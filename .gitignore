@@ -7,6 +7,12 @@
 *.dll
 *.so
 *.dylib
+server
+
+.windsurf/
+.vscode/
+.aiassistant/
+.idea/
 
 # Test binary, built with `go test -c`
 *.test
