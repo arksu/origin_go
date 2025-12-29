@@ -125,3 +125,20 @@ func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64)
 	}
 	return items, nil
 }
+
+const updateCharacterPosition = `-- name: UpdateCharacterPosition :exec
+UPDATE character
+SET x = $2, y = $3
+WHERE id = $1
+`
+
+type UpdateCharacterPositionParams struct {
+	ID int64 `json:"id"`
+	X  int32 `json:"x"`
+	Y  int32 `json:"y"`
+}
+
+func (q *Queries) UpdateCharacterPosition(ctx context.Context, arg UpdateCharacterPositionParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterPosition, arg.ID, arg.X, arg.Y)
+	return err
+}

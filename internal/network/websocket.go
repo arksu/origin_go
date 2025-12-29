@@ -235,6 +235,17 @@ func (c *Client) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Cleanup player state if authenticated
+	if c.authed && c.handle != 0 {
+		shard := c.world.ShardManager().GetShard(c.layer)
+		if shard != nil {
+			ctx := context.Background()
+			if err := shard.DisconnectPlayer(ctx, c.world.DB().Queries(), c.handle); err != nil {
+				log.Printf("Failed to disconnect player handle=%d: %v", c.handle, err)
+			}
+		}
+	}
+
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
