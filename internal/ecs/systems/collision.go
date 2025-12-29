@@ -236,6 +236,7 @@ type CollisionSystem struct {
 	staticSpatialHash  *SpatialHashGrid
 	dynamicSpatialHash *SpatialHashGrid
 	events             []components.CollisionEvent
+	broadcastSystem    *MovementBroadcastSystem // For marking dirty positions
 
 	// Preallocated buffer to avoid per-tick allocations
 	candidates     []ecs.Handle
@@ -253,6 +254,11 @@ func NewCollisionSystem() *CollisionSystem {
 		candidates:         make([]ecs.Handle, 0, 64),
 		dynamicHandles:     make([]ecs.Handle, 0, 128),
 	}
+}
+
+// SetBroadcastSystem sets the movement broadcast system for marking dirty positions
+func (s *CollisionSystem) SetBroadcastSystem(broadcast *MovementBroadcastSystem) {
+	s.broadcastSystem = broadcast
 }
 
 // Events returns collision events from the last update (for other systems to consume)
@@ -444,6 +450,10 @@ func (s *CollisionSystem) resolveStaticCollisions(
 			pos.X += remainingX
 			pos.Y += remainingY
 			log.Printf("[collision] no hit entity=%d delta=(%.3f,%.3f) newPos=(%.3f,%.3f)", h, remainingX, remainingY, pos.X, pos.Y)
+			// Mark position as dirty for network broadcast
+			if s.broadcastSystem != nil {
+				s.broadcastSystem.MarkDirty(h)
+			}
 			break
 		}
 
@@ -451,6 +461,11 @@ func (s *CollisionSystem) resolveStaticCollisions(
 		safeTime := math.Max(0, earliestTime-collisionEpsilon)
 		pos.X += remainingX * safeTime
 		pos.Y += remainingY * safeTime
+
+		// Mark position as dirty for network broadcast
+		if s.broadcastSystem != nil {
+			s.broadcastSystem.MarkDirty(h)
+		}
 
 		// Record collision event
 		if collidedHandle.IsValid() {

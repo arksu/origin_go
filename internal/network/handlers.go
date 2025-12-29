@@ -5,17 +5,16 @@ import (
 	"database/sql"
 	"errors"
 	"log"
-
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/network/pb"
+	"origin/internal/proto"
 )
 
 // handleAuth handles authentication packets
 func (s *Server) handleAuth(c *Client, payload []byte) error {
-	var req pb.C2SAuth
-	if err := DecodePayload(payload, &req); err != nil {
-		c.SendError(pb.S2CError_ERROR_CODE_INVALID_PACKET, "invalid auth packet")
+	var req proto.C2SAuth
+	if err := proto.DecodePayload(payload, &req); err != nil {
+		c.SendError(proto.S2CError_ERROR_CODE_INVALID_PACKET, "invalid auth packet")
 		return err
 	}
 
@@ -27,10 +26,10 @@ func (s *Server) handleAuth(c *Client, payload []byte) error {
 	character, err := s.world.DB().GetCharacterByToken(ctx, req.Token)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.SendError(pb.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "invalid or expired token")
+			c.SendError(proto.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "invalid or expired token")
 			return nil
 		}
-		c.SendError(pb.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "authentication failed")
+		c.SendError(proto.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "authentication failed")
 		return err
 	}
 
@@ -59,7 +58,7 @@ func (s *Server) handleAuth(c *Client, payload []byte) error {
 	)
 
 	if !spawnResult.Success {
-		c.SendError(pb.S2CError_ERROR_CODE_UNSPECIFIED, "failed to spawn player")
+		c.SendError(proto.S2CError_ERROR_CODE_UNSPECIFIED, "failed to spawn player")
 		return errors.New("failed to spawn player into world")
 	}
 
@@ -70,11 +69,16 @@ func (s *Server) handleAuth(c *Client, payload []byte) error {
 	c.layer = int(character.Layer)
 	c.mu.Unlock()
 
+	// Register client in network flush system for packet routing
+	// Wrap client to match NetworkClient interface
+	clientAdapter := &ClientAdapter{client: c}
+	shard.NetworkFlush().RegisterClient(spawnResult.Handle, clientAdapter)
+
 	log.Printf("Player %s spawned at (%d, %d) in layer %d via %v",
 		character.Name, spawnResult.X, spawnResult.Y, character.Layer, spawnResult.Method)
 
 	// Send auth result
-	return c.SendPacket(PacketAuthResult, &pb.S2CAuthResult{
+	return c.SendPacket(proto.PacketAuthResult, &proto.S2CAuthResult{
 		Success:     true,
 		CharacterId: uint64(character.ID),
 	})
@@ -83,13 +87,13 @@ func (s *Server) handleAuth(c *Client, payload []byte) error {
 // handleMapClick handles map click packets
 func (s *Server) handleMapClick(c *Client, payload []byte) error {
 	if !c.IsAuthed() {
-		c.SendError(pb.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "not authenticated")
+		c.SendError(proto.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "not authenticated")
 		return nil
 	}
 
-	var req pb.C2SMapClick
-	if err := DecodePayload(payload, &req); err != nil {
-		c.SendError(pb.S2CError_ERROR_CODE_INVALID_PACKET, "invalid map click packet")
+	var req proto.C2SMapClick
+	if err := proto.DecodePayload(payload, &req); err != nil {
+		c.SendError(proto.S2CError_ERROR_CODE_INVALID_PACKET, "invalid map click packet")
 		return err
 	}
 
@@ -98,7 +102,7 @@ func (s *Server) handleMapClick(c *Client, payload []byte) error {
 	// Get the shard for this player's layer
 	shard := s.world.ShardManager().GetShard(c.layer)
 	if shard == nil {
-		c.SendError(pb.S2CError_ERROR_CODE_UNSPECIFIED, "shard not found")
+		c.SendError(proto.S2CError_ERROR_CODE_UNSPECIFIED, "shard not found")
 		return nil
 	}
 
@@ -125,13 +129,13 @@ func (s *Server) handleMapClick(c *Client, payload []byte) error {
 // handleObjectClick handles object click packets
 func (s *Server) handleObjectClick(c *Client, payload []byte) error {
 	if !c.IsAuthed() {
-		c.SendError(pb.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "not authenticated")
+		c.SendError(proto.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "not authenticated")
 		return nil
 	}
 
-	var req pb.C2CObjectClick
-	if err := DecodePayload(payload, &req); err != nil {
-		c.SendError(pb.S2CError_ERROR_CODE_INVALID_PACKET, "invalid object click packet")
+	var req proto.C2CObjectClick
+	if err := proto.DecodePayload(payload, &req); err != nil {
+		c.SendError(proto.S2CError_ERROR_CODE_INVALID_PACKET, "invalid object click packet")
 		return err
 	}
 
@@ -144,27 +148,27 @@ func (s *Server) handleObjectClick(c *Client, payload []byte) error {
 // handleChat handles chat packets
 func (s *Server) handleChat(c *Client, payload []byte) error {
 	if !c.IsAuthed() {
-		c.SendError(pb.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "not authenticated")
+		c.SendError(proto.S2CError_ERROR_CODE_NOT_AUTHENTICATED, "not authenticated")
 		return nil
 	}
 
-	var req pb.C2SChat
-	if err := DecodePayload(payload, &req); err != nil {
-		c.SendError(pb.S2CError_ERROR_CODE_INVALID_PACKET, "invalid chat packet")
+	var req proto.C2SChat
+	if err := proto.DecodePayload(payload, &req); err != nil {
+		c.SendError(proto.S2CError_ERROR_CODE_INVALID_PACKET, "invalid chat packet")
 		return err
 	}
 
 	log.Printf("Chat message: channel=%v msg=%s", req.Channel, req.Message)
 
 	// Broadcast chat message
-	chatMsg := &pb.S2CChatMsg{
+	chatMsg := &proto.S2CChatMsg{
 		SenderId:   uint64(c.characterID),
 		SenderName: "Player", // TODO: get actual name
 		Message:    req.Message,
 		Channel:    req.Channel,
 	}
 
-	data, err := EncodePacket(PacketChatMsg, chatMsg)
+	data, err := proto.EncodePacket(proto.PacketChatMsg, chatMsg)
 	if err != nil {
 		return err
 	}

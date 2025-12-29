@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package proto;
 
-option go_package = "origin/internal/network/pb";
+option go_package = "origin/internal/proto";
 
 // ============================================================================
 // Client -> Server Packets

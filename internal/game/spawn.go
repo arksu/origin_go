@@ -150,6 +150,21 @@ func (s *Shard) doSpawnPlayer(characterID int64, name string, x, y int, method S
 		Mask:   0xFF, // Collide with everything
 	})
 
+	// Add visibility components
+	ecs.AddComponent(s.world, h, components.Perception{
+		Range: 200.0, // Default vision radius
+	})
+	ecs.AddComponent(s.world, h, components.Stealth{
+		Value: 0.0, // Players have no stealth by default
+	})
+	ecs.AddComponent(s.world, h, components.EntityMeta{
+		EntityID:   entityID,
+		EntityType: 1, // Type 1 = Player
+	})
+	ecs.AddComponent(s.world, h, components.VisibilityState{
+		VisibleEntities: make(map[ecs.Handle]bool),
+	})
+
 	// Track player in shard by handle
 	s.AddPlayer(h)
 

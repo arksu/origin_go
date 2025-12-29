@@ -4,7 +4,7 @@
 // 	protoc        v6.33.1
 // source: proto/packets.proto
 
-package pb
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1234,7 +1234,7 @@ const file_proto_packets_proto_rawDesc = "" +
 	"\rS2CWorldState\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x12\x1f\n" +
 	"\vserver_time\x18\x02 \x01(\x04R\n" +
-	"serverTimeB\x1cZ\x1aorigin/internal/network/pbb\x06proto3"
+	"serverTimeB\x17Z\x15origin/internal/protob\x06proto3"
 
 var (
 	file_proto_packets_proto_rawDescOnce sync.Once
