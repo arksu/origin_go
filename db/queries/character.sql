@@ -19,3 +19,8 @@ where auth_token = $1;
 UPDATE character
 SET auth_token = NULL
 WHERE id = $1;
+
+-- name: UpdateCharacterPosition :exec
+UPDATE character
+SET x = $2, y = $3
+WHERE id = $1;
