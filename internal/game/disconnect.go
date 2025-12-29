@@ -3,11 +3,11 @@ package game
 import (
 	"context"
 	"log"
+	"origin/internal/ecs/systems"
 
 	"origin/internal/db"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/ecs/systems"
 )
 
 // DisconnectPlayer handles player disconnection cleanup

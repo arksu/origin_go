@@ -1,4 +1,4 @@
-package network
+package proto
 
 import (
 	"encoding/binary"

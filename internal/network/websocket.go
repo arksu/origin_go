@@ -9,12 +9,12 @@ import (
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/game"
-	"origin/internal/network/pb"
+	"origin/internal/proto"
 	"sync"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"google.golang.org/protobuf/proto"
+	protog "google.golang.org/protobuf/proto"
 )
 
 // PacketHandler handles incoming packets by type
@@ -42,7 +42,7 @@ type Server struct {
 	world      *game.World
 	clients    map[*Client]bool
 	httpServer *http.Server
-	handlers   map[PacketType]PacketHandler
+	handlers   map[proto.PacketType]PacketHandler
 	mu         sync.RWMutex
 }
 
@@ -52,23 +52,23 @@ func NewServer(cfg *config.Config, world *game.World) *Server {
 		cfg:      cfg,
 		world:    world,
 		clients:  make(map[*Client]bool),
-		handlers: make(map[PacketType]PacketHandler),
+		handlers: make(map[proto.PacketType]PacketHandler),
 	}
 	s.registerHandlers()
 	return s
 }
 
 // RegisterHandler registers a packet handler for a specific packet type
-func (s *Server) RegisterHandler(packetType PacketType, handler PacketHandler) {
+func (s *Server) RegisterHandler(packetType proto.PacketType, handler PacketHandler) {
 	s.handlers[packetType] = handler
 }
 
 // registerHandlers registers all packet handlers
 func (s *Server) registerHandlers() {
-	s.RegisterHandler(PacketAuth, s.handleAuth)
-	s.RegisterHandler(PacketMapClick, s.handleMapClick)
-	s.RegisterHandler(PacketObjectClick, s.handleObjectClick)
-	s.RegisterHandler(PacketChat, s.handleChat)
+	s.RegisterHandler(proto.PacketAuth, s.handleAuth)
+	s.RegisterHandler(proto.PacketMapClick, s.handleMapClick)
+	s.RegisterHandler(proto.PacketObjectClick, s.handleObjectClick)
+	s.RegisterHandler(proto.PacketChat, s.handleChat)
 }
 
 // Start starts the WebSocket httpServer
@@ -186,7 +186,7 @@ func (c *Client) writePump() {
 
 // handlePacket processes an incoming packet
 func (c *Client) handlePacket(data []byte) {
-	packetType, payload, err := DecodePacket(data)
+	packetType, payload, err := proto.DecodePacket(data)
 	if err != nil {
 		log.Printf("Decode error: %v", err)
 		return
@@ -213,8 +213,8 @@ func (c *Client) Send(data []byte) {
 }
 
 // SendPacket encodes and sends a protobuf packet to the client
-func (c *Client) SendPacket(packetType PacketType, msg proto.Message) error {
-	data, err := EncodePacket(packetType, msg)
+func (c *Client) SendPacket(packetType proto.PacketType, msg protog.Message) error {
+	data, err := proto.EncodePacket(packetType, msg)
 	if err != nil {
 		return err
 	}
@@ -223,8 +223,8 @@ func (c *Client) SendPacket(packetType PacketType, msg proto.Message) error {
 }
 
 // SendError sends an error packet to the client
-func (c *Client) SendError(code pb.S2CError_ErrorCode, message string) {
-	_ = c.SendPacket(PacketError, &pb.S2CError{
+func (c *Client) SendError(code proto.S2CError_ErrorCode, message string) {
+	_ = c.SendPacket(proto.PacketError, &proto.S2CError{
 		Code:    code,
 		Message: message,
 	})

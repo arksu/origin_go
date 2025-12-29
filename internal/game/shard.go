@@ -9,25 +9,45 @@ import (
 
 // Shard is part of layer world
 type Shard struct {
-	layer        int
-	chunkManager *ChunkManager       // manage chunks (load, unload)
-	players      map[ecs.Handle]bool // connected players in this shard (by handle)
-	world        *ecs.World          // ECS world to operate with entities
-	mu           sync.RWMutex
+	layer            int
+	chunkManager     *ChunkManager                    // manage chunks (load, unload)
+	players          map[ecs.Handle]bool              // connected players in this shard (by handle)
+	world            *ecs.World                       // ECS world to operate with entities
+	visibilitySystem *systems.VisibilitySystem        // manages what entities can see
+	broadcastSystem  *systems.MovementBroadcastSystem // generates movement events
+	networkFlush     *systems.NetworkFlushSystem      // sends packets to clients
+	mu               sync.RWMutex
 	// TODO chunks spatial hash grid
 }
 
 // NewShard creates a new shard for the given layer
 func NewShard(layer int, db *persistence.Postgres) *Shard {
 	world := ecs.NewWorld()
-	world.AddSystem(systems.NewMovementSystem())
-	world.AddSystem(systems.NewCollisionSystem())
+
+	// Create systems
+	visSystem := systems.NewVisibilitySystem()
+	broadcastSystem := systems.NewMovementBroadcastSystem(visSystem)
+	networkFlush := systems.NewNetworkFlushSystem(visSystem, broadcastSystem)
+	collisionSystem := systems.NewCollisionSystem()
+
+	// Link collision system to broadcast system for dirty position tracking
+	collisionSystem.SetBroadcastSystem(broadcastSystem)
+
+	// Add systems in priority order
+	world.AddSystem(systems.NewMovementSystem()) // Priority 100
+	world.AddSystem(collisionSystem)             // Priority 200
+	world.AddSystem(visSystem)                   // Priority 300
+	world.AddSystem(broadcastSystem)             // Priority 400
+	world.AddSystem(networkFlush)                // Priority 500
 
 	return &Shard{
-		layer:        layer,
-		chunkManager: NewChunkManager(db),
-		players:      make(map[ecs.Handle]bool),
-		world:        world,
+		layer:            layer,
+		chunkManager:     NewChunkManager(db),
+		players:          make(map[ecs.Handle]bool),
+		world:            world,
+		visibilitySystem: visSystem,
+		broadcastSystem:  broadcastSystem,
+		networkFlush:     networkFlush,
 	}
 }
 
@@ -62,6 +82,16 @@ func (s *Shard) PlayerCount() int {
 // ECSWorld returns the ECS world for this shard
 func (s *Shard) ECSWorld() *ecs.World {
 	return s.world
+}
+
+// NetworkFlush returns the network flush system
+func (s *Shard) NetworkFlush() *systems.NetworkFlushSystem {
+	return s.networkFlush
+}
+
+// BroadcastSystem returns the movement broadcast system
+func (s *Shard) BroadcastSystem() *systems.MovementBroadcastSystem {
+	return s.broadcastSystem
 }
 
 // ChunkManager returns the chunk manager for this shard

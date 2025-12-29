@@ -6,9 +6,9 @@ sqlc:
 	sqlc generate
 
 # Generate protobuf Go code
-proto-gen:
+proto:
 	@echo "Generating protobuf code..."
-	@mkdir -p internal/network/pb
+	@mkdir -p internal/proto
 	protoc --go_out=. --go_opt=module=origin \
 		proto/packets.proto
 
@@ -17,11 +17,11 @@ proto-tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 # Build the server
-build: proto-gen sqlc
+build: proto sqlc
 	go build -o server ./cmd/server
 
 # Run the server
-run: proto-gen sqlc
+run: proto sqlc
 	go run ./cmd/server
 
 map-gen:
