@@ -70,9 +70,7 @@ func (s *Server) handleAuth(c *Client, payload []byte) error {
 	c.mu.Unlock()
 
 	// Register client in network flush system for packet routing
-	// Wrap client to match NetworkClient interface
-	clientAdapter := &ClientAdapter{client: c}
-	shard.NetworkFlush().RegisterClient(spawnResult.Handle, clientAdapter)
+	shard.NetworkFlush().RegisterClient(spawnResult.Handle, c)
 
 	log.Printf("Player %s spawned at (%d, %d) in layer %d via %v",
 		character.Name, spawnResult.X, spawnResult.Y, character.Layer, spawnResult.Method)
