@@ -32,12 +32,19 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 	speedStorage := ecs.GetOrCreateStorage[components.Speed](w)
 	colliderStorage := ecs.GetOrCreateStorage[components.Collider](w)
 
-	// Query entities with Position + Velocity
-	query := w.Query().
-		With(components.PositionID).
-		With(components.VelocityID)
+	// Use active lists if available (chunk-filtered), otherwise fallback to query
+	var handles []ecs.Handle
+	if activeLists := ecs.GetActiveLists(w); activeLists != nil && len(activeLists.Dynamic) > 0 {
+		handles = activeLists.Dynamic
+	} else {
+		// Fallback: query all entities with Position + Velocity
+		query := w.Query().
+			With(components.PositionID).
+			With(components.VelocityID)
+		handles = query.Handles()
+	}
 
-	for _, h := range query.Handles() {
+	for _, h := range handles {
 		pos := posStorage.GetPtr(h)
 		vel := velStorage.GetPtr(h)
 		if pos == nil || vel == nil {

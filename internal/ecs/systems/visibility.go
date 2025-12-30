@@ -54,12 +54,18 @@ func (s *VisibilitySystem) Update(w *ecs.World, dt float64) {
 	visStateStorage := ecs.GetOrCreateStorage[components.VisibilityState](w)
 
 	// Phase 1: Insert all visible entities into spatial hash
-	// (entities with EntityMeta are potentially visible)
-	metaQuery := w.Query().
-		With(components.PositionID).
-		With(components.EntityMetaID)
+	// Use active lists if available (chunk-filtered), otherwise fallback to query
+	var visibleHandles []ecs.Handle
+	if activeLists := ecs.GetActiveLists(w); activeLists != nil && len(activeLists.Visible) > 0 {
+		visibleHandles = activeLists.Visible
+	} else {
+		metaQuery := w.Query().
+			With(components.PositionID).
+			With(components.EntityMetaID)
+		visibleHandles = metaQuery.Handles()
+	}
 
-	for _, h := range metaQuery.Handles() {
+	for _, h := range visibleHandles {
 		pos, ok := posStorage.Get(h)
 		if !ok {
 			continue
@@ -70,12 +76,19 @@ func (s *VisibilitySystem) Update(w *ecs.World, dt float64) {
 	}
 
 	// Phase 2: Process each observer
-	observerQuery := w.Query().
-		With(components.PositionID).
-		With(components.PerceptionID).
-		With(components.VisibilityStateID)
+	// Use active lists if available (chunk-filtered), otherwise fallback to query
+	var observerHandles []ecs.Handle
+	if activeLists := ecs.GetActiveLists(w); activeLists != nil && len(activeLists.Vision) > 0 {
+		observerHandles = activeLists.Vision
+	} else {
+		observerQuery := w.Query().
+			With(components.PositionID).
+			With(components.PerceptionID).
+			With(components.VisibilityStateID)
+		observerHandles = observerQuery.Handles()
+	}
 
-	for _, observer := range observerQuery.Handles() {
+	for _, observer := range observerHandles {
 		observerPos, ok := posStorage.Get(observer)
 		if !ok {
 			continue

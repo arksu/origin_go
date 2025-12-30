@@ -282,12 +282,19 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 	staticStorage := ecs.GetOrCreateStorage[components.Static](w)
 
 	// Phase 1: Insert all static solid entities into spatial hash
-	staticQuery := w.Query().
-		With(components.PositionID).
-		With(components.ColliderID).
-		With(components.StaticID)
+	// Use active lists if available (chunk-filtered), otherwise fallback to query
+	var staticHandles []ecs.Handle
+	if activeLists := ecs.GetActiveLists(w); activeLists != nil && len(activeLists.Static) > 0 {
+		staticHandles = activeLists.Static
+	} else {
+		staticQuery := w.Query().
+			With(components.PositionID).
+			With(components.ColliderID).
+			With(components.StaticID)
+		staticHandles = staticQuery.Handles()
+	}
 
-	for _, h := range staticQuery.Handles() {
+	for _, h := range staticHandles {
 		pos, ok := posStorage.Get(h)
 		if !ok {
 			continue
@@ -303,14 +310,26 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 	}
 
 	// Phase 2: Process dynamic entities (entities with velocity, not static)
-	dynamicQuery := w.Query().
-		With(components.PositionID).
-		With(components.VelocityID).
-		With(components.ColliderID)
+	// Use active lists if available (chunk-filtered), otherwise fallback to query
+	var dynamicQueryHandles []ecs.Handle
+	if activeLists := ecs.GetActiveLists(w); activeLists != nil && len(activeLists.Dynamic) > 0 {
+		dynamicQueryHandles = activeLists.Dynamic
+	} else {
+		dynamicQuery := w.Query().
+			With(components.PositionID).
+			With(components.VelocityID).
+			With(components.ColliderID)
+		dynamicQueryHandles = dynamicQuery.Handles()
+	}
 
-	for _, h := range dynamicQuery.Handles() {
-		// Skip static entities
+	for _, h := range dynamicQueryHandles {
+		// Skip static entities (only needed for fallback query path)
 		if staticStorage.Has(h) {
+			continue
+		}
+
+		// Skip entities without collider (only needed when using activeLists.Dynamic)
+		if !colliderStorage.Has(h) {
 			continue
 		}
 
