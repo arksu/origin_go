@@ -5,21 +5,14 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/proto"
+
+	protog "google.golang.org/protobuf/proto"
 )
 
 // NetworkClient is an interface for sending packets to clients
 // This avoids circular dependency with the network package
 type NetworkClient interface {
-	SendPacket(packetType proto.PacketType, msg interface{}) error
-}
-
-// NetworkClientAdapter wraps a real client to match the interface
-type NetworkClientAdapter struct {
-	sendFunc func(proto.PacketType, interface{}) error
-}
-
-func (a *NetworkClientAdapter) SendPacket(packetType proto.PacketType, msg interface{}) error {
-	return a.sendFunc(packetType, msg)
+	SendPacket(packetType proto.PacketType, msg protog.Message) error
 }
 
 // NetworkFlushSystem sends accumulated network events to clients
@@ -59,9 +52,9 @@ func (s *NetworkFlushSystem) Update(w *ecs.World, dt float64) {
 
 	// Group events by client
 	type ClientEvents struct {
-		objectAdd    []interface{}
-		objectDelete []interface{}
-		objectMove   []interface{}
+		objectAdd    []*proto.S2CObjectAdd
+		objectDelete []*proto.S2CObjectDelete
+		objectMove   []*proto.S2CObjectMove
 	}
 	clientEvents := make(map[NetworkClient]*ClientEvents)
 
@@ -88,14 +81,13 @@ func (s *NetworkFlushSystem) Update(w *ecs.World, dt float64) {
 				continue
 			}
 
-			// Create object add message (will be marshaled by network layer)
-			msg := map[string]interface{}{
-				"entity_id": uint64(meta.EntityID),
-				"type_id":   int32(meta.EntityType),
-				"x":         int32(pos.X),
-				"y":         int32(pos.Y),
-				"heading":   int32(0),
-				"resource":  "",
+			msg := &proto.S2CObjectAdd{
+				EntityId: uint64(meta.EntityID),
+				TypeId:   int32(meta.EntityType),
+				X:        int32(pos.X),
+				Y:        int32(pos.Y),
+				Heading:  0,
+				Resource: "",
 			}
 			clientEvents[client].objectAdd = append(clientEvents[client].objectAdd, msg)
 		} else {
@@ -105,8 +97,8 @@ func (s *NetworkFlushSystem) Update(w *ecs.World, dt float64) {
 				continue
 			}
 
-			msg := map[string]interface{}{
-				"entity_id": uint64(meta.EntityID),
+			msg := &proto.S2CObjectDelete{
+				EntityId: uint64(meta.EntityID),
 			}
 			clientEvents[client].objectDelete = append(clientEvents[client].objectDelete, msg)
 		}
@@ -123,10 +115,10 @@ func (s *NetworkFlushSystem) Update(w *ecs.World, dt float64) {
 			clientEvents[client] = &ClientEvents{}
 		}
 
-		msg := map[string]interface{}{
-			"entity_id": uint64(event.EntityID),
-			"x":         event.X,
-			"y":         event.Y,
+		msg := &proto.S2CObjectMove{
+			EntityId: uint64(event.EntityID),
+			X:        event.X,
+			Y:        event.Y,
 		}
 		clientEvents[client].objectMove = append(clientEvents[client].objectMove, msg)
 	}

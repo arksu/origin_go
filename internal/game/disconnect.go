@@ -45,6 +45,9 @@ func (s *Shard) DisconnectPlayer(ctx context.Context, queries *db.Queries, h ecs
 		}
 	}
 
+	// Unregister client from network flush system
+	s.NetworkFlush().UnregisterClient(h)
+
 	// Remove player from shard tracking
 	s.RemovePlayer(h)
 

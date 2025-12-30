@@ -25,6 +25,7 @@ func NewShard(layer int, db *persistence.Postgres) *Shard {
 	world := ecs.NewWorld()
 
 	// Create systems
+	movementSystem := systems.NewMovementSystem()
 	visSystem := systems.NewVisibilitySystem()
 	broadcastSystem := systems.NewMovementBroadcastSystem(visSystem)
 	networkFlush := systems.NewNetworkFlushSystem(visSystem, broadcastSystem)
@@ -34,11 +35,11 @@ func NewShard(layer int, db *persistence.Postgres) *Shard {
 	collisionSystem.SetBroadcastSystem(broadcastSystem)
 
 	// Add systems in priority order
-	world.AddSystem(systems.NewMovementSystem()) // Priority 100
-	world.AddSystem(collisionSystem)             // Priority 200
-	world.AddSystem(visSystem)                   // Priority 300
-	world.AddSystem(broadcastSystem)             // Priority 400
-	world.AddSystem(networkFlush)                // Priority 500
+	world.AddSystem(movementSystem)  // Priority 100
+	world.AddSystem(collisionSystem) // Priority 200
+	world.AddSystem(visSystem)       // Priority 300
+	world.AddSystem(broadcastSystem) // Priority 400
+	world.AddSystem(networkFlush)    // Priority 500
 
 	return &Shard{
 		layer:            layer,
