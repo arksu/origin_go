@@ -1,4 +1,5 @@
 create schema if not exists origin;
+set search_path to origin;
 
 -- ACCOUNT -------------------------------------------------------------
 
@@ -20,19 +21,19 @@ CREATE TABLE IF NOT EXISTS character
     account_id  BIGINT       NOT NULL REFERENCES account (id),
     name        VARCHAR(128) NOT NULL,
 
-    region      INT          NOT NULL,    -- region id (continent)
-    x           INT          NOT NULL,
-    y           INT          NOT NULL,
-    layer       INT          NOT NULL,    -- ground layer
-    heading     SMALLINT     NOT NULL,    -- rotating angle (8 angles, 45 degrees)
+    region      INT          NOT NULL, -- region id (continent)
+    x           INT          NOT NULL, -- world coordinate
+    y           INT          NOT NULL, -- world coordinate
+    layer       INT          NOT NULL, -- ground layer
+    heading     SMALLINT     NOT NULL, -- rotating angle (8 angles, 45 degrees)
 
-    stamina     INT          NOT NULL,
-    shp         INT          NOT NULL,    -- soft health points
-    hhp         INT          NOT NULL,    -- hard health points
+    stamina     INT          NOT NULL, -- current stamina
+    shp         INT          NOT NULL, -- soft health points
+    hhp         INT          NOT NULL, -- hard health points
 
-    deleted_at  TIMESTAMPTZ  NULL,        -- when delete set now()
-    online_time BIGINT       NOT NULL,    -- time in seconds spent in game
+    online_time BIGINT       NOT NULL, -- time in seconds spent in game
     auth_token  text         null unique, -- token used in C2SAuth packet
+    deleted_at  TIMESTAMPTZ  NULL, -- when delete set now()
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
@@ -48,7 +49,7 @@ CREATE TABLE IF NOT EXISTS inventory
     item_quality SMALLINT NOT NULL,
     item_count   INT      NOT NULL,
     last_tick    BIGINT   NOT NULL,
-    data         VARCHAR(254), -- binary data converted to string hex data in uppercase
+    data_hex     VARCHAR(254), -- binary data converted to string hex data in uppercase
     deleted      BOOLEAN  NOT NULL
 );
 
@@ -56,14 +57,14 @@ CREATE TABLE IF NOT EXISTS inventory
 -- when load - also load objects by grid_x, grid_y, use (grid_x, grid_y) in spatial hash grid
 CREATE TABLE IF NOT EXISTS chunk
 (
-    region    INT    NOT NULL,
-    x         INT    NOT NULL,
-    y         INT    NOT NULL,
+    region    INT    NOT NULL, -- region id
+    x         INT    NOT NULL, -- chunk x coordinate
+    y         INT    NOT NULL, -- chunk y coordinate
     layer     INT    NOT NULL, -- ground layer
     last_tick BIGINT NOT NULL,
     data      BYTEA  NOT NULL
 );
-create index idx_grid on chunk (region, x, y, layer);
+create index idx_chunk on chunk (region, x, y, layer);
 
 -- OBJECT --------------------------------------------------------------
 -- object in grid, keep actual grid_x, grid_y when object moving, load by grid_x, grid_y
@@ -71,18 +72,18 @@ CREATE TABLE IF NOT EXISTS object
 (
     id          BIGINT PRIMARY KEY,
     region      INT      NOT NULL,
-    x           INT      NOT NULL,
-    y           INT      NOT NULL,
+    x           INT      NOT NULL, -- world coordinate
+    y           INT      NOT NULL, -- world coordinate
     layer       INT      NOT NULL,
     heading     SMALLINT NOT NULL,
-    grid_x      INT      NOT NULL, -- redundant data for loading by grid
-    grid_y      INT      NOT NULL, -- redundant data for loading by grid
-    type        INT      NOT NULL,
+    chunk_x     INT      NOT NULL, -- redundant data for loading by chunk
+    chunk_y     INT      NOT NULL, -- redundant data for loading by chunk
+    type_id     INT      NOT NULL, -- type id
     quality     SMALLINT NOT NULL,
     hp          INT      NOT NULL,
     create_tick BIGINT   NOT NULL,
     last_tick   BIGINT   NOT NULL,
-    data        VARCHAR(254)       -- binary data converted to string hex data in uppercase
+    data_hex    VARCHAR(254)       -- binary data converted to string hex data in uppercase
 );
 
 CREATE INDEX idx_object ON object (region, x, y, layer);

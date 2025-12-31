@@ -20,7 +20,7 @@ func (q *Queries) DeleteObject(ctx context.Context, id int64) error {
 }
 
 const getObjectByID = `-- name: GetObjectByID :one
-SELECT id, region, x, y, layer, heading, grid_x, grid_y, type, quality, hp, create_tick, last_tick, data
+SELECT id, region, x, y, layer, heading, chunk_x, chunk_y, type_id, quality, hp, create_tick, last_tick, data_hex
 FROM object
 WHERE id = $1
 `
@@ -35,39 +35,39 @@ func (q *Queries) GetObjectByID(ctx context.Context, id int64) (Object, error) {
 		&i.Y,
 		&i.Layer,
 		&i.Heading,
-		&i.GridX,
-		&i.GridY,
-		&i.Type,
+		&i.ChunkX,
+		&i.ChunkY,
+		&i.TypeID,
 		&i.Quality,
 		&i.Hp,
 		&i.CreateTick,
 		&i.LastTick,
-		&i.Data,
+		&i.DataHex,
 	)
 	return i, err
 }
 
 const getObjectsByChunk = `-- name: GetObjectsByChunk :many
-SELECT id, region, x, y, layer, heading, grid_x, grid_y, type, quality, hp, create_tick, last_tick, data
+SELECT id, region, x, y, layer, heading, chunk_x, chunk_y, type_id, quality, hp, create_tick, last_tick, data_hex
 FROM object
 WHERE region = $1
-  AND grid_x = $2
-  AND grid_y = $3
+  AND chunk_x = $2
+  AND chunk_y = $3
   AND layer = $4
 `
 
 type GetObjectsByChunkParams struct {
 	Region int32 `json:"region"`
-	GridX  int32 `json:"grid_x"`
-	GridY  int32 `json:"grid_y"`
+	ChunkX int32 `json:"chunk_x"`
+	ChunkY int32 `json:"chunk_y"`
 	Layer  int32 `json:"layer"`
 }
 
 func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkParams) ([]Object, error) {
 	rows, err := q.db.QueryContext(ctx, getObjectsByChunk,
 		arg.Region,
-		arg.GridX,
-		arg.GridY,
+		arg.ChunkX,
+		arg.ChunkY,
 		arg.Layer,
 	)
 	if err != nil {
@@ -84,14 +84,14 @@ func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkPa
 			&i.Y,
 			&i.Layer,
 			&i.Heading,
-			&i.GridX,
-			&i.GridY,
-			&i.Type,
+			&i.ChunkX,
+			&i.ChunkY,
+			&i.TypeID,
 			&i.Quality,
 			&i.Hp,
 			&i.CreateTick,
 			&i.LastTick,
-			&i.Data,
+			&i.DataHex,
 		); err != nil {
 			return nil, err
 		}
@@ -107,7 +107,7 @@ func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkPa
 }
 
 const saveObject = `-- name: SaveObject :exec
-INSERT INTO object (id, region, x, y, layer, heading, grid_x, grid_y, type, quality, hp, create_tick, last_tick, data)
+INSERT INTO object (id, region, x, y, layer, heading, chunk_x, chunk_y, type_id, quality, hp, create_tick, last_tick, data_hex)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (id) DO UPDATE SET
     region = EXCLUDED.region,
@@ -115,13 +115,13 @@ ON CONFLICT (id) DO UPDATE SET
     y = EXCLUDED.y,
     layer = EXCLUDED.layer,
     heading = EXCLUDED.heading,
-    grid_x = EXCLUDED.grid_x,
-    grid_y = EXCLUDED.grid_y,
-    type = EXCLUDED.type,
+    chunk_x = EXCLUDED.chunk_x,
+    chunk_y = EXCLUDED.chunk_y,
+    type_id = EXCLUDED.type_id,
     quality = EXCLUDED.quality,
     hp = EXCLUDED.hp,
     last_tick = EXCLUDED.last_tick,
-    data = EXCLUDED.data
+    data_hex = EXCLUDED.data_hex
 `
 
 type SaveObjectParams struct {
@@ -131,14 +131,14 @@ type SaveObjectParams struct {
 	Y          int32          `json:"y"`
 	Layer      int32          `json:"layer"`
 	Heading    int16          `json:"heading"`
-	GridX      int32          `json:"grid_x"`
-	GridY      int32          `json:"grid_y"`
-	Type       int32          `json:"type"`
+	ChunkX     int32          `json:"chunk_x"`
+	ChunkY     int32          `json:"chunk_y"`
+	TypeID     int32          `json:"type_id"`
 	Quality    int16          `json:"quality"`
 	Hp         int32          `json:"hp"`
 	CreateTick int64          `json:"create_tick"`
 	LastTick   int64          `json:"last_tick"`
-	Data       sql.NullString `json:"data"`
+	DataHex    sql.NullString `json:"data_hex"`
 }
 
 func (q *Queries) SaveObject(ctx context.Context, arg SaveObjectParams) error {
@@ -149,14 +149,23 @@ func (q *Queries) SaveObject(ctx context.Context, arg SaveObjectParams) error {
 		arg.Y,
 		arg.Layer,
 		arg.Heading,
-		arg.GridX,
-		arg.GridY,
-		arg.Type,
+		arg.ChunkX,
+		arg.ChunkY,
+		arg.TypeID,
 		arg.Quality,
 		arg.Hp,
 		arg.CreateTick,
 		arg.LastTick,
-		arg.Data,
+		arg.DataHex,
 	)
+	return err
+}
+
+const truncateObjects = `-- name: TruncateObjects :exec
+TRUNCATE TABLE object
+`
+
+func (q *Queries) TruncateObjects(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, truncateObjects)
 	return err
 }

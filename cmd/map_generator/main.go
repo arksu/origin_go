@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -170,10 +171,14 @@ func main() {
 	queries := db.New(sqlDB)
 
 	// Truncate all chunks before start
-	log.Println("Truncating existing chunks...")
+	log.Println("Truncating existing chunks and objects...")
 	err = queries.TruncateChunks(ctx)
 	if err != nil {
 		log.Fatalf("Unable to truncate chunks: %v", err)
+	}
+	err = queries.TruncateObjects(ctx)
+	if err != nil {
+		log.Fatalf("Unable to truncate objects: %v", err)
 	}
 
 	// Initialize Perlin noise
@@ -181,6 +186,17 @@ func main() {
 
 	region := cfg.RegionID
 	layer := 0
+
+	// Get last used ID for object generation
+	var currentID int64
+	row := sqlDB.QueryRowContext(ctx, "SELECT value_long FROM global_var WHERE name = $1", game.LAST_USED_ID)
+	err = row.Scan(&currentID)
+	if err != nil && err != sql.ErrNoRows {
+		log.Fatalf("Unable to get last_used_id: %v", err)
+	}
+	if err == sql.ErrNoRows {
+		currentID = 0
+	}
 
 	// Generate chunks for the region
 	for chunkY := 0; chunkY < cfg.RegionHeightChunks; chunkY++ {
@@ -202,7 +218,45 @@ func main() {
 			if err != nil {
 				log.Fatalf("Failed to save chunk (%d, %d): %v", chunkX, chunkY, err)
 			}
+
+			// Generate randomly position objects. type_id = 1. count about 120 per chunk
+			objectCount := 120
+			for i := 0; i < objectCount; i++ {
+				currentID++
+				// Random world coordinates within chunk
+				worldX := (chunkX*game.CHUNK_SIZE)*game.COORD_PER_TILE + rand.Intn(game.CHUNK_SIZE*game.COORD_PER_TILE)
+				worldY := (chunkY*game.CHUNK_SIZE)*game.COORD_PER_TILE + rand.Intn(game.CHUNK_SIZE*game.COORD_PER_TILE)
+
+				err = queries.SaveObject(ctx, db.SaveObjectParams{
+					ID:         currentID,
+					Region:     int32(region),
+					X:          int32(worldX),
+					Y:          int32(worldY),
+					Layer:      int32(layer),
+					Heading:    int16(rand.Intn(8)),
+					ChunkX:     int32(chunkX),
+					ChunkY:     int32(chunkY),
+					TypeID:     1,
+					Quality:    10,
+					Hp:         100,
+					CreateTick: 0,
+					LastTick:   0,
+					DataHex:    sql.NullString{Valid: false},
+				})
+				if err != nil {
+					log.Fatalf("Failed to save object %d in chunk (%d, %d): %v", currentID, chunkX, chunkY, err)
+				}
+			}
 		}
+	}
+
+	// Update last used ID
+	err = queries.UpsertGlobalVarLong(ctx, db.UpsertGlobalVarLongParams{
+		Name:      game.LAST_USED_ID,
+		ValueLong: sql.NullInt64{Int64: currentID, Valid: true},
+	})
+	if err != nil {
+		log.Fatalf("Unable to update last_used_id: %v", err)
 	}
 
 	log.Printf("Successfully generated %d x %d chunks for region %d",
