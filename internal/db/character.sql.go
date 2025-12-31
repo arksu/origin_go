@@ -22,7 +22,7 @@ func (q *Queries) ClearAuthToken(ctx context.Context, id int64) error {
 }
 
 const getCharacter = `-- name: GetCharacter :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, deleted_at, online_time, auth_token, created_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, online_time, auth_token, deleted_at, created_at
 FROM character
 WHERE id = $1
   AND deleted_at IS NULL
@@ -43,16 +43,16 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
-		&i.DeletedAt,
 		&i.OnlineTime,
 		&i.AuthToken,
+		&i.DeletedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCharacterByToken = `-- name: GetCharacterByToken :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, deleted_at, online_time, auth_token, created_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, online_time, auth_token, deleted_at, created_at
 from character
 where auth_token = $1
 `
@@ -72,16 +72,16 @@ func (q *Queries) GetCharacterByToken(ctx context.Context, authToken sql.NullStr
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
-		&i.DeletedAt,
 		&i.OnlineTime,
 		&i.AuthToken,
+		&i.DeletedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCharactersByAccountID = `-- name: GetCharactersByAccountID :many
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, deleted_at, online_time, auth_token, created_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, online_time, auth_token, deleted_at, created_at
 FROM character
 WHERE account_id = $1
   AND deleted_at IS NULL
@@ -108,9 +108,9 @@ func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64)
 			&i.Stamina,
 			&i.Shp,
 			&i.Hhp,
-			&i.DeletedAt,
 			&i.OnlineTime,
 			&i.AuthToken,
+			&i.DeletedAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

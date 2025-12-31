@@ -30,9 +30,9 @@ type Character struct {
 	Stamina    int32          `json:"stamina"`
 	Shp        int32          `json:"shp"`
 	Hhp        int32          `json:"hhp"`
-	DeletedAt  sql.NullTime   `json:"deleted_at"`
 	OnlineTime int64          `json:"online_time"`
 	AuthToken  sql.NullString `json:"auth_token"`
+	DeletedAt  sql.NullTime   `json:"deleted_at"`
 	CreatedAt  time.Time      `json:"created_at"`
 }
 
@@ -71,7 +71,7 @@ type Inventory struct {
 	ItemQuality int16          `json:"item_quality"`
 	ItemCount   int32          `json:"item_count"`
 	LastTick    int64          `json:"last_tick"`
-	Data        sql.NullString `json:"data"`
+	DataHex     sql.NullString `json:"data_hex"`
 	Deleted     bool           `json:"deleted"`
 }
 
@@ -82,14 +82,14 @@ type Object struct {
 	Y          int32          `json:"y"`
 	Layer      int32          `json:"layer"`
 	Heading    int16          `json:"heading"`
-	GridX      int32          `json:"grid_x"`
-	GridY      int32          `json:"grid_y"`
-	Type       int32          `json:"type"`
+	ChunkX     int32          `json:"chunk_x"`
+	ChunkY     int32          `json:"chunk_y"`
+	TypeID     int32          `json:"type_id"`
 	Quality    int16          `json:"quality"`
 	Hp         int32          `json:"hp"`
 	CreateTick int64          `json:"create_tick"`
 	LastTick   int64          `json:"last_tick"`
-	Data       sql.NullString `json:"data"`
+	DataHex    sql.NullString `json:"data_hex"`
 }
 
 type Skill struct {

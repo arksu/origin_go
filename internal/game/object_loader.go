@@ -49,8 +49,8 @@ func (ol *ObjectLoader) LoadChunkObjects(ctx context.Context, w *ecs.World, regi
 	// Load objects from database
 	objects, err := ol.queries.GetObjectsByChunk(ctx, db.GetObjectsByChunkParams{
 		Region: region,
-		GridX:  chunkX,
-		GridY:  chunkY,
+		ChunkX: chunkX,
+		ChunkY: chunkY,
 		Layer:  layer,
 	})
 	if err != nil {
@@ -88,11 +88,11 @@ func (ol *ObjectLoader) LoadChunkObjects(ctx context.Context, w *ecs.World, regi
 
 		// Add WorldObject component
 		data := ""
-		if obj.Data.Valid {
-			data = obj.Data.String
+		if obj.DataHex.Valid {
+			data = obj.DataHex.String
 		}
 		ecs.AddComponent(w, h, components.WorldObject{
-			ObjectType: obj.Type,
+			ObjectType: obj.TypeID,
 			Quality:    obj.Quality,
 			HP:         obj.Hp,
 			Heading:    obj.Heading,
@@ -104,14 +104,14 @@ func (ol *ObjectLoader) LoadChunkObjects(ctx context.Context, w *ecs.World, regi
 		// Add EntityMeta for visibility
 		ecs.AddComponent(w, h, components.EntityMeta{
 			EntityID:   ecs.EntityID(obj.ID),
-			EntityType: uint32(obj.Type),
+			EntityType: uint32(obj.TypeID),
 		})
 
 		// Add Static marker (world objects don't move)
 		ecs.AddComponent(w, h, components.Static{})
 
 		// Add Collider based on object type (default size, can be customized per type)
-		colliderSize := getObjectColliderSize(obj.Type)
+		colliderSize := getObjectColliderSize(obj.TypeID)
 		if colliderSize > 0 {
 			ecs.AddComponent(w, h, components.Collider{
 				Width:  colliderSize,

@@ -10,7 +10,7 @@ import (
 )
 
 const getInventoryByParentID = `-- name: GetInventoryByParentID :many
-SELECT id, parent_id, item_type, slot_x, slot_y, item_quality, item_count, last_tick, data, deleted
+SELECT id, parent_id, item_type, slot_x, slot_y, item_quality, item_count, last_tick, data_hex, deleted
 FROM inventory
 WHERE parent_id = $1
   AND deleted = false
@@ -34,7 +34,7 @@ func (q *Queries) GetInventoryByParentID(ctx context.Context, parentID int64) ([
 			&i.ItemQuality,
 			&i.ItemCount,
 			&i.LastTick,
-			&i.Data,
+			&i.DataHex,
 			&i.Deleted,
 		); err != nil {
 			return nil, err
@@ -51,7 +51,7 @@ func (q *Queries) GetInventoryByParentID(ctx context.Context, parentID int64) ([
 }
 
 const getInventoryItem = `-- name: GetInventoryItem :one
-SELECT id, parent_id, item_type, slot_x, slot_y, item_quality, item_count, last_tick, data, deleted
+SELECT id, parent_id, item_type, slot_x, slot_y, item_quality, item_count, last_tick, data_hex, deleted
 FROM inventory
 WHERE id = $1
   AND deleted = false
@@ -69,7 +69,7 @@ func (q *Queries) GetInventoryItem(ctx context.Context, id int64) (Inventory, er
 		&i.ItemQuality,
 		&i.ItemCount,
 		&i.LastTick,
-		&i.Data,
+		&i.DataHex,
 		&i.Deleted,
 	)
 	return i, err
