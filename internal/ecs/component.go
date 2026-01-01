@@ -6,7 +6,7 @@ import (
 )
 
 // ComponentID is a unique identifier for a component type
-type ComponentID uint16
+type ComponentID uint8
 
 // Component is a marker interface for ECS components
 type Component interface{}
