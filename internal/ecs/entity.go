@@ -6,21 +6,6 @@ import "sync"
 // Uses generational index pattern: lower 32 bits = index, upper 32 bits = generation
 type EntityID uint64
 
-// Index returns the index portion of the entity ID
-func (e EntityID) Index() uint32 {
-	return uint32(e & 0xFFFFFFFF)
-}
-
-// Generation returns the generation portion of the entity ID
-func (e EntityID) Generation() uint32 {
-	return uint32(e >> 32)
-}
-
-// IsValid checks if the entity ID is non-zero
-func (e EntityID) IsValid() bool {
-	return e != 0
-}
-
 // Handle is a compact runtime identifier (uint32) used internally by ECS
 // Assigned from a pool and used by all systems and ComponentStorage
 // Sparse arrays are bounded by max active entities, not by astronomical EntityID values
