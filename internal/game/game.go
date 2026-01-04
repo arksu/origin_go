@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -16,6 +17,30 @@ import (
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 )
+
+type GameState int32
+
+const (
+	GameStateStarting GameState = iota
+	GameStateRunning
+	GameStateStopping
+	GameStateStopped
+)
+
+func (gs GameState) String() string {
+	switch gs {
+	case GameStateStarting:
+		return "Starting"
+	case GameStateRunning:
+		return "Running"
+	case GameStateStopping:
+		return "Stopping"
+	case GameStateStopped:
+		return "Stopped"
+	default:
+		return "Unknown"
+	}
+}
 
 type Game struct {
 	cfg    *config.Config
@@ -30,6 +55,7 @@ type Game struct {
 	tickRate    int
 	tickPeriod  time.Duration
 	currentTick uint64
+	state       atomic.Int32 // GameState
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -49,6 +75,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *Object
 		ctx:           ctx,
 		cancel:        cancel,
 	}
+	g.state.Store(int32(GameStateStarting))
 
 	g.entityIDManager = NewEntityIDManager(cfg, db, logger)
 	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, logger)
@@ -61,8 +88,22 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *Object
 	return g
 }
 
+func (g *Game) setState(state GameState) {
+	oldState := g.state.Load()
+	g.state.Store(int32(state))
+	g.logger.Info("Game state changed", zap.String("old_state", GameState(oldState).String()), zap.String("new_state", state.String()))
+}
+
+func (g *Game) getState() GameState {
+	return GameState(g.state.Load())
+}
+
 func (g *Game) setupNetworkHandlers() {
 	g.networkServer.SetOnConnect(func(c *network.Client) {
+		if g.getState() == GameStateStopping {
+			c.Close()
+			return
+		}
 		g.logger.Info("Client connected", zap.Uint64("client_id", c.ID))
 	})
 
@@ -71,7 +112,9 @@ func (g *Game) setupNetworkHandlers() {
 	})
 
 	g.networkServer.SetOnMessage(func(c *network.Client, data []byte) {
-		g.handlePacket(c, data)
+		if g.getState() == GameStateRunning {
+			g.handlePacket(c, data)
+		}
 	})
 }
 
@@ -204,24 +247,26 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 	// If IsOnline - update is_online=false in character
 	if c.CharacterID != 0 {
-		if err := g.db.Queries().SetCharacterOffline(g.ctx, c.CharacterID); err != nil {
-			g.logger.Error("Failed to set character offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID), zap.Error(err))
-		} else {
-			g.logger.Info("Character set offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID))
+		if g.getState() == GameStateRunning {
+			if err := g.db.Queries().SetCharacterOffline(g.ctx, c.CharacterID); err != nil {
+				g.logger.Error("Failed to set character offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID), zap.Error(err))
+			} else {
+				g.logger.Info("Character set offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID))
+			}
 		}
 	}
 }
 
 func (g *Game) resetOnlinePlayers() {
-	// set is_online=false where region=cfg.region
-	if err := g.db.Queries().ResetOnlinePlayers(g.ctx, int32(g.cfg.Game.Region)); err != nil {
-		g.logger.Error("Failed to reset online players", zap.Int32("region", int32(g.cfg.Game.Region)), zap.Error(err))
+	if err := g.db.Queries().ResetOnlinePlayers(g.ctx, g.cfg.Game.Region); err != nil {
+		g.logger.Error("Failed to reset online players", zap.Int32("region", g.cfg.Game.Region), zap.Error(err))
 	} else {
 		g.logger.Info("Reset online players", zap.Int32("region", int32(g.cfg.Game.Region)))
 	}
 }
 
 func (g *Game) StartGameLoop() {
+	g.setState(GameStateRunning)
 	g.wg.Add(1)
 	go g.gameLoop()
 
@@ -241,6 +286,9 @@ func (g *Game) gameLoop() {
 		case <-g.ctx.Done():
 			return
 		case now := <-ticker.C:
+			if g.getState() != GameStateRunning {
+				return
+			}
 			dt := now.Sub(lastTime).Seconds()
 			lastTime = now
 
@@ -251,11 +299,15 @@ func (g *Game) gameLoop() {
 }
 
 func (g *Game) update(dt float32) {
+
 	g.shardManager.Update(dt)
 }
 
 func (g *Game) Stop() {
 	g.logger.Info("Stopping game...")
+	g.setState(GameStateStopping)
+
+	g.resetOnlinePlayers()
 	g.cancel()
 
 	g.networkServer.Stop()
@@ -264,8 +316,7 @@ func (g *Game) Stop() {
 
 	g.wg.Wait()
 
-	g.resetOnlinePlayers()
-
+	g.setState(GameStateStopped)
 	g.logger.Info("Game stopped")
 }
 
@@ -285,24 +336,6 @@ func (g *Game) CurrentTick() uint64 {
 	return g.currentTick
 }
 
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var b [20]byte
-	n := len(b)
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	for i > 0 {
-		n--
-		b[n] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		n--
-		b[n] = '-'
-	}
-	return string(b[n:])
+func (g *Game) State() GameState {
+	return g.getState()
 }
