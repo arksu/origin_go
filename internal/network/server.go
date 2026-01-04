@@ -39,6 +39,7 @@ type Client struct {
 	ID          uint64
 	conn        net.Conn
 	server      *Server
+	logger      *zap.Logger
 	sendCh      chan []byte
 	closeCh     chan struct{}
 	closeOnce   sync.Once
@@ -125,10 +126,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	clientID := s.nextID.Add(1)
 	client := &Client{
-		ID:      s.nextID.Add(1),
+		ID:      clientID,
 		conn:    conn,
 		server:  s,
+		logger:  s.logger.Named("client").With(zap.Uint64("id", clientID)),
 		sendCh:  make(chan []byte, 256),
 		closeCh: make(chan struct{}),
 	}
@@ -151,15 +154,11 @@ func (c *Client) readLoop() {
 	defer c.Close()
 
 	for {
-		select {
-		case <-c.closeCh:
+		err := c.conn.SetReadDeadline(time.Now().Add(c.server.cfg.ReadTimeout))
+		if err != nil {
+			c.logger.Error("Failed to set read deadline", zap.Uint64("client_id", c.ID), zap.Error(err))
 			return
-		case <-c.server.ctx.Done():
-			return
-		default:
 		}
-
-		c.conn.SetReadDeadline(time.Now().Add(c.server.cfg.ReadTimeout))
 
 		msg, op, err := wsutil.ReadClientData(c.conn)
 		if err != nil {
@@ -168,6 +167,14 @@ func (c *Client) readLoop() {
 
 		if op == ws.OpBinary && c.server.onMessage != nil {
 			c.server.onMessage(c, msg)
+		}
+
+		select {
+		case <-c.closeCh:
+			return
+		case <-c.server.ctx.Done():
+			return
+		default:
 		}
 	}
 }

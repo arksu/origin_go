@@ -1376,8 +1376,7 @@ type S2C_AuthResult struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Success        bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	ErrorMessage   string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	PlayerEntityId uint64                 `protobuf:"varint,3,opt,name=player_entity_id,json=playerEntityId,proto3" json:"player_entity_id,omitempty"`
-	PlayerState    *PlayerFullState       `protobuf:"bytes,4,opt,name=player_state,json=playerState,proto3" json:"player_state,omitempty"`
+	PlayerEntityId uint64                 `protobuf:"varint,3,opt,name=player_entity_id,json=playerEntityId,proto3" json:"player_entity_id,omitempty"` //  PlayerFullState player_state = 4;
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1431,13 +1430,6 @@ func (x *S2C_AuthResult) GetPlayerEntityId() uint64 {
 		return x.PlayerEntityId
 	}
 	return 0
-}
-
-func (x *S2C_AuthResult) GetPlayerState() *PlayerFullState {
-	if x != nil {
-		return x.PlayerState
-	}
-	return nil
 }
 
 type S2C_Pong struct {
@@ -1779,12 +1771,11 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x04auth\x18\n" +
 	" \x01(\v2\x0f.proto.C2S_AuthH\x00R\x04auth\x12%\n" +
 	"\x04ping\x18\v \x01(\v2\x0f.proto.C2S_PingH\x00R\x04pingB\t\n" +
-	"\apayload\"\xb4\x01\n" +
+	"\apayload\"y\n" +
 	"\x0eS2C_AuthResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12(\n" +
-	"\x10player_entity_id\x18\x03 \x01(\x04R\x0eplayerEntityId\x129\n" +
-	"\fplayer_state\x18\x04 \x01(\v2\x16.proto.PlayerFullStateR\vplayerState\"V\n" +
+	"\x10player_entity_id\x18\x03 \x01(\x04R\x0eplayerEntityId\"V\n" +
 	"\bS2C_Pong\x12$\n" +
 	"\x0eclient_time_ms\x18\x01 \x01(\x03R\fclientTimeMs\x12$\n" +
 	"\x0eserver_time_ms\x18\x02 \x01(\x03R\fserverTimeMs\"7\n" +
@@ -1908,18 +1899,17 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	17, // 12: proto.ChunkData.coord:type_name -> proto.ChunkCoord
 	19, // 13: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
 	20, // 14: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
-	15, // 15: proto.S2C_AuthResult.player_state:type_name -> proto.PlayerFullState
-	18, // 16: proto.S2C_LoadChunk.chunk:type_name -> proto.ChunkData
-	17, // 17: proto.S2C_UnloadChunk.coord:type_name -> proto.ChunkCoord
-	22, // 18: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	23, // 19: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	24, // 20: proto.ServerMessage.load_chunk:type_name -> proto.S2C_LoadChunk
-	25, // 21: proto.ServerMessage.unload_chunk:type_name -> proto.S2C_UnloadChunk
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	18, // 15: proto.S2C_LoadChunk.chunk:type_name -> proto.ChunkData
+	17, // 16: proto.S2C_UnloadChunk.coord:type_name -> proto.ChunkCoord
+	22, // 17: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	23, // 18: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	24, // 19: proto.ServerMessage.load_chunk:type_name -> proto.S2C_LoadChunk
+	25, // 20: proto.ServerMessage.unload_chunk:type_name -> proto.S2C_UnloadChunk
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }

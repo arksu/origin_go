@@ -219,7 +219,7 @@ message S2C_AuthResult {
   bool success = 1;
   string error_message = 2;
   uint64 player_entity_id = 3;
-  PlayerFullState player_state = 4;
+//  PlayerFullState player_state = 4;
 }
 
 message S2C_Pong {
