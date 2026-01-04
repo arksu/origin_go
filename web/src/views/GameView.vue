@@ -51,13 +51,19 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted } from 'vue'
+import { computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
 import { gameConnection } from '../network/GameConnection'
 
 const router = useRouter()
 const gameStore = useGameStore()
+
+watch(() => gameStore.connectionState, (newState) => {
+  if (newState === 'disconnected' && gameStore.wsToken) {
+    router.push('/characters')
+  }
+})
 
 const connectionStatusClass = computed(() => {
   switch (gameStore.connectionState) {

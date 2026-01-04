@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 
 	"origin/internal/config"
 	"origin/internal/network"
+	netproto "origin/internal/network/proto"
 	"origin/internal/persistence"
 )
 
@@ -69,7 +71,81 @@ func (g *Game) setupNetworkHandlers() {
 }
 
 func (g *Game) handlePacket(c *network.Client, data []byte) {
-	// TODO: implement packet handling with protobuf
+	msg := &netproto.ClientMessage{}
+	if err := proto.Unmarshal(data, msg); err != nil {
+		g.logger.Warn("Failed to unmarshal packet", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+	g.logger.Debug("Received packet", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
+
+	switch payload := msg.Payload.(type) {
+	case *netproto.ClientMessage_Ping:
+		g.handlePing(c, msg.Sequence, payload.Ping)
+	case *netproto.ClientMessage_Auth:
+		g.handleAuth(c, msg.Sequence, payload.Auth)
+	default:
+		g.logger.Warn("Unknown packet type", zap.Uint64("client_id", c.ID))
+	}
+}
+
+func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S_Ping) {
+	pong := &netproto.S2C_Pong{
+		ClientTimeMs: ping.ClientTimeMs,
+		ServerTimeMs: time.Now().UnixMilli(),
+	}
+
+	response := &netproto.ServerMessage{
+		Sequence: sequence,
+		Payload: &netproto.ServerMessage_Pong{
+			Pong: pong,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		g.logger.Error("Failed to marshal pong", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+
+	c.Send(data)
+}
+
+func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S_Auth) {
+	g.logger.Debug("Auth request", zap.Uint64("client_id", c.ID), zap.String("token", auth.Token))
+
+	// TODO: validate token against auth service
+	if auth.Token == "" {
+		g.sendAuthResult(c, sequence, false, "Empty token", 0)
+		return
+	}
+
+	// TODO: create player entity and load state
+	playerEntityID := uint64(1)
+
+	g.sendAuthResult(c, sequence, true, "", playerEntityID)
+}
+
+func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, errorMsg string, playerEntityID uint64) {
+	result := &netproto.S2C_AuthResult{
+		Success:        success,
+		ErrorMessage:   errorMsg,
+		PlayerEntityId: playerEntityID,
+	}
+
+	response := &netproto.ServerMessage{
+		Sequence: sequence,
+		Payload: &netproto.ServerMessage_AuthResult{
+			AuthResult: result,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		g.logger.Error("Failed to marshal auth result", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+
+	c.Send(data)
 }
 
 func (g *Game) StartGameLoop() {
