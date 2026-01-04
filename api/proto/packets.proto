@@ -1,0 +1,279 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "origin/internal/network/proto";
+
+// ============================================================================
+// БАЗОВЫЕ ТИПЫ
+// ============================================================================
+
+// Позиция в мире
+message Position {
+  int32 x = 1;
+  int32 y = 2;
+  uint32 heading = 3;
+}
+
+// Вектор направления/скорости
+message Vector2 {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+// AABB для коллизий
+message AABB {
+  int32 min_x = 1;
+  int32 min_y = 2;
+  int32 max_x = 3;
+  int32 max_y = 4;
+}
+
+// Timestamp в Unix milliseconds
+message Timestamp {
+  int64 millis = 1;
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum MoveMode {
+  MOVE_MODE_WALK = 0;
+  MOVE_MODE_RUN = 1;
+  MOVE_MODE_FAST_RUN = 2;
+  MOVE_MODE_SWIM = 3;
+}
+
+enum EquipSlot {
+  EQUIP_SLOT_NONE = 0;
+  EQUIP_SLOT_HEAD = 1;
+  EQUIP_SLOT_CHEST = 2;
+  EQUIP_SLOT_LEGS = 3;
+  EQUIP_SLOT_FEET = 4;
+  EQUIP_SLOT_HANDS = 5;
+  EQUIP_SLOT_LEFT_HAND = 6;
+  EQUIP_SLOT_RIGHT_HAND = 7;
+  EQUIP_SLOT_BACK = 8;
+  EQUIP_SLOT_NECK = 9;
+  EQUIP_SLOT_RING_1 = 10;
+  EQUIP_SLOT_RING_2 = 11;
+}
+
+enum ExpType {
+  EXP_TYPE_NATURE = 0;
+  EXP_TYPE_INDUSTRY = 1;
+  EXP_TYPE_COMBAT = 2;
+}
+
+enum WeatherType {
+  WEATHER_TYPE_CLEAR = 0;
+  WEATHER_TYPE_RAIN = 1;
+  WEATHER_TYPE_FOG = 2;
+  WEATHER_TYPE_STORM = 3;
+  WEATHER_TYPE_SNOW = 4;
+}
+
+enum ErrorCode {
+  ERROR_CODE_NONE = 0;
+  ERROR_CODE_INVALID_REQUEST = 1;
+  ERROR_CODE_NOT_AUTHENTICATED = 2;
+  ERROR_CODE_ENTITY_NOT_FOUND = 3;
+  ERROR_CODE_OUT_OF_RANGE = 4;
+  ERROR_CODE_INSUFFICIENT_RESOURCES = 5;
+  ERROR_CODE_INVENTORY_FULL = 6;
+  ERROR_CODE_CANNOT_INTERACT = 7;
+  ERROR_CODE_COOLDOWN_ACTIVE = 8;
+  ERROR_CODE_INSUFFICIENT_STAMINA = 9;
+  ERROR_CODE_TARGET_INVALID = 10;
+  ERROR_CODE_PATH_BLOCKED = 11;
+  ERROR_CODE_ALREADY_IN_PROGRESS = 12;
+  ERROR_CODE_BUILDING_INCOMPLETE = 13;
+  ERROR_CODE_RECIPE_UNKNOWN = 14;
+}
+
+// ============================================================================
+// ITEM & INVENTORY
+// ============================================================================
+
+message Item {
+  uint32 item_id = 1;           // ID типа предмета
+  string resource = 2;
+  uint32 quality = 3;
+  uint32 quantity = 4;
+  uint32 durability = 5;        // 0-100, если применимо
+}
+
+message InventorySlot {
+  uint32 x = 1;
+  uint32 y = 2;
+  Item item = 3;
+}
+
+message Inventory {
+  uint32 width = 1;
+  uint32 height = 2;
+  repeated InventorySlot slots = 3;
+}
+
+message PaperdollSlot {
+  EquipSlot slot = 1;
+  Item item = 2;
+}
+
+message Paperdoll {
+  repeated PaperdollSlot slots = 1;
+}
+
+// ============================================================================
+// ENTITY DATA
+// ============================================================================
+
+message EntityMovement {
+  Position position = 1;
+  Vector2 velocity = 2;
+  MoveMode move_mode = 3;
+  optional Vector2 target_position = 4; // куда движется, если есть
+  bool is_moving = 5;
+}
+
+// Полная информация о своём персонаже
+message PlayerFullState {
+  uint64 entity_id = 1;
+  string name = 2;
+  EntityMovement movement = 3;
+  //  EntityStats stats = 4;
+  //  EntitySkills skills = 5;
+  Inventory inventory = 6;
+  Paperdoll paperdoll = 7;
+  optional uint64 dragging_entity_id = 8; // если тащим что-то
+}
+
+message EntityAppearance {
+  string resource = 1;
+  string name = 2;
+}
+
+// ============================================================================
+// CHUNK & WORLD
+// ============================================================================
+
+message ChunkCoord {
+  int32 x = 1;
+  int32 y = 2;
+}
+message ChunkData {
+  ChunkCoord coord = 1;
+  bytes tiles = 2;              // compressed 128x128 tiles (можно zlib)
+  uint32 version = 3;           // для инвалидации кэша
+}
+
+// ============================================================================
+// CLIENT -> SERVER MESSAGES
+// ============================================================================
+
+message C2S_Auth {
+  string token = 1;
+  string client_version = 2;
+}
+
+message C2S_Ping {
+  int64 client_time_ms = 1;
+}
+
+// Обёртка для всех клиентских сообщений
+message ClientMessage {
+  uint32 sequence = 1;          // sequence number для ack
+  oneof payload {
+    C2S_Auth auth = 10;
+    C2S_Ping ping = 11;
+    //    C2S_MoveTo move_to = 11;
+    //    C2S_MoveToEntity move_to_entity = 12;
+    //    C2S_StopMovement stop_movement = 13;
+    //    C2S_Interact interact = 14;
+    //    C2S_Attack attack = 15;
+    //    C2S_UseItem use_item = 16;
+    //    C2S_EquipItem equip_item = 17;
+    //    C2S_UnequipItem unequip_item = 18;
+    //    C2S_MoveItemInInventory move_item = 19;
+    //    C2S_DropItem drop_item = 20;
+    //    C2S_SplitStack split_stack = 21;
+    //    C2S_PickupItem pickup_item = 22;
+    //    C2S_TransferItem transfer_item = 23;
+    //    C2S_Craft craft = 24;
+    //    C2S_Build build = 25;
+    //    C2S_PlaceItemInBuildSite place_in_build = 26;
+    //    C2S_StartDragging start_dragging = 27;
+    //    C2S_StopDragging stop_dragging = 28;
+    //    C2S_ChatMessage chat = 29;
+    //    C2S_RequestChunk request_chunk = 30;
+  }
+}
+
+
+// ============================================================================
+// SERVER -> CLIENT MESSAGES
+// ============================================================================
+
+message S2C_AuthResult {
+  bool success = 1;
+  string error_message = 2;
+  uint64 player_entity_id = 3;
+  PlayerFullState player_state = 4;
+}
+
+message S2C_Pong {
+  int64 client_time_ms = 1;
+  int64 server_time_ms = 2;
+}
+
+message S2C_LoadChunk {
+  ChunkData chunk = 1;
+}
+
+message S2C_UnloadChunk {
+  ChunkCoord coord = 1;
+}
+
+// Обёртка для всех серверных сообщений
+message ServerMessage {
+  uint32 sequence = 1;          // для ack если нужно
+  oneof payload {
+    S2C_AuthResult auth_result = 10;
+    S2C_Pong pong = 11;
+    S2C_LoadChunk load_chunk = 12;
+    S2C_UnloadChunk unload_chunk = 13;
+//    S2C_SpawnEntity spawn_entity = 13;
+//    S2C_DespawnEntity despawn_entity = 14;
+//    S2C_EntityUpdate entity_update = 15;
+//    S2C_PlayerStateUpdate player_state = 16;
+//    S2C_InventoryUpdate inventory_update = 17;
+//    S2C_PaperdollUpdate paperdoll_update = 18;
+//    S2C_ContainerOpen container_open = 19;
+//    S2C_ContainerClose container_close = 20;
+//    S2C_ContainerUpdate container_update = 21;
+//    S2C_ItemPickedUp item_picked = 22;
+//    S2C_ItemDropped item_dropped = 23;
+//    S2C_ExpGain exp_gain = 24;
+//    S2C_DamageDealt damage_dealt = 25;
+//    S2C_EntityDied entity_died = 26;
+//    S2C_ResourceGathered resource_gathered = 27;
+//    S2C_ResourceDepleted resource_depleted = 28;
+//    S2C_CraftStarted craft_started = 29;
+//    S2C_CraftCompleted craft_completed = 30;
+//    S2C_CraftFailed craft_failed = 31;
+//    S2C_BuildSiteCreated build_site_created = 32;
+//    S2C_BuildSiteUpdate build_site_update = 33;
+//    S2C_BuildingCompleted building_completed = 34;
+//    S2C_PlantGrowthUpdate plant_growth = 35;
+//    S2C_DragStarted drag_started = 36;
+//    S2C_DragStopped drag_stopped = 37;
+//    S2C_VisibilityChanged visibility_changed = 38;
+//    S2C_WorldStateUpdate world_state = 39;
+//    S2C_ChatMessage chat = 40;
+//    S2C_SystemMessage system_message = 41;
+//    S2C_Error error = 42;
+//    S2C_Disconnect disconnect = 44;
+//    S2C_EventBatch event_batch = 45;
+  }
+}

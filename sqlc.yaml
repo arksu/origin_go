@@ -1,12 +1,12 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "db/queries"
-    schema: "db/schema.sql"
+    queries: "internal/persistence/queries"
+    schema: "migrations/schema.sql"
     gen:
       go:
-        package: "db"
-        out: "internal/db"
+        package: "repository"
+        out: "internal/persistence/repository"
         emit_json_tags: true
         emit_prepared_queries: false
         emit_interface: false

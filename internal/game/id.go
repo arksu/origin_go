@@ -2,103 +2,101 @@ package game
 
 import (
 	"context"
-	"log"
 	"sync"
+	"time"
+
+	"go.uber.org/zap"
 
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/persistence"
 )
 
-type EntityIdManager struct {
+type EntityIDManager struct {
 	db        *persistence.Postgres
+	logger    *zap.Logger
 	rangeSize uint64
 
-	currentId uint64 // current ID to allocate
-	rangeEnd  uint64 // end of current range (exclusive)
+	currentID uint64
+	rangeEnd  uint64
 
-	mu     sync.Mutex
-	stopCh chan struct{}
-	doneCh chan struct{}
+	mu sync.Mutex
 }
 
-func NewEntityIdManager(cfg *config.Config, db *persistence.Postgres) *EntityIdManager {
-	lastUsedId := uint64(db.GetGlobalVarLong(context.Background(), LAST_USED_ID))
-	log.Printf("EntityIdManager: loaded lastUsedId=%d from DB", lastUsedId)
+func NewEntityIDManager(cfg *config.Config, db *persistence.Postgres, logger *zap.Logger) *EntityIDManager {
+	lastUsedID := uint64(db.GetGlobalVarLong(context.Background(), LAST_USED_ID))
+	logger.Info("EntityIDManager loaded lastUsedID from DB", zap.Uint64("last_used_id", lastUsedID))
 
-	rangeSize := uint64(cfg.EntityIdRangeSize)
-	if rangeSize == 10 {
-		panic("EntityIdManager: EntityIdRangeSize must be greater than 10")
+	rangeSize := uint64(cfg.EntityID.RangeSize)
+	if rangeSize <= 10 {
+		panic("EntityIDManager: RangeSize must be greater than 10")
 	}
 
-	em := &EntityIdManager{
+	em := &EntityIDManager{
 		db:        db,
+		logger:    logger,
 		rangeSize: rangeSize,
-		currentId: lastUsedId,
-		rangeEnd:  lastUsedId, // force immediate range allocation
-		stopCh:    make(chan struct{}),
-		doneCh:    make(chan struct{}),
+		currentID: lastUsedID,
+		rangeEnd:  lastUsedID,
 	}
 
-	// Allocate first range
 	em.allocateNewRange()
 
 	return em
 }
 
-// allocateNewRange reserves a new range of IDs and persists to DB in background
-func (em *EntityIdManager) allocateNewRange() {
+func (em *EntityIDManager) allocateNewRange() {
 	newRangeEnd := em.rangeEnd + em.rangeSize
 	em.rangeEnd = newRangeEnd
 
-	log.Printf("EntityIdManager: allocated new range [%d, %d)", em.currentId+1, newRangeEnd)
+	em.logger.Info("EntityIDManager allocated new range",
+		zap.Uint64("start", em.currentID+1),
+		zap.Uint64("end", newRangeEnd))
 
-	// Save to DB in background goroutine
-	go func(endId uint64) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*1e9) // 5 seconds
+	go func(endID uint64) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := em.db.SetGlobalVarLong(ctx, LAST_USED_ID, int64(endId)); err != nil {
-			log.Printf("EntityIdManager: failed to persist LAST_USED_ID=%d: %v", endId, err)
+		if err := em.db.SetGlobalVarLong(ctx, LAST_USED_ID, int64(endID)); err != nil {
+			em.logger.Error("EntityIDManager failed to persist LAST_USED_ID",
+				zap.Uint64("end_id", endID),
+				zap.Error(err))
 		}
 	}(newRangeEnd)
 }
 
-// GetFreeId returns the next available entity ID
-func (em *EntityIdManager) GetFreeId() ecs.EntityID {
+func (em *EntityIDManager) GetFreeID() ecs.EntityID {
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
-	em.currentId++
+	em.currentID++
 
-	// Check if we've exhausted the current range
-	if em.currentId >= em.rangeEnd {
+	if em.currentID >= em.rangeEnd {
 		em.allocateNewRange()
 	}
 
-	return ecs.EntityID(em.currentId)
+	return ecs.EntityID(em.currentID)
 }
 
-// GetLastUsedId returns the current last used ID
-func (em *EntityIdManager) GetLastUsedId() uint64 {
+func (em *EntityIDManager) GetLastUsedID() uint64 {
 	em.mu.Lock()
 	defer em.mu.Unlock()
-	return em.currentId
+	return em.currentID
 }
 
-// Stop gracefully shuts down the manager and persists final state
-func (em *EntityIdManager) Stop() {
+func (em *EntityIDManager) Stop() {
 	em.mu.Lock()
-	currentId := em.currentId
+	currentID := em.currentID
 	em.mu.Unlock()
 
-	// Persist final state synchronously
-	ctx, cancel := context.WithTimeout(context.Background(), 5*1e9)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := em.db.SetGlobalVarLong(ctx, LAST_USED_ID, int64(currentId)); err != nil {
-		log.Printf("EntityIdManager: failed to persist final LAST_USED_ID=%d: %v", currentId, err)
+	if err := em.db.SetGlobalVarLong(ctx, LAST_USED_ID, int64(currentID)); err != nil {
+		em.logger.Error("EntityIDManager failed to persist final LAST_USED_ID",
+			zap.Uint64("current_id", currentID),
+			zap.Error(err))
 	} else {
-		log.Printf("EntityIdManager: persisted final LAST_USED_ID=%d", currentId)
+		em.logger.Info("EntityIDManager persisted final LAST_USED_ID", zap.Uint64("current_id", currentID))
 	}
 }
