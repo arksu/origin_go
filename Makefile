@@ -10,7 +10,7 @@ proto:
 	@echo "Generating protobuf code..."
 	@mkdir -p internal/proto
 	protoc --go_out=. --go_opt=module=origin \
-		proto/packets.proto
+		api/proto/packets.proto
 
 # Install protobuf tools
 proto-tools:
@@ -18,18 +18,18 @@ proto-tools:
 
 # Build the server
 build: proto sqlc
-	go build -o server ./cmd/server
+	go build -o gameserver ./cmd/gameserver
 
 # Run the server
 run: proto sqlc
-	go run ./cmd/server
+	go run ./cmd/gameserver
 
 map-gen:
 	go run ./cmd/map_generator
 
 # Clean build artifacts
 clean:
-	rm -f server game_server
+	rm -f gameserver
 	rm -rf internal/network/pb
 
 # Install dependencies

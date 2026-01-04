@@ -1,0 +1,156 @@
+package game
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"go.uber.org/zap"
+
+	"origin/internal/config"
+	"origin/internal/network"
+	"origin/internal/persistence"
+)
+
+type Game struct {
+	cfg    *config.Config
+	db     *persistence.Postgres
+	logger *zap.Logger
+
+	objectFactory   *ObjectFactory
+	shardManager    *ShardManager
+	entityIDManager *EntityIDManager
+	networkServer   *network.Server
+
+	tickRate    int
+	tickPeriod  time.Duration
+	currentTick uint64
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+}
+
+func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *ObjectFactory, logger *zap.Logger) *Game {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	g := &Game{
+		cfg:           cfg,
+		db:            db,
+		objectFactory: objectFactory,
+		logger:        logger,
+		tickRate:      cfg.Game.TickRate,
+		tickPeriod:    time.Second / time.Duration(cfg.Game.TickRate),
+		ctx:           ctx,
+		cancel:        cancel,
+	}
+
+	g.entityIDManager = NewEntityIDManager(cfg, db, logger)
+	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, logger)
+	g.networkServer = network.NewServer(&cfg.Network, logger)
+
+	g.setupNetworkHandlers()
+
+	return g
+}
+
+func (g *Game) setupNetworkHandlers() {
+	g.networkServer.SetOnConnect(func(c *network.Client) {
+		g.logger.Info("Client connected", zap.Uint64("client_id", c.ID))
+	})
+
+	g.networkServer.SetOnDisconnect(func(c *network.Client) {
+		g.logger.Info("Client disconnected", zap.Uint64("client_id", c.ID))
+	})
+
+	g.networkServer.SetOnMessage(func(c *network.Client, data []byte) {
+		g.handlePacket(c, data)
+	})
+}
+
+func (g *Game) handlePacket(c *network.Client, data []byte) {
+	// TODO: implement packet handling with protobuf
+}
+
+func (g *Game) StartGameLoop() {
+	g.wg.Add(1)
+	go g.gameLoop()
+
+	g.logger.Info("Game loop started", zap.Int("tick_rate_hz", g.tickRate))
+}
+
+func (g *Game) gameLoop() {
+	defer g.wg.Done()
+
+	ticker := time.NewTicker(g.tickPeriod)
+	defer ticker.Stop()
+
+	lastTime := time.Now()
+
+	for {
+		select {
+		case <-g.ctx.Done():
+			return
+		case now := <-ticker.C:
+			dt := now.Sub(lastTime).Seconds()
+			lastTime = now
+
+			g.currentTick++
+			g.update(float32(dt))
+		}
+	}
+}
+
+func (g *Game) update(dt float32) {
+	g.shardManager.Update(dt)
+}
+
+func (g *Game) Stop() {
+	g.logger.Info("Stopping game...")
+	g.cancel()
+
+	g.networkServer.Stop()
+	g.shardManager.Stop()
+	g.entityIDManager.Stop()
+
+	g.wg.Wait()
+	g.logger.Info("Game stopped")
+}
+
+func (g *Game) ShardManager() *ShardManager {
+	return g.shardManager
+}
+
+func (g *Game) EntityIDManager() *EntityIDManager {
+	return g.entityIDManager
+}
+
+func (g *Game) NetworkServer() *network.Server {
+	return g.networkServer
+}
+
+func (g *Game) CurrentTick() uint64 {
+	return g.currentTick
+}
+
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	var b [20]byte
+	n := len(b)
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+	for i > 0 {
+		n--
+		b[n] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		n--
+		b[n] = '-'
+	}
+	return string(b[n:])
+}

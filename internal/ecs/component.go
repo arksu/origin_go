@@ -11,12 +11,12 @@ type ComponentID uint8
 // Component is a marker interface for ECS components
 type Component interface{}
 
-// ComponentRegistry manages component type registration and ID assignment
+// ComponentRegistry manages component type registration with explicit IDs
 // Thread-safe for concurrent registration
+// IDs must be explicitly assigned to ensure deterministic behavior across builds
 type ComponentRegistry struct {
 	typeToID map[reflect.Type]ComponentID
 	idToType map[ComponentID]reflect.Type
-	nextID   ComponentID
 	mu       sync.RWMutex
 }
 
@@ -24,11 +24,40 @@ type ComponentRegistry struct {
 var globalRegistry = &ComponentRegistry{
 	typeToID: make(map[reflect.Type]ComponentID),
 	idToType: make(map[ComponentID]reflect.Type),
-	nextID:   0,
+}
+
+// RegisterComponent registers a component type with an explicit, stable ID
+// Must be called during init() to ensure deterministic registration
+// Panics if ID is already registered or exceeds MaxComponentID
+func RegisterComponent[T Component](id ComponentID) {
+	if id > MaxComponentID {
+		panic("component ID exceeds maximum (63)")
+	}
+
+	var zero T
+	t := reflect.TypeOf(zero)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	globalRegistry.mu.Lock()
+	defer globalRegistry.mu.Unlock()
+
+	if existingType, exists := globalRegistry.idToType[id]; exists {
+		panic("component ID " + string(id) + " already registered for type " + existingType.String())
+	}
+
+	if existingID, exists := globalRegistry.typeToID[t]; exists {
+		panic("component type " + t.String() + " already registered with ID " + string(rune(existingID)))
+	}
+
+	globalRegistry.typeToID[t] = id
+	globalRegistry.idToType[id] = t
 }
 
 // GetComponentID returns the ComponentID for a given component type
-// Registers the type if not already registered
+// Panics if the component type is not registered
+// Components must be registered via RegisterComponent during init()
 func GetComponentID[T Component]() ComponentID {
 	var zero T
 	t := reflect.TypeOf(zero)
@@ -37,24 +66,12 @@ func GetComponentID[T Component]() ComponentID {
 	}
 
 	globalRegistry.mu.RLock()
-	if id, ok := globalRegistry.typeToID[t]; ok {
-		globalRegistry.mu.RUnlock()
-		return id
+	defer globalRegistry.mu.RUnlock()
+
+	id, ok := globalRegistry.typeToID[t]
+	if !ok {
+		panic("component type " + t.String() + " not registered - call RegisterComponent during init()")
 	}
-	globalRegistry.mu.RUnlock()
-
-	globalRegistry.mu.Lock()
-	defer globalRegistry.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	if id, ok := globalRegistry.typeToID[t]; ok {
-		return id
-	}
-
-	id := globalRegistry.nextID
-	globalRegistry.nextID++
-	globalRegistry.typeToID[t] = id
-	globalRegistry.idToType[id] = t
 	return id
 }
 
@@ -103,12 +120,11 @@ const MaxSparseSize = 1 << 21
 
 // ComponentStorage provides type-safe dense storage for a single component type
 // Uses sparse-dense array pattern for O(1) access and cache-friendly iteration
-// Works with Handle (uint32) for compact sparse arrays
+// Single-threaded per shard - no locks needed
 type ComponentStorage[T Component] struct {
 	dense   []T      // Dense array of components
 	sparse  []int32  // Handle -> dense index (-1 if not present)
 	handles []Handle // Dense index -> Handle
-	mu      sync.RWMutex
 }
 
 // NewComponentStorage creates a new component storage with initial capacity
@@ -125,20 +141,20 @@ func NewComponentStorage[T Component](capacity int) *ComponentStorage[T] {
 }
 
 // Set adds or updates a component for an entity
-// Panics if handle exceeds MaxSparseSize
+// Panics if handle index exceeds MaxSparseSize
+// Single-threaded - no lock needed
 func (s *ComponentStorage[T]) Set(h Handle, component T) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
-	if int(h) >= MaxSparseSize {
-		panic("handle exceeds maximum sparse size")
+	index := h.Index()
+	if int(index) >= MaxSparseSize {
+		panic("handle index exceeds maximum sparse size")
 	}
 
-	// Grow sparse array if needed (grow by 2x or to h+1, whichever is larger)
-	if int(h) >= len(s.sparse) {
+	// Grow sparse array if needed (grow by 2x or to index+1, whichever is larger)
+	if int(index) >= len(s.sparse) {
 		newSize := len(s.sparse) * 2
-		if newSize < int(h)+1 {
-			newSize = int(h) + 1
+		if newSize < int(index)+1 {
+			newSize = int(index) + 1
 		}
 		if newSize > MaxSparseSize {
 			newSize = MaxSparseSize
@@ -151,126 +167,171 @@ func (s *ComponentStorage[T]) Set(h Handle, component T) {
 		s.sparse = newSparse
 	}
 
-	idx := s.sparse[h]
+	idx := s.sparse[index]
 	if idx >= 0 {
 		// Update existing
 		s.dense[idx] = component
+		s.handles[idx] = h // Update handle to latest generation
 	} else {
 		// Add new
-		s.sparse[h] = int32(len(s.dense))
+		s.sparse[index] = int32(len(s.dense))
 		s.dense = append(s.dense, component)
 		s.handles = append(s.handles, h)
 	}
 }
 
 // Get retrieves a component for an entity
+// Returns false if handle generation doesn't match (stale handle)
+// Single-threaded - no lock needed
 func (s *ComponentStorage[T]) Get(h Handle) (T, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
 	var zero T
-	if int(h) >= len(s.sparse) {
+	index := h.Index()
+	if int(index) >= len(s.sparse) {
 		return zero, false
 	}
 
-	idx := s.sparse[h]
+	idx := s.sparse[index]
 	if idx < 0 {
+		return zero, false
+	}
+	// Validate generation to prevent stale handle access
+	if s.handles[idx] != h {
 		return zero, false
 	}
 	return s.dense[idx], true
 }
 
-// GetPtr retrieves a pointer to a component for an entity (for mutation)
-func (s *ComponentStorage[T]) GetPtr(h Handle) *T {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// Mutate executes a callback with a pointer to the component for mutation
+// The callback returns bool to indicate success/failure or conditional logic
+// The pointer is only valid within the callback scope
+// Returns false if handle generation doesn't match (stale handle)
+// Single-threaded - no lock needed
+func (s *ComponentStorage[T]) Mutate(h Handle, fn func(*T) bool) bool {
 
-	if int(h) >= len(s.sparse) {
-		return nil
+	index := h.Index()
+	if int(index) >= len(s.sparse) {
+		return false
 	}
 
-	idx := s.sparse[h]
+	idx := s.sparse[index]
 	if idx < 0 {
-		return nil
+		return false
 	}
-	return &s.dense[idx]
+	// Validate generation to prevent stale handle access
+	if s.handles[idx] != h {
+		return false
+	}
+	return fn(&s.dense[idx])
+}
+
+// WithPtr executes a callback with a pointer to the component for mutation
+// The pointer is only valid within the callback scope
+// Returns false if the component doesn't exist or handle generation doesn't match
+// Single-threaded - no lock needed
+func (s *ComponentStorage[T]) WithPtr(h Handle, fn func(*T)) bool {
+
+	index := h.Index()
+	if int(index) >= len(s.sparse) {
+		return false
+	}
+
+	idx := s.sparse[index]
+	if idx < 0 {
+		return false
+	}
+	// Validate generation to prevent stale handle access
+	if s.handles[idx] != h {
+		return false
+	}
+	fn(&s.dense[idx])
+	return true
 }
 
 // Remove removes a component from an entity
+// Single-threaded - no lock needed
 func (s *ComponentStorage[T]) Remove(h Handle) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	return s.remove(h)
+}
 
-	if int(h) >= len(s.sparse) {
+// RemoveByHandle implements componentRemover interface for Despawn cleanup
+// Single-threaded - no lock needed
+func (s *ComponentStorage[T]) RemoveByHandle(h Handle) {
+	s.remove(h)
+}
+
+func (s *ComponentStorage[T]) remove(h Handle) bool {
+	index := h.Index()
+	if int(index) >= len(s.sparse) {
 		return false
 	}
 
-	idx := s.sparse[h]
+	idx := s.sparse[index]
 	if idx < 0 {
 		return false
 	}
+	// Validate generation to prevent stale handle removal
+	if s.handles[idx] != h {
+		return false
+	}
 
-	// Swap with last element (swap-remove pattern)
 	lastIdx := len(s.dense) - 1
 	if int(idx) != lastIdx {
 		s.dense[idx] = s.dense[lastIdx]
 		lastHandle := s.handles[lastIdx]
 		s.handles[idx] = lastHandle
-		s.sparse[lastHandle] = idx
+		s.sparse[lastHandle.Index()] = idx
 	}
 
 	s.dense = s.dense[:lastIdx]
 	s.handles = s.handles[:lastIdx]
-	s.sparse[h] = -1
+	s.sparse[index] = -1
 	return true
 }
 
 // Has checks if an entity has this component
+// Returns false if handle generation doesn't match (stale handle)
+// Single-threaded - no lock needed
 func (s *ComponentStorage[T]) Has(h Handle) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	if int(h) >= len(s.sparse) {
+	index := h.Index()
+	if int(index) >= len(s.sparse) {
 		return false
 	}
-	return s.sparse[h] >= 0
+	idx := s.sparse[index]
+	if idx < 0 {
+		return false
+	}
+	// Validate generation to prevent stale handle check
+	return s.handles[idx] == h
 }
 
 // Len returns the number of components stored
+// Single-threaded - no lock needed
 func (s *ComponentStorage[T]) Len() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return len(s.dense)
 }
 
 // Iterate calls the callback for each handle-component pair
 // Callback receives Handle and pointer to component for mutation
-// IMPORTANT: Holds write lock during iteration - do not call other storage methods from callback
+// Single-threaded - safe to call other methods from callback
 func (s *ComponentStorage[T]) Iterate(fn func(Handle, *T)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	for i := range s.dense {
 		fn(s.handles[i], &s.dense[i])
 	}
 }
 
 // IterateReadOnly calls the callback for each handle-component pair with copies
-// Safe for concurrent read access - callback receives copies, not pointers
+// Single-threaded - no lock needed
 func (s *ComponentStorage[T]) IterateReadOnly(fn func(Handle, T)) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	for i := range s.dense {
 		fn(s.handles[i], s.dense[i])
 	}
 }
 
 // Handles returns a copy of all handles that have this component
+// Single-threaded - no lock needed
 func (s *ComponentStorage[T]) Handles() []Handle {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	result := make([]Handle, len(s.handles))
 	copy(result, s.handles)
 	return result
@@ -283,9 +344,9 @@ type ExternalID struct {
 }
 
 // ExternalIDComponentID is the ComponentID for ExternalID
-// Registered during init
-var ExternalIDComponentID ComponentID
+// ID 0 is reserved for the mandatory ExternalID component
+const ExternalIDComponentID ComponentID = 0
 
 func init() {
-	ExternalIDComponentID = GetComponentID[ExternalID]()
+	RegisterComponent[ExternalID](ExternalIDComponentID)
 }

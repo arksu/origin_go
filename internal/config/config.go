@@ -1,87 +1,146 @@
 package config
 
 import (
-	"os"
-	"strconv"
+	"errors"
+	"strings"
 	"time"
+
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 type Config struct {
-	// Server
-	ListenAddr         string
-	RegionID           int
-	RegionWidthChunks  int
-	RegionHeightChunks int
-
-	// Database
-	PostgresURL       string
-	DBSchema          string
-	DBMaxConns        int
-	DBMinConns        int
-	DBMaxConnIdleTime time.Duration
-	DBMaxConnLifetime time.Duration
-	DBConnTimeout     time.Duration
-
-	// Game settings
-	TickRate       time.Duration
-	WorldBorder    int
-	MaxPlayers     int
-	MaxBots        int
-	ChunkLoadRange int // 3x3 around player
-
-	// Performance
-	TickBudget           time.Duration
-	PositionSaveInterval time.Duration
-
-	// Entity ID allocation
-	EntityIdRangeSize int
+	Server   ServerConfig   `mapstructure:"server"`
+	Database DatabaseConfig `mapstructure:"database"`
+	Game     GameConfig     `mapstructure:"game"`
+	EntityID EntityIDConfig `mapstructure:"entity_id"`
+	Network  NetworkConfig  `mapstructure:"network"`
 }
 
-func Load() *Config {
-	return &Config{
-		ListenAddr:           getEnv("LISTEN_ADDR", ":8080"),
-		RegionID:             getIntEnv("REGION_ID", 1),
-		RegionHeightChunks:   getIntEnv("REGION_HEIGHT", 100),
-		RegionWidthChunks:    getIntEnv("REGION_WIDTH", 100),
-		PostgresURL:          getEnv("DB_URL", "postgres://origingo:origingo@localhost:5432/origingo"),
-		DBSchema:             getEnv("DB_SCHEMA", "origin"),
-		DBMaxConns:           getIntEnv("DB_MAX_CONNS", 25),
-		DBMinConns:           getIntEnv("DB_MIN_CONNS", 5),
-		DBMaxConnIdleTime:    getDurationEnv("DB_MAX_CONN_IDLE_TIME", 30*time.Minute),
-		DBMaxConnLifetime:    getDurationEnv("DB_MAX_CONN_LIFETIME", time.Hour),
-		DBConnTimeout:        getDurationEnv("DB_CONN_TIMEOUT", 5*time.Second),
-		WorldBorder:          getIntEnv("WORLD_BORDER", 20),
-		MaxPlayers:           getIntEnv("MAX_PLAYERS", 1000),
-		MaxBots:              getIntEnv("MAX_BOTS", 5000),
-		ChunkLoadRange:       getIntEnv("CHUNK_LOAD_RANGE", 1),                 // 3x3 = range 1
-		TickRate:             getDurationEnv("TICK_RATE", 33*time.Millisecond), // ~30 ticks/sec
-		TickBudget:           getDurationEnv("TICK_BUDGET", 30*time.Millisecond),
-		PositionSaveInterval: getDurationEnv("POSITION_SAVE_INTERVAL", time.Second),
-		EntityIdRangeSize:    getIntEnv("ENTITY_ID_RANGE_SIZE", 1000),
-	}
+type ServerConfig struct {
+	Host string `mapstructure:"host"`
+	Port int    `mapstructure:"port"`
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+type DatabaseConfig struct {
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	User            string        `mapstructure:"user"`
+	Password        string        `mapstructure:"password"`
+	Database        string        `mapstructure:"database"`
+	Schema          string        `mapstructure:"schema"`
+	MaxConns        int32         `mapstructure:"max_conns"`
+	MinConns        int32         `mapstructure:"min_conns"`
+	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
+	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"`
 }
 
-func getIntEnv(key string, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
+type GameConfig struct {
+	TickRate         int   `mapstructure:"tick_rate"`
+	ChunkSize        int   `mapstructure:"chunk_size"`
+	CoordPerTile     int   `mapstructure:"coord_per_tile"`
+	AOIRadius        int   `mapstructure:"aoi_radius"`
+	Region           int32 `mapstructure:"region"`
+	MaxLayers        int   `mapstructure:"max_layers"`
+	DisconnectDelay  int   `mapstructure:"disconnect_delay"`
+	ChunkLRUCapacity int   `mapstructure:"chunk_lru_capacity"`
+	ChunkLRUTTL      int   `mapstructure:"chunk_lru_ttl"`
+	MaxEntities      int   `mapstructure:"max_entities"`
+	WorkerPoolSize   int   `mapstructure:"worker_pool_size"`
+	LoadWorkers      int   `mapstructure:"load_workers"`
+	SaveWorkers      int   `mapstructure:"save_workers"`
+	PreloadRadius    int   `mapstructure:"preload_radius"`
+}
+
+type EntityIDConfig struct {
+	RangeSize int `mapstructure:"range_size"`
+}
+
+type NetworkConfig struct {
+	ReadBufferSize  int           `mapstructure:"read_buffer_size"`
+	WriteBufferSize int           `mapstructure:"write_buffer_size"`
+	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
+	MaxMessageSize  int           `mapstructure:"max_message_size"`
+}
+
+func Load(logger *zap.Logger) (*Config, error) {
+	v := viper.New()
+
+	setDefaults(v)
+
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
+
+	if err := v.ReadInConfig(); err != nil {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
+			return nil, err
 		}
+		logger.Info("Config file not found, using defaults and environment variables")
 	}
-	return fallback
+
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
 }
 
-func getDurationEnv(key string, fallback time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
+func setDefaults(v *viper.Viper) {
+	// Server defaults
+	v.SetDefault("server.host", "0.0.0.0")
+	v.SetDefault("server.port", 8080)
+
+	// Database defaults
+	v.SetDefault("database.host", "localhost")
+	v.SetDefault("database.port", 5430)
+	v.SetDefault("database.user", "origin")
+	v.SetDefault("database.password", "origin")
+	v.SetDefault("database.database", "origin")
+	v.SetDefault("database.schema", "origin")
+	v.SetDefault("database.max_conns", 10)
+	v.SetDefault("database.min_conns", 2)
+	v.SetDefault("database.max_conn_lifetime", 30*time.Minute)
+	v.SetDefault("database.max_conn_idle_time", 5*time.Minute)
+
+	// Game defaults
+	v.SetDefault("game.tick_rate", 20)
+	v.SetDefault("game.chunk_size", 128)
+	v.SetDefault("game.coord_per_tile", 12)
+	v.SetDefault("game.aoi_radius", 1)
+	v.SetDefault("game.region", 1)
+	v.SetDefault("game.max_layers", 3)
+	v.SetDefault("game.disconnect_delay", 15)
+	v.SetDefault("game.chunk_lru_capacity", 1000)
+	v.SetDefault("game.chunk_lru_ttl", 300)
+	v.SetDefault("game.max_entities", 1048576)
+	v.SetDefault("game.worker_pool_size", 4)
+	v.SetDefault("game.load_workers", 2)
+	v.SetDefault("game.save_workers", 2)
+	v.SetDefault("game.preload_radius", 2)
+
+	// EntityID defaults
+	v.SetDefault("entity_id.range_size", 1000)
+
+	// Network defaults
+	v.SetDefault("network.read_buffer_size", 4096)
+	v.SetDefault("network.write_buffer_size", 4096)
+	v.SetDefault("network.read_timeout", 60*time.Second)
+	v.SetDefault("network.write_timeout", 10*time.Second)
+	v.SetDefault("network.max_message_size", 65536)
+}
+
+func MustLoad(logger *zap.Logger) *Config {
+	cfg, err := Load(logger)
+	if err != nil {
+		logger.Fatal("Failed to load config", zap.Error(err))
 	}
-	return fallback
+	return cfg
 }

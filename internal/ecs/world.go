@@ -8,12 +8,19 @@ import (
 // DefaultMaxHandles is the default maximum number of active entities
 const DefaultMaxHandles uint32 = 1 << 20 // 1M entities
 
+// EntityLocation tracks where an entity is stored in its archetype
+type EntityLocation struct {
+	archetype *Archetype
+	index     int // Index within archetype.handles
+}
+
 // World manages all entities and systems for one shard
-// Optimized for cache-friendly iteration using archetype-based storage
-// Uses compact Handle (uint32) internally for all operations
+// Single-threaded ECS per shard - no internal locks
+// External synchronization via command queue for cross-thread access
 type World struct {
 	// Entity management
 	entities   map[Handle]ComponentMask
+	locations  map[Handle]EntityLocation // O(1) archetype removal
 	archetypes *ArchetypeGraph
 	handles    *HandleAllocator
 
@@ -28,8 +35,10 @@ type World struct {
 	resources map[any]any
 
 	// Delta time for current tick
-	DeltaTime float64
+	DeltaTime float32
 
+	// Optional: mutex for external command queue synchronization
+	// Only used if World is accessed from multiple threads (not recommended)
 	mu sync.RWMutex
 }
 
@@ -42,6 +51,7 @@ func NewWorld() *World {
 func NewWorldWithCapacity(maxHandles uint32) *World {
 	w := &World{
 		entities:   make(map[Handle]ComponentMask, 1024),
+		locations:  make(map[Handle]EntityLocation, 1024),
 		archetypes: NewArchetypeGraph(),
 		handles:    NewHandleAllocator(maxHandles),
 		systems:    make([]System, 0, 16),
@@ -53,7 +63,7 @@ func NewWorldWithCapacity(maxHandles uint32) *World {
 
 // System interface for ECS systems
 type System interface {
-	Update(w *World, dt float64)
+	Update(w *World, dt float32)
 	Priority() int // Lower priority runs first
 	Name() string
 }
@@ -74,20 +84,19 @@ func (s BaseSystem) Name() string  { return s.name }
 // Spawn creates a new entity with the given external EntityID
 // Returns the Handle for internal ECS operations
 // The ExternalID component is automatically added to map Handle -> EntityID
+// Single-threaded - no lock needed
 func (w *World) Spawn(externalID EntityID) Handle {
-	w.mu.Lock()
-
 	h := w.handles.Alloc()
 	if h == InvalidHandle {
-		w.mu.Unlock()
 		return InvalidHandle
 	}
 
 	w.entities[h] = 0 // Empty component mask
-	w.archetypes.GetOrCreate(0).AddEntity(h)
+	arch := w.archetypes.GetOrCreate(0)
+	index := arch.AddEntity(h)
+	w.locations[h] = EntityLocation{archetype: arch, index: index}
 
-	// Add ExternalID component (done inside lock, storage has its own lock)
-	w.mu.Unlock()
+	// Add ExternalID component
 	AddComponent(w, h, ExternalID{ID: externalID})
 
 	return h
@@ -95,59 +104,77 @@ func (w *World) Spawn(externalID EntityID) Handle {
 
 // SpawnWithoutExternalID creates a new entity without external ID
 // Useful for temporary/runtime-only entities
+// Single-threaded - no lock needed
 func (w *World) SpawnWithoutExternalID() Handle {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	h := w.handles.Alloc()
 	if h == InvalidHandle {
 		return InvalidHandle
 	}
 
 	w.entities[h] = 0
-	w.archetypes.GetOrCreate(0).AddEntity(h)
+	arch := w.archetypes.GetOrCreate(0)
+	index := arch.AddEntity(h)
+	w.locations[h] = EntityLocation{archetype: arch, index: index}
 	return h
 }
 
 // Despawn removes an entity and all its components
+// Single-threaded - no lock needed
 func (w *World) Despawn(h Handle) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	mask, ok := w.entities[h]
 	if !ok {
 		return false
 	}
 
-	// Remove from archetype
-	if arch := w.archetypes.Get(mask); arch != nil {
-		arch.RemoveEntity(h)
+	if loc, ok := w.locations[h]; ok {
+		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != InvalidHandle {
+			// Update location of swapped entity
+			w.locations[swappedHandle] = EntityLocation{archetype: loc.archetype, index: loc.index}
+		}
+		delete(w.locations, h)
 	}
 
 	delete(w.entities, h)
 	w.handles.Free(h)
+
+	// Remove components
+	for id, storage := range w.storages {
+		if mask.Has(id) {
+			if remover, ok := storage.(componentRemover); ok {
+				remover.RemoveByHandle(h)
+			}
+		}
+	}
+
 	return true
 }
 
-// Alive checks if an entity exists
+type componentRemover interface {
+	RemoveByHandle(h Handle)
+}
+
+// Alive checks if an entity exists and handle generation is valid
+// Returns false for stale handles (generation mismatch)
+// Single-threaded - no lock needed
 func (w *World) Alive(h Handle) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	if h == InvalidHandle {
+		return false
+	}
+	// Single map lookup - if present in entities, it's alive and valid
+	// World maintains invariant: only valid handles are in entities map
 	_, ok := w.entities[h]
 	return ok
 }
 
 // EntityCount returns the number of alive entities
+// Single-threaded - no lock needed
 func (w *World) EntityCount() int {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
 	return len(w.entities)
 }
 
 // GetMask returns the component mask for an entity
+// Single-threaded - no lock needed
 func (w *World) GetMask(h Handle) ComponentMask {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
 	return w.entities[h]
 }
 
@@ -166,36 +193,40 @@ func (w *World) updateEntityArchetype(h Handle, oldMask, newMask ComponentMask) 
 		return
 	}
 
-	if arch := w.archetypes.Get(oldMask); arch != nil {
-		arch.RemoveEntity(h)
+	// Remove from old archetype using O(1) location lookup
+	if loc, ok := w.locations[h]; ok {
+		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != InvalidHandle {
+			// Update location of swapped entity
+			w.locations[swappedHandle] = EntityLocation{archetype: loc.archetype, index: loc.index}
+		}
 	}
-	w.archetypes.GetOrCreate(newMask).AddEntity(h)
+
+	// Add to new archetype
+	newArch := w.archetypes.GetOrCreate(newMask)
+	newIndex := newArch.AddEntity(h)
+	w.locations[h] = EntityLocation{archetype: newArch, index: newIndex}
 	w.entities[h] = newMask
 }
 
 // AddSystem registers a system to be run each tick
+// Single-threaded - no lock needed
 func (w *World) AddSystem(system System) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.systems = append(w.systems, system)
 	w.systemsSorted = false
 }
 
 // Update runs all systems in priority order
-func (w *World) Update(dt float64) {
-	w.mu.Lock()
+// Single-threaded - no lock needed
+func (w *World) Update(dt float32) {
 	if !w.systemsSorted {
 		sort.Slice(w.systems, func(i, j int) bool {
 			return w.systems[i].Priority() < w.systems[j].Priority()
 		})
 		w.systemsSorted = true
 	}
-	systems := make([]System, len(w.systems))
-	copy(systems, w.systems)
 	w.DeltaTime = dt
-	w.mu.Unlock()
 
-	for _, sys := range systems {
+	for _, sys := range w.systems {
 		sys.Update(w, dt)
 	}
 }
@@ -206,26 +237,22 @@ func (w *World) Query() *Query {
 }
 
 // SetResource stores a singleton resource
+// Single-threaded - no lock needed
 func (w *World) SetResource(key, value any) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.resources[key] = value
 }
 
 // GetResource retrieves a singleton resource
+// Single-threaded - no lock needed
 func (w *World) GetResource(key any) (any, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
 	v, ok := w.resources[key]
 	return v, ok
 }
 
 // GetStorage returns the component storage for a given component ID
-// Creates storage if it doesn't exist
+// Single-threaded - no lock needed
 func (w *World) GetStorage(componentID ComponentID) any {
-	w.mu.RLock()
 	storage, ok := w.storages[componentID]
-	w.mu.RUnlock()
 	if ok {
 		return storage
 	}
@@ -233,27 +260,16 @@ func (w *World) GetStorage(componentID ComponentID) any {
 }
 
 // SetStorage sets the component storage for a given component ID
+// Single-threaded - no lock needed
 func (w *World) SetStorage(componentID ComponentID, storage any) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.storages[componentID] = storage
 }
 
 // GetOrCreateStorage returns existing storage or creates new one
+// Single-threaded - no lock needed
 func GetOrCreateStorage[T Component](w *World) *ComponentStorage[T] {
 	componentID := GetComponentID[T]()
 
-	w.mu.RLock()
-	if storage, ok := w.storages[componentID]; ok {
-		w.mu.RUnlock()
-		return storage.(*ComponentStorage[T])
-	}
-	w.mu.RUnlock()
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	// Double-check
 	if storage, ok := w.storages[componentID]; ok {
 		return storage.(*ComponentStorage[T])
 	}
@@ -264,17 +280,16 @@ func GetOrCreateStorage[T Component](w *World) *ComponentStorage[T] {
 }
 
 // AddComponent adds a component to an entity
+// Single-threaded - no lock needed
 func AddComponent[T Component](w *World, h Handle, component T) {
 	componentID := GetComponentID[T]()
 	storage := GetOrCreateStorage[T](w)
 	storage.Set(h, component)
 
-	w.mu.Lock()
 	oldMask := w.entities[h]
 	newMask := oldMask
 	newMask.Set(componentID)
 	w.updateEntityArchetype(h, oldMask, newMask)
-	w.mu.Unlock()
 }
 
 // GetComponent retrieves a component from an entity
@@ -283,13 +298,24 @@ func GetComponent[T Component](w *World, h Handle) (T, bool) {
 	return storage.Get(h)
 }
 
-// GetComponentPtr retrieves a pointer to a component for mutation
-func GetComponentPtr[T Component](w *World, h Handle) *T {
+// MutateComponent executes a callback with a pointer to the component for mutation
+// The callback returns bool to indicate success/failure or conditional logic
+// The pointer is only valid within the callback scope
+func MutateComponent[T Component](w *World, h Handle, fn func(*T) bool) bool {
 	storage := GetOrCreateStorage[T](w)
-	return storage.GetPtr(h)
+	return storage.Mutate(h, fn)
+}
+
+// WithComponent executes a callback with a pointer to the component for mutation
+// The pointer is only valid within the callback scope
+// Returns false if the component doesn't exist
+func WithComponent[T Component](w *World, h Handle, fn func(*T)) bool {
+	storage := GetOrCreateStorage[T](w)
+	return storage.WithPtr(h, fn)
 }
 
 // RemoveComponent removes a component from an entity
+// Single-threaded - no lock needed
 func RemoveComponent[T Component](w *World, h Handle) bool {
 	componentID := GetComponentID[T]()
 	storage := GetOrCreateStorage[T](w)
@@ -298,12 +324,10 @@ func RemoveComponent[T Component](w *World, h Handle) bool {
 		return false
 	}
 
-	w.mu.Lock()
 	oldMask := w.entities[h]
 	newMask := oldMask
 	newMask.Clear(componentID)
 	w.updateEntityArchetype(h, oldMask, newMask)
-	w.mu.Unlock()
 	return true
 }
 
