@@ -1,8 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useGameStore } from '../stores/game'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import CharactersView from '../views/CharactersView.vue'
+import GameView from '../views/GameView.vue'
 
 const routes = [
   {
@@ -26,6 +28,12 @@ const routes = [
     name: 'characters',
     component: CharactersView,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/game',
+    name: 'game',
+    component: GameView,
+    meta: { requiresAuth: true, requiresGame: true }
   }
 ]
 
@@ -36,9 +44,12 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
+  const gameStore = useGameStore()
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
+  } else if (to.meta.requiresGame && !gameStore.wsToken) {
+    next('/characters')
   } else if (to.meta.guest && authStore.isAuthenticated) {
     next('/characters')
   } else {

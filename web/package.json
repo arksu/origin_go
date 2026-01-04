@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "proto": "pbjs -t static-module -w es6 -o src/proto/packets.js ../api/proto/packets.proto"
   },
   "dependencies": {
     "axios": "^1.6.2",
     "pinia": "^2.1.7",
+    "protobufjs": "^7.5.4",
     "vue": "^3.3.11",
     "vue-router": "^4.2.5"
   },
@@ -18,6 +20,7 @@
     "@vitejs/plugin-vue": "^4.5.2",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.32",
+    "protobufjs-cli": "^2.0.0",
     "tailwindcss": "^3.3.6",
     "vite": "^5.0.8"
   }
