@@ -137,18 +137,6 @@ message EntityMovement {
   bool is_moving = 5;
 }
 
-// Полная информация о своём персонаже
-message PlayerFullState {
-  uint64 entity_id = 1;
-  string name = 2;
-  EntityMovement movement = 3;
-  //  EntityStats stats = 4;
-  //  EntitySkills skills = 5;
-  Inventory inventory = 6;
-  Paperdoll paperdoll = 7;
-  optional uint64 dragging_entity_id = 8; // если тащим что-то
-}
-
 message EntityAppearance {
   string resource = 1;
   string name = 2;
@@ -218,13 +206,28 @@ message ClientMessage {
 message S2C_AuthResult {
   bool success = 1;
   string error_message = 2;
-  uint64 player_entity_id = 3;
-//  PlayerFullState player_state = 4;
 }
 
 message S2C_Pong {
   int64 client_time_ms = 1;
   int64 server_time_ms = 2;
+}
+
+// when all is ready to player enter, than send chunks, entities, etc
+message S2C_PlayerEnterWorld {
+  uint64 entity_id = 1;
+  string name = 2;
+  EntityMovement movement = 3;
+  //  EntityStats stats = 4;
+  //  EntitySkills skills = 5;
+  Inventory inventory = 6;
+  Paperdoll paperdoll = 7;
+  optional uint64 dragging_entity_id = 8; // если тащим что-то
+}
+
+// on teleport, layer change - show loading screen on client, remove all chunks, entities
+message S2C_PlayerLeaveWorld {
+  uint64 entity_id = 1;
 }
 
 message S2C_LoadChunk {
@@ -243,37 +246,39 @@ message ServerMessage {
     S2C_Pong pong = 11;
     S2C_LoadChunk load_chunk = 12;
     S2C_UnloadChunk unload_chunk = 13;
-//    S2C_SpawnEntity spawn_entity = 13;
-//    S2C_DespawnEntity despawn_entity = 14;
-//    S2C_EntityUpdate entity_update = 15;
-//    S2C_PlayerStateUpdate player_state = 16;
-//    S2C_InventoryUpdate inventory_update = 17;
-//    S2C_PaperdollUpdate paperdoll_update = 18;
-//    S2C_ContainerOpen container_open = 19;
-//    S2C_ContainerClose container_close = 20;
-//    S2C_ContainerUpdate container_update = 21;
-//    S2C_ItemPickedUp item_picked = 22;
-//    S2C_ItemDropped item_dropped = 23;
-//    S2C_ExpGain exp_gain = 24;
-//    S2C_DamageDealt damage_dealt = 25;
-//    S2C_EntityDied entity_died = 26;
-//    S2C_ResourceGathered resource_gathered = 27;
-//    S2C_ResourceDepleted resource_depleted = 28;
-//    S2C_CraftStarted craft_started = 29;
-//    S2C_CraftCompleted craft_completed = 30;
-//    S2C_CraftFailed craft_failed = 31;
-//    S2C_BuildSiteCreated build_site_created = 32;
-//    S2C_BuildSiteUpdate build_site_update = 33;
-//    S2C_BuildingCompleted building_completed = 34;
-//    S2C_PlantGrowthUpdate plant_growth = 35;
-//    S2C_DragStarted drag_started = 36;
-//    S2C_DragStopped drag_stopped = 37;
-//    S2C_VisibilityChanged visibility_changed = 38;
-//    S2C_WorldStateUpdate world_state = 39;
-//    S2C_ChatMessage chat = 40;
-//    S2C_SystemMessage system_message = 41;
-//    S2C_Error error = 42;
-//    S2C_Disconnect disconnect = 44;
-//    S2C_EventBatch event_batch = 45;
+    S2C_PlayerEnterWorld player_enter_world = 14;
+    S2C_PlayerLeaveWorld player_leave_world = 15;
+    //    S2C_SpawnEntity spawn_entity = 13;
+    //    S2C_DespawnEntity despawn_entity = 14;
+    //    S2C_EntityUpdate entity_update = 15;
+    //    S2C_PlayerStateUpdate player_state = 16;
+    //    S2C_InventoryUpdate inventory_update = 17;
+    //    S2C_PaperdollUpdate paperdoll_update = 18;
+    //    S2C_ContainerOpen container_open = 19;
+    //    S2C_ContainerClose container_close = 20;
+    //    S2C_ContainerUpdate container_update = 21;
+    //    S2C_ItemPickedUp item_picked = 22;
+    //    S2C_ItemDropped item_dropped = 23;
+    //    S2C_ExpGain exp_gain = 24;
+    //    S2C_DamageDealt damage_dealt = 25;
+    //    S2C_EntityDied entity_died = 26;
+    //    S2C_ResourceGathered resource_gathered = 27;
+    //    S2C_ResourceDepleted resource_depleted = 28;
+    //    S2C_CraftStarted craft_started = 29;
+    //    S2C_CraftCompleted craft_completed = 30;
+    //    S2C_CraftFailed craft_failed = 31;
+    //    S2C_BuildSiteCreated build_site_created = 32;
+    //    S2C_BuildSiteUpdate build_site_update = 33;
+    //    S2C_BuildingCompleted building_completed = 34;
+    //    S2C_PlantGrowthUpdate plant_growth = 35;
+    //    S2C_DragStarted drag_started = 36;
+    //    S2C_DragStopped drag_stopped = 37;
+    //    S2C_VisibilityChanged visibility_changed = 38;
+    //    S2C_WorldStateUpdate world_state = 39;
+    //    S2C_ChatMessage chat = 40;
+    //    S2C_SystemMessage system_message = 41;
+    //    S2C_Error error = 42;
+    //    S2C_Disconnect disconnect = 44;
+    //    S2C_EventBatch event_batch = 45;
   }
 }
