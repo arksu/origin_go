@@ -1,5 +1,4 @@
-you are experienced game Golang developer.
-lets develop online MMO game - survival game:
+MMO game - survival game:
 - very large 2d map
 - world sliced by ground layers (0 surface, -1, -2 underground)
 - world split into chunks (128x128 tiles), chunk store tiles BLOB into DB, COORD_PER_TILE=12
@@ -36,30 +35,19 @@ shard manager:
 
 chunk manager:
 - one chunk manager per shard(layer)
-- load chunks (tiles, entities)
-- manage active chunks
+- load chunks (tiles, entities) async
+- manage active chunks, while player in chunk - keep it active
 - preload chunks in background async, beyond the borders of AOI
 - unload inactive chunks, LRU eviction
 - store chunk state into DB (dirty flag), background
 
 chunk:
-- spatial hash for entities (static, dynamic)
-- state: Unloaded, Loading, Loaded (inactive), Active (в AOI), Dirty
-- Active = участвует в ECS queries
+- spatial hash for entities (split entities to static and dynamic)
+- state: Unloaded, Loading, Preloaded (Config.Game.PreloadRadius), Active (в AOI), Inactive
+- main goal: only Active chunks keep entities in ECS
+- when chunk deactivates - remove entities from ECS
 
-Active chunk = участвует в ECS queries
-// Статичные объекты добавляем один раз при загрузке чанка
-// Динамичные обновляем каждый кадр
-type SpatialHashGrid struct {
-cellSize    float64
-invCellSize float64 // Precomputed 1/cellSize for faster division
-staticCells       map[int64][]ecs.Handle
-dynamicCells       map[int64][]ecs.Handle
-// Preallocated slice pools to avoid per-tick allocations
-cellPool [][]ecs.Handle
-poolIdx  int
-}
-pack key func use Morton (Z-order)
+Event bus system for main game logic
 
 ECS for update game world
 components:
@@ -74,7 +62,4 @@ components:
 - collision
 - chunk migration
 
-event bus system for main game logic, Использовать typed event bus, не generic pub/sub
 it must service about 1000 online real players and about 5000 bots (simulate, moving and other game actions).
-use Go as programming language.
-client is frontend web client based on pixi.js and vue.js, protocol - binary websocket with protobuf.

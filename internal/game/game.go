@@ -113,23 +113,20 @@ func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S
 func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S_Auth) {
 	g.logger.Debug("Auth request", zap.Uint64("client_id", c.ID), zap.String("token", auth.Token))
 
-	// TODO: validate token against auth service
 	if auth.Token == "" {
-		g.sendAuthResult(c, sequence, false, "Empty token", 0)
+		g.sendAuthResult(c, sequence, false, "Empty token")
 		return
 	}
+	// TODO: validate token against auth service, select from character where auth_token=token and token_expires_at is valid
+	//  set character var
 
-	// TODO: create player entity and load state
-	playerEntityID := uint64(1)
-
-	g.sendAuthResult(c, sequence, true, "", playerEntityID)
+	g.sendAuthResult(c, sequence, true, "")
 }
 
-func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, errorMsg string, playerEntityID uint64) {
+func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, errorMsg string) {
 	result := &netproto.S2C_AuthResult{
-		Success:        success,
-		ErrorMessage:   errorMsg,
-		PlayerEntityId: playerEntityID,
+		Success:      success,
+		ErrorMessage: errorMsg,
 	}
 
 	response := &netproto.ServerMessage{
