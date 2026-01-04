@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 	"time"
 
@@ -62,7 +63,7 @@ func (g *Game) setupNetworkHandlers() {
 	})
 
 	g.networkServer.SetOnDisconnect(func(c *network.Client) {
-		g.logger.Info("Client disconnected", zap.Uint64("client_id", c.ID))
+		g.handleDisconnect(c)
 	})
 
 	g.networkServer.SetOnMessage(func(c *network.Client, data []byte) {
@@ -117,8 +118,40 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 		g.sendAuthResult(c, sequence, false, "Empty token")
 		return
 	}
-	// TODO: validate token against auth service, select from character where auth_token=token and token_expires_at is valid
-	//  set character var
+	// Validate token against auth service, select from character where auth_token=token and token_expires_at is valid
+	character, err := g.db.Queries().GetCharacterByToken(g.ctx, sql.NullString{String: auth.Token, Valid: true})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			g.sendAuthResult(c, sequence, false, "Invalid token")
+			return
+		}
+		g.logger.Error("Failed to get character by token", zap.Uint64("client_id", c.ID), zap.Error(err))
+		g.sendAuthResult(c, sequence, false, "Database error")
+		return
+	}
+
+	// Check if token is expired
+	if character.TokenExpiresAt.Valid && character.TokenExpiresAt.Time.Before(time.Now()) {
+		g.sendAuthResult(c, sequence, false, "Token expired")
+		return
+	}
+
+	// Check if character is already online
+	if character.IsOnline.Valid && character.IsOnline.Bool {
+		g.sendAuthResult(c, sequence, false, "Character already online")
+		return
+	}
+
+	// Update character: set is_online=true where is_online=false
+	if err := g.db.Queries().SetCharacterOnline(g.ctx, character.ID); err != nil {
+		g.logger.Error("Failed to set character online", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.Error(err))
+		g.sendAuthResult(c, sequence, false, "Failed to set character online")
+		return
+	}
+
+	// Set character as online and update client association
+	c.CharacterID = character.ID
+	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
 	g.sendAuthResult(c, sequence, true, "")
 }
@@ -143,6 +176,19 @@ func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, 
 	}
 
 	c.Send(data)
+}
+
+func (g *Game) handleDisconnect(c *network.Client) {
+	g.logger.Info("Client disconnected", zap.Uint64("client_id", c.ID))
+
+	// If IsOnline - update is_online=false in character
+	if c.CharacterID != 0 {
+		if err := g.db.Queries().SetCharacterOffline(g.ctx, c.CharacterID); err != nil {
+			g.logger.Error("Failed to set character offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID), zap.Error(err))
+		} else {
+			g.logger.Info("Character set offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID))
+		}
+	}
 }
 
 func (g *Game) StartGameLoop() {

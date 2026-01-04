@@ -248,6 +248,32 @@ func (q *Queries) SetCharacterAuthToken(ctx context.Context, arg SetCharacterAut
 	return err
 }
 
+const setCharacterOffline = `-- name: SetCharacterOffline :exec
+UPDATE character
+SET is_online = false
+WHERE id = $1
+  AND is_online = true
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) SetCharacterOffline(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, setCharacterOffline, id)
+	return err
+}
+
+const setCharacterOnline = `-- name: SetCharacterOnline :exec
+UPDATE character
+SET is_online = true
+WHERE id = $1
+  AND is_online = false
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) SetCharacterOnline(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, setCharacterOnline, id)
+	return err
+}
+
 const updateCharacterPosition = `-- name: UpdateCharacterPosition :exec
 UPDATE character
 SET x = $2, y = $3
