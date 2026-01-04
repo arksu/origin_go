@@ -83,11 +83,6 @@
         </div>
       </div>
 
-      <div v-if="enterToken" class="mt-6 bg-gray-800 rounded-xl p-6">
-        <h2 class="text-lg font-semibold text-white mb-2">Game Auth Token</h2>
-        <p class="text-gray-400 text-sm mb-2">Use this token to connect to the game server (expires in 30 seconds):</p>
-        <code class="block bg-gray-900 p-3 rounded-lg text-green-400 text-sm break-all">{{ enterToken }}</code>
-      </div>
     </div>
   </div>
 </template>
@@ -97,9 +92,12 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { listCharacters, createCharacter, deleteCharacter, enterCharacter } from '../api/characters'
+import { useGameStore } from '../stores/game'
+import { gameConnection } from '../network/GameConnection'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const gameStore = useGameStore()
 
 const characters = ref([])
 const loading = ref(true)
@@ -111,7 +109,6 @@ const createError = ref('')
 
 const deletingId = ref(null)
 const enteringId = ref(null)
-const enterToken = ref('')
 
 async function fetchCharacters() {
   loading.value = true
@@ -161,11 +158,12 @@ async function handleDelete(id) {
 
 async function handleEnter(id) {
   enteringId.value = id
-  enterToken.value = ''
 
   try {
     const data = await enterCharacter(id)
-    enterToken.value = data.auth_token
+    gameStore.setWsToken(data.auth_token, id)
+    gameConnection.connect()
+    router.push('/game')
   } catch (err) {
     alert(err.response?.data?.message || 'Failed to enter game')
   } finally {
