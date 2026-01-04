@@ -15,6 +15,7 @@ import (
 
 type Postgres struct {
 	pool    *pgxpool.Pool
+	db      *sql.DB
 	queries *repository.Queries
 	logger  *zap.Logger
 }
@@ -55,6 +56,7 @@ func NewPostgres(ctx context.Context, cfg *config.DatabaseConfig, logger *zap.Lo
 
 	return &Postgres{
 		pool:    pool,
+		db:      db,
 		queries: queries,
 		logger:  logger,
 	}, nil
@@ -91,4 +93,23 @@ func (p *Postgres) SetGlobalVarLong(ctx context.Context, name string, value int6
 		Name:      name,
 		ValueLong: sql.NullInt64{Int64: value, Valid: true},
 	})
+}
+
+func (p *Postgres) WithTx(ctx context.Context, fn func(*repository.Queries) error) error {
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	qtx := p.queries.WithTx(tx)
+	if err := fn(qtx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
 }
