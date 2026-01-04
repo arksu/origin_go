@@ -43,3 +43,17 @@ SET auth_token = $2, token_expires_at = $3
 WHERE id = $1
   AND account_id = $4
   AND deleted_at IS NULL;
+
+-- name: SetCharacterOnline :exec
+UPDATE character
+SET is_online = true
+WHERE id = $1
+  AND is_online = false
+  AND deleted_at IS NULL;
+
+-- name: SetCharacterOffline :exec
+UPDATE character
+SET is_online = false
+WHERE id = $1
+  AND is_online = true
+  AND deleted_at IS NULL;
