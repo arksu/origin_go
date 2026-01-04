@@ -322,7 +322,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord, preload bool) {
 	cm.chunksMu.Unlock()
 
 	state := chunk.GetState()
-	if state != ChunkStateUnloaded && state != ChunkStateLoading {
+	if state != ChunkStateUnloaded {
 		return
 	}
 
