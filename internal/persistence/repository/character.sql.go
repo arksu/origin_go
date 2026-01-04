@@ -126,14 +126,15 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 	return i, err
 }
 
-const getCharacterByToken = `-- name: GetCharacterByToken :one
+const getCharacterByTokenForUpdate = `-- name: GetCharacterByTokenForUpdate :one
 SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, paperdoll, inventory, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 from character
 where auth_token = $1
+FOR UPDATE
 `
 
-func (q *Queries) GetCharacterByToken(ctx context.Context, authToken sql.NullString) (Character, error) {
-	row := q.db.QueryRowContext(ctx, getCharacterByToken, authToken)
+func (q *Queries) GetCharacterByTokenForUpdate(ctx context.Context, authToken sql.NullString) (Character, error) {
+	row := q.db.QueryRowContext(ctx, getCharacterByTokenForUpdate, authToken)
 	var i Character
 	err := row.Scan(
 		&i.ID,
@@ -221,6 +222,19 @@ func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64)
 		return nil, err
 	}
 	return items, nil
+}
+
+const resetOnlinePlayers = `-- name: ResetOnlinePlayers :exec
+UPDATE character
+SET is_online = false
+WHERE region = $1
+  AND is_online = true
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) ResetOnlinePlayers(ctx context.Context, region int32) error {
+	_, err := q.db.ExecContext(ctx, resetOnlinePlayers, region)
+	return err
 }
 
 const setCharacterAuthToken = `-- name: SetCharacterAuthToken :exec

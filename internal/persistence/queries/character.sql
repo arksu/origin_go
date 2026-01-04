@@ -10,10 +10,11 @@ FROM character
 WHERE account_id = $1
   AND deleted_at IS NULL;
 
--- name: GetCharacterByToken :one
+-- name: GetCharacterByTokenForUpdate :one
 SELECT *
 from character
-where auth_token = $1;
+where auth_token = $1
+FOR UPDATE;
 
 -- name: ClearAuthToken :exec
 UPDATE character
@@ -55,5 +56,12 @@ WHERE id = $1
 UPDATE character
 SET is_online = false
 WHERE id = $1
+  AND is_online = true
+  AND deleted_at IS NULL;
+
+-- name: ResetOnlinePlayers :exec
+UPDATE character
+SET is_online = false
+WHERE region = $1
   AND is_online = true
   AND deleted_at IS NULL;

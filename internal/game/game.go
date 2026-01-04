@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence"
+	"origin/internal/persistence/repository"
 )
 
 type Game struct {
@@ -53,6 +55,8 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *Object
 	g.networkServer = network.NewServer(&cfg.Network, logger)
 
 	g.setupNetworkHandlers()
+
+	g.resetOnlinePlayers()
 
 	return g
 }
@@ -118,34 +122,51 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 		g.sendAuthResult(c, sequence, false, "Empty token")
 		return
 	}
-	// Validate token against auth service, select from character where auth_token=token and token_expires_at is valid
-	character, err := g.db.Queries().GetCharacterByToken(g.ctx, sql.NullString{String: auth.Token, Valid: true})
+
+	var character repository.Character
+
+	// Use transaction with FOR UPDATE lock to prevent race conditions
+	err := g.db.WithTx(g.ctx, func(q *repository.Queries) error {
+		var err error
+		character, err = q.GetCharacterByTokenForUpdate(g.ctx, sql.NullString{String: auth.Token, Valid: true})
+		if err != nil {
+			return err
+		}
+
+		// Check if token is expired
+		if character.TokenExpiresAt.Valid && character.TokenExpiresAt.Time.Before(time.Now()) {
+			return fmt.Errorf("token expired")
+		}
+
+		// Check if character is already online
+		if character.IsOnline.Valid && character.IsOnline.Bool {
+			return fmt.Errorf("character already online")
+		}
+
+		// Update character: set is_online=true where is_online=false
+		if err := q.SetCharacterOnline(g.ctx, character.ID); err != nil {
+			return fmt.Errorf("set character online: %w", err)
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			g.sendAuthResult(c, sequence, false, "Invalid token")
 			return
 		}
-		g.logger.Error("Failed to get character by token", zap.Uint64("client_id", c.ID), zap.Error(err))
+		errMsg := err.Error()
+		if errMsg == "token expired" {
+			g.sendAuthResult(c, sequence, false, "Token expired")
+			return
+		}
+		if errMsg == "character already online" {
+			g.sendAuthResult(c, sequence, false, "Character already online")
+			return
+		}
+		g.logger.Error("Failed to authenticate character", zap.Uint64("client_id", c.ID), zap.Error(err))
 		g.sendAuthResult(c, sequence, false, "Database error")
-		return
-	}
-
-	// Check if token is expired
-	if character.TokenExpiresAt.Valid && character.TokenExpiresAt.Time.Before(time.Now()) {
-		g.sendAuthResult(c, sequence, false, "Token expired")
-		return
-	}
-
-	// Check if character is already online
-	if character.IsOnline.Valid && character.IsOnline.Bool {
-		g.sendAuthResult(c, sequence, false, "Character already online")
-		return
-	}
-
-	// Update character: set is_online=true where is_online=false
-	if err := g.db.Queries().SetCharacterOnline(g.ctx, character.ID); err != nil {
-		g.logger.Error("Failed to set character online", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.Error(err))
-		g.sendAuthResult(c, sequence, false, "Failed to set character online")
 		return
 	}
 
@@ -191,6 +212,15 @@ func (g *Game) handleDisconnect(c *network.Client) {
 	}
 }
 
+func (g *Game) resetOnlinePlayers() {
+	// set is_online=false where region=cfg.region
+	if err := g.db.Queries().ResetOnlinePlayers(g.ctx, int32(g.cfg.Game.Region)); err != nil {
+		g.logger.Error("Failed to reset online players", zap.Int32("region", int32(g.cfg.Game.Region)), zap.Error(err))
+	} else {
+		g.logger.Info("Reset online players", zap.Int32("region", int32(g.cfg.Game.Region)))
+	}
+}
+
 func (g *Game) StartGameLoop() {
 	g.wg.Add(1)
 	go g.gameLoop()
@@ -233,6 +263,9 @@ func (g *Game) Stop() {
 	g.entityIDManager.Stop()
 
 	g.wg.Wait()
+
+	g.resetOnlinePlayers()
+
 	g.logger.Info("Game stopped")
 }
 
