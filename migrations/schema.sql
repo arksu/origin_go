@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS character
     region           INT          NOT NULL,                      -- region id (continent)
     x                INT          NOT NULL,                      -- world coordinate
     y                INT          NOT NULL,                      -- world coordinate
-    layer            SMALLINT     NOT NULL,                      -- ground layer
+    layer            INT          NOT NULL,                      -- ground layer
     heading          SMALLINT     NOT NULL CHECK (heading >= 0 AND heading < 8),
 
     stamina          INT          NOT NULL CHECK (stamina >= 0), -- current stamina

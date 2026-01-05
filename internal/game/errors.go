@@ -13,4 +13,7 @@ var (
 
 	ErrBuilderNotFound  = errors.New("object builder not found")
 	ErrEntityNotInChunk = errors.New("entity not in chunk")
+
+	ErrPlayerSpawnFailed = errors.New("player spawn failed")
+	ErrShardNotFound     = errors.New("shard not found")
 )

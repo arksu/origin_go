@@ -44,7 +44,7 @@ type Character struct {
 	Region         int32                 `json:"region"`
 	X              int32                 `json:"x"`
 	Y              int32                 `json:"y"`
-	Layer          int16                 `json:"layer"`
+	Layer          int32                 `json:"layer"`
 	Heading        int16                 `json:"heading"`
 	Stamina        int32                 `json:"stamina"`
 	Shp            int32                 `json:"shp"`
