@@ -7,6 +7,9 @@ export const useGameStore = defineStore('game', () => {
   const connectionState = ref('disconnected') // disconnected, connecting, connected, error
   const playerState = ref(null)
   const lastError = ref('')
+  const worldReady = ref(false)
+  const chunks = ref(new Map())
+  const playerPosition = ref({ x: 0, y: 0, heading: 0 })
 
   const isConnected = computed(() => connectionState.value === 'connected')
 
@@ -23,6 +26,24 @@ export const useGameStore = defineStore('game', () => {
     playerState.value = state
   }
 
+  function setWorldReady(ready) {
+    worldReady.value = ready
+  }
+
+  function setPlayerPosition(pos) {
+    playerPosition.value = { ...pos }
+  }
+
+  function addChunk(coord, data) {
+    const key = `${coord.x},${coord.y}`
+    chunks.value.set(key, { coord, data })
+  }
+
+  function removeChunk(coord) {
+    const key = `${coord.x},${coord.y}`
+    chunks.value.delete(key)
+  }
+
   function setError(error) {
     lastError.value = error
     connectionState.value = 'error'
@@ -34,6 +55,9 @@ export const useGameStore = defineStore('game', () => {
     connectionState.value = 'disconnected'
     playerState.value = null
     lastError.value = ''
+    worldReady.value = false
+    chunks.value.clear()
+    playerPosition.value = { x: 0, y: 0, heading: 0 }
   }
 
   return {
@@ -42,10 +66,17 @@ export const useGameStore = defineStore('game', () => {
     connectionState,
     playerState,
     lastError,
+    worldReady,
+    chunks,
+    playerPosition,
     isConnected,
     setWsToken,
     setConnectionState,
     setPlayerState,
+    setWorldReady,
+    setPlayerPosition,
+    addChunk,
+    removeChunk,
     setError,
     reset
   }

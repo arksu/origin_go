@@ -87,6 +87,12 @@ class GameConnection {
         this.handleAuthResult(message.authResult)
       } else if (message.pong) {
         this.handlePong(message.pong)
+      } else if (message.playerEnterWorld) {
+        this.handlePlayerEnterWorld(message.playerEnterWorld)
+      } else if (message.loadChunk) {
+        this.handleLoadChunk(message.loadChunk)
+      } else if (message.unloadChunk) {
+        this.handleUnloadChunk(message.unloadChunk)
       }
 
       // Notify registered handlers
@@ -137,6 +143,31 @@ class GameConnection {
       clientTimeMs: Date.now()
     })
     this.send({ ping: pingMsg })
+  }
+
+  handlePlayerEnterWorld(enterWorld) {
+    const gameStore = useGameStore()
+    gameStore.setPlayerPosition({
+      x: enterWorld.movement?.position?.x || 0,
+      y: enterWorld.movement?.position?.y || 0,
+      heading: enterWorld.movement?.position?.heading || 0
+    })
+    gameStore.setWorldReady(true)
+    console.log('Player entered world:', enterWorld)
+  }
+
+  handleLoadChunk(loadChunk) {
+    const gameStore = useGameStore()
+    if (loadChunk.chunk) {
+      console.log('Chunk loaded:', loadChunk.chunk.coord, 'tiles length:', loadChunk.chunk.tiles?.length)
+      gameStore.addChunk(loadChunk.chunk.coord, loadChunk.chunk.tiles)
+    }
+  }
+
+  handleUnloadChunk(unloadChunk) {
+    const gameStore = useGameStore()
+    gameStore.removeChunk(unloadChunk.coord)
+    console.log('Chunk unloaded:', unloadChunk.coord)
   }
 
   onMessage(type, handler) {

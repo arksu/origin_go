@@ -316,7 +316,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	default:
 	}
 
-	g.sendPlayerEnterWorld(c, playerEntityID, aoiCoords, aoiChunks)
+	g.sendPlayerEnterWorld(c, playerEntityID, aoiCoords, aoiChunks, character)
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -382,7 +382,7 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 	c.Send(data)
 }
 
-func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, coords []ChunkCoord, chunks []*Chunk) {
+func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, coords []ChunkCoord, chunks []*Chunk, character repository.Character) {
 	// Send chunks first so client can start rendering
 	for _, chunk := range chunks {
 		select {
@@ -424,6 +424,13 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, co
 		Payload: &netproto.ServerMessage_PlayerEnterWorld{
 			PlayerEnterWorld: &netproto.S2C_PlayerEnterWorld{
 				EntityId: uint64(entityID),
+				Movement: &netproto.EntityMovement{
+					Position: &netproto.Position{
+						X:       character.X,
+						Y:       character.Y,
+						Heading: uint32(character.Heading),
+					},
+				},
 			},
 		},
 	}

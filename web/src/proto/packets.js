@@ -2834,380 +2834,6 @@ export const proto = $root.proto = (() => {
         return EntityMovement;
     })();
 
-    proto.PlayerFullState = (function() {
-
-        /**
-         * Properties of a PlayerFullState.
-         * @memberof proto
-         * @interface IPlayerFullState
-         * @property {number|Long|null} [entityId] PlayerFullState entityId
-         * @property {string|null} [name] PlayerFullState name
-         * @property {proto.IEntityMovement|null} [movement] PlayerFullState movement
-         * @property {proto.IInventory|null} [inventory] PlayerFullState inventory
-         * @property {proto.IPaperdoll|null} [paperdoll] PlayerFullState paperdoll
-         * @property {number|Long|null} [draggingEntityId] PlayerFullState draggingEntityId
-         */
-
-        /**
-         * Constructs a new PlayerFullState.
-         * @memberof proto
-         * @classdesc Represents a PlayerFullState.
-         * @implements IPlayerFullState
-         * @constructor
-         * @param {proto.IPlayerFullState=} [properties] Properties to set
-         */
-        function PlayerFullState(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * PlayerFullState entityId.
-         * @member {number|Long} entityId
-         * @memberof proto.PlayerFullState
-         * @instance
-         */
-        PlayerFullState.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-        /**
-         * PlayerFullState name.
-         * @member {string} name
-         * @memberof proto.PlayerFullState
-         * @instance
-         */
-        PlayerFullState.prototype.name = "";
-
-        /**
-         * PlayerFullState movement.
-         * @member {proto.IEntityMovement|null|undefined} movement
-         * @memberof proto.PlayerFullState
-         * @instance
-         */
-        PlayerFullState.prototype.movement = null;
-
-        /**
-         * PlayerFullState inventory.
-         * @member {proto.IInventory|null|undefined} inventory
-         * @memberof proto.PlayerFullState
-         * @instance
-         */
-        PlayerFullState.prototype.inventory = null;
-
-        /**
-         * PlayerFullState paperdoll.
-         * @member {proto.IPaperdoll|null|undefined} paperdoll
-         * @memberof proto.PlayerFullState
-         * @instance
-         */
-        PlayerFullState.prototype.paperdoll = null;
-
-        /**
-         * PlayerFullState draggingEntityId.
-         * @member {number|Long|null|undefined} draggingEntityId
-         * @memberof proto.PlayerFullState
-         * @instance
-         */
-        PlayerFullState.prototype.draggingEntityId = null;
-
-        // OneOf field names bound to virtual getters and setters
-        let $oneOfFields;
-
-        // Virtual OneOf for proto3 optional field
-        Object.defineProperty(PlayerFullState.prototype, "_draggingEntityId", {
-            get: $util.oneOfGetter($oneOfFields = ["draggingEntityId"]),
-            set: $util.oneOfSetter($oneOfFields)
-        });
-
-        /**
-         * Creates a new PlayerFullState instance using the specified properties.
-         * @function create
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {proto.IPlayerFullState=} [properties] Properties to set
-         * @returns {proto.PlayerFullState} PlayerFullState instance
-         */
-        PlayerFullState.create = function create(properties) {
-            return new PlayerFullState(properties);
-        };
-
-        /**
-         * Encodes the specified PlayerFullState message. Does not implicitly {@link proto.PlayerFullState.verify|verify} messages.
-         * @function encode
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {proto.IPlayerFullState} message PlayerFullState message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        PlayerFullState.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
-            if (message.name != null && Object.hasOwnProperty.call(message, "name"))
-                writer.uint32(/* id 2, wireType 2 =*/18).string(message.name);
-            if (message.movement != null && Object.hasOwnProperty.call(message, "movement"))
-                $root.proto.EntityMovement.encode(message.movement, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-            if (message.inventory != null && Object.hasOwnProperty.call(message, "inventory"))
-                $root.proto.Inventory.encode(message.inventory, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
-            if (message.paperdoll != null && Object.hasOwnProperty.call(message, "paperdoll"))
-                $root.proto.Paperdoll.encode(message.paperdoll, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
-            if (message.draggingEntityId != null && Object.hasOwnProperty.call(message, "draggingEntityId"))
-                writer.uint32(/* id 8, wireType 0 =*/64).uint64(message.draggingEntityId);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified PlayerFullState message, length delimited. Does not implicitly {@link proto.PlayerFullState.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {proto.IPlayerFullState} message PlayerFullState message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        PlayerFullState.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a PlayerFullState message from the specified reader or buffer.
-         * @function decode
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {proto.PlayerFullState} PlayerFullState
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        PlayerFullState.decode = function decode(reader, length, error) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.PlayerFullState();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                if (tag === error)
-                    break;
-                switch (tag >>> 3) {
-                case 1: {
-                        message.entityId = reader.uint64();
-                        break;
-                    }
-                case 2: {
-                        message.name = reader.string();
-                        break;
-                    }
-                case 3: {
-                        message.movement = $root.proto.EntityMovement.decode(reader, reader.uint32());
-                        break;
-                    }
-                case 6: {
-                        message.inventory = $root.proto.Inventory.decode(reader, reader.uint32());
-                        break;
-                    }
-                case 7: {
-                        message.paperdoll = $root.proto.Paperdoll.decode(reader, reader.uint32());
-                        break;
-                    }
-                case 8: {
-                        message.draggingEntityId = reader.uint64();
-                        break;
-                    }
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a PlayerFullState message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.PlayerFullState} PlayerFullState
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        PlayerFullState.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a PlayerFullState message.
-         * @function verify
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        PlayerFullState.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            let properties = {};
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
-                    return "entityId: integer|Long expected";
-            if (message.name != null && message.hasOwnProperty("name"))
-                if (!$util.isString(message.name))
-                    return "name: string expected";
-            if (message.movement != null && message.hasOwnProperty("movement")) {
-                let error = $root.proto.EntityMovement.verify(message.movement);
-                if (error)
-                    return "movement." + error;
-            }
-            if (message.inventory != null && message.hasOwnProperty("inventory")) {
-                let error = $root.proto.Inventory.verify(message.inventory);
-                if (error)
-                    return "inventory." + error;
-            }
-            if (message.paperdoll != null && message.hasOwnProperty("paperdoll")) {
-                let error = $root.proto.Paperdoll.verify(message.paperdoll);
-                if (error)
-                    return "paperdoll." + error;
-            }
-            if (message.draggingEntityId != null && message.hasOwnProperty("draggingEntityId")) {
-                properties._draggingEntityId = 1;
-                if (!$util.isInteger(message.draggingEntityId) && !(message.draggingEntityId && $util.isInteger(message.draggingEntityId.low) && $util.isInteger(message.draggingEntityId.high)))
-                    return "draggingEntityId: integer|Long expected";
-            }
-            return null;
-        };
-
-        /**
-         * Creates a PlayerFullState message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {proto.PlayerFullState} PlayerFullState
-         */
-        PlayerFullState.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.PlayerFullState)
-                return object;
-            let message = new $root.proto.PlayerFullState();
-            if (object.entityId != null)
-                if ($util.Long)
-                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
-                else if (typeof object.entityId === "string")
-                    message.entityId = parseInt(object.entityId, 10);
-                else if (typeof object.entityId === "number")
-                    message.entityId = object.entityId;
-                else if (typeof object.entityId === "object")
-                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
-            if (object.name != null)
-                message.name = String(object.name);
-            if (object.movement != null) {
-                if (typeof object.movement !== "object")
-                    throw TypeError(".proto.PlayerFullState.movement: object expected");
-                message.movement = $root.proto.EntityMovement.fromObject(object.movement);
-            }
-            if (object.inventory != null) {
-                if (typeof object.inventory !== "object")
-                    throw TypeError(".proto.PlayerFullState.inventory: object expected");
-                message.inventory = $root.proto.Inventory.fromObject(object.inventory);
-            }
-            if (object.paperdoll != null) {
-                if (typeof object.paperdoll !== "object")
-                    throw TypeError(".proto.PlayerFullState.paperdoll: object expected");
-                message.paperdoll = $root.proto.Paperdoll.fromObject(object.paperdoll);
-            }
-            if (object.draggingEntityId != null)
-                if ($util.Long)
-                    (message.draggingEntityId = $util.Long.fromValue(object.draggingEntityId)).unsigned = true;
-                else if (typeof object.draggingEntityId === "string")
-                    message.draggingEntityId = parseInt(object.draggingEntityId, 10);
-                else if (typeof object.draggingEntityId === "number")
-                    message.draggingEntityId = object.draggingEntityId;
-                else if (typeof object.draggingEntityId === "object")
-                    message.draggingEntityId = new $util.LongBits(object.draggingEntityId.low >>> 0, object.draggingEntityId.high >>> 0).toNumber(true);
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a PlayerFullState message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {proto.PlayerFullState} message PlayerFullState
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        PlayerFullState.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults) {
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, true);
-                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.entityId = options.longs === String ? "0" : 0;
-                object.name = "";
-                object.movement = null;
-                object.inventory = null;
-                object.paperdoll = null;
-            }
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (typeof message.entityId === "number")
-                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
-                else
-                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
-            if (message.name != null && message.hasOwnProperty("name"))
-                object.name = message.name;
-            if (message.movement != null && message.hasOwnProperty("movement"))
-                object.movement = $root.proto.EntityMovement.toObject(message.movement, options);
-            if (message.inventory != null && message.hasOwnProperty("inventory"))
-                object.inventory = $root.proto.Inventory.toObject(message.inventory, options);
-            if (message.paperdoll != null && message.hasOwnProperty("paperdoll"))
-                object.paperdoll = $root.proto.Paperdoll.toObject(message.paperdoll, options);
-            if (message.draggingEntityId != null && message.hasOwnProperty("draggingEntityId")) {
-                if (typeof message.draggingEntityId === "number")
-                    object.draggingEntityId = options.longs === String ? String(message.draggingEntityId) : message.draggingEntityId;
-                else
-                    object.draggingEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.draggingEntityId) : options.longs === Number ? new $util.LongBits(message.draggingEntityId.low >>> 0, message.draggingEntityId.high >>> 0).toNumber(true) : message.draggingEntityId;
-                if (options.oneofs)
-                    object._draggingEntityId = "draggingEntityId";
-            }
-            return object;
-        };
-
-        /**
-         * Converts this PlayerFullState to JSON.
-         * @function toJSON
-         * @memberof proto.PlayerFullState
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        PlayerFullState.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        /**
-         * Gets the default type url for PlayerFullState
-         * @function getTypeUrl
-         * @memberof proto.PlayerFullState
-         * @static
-         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
-         * @returns {string} The default type url
-         */
-        PlayerFullState.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
-            if (typeUrlPrefix === undefined) {
-                typeUrlPrefix = "type.googleapis.com";
-            }
-            return typeUrlPrefix + "/proto.PlayerFullState";
-        };
-
-        return PlayerFullState;
-    })();
-
     proto.EntityAppearance = (function() {
 
         /**
@@ -4676,8 +4302,6 @@ export const proto = $root.proto = (() => {
          * @interface IS2C_AuthResult
          * @property {boolean|null} [success] S2C_AuthResult success
          * @property {string|null} [errorMessage] S2C_AuthResult errorMessage
-         * @property {number|Long|null} [playerEntityId] S2C_AuthResult playerEntityId
-         * @property {proto.IPlayerFullState|null} [playerState] S2C_AuthResult playerState
          */
 
         /**
@@ -4712,22 +4336,6 @@ export const proto = $root.proto = (() => {
         S2C_AuthResult.prototype.errorMessage = "";
 
         /**
-         * S2C_AuthResult playerEntityId.
-         * @member {number|Long} playerEntityId
-         * @memberof proto.S2C_AuthResult
-         * @instance
-         */
-        S2C_AuthResult.prototype.playerEntityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-        /**
-         * S2C_AuthResult playerState.
-         * @member {proto.IPlayerFullState|null|undefined} playerState
-         * @memberof proto.S2C_AuthResult
-         * @instance
-         */
-        S2C_AuthResult.prototype.playerState = null;
-
-        /**
          * Creates a new S2C_AuthResult instance using the specified properties.
          * @function create
          * @memberof proto.S2C_AuthResult
@@ -4755,10 +4363,6 @@ export const proto = $root.proto = (() => {
                 writer.uint32(/* id 1, wireType 0 =*/8).bool(message.success);
             if (message.errorMessage != null && Object.hasOwnProperty.call(message, "errorMessage"))
                 writer.uint32(/* id 2, wireType 2 =*/18).string(message.errorMessage);
-            if (message.playerEntityId != null && Object.hasOwnProperty.call(message, "playerEntityId"))
-                writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.playerEntityId);
-            if (message.playerState != null && Object.hasOwnProperty.call(message, "playerState"))
-                $root.proto.PlayerFullState.encode(message.playerState, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
             return writer;
         };
 
@@ -4803,14 +4407,6 @@ export const proto = $root.proto = (() => {
                         message.errorMessage = reader.string();
                         break;
                     }
-                case 3: {
-                        message.playerEntityId = reader.uint64();
-                        break;
-                    }
-                case 4: {
-                        message.playerState = $root.proto.PlayerFullState.decode(reader, reader.uint32());
-                        break;
-                    }
                 default:
                     reader.skipType(tag & 7);
                     break;
@@ -4852,14 +4448,6 @@ export const proto = $root.proto = (() => {
             if (message.errorMessage != null && message.hasOwnProperty("errorMessage"))
                 if (!$util.isString(message.errorMessage))
                     return "errorMessage: string expected";
-            if (message.playerEntityId != null && message.hasOwnProperty("playerEntityId"))
-                if (!$util.isInteger(message.playerEntityId) && !(message.playerEntityId && $util.isInteger(message.playerEntityId.low) && $util.isInteger(message.playerEntityId.high)))
-                    return "playerEntityId: integer|Long expected";
-            if (message.playerState != null && message.hasOwnProperty("playerState")) {
-                let error = $root.proto.PlayerFullState.verify(message.playerState);
-                if (error)
-                    return "playerState." + error;
-            }
             return null;
         };
 
@@ -4879,20 +4467,6 @@ export const proto = $root.proto = (() => {
                 message.success = Boolean(object.success);
             if (object.errorMessage != null)
                 message.errorMessage = String(object.errorMessage);
-            if (object.playerEntityId != null)
-                if ($util.Long)
-                    (message.playerEntityId = $util.Long.fromValue(object.playerEntityId)).unsigned = true;
-                else if (typeof object.playerEntityId === "string")
-                    message.playerEntityId = parseInt(object.playerEntityId, 10);
-                else if (typeof object.playerEntityId === "number")
-                    message.playerEntityId = object.playerEntityId;
-                else if (typeof object.playerEntityId === "object")
-                    message.playerEntityId = new $util.LongBits(object.playerEntityId.low >>> 0, object.playerEntityId.high >>> 0).toNumber(true);
-            if (object.playerState != null) {
-                if (typeof object.playerState !== "object")
-                    throw TypeError(".proto.S2C_AuthResult.playerState: object expected");
-                message.playerState = $root.proto.PlayerFullState.fromObject(object.playerState);
-            }
             return message;
         };
 
@@ -4912,24 +4486,11 @@ export const proto = $root.proto = (() => {
             if (options.defaults) {
                 object.success = false;
                 object.errorMessage = "";
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, true);
-                    object.playerEntityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.playerEntityId = options.longs === String ? "0" : 0;
-                object.playerState = null;
             }
             if (message.success != null && message.hasOwnProperty("success"))
                 object.success = message.success;
             if (message.errorMessage != null && message.hasOwnProperty("errorMessage"))
                 object.errorMessage = message.errorMessage;
-            if (message.playerEntityId != null && message.hasOwnProperty("playerEntityId"))
-                if (typeof message.playerEntityId === "number")
-                    object.playerEntityId = options.longs === String ? String(message.playerEntityId) : message.playerEntityId;
-                else
-                    object.playerEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.playerEntityId) : options.longs === Number ? new $util.LongBits(message.playerEntityId.low >>> 0, message.playerEntityId.high >>> 0).toNumber(true) : message.playerEntityId;
-            if (message.playerState != null && message.hasOwnProperty("playerState"))
-                object.playerState = $root.proto.PlayerFullState.toObject(message.playerState, options);
             return object;
         };
 
@@ -5217,6 +4778,599 @@ export const proto = $root.proto = (() => {
         };
 
         return S2C_Pong;
+    })();
+
+    proto.S2C_PlayerEnterWorld = (function() {
+
+        /**
+         * Properties of a S2C_PlayerEnterWorld.
+         * @memberof proto
+         * @interface IS2C_PlayerEnterWorld
+         * @property {number|Long|null} [entityId] S2C_PlayerEnterWorld entityId
+         * @property {string|null} [name] S2C_PlayerEnterWorld name
+         * @property {proto.IEntityMovement|null} [movement] S2C_PlayerEnterWorld movement
+         * @property {proto.IInventory|null} [inventory] S2C_PlayerEnterWorld inventory
+         * @property {proto.IPaperdoll|null} [paperdoll] S2C_PlayerEnterWorld paperdoll
+         * @property {number|Long|null} [draggingEntityId] S2C_PlayerEnterWorld draggingEntityId
+         */
+
+        /**
+         * Constructs a new S2C_PlayerEnterWorld.
+         * @memberof proto
+         * @classdesc Represents a S2C_PlayerEnterWorld.
+         * @implements IS2C_PlayerEnterWorld
+         * @constructor
+         * @param {proto.IS2C_PlayerEnterWorld=} [properties] Properties to set
+         */
+        function S2C_PlayerEnterWorld(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_PlayerEnterWorld entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * S2C_PlayerEnterWorld name.
+         * @member {string} name
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.name = "";
+
+        /**
+         * S2C_PlayerEnterWorld movement.
+         * @member {proto.IEntityMovement|null|undefined} movement
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.movement = null;
+
+        /**
+         * S2C_PlayerEnterWorld inventory.
+         * @member {proto.IInventory|null|undefined} inventory
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.inventory = null;
+
+        /**
+         * S2C_PlayerEnterWorld paperdoll.
+         * @member {proto.IPaperdoll|null|undefined} paperdoll
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.paperdoll = null;
+
+        /**
+         * S2C_PlayerEnterWorld draggingEntityId.
+         * @member {number|Long|null|undefined} draggingEntityId
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.draggingEntityId = null;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(S2C_PlayerEnterWorld.prototype, "_draggingEntityId", {
+            get: $util.oneOfGetter($oneOfFields = ["draggingEntityId"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new S2C_PlayerEnterWorld instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {proto.IS2C_PlayerEnterWorld=} [properties] Properties to set
+         * @returns {proto.S2C_PlayerEnterWorld} S2C_PlayerEnterWorld instance
+         */
+        S2C_PlayerEnterWorld.create = function create(properties) {
+            return new S2C_PlayerEnterWorld(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_PlayerEnterWorld message. Does not implicitly {@link proto.S2C_PlayerEnterWorld.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {proto.IS2C_PlayerEnterWorld} message S2C_PlayerEnterWorld message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_PlayerEnterWorld.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            if (message.name != null && Object.hasOwnProperty.call(message, "name"))
+                writer.uint32(/* id 2, wireType 2 =*/18).string(message.name);
+            if (message.movement != null && Object.hasOwnProperty.call(message, "movement"))
+                $root.proto.EntityMovement.encode(message.movement, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            if (message.inventory != null && Object.hasOwnProperty.call(message, "inventory"))
+                $root.proto.Inventory.encode(message.inventory, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
+            if (message.paperdoll != null && Object.hasOwnProperty.call(message, "paperdoll"))
+                $root.proto.Paperdoll.encode(message.paperdoll, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
+            if (message.draggingEntityId != null && Object.hasOwnProperty.call(message, "draggingEntityId"))
+                writer.uint32(/* id 8, wireType 0 =*/64).uint64(message.draggingEntityId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_PlayerEnterWorld message, length delimited. Does not implicitly {@link proto.S2C_PlayerEnterWorld.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {proto.IS2C_PlayerEnterWorld} message S2C_PlayerEnterWorld message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_PlayerEnterWorld.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_PlayerEnterWorld message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_PlayerEnterWorld} S2C_PlayerEnterWorld
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_PlayerEnterWorld.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_PlayerEnterWorld();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.name = reader.string();
+                        break;
+                    }
+                case 3: {
+                        message.movement = $root.proto.EntityMovement.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 6: {
+                        message.inventory = $root.proto.Inventory.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 7: {
+                        message.paperdoll = $root.proto.Paperdoll.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 8: {
+                        message.draggingEntityId = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_PlayerEnterWorld message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_PlayerEnterWorld} S2C_PlayerEnterWorld
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_PlayerEnterWorld.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_PlayerEnterWorld message.
+         * @function verify
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_PlayerEnterWorld.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            if (message.name != null && message.hasOwnProperty("name"))
+                if (!$util.isString(message.name))
+                    return "name: string expected";
+            if (message.movement != null && message.hasOwnProperty("movement")) {
+                let error = $root.proto.EntityMovement.verify(message.movement);
+                if (error)
+                    return "movement." + error;
+            }
+            if (message.inventory != null && message.hasOwnProperty("inventory")) {
+                let error = $root.proto.Inventory.verify(message.inventory);
+                if (error)
+                    return "inventory." + error;
+            }
+            if (message.paperdoll != null && message.hasOwnProperty("paperdoll")) {
+                let error = $root.proto.Paperdoll.verify(message.paperdoll);
+                if (error)
+                    return "paperdoll." + error;
+            }
+            if (message.draggingEntityId != null && message.hasOwnProperty("draggingEntityId")) {
+                properties._draggingEntityId = 1;
+                if (!$util.isInteger(message.draggingEntityId) && !(message.draggingEntityId && $util.isInteger(message.draggingEntityId.low) && $util.isInteger(message.draggingEntityId.high)))
+                    return "draggingEntityId: integer|Long expected";
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_PlayerEnterWorld message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_PlayerEnterWorld} S2C_PlayerEnterWorld
+         */
+        S2C_PlayerEnterWorld.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_PlayerEnterWorld)
+                return object;
+            let message = new $root.proto.S2C_PlayerEnterWorld();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            if (object.name != null)
+                message.name = String(object.name);
+            if (object.movement != null) {
+                if (typeof object.movement !== "object")
+                    throw TypeError(".proto.S2C_PlayerEnterWorld.movement: object expected");
+                message.movement = $root.proto.EntityMovement.fromObject(object.movement);
+            }
+            if (object.inventory != null) {
+                if (typeof object.inventory !== "object")
+                    throw TypeError(".proto.S2C_PlayerEnterWorld.inventory: object expected");
+                message.inventory = $root.proto.Inventory.fromObject(object.inventory);
+            }
+            if (object.paperdoll != null) {
+                if (typeof object.paperdoll !== "object")
+                    throw TypeError(".proto.S2C_PlayerEnterWorld.paperdoll: object expected");
+                message.paperdoll = $root.proto.Paperdoll.fromObject(object.paperdoll);
+            }
+            if (object.draggingEntityId != null)
+                if ($util.Long)
+                    (message.draggingEntityId = $util.Long.fromValue(object.draggingEntityId)).unsigned = true;
+                else if (typeof object.draggingEntityId === "string")
+                    message.draggingEntityId = parseInt(object.draggingEntityId, 10);
+                else if (typeof object.draggingEntityId === "number")
+                    message.draggingEntityId = object.draggingEntityId;
+                else if (typeof object.draggingEntityId === "object")
+                    message.draggingEntityId = new $util.LongBits(object.draggingEntityId.low >>> 0, object.draggingEntityId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_PlayerEnterWorld message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {proto.S2C_PlayerEnterWorld} message S2C_PlayerEnterWorld
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_PlayerEnterWorld.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+                object.name = "";
+                object.movement = null;
+                object.inventory = null;
+                object.paperdoll = null;
+            }
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            if (message.name != null && message.hasOwnProperty("name"))
+                object.name = message.name;
+            if (message.movement != null && message.hasOwnProperty("movement"))
+                object.movement = $root.proto.EntityMovement.toObject(message.movement, options);
+            if (message.inventory != null && message.hasOwnProperty("inventory"))
+                object.inventory = $root.proto.Inventory.toObject(message.inventory, options);
+            if (message.paperdoll != null && message.hasOwnProperty("paperdoll"))
+                object.paperdoll = $root.proto.Paperdoll.toObject(message.paperdoll, options);
+            if (message.draggingEntityId != null && message.hasOwnProperty("draggingEntityId")) {
+                if (typeof message.draggingEntityId === "number")
+                    object.draggingEntityId = options.longs === String ? String(message.draggingEntityId) : message.draggingEntityId;
+                else
+                    object.draggingEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.draggingEntityId) : options.longs === Number ? new $util.LongBits(message.draggingEntityId.low >>> 0, message.draggingEntityId.high >>> 0).toNumber(true) : message.draggingEntityId;
+                if (options.oneofs)
+                    object._draggingEntityId = "draggingEntityId";
+            }
+            return object;
+        };
+
+        /**
+         * Converts this S2C_PlayerEnterWorld to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_PlayerEnterWorld.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_PlayerEnterWorld
+         * @function getTypeUrl
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_PlayerEnterWorld.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_PlayerEnterWorld";
+        };
+
+        return S2C_PlayerEnterWorld;
+    })();
+
+    proto.S2C_PlayerLeaveWorld = (function() {
+
+        /**
+         * Properties of a S2C_PlayerLeaveWorld.
+         * @memberof proto
+         * @interface IS2C_PlayerLeaveWorld
+         * @property {number|Long|null} [entityId] S2C_PlayerLeaveWorld entityId
+         */
+
+        /**
+         * Constructs a new S2C_PlayerLeaveWorld.
+         * @memberof proto
+         * @classdesc Represents a S2C_PlayerLeaveWorld.
+         * @implements IS2C_PlayerLeaveWorld
+         * @constructor
+         * @param {proto.IS2C_PlayerLeaveWorld=} [properties] Properties to set
+         */
+        function S2C_PlayerLeaveWorld(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_PlayerLeaveWorld entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @instance
+         */
+        S2C_PlayerLeaveWorld.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Creates a new S2C_PlayerLeaveWorld instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {proto.IS2C_PlayerLeaveWorld=} [properties] Properties to set
+         * @returns {proto.S2C_PlayerLeaveWorld} S2C_PlayerLeaveWorld instance
+         */
+        S2C_PlayerLeaveWorld.create = function create(properties) {
+            return new S2C_PlayerLeaveWorld(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_PlayerLeaveWorld message. Does not implicitly {@link proto.S2C_PlayerLeaveWorld.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {proto.IS2C_PlayerLeaveWorld} message S2C_PlayerLeaveWorld message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_PlayerLeaveWorld.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_PlayerLeaveWorld message, length delimited. Does not implicitly {@link proto.S2C_PlayerLeaveWorld.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {proto.IS2C_PlayerLeaveWorld} message S2C_PlayerLeaveWorld message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_PlayerLeaveWorld.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_PlayerLeaveWorld message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_PlayerLeaveWorld} S2C_PlayerLeaveWorld
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_PlayerLeaveWorld.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_PlayerLeaveWorld();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_PlayerLeaveWorld message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_PlayerLeaveWorld} S2C_PlayerLeaveWorld
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_PlayerLeaveWorld.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_PlayerLeaveWorld message.
+         * @function verify
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_PlayerLeaveWorld.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates a S2C_PlayerLeaveWorld message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_PlayerLeaveWorld} S2C_PlayerLeaveWorld
+         */
+        S2C_PlayerLeaveWorld.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_PlayerLeaveWorld)
+                return object;
+            let message = new $root.proto.S2C_PlayerLeaveWorld();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_PlayerLeaveWorld message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {proto.S2C_PlayerLeaveWorld} message S2C_PlayerLeaveWorld
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_PlayerLeaveWorld.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            return object;
+        };
+
+        /**
+         * Converts this S2C_PlayerLeaveWorld to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_PlayerLeaveWorld.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_PlayerLeaveWorld
+         * @function getTypeUrl
+         * @memberof proto.S2C_PlayerLeaveWorld
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_PlayerLeaveWorld.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_PlayerLeaveWorld";
+        };
+
+        return S2C_PlayerLeaveWorld;
     })();
 
     proto.S2C_LoadChunk = (function() {
@@ -5639,6 +5793,319 @@ export const proto = $root.proto = (() => {
         return S2C_UnloadChunk;
     })();
 
+    proto.S2C_Error = (function() {
+
+        /**
+         * Properties of a S2C_Error.
+         * @memberof proto
+         * @interface IS2C_Error
+         * @property {proto.ErrorCode|null} [code] S2C_Error code
+         * @property {string|null} [message] S2C_Error message
+         */
+
+        /**
+         * Constructs a new S2C_Error.
+         * @memberof proto
+         * @classdesc Represents a S2C_Error.
+         * @implements IS2C_Error
+         * @constructor
+         * @param {proto.IS2C_Error=} [properties] Properties to set
+         */
+        function S2C_Error(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_Error code.
+         * @member {proto.ErrorCode} code
+         * @memberof proto.S2C_Error
+         * @instance
+         */
+        S2C_Error.prototype.code = 0;
+
+        /**
+         * S2C_Error message.
+         * @member {string} message
+         * @memberof proto.S2C_Error
+         * @instance
+         */
+        S2C_Error.prototype.message = "";
+
+        /**
+         * Creates a new S2C_Error instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {proto.IS2C_Error=} [properties] Properties to set
+         * @returns {proto.S2C_Error} S2C_Error instance
+         */
+        S2C_Error.create = function create(properties) {
+            return new S2C_Error(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_Error message. Does not implicitly {@link proto.S2C_Error.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {proto.IS2C_Error} message S2C_Error message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_Error.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.code != null && Object.hasOwnProperty.call(message, "code"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.code);
+            if (message.message != null && Object.hasOwnProperty.call(message, "message"))
+                writer.uint32(/* id 2, wireType 2 =*/18).string(message.message);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_Error message, length delimited. Does not implicitly {@link proto.S2C_Error.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {proto.IS2C_Error} message S2C_Error message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_Error.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_Error message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_Error} S2C_Error
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_Error.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_Error();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.code = reader.int32();
+                        break;
+                    }
+                case 2: {
+                        message.message = reader.string();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_Error message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_Error} S2C_Error
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_Error.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_Error message.
+         * @function verify
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_Error.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.code != null && message.hasOwnProperty("code"))
+                switch (message.code) {
+                default:
+                    return "code: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                case 6:
+                case 7:
+                case 8:
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                case 13:
+                case 14:
+                    break;
+                }
+            if (message.message != null && message.hasOwnProperty("message"))
+                if (!$util.isString(message.message))
+                    return "message: string expected";
+            return null;
+        };
+
+        /**
+         * Creates a S2C_Error message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_Error} S2C_Error
+         */
+        S2C_Error.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_Error)
+                return object;
+            let message = new $root.proto.S2C_Error();
+            switch (object.code) {
+            default:
+                if (typeof object.code === "number") {
+                    message.code = object.code;
+                    break;
+                }
+                break;
+            case "ERROR_CODE_NONE":
+            case 0:
+                message.code = 0;
+                break;
+            case "ERROR_CODE_INVALID_REQUEST":
+            case 1:
+                message.code = 1;
+                break;
+            case "ERROR_CODE_NOT_AUTHENTICATED":
+            case 2:
+                message.code = 2;
+                break;
+            case "ERROR_CODE_ENTITY_NOT_FOUND":
+            case 3:
+                message.code = 3;
+                break;
+            case "ERROR_CODE_OUT_OF_RANGE":
+            case 4:
+                message.code = 4;
+                break;
+            case "ERROR_CODE_INSUFFICIENT_RESOURCES":
+            case 5:
+                message.code = 5;
+                break;
+            case "ERROR_CODE_INVENTORY_FULL":
+            case 6:
+                message.code = 6;
+                break;
+            case "ERROR_CODE_CANNOT_INTERACT":
+            case 7:
+                message.code = 7;
+                break;
+            case "ERROR_CODE_COOLDOWN_ACTIVE":
+            case 8:
+                message.code = 8;
+                break;
+            case "ERROR_CODE_INSUFFICIENT_STAMINA":
+            case 9:
+                message.code = 9;
+                break;
+            case "ERROR_CODE_TARGET_INVALID":
+            case 10:
+                message.code = 10;
+                break;
+            case "ERROR_CODE_PATH_BLOCKED":
+            case 11:
+                message.code = 11;
+                break;
+            case "ERROR_CODE_ALREADY_IN_PROGRESS":
+            case 12:
+                message.code = 12;
+                break;
+            case "ERROR_CODE_BUILDING_INCOMPLETE":
+            case 13:
+                message.code = 13;
+                break;
+            case "ERROR_CODE_RECIPE_UNKNOWN":
+            case 14:
+                message.code = 14;
+                break;
+            }
+            if (object.message != null)
+                message.message = String(object.message);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_Error message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {proto.S2C_Error} message S2C_Error
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_Error.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.code = options.enums === String ? "ERROR_CODE_NONE" : 0;
+                object.message = "";
+            }
+            if (message.code != null && message.hasOwnProperty("code"))
+                object.code = options.enums === String ? $root.proto.ErrorCode[message.code] === undefined ? message.code : $root.proto.ErrorCode[message.code] : message.code;
+            if (message.message != null && message.hasOwnProperty("message"))
+                object.message = message.message;
+            return object;
+        };
+
+        /**
+         * Converts this S2C_Error to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_Error
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_Error.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_Error
+         * @function getTypeUrl
+         * @memberof proto.S2C_Error
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_Error.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_Error";
+        };
+
+        return S2C_Error;
+    })();
+
     proto.ServerMessage = (function() {
 
         /**
@@ -5650,6 +6117,9 @@ export const proto = $root.proto = (() => {
          * @property {proto.IS2C_Pong|null} [pong] ServerMessage pong
          * @property {proto.IS2C_LoadChunk|null} [loadChunk] ServerMessage loadChunk
          * @property {proto.IS2C_UnloadChunk|null} [unloadChunk] ServerMessage unloadChunk
+         * @property {proto.IS2C_PlayerEnterWorld|null} [playerEnterWorld] ServerMessage playerEnterWorld
+         * @property {proto.IS2C_PlayerLeaveWorld|null} [playerLeaveWorld] ServerMessage playerLeaveWorld
+         * @property {proto.IS2C_Error|null} [error] ServerMessage error
          */
 
         /**
@@ -5707,17 +6177,41 @@ export const proto = $root.proto = (() => {
          */
         ServerMessage.prototype.unloadChunk = null;
 
+        /**
+         * ServerMessage playerEnterWorld.
+         * @member {proto.IS2C_PlayerEnterWorld|null|undefined} playerEnterWorld
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.playerEnterWorld = null;
+
+        /**
+         * ServerMessage playerLeaveWorld.
+         * @member {proto.IS2C_PlayerLeaveWorld|null|undefined} playerLeaveWorld
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.playerLeaveWorld = null;
+
+        /**
+         * ServerMessage error.
+         * @member {proto.IS2C_Error|null|undefined} error
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.error = null;
+
         // OneOf field names bound to virtual getters and setters
         let $oneOfFields;
 
         /**
          * ServerMessage payload.
-         * @member {"authResult"|"pong"|"loadChunk"|"unloadChunk"|undefined} payload
+         * @member {"authResult"|"pong"|"loadChunk"|"unloadChunk"|"playerEnterWorld"|"playerLeaveWorld"|"error"|undefined} payload
          * @memberof proto.ServerMessage
          * @instance
          */
         Object.defineProperty(ServerMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "loadChunk", "unloadChunk"]),
+            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "loadChunk", "unloadChunk", "playerEnterWorld", "playerLeaveWorld", "error"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -5755,6 +6249,12 @@ export const proto = $root.proto = (() => {
                 $root.proto.S2C_LoadChunk.encode(message.loadChunk, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
             if (message.unloadChunk != null && Object.hasOwnProperty.call(message, "unloadChunk"))
                 $root.proto.S2C_UnloadChunk.encode(message.unloadChunk, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
+            if (message.playerEnterWorld != null && Object.hasOwnProperty.call(message, "playerEnterWorld"))
+                $root.proto.S2C_PlayerEnterWorld.encode(message.playerEnterWorld, writer.uint32(/* id 14, wireType 2 =*/114).fork()).ldelim();
+            if (message.playerLeaveWorld != null && Object.hasOwnProperty.call(message, "playerLeaveWorld"))
+                $root.proto.S2C_PlayerLeaveWorld.encode(message.playerLeaveWorld, writer.uint32(/* id 15, wireType 2 =*/122).fork()).ldelim();
+            if (message.error != null && Object.hasOwnProperty.call(message, "error"))
+                $root.proto.S2C_Error.encode(message.error, writer.uint32(/* id 42, wireType 2 =*/338).fork()).ldelim();
             return writer;
         };
 
@@ -5809,6 +6309,18 @@ export const proto = $root.proto = (() => {
                     }
                 case 13: {
                         message.unloadChunk = $root.proto.S2C_UnloadChunk.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 14: {
+                        message.playerEnterWorld = $root.proto.S2C_PlayerEnterWorld.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 15: {
+                        message.playerLeaveWorld = $root.proto.S2C_PlayerLeaveWorld.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 42: {
+                        message.error = $root.proto.S2C_Error.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -5888,6 +6400,36 @@ export const proto = $root.proto = (() => {
                         return "unloadChunk." + error;
                 }
             }
+            if (message.playerEnterWorld != null && message.hasOwnProperty("playerEnterWorld")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_PlayerEnterWorld.verify(message.playerEnterWorld);
+                    if (error)
+                        return "playerEnterWorld." + error;
+                }
+            }
+            if (message.playerLeaveWorld != null && message.hasOwnProperty("playerLeaveWorld")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_PlayerLeaveWorld.verify(message.playerLeaveWorld);
+                    if (error)
+                        return "playerLeaveWorld." + error;
+                }
+            }
+            if (message.error != null && message.hasOwnProperty("error")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_Error.verify(message.error);
+                    if (error)
+                        return "error." + error;
+                }
+            }
             return null;
         };
 
@@ -5924,6 +6466,21 @@ export const proto = $root.proto = (() => {
                 if (typeof object.unloadChunk !== "object")
                     throw TypeError(".proto.ServerMessage.unloadChunk: object expected");
                 message.unloadChunk = $root.proto.S2C_UnloadChunk.fromObject(object.unloadChunk);
+            }
+            if (object.playerEnterWorld != null) {
+                if (typeof object.playerEnterWorld !== "object")
+                    throw TypeError(".proto.ServerMessage.playerEnterWorld: object expected");
+                message.playerEnterWorld = $root.proto.S2C_PlayerEnterWorld.fromObject(object.playerEnterWorld);
+            }
+            if (object.playerLeaveWorld != null) {
+                if (typeof object.playerLeaveWorld !== "object")
+                    throw TypeError(".proto.ServerMessage.playerLeaveWorld: object expected");
+                message.playerLeaveWorld = $root.proto.S2C_PlayerLeaveWorld.fromObject(object.playerLeaveWorld);
+            }
+            if (object.error != null) {
+                if (typeof object.error !== "object")
+                    throw TypeError(".proto.ServerMessage.error: object expected");
+                message.error = $root.proto.S2C_Error.fromObject(object.error);
             }
             return message;
         };
@@ -5964,6 +6521,21 @@ export const proto = $root.proto = (() => {
                 object.unloadChunk = $root.proto.S2C_UnloadChunk.toObject(message.unloadChunk, options);
                 if (options.oneofs)
                     object.payload = "unloadChunk";
+            }
+            if (message.playerEnterWorld != null && message.hasOwnProperty("playerEnterWorld")) {
+                object.playerEnterWorld = $root.proto.S2C_PlayerEnterWorld.toObject(message.playerEnterWorld, options);
+                if (options.oneofs)
+                    object.payload = "playerEnterWorld";
+            }
+            if (message.playerLeaveWorld != null && message.hasOwnProperty("playerLeaveWorld")) {
+                object.playerLeaveWorld = $root.proto.S2C_PlayerLeaveWorld.toObject(message.playerLeaveWorld, options);
+                if (options.oneofs)
+                    object.payload = "playerLeaveWorld";
+            }
+            if (message.error != null && message.hasOwnProperty("error")) {
+                object.error = $root.proto.S2C_Error.toObject(message.error, options);
+                if (options.oneofs)
+                    object.payload = "error";
             }
             return object;
         };
