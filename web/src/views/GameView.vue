@@ -20,12 +20,12 @@
       </div>
     </header>
 
-    <main class="flex-1 p-6">
-      <div v-if="gameStore.connectionState === 'connecting'" class="text-center text-gray-400 py-12">
+    <main class="flex-1 overflow-hidden">
+      <div v-if="gameStore.connectionState === 'connecting'" class="h-full flex items-center justify-center text-gray-400">
         Connecting to game server...
       </div>
 
-      <div v-else-if="gameStore.connectionState === 'error'" class="text-center py-12">
+      <div v-else-if="gameStore.connectionState === 'error'" class="h-full flex flex-col items-center justify-center">
         <p class="text-red-400 mb-4">{{ gameStore.lastError }}</p>
         <button
           @click="handleRetry"
@@ -35,15 +35,11 @@
         </button>
       </div>
 
-      <div v-else-if="gameStore.isConnected" class="text-center text-gray-400 py-12">
-        <p class="text-green-400 mb-4">Connected to game server!</p>
-        <p v-if="gameStore.playerState" class="text-white">
-          Player Entity ID: {{ gameStore.playerState.entityId }}
-        </p>
-        <p class="text-gray-500 mt-4 text-sm">Game canvas will be implemented here</p>
+      <div v-else-if="gameStore.isConnected" class="h-full">
+        <GameCanvas />
       </div>
 
-      <div v-else class="text-center text-gray-400 py-12">
+      <div v-else class="h-full flex items-center justify-center text-gray-400">
         Disconnected from server
       </div>
     </main>
@@ -55,6 +51,7 @@ import { computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
 import { gameConnection } from '../network/GameConnection'
+import GameCanvas from '../components/GameCanvas.vue'
 
 const router = useRouter()
 const gameStore = useGameStore()
