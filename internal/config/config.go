@@ -96,6 +96,14 @@ func Load(logger *zap.Logger) (*Config, error) {
 		return nil, err
 	}
 
+	// Validate critical game config values
+	if cfg.Game.WorldWidthChunks <= 0 || cfg.Game.WorldHeightChunks <= 0 {
+		logger.Fatal("Invalid world dimensions: world_width_chunks and world_height_chunks must be > 0",
+			zap.Int("world_width_chunks", cfg.Game.WorldWidthChunks),
+			zap.Int("world_height_chunks", cfg.Game.WorldHeightChunks),
+		)
+	}
+
 	return &cfg, nil
 }
 
