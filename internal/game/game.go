@@ -308,6 +308,14 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		return
 	}
 
+	// Final check: ensure spawn context hasn't timed out before sending packets
+	select {
+	case <-ctx.Done():
+		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
+		return
+	default:
+	}
+
 	g.sendPlayerEnterWorld(c, playerEntityID, aoiCoords, aoiChunks)
 
 	g.logger.Info("Player spawned",
