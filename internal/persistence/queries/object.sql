@@ -62,3 +62,6 @@ WHERE region = $1
   AND chunk_y = $3
   AND layer = $4
   AND deleted_at IS NULL;
+
+-- name: HardDeleteObjectsByRegion :exec
+DELETE FROM object WHERE region = $1;

@@ -23,3 +23,6 @@ ON CONFLICT (region, x, y, layer) DO UPDATE SET
 
 -- name: TruncateChunks :exec
 TRUNCATE TABLE chunk;
+
+-- name: DeleteChunksByRegion :exec
+DELETE FROM chunk WHERE region = $1;
