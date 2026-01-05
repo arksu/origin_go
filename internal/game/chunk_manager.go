@@ -168,12 +168,17 @@ type ChunkManager struct {
 	preloadedChunks map[ChunkCoord]struct{}
 	stateMu         sync.RWMutex
 
-	loadFutures   map[ChunkCoord]chan struct{}
+	loadFutures   map[ChunkCoord]*loadFuture
 	loadFuturesMu sync.Mutex
 
 	stats ChunkStats
 
 	eventBus *eventbus.EventBus
+}
+
+type loadFuture struct {
+	done    chan struct{}
+	waiters int
 }
 
 func NewChunkManager(
@@ -202,7 +207,7 @@ func NewChunkManager(
 		stopCh:          make(chan struct{}),
 		activeChunks:    make(map[ChunkCoord]struct{}),
 		preloadedChunks: make(map[ChunkCoord]struct{}),
-		loadFutures:     make(map[ChunkCoord]chan struct{}),
+		loadFutures:     make(map[ChunkCoord]*loadFuture),
 		eventBus:        eventBus,
 	}
 
@@ -543,23 +548,54 @@ func (cm *ChunkManager) getOrCreateFuture(coord ChunkCoord) chan struct{} {
 	cm.loadFuturesMu.Lock()
 	defer cm.loadFuturesMu.Unlock()
 
-	if done, exists := cm.loadFutures[coord]; exists {
-		return done
+	if fut, exists := cm.loadFutures[coord]; exists {
+		fut.waiters++
+		return fut.done
 	}
 
-	done := make(chan struct{})
-	cm.loadFutures[coord] = done
-	return done
+	fut := &loadFuture{done: make(chan struct{}), waiters: 1}
+	cm.loadFutures[coord] = fut
+	return fut.done
 }
 
 func (cm *ChunkManager) completeFuture(coord ChunkCoord) {
 	cm.loadFuturesMu.Lock()
 	defer cm.loadFuturesMu.Unlock()
 
-	if done, exists := cm.loadFutures[coord]; exists {
-		close(done)
+	if fut, exists := cm.loadFutures[coord]; exists {
+		close(fut.done)
 		delete(cm.loadFutures, coord)
 	}
+}
+
+func (cm *ChunkManager) cleanupFuture(coord ChunkCoord) {
+	cm.loadFuturesMu.Lock()
+	fut, exists := cm.loadFutures[coord]
+	if !exists {
+		cm.loadFuturesMu.Unlock()
+		return
+	}
+
+	fut.waiters--
+	noWaiters := fut.waiters <= 0
+	cm.loadFuturesMu.Unlock()
+
+	if !noWaiters {
+		return
+	}
+
+	// Avoid lock inversion between chunksMu and loadFuturesMu:
+	// check chunk state outside the futures lock, then confirm-and-delete.
+	chunk := cm.GetChunk(coord)
+	if chunk != nil && chunk.GetState() != ChunkStateUnloaded {
+		return
+	}
+
+	cm.loadFuturesMu.Lock()
+	if fut2, exists2 := cm.loadFutures[coord]; exists2 && fut2.waiters <= 0 {
+		delete(cm.loadFutures, coord)
+	}
+	cm.loadFuturesMu.Unlock()
 }
 
 func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) error {
@@ -578,8 +614,10 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) err
 	case <-done:
 		return nil
 	case <-ctx.Done():
+		cm.cleanupFuture(coord)
 		return ctx.Err()
 	case <-cm.stopCh:
+		cm.cleanupFuture(coord)
 		return ErrChunkNotLoaded
 	}
 }

@@ -1,6 +1,9 @@
 package eventbus
 
-import "time"
+import (
+	"origin/internal/ecs"
+	"time"
+)
 
 const (
 	TopicGameplayAll              = "gameplay.*"
@@ -74,7 +77,7 @@ func NewDeathEvent(entityID, killerID uint64, cause string) *DeathEvent {
 type EntitySpawnEvent struct {
 	topic      string
 	Timestamp  time.Time
-	EntityID   uint64
+	EntityID   ecs.EntityID
 	EntityType string
 	X, Y, Z    float64
 	Layer      int32
@@ -82,7 +85,7 @@ type EntitySpawnEvent struct {
 
 func (e *EntitySpawnEvent) Topic() string { return e.topic }
 
-func NewEntitySpawnEvent(entityID uint64, entityType string, x, y, z float64, layer int32) *EntitySpawnEvent {
+func NewEntitySpawnEvent(entityID ecs.EntityID, entityType string, x, y, z float64, layer int32) *EntitySpawnEvent {
 	return &EntitySpawnEvent{
 		topic:      TopicGameplayEntitySpawn,
 		Timestamp:  time.Now(),
