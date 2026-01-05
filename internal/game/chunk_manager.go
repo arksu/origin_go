@@ -444,6 +444,7 @@ func (cm *ChunkManager) saveChunkToDB(chunk *Chunk) {
 			)
 			continue
 		}
+		cm.logger.Info("save object", zap.Int64("object_id", obj.ID), zap.Any("info", info))
 
 		obj.LastTick = int64(lastTick)
 		err = cm.db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{

@@ -23,7 +23,10 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (ecs.Handle, e
 	ecs.AddComponent(w, h, components.Transform{X: float32(raw.X), Y: float32(raw.Y), Direction: float32(raw.Heading.Int16) * 45})
 
 	ecs.AddComponent(w, h, components.EntityInfo{
-		IsStatic: raw.IsStatic.Valid && raw.IsStatic.Bool, Region: raw.Region, Layer: raw.Layer,
+		ObjectType: components.ObjectType(raw.ObjectType),
+		IsStatic:   raw.IsStatic.Valid && raw.IsStatic.Bool,
+		Region:     raw.Region,
+		Layer:      raw.Layer,
 	})
 
 	return h, nil
