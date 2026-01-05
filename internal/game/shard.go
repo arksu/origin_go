@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"go.uber.org/zap"
@@ -159,12 +160,17 @@ func (s *Shard) Stop() {
 	s.chunkManager.Stop()
 }
 
-func (s *Shard) SpawnEntity() ecs.Handle {
-	id := s.entityIDManager.GetFreeID()
+func (s *Shard) SpawnEntity(id ecs.EntityID) ecs.Handle {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.spawnEntityLocked(id)
+}
+
+func (s *Shard) spawnEntityLocked(id ecs.EntityID) ecs.Handle {
 	handle := s.world.Spawn(id)
 
 	s.eventBus.PublishAsync(
-		eventbus.NewEntitySpawnEvent(uint64(id), "entity", 0, 0, 0, s.layer),
+		eventbus.NewEntitySpawnEvent(id, "entity", 0, 0, 0, s.layer),
 		eventbus.PriorityMedium,
 	)
 
@@ -194,6 +200,7 @@ func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) 
 		}
 	}
 
+	// Wait for all chunks to be preloaded (without holding the lock)
 	for _, coord := range coords {
 		if err := s.chunkManager.WaitPreloaded(ctx, coord); err != nil {
 			return nil, nil, err
@@ -203,10 +210,15 @@ func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Activate chunks and collect them; fail if any chunk cannot be activated
 	chunks := make([]*Chunk, 0, len(coords))
 	for _, coord := range coords {
 		if err := s.chunkManager.ActivateChunk(coord); err != nil {
-			continue
+			// AOI incomplete - release already activated chunks and fail
+			for _, c := range chunks {
+				_ = s.chunkManager.DeactivateChunk(c.Coord)
+			}
+			return nil, nil, fmt.Errorf("failed to activate chunk (%d,%d): %w", coord.X, coord.Y, err)
 		}
 		if chunk := s.chunkManager.GetChunk(coord); chunk != nil {
 			chunks = append(chunks, chunk)
@@ -216,16 +228,28 @@ func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) 
 	return coords, chunks, nil
 }
 
-func (s *Shard) TrySpawnPlayer(worldX, worldY int) (bool, uint64) {
-	if !s.CanSpawnAt(worldX, worldY) {
+func (s *Shard) TrySpawnPlayer(worldX, worldY int, playerEntityID ecs.EntityID) (bool, ecs.Handle) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.trySpawnPlayerLocked(worldX, worldY, playerEntityID)
+}
+
+func (s *Shard) trySpawnPlayerLocked(worldX, worldY int, playerEntityID ecs.EntityID) (bool, ecs.Handle) {
+	if !s.canSpawnAtLocked(worldX, worldY) {
 		return false, 0
 	}
 
-	handle := s.SpawnEntity()
-	return true, uint64(handle)
+	handle := s.spawnEntityLocked(playerEntityID)
+	return true, handle
 }
 
 func (s *Shard) CanSpawnAt(worldX, worldY int) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.canSpawnAtLocked(worldX, worldY)
+}
+
+func (s *Shard) canSpawnAtLocked(worldX, worldY int) bool {
 	// TODO check spawn logic
 	return true
 }

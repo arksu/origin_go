@@ -35,6 +35,7 @@ func main() {
 	defer db.Close()
 
 	objectFactory := game.NewObjectFactory()
+	objectFactory.RegisterBuilder(&game.TreeBuilder{})
 
 	g := game.NewGame(cfg, db, objectFactory, logger)
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"origin/internal/ecs"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -275,7 +276,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 	var aoiCoords []ChunkCoord
 	var aoiChunks []*Chunk
-	var playerEntityID uint64
+	playerEntityID := ecs.EntityID(character.ID)
 	spawned := false
 
 	for _, pos := range candidates {
@@ -291,11 +292,10 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			continue
 		}
 
-		ok, entityID := shard.TrySpawnPlayer(pos.X, pos.Y)
+		ok, _ := shard.TrySpawnPlayer(pos.X, pos.Y, playerEntityID)
 		if ok {
 			aoiCoords = coords
 			aoiChunks = chunks
-			playerEntityID = entityID
 			spawned = true
 			break
 		}
@@ -313,7 +313,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
 		zap.Int64("character_id", character.ID),
-		zap.Uint64("entity_id", playerEntityID),
+		zap.Uint64("entity_id", uint64(playerEntityID)),
 		zap.Int("chunks_loaded", len(aoiChunks)),
 	)
 }
@@ -342,10 +342,12 @@ func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 	}
 
 	chunkSize := g.cfg.Game.ChunkSize * g.cfg.Game.CoordPerTile
+	worldWidth := chunkSize * g.cfg.Game.WorldWidthChunks
+	worldHeight := chunkSize * g.cfg.Game.WorldHeightChunks
 	for i := 0; i < g.cfg.Game.RandomSpawnTries; i++ {
 		pos := spawnPos{
-			X: rand.Intn(chunkSize * 10),
-			Y: rand.Intn(chunkSize * 10),
+			X: rand.Intn(worldWidth),
+			Y: rand.Intn(worldHeight),
 		}
 		candidates = append(candidates, pos)
 	}
@@ -372,23 +374,15 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 	c.Send(data)
 }
 
-func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID uint64, coords []ChunkCoord, chunks []*Chunk) {
-	enterWorld := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_PlayerEnterWorld{
-			PlayerEnterWorld: &netproto.S2C_PlayerEnterWorld{
-				EntityId: entityID,
-			},
-		},
-	}
-
-	data, err := proto.Marshal(enterWorld)
-	if err != nil {
-		g.logger.Error("Failed to marshal player enter world", zap.Uint64("client_id", c.ID), zap.Error(err))
-		return
-	}
-	c.Send(data)
-
+func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, coords []ChunkCoord, chunks []*Chunk) {
+	// Send chunks first so client can start rendering
 	for _, chunk := range chunks {
+		select {
+		case <-c.Done():
+			return
+		default:
+		}
+
 		loadChunk := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_LoadChunk{
 				LoadChunk: &netproto.S2C_LoadChunk{
@@ -410,6 +404,28 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID uint64, coords [
 		}
 		c.Send(chunkData)
 	}
+
+	select {
+	case <-c.Done():
+		return
+	default:
+	}
+
+	// Send enter world after chunks are sent (signals "ready to render")
+	enterWorld := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_PlayerEnterWorld{
+			PlayerEnterWorld: &netproto.S2C_PlayerEnterWorld{
+				EntityId: uint64(entityID),
+			},
+		},
+	}
+
+	data, err := proto.Marshal(enterWorld)
+	if err != nil {
+		g.logger.Error("Failed to marshal player enter world", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+	c.Send(data)
 }
 
 func (g *Game) handleDisconnect(c *network.Client) {
