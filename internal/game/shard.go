@@ -19,7 +19,7 @@ type ShardManager struct {
 	objectFactory   *ObjectFactory
 	logger          *zap.Logger
 
-	shards   map[int]*Shard
+	shards   map[int32]*Shard
 	shardsMu sync.RWMutex
 
 	workerPool *WorkerPool
@@ -46,13 +46,14 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 		entityIDManager: entityIDManager,
 		objectFactory:   objectFactory,
 		logger:          logger,
-		shards:          make(map[int]*Shard),
+		shards:          make(map[int32]*Shard),
 		workerPool:      NewWorkerPool(cfg.Game.WorkerPoolSize),
 		eventBus:        eventbus.New(ebCfg),
 	}
 
-	for layer := 0; layer < cfg.Game.MaxLayers; layer++ {
-		sm.shards[layer] = NewShard(int32(layer), cfg, db, entityIDManager, objectFactory, sm.eventBus, logger.Named("shard"))
+	var layer int32
+	for layer = 0; layer < cfg.Game.MaxLayers; layer++ {
+		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, sm.eventBus, logger.Named("shard"))
 	}
 
 	return sm
@@ -61,7 +62,7 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 func (sm *ShardManager) GetShard(layer int32) *Shard {
 	sm.shardsMu.RLock()
 	defer sm.shardsMu.RUnlock()
-	return sm.shards[int(layer)]
+	return sm.shards[layer]
 }
 
 func (sm *ShardManager) Update(dt float32) {
@@ -180,6 +181,62 @@ func (s *Shard) PublishEvent(event eventbus.Event, priority eventbus.Priority) {
 
 func (s *Shard) PublishEventSync(event eventbus.Event) error {
 	return s.eventBus.PublishSync(event)
+}
+
+func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) ([]ChunkCoord, []*Chunk, error) {
+	centerChunk := WorldToChunkCoord(centerWorldX, centerWorldY, s.cfg.Game.ChunkSize, s.cfg.Game.CoordPerTile)
+	radius := s.cfg.Game.AOIRadius
+
+	coords := make([]ChunkCoord, 0, (2*radius+1)*(2*radius+1))
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			coords = append(coords, ChunkCoord{X: centerChunk.X + dx, Y: centerChunk.Y + dy})
+		}
+	}
+
+	for _, coord := range coords {
+		if err := s.chunkManager.WaitPreloaded(ctx, coord); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	chunks := make([]*Chunk, 0, len(coords))
+	for _, coord := range coords {
+		if err := s.chunkManager.ActivateChunk(coord); err != nil {
+			continue
+		}
+		if chunk := s.chunkManager.GetChunk(coord); chunk != nil {
+			chunks = append(chunks, chunk)
+		}
+	}
+
+	return coords, chunks, nil
+}
+
+func (s *Shard) TrySpawnPlayer(worldX, worldY int) (bool, uint64) {
+	if !s.CanSpawnAt(worldX, worldY) {
+		return false, 0
+	}
+
+	handle := s.SpawnEntity()
+	return true, uint64(handle)
+}
+
+func (s *Shard) CanSpawnAt(worldX, worldY int) bool {
+	// TODO check spawn logic
+	return true
+}
+
+func (s *Shard) ReleaseAOI(coords []ChunkCoord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, coord := range coords {
+		_ = s.chunkManager.DeactivateChunk(coord)
+	}
 }
 
 type WorkerPool struct {

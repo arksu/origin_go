@@ -1609,6 +1609,58 @@ func (x *S2C_UnloadChunk) GetCoord() *ChunkCoord {
 	return nil
 }
 
+type S2C_Error struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          ErrorCode              `protobuf:"varint,1,opt,name=code,proto3,enum=proto.ErrorCode" json:"code,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *S2C_Error) Reset() {
+	*x = S2C_Error{}
+	mi := &file_api_proto_packets_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *S2C_Error) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*S2C_Error) ProtoMessage() {}
+
+func (x *S2C_Error) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_packets_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use S2C_Error.ProtoReflect.Descriptor instead.
+func (*S2C_Error) Descriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *S2C_Error) GetCode() ErrorCode {
+	if x != nil {
+		return x.Code
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *S2C_Error) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 // Обёртка для всех серверных сообщений
 type ServerMessage struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -1621,6 +1673,7 @@ type ServerMessage struct {
 	//	*ServerMessage_UnloadChunk
 	//	*ServerMessage_PlayerEnterWorld
 	//	*ServerMessage_PlayerLeaveWorld
+	//	*ServerMessage_Error
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1628,7 +1681,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_api_proto_packets_proto_msgTypes[22]
+	mi := &file_api_proto_packets_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1640,7 +1693,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[22]
+	mi := &file_api_proto_packets_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1653,7 +1706,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{22}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ServerMessage) GetSequence() uint32 {
@@ -1724,6 +1777,15 @@ func (x *ServerMessage) GetPlayerLeaveWorld() *S2C_PlayerLeaveWorld {
 	return nil
 }
 
+func (x *ServerMessage) GetError() *S2C_Error {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_Error); ok {
+			return x.Error
+		}
+	}
+	return nil
+}
+
 type isServerMessage_Payload interface {
 	isServerMessage_Payload()
 }
@@ -1752,6 +1814,39 @@ type ServerMessage_PlayerLeaveWorld struct {
 	PlayerLeaveWorld *S2C_PlayerLeaveWorld `protobuf:"bytes,15,opt,name=player_leave_world,json=playerLeaveWorld,proto3,oneof"`
 }
 
+type ServerMessage_Error struct {
+	// S2C_SpawnEntity spawn_entity = 13;
+	// S2C_DespawnEntity despawn_entity = 14;
+	// S2C_EntityUpdate entity_update = 15;
+	// S2C_PlayerStateUpdate player_state = 16;
+	// S2C_InventoryUpdate inventory_update = 17;
+	// S2C_PaperdollUpdate paperdoll_update = 18;
+	// S2C_ContainerOpen container_open = 19;
+	// S2C_ContainerClose container_close = 20;
+	// S2C_ContainerUpdate container_update = 21;
+	// S2C_ItemPickedUp item_picked = 22;
+	// S2C_ItemDropped item_dropped = 23;
+	// S2C_ExpGain exp_gain = 24;
+	// S2C_DamageDealt damage_dealt = 25;
+	// S2C_EntityDied entity_died = 26;
+	// S2C_ResourceGathered resource_gathered = 27;
+	// S2C_ResourceDepleted resource_depleted = 28;
+	// S2C_CraftStarted craft_started = 29;
+	// S2C_CraftCompleted craft_completed = 30;
+	// S2C_CraftFailed craft_failed = 31;
+	// S2C_BuildSiteCreated build_site_created = 32;
+	// S2C_BuildSiteUpdate build_site_update = 33;
+	// S2C_BuildingCompleted building_completed = 34;
+	// S2C_PlantGrowthUpdate plant_growth = 35;
+	// S2C_DragStarted drag_started = 36;
+	// S2C_DragStopped drag_stopped = 37;
+	// S2C_VisibilityChanged visibility_changed = 38;
+	// S2C_WorldStateUpdate world_state = 39;
+	// S2C_ChatMessage chat = 40;
+	// S2C_SystemMessage system_message = 41;
+	Error *S2C_Error `protobuf:"bytes,42,opt,name=error,proto3,oneof"`
+}
+
 func (*ServerMessage_AuthResult) isServerMessage_Payload() {}
 
 func (*ServerMessage_Pong) isServerMessage_Payload() {}
@@ -1763,6 +1858,8 @@ func (*ServerMessage_UnloadChunk) isServerMessage_Payload() {}
 func (*ServerMessage_PlayerEnterWorld) isServerMessage_Payload() {}
 
 func (*ServerMessage_PlayerLeaveWorld) isServerMessage_Payload() {}
+
+func (*ServerMessage_Error) isServerMessage_Payload() {}
 
 var File_api_proto_packets_proto protoreflect.FileDescriptor
 
@@ -1852,7 +1949,10 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rS2C_LoadChunk\x12&\n" +
 	"\x05chunk\x18\x01 \x01(\v2\x10.proto.ChunkDataR\x05chunk\":\n" +
 	"\x0fS2C_UnloadChunk\x12'\n" +
-	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\xa5\x03\n" +
+	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"K\n" +
+	"\tS2C_Error\x12$\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x10.proto.ErrorCodeR\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xcf\x03\n" +
 	"\rServerMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\rR\bsequence\x128\n" +
 	"\vauth_result\x18\n" +
@@ -1863,7 +1963,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"load_chunk\x18\f \x01(\v2\x14.proto.S2C_LoadChunkH\x00R\tloadChunk\x12;\n" +
 	"\funload_chunk\x18\r \x01(\v2\x16.proto.S2C_UnloadChunkH\x00R\vunloadChunk\x12K\n" +
 	"\x12player_enter_world\x18\x0e \x01(\v2\x1b.proto.S2C_PlayerEnterWorldH\x00R\x10playerEnterWorld\x12K\n" +
-	"\x12player_leave_world\x18\x0f \x01(\v2\x1b.proto.S2C_PlayerLeaveWorldH\x00R\x10playerLeaveWorldB\t\n" +
+	"\x12player_leave_world\x18\x0f \x01(\v2\x1b.proto.S2C_PlayerLeaveWorldH\x00R\x10playerLeaveWorld\x12(\n" +
+	"\x05error\x18* \x01(\v2\x10.proto.S2C_ErrorH\x00R\x05errorB\t\n" +
 	"\apayload*]\n" +
 	"\bMoveMode\x12\x12\n" +
 	"\x0eMOVE_MODE_WALK\x10\x00\x12\x11\n" +
@@ -1925,7 +2026,7 @@ func file_api_proto_packets_proto_rawDescGZIP() []byte {
 }
 
 var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_api_proto_packets_proto_goTypes = []any{
 	(MoveMode)(0),                // 0: proto.MoveMode
 	(EquipSlot)(0),               // 1: proto.EquipSlot
@@ -1954,7 +2055,8 @@ var file_api_proto_packets_proto_goTypes = []any{
 	(*S2C_PlayerLeaveWorld)(nil), // 24: proto.S2C_PlayerLeaveWorld
 	(*S2C_LoadChunk)(nil),        // 25: proto.S2C_LoadChunk
 	(*S2C_UnloadChunk)(nil),      // 26: proto.S2C_UnloadChunk
-	(*ServerMessage)(nil),        // 27: proto.ServerMessage
+	(*S2C_Error)(nil),            // 27: proto.S2C_Error
+	(*ServerMessage)(nil),        // 28: proto.ServerMessage
 }
 var file_api_proto_packets_proto_depIdxs = []int32{
 	9,  // 0: proto.InventorySlot.item:type_name -> proto.Item
@@ -1974,17 +2076,19 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	13, // 14: proto.S2C_PlayerEnterWorld.paperdoll:type_name -> proto.Paperdoll
 	17, // 15: proto.S2C_LoadChunk.chunk:type_name -> proto.ChunkData
 	16, // 16: proto.S2C_UnloadChunk.coord:type_name -> proto.ChunkCoord
-	21, // 17: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	22, // 18: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	25, // 19: proto.ServerMessage.load_chunk:type_name -> proto.S2C_LoadChunk
-	26, // 20: proto.ServerMessage.unload_chunk:type_name -> proto.S2C_UnloadChunk
-	23, // 21: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	24, // 22: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	4,  // 17: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	21, // 18: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	22, // 19: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	25, // 20: proto.ServerMessage.load_chunk:type_name -> proto.S2C_LoadChunk
+	26, // 21: proto.ServerMessage.unload_chunk:type_name -> proto.S2C_UnloadChunk
+	23, // 22: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	24, // 23: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	27, // 24: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -1998,13 +2102,14 @@ func file_api_proto_packets_proto_init() {
 		(*ClientMessage_Ping)(nil),
 	}
 	file_api_proto_packets_proto_msgTypes[18].OneofWrappers = []any{}
-	file_api_proto_packets_proto_msgTypes[22].OneofWrappers = []any{
+	file_api_proto_packets_proto_msgTypes[23].OneofWrappers = []any{
 		(*ServerMessage_AuthResult)(nil),
 		(*ServerMessage_Pong)(nil),
 		(*ServerMessage_LoadChunk)(nil),
 		(*ServerMessage_UnloadChunk)(nil),
 		(*ServerMessage_PlayerEnterWorld)(nil),
 		(*ServerMessage_PlayerLeaveWorld)(nil),
+		(*ServerMessage_Error)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2012,7 +2117,7 @@ func file_api_proto_packets_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_packets_proto_rawDesc), len(file_api_proto_packets_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   23,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

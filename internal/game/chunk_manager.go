@@ -168,6 +168,9 @@ type ChunkManager struct {
 	preloadedChunks map[ChunkCoord]struct{}
 	stateMu         sync.RWMutex
 
+	loadFutures   map[ChunkCoord]chan struct{}
+	loadFuturesMu sync.Mutex
+
 	stats ChunkStats
 
 	eventBus *eventbus.EventBus
@@ -199,6 +202,7 @@ func NewChunkManager(
 		stopCh:          make(chan struct{}),
 		activeChunks:    make(map[ChunkCoord]struct{}),
 		preloadedChunks: make(map[ChunkCoord]struct{}),
+		loadFutures:     make(map[ChunkCoord]chan struct{}),
 		eventBus:        eventBus,
 	}
 
@@ -374,6 +378,8 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord, preload bool) {
 		chunk.SetState(ChunkStatePreloaded)
 	}
 
+	cm.completeFuture(coord)
+
 	cm.eventBus.PublishAsync(
 		eventbus.NewChunkLoadEvent(coord.X, coord.Y, cm.layer),
 		eventbus.PriorityLow,
@@ -530,6 +536,51 @@ func (cm *ChunkManager) requestLoad(coord ChunkCoord, preload bool) {
 	select {
 	case cm.loadQueue <- loadRequest{coord: coord, preload: preload}:
 	default:
+	}
+}
+
+func (cm *ChunkManager) getOrCreateFuture(coord ChunkCoord) chan struct{} {
+	cm.loadFuturesMu.Lock()
+	defer cm.loadFuturesMu.Unlock()
+
+	if done, exists := cm.loadFutures[coord]; exists {
+		return done
+	}
+
+	done := make(chan struct{})
+	cm.loadFutures[coord] = done
+	return done
+}
+
+func (cm *ChunkManager) completeFuture(coord ChunkCoord) {
+	cm.loadFuturesMu.Lock()
+	defer cm.loadFuturesMu.Unlock()
+
+	if done, exists := cm.loadFutures[coord]; exists {
+		close(done)
+		delete(cm.loadFutures, coord)
+	}
+}
+
+func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) error {
+	chunk := cm.GetChunk(coord)
+	if chunk != nil {
+		state := chunk.GetState()
+		if state == ChunkStatePreloaded || state == ChunkStateActive {
+			return nil
+		}
+	}
+
+	done := cm.getOrCreateFuture(coord)
+	cm.requestLoad(coord, true)
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-cm.stopCh:
+		return ErrChunkNotLoaded
 	}
 }
 

@@ -238,6 +238,11 @@ message S2C_UnloadChunk {
   ChunkCoord coord = 1;
 }
 
+message S2C_Error {
+  ErrorCode code = 1;
+  string message = 2;
+}
+
 // Обёртка для всех серверных сообщений
 message ServerMessage {
   uint32 sequence = 1;          // для ack если нужно
@@ -277,7 +282,7 @@ message ServerMessage {
     //    S2C_WorldStateUpdate world_state = 39;
     //    S2C_ChatMessage chat = 40;
     //    S2C_SystemMessage system_message = 41;
-    //    S2C_Error error = 42;
+    S2C_Error error = 42;
     //    S2C_Disconnect disconnect = 44;
     //    S2C_EventBatch event_batch = 45;
   }

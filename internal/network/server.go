@@ -221,6 +221,10 @@ func (c *Client) Close() {
 	})
 }
 
+func (c *Client) Done() <-chan struct{} {
+	return c.closeCh
+}
+
 func (s *Server) GetClient(id uint64) *Client {
 	s.clientsMu.RLock()
 	defer s.clientsMu.RUnlock()

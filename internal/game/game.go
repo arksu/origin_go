@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -218,6 +219,8 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
 	g.sendAuthResult(c, sequence, true, "")
+
+	go g.spawnAndLogin(c, character)
 }
 
 func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, errorMsg string) {
@@ -240,6 +243,173 @@ func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, 
 	}
 
 	c.Send(data)
+}
+
+func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) {
+	ctx, cancel := context.WithTimeout(context.Background(), g.cfg.Game.SpawnTimeout)
+	defer cancel()
+
+	go func() {
+		select {
+		case <-c.Done():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	select {
+	case <-c.Done():
+		g.logger.Debug("Client disconnected before spawn", zap.Uint64("client_id", c.ID))
+		return
+	default:
+	}
+
+	shard := g.shardManager.GetShard(character.Layer)
+	if shard == nil {
+		g.logger.Error("Shard not found for layer", zap.Int32("layer", character.Layer), zap.Int64("character_id", character.ID))
+		g.sendError(c, "Spawn failed: invalid layer")
+		return
+	}
+
+	candidates := g.generateSpawnCandidates(int(character.X), int(character.Y))
+
+	var aoiCoords []ChunkCoord
+	var aoiChunks []*Chunk
+	var playerEntityID uint64
+	spawned := false
+
+	for _, pos := range candidates {
+		select {
+		case <-ctx.Done():
+			g.sendError(c, "Spawn timeout")
+			return
+		default:
+		}
+
+		coords, chunks, err := shard.PrepareAOI(ctx, pos.X, pos.Y)
+		if err != nil {
+			continue
+		}
+
+		ok, entityID := shard.TrySpawnPlayer(pos.X, pos.Y)
+		if ok {
+			aoiCoords = coords
+			aoiChunks = chunks
+			playerEntityID = entityID
+			spawned = true
+			break
+		}
+
+		shard.ReleaseAOI(coords)
+	}
+
+	if !spawned {
+		g.sendError(c, "Spawn failed: no valid position")
+		return
+	}
+
+	g.sendPlayerEnterWorld(c, playerEntityID, aoiCoords, aoiChunks)
+
+	g.logger.Info("Player spawned",
+		zap.Uint64("client_id", c.ID),
+		zap.Int64("character_id", character.ID),
+		zap.Uint64("entity_id", playerEntityID),
+		zap.Int("chunks_loaded", len(aoiChunks)),
+	)
+}
+
+type spawnPos struct {
+	X, Y int
+}
+
+func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
+	candidates := make([]spawnPos, 0, 1+g.cfg.Game.NearSpawnTries+g.cfg.Game.RandomSpawnTries)
+
+	candidates = append(candidates, spawnPos{X: dbX, Y: dbY})
+
+	radius := g.cfg.Game.NearSpawnRadius
+	visited := make(map[spawnPos]struct{})
+	visited[spawnPos{X: dbX, Y: dbY}] = struct{}{}
+
+	for i := 0; i < g.cfg.Game.NearSpawnTries; i++ {
+		dx := rand.Intn(radius*2+1) - radius
+		dy := rand.Intn(radius*2+1) - radius
+		pos := spawnPos{X: dbX + dx, Y: dbY + dy}
+		if _, exists := visited[pos]; !exists {
+			visited[pos] = struct{}{}
+			candidates = append(candidates, pos)
+		}
+	}
+
+	chunkSize := g.cfg.Game.ChunkSize * g.cfg.Game.CoordPerTile
+	for i := 0; i < g.cfg.Game.RandomSpawnTries; i++ {
+		pos := spawnPos{
+			X: rand.Intn(chunkSize * 10),
+			Y: rand.Intn(chunkSize * 10),
+		}
+		candidates = append(candidates, pos)
+	}
+
+	return candidates
+}
+
+func (g *Game) sendError(c *network.Client, errorMsg string) {
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_Error{
+			Error: &netproto.S2C_Error{
+				Code:    netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+				Message: errorMsg,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		g.logger.Error("Failed to marshal error", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+
+	c.Send(data)
+}
+
+func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID uint64, coords []ChunkCoord, chunks []*Chunk) {
+	enterWorld := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_PlayerEnterWorld{
+			PlayerEnterWorld: &netproto.S2C_PlayerEnterWorld{
+				EntityId: entityID,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(enterWorld)
+	if err != nil {
+		g.logger.Error("Failed to marshal player enter world", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+	c.Send(data)
+
+	for _, chunk := range chunks {
+		loadChunk := &netproto.ServerMessage{
+			Payload: &netproto.ServerMessage_LoadChunk{
+				LoadChunk: &netproto.S2C_LoadChunk{
+					Chunk: &netproto.ChunkData{
+						Coord: &netproto.ChunkCoord{
+							X: int32(chunk.Coord.X),
+							Y: int32(chunk.Coord.Y),
+						},
+						Tiles: chunk.Tiles,
+					},
+				},
+			},
+		}
+
+		chunkData, err := proto.Marshal(loadChunk)
+		if err != nil {
+			g.logger.Error("Failed to marshal load chunk", zap.Uint64("client_id", c.ID), zap.Error(err))
+			continue
+		}
+		c.Send(chunkData)
+	}
 }
 
 func (g *Game) handleDisconnect(c *network.Client) {
