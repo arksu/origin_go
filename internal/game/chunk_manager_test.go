@@ -49,6 +49,7 @@ func TestChunkState_String(t *testing.T) {
 		{ChunkStateLoading, "loading"},
 		{ChunkStatePreloaded, "preloaded"},
 		{ChunkStateActive, "active"},
+		{ChunkStateInactive, "inactive"},
 		{ChunkState(99), "unknown"},
 	}
 

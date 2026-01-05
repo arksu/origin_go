@@ -23,11 +23,23 @@ var _ context.Context
 
 type ChunkState uint8
 
+/*
+Unloaded → Loading (requestLoad)
+Loading → Preloaded (loadChunkFromDB завершён)
+Preloaded → Active (ActivateChunk)
+Active → Preloaded (DeactivateChunk)
+Preloaded → Inactive (выход из preload-зоны в updatePreloadZone)
+Inactive → Unloaded (LRU eviction)
+Preloaded → Inactive (выход из preload-зоны)
+Inactive → Preloaded (возврат в preload-зону)
+*/
+
 const (
 	ChunkStateUnloaded ChunkState = iota
 	ChunkStateLoading
 	ChunkStatePreloaded
 	ChunkStateActive
+	ChunkStateInactive
 )
 
 func (s ChunkState) String() string {
@@ -40,6 +52,8 @@ func (s ChunkState) String() string {
 		return "preloaded"
 	case ChunkStateActive:
 		return "active"
+	case ChunkStateInactive:
+		return "inactive"
 	default:
 		return "unknown"
 	}
@@ -128,8 +142,7 @@ func (c *Chunk) Spatial() *SpatialHashGrid {
 }
 
 type loadRequest struct {
-	coord   ChunkCoord
-	preload bool
+	coord ChunkCoord
 }
 
 type saveRequest struct {
@@ -262,12 +275,14 @@ func (cm *ChunkManager) updatePreloadZone(center ChunkCoord) {
 	}
 
 	cm.stateMu.Lock()
-	oldPreload := cm.preloadedChunks
+	defer cm.stateMu.Unlock()
 
-	for coord := range oldPreload {
+	// Phase 1: chunks leaving preload zone -> Inactive
+	for coord := range cm.preloadedChunks {
 		if _, inNew := newPreload[coord]; !inNew {
 			if _, isActive := cm.activeChunks[coord]; !isActive {
 				if chunk := cm.getChunkUnsafe(coord); chunk != nil {
+					chunk.SetState(ChunkStateInactive)
 					cm.lruCache.Add(coord, chunk)
 					atomic.AddInt64(&cm.stats.InactiveCount, 1)
 				}
@@ -275,15 +290,24 @@ func (cm *ChunkManager) updatePreloadZone(center ChunkCoord) {
 		}
 	}
 
+	// Phase 2: chunks entering preload zone -> Preloaded (if not Active)
 	for coord := range newPreload {
 		if _, isActive := cm.activeChunks[coord]; !isActive {
-			cm.lruCache.Remove(coord)
-			cm.requestLoad(coord, true)
+			if chunk := cm.getChunkUnsafe(coord); chunk != nil {
+				// Chunk exists but not in preload zone -> move to Preloaded
+				if _, wasPreloaded := cm.preloadedChunks[coord]; !wasPreloaded {
+					chunk.SetState(ChunkStatePreloaded)
+					atomic.AddInt64(&cm.stats.PreloadedCount, 1)
+				}
+			} else {
+				// Chunk doesn't exist -> request load as Preloaded
+				cm.lruCache.Remove(coord)
+				cm.requestLoad(coord)
+			}
 		}
 	}
 
 	cm.preloadedChunks = newPreload
-	cm.stateMu.Unlock()
 }
 
 func (cm *ChunkManager) getChunkUnsafe(coord ChunkCoord) *Chunk {
@@ -301,7 +325,7 @@ func (cm *ChunkManager) loadWorker() {
 		case <-cm.stopCh:
 			return
 		case req := <-cm.loadQueue:
-			cm.loadChunkFromDB(req.coord, req.preload)
+			cm.loadChunkFromDB(req.coord)
 		}
 	}
 }
@@ -319,7 +343,7 @@ func (cm *ChunkManager) saveWorker() {
 	}
 }
 
-func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord, preload bool) {
+func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord) {
 	atomic.AddInt64(&cm.stats.LoadRequests, 1)
 
 	cm.chunksMu.Lock()
@@ -376,12 +400,8 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord, preload bool) {
 		chunk.SetRawObjects(rawObjects)
 	}
 
-	if preload {
-		chunk.SetState(ChunkStatePreloaded)
-		atomic.AddInt64(&cm.stats.PreloadedCount, 1)
-	} else {
-		chunk.SetState(ChunkStatePreloaded)
-	}
+	chunk.SetState(ChunkStatePreloaded)
+	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
 
 	cm.completeFuture(coord)
 
@@ -512,6 +532,8 @@ func (cm *ChunkManager) onEvict(coord ChunkCoord, chunk *Chunk) {
 }
 
 func (cm *ChunkManager) GetChunk(coord ChunkCoord) *Chunk {
+	// TODO check coord world size bounds, error "world out of bounds"
+
 	cm.chunksMu.RLock()
 	chunk := cm.chunks[coord]
 	cm.chunksMu.RUnlock()
@@ -538,9 +560,9 @@ func (cm *ChunkManager) GetOrCreateChunk(coord ChunkCoord) *Chunk {
 	return chunk
 }
 
-func (cm *ChunkManager) requestLoad(coord ChunkCoord, preload bool) {
+func (cm *ChunkManager) requestLoad(coord ChunkCoord) {
 	select {
-	case cm.loadQueue <- loadRequest{coord: coord, preload: preload}:
+	case cm.loadQueue <- loadRequest{coord: coord}:
 	default:
 	}
 }
@@ -609,7 +631,7 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) err
 	}
 
 	done := cm.getOrCreateFuture(coord)
-	cm.requestLoad(coord, true)
+	cm.requestLoad(coord)
 
 	select {
 	case <-done:
@@ -623,20 +645,20 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) err
 	}
 }
 
+// ActivateChunk transitions a chunk to an active state based on its current state.
+// Returns an error if the chunk cannot be activated or is in an invalid state.
 func (cm *ChunkManager) ActivateChunk(coord ChunkCoord) error {
 	chunk := cm.GetOrCreateChunk(coord)
+	if chunk == nil {
+		return ErrChunkNotLoaded
+	}
 	state := chunk.GetState()
 
 	switch state {
 	case ChunkStateUnloaded:
-		cm.requestLoad(coord, false)
-		// TODO надо дождаться загрузки (ChunkStatePreloaded) чанка и обработать
-		//  ActivateChunk
 		return ErrChunkNotLoaded
 
 	case ChunkStateLoading:
-		// TODO надо дождаться загрузки чанка и обработать
-		//  ActivateChunk
 		return ErrChunkNotLoaded
 
 	case ChunkStatePreloaded:
@@ -644,6 +666,9 @@ func (cm *ChunkManager) ActivateChunk(coord ChunkCoord) error {
 
 	case ChunkStateActive:
 		return nil
+
+	case ChunkStateInactive:
+		return cm.activatePreloadedChunk(coord, chunk)
 
 	default:
 		return ErrInvalidState
@@ -653,6 +678,8 @@ func (cm *ChunkManager) ActivateChunk(coord ChunkCoord) error {
 func (cm *ChunkManager) activatePreloadedChunk(coord ChunkCoord, chunk *Chunk) error {
 	rawObjects := chunk.GetRawObjects()
 	spatial := chunk.Spatial()
+
+	// todo: delete from lru
 
 	for _, raw := range rawObjects {
 		h, err := cm.objectFactory.Build(cm.world, raw)
@@ -828,6 +855,7 @@ func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
 
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
+			// TODO : check world bounds
 			coord := ChunkCoord{X: center.X + dx, Y: center.Y + dy}
 
 			cm.stateMu.Lock()
@@ -836,7 +864,7 @@ func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
 
 			chunk := cm.GetChunk(coord)
 			if chunk == nil || chunk.GetState() == ChunkStateUnloaded {
-				cm.requestLoad(coord, true)
+				cm.requestLoad(coord)
 			}
 		}
 	}

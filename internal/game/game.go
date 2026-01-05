@@ -354,8 +354,8 @@ func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 	worldHeight := chunkSize * g.cfg.Game.WorldHeightChunks
 	for i := 0; i < g.cfg.Game.RandomSpawnTries; i++ {
 		pos := spawnPos{
-			X: rand.Intn(worldWidth),
-			Y: rand.Intn(worldHeight),
+			X: g.cfg.Game.WorldMinXChunks*chunkSize + rand.Intn(worldWidth),
+			Y: g.cfg.Game.WorldMinYChunks*chunkSize + rand.Intn(worldHeight),
 		}
 		candidates = append(candidates, pos)
 	}
