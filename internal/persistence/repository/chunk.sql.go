@@ -10,6 +10,15 @@ import (
 	"database/sql"
 )
 
+const deleteChunksByRegion = `-- name: DeleteChunksByRegion :exec
+DELETE FROM chunk WHERE region = $1
+`
+
+func (q *Queries) DeleteChunksByRegion(ctx context.Context, region int32) error {
+	_, err := q.db.ExecContext(ctx, deleteChunksByRegion, region)
+	return err
+}
+
 const getChunk = `-- name: GetChunk :one
 SELECT region, x, y, layer, version, last_tick, last_saved_at, tiles_data, entity_count
 FROM chunk

@@ -151,6 +151,15 @@ func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkPa
 	return items, nil
 }
 
+const hardDeleteObjectsByRegion = `-- name: HardDeleteObjectsByRegion :exec
+DELETE FROM object WHERE region = $1
+`
+
+func (q *Queries) HardDeleteObjectsByRegion(ctx context.Context, region int32) error {
+	_, err := q.db.ExecContext(ctx, hardDeleteObjectsByRegion, region)
+	return err
+}
+
 const softDeleteObject = `-- name: SoftDeleteObject :exec
 UPDATE object
 SET deleted_at = NOW()
