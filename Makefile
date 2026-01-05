@@ -18,7 +18,7 @@ proto-tools:
 
 # Build the server
 build: proto sqlc
-	go build -o gameserver ./cmd/gameserver
+	go build -trimpath -o gameserver ./cmd/gameserver
 
 # Run the server
 run: proto sqlc
