@@ -196,7 +196,14 @@ func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) 
 	coords := make([]ChunkCoord, 0, (2*radius+1)*(2*radius+1))
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
-			coords = append(coords, ChunkCoord{X: centerChunk.X + dx, Y: centerChunk.Y + dy})
+			chunkX := centerChunk.X + dx
+			chunkY := centerChunk.Y + dy
+			// Check world bounds: min chunks inclusive, max chunks exclusive
+			if chunkX < s.cfg.Game.WorldMinXChunks || chunkX >= s.cfg.Game.WorldMinXChunks+s.cfg.Game.WorldWidthChunks ||
+				chunkY < s.cfg.Game.WorldMinYChunks || chunkY >= s.cfg.Game.WorldMinYChunks+s.cfg.Game.WorldHeightChunks {
+				continue
+			}
+			coords = append(coords, ChunkCoord{X: chunkX, Y: chunkY})
 		}
 	}
 
