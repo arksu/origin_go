@@ -158,6 +158,26 @@ type ChunkStats struct {
 	CacheMisses    int64
 }
 
+// EntityAOI represents Area of Interest for a single entity
+type EntityAOI struct {
+	EntityID    ecs.EntityID
+	Handle      ecs.Handle
+	CenterChunk ChunkCoord
+}
+
+// ChunkInterest tracks which entities are interested in a chunk
+type ChunkInterest struct {
+	activeEntities    map[ecs.EntityID]struct{} // entities with this chunk in active zone
+	preloadedEntities map[ecs.EntityID]struct{} // entities with this chunk in preload zone
+}
+
+func newChunkInterest() *ChunkInterest {
+	return &ChunkInterest{
+		activeEntities:    make(map[ecs.EntityID]struct{}),
+		preloadedEntities: make(map[ecs.EntityID]struct{}),
+	}
+}
+
 type ChunkManager struct {
 	cfg           *config.Config
 	db            *persistence.Postgres
@@ -177,9 +197,13 @@ type ChunkManager struct {
 	stopCh    chan struct{}
 	wg        sync.WaitGroup
 
-	activeChunks    map[ChunkCoord]struct{}
-	preloadedChunks map[ChunkCoord]struct{}
-	stateMu         sync.RWMutex
+	// Per-entity AOI tracking
+	entityAOIs map[ecs.EntityID]*EntityAOI
+	aoiMu      sync.RWMutex
+
+	// Global chunk interest tracking
+	chunkInterests map[ChunkCoord]*ChunkInterest
+	interestMu     sync.RWMutex
 
 	loadFutures   map[ChunkCoord]*loadFuture
 	loadFuturesMu sync.Mutex
@@ -207,21 +231,21 @@ func NewChunkManager(
 	ttl := time.Duration(cfg.Game.ChunkLRUTTL) * time.Second
 
 	cm := &ChunkManager{
-		cfg:             cfg,
-		db:              db,
-		world:           world,
-		layer:           layer,
-		region:          region,
-		objectFactory:   objectFactory,
-		logger:          logger.Named("chunk_manager"),
-		chunks:          make(map[ChunkCoord]*Chunk),
-		loadQueue:       make(chan loadRequest, 256),
-		saveQueue:       make(chan saveRequest, 256),
-		stopCh:          make(chan struct{}),
-		activeChunks:    make(map[ChunkCoord]struct{}),
-		preloadedChunks: make(map[ChunkCoord]struct{}),
-		loadFutures:     make(map[ChunkCoord]*loadFuture),
-		eventBus:        eventBus,
+		cfg:            cfg,
+		db:             db,
+		world:          world,
+		layer:          layer,
+		region:         region,
+		objectFactory:  objectFactory,
+		logger:         logger.Named("chunk_manager"),
+		chunks:         make(map[ChunkCoord]*Chunk),
+		loadQueue:      make(chan loadRequest, 256),
+		saveQueue:      make(chan saveRequest, 256),
+		stopCh:         make(chan struct{}),
+		entityAOIs:     make(map[ecs.EntityID]*EntityAOI),
+		chunkInterests: make(map[ChunkCoord]*ChunkInterest),
+		loadFutures:    make(map[ChunkCoord]*loadFuture),
+		eventBus:       eventBus,
 	}
 
 	cm.lruCache = lru.NewLRU[ChunkCoord, *Chunk](
