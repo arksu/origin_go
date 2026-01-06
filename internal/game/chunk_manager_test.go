@@ -22,6 +22,10 @@ func newTestConfig() *config.Config {
 			SaveWorkers:              1,
 			PlayerPreloadChunkRadius: 2,
 			PlayerActiveChunkRadius:  1,
+			WorldMinXChunks:          0,
+			WorldMinYChunks:          0,
+			WorldWidthChunks:         50,
+			WorldHeightChunks:        50,
 		},
 	}
 }

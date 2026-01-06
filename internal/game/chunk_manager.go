@@ -786,8 +786,20 @@ func (cm *ChunkManager) onEvict(coord ChunkCoord, chunk *Chunk) {
 	)
 }
 
+// isWithinWorldBounds checks if a chunk coordinate is within world boundaries
+func (cm *ChunkManager) isWithinWorldBounds(coord ChunkCoord) bool {
+	minX := cm.cfg.Game.WorldMinXChunks
+	minY := cm.cfg.Game.WorldMinYChunks
+	maxX := minX + cm.cfg.Game.WorldWidthChunks
+	maxY := minY + cm.cfg.Game.WorldHeightChunks
+
+	return coord.X >= minX && coord.X < maxX && coord.Y >= minY && coord.Y < maxY
+}
+
 func (cm *ChunkManager) GetChunk(coord ChunkCoord) *Chunk {
-	// TODO check coord world size bounds, error "world out of bounds"
+	if !cm.isWithinWorldBounds(coord) {
+		return nil
+	}
 
 	cm.chunksMu.RLock()
 	chunk := cm.chunks[coord]
@@ -1112,8 +1124,12 @@ func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
 
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
-			// TODO : check world bounds
 			coord := ChunkCoord{X: center.X + dx, Y: center.Y + dy}
+
+			// Skip chunks outside world bounds
+			if !cm.isWithinWorldBounds(coord) {
+				continue
+			}
 
 			chunk := cm.GetChunk(coord)
 			if chunk == nil || chunk.GetState() == ChunkStateUnloaded {
