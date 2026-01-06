@@ -191,7 +191,7 @@ func (s *Shard) PublishEventSync(event eventbus.Event) error {
 
 func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) ([]ChunkCoord, []*Chunk, error) {
 	centerChunk := WorldToChunkCoord(centerWorldX, centerWorldY, s.cfg.Game.ChunkSize, s.cfg.Game.CoordPerTile)
-	radius := s.cfg.Game.AOIRadius
+	radius := s.cfg.Game.PlayerActiveChunkRadius
 
 	coords := make([]ChunkCoord, 0, (2*radius+1)*(2*radius+1))
 	for dy := -radius; dy <= radius; dy++ {

@@ -36,28 +36,28 @@ type DatabaseConfig struct {
 }
 
 type GameConfig struct {
-	TickRate          int           `mapstructure:"tick_rate"`
-	ChunkSize         int           `mapstructure:"chunk_size"`
-	CoordPerTile      int           `mapstructure:"coord_per_tile"`
-	AOIRadius         int           `mapstructure:"aoi_radius"`
-	PreloadRadius     int           `mapstructure:"preload_radius"`
-	Region            int32         `mapstructure:"region"`
-	MaxLayers         int32         `mapstructure:"max_layers"`
-	DisconnectDelay   int           `mapstructure:"disconnect_delay"`
-	ChunkLRUCapacity  int           `mapstructure:"chunk_lru_capacity"`
-	ChunkLRUTTL       int           `mapstructure:"chunk_lru_ttl"`
-	MaxEntities       int           `mapstructure:"max_entities"`
-	WorkerPoolSize    int           `mapstructure:"worker_pool_size"`
-	LoadWorkers       int           `mapstructure:"load_workers"`
-	SaveWorkers       int           `mapstructure:"save_workers"`
-	SpawnTimeout      time.Duration `mapstructure:"spawn_timeout"`
-	NearSpawnRadius   int           `mapstructure:"near_spawn_radius"`
-	NearSpawnTries    int           `mapstructure:"near_spawn_tries"`
-	RandomSpawnTries  int           `mapstructure:"random_spawn_tries"`
-	WorldMinXChunks   int           `mapstructure:"world_min_x_chunks"`
-	WorldMinYChunks   int           `mapstructure:"world_min_y_chunks"`
-	WorldWidthChunks  int           `mapstructure:"world_width_chunks"`
-	WorldHeightChunks int           `mapstructure:"world_height_chunks"`
+	TickRate                 int           `mapstructure:"tick_rate"`
+	ChunkSize                int           `mapstructure:"chunk_size"`
+	CoordPerTile             int           `mapstructure:"coord_per_tile"`
+	PlayerActiveChunkRadius  int           `mapstructure:"player_active_chunk_radius"`
+	PlayerPreloadChunkRadius int           `mapstructure:"player_preload_chunk_radius"`
+	Region                   int32         `mapstructure:"region"`
+	MaxLayers                int32         `mapstructure:"max_layers"`
+	DisconnectDelay          int           `mapstructure:"disconnect_delay"`
+	ChunkLRUCapacity         int           `mapstructure:"chunk_lru_capacity"`
+	ChunkLRUTTL              int           `mapstructure:"chunk_lru_ttl"`
+	MaxEntities              int           `mapstructure:"max_entities"`
+	WorkerPoolSize           int           `mapstructure:"worker_pool_size"`
+	LoadWorkers              int           `mapstructure:"load_workers"`
+	SaveWorkers              int           `mapstructure:"save_workers"`
+	SpawnTimeout             time.Duration `mapstructure:"spawn_timeout"`
+	NearSpawnRadius          int           `mapstructure:"near_spawn_radius"`
+	NearSpawnTries           int           `mapstructure:"near_spawn_tries"`
+	RandomSpawnTries         int           `mapstructure:"random_spawn_tries"`
+	WorldMinXChunks          int           `mapstructure:"world_min_x_chunks"`
+	WorldMinYChunks          int           `mapstructure:"world_min_y_chunks"`
+	WorldWidthChunks         int           `mapstructure:"world_width_chunks"`
+	WorldHeightChunks        int           `mapstructure:"world_height_chunks"`
 }
 
 type EntityIDConfig struct {
@@ -130,7 +130,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.tick_rate", 20)
 	v.SetDefault("game.chunk_size", 128)
 	v.SetDefault("game.coord_per_tile", 12)
-	v.SetDefault("game.aoi_radius", 1)
+	v.SetDefault("game.player_active_chunk_radius", 1)
+	v.SetDefault("game.player_preload_chunk_radius", 2)
+	v.SetDefault("game.save_workers", 2)
 	v.SetDefault("game.region", 1)
 	v.SetDefault("game.max_layers", 3)
 	v.SetDefault("game.disconnect_delay", 15)
@@ -140,7 +142,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.worker_pool_size", 4)
 	v.SetDefault("game.load_workers", 2)
 	v.SetDefault("game.save_workers", 2)
-	v.SetDefault("game.preload_radius", 2)
 	v.SetDefault("game.spawn_timeout", 30*time.Second)
 	v.SetDefault("game.near_spawn_radius", 10)
 	v.SetDefault("game.near_spawn_tries", 5)
