@@ -119,14 +119,14 @@ func NewEntityDespawnEvent(entityID uint64, reason string) *EntityDespawnEvent {
 type MovementEvent struct {
 	topic        string
 	Timestamp    time.Time
-	EntityID     uint64
+	EntityID     ecs.EntityID
 	FromX, FromY float64
 	ToX, ToY     float64
 }
 
 func (e *MovementEvent) Topic() string { return e.topic }
 
-func NewMovementEvent(entityID uint64, fromX, fromY, toX, toY float64) *MovementEvent {
+func NewMovementEvent(entityID ecs.EntityID, fromX, fromY, toX, toY float64) *MovementEvent {
 	return &MovementEvent{
 		topic:     TopicGameplayMovementMove,
 		Timestamp: time.Now(),

@@ -160,22 +160,46 @@ type ChunkStats struct {
 
 // EntityAOI represents Area of Interest for a single entity
 type EntityAOI struct {
-	EntityID    ecs.EntityID
-	Handle      ecs.Handle
-	CenterChunk ChunkCoord
+	EntityID      ecs.EntityID
+	Handle        ecs.Handle
+	CenterChunk   ChunkCoord
+	ActiveChunks  map[ChunkCoord]struct{}
+	PreloadChunks map[ChunkCoord]struct{}
+}
+
+func newEntityAOI(entityID ecs.EntityID, handle ecs.Handle, center ChunkCoord) *EntityAOI {
+	return &EntityAOI{
+		EntityID:      entityID,
+		Handle:        handle,
+		CenterChunk:   center,
+		ActiveChunks:  make(map[ChunkCoord]struct{}),
+		PreloadChunks: make(map[ChunkCoord]struct{}),
+	}
 }
 
 // ChunkInterest tracks which entities are interested in a chunk
 type ChunkInterest struct {
-	activeEntities    map[ecs.EntityID]struct{} // entities with this chunk in active zone
-	preloadedEntities map[ecs.EntityID]struct{} // entities with this chunk in preload zone
+	activeEntities  map[ecs.EntityID]struct{} // entities with this chunk in active zone
+	preloadEntities map[ecs.EntityID]struct{} // entities with this chunk in preload zone (not active)
 }
 
 func newChunkInterest() *ChunkInterest {
 	return &ChunkInterest{
-		activeEntities:    make(map[ecs.EntityID]struct{}),
-		preloadedEntities: make(map[ecs.EntityID]struct{}),
+		activeEntities:  make(map[ecs.EntityID]struct{}),
+		preloadEntities: make(map[ecs.EntityID]struct{}),
 	}
+}
+
+func (ci *ChunkInterest) isEmpty() bool {
+	return len(ci.activeEntities) == 0 && len(ci.preloadEntities) == 0
+}
+
+func (ci *ChunkInterest) hasActive() bool {
+	return len(ci.activeEntities) > 0
+}
+
+func (ci *ChunkInterest) hasPreload() bool {
+	return len(ci.preloadEntities) > 0
 }
 
 type ChunkManager struct {
@@ -204,6 +228,10 @@ type ChunkManager struct {
 	// Global chunk interest tracking
 	chunkInterests map[ChunkCoord]*ChunkInterest
 	interestMu     sync.RWMutex
+
+	// Cached active chunks for fast access (hot path optimization)
+	activeChunks   map[ChunkCoord]struct{}
+	activeChunksMu sync.RWMutex
 
 	loadFutures   map[ChunkCoord]*loadFuture
 	loadFuturesMu sync.Mutex
@@ -244,6 +272,7 @@ func NewChunkManager(
 		stopCh:         make(chan struct{}),
 		entityAOIs:     make(map[ecs.EntityID]*EntityAOI),
 		chunkInterests: make(map[ChunkCoord]*ChunkInterest),
+		activeChunks:   make(map[ChunkCoord]struct{}),
 		loadFutures:    make(map[ChunkCoord]*loadFuture),
 		eventBus:       eventBus,
 	}
@@ -283,55 +312,256 @@ func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
 	newChunk := WorldToChunkCoord(int(move.ToX), int(move.ToY), cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
 
 	if oldChunk != newChunk {
-		cm.updatePreloadZone(newChunk)
+		cm.UpdateEntityPosition(move.EntityID, newChunk)
 	}
 }
 
-func (cm *ChunkManager) updatePreloadZone(center ChunkCoord) {
-	radius := cm.cfg.Game.PreloadRadius
+// RegisterEntity registers an entity for AOI tracking
+func (cm *ChunkManager) RegisterEntity(entityID ecs.EntityID, handle ecs.Handle, worldX, worldY int) {
+	center := WorldToChunkCoord(worldX, worldY, cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
+
+	cm.aoiMu.Lock()
+	if _, exists := cm.entityAOIs[entityID]; exists {
+		cm.aoiMu.Unlock()
+		return
+	}
+	aoi := newEntityAOI(entityID, handle, center)
+	cm.entityAOIs[entityID] = aoi
+	cm.aoiMu.Unlock()
+
+	cm.updateEntityAOI(entityID, center)
+}
+
+// UnregisterEntity removes an entity from AOI tracking
+func (cm *ChunkManager) UnregisterEntity(entityID ecs.EntityID) {
+	cm.aoiMu.Lock()
+	aoi, exists := cm.entityAOIs[entityID]
+	if !exists {
+		cm.aoiMu.Unlock()
+		return
+	}
+	delete(cm.entityAOIs, entityID)
+	cm.aoiMu.Unlock()
+
+	cm.removeEntityInterests(entityID, aoi)
+	cm.recalculateChunkStates()
+}
+
+// UpdateEntityPosition updates AOI for an entity when it moves to a new chunk
+func (cm *ChunkManager) UpdateEntityPosition(entityID ecs.EntityID, newCenter ChunkCoord) {
+	cm.aoiMu.Lock()
+	aoi, exists := cm.entityAOIs[entityID]
+	if !exists {
+		cm.aoiMu.Unlock()
+		return
+	}
+	oldCenter := aoi.CenterChunk
+	cm.aoiMu.Unlock()
+
+	if oldCenter == newCenter {
+		return
+	}
+
+	cm.updateEntityAOI(entityID, newCenter)
+}
+
+// updateEntityAOI recalculates AOI zones for a single entity and updates global interests
+func (cm *ChunkManager) updateEntityAOI(entityID ecs.EntityID, newCenter ChunkCoord) {
+	activeRadius := cm.cfg.Game.PlayerActiveChunkRadius
+	preloadRadius := cm.cfg.Game.PlayerPreloadChunkRadius
+
+	newActive := make(map[ChunkCoord]struct{})
 	newPreload := make(map[ChunkCoord]struct{})
 
-	for dy := -radius; dy <= radius; dy++ {
-		for dx := -radius; dx <= radius; dx++ {
-			coord := ChunkCoord{X: center.X + dx, Y: center.Y + dy}
-			newPreload[coord] = struct{}{}
+	// Calculate new active zone
+	for dy := -activeRadius; dy <= activeRadius; dy++ {
+		for dx := -activeRadius; dx <= activeRadius; dx++ {
+			coord := ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
+			newActive[coord] = struct{}{}
 		}
 	}
 
-	cm.stateMu.Lock()
-	defer cm.stateMu.Unlock()
+	// Calculate new preload zone (excluding active)
+	for dy := -preloadRadius; dy <= preloadRadius; dy++ {
+		for dx := -preloadRadius; dx <= preloadRadius; dx++ {
+			coord := ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
+			if _, isActive := newActive[coord]; !isActive {
+				newPreload[coord] = struct{}{}
+			}
+		}
+	}
 
-	// Phase 1: chunks leaving preload zone -> Inactive
-	for coord := range cm.preloadedChunks {
-		if _, inNew := newPreload[coord]; !inNew {
-			if _, isActive := cm.activeChunks[coord]; !isActive {
-				if chunk := cm.getChunkUnsafe(coord); chunk != nil {
+	cm.aoiMu.Lock()
+	aoi, exists := cm.entityAOIs[entityID]
+	if !exists {
+		cm.aoiMu.Unlock()
+		return
+	}
+	oldActive := aoi.ActiveChunks
+	oldPreload := aoi.PreloadChunks
+	aoi.CenterChunk = newCenter
+	aoi.ActiveChunks = newActive
+	aoi.PreloadChunks = newPreload
+	cm.aoiMu.Unlock()
+
+	// Update global chunk interests
+	cm.interestMu.Lock()
+
+	// Remove old active interests
+	for coord := range oldActive {
+		if interest, exists := cm.chunkInterests[coord]; exists {
+			delete(interest.activeEntities, entityID)
+		}
+	}
+
+	// Remove old preload interests
+	for coord := range oldPreload {
+		if interest, exists := cm.chunkInterests[coord]; exists {
+			delete(interest.preloadEntities, entityID)
+		}
+	}
+
+	// Add new active interests
+	for coord := range newActive {
+		interest, exists := cm.chunkInterests[coord]
+		if !exists {
+			interest = newChunkInterest()
+			cm.chunkInterests[coord] = interest
+		}
+		interest.activeEntities[entityID] = struct{}{}
+	}
+
+	// Add new preload interests
+	for coord := range newPreload {
+		interest, exists := cm.chunkInterests[coord]
+		if !exists {
+			interest = newChunkInterest()
+			cm.chunkInterests[coord] = interest
+		}
+		interest.preloadEntities[entityID] = struct{}{}
+	}
+
+	cm.interestMu.Unlock()
+
+	cm.recalculateChunkStates()
+}
+
+// removeEntityInterests removes all interests for an entity
+func (cm *ChunkManager) removeEntityInterests(entityID ecs.EntityID, aoi *EntityAOI) {
+	cm.interestMu.Lock()
+	defer cm.interestMu.Unlock()
+
+	for coord := range aoi.ActiveChunks {
+		if interest, exists := cm.chunkInterests[coord]; exists {
+			delete(interest.activeEntities, entityID)
+		}
+	}
+
+	for coord := range aoi.PreloadChunks {
+		if interest, exists := cm.chunkInterests[coord]; exists {
+			delete(interest.preloadEntities, entityID)
+		}
+	}
+}
+
+// recalculateChunkStates updates chunk states based on global interests
+func (cm *ChunkManager) recalculateChunkStates() {
+	cm.interestMu.RLock()
+	interestsCopy := make(map[ChunkCoord]*ChunkInterest, len(cm.chunkInterests))
+	for coord, interest := range cm.chunkInterests {
+		interestsCopy[coord] = interest
+	}
+	cm.interestMu.RUnlock()
+
+	// Track changes to active chunks
+	activatedChunks := make([]ChunkCoord, 0)
+	deactivatedChunks := make([]ChunkCoord, 0)
+
+	for coord, interest := range interestsCopy {
+		chunk := cm.GetChunk(coord)
+
+		if interest.hasActive() {
+			// Should be Active
+			if chunk == nil {
+				cm.requestLoad(coord)
+			} else {
+				state := chunk.GetState()
+				if state == ChunkStatePreloaded || state == ChunkStateInactive {
+					if err := cm.activateChunkInternal(coord, chunk); err != nil {
+						cm.logger.Debug("failed to activate chunk",
+							zap.Int("x", coord.X),
+							zap.Int("y", coord.Y),
+							zap.Error(err),
+						)
+					} else {
+						activatedChunks = append(activatedChunks, coord)
+					}
+				} else if state == ChunkStateActive {
+					// Already active, ensure it's in cache
+					activatedChunks = append(activatedChunks, coord)
+				}
+			}
+		} else if interest.hasPreload() {
+			// Should be Preloaded
+			if chunk == nil {
+				cm.requestLoad(coord)
+			} else {
+				state := chunk.GetState()
+				if state == ChunkStateActive {
+					if err := cm.deactivateChunkInternal(chunk); err != nil {
+						cm.logger.Debug("failed to deactivate chunk",
+							zap.Int("x", coord.X),
+							zap.Int("y", coord.Y),
+							zap.Error(err),
+						)
+					} else {
+						deactivatedChunks = append(deactivatedChunks, coord)
+					}
+				} else if state == ChunkStateInactive {
+					chunk.SetState(ChunkStatePreloaded)
+					cm.lruCache.Remove(coord)
+					atomic.AddInt64(&cm.stats.InactiveCount, -1)
+					atomic.AddInt64(&cm.stats.PreloadedCount, 1)
+				}
+			}
+		} else {
+			// No interest -> Inactive
+			if chunk != nil {
+				state := chunk.GetState()
+				if state == ChunkStateActive {
+					if err := cm.deactivateChunkInternal(chunk); err == nil {
+						chunk.SetState(ChunkStateInactive)
+						cm.lruCache.Add(coord, chunk)
+						atomic.AddInt64(&cm.stats.PreloadedCount, -1)
+						atomic.AddInt64(&cm.stats.InactiveCount, 1)
+						deactivatedChunks = append(deactivatedChunks, coord)
+					}
+				} else if state == ChunkStatePreloaded {
 					chunk.SetState(ChunkStateInactive)
 					cm.lruCache.Add(coord, chunk)
+					atomic.AddInt64(&cm.stats.PreloadedCount, -1)
 					atomic.AddInt64(&cm.stats.InactiveCount, 1)
 				}
 			}
-		}
-	}
 
-	// Phase 2: chunks entering preload zone -> Preloaded (if not Active)
-	for coord := range newPreload {
-		if _, isActive := cm.activeChunks[coord]; !isActive {
-			if chunk := cm.getChunkUnsafe(coord); chunk != nil {
-				// Chunk exists but not in preload zone -> move to Preloaded
-				if _, wasPreloaded := cm.preloadedChunks[coord]; !wasPreloaded {
-					chunk.SetState(ChunkStatePreloaded)
-					atomic.AddInt64(&cm.stats.PreloadedCount, 1)
-				}
-			} else {
-				// Chunk doesn't exist -> request load as Preloaded
-				cm.lruCache.Remove(coord)
-				cm.requestLoad(coord)
+			// Clean up empty interest
+			cm.interestMu.Lock()
+			if interest, exists := cm.chunkInterests[coord]; exists && interest.isEmpty() {
+				delete(cm.chunkInterests, coord)
 			}
+			cm.interestMu.Unlock()
 		}
 	}
 
-	cm.preloadedChunks = newPreload
+	// Update cached active chunks
+	cm.activeChunksMu.Lock()
+	for _, coord := range activatedChunks {
+		cm.activeChunks[coord] = struct{}{}
+	}
+	for _, coord := range deactivatedChunks {
+		delete(cm.activeChunks, coord)
+	}
+	cm.activeChunksMu.Unlock()
 }
 
 func (cm *ChunkManager) getChunkUnsafe(coord ChunkCoord) *Chunk {
@@ -524,12 +754,13 @@ func (cm *ChunkManager) onEvict(coord ChunkCoord, chunk *Chunk) {
 		return
 	}
 
-	cm.stateMu.RLock()
-	_, isActive := cm.activeChunks[coord]
-	_, isPreloaded := cm.preloadedChunks[coord]
-	cm.stateMu.RUnlock()
+	// Check if any entity is still interested in this chunk
+	cm.interestMu.RLock()
+	interest, hasInterest := cm.chunkInterests[coord]
+	isInterested := hasInterest && !interest.isEmpty()
+	cm.interestMu.RUnlock()
 
-	if isActive || isPreloaded {
+	if isInterested {
 		return
 	}
 
@@ -700,10 +931,21 @@ func (cm *ChunkManager) ActivateChunk(coord ChunkCoord) error {
 }
 
 func (cm *ChunkManager) activatePreloadedChunk(coord ChunkCoord, chunk *Chunk) error {
+	return cm.activateChunkInternal(coord, chunk)
+}
+
+// activateChunkInternal activates a chunk by building entities from raw objects
+func (cm *ChunkManager) activateChunkInternal(coord ChunkCoord, chunk *Chunk) error {
+	state := chunk.GetState()
+	if state == ChunkStateActive {
+		return nil
+	}
+	if state == ChunkStateUnloaded || state == ChunkStateLoading {
+		return ErrChunkNotLoaded
+	}
+
 	rawObjects := chunk.GetRawObjects()
 	spatial := chunk.Spatial()
-
-	// todo: delete from lru
 
 	for _, raw := range rawObjects {
 		h, err := cm.objectFactory.Build(cm.world, raw)
@@ -734,12 +976,6 @@ func (cm *ChunkManager) activatePreloadedChunk(coord ChunkCoord, chunk *Chunk) e
 
 	chunk.ClearRawObjects()
 	chunk.SetState(ChunkStateActive)
-
-	cm.stateMu.Lock()
-	cm.activeChunks[coord] = struct{}{}
-	delete(cm.preloadedChunks, coord)
-	cm.stateMu.Unlock()
-
 	cm.lruCache.Remove(coord)
 
 	atomic.AddInt64(&cm.stats.ActiveCount, 1)
@@ -756,6 +992,15 @@ func (cm *ChunkManager) DeactivateChunk(coord ChunkCoord) error {
 
 	if chunk.GetState() != ChunkStateActive {
 		return ErrChunkNotActive
+	}
+
+	return cm.deactivateChunkInternal(chunk)
+}
+
+// deactivateChunkInternal deactivates a chunk by serializing entities to raw objects
+func (cm *ChunkManager) deactivateChunkInternal(chunk *Chunk) error {
+	if chunk.GetState() != ChunkStateActive {
+		return nil
 	}
 
 	handles := chunk.GetHandles()
@@ -787,26 +1032,14 @@ func (cm *ChunkManager) DeactivateChunk(coord ChunkCoord) error {
 	chunk.ClearHandles()
 	chunk.SetState(ChunkStatePreloaded)
 
-	cm.stateMu.Lock()
-	delete(cm.activeChunks, coord)
-	_, inPreloadZone := cm.preloadedChunks[coord]
-	if !inPreloadZone {
-		cm.lruCache.Add(coord, chunk)
-	} else {
-		cm.preloadedChunks[coord] = struct{}{}
-	}
-	cm.stateMu.Unlock()
-
 	atomic.AddInt64(&cm.stats.ActiveCount, -1)
-	if inPreloadZone {
-		atomic.AddInt64(&cm.stats.PreloadedCount, 1)
-	} else {
-		atomic.AddInt64(&cm.stats.InactiveCount, 1)
-	}
+	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
 
 	return nil
 }
 
+// MigrateObject moves an entity identified by the given handle from one chunk to another, updating all relevant spatial and reference data. Returns an error if the operation cannot be completed.
+// переход только из активного в другой активный или preloaded чанк
 func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoord) error {
 	if fromCoord == toCoord {
 		return nil
@@ -875,16 +1108,12 @@ func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoor
 }
 
 func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
-	radius := cm.cfg.Game.PreloadRadius
+	radius := cm.cfg.Game.PlayerPreloadChunkRadius
 
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
 			// TODO : check world bounds
 			coord := ChunkCoord{X: center.X + dx, Y: center.Y + dy}
-
-			cm.stateMu.Lock()
-			cm.preloadedChunks[coord] = struct{}{}
-			cm.stateMu.Unlock()
 
 			chunk := cm.GetChunk(coord)
 			if chunk == nil || chunk.GetState() == ChunkStateUnloaded {
@@ -895,12 +1124,13 @@ func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
 }
 
 func (cm *ChunkManager) ActiveChunks() []*Chunk {
-	cm.stateMu.RLock()
+	// Fast path: read from cached active chunks
+	cm.activeChunksMu.RLock()
 	coords := make([]ChunkCoord, 0, len(cm.activeChunks))
 	for coord := range cm.activeChunks {
 		coords = append(coords, coord)
 	}
-	cm.stateMu.RUnlock()
+	cm.activeChunksMu.RUnlock()
 
 	chunks := make([]*Chunk, 0, len(coords))
 	for _, coord := range coords {
@@ -912,8 +1142,9 @@ func (cm *ChunkManager) ActiveChunks() []*Chunk {
 }
 
 func (cm *ChunkManager) ActiveChunkCoords() []ChunkCoord {
-	cm.stateMu.RLock()
-	defer cm.stateMu.RUnlock()
+	// Fast path: read from cached active chunks
+	cm.activeChunksMu.RLock()
+	defer cm.activeChunksMu.RUnlock()
 
 	coords := make([]ChunkCoord, 0, len(cm.activeChunks))
 	for coord := range cm.activeChunks {
@@ -940,26 +1171,30 @@ func (cm *ChunkManager) Stop() {
 	close(cm.stopCh)
 	cm.wg.Wait()
 
-	cm.stateMu.RLock()
-	activeCoords := make([]ChunkCoord, 0, len(cm.activeChunks))
-	for coord := range cm.activeChunks {
-		activeCoords = append(activeCoords, coord)
+	// Collect all chunks that need saving
+	cm.interestMu.RLock()
+	interestedCoords := make([]ChunkCoord, 0, len(cm.chunkInterests))
+	for coord := range cm.chunkInterests {
+		interestedCoords = append(interestedCoords, coord)
 	}
-	preloadedCoords := make([]ChunkCoord, 0, len(cm.preloadedChunks))
-	for coord := range cm.preloadedChunks {
-		preloadedCoords = append(preloadedCoords, coord)
-	}
-	cm.stateMu.RUnlock()
+	cm.interestMu.RUnlock()
 
-	for _, coord := range activeCoords {
-		if chunk := cm.GetChunk(coord); chunk != nil {
-			cm.saveChunkToDB(chunk)
-		}
+	// Also save all loaded chunks
+	cm.chunksMu.RLock()
+	allCoords := make([]ChunkCoord, 0, len(cm.chunks))
+	for coord := range cm.chunks {
+		allCoords = append(allCoords, coord)
 	}
+	cm.chunksMu.RUnlock()
 
-	for _, coord := range preloadedCoords {
+	savedCount := 0
+	for _, coord := range allCoords {
 		if chunk := cm.GetChunk(coord); chunk != nil {
-			cm.saveChunkToDB(chunk)
+			state := chunk.GetState()
+			if state == ChunkStateActive || state == ChunkStatePreloaded {
+				cm.saveChunkToDB(chunk)
+				savedCount++
+			}
 		}
 	}
 
@@ -967,8 +1202,7 @@ func (cm *ChunkManager) Stop() {
 
 	cm.logger.Info("chunk manager stopped",
 		zap.Int32("layer", cm.layer),
-		zap.Int64("active_saved", int64(len(activeCoords))),
-		zap.Int64("preloaded_saved", int64(len(preloadedCoords))),
+		zap.Int("chunks_saved", savedCount),
 	)
 }
 
