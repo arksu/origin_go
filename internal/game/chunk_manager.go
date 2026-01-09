@@ -277,7 +277,7 @@ func NewChunkManager(
 		eventBus:       eventBus,
 	}
 
-	cm.lruCache = lru.NewLRU[ChunkCoord, *Chunk](
+	cm.lruCache = lru.NewLRU(
 		cfg.Game.ChunkLRUCapacity,
 		cm.onEvict,
 		ttl,
@@ -486,7 +486,8 @@ func (cm *ChunkManager) recalculateChunkStates() {
 				cm.requestLoad(coord)
 			} else {
 				state := chunk.GetState()
-				if state == ChunkStatePreloaded || state == ChunkStateInactive {
+				switch state {
+				case ChunkStatePreloaded, ChunkStateInactive:
 					if err := cm.activateChunkInternal(coord, chunk); err != nil {
 						cm.logger.Debug("failed to activate chunk",
 							zap.Int("x", coord.X),
@@ -496,7 +497,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 					} else {
 						activatedChunks = append(activatedChunks, coord)
 					}
-				} else if state == ChunkStateActive {
+				case ChunkStateActive:
 					// Already active, ensure it's in cache
 					activatedChunks = append(activatedChunks, coord)
 				}
@@ -507,7 +508,8 @@ func (cm *ChunkManager) recalculateChunkStates() {
 				cm.requestLoad(coord)
 			} else {
 				state := chunk.GetState()
-				if state == ChunkStateActive {
+				switch state {
+				case ChunkStateActive:
 					if err := cm.deactivateChunkInternal(chunk); err != nil {
 						cm.logger.Debug("failed to deactivate chunk",
 							zap.Int("x", coord.X),
@@ -517,7 +519,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 					} else {
 						deactivatedChunks = append(deactivatedChunks, coord)
 					}
-				} else if state == ChunkStateInactive {
+				case ChunkStateInactive:
 					chunk.SetState(ChunkStatePreloaded)
 					cm.lruCache.Remove(coord)
 					atomic.AddInt64(&cm.stats.InactiveCount, -1)
@@ -528,7 +530,8 @@ func (cm *ChunkManager) recalculateChunkStates() {
 			// No interest -> Inactive
 			if chunk != nil {
 				state := chunk.GetState()
-				if state == ChunkStateActive {
+				switch state {
+				case ChunkStateActive:
 					if err := cm.deactivateChunkInternal(chunk); err == nil {
 						chunk.SetState(ChunkStateInactive)
 						cm.lruCache.Add(coord, chunk)
@@ -536,7 +539,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 						atomic.AddInt64(&cm.stats.InactiveCount, 1)
 						deactivatedChunks = append(deactivatedChunks, coord)
 					}
-				} else if state == ChunkStatePreloaded {
+				case ChunkStatePreloaded:
 					chunk.SetState(ChunkStateInactive)
 					cm.lruCache.Add(coord, chunk)
 					atomic.AddInt64(&cm.stats.PreloadedCount, -1)
