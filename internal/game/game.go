@@ -217,6 +217,7 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 
 	// Set character as online and update client association
 	c.CharacterID = ecs.EntityID(character.ID)
+	c.Layer = character.Layer
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
 	g.sendAuthResult(c, sequence, true, "")
@@ -276,7 +277,6 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 	playerEntityID := ecs.EntityID(character.ID)
 	var playerHandle ecs.Handle
-	var spawnPos spawnPos
 	spawned := false
 
 	for _, pos := range candidates {
@@ -287,31 +287,29 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		default:
 		}
 
+		if err := shard.PrepareEntityAOI(ctx, playerEntityID, playerHandle, pos.X, pos.Y); err != nil {
+			g.logger.Error("Failed to prepare entity AOI",
+				zap.Uint64("client_id", c.ID),
+				zap.Int64("character_id", character.ID),
+				zap.Error(err),
+			)
+			g.sendError(c, "Spawn failed: AOI preparation error")
+			return
+		}
+
 		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, playerEntityID)
 		if ok {
 			playerHandle = handle
-			spawnPos = pos
 			spawned = true
 			break
 		}
+		shard.UnregisterEntityAOI(playerEntityID)
 	}
 
 	if !spawned {
 		g.sendError(c, "Spawn failed: no valid position")
 		return
 	}
-
-	if err := shard.PrepareEntityAOI(ctx, playerEntityID, playerHandle, spawnPos.X, spawnPos.Y); err != nil {
-		g.logger.Error("Failed to prepare entity AOI",
-			zap.Uint64("client_id", c.ID),
-			zap.Int64("character_id", character.ID),
-			zap.Error(err),
-		)
-		g.sendError(c, "Spawn failed: AOI preparation error")
-		return
-	}
-
-	c.Layer = character.Layer
 
 	// Final check: ensure spawn context hasn't timed out before sending packets
 	select {
