@@ -4,8 +4,8 @@ import "origin/internal/ecs"
 
 // Collider represents an entity's collision box dimensions
 type Collider struct {
-	Width  int
-	Height int
+	HalfWidth  int
+	HalfHeight int
 }
 
 const ColliderComponentID ecs.ComponentID = 14

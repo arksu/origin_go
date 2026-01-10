@@ -302,20 +302,35 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		if ok {
 			playerHandle = handle
 
-			// TODO add player components
+			// add player components
 			ecs.AddComponent(shard.world, handle, components.EntityInfo{
 				ObjectType: components.ObjectTypePlayer,
 				IsStatic:   false,
 				Region:     character.Region,
 				Layer:      character.Layer,
 			})
-
 			ecs.AddComponent(shard.world, handle, components.Transform{X: pos.X, Y: pos.Y, Direction: float32(character.Heading) * 45})
+			ecs.AddComponent(shard.world, handle, components.Movement{
+				VelocityX:        0,
+				VelocityY:        0,
+				Mode:             components.Walk,
+				State:            components.StateIdle,
+				Speed:            12.0, // TODO player speed
+				TargetType:       components.TargetNone,
+				TargetX:          0,
+				TargetY:          0,
+				TargetHandle:     ecs.InvalidHandle,
+				InteractionRange: 5.0,
+			})
+			ecs.AddComponent(shard.world, handle, components.Collider{
+				HalfWidth:  PlayerAABBSize / 2,
+				HalfHeight: PlayerAABBSize / 2,
+			})
 
 			spawned = true
 			break
 		}
-		shard.UnregisterEntityAOI(playerEntityID)
+		g.logger.Debug("failed to spawn player", zap.Int64("character_id", character.ID), zap.Any("coord", pos))
 	}
 
 	if !spawned {
