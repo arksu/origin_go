@@ -50,15 +50,19 @@ package components
 import "origin/internal/ecs"
 
 const (
-    PositionComponentID ecs.ComponentID = 10
-    VelocityComponentID ecs.ComponentID = 11
-    HealthComponentID   ecs.ComponentID = 12
+    TransformComponentID = 10
+    ChunkRefComponentID = 11
+    MovementComponentID = 12
+    EntityInfoComponentID = 13
+    ColliderComponentID = 14
+    CollisionResultComponentID = 15
 )
 
 func init() {
-    ecs.RegisterComponent[Position](PositionComponentID)
-    ecs.RegisterComponent[Velocity](VelocityComponentID)
-    ecs.RegisterComponent[Health](HealthComponentID)
+    ecs.RegisterComponent[Transform](TransformComponentID)
+    ecs.RegisterComponent[Collider](ColliderComponentID)
+    ecs.RegisterComponent[Movement](MovementComponentID)
+    ecs.RegisterComponent[CollisionResult](CollisionResultComponentID)
 }
 ```
 
