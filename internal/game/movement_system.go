@@ -1,19 +1,18 @@
-package systems
+package game
 
 import (
 	"math"
 
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/game"
 )
 
 type MovementSystem struct {
 	ecs.BaseSystem
-	chunkManager *game.ChunkManager
+	chunkManager *ChunkManager
 }
 
-func NewMovementSystem(chunkManager *game.ChunkManager) *MovementSystem {
+func NewMovementSystem(chunkManager *ChunkManager) *MovementSystem {
 	return &MovementSystem{
 		BaseSystem:   ecs.NewBaseSystem("MovementSystem", 100),
 		chunkManager: chunkManager,
