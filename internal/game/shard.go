@@ -254,12 +254,14 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// make AABB for player
+	// make AABB for player with const.PlayerAABBSize
+	// iterate for active chunks: chunkManager.GetEntityActiveChunks(character.ID)
 
-	// TODO check tile collision
+	// TODO check tile collision: get all AABB tiles (4) check tiles chunk.isPassable
+	// TODO check objects (static, dynamic) collision (just intersect AABB)
 
-	// TODO check objects collision
-
+	// if collision return false, InvalidHandle
+	// if no one collision:
 	handle := s.spawnEntityLocked(ecs.EntityID(character.ID))
 
 	return true, handle
