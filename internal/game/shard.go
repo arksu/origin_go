@@ -253,6 +253,13 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, han
 func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Character) (bool, ecs.Handle) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// make AABB for player
+
+	// TODO check tile collision
+
+	// TODO check objects collision
+
 	handle := s.spawnEntityLocked(ecs.EntityID(character.ID))
 
 	return true, handle
