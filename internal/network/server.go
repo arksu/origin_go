@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"origin/internal/ecs"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,7 +44,8 @@ type Client struct {
 	sendCh      chan []byte
 	closeCh     chan struct{}
 	closeOnce   sync.Once
-	CharacterID int64
+	CharacterID ecs.EntityID
+	Layer       int32
 }
 
 func NewServer(cfg *config.NetworkConfig, logger *zap.Logger) *Server {
