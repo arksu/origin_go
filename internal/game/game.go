@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"origin/internal/ecs"
+	"origin/internal/ecs/components"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -297,9 +298,20 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			return
 		}
 
-		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, playerEntityID)
+		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character)
 		if ok {
 			playerHandle = handle
+
+			// TODO add player components
+			ecs.AddComponent(shard.world, handle, components.EntityInfo{
+				ObjectType: components.ObjectTypePlayer,
+				IsStatic:   false,
+				Region:     character.Region,
+				Layer:      character.Layer,
+			})
+
+			ecs.AddComponent(shard.world, handle, components.Transform{X: pos.X, Y: pos.Y, Direction: float32(character.Heading) * 45})
+
 			spawned = true
 			break
 		}
@@ -508,12 +520,12 @@ func (g *Game) gameLoop() {
 			lastTime = now
 
 			g.currentTick++
-			g.update(float32(dt))
+			g.update(dt)
 		}
 	}
 }
 
-func (g *Game) update(dt float32) {
+func (g *Game) update(dt float64) {
 
 	g.shardManager.Update(dt)
 }

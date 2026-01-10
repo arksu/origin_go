@@ -35,7 +35,7 @@ type World struct {
 	resources map[any]any
 
 	// Delta time for current tick
-	DeltaTime float32
+	DeltaTime float64
 
 	// Optional: mutex for external command queue synchronization
 	// Only used if World is accessed from multiple threads (not recommended)
@@ -63,7 +63,7 @@ func NewWorldWithCapacity(maxHandles uint32) *World {
 
 // System interface for ECS systems
 type System interface {
-	Update(w *World, dt float32)
+	Update(w *World, dt float64)
 	Priority() int // Lower priority runs first
 	Name() string
 }
@@ -217,7 +217,7 @@ func (w *World) AddSystem(system System) {
 
 // Update runs all systems in priority order
 // Single-threaded - no lock needed
-func (w *World) Update(dt float32) {
+func (w *World) Update(dt float64) {
 	if !w.systemsSorted {
 		sort.Slice(w.systems, func(i, j int) bool {
 			return w.systems[i].Priority() < w.systems[j].Priority()

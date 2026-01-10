@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"origin/internal/persistence/repository"
 	"sync"
 
 	"go.uber.org/zap"
@@ -65,7 +66,7 @@ func (sm *ShardManager) GetShard(layer int32) *Shard {
 	return sm.shards[layer]
 }
 
-func (sm *ShardManager) Update(dt float32) {
+func (sm *ShardManager) Update(dt float64) {
 	sm.shardsMu.RLock()
 	shards := make([]*Shard, 0, len(sm.shards))
 	for _, s := range sm.shards {
@@ -148,7 +149,7 @@ func (s *Shard) ChunkManager() *ChunkManager {
 	return s.chunkManager
 }
 
-func (s *Shard) Update(dt float32) {
+func (s *Shard) Update(dt float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -249,30 +250,12 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, han
 	return nil
 }
 
-func (s *Shard) TrySpawnPlayer(worldX, worldY int, playerEntityID ecs.EntityID) (bool, ecs.Handle) {
+func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Character) (bool, ecs.Handle) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.trySpawnPlayerLocked(worldX, worldY, playerEntityID)
-}
+	handle := s.spawnEntityLocked(ecs.EntityID(character.ID))
 
-func (s *Shard) trySpawnPlayerLocked(worldX, worldY int, playerEntityID ecs.EntityID) (bool, ecs.Handle) {
-	if !s.canSpawnAtLocked(worldX, worldY) {
-		return false, 0
-	}
-
-	handle := s.spawnEntityLocked(playerEntityID)
 	return true, handle
-}
-
-func (s *Shard) CanSpawnAt(worldX, worldY int) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.canSpawnAtLocked(worldX, worldY)
-}
-
-func (s *Shard) canSpawnAtLocked(worldX, worldY int) bool {
-	// TODO check spawn logic
-	return true
 }
 
 func (s *Shard) UnregisterEntityAOI(entityID ecs.EntityID) {

@@ -14,3 +14,11 @@ const (
 	TileSand       = 32
 	TileCave       = 42
 )
+
+func isTilePassable(tileID byte) bool {
+	return tileID > TileWater && tileID != TileSwamp
+}
+
+func isTileSwimmable(tileID byte) bool {
+	return tileID == TileWater || tileID == TileWaterDeep
+}

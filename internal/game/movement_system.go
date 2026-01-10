@@ -19,7 +19,7 @@ func NewMovementSystem(chunkManager *ChunkManager) *MovementSystem {
 	}
 }
 
-func (s *MovementSystem) Update(w *ecs.World, dt float32) {
+func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 
 	activeChunks := s.chunkManager.ActiveChunks()
 
@@ -66,7 +66,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float32) {
 
 			dx := movement.TargetX - transform.X
 			dy := movement.TargetY - transform.Y
-			dist := float32(math.Sqrt(float64(dx*dx + dy*dy)))
+			dist := float64(math.Sqrt(float64(dx*dx + dy*dy)))
 
 			if dist > 0.001 {
 				speed := movement.GetCurrentSpeed()
@@ -91,8 +91,8 @@ func (s *MovementSystem) Update(w *ecs.World, dt float32) {
 				}
 
 				// Normal movement
-				velocityX := (dx / dist) * speed
-				velocityY := (dy / dist) * speed
+				velocityX := (float64(dx) / dist) * speed
+				velocityY := (float64(dy) / dist) * speed
 
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.VelocityX = velocityX
@@ -103,12 +103,12 @@ func (s *MovementSystem) Update(w *ecs.World, dt float32) {
 
 				oldX := transform.X
 				oldY := transform.Y
-				newX := transform.X + velocityX*dt
-				newY := transform.Y + velocityY*dt
+				newX := float64(transform.X) + velocityX*dt
+				newY := float64(transform.Y) + velocityY*dt
 
 				ecs.WithComponent(w, h, func(t *components.Transform) {
-					t.X = newX
-					t.Y = newY
+					t.IntentX = int(math.Round(newX))
+					t.IntentY = int(math.Round(newY))
 					// Direction based on actual velocity vector
 					t.Direction = float32(math.Atan2(float64(velocityY), float64(velocityX)))
 				})

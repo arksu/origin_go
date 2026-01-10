@@ -20,7 +20,7 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (ecs.Handle, e
 	}
 
 	// Direction = raw.Heading * 45 degrees
-	ecs.AddComponent(w, h, components.Transform{X: float32(raw.X), Y: float32(raw.Y), Direction: float32(raw.Heading.Int16) * 45})
+	ecs.AddComponent(w, h, components.Transform{X: int(raw.X), Y: int(raw.Y), Direction: float32(raw.Heading.Int16) * 45})
 
 	ecs.AddComponent(w, h, components.EntityInfo{
 		ObjectType: components.ObjectType(raw.ObjectType),
