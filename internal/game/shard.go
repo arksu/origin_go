@@ -168,9 +168,8 @@ func (s *Shard) SpawnEntity(id ecs.EntityID) ecs.Handle {
 func (s *Shard) spawnEntityLocked(id ecs.EntityID) ecs.Handle {
 	handle := s.world.Spawn(id)
 
-	s.eventBus.PublishAsync(
+	s.PublishEventSync(
 		eventbus.NewEntitySpawnEvent(id, "entity", 0, 0, 0, s.layer),
-		eventbus.PriorityMedium,
 	)
 
 	return handle
