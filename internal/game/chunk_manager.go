@@ -649,6 +649,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord) {
 			)
 			objects = nil
 		}
+		cm.logger.Debug("loaded objects", zap.Int("count", len(objects)))
 
 		rawObjects := make([]*repository.Object, len(objects))
 		for i := range objects {
@@ -721,7 +722,7 @@ func (cm *ChunkManager) saveChunkToDB(chunk *Chunk) {
 			)
 			continue
 		}
-		cm.logger.Info("save object", zap.Int64("object_id", obj.ID), zap.Any("info", info))
+		//cm.logger.Info("save object", zap.Int64("object_id", obj.ID), zap.Any("info", info))
 
 		obj.LastTick = int64(lastTick)
 		err = cm.db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
@@ -750,6 +751,7 @@ func (cm *ChunkManager) saveChunkToDB(chunk *Chunk) {
 			)
 		}
 	}
+	cm.logger.Debug("saved objects", zap.Int("count", len(handles)))
 }
 
 func (cm *ChunkManager) onEvict(coord ChunkCoord, chunk *Chunk) {
