@@ -109,6 +109,7 @@ type Shard struct {
 	cfg             *config.Config
 	db              *persistence.Postgres
 	entityIDManager *EntityIDManager
+	logger          *zap.Logger
 
 	world        *ecs.World
 	chunkManager *ChunkManager
@@ -123,6 +124,7 @@ func NewShard(layer int32, cfg *config.Config, db *persistence.Postgres, entityI
 		cfg:             cfg,
 		db:              db,
 		entityIDManager: entityIDManager,
+		logger:          logger,
 		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities)),
 		eventBus:        eb,
 	}
@@ -190,6 +192,13 @@ func (s *Shard) PublishEventSync(event eventbus.Event) error {
 }
 
 func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, handle ecs.Handle, centerWorldX, centerWorldY int) error {
+	s.logger.Info("Preparing entity AOI",
+		zap.Int64("entity_id", int64(entityID)),
+		zap.Int("world_x", centerWorldX),
+		zap.Int("world_y", centerWorldY),
+		zap.Int32("layer", s.layer),
+	)
+
 	centerChunk := WorldToChunkCoord(centerWorldX, centerWorldY, s.cfg.Game.ChunkSize, s.cfg.Game.CoordPerTile)
 	radius := s.cfg.Game.PlayerActiveChunkRadius
 
@@ -206,13 +215,36 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, han
 		}
 	}
 
+	s.logger.Debug("Calculated chunk coordinates for AOI",
+		zap.Int("center_chunk_x", centerChunk.X),
+		zap.Int("center_chunk_y", centerChunk.Y),
+		zap.Int("radius", radius),
+		zap.Int("total_chunks", len(coords)),
+	)
+
 	for _, coord := range coords {
 		if err := s.chunkManager.WaitPreloaded(ctx, coord); err != nil {
+			s.logger.Error("Failed to preload chunk",
+				zap.Int("chunk_x", coord.X),
+				zap.Int("chunk_y", coord.Y),
+				zap.Error(err),
+			)
 			return err
 		}
 	}
 
+	s.logger.Info("Successfully preloaded chunks for entity AOI",
+		zap.Int64("entity_id", int64(entityID)),
+		zap.Int("chunks_loaded", len(coords)),
+	)
+
 	s.chunkManager.RegisterEntity(entityID, handle, centerWorldX, centerWorldY)
+
+	s.logger.Debug("Entity registered with chunk manager",
+		zap.Int64("entity_id", int64(entityID)),
+		zap.Int("world_x", centerWorldX),
+		zap.Int("world_y", centerWorldY),
+	)
 
 	return nil
 }
