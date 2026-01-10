@@ -496,7 +496,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 		if snapshot.activeCount > 0 {
 			// Should be Active
 			if chunk == nil {
-				cm.requestLoad(coord)
+				_ = cm.requestLoad(coord)
 			} else {
 				state := chunk.GetState()
 				switch state {
@@ -518,7 +518,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 		} else if snapshot.preloadCount > 0 {
 			// Should be Preloaded
 			if chunk == nil {
-				cm.requestLoad(coord)
+				_ = cm.requestLoad(coord)
 			} else {
 				state := chunk.GetState()
 				switch state {
@@ -845,10 +845,16 @@ func (cm *ChunkManager) GetOrCreateChunk(coord ChunkCoord) *Chunk {
 	return chunk
 }
 
-func (cm *ChunkManager) requestLoad(coord ChunkCoord) {
+func (cm *ChunkManager) requestLoad(coord ChunkCoord) bool {
 	select {
 	case cm.loadQueue <- loadRequest{coord: coord}:
+		return true
 	default:
+		cm.logger.Warn("load queue full, dropping load request",
+			zap.Int("chunk_x", coord.X),
+			zap.Int("chunk_y", coord.Y),
+		)
+		return false
 	}
 }
 
@@ -916,7 +922,7 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) err
 	}
 
 	done := cm.getOrCreateFuture(coord)
-	cm.requestLoad(coord)
+	_ = cm.requestLoad(coord)
 
 	select {
 	case <-done:
@@ -1011,20 +1017,30 @@ func (cm *ChunkManager) activateChunkInternal(coord ChunkCoord, chunk *Chunk) er
 	atomic.AddInt64(&cm.stats.ActiveCount, 1)
 	atomic.AddInt64(&cm.stats.PreloadedCount, -1)
 
+	cm.activeChunksMu.Lock()
+	cm.activeChunks[coord] = struct{}{}
+	cm.activeChunksMu.Unlock()
+
 	return nil
 }
 
 func (cm *ChunkManager) DeactivateChunk(coord ChunkCoord) error {
 	chunk := cm.GetChunk(coord)
 	if chunk == nil {
-		return ErrChunkNotFound
+		return nil
 	}
 
 	if chunk.GetState() != ChunkStateActive {
-		return ErrChunkNotActive
+		return nil
 	}
 
-	return cm.deactivateChunkInternal(chunk)
+	err := cm.deactivateChunkInternal(chunk)
+	if err == nil {
+		cm.activeChunksMu.Lock()
+		delete(cm.activeChunks, coord)
+		cm.activeChunksMu.Unlock()
+	}
+	return err
 }
 
 // deactivateChunkInternal deactivates a chunk by serializing entities to raw objects
@@ -1070,7 +1086,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *Chunk) error {
 
 // MigrateObject moves an entity identified by the given handle from one chunk to another, updating all relevant spatial and reference data. Returns an error if the operation cannot be completed.
 // переход только из активного в другой активный или preloaded чанк
-func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoord) error {
+func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoord, toX, toY float64) error {
 	if fromCoord == toCoord {
 		return nil
 	}
@@ -1117,9 +1133,9 @@ func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoor
 	if toChunk.GetState() == ChunkStateActive {
 		toSpatial := toChunk.Spatial()
 		if isStatic {
-			toSpatial.AddStatic(h, float64(toCoord.X), float64(toCoord.Y))
+			toSpatial.AddStatic(h, toX, toY)
 		} else {
-			toSpatial.AddDynamic(h, float64(toCoord.X), float64(toCoord.Y))
+			toSpatial.AddDynamic(h, toX, toY)
 		}
 	} else {
 		obj, err := cm.objectFactory.Serialize(cm.world, h, info.ObjectType)
@@ -1151,7 +1167,7 @@ func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
 
 			chunk := cm.GetChunk(coord)
 			if chunk == nil || chunk.GetState() == ChunkStateUnloaded {
-				cm.requestLoad(coord)
+				_ = cm.requestLoad(coord)
 			}
 		}
 	}
