@@ -2,7 +2,6 @@ package game
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"go.uber.org/zap"
@@ -189,7 +188,7 @@ func (s *Shard) PublishEventSync(event eventbus.Event) error {
 	return s.eventBus.PublishSync(event)
 }
 
-func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) ([]ChunkCoord, []*Chunk, error) {
+func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, handle ecs.Handle, centerWorldX, centerWorldY int) error {
 	centerChunk := WorldToChunkCoord(centerWorldX, centerWorldY, s.cfg.Game.ChunkSize, s.cfg.Game.CoordPerTile)
 	radius := s.cfg.Game.PlayerActiveChunkRadius
 
@@ -198,7 +197,6 @@ func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) 
 		for dx := -radius; dx <= radius; dx++ {
 			chunkX := centerChunk.X + dx
 			chunkY := centerChunk.Y + dy
-			// Check world bounds: min chunks inclusive, max chunks exclusive
 			if chunkX < s.cfg.Game.WorldMinXChunks || chunkX >= s.cfg.Game.WorldMinXChunks+s.cfg.Game.WorldWidthChunks ||
 				chunkY < s.cfg.Game.WorldMinYChunks || chunkY >= s.cfg.Game.WorldMinYChunks+s.cfg.Game.WorldHeightChunks {
 				continue
@@ -207,32 +205,15 @@ func (s *Shard) PrepareAOI(ctx context.Context, centerWorldX, centerWorldY int) 
 		}
 	}
 
-	// Wait for all chunks to be preloaded (without holding the lock)
 	for _, coord := range coords {
 		if err := s.chunkManager.WaitPreloaded(ctx, coord); err != nil {
-			return nil, nil, err
+			return err
 		}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.chunkManager.RegisterEntity(entityID, handle, centerWorldX, centerWorldY)
 
-	// Activate chunks and collect them; fail if any chunk cannot be activated
-	chunks := make([]*Chunk, 0, len(coords))
-	for _, coord := range coords {
-		if err := s.chunkManager.ActivateChunk(coord); err != nil {
-			// AOI incomplete - release already activated chunks and fail
-			for _, c := range chunks {
-				_ = s.chunkManager.DeactivateChunk(c.Coord)
-			}
-			return nil, nil, fmt.Errorf("failed to activate chunk (%d,%d): %w", coord.X, coord.Y, err)
-		}
-		if chunk := s.chunkManager.GetChunk(coord); chunk != nil {
-			chunks = append(chunks, chunk)
-		}
-	}
-
-	return coords, chunks, nil
+	return nil
 }
 
 func (s *Shard) TrySpawnPlayer(worldX, worldY int, playerEntityID ecs.EntityID) (bool, ecs.Handle) {
@@ -261,13 +242,8 @@ func (s *Shard) canSpawnAtLocked(worldX, worldY int) bool {
 	return true
 }
 
-func (s *Shard) ReleaseAOI(coords []ChunkCoord) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, coord := range coords {
-		_ = s.chunkManager.DeactivateChunk(coord)
-	}
+func (s *Shard) UnregisterEntityAOI(entityID ecs.EntityID) {
+	s.chunkManager.UnregisterEntity(entityID)
 }
 
 type WorkerPool struct {

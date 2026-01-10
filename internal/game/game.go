@@ -216,7 +216,7 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	}
 
 	// Set character as online and update client association
-	c.CharacterID = character.ID
+	c.CharacterID = ecs.EntityID(character.ID)
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
 	g.sendAuthResult(c, sequence, true, "")
@@ -274,9 +274,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 	candidates := g.generateSpawnCandidates(int(character.X), int(character.Y))
 
-	var aoiCoords []ChunkCoord
-	var aoiChunks []*Chunk
 	playerEntityID := ecs.EntityID(character.ID)
+	var playerHandle ecs.Handle
+	var spawnPos spawnPos
 	spawned := false
 
 	for _, pos := range candidates {
@@ -287,20 +287,13 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		default:
 		}
 
-		coords, chunks, err := shard.PrepareAOI(ctx, pos.X, pos.Y)
-		if err != nil {
-			continue
-		}
-
-		ok, _ := shard.TrySpawnPlayer(pos.X, pos.Y, playerEntityID)
+		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, playerEntityID)
 		if ok {
-			aoiCoords = coords
-			aoiChunks = chunks
+			playerHandle = handle
+			spawnPos = pos
 			spawned = true
 			break
 		}
-
-		shard.ReleaseAOI(coords)
 	}
 
 	if !spawned {
@@ -308,21 +301,33 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		return
 	}
 
+	if err := shard.PrepareEntityAOI(ctx, playerEntityID, playerHandle, spawnPos.X, spawnPos.Y); err != nil {
+		g.logger.Error("Failed to prepare entity AOI",
+			zap.Uint64("client_id", c.ID),
+			zap.Int64("character_id", character.ID),
+			zap.Error(err),
+		)
+		g.sendError(c, "Spawn failed: AOI preparation error")
+		return
+	}
+
+	c.Layer = character.Layer
+
 	// Final check: ensure spawn context hasn't timed out before sending packets
 	select {
 	case <-ctx.Done():
 		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
+		shard.UnregisterEntityAOI(playerEntityID)
 		return
 	default:
 	}
 
-	g.sendPlayerEnterWorld(c, playerEntityID, aoiCoords, aoiChunks, character)
+	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
 		zap.Int64("character_id", character.ID),
 		zap.Uint64("entity_id", uint64(playerEntityID)),
-		zap.Int("chunks_loaded", len(aoiChunks)),
 	)
 }
 
@@ -382,7 +387,10 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 	c.Send(data)
 }
 
-func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, coords []ChunkCoord, chunks []*Chunk, character repository.Character) {
+func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, shard *Shard, character repository.Character) {
+	// TODO fix: send to client only active chunks for this entityID (active radius)
+	chunks := shard.ChunkManager().ActiveChunks()
+
 	// Send chunks first so client can start rendering
 	for _, chunk := range chunks {
 		select {
@@ -446,13 +454,22 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, co
 func (g *Game) handleDisconnect(c *network.Client) {
 	g.logger.Info("Client disconnected", zap.Uint64("client_id", c.ID))
 
-	// If IsOnline - update is_online=false in character
 	if c.CharacterID != 0 {
 		if g.getState() == GameStateRunning {
-			if err := g.db.Queries().SetCharacterOffline(g.ctx, c.CharacterID); err != nil {
-				g.logger.Error("Failed to set character offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID), zap.Error(err))
+			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
+				playerEntityID := c.CharacterID
+				shard.UnregisterEntityAOI(playerEntityID)
+				g.logger.Debug("Unregistered entity AOI",
+					zap.Uint64("client_id", c.ID),
+					zap.Int64("character_id", int64(c.CharacterID)),
+					zap.Int32("layer", c.Layer),
+				)
+			}
+
+			if err := g.db.Queries().SetCharacterOffline(g.ctx, int64(c.CharacterID)); err != nil {
+				g.logger.Error("Failed to set character offline", zap.Uint64("client_id", c.ID), zap.Uint64("character_id", uint64(c.CharacterID)), zap.Error(err))
 			} else {
-				g.logger.Info("Character set offline", zap.Uint64("client_id", c.ID), zap.Int64("character_id", c.CharacterID))
+				g.logger.Info("Character set offline", zap.Uint64("client_id", c.ID), zap.Uint64("character_id", uint64(c.CharacterID)))
 			}
 		}
 	}
