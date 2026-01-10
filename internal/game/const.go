@@ -3,7 +3,7 @@ package game
 const (
 	ChunkSize      = 128
 	CoordPerTile   = 12
-	PlayerAABBSize = 5
+	PlayerAABBSize = 10
 )
 
 const (

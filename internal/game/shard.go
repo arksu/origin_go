@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"origin/internal/ecs/components"
 	"origin/internal/persistence/repository"
 	"sync"
 
@@ -254,16 +255,63 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// make AABB for player with const.PlayerAABBSize
-	// iterate for active chunks: chunkManager.GetEntityActiveChunks(character.ID)
+	halfSize := PlayerAABBSize / 2
+	minX := worldX - halfSize
+	minY := worldY - halfSize
+	maxX := worldX + halfSize
+	maxY := worldY + halfSize
 
-	// TODO check tile collision: get all AABB tiles (4) check tiles chunk.isPassable
-	// TODO check objects (static, dynamic) collision (just intersect AABB)
+	coordPerTile := s.cfg.Game.CoordPerTile
+	minTileX := minX / coordPerTile
+	minTileY := minY / coordPerTile
+	maxTileX := maxX / coordPerTile
+	maxTileY := maxY / coordPerTile
 
-	// if collision return false, InvalidHandle
-	// if no one collision:
+	chunks := s.chunkManager.GetEntityActiveChunks(ecs.EntityID(character.ID))
+	if len(chunks) == 0 {
+		return false, ecs.InvalidHandle
+	}
+
+	for tileY := minTileY; tileY <= maxTileY; tileY++ {
+		for tileX := minTileX; tileX <= maxTileX; tileX++ {
+			if !s.chunkManager.IsTilePassable(tileX, tileY) {
+				return false, ecs.InvalidHandle
+			}
+		}
+	}
+
+	var candidateHandles []ecs.Handle
+	for _, chunk := range chunks {
+		spatial := chunk.Spatial()
+		spatial.QueryAABB(float64(minX), float64(minY), float64(maxX), float64(maxY), &candidateHandles)
+	}
+
+	for _, h := range candidateHandles {
+		if !s.world.Alive(h) {
+			continue
+		}
+
+		transform, hasTransform := ecs.GetComponent[components.Transform](s.world, h)
+		if !hasTransform {
+			continue
+		}
+
+		collider, hasCollider := ecs.GetComponent[components.Collider](s.world, h)
+		if !hasCollider {
+			continue
+		}
+
+		objMinX := transform.X - collider.HalfWidth
+		objMinY := transform.Y - collider.HalfHeight
+		objMaxX := transform.X + collider.HalfWidth
+		objMaxY := transform.Y + collider.HalfHeight
+
+		if !(maxX < objMinX || minX > objMaxX || maxY < objMinY || minY > objMaxY) {
+			return false, ecs.InvalidHandle
+		}
+	}
+
 	handle := s.spawnEntityLocked(ecs.EntityID(character.ID))
-
 	return true, handle
 }
 
