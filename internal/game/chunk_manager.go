@@ -221,16 +221,14 @@ type ChunkStats struct {
 // EntityAOI represents Area of Interest for a single entity
 type EntityAOI struct {
 	EntityID      ecs.EntityID
-	Handle        ecs.Handle
 	CenterChunk   ChunkCoord
 	ActiveChunks  map[ChunkCoord]struct{}
 	PreloadChunks map[ChunkCoord]struct{}
 }
 
-func newEntityAOI(entityID ecs.EntityID, handle ecs.Handle, center ChunkCoord) *EntityAOI {
+func newEntityAOI(entityID ecs.EntityID, center ChunkCoord) *EntityAOI {
 	return &EntityAOI{
 		EntityID:      entityID,
-		Handle:        handle,
 		CenterChunk:   center,
 		ActiveChunks:  make(map[ChunkCoord]struct{}),
 		PreloadChunks: make(map[ChunkCoord]struct{}),
@@ -377,7 +375,7 @@ func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
 }
 
 // RegisterEntity registers an entity for AOI tracking
-func (cm *ChunkManager) RegisterEntity(entityID ecs.EntityID, handle ecs.Handle, worldX, worldY int) {
+func (cm *ChunkManager) RegisterEntity(entityID ecs.EntityID, worldX, worldY int) {
 	center := WorldToChunkCoord(worldX, worldY, cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
 
 	cm.aoiMu.Lock()
@@ -385,7 +383,7 @@ func (cm *ChunkManager) RegisterEntity(entityID ecs.EntityID, handle ecs.Handle,
 		cm.aoiMu.Unlock()
 		return
 	}
-	aoi := newEntityAOI(entityID, handle, center)
+	aoi := newEntityAOI(entityID, center)
 	cm.entityAOIs[entityID] = aoi
 	cm.aoiMu.Unlock()
 

@@ -79,13 +79,12 @@ type EntitySpawnEvent struct {
 	Timestamp  time.Time
 	EntityID   ecs.EntityID
 	EntityType string
-	X, Y, Z    float64
-	Layer      int32
+	X, Y       int
 }
 
 func (e *EntitySpawnEvent) Topic() string { return e.topic }
 
-func NewEntitySpawnEvent(entityID ecs.EntityID, entityType string, x, y, z float64, layer int32) *EntitySpawnEvent {
+func NewEntitySpawnEvent(entityID ecs.EntityID, entityType string, x, y int) *EntitySpawnEvent {
 	return &EntitySpawnEvent{
 		topic:      TopicGameplayEntitySpawn,
 		Timestamp:  time.Now(),
@@ -93,8 +92,6 @@ func NewEntitySpawnEvent(entityID ecs.EntityID, entityType string, x, y, z float
 		EntityType: entityType,
 		X:          x,
 		Y:          y,
-		Z:          z,
-		Layer:      layer,
 	}
 }
 

@@ -165,17 +165,12 @@ func (s *Shard) Stop() {
 	s.chunkManager.Stop()
 }
 
-func (s *Shard) SpawnEntity(id ecs.EntityID) ecs.Handle {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.spawnEntityLocked(id)
-}
-
-func (s *Shard) spawnEntityLocked(id ecs.EntityID) ecs.Handle {
+func (s *Shard) spawnEntityLocked(id ecs.EntityID, x int, y int) ecs.Handle {
 	handle := s.world.Spawn(id)
 
-	s.PublishEventSync(
-		eventbus.NewEntitySpawnEvent(id, "entity", 0, 0, 0, s.layer),
+	s.PublishEvent(
+		eventbus.NewEntitySpawnEvent(id, "entity", x, y),
+		eventbus.PriorityMedium,
 	)
 
 	return handle
@@ -193,7 +188,7 @@ func (s *Shard) PublishEventSync(event eventbus.Event) error {
 	return s.eventBus.PublishSync(event)
 }
 
-func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, handle ecs.Handle, centerWorldX, centerWorldY int) error {
+func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, centerWorldX, centerWorldY int) error {
 	s.logger.Info("Preparing entity AOI",
 		zap.Int64("entity_id", int64(entityID)),
 		zap.Int("world_x", centerWorldX),
@@ -240,7 +235,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, han
 		zap.Int("chunks_loaded", len(coords)),
 	)
 
-	s.chunkManager.RegisterEntity(entityID, handle, centerWorldX, centerWorldY)
+	s.chunkManager.RegisterEntity(entityID, centerWorldX, centerWorldY)
 
 	s.logger.Debug("Entity registered with chunk manager",
 		zap.Int64("entity_id", int64(entityID)),
@@ -264,8 +259,8 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	coordPerTile := s.cfg.Game.CoordPerTile
 	minTileX := minX / coordPerTile
 	minTileY := minY / coordPerTile
-	maxTileX := maxX / coordPerTile
-	maxTileY := maxY / coordPerTile
+	maxTileX := (maxX - 1) / coordPerTile
+	maxTileY := (maxY - 1) / coordPerTile
 
 	chunks := s.chunkManager.GetEntityActiveChunks(ecs.EntityID(character.ID))
 	if len(chunks) == 0 {
@@ -306,12 +301,12 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		objMaxX := transform.X + collider.HalfWidth
 		objMaxY := transform.Y + collider.HalfHeight
 
-		if !(maxX < objMinX || minX > objMaxX || maxY < objMinY || minY > objMaxY) {
+		if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
 			return false, ecs.InvalidHandle
 		}
 	}
 
-	handle := s.spawnEntityLocked(ecs.EntityID(character.ID))
+	handle := s.spawnEntityLocked(ecs.EntityID(character.ID), worldX, worldY)
 	return true, handle
 }
 
