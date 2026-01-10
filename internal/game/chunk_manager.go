@@ -70,6 +70,9 @@ type Chunk struct {
 	Tiles    []byte
 	LastTick uint64
 
+	isPassable  []uint64
+	isSwimmable []uint64
+
 	rawObjects []*repository.Object
 	spatial    *SpatialHashGrid
 
@@ -78,13 +81,17 @@ type Chunk struct {
 
 func NewChunk(coord ChunkCoord, layer int32, chunkSize int) *Chunk {
 	cellSize := 16.0
+	totalTiles := chunkSize * chunkSize
+	bitsetSize := (totalTiles + 63) / 64
 
 	return &Chunk{
-		Coord:   coord,
-		Layer:   layer,
-		State:   ChunkStateUnloaded,
-		Tiles:   make([]byte, chunkSize*chunkSize),
-		spatial: NewSpatialHashGrid(cellSize),
+		Coord:       coord,
+		Layer:       layer,
+		State:       ChunkStateUnloaded,
+		Tiles:       make([]byte, totalTiles),
+		isPassable:  make([]uint64, bitsetSize),
+		isSwimmable: make([]uint64, bitsetSize),
+		spatial:     NewSpatialHashGrid(cellSize),
 	}
 }
 
@@ -139,6 +146,59 @@ func (c *Chunk) Spatial() *SpatialHashGrid {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.spatial
+}
+
+func (c *Chunk) populateTileBitsets() {
+	for i, tileID := range c.Tiles {
+		if isTilePassable(tileID) {
+			c.setBit(c.isPassable, i)
+		}
+		if isTileSwimmable(tileID) {
+			c.setBit(c.isSwimmable, i)
+		}
+	}
+}
+
+func (c *Chunk) setBit(bitset []uint64, index int) {
+	wordIndex := index / 64
+	bitIndex := uint(index % 64)
+	bitset[wordIndex] |= 1 << bitIndex
+}
+
+func (c *Chunk) getBit(bitset []uint64, index int) bool {
+	wordIndex := index / 64
+	bitIndex := uint(index % 64)
+	return (bitset[wordIndex] & (1 << bitIndex)) != 0
+}
+
+func (c *Chunk) IsTilePassable(localTileX, localTileY, chunkSize int) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if localTileX < 0 || localTileX >= chunkSize || localTileY < 0 || localTileY >= chunkSize {
+		return false
+	}
+
+	index := localTileY*chunkSize + localTileX
+	if index >= len(c.Tiles) {
+		return false
+	}
+	return c.getBit(c.isPassable, index)
+}
+
+func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if localTileX < 0 || localTileX >= chunkSize || localTileY < 0 || localTileY >= chunkSize {
+		return false
+	}
+
+	index := localTileY*chunkSize + localTileX
+	if index >= len(c.Tiles) {
+		return false
+	}
+	return c.getBit(c.isSwimmable, index)
 }
 
 type loadRequest struct {
@@ -645,6 +705,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord) {
 			chunk.mu.Lock()
 			chunk.Tiles = tilesData.TilesData
 			chunk.LastTick = uint64(tilesData.LastTick)
+			chunk.populateTileBitsets()
 			chunk.mu.Unlock()
 		}
 
@@ -1236,7 +1297,7 @@ func (cm *ChunkManager) Stats() ChunkStats {
 	}
 }
 
-func (cm *ChunkManager) Update(dt float32) {
+func (cm *ChunkManager) Update(dt float64) {
 }
 
 func (cm *ChunkManager) Stop() {
@@ -1289,4 +1350,52 @@ func WorldToChunkCoord(worldX, worldY int, chunkSize, coordPerTile int) ChunkCoo
 		X: tileX / chunkSize,
 		Y: tileY / chunkSize,
 	}
+}
+
+func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {
+	chunkSize := cm.cfg.Game.ChunkSize
+	chunkCoord := ChunkCoord{
+		X: tileX / chunkSize,
+		Y: tileY / chunkSize,
+	}
+
+	chunk := cm.GetChunk(chunkCoord)
+	if chunk == nil {
+		return false
+	}
+
+	localTileX := tileX % chunkSize
+	localTileY := tileY % chunkSize
+	if localTileX < 0 {
+		localTileX += chunkSize
+	}
+	if localTileY < 0 {
+		localTileY += chunkSize
+	}
+
+	return chunk.IsTilePassable(localTileX, localTileY, chunkSize)
+}
+
+func (cm *ChunkManager) IsTileSwimmable(tileX, tileY int) bool {
+	chunkSize := cm.cfg.Game.ChunkSize
+	chunkCoord := ChunkCoord{
+		X: tileX / chunkSize,
+		Y: tileY / chunkSize,
+	}
+
+	chunk := cm.GetChunk(chunkCoord)
+	if chunk == nil {
+		return false
+	}
+
+	localTileX := tileX % chunkSize
+	localTileY := tileY % chunkSize
+	if localTileX < 0 {
+		localTileX += chunkSize
+	}
+	if localTileY < 0 {
+		localTileY += chunkSize
+	}
+
+	return chunk.IsTileSwimmable(localTileX, localTileY, chunkSize)
 }

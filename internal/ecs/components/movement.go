@@ -2,7 +2,7 @@ package components
 
 import "origin/internal/ecs"
 
-const StopDistance float32 = 0.2
+const StopDistance float64 = 0.2
 
 // MoveMode represents different movement states
 type MoveMode uint8
@@ -34,18 +34,18 @@ const (
 
 // Movement represents an entity's movement capabilities and state
 type Movement struct {
-	VelocityX float32
-	VelocityY float32
+	VelocityX float64
+	VelocityY float64
 	Mode      MoveMode
 	State     MoveState
-	Speed     float32
+	Speed     float64
 
 	TargetType   TargetType
-	TargetX      float32
-	TargetY      float32
+	TargetX      int
+	TargetY      int
 	TargetHandle ecs.Handle
 
-	InteractionRange float32
+	InteractionRange float64
 }
 
 const MovementComponentID ecs.ComponentID = 12
@@ -54,14 +54,14 @@ func init() {
 	ecs.RegisterComponent[Movement](MovementComponentID)
 }
 
-func (m *Movement) HasReachedTarget(currentX, currentY float32) bool {
+func (m *Movement) HasReachedTarget(currentX, currentY int) bool {
 	if m.TargetType == TargetNone {
 		return true
 	}
 
 	dx := m.TargetX - currentX
 	dy := m.TargetY - currentY
-	distSq := dx*dx + dy*dy
+	distSq := float64(dx*dx) + float64(dy*dy)
 	stopDistSq := StopDistance * StopDistance
 
 	return distSq <= stopDistSq
@@ -75,7 +75,7 @@ func (m *Movement) ClearTarget() {
 	m.State = StateIdle
 }
 
-func (m *Movement) SetTargetPoint(x, y float32) {
+func (m *Movement) SetTargetPoint(x, y int) {
 	m.TargetType = TargetPoint
 	m.TargetX = x
 	m.TargetY = y
@@ -83,7 +83,7 @@ func (m *Movement) SetTargetPoint(x, y float32) {
 	m.State = StateMoving
 }
 
-func (m *Movement) SetTargetHandle(handle ecs.Handle, x, y float32) {
+func (m *Movement) SetTargetHandle(handle ecs.Handle, x, y int) {
 	m.TargetType = TargetEntity
 	m.TargetHandle = handle
 	m.TargetX = x
@@ -91,7 +91,7 @@ func (m *Movement) SetTargetHandle(handle ecs.Handle, x, y float32) {
 	m.State = StateMoving
 }
 
-func (m *Movement) GetCurrentSpeed() float32 {
+func (m *Movement) GetCurrentSpeed() float64 {
 	switch m.Mode {
 	case Walk:
 		return m.Speed

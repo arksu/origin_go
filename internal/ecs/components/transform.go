@@ -4,8 +4,13 @@ import "origin/internal/ecs"
 
 // Transform represents an entity's position and orientation in 2D space
 type Transform struct {
-	X         float32
-	Y         float32
+	// исходные координаты на начало тика
+	X int
+	Y int
+	// то куда передвигаемся на текущем тике
+	IntentX int
+	IntentY int
+	// направление вращения в градусах
 	Direction float32
 }
 

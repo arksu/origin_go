@@ -14,6 +14,7 @@ const (
 	ObjectTypeBuilding
 	ObjectTypeItem
 	ObjectTypeNPC
+	ObjectTypePlayer
 )
 
 // EntityInfo stores basic entity metadata
