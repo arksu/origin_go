@@ -1183,6 +1183,28 @@ func (cm *ChunkManager) ActiveChunkCoords() []ChunkCoord {
 	return coords
 }
 
+func (cm *ChunkManager) GetEntityActiveChunks(entityID ecs.EntityID) []*Chunk {
+	cm.aoiMu.RLock()
+	aoi, exists := cm.entityAOIs[entityID]
+	if !exists {
+		cm.aoiMu.RUnlock()
+		return nil
+	}
+	activeCoords := make([]ChunkCoord, 0, len(aoi.ActiveChunks))
+	for coord := range aoi.ActiveChunks {
+		activeCoords = append(activeCoords, coord)
+	}
+	cm.aoiMu.RUnlock()
+
+	chunks := make([]*Chunk, 0, len(activeCoords))
+	for _, coord := range activeCoords {
+		if chunk := cm.GetChunk(coord); chunk != nil && chunk.GetState() == ChunkStateActive {
+			chunks = append(chunks, chunk)
+		}
+	}
+	return chunks
+}
+
 func (cm *ChunkManager) Stats() ChunkStats {
 	return ChunkStats{
 		ActiveCount:    atomic.LoadInt64(&cm.stats.ActiveCount),
