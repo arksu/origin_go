@@ -373,20 +373,24 @@ func (cm *ChunkManager) updateEntityAOI(entityID ecs.EntityID, newCenter ChunkCo
 	newActive := make(map[ChunkCoord]struct{})
 	newPreload := make(map[ChunkCoord]struct{})
 
-	// Calculate new active zone
+	// Calculate new active zone (with bounds checking)
 	for dy := -activeRadius; dy <= activeRadius; dy++ {
 		for dx := -activeRadius; dx <= activeRadius; dx++ {
 			coord := ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
-			newActive[coord] = struct{}{}
+			if cm.isWithinWorldBounds(coord) {
+				newActive[coord] = struct{}{}
+			}
 		}
 	}
 
-	// Calculate new preload zone (excluding active)
+	// Calculate new preload zone (excluding active, with bounds checking)
 	for dy := -preloadRadius; dy <= preloadRadius; dy++ {
 		for dx := -preloadRadius; dx <= preloadRadius; dx++ {
 			coord := ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
-			if _, isActive := newActive[coord]; !isActive {
-				newPreload[coord] = struct{}{}
+			if cm.isWithinWorldBounds(coord) {
+				if _, isActive := newActive[coord]; !isActive {
+					newPreload[coord] = struct{}{}
+				}
 			}
 		}
 	}
