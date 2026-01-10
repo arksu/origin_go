@@ -388,8 +388,7 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 }
 
 func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, shard *Shard, character repository.Character) {
-	// TODO fix: send to client only active chunks for this entityID (active radius)
-	chunks := shard.ChunkManager().ActiveChunks()
+	chunks := shard.ChunkManager().GetEntityActiveChunks(entityID)
 
 	// Send chunks first so client can start rendering
 	for _, chunk := range chunks {
