@@ -277,7 +277,6 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	candidates := g.generateSpawnCandidates(int(character.X), int(character.Y))
 
 	playerEntityID := ecs.EntityID(character.ID)
-	var playerHandle ecs.Handle
 	spawned := false
 
 	for _, pos := range candidates {
@@ -288,7 +287,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		default:
 		}
 
-		if err := shard.PrepareEntityAOI(ctx, playerEntityID, playerHandle, pos.X, pos.Y); err != nil {
+		if err := shard.PrepareEntityAOI(ctx, playerEntityID, pos.X, pos.Y); err != nil {
 			g.logger.Error("Failed to prepare entity AOI",
 				zap.Uint64("client_id", c.ID),
 				zap.Int64("character_id", character.ID),
@@ -300,7 +299,6 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character)
 		if ok {
-			playerHandle = handle
 
 			// add player components
 			ecs.AddComponent(shard.world, handle, components.EntityInfo{
