@@ -464,12 +464,21 @@ func (cm *ChunkManager) removeEntityInterests(entityID ecs.EntityID, aoi *Entity
 	}
 }
 
+// chunkInterestSnapshot holds a thread-safe snapshot of interest counts
+type chunkInterestSnapshot struct {
+	activeCount  int
+	preloadCount int
+}
+
 // recalculateChunkStates updates chunk states based on global interests
 func (cm *ChunkManager) recalculateChunkStates() {
 	cm.interestMu.RLock()
-	interestsCopy := make(map[ChunkCoord]*ChunkInterest, len(cm.chunkInterests))
+	interestsSnapshot := make(map[ChunkCoord]chunkInterestSnapshot, len(cm.chunkInterests))
 	for coord, interest := range cm.chunkInterests {
-		interestsCopy[coord] = interest
+		interestsSnapshot[coord] = chunkInterestSnapshot{
+			activeCount:  len(interest.activeEntities),
+			preloadCount: len(interest.preloadEntities),
+		}
 	}
 	cm.interestMu.RUnlock()
 
@@ -477,10 +486,10 @@ func (cm *ChunkManager) recalculateChunkStates() {
 	activatedChunks := make([]ChunkCoord, 0)
 	deactivatedChunks := make([]ChunkCoord, 0)
 
-	for coord, interest := range interestsCopy {
+	for coord, snapshot := range interestsSnapshot {
 		chunk := cm.GetChunk(coord)
 
-		if interest.hasActive() {
+		if snapshot.activeCount > 0 {
 			// Should be Active
 			if chunk == nil {
 				cm.requestLoad(coord)
@@ -502,7 +511,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 					activatedChunks = append(activatedChunks, coord)
 				}
 			}
-		} else if interest.hasPreload() {
+		} else if snapshot.preloadCount > 0 {
 			// Should be Preloaded
 			if chunk == nil {
 				cm.requestLoad(coord)
