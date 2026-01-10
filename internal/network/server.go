@@ -102,20 +102,28 @@ func (s *Server) Start(addr string, mux *http.ServeMux) error {
 }
 
 func (s *Server) Stop() {
+	s.logger.Info("Stopping network server")
 	s.cancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if s.httpServer != nil {
+		s.logger.Info("Stopping httpServer")
 		s.httpServer.Shutdown(ctx)
 	}
 
+	s.logger.Info("Close clients")
 	s.clientsMu.Lock()
+	clients := make([]*Client, 0, len(s.clients))
 	for _, c := range s.clients {
-		c.Close()
+		clients = append(clients, c)
 	}
 	s.clientsMu.Unlock()
+
+	for _, c := range clients {
+		c.Close()
+	}
 
 	s.wg.Wait()
 	s.logger.Info("WebSocket server stopped")

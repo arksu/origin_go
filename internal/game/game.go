@@ -476,7 +476,7 @@ func (g *Game) resetOnlinePlayers() {
 	if err := g.db.Queries().ResetOnlinePlayers(g.ctx, g.cfg.Game.Region); err != nil {
 		g.logger.Error("Failed to reset online players", zap.Int32("region", g.cfg.Game.Region), zap.Error(err))
 	} else {
-		g.logger.Info("Reset online players", zap.Int32("region", int32(g.cfg.Game.Region)))
+		g.logger.Info("Reset online players", zap.Int32("region", g.cfg.Game.Region))
 	}
 }
 
@@ -525,10 +525,14 @@ func (g *Game) Stop() {
 	g.resetOnlinePlayers()
 	g.cancel()
 
+	g.logger.Info("Stopping networkServer")
 	g.networkServer.Stop()
+	g.logger.Info("Stopping shardManager")
 	g.shardManager.Stop()
+	g.logger.Info("Stopping entityIDManager")
 	g.entityIDManager.Stop()
 
+	// Wait for all goroutines to finish
 	g.wg.Wait()
 
 	g.setState(GameStateStopped)

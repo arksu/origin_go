@@ -662,7 +662,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord) {
 			)
 			objects = nil
 		}
-		cm.logger.Debug("loaded objects", zap.Int("count", len(objects)))
+		cm.logger.Debug("loaded objects", zap.Any("coord", coord), zap.Int("count", len(objects)))
 
 		rawObjects := make([]*repository.Object, len(objects))
 		for i := range objects {
