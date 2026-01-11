@@ -8,6 +8,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
+	"origin/internal/utils"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -322,8 +323,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				InteractionRange: 5.0,
 			})
 			ecs.AddComponent(shard.world, handle, components.Collider{
-				HalfWidth:  PlayerAABBSize / 2,
-				HalfHeight: PlayerAABBSize / 2,
+				HalfWidth:  utils.PlayerAABBSize / 2,
+				HalfHeight: utils.PlayerAABBSize / 2,
 			})
 
 			spawned = true

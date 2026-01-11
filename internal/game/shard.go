@@ -5,6 +5,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
+	"origin/internal/utils"
 	"sync"
 
 	"go.uber.org/zap"
@@ -251,7 +252,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	halfSize := PlayerAABBSize / 2
+	halfSize := utils.PlayerAABBSize / 2
 	minX := worldX - halfSize
 	minY := worldY - halfSize
 	maxX := worldX + halfSize

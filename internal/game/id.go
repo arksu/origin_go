@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"origin/internal/utils"
 	"sync"
 	"time"
 
@@ -24,7 +25,7 @@ type EntityIDManager struct {
 }
 
 func NewEntityIDManager(cfg *config.Config, db *persistence.Postgres, logger *zap.Logger) *EntityIDManager {
-	lastUsedID := uint64(db.GetGlobalVarLong(context.Background(), LAST_USED_ID))
+	lastUsedID := uint64(db.GetGlobalVarLong(context.Background(), utils.LAST_USED_ID))
 	logger.Info("EntityIDManager loaded lastUsedID from DB", zap.Uint64("last_used_id", lastUsedID))
 
 	rangeSize := uint64(cfg.EntityID.RangeSize)
@@ -57,7 +58,7 @@ func (em *EntityIDManager) allocateNewRange() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := em.db.SetGlobalVarLong(ctx, LAST_USED_ID, int64(endID)); err != nil {
+		if err := em.db.SetGlobalVarLong(ctx, utils.LAST_USED_ID, int64(endID)); err != nil {
 			em.logger.Error("EntityIDManager failed to persist LAST_USED_ID",
 				zap.Uint64("end_id", endID),
 				zap.Error(err))
@@ -92,7 +93,7 @@ func (em *EntityIDManager) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := em.db.SetGlobalVarLong(ctx, LAST_USED_ID, int64(currentID)); err != nil {
+	if err := em.db.SetGlobalVarLong(ctx, utils.LAST_USED_ID, int64(currentID)); err != nil {
 		em.logger.Error("EntityIDManager failed to persist final LAST_USED_ID",
 			zap.Uint64("current_id", currentID),
 			zap.Error(err))
