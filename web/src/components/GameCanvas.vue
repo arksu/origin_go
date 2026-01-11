@@ -23,9 +23,10 @@ const ctx = ref(null)
 const TILE_SIZE_PIXELS = 3
 const CHUNK_SIZE = 128
 const CHUNK_PIXEL_SIZE = CHUNK_SIZE * TILE_SIZE_PIXELS
+const COORD_PER_TILE = 12
 
-const canvasWidth = ref(1024)
-const canvasHeight = ref(768)
+const canvasWidth = ref(window.innerWidth)
+const canvasHeight = ref(window.innerHeight)
 
 // Debug flag - set to false to hide console logs
 const DEBUG = false
@@ -71,17 +72,23 @@ function renderChunks() {
   }
 
   if (DEBUG) console.debug("renderChunks", ctx.value, gameStore.worldReady, "chunks count:", gameStore.chunks.size)
+  if (DEBUG) console.debug("playerPosition object:", gameStore.playerPosition)
 
   const playerX = gameStore.playerPosition.x || 0
   const playerY = gameStore.playerPosition.y || 0
 
-  if (DEBUG) console.debug("player position:", playerX, playerY)
+  // Convert player coordinates from world coords to pixel coords
+  const playerPixelX = (playerX / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  const playerPixelY = (playerY / COORD_PER_TILE) * TILE_SIZE_PIXELS
 
-  // Center camera at (0,0) to see chunks around origin
-  const cameraX = 0
-  const cameraY = 0
+  if (DEBUG) console.debug("player position:", playerX, playerY, "pixel coords:", playerPixelX, playerPixelY)
+
+  // Center camera on player position (in pixel coordinates)
+  const cameraX = playerPixelX - (canvasWidth.value / 2)
+  const cameraY = playerPixelY - (canvasHeight.value / 2)
 
   if (DEBUG) console.debug("camera: ", cameraX, cameraY)
+  if (DEBUG) console.debug("TILE_SIZE_PIXELS:", TILE_SIZE_PIXELS, "COORD_PER_TILE:", COORD_PER_TILE)
   if (DEBUG) console.debug("canvas size:", canvasWidth.value, canvasHeight.value)
 
   // Render all loaded chunks
@@ -90,18 +97,23 @@ function renderChunks() {
     renderChunk(coord, data, cameraX, cameraY)
   })
 
-  // Draw player marker at actual player position (not center for now)
-  const playerScreenX = (playerX * TILE_SIZE_PIXELS) - cameraX
-  const playerScreenY = (playerY * TILE_SIZE_PIXELS) - cameraY
+  // Draw player marker at screen center (red aim crosshair)
+  const playerScreenX = canvasWidth.value / 2
+  const playerScreenY = canvasHeight.value / 2
   
-  // Draw red cross for player
+  // Draw red aim crosshair for player
   ctx.value.strokeStyle = '#ff0000'
   ctx.value.lineWidth = 2
   ctx.value.beginPath()
-  ctx.value.moveTo(playerScreenX - 8, playerScreenY)
-  ctx.value.lineTo(playerScreenX + 8, playerScreenY)
-  ctx.value.moveTo(playerScreenX, playerScreenY - 8)
-  ctx.value.lineTo(playerScreenX, playerScreenY + 8)
+  ctx.value.moveTo(playerScreenX - 10, playerScreenY)
+  ctx.value.lineTo(playerScreenX + 10, playerScreenY)
+  ctx.value.moveTo(playerScreenX, playerScreenY - 10)
+  ctx.value.lineTo(playerScreenX, playerScreenY + 10)
+  ctx.value.stroke()
+  
+  // Draw red circle around aim
+  ctx.value.beginPath()
+  ctx.value.arc(playerScreenX, playerScreenY, 5, 0, 2 * Math.PI)
   ctx.value.stroke()
   ctx.value.lineWidth = 1
 
@@ -183,8 +195,8 @@ onMounted(() => {
     // Resize canvas to match container
     const resizeCanvas = () => {
       const rect = canvas.value.parentElement.getBoundingClientRect()
-      canvasWidth.value = Math.floor(rect.width) || 1024
-      canvasHeight.value = Math.floor(rect.height) || 768
+      canvasWidth.value = Math.floor(rect.width)
+      canvasHeight.value = Math.floor(rect.height)
       canvas.value.width = canvasWidth.value
       canvas.value.height = canvasHeight.value
       if (DEBUG) console.debug('Canvas resized to:', canvasWidth.value, canvasHeight.value)
