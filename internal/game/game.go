@@ -339,6 +339,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	}
 
 	if !spawned {
+		g.logger.Debug("Player NOT spawned", zap.Int64("character_id", character.ID))
 		g.sendError(c, "Spawn failed: no valid position")
 		return
 	}

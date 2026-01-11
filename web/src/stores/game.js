@@ -49,12 +49,15 @@ export const useGameStore = defineStore('game', () => {
     connectionState.value = 'error'
   }
 
+  function clearError() {
+    lastError.value = ''
+  }
+
   function reset() {
     wsToken.value = ''
     characterId.value = null
     connectionState.value = 'disconnected'
     playerState.value = null
-    lastError.value = ''
     worldReady.value = false
     chunks.value.clear()
     playerPosition.value = { x: 0, y: 0, heading: 0 }
@@ -78,6 +81,7 @@ export const useGameStore = defineStore('game', () => {
     addChunk,
     removeChunk,
     setError,
+    clearError,
     reset
   }
 })

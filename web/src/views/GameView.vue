@@ -47,7 +47,7 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
 import { gameConnection } from '../network/GameConnection'
@@ -100,6 +100,10 @@ function handleRetry() {
     router.push('/characters')
   }
 }
+
+onMounted(() => {
+  gameConnection.setRouter(router)
+})
 
 onUnmounted(() => {
   gameConnection.disconnect()

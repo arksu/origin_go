@@ -1,6 +1,7 @@
 import { proto } from '../proto/packets.js'
 import { networkConfig } from '../config/network.js'
 import { useGameStore } from '../stores/game.js'
+import { useRouter } from 'vue-router'
 
 class GameConnection {
   constructor() {
@@ -8,6 +9,11 @@ class GameConnection {
     this.pingInterval = null
     this.sequenceNumber = 0
     this.handlers = new Map()
+    this.router = null
+  }
+
+  setRouter(router) {
+    this.router = router
   }
 
   connect() {
@@ -93,6 +99,8 @@ class GameConnection {
         this.handleLoadChunk(message.loadChunk)
       } else if (message.unloadChunk) {
         this.handleUnloadChunk(message.unloadChunk)
+      } else if (message.error) {
+        this.handleError(message.error)
       }
 
       // Notify registered handlers
@@ -168,6 +176,17 @@ class GameConnection {
     const gameStore = useGameStore()
     gameStore.removeChunk(unloadChunk.coord)
     console.log('Chunk unloaded:', unloadChunk.coord)
+  }
+
+  handleError(error) {
+    const gameStore = useGameStore()
+    const errorMessage = error.message || 'An error occurred'
+    console.error('Server error:', error.code, errorMessage)
+    gameStore.setError(errorMessage)
+    this.disconnect()
+    if (this.router) {
+      this.router.push('/characters')
+    }
   }
 
   onMessage(type, handler) {

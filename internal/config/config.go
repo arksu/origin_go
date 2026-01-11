@@ -133,7 +133,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.max_layers", 3)
 	v.SetDefault("game.disconnect_delay", 15)
 	v.SetDefault("game.chunk_lru_capacity", 1000)
-	v.SetDefault("game.chunk_lru_ttl", 300)
+	v.SetDefault("game.chunk_lru_ttl", 20)
 	v.SetDefault("game.max_entities", 1048576)
 	v.SetDefault("game.worker_pool_size", 4)
 	v.SetDefault("game.load_workers", 2)
