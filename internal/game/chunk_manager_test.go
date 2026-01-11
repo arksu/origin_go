@@ -2,6 +2,7 @@ package game
 
 import (
 	"origin/internal/config"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
 	"origin/internal/types"
@@ -66,7 +67,7 @@ func TestChunkState_String(t *testing.T) {
 
 func TestNewChunk(t *testing.T) {
 	coord := types.ChunkCoord{X: 5, Y: 10}
-	chunk := NewChunk(coord, 0, 128)
+	chunk := core.NewChunk(coord, 0, 128)
 
 	if chunk == nil {
 		t.Fatal("NewChunk returned nil")
@@ -91,7 +92,7 @@ func TestNewChunk(t *testing.T) {
 }
 
 func TestChunk_SetGetState(t *testing.T) {
-	chunk := NewChunk(types.ChunkCoord{X: 0, Y: 0}, 0, 128)
+	chunk := core.NewChunk(types.ChunkCoord{X: 0, Y: 0}, 0, 128)
 
 	chunk.SetState(types.ChunkStateLoading)
 	if got := chunk.GetState(); got != types.ChunkStateLoading {

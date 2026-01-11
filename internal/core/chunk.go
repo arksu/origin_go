@@ -1,7 +1,6 @@
-package game
+package core
 
 import (
-	"origin/internal/core"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"sync"
@@ -15,7 +14,7 @@ type Chunk struct {
 	isSwimmable []uint64
 
 	rawObjects []*repository.Object
-	spatial    *core.SpatialHashGrid
+	spatial    *SpatialHashGrid
 
 	mu sync.RWMutex
 }
@@ -29,7 +28,7 @@ func NewChunk(coord types.ChunkCoord, layer int32, chunkSize int) *Chunk {
 		ChunkData:   types.NewChunkData(coord, layer, chunkSize),
 		isPassable:  make([]uint64, bitsetSize),
 		isSwimmable: make([]uint64, bitsetSize),
-		spatial:     core.NewSpatialHashGrid(cellSize),
+		spatial:     NewSpatialHashGrid(cellSize),
 	}
 }
 
@@ -59,6 +58,12 @@ func (c *Chunk) GetRawObjects() []*repository.Object {
 	return objects
 }
 
+func (c *Chunk) AddRawObject(obj *repository.Object) {
+	c.mu.Lock()
+	c.rawObjects = append(c.rawObjects, obj)
+	c.mu.Unlock()
+}
+
 func (c *Chunk) ClearRawObjects() {
 	c.mu.Lock()
 	c.rawObjects = nil
@@ -80,10 +85,17 @@ func (c *Chunk) ClearHandles() {
 	c.mu.Unlock()
 }
 
-func (c *Chunk) Spatial() *core.SpatialHashGrid {
+func (c *Chunk) Spatial() *SpatialHashGrid {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.spatial
+}
+
+func (c *Chunk) SetTiles(Tiles []byte, lastTick uint64) {
+	c.mu.Lock()
+	c.ChunkData.Tiles = Tiles
+	c.ChunkData.LastTick = lastTick
+	c.mu.Unlock()
 }
 
 func (c *Chunk) populateTileBitsets() {
