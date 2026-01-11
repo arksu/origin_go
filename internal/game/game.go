@@ -311,11 +311,12 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			})
 			ecs.AddComponent(shard.world, handle, components.Transform{X: pos.X, Y: pos.Y, Direction: float32(character.Heading) * 45})
 			ecs.AddComponent(shard.world, handle, components.Movement{
-				VelocityX:        0,
-				VelocityY:        0,
-				Mode:             components.Walk,
-				State:            components.StateIdle,
-				Speed:            12.0, // TODO player speed
+				VelocityX: 0,
+				VelocityY: 0,
+				Mode:      components.Walk,
+				State:     components.StateIdle,
+				// TODO player speed
+				Speed:            12.0,
 				TargetType:       components.TargetNone,
 				TargetX:          0,
 				TargetY:          0,
