@@ -67,14 +67,14 @@ func TestChunkState_String(t *testing.T) {
 
 func TestNewChunk(t *testing.T) {
 	coord := types.ChunkCoord{X: 5, Y: 10}
-	chunk := core.NewChunk(coord, 0, 128)
+	chunk := core.NewChunk(coord, 0, 0, 128)
 
 	if chunk == nil {
 		t.Fatal("NewChunk returned nil")
 	}
 
-	if chunk.ChunkData.Coord != coord {
-		t.Errorf("Expected coord %v, got %v", coord, chunk.ChunkData.Coord)
+	if chunk.Coord != coord {
+		t.Errorf("Expected coord %v, got %v", coord, chunk.Coord)
 	}
 
 	if chunk.Layer != 0 {
@@ -86,13 +86,13 @@ func TestNewChunk(t *testing.T) {
 	}
 
 	expectedTiles := 128 * 128
-	if len(chunk.ChunkData.Tiles) != expectedTiles {
-		t.Errorf("Expected %d tiles, got %d", expectedTiles, len(chunk.ChunkData.Tiles))
+	if len(chunk.Tiles) != expectedTiles {
+		t.Errorf("Expected %d tiles, got %d", expectedTiles, len(chunk.Tiles))
 	}
 }
 
 func TestChunk_SetGetState(t *testing.T) {
-	chunk := core.NewChunk(types.ChunkCoord{X: 0, Y: 0}, 0, 128)
+	chunk := core.NewChunk(types.ChunkCoord{X: 0, Y: 0}, 0, 0, 128)
 
 	chunk.SetState(types.ChunkStateLoading)
 	if got := chunk.GetState(); got != types.ChunkStateLoading {
