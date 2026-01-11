@@ -1,5 +1,5 @@
 <template>
-  <div class="relative w-full h-full bg-black overflow-hidden" style="min-height: 768px;">
+  <div class="relative w-full h-full bg-black overflow-hidden" style="min-height: 868px;">
     <canvas
       ref="canvas"
       class="absolute inset-0"
@@ -20,7 +20,7 @@ const gameStore = useGameStore()
 const canvas = ref(null)
 const ctx = ref(null)
 
-const TILE_SIZE_PIXELS = 3
+const TILE_SIZE_PIXELS = 2
 const CHUNK_SIZE = 128
 const CHUNK_PIXEL_SIZE = CHUNK_SIZE * TILE_SIZE_PIXELS
 const COORD_PER_TILE = 12
@@ -32,12 +32,13 @@ const canvasHeight = ref(window.innerHeight)
 const DEBUG = false
 
 const tileColors = {
-  0: '#2d5016',   // grass
-  1: '#8b7355',   // dirt
-  32: '#4a90e2',   // water
-  3: '#90ee90',   // light grass
-  4: '#a0522d',   // brown
-  17: '#696969',   // dark gray
+  1: '#0013e9',   // TileWaterDeep
+  3: '#177eff',   // TileWater
+  10: '#a0522d',   // TileStone
+  13: '#23755f',   // TileForestPine
+  15: '#5ba143',   // TileForestLeaf
+  32: '#f0e873',   // TileSand
+  17: '#00e319',   // TileGrass
   255: '#000000'  // default/unknown
 }
 
@@ -60,10 +61,6 @@ function renderChunks() {
   ctx.value.fillStyle = '#000000'
   ctx.value.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
 
-  // Always draw a test pattern to verify canvas works
-  ctx.value.fillStyle = '#00ff00'
-  ctx.value.fillRect(10, 10, 50, 50)
-
   if (!gameStore.worldReady) {
     ctx.value.fillStyle = '#ffffff'
     ctx.value.font = '20px Arial'
@@ -78,8 +75,11 @@ function renderChunks() {
   const playerY = gameStore.playerPosition.y || 0
 
   // Convert player coordinates from world coords to pixel coords
-  const playerPixelX = (playerX / COORD_PER_TILE) * TILE_SIZE_PIXELS
-  const playerPixelY = (playerY / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  // Use floor to match backend integer division behavior
+  const playerTileX = Math.floor(playerX / COORD_PER_TILE)
+  const playerTileY = Math.floor(playerY / COORD_PER_TILE)
+  const playerPixelX = playerTileX * TILE_SIZE_PIXELS
+  const playerPixelY = playerTileY * TILE_SIZE_PIXELS
 
   if (DEBUG) console.debug("player position:", playerX, playerY, "pixel coords:", playerPixelX, playerPixelY)
 
@@ -128,6 +128,18 @@ function renderChunks() {
   ctx.value.lineTo(originScreenX, originScreenY + 10)
   ctx.value.stroke()
 
+  // Draw debug info
+  const playerChunkX = Math.floor(playerTileX / CHUNK_SIZE)
+  const playerChunkY = Math.floor(playerTileY / CHUNK_SIZE)
+  
+  ctx.value.fillStyle = '#ffffff'
+  ctx.value.font = '12px monospace'
+  ctx.value.fillText(`World: (${playerX}, ${playerY})`, 10, 80)
+  ctx.value.fillText(`Tile: (${playerTileX}, ${playerTileY})`, 10, 95)
+  ctx.value.fillText(`Chunk: (${playerChunkX}, ${playerChunkY})`, 10, 110)
+  ctx.value.fillText(`Pixel: (${playerPixelX.toFixed(1)}, ${playerPixelY.toFixed(1)})`, 10, 125)
+  ctx.value.fillText(`TILE_SIZE: ${TILE_SIZE_PIXELS}px`, 10, 140)
+
   // Draw chunk boundaries for debugging
   ctx.value.strokeStyle = '#ffff00'
   ctx.value.lineWidth = 1
@@ -150,10 +162,10 @@ function renderChunk(coord, tileData, cameraX, cameraY) {
   const chunkX = coord.x || 0
   const chunkY = coord.y || 0
 
-  const chunkWorldX = chunkX * CHUNK_PIXEL_SIZE
-  const chunkWorldY = chunkY * CHUNK_PIXEL_SIZE
+  const chunkPixelX = chunkX * CHUNK_PIXEL_SIZE
+  const chunkPixelY = chunkY * CHUNK_PIXEL_SIZE
 
-  if (DEBUG) console.debug("chunk world pos:", chunkWorldX, chunkWorldY)
+  if (DEBUG) console.debug("chunk pixel pos:", chunkPixelX, chunkPixelY)
 
   let tilesRendered = 0
   for (let ty = 0; ty < CHUNK_SIZE; ty++) {
@@ -161,11 +173,11 @@ function renderChunk(coord, tileData, cameraX, cameraY) {
       const tileIndex = ty * CHUNK_SIZE + tx
       const tileId = tiles[tileIndex] || 0
 
-      const worldX = chunkWorldX + tx * TILE_SIZE_PIXELS
-      const worldY = chunkWorldY + ty * TILE_SIZE_PIXELS
+      const tilePixelX = chunkPixelX + tx * TILE_SIZE_PIXELS
+      const tilePixelY = chunkPixelY + ty * TILE_SIZE_PIXELS
 
-      const screenX = worldX - cameraX
-      const screenY = worldY - cameraY
+      const screenX = tilePixelX - cameraX
+      const screenY = tilePixelY - cameraY
 
       // Only render if visible
       if (

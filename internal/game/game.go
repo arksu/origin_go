@@ -328,9 +328,13 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				HalfHeight: utils.PlayerAABBSize / 2,
 			})
 
+			character.X = int32(pos.X)
+			character.Y = int32(pos.Y)
+
 			spawned = true
 			break
 		}
+		shard.UnregisterEntityAOI(playerEntityID)
 		g.logger.Debug("failed to spawn player", zap.Int64("character_id", character.ID), zap.Any("coord", pos))
 	}
 
