@@ -2,6 +2,8 @@ package ecs
 
 import (
 	"testing"
+
+	"origin/internal/types"
 )
 
 // TestArchetypeRemoveEntityAt verifies O(1) removal with location tracking
@@ -9,9 +11,9 @@ func TestArchetypeRemoveEntityAt(t *testing.T) {
 	arch := NewArchetype(0)
 
 	// Add entities
-	h1 := MakeHandle(1, 0)
-	h2 := MakeHandle(2, 0)
-	h3 := MakeHandle(3, 0)
+	h1 := types.MakeHandle(1, 0)
+	h2 := types.MakeHandle(2, 0)
+	h3 := types.MakeHandle(3, 0)
 
 	idx1 := arch.AddEntity(h1)
 	idx2 := arch.AddEntity(h2)
@@ -37,7 +39,7 @@ func TestArchetypeRemoveEntityAt(t *testing.T) {
 
 	// Remove last entity
 	swapped = arch.RemoveEntityAt(1)
-	if swapped != InvalidHandle {
+	if swapped != types.InvalidHandle {
 		t.Errorf("expected InvalidHandle when removing last, got %v", swapped)
 	}
 
@@ -51,9 +53,9 @@ func TestWorldLocationTracking(t *testing.T) {
 	w := NewWorld()
 
 	// Spawn entities
-	h1 := w.Spawn(EntityID(1))
-	h2 := w.Spawn(EntityID(2))
-	h3 := w.Spawn(EntityID(3))
+	h1 := w.Spawn(types.EntityID(1))
+	h2 := w.Spawn(types.EntityID(2))
+	h3 := w.Spawn(types.EntityID(3))
 
 	// All should be in same archetype (ExternalID only)
 	loc1, ok1 := w.locations[h1]
@@ -93,9 +95,9 @@ func TestComponentChangeArchetypeTransition(t *testing.T) {
 	RegisterComponent[TestComp](TestCompID)
 
 	// Spawn entities with ExternalID
-	h1 := w.Spawn(EntityID(1))
-	_ = w.Spawn(EntityID(2))
-	h3 := w.Spawn(EntityID(3))
+	h1 := w.Spawn(types.EntityID(1))
+	_ = w.Spawn(types.EntityID(2))
+	h3 := w.Spawn(types.EntityID(3))
 
 	loc1Before := w.locations[h1]
 
@@ -131,11 +133,11 @@ func BenchmarkArchetypeRemoval_Old(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(string(rune(size)), func(b *testing.B) {
 			arch := NewArchetype(0)
-			handles := make([]Handle, size)
+			handles := make([]types.Handle, size)
 
 			// Populate archetype
 			for i := 0; i < size; i++ {
-				handles[i] = MakeHandle(uint32(i), 0)
+				handles[i] = types.MakeHandle(uint32(i), 0)
 				arch.AddEntity(handles[i])
 			}
 
@@ -158,12 +160,12 @@ func BenchmarkArchetypeRemoval_New(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(string(rune(size)), func(b *testing.B) {
 			arch := NewArchetype(0)
-			handles := make([]Handle, size)
+			handles := make([]types.Handle, size)
 			indices := make([]int, size)
 
 			// Populate archetype
 			for i := 0; i < size; i++ {
-				handles[i] = MakeHandle(uint32(i), 0)
+				handles[i] = types.MakeHandle(uint32(i), 0)
 				indices[i] = arch.AddEntity(handles[i])
 			}
 
@@ -174,7 +176,7 @@ func BenchmarkArchetypeRemoval_New(b *testing.B) {
 				swapped := arch.RemoveEntityAt(idx)
 
 				// Update swapped entity's index
-				if swapped != InvalidHandle {
+				if swapped != types.InvalidHandle {
 					for j := range handles {
 						if handles[j] == swapped {
 							indices[j] = idx
@@ -197,11 +199,11 @@ func BenchmarkWorldDespawn(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(string(rune(size)), func(b *testing.B) {
 			w := NewWorld()
-			handles := make([]Handle, size)
+			handles := make([]types.Handle, size)
 
 			// Spawn entities
 			for i := 0; i < size; i++ {
-				handles[i] = w.Spawn(EntityID(i))
+				handles[i] = w.Spawn(types.EntityID(i))
 			}
 
 			b.ResetTimer()
@@ -209,7 +211,7 @@ func BenchmarkWorldDespawn(b *testing.B) {
 				// Despawn and respawn middle entity
 				h := handles[size/2]
 				w.Despawn(h)
-				handles[size/2] = w.Spawn(EntityID(size / 2))
+				handles[size/2] = w.Spawn(types.EntityID(size / 2))
 			}
 		})
 	}
@@ -226,11 +228,11 @@ func BenchmarkComponentChange(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(string(rune(size)), func(b *testing.B) {
 			w := NewWorld()
-			handles := make([]Handle, size)
+			handles := make([]types.Handle, size)
 
 			// Spawn entities
 			for i := 0; i < size; i++ {
-				handles[i] = w.Spawn(EntityID(i))
+				handles[i] = w.Spawn(types.EntityID(i))
 			}
 
 			b.ResetTimer()

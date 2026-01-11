@@ -7,16 +7,17 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/persistence/repository"
+	"origin/internal/types"
 )
 
 type TreeBuilder struct{}
 
 func (b *TreeBuilder) ObjectType() components.ObjectType { return components.ObjectTypeTree }
 
-func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (ecs.Handle, error) {
-	h := w.Spawn(ecs.EntityID(raw.ID))
-	if h == ecs.InvalidHandle {
-		return ecs.InvalidHandle, ErrEntitySpawnFailed
+func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle, error) {
+	h := w.Spawn(types.EntityID(raw.ID))
+	if h == types.InvalidHandle {
+		return types.InvalidHandle, ErrEntitySpawnFailed
 	}
 
 	// Direction = raw.Heading * 45 degrees
@@ -32,7 +33,7 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (ecs.Handle, e
 	return h, nil
 }
 
-func (b *TreeBuilder) Serialize(w *ecs.World, h ecs.Handle) (*repository.Object, error) {
+func (b *TreeBuilder) Serialize(w *ecs.World, h types.Handle) (*repository.Object, error) {
 	extID, ok := ecs.GetComponent[ecs.ExternalID](w, h)
 	if !ok {
 		return nil, ErrEntityNotFound

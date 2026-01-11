@@ -1,7 +1,7 @@
 package eventbus
 
 import (
-	"origin/internal/ecs"
+	"origin/internal/types"
 	"time"
 )
 
@@ -77,14 +77,14 @@ func NewDeathEvent(entityID, killerID uint64, cause string) *DeathEvent {
 type EntitySpawnEvent struct {
 	topic      string
 	Timestamp  time.Time
-	EntityID   ecs.EntityID
+	EntityID   types.EntityID
 	EntityType string
 	X, Y       int
 }
 
 func (e *EntitySpawnEvent) Topic() string { return e.topic }
 
-func NewEntitySpawnEvent(entityID ecs.EntityID, entityType string, x, y int) *EntitySpawnEvent {
+func NewEntitySpawnEvent(entityID types.EntityID, entityType string, x, y int) *EntitySpawnEvent {
 	return &EntitySpawnEvent{
 		topic:      TopicGameplayEntitySpawn,
 		Timestamp:  time.Now(),
@@ -116,14 +116,14 @@ func NewEntityDespawnEvent(entityID uint64, reason string) *EntityDespawnEvent {
 type MovementEvent struct {
 	topic        string
 	Timestamp    time.Time
-	EntityID     ecs.EntityID
+	EntityID     types.EntityID
 	FromX, FromY float64
 	ToX, ToY     float64
 }
 
 func (e *MovementEvent) Topic() string { return e.topic }
 
-func NewMovementEvent(entityID ecs.EntityID, fromX, fromY, toX, toY float64) *MovementEvent {
+func NewMovementEvent(entityID types.EntityID, fromX, fromY, toX, toY float64) *MovementEvent {
 	return &MovementEvent{
 		topic:     TopicGameplayMovementMove,
 		Timestamp: time.Now(),

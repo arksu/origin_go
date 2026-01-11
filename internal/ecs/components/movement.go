@@ -1,6 +1,9 @@
 package components
 
-import "origin/internal/ecs"
+import (
+	"origin/internal/ecs"
+	"origin/internal/types"
+)
 
 const StopDistance float64 = 0.2
 
@@ -43,7 +46,7 @@ type Movement struct {
 	TargetType   TargetType
 	TargetX      int
 	TargetY      int
-	TargetHandle ecs.Handle
+	TargetHandle types.Handle
 
 	InteractionRange float64
 }
@@ -69,7 +72,7 @@ func (m *Movement) HasReachedTarget(currentX, currentY int) bool {
 
 func (m *Movement) ClearTarget() {
 	m.TargetType = TargetNone
-	m.TargetHandle = ecs.InvalidHandle
+	m.TargetHandle = types.InvalidHandle
 	m.VelocityX = 0
 	m.VelocityY = 0
 	m.State = StateIdle
@@ -79,11 +82,11 @@ func (m *Movement) SetTargetPoint(x, y int) {
 	m.TargetType = TargetPoint
 	m.TargetX = x
 	m.TargetY = y
-	m.TargetHandle = ecs.InvalidHandle
+	m.TargetHandle = types.InvalidHandle
 	m.State = StateMoving
 }
 
-func (m *Movement) SetTargetHandle(handle ecs.Handle, x, y int) {
+func (m *Movement) SetTargetHandle(handle types.Handle, x, y int) {
 	m.TargetType = TargetEntity
 	m.TargetHandle = handle
 	m.TargetX = x

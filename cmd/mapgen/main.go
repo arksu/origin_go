@@ -14,16 +14,10 @@ import (
 	"origin/internal/config"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
+	"origin/internal/types"
 )
 
 const (
-	TileWaterDeep  = 1
-	TileWater      = 3
-	TileForestPine = 13
-	TileForestLeaf = 15
-	TileGrass      = 17
-	TileSand       = 32
-
 	ObjectTypeTree = 1
 	TreeHP         = 100
 	TreeDensity    = 0.15
@@ -141,7 +135,7 @@ func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int32) 
 			tile := g.getTileType(worldX, worldY)
 			tiles[ty*g.chunkSize+tx] = tile
 
-			if (tile == TileForestPine || tile == TileForestLeaf) && g.rng.Float64() < TreeDensity {
+			if (tile == types.TileForestPine || tile == types.TileForestLeaf) && g.rng.Float64() < TreeDensity {
 				g.lastEntityID++
 				tileWorldX := int32(worldOffsetX) + int32(tx*g.coordPerTile) + int32(g.rng.Intn(g.coordPerTile))
 				tileWorldY := int32(worldOffsetY) + int32(ty*g.coordPerTile) + int32(g.rng.Intn(g.coordPerTile))
@@ -201,24 +195,24 @@ func (g *MapGenerator) getTileType(worldX, worldY float64) byte {
 	temperature = (temperature + 1) / 2
 
 	if elevation < 0.25 {
-		return TileWaterDeep
+		return types.TileWaterDeep
 	}
 	if elevation < 0.35 {
-		return TileWater
+		return types.TileWater
 	}
 
 	if elevation < 0.42 {
-		return TileSand
+		return types.TileSand
 	}
 
 	if moisture > 0.6 {
 		if temperature > 0.5 {
-			return TileForestLeaf
+			return types.TileForestLeaf
 		}
-		return TileForestPine
+		return types.TileForestPine
 	}
 
-	return TileGrass
+	return types.TileGrass
 }
 
 type PerlinNoise struct {
