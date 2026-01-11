@@ -2,7 +2,6 @@ package game
 
 import (
 	"context"
-	"database/sql"
 	"origin/internal/core"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
@@ -488,7 +487,7 @@ func (cm *ChunkManager) saveWorker() {
 		case <-cm.stopCh:
 			return
 		case req := <-cm.saveQueue:
-			cm.saveChunkToDB(req.chunk)
+			req.chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 		}
 	}
 }
@@ -499,7 +498,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	cm.chunksMu.Lock()
 	chunk, exists := cm.chunks[coord]
 	if !exists {
-		chunk = core.NewChunk(coord, cm.layer, cm.cfg.Game.ChunkSize)
+		chunk = core.NewChunk(coord, cm.region, cm.layer, cm.cfg.Game.ChunkSize)
 		cm.chunks[coord] = chunk
 	}
 	cm.chunksMu.Unlock()
@@ -509,46 +508,8 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 		return
 	}
 
-	chunk.SetState(types.ChunkStateLoading)
+	chunk.LoadFromDB(cm.db, cm.region, cm.layer, cm.logger)
 
-	if cm.db != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		tilesData, err := cm.db.Queries().GetChunk(ctx, repository.GetChunkParams{
-			Region: cm.region,
-			X:      int32(coord.X),
-			Y:      int32(coord.Y),
-			Layer:  cm.layer,
-		})
-		if err == nil {
-			chunk.SetTiles(tilesData.TilesData, uint64(tilesData.LastTick))
-		}
-
-		objects, err := cm.db.Queries().GetObjectsByChunk(ctx, repository.GetObjectsByChunkParams{
-			Region: cm.region,
-			ChunkX: int32(coord.X),
-			ChunkY: int32(coord.Y),
-			Layer:  cm.layer,
-		})
-		if err != nil {
-			cm.logger.Error("failed to load objects",
-				zap.Int("chunk_x", coord.X),
-				zap.Int("chunk_y", coord.Y),
-				zap.Error(err),
-			)
-			objects = nil
-		}
-		cm.logger.Debug("loaded objects", zap.Any("coord", coord), zap.Int("count", len(objects)))
-
-		rawObjects := make([]*repository.Object, len(objects))
-		for i := range objects {
-			rawObjects[i] = &objects[i]
-		}
-		chunk.SetRawObjects(rawObjects)
-	}
-
-	chunk.SetState(types.ChunkStatePreloaded)
 	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
 
 	cm.completeFuture(coord)
@@ -557,91 +518,6 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 		eventbus.NewChunkLoadEvent(coord.X, coord.Y, cm.layer),
 		eventbus.PriorityLow,
 	)
-}
-
-func (cm *ChunkManager) saveChunkToDB(chunk *core.Chunk) {
-	if cm.db == nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	coord := chunk.Coord
-
-	chunk.mu.RLock()
-	tiles := make([]byte, len(chunk.Tiles))
-	copy(tiles, chunk.Tiles)
-	lastTick := chunk.LastTick
-	totalHandles := chunk.GetHandles()
-	entityCount := len(totalHandles)
-	chunk.mu.RUnlock()
-
-	err := cm.db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
-		Region:      cm.region,
-		X:           int32(coord.X),
-		Y:           int32(coord.Y),
-		Layer:       cm.layer,
-		TilesData:   tiles,
-		LastTick:    int64(lastTick),
-		EntityCount: sql.NullInt32{Int32: int32(entityCount), Valid: true},
-	})
-	if err != nil {
-		cm.logger.Error("failed to save chunk tiles",
-			zap.Int("chunk_x", coord.X),
-			zap.Int("chunk_y", coord.Y),
-			zap.Error(err),
-		)
-	}
-
-	handles := totalHandles
-	for _, h := range handles {
-		if !cm.world.Alive(h) {
-			continue
-		}
-
-		info, ok := ecs.GetComponent[components.EntityInfo](cm.world, h)
-		if !ok {
-			continue
-		}
-
-		obj, err := cm.objectFactory.Serialize(cm.world, h, info.ObjectType)
-		if err != nil {
-			cm.logger.Error("failed to serialize object",
-				zap.Error(err),
-			)
-			continue
-		}
-		//cm.logger.Info("save object", zap.Int64("object_id", obj.ID), zap.Any("info", info))
-
-		obj.LastTick = int64(lastTick)
-		err = cm.db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
-			ID:         obj.ID,
-			ObjectType: obj.ObjectType,
-			Region:     obj.Region,
-			X:          obj.X,
-			Y:          obj.Y,
-			Layer:      obj.Layer,
-			ChunkX:     obj.ChunkX,
-			ChunkY:     obj.ChunkY,
-			Heading:    obj.Heading,
-			Quality:    obj.Quality,
-			HpCurrent:  obj.HpCurrent,
-			HpMax:      obj.HpMax,
-			IsStatic:   obj.IsStatic,
-			OwnerID:    obj.OwnerID,
-			DataJsonb:  obj.DataJsonb,
-			CreateTick: obj.CreateTick,
-			LastTick:   obj.LastTick,
-		})
-		if err != nil {
-			cm.logger.Error("failed to save object",
-				zap.Int64("object_id", obj.ID),
-				zap.Error(err),
-			)
-		}
-	}
-	cm.logger.Debug("saved objects", zap.Int("count", len(handles)))
 }
 
 func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
@@ -666,7 +542,7 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 			zap.Int("chunk_x", coord.X),
 			zap.Int("chunk_y", coord.Y),
 		)
-		cm.saveChunkToDB(chunk)
+		chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 	}
 
 	cm.chunksMu.Lock()
@@ -717,7 +593,7 @@ func (cm *ChunkManager) GetOrCreateChunk(coord types.ChunkCoord) *core.Chunk {
 		return chunk
 	}
 
-	chunk := core.NewChunk(coord, cm.layer, cm.cfg.Game.ChunkSize)
+	chunk := core.NewChunk(coord, cm.region, cm.layer, cm.cfg.Game.ChunkSize)
 	cm.chunks[coord] = chunk
 	return chunk
 }
@@ -1140,7 +1016,7 @@ func (cm *ChunkManager) Stop() {
 		if chunk := cm.GetChunk(coord); chunk != nil {
 			state := chunk.GetState()
 			if state == types.ChunkStateActive || state == types.ChunkStatePreloaded {
-				cm.saveChunkToDB(chunk)
+				chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 				savedCount++
 			}
 		}

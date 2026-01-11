@@ -45,18 +45,20 @@ type ChunkCoord struct {
 // ChunkData represents the core data of a chunk without dependencies
 type ChunkData struct {
 	Coord    ChunkCoord
+	Region   int32
 	Layer    int32
 	State    ChunkState
 	Tiles    []byte
 	LastTick uint64
 }
 
-func NewChunkData(coord ChunkCoord, layer int32, chunkSize int) *ChunkData {
+func NewChunkData(coord ChunkCoord, region int32, layer int32, chunkSize int) *ChunkData {
 	return &ChunkData{
-		Coord: coord,
-		Layer: layer,
-		State: ChunkStateUnloaded,
-		Tiles: make([]byte, chunkSize*chunkSize),
+		Coord:  coord,
+		Region: region,
+		Layer:  layer,
+		State:  ChunkStateUnloaded,
+		Tiles:  make([]byte, chunkSize*chunkSize),
 	}
 }
 
