@@ -2,6 +2,8 @@ package ecs
 
 import (
 	"testing"
+
+	"origin/internal/types"
 )
 
 // BenchmarkHandleValidation compares validation performance
@@ -9,7 +11,7 @@ func BenchmarkHandleValidation(b *testing.B) {
 	allocator := NewHandleAllocator(1000000)
 
 	// Allocate handles
-	handles := make([]Handle, 10000)
+	handles := make([]types.Handle, 10000)
 	for i := 0; i < 10000; i++ {
 		handles[i] = allocator.Alloc()
 	}
@@ -27,22 +29,23 @@ func BenchmarkWorldAlive(b *testing.B) {
 	w := NewWorld()
 
 	// Spawn entities
-	handles := make([]Handle, 10000)
-	for i := 0; i < 10000; i++ {
-		handles[i] = w.Spawn(EntityID(i))
+	handles := make([]types.Handle, 100000)
+	for i := 0; i < 100000; i++ {
+		handles[i] = w.Spawn(types.EntityID(i))
 	}
 
 	b.Run("Alive-SingleLookup", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_ = w.Alive(handles[i%10000])
+			h := handles[i%100000]
+			_ = w.Alive(h)
 		}
 	})
 
 	// Test with stale handles
-	staleHandles := make([]Handle, 1000)
+	staleHandles := make([]types.Handle, 1000)
 	for i := 0; i < 1000; i++ {
-		h := w.Spawn(EntityID(10000 + i))
+		h := w.Spawn(types.EntityID(100000 + i))
 		staleHandles[i] = h
 		w.Despawn(h)
 	}
@@ -81,9 +84,9 @@ func BenchmarkHotPath(b *testing.B) {
 	w := NewWorld()
 
 	// Spawn 10k entities
-	handles := make([]Handle, 10000)
+	handles := make([]types.Handle, 10000)
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Transform{X: float64(i), Y: 0, Z: 0})
 		handles[i] = h
 	}
@@ -94,7 +97,7 @@ func BenchmarkHotPath(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			count := 0
-			pq.ForEach(func(h Handle) {
+			pq.ForEach(func(h types.Handle) {
 				if w.Alive(h) { // Hot path: Alive() check
 					count++
 				}
@@ -105,7 +108,7 @@ func BenchmarkHotPath(b *testing.B) {
 	b.Run("QueryIteration-WithComponentAccess", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			pq.ForEach(func(h Handle) {
+			pq.ForEach(func(h types.Handle) {
 				if w.Alive(h) {
 					MutateComponent[Transform](w, h, func(t *Transform) bool {
 						t.X += 1.0
@@ -158,7 +161,7 @@ func TestWorldAliveCorrectness(t *testing.T) {
 	w := NewWorld()
 
 	// Spawn entity
-	h1 := w.Spawn(EntityID(1))
+	h1 := w.Spawn(types.EntityID(1))
 	if !w.Alive(h1) {
 		t.Error("spawned entity should be alive")
 	}
@@ -170,7 +173,7 @@ func TestWorldAliveCorrectness(t *testing.T) {
 	}
 
 	// Spawn new entity (reuses index)
-	h2 := w.Spawn(EntityID(2))
+	h2 := w.Spawn(types.EntityID(2))
 	if !w.Alive(h2) {
 		t.Error("new entity should be alive")
 	}

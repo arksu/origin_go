@@ -8,8 +8,8 @@ import (
 	"go.uber.org/zap"
 
 	"origin/internal/config"
-	"origin/internal/ecs"
 	"origin/internal/persistence"
+	"origin/internal/types"
 )
 
 type EntityIDManager struct {
@@ -65,7 +65,7 @@ func (em *EntityIDManager) allocateNewRange() {
 	}(newRangeEnd)
 }
 
-func (em *EntityIDManager) GetFreeID() ecs.EntityID {
+func (em *EntityIDManager) GetFreeID() types.EntityID {
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
@@ -75,7 +75,7 @@ func (em *EntityIDManager) GetFreeID() ecs.EntityID {
 		em.allocateNewRange()
 	}
 
-	return ecs.EntityID(em.currentID)
+	return types.EntityID(em.currentID)
 }
 
 func (em *EntityIDManager) GetLastUsedID() uint64 {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"origin/internal/ecs"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"origin/internal/config"
+	"origin/internal/types"
 )
 
 type Server struct {
@@ -44,7 +44,7 @@ type Client struct {
 	sendCh      chan []byte
 	closeCh     chan struct{}
 	closeOnce   sync.Once
-	CharacterID ecs.EntityID
+	CharacterID types.EntityID
 	Layer       int32
 }
 

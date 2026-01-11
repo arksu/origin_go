@@ -2,6 +2,8 @@ package ecs
 
 import (
 	"testing"
+
+	"origin/internal/types"
 )
 
 // TestGenerationalHandles verifies that stale handles are detected
@@ -10,7 +12,7 @@ func TestGenerationalHandles(t *testing.T) {
 
 	// Allocate a handle
 	h1 := allocator.Alloc()
-	if h1 == InvalidHandle {
+	if h1 == types.InvalidHandle {
 		t.Fatal("failed to allocate handle")
 	}
 
@@ -29,7 +31,7 @@ func TestGenerationalHandles(t *testing.T) {
 
 	// Allocate again - should reuse the same index but with new generation
 	h2 := allocator.Alloc()
-	if h2 == InvalidHandle {
+	if h2 == types.InvalidHandle {
 		t.Fatal("failed to allocate second handle")
 	}
 
@@ -94,7 +96,7 @@ func TestStaleHandleInWorld(t *testing.T) {
 	w := NewWorld()
 
 	// Create entity 1
-	h1 := w.Spawn(EntityID(1))
+	h1 := w.Spawn(types.EntityID(1))
 	if !w.Alive(h1) {
 		t.Error("newly spawned entity should be alive")
 	}
@@ -106,7 +108,7 @@ func TestStaleHandleInWorld(t *testing.T) {
 	}
 
 	// Create entity 2 - reuses same index
-	h2 := w.Spawn(EntityID(2))
+	h2 := w.Spawn(types.EntityID(2))
 	if !w.Alive(h2) {
 		t.Error("newly spawned entity should be alive")
 	}
@@ -142,7 +144,7 @@ func TestHandlePackingUnpacking(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		h := MakeHandle(tt.index, tt.generation)
+		h := types.MakeHandle(tt.index, tt.generation)
 		if h.Index() != tt.index {
 			t.Errorf("index mismatch: expected %d, got %d", tt.index, h.Index())
 		}

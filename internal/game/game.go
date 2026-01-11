@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/types"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -217,7 +218,7 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	}
 
 	// Set character as online and update client association
-	c.CharacterID = ecs.EntityID(character.ID)
+	c.CharacterID = types.EntityID(character.ID)
 	c.Layer = character.Layer
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
@@ -276,7 +277,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 	candidates := g.generateSpawnCandidates(int(character.X), int(character.Y))
 
-	playerEntityID := ecs.EntityID(character.ID)
+	playerEntityID := types.EntityID(character.ID)
 	spawned := false
 
 	for _, pos := range candidates {
@@ -317,7 +318,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				TargetType:       components.TargetNone,
 				TargetX:          0,
 				TargetY:          0,
-				TargetHandle:     ecs.InvalidHandle,
+				TargetHandle:     types.InvalidHandle,
 				InteractionRange: 5.0,
 			})
 			ecs.AddComponent(shard.world, handle, components.Collider{
@@ -410,7 +411,7 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 	c.Send(data)
 }
 
-func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID ecs.EntityID, shard *Shard, character repository.Character) {
+func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, shard *Shard, character repository.Character) {
 	chunks := shard.ChunkManager().GetEntityActiveChunks(entityID)
 
 	// Send chunks first so client can start rendering

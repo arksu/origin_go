@@ -3,6 +3,8 @@ package ecs
 import (
 	"sort"
 	"sync"
+
+	"origin/internal/types"
 )
 
 // DefaultMaxHandles is the default maximum number of active entities
@@ -19,8 +21,8 @@ type EntityLocation struct {
 // External synchronization via command queue for cross-thread access
 type World struct {
 	// Entity management
-	entities   map[Handle]ComponentMask
-	locations  map[Handle]EntityLocation // O(1) archetype removal
+	entities   map[types.Handle]ComponentMask
+	locations  map[types.Handle]EntityLocation // O(1) archetype removal
 	archetypes *ArchetypeGraph
 	handles    *HandleAllocator
 
@@ -50,8 +52,8 @@ func NewWorld() *World {
 // NewWorldWithCapacity creates a new ECS world with specified max handles
 func NewWorldWithCapacity(maxHandles uint32) *World {
 	w := &World{
-		entities:   make(map[Handle]ComponentMask, 1024),
-		locations:  make(map[Handle]EntityLocation, 1024),
+		entities:   make(map[types.Handle]ComponentMask, 1024),
+		locations:  make(map[types.Handle]EntityLocation, 1024),
 		archetypes: NewArchetypeGraph(),
 		handles:    NewHandleAllocator(maxHandles),
 		systems:    make([]System, 0, 16),
@@ -85,10 +87,10 @@ func (s BaseSystem) Name() string  { return s.name }
 // Returns the Handle for internal ECS operations
 // The ExternalID component is automatically added to map Handle -> EntityID
 // Single-threaded - no lock needed
-func (w *World) Spawn(externalID EntityID) Handle {
+func (w *World) Spawn(externalID types.EntityID) types.Handle {
 	h := w.handles.Alloc()
-	if h == InvalidHandle {
-		return InvalidHandle
+	if h == types.InvalidHandle {
+		return types.InvalidHandle
 	}
 
 	w.entities[h] = 0 // Empty component mask
@@ -105,10 +107,10 @@ func (w *World) Spawn(externalID EntityID) Handle {
 // SpawnWithoutExternalID creates a new entity without external ID
 // Useful for temporary/runtime-only entities
 // Single-threaded - no lock needed
-func (w *World) SpawnWithoutExternalID() Handle {
+func (w *World) SpawnWithoutExternalID() types.Handle {
 	h := w.handles.Alloc()
-	if h == InvalidHandle {
-		return InvalidHandle
+	if h == types.InvalidHandle {
+		return types.InvalidHandle
 	}
 
 	w.entities[h] = 0
@@ -120,14 +122,14 @@ func (w *World) SpawnWithoutExternalID() Handle {
 
 // Despawn removes an entity and all its components
 // Single-threaded - no lock needed
-func (w *World) Despawn(h Handle) bool {
+func (w *World) Despawn(h types.Handle) bool {
 	mask, ok := w.entities[h]
 	if !ok {
 		return false
 	}
 
 	if loc, ok := w.locations[h]; ok {
-		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != InvalidHandle {
+		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != types.InvalidHandle {
 			// Update location of swapped entity
 			w.locations[swappedHandle] = EntityLocation{archetype: loc.archetype, index: loc.index}
 		}
@@ -150,14 +152,14 @@ func (w *World) Despawn(h Handle) bool {
 }
 
 type componentRemover interface {
-	RemoveByHandle(h Handle)
+	RemoveByHandle(h types.Handle)
 }
 
 // Alive checks if an entity exists and handle generation is valid
 // Returns false for stale handles (generation mismatch)
 // Single-threaded - no lock needed
-func (w *World) Alive(h Handle) bool {
-	if h == InvalidHandle {
+func (w *World) Alive(h types.Handle) bool {
+	if h == types.InvalidHandle {
 		return false
 	}
 	// Single map lookup - if present in entities, it's alive and valid
@@ -174,12 +176,12 @@ func (w *World) EntityCount() int {
 
 // GetMask returns the component mask for an entity
 // Single-threaded - no lock needed
-func (w *World) GetMask(h Handle) ComponentMask {
+func (w *World) GetMask(h types.Handle) ComponentMask {
 	return w.entities[h]
 }
 
 // GetExternalID returns the external EntityID for a handle
-func (w *World) GetExternalID(h Handle) (EntityID, bool) {
+func (w *World) GetExternalID(h types.Handle) (types.EntityID, bool) {
 	ext, ok := GetComponent[ExternalID](w, h)
 	if !ok {
 		return 0, false
@@ -188,14 +190,14 @@ func (w *World) GetExternalID(h Handle) (EntityID, bool) {
 }
 
 // updateEntityArchetype moves entity to new archetype after component change
-func (w *World) updateEntityArchetype(h Handle, oldMask, newMask ComponentMask) {
+func (w *World) updateEntityArchetype(h types.Handle, oldMask, newMask ComponentMask) {
 	if oldMask == newMask {
 		return
 	}
 
 	// Remove from old archetype using O(1) location lookup
 	if loc, ok := w.locations[h]; ok {
-		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != InvalidHandle {
+		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != types.InvalidHandle {
 			// Update location of swapped entity
 			w.locations[swappedHandle] = EntityLocation{archetype: loc.archetype, index: loc.index}
 		}
@@ -281,7 +283,7 @@ func GetOrCreateStorage[T Component](w *World) *ComponentStorage[T] {
 
 // AddComponent adds a component to an entity
 // Single-threaded - no lock needed
-func AddComponent[T Component](w *World, h Handle, component T) {
+func AddComponent[T Component](w *World, h types.Handle, component T) {
 	componentID := GetComponentID[T]()
 	storage := GetOrCreateStorage[T](w)
 	storage.Set(h, component)
@@ -293,7 +295,7 @@ func AddComponent[T Component](w *World, h Handle, component T) {
 }
 
 // GetComponent retrieves a component from an entity
-func GetComponent[T Component](w *World, h Handle) (T, bool) {
+func GetComponent[T Component](w *World, h types.Handle) (T, bool) {
 	storage := GetOrCreateStorage[T](w)
 	return storage.Get(h)
 }
@@ -301,7 +303,7 @@ func GetComponent[T Component](w *World, h Handle) (T, bool) {
 // MutateComponent executes a callback with a pointer to the component for mutation
 // The callback returns bool to indicate success/failure or conditional logic
 // The pointer is only valid within the callback scope
-func MutateComponent[T Component](w *World, h Handle, fn func(*T) bool) bool {
+func MutateComponent[T Component](w *World, h types.Handle, fn func(*T) bool) bool {
 	storage := GetOrCreateStorage[T](w)
 	return storage.Mutate(h, fn)
 }
@@ -309,14 +311,14 @@ func MutateComponent[T Component](w *World, h Handle, fn func(*T) bool) bool {
 // WithComponent executes a callback with a pointer to the component for mutation
 // The pointer is only valid within the callback scope
 // Returns false if the component doesn't exist
-func WithComponent[T Component](w *World, h Handle, fn func(*T)) bool {
+func WithComponent[T Component](w *World, h types.Handle, fn func(*T)) bool {
 	storage := GetOrCreateStorage[T](w)
 	return storage.WithPtr(h, fn)
 }
 
 // RemoveComponent removes a component from an entity
 // Single-threaded - no lock needed
-func RemoveComponent[T Component](w *World, h Handle) bool {
+func RemoveComponent[T Component](w *World, h types.Handle) bool {
 	componentID := GetComponentID[T]()
 	storage := GetOrCreateStorage[T](w)
 
@@ -332,7 +334,7 @@ func RemoveComponent[T Component](w *World, h Handle) bool {
 }
 
 // HasComponent checks if an entity has a component
-func HasComponent[T Component](w *World, h Handle) bool {
+func HasComponent[T Component](w *World, h types.Handle) bool {
 	storage := GetOrCreateStorage[T](w)
 	return storage.Has(h)
 }

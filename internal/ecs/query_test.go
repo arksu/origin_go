@@ -2,6 +2,8 @@ package ecs
 
 import (
 	"testing"
+
+	"origin/internal/types"
 )
 
 type BenchPosition struct {
@@ -28,7 +30,7 @@ func TestQueryForEachZeroCopy(t *testing.T) {
 
 	// Create entities
 	for i := 0; i < 100; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -36,7 +38,7 @@ func TestQueryForEachZeroCopy(t *testing.T) {
 	query := w.Query().With(BenchPositionID).With(BenchVelocityID)
 
 	count := 0
-	query.ForEach(func(h Handle) {
+	query.ForEach(func(h types.Handle) {
 		count++
 	})
 
@@ -51,7 +53,7 @@ func TestPreparedQuery(t *testing.T) {
 
 	// Create entities with Position
 	for i := 0; i < 50; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 	}
 
@@ -64,7 +66,7 @@ func TestPreparedQuery(t *testing.T) {
 
 	// Add more entities to same archetype (Position only)
 	for i := 50; i < 100; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 	}
 
@@ -76,7 +78,7 @@ func TestPreparedQuery(t *testing.T) {
 
 	// Create entities with different archetype (Position + Velocity)
 	for i := 100; i < 150; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -104,7 +106,7 @@ func TestQueryHandlesInto(t *testing.T) {
 
 	// Spawn entities
 	for i := 0; i < 100; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Position{X: float64(i)})
 	}
 
@@ -115,7 +117,7 @@ func TestQueryHandlesInto(t *testing.T) {
 	}
 
 	// Test with pre-allocated buffer (zero allocations)
-	buf := make([]Handle, 0, 200)
+	buf := make([]types.Handle, 0, 200)
 	handles2 := w.Query().With(PositionID).HandlesInto(buf)
 	if len(handles2) != 100 {
 		t.Errorf("expected 100 handles, got %d", len(handles2))
@@ -142,7 +144,7 @@ func BenchmarkQueryHandlesInto(b *testing.B) {
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Position{X: float64(i), Y: 0, Z: 0})
 	}
 
@@ -155,7 +157,7 @@ func BenchmarkQueryHandlesInto(b *testing.B) {
 	})
 
 	b.Run("HandlesInto-Preallocated", func(b *testing.B) {
-		buf := make([]Handle, 0, 10000)
+		buf := make([]types.Handle, 0, 10000)
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -180,7 +182,7 @@ func BenchmarkQueryForEach_Old(b *testing.B) {
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -201,7 +203,7 @@ func BenchmarkQueryForEach_New(b *testing.B) {
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -209,7 +211,7 @@ func BenchmarkQueryForEach_New(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		query := w.Query().With(BenchPositionID).With(BenchVelocityID)
-		query.ForEach(func(h Handle) {
+		query.ForEach(func(h types.Handle) {
 			_ = h
 		})
 	}
@@ -221,7 +223,7 @@ func BenchmarkPreparedQuery(b *testing.B) {
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -230,7 +232,7 @@ func BenchmarkPreparedQuery(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pq.ForEach(func(h Handle) {
+		pq.ForEach(func(h types.Handle) {
 			_ = h
 		})
 	}
@@ -242,7 +244,7 @@ func BenchmarkQueryWithComponentAccess(b *testing.B) {
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -252,7 +254,7 @@ func BenchmarkQueryWithComponentAccess(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pq.ForEach(func(h Handle) {
+		pq.ForEach(func(h types.Handle) {
 			MutateComponent[BenchPosition](w, h, func(pos *BenchPosition) bool {
 				if vel, ok := GetComponent[BenchVelocity](w, h); ok {
 					pos.X += vel.X * dt
@@ -270,7 +272,7 @@ func BenchmarkQueryAllocation(b *testing.B) {
 	w := NewWorld()
 
 	for i := 0; i < 1000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 	}
 
@@ -287,7 +289,7 @@ func BenchmarkQueryAllocation(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			query := w.Query().With(BenchPositionID)
-			query.ForEach(func(h Handle) {
+			query.ForEach(func(h types.Handle) {
 				_ = h
 			})
 		}
@@ -297,7 +299,7 @@ func BenchmarkQueryAllocation(b *testing.B) {
 		pq := w.Query().With(BenchPositionID).Prepare()
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			pq.ForEach(func(h Handle) {
+			pq.ForEach(func(h types.Handle) {
 				_ = h
 			})
 		}

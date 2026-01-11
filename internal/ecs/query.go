@@ -1,5 +1,7 @@
 package ecs
 
+import "origin/internal/types"
+
 // Query provides efficient iteration over entities with specific components
 // Inspired by Bevy's Query<(&A, &B, &mut C)> pattern
 // Zero-copy iteration via ForEach, pooled buffers for Handles()
@@ -39,7 +41,7 @@ func (q *Query) Without(componentID ComponentID) *Query {
 // HandlesInto appends all matching handles to dst and returns the result
 // Caller manages the buffer - zero allocations if dst has sufficient capacity
 // This is the preferred method for performance-critical code
-func (q *Query) HandlesInto(dst []Handle) []Handle {
+func (q *Query) HandlesInto(dst []types.Handle) []types.Handle {
 	archetypes := q.world.archetypes.QueryArchetypes(q.required)
 
 	for _, arch := range archetypes {
@@ -47,7 +49,7 @@ func (q *Query) HandlesInto(dst []Handle) []Handle {
 			continue
 		}
 		// Direct append from archetype's internal slice
-		arch.ForEachHandle(func(h Handle) {
+		arch.ForEachHandle(func(h types.Handle) {
 			dst = append(dst, h)
 		})
 	}
@@ -57,7 +59,7 @@ func (q *Query) HandlesInto(dst []Handle) []Handle {
 
 // Handles returns all handles matching the query
 // Allocates a new slice - use HandlesInto for zero-allocation version
-func (q *Query) Handles() []Handle {
+func (q *Query) Handles() []types.Handle {
 	return q.HandlesInto(nil)
 }
 
@@ -77,7 +79,7 @@ func (q *Query) Count() int {
 
 // ForEach iterates over all entities matching the query
 // Zero-copy iteration - no allocations
-func (q *Query) ForEach(fn func(Handle)) {
+func (q *Query) ForEach(fn func(types.Handle)) {
 	archetypes := q.world.archetypes.QueryArchetypes(q.required)
 
 	for _, arch := range archetypes {
@@ -161,7 +163,7 @@ func (pq *PreparedQuery) Refresh() {
 // ForEach iterates with zero allocations using cached archetype list
 // Automatically refreshes if new archetypes were created since last refresh
 // Single-threaded - no lock needed
-func (pq *PreparedQuery) ForEach(fn func(Handle)) {
+func (pq *PreparedQuery) ForEach(fn func(types.Handle)) {
 	// Auto-refresh if archetype version changed (new archetypes created)
 	if pq.seenVersion != pq.world.archetypes.Version() {
 		pq.Refresh()

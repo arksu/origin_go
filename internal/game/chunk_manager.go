@@ -41,13 +41,13 @@ type ChunkStats struct {
 
 // EntityAOI represents Area of Interest for a single entity
 type EntityAOI struct {
-	EntityID      ecs.EntityID
+	EntityID      types.EntityID
 	CenterChunk   types.ChunkCoord
 	ActiveChunks  map[types.ChunkCoord]struct{}
 	PreloadChunks map[types.ChunkCoord]struct{}
 }
 
-func newEntityAOI(entityID ecs.EntityID, center types.ChunkCoord) *EntityAOI {
+func newEntityAOI(entityID types.EntityID, center types.ChunkCoord) *EntityAOI {
 	return &EntityAOI{
 		EntityID:      entityID,
 		CenterChunk:   center,
@@ -58,14 +58,14 @@ func newEntityAOI(entityID ecs.EntityID, center types.ChunkCoord) *EntityAOI {
 
 // ChunkInterest tracks which entities are interested in a chunk
 type ChunkInterest struct {
-	activeEntities  map[ecs.EntityID]struct{} // entities with this chunk in active zone
-	preloadEntities map[ecs.EntityID]struct{} // entities with this chunk in preload zone (not active)
+	activeEntities  map[types.EntityID]struct{} // entities with this chunk in active zone
+	preloadEntities map[types.EntityID]struct{} // entities with this chunk in preload zone (not active)
 }
 
 func newChunkInterest() *ChunkInterest {
 	return &ChunkInterest{
-		activeEntities:  make(map[ecs.EntityID]struct{}),
-		preloadEntities: make(map[ecs.EntityID]struct{}),
+		activeEntities:  make(map[types.EntityID]struct{}),
+		preloadEntities: make(map[types.EntityID]struct{}),
 	}
 }
 
@@ -101,7 +101,7 @@ type ChunkManager struct {
 	wg        sync.WaitGroup
 
 	// Per-entity AOI tracking
-	entityAOIs map[ecs.EntityID]*EntityAOI
+	entityAOIs map[types.EntityID]*EntityAOI
 	aoiMu      sync.RWMutex
 
 	// Global chunk interest tracking
@@ -149,7 +149,7 @@ func NewChunkManager(
 		loadQueue:      make(chan loadRequest, 256),
 		saveQueue:      make(chan saveRequest, 256),
 		stopCh:         make(chan struct{}),
-		entityAOIs:     make(map[ecs.EntityID]*EntityAOI),
+		entityAOIs:     make(map[types.EntityID]*EntityAOI),
 		chunkInterests: make(map[types.ChunkCoord]*ChunkInterest),
 		activeChunks:   make(map[types.ChunkCoord]struct{}),
 		loadFutures:    make(map[types.ChunkCoord]*loadFuture),
@@ -196,7 +196,7 @@ func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
 }
 
 // RegisterEntity registers an entity for AOI tracking
-func (cm *ChunkManager) RegisterEntity(entityID ecs.EntityID, worldX, worldY int) {
+func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY int) {
 	center := types.WorldToChunkCoord(worldX, worldY, cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
 
 	cm.aoiMu.Lock()
@@ -212,7 +212,7 @@ func (cm *ChunkManager) RegisterEntity(entityID ecs.EntityID, worldX, worldY int
 }
 
 // UnregisterEntity removes an entity from AOI tracking
-func (cm *ChunkManager) UnregisterEntity(entityID ecs.EntityID) {
+func (cm *ChunkManager) UnregisterEntity(entityID types.EntityID) {
 	cm.aoiMu.Lock()
 	aoi, exists := cm.entityAOIs[entityID]
 	if !exists {
@@ -227,7 +227,7 @@ func (cm *ChunkManager) UnregisterEntity(entityID ecs.EntityID) {
 }
 
 // UpdateEntityPosition updates AOI for an entity when it moves to a new chunk
-func (cm *ChunkManager) UpdateEntityPosition(entityID ecs.EntityID, newCenter types.ChunkCoord) {
+func (cm *ChunkManager) UpdateEntityPosition(entityID types.EntityID, newCenter types.ChunkCoord) {
 	cm.aoiMu.Lock()
 	aoi, exists := cm.entityAOIs[entityID]
 	if !exists {
@@ -245,7 +245,7 @@ func (cm *ChunkManager) UpdateEntityPosition(entityID ecs.EntityID, newCenter ty
 }
 
 // updateEntityAOI recalculates AOI zones for a single entity and updates global interests
-func (cm *ChunkManager) updateEntityAOI(entityID ecs.EntityID, newCenter types.ChunkCoord) {
+func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types.ChunkCoord) {
 	activeRadius := cm.cfg.Game.PlayerActiveChunkRadius
 	preloadRadius := cm.cfg.Game.PlayerPreloadChunkRadius
 
@@ -330,7 +330,7 @@ func (cm *ChunkManager) updateEntityAOI(entityID ecs.EntityID, newCenter types.C
 }
 
 // removeEntityInterests removes all interests for an entity
-func (cm *ChunkManager) removeEntityInterests(entityID ecs.EntityID, aoi *EntityAOI) {
+func (cm *ChunkManager) removeEntityInterests(entityID types.EntityID, aoi *EntityAOI) {
 	cm.interestMu.Lock()
 	defer cm.interestMu.Unlock()
 
@@ -966,7 +966,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *Chunk) error {
 
 // MigrateObject moves an entity identified by the given handle from one chunk to another, updating all relevant spatial and reference data. Returns an error if the operation cannot be completed.
 // переход только из активного в другой активный или preloaded чанк
-func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord types.ChunkCoord, toX, toY float64) error {
+func (cm *ChunkManager) MigrateObject(h types.Handle, fromCoord, toCoord types.ChunkCoord, toX, toY float64) error {
 	if fromCoord == toCoord {
 		return nil
 	}
@@ -1083,7 +1083,7 @@ func (cm *ChunkManager) ActiveChunkCoords() []types.ChunkCoord {
 	return coords
 }
 
-func (cm *ChunkManager) GetEntityActiveChunks(entityID ecs.EntityID) []*Chunk {
+func (cm *ChunkManager) GetEntityActiveChunks(entityID types.EntityID) []*Chunk {
 	cm.aoiMu.RLock()
 	aoi, exists := cm.entityAOIs[entityID]
 	if !exists {

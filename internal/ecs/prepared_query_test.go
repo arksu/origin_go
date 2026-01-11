@@ -2,6 +2,8 @@ package ecs
 
 import (
 	"testing"
+
+	"origin/internal/types"
 )
 
 // TestPreparedQueryAutoRefresh verifies automatic refresh when new archetypes are created
@@ -28,7 +30,7 @@ func TestPreparedQueryAutoRefresh(t *testing.T) {
 
 	// Spawn entities with Transform+Velocity
 	for i := 0; i < 10; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Transform{X: float64(i)})
 		AddComponent(w, h, Velocity{X: 1.0})
 	}
@@ -41,7 +43,7 @@ func TestPreparedQueryAutoRefresh(t *testing.T) {
 
 	// Add InCombat to some entities - creates new archetype (Transform+Velocity+InCombat)
 	for i := 0; i < 5; i++ {
-		h := Handle(MakeHandle(uint32(i+1), 0))
+		h := types.MakeHandle(uint32(i+1), 0)
 		AddComponent(w, h, InCombat{})
 	}
 
@@ -53,7 +55,7 @@ func TestPreparedQueryAutoRefresh(t *testing.T) {
 
 	// Add Swimming to some entities - creates another new archetype
 	for i := 0; i < 3; i++ {
-		h := Handle(MakeHandle(uint32(i+1), 0))
+		h := types.MakeHandle(uint32(i+1), 0)
 		AddComponent(w, h, Swimming{})
 	}
 
@@ -65,7 +67,7 @@ func TestPreparedQueryAutoRefresh(t *testing.T) {
 
 	// Verify ForEach also auto-refreshes
 	seen := 0
-	pq.ForEach(func(h Handle) {
+	pq.ForEach(func(h types.Handle) {
 		seen++
 	})
 	if seen != 10 {
@@ -83,7 +85,7 @@ func TestPreparedQueryNoRefreshWhenNoNewArchetypes(t *testing.T) {
 
 	// Spawn entities - creates archetype
 	for i := 0; i < 100; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Position{X: float64(i), Y: 0})
 	}
 
@@ -94,7 +96,7 @@ func TestPreparedQueryNoRefreshWhenNoNewArchetypes(t *testing.T) {
 	// Multiple iterations without creating new archetypes
 	for tick := 0; tick < 10; tick++ {
 		count := 0
-		pq.ForEach(func(h Handle) {
+		pq.ForEach(func(h types.Handle) {
 			count++
 		})
 		if count != 100 {
@@ -116,7 +118,7 @@ func TestPreparedQueryWithDynamicCombinations(t *testing.T) {
 	type Health struct{ HP int }
 	type InCombat struct{}
 	type Stealth struct{}
-	type Dragging struct{ TargetID EntityID }
+	type Dragging struct{ TargetID types.EntityID }
 
 	const TransformID ComponentID = 55
 	const HealthID ComponentID = 56
@@ -134,9 +136,9 @@ func TestPreparedQueryWithDynamicCombinations(t *testing.T) {
 	pq := w.Query().With(TransformID).Prepare()
 
 	// Spawn base entities
-	handles := make([]Handle, 20)
+	handles := make([]types.Handle, 20)
 	for i := 0; i < 20; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Transform{X: float64(i)})
 		AddComponent(w, h, Health{HP: 100})
 		handles[i] = h
@@ -181,8 +183,8 @@ func TestPreparedQueryWithDynamicCombinations(t *testing.T) {
 	}
 
 	// Verify all entities are still visible via ForEach
-	seen := make(map[Handle]bool)
-	pq.ForEach(func(h Handle) {
+	seen := make(map[types.Handle]bool)
+	pq.ForEach(func(h types.Handle) {
 		seen[h] = true
 	})
 	if len(seen) != 20 {
@@ -211,7 +213,7 @@ func TestPreparedQueryWithTemporaryEntities(t *testing.T) {
 
 	// Spawn permanent entities
 	for i := 0; i < 10; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Position{X: float64(i)})
 	}
 
@@ -259,7 +261,7 @@ func BenchmarkPreparedQueryAutoRefresh(b *testing.B) {
 
 	// Spawn entities
 	for i := 0; i < 1000; i++ {
-		h := w.Spawn(EntityID(i))
+		h := w.Spawn(types.EntityID(i))
 		AddComponent(w, h, Transform{X: float64(i)})
 	}
 
@@ -269,7 +271,7 @@ func BenchmarkPreparedQueryAutoRefresh(b *testing.B) {
 	b.Run("ForEach-NoRefresh", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			count := 0
-			pq.ForEach(func(h Handle) {
+			pq.ForEach(func(h types.Handle) {
 				count++
 			})
 		}
@@ -279,14 +281,14 @@ func BenchmarkPreparedQueryAutoRefresh(b *testing.B) {
 	type Velocity struct{ X, Y, Z float64 }
 	const VelocityID ComponentID = 46
 	RegisterComponent[Velocity](VelocityID)
-	h := w.Spawn(EntityID(9999))
+	h := w.Spawn(types.EntityID(9999))
 	AddComponent(w, h, Transform{X: 999})
 	AddComponent(w, h, Velocity{X: 1})
 
 	b.Run("ForEach-WithRefresh", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			count := 0
-			pq.ForEach(func(h Handle) {
+			pq.ForEach(func(h types.Handle) {
 				count++
 			})
 		}

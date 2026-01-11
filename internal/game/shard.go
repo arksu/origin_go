@@ -166,7 +166,7 @@ func (s *Shard) Stop() {
 	s.chunkManager.Stop()
 }
 
-func (s *Shard) spawnEntityLocked(id ecs.EntityID, x int, y int) ecs.Handle {
+func (s *Shard) spawnEntityLocked(id types.EntityID, x int, y int) types.Handle {
 	handle := s.world.Spawn(id)
 
 	s.PublishEvent(
@@ -189,7 +189,7 @@ func (s *Shard) PublishEventSync(event eventbus.Event) error {
 	return s.eventBus.PublishSync(event)
 }
 
-func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, centerWorldX, centerWorldY int) error {
+func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, centerWorldX, centerWorldY int) error {
 	s.logger.Info("Preparing entity AOI",
 		zap.Int64("entity_id", int64(entityID)),
 		zap.Int("world_x", centerWorldX),
@@ -247,7 +247,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, cen
 	return nil
 }
 
-func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Character) (bool, ecs.Handle) {
+func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Character) (bool, types.Handle) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -263,20 +263,20 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	maxTileX := (maxX - 1) / coordPerTile
 	maxTileY := (maxY - 1) / coordPerTile
 
-	chunks := s.chunkManager.GetEntityActiveChunks(ecs.EntityID(character.ID))
+	chunks := s.chunkManager.GetEntityActiveChunks(types.EntityID(character.ID))
 	if len(chunks) == 0 {
-		return false, ecs.InvalidHandle
+		return false, types.InvalidHandle
 	}
 
 	for tileY := minTileY; tileY <= maxTileY; tileY++ {
 		for tileX := minTileX; tileX <= maxTileX; tileX++ {
 			if !s.chunkManager.IsTilePassable(tileX, tileY) {
-				return false, ecs.InvalidHandle
+				return false, types.InvalidHandle
 			}
 		}
 	}
 
-	var candidateHandles []ecs.Handle
+	var candidateHandles []types.Handle
 	for _, chunk := range chunks {
 		spatial := chunk.Spatial()
 		spatial.QueryAABB(float64(minX), float64(minY), float64(maxX), float64(maxY), &candidateHandles)
@@ -303,15 +303,15 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		objMaxY := transform.Y + collider.HalfHeight
 
 		if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
-			return false, ecs.InvalidHandle
+			return false, types.InvalidHandle
 		}
 	}
 
-	handle := s.spawnEntityLocked(ecs.EntityID(character.ID), worldX, worldY)
+	handle := s.spawnEntityLocked(types.EntityID(character.ID), worldX, worldY)
 	return true, handle
 }
 
-func (s *Shard) UnregisterEntityAOI(entityID ecs.EntityID) {
+func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 	s.chunkManager.UnregisterEntity(entityID)
 }
 
