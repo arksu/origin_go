@@ -1,6 +1,7 @@
 package game
 
 import (
+	"origin/internal/core"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"sync"
@@ -14,7 +15,7 @@ type Chunk struct {
 	isSwimmable []uint64
 
 	rawObjects []*repository.Object
-	spatial    *SpatialHashGrid
+	spatial    *core.SpatialHashGrid
 
 	mu sync.RWMutex
 }
@@ -28,7 +29,7 @@ func NewChunk(coord types.ChunkCoord, layer int32, chunkSize int) *Chunk {
 		ChunkData:   types.NewChunkData(coord, layer, chunkSize),
 		isPassable:  make([]uint64, bitsetSize),
 		isSwimmable: make([]uint64, bitsetSize),
-		spatial:     NewSpatialHashGrid(cellSize),
+		spatial:     core.NewSpatialHashGrid(cellSize),
 	}
 }
 
@@ -79,7 +80,7 @@ func (c *Chunk) ClearHandles() {
 	c.mu.Unlock()
 }
 
-func (c *Chunk) Spatial() *SpatialHashGrid {
+func (c *Chunk) Spatial() *core.SpatialHashGrid {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.spatial
