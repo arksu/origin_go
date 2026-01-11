@@ -11,6 +11,21 @@
         </button>
       </div>
 
+      <div v-if="gameStore.lastError" class="bg-red-900 border border-red-700 rounded-xl p-4 mb-6">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-red-200 font-semibold mb-1">Connection Error</h3>
+            <p class="text-red-100 text-sm">{{ gameStore.lastError }}</p>
+          </div>
+          <button
+            @click="clearGameError"
+            class="text-red-300 hover:text-red-100 ml-4"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
       <div class="bg-gray-800 rounded-xl p-6 mb-6">
         <h2 class="text-lg font-semibold text-white mb-4">Create New Character</h2>
         <form @submit.prevent="handleCreate" class="flex gap-4">
@@ -161,6 +176,7 @@ async function handleEnter(id) {
 
   try {
     const data = await enterCharacter(id)
+    gameStore.clearError()
     gameStore.setWsToken(data.auth_token, id)
     gameConnection.connect()
     router.push('/game')
@@ -174,6 +190,10 @@ async function handleEnter(id) {
 function handleLogout() {
   authStore.logout()
   router.push('/login')
+}
+
+function clearGameError() {
+  gameStore.lastError = ''
 }
 
 onMounted(() => {

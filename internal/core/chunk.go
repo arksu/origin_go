@@ -253,7 +253,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			)
 		}
 	}
-	logger.Debug("saved objects", zap.Int("count", len(handles)))
+	logger.Debug("saved chunk", zap.Any("coord", c.Coord), zap.Int("count", len(handles)))
 }
 
 // LoadFromDB loads chunk data and objects from the database
