@@ -1,4 +1,4 @@
-package game
+package utils
 
 const (
 	ChunkSize      = 128
