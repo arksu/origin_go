@@ -100,6 +100,7 @@ type ChunkManager struct {
 	saveQueue chan saveRequest
 	stopCh    chan struct{}
 	wg        sync.WaitGroup
+	stopped   int32 // atomic flag to prevent saves after shutdown
 
 	// Per-entity AOI tracking
 	entityAOIs map[types.EntityID]*EntityAOI
@@ -524,6 +525,11 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 
 func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	if chunk == nil {
+		return
+	}
+
+	// Don't save if chunk manager is stopped
+	if atomic.LoadInt32(&cm.stopped) != 0 {
 		return
 	}
 
@@ -994,6 +1000,9 @@ func (cm *ChunkManager) Update(dt float64) {
 }
 
 func (cm *ChunkManager) Stop() {
+	// Set stopped flag to prevent LRU evictions from saving
+	atomic.StoreInt32(&cm.stopped, 1)
+
 	close(cm.stopCh)
 	cm.wg.Wait()
 
@@ -1017,13 +1026,14 @@ func (cm *ChunkManager) Stop() {
 	for _, coord := range allCoords {
 		if chunk := cm.GetChunk(coord); chunk != nil {
 			state := chunk.GetState()
-			if state == types.ChunkStateActive || state == types.ChunkStatePreloaded {
+			if state == types.ChunkStateActive || state == types.ChunkStatePreloaded || state == types.ChunkStateInactive {
 				chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 				savedCount++
 			}
 		}
 	}
 
+	// Now purge the LRU cache - evictions won't save because stopped flag is set
 	cm.lruCache.Purge()
 
 	cm.logger.Info("chunk manager stopped",
