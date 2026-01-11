@@ -1,9 +1,17 @@
 package core
 
 import (
+	"context"
+	"database/sql"
+	"origin/internal/ecs"
+	"origin/internal/ecs/components"
+	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"sync"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 // Chunk extends ChunkData with game-specific functionality
@@ -19,13 +27,13 @@ type Chunk struct {
 	mu sync.RWMutex
 }
 
-func NewChunk(coord types.ChunkCoord, layer int32, chunkSize int) *Chunk {
+func NewChunk(coord types.ChunkCoord, region int32, layer int32, chunkSize int) *Chunk {
 	cellSize := 16.0
 	totalTiles := chunkSize * chunkSize
 	bitsetSize := (totalTiles + 63) / 64
 
 	return &Chunk{
-		ChunkData:   types.NewChunkData(coord, layer, chunkSize),
+		ChunkData:   types.NewChunkData(coord, region, layer, chunkSize),
 		isPassable:  make([]uint64, bitsetSize),
 		isSwimmable: make([]uint64, bitsetSize),
 		spatial:     NewSpatialHashGrid(cellSize),
@@ -95,6 +103,7 @@ func (c *Chunk) SetTiles(Tiles []byte, lastTick uint64) {
 	c.mu.Lock()
 	c.ChunkData.Tiles = Tiles
 	c.ChunkData.LastTick = lastTick
+	c.populateTileBitsets()
 	c.mu.Unlock()
 }
 
@@ -149,4 +158,139 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 		return false
 	}
 	return c.getBit(c.isSwimmable, index)
+}
+
+// SaveToDB persists the chunk and its entities to the database
+func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
+	Serialize(world *ecs.World, h types.Handle, objectType components.ObjectType) (*repository.Object, error)
+}, logger *zap.Logger) {
+	if db == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	coord := c.Coord
+
+	c.mu.RLock()
+	tiles := make([]byte, len(c.Tiles))
+	copy(tiles, c.Tiles)
+	lastTick := c.LastTick
+	totalHandles := c.GetHandles()
+	entityCount := len(totalHandles)
+	c.mu.RUnlock()
+
+	err := db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
+		Region:      c.ChunkData.Region,
+		X:           int32(coord.X),
+		Y:           int32(coord.Y),
+		Layer:       c.ChunkData.Layer,
+		TilesData:   tiles,
+		LastTick:    int64(lastTick),
+		EntityCount: sql.NullInt32{Int32: int32(entityCount), Valid: true},
+	})
+	if err != nil {
+		logger.Error("failed to save chunk tiles",
+			zap.Int("chunk_x", coord.X),
+			zap.Int("chunk_y", coord.Y),
+			zap.Error(err),
+		)
+	}
+
+	handles := totalHandles
+	for _, h := range handles {
+		if !world.Alive(h) {
+			continue
+		}
+
+		info, ok := ecs.GetComponent[components.EntityInfo](world, h)
+		if !ok {
+			continue
+		}
+
+		obj, err := objectFactory.Serialize(world, h, info.ObjectType)
+		if err != nil {
+			logger.Error("failed to serialize object",
+				zap.Error(err),
+			)
+			continue
+		}
+
+		obj.LastTick = int64(lastTick)
+		err = db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
+			ID:         obj.ID,
+			ObjectType: obj.ObjectType,
+			Region:     obj.Region,
+			X:          obj.X,
+			Y:          obj.Y,
+			Layer:      obj.Layer,
+			ChunkX:     obj.ChunkX,
+			ChunkY:     obj.ChunkY,
+			Heading:    obj.Heading,
+			Quality:    obj.Quality,
+			HpCurrent:  obj.HpCurrent,
+			HpMax:      obj.HpMax,
+			IsStatic:   obj.IsStatic,
+			OwnerID:    obj.OwnerID,
+			DataJsonb:  obj.DataJsonb,
+			CreateTick: obj.CreateTick,
+			LastTick:   obj.LastTick,
+		})
+		if err != nil {
+			logger.Error("failed to save object",
+				zap.Int64("object_id", obj.ID),
+				zap.Error(err),
+			)
+		}
+	}
+	logger.Debug("saved objects", zap.Int("count", len(handles)))
+}
+
+// LoadFromDB loads chunk data and objects from the database
+func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int32, layer int32, logger *zap.Logger) error {
+	c.SetState(types.ChunkStateLoading)
+
+	if db == nil {
+		c.SetState(types.ChunkStatePreloaded)
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tilesData, err := db.Queries().GetChunk(ctx, repository.GetChunkParams{
+		Region: region,
+		X:      int32(c.Coord.X),
+		Y:      int32(c.Coord.Y),
+		Layer:  layer,
+	})
+	if err == nil {
+		c.SetTiles(tilesData.TilesData, uint64(tilesData.LastTick))
+	}
+
+	objects, err := db.Queries().GetObjectsByChunk(ctx, repository.GetObjectsByChunkParams{
+		Region: region,
+		ChunkX: int32(c.Coord.X),
+		ChunkY: int32(c.Coord.Y),
+		Layer:  layer,
+	})
+	if err != nil {
+		logger.Error("failed to load objects",
+			zap.Int("chunk_x", c.Coord.X),
+			zap.Int("chunk_y", c.Coord.Y),
+			zap.Error(err),
+		)
+		objects = nil
+	}
+	logger.Debug("loaded objects", zap.Any("coord", c.Coord), zap.Int("count", len(objects)))
+
+	rawObjects := make([]*repository.Object, len(objects))
+	for i := range objects {
+		rawObjects[i] = &objects[i]
+	}
+	c.SetRawObjects(rawObjects)
+
+	c.SetState(types.ChunkStatePreloaded)
+	return nil
 }
