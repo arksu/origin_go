@@ -42,26 +42,6 @@ type ChunkCoord struct {
 	X, Y int
 }
 
-// ChunkData represents the core data of a chunk without dependencies
-type ChunkData struct {
-	Coord    ChunkCoord
-	Region   int32
-	Layer    int32
-	State    ChunkState
-	Tiles    []byte
-	LastTick uint64
-}
-
-func NewChunkData(coord ChunkCoord, region int32, layer int32, chunkSize int) *ChunkData {
-	return &ChunkData{
-		Coord:  coord,
-		Region: region,
-		Layer:  layer,
-		State:  ChunkStateUnloaded,
-		Tiles:  make([]byte, chunkSize*chunkSize),
-	}
-}
-
 func WorldToChunkCoord(worldX, worldY int, chunkSize, coordPerTile int) ChunkCoord {
 	tileX := worldX / coordPerTile
 	tileY := worldY / coordPerTile

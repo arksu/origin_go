@@ -14,9 +14,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Chunk extends ChunkData with game-specific functionality
+// Chunk represents a game chunk with all its data and functionality
 type Chunk struct {
-	*types.ChunkData
+	Coord    types.ChunkCoord
+	Region   int32
+	Layer    int32
+	State    types.ChunkState
+	Tiles    []byte
+	LastTick uint64
 
 	isPassable  []uint64
 	isSwimmable []uint64
@@ -33,7 +38,11 @@ func NewChunk(coord types.ChunkCoord, region int32, layer int32, chunkSize int) 
 	bitsetSize := (totalTiles + 63) / 64
 
 	return &Chunk{
-		ChunkData:   types.NewChunkData(coord, region, layer, chunkSize),
+		Coord:       coord,
+		Region:      region,
+		Layer:       layer,
+		State:       types.ChunkStateUnloaded,
+		Tiles:       make([]byte, totalTiles),
 		isPassable:  make([]uint64, bitsetSize),
 		isSwimmable: make([]uint64, bitsetSize),
 		spatial:     NewSpatialHashGrid(cellSize),
@@ -42,13 +51,13 @@ func NewChunk(coord types.ChunkCoord, region int32, layer int32, chunkSize int) 
 
 func (c *Chunk) SetState(state types.ChunkState) {
 	c.mu.Lock()
-	c.ChunkData.State = state
+	c.State = state
 	c.mu.Unlock()
 }
 
 func (c *Chunk) GetState() types.ChunkState {
 	c.mu.RLock()
-	state := c.ChunkData.State
+	state := c.State
 	c.mu.RUnlock()
 	return state
 }
@@ -101,14 +110,14 @@ func (c *Chunk) Spatial() *SpatialHashGrid {
 
 func (c *Chunk) SetTiles(Tiles []byte, lastTick uint64) {
 	c.mu.Lock()
-	c.ChunkData.Tiles = Tiles
-	c.ChunkData.LastTick = lastTick
+	c.Tiles = Tiles
+	c.LastTick = lastTick
 	c.populateTileBitsets()
 	c.mu.Unlock()
 }
 
 func (c *Chunk) populateTileBitsets() {
-	for i, tileID := range c.ChunkData.Tiles {
+	for i, tileID := range c.Tiles {
 		if types.IsTilePassable(tileID) {
 			c.setBit(c.isPassable, i)
 		}
@@ -139,7 +148,7 @@ func (c *Chunk) IsTilePassable(localTileX, localTileY, chunkSize int) bool {
 	}
 
 	index := localTileY*chunkSize + localTileX
-	if index >= len(c.ChunkData.Tiles) {
+	if index >= len(c.Tiles) {
 		return false
 	}
 	return c.getBit(c.isPassable, index)
@@ -154,7 +163,7 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 	}
 
 	index := localTileY*chunkSize + localTileX
-	if index >= len(c.ChunkData.Tiles) {
+	if index >= len(c.Tiles) {
 		return false
 	}
 	return c.getBit(c.isSwimmable, index)
@@ -182,10 +191,10 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	c.mu.RUnlock()
 
 	err := db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
-		Region:      c.ChunkData.Region,
+		Region:      c.Region,
 		X:           int32(coord.X),
 		Y:           int32(coord.Y),
-		Layer:       c.ChunkData.Layer,
+		Layer:       c.Layer,
 		TilesData:   tiles,
 		LastTick:    int64(lastTick),
 		EntityCount: sql.NullInt32{Int32: int32(entityCount), Valid: true},
