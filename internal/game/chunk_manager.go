@@ -506,6 +506,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 
 	state := chunk.GetState()
 	if state != types.ChunkStateUnloaded {
+		cm.completeFuture(coord)
 		return
 	}
 
