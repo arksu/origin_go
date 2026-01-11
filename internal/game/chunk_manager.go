@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"database/sql"
+	"origin/internal/core"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
 	"sync"
@@ -27,7 +28,7 @@ type loadRequest struct {
 }
 
 type saveRequest struct {
-	chunk *Chunk
+	chunk *core.Chunk
 }
 
 type ChunkStats struct {
@@ -90,10 +91,10 @@ type ChunkManager struct {
 	objectFactory *ObjectFactory
 	logger        *zap.Logger
 
-	chunks   map[types.ChunkCoord]*Chunk
+	chunks   map[types.ChunkCoord]*core.Chunk
 	chunksMu sync.RWMutex
 
-	lruCache *lru.LRU[types.ChunkCoord, *Chunk]
+	lruCache *lru.LRU[types.ChunkCoord, *core.Chunk]
 
 	loadQueue chan loadRequest
 	saveQueue chan saveRequest
@@ -145,7 +146,7 @@ func NewChunkManager(
 		region:         region,
 		objectFactory:  objectFactory,
 		logger:         logger.Named("chunk_manager"),
-		chunks:         make(map[types.ChunkCoord]*Chunk),
+		chunks:         make(map[types.ChunkCoord]*core.Chunk),
 		loadQueue:      make(chan loadRequest, 256),
 		saveQueue:      make(chan saveRequest, 256),
 		stopCh:         make(chan struct{}),
@@ -459,7 +460,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 	cm.activeChunksMu.Unlock()
 }
 
-func (cm *ChunkManager) getChunkUnsafe(coord types.ChunkCoord) *Chunk {
+func (cm *ChunkManager) getChunkUnsafe(coord types.ChunkCoord) *core.Chunk {
 	cm.chunksMu.RLock()
 	chunk := cm.chunks[coord]
 	cm.chunksMu.RUnlock()
@@ -498,7 +499,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	cm.chunksMu.Lock()
 	chunk, exists := cm.chunks[coord]
 	if !exists {
-		chunk = NewChunk(coord, cm.layer, cm.cfg.Game.ChunkSize)
+		chunk = core.NewChunk(coord, cm.layer, cm.cfg.Game.ChunkSize)
 		cm.chunks[coord] = chunk
 	}
 	cm.chunksMu.Unlock()
@@ -521,11 +522,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 			Layer:  cm.layer,
 		})
 		if err == nil {
-			chunk.mu.Lock()
-			chunk.Tiles = tilesData.TilesData
-			chunk.LastTick = uint64(tilesData.LastTick)
-			chunk.populateTileBitsets()
-			chunk.mu.Unlock()
+			chunk.SetTiles(tilesData.TilesData, uint64(tilesData.LastTick))
 		}
 
 		objects, err := cm.db.Queries().GetObjectsByChunk(ctx, repository.GetObjectsByChunkParams{
@@ -562,7 +559,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	)
 }
 
-func (cm *ChunkManager) saveChunkToDB(chunk *Chunk) {
+func (cm *ChunkManager) saveChunkToDB(chunk *core.Chunk) {
 	if cm.db == nil {
 		return
 	}
@@ -647,7 +644,7 @@ func (cm *ChunkManager) saveChunkToDB(chunk *Chunk) {
 	cm.logger.Debug("saved objects", zap.Int("count", len(handles)))
 }
 
-func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *Chunk) {
+func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	if chunk == nil {
 		return
 	}
@@ -694,7 +691,7 @@ func (cm *ChunkManager) isWithinWorldBounds(coord types.ChunkCoord) bool {
 	return coord.X >= minX && coord.X < maxX && coord.Y >= minY && coord.Y < maxY
 }
 
-func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *Chunk {
+func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *core.Chunk {
 	if !cm.isWithinWorldBounds(coord) {
 		return nil
 	}
@@ -712,7 +709,7 @@ func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *Chunk {
 	return chunk
 }
 
-func (cm *ChunkManager) GetOrCreateChunk(coord types.ChunkCoord) *Chunk {
+func (cm *ChunkManager) GetOrCreateChunk(coord types.ChunkCoord) *core.Chunk {
 	cm.chunksMu.Lock()
 	defer cm.chunksMu.Unlock()
 
@@ -720,7 +717,7 @@ func (cm *ChunkManager) GetOrCreateChunk(coord types.ChunkCoord) *Chunk {
 		return chunk
 	}
 
-	chunk := NewChunk(coord, cm.layer, cm.cfg.Game.ChunkSize)
+	chunk := core.NewChunk(coord, cm.layer, cm.cfg.Game.ChunkSize)
 	cm.chunks[coord] = chunk
 	return chunk
 }
@@ -846,12 +843,12 @@ func (cm *ChunkManager) ActivateChunk(coord types.ChunkCoord) error {
 	}
 }
 
-func (cm *ChunkManager) activatePreloadedChunk(coord types.ChunkCoord, chunk *Chunk) error {
+func (cm *ChunkManager) activatePreloadedChunk(coord types.ChunkCoord, chunk *core.Chunk) error {
 	return cm.activateChunkInternal(coord, chunk)
 }
 
 // activateChunkInternal activates a chunk by building entities from raw objects
-func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *Chunk) error {
+func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *core.Chunk) error {
 	state := chunk.GetState()
 	if state == types.ChunkStateActive {
 		return nil
@@ -924,7 +921,7 @@ func (cm *ChunkManager) DeactivateChunk(coord types.ChunkCoord) error {
 }
 
 // deactivateChunkInternal deactivates a chunk by serializing entities to raw objects
-func (cm *ChunkManager) deactivateChunkInternal(chunk *Chunk) error {
+func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 	if chunk.GetState() != types.ChunkStateActive {
 		return nil
 	}
@@ -1023,9 +1020,8 @@ func (cm *ChunkManager) MigrateObject(h types.Handle, fromCoord, toCoord types.C
 			return err
 		}
 
-		toChunk.mu.Lock()
-		toChunk.rawObjects = append(toChunk.rawObjects, obj)
-		toChunk.mu.Unlock()
+		// TODO update chunk and coord into obj
+		toChunk.AddRawObject(obj)
 
 		cm.world.Despawn(h)
 	}
@@ -1053,7 +1049,7 @@ func (cm *ChunkManager) PreloadChunksAround(center types.ChunkCoord) {
 	}
 }
 
-func (cm *ChunkManager) ActiveChunks() []*Chunk {
+func (cm *ChunkManager) ActiveChunks() []*core.Chunk {
 	// Fast path: read from cached active chunks
 	cm.activeChunksMu.RLock()
 	coords := make([]types.ChunkCoord, 0, len(cm.activeChunks))
@@ -1062,7 +1058,7 @@ func (cm *ChunkManager) ActiveChunks() []*Chunk {
 	}
 	cm.activeChunksMu.RUnlock()
 
-	chunks := make([]*Chunk, 0, len(coords))
+	chunks := make([]*core.Chunk, 0, len(coords))
 	for _, coord := range coords {
 		if chunk := cm.GetChunk(coord); chunk != nil {
 			chunks = append(chunks, chunk)
@@ -1083,7 +1079,7 @@ func (cm *ChunkManager) ActiveChunkCoords() []types.ChunkCoord {
 	return coords
 }
 
-func (cm *ChunkManager) GetEntityActiveChunks(entityID types.EntityID) []*Chunk {
+func (cm *ChunkManager) GetEntityActiveChunks(entityID types.EntityID) []*core.Chunk {
 	cm.aoiMu.RLock()
 	aoi, exists := cm.entityAOIs[entityID]
 	if !exists {
@@ -1096,7 +1092,7 @@ func (cm *ChunkManager) GetEntityActiveChunks(entityID types.EntityID) []*Chunk 
 	}
 	cm.aoiMu.RUnlock()
 
-	chunks := make([]*Chunk, 0, len(activeCoords))
+	chunks := make([]*core.Chunk, 0, len(activeCoords))
 	for _, coord := range activeCoords {
 		if chunk := cm.GetChunk(coord); chunk != nil && chunk.GetState() == types.ChunkStateActive {
 			chunks = append(chunks, chunk)
