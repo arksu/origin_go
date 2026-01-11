@@ -1,14 +1,14 @@
 package game
 
 import (
+	"origin/internal/config"
+	"origin/internal/ecs"
+	"origin/internal/eventbus"
+	"origin/internal/types"
 	"testing"
 	"time"
 
 	"go.uber.org/zap"
-
-	"origin/internal/config"
-	"origin/internal/ecs"
-	"origin/internal/eventbus"
 )
 
 func newTestConfig() *config.Config {
@@ -46,53 +46,61 @@ func newTestChunkManager() *ChunkManager {
 
 func TestChunkState_String(t *testing.T) {
 	tests := []struct {
-		state    ChunkState
+		state    types.ChunkState
 		expected string
 	}{
-		{ChunkStateUnloaded, "unloaded"},
-		{ChunkStateLoading, "loading"},
-		{ChunkStatePreloaded, "preloaded"},
-		{ChunkStateActive, "active"},
-		{ChunkStateInactive, "inactive"},
-		{ChunkState(99), "unknown"},
+		{types.ChunkStateUnloaded, "unloaded"},
+		{types.ChunkStateLoading, "loading"},
+		{types.ChunkStatePreloaded, "preloaded"},
+		{types.ChunkStateActive, "active"},
+		{types.ChunkStateInactive, "inactive"},
+		{types.ChunkState(5), "unknown"},
 	}
 
 	for _, tt := range tests {
 		if got := tt.state.String(); got != tt.expected {
-			t.Errorf("ChunkState(%d).String() = %q, want %q", tt.state, got, tt.expected)
+			t.Errorf("ChunkState(%d).String() = %v, want %v", tt.state, got, tt.expected)
 		}
 	}
 }
 
 func TestNewChunk(t *testing.T) {
-	coord := ChunkCoord{X: 5, Y: 10}
+	coord := types.ChunkCoord{X: 5, Y: 10}
 	chunk := NewChunk(coord, 0, 128)
 
-	if chunk.Coord != coord {
-		t.Errorf("chunk.Coord = %v, want %v", chunk.Coord, coord)
+	if chunk == nil {
+		t.Fatal("NewChunk returned nil")
 	}
+
+	if chunk.ChunkData.Coord != coord {
+		t.Errorf("Expected coord %v, got %v", coord, chunk.ChunkData.Coord)
+	}
+
 	if chunk.Layer != 0 {
-		t.Errorf("chunk.Layer = %d, want 0", chunk.Layer)
+		t.Errorf("Expected layer 0, got %d", chunk.Layer)
 	}
-	if chunk.State != ChunkStateUnloaded {
-		t.Errorf("chunk.State = %v, want ChunkStateUnloaded", chunk.State)
+
+	if chunk.GetState() != types.ChunkStateUnloaded {
+		t.Errorf("Expected state %v, got %v", types.ChunkStateUnloaded, chunk.GetState())
 	}
-	if len(chunk.Tiles) != 128*128 {
-		t.Errorf("len(chunk.Tiles) = %d, want %d", len(chunk.Tiles), 128*128)
+
+	expectedTiles := 128 * 128
+	if len(chunk.ChunkData.Tiles) != expectedTiles {
+		t.Errorf("Expected %d tiles, got %d", expectedTiles, len(chunk.ChunkData.Tiles))
 	}
 }
 
 func TestChunk_SetGetState(t *testing.T) {
-	chunk := NewChunk(ChunkCoord{X: 0, Y: 0}, 0, 128)
+	chunk := NewChunk(types.ChunkCoord{X: 0, Y: 0}, 0, 128)
 
-	chunk.SetState(ChunkStateLoading)
-	if got := chunk.GetState(); got != ChunkStateLoading {
-		t.Errorf("GetState() = %v, want ChunkStateLoading", got)
+	chunk.SetState(types.ChunkStateLoading)
+	if got := chunk.GetState(); got != types.ChunkStateLoading {
+		t.Errorf("Expected state %v, got %v", types.ChunkStateLoading, got)
 	}
 
-	chunk.SetState(ChunkStateActive)
-	if got := chunk.GetState(); got != ChunkStateActive {
-		t.Errorf("GetState() = %v, want ChunkStateActive", got)
+	chunk.SetState(types.ChunkStateActive)
+	if got := chunk.GetState(); got != types.ChunkStateActive {
+		t.Errorf("Expected state %v, got %v", types.ChunkStateActive, got)
 	}
 }
 
@@ -100,7 +108,7 @@ func TestChunkManager_GetOrCreateChunk(t *testing.T) {
 	cm := newTestChunkManager()
 	defer cm.Stop()
 
-	coord := ChunkCoord{X: 1, Y: 2}
+	coord := types.ChunkCoord{X: 1, Y: 2}
 
 	chunk1 := cm.GetOrCreateChunk(coord)
 	if chunk1 == nil {
@@ -117,7 +125,7 @@ func TestChunkManager_GetChunk(t *testing.T) {
 	cm := newTestChunkManager()
 	defer cm.Stop()
 
-	coord := ChunkCoord{X: 3, Y: 4}
+	coord := types.ChunkCoord{X: 3, Y: 4}
 
 	if chunk := cm.GetChunk(coord); chunk != nil {
 		t.Error("GetChunk should return nil for non-existent chunk")
@@ -162,17 +170,20 @@ func TestWorldToChunkCoord(t *testing.T) {
 		worldX, worldY int
 		chunkSize      int
 		coordPerTile   int
-		expected       ChunkCoord
+		expected       types.ChunkCoord
 	}{
-		{0, 0, 128, 12, ChunkCoord{0, 0}},
-		{1536, 1536, 128, 12, ChunkCoord{1, 1}},
-		{3072, 0, 128, 12, ChunkCoord{2, 0}},
-		{100, 200, 128, 12, ChunkCoord{0, 0}},
-		{2000, 3000, 128, 12, ChunkCoord{1, 1}},
+		{0, 0, 32, 16, types.ChunkCoord{X: 0, Y: 0}},
+		{511, 511, 32, 16, types.ChunkCoord{X: 0, Y: 0}},   // 31.999... tiles -> 0 chunk
+		{512, 512, 32, 16, types.ChunkCoord{X: 1, Y: 1}},   // exactly 32 tiles -> 1 chunk
+		{1023, 1023, 32, 16, types.ChunkCoord{X: 1, Y: 1}}, // 63.999... tiles -> 1 chunk
+		{1024, 1024, 32, 16, types.ChunkCoord{X: 2, Y: 2}}, // exactly 64 tiles -> 2 chunks
+		{-1, -1, 32, 16, types.ChunkCoord{X: -1, Y: -1}},
+		{-512, -512, 32, 16, types.ChunkCoord{X: -1, Y: -1}},
+		{-513, -513, 32, 16, types.ChunkCoord{X: -2, Y: -2}},
 	}
 
 	for _, tt := range tests {
-		got := WorldToChunkCoord(tt.worldX, tt.worldY, tt.chunkSize, tt.coordPerTile)
+		got := types.WorldToChunkCoord(tt.worldX, tt.worldY, tt.chunkSize, tt.coordPerTile)
 		if got != tt.expected {
 			t.Errorf("WorldToChunkCoord(%d, %d, %d, %d) = %v, want %v",
 				tt.worldX, tt.worldY, tt.chunkSize, tt.coordPerTile, got, tt.expected)
@@ -184,7 +195,7 @@ func TestChunkManager_PreloadChunksAround(t *testing.T) {
 	cm := newTestChunkManager()
 	defer cm.Stop()
 
-	center := ChunkCoord{X: 5, Y: 5}
+	center := types.ChunkCoord{X: 5, Y: 5}
 	cm.PreloadChunksAround(center)
 
 	time.Sleep(50 * time.Millisecond)

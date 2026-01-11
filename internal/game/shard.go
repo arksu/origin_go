@@ -4,6 +4,7 @@ import (
 	"context"
 	"origin/internal/ecs/components"
 	"origin/internal/persistence/repository"
+	"origin/internal/types"
 	"sync"
 
 	"go.uber.org/zap"
@@ -196,10 +197,10 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, cen
 		zap.Int32("layer", s.layer),
 	)
 
-	centerChunk := WorldToChunkCoord(centerWorldX, centerWorldY, s.cfg.Game.ChunkSize, s.cfg.Game.CoordPerTile)
+	centerChunk := types.WorldToChunkCoord(centerWorldX, centerWorldY, s.cfg.Game.ChunkSize, s.cfg.Game.CoordPerTile)
 	radius := s.cfg.Game.PlayerActiveChunkRadius
 
-	coords := make([]ChunkCoord, 0, (2*radius+1)*(2*radius+1))
+	coords := make([]types.ChunkCoord, 0, (2*radius+1)*(2*radius+1))
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
 			chunkX := centerChunk.X + dx
@@ -208,7 +209,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID ecs.EntityID, cen
 				chunkY < s.cfg.Game.WorldMinYChunks || chunkY >= s.cfg.Game.WorldMinYChunks+s.cfg.Game.WorldHeightChunks {
 				continue
 			}
-			coords = append(coords, ChunkCoord{X: chunkX, Y: chunkY})
+			coords = append(coords, types.ChunkCoord{X: chunkX, Y: chunkY})
 		}
 	}
 
