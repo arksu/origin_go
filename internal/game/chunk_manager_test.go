@@ -15,8 +15,6 @@ import (
 func newTestConfig() *config.Config {
 	return &config.Config{
 		Game: config.GameConfig{
-			ChunkSize:                128,
-			CoordPerTile:             12,
 			ChunkLRUCapacity:         10,
 			ChunkLRUTTL:              60,
 			LoadWorkers:              1,
