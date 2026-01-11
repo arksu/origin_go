@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"origin/internal/ecs/components"
+	"origin/internal/types"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,188 +22,8 @@ import (
 // Ensure context is used (for eventbus handler signature)
 var _ context.Context
 
-type ChunkState uint8
-
-/*
-Unloaded → Loading (requestLoad)
-Loading → Preloaded (loadChunkFromDB завершён)
-Preloaded → Active (ActivateChunk)
-Active → Preloaded (DeactivateChunk)
-Preloaded → Inactive (выход из preload-зоны в updatePreloadZone)
-Inactive → Unloaded (LRU eviction)
-Preloaded → Inactive (выход из preload-зоны)
-Inactive → Preloaded (возврат в preload-зону)
-*/
-
-const (
-	ChunkStateUnloaded ChunkState = iota
-	ChunkStateLoading
-	ChunkStatePreloaded
-	ChunkStateActive
-	ChunkStateInactive
-)
-
-func (s ChunkState) String() string {
-	switch s {
-	case ChunkStateUnloaded:
-		return "unloaded"
-	case ChunkStateLoading:
-		return "loading"
-	case ChunkStatePreloaded:
-		return "preloaded"
-	case ChunkStateActive:
-		return "active"
-	case ChunkStateInactive:
-		return "inactive"
-	default:
-		return "unknown"
-	}
-}
-
-type ChunkCoord struct {
-	X, Y int
-}
-
-type Chunk struct {
-	Coord    ChunkCoord
-	Layer    int32
-	State    ChunkState
-	Tiles    []byte
-	LastTick uint64
-
-	isPassable  []uint64
-	isSwimmable []uint64
-
-	rawObjects []*repository.Object
-	spatial    *SpatialHashGrid
-
-	mu sync.RWMutex
-}
-
-func NewChunk(coord ChunkCoord, layer int32, chunkSize int) *Chunk {
-	cellSize := 16.0
-	totalTiles := chunkSize * chunkSize
-	bitsetSize := (totalTiles + 63) / 64
-
-	return &Chunk{
-		Coord:       coord,
-		Layer:       layer,
-		State:       ChunkStateUnloaded,
-		Tiles:       make([]byte, totalTiles),
-		isPassable:  make([]uint64, bitsetSize),
-		isSwimmable: make([]uint64, bitsetSize),
-		spatial:     NewSpatialHashGrid(cellSize),
-	}
-}
-
-func (c *Chunk) SetState(state ChunkState) {
-	c.mu.Lock()
-	c.State = state
-	c.mu.Unlock()
-}
-
-func (c *Chunk) GetState() ChunkState {
-	c.mu.RLock()
-	state := c.State
-	c.mu.RUnlock()
-	return state
-}
-
-func (c *Chunk) SetRawObjects(objects []*repository.Object) {
-	c.mu.Lock()
-	c.rawObjects = objects
-	c.mu.Unlock()
-}
-
-func (c *Chunk) GetRawObjects() []*repository.Object {
-	c.mu.RLock()
-	objects := c.rawObjects
-	c.mu.RUnlock()
-	return objects
-}
-
-func (c *Chunk) ClearRawObjects() {
-	c.mu.Lock()
-	c.rawObjects = nil
-	c.mu.Unlock()
-}
-
-func (c *Chunk) GetHandles() []ecs.Handle {
-	return c.spatial.GetAllHandles()
-}
-
-func (c *Chunk) GetDynamicHandles() []ecs.Handle {
-	return c.spatial.GetDynamicHandles()
-}
-
-func (c *Chunk) ClearHandles() {
-	c.mu.Lock()
-	c.spatial.ClearDynamic()
-	c.spatial.ClearStatic()
-	c.mu.Unlock()
-}
-
-func (c *Chunk) Spatial() *SpatialHashGrid {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.spatial
-}
-
-func (c *Chunk) populateTileBitsets() {
-	for i, tileID := range c.Tiles {
-		if isTilePassable(tileID) {
-			c.setBit(c.isPassable, i)
-		}
-		if isTileSwimmable(tileID) {
-			c.setBit(c.isSwimmable, i)
-		}
-	}
-}
-
-func (c *Chunk) setBit(bitset []uint64, index int) {
-	wordIndex := index / 64
-	bitIndex := uint(index % 64)
-	bitset[wordIndex] |= 1 << bitIndex
-}
-
-func (c *Chunk) getBit(bitset []uint64, index int) bool {
-	wordIndex := index / 64
-	bitIndex := uint(index % 64)
-	return (bitset[wordIndex] & (1 << bitIndex)) != 0
-}
-
-func (c *Chunk) IsTilePassable(localTileX, localTileY, chunkSize int) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if localTileX < 0 || localTileX >= chunkSize || localTileY < 0 || localTileY >= chunkSize {
-		return false
-	}
-
-	index := localTileY*chunkSize + localTileX
-	if index >= len(c.Tiles) {
-		return false
-	}
-	return c.getBit(c.isPassable, index)
-}
-
-func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if localTileX < 0 || localTileX >= chunkSize || localTileY < 0 || localTileY >= chunkSize {
-		return false
-	}
-
-	index := localTileY*chunkSize + localTileX
-	if index >= len(c.Tiles) {
-		return false
-	}
-	return c.getBit(c.isSwimmable, index)
-}
-
 type loadRequest struct {
-	coord ChunkCoord
+	coord types.ChunkCoord
 }
 
 type saveRequest struct {
@@ -221,17 +42,17 @@ type ChunkStats struct {
 // EntityAOI represents Area of Interest for a single entity
 type EntityAOI struct {
 	EntityID      ecs.EntityID
-	CenterChunk   ChunkCoord
-	ActiveChunks  map[ChunkCoord]struct{}
-	PreloadChunks map[ChunkCoord]struct{}
+	CenterChunk   types.ChunkCoord
+	ActiveChunks  map[types.ChunkCoord]struct{}
+	PreloadChunks map[types.ChunkCoord]struct{}
 }
 
-func newEntityAOI(entityID ecs.EntityID, center ChunkCoord) *EntityAOI {
+func newEntityAOI(entityID ecs.EntityID, center types.ChunkCoord) *EntityAOI {
 	return &EntityAOI{
 		EntityID:      entityID,
 		CenterChunk:   center,
-		ActiveChunks:  make(map[ChunkCoord]struct{}),
-		PreloadChunks: make(map[ChunkCoord]struct{}),
+		ActiveChunks:  make(map[types.ChunkCoord]struct{}),
+		PreloadChunks: make(map[types.ChunkCoord]struct{}),
 	}
 }
 
@@ -269,10 +90,10 @@ type ChunkManager struct {
 	objectFactory *ObjectFactory
 	logger        *zap.Logger
 
-	chunks   map[ChunkCoord]*Chunk
+	chunks   map[types.ChunkCoord]*Chunk
 	chunksMu sync.RWMutex
 
-	lruCache *lru.LRU[ChunkCoord, *Chunk]
+	lruCache *lru.LRU[types.ChunkCoord, *Chunk]
 
 	loadQueue chan loadRequest
 	saveQueue chan saveRequest
@@ -284,14 +105,14 @@ type ChunkManager struct {
 	aoiMu      sync.RWMutex
 
 	// Global chunk interest tracking
-	chunkInterests map[ChunkCoord]*ChunkInterest
+	chunkInterests map[types.ChunkCoord]*ChunkInterest
 	interestMu     sync.RWMutex
 
 	// Cached active chunks for fast access (hot path optimization)
-	activeChunks   map[ChunkCoord]struct{}
+	activeChunks   map[types.ChunkCoord]struct{}
 	activeChunksMu sync.RWMutex
 
-	loadFutures   map[ChunkCoord]*loadFuture
+	loadFutures   map[types.ChunkCoord]*loadFuture
 	loadFuturesMu sync.Mutex
 
 	stats ChunkStats
@@ -324,14 +145,14 @@ func NewChunkManager(
 		region:         region,
 		objectFactory:  objectFactory,
 		logger:         logger.Named("chunk_manager"),
-		chunks:         make(map[ChunkCoord]*Chunk),
+		chunks:         make(map[types.ChunkCoord]*Chunk),
 		loadQueue:      make(chan loadRequest, 256),
 		saveQueue:      make(chan saveRequest, 256),
 		stopCh:         make(chan struct{}),
 		entityAOIs:     make(map[ecs.EntityID]*EntityAOI),
-		chunkInterests: make(map[ChunkCoord]*ChunkInterest),
-		activeChunks:   make(map[ChunkCoord]struct{}),
-		loadFutures:    make(map[ChunkCoord]*loadFuture),
+		chunkInterests: make(map[types.ChunkCoord]*ChunkInterest),
+		activeChunks:   make(map[types.ChunkCoord]struct{}),
+		loadFutures:    make(map[types.ChunkCoord]*loadFuture),
 		eventBus:       eventBus,
 	}
 
@@ -366,8 +187,8 @@ func (cm *ChunkManager) subscribeToEvents() {
 }
 
 func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
-	oldChunk := WorldToChunkCoord(int(move.FromX), int(move.FromY), cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
-	newChunk := WorldToChunkCoord(int(move.ToX), int(move.ToY), cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
+	oldChunk := types.WorldToChunkCoord(int(move.FromX), int(move.FromY), cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
+	newChunk := types.WorldToChunkCoord(int(move.ToX), int(move.ToY), cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
 
 	if oldChunk != newChunk {
 		cm.UpdateEntityPosition(move.EntityID, newChunk)
@@ -376,7 +197,7 @@ func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
 
 // RegisterEntity registers an entity for AOI tracking
 func (cm *ChunkManager) RegisterEntity(entityID ecs.EntityID, worldX, worldY int) {
-	center := WorldToChunkCoord(worldX, worldY, cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
+	center := types.WorldToChunkCoord(worldX, worldY, cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
 
 	cm.aoiMu.Lock()
 	if _, exists := cm.entityAOIs[entityID]; exists {
@@ -406,7 +227,7 @@ func (cm *ChunkManager) UnregisterEntity(entityID ecs.EntityID) {
 }
 
 // UpdateEntityPosition updates AOI for an entity when it moves to a new chunk
-func (cm *ChunkManager) UpdateEntityPosition(entityID ecs.EntityID, newCenter ChunkCoord) {
+func (cm *ChunkManager) UpdateEntityPosition(entityID ecs.EntityID, newCenter types.ChunkCoord) {
 	cm.aoiMu.Lock()
 	aoi, exists := cm.entityAOIs[entityID]
 	if !exists {
@@ -424,17 +245,17 @@ func (cm *ChunkManager) UpdateEntityPosition(entityID ecs.EntityID, newCenter Ch
 }
 
 // updateEntityAOI recalculates AOI zones for a single entity and updates global interests
-func (cm *ChunkManager) updateEntityAOI(entityID ecs.EntityID, newCenter ChunkCoord) {
+func (cm *ChunkManager) updateEntityAOI(entityID ecs.EntityID, newCenter types.ChunkCoord) {
 	activeRadius := cm.cfg.Game.PlayerActiveChunkRadius
 	preloadRadius := cm.cfg.Game.PlayerPreloadChunkRadius
 
-	newActive := make(map[ChunkCoord]struct{})
-	newPreload := make(map[ChunkCoord]struct{})
+	newActive := make(map[types.ChunkCoord]struct{})
+	newPreload := make(map[types.ChunkCoord]struct{})
 
 	// Calculate new active zone (with bounds checking)
 	for dy := -activeRadius; dy <= activeRadius; dy++ {
 		for dx := -activeRadius; dx <= activeRadius; dx++ {
-			coord := ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
+			coord := types.ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
 			if cm.isWithinWorldBounds(coord) {
 				newActive[coord] = struct{}{}
 			}
@@ -444,7 +265,7 @@ func (cm *ChunkManager) updateEntityAOI(entityID ecs.EntityID, newCenter ChunkCo
 	// Calculate new preload zone (excluding active, with bounds checking)
 	for dy := -preloadRadius; dy <= preloadRadius; dy++ {
 		for dx := -preloadRadius; dx <= preloadRadius; dx++ {
-			coord := ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
+			coord := types.ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
 			if cm.isWithinWorldBounds(coord) {
 				if _, isActive := newActive[coord]; !isActive {
 					newPreload[coord] = struct{}{}
@@ -535,7 +356,7 @@ type chunkInterestSnapshot struct {
 // recalculateChunkStates updates chunk states based on global interests
 func (cm *ChunkManager) recalculateChunkStates() {
 	cm.interestMu.RLock()
-	interestsSnapshot := make(map[ChunkCoord]chunkInterestSnapshot, len(cm.chunkInterests))
+	interestsSnapshot := make(map[types.ChunkCoord]chunkInterestSnapshot, len(cm.chunkInterests))
 	for coord, interest := range cm.chunkInterests {
 		interestsSnapshot[coord] = chunkInterestSnapshot{
 			activeCount:  len(interest.activeEntities),
@@ -545,8 +366,8 @@ func (cm *ChunkManager) recalculateChunkStates() {
 	cm.interestMu.RUnlock()
 
 	// Track changes to active chunks
-	activatedChunks := make([]ChunkCoord, 0)
-	deactivatedChunks := make([]ChunkCoord, 0)
+	activatedChunks := make([]types.ChunkCoord, 0)
+	deactivatedChunks := make([]types.ChunkCoord, 0)
 
 	for coord, snapshot := range interestsSnapshot {
 		chunk := cm.GetChunk(coord)
@@ -558,17 +379,17 @@ func (cm *ChunkManager) recalculateChunkStates() {
 			} else {
 				state := chunk.GetState()
 				switch state {
-				case ChunkStatePreloaded, ChunkStateInactive:
+				case types.ChunkStatePreloaded, types.ChunkStateInactive:
 					if err := cm.activateChunkInternal(coord, chunk); err != nil {
 						cm.logger.Debug("failed to activate chunk",
-							zap.Int("x", coord.X),
-							zap.Int("y", coord.Y),
+							zap.Int("chunk_x", coord.X),
+							zap.Int("chunk_y", coord.Y),
 							zap.Error(err),
 						)
 					} else {
 						activatedChunks = append(activatedChunks, coord)
 					}
-				case ChunkStateActive:
+				case types.ChunkStateActive:
 					// Already active, ensure it's in cache
 					activatedChunks = append(activatedChunks, coord)
 				}
@@ -580,18 +401,18 @@ func (cm *ChunkManager) recalculateChunkStates() {
 			} else {
 				state := chunk.GetState()
 				switch state {
-				case ChunkStateActive:
+				case types.ChunkStateActive:
 					if err := cm.deactivateChunkInternal(chunk); err != nil {
 						cm.logger.Debug("failed to deactivate chunk",
-							zap.Int("x", coord.X),
-							zap.Int("y", coord.Y),
+							zap.Int("chunk_x", coord.X),
+							zap.Int("chunk_y", coord.Y),
 							zap.Error(err),
 						)
 					} else {
 						deactivatedChunks = append(deactivatedChunks, coord)
 					}
-				case ChunkStateInactive:
-					chunk.SetState(ChunkStatePreloaded)
+				case types.ChunkStateInactive:
+					chunk.SetState(types.ChunkStatePreloaded)
 					cm.lruCache.Remove(coord)
 					atomic.AddInt64(&cm.stats.InactiveCount, -1)
 					atomic.AddInt64(&cm.stats.PreloadedCount, 1)
@@ -602,16 +423,16 @@ func (cm *ChunkManager) recalculateChunkStates() {
 			if chunk != nil {
 				state := chunk.GetState()
 				switch state {
-				case ChunkStateActive:
+				case types.ChunkStateActive:
 					if err := cm.deactivateChunkInternal(chunk); err == nil {
-						chunk.SetState(ChunkStateInactive)
+						chunk.SetState(types.ChunkStateInactive)
 						cm.lruCache.Add(coord, chunk)
 						atomic.AddInt64(&cm.stats.PreloadedCount, -1)
 						atomic.AddInt64(&cm.stats.InactiveCount, 1)
 						deactivatedChunks = append(deactivatedChunks, coord)
 					}
-				case ChunkStatePreloaded:
-					chunk.SetState(ChunkStateInactive)
+				case types.ChunkStatePreloaded:
+					chunk.SetState(types.ChunkStateInactive)
 					cm.lruCache.Add(coord, chunk)
 					atomic.AddInt64(&cm.stats.PreloadedCount, -1)
 					atomic.AddInt64(&cm.stats.InactiveCount, 1)
@@ -638,7 +459,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 	cm.activeChunksMu.Unlock()
 }
 
-func (cm *ChunkManager) getChunkUnsafe(coord ChunkCoord) *Chunk {
+func (cm *ChunkManager) getChunkUnsafe(coord types.ChunkCoord) *Chunk {
 	cm.chunksMu.RLock()
 	chunk := cm.chunks[coord]
 	cm.chunksMu.RUnlock()
@@ -671,7 +492,7 @@ func (cm *ChunkManager) saveWorker() {
 	}
 }
 
-func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord) {
+func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	atomic.AddInt64(&cm.stats.LoadRequests, 1)
 
 	cm.chunksMu.Lock()
@@ -683,11 +504,11 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord) {
 	cm.chunksMu.Unlock()
 
 	state := chunk.GetState()
-	if state != ChunkStateUnloaded {
+	if state != types.ChunkStateUnloaded {
 		return
 	}
 
-	chunk.SetState(ChunkStateLoading)
+	chunk.SetState(types.ChunkStateLoading)
 
 	if cm.db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -730,7 +551,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord ChunkCoord) {
 		chunk.SetRawObjects(rawObjects)
 	}
 
-	chunk.SetState(ChunkStatePreloaded)
+	chunk.SetState(types.ChunkStatePreloaded)
 	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
 
 	cm.completeFuture(coord)
@@ -826,7 +647,7 @@ func (cm *ChunkManager) saveChunkToDB(chunk *Chunk) {
 	cm.logger.Debug("saved objects", zap.Int("count", len(handles)))
 }
 
-func (cm *ChunkManager) onEvict(coord ChunkCoord, chunk *Chunk) {
+func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *Chunk) {
 	if chunk == nil {
 		return
 	}
@@ -864,7 +685,7 @@ func (cm *ChunkManager) onEvict(coord ChunkCoord, chunk *Chunk) {
 }
 
 // isWithinWorldBounds checks if a chunk coordinate is within world boundaries
-func (cm *ChunkManager) isWithinWorldBounds(coord ChunkCoord) bool {
+func (cm *ChunkManager) isWithinWorldBounds(coord types.ChunkCoord) bool {
 	minX := cm.cfg.Game.WorldMinXChunks
 	minY := cm.cfg.Game.WorldMinYChunks
 	maxX := minX + cm.cfg.Game.WorldWidthChunks
@@ -873,7 +694,7 @@ func (cm *ChunkManager) isWithinWorldBounds(coord ChunkCoord) bool {
 	return coord.X >= minX && coord.X < maxX && coord.Y >= minY && coord.Y < maxY
 }
 
-func (cm *ChunkManager) GetChunk(coord ChunkCoord) *Chunk {
+func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *Chunk {
 	if !cm.isWithinWorldBounds(coord) {
 		return nil
 	}
@@ -891,7 +712,7 @@ func (cm *ChunkManager) GetChunk(coord ChunkCoord) *Chunk {
 	return chunk
 }
 
-func (cm *ChunkManager) GetOrCreateChunk(coord ChunkCoord) *Chunk {
+func (cm *ChunkManager) GetOrCreateChunk(coord types.ChunkCoord) *Chunk {
 	cm.chunksMu.Lock()
 	defer cm.chunksMu.Unlock()
 
@@ -904,7 +725,7 @@ func (cm *ChunkManager) GetOrCreateChunk(coord ChunkCoord) *Chunk {
 	return chunk
 }
 
-func (cm *ChunkManager) requestLoad(coord ChunkCoord) bool {
+func (cm *ChunkManager) requestLoad(coord types.ChunkCoord) bool {
 	select {
 	case cm.loadQueue <- loadRequest{coord: coord}:
 		return true
@@ -917,7 +738,7 @@ func (cm *ChunkManager) requestLoad(coord ChunkCoord) bool {
 	}
 }
 
-func (cm *ChunkManager) getOrCreateFuture(coord ChunkCoord) chan struct{} {
+func (cm *ChunkManager) getOrCreateFuture(coord types.ChunkCoord) chan struct{} {
 	cm.loadFuturesMu.Lock()
 	defer cm.loadFuturesMu.Unlock()
 
@@ -931,7 +752,7 @@ func (cm *ChunkManager) getOrCreateFuture(coord ChunkCoord) chan struct{} {
 	return fut.done
 }
 
-func (cm *ChunkManager) completeFuture(coord ChunkCoord) {
+func (cm *ChunkManager) completeFuture(coord types.ChunkCoord) {
 	cm.loadFuturesMu.Lock()
 	defer cm.loadFuturesMu.Unlock()
 
@@ -941,7 +762,7 @@ func (cm *ChunkManager) completeFuture(coord ChunkCoord) {
 	}
 }
 
-func (cm *ChunkManager) cleanupFuture(coord ChunkCoord) {
+func (cm *ChunkManager) cleanupFuture(coord types.ChunkCoord) {
 	cm.loadFuturesMu.Lock()
 	fut, exists := cm.loadFutures[coord]
 	if !exists {
@@ -960,7 +781,7 @@ func (cm *ChunkManager) cleanupFuture(coord ChunkCoord) {
 	// Avoid lock inversion between chunksMu and loadFuturesMu:
 	// check chunk state outside the futures lock, then confirm-and-delete.
 	chunk := cm.GetChunk(coord)
-	if chunk != nil && chunk.GetState() != ChunkStateUnloaded {
+	if chunk != nil && chunk.GetState() != types.ChunkStateUnloaded {
 		return
 	}
 
@@ -971,11 +792,11 @@ func (cm *ChunkManager) cleanupFuture(coord ChunkCoord) {
 	cm.loadFuturesMu.Unlock()
 }
 
-func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) error {
+func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord types.ChunkCoord) error {
 	chunk := cm.GetChunk(coord)
 	if chunk != nil {
 		state := chunk.GetState()
-		if state == ChunkStatePreloaded || state == ChunkStateActive {
+		if state == types.ChunkStatePreloaded || state == types.ChunkStateActive {
 			return nil
 		}
 	}
@@ -997,7 +818,7 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord ChunkCoord) err
 
 // ActivateChunk transitions a chunk to an active state based on its current state.
 // Returns an error if the chunk cannot be activated or is in an invalid state.
-func (cm *ChunkManager) ActivateChunk(coord ChunkCoord) error {
+func (cm *ChunkManager) ActivateChunk(coord types.ChunkCoord) error {
 	chunk := cm.GetOrCreateChunk(coord)
 	if chunk == nil {
 		return ErrChunkNotLoaded
@@ -1005,19 +826,19 @@ func (cm *ChunkManager) ActivateChunk(coord ChunkCoord) error {
 	state := chunk.GetState()
 
 	switch state {
-	case ChunkStateUnloaded:
+	case types.ChunkStateUnloaded:
 		return ErrChunkNotLoaded
 
-	case ChunkStateLoading:
+	case types.ChunkStateLoading:
 		return ErrChunkNotLoaded
 
-	case ChunkStatePreloaded:
+	case types.ChunkStatePreloaded:
 		return cm.activatePreloadedChunk(coord, chunk)
 
-	case ChunkStateActive:
+	case types.ChunkStateActive:
 		return nil
 
-	case ChunkStateInactive:
+	case types.ChunkStateInactive:
 		return cm.activatePreloadedChunk(coord, chunk)
 
 	default:
@@ -1025,17 +846,17 @@ func (cm *ChunkManager) ActivateChunk(coord ChunkCoord) error {
 	}
 }
 
-func (cm *ChunkManager) activatePreloadedChunk(coord ChunkCoord, chunk *Chunk) error {
+func (cm *ChunkManager) activatePreloadedChunk(coord types.ChunkCoord, chunk *Chunk) error {
 	return cm.activateChunkInternal(coord, chunk)
 }
 
 // activateChunkInternal activates a chunk by building entities from raw objects
-func (cm *ChunkManager) activateChunkInternal(coord ChunkCoord, chunk *Chunk) error {
+func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *Chunk) error {
 	state := chunk.GetState()
-	if state == ChunkStateActive {
+	if state == types.ChunkStateActive {
 		return nil
 	}
-	if state == ChunkStateUnloaded || state == ChunkStateLoading {
+	if state == types.ChunkStateUnloaded || state == types.ChunkStateLoading {
 		return ErrChunkNotLoaded
 	}
 
@@ -1070,7 +891,7 @@ func (cm *ChunkManager) activateChunkInternal(coord ChunkCoord, chunk *Chunk) er
 	}
 
 	chunk.ClearRawObjects()
-	chunk.SetState(ChunkStateActive)
+	chunk.SetState(types.ChunkStateActive)
 	cm.lruCache.Remove(coord)
 
 	atomic.AddInt64(&cm.stats.ActiveCount, 1)
@@ -1083,13 +904,13 @@ func (cm *ChunkManager) activateChunkInternal(coord ChunkCoord, chunk *Chunk) er
 	return nil
 }
 
-func (cm *ChunkManager) DeactivateChunk(coord ChunkCoord) error {
+func (cm *ChunkManager) DeactivateChunk(coord types.ChunkCoord) error {
 	chunk := cm.GetChunk(coord)
 	if chunk == nil {
 		return nil
 	}
 
-	if chunk.GetState() != ChunkStateActive {
+	if chunk.GetState() != types.ChunkStateActive {
 		return nil
 	}
 
@@ -1104,7 +925,7 @@ func (cm *ChunkManager) DeactivateChunk(coord ChunkCoord) error {
 
 // deactivateChunkInternal deactivates a chunk by serializing entities to raw objects
 func (cm *ChunkManager) deactivateChunkInternal(chunk *Chunk) error {
-	if chunk.GetState() != ChunkStateActive {
+	if chunk.GetState() != types.ChunkStateActive {
 		return nil
 	}
 
@@ -1135,7 +956,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *Chunk) error {
 
 	chunk.SetRawObjects(rawObjects)
 	chunk.ClearHandles()
-	chunk.SetState(ChunkStatePreloaded)
+	chunk.SetState(types.ChunkStatePreloaded)
 
 	atomic.AddInt64(&cm.stats.ActiveCount, -1)
 	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
@@ -1145,7 +966,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *Chunk) error {
 
 // MigrateObject moves an entity identified by the given handle from one chunk to another, updating all relevant spatial and reference data. Returns an error if the operation cannot be completed.
 // переход только из активного в другой активный или preloaded чанк
-func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoord, toX, toY float64) error {
+func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord types.ChunkCoord, toX, toY float64) error {
 	if fromCoord == toCoord {
 		return nil
 	}
@@ -1157,7 +978,7 @@ func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoor
 		return ErrChunkNotFound
 	}
 
-	if fromChunk.GetState() != ChunkStateActive {
+	if fromChunk.GetState() != types.ChunkStateActive {
 		return ErrChunkNotActive
 	}
 
@@ -1189,7 +1010,7 @@ func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoor
 		ref.CurrentChunkY = toCoord.Y
 	})
 
-	if toChunk.GetState() == ChunkStateActive {
+	if toChunk.GetState() == types.ChunkStateActive {
 		toSpatial := toChunk.Spatial()
 		if isStatic {
 			toSpatial.AddStatic(h, toX, toY)
@@ -1212,12 +1033,12 @@ func (cm *ChunkManager) MigrateObject(h ecs.Handle, fromCoord, toCoord ChunkCoor
 	return nil
 }
 
-func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
+func (cm *ChunkManager) PreloadChunksAround(center types.ChunkCoord) {
 	radius := cm.cfg.Game.PlayerPreloadChunkRadius
 
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
-			coord := ChunkCoord{X: center.X + dx, Y: center.Y + dy}
+			coord := types.ChunkCoord{X: center.X + dx, Y: center.Y + dy}
 
 			// Skip chunks outside world bounds
 			if !cm.isWithinWorldBounds(coord) {
@@ -1225,7 +1046,7 @@ func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
 			}
 
 			chunk := cm.GetChunk(coord)
-			if chunk == nil || chunk.GetState() == ChunkStateUnloaded {
+			if chunk == nil || chunk.GetState() == types.ChunkStateUnloaded {
 				_ = cm.requestLoad(coord)
 			}
 		}
@@ -1235,7 +1056,7 @@ func (cm *ChunkManager) PreloadChunksAround(center ChunkCoord) {
 func (cm *ChunkManager) ActiveChunks() []*Chunk {
 	// Fast path: read from cached active chunks
 	cm.activeChunksMu.RLock()
-	coords := make([]ChunkCoord, 0, len(cm.activeChunks))
+	coords := make([]types.ChunkCoord, 0, len(cm.activeChunks))
 	for coord := range cm.activeChunks {
 		coords = append(coords, coord)
 	}
@@ -1250,12 +1071,12 @@ func (cm *ChunkManager) ActiveChunks() []*Chunk {
 	return chunks
 }
 
-func (cm *ChunkManager) ActiveChunkCoords() []ChunkCoord {
+func (cm *ChunkManager) ActiveChunkCoords() []types.ChunkCoord {
 	// Fast path: read from cached active chunks
 	cm.activeChunksMu.RLock()
 	defer cm.activeChunksMu.RUnlock()
 
-	coords := make([]ChunkCoord, 0, len(cm.activeChunks))
+	coords := make([]types.ChunkCoord, 0, len(cm.activeChunks))
 	for coord := range cm.activeChunks {
 		coords = append(coords, coord)
 	}
@@ -1269,7 +1090,7 @@ func (cm *ChunkManager) GetEntityActiveChunks(entityID ecs.EntityID) []*Chunk {
 		cm.aoiMu.RUnlock()
 		return nil
 	}
-	activeCoords := make([]ChunkCoord, 0, len(aoi.ActiveChunks))
+	activeCoords := make([]types.ChunkCoord, 0, len(aoi.ActiveChunks))
 	for coord := range aoi.ActiveChunks {
 		activeCoords = append(activeCoords, coord)
 	}
@@ -1277,7 +1098,7 @@ func (cm *ChunkManager) GetEntityActiveChunks(entityID ecs.EntityID) []*Chunk {
 
 	chunks := make([]*Chunk, 0, len(activeCoords))
 	for _, coord := range activeCoords {
-		if chunk := cm.GetChunk(coord); chunk != nil && chunk.GetState() == ChunkStateActive {
+		if chunk := cm.GetChunk(coord); chunk != nil && chunk.GetState() == types.ChunkStateActive {
 			chunks = append(chunks, chunk)
 		}
 	}
@@ -1304,7 +1125,7 @@ func (cm *ChunkManager) Stop() {
 
 	// Collect all chunks that need saving
 	cm.interestMu.RLock()
-	interestedCoords := make([]ChunkCoord, 0, len(cm.chunkInterests))
+	interestedCoords := make([]types.ChunkCoord, 0, len(cm.chunkInterests))
 	for coord := range cm.chunkInterests {
 		interestedCoords = append(interestedCoords, coord)
 	}
@@ -1312,7 +1133,7 @@ func (cm *ChunkManager) Stop() {
 
 	// Also save all loaded chunks
 	cm.chunksMu.RLock()
-	allCoords := make([]ChunkCoord, 0, len(cm.chunks))
+	allCoords := make([]types.ChunkCoord, 0, len(cm.chunks))
 	for coord := range cm.chunks {
 		allCoords = append(allCoords, coord)
 	}
@@ -1322,7 +1143,7 @@ func (cm *ChunkManager) Stop() {
 	for _, coord := range allCoords {
 		if chunk := cm.GetChunk(coord); chunk != nil {
 			state := chunk.GetState()
-			if state == ChunkStateActive || state == ChunkStatePreloaded {
+			if state == types.ChunkStateActive || state == types.ChunkStatePreloaded {
 				cm.saveChunkToDB(chunk)
 				savedCount++
 			}
@@ -1341,18 +1162,9 @@ func (cm *ChunkManager) ObjectFactory() *ObjectFactory {
 	return cm.objectFactory
 }
 
-func WorldToChunkCoord(worldX, worldY int, chunkSize, coordPerTile int) ChunkCoord {
-	tileX := worldX / coordPerTile
-	tileY := worldY / coordPerTile
-	return ChunkCoord{
-		X: tileX / chunkSize,
-		Y: tileY / chunkSize,
-	}
-}
-
 func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {
 	chunkSize := cm.cfg.Game.ChunkSize
-	chunkCoord := ChunkCoord{
+	chunkCoord := types.ChunkCoord{
 		X: tileX / chunkSize,
 		Y: tileY / chunkSize,
 	}
@@ -1376,7 +1188,7 @@ func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {
 
 func (cm *ChunkManager) IsTileSwimmable(tileX, tileY int) bool {
 	chunkSize := cm.cfg.Game.ChunkSize
-	chunkCoord := ChunkCoord{
+	chunkCoord := types.ChunkCoord{
 		X: tileX / chunkSize,
 		Y: tileY / chunkSize,
 	}
