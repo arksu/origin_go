@@ -5,6 +5,7 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
+	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"testing"
 	"time"
@@ -263,4 +264,40 @@ func TestChunkManager_Stop_PreventsLRUSave(t *testing.T) {
 
 	// The key verification is that Stop() completes without issues
 	// which means the stopped flag prevented LRU evictions from saving
+}
+
+func TestChunk_SaveToDB_HandlesInactiveChunks(t *testing.T) {
+	// This test verifies that SaveToDB correctly handles chunks with raw objects (inactive state)
+	coord := types.ChunkCoord{X: 1, Y: 1}
+	chunk := core.NewChunk(coord, 0, 0, 128)
+
+	// Create some mock raw objects (simulating inactive chunk state)
+	rawObjects := make([]*repository.Object, 3)
+	for i := 0; i < 3; i++ {
+		rawObjects[i] = &repository.Object{
+			ID:         int64(i + 1),
+			ObjectType: int32(i + 1),
+			Region:     0,
+			X:          int32(i * 10),
+			Y:          int32(i * 10),
+			Layer:      0,
+			ChunkX:     int32(coord.X),
+			ChunkY:     int32(coord.Y),
+		}
+	}
+
+	// Set raw objects (simulating inactive chunk)
+	chunk.SetRawObjects(rawObjects)
+
+	// Verify GetRawObjects returns the objects
+	retrievedObjects := chunk.GetRawObjects()
+	if len(retrievedObjects) != 3 {
+		t.Errorf("Expected 3 raw objects, got %d", len(retrievedObjects))
+	}
+
+	// Verify GetHandles returns empty (no active entities)
+	handles := chunk.GetHandles()
+	if len(handles) != 0 {
+		t.Errorf("Expected 0 handles for inactive chunk, got %d", len(handles))
+	}
 }

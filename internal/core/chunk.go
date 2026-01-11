@@ -187,8 +187,40 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	copy(tiles, c.Tiles)
 	lastTick := c.LastTick
 	totalHandles := c.GetHandles()
-	entityCount := len(totalHandles)
+	rawObjects := c.GetRawObjects()
 	c.mu.RUnlock()
+
+	// Determine entity count and objects to save
+	var objectsToSave []*repository.Object
+	var entityCount int
+
+	if len(totalHandles) > 0 {
+		// Chunk is active - serialize entities from handles
+		entityCount = len(totalHandles)
+		for _, h := range totalHandles {
+			if !world.Alive(h) {
+				continue
+			}
+
+			info, ok := ecs.GetComponent[components.EntityInfo](world, h)
+			if !ok {
+				continue
+			}
+
+			obj, err := objectFactory.Serialize(world, h, info.ObjectType)
+			if err != nil {
+				logger.Error("failed to serialize object",
+					zap.Error(err),
+				)
+				continue
+			}
+			objectsToSave = append(objectsToSave, obj)
+		}
+	} else {
+		// Chunk is inactive - use raw objects directly
+		objectsToSave = rawObjects
+		entityCount = len(rawObjects)
+	}
 
 	err := db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
 		Region:      c.Region,
@@ -207,22 +239,9 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		)
 	}
 
-	handles := totalHandles
-	for _, h := range handles {
-		if !world.Alive(h) {
-			continue
-		}
-
-		info, ok := ecs.GetComponent[components.EntityInfo](world, h)
-		if !ok {
-			continue
-		}
-
-		obj, err := objectFactory.Serialize(world, h, info.ObjectType)
-		if err != nil {
-			logger.Error("failed to serialize object",
-				zap.Error(err),
-			)
+	// Save objects
+	for _, obj := range objectsToSave {
+		if obj == nil {
 			continue
 		}
 
@@ -253,7 +272,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			)
 		}
 	}
-	logger.Debug("saved chunk", zap.Any("coord", c.Coord), zap.Int("count", len(handles)))
+	logger.Debug("saved chunk", zap.Any("coord", c.Coord), zap.Int("count", len(objectsToSave)))
 }
 
 // LoadFromDB loads chunk data and objects from the database
