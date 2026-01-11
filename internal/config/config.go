@@ -37,8 +37,6 @@ type DatabaseConfig struct {
 
 type GameConfig struct {
 	TickRate                 int           `mapstructure:"tick_rate"`
-	ChunkSize                int           `mapstructure:"chunk_size"`
-	CoordPerTile             int           `mapstructure:"coord_per_tile"`
 	PlayerActiveChunkRadius  int           `mapstructure:"player_active_chunk_radius"`
 	PlayerPreloadChunkRadius int           `mapstructure:"player_preload_chunk_radius"`
 	Region                   int32         `mapstructure:"region"`
@@ -128,8 +126,6 @@ func setDefaults(v *viper.Viper) {
 
 	// Game defaults
 	v.SetDefault("game.tick_rate", 20)
-	v.SetDefault("game.chunk_size", 128)
-	v.SetDefault("game.coord_per_tile", 12)
 	v.SetDefault("game.player_active_chunk_radius", 1)
 	v.SetDefault("game.player_preload_chunk_radius", 2)
 	v.SetDefault("game.save_workers", 2)

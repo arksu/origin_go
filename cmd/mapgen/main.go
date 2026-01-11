@@ -15,6 +15,7 @@ import (
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
+	"origin/internal/utils"
 )
 
 const (
@@ -53,8 +54,8 @@ func main() {
 		db:           db,
 		logger:       logger,
 		rng:          rng,
-		chunkSize:    cfg.Game.ChunkSize,
-		coordPerTile: cfg.Game.CoordPerTile,
+		chunkSize:    utils.ChunkSize,
+		coordPerTile: utils.CoordPerTile,
 		region:       cfg.Game.Region,
 		perlin:       NewPerlinNoise(*seed),
 	}

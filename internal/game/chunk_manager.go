@@ -5,6 +5,7 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
+	"origin/internal/utils"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -187,8 +188,8 @@ func (cm *ChunkManager) subscribeToEvents() {
 }
 
 func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
-	oldChunk := types.WorldToChunkCoord(int(move.FromX), int(move.FromY), cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
-	newChunk := types.WorldToChunkCoord(int(move.ToX), int(move.ToY), cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
+	oldChunk := types.WorldToChunkCoord(int(move.FromX), int(move.FromY), utils.ChunkSize, utils.CoordPerTile)
+	newChunk := types.WorldToChunkCoord(int(move.ToX), int(move.ToY), utils.ChunkSize, utils.CoordPerTile)
 
 	if oldChunk != newChunk {
 		cm.UpdateEntityPosition(move.EntityID, newChunk)
@@ -197,7 +198,7 @@ func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
 
 // RegisterEntity registers an entity for AOI tracking
 func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY int) {
-	center := types.WorldToChunkCoord(worldX, worldY, cm.cfg.Game.ChunkSize, cm.cfg.Game.CoordPerTile)
+	center := types.WorldToChunkCoord(worldX, worldY, utils.ChunkSize, utils.CoordPerTile)
 
 	cm.aoiMu.Lock()
 	if _, exists := cm.entityAOIs[entityID]; exists {
@@ -498,7 +499,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	cm.chunksMu.Lock()
 	chunk, exists := cm.chunks[coord]
 	if !exists {
-		chunk = core.NewChunk(coord, cm.region, cm.layer, cm.cfg.Game.ChunkSize)
+		chunk = core.NewChunk(coord, cm.region, cm.layer, utils.ChunkSize)
 		cm.chunks[coord] = chunk
 	}
 	cm.chunksMu.Unlock()
@@ -593,7 +594,7 @@ func (cm *ChunkManager) GetOrCreateChunk(coord types.ChunkCoord) *core.Chunk {
 		return chunk
 	}
 
-	chunk := core.NewChunk(coord, cm.region, cm.layer, cm.cfg.Game.ChunkSize)
+	chunk := core.NewChunk(coord, cm.region, cm.layer, utils.ChunkSize)
 	cm.chunks[coord] = chunk
 	return chunk
 }
@@ -1035,7 +1036,7 @@ func (cm *ChunkManager) ObjectFactory() *ObjectFactory {
 }
 
 func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {
-	chunkSize := cm.cfg.Game.ChunkSize
+	chunkSize := utils.ChunkSize
 	chunkCoord := types.ChunkCoord{
 		X: tileX / chunkSize,
 		Y: tileY / chunkSize,
@@ -1059,7 +1060,7 @@ func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {
 }
 
 func (cm *ChunkManager) IsTileSwimmable(tileX, tileY int) bool {
-	chunkSize := cm.cfg.Game.ChunkSize
+	chunkSize := utils.ChunkSize
 	chunkCoord := types.ChunkCoord{
 		X: tileX / chunkSize,
 		Y: tileY / chunkSize,

@@ -198,7 +198,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 		zap.Int32("layer", s.layer),
 	)
 
-	centerChunk := types.WorldToChunkCoord(centerWorldX, centerWorldY, s.cfg.Game.ChunkSize, s.cfg.Game.CoordPerTile)
+	centerChunk := types.WorldToChunkCoord(centerWorldX, centerWorldY, utils.ChunkSize, utils.CoordPerTile)
 	radius := s.cfg.Game.PlayerActiveChunkRadius
 
 	coords := make([]types.ChunkCoord, 0, (2*radius+1)*(2*radius+1))
@@ -258,7 +258,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	maxX := worldX + halfSize
 	maxY := worldY + halfSize
 
-	coordPerTile := s.cfg.Game.CoordPerTile
+	coordPerTile := utils.CoordPerTile
 	minTileX := minX / coordPerTile
 	minTileY := minY / coordPerTile
 	maxTileX := (maxX - 1) / coordPerTile
