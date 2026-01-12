@@ -21,10 +21,11 @@ type EntityLocation struct {
 // External synchronization via command queue for cross-thread access
 type World struct {
 	// Entity management
-	entities   map[types.Handle]ComponentMask
-	locations  map[types.Handle]EntityLocation // O(1) archetype removal
-	archetypes *ArchetypeGraph
-	handles    *HandleAllocator
+	entities         map[types.Handle]ComponentMask
+	locations        map[types.Handle]EntityLocation // O(1) archetype removal
+	entityIDToHandle map[types.EntityID]types.Handle // O(1) EntityID -> Handle lookup
+	archetypes       *ArchetypeGraph
+	handles          *HandleAllocator
 
 	// System scheduling
 	systems       []System
@@ -52,13 +53,14 @@ func NewWorld() *World {
 // NewWorldWithCapacity creates a new ECS world with specified max handles
 func NewWorldWithCapacity(maxHandles uint32) *World {
 	w := &World{
-		entities:   make(map[types.Handle]ComponentMask, 1024),
-		locations:  make(map[types.Handle]EntityLocation, 1024),
-		archetypes: NewArchetypeGraph(),
-		handles:    NewHandleAllocator(maxHandles),
-		systems:    make([]System, 0, 16),
-		storages:   make(map[ComponentID]any),
-		resources:  make(map[any]any),
+		entities:         make(map[types.Handle]ComponentMask, 1024),
+		locations:        make(map[types.Handle]EntityLocation, 1024),
+		entityIDToHandle: make(map[types.EntityID]types.Handle, 1024),
+		archetypes:       NewArchetypeGraph(),
+		handles:          NewHandleAllocator(maxHandles),
+		systems:          make([]System, 0, 16),
+		storages:         make(map[ComponentID]any),
+		resources:        make(map[any]any),
 	}
 	return w
 }
@@ -98,6 +100,9 @@ func (w *World) Spawn(externalID types.EntityID) types.Handle {
 	index := arch.AddEntity(h)
 	w.locations[h] = EntityLocation{archetype: arch, index: index}
 
+	// Maintain reverse lookup map
+	w.entityIDToHandle[externalID] = h
+
 	// Add ExternalID component
 	AddComponent(w, h, ExternalID{ID: externalID})
 
@@ -126,6 +131,11 @@ func (w *World) Despawn(h types.Handle) bool {
 	mask, ok := w.entities[h]
 	if !ok {
 		return false
+	}
+
+	// Remove from entityIDToHandle map if entity has ExternalID
+	if extID, ok := GetComponent[ExternalID](w, h); ok {
+		delete(w.entityIDToHandle, extID.ID)
 	}
 
 	if loc, ok := w.locations[h]; ok {
@@ -187,6 +197,16 @@ func (w *World) GetExternalID(h types.Handle) (types.EntityID, bool) {
 		return 0, false
 	}
 	return ext.ID, true
+}
+
+// GetHandleByEntityID returns the handle for a given EntityID
+// O(1) lookup using reverse map - optimized for frequent packet handling
+// Returns InvalidHandle if entity not found
+func (w *World) GetHandleByEntityID(entityID types.EntityID) types.Handle {
+	if h, ok := w.entityIDToHandle[entityID]; ok {
+		return h
+	}
+	return types.InvalidHandle
 }
 
 // updateEntityArchetype moves entity to new archetype after component change

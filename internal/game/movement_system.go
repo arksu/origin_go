@@ -114,6 +114,8 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				})
 
 				spatial := chunk.Spatial()
+				// TODO log debug movement data
+
 				// TODO проверить миграции между гридами
 				spatial.UpdateDynamic(h, float64(oldX), float64(oldY), float64(newX), float64(newY))
 			}
