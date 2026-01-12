@@ -992,15 +992,15 @@ export const proto = $root.proto = (() => {
     })();
 
     /**
-     * MoveMode enum.
-     * @name proto.MoveMode
+     * MovementMode enum.
+     * @name proto.MovementMode
      * @enum {number}
      * @property {number} MOVE_MODE_WALK=0 MOVE_MODE_WALK value
      * @property {number} MOVE_MODE_RUN=1 MOVE_MODE_RUN value
      * @property {number} MOVE_MODE_FAST_RUN=2 MOVE_MODE_FAST_RUN value
      * @property {number} MOVE_MODE_SWIM=3 MOVE_MODE_SWIM value
      */
-    proto.MoveMode = (function() {
+    proto.MovementMode = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "MOVE_MODE_WALK"] = 0;
         values[valuesById[1] = "MOVE_MODE_RUN"] = 1;
@@ -2485,7 +2485,7 @@ export const proto = $root.proto = (() => {
          * @interface IEntityMovement
          * @property {proto.IPosition|null} [position] EntityMovement position
          * @property {proto.IVector2|null} [velocity] EntityMovement velocity
-         * @property {proto.MoveMode|null} [moveMode] EntityMovement moveMode
+         * @property {proto.MovementMode|null} [moveMode] EntityMovement moveMode
          * @property {proto.IVector2|null} [targetPosition] EntityMovement targetPosition
          * @property {boolean|null} [isMoving] EntityMovement isMoving
          */
@@ -2523,7 +2523,7 @@ export const proto = $root.proto = (() => {
 
         /**
          * EntityMovement moveMode.
-         * @member {proto.MoveMode} moveMode
+         * @member {proto.MovementMode} moveMode
          * @memberof proto.EntityMovement
          * @instance
          */
@@ -2794,7 +2794,7 @@ export const proto = $root.proto = (() => {
             if (message.velocity != null && message.hasOwnProperty("velocity"))
                 object.velocity = $root.proto.Vector2.toObject(message.velocity, options);
             if (message.moveMode != null && message.hasOwnProperty("moveMode"))
-                object.moveMode = options.enums === String ? $root.proto.MoveMode[message.moveMode] === undefined ? message.moveMode : $root.proto.MoveMode[message.moveMode] : message.moveMode;
+                object.moveMode = options.enums === String ? $root.proto.MovementMode[message.moveMode] === undefined ? message.moveMode : $root.proto.MovementMode[message.moveMode] : message.moveMode;
             if (message.targetPosition != null && message.hasOwnProperty("targetPosition")) {
                 object.targetPosition = $root.proto.Vector2.toObject(message.targetPosition, options);
                 if (options.oneofs)
@@ -3558,6 +3558,1355 @@ export const proto = $root.proto = (() => {
         return ChunkData;
     })();
 
+    proto.MoveTo = (function() {
+
+        /**
+         * Properties of a MoveTo.
+         * @memberof proto
+         * @interface IMoveTo
+         * @property {number|null} [x] MoveTo x
+         * @property {number|null} [y] MoveTo y
+         * @property {number|null} [layer] MoveTo layer
+         */
+
+        /**
+         * Constructs a new MoveTo.
+         * @memberof proto
+         * @classdesc Represents a MoveTo.
+         * @implements IMoveTo
+         * @constructor
+         * @param {proto.IMoveTo=} [properties] Properties to set
+         */
+        function MoveTo(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * MoveTo x.
+         * @member {number} x
+         * @memberof proto.MoveTo
+         * @instance
+         */
+        MoveTo.prototype.x = 0;
+
+        /**
+         * MoveTo y.
+         * @member {number} y
+         * @memberof proto.MoveTo
+         * @instance
+         */
+        MoveTo.prototype.y = 0;
+
+        /**
+         * MoveTo layer.
+         * @member {number} layer
+         * @memberof proto.MoveTo
+         * @instance
+         */
+        MoveTo.prototype.layer = 0;
+
+        /**
+         * Creates a new MoveTo instance using the specified properties.
+         * @function create
+         * @memberof proto.MoveTo
+         * @static
+         * @param {proto.IMoveTo=} [properties] Properties to set
+         * @returns {proto.MoveTo} MoveTo instance
+         */
+        MoveTo.create = function create(properties) {
+            return new MoveTo(properties);
+        };
+
+        /**
+         * Encodes the specified MoveTo message. Does not implicitly {@link proto.MoveTo.verify|verify} messages.
+         * @function encode
+         * @memberof proto.MoveTo
+         * @static
+         * @param {proto.IMoveTo} message MoveTo message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        MoveTo.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.x != null && Object.hasOwnProperty.call(message, "x"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.x);
+            if (message.y != null && Object.hasOwnProperty.call(message, "y"))
+                writer.uint32(/* id 2, wireType 0 =*/16).int32(message.y);
+            if (message.layer != null && Object.hasOwnProperty.call(message, "layer"))
+                writer.uint32(/* id 3, wireType 0 =*/24).int32(message.layer);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified MoveTo message, length delimited. Does not implicitly {@link proto.MoveTo.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.MoveTo
+         * @static
+         * @param {proto.IMoveTo} message MoveTo message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        MoveTo.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a MoveTo message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.MoveTo
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.MoveTo} MoveTo
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        MoveTo.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.MoveTo();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.x = reader.int32();
+                        break;
+                    }
+                case 2: {
+                        message.y = reader.int32();
+                        break;
+                    }
+                case 3: {
+                        message.layer = reader.int32();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a MoveTo message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.MoveTo
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.MoveTo} MoveTo
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        MoveTo.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a MoveTo message.
+         * @function verify
+         * @memberof proto.MoveTo
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        MoveTo.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.x != null && message.hasOwnProperty("x"))
+                if (!$util.isInteger(message.x))
+                    return "x: integer expected";
+            if (message.y != null && message.hasOwnProperty("y"))
+                if (!$util.isInteger(message.y))
+                    return "y: integer expected";
+            if (message.layer != null && message.hasOwnProperty("layer"))
+                if (!$util.isInteger(message.layer))
+                    return "layer: integer expected";
+            return null;
+        };
+
+        /**
+         * Creates a MoveTo message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.MoveTo
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.MoveTo} MoveTo
+         */
+        MoveTo.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.MoveTo)
+                return object;
+            let message = new $root.proto.MoveTo();
+            if (object.x != null)
+                message.x = object.x | 0;
+            if (object.y != null)
+                message.y = object.y | 0;
+            if (object.layer != null)
+                message.layer = object.layer | 0;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a MoveTo message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.MoveTo
+         * @static
+         * @param {proto.MoveTo} message MoveTo
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        MoveTo.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.x = 0;
+                object.y = 0;
+                object.layer = 0;
+            }
+            if (message.x != null && message.hasOwnProperty("x"))
+                object.x = message.x;
+            if (message.y != null && message.hasOwnProperty("y"))
+                object.y = message.y;
+            if (message.layer != null && message.hasOwnProperty("layer"))
+                object.layer = message.layer;
+            return object;
+        };
+
+        /**
+         * Converts this MoveTo to JSON.
+         * @function toJSON
+         * @memberof proto.MoveTo
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        MoveTo.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for MoveTo
+         * @function getTypeUrl
+         * @memberof proto.MoveTo
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        MoveTo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.MoveTo";
+        };
+
+        return MoveTo;
+    })();
+
+    proto.MoveToEntity = (function() {
+
+        /**
+         * Properties of a MoveToEntity.
+         * @memberof proto
+         * @interface IMoveToEntity
+         * @property {number|Long|null} [entityId] MoveToEntity entityId
+         * @property {boolean|null} [autoInteract] MoveToEntity autoInteract
+         */
+
+        /**
+         * Constructs a new MoveToEntity.
+         * @memberof proto
+         * @classdesc Represents a MoveToEntity.
+         * @implements IMoveToEntity
+         * @constructor
+         * @param {proto.IMoveToEntity=} [properties] Properties to set
+         */
+        function MoveToEntity(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * MoveToEntity entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.MoveToEntity
+         * @instance
+         */
+        MoveToEntity.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * MoveToEntity autoInteract.
+         * @member {boolean} autoInteract
+         * @memberof proto.MoveToEntity
+         * @instance
+         */
+        MoveToEntity.prototype.autoInteract = false;
+
+        /**
+         * Creates a new MoveToEntity instance using the specified properties.
+         * @function create
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {proto.IMoveToEntity=} [properties] Properties to set
+         * @returns {proto.MoveToEntity} MoveToEntity instance
+         */
+        MoveToEntity.create = function create(properties) {
+            return new MoveToEntity(properties);
+        };
+
+        /**
+         * Encodes the specified MoveToEntity message. Does not implicitly {@link proto.MoveToEntity.verify|verify} messages.
+         * @function encode
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {proto.IMoveToEntity} message MoveToEntity message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        MoveToEntity.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            if (message.autoInteract != null && Object.hasOwnProperty.call(message, "autoInteract"))
+                writer.uint32(/* id 2, wireType 0 =*/16).bool(message.autoInteract);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified MoveToEntity message, length delimited. Does not implicitly {@link proto.MoveToEntity.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {proto.IMoveToEntity} message MoveToEntity message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        MoveToEntity.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a MoveToEntity message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.MoveToEntity} MoveToEntity
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        MoveToEntity.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.MoveToEntity();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.autoInteract = reader.bool();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a MoveToEntity message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.MoveToEntity} MoveToEntity
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        MoveToEntity.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a MoveToEntity message.
+         * @function verify
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        MoveToEntity.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            if (message.autoInteract != null && message.hasOwnProperty("autoInteract"))
+                if (typeof message.autoInteract !== "boolean")
+                    return "autoInteract: boolean expected";
+            return null;
+        };
+
+        /**
+         * Creates a MoveToEntity message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.MoveToEntity} MoveToEntity
+         */
+        MoveToEntity.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.MoveToEntity)
+                return object;
+            let message = new $root.proto.MoveToEntity();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            if (object.autoInteract != null)
+                message.autoInteract = Boolean(object.autoInteract);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a MoveToEntity message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {proto.MoveToEntity} message MoveToEntity
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        MoveToEntity.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+                object.autoInteract = false;
+            }
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            if (message.autoInteract != null && message.hasOwnProperty("autoInteract"))
+                object.autoInteract = message.autoInteract;
+            return object;
+        };
+
+        /**
+         * Converts this MoveToEntity to JSON.
+         * @function toJSON
+         * @memberof proto.MoveToEntity
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        MoveToEntity.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for MoveToEntity
+         * @function getTypeUrl
+         * @memberof proto.MoveToEntity
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        MoveToEntity.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.MoveToEntity";
+        };
+
+        return MoveToEntity;
+    })();
+
+    proto.Interact = (function() {
+
+        /**
+         * Properties of an Interact.
+         * @memberof proto
+         * @interface IInteract
+         * @property {number|Long|null} [entityId] Interact entityId
+         * @property {proto.InteractionType|null} [type] Interact type
+         */
+
+        /**
+         * Constructs a new Interact.
+         * @memberof proto
+         * @classdesc Represents an Interact.
+         * @implements IInteract
+         * @constructor
+         * @param {proto.IInteract=} [properties] Properties to set
+         */
+        function Interact(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Interact entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.Interact
+         * @instance
+         */
+        Interact.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Interact type.
+         * @member {proto.InteractionType} type
+         * @memberof proto.Interact
+         * @instance
+         */
+        Interact.prototype.type = 0;
+
+        /**
+         * Creates a new Interact instance using the specified properties.
+         * @function create
+         * @memberof proto.Interact
+         * @static
+         * @param {proto.IInteract=} [properties] Properties to set
+         * @returns {proto.Interact} Interact instance
+         */
+        Interact.create = function create(properties) {
+            return new Interact(properties);
+        };
+
+        /**
+         * Encodes the specified Interact message. Does not implicitly {@link proto.Interact.verify|verify} messages.
+         * @function encode
+         * @memberof proto.Interact
+         * @static
+         * @param {proto.IInteract} message Interact message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Interact.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            if (message.type != null && Object.hasOwnProperty.call(message, "type"))
+                writer.uint32(/* id 2, wireType 0 =*/16).int32(message.type);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Interact message, length delimited. Does not implicitly {@link proto.Interact.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.Interact
+         * @static
+         * @param {proto.IInteract} message Interact message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Interact.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an Interact message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.Interact
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.Interact} Interact
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Interact.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.Interact();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.type = reader.int32();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an Interact message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.Interact
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.Interact} Interact
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Interact.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an Interact message.
+         * @function verify
+         * @memberof proto.Interact
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Interact.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            if (message.type != null && message.hasOwnProperty("type"))
+                switch (message.type) {
+                default:
+                    return "type: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 4:
+                case 5:
+                    break;
+                }
+            return null;
+        };
+
+        /**
+         * Creates an Interact message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.Interact
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.Interact} Interact
+         */
+        Interact.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.Interact)
+                return object;
+            let message = new $root.proto.Interact();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            switch (object.type) {
+            default:
+                if (typeof object.type === "number") {
+                    message.type = object.type;
+                    break;
+                }
+                break;
+            case "AUTO":
+            case 0:
+                message.type = 0;
+                break;
+            case "GATHER":
+            case 1:
+                message.type = 1;
+                break;
+            case "OPEN_CONTAINER":
+            case 2:
+                message.type = 2;
+                break;
+            case "USE":
+            case 4:
+                message.type = 4;
+                break;
+            case "PICKUP":
+            case 5:
+                message.type = 5;
+                break;
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an Interact message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.Interact
+         * @static
+         * @param {proto.Interact} message Interact
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Interact.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+                object.type = options.enums === String ? "AUTO" : 0;
+            }
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            if (message.type != null && message.hasOwnProperty("type"))
+                object.type = options.enums === String ? $root.proto.InteractionType[message.type] === undefined ? message.type : $root.proto.InteractionType[message.type] : message.type;
+            return object;
+        };
+
+        /**
+         * Converts this Interact to JSON.
+         * @function toJSON
+         * @memberof proto.Interact
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Interact.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for Interact
+         * @function getTypeUrl
+         * @memberof proto.Interact
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        Interact.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.Interact";
+        };
+
+        return Interact;
+    })();
+
+    /**
+     * InteractionType enum.
+     * @name proto.InteractionType
+     * @enum {number}
+     * @property {number} AUTO=0 AUTO value
+     * @property {number} GATHER=1 GATHER value
+     * @property {number} OPEN_CONTAINER=2 OPEN_CONTAINER value
+     * @property {number} USE=4 USE value
+     * @property {number} PICKUP=5 PICKUP value
+     */
+    proto.InteractionType = (function() {
+        const valuesById = {}, values = Object.create(valuesById);
+        values[valuesById[0] = "AUTO"] = 0;
+        values[valuesById[1] = "GATHER"] = 1;
+        values[valuesById[2] = "OPEN_CONTAINER"] = 2;
+        values[valuesById[4] = "USE"] = 4;
+        values[valuesById[5] = "PICKUP"] = 5;
+        return values;
+    })();
+
+    proto.C2S_PlayerAction = (function() {
+
+        /**
+         * Properties of a C2S_PlayerAction.
+         * @memberof proto
+         * @interface IC2S_PlayerAction
+         * @property {proto.IMoveTo|null} [moveTo] C2S_PlayerAction moveTo
+         * @property {proto.IMoveToEntity|null} [moveToEntity] C2S_PlayerAction moveToEntity
+         * @property {proto.IInteract|null} [interact] C2S_PlayerAction interact
+         * @property {number|null} [modifiers] C2S_PlayerAction modifiers
+         */
+
+        /**
+         * Constructs a new C2S_PlayerAction.
+         * @memberof proto
+         * @classdesc Represents a C2S_PlayerAction.
+         * @implements IC2S_PlayerAction
+         * @constructor
+         * @param {proto.IC2S_PlayerAction=} [properties] Properties to set
+         */
+        function C2S_PlayerAction(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * C2S_PlayerAction moveTo.
+         * @member {proto.IMoveTo|null|undefined} moveTo
+         * @memberof proto.C2S_PlayerAction
+         * @instance
+         */
+        C2S_PlayerAction.prototype.moveTo = null;
+
+        /**
+         * C2S_PlayerAction moveToEntity.
+         * @member {proto.IMoveToEntity|null|undefined} moveToEntity
+         * @memberof proto.C2S_PlayerAction
+         * @instance
+         */
+        C2S_PlayerAction.prototype.moveToEntity = null;
+
+        /**
+         * C2S_PlayerAction interact.
+         * @member {proto.IInteract|null|undefined} interact
+         * @memberof proto.C2S_PlayerAction
+         * @instance
+         */
+        C2S_PlayerAction.prototype.interact = null;
+
+        /**
+         * C2S_PlayerAction modifiers.
+         * @member {number} modifiers
+         * @memberof proto.C2S_PlayerAction
+         * @instance
+         */
+        C2S_PlayerAction.prototype.modifiers = 0;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        /**
+         * C2S_PlayerAction action.
+         * @member {"moveTo"|"moveToEntity"|"interact"|undefined} action
+         * @memberof proto.C2S_PlayerAction
+         * @instance
+         */
+        Object.defineProperty(C2S_PlayerAction.prototype, "action", {
+            get: $util.oneOfGetter($oneOfFields = ["moveTo", "moveToEntity", "interact"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new C2S_PlayerAction instance using the specified properties.
+         * @function create
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {proto.IC2S_PlayerAction=} [properties] Properties to set
+         * @returns {proto.C2S_PlayerAction} C2S_PlayerAction instance
+         */
+        C2S_PlayerAction.create = function create(properties) {
+            return new C2S_PlayerAction(properties);
+        };
+
+        /**
+         * Encodes the specified C2S_PlayerAction message. Does not implicitly {@link proto.C2S_PlayerAction.verify|verify} messages.
+         * @function encode
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {proto.IC2S_PlayerAction} message C2S_PlayerAction message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_PlayerAction.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.moveTo != null && Object.hasOwnProperty.call(message, "moveTo"))
+                $root.proto.MoveTo.encode(message.moveTo, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.moveToEntity != null && Object.hasOwnProperty.call(message, "moveToEntity"))
+                $root.proto.MoveToEntity.encode(message.moveToEntity, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            if (message.interact != null && Object.hasOwnProperty.call(message, "interact"))
+                $root.proto.Interact.encode(message.interact, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            if (message.modifiers != null && Object.hasOwnProperty.call(message, "modifiers"))
+                writer.uint32(/* id 10, wireType 0 =*/80).uint32(message.modifiers);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified C2S_PlayerAction message, length delimited. Does not implicitly {@link proto.C2S_PlayerAction.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {proto.IC2S_PlayerAction} message C2S_PlayerAction message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_PlayerAction.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a C2S_PlayerAction message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.C2S_PlayerAction} C2S_PlayerAction
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_PlayerAction.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.C2S_PlayerAction();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.moveTo = $root.proto.MoveTo.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 2: {
+                        message.moveToEntity = $root.proto.MoveToEntity.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 3: {
+                        message.interact = $root.proto.Interact.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 10: {
+                        message.modifiers = reader.uint32();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a C2S_PlayerAction message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.C2S_PlayerAction} C2S_PlayerAction
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_PlayerAction.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a C2S_PlayerAction message.
+         * @function verify
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        C2S_PlayerAction.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.moveTo != null && message.hasOwnProperty("moveTo")) {
+                properties.action = 1;
+                {
+                    let error = $root.proto.MoveTo.verify(message.moveTo);
+                    if (error)
+                        return "moveTo." + error;
+                }
+            }
+            if (message.moveToEntity != null && message.hasOwnProperty("moveToEntity")) {
+                if (properties.action === 1)
+                    return "action: multiple values";
+                properties.action = 1;
+                {
+                    let error = $root.proto.MoveToEntity.verify(message.moveToEntity);
+                    if (error)
+                        return "moveToEntity." + error;
+                }
+            }
+            if (message.interact != null && message.hasOwnProperty("interact")) {
+                if (properties.action === 1)
+                    return "action: multiple values";
+                properties.action = 1;
+                {
+                    let error = $root.proto.Interact.verify(message.interact);
+                    if (error)
+                        return "interact." + error;
+                }
+            }
+            if (message.modifiers != null && message.hasOwnProperty("modifiers"))
+                if (!$util.isInteger(message.modifiers))
+                    return "modifiers: integer expected";
+            return null;
+        };
+
+        /**
+         * Creates a C2S_PlayerAction message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.C2S_PlayerAction} C2S_PlayerAction
+         */
+        C2S_PlayerAction.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.C2S_PlayerAction)
+                return object;
+            let message = new $root.proto.C2S_PlayerAction();
+            if (object.moveTo != null) {
+                if (typeof object.moveTo !== "object")
+                    throw TypeError(".proto.C2S_PlayerAction.moveTo: object expected");
+                message.moveTo = $root.proto.MoveTo.fromObject(object.moveTo);
+            }
+            if (object.moveToEntity != null) {
+                if (typeof object.moveToEntity !== "object")
+                    throw TypeError(".proto.C2S_PlayerAction.moveToEntity: object expected");
+                message.moveToEntity = $root.proto.MoveToEntity.fromObject(object.moveToEntity);
+            }
+            if (object.interact != null) {
+                if (typeof object.interact !== "object")
+                    throw TypeError(".proto.C2S_PlayerAction.interact: object expected");
+                message.interact = $root.proto.Interact.fromObject(object.interact);
+            }
+            if (object.modifiers != null)
+                message.modifiers = object.modifiers >>> 0;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a C2S_PlayerAction message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {proto.C2S_PlayerAction} message C2S_PlayerAction
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        C2S_PlayerAction.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                object.modifiers = 0;
+            if (message.moveTo != null && message.hasOwnProperty("moveTo")) {
+                object.moveTo = $root.proto.MoveTo.toObject(message.moveTo, options);
+                if (options.oneofs)
+                    object.action = "moveTo";
+            }
+            if (message.moveToEntity != null && message.hasOwnProperty("moveToEntity")) {
+                object.moveToEntity = $root.proto.MoveToEntity.toObject(message.moveToEntity, options);
+                if (options.oneofs)
+                    object.action = "moveToEntity";
+            }
+            if (message.interact != null && message.hasOwnProperty("interact")) {
+                object.interact = $root.proto.Interact.toObject(message.interact, options);
+                if (options.oneofs)
+                    object.action = "interact";
+            }
+            if (message.modifiers != null && message.hasOwnProperty("modifiers"))
+                object.modifiers = message.modifiers;
+            return object;
+        };
+
+        /**
+         * Converts this C2S_PlayerAction to JSON.
+         * @function toJSON
+         * @memberof proto.C2S_PlayerAction
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        C2S_PlayerAction.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for C2S_PlayerAction
+         * @function getTypeUrl
+         * @memberof proto.C2S_PlayerAction
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        C2S_PlayerAction.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.C2S_PlayerAction";
+        };
+
+        return C2S_PlayerAction;
+    })();
+
+    proto.C2S_MovementMode = (function() {
+
+        /**
+         * Properties of a C2S_MovementMode.
+         * @memberof proto
+         * @interface IC2S_MovementMode
+         * @property {proto.MovementMode|null} [mode] C2S_MovementMode mode
+         */
+
+        /**
+         * Constructs a new C2S_MovementMode.
+         * @memberof proto
+         * @classdesc Represents a C2S_MovementMode.
+         * @implements IC2S_MovementMode
+         * @constructor
+         * @param {proto.IC2S_MovementMode=} [properties] Properties to set
+         */
+        function C2S_MovementMode(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * C2S_MovementMode mode.
+         * @member {proto.MovementMode} mode
+         * @memberof proto.C2S_MovementMode
+         * @instance
+         */
+        C2S_MovementMode.prototype.mode = 0;
+
+        /**
+         * Creates a new C2S_MovementMode instance using the specified properties.
+         * @function create
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {proto.IC2S_MovementMode=} [properties] Properties to set
+         * @returns {proto.C2S_MovementMode} C2S_MovementMode instance
+         */
+        C2S_MovementMode.create = function create(properties) {
+            return new C2S_MovementMode(properties);
+        };
+
+        /**
+         * Encodes the specified C2S_MovementMode message. Does not implicitly {@link proto.C2S_MovementMode.verify|verify} messages.
+         * @function encode
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {proto.IC2S_MovementMode} message C2S_MovementMode message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_MovementMode.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.mode != null && Object.hasOwnProperty.call(message, "mode"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.mode);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified C2S_MovementMode message, length delimited. Does not implicitly {@link proto.C2S_MovementMode.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {proto.IC2S_MovementMode} message C2S_MovementMode message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_MovementMode.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a C2S_MovementMode message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.C2S_MovementMode} C2S_MovementMode
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_MovementMode.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.C2S_MovementMode();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.mode = reader.int32();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a C2S_MovementMode message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.C2S_MovementMode} C2S_MovementMode
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_MovementMode.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a C2S_MovementMode message.
+         * @function verify
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        C2S_MovementMode.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.mode != null && message.hasOwnProperty("mode"))
+                switch (message.mode) {
+                default:
+                    return "mode: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    break;
+                }
+            return null;
+        };
+
+        /**
+         * Creates a C2S_MovementMode message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.C2S_MovementMode} C2S_MovementMode
+         */
+        C2S_MovementMode.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.C2S_MovementMode)
+                return object;
+            let message = new $root.proto.C2S_MovementMode();
+            switch (object.mode) {
+            default:
+                if (typeof object.mode === "number") {
+                    message.mode = object.mode;
+                    break;
+                }
+                break;
+            case "MOVE_MODE_WALK":
+            case 0:
+                message.mode = 0;
+                break;
+            case "MOVE_MODE_RUN":
+            case 1:
+                message.mode = 1;
+                break;
+            case "MOVE_MODE_FAST_RUN":
+            case 2:
+                message.mode = 2;
+                break;
+            case "MOVE_MODE_SWIM":
+            case 3:
+                message.mode = 3;
+                break;
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a C2S_MovementMode message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {proto.C2S_MovementMode} message C2S_MovementMode
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        C2S_MovementMode.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                object.mode = options.enums === String ? "MOVE_MODE_WALK" : 0;
+            if (message.mode != null && message.hasOwnProperty("mode"))
+                object.mode = options.enums === String ? $root.proto.MovementMode[message.mode] === undefined ? message.mode : $root.proto.MovementMode[message.mode] : message.mode;
+            return object;
+        };
+
+        /**
+         * Converts this C2S_MovementMode to JSON.
+         * @function toJSON
+         * @memberof proto.C2S_MovementMode
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        C2S_MovementMode.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for C2S_MovementMode
+         * @function getTypeUrl
+         * @memberof proto.C2S_MovementMode
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        C2S_MovementMode.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.C2S_MovementMode";
+        };
+
+        return C2S_MovementMode;
+    })();
+
     proto.C2S_Auth = (function() {
 
         /**
@@ -4015,6 +5364,8 @@ export const proto = $root.proto = (() => {
          * @property {number|null} [sequence] ClientMessage sequence
          * @property {proto.IC2S_Auth|null} [auth] ClientMessage auth
          * @property {proto.IC2S_Ping|null} [ping] ClientMessage ping
+         * @property {proto.IC2S_PlayerAction|null} [playerAction] ClientMessage playerAction
+         * @property {proto.IC2S_MovementMode|null} [movementMode] ClientMessage movementMode
          */
 
         /**
@@ -4056,17 +5407,33 @@ export const proto = $root.proto = (() => {
          */
         ClientMessage.prototype.ping = null;
 
+        /**
+         * ClientMessage playerAction.
+         * @member {proto.IC2S_PlayerAction|null|undefined} playerAction
+         * @memberof proto.ClientMessage
+         * @instance
+         */
+        ClientMessage.prototype.playerAction = null;
+
+        /**
+         * ClientMessage movementMode.
+         * @member {proto.IC2S_MovementMode|null|undefined} movementMode
+         * @memberof proto.ClientMessage
+         * @instance
+         */
+        ClientMessage.prototype.movementMode = null;
+
         // OneOf field names bound to virtual getters and setters
         let $oneOfFields;
 
         /**
          * ClientMessage payload.
-         * @member {"auth"|"ping"|undefined} payload
+         * @member {"auth"|"ping"|"playerAction"|"movementMode"|undefined} payload
          * @memberof proto.ClientMessage
          * @instance
          */
         Object.defineProperty(ClientMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["auth", "ping"]),
+            get: $util.oneOfGetter($oneOfFields = ["auth", "ping", "playerAction", "movementMode"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -4100,6 +5467,10 @@ export const proto = $root.proto = (() => {
                 $root.proto.C2S_Auth.encode(message.auth, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
             if (message.ping != null && Object.hasOwnProperty.call(message, "ping"))
                 $root.proto.C2S_Ping.encode(message.ping, writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
+            if (message.playerAction != null && Object.hasOwnProperty.call(message, "playerAction"))
+                $root.proto.C2S_PlayerAction.encode(message.playerAction, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
+            if (message.movementMode != null && Object.hasOwnProperty.call(message, "movementMode"))
+                $root.proto.C2S_MovementMode.encode(message.movementMode, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
             return writer;
         };
 
@@ -4146,6 +5517,14 @@ export const proto = $root.proto = (() => {
                     }
                 case 11: {
                         message.ping = $root.proto.C2S_Ping.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 12: {
+                        message.playerAction = $root.proto.C2S_PlayerAction.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 13: {
+                        message.movementMode = $root.proto.C2S_MovementMode.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -4205,6 +5584,26 @@ export const proto = $root.proto = (() => {
                         return "ping." + error;
                 }
             }
+            if (message.playerAction != null && message.hasOwnProperty("playerAction")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.C2S_PlayerAction.verify(message.playerAction);
+                    if (error)
+                        return "playerAction." + error;
+                }
+            }
+            if (message.movementMode != null && message.hasOwnProperty("movementMode")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.C2S_MovementMode.verify(message.movementMode);
+                    if (error)
+                        return "movementMode." + error;
+                }
+            }
             return null;
         };
 
@@ -4231,6 +5630,16 @@ export const proto = $root.proto = (() => {
                 if (typeof object.ping !== "object")
                     throw TypeError(".proto.ClientMessage.ping: object expected");
                 message.ping = $root.proto.C2S_Ping.fromObject(object.ping);
+            }
+            if (object.playerAction != null) {
+                if (typeof object.playerAction !== "object")
+                    throw TypeError(".proto.ClientMessage.playerAction: object expected");
+                message.playerAction = $root.proto.C2S_PlayerAction.fromObject(object.playerAction);
+            }
+            if (object.movementMode != null) {
+                if (typeof object.movementMode !== "object")
+                    throw TypeError(".proto.ClientMessage.movementMode: object expected");
+                message.movementMode = $root.proto.C2S_MovementMode.fromObject(object.movementMode);
             }
             return message;
         };
@@ -4261,6 +5670,16 @@ export const proto = $root.proto = (() => {
                 object.ping = $root.proto.C2S_Ping.toObject(message.ping, options);
                 if (options.oneofs)
                     object.payload = "ping";
+            }
+            if (message.playerAction != null && message.hasOwnProperty("playerAction")) {
+                object.playerAction = $root.proto.C2S_PlayerAction.toObject(message.playerAction, options);
+                if (options.oneofs)
+                    object.payload = "playerAction";
+            }
+            if (message.movementMode != null && message.hasOwnProperty("movementMode")) {
+                object.movementMode = $root.proto.C2S_MovementMode.toObject(message.movementMode, options);
+                if (options.oneofs)
+                    object.payload = "movementMode";
             }
             return object;
         };
