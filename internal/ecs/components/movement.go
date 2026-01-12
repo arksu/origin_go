@@ -37,11 +37,13 @@ const (
 
 // Movement represents an entity's movement capabilities and state
 type Movement struct {
+	// updates by movement system based on Speed
 	VelocityX float64
 	VelocityY float64
-	Mode      MoveMode
-	State     MoveState
-	Speed     float64
+
+	Mode  MoveMode
+	State MoveState
+	Speed float64
 
 	TargetType   TargetType
 	TargetX      int

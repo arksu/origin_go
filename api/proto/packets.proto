@@ -163,7 +163,6 @@ message ChunkData {
 message MoveTo {
   int32 x = 1;
   int32 y = 2;
-  int32 layer = 3;
 }
 
 message MoveToEntity {

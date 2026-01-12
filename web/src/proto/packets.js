@@ -3566,7 +3566,6 @@ export const proto = $root.proto = (() => {
          * @interface IMoveTo
          * @property {number|null} [x] MoveTo x
          * @property {number|null} [y] MoveTo y
-         * @property {number|null} [layer] MoveTo layer
          */
 
         /**
@@ -3601,14 +3600,6 @@ export const proto = $root.proto = (() => {
         MoveTo.prototype.y = 0;
 
         /**
-         * MoveTo layer.
-         * @member {number} layer
-         * @memberof proto.MoveTo
-         * @instance
-         */
-        MoveTo.prototype.layer = 0;
-
-        /**
          * Creates a new MoveTo instance using the specified properties.
          * @function create
          * @memberof proto.MoveTo
@@ -3636,8 +3627,6 @@ export const proto = $root.proto = (() => {
                 writer.uint32(/* id 1, wireType 0 =*/8).int32(message.x);
             if (message.y != null && Object.hasOwnProperty.call(message, "y"))
                 writer.uint32(/* id 2, wireType 0 =*/16).int32(message.y);
-            if (message.layer != null && Object.hasOwnProperty.call(message, "layer"))
-                writer.uint32(/* id 3, wireType 0 =*/24).int32(message.layer);
             return writer;
         };
 
@@ -3682,10 +3671,6 @@ export const proto = $root.proto = (() => {
                         message.y = reader.int32();
                         break;
                     }
-                case 3: {
-                        message.layer = reader.int32();
-                        break;
-                    }
                 default:
                     reader.skipType(tag & 7);
                     break;
@@ -3727,9 +3712,6 @@ export const proto = $root.proto = (() => {
             if (message.y != null && message.hasOwnProperty("y"))
                 if (!$util.isInteger(message.y))
                     return "y: integer expected";
-            if (message.layer != null && message.hasOwnProperty("layer"))
-                if (!$util.isInteger(message.layer))
-                    return "layer: integer expected";
             return null;
         };
 
@@ -3749,8 +3731,6 @@ export const proto = $root.proto = (() => {
                 message.x = object.x | 0;
             if (object.y != null)
                 message.y = object.y | 0;
-            if (object.layer != null)
-                message.layer = object.layer | 0;
             return message;
         };
 
@@ -3770,14 +3750,11 @@ export const proto = $root.proto = (() => {
             if (options.defaults) {
                 object.x = 0;
                 object.y = 0;
-                object.layer = 0;
             }
             if (message.x != null && message.hasOwnProperty("x"))
                 object.x = message.x;
             if (message.y != null && message.hasOwnProperty("y"))
                 object.y = message.y;
-            if (message.layer != null && message.hasOwnProperty("layer"))
-                object.layer = message.layer;
             return object;
         };
 

@@ -80,16 +80,12 @@ function handleCanvasClick(event) {
   const worldX = tileX * COORD_PER_TILE
   const worldY = tileY * COORD_PER_TILE
   
-  if (DEBUG) {
     console.debug('Canvas click:', { screenX, screenY })
     console.debug('World coords:', { worldX, worldY })
-  }
   
   // Send MoveTo action
   try {
     gameConnection.sendPlayerAction(worldX, worldY)
-    
-    if (DEBUG) console.debug('Sent MoveTo action:', { worldX, worldY })
   } catch (error) {
     console.error('Failed to send MoveTo action:', error)
   }
