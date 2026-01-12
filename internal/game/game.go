@@ -528,18 +528,8 @@ func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netpr
 
 	// TODO: Validate target position (bounds, walkable, etc.)
 
-	// Find player entity handle by EntityID
-	var playerHandle types.Handle = types.InvalidHandle
-	shard.world.Query().ForEach(func(h types.Handle) {
-		if playerHandle != types.InvalidHandle {
-			return // Already found
-		}
-		extID, ok := ecs.GetComponent[ecs.ExternalID](shard.world, h)
-		if ok && extID.ID == c.CharacterID {
-			playerHandle = h
-		}
-	})
-
+	// Find player entity handle by EntityID (O(1) lookup)
+	playerHandle := shard.world.GetHandleByEntityID(c.CharacterID)
 	if playerHandle == types.InvalidHandle {
 		g.logger.Error("Player entity not found",
 			zap.Uint64("client_id", c.ID),
