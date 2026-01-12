@@ -5,7 +5,7 @@ import (
 )
 
 // ObjectType represents different types of entities
-type ObjectType int32
+type ObjectType int
 
 const (
 	ObjectTypeUnknown ObjectType = iota
@@ -21,8 +21,8 @@ const (
 type EntityInfo struct {
 	ObjectType ObjectType
 	IsStatic   bool
-	Region     int32
-	Layer      int32
+	Region     int
+	Layer      int
 }
 
 const EntityInfoComponentID ecs.ComponentID = 13

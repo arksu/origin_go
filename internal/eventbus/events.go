@@ -140,12 +140,12 @@ type ChunkLoadEvent struct {
 	Timestamp time.Time
 	ChunkX    int
 	ChunkY    int
-	Layer     int32
+	Layer     int
 }
 
 func (e *ChunkLoadEvent) Topic() string { return e.topic }
 
-func NewChunkLoadEvent(chunkX, chunkY int, layer int32) *ChunkLoadEvent {
+func NewChunkLoadEvent(chunkX, chunkY int, layer int) *ChunkLoadEvent {
 	return &ChunkLoadEvent{
 		topic:     TopicGameplayChunkLoad,
 		Timestamp: time.Now(),
@@ -160,12 +160,12 @@ type ChunkUnloadEvent struct {
 	Timestamp time.Time
 	ChunkX    int
 	ChunkY    int
-	Layer     int32
+	Layer     int
 }
 
 func (e *ChunkUnloadEvent) Topic() string { return e.topic }
 
-func NewChunkUnloadEvent(chunkX, chunkY int, layer int32) *ChunkUnloadEvent {
+func NewChunkUnloadEvent(chunkX, chunkY int, layer int) *ChunkUnloadEvent {
 	return &ChunkUnloadEvent{
 		topic:     TopicGameplayChunkUnload,
 		Timestamp: time.Now(),

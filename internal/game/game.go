@@ -273,7 +273,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 	shard := g.shardManager.GetShard(character.Layer)
 	if shard == nil {
-		g.logger.Error("Shard not found for layer", zap.Int32("layer", character.Layer), zap.Int64("character_id", character.ID))
+		g.logger.Error("Shard not found for layer", zap.Int("layer", character.Layer), zap.Int64("character_id", character.ID))
 		g.sendError(c, "Spawn failed: invalid layer")
 		return
 	}
@@ -330,8 +330,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				HalfHeight: utils.PlayerAABBSize / 2,
 			})
 
-			character.X = int32(pos.X)
-			character.Y = int32(pos.Y)
+			character.X = pos.X
+			character.Y = pos.Y
 
 			spawned = true
 			break
@@ -466,8 +466,8 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				EntityId: uint64(entityID),
 				Movement: &netproto.EntityMovement{
 					Position: &netproto.Position{
-						X:       character.X,
-						Y:       character.Y,
+						X:       int32(character.X),
+						Y:       int32(character.Y),
 						Heading: uint32(character.Heading),
 					},
 				},
@@ -500,7 +500,7 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 	if shard == nil {
 		g.logger.Error("Shard not found for player action",
 			zap.Uint64("client_id", c.ID),
-			zap.Int32("layer", c.Layer))
+			zap.Int("layer", c.Layer))
 		g.sendError(c, "Invalid shard")
 		return
 	}
@@ -598,7 +598,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				g.logger.Debug("Unregistered entity AOI",
 					zap.Uint64("client_id", c.ID),
 					zap.Int64("character_id", int64(c.CharacterID)),
-					zap.Int32("layer", c.Layer),
+					zap.Int("layer", c.Layer),
 				)
 			}
 
@@ -613,9 +613,9 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 func (g *Game) resetOnlinePlayers() {
 	if err := g.db.Queries().ResetOnlinePlayers(g.ctx, g.cfg.Game.Region); err != nil {
-		g.logger.Error("Failed to reset online players", zap.Int32("region", g.cfg.Game.Region), zap.Error(err))
+		g.logger.Error("Failed to reset online players", zap.Int("region", g.cfg.Game.Region), zap.Error(err))
 	} else {
-		g.logger.Info("Reset online players", zap.Int32("region", g.cfg.Game.Region))
+		g.logger.Info("Reset online players", zap.Int("region", g.cfg.Game.Region))
 	}
 }
 

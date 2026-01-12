@@ -14,7 +14,7 @@ const deleteChunksByRegion = `-- name: DeleteChunksByRegion :exec
 DELETE FROM chunk WHERE region = $1
 `
 
-func (q *Queries) DeleteChunksByRegion(ctx context.Context, region int32) error {
+func (q *Queries) DeleteChunksByRegion(ctx context.Context, region int) error {
 	_, err := q.db.ExecContext(ctx, deleteChunksByRegion, region)
 	return err
 }
@@ -29,10 +29,10 @@ WHERE region = $1
 `
 
 type GetChunkParams struct {
-	Region int32 `json:"region"`
-	X      int32 `json:"x"`
-	Y      int32 `json:"y"`
-	Layer  int32 `json:"layer"`
+	Region int `json:"region"`
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Layer  int `json:"layer"`
 }
 
 func (q *Queries) GetChunk(ctx context.Context, arg GetChunkParams) (Chunk, error) {
@@ -63,7 +63,7 @@ FROM chunk
 WHERE region = $1
 `
 
-func (q *Queries) GetChunksByRegion(ctx context.Context, region int32) ([]Chunk, error) {
+func (q *Queries) GetChunksByRegion(ctx context.Context, region int) ([]Chunk, error) {
 	rows, err := q.db.QueryContext(ctx, getChunksByRegion, region)
 	if err != nil {
 		return nil, err
@@ -117,10 +117,10 @@ ON CONFLICT (region, x, y, layer) DO UPDATE SET
 `
 
 type UpsertChunkParams struct {
-	Region      int32         `json:"region"`
-	X           int32         `json:"x"`
-	Y           int32         `json:"y"`
-	Layer       int32         `json:"layer"`
+	Region      int           `json:"region"`
+	X           int           `json:"x"`
+	Y           int           `json:"y"`
+	Layer       int           `json:"layer"`
 	TilesData   []byte        `json:"tiles_data"`
 	LastTick    int64         `json:"last_tick"`
 	EntityCount sql.NullInt32 `json:"entity_count"`

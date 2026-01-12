@@ -26,9 +26,9 @@ type Account struct {
 type BuildSite struct {
 	ID                  int64           `json:"id"`
 	ObjectID            int64           `json:"object_id"`
-	RecipeID            int32           `json:"recipe_id"`
+	RecipeID            int             `json:"recipe_id"`
 	BuilderID           sql.NullInt64   `json:"builder_id"`
-	BuildPointsTotal    int32           `json:"build_points_total"`
+	BuildPointsTotal    int             `json:"build_points_total"`
 	BuildPointsProvided sql.NullInt32   `json:"build_points_provided"`
 	BuildPointsCurrent  sql.NullInt32   `json:"build_points_current"`
 	Status              sql.NullInt16   `json:"status"`
@@ -41,14 +41,14 @@ type Character struct {
 	ID             int64                 `json:"id"`
 	AccountID      int64                 `json:"account_id"`
 	Name           string                `json:"name"`
-	Region         int32                 `json:"region"`
-	X              int32                 `json:"x"`
-	Y              int32                 `json:"y"`
-	Layer          int32                 `json:"layer"`
+	Region         int                   `json:"region"`
+	X              int                   `json:"x"`
+	Y              int                   `json:"y"`
+	Layer          int                   `json:"layer"`
 	Heading        int16                 `json:"heading"`
-	Stamina        int32                 `json:"stamina"`
-	Shp            int32                 `json:"shp"`
-	Hhp            int32                 `json:"hhp"`
+	Stamina        int                   `json:"stamina"`
+	Shp            int                   `json:"shp"`
+	Hhp            int                   `json:"hhp"`
 	Paperdoll      pqtype.NullRawMessage `json:"paperdoll"`
 	Inventory      pqtype.NullRawMessage `json:"inventory"`
 	ExpNature      sql.NullInt64         `json:"exp_nature"`
@@ -71,9 +71,9 @@ type Chat struct {
 	Channel    int16         `json:"channel"`
 	SenderID   int64         `json:"sender_id"`
 	ReceiverID sql.NullInt64 `json:"receiver_id"`
-	Region     int32         `json:"region"`
-	X          int32         `json:"x"`
-	Y          int32         `json:"y"`
+	Region     int           `json:"region"`
+	X          int           `json:"x"`
+	Y          int           `json:"y"`
 	Layer      int16         `json:"layer"`
 	Message    string        `json:"message"`
 	CreatedAt  time.Time     `json:"created_at"`
@@ -84,19 +84,19 @@ type ChatDefault struct {
 	Channel    int16         `json:"channel"`
 	SenderID   int64         `json:"sender_id"`
 	ReceiverID sql.NullInt64 `json:"receiver_id"`
-	Region     int32         `json:"region"`
-	X          int32         `json:"x"`
-	Y          int32         `json:"y"`
+	Region     int           `json:"region"`
+	X          int           `json:"x"`
+	Y          int           `json:"y"`
 	Layer      int16         `json:"layer"`
 	Message    string        `json:"message"`
 	CreatedAt  time.Time     `json:"created_at"`
 }
 
 type Chunk struct {
-	Region      int32         `json:"region"`
-	X           int32         `json:"x"`
-	Y           int32         `json:"y"`
-	Layer       int32         `json:"layer"`
+	Region      int           `json:"region"`
+	X           int           `json:"x"`
+	Y           int           `json:"y"`
+	Layer       int           `json:"layer"`
 	Version     sql.NullInt32 `json:"version"`
 	LastTick    int64         `json:"last_tick"`
 	LastSavedAt sql.NullTime  `json:"last_saved_at"`
@@ -109,8 +109,8 @@ type Container struct {
 	OwnerID     int64           `json:"owner_id"`
 	OwnerType   int16           `json:"owner_type"`
 	ContainerID int64           `json:"container_id"`
-	Width       int32           `json:"width"`
-	Height      int32           `json:"height"`
+	Width       int             `json:"width"`
+	Height      int             `json:"height"`
 	Data        json.RawMessage `json:"data"`
 	UpdatedAt   sql.NullTime    `json:"updated_at"`
 }
@@ -123,13 +123,13 @@ type GlobalVar struct {
 
 type Object struct {
 	ID         int64                 `json:"id"`
-	ObjectType int32                 `json:"object_type"`
-	Region     int32                 `json:"region"`
-	X          int32                 `json:"x"`
-	Y          int32                 `json:"y"`
-	Layer      int32                 `json:"layer"`
-	ChunkX     int32                 `json:"chunk_x"`
-	ChunkY     int32                 `json:"chunk_y"`
+	ObjectType int                   `json:"object_type"`
+	Region     int                   `json:"region"`
+	X          int                   `json:"x"`
+	Y          int                   `json:"y"`
+	Layer      int                   `json:"layer"`
+	ChunkX     int                   `json:"chunk_x"`
+	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
 	HpCurrent  sql.NullInt32         `json:"hp_current"`
@@ -146,13 +146,13 @@ type Object struct {
 
 type ObjectRegion1 struct {
 	ID         int64                 `json:"id"`
-	ObjectType int32                 `json:"object_type"`
-	Region     int32                 `json:"region"`
-	X          int32                 `json:"x"`
-	Y          int32                 `json:"y"`
-	Layer      int32                 `json:"layer"`
-	ChunkX     int32                 `json:"chunk_x"`
-	ChunkY     int32                 `json:"chunk_y"`
+	ObjectType int                   `json:"object_type"`
+	Region     int                   `json:"region"`
+	X          int                   `json:"x"`
+	Y          int                   `json:"y"`
+	Layer      int                   `json:"layer"`
+	ChunkX     int                   `json:"chunk_x"`
+	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
 	HpCurrent  sql.NullInt32         `json:"hp_current"`
@@ -169,13 +169,13 @@ type ObjectRegion1 struct {
 
 type ObjectRegion2 struct {
 	ID         int64                 `json:"id"`
-	ObjectType int32                 `json:"object_type"`
-	Region     int32                 `json:"region"`
-	X          int32                 `json:"x"`
-	Y          int32                 `json:"y"`
-	Layer      int32                 `json:"layer"`
-	ChunkX     int32                 `json:"chunk_x"`
-	ChunkY     int32                 `json:"chunk_y"`
+	ObjectType int                   `json:"object_type"`
+	Region     int                   `json:"region"`
+	X          int                   `json:"x"`
+	Y          int                   `json:"y"`
+	Layer      int                   `json:"layer"`
+	ChunkX     int                   `json:"chunk_x"`
+	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
 	HpCurrent  sql.NullInt32         `json:"hp_current"`
@@ -192,9 +192,9 @@ type ObjectRegion2 struct {
 
 type Skill struct {
 	CharacterID int64         `json:"character_id"`
-	SkillID     int32         `json:"skill_id"`
+	SkillID     int           `json:"skill_id"`
 	Experience  sql.NullInt64 `json:"experience"`
-	Level       int32         `json:"level"`
+	Level       int           `json:"level"`
 	LastGainAt  sql.NullTime  `json:"last_gain_at"`
 	CreatedAt   sql.NullTime  `json:"created_at"`
 	UpdatedAt   sql.NullTime  `json:"updated_at"`

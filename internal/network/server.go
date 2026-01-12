@@ -45,7 +45,7 @@ type Client struct {
 	closeCh     chan struct{}
 	closeOnce   sync.Once
 	CharacterID types.EntityID
-	Layer       int32
+	Layer       int
 }
 
 func NewServer(cfg *config.NetworkConfig, logger *zap.Logger) *Server {

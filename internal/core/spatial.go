@@ -7,7 +7,7 @@ import (
 )
 
 type SpatialHashGrid struct {
-	cellSize    float64
+	cellSize    int
 	invCellSize float64
 
 	staticCells  map[int64][]types.Handle
@@ -16,18 +16,18 @@ type SpatialHashGrid struct {
 	mu sync.RWMutex
 }
 
-func NewSpatialHashGrid(cellSize float64) *SpatialHashGrid {
+func NewSpatialHashGrid(cellSize int) *SpatialHashGrid {
 	return &SpatialHashGrid{
 		cellSize:     cellSize,
-		invCellSize:  1.0 / cellSize,
+		invCellSize:  1.0 / float64(cellSize),
 		staticCells:  make(map[int64][]types.Handle),
 		dynamicCells: make(map[int64][]types.Handle),
 	}
 }
 
-func (g *SpatialHashGrid) cellKey(x, y float64) int64 {
-	cx := int32(x * g.invCellSize)
-	cy := int32(y * g.invCellSize)
+func (g *SpatialHashGrid) cellKey(x, y int) int64 {
+	cx := int32(float64(x) * g.invCellSize)
+	cy := int32(float64(y) * g.invCellSize)
 	return mortonEncode(cx, cy)
 }
 
@@ -44,7 +44,7 @@ func interleave(x uint32) uint32 {
 	return x
 }
 
-func (g *SpatialHashGrid) AddStatic(h types.Handle, x, y float64) {
+func (g *SpatialHashGrid) AddStatic(h types.Handle, x, y int) {
 	key := g.cellKey(x, y)
 
 	g.mu.Lock()
@@ -53,7 +53,7 @@ func (g *SpatialHashGrid) AddStatic(h types.Handle, x, y float64) {
 	g.staticCells[key] = append(g.staticCells[key], h)
 }
 
-func (g *SpatialHashGrid) RemoveStatic(h types.Handle, x, y float64) {
+func (g *SpatialHashGrid) RemoveStatic(h types.Handle, x, y int) {
 	key := g.cellKey(x, y)
 
 	g.mu.Lock()
@@ -69,7 +69,7 @@ func (g *SpatialHashGrid) RemoveStatic(h types.Handle, x, y float64) {
 	}
 }
 
-func (g *SpatialHashGrid) AddDynamic(h types.Handle, x, y float64) {
+func (g *SpatialHashGrid) AddDynamic(h types.Handle, x, y int) {
 	key := g.cellKey(x, y)
 
 	g.mu.Lock()
@@ -78,7 +78,7 @@ func (g *SpatialHashGrid) AddDynamic(h types.Handle, x, y float64) {
 	g.dynamicCells[key] = append(g.dynamicCells[key], h)
 }
 
-func (g *SpatialHashGrid) RemoveDynamic(h types.Handle, x, y float64) {
+func (g *SpatialHashGrid) RemoveDynamic(h types.Handle, x, y int) {
 	key := g.cellKey(x, y)
 
 	g.mu.Lock()
@@ -94,7 +94,7 @@ func (g *SpatialHashGrid) RemoveDynamic(h types.Handle, x, y float64) {
 	}
 }
 
-func (g *SpatialHashGrid) UpdateDynamic(h types.Handle, oldX, oldY, newX, newY float64) {
+func (g *SpatialHashGrid) UpdateDynamic(h types.Handle, oldX, oldY, newX, newY int) {
 	oldKey := g.cellKey(oldX, oldY)
 	newKey := g.cellKey(newX, newY)
 
@@ -163,11 +163,11 @@ func (g *SpatialHashGrid) QueryRadius(x, y, radius float64, result *[]types.Hand
 	}
 }
 
-func (g *SpatialHashGrid) QueryAABB(minX, minY, maxX, maxY float64, result *[]types.Handle) {
-	minCX := int32(minX * g.invCellSize)
-	maxCX := int32(maxX * g.invCellSize)
-	minCY := int32(minY * g.invCellSize)
-	maxCY := int32(maxY * g.invCellSize)
+func (g *SpatialHashGrid) QueryAABB(minX, minY, maxX, maxY int, result *[]types.Handle) {
+	minCX := int32(float64(minX) * g.invCellSize)
+	maxCX := int32(float64(maxX) * g.invCellSize)
+	minCY := int32(float64(minY) * g.invCellSize)
+	maxCY := int32(float64(maxY) * g.invCellSize)
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()

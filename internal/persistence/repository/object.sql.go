@@ -34,10 +34,10 @@ WHERE region = $1
 `
 
 type DeleteObjectsByChunkParams struct {
-	Region int32 `json:"region"`
-	ChunkX int32 `json:"chunk_x"`
-	ChunkY int32 `json:"chunk_y"`
-	Layer  int32 `json:"layer"`
+	Region int `json:"region"`
+	ChunkX int `json:"chunk_x"`
+	ChunkY int `json:"chunk_y"`
+	Layer  int `json:"layer"`
 }
 
 func (q *Queries) DeleteObjectsByChunk(ctx context.Context, arg DeleteObjectsByChunkParams) error {
@@ -96,10 +96,10 @@ WHERE region = $1
 `
 
 type GetObjectsByChunkParams struct {
-	Region int32 `json:"region"`
-	ChunkX int32 `json:"chunk_x"`
-	ChunkY int32 `json:"chunk_y"`
-	Layer  int32 `json:"layer"`
+	Region int `json:"region"`
+	ChunkX int `json:"chunk_x"`
+	ChunkY int `json:"chunk_y"`
+	Layer  int `json:"layer"`
 }
 
 func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkParams) ([]Object, error) {
@@ -155,7 +155,7 @@ const hardDeleteObjectsByRegion = `-- name: HardDeleteObjectsByRegion :exec
 DELETE FROM object WHERE region = $1
 `
 
-func (q *Queries) HardDeleteObjectsByRegion(ctx context.Context, region int32) error {
+func (q *Queries) HardDeleteObjectsByRegion(ctx context.Context, region int) error {
 	_, err := q.db.ExecContext(ctx, hardDeleteObjectsByRegion, region)
 	return err
 }
@@ -167,7 +167,7 @@ WHERE region = $1 AND id = $2
 `
 
 type SoftDeleteObjectParams struct {
-	Region int32 `json:"region"`
+	Region int   `json:"region"`
 	ID     int64 `json:"id"`
 }
 
@@ -216,13 +216,13 @@ ON CONFLICT (region, id) DO UPDATE SET
 
 type UpsertObjectParams struct {
 	ID         int64                 `json:"id"`
-	ObjectType int32                 `json:"object_type"`
-	Region     int32                 `json:"region"`
-	X          int32                 `json:"x"`
-	Y          int32                 `json:"y"`
-	Layer      int32                 `json:"layer"`
-	ChunkX     int32                 `json:"chunk_x"`
-	ChunkY     int32                 `json:"chunk_y"`
+	ObjectType int                   `json:"object_type"`
+	Region     int                   `json:"region"`
+	X          int                   `json:"x"`
+	Y          int                   `json:"y"`
+	Layer      int                   `json:"layer"`
+	ChunkX     int                   `json:"chunk_x"`
+	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
 	HpCurrent  sql.NullInt32         `json:"hp_current"`
