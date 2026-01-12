@@ -14,6 +14,10 @@ import (
 	"go.uber.org/zap"
 )
 
+type ChunkManager interface {
+	ActiveChunks() []*Chunk
+}
+
 // Chunk represents a game chunk with all its data and functionality
 type Chunk struct {
 	Coord    types.ChunkCoord

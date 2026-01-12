@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"origin/internal/ecs/components"
+	"origin/internal/ecs/systems"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"origin/internal/utils"
@@ -134,7 +135,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	s.chunkManager = NewChunkManager(cfg, db, s.world, layer, cfg.Game.Region, objectFactory, eb, logger)
 
-	s.world.AddSystem(NewMovementSystem(s.chunkManager, logger))
+	s.world.AddSystem(systems.NewMovementSystem(s.chunkManager, logger))
 
 	return s
 }
