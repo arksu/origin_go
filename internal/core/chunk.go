@@ -175,7 +175,7 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 
 // SaveToDB persists the chunk and its entities to the database
 func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
-	Serialize(world *ecs.World, h types.Handle, objectType components.ObjectType) (*repository.Object, error)
+	Serialize(world *ecs.World, h types.Handle, objectType types.ObjectType) (*repository.Object, error)
 }, logger *zap.Logger) {
 	if db == nil {
 		return
