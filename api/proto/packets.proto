@@ -38,7 +38,7 @@ message Timestamp {
 // ENUMS
 // ============================================================================
 
-enum MoveMode {
+enum MovementMode {
   MOVE_MODE_WALK = 0;
   MOVE_MODE_RUN = 1;
   MOVE_MODE_FAST_RUN = 2;
@@ -132,7 +132,7 @@ message Paperdoll {
 message EntityMovement {
   Position position = 1;
   Vector2 velocity = 2;
-  MoveMode move_mode = 3;
+  MovementMode move_mode = 3;
   optional Vector2 target_position = 4; // куда движется, если есть
   bool is_moving = 5;
 }
@@ -157,6 +157,52 @@ message ChunkData {
 }
 
 // ============================================================================
+// ACTIONS
+// ============================================================================
+
+message MoveTo {
+  int32 x = 1;
+  int32 y = 2;
+  int32 layer = 3;
+}
+
+message MoveToEntity {
+  uint64 entity_id = 1;
+  bool auto_interact = 2; // автоматически взаимодействовать при достижении
+}
+
+message Interact {
+  uint64 entity_id = 1;
+  InteractionType type = 2; // optional, сервер сам определит если не указан
+}
+
+enum InteractionType {
+  AUTO = 0; // сервер решает
+  GATHER = 1;
+  OPEN_CONTAINER = 2;
+  USE = 4;
+  PICKUP = 5;
+}
+
+message C2S_PlayerAction {
+  oneof action {
+    MoveTo move_to = 1;
+    MoveToEntity move_to_entity = 2;
+    Interact interact = 3;
+    //    Attack attack = 4;
+    //    UseSkill use_skill = 5;
+    //    StopAction stop = 6;
+  }
+
+  uint32 modifiers = 10; // bitflags: SHIFT=1, CTRL=2, ALT=4
+}
+
+// Движение - отдельный поток для responsive controls
+message C2S_MovementMode {
+  MovementMode mode = 1; // WALK, RUN, FAST_RUN, SWIM
+}
+
+// ============================================================================
 // CLIENT -> SERVER MESSAGES
 // ============================================================================
 
@@ -175,6 +221,8 @@ message ClientMessage {
   oneof payload {
     C2S_Auth auth = 10;
     C2S_Ping ping = 11;
+    C2S_PlayerAction player_action = 12;
+    C2S_MovementMode movement_mode = 13;
     //    C2S_MoveTo move_to = 11;
     //    C2S_MoveToEntity move_to_entity = 12;
     //    C2S_StopMovement stop_movement = 13;

@@ -67,6 +67,20 @@ class GameConnection {
     this.send({ auth: authMsg })
   }
 
+  sendPlayerAction(worldX, worldY, layer = 0, modifiers = 0) {
+    console.debug('Sending player action:', { worldX, worldY, layer, modifiers })
+    const playerActionMsg = proto.C2S_PlayerAction.create({
+      moveTo: proto.MoveTo.create({
+        x: worldX,
+        y: worldY,
+        layer: layer
+      }),
+      modifiers: modifiers
+    })
+
+    this.send({ playerAction: playerActionMsg })
+  }
+
   send(payload) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket not connected')

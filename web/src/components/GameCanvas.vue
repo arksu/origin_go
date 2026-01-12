@@ -5,6 +5,7 @@
       class="absolute inset-0"
       :width="canvasWidth"
       :height="canvasHeight"
+      @click="handleCanvasClick"
     />
     <div v-if="!gameStore.worldReady" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75">
       <p class="text-white text-lg">Loading world...</p>
@@ -15,6 +16,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useGameStore } from '../stores/game'
+import { gameConnection } from '../network/GameConnection.js'
 
 const gameStore = useGameStore()
 const canvas = ref(null)
@@ -45,6 +47,52 @@ const tileColors = {
 function getTileColor(tileId) {
   // console.debug("tileId", tileId)
   return tileColors[tileId] || tileColors[255]
+}
+
+function handleCanvasClick(event) {
+  if (!gameStore.worldReady || !gameStore.isConnected) return
+  
+  const rect = canvas.value.getBoundingClientRect()
+  const screenX = event.clientX - rect.left
+  const screenY = event.clientY - rect.top
+  
+  // Get current camera position from player position
+  const playerX = gameStore.playerPosition.x || 0
+  const playerY = gameStore.playerPosition.y || 0
+  const playerTileX = Math.floor(playerX / COORD_PER_TILE)
+  const playerTileY = Math.floor(playerY / COORD_PER_TILE)
+  const playerPixelX = playerTileX * TILE_SIZE_PIXELS
+  const playerPixelY = playerTileY * TILE_SIZE_PIXELS
+  
+  // Calculate camera position
+  const cameraX = playerPixelX - (canvasWidth.value / 2)
+  const cameraY = playerPixelY - (canvasHeight.value / 2)
+  
+  // Convert screen coordinates to world coordinates
+  const worldPixelX = screenX + cameraX
+  const worldPixelY = screenY + cameraY
+  
+  // Convert pixel coordinates to tile coordinates
+  const tileX = Math.floor(worldPixelX / TILE_SIZE_PIXELS)
+  const tileY = Math.floor(worldPixelY / TILE_SIZE_PIXELS)
+  
+  // Convert tile coordinates to world coordinates (COORD_PER_TILE units per tile)
+  const worldX = tileX * COORD_PER_TILE
+  const worldY = tileY * COORD_PER_TILE
+  
+  if (DEBUG) {
+    console.debug('Canvas click:', { screenX, screenY })
+    console.debug('World coords:', { worldX, worldY })
+  }
+  
+  // Send MoveTo action
+  try {
+    gameConnection.sendPlayerAction(worldX, worldY)
+    
+    if (DEBUG) console.debug('Sent MoveTo action:', { worldX, worldY })
+  } catch (error) {
+    console.error('Failed to send MoveTo action:', error)
+  }
 }
 
 function decompressTiles(compressedData) {
