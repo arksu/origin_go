@@ -210,6 +210,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			obj, err := objectFactory.Serialize(world, h, info.ObjectType)
 			if err != nil {
 				logger.Error("failed to serialize object",
+					zap.Any("object_type", info.ObjectType),
 					zap.Error(err),
 				)
 				continue

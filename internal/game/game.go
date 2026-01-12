@@ -311,7 +311,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Region:     character.Region,
 				Layer:      character.Layer,
 			})
-			ecs.AddComponent(shard.world, handle, components.Transform{X: pos.X, Y: pos.Y, Direction: float32(character.Heading) * 45})
+			ecs.AddComponent(shard.world, handle, components.Transform{X: float64(pos.X), Y: float64(pos.Y), Direction: float64(character.Heading) * 45})
 			ecs.AddComponent(shard.world, handle, components.Movement{
 				VelocityX: 0,
 				VelocityY: 0,
@@ -555,12 +555,14 @@ func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netpr
 	}
 
 	// Set movement target using helper method
-	mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
+	ecs.WithComponent(shard.world, playerHandle, func(mov *components.Movement) {
+		mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
+	})
 
 	g.logger.Debug("Set movement target",
 		zap.Uint64("client_id", c.ID),
-		zap.Int("target_x", mov.TargetX),
-		zap.Int("target_y", mov.TargetY))
+		zap.Int32("target_x", moveTo.X),
+		zap.Int32("target_y", moveTo.Y))
 }
 
 func (g *Game) handleMoveToEntityAction(c *network.Client, shard *Shard, moveToEntity *netproto.MoveToEntity) {

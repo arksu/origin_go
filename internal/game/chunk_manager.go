@@ -985,6 +985,26 @@ func (cm *ChunkManager) GetEntityActiveChunks(entityID types.EntityID) []*core.C
 	return chunks
 }
 
+// GetEntityChunk returns the chunk coordinate where the entity is currently located
+func (cm *ChunkManager) GetEntityChunk(entityID types.EntityID) (*core.Chunk, bool) {
+	cm.aoiMu.RLock()
+	aoi, exists := cm.entityAOIs[entityID]
+	if !exists {
+		cm.aoiMu.RUnlock()
+		return nil, false
+	}
+	centerChunk := aoi.CenterChunk
+	cm.aoiMu.RUnlock()
+
+	// Verify the entity actually exists in an active chunk
+	chunk := cm.GetChunk(centerChunk)
+	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
+		return nil, false
+	}
+
+	return chunk, true
+}
+
 func (cm *ChunkManager) Stats() ChunkStats {
 	return ChunkStats{
 		ActiveCount:    atomic.LoadInt64(&cm.stats.ActiveCount),
