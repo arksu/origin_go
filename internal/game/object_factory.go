@@ -2,7 +2,6 @@ package game
 
 import (
 	"origin/internal/ecs"
-	"origin/internal/ecs/components"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 )
@@ -10,16 +9,16 @@ import (
 type ObjectBuilder interface {
 	Build(w *ecs.World, raw *repository.Object) (types.Handle, error)
 	Serialize(w *ecs.World, h types.Handle) (*repository.Object, error)
-	ObjectType() components.ObjectType
+	ObjectType() types.ObjectType
 }
 
 type ObjectFactory struct {
-	builders map[components.ObjectType]ObjectBuilder
+	builders map[types.ObjectType]ObjectBuilder
 }
 
 func NewObjectFactory() *ObjectFactory {
 	return &ObjectFactory{
-		builders: make(map[components.ObjectType]ObjectBuilder),
+		builders: make(map[types.ObjectType]ObjectBuilder),
 	}
 }
 
@@ -28,7 +27,7 @@ func (f *ObjectFactory) RegisterBuilder(builder ObjectBuilder) {
 }
 
 func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object) (types.Handle, error) {
-	objType := components.ObjectType(raw.ObjectType)
+	objType := types.ObjectType(raw.ObjectType)
 	builder, ok := f.builders[objType]
 	if !ok {
 		return types.InvalidHandle, ErrBuilderNotFound
@@ -36,7 +35,7 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object) (types.Handl
 	return builder.Build(w, raw)
 }
 
-func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle, objType components.ObjectType) (*repository.Object, error) {
+func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle, objType types.ObjectType) (*repository.Object, error) {
 	builder, ok := f.builders[objType]
 	if !ok {
 		return nil, ErrBuilderNotFound

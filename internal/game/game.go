@@ -306,7 +306,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 			// add player components
 			ecs.AddComponent(shard.world, handle, components.EntityInfo{
-				ObjectType: components.ObjectTypePlayer,
+				ObjectType: types.ObjectTypePlayer,
 				IsStatic:   false,
 				Region:     character.Region,
 				Layer:      character.Layer,

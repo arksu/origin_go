@@ -2,24 +2,12 @@ package components
 
 import (
 	"origin/internal/ecs"
-)
-
-// ObjectType represents different types of entities
-type ObjectType int
-
-const (
-	ObjectTypeUnknown ObjectType = iota
-	ObjectTypeTree
-	ObjectTypeRock
-	ObjectTypeBuilding
-	ObjectTypeItem
-	ObjectTypeNPC
-	ObjectTypePlayer
+	"origin/internal/types"
 )
 
 // EntityInfo stores basic entity metadata
 type EntityInfo struct {
-	ObjectType ObjectType
+	ObjectType types.ObjectType
 	IsStatic   bool
 	Region     int
 	Layer      int

@@ -12,7 +12,7 @@ import (
 
 type TreeBuilder struct{}
 
-func (b *TreeBuilder) ObjectType() components.ObjectType { return components.ObjectTypeTree }
+func (b *TreeBuilder) ObjectType() types.ObjectType { return types.ObjectTypeTree }
 
 func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle, error) {
 	h := w.Spawn(types.EntityID(raw.ID))
@@ -24,10 +24,15 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle,
 	ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, int(raw.Heading.Int16*45)))
 
 	ecs.AddComponent(w, h, components.EntityInfo{
-		ObjectType: components.ObjectType(raw.ObjectType),
+		ObjectType: types.ObjectType(raw.ObjectType),
 		IsStatic:   raw.IsStatic.Valid && raw.IsStatic.Bool,
 		Region:     raw.Region,
 		Layer:      raw.Layer,
+	})
+
+	ecs.AddComponent(w, h, components.Collider{
+		HalfWidth:  10 / 2,
+		HalfHeight: 10 / 2,
 	})
 
 	return h, nil

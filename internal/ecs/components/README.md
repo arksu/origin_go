@@ -25,21 +25,18 @@ package components
 
 import "origin/internal/ecs"
 
-// Position represents an entity's location in the world
-type Position struct {
-    X, Y, Z float64
+// Transform represents an entity's position and orientation in 2D space
+type Transform struct {
+	// исходные координаты на начало тика
+	X float64
+	Y float64
+	// то куда передвигаемся на текущем тике
+	IntentX float64
+	IntentY float64
+	// направление вращения в градусах
+	Direction float64
 }
 
-// Velocity represents an entity's movement speed
-type Velocity struct {
-    DX, DY, DZ float64
-}
-
-// Health represents an entity's health points
-type Health struct {
-    Current int32
-    Maximum int32
-}
 ```
 
 ### 2. Register with Explicit ID
@@ -60,10 +57,7 @@ const (
 
 func init() {
     ecs.RegisterComponent[Transform](TransformComponentID)
-    ecs.RegisterComponent[Collider](ColliderComponentID)
-    ecs.RegisterComponent[Movement](MovementComponentID)
-    ecs.RegisterComponent[CollisionResult](CollisionResultComponentID)
-}
+
 ```
 
 ### 3. Usage in Game Code
