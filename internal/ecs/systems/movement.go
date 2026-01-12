@@ -1,8 +1,9 @@
-package game
+package systems
 
 import (
 	"math"
 
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 
@@ -11,11 +12,11 @@ import (
 
 type MovementSystem struct {
 	ecs.BaseSystem
-	chunkManager *ChunkManager
+	chunkManager core.ChunkManager
 	logger       *zap.Logger
 }
 
-func NewMovementSystem(chunkManager *ChunkManager, logger *zap.Logger) *MovementSystem {
+func NewMovementSystem(chunkManager core.ChunkManager, logger *zap.Logger) *MovementSystem {
 	return &MovementSystem{
 		BaseSystem:   ecs.NewBaseSystem("MovementSystem", 100),
 		chunkManager: chunkManager,
@@ -79,19 +80,15 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				// Clamp step to prevent overshoot oscillation
 				if step >= dist {
 					// Reached target, snap to exact position
-					//oldX := transform.X
-					//oldY := transform.Y
 					ecs.WithComponent(w, h, func(t *components.Transform) {
-						t.X = movement.TargetX
-						t.Y = movement.TargetY
+						t.IntentX = movement.TargetX
+						t.IntentY = movement.TargetY
 						t.Direction = math.Atan2(dy, dx)
 					})
 					ecs.WithComponent(w, h, func(m *components.Movement) {
 						m.ClearTarget()
 					})
-					// TODO
-					//spatial := chunk.Spatial()
-					//spatial.UpdateDynamic(h, oldX, oldY, movement.TargetX, movement.TargetY)
+					// TODO впереди еще проверка коллизий, поэтому пишем просто в Intent, и только после будет фактическая смена позиции
 					continue
 				}
 
@@ -127,10 +124,6 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 					zap.Float64("velocity_x", velocityX),
 					zap.Float64("velocity_y", velocityY),
 					zap.Float64("dt", dt))
-
-				// TODO проверить миграции между гридами
-				//spatial := chunk.Spatial()
-				//spatial.UpdateDynamic(h, oldX, oldY, newX, newY)
 			}
 		}
 	}
