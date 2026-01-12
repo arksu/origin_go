@@ -524,11 +524,53 @@ func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netpr
 	g.logger.Debug("MoveTo action",
 		zap.Uint64("client_id", c.ID),
 		zap.Int32("target_x", moveTo.X),
-		zap.Int32("target_y", moveTo.Y),
-		zap.Int32("layer", moveTo.Layer))
+		zap.Int32("target_y", moveTo.Y))
 
 	// TODO: Validate target position (bounds, walkable, etc.)
 
+	// Find player entity handle by EntityID
+	var playerHandle types.Handle = types.InvalidHandle
+	shard.world.Query().ForEach(func(h types.Handle) {
+		if playerHandle != types.InvalidHandle {
+			return // Already found
+		}
+		extID, ok := ecs.GetComponent[ecs.ExternalID](shard.world, h)
+		if ok && extID.ID == c.CharacterID {
+			playerHandle = h
+		}
+	})
+
+	if playerHandle == types.InvalidHandle {
+		g.logger.Error("Player entity not found",
+			zap.Uint64("client_id", c.ID),
+			zap.Uint64("entity_id", uint64(c.CharacterID)))
+		return
+	}
+
+	// Get movement component
+	mov, ok := ecs.GetComponent[components.Movement](shard.world, playerHandle)
+	if !ok {
+		g.logger.Error("Movement component not found",
+			zap.Uint64("client_id", c.ID),
+			zap.Uint64("entity_id", uint64(c.CharacterID)))
+		return
+	}
+
+	// Only allow movement if not stunned
+	if mov.State == components.StateStunned {
+		g.logger.Debug("Cannot move while stunned",
+			zap.Uint64("client_id", c.ID),
+			zap.Uint64("entity_id", uint64(c.CharacterID)))
+		return
+	}
+
+	// Set movement target using helper method
+	mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
+
+	g.logger.Debug("Set movement target",
+		zap.Uint64("client_id", c.ID),
+		zap.Int("target_x", mov.TargetX),
+		zap.Int("target_y", mov.TargetY))
 }
 
 func (g *Game) handleMoveToEntityAction(c *network.Client, shard *Shard, moveToEntity *netproto.MoveToEntity) {

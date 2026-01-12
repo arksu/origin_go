@@ -1157,7 +1157,6 @@ type MoveTo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	X             int32                  `protobuf:"varint,1,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int32                  `protobuf:"varint,2,opt,name=y,proto3" json:"y,omitempty"`
-	Layer         int32                  `protobuf:"varint,3,opt,name=layer,proto3" json:"layer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1202,13 +1201,6 @@ func (x *MoveTo) GetX() int32 {
 func (x *MoveTo) GetY() int32 {
 	if x != nil {
 		return x.Y
-	}
-	return 0
-}
-
-func (x *MoveTo) GetLayer() int32 {
-	if x != nil {
-		return x.Layer
 	}
 	return 0
 }
@@ -2320,11 +2312,10 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\tChunkData\x12'\n" +
 	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\x12\x14\n" +
 	"\x05tiles\x18\x02 \x01(\fR\x05tiles\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\rR\aversion\":\n" +
+	"\aversion\x18\x03 \x01(\rR\aversion\"$\n" +
 	"\x06MoveTo\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x05R\x01x\x12\f\n" +
-	"\x01y\x18\x02 \x01(\x05R\x01y\x12\x14\n" +
-	"\x05layer\x18\x03 \x01(\x05R\x05layer\"P\n" +
+	"\x01y\x18\x02 \x01(\x05R\x01y\"P\n" +
 	"\fMoveToEntity\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12#\n" +
 	"\rauto_interact\x18\x02 \x01(\bR\fautoInteract\"S\n" +
