@@ -70,7 +70,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 
 			dx := movement.TargetX - transform.X
 			dy := movement.TargetY - transform.Y
-			dist := float64(math.Sqrt(float64(dx*dx + dy*dy)))
+			dist := math.Sqrt(dx*dx + dy*dy)
 
 			if dist > 0.001 {
 				speed := movement.GetCurrentSpeed()
@@ -79,24 +79,25 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				// Clamp step to prevent overshoot oscillation
 				if step >= dist {
 					// Reached target, snap to exact position
-					oldX := transform.X
-					oldY := transform.Y
+					//oldX := transform.X
+					//oldY := transform.Y
 					ecs.WithComponent(w, h, func(t *components.Transform) {
 						t.X = movement.TargetX
 						t.Y = movement.TargetY
-						t.Direction = float32(math.Atan2(float64(dy), float64(dx)))
+						t.Direction = math.Atan2(dy, dx)
 					})
 					ecs.WithComponent(w, h, func(m *components.Movement) {
 						m.ClearTarget()
 					})
-					spatial := chunk.Spatial()
-					spatial.UpdateDynamic(h, oldX, oldY, movement.TargetX, movement.TargetY)
+					// TODO
+					//spatial := chunk.Spatial()
+					//spatial.UpdateDynamic(h, oldX, oldY, movement.TargetX, movement.TargetY)
 					continue
 				}
 
 				// Normal movement
-				velocityX := (float64(dx) / dist) * speed
-				velocityY := (float64(dy) / dist) * speed
+				velocityX := (dx / dist) * speed
+				velocityY := (dy / dist) * speed
 
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.VelocityX = velocityX
@@ -107,30 +108,29 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 
 				oldX := transform.X
 				oldY := transform.Y
-				newX := int(math.Round(float64(transform.X) + velocityX*dt))
-				newY := int(math.Round(float64(transform.Y) + velocityY*dt))
+				newX := math.Round(transform.X + velocityX*dt)
+				newY := math.Round(transform.Y + velocityY*dt)
 
 				ecs.WithComponent(w, h, func(t *components.Transform) {
 					t.IntentX = newX
 					t.IntentY = newY
 					// Direction based on actual velocity vector
-					t.Direction = float32(math.Atan2(velocityY, velocityX))
+					t.Direction = math.Atan2(velocityY, velocityX)
 				})
 
-				spatial := chunk.Spatial()
 				s.logger.Debug("Entity movement",
 					zap.Uint64("handle", uint64(h)),
-					zap.Int("old_x", oldX),
-					zap.Int("old_y", oldY),
-					zap.Int("new_x", newX),
-					zap.Int("new_y", newY),
+					zap.Float64("old_x", oldX),
+					zap.Float64("old_y", oldY),
+					zap.Float64("new_x", newX),
+					zap.Float64("new_y", newY),
 					zap.Float64("velocity_x", velocityX),
 					zap.Float64("velocity_y", velocityY),
-					zap.Float64("speed", speed),
 					zap.Float64("dt", dt))
 
 				// TODO проверить миграции между гридами
-				spatial.UpdateDynamic(h, oldX, oldY, newX, newY)
+				//spatial := chunk.Spatial()
+				//spatial.UpdateDynamic(h, oldX, oldY, newX, newY)
 			}
 		}
 	}

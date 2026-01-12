@@ -251,6 +251,8 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	entityID := types.EntityID(character.ID)
+
 	halfSize := utils.PlayerAABBSize / 2
 	minX := worldX - halfSize
 	minY := worldY - halfSize
@@ -263,7 +265,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 	maxTileX := (maxX - 1) / coordPerTile
 	maxTileY := (maxY - 1) / coordPerTile
 
-	chunks := s.chunkManager.GetEntityActiveChunks(types.EntityID(character.ID))
+	chunks := s.chunkManager.GetEntityActiveChunks(entityID)
 	if len(chunks) == 0 {
 		return false, types.InvalidHandle
 	}
@@ -297,17 +299,20 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 			continue
 		}
 
-		objMinX := transform.X - collider.HalfWidth
-		objMinY := transform.Y - collider.HalfHeight
-		objMaxX := transform.X + collider.HalfWidth
-		objMaxY := transform.Y + collider.HalfHeight
+		objMinX := int(transform.X) - collider.HalfWidth
+		objMinY := int(transform.Y) - collider.HalfHeight
+		objMaxX := int(transform.X) + collider.HalfWidth
+		objMaxY := int(transform.Y) + collider.HalfHeight
 
 		if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
 			return false, types.InvalidHandle
 		}
 	}
 
-	handle := s.spawnEntityLocked(types.EntityID(character.ID), worldX, worldY)
+	handle := s.spawnEntityLocked(entityID, worldX, worldY)
+	if chunk, ok := s.chunkManager.GetEntityChunk(entityID); ok {
+		chunk.Spatial().AddDynamic(handle, worldX, worldY)
+	}
 	return true, handle
 }
 

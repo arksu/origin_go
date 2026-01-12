@@ -46,8 +46,8 @@ type Movement struct {
 	Speed float64
 
 	TargetType   TargetType
-	TargetX      int
-	TargetY      int
+	TargetX      float64
+	TargetY      float64
 	TargetHandle types.Handle
 
 	InteractionRange float64
@@ -59,14 +59,14 @@ func init() {
 	ecs.RegisterComponent[Movement](MovementComponentID)
 }
 
-func (m *Movement) HasReachedTarget(currentX, currentY int) bool {
+func (m *Movement) HasReachedTarget(currentX, currentY float64) bool {
 	if m.TargetType == TargetNone {
 		return true
 	}
 
 	dx := m.TargetX - currentX
 	dy := m.TargetY - currentY
-	distSq := float64(dx*dx) + float64(dy*dy)
+	distSq := dx*dx + dy*dy
 	stopDistSq := StopDistance * StopDistance
 
 	return distSq <= stopDistSq
@@ -82,8 +82,8 @@ func (m *Movement) ClearTarget() {
 
 func (m *Movement) SetTargetPoint(x, y int) {
 	m.TargetType = TargetPoint
-	m.TargetX = x
-	m.TargetY = y
+	m.TargetX = float64(x)
+	m.TargetY = float64(y)
 	m.TargetHandle = types.InvalidHandle
 	m.State = StateMoving
 }
@@ -91,8 +91,8 @@ func (m *Movement) SetTargetPoint(x, y int) {
 func (m *Movement) SetTargetHandle(handle types.Handle, x, y int) {
 	m.TargetType = TargetEntity
 	m.TargetHandle = handle
-	m.TargetX = x
-	m.TargetY = y
+	m.TargetX = float64(x)
+	m.TargetY = float64(y)
 	m.State = StateMoving
 }
 

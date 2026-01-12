@@ -21,7 +21,7 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle,
 	}
 
 	// Direction = raw.Heading * 45 degrees
-	ecs.AddComponent(w, h, components.Transform{X: raw.X, Y: raw.Y, Direction: float32(raw.Heading.Int16) * 45})
+	ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, int(raw.Heading.Int16*45)))
 
 	ecs.AddComponent(w, h, components.EntityInfo{
 		ObjectType: components.ObjectType(raw.ObjectType),
@@ -54,8 +54,8 @@ func (b *TreeBuilder) Serialize(w *ecs.World, h types.Handle) (*repository.Objec
 	}
 
 	if pos, ok := ecs.GetComponent[components.Transform](w, h); ok {
-		obj.X = pos.X
-		obj.Y = pos.Y
+		obj.X = int(pos.X)
+		obj.Y = int(pos.Y)
 		obj.Heading = sql.NullInt16{Int16: int16(pos.Direction / 45), Valid: true}
 	}
 
