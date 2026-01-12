@@ -25,7 +25,7 @@ run: proto sqlc
 	go run ./cmd/gameserver
 
 map-gen:
-	go run ./cmd/map_generator
+	go run ./cmd/mapgen
 
 # Clean build artifacts
 clean:

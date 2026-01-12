@@ -29,8 +29,8 @@ func main() {
 	defer logger.Sync()
 
 	var (
-		chunksX = flag.Int("chunks-x", 10, "number of chunks in X direction")
-		chunksY = flag.Int("chunks-y", 10, "number of chunks in Y direction")
+		chunksX = flag.Int("chunks-x", 50, "number of chunks in X direction")
+		chunksY = flag.Int("chunks-y", 50, "number of chunks in Y direction")
 		seed    = flag.Int64("seed", 0, "random seed (0 = use current time)")
 	)
 	flag.Parse()
