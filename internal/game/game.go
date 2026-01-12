@@ -401,116 +401,6 @@ func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 	return candidates
 }
 
-func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *netproto.C2S_PlayerAction) {
-	if c.CharacterID == 0 {
-		g.logger.Warn("Player action from unauthenticated client", zap.Uint64("client_id", c.ID))
-		g.sendError(c, "Not authenticated")
-		return
-	}
-
-	g.logger.Debug("Received player action",
-		zap.Uint64("client_id", c.ID),
-		zap.Uint64("character_id", uint64(c.CharacterID)),
-		zap.Any("action", action))
-
-	// Get the shard for this player
-	shard := g.shardManager.GetShard(c.Layer)
-	if shard == nil {
-		g.logger.Error("Shard not found for player action",
-			zap.Uint64("client_id", c.ID),
-			zap.Int32("layer", c.Layer))
-		g.sendError(c, "Invalid shard")
-		return
-	}
-
-	// Handle different action types
-	switch act := action.Action.(type) {
-	case *netproto.C2S_PlayerAction_MoveTo:
-		g.handleMoveToAction(c, shard, act.MoveTo)
-	case *netproto.C2S_PlayerAction_MoveToEntity:
-		g.handleMoveToEntityAction(c, shard, act.MoveToEntity)
-	case *netproto.C2S_PlayerAction_Interact:
-		g.handleInteractAction(c, shard, act.Interact)
-	default:
-		g.logger.Warn("Unknown player action type",
-			zap.Uint64("client_id", c.ID),
-			zap.Any("action_type", action.Action))
-	}
-}
-
-func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netproto.MoveTo) {
-	g.logger.Debug("MoveTo action",
-		zap.Uint64("client_id", c.ID),
-		zap.Int32("target_x", moveTo.X),
-		zap.Int32("target_y", moveTo.Y),
-		zap.Int32("layer", moveTo.Layer))
-
-	// TODO: Validate target position (bounds, walkable, etc.)
-
-	// Find player entity handle by EntityID
-	var playerHandle types.Handle = types.InvalidHandle
-	shard.world.Query().ForEach(func(h types.Handle) {
-		if playerHandle != types.InvalidHandle {
-			return // Already found
-		}
-		extID, ok := ecs.GetComponent[ecs.ExternalID](shard.world, h)
-		if ok && extID.ID == c.CharacterID {
-			playerHandle = h
-		}
-	})
-
-	if playerHandle == types.InvalidHandle {
-		g.logger.Error("Player entity not found",
-			zap.Uint64("client_id", c.ID),
-			zap.Uint64("entity_id", uint64(c.CharacterID)))
-		return
-	}
-
-	// Update movement component with target position
-	mov, ok := ecs.GetComponent[components.Movement](shard.world, playerHandle)
-	if !ok {
-		g.logger.Error("Movement component not found",
-			zap.Uint64("client_id", c.ID),
-			zap.Uint64("entity_id", uint64(c.CharacterID)))
-		return
-	}
-
-	// Set movement target using the helper method
-	mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
-
-	// TODO: Apply modifiers (shift, ctrl, alt) for different movement modes
-	// Example: if action.Modifiers & 1 != 0 -> run mode
-
-	g.logger.Debug("Set movement target",
-		zap.Uint64("client_id", c.ID),
-		zap.Int("target_x", mov.TargetX),
-		zap.Int("target_y", mov.TargetY))
-}
-
-func (g *Game) handleMoveToEntityAction(c *network.Client, shard *Shard, moveToEntity *netproto.MoveToEntity) {
-	g.logger.Debug("MoveToEntity action",
-		zap.Uint64("client_id", c.ID),
-		zap.Uint64("target_entity_id", moveToEntity.EntityId),
-		zap.Bool("auto_interact", moveToEntity.AutoInteract))
-
-	// TODO: Implement entity targeting and pathfinding
-	// 1. Validate target entity exists and is reachable
-	// 2. Set movement target to entity position
-	// 3. If auto_interact, queue interaction when reached
-}
-
-func (g *Game) handleInteractAction(c *network.Client, shard *Shard, interact *netproto.Interact) {
-	g.logger.Debug("Interact action",
-		zap.Uint64("client_id", c.ID),
-		zap.Uint64("target_entity_id", interact.EntityId),
-		zap.Int32("interaction_type", int32(interact.Type)))
-
-	// TODO: Implement interaction system
-	// 1. Validate target entity exists and is in range
-	// 2. Check if interaction is valid for entity type
-	// 3. Execute interaction (gather, open container, use, pickup, etc.)
-}
-
 func (g *Game) sendError(c *network.Client, errorMsg string) {
 	response := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_Error{
@@ -591,6 +481,78 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 		return
 	}
 	c.Send(data)
+}
+
+func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *netproto.C2S_PlayerAction) {
+	if c.CharacterID == 0 {
+		g.logger.Warn("Player action from unauthenticated client", zap.Uint64("client_id", c.ID))
+		g.sendError(c, "Not authenticated")
+		return
+	}
+
+	g.logger.Debug("Received player action",
+		zap.Uint64("client_id", c.ID),
+		zap.Uint64("character_id", uint64(c.CharacterID)),
+		zap.Any("action", action))
+
+	// Get the shard for this player
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		g.logger.Error("Shard not found for player action",
+			zap.Uint64("client_id", c.ID),
+			zap.Int32("layer", c.Layer))
+		g.sendError(c, "Invalid shard")
+		return
+	}
+
+	// Handle different action types
+	switch act := action.Action.(type) {
+	case *netproto.C2S_PlayerAction_MoveTo:
+		g.handleMoveToAction(c, shard, act.MoveTo)
+	case *netproto.C2S_PlayerAction_MoveToEntity:
+		g.handleMoveToEntityAction(c, shard, act.MoveToEntity)
+	case *netproto.C2S_PlayerAction_Interact:
+		g.handleInteractAction(c, shard, act.Interact)
+	default:
+		g.logger.Warn("Unknown player action type",
+			zap.Uint64("client_id", c.ID),
+			zap.Any("action_type", action.Action))
+	}
+}
+
+func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netproto.MoveTo) {
+	g.logger.Debug("MoveTo action",
+		zap.Uint64("client_id", c.ID),
+		zap.Int32("target_x", moveTo.X),
+		zap.Int32("target_y", moveTo.Y),
+		zap.Int32("layer", moveTo.Layer))
+
+	// TODO: Validate target position (bounds, walkable, etc.)
+
+}
+
+func (g *Game) handleMoveToEntityAction(c *network.Client, shard *Shard, moveToEntity *netproto.MoveToEntity) {
+	g.logger.Debug("MoveToEntity action",
+		zap.Uint64("client_id", c.ID),
+		zap.Uint64("target_entity_id", moveToEntity.EntityId),
+		zap.Bool("auto_interact", moveToEntity.AutoInteract))
+
+	// TODO: Implement entity targeting and pathfinding
+	// 1. Validate target entity exists and is reachable
+	// 2. Set movement target to entity position
+	// 3. If auto_interact, queue interaction when reached
+}
+
+func (g *Game) handleInteractAction(c *network.Client, shard *Shard, interact *netproto.Interact) {
+	g.logger.Debug("Interact action",
+		zap.Uint64("client_id", c.ID),
+		zap.Uint64("target_entity_id", interact.EntityId),
+		zap.Int32("interaction_type", int32(interact.Type)))
+
+	// TODO: Implement interaction system
+	// 1. Validate target entity exists and is in range
+	// 2. Check if interaction is valid for entity type
+	// 3. Execute interaction (gather, open container, use, pickup, etc.)
 }
 
 func (g *Game) handleDisconnect(c *network.Client) {
