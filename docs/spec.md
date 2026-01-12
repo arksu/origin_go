@@ -3,12 +3,9 @@ MMO game - survival game:
 - world sliced by ground layers (0 surface, -1, -2 underground)
 - world split into chunks (128x128 tiles), chunk store tiles BLOB into DB, COORD_PER_TILE=12
 - most objects are static (tree, wall, stone): no moves. player can interact with it.
-- load objects when chunk marks active
-- area of interest around player 3x3 chunks, load when player moving, unload inactive chunks by LRU.
-- need to optimize ECS queries: base it on loaded chunks?
 - player moving to point, to object, to object and interact with it (combat, open inventory, etc). no pathfinding, move straight line
 - player have move modes: walk, run, fast run, swim. stamina consuming depend on move mode.
-- AABB swept collisions, Uses Minkowski difference approach for robust swept collision, slide walls. collisions with dynamic objects (that are moving too) use push back.
+- AABB swept collisions, Uses Minkowski difference approach for robust swept collision, slide walls. collisions with dynamic objects (that are moving too) - stop, do not push back.
 - player do some actions with object if not near with object - must move to it and then interact.
 - player have skills, exp, inventory, paperdoll, health.
 - player can lift objects: drag boxes, boat, etc
@@ -38,7 +35,7 @@ chunk manager:
 - load chunks (tiles, entities) async
 - manage active chunks, while player in chunk - keep it active
 - preload chunks in background async, beyond the borders of AOI
-- unload inactive chunks, LRU eviction
+- unload inactive chunks in background, LRU eviction
 - store chunk state into DB (dirty flag), background
 
 chunk:
@@ -53,11 +50,14 @@ ECS for update game world
 components:
 - transform (x, y, heading)
 - movement (velocity, moveMode(walk, run, fastRun, swim) )
+- collider
+- collision_result
 - chunkRef
 - Inventory(w, h, slots: []Item)
 - Stealth
 - Player(stat, skills)
-  systems:
+
+- systems:
 - movement
 - collision
 - chunk migration

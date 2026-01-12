@@ -24,9 +24,6 @@ type PhantomCollider struct {
 	HalfHeight int
 
 	BuildingType types.ObjectType
-
-	// Метка владельца
-	OwnerEntityID types.EntityID
 }
 
 const ColliderComponentID ecs.ComponentID = 14

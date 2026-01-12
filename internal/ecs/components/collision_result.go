@@ -7,10 +7,11 @@ import (
 
 // CollisionResult represents the result of a collision check
 type CollisionResult struct {
-	FinalX, FinalY                     float64          // Финальная позиция
-	CollisionNormalX, CollisionNormalY float64          // Нормаль коллизии
+	FinalX, FinalY                     float64 // Финальная позиция
+	CollisionNormalX, CollisionNormalY float64 // Нормаль коллизии
+	IsPhantom                          bool
 	CollidedWith                       []types.EntityID // С кем столкнулись
-	WasBlocked                         bool             // Было ли движение заблокировано
+	HasCollision                       bool
 }
 
 const CollisionResultComponentID ecs.ComponentID = 15
