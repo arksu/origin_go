@@ -23,7 +23,7 @@ type ShardManager struct {
 	objectFactory   *ObjectFactory
 	logger          *zap.Logger
 
-	shards   map[int32]*Shard
+	shards   map[int]*Shard
 	shardsMu sync.RWMutex
 
 	workerPool *WorkerPool
@@ -50,20 +50,19 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 		entityIDManager: entityIDManager,
 		objectFactory:   objectFactory,
 		logger:          logger,
-		shards:          make(map[int32]*Shard),
+		shards:          make(map[int]*Shard),
 		workerPool:      NewWorkerPool(cfg.Game.WorkerPoolSize),
 		eventBus:        eventbus.New(ebCfg),
 	}
 
-	var layer int32
-	for layer = 0; layer < cfg.Game.MaxLayers; layer++ {
+	for layer := 0; layer < cfg.Game.MaxLayers; layer++ {
 		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, sm.eventBus, logger.Named("shard"))
 	}
 
 	return sm
 }
 
-func (sm *ShardManager) GetShard(layer int32) *Shard {
+func (sm *ShardManager) GetShard(layer int) *Shard {
 	sm.shardsMu.RLock()
 	defer sm.shardsMu.RUnlock()
 	return sm.shards[layer]
@@ -109,7 +108,7 @@ func (sm *ShardManager) EventBus() *eventbus.EventBus {
 }
 
 type Shard struct {
-	layer           int32
+	layer           int
 	cfg             *config.Config
 	db              *persistence.Postgres
 	entityIDManager *EntityIDManager
@@ -122,7 +121,7 @@ type Shard struct {
 	mu sync.RWMutex
 }
 
-func NewShard(layer int32, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *ObjectFactory, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
+func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *ObjectFactory, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
 	s := &Shard{
 		layer:           layer,
 		cfg:             cfg,
@@ -135,12 +134,12 @@ func NewShard(layer int32, cfg *config.Config, db *persistence.Postgres, entityI
 
 	s.chunkManager = NewChunkManager(cfg, db, s.world, layer, cfg.Game.Region, objectFactory, eb, logger)
 
-	s.world.AddSystem(NewMovementSystem(s.chunkManager))
+	s.world.AddSystem(NewMovementSystem(s.chunkManager, logger))
 
 	return s
 }
 
-func (s *Shard) Layer() int32 {
+func (s *Shard) Layer() int {
 	return s.layer
 }
 
@@ -195,7 +194,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 		zap.Int64("entity_id", int64(entityID)),
 		zap.Int("world_x", centerWorldX),
 		zap.Int("world_y", centerWorldY),
-		zap.Int32("layer", s.layer),
+		zap.Int("layer", s.layer),
 	)
 
 	centerChunk := types.WorldToChunkCoord(centerWorldX, centerWorldY, utils.ChunkSize, utils.CoordPerTile)
@@ -277,13 +276,13 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		}
 	}
 
-	var candidateHandles []types.Handle
+	var collisionObjectsFromSpatial []types.Handle
 	for _, chunk := range chunks {
 		spatial := chunk.Spatial()
-		spatial.QueryAABB(float64(minX), float64(minY), float64(maxX), float64(maxY), &candidateHandles)
+		spatial.QueryAABB(minX, minY, maxX, maxY, &collisionObjectsFromSpatial)
 	}
 
-	for _, h := range candidateHandles {
+	for _, h := range collisionObjectsFromSpatial {
 		if !s.world.Alive(h) {
 			continue
 		}

@@ -5,17 +5,21 @@ import (
 
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+
+	"go.uber.org/zap"
 )
 
 type MovementSystem struct {
 	ecs.BaseSystem
 	chunkManager *ChunkManager
+	logger       *zap.Logger
 }
 
-func NewMovementSystem(chunkManager *ChunkManager) *MovementSystem {
+func NewMovementSystem(chunkManager *ChunkManager, logger *zap.Logger) *MovementSystem {
 	return &MovementSystem{
 		BaseSystem:   ecs.NewBaseSystem("MovementSystem", 100),
 		chunkManager: chunkManager,
+		logger:       logger,
 	}
 }
 
@@ -86,7 +90,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 						m.ClearTarget()
 					})
 					spatial := chunk.Spatial()
-					spatial.UpdateDynamic(h, float64(oldX), float64(oldY), float64(movement.TargetX), float64(movement.TargetY))
+					spatial.UpdateDynamic(h, oldX, oldY, movement.TargetX, movement.TargetY)
 					continue
 				}
 
@@ -103,21 +107,30 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 
 				oldX := transform.X
 				oldY := transform.Y
-				newX := float64(transform.X) + velocityX*dt
-				newY := float64(transform.Y) + velocityY*dt
+				newX := int(math.Round(float64(transform.X) + velocityX*dt))
+				newY := int(math.Round(float64(transform.Y) + velocityY*dt))
 
 				ecs.WithComponent(w, h, func(t *components.Transform) {
-					t.IntentX = int(math.Round(newX))
-					t.IntentY = int(math.Round(newY))
+					t.IntentX = newX
+					t.IntentY = newY
 					// Direction based on actual velocity vector
-					t.Direction = float32(math.Atan2(float64(velocityY), float64(velocityX)))
+					t.Direction = float32(math.Atan2(velocityY, velocityX))
 				})
 
 				spatial := chunk.Spatial()
-				// TODO log debug movement data
+				s.logger.Debug("Entity movement",
+					zap.Uint64("handle", uint64(h)),
+					zap.Int("old_x", oldX),
+					zap.Int("old_y", oldY),
+					zap.Int("new_x", newX),
+					zap.Int("new_y", newY),
+					zap.Float64("velocity_x", velocityX),
+					zap.Float64("velocity_y", velocityY),
+					zap.Float64("speed", speed),
+					zap.Float64("dt", dt))
 
 				// TODO проверить миграции между гридами
-				spatial.UpdateDynamic(h, float64(oldX), float64(oldY), float64(newX), float64(newY))
+				spatial.UpdateDynamic(h, oldX, oldY, newX, newY)
 			}
 		}
 	}

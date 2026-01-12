@@ -232,7 +232,7 @@ WHERE region = $1
   AND deleted_at IS NULL
 `
 
-func (q *Queries) ResetOnlinePlayers(ctx context.Context, region int32) error {
+func (q *Queries) ResetOnlinePlayers(ctx context.Context, region int) error {
 	_, err := q.db.ExecContext(ctx, resetOnlinePlayers, region)
 	return err
 }
@@ -296,8 +296,8 @@ WHERE id = $1
 
 type UpdateCharacterPositionParams struct {
 	ID int64 `json:"id"`
-	X  int32 `json:"x"`
-	Y  int32 `json:"y"`
+	X  int   `json:"x"`
+	Y  int   `json:"y"`
 }
 
 func (q *Queries) UpdateCharacterPosition(ctx context.Context, arg UpdateCharacterPositionParams) error {

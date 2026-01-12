@@ -17,8 +17,8 @@ import (
 // Chunk represents a game chunk with all its data and functionality
 type Chunk struct {
 	Coord    types.ChunkCoord
-	Region   int32
-	Layer    int32
+	Region   int
+	Layer    int
 	State    types.ChunkState
 	Tiles    []byte
 	LastTick uint64
@@ -32,8 +32,8 @@ type Chunk struct {
 	mu sync.RWMutex
 }
 
-func NewChunk(coord types.ChunkCoord, region int32, layer int32, chunkSize int) *Chunk {
-	cellSize := 16.0
+func NewChunk(coord types.ChunkCoord, region int, layer int, chunkSize int) *Chunk {
+	cellSize := 16
 	totalTiles := chunkSize * chunkSize
 	bitsetSize := (totalTiles + 63) / 64
 
@@ -224,8 +224,8 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 
 	err := db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
 		Region:      c.Region,
-		X:           int32(coord.X),
-		Y:           int32(coord.Y),
+		X:           coord.X,
+		Y:           coord.Y,
 		Layer:       c.Layer,
 		TilesData:   tiles,
 		LastTick:    int64(lastTick),
@@ -276,7 +276,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 }
 
 // LoadFromDB loads chunk data and objects from the database
-func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int32, layer int32, logger *zap.Logger) error {
+func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logger *zap.Logger) error {
 	c.SetState(types.ChunkStateLoading)
 
 	if db == nil {
@@ -289,8 +289,8 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int32, layer int32, 
 
 	tilesData, err := db.Queries().GetChunk(ctx, repository.GetChunkParams{
 		Region: region,
-		X:      int32(c.Coord.X),
-		Y:      int32(c.Coord.Y),
+		X:      c.Coord.X,
+		Y:      c.Coord.Y,
 		Layer:  layer,
 	})
 	if err == nil {
@@ -299,8 +299,8 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int32, layer int32, 
 
 	objects, err := db.Queries().GetObjectsByChunk(ctx, repository.GetObjectsByChunkParams{
 		Region: region,
-		ChunkX: int32(c.Coord.X),
-		ChunkY: int32(c.Coord.Y),
+		ChunkX: c.Coord.X,
+		ChunkY: c.Coord.Y,
 		Layer:  layer,
 	})
 	if err != nil {

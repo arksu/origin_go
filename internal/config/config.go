@@ -39,8 +39,8 @@ type GameConfig struct {
 	TickRate                 int           `mapstructure:"tick_rate"`
 	PlayerActiveChunkRadius  int           `mapstructure:"player_active_chunk_radius"`
 	PlayerPreloadChunkRadius int           `mapstructure:"player_preload_chunk_radius"`
-	Region                   int32         `mapstructure:"region"`
-	MaxLayers                int32         `mapstructure:"max_layers"`
+	Region                   int           `mapstructure:"region"`
+	MaxLayers                int           `mapstructure:"max_layers"`
 	DisconnectDelay          int           `mapstructure:"disconnect_delay"`
 	ChunkLRUCapacity         int           `mapstructure:"chunk_lru_capacity"`
 	ChunkLRUTTL              int           `mapstructure:"chunk_lru_ttl"`

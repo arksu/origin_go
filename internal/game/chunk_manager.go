@@ -86,8 +86,8 @@ type ChunkManager struct {
 	cfg           *config.Config
 	db            *persistence.Postgres
 	world         *ecs.World
-	layer         int32
-	region        int32
+	layer         int
+	region        int
 	objectFactory *ObjectFactory
 	logger        *zap.Logger
 
@@ -131,8 +131,8 @@ func NewChunkManager(
 	cfg *config.Config,
 	db *persistence.Postgres,
 	world *ecs.World,
-	layer int32,
-	region int32,
+	layer int,
+	region int,
 	objectFactory *ObjectFactory,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
@@ -749,7 +749,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		if err != nil {
 			cm.logger.Error("failed to build object",
 				zap.Int64("object_id", raw.ID),
-				zap.Int32("object_type", raw.ObjectType),
+				zap.Int("object_type", raw.ObjectType),
 				zap.Error(err),
 			)
 			continue
@@ -761,13 +761,11 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		})
 
 		isStatic := cm.objectFactory.IsStatic(raw)
-		x := float64(raw.X)
-		y := float64(raw.Y)
 
 		if isStatic {
-			spatial.AddStatic(h, x, y)
+			spatial.AddStatic(h, raw.X, raw.Y)
 		} else {
-			spatial.AddDynamic(h, x, y)
+			spatial.AddDynamic(h, raw.X, raw.Y)
 		}
 	}
 
@@ -879,9 +877,9 @@ func (cm *ChunkManager) MigrateObject(h types.Handle, fromCoord, toCoord types.C
 
 	fromSpatial := fromChunk.Spatial()
 	if isStatic {
-		fromSpatial.RemoveStatic(h, float64(chunkRef.CurrentChunkX), float64(chunkRef.CurrentChunkY))
+		fromSpatial.RemoveStatic(h, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY)
 	} else {
-		fromSpatial.RemoveDynamic(h, float64(chunkRef.CurrentChunkX), float64(chunkRef.CurrentChunkY))
+		fromSpatial.RemoveDynamic(h, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY)
 	}
 
 	ecs.WithComponent(cm.world, h, func(ref *components.ChunkRef) {
@@ -892,11 +890,13 @@ func (cm *ChunkManager) MigrateObject(h types.Handle, fromCoord, toCoord types.C
 	})
 
 	if toChunk.GetState() == types.ChunkStateActive {
-		toSpatial := toChunk.Spatial()
+		//toSpatial := toChunk.Spatial()
 		if isStatic {
-			toSpatial.AddStatic(h, toX, toY)
+			// TODO fix world coord
+			//toSpatial.AddStatic(h, toX, toY)
 		} else {
-			toSpatial.AddDynamic(h, toX, toY)
+			// TODO fix world coord
+			//toSpatial.AddDynamic(h, toX, toY)
 		}
 	} else {
 		obj, err := cm.objectFactory.Serialize(cm.world, h, info.ObjectType)
@@ -1037,7 +1037,7 @@ func (cm *ChunkManager) Stop() {
 	cm.lruCache.Purge()
 
 	cm.logger.Info("chunk manager stopped",
-		zap.Int32("layer", cm.layer),
+		zap.Int("layer", cm.layer),
 		zap.Int("chunks_saved", savedCount),
 	)
 }
