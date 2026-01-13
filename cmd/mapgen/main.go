@@ -64,7 +64,7 @@ func main() {
 		zap.Int("chunks_x", *chunksX),
 		zap.Int("chunks_y", *chunksY),
 		zap.Int64("seed", *seed),
-		zap.Int32("region", cfg.Game.Region))
+		zap.Int("region", cfg.Game.Region))
 
 	if err := gen.Generate(ctx, *chunksX, *chunksY); err != nil {
 		logger.Fatal("map generation failed", zap.Error(err))
@@ -80,13 +80,13 @@ type MapGenerator struct {
 	rng          *rand.Rand
 	chunkSize    int
 	coordPerTile int
-	region       int32
+	region       int
 	perlin       *PerlinNoise
 	lastEntityID uint64
 }
 
 func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY int) error {
-	g.logger.Info("truncating existing data for region", zap.Int32("region", g.region))
+	g.logger.Info("truncating existing data for region", zap.Int("region", g.region))
 	if err := g.db.Queries().DeleteChunksByRegion(ctx, g.region); err != nil {
 		return fmt.Errorf("delete chunks: %w", err)
 	}
@@ -102,7 +102,7 @@ func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY int) error
 
 	for cy := 0; cy < chunksY; cy++ {
 		for cx := 0; cx < chunksX; cx++ {
-			if err := g.generateChunk(ctx, int32(cx), int32(cy)); err != nil {
+			if err := g.generateChunk(ctx, cx, cy); err != nil {
 				return fmt.Errorf("generate chunk (%d,%d): %w", cx, cy, err)
 			}
 			generated++
@@ -120,7 +120,7 @@ func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY int) error
 	return nil
 }
 
-func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int32) error {
+func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) error {
 	tilesPerChunk := g.chunkSize
 	tiles := make([]byte, tilesPerChunk*tilesPerChunk)
 	var entities []repository.UpsertObjectParams
@@ -138,8 +138,8 @@ func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int32) 
 
 			if (tile == types.TileForestPine || tile == types.TileForestLeaf) && g.rng.Float64() < TreeDensity {
 				g.lastEntityID++
-				tileWorldX := int32(worldOffsetX) + int32(tx*g.coordPerTile) + int32(g.rng.Intn(g.coordPerTile))
-				tileWorldY := int32(worldOffsetY) + int32(ty*g.coordPerTile) + int32(g.rng.Intn(g.coordPerTile))
+				tileWorldX := int(worldOffsetX) + tx*g.coordPerTile + g.rng.Intn(g.coordPerTile)
+				tileWorldY := int(worldOffsetY) + ty*g.coordPerTile + g.rng.Intn(g.coordPerTile)
 
 				entities = append(entities, repository.UpsertObjectParams{
 					ID:         int64(g.lastEntityID),

@@ -1,4 +1,4 @@
-.PHONY: proto build run clean
+.PHONY: proto build run map-gen-build map-gen clean
 
 # generate sqlc files
 sqlc:
@@ -24,12 +24,17 @@ build: proto sqlc
 run: proto sqlc
 	go run ./cmd/gameserver
 
-map-gen:
+# Build the map generator
+map-gen-build: proto sqlc
+	go build -trimpath -o mapgen ./cmd/mapgen
+
+# Run the map generator
+map-gen: proto sqlc
 	go run ./cmd/mapgen
 
 # Clean build artifacts
 clean:
-	rm -f gameserver
+	rm -f gameserver mapgen
 	rm -rf internal/network/pb
 
 # Install dependencies
