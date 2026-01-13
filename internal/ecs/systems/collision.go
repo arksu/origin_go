@@ -11,6 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const epsilon = 0.001
+
 type CollisionSystem struct {
 	ecs.BaseSystem
 	chunkManager core.ChunkManager
@@ -60,6 +62,18 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 			// Calculate movement delta
 			dx := transform.IntentX - transform.X
 			dy := transform.IntentY - transform.Y
+
+			// Check phantom collider first (owner's build intent)
+			if collider.Phantom != nil {
+				phantomResult := s.checkPhantomCollision(w, h, transform, collider, dx, dy, chunk)
+				if phantomResult.HasCollision {
+					// Hard stop at phantom border - do not slide
+					ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+						*cr = phantomResult
+					})
+					continue
+				}
+			}
 
 			// Perform swept AABB collision
 			result := s.sweepCollision(w, h, transform, collider, dx, dy, chunk)
@@ -138,6 +152,11 @@ func (s *CollisionSystem) sweepCollision(
 				continue
 			}
 
+			// Skip phantom colliders - they don't block other entities
+			if candidateCollider.Phantom != nil {
+				continue
+			}
+
 			candidateTransform, ok := ecs.GetComponent[components.Transform](w, candidateHandle)
 			if !ok {
 				continue
@@ -187,7 +206,6 @@ func (s *CollisionSystem) sweepCollision(
 
 		if earliestT < 1.0 {
 			// Move to collision point (with small epsilon)
-			const epsilon = 0.001
 			currentX += remainingDX * (earliestT - epsilon)
 			currentY += remainingDY * (earliestT - epsilon)
 
@@ -301,4 +319,55 @@ func (s *CollisionSystem) sweptAABB(
 	}
 
 	return entryTime, normalX, normalY, true
+}
+
+// checkPhantomCollision checks if entity's collider collides with its phantom
+// Uses swept AABB to find touch point, then stops (no sliding, single iteration)
+func (s *CollisionSystem) checkPhantomCollision(
+	w *ecs.World,
+	entityHandle types.Handle,
+	transform components.Transform,
+	collider components.Collider,
+	dx, dy float64,
+	chunk *core.Chunk,
+) components.CollisionResult {
+	result := components.CollisionResult{
+		FinalX:       transform.X + dx,
+		FinalY:       transform.Y + dy,
+		HasCollision: false,
+		IsPhantom:    false,
+	}
+
+	phantom := collider.Phantom
+	if phantom == nil {
+		return result
+	}
+
+	// Perform swept AABB collision with phantom
+	entityHalfW := float64(collider.HalfWidth)
+	entityHalfH := float64(collider.HalfHeight)
+	phantomHalfW := float64(phantom.HalfWidth)
+	phantomHalfH := float64(phantom.HalfHeight)
+
+	t, normalX, normalY, hit := s.sweptAABB(
+		transform.X, transform.Y, entityHalfW, entityHalfH,
+		dx, dy,
+		phantom.WorldX, phantom.WorldY, phantomHalfW, phantomHalfH,
+	)
+
+	if hit && t < 1.0 {
+		// Collision detected - move to touch point (with epsilon)
+		result.FinalX = transform.X + dx*(t-epsilon)
+		result.FinalY = transform.Y + dy*(t-epsilon)
+		result.HasCollision = true
+		result.IsPhantom = true
+		result.CollisionNormalX = normalX
+		result.CollisionNormalY = normalY
+
+		if extID, ok := w.GetExternalID(entityHandle); ok {
+			result.CollidedWith = []types.EntityID{extID}
+		}
+	}
+
+	return result
 }
