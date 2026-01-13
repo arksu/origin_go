@@ -30,9 +30,10 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle,
 		Layer:      raw.Layer,
 	})
 
+	// TODO object size
 	ecs.AddComponent(w, h, components.Collider{
-		HalfWidth:  10 / 2,
-		HalfHeight: 10 / 2,
+		HalfWidth:  10.0 / 2,
+		HalfHeight: 10.0 / 2,
 	})
 
 	return h, nil

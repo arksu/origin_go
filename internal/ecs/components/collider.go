@@ -7,8 +7,8 @@ import (
 
 // Collider represents an entity's collision box dimensions
 type Collider struct {
-	HalfWidth  int
-	HalfHeight int
+	HalfWidth  float64
+	HalfHeight float64
 	Layer      uint64 // Collision layer (битовая маска)
 	Mask       uint64 // С какими слоями проверяем
 
@@ -20,8 +20,8 @@ type PhantomCollider struct {
 	WorldX float64
 	WorldY float64
 
-	HalfWidth  int
-	HalfHeight int
+	HalfWidth  float64
+	HalfHeight float64
 
 	ObjectType types.ObjectType
 }

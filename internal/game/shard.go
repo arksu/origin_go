@@ -300,10 +300,10 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 			continue
 		}
 
-		objMinX := int(transform.X) - collider.HalfWidth
-		objMinY := int(transform.Y) - collider.HalfHeight
-		objMaxX := int(transform.X) + collider.HalfWidth
-		objMaxY := int(transform.Y) + collider.HalfHeight
+		objMinX := int(transform.X - collider.HalfWidth)
+		objMinY := int(transform.Y - collider.HalfHeight)
+		objMaxX := int(transform.X + collider.HalfWidth)
+		objMaxY := int(transform.Y + collider.HalfHeight)
 
 		if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
 			return false, types.InvalidHandle

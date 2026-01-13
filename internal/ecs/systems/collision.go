@@ -108,8 +108,8 @@ func (s *CollisionSystem) sweepCollision(
 	}
 
 	// Entity AABB
-	entityHalfW := float64(collider.HalfWidth)
-	entityHalfH := float64(collider.HalfHeight)
+	entityHalfW := collider.HalfWidth
+	entityHalfH := collider.HalfHeight
 
 	// Query potential colliders from spatial hash
 	candidates := make([]types.Handle, 0, 64)
@@ -344,10 +344,10 @@ func (s *CollisionSystem) checkPhantomCollision(
 	}
 
 	// Perform swept AABB collision with phantom
-	entityHalfW := float64(collider.HalfWidth)
-	entityHalfH := float64(collider.HalfHeight)
-	phantomHalfW := float64(phantom.HalfWidth)
-	phantomHalfH := float64(phantom.HalfHeight)
+	entityHalfW := collider.HalfWidth
+	entityHalfH := collider.HalfHeight
+	phantomHalfW := phantom.HalfWidth
+	phantomHalfH := phantom.HalfHeight
 
 	t, normalX, normalY, hit := s.sweptAABB(
 		transform.X, transform.Y, entityHalfW, entityHalfH,
