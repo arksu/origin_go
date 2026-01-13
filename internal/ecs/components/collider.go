@@ -23,7 +23,7 @@ type PhantomCollider struct {
 	HalfWidth  int
 	HalfHeight int
 
-	BuildingType types.ObjectType
+	ObjectType types.ObjectType
 }
 
 const ColliderComponentID ecs.ComponentID = 14
