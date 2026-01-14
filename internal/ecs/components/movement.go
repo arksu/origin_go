@@ -51,6 +51,13 @@ type Movement struct {
 	TargetHandle types.Handle
 
 	InteractionRange float64
+
+	// Steering/obstacle avoidance
+	StuckCounter       int     // How many ticks we've been stuck
+	LastCollisionNormX float64 // Last collision normal X
+	LastCollisionNormY float64 // Last collision normal Y
+	SteeringMode       bool    // Currently steering around obstacle
+	RetryDirectCounter int     // Ticks until retry direct path
 }
 
 const MovementComponentID ecs.ComponentID = 12

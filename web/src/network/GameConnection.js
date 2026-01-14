@@ -101,6 +101,7 @@ class GameConnection {
     try {
       const buffer = new Uint8Array(data)
       const message = proto.ServerMessage.decode(buffer)
+      // console.debug('Received message:', message)
 
       if (message.authResult) {
         this.handleAuthResult(message.authResult)
@@ -112,6 +113,10 @@ class GameConnection {
         this.handleLoadChunk(message.loadChunk)
       } else if (message.unloadChunk) {
         this.handleUnloadChunk(message.unloadChunk)
+      } else if (message.object) {
+        this.handleObject(message.object)
+      } else if (message.objectMove) {
+        this.handleObjectMove(message.objectMove)
       } else if (message.error) {
         this.handleError(message.error)
       }
@@ -189,6 +194,67 @@ class GameConnection {
     const gameStore = useGameStore()
     gameStore.removeChunk(unloadChunk.coord)
     console.log('Chunk unloaded:', unloadChunk.coord)
+  }
+
+  handleObject(object) {
+    const gameStore = useGameStore()
+    console.log('Object received:', object)
+
+    // Check if this is the player's entity
+    if (object.entityId === gameStore.characterId) {
+      // Update player position from initial object data
+      if (object.position && object.position.position) {
+        const newPosition = {
+          x: object.position.position.x || 0,
+          y: object.position.position.y || 0,
+          heading: object.position.position.heading || 0
+        }
+        gameStore.setPlayerPosition(newPosition)
+        console.log('Set initial player position:', newPosition)
+      }
+      return // Don't add player as a game object
+    }
+
+    gameStore.addGameObject(object.entityId, object)
+  }
+
+  handleObjectMove(objectMove) {
+    const gameStore = useGameStore()
+    console.log('Object move received:', objectMove)
+
+    // Check if this is the player's entity
+    if (objectMove.entityId === gameStore.characterId) {
+      // Update player position
+      if (objectMove.movement && objectMove.movement.position) {
+        const newPosition = {
+          x: objectMove.movement.position.x || 0,
+          y: objectMove.movement.position.y || 0,
+          heading: objectMove.movement.position.heading || 0
+        }
+        gameStore.setPlayerPosition(newPosition)
+        console.log('Updated player position:', newPosition)
+      }
+      return // Don't add player as a game object
+    }
+
+    // Update existing game object with new movement data
+    const existingObject = gameStore.gameObjects.get(objectMove.entityId)
+    if (existingObject) {
+      // Merge the movement data with existing object data
+      const updatedObject = {
+        ...existingObject,
+        movement: objectMove.movement
+      }
+      gameStore.updateGameObject(objectMove.entityId, updatedObject)
+    } else {
+      // If object doesn't exist, create it with basic info
+      const newObject = {
+        entityId: objectMove.entityId,
+        movement: objectMove.movement,
+        position: objectMove.movement.position
+      }
+      gameStore.addGameObject(objectMove.entityId, newObject)
+    }
   }
 
   handleError(error) {

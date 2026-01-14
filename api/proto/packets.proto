@@ -132,9 +132,14 @@ message Paperdoll {
 message EntityMovement {
   Position position = 1;
   Vector2 velocity = 2;
-  MovementMode move_mode = 3;
-  optional Vector2 target_position = 4; // куда движется, если есть
-  bool is_moving = 5;
+  MovementMode move_mode = 4;
+  optional Vector2 target_position = 5; // куда движется, если есть
+  bool is_moving = 6;
+}
+
+message EntityPosition {
+  Position position = 1;
+  Vector2 size = 2;
 }
 
 message EntityAppearance {
@@ -272,6 +277,17 @@ message S2C_PlayerEnterWorld {
   optional uint64 dragging_entity_id = 8; // если тащим что-то
 }
 
+message S2C_Object {
+  uint64 entity_id = 1;
+  int32 object_type = 2;
+  EntityPosition position = 3;
+}
+
+message S2C_ObjectMove {
+  uint64 entity_id = 1;
+  EntityMovement movement = 2;
+}
+
 // on teleport, layer change - show loading screen on client, remove all chunks, entities
 message S2C_PlayerLeaveWorld {
   uint64 entity_id = 1;
@@ -300,6 +316,9 @@ message ServerMessage {
     S2C_UnloadChunk unload_chunk = 13;
     S2C_PlayerEnterWorld player_enter_world = 14;
     S2C_PlayerLeaveWorld player_leave_world = 15;
+    S2C_Object object = 16;
+    S2C_ObjectMove object_move = 17;
+
     //    S2C_SpawnEntity spawn_entity = 13;
     //    S2C_DespawnEntity despawn_entity = 14;
     //    S2C_EntityUpdate entity_update = 15;

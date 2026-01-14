@@ -22,7 +22,7 @@ const gameStore = useGameStore()
 const canvas = ref(null)
 const ctx = ref(null)
 
-const TILE_SIZE_PIXELS = 2
+const TILE_SIZE_PIXELS = 20
 const CHUNK_SIZE = 128
 const CHUNK_PIXEL_SIZE = CHUNK_SIZE * TILE_SIZE_PIXELS
 const COORD_PER_TILE = 12
@@ -56,29 +56,23 @@ function handleCanvasClick(event) {
   const screenX = event.clientX - rect.left
   const screenY = event.clientY - rect.top
   
-  // Get current camera position from player position
+  // Get current camera position from player position (NOT tile-aligned)
   const playerX = gameStore.playerPosition.x || 0
   const playerY = gameStore.playerPosition.y || 0
-  const playerTileX = Math.floor(playerX / COORD_PER_TILE)
-  const playerTileY = Math.floor(playerY / COORD_PER_TILE)
-  const playerPixelX = playerTileX * TILE_SIZE_PIXELS
-  const playerPixelY = playerTileY * TILE_SIZE_PIXELS
+  const playerPixelX = (playerX / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  const playerPixelY = (playerY / COORD_PER_TILE) * TILE_SIZE_PIXELS
   
   // Calculate camera position
   const cameraX = playerPixelX - (canvasWidth.value / 2)
   const cameraY = playerPixelY - (canvasHeight.value / 2)
   
-  // Convert screen coordinates to world coordinates
+  // Convert screen coordinates to world pixel coordinates
   const worldPixelX = screenX + cameraX
   const worldPixelY = screenY + cameraY
   
-  // Convert pixel coordinates to tile coordinates
-  const tileX = Math.floor(worldPixelX / TILE_SIZE_PIXELS)
-  const tileY = Math.floor(worldPixelY / TILE_SIZE_PIXELS)
-  
-  // Convert tile coordinates to world coordinates (COORD_PER_TILE units per tile)
-  const worldX = tileX * COORD_PER_TILE
-  const worldY = tileY * COORD_PER_TILE
+  // Convert pixel coordinates directly to world coordinates (NOT tile-aligned)
+  const worldX = (worldPixelX / TILE_SIZE_PIXELS) * COORD_PER_TILE
+  const worldY = (worldPixelY / TILE_SIZE_PIXELS) * COORD_PER_TILE
   
     console.debug('Canvas click:', { screenX, screenY })
     console.debug('World coords:', { worldX, worldY })
@@ -118,12 +112,9 @@ function renderChunks() {
   const playerX = gameStore.playerPosition.x || 0
   const playerY = gameStore.playerPosition.y || 0
 
-  // Convert player coordinates from world coords to pixel coords
-  // Use floor to match backend integer division behavior
-  const playerTileX = Math.floor(playerX / COORD_PER_TILE)
-  const playerTileY = Math.floor(playerY / COORD_PER_TILE)
-  const playerPixelX = playerTileX * TILE_SIZE_PIXELS
-  const playerPixelY = playerTileY * TILE_SIZE_PIXELS
+  // Convert player coordinates from world coords to pixel coords (NOT tile-aligned)
+  const playerPixelX = (playerX / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  const playerPixelY = (playerY / COORD_PER_TILE) * TILE_SIZE_PIXELS
 
   if (DEBUG) console.debug("player position:", playerX, playerY, "pixel coords:", playerPixelX, playerPixelY)
 
@@ -139,6 +130,11 @@ function renderChunks() {
   gameStore.chunks.forEach(({ coord, data }) => {
     if (DEBUG) console.debug("Rendering chunk:", coord, "data length:", data?.length)
     renderChunk(coord, data, cameraX, cameraY)
+  })
+
+  // Render game objects
+  gameStore.gameObjects.forEach((gameObject) => {
+    renderGameObject(gameObject, cameraX, cameraY)
   })
 
   // Draw player marker at screen center (red aim crosshair)
@@ -173,6 +169,8 @@ function renderChunks() {
   ctx.value.stroke()
 
   // Draw debug info
+  const playerTileX = Math.floor(playerX / COORD_PER_TILE)
+  const playerTileY = Math.floor(playerY / COORD_PER_TILE)
   const playerChunkX = Math.floor(playerTileX / CHUNK_SIZE)
   const playerChunkY = Math.floor(playerTileY / CHUNK_SIZE)
   
@@ -200,7 +198,6 @@ function renderChunks() {
 
 function renderChunk(coord, tileData, cameraX, cameraY) {
   const tiles = decompressTiles(tileData)
-  if (DEBUG) console.debug("tiles", tiles.length, "coord:", coord)
 
   // Handle missing coord properties
   const chunkX = coord.x || 0
@@ -239,6 +236,81 @@ function renderChunk(coord, tileData, cameraX, cameraY) {
   if (DEBUG) console.debug("rendered", tilesRendered, "tiles for chunk", coord)
 }
 
+function renderGameObject(gameObject, cameraX, cameraY) {
+  let position = gameObject.position
+  
+  // If we have movement data, use the current position from movement
+  if (gameObject.movement && gameObject.movement.position) {
+    position = gameObject.movement.position
+  } else if (gameObject.position && gameObject.position.position) {
+    // For static entities from S2C_Object, position is nested
+    position = gameObject.position.position
+  }
+  
+  if (!position) return
+
+  // Convert world coordinates directly to pixel coordinates (NOT tile-aligned)
+  const worldX = position.x || 0
+  const worldY = position.y || 0
+  const pixelX = (worldX / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  const pixelY = (worldY / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  // console.debug("rendering game object:", gameObject, "at", pixelX, pixelY)
+  
+  // Get object size from Vector2 (width, height)
+  let size = gameObject.size
+  if (gameObject.position && gameObject.position.size) {
+    // For static entities from S2C_Object, size is nested
+    size = gameObject.position.size
+  }
+  if (gameObject.movement && gameObject.movement.velocity) {
+    // For moving objects, use a default size if none specified
+    size = size || { x: 32, y: 32 }
+  }
+  
+  const width = size?.x || 32  // Default width if not specified
+  const height = size?.y || 32  // Default height if not specified
+  
+  // Convert size from world units to pixels
+  const pixelWidth = (width / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  const pixelHeight = (height / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  
+  // Calculate screen position
+  const screenX = pixelX - cameraX
+  const screenY = pixelY - cameraY
+  
+  // Only render if visible
+  if (
+    screenX + pixelWidth > 0 &&
+    screenX < canvasWidth.value &&
+    screenY + pixelHeight > 0 &&
+    screenY < canvasHeight.value
+  ) {
+    // Draw blue rectangle for game object
+    ctx.value.fillStyle = '#0011ff'
+    ctx.value.fillRect(screenX, screenY, pixelWidth, pixelHeight)
+    
+    if (DEBUG) {
+      ctx.value.strokeStyle = '#ffffff'
+      ctx.value.lineWidth = 1
+      ctx.value.strokeRect(screenX, screenY, pixelWidth, pixelHeight)
+      ctx.value.lineWidth = 1
+      
+      // Draw movement info if available
+      if (gameObject.movement) {
+        ctx.value.fillStyle = '#ffffff'
+        ctx.value.font = '10px monospace'
+        const moveText = `v:${gameObject.movement.velocity?.x || 0},${gameObject.movement.velocity?.y || 0}`
+        ctx.value.fillText(moveText, screenX, screenY - 5)
+      } else {
+        // Draw entity ID for static objects
+        ctx.value.fillStyle = '#ffffff'
+        ctx.value.font = '10px monospace'
+        ctx.value.fillText(`ID:${gameObject.entityId}`, screenX, screenY - 5)
+      }
+    }
+  }
+}
+
 function animate() {
   renderChunks()
   requestAnimationFrame(animate)
@@ -269,9 +341,9 @@ onUnmounted(() => {
   // Animation frame will stop when component unmounts
 })
 
-// Re-render when chunks or player position changes
+// Re-render when chunks, player position, or game objects change
 watch(
-  () => [gameStore.chunks.size, gameStore.playerPosition],
+  () => [gameStore.chunks.size, gameStore.playerPosition, gameStore.gameObjects.size],
   () => {
     // Rendering happens in animation loop
   },
