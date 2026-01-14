@@ -361,6 +361,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		zap.Uint64("client_id", c.ID),
 		zap.Int64("character_id", character.ID),
 		zap.Uint64("entity_id", uint64(playerEntityID)),
+		zap.Any("posX", character.X),
+		zap.Any("posY", character.Y),
 	)
 }
 
