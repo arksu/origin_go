@@ -83,6 +83,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 					ecs.WithComponent(w, h, func(t *components.Transform) {
 						t.IntentX = movement.TargetX
 						t.IntentY = movement.TargetY
+						t.WasMoved = true
 						t.Direction = math.Atan2(dy, dx)
 					})
 					ecs.WithComponent(w, h, func(m *components.Movement) {
@@ -105,12 +106,13 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 
 				oldX := transform.X
 				oldY := transform.Y
-				newX := math.Round(transform.X + velocityX*dt)
-				newY := math.Round(transform.Y + velocityY*dt)
+				newX := transform.X + velocityX*dt
+				newY := transform.Y + velocityY*dt
 
 				ecs.WithComponent(w, h, func(t *components.Transform) {
 					t.IntentX = newX
 					t.IntentY = newY
+					t.WasMoved = true
 					// Direction based on actual velocity vector
 					t.Direction = math.Atan2(velocityY, velocityX)
 				})
