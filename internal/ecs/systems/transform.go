@@ -47,6 +47,9 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 			var finalX, finalY float64
 			if hasCollision {
+				if collisionResult.HasCollision {
+					s.logger.Debug("Collision detected")
+				}
 				// Apply collision-adjusted position
 				finalX = collisionResult.FinalX
 				finalY = collisionResult.FinalY
@@ -62,6 +65,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			newX := int(finalX)
 			newY := int(finalY)
 
+			// TODO migrate chunks
 			if oldX != newX || oldY != newY {
 				chunk.Spatial().UpdateDynamic(h, oldX, oldY, newX, newY)
 			}
@@ -72,6 +76,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				t.Y = finalY
 				t.IntentX = finalX
 				t.IntentY = finalY
+				t.WasMoved = false
 			})
 
 			// Clear collision result for next frame

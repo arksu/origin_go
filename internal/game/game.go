@@ -331,6 +331,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Layer:      1,
 				Mask:       1,
 			})
+			ecs.AddComponent(shard.world, handle, components.CollisionResult{
+				HasCollision: false,
+			})
 
 			character.X = pos.X
 			character.Y = pos.Y

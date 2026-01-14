@@ -80,7 +80,13 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 
 			// Store collision result
 			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-				*cr = result
+				cr.HasCollision = result.HasCollision
+				cr.CollidedWith = result.CollidedWith
+				cr.IsPhantom = result.IsPhantom
+				cr.FinalX = result.FinalX
+				cr.FinalY = result.FinalY
+				cr.CollisionNormalX = result.CollisionNormalX
+				cr.CollisionNormalY = result.CollisionNormalY
 			})
 		}
 	}
@@ -101,7 +107,7 @@ func (s *CollisionSystem) sweepCollision(
 		HasCollision: false,
 	}
 
-	if dx == 0 && dy == 0 {
+	if math.Abs(dx) < 0.001 && math.Abs(dy) < 0.001 {
 		result.FinalX = transform.X
 		result.FinalY = transform.Y
 		return result
@@ -231,6 +237,14 @@ func (s *CollisionSystem) sweepCollision(
 
 	result.FinalX = currentX
 	result.FinalY = currentY
+	if result.HasCollision {
+		s.logger.Debug("Collision",
+			zap.Uint64("handle", uint64(entityHandle)),
+			zap.Any("CollidedWith", result.CollidedWith),
+			zap.Float64("finalX", result.FinalX),
+			zap.Float64("finalY", result.FinalY),
+		)
+	}
 	return result
 }
 

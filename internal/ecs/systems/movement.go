@@ -2,6 +2,7 @@ package systems
 
 import (
 	"math"
+	"origin/internal/types"
 
 	"origin/internal/core"
 	"origin/internal/ecs"
@@ -104,8 +105,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 					m.TargetY = movement.TargetY
 				})
 
-				oldX := transform.X
-				oldY := transform.Y
+				old := types.Vector2{X: transform.X, Y: transform.Y}
 				newX := transform.X + velocityX*dt
 				newY := transform.Y + velocityY*dt
 
@@ -119,13 +119,12 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 
 				s.logger.Debug("Entity movement",
 					zap.Uint64("handle", uint64(h)),
-					zap.Float64("old_x", oldX),
-					zap.Float64("old_y", oldY),
-					zap.Float64("new_x", newX),
-					zap.Float64("new_y", newY),
-					zap.Float64("velocity_x", velocityX),
-					zap.Float64("velocity_y", velocityY),
-					zap.Float64("dt", dt))
+					zap.Any("old", old),
+					zap.Any("new", types.Vector2{X: newX, Y: newY}),
+					//zap.Float64("velocity_x", velocityX),
+					//zap.Float64("velocity_y", velocityY),
+					//zap.Float64("dt", dt),
+				)
 			}
 		}
 	}
