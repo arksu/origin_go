@@ -311,7 +311,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Region:     character.Region,
 				Layer:      character.Layer,
 			})
-			ecs.AddComponent(shard.world, handle, components.Transform{X: float64(pos.X), Y: float64(pos.Y), Direction: float64(character.Heading) * 45})
+			ecs.AddComponent(shard.world, handle, components.CreateTransform(pos.X, pos.Y, int(character.Heading)*45))
 			ecs.AddComponent(shard.world, handle, components.Movement{
 				VelocityX: 0,
 				VelocityY: 0,
@@ -328,6 +328,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(shard.world, handle, components.Collider{
 				HalfWidth:  utils.PlayerAABBSize / 2,
 				HalfHeight: utils.PlayerAABBSize / 2,
+				Layer:      1,
+				Mask:       1,
 			})
 
 			character.X = pos.X

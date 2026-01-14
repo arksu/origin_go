@@ -34,6 +34,8 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle,
 	ecs.AddComponent(w, h, components.Collider{
 		HalfWidth:  10.0 / 2,
 		HalfHeight: 10.0 / 2,
+		Layer:      1,
+		Mask:       1,
 	})
 
 	return h, nil

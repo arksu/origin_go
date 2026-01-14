@@ -43,7 +43,7 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 			}
 
 			// Skip if no movement intent
-			if transform.IntentX == transform.X && transform.IntentY == transform.Y {
+			if !transform.WasMoved {
 				continue
 			}
 
@@ -170,7 +170,7 @@ func (s *CollisionSystem) sweepCollision(
 					currentX, currentY, entityHalfW, entityHalfH,
 					remainingDX, remainingDY,
 					candidateTransform.X, candidateTransform.Y,
-					float64(candidateCollider.HalfWidth), float64(candidateCollider.HalfHeight),
+					candidateCollider.HalfWidth, candidateCollider.HalfHeight,
 				)
 				if hit && t < earliestT {
 					earliestT = t
