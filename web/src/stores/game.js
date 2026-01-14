@@ -10,6 +10,7 @@ export const useGameStore = defineStore('game', () => {
   const worldReady = ref(false)
   const chunks = ref(new Map())
   const playerPosition = ref({ x: 0, y: 0, heading: 0 })
+  const gameObjects = ref(new Map())
 
   const isConnected = computed(() => connectionState.value === 'connected')
 
@@ -44,6 +45,18 @@ export const useGameStore = defineStore('game', () => {
     chunks.value.delete(key)
   }
 
+  function addGameObject(entityId, gameObject) {
+    gameObjects.value.set(entityId, gameObject)
+  }
+
+  function removeGameObject(entityId) {
+    gameObjects.value.delete(entityId)
+  }
+
+  function updateGameObject(entityId, gameObject) {
+    gameObjects.value.set(entityId, gameObject)
+  }
+
   function setError(error) {
     lastError.value = error
     connectionState.value = 'error'
@@ -61,6 +74,7 @@ export const useGameStore = defineStore('game', () => {
     worldReady.value = false
     chunks.value.clear()
     playerPosition.value = { x: 0, y: 0, heading: 0 }
+    gameObjects.value.clear()
   }
 
   return {
@@ -72,6 +86,7 @@ export const useGameStore = defineStore('game', () => {
     worldReady,
     chunks,
     playerPosition,
+    gameObjects,
     isConnected,
     setWsToken,
     setConnectionState,
@@ -80,6 +95,9 @@ export const useGameStore = defineStore('game', () => {
     setPlayerPosition,
     addChunk,
     removeChunk,
+    addGameObject,
+    removeGameObject,
+    updateGameObject,
     setError,
     clearError,
     reset

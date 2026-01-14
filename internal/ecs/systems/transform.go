@@ -4,20 +4,46 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/types"
+	"time"
 
 	"go.uber.org/zap"
+
+	"origin/internal/eventbus"
+	"origin/internal/network/proto"
 )
+
+// ObjectMoveEvent represents an object movement event for network transmission
+type ObjectMoveEvent struct {
+	topic     string
+	Timestamp time.Time
+	EntityID  types.EntityID
+	Movement  *proto.EntityMovement
+}
+
+func (e *ObjectMoveEvent) Topic() string { return e.topic }
+
+func NewObjectMoveEvent(entityID types.EntityID, movement *proto.EntityMovement) *ObjectMoveEvent {
+	return &ObjectMoveEvent{
+		topic:     "gameplay.object.move",
+		Timestamp: time.Now(),
+		EntityID:  entityID,
+		Movement:  movement,
+	}
+}
 
 type TransformUpdateSystem struct {
 	ecs.BaseSystem
 	chunkManager core.ChunkManager
+	eventBus     *eventbus.EventBus
 	logger       *zap.Logger
 }
 
-func NewTransformUpdateSystem(chunkManager core.ChunkManager, logger *zap.Logger) *TransformUpdateSystem {
+func NewTransformUpdateSystem(chunkManager core.ChunkManager, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
 	return &TransformUpdateSystem{
 		BaseSystem:   ecs.NewBaseSystem("TransformUpdateSystem", 300),
 		chunkManager: chunkManager,
+		eventBus:     eventBus,
 		logger:       logger,
 	}
 }
@@ -78,6 +104,64 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				t.IntentY = finalY
 				t.WasMoved = false
 			})
+
+			// Send to client S2C_ObjectMove with current data
+			if entityID, ok := w.GetExternalID(h); ok {
+				// Get movement component for velocity data
+				movement, hasMovement := ecs.GetComponent[components.Movement](w, h)
+
+				// Create movement data for packet
+				moveMode := proto.MovementMode_MOVE_MODE_WALK
+				isMoving := false
+				var velocity proto.Vector2
+				var targetPosition *proto.Vector2
+
+				if hasMovement {
+					// Convert movement mode
+					switch movement.Mode {
+					case components.Walk:
+						moveMode = proto.MovementMode_MOVE_MODE_WALK
+					case components.Run:
+						moveMode = proto.MovementMode_MOVE_MODE_RUN
+					case components.FastRun:
+						moveMode = proto.MovementMode_MOVE_MODE_FAST_RUN
+					case components.Swim:
+						moveMode = proto.MovementMode_MOVE_MODE_SWIM
+					}
+
+					isMoving = movement.State == components.StateMoving
+					velocity = proto.Vector2{
+						X: int32(movement.VelocityX),
+						Y: int32(movement.VelocityY),
+					}
+
+					if movement.TargetType == components.TargetPoint {
+						targetPosition = &proto.Vector2{
+							X: int32(movement.TargetX),
+							Y: int32(movement.TargetY),
+						}
+					}
+				}
+
+				// Create entity movement packet
+				entityMovement := &proto.EntityMovement{
+					Position: &proto.Position{
+						X:       int32(finalX),
+						Y:       int32(finalY),
+						Heading: 0, // TODO: get from transform component
+					},
+					Velocity:       &velocity,
+					MoveMode:       moveMode,
+					TargetPosition: targetPosition,
+					IsMoving:       isMoving,
+				}
+
+				// Publish network event for S2C_ObjectMove
+				s.eventBus.PublishAsync(
+					NewObjectMoveEvent(entityID, entityMovement),
+					eventbus.PriorityMedium,
+				)
+			}
 
 			// Clear collision result for next frame
 			if hasCollision {

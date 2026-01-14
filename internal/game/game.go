@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/ecs/systems"
+	"origin/internal/eventbus"
 	"origin/internal/types"
 	"origin/internal/utils"
 	"sync"
@@ -87,6 +89,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *Object
 	g.networkServer = network.NewServer(&cfg.Network, logger)
 
 	g.setupNetworkHandlers()
+	g.setupEventHandlers()
 
 	g.resetOnlinePlayers()
 
@@ -121,6 +124,42 @@ func (g *Game) setupNetworkHandlers() {
 			g.handlePacket(c, data)
 		}
 	})
+}
+
+func (g *Game) setupEventHandlers() {
+	// Subscribe to object move events from systems
+	eventBus := g.shardManager.EventBus()
+	eventBus.SubscribeAsync("gameplay.object.move", eventbus.PriorityMedium, func(ctx context.Context, e eventbus.Event) error {
+		if objectMove, ok := e.(*systems.ObjectMoveEvent); ok {
+			g.handleObjectMove(objectMove)
+		}
+		return nil
+	})
+}
+
+func (g *Game) handleObjectMove(event *systems.ObjectMoveEvent) {
+	// Create S2C_ObjectMove packet
+	objectMoveMsg := &netproto.S2C_ObjectMove{
+		EntityId: uint64(event.EntityID),
+		Movement: event.Movement,
+	}
+
+	// Create server message
+	serverMsg := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ObjectMove{
+			ObjectMove: objectMoveMsg,
+		},
+	}
+
+	// Broadcast to all connected clients
+	data, err := proto.Marshal(serverMsg)
+	if err != nil {
+		g.logger.Error("Failed to marshal S2C_ObjectMove", zap.Error(err))
+		return
+	}
+
+	g.networkServer.Broadcast(data)
+	g.logger.Debug("Broadcasted S2C_ObjectMove", zap.Uint64("entity_id", uint64(event.EntityID)))
 }
 
 func (g *Game) handlePacket(c *network.Client, data []byte) {
@@ -318,7 +357,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Mode:      components.Walk,
 				State:     components.StateIdle,
 				// TODO player speed
-				Speed:            12.0,
+				Speed:            32.0,
 				TargetType:       components.TargetNone,
 				TargetX:          0,
 				TargetY:          0,
@@ -450,6 +489,52 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 					},
 				},
 			},
+		}
+
+		// Send all static handles to client - S2C_Object
+		handles := chunk.GetStaticHandles()
+		world := shard.World()
+		for _, h := range handles {
+			if !world.Alive(h) {
+				continue
+			}
+
+			transform, hasTransform := ecs.GetComponent[components.Transform](world, h)
+			if !hasTransform {
+				continue
+			}
+
+			entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](world, h)
+			if !hasEntityInfo {
+				continue
+			}
+
+			objectMsg := &netproto.ServerMessage{
+				Payload: &netproto.ServerMessage_Object{
+					Object: &netproto.S2C_Object{
+						EntityId:   uint64(h),
+						ObjectType: int32(entityInfo.ObjectType),
+						Position: &netproto.EntityPosition{
+							Position: &netproto.Position{
+								X:       int32(transform.X),
+								Y:       int32(transform.Y),
+								Heading: uint32(transform.Direction),
+							},
+							Size: &netproto.Vector2{
+								X: 10, // Static objects are 5x5
+								Y: 10, // Static objects are 5x5
+							},
+						},
+					},
+				},
+			}
+
+			objectData, err := proto.Marshal(objectMsg)
+			if err != nil {
+				g.logger.Error("Failed to marshal object", zap.Uint64("client_id", c.ID), zap.Error(err))
+				continue
+			}
+			c.Send(objectData)
 		}
 
 		chunkData, err := proto.Marshal(loadChunk)

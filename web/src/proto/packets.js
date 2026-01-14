@@ -2583,11 +2583,11 @@ export const proto = $root.proto = (() => {
             if (message.velocity != null && Object.hasOwnProperty.call(message, "velocity"))
                 $root.proto.Vector2.encode(message.velocity, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
             if (message.moveMode != null && Object.hasOwnProperty.call(message, "moveMode"))
-                writer.uint32(/* id 3, wireType 0 =*/24).int32(message.moveMode);
+                writer.uint32(/* id 4, wireType 0 =*/32).int32(message.moveMode);
             if (message.targetPosition != null && Object.hasOwnProperty.call(message, "targetPosition"))
-                $root.proto.Vector2.encode(message.targetPosition, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+                $root.proto.Vector2.encode(message.targetPosition, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
             if (message.isMoving != null && Object.hasOwnProperty.call(message, "isMoving"))
-                writer.uint32(/* id 5, wireType 0 =*/40).bool(message.isMoving);
+                writer.uint32(/* id 6, wireType 0 =*/48).bool(message.isMoving);
             return writer;
         };
 
@@ -2632,15 +2632,15 @@ export const proto = $root.proto = (() => {
                         message.velocity = $root.proto.Vector2.decode(reader, reader.uint32());
                         break;
                     }
-                case 3: {
+                case 4: {
                         message.moveMode = reader.int32();
                         break;
                     }
-                case 4: {
+                case 5: {
                         message.targetPosition = $root.proto.Vector2.decode(reader, reader.uint32());
                         break;
                     }
-                case 5: {
+                case 6: {
                         message.isMoving = reader.bool();
                         break;
                     }
@@ -2832,6 +2832,245 @@ export const proto = $root.proto = (() => {
         };
 
         return EntityMovement;
+    })();
+
+    proto.EntityPosition = (function() {
+
+        /**
+         * Properties of an EntityPosition.
+         * @memberof proto
+         * @interface IEntityPosition
+         * @property {proto.IPosition|null} [position] EntityPosition position
+         * @property {proto.IVector2|null} [size] EntityPosition size
+         */
+
+        /**
+         * Constructs a new EntityPosition.
+         * @memberof proto
+         * @classdesc Represents an EntityPosition.
+         * @implements IEntityPosition
+         * @constructor
+         * @param {proto.IEntityPosition=} [properties] Properties to set
+         */
+        function EntityPosition(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * EntityPosition position.
+         * @member {proto.IPosition|null|undefined} position
+         * @memberof proto.EntityPosition
+         * @instance
+         */
+        EntityPosition.prototype.position = null;
+
+        /**
+         * EntityPosition size.
+         * @member {proto.IVector2|null|undefined} size
+         * @memberof proto.EntityPosition
+         * @instance
+         */
+        EntityPosition.prototype.size = null;
+
+        /**
+         * Creates a new EntityPosition instance using the specified properties.
+         * @function create
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {proto.IEntityPosition=} [properties] Properties to set
+         * @returns {proto.EntityPosition} EntityPosition instance
+         */
+        EntityPosition.create = function create(properties) {
+            return new EntityPosition(properties);
+        };
+
+        /**
+         * Encodes the specified EntityPosition message. Does not implicitly {@link proto.EntityPosition.verify|verify} messages.
+         * @function encode
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {proto.IEntityPosition} message EntityPosition message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        EntityPosition.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.position != null && Object.hasOwnProperty.call(message, "position"))
+                $root.proto.Position.encode(message.position, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.size != null && Object.hasOwnProperty.call(message, "size"))
+                $root.proto.Vector2.encode(message.size, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified EntityPosition message, length delimited. Does not implicitly {@link proto.EntityPosition.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {proto.IEntityPosition} message EntityPosition message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        EntityPosition.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an EntityPosition message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.EntityPosition} EntityPosition
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        EntityPosition.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.EntityPosition();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.position = $root.proto.Position.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 2: {
+                        message.size = $root.proto.Vector2.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an EntityPosition message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.EntityPosition} EntityPosition
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        EntityPosition.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an EntityPosition message.
+         * @function verify
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        EntityPosition.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.position != null && message.hasOwnProperty("position")) {
+                let error = $root.proto.Position.verify(message.position);
+                if (error)
+                    return "position." + error;
+            }
+            if (message.size != null && message.hasOwnProperty("size")) {
+                let error = $root.proto.Vector2.verify(message.size);
+                if (error)
+                    return "size." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates an EntityPosition message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.EntityPosition} EntityPosition
+         */
+        EntityPosition.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.EntityPosition)
+                return object;
+            let message = new $root.proto.EntityPosition();
+            if (object.position != null) {
+                if (typeof object.position !== "object")
+                    throw TypeError(".proto.EntityPosition.position: object expected");
+                message.position = $root.proto.Position.fromObject(object.position);
+            }
+            if (object.size != null) {
+                if (typeof object.size !== "object")
+                    throw TypeError(".proto.EntityPosition.size: object expected");
+                message.size = $root.proto.Vector2.fromObject(object.size);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an EntityPosition message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {proto.EntityPosition} message EntityPosition
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        EntityPosition.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.position = null;
+                object.size = null;
+            }
+            if (message.position != null && message.hasOwnProperty("position"))
+                object.position = $root.proto.Position.toObject(message.position, options);
+            if (message.size != null && message.hasOwnProperty("size"))
+                object.size = $root.proto.Vector2.toObject(message.size, options);
+            return object;
+        };
+
+        /**
+         * Converts this EntityPosition to JSON.
+         * @function toJSON
+         * @memberof proto.EntityPosition
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        EntityPosition.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for EntityPosition
+         * @function getTypeUrl
+         * @memberof proto.EntityPosition
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        EntityPosition.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.EntityPosition";
+        };
+
+        return EntityPosition;
     })();
 
     proto.EntityAppearance = (function() {
@@ -6550,6 +6789,525 @@ export const proto = $root.proto = (() => {
         return S2C_PlayerEnterWorld;
     })();
 
+    proto.S2C_Object = (function() {
+
+        /**
+         * Properties of a S2C_Object.
+         * @memberof proto
+         * @interface IS2C_Object
+         * @property {number|Long|null} [entityId] S2C_Object entityId
+         * @property {number|null} [objectType] S2C_Object objectType
+         * @property {proto.IEntityPosition|null} [position] S2C_Object position
+         */
+
+        /**
+         * Constructs a new S2C_Object.
+         * @memberof proto
+         * @classdesc Represents a S2C_Object.
+         * @implements IS2C_Object
+         * @constructor
+         * @param {proto.IS2C_Object=} [properties] Properties to set
+         */
+        function S2C_Object(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_Object entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_Object
+         * @instance
+         */
+        S2C_Object.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * S2C_Object objectType.
+         * @member {number} objectType
+         * @memberof proto.S2C_Object
+         * @instance
+         */
+        S2C_Object.prototype.objectType = 0;
+
+        /**
+         * S2C_Object position.
+         * @member {proto.IEntityPosition|null|undefined} position
+         * @memberof proto.S2C_Object
+         * @instance
+         */
+        S2C_Object.prototype.position = null;
+
+        /**
+         * Creates a new S2C_Object instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {proto.IS2C_Object=} [properties] Properties to set
+         * @returns {proto.S2C_Object} S2C_Object instance
+         */
+        S2C_Object.create = function create(properties) {
+            return new S2C_Object(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_Object message. Does not implicitly {@link proto.S2C_Object.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {proto.IS2C_Object} message S2C_Object message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_Object.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            if (message.objectType != null && Object.hasOwnProperty.call(message, "objectType"))
+                writer.uint32(/* id 2, wireType 0 =*/16).int32(message.objectType);
+            if (message.position != null && Object.hasOwnProperty.call(message, "position"))
+                $root.proto.EntityPosition.encode(message.position, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_Object message, length delimited. Does not implicitly {@link proto.S2C_Object.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {proto.IS2C_Object} message S2C_Object message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_Object.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_Object message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_Object} S2C_Object
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_Object.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_Object();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.objectType = reader.int32();
+                        break;
+                    }
+                case 3: {
+                        message.position = $root.proto.EntityPosition.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_Object message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_Object} S2C_Object
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_Object.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_Object message.
+         * @function verify
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_Object.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            if (message.objectType != null && message.hasOwnProperty("objectType"))
+                if (!$util.isInteger(message.objectType))
+                    return "objectType: integer expected";
+            if (message.position != null && message.hasOwnProperty("position")) {
+                let error = $root.proto.EntityPosition.verify(message.position);
+                if (error)
+                    return "position." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_Object message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_Object} S2C_Object
+         */
+        S2C_Object.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_Object)
+                return object;
+            let message = new $root.proto.S2C_Object();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            if (object.objectType != null)
+                message.objectType = object.objectType | 0;
+            if (object.position != null) {
+                if (typeof object.position !== "object")
+                    throw TypeError(".proto.S2C_Object.position: object expected");
+                message.position = $root.proto.EntityPosition.fromObject(object.position);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_Object message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {proto.S2C_Object} message S2C_Object
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_Object.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+                object.objectType = 0;
+                object.position = null;
+            }
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            if (message.objectType != null && message.hasOwnProperty("objectType"))
+                object.objectType = message.objectType;
+            if (message.position != null && message.hasOwnProperty("position"))
+                object.position = $root.proto.EntityPosition.toObject(message.position, options);
+            return object;
+        };
+
+        /**
+         * Converts this S2C_Object to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_Object
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_Object.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_Object
+         * @function getTypeUrl
+         * @memberof proto.S2C_Object
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_Object.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_Object";
+        };
+
+        return S2C_Object;
+    })();
+
+    proto.S2C_ObjectMove = (function() {
+
+        /**
+         * Properties of a S2C_ObjectMove.
+         * @memberof proto
+         * @interface IS2C_ObjectMove
+         * @property {number|Long|null} [entityId] S2C_ObjectMove entityId
+         * @property {proto.IEntityMovement|null} [movement] S2C_ObjectMove movement
+         */
+
+        /**
+         * Constructs a new S2C_ObjectMove.
+         * @memberof proto
+         * @classdesc Represents a S2C_ObjectMove.
+         * @implements IS2C_ObjectMove
+         * @constructor
+         * @param {proto.IS2C_ObjectMove=} [properties] Properties to set
+         */
+        function S2C_ObjectMove(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_ObjectMove entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * S2C_ObjectMove movement.
+         * @member {proto.IEntityMovement|null|undefined} movement
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.movement = null;
+
+        /**
+         * Creates a new S2C_ObjectMove instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.IS2C_ObjectMove=} [properties] Properties to set
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove instance
+         */
+        S2C_ObjectMove.create = function create(properties) {
+            return new S2C_ObjectMove(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectMove message. Does not implicitly {@link proto.S2C_ObjectMove.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.IS2C_ObjectMove} message S2C_ObjectMove message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectMove.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            if (message.movement != null && Object.hasOwnProperty.call(message, "movement"))
+                $root.proto.EntityMovement.encode(message.movement, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectMove message, length delimited. Does not implicitly {@link proto.S2C_ObjectMove.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.IS2C_ObjectMove} message S2C_ObjectMove message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectMove.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_ObjectMove message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectMove.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ObjectMove();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.movement = $root.proto.EntityMovement.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_ObjectMove message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectMove.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_ObjectMove message.
+         * @function verify
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_ObjectMove.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            if (message.movement != null && message.hasOwnProperty("movement")) {
+                let error = $root.proto.EntityMovement.verify(message.movement);
+                if (error)
+                    return "movement." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_ObjectMove message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
+         */
+        S2C_ObjectMove.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ObjectMove)
+                return object;
+            let message = new $root.proto.S2C_ObjectMove();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            if (object.movement != null) {
+                if (typeof object.movement !== "object")
+                    throw TypeError(".proto.S2C_ObjectMove.movement: object expected");
+                message.movement = $root.proto.EntityMovement.fromObject(object.movement);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_ObjectMove message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.S2C_ObjectMove} message S2C_ObjectMove
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_ObjectMove.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+                object.movement = null;
+            }
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            if (message.movement != null && message.hasOwnProperty("movement"))
+                object.movement = $root.proto.EntityMovement.toObject(message.movement, options);
+            return object;
+        };
+
+        /**
+         * Converts this S2C_ObjectMove to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_ObjectMove.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_ObjectMove
+         * @function getTypeUrl
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_ObjectMove.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_ObjectMove";
+        };
+
+        return S2C_ObjectMove;
+    })();
+
     proto.S2C_PlayerLeaveWorld = (function() {
 
         /**
@@ -7515,6 +8273,8 @@ export const proto = $root.proto = (() => {
          * @property {proto.IS2C_UnloadChunk|null} [unloadChunk] ServerMessage unloadChunk
          * @property {proto.IS2C_PlayerEnterWorld|null} [playerEnterWorld] ServerMessage playerEnterWorld
          * @property {proto.IS2C_PlayerLeaveWorld|null} [playerLeaveWorld] ServerMessage playerLeaveWorld
+         * @property {proto.IS2C_Object|null} [object] ServerMessage object
+         * @property {proto.IS2C_ObjectMove|null} [objectMove] ServerMessage objectMove
          * @property {proto.IS2C_Error|null} [error] ServerMessage error
          */
 
@@ -7590,6 +8350,22 @@ export const proto = $root.proto = (() => {
         ServerMessage.prototype.playerLeaveWorld = null;
 
         /**
+         * ServerMessage object.
+         * @member {proto.IS2C_Object|null|undefined} object
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.object = null;
+
+        /**
+         * ServerMessage objectMove.
+         * @member {proto.IS2C_ObjectMove|null|undefined} objectMove
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.objectMove = null;
+
+        /**
          * ServerMessage error.
          * @member {proto.IS2C_Error|null|undefined} error
          * @memberof proto.ServerMessage
@@ -7602,12 +8378,12 @@ export const proto = $root.proto = (() => {
 
         /**
          * ServerMessage payload.
-         * @member {"authResult"|"pong"|"loadChunk"|"unloadChunk"|"playerEnterWorld"|"playerLeaveWorld"|"error"|undefined} payload
+         * @member {"authResult"|"pong"|"loadChunk"|"unloadChunk"|"playerEnterWorld"|"playerLeaveWorld"|"object"|"objectMove"|"error"|undefined} payload
          * @memberof proto.ServerMessage
          * @instance
          */
         Object.defineProperty(ServerMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "loadChunk", "unloadChunk", "playerEnterWorld", "playerLeaveWorld", "error"]),
+            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "loadChunk", "unloadChunk", "playerEnterWorld", "playerLeaveWorld", "object", "objectMove", "error"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -7649,6 +8425,10 @@ export const proto = $root.proto = (() => {
                 $root.proto.S2C_PlayerEnterWorld.encode(message.playerEnterWorld, writer.uint32(/* id 14, wireType 2 =*/114).fork()).ldelim();
             if (message.playerLeaveWorld != null && Object.hasOwnProperty.call(message, "playerLeaveWorld"))
                 $root.proto.S2C_PlayerLeaveWorld.encode(message.playerLeaveWorld, writer.uint32(/* id 15, wireType 2 =*/122).fork()).ldelim();
+            if (message.object != null && Object.hasOwnProperty.call(message, "object"))
+                $root.proto.S2C_Object.encode(message.object, writer.uint32(/* id 16, wireType 2 =*/130).fork()).ldelim();
+            if (message.objectMove != null && Object.hasOwnProperty.call(message, "objectMove"))
+                $root.proto.S2C_ObjectMove.encode(message.objectMove, writer.uint32(/* id 17, wireType 2 =*/138).fork()).ldelim();
             if (message.error != null && Object.hasOwnProperty.call(message, "error"))
                 $root.proto.S2C_Error.encode(message.error, writer.uint32(/* id 42, wireType 2 =*/338).fork()).ldelim();
             return writer;
@@ -7713,6 +8493,14 @@ export const proto = $root.proto = (() => {
                     }
                 case 15: {
                         message.playerLeaveWorld = $root.proto.S2C_PlayerLeaveWorld.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 16: {
+                        message.object = $root.proto.S2C_Object.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 17: {
+                        message.objectMove = $root.proto.S2C_ObjectMove.decode(reader, reader.uint32());
                         break;
                     }
                 case 42: {
@@ -7816,6 +8604,26 @@ export const proto = $root.proto = (() => {
                         return "playerLeaveWorld." + error;
                 }
             }
+            if (message.object != null && message.hasOwnProperty("object")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_Object.verify(message.object);
+                    if (error)
+                        return "object." + error;
+                }
+            }
+            if (message.objectMove != null && message.hasOwnProperty("objectMove")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_ObjectMove.verify(message.objectMove);
+                    if (error)
+                        return "objectMove." + error;
+                }
+            }
             if (message.error != null && message.hasOwnProperty("error")) {
                 if (properties.payload === 1)
                     return "payload: multiple values";
@@ -7873,6 +8681,16 @@ export const proto = $root.proto = (() => {
                     throw TypeError(".proto.ServerMessage.playerLeaveWorld: object expected");
                 message.playerLeaveWorld = $root.proto.S2C_PlayerLeaveWorld.fromObject(object.playerLeaveWorld);
             }
+            if (object.object != null) {
+                if (typeof object.object !== "object")
+                    throw TypeError(".proto.ServerMessage.object: object expected");
+                message.object = $root.proto.S2C_Object.fromObject(object.object);
+            }
+            if (object.objectMove != null) {
+                if (typeof object.objectMove !== "object")
+                    throw TypeError(".proto.ServerMessage.objectMove: object expected");
+                message.objectMove = $root.proto.S2C_ObjectMove.fromObject(object.objectMove);
+            }
             if (object.error != null) {
                 if (typeof object.error !== "object")
                     throw TypeError(".proto.ServerMessage.error: object expected");
@@ -7927,6 +8745,16 @@ export const proto = $root.proto = (() => {
                 object.playerLeaveWorld = $root.proto.S2C_PlayerLeaveWorld.toObject(message.playerLeaveWorld, options);
                 if (options.oneofs)
                     object.payload = "playerLeaveWorld";
+            }
+            if (message.object != null && message.hasOwnProperty("object")) {
+                object.object = $root.proto.S2C_Object.toObject(message.object, options);
+                if (options.oneofs)
+                    object.payload = "object";
+            }
+            if (message.objectMove != null && message.hasOwnProperty("objectMove")) {
+                object.objectMove = $root.proto.S2C_ObjectMove.toObject(message.objectMove, options);
+                if (options.oneofs)
+                    object.payload = "objectMove";
             }
             if (message.error != null && message.hasOwnProperty("error")) {
                 object.error = $root.proto.S2C_Error.toObject(message.error, options);

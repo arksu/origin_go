@@ -99,6 +99,10 @@ func (c *Chunk) GetDynamicHandles() []types.Handle {
 	return c.spatial.GetDynamicHandles()
 }
 
+func (c *Chunk) GetStaticHandles() []types.Handle {
+	return c.spatial.GetStaticHandles()
+}
+
 func (c *Chunk) ClearHandles() {
 	c.mu.Lock()
 	c.spatial.ClearDynamic()
