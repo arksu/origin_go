@@ -19,7 +19,7 @@ func CreateTransform(x, y int, direction int) Transform {
 	return Transform{
 		X:         float64(x),
 		Y:         float64(y),
-		IntentX:   float64(y),
+		IntentX:   float64(x),
 		IntentY:   float64(y),
 		Direction: float64(direction),
 	}

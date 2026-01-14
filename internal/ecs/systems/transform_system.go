@@ -37,12 +37,8 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				continue
 			}
 
-			if !transform.WasMoved {
-				continue
-			}
-
 			// Skip if no movement intent
-			if transform.IntentX == transform.X && transform.IntentY == transform.Y {
+			if !transform.WasMoved {
 				continue
 			}
 
