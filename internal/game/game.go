@@ -159,7 +159,7 @@ func (g *Game) handleObjectMove(event *systems.ObjectMoveEvent) {
 	}
 
 	g.networkServer.Broadcast(data)
-	g.logger.Debug("Broadcasted S2C_ObjectMove", zap.Uint64("entity_id", uint64(event.EntityID)))
+	//g.logger.Debug("Broadcasted S2C_ObjectMove", zap.Uint64("entity_id", uint64(event.EntityID)))
 }
 
 func (g *Game) handlePacket(c *network.Client, data []byte) {
@@ -752,8 +752,16 @@ func (g *Game) gameLoop() {
 }
 
 func (g *Game) update(dt float64) {
+	start := time.Now()
 
 	g.shardManager.Update(dt)
+
+	duration := time.Since(start)
+	g.logger.Debug("Game tick completed",
+		zap.Uint64("tick", g.currentTick),
+		zap.Duration("duration", duration),
+		zap.Float64("dt", dt),
+	)
 }
 
 func (g *Game) Stop() {

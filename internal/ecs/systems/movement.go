@@ -11,6 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const debugEnabled = false
+
 type MovementSystem struct {
 	ecs.BaseSystem
 	chunkManager core.ChunkManager
@@ -117,14 +119,16 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 					t.Direction = math.Atan2(velocityY, velocityX)
 				})
 
-				s.logger.Debug("Entity movement",
-					zap.Uint64("handle", uint64(h)),
-					zap.Any("old", old),
-					zap.Any("new", types.Vector2{X: newX, Y: newY}),
-					//zap.Float64("velocity_x", velocityX),
-					//zap.Float64("velocity_y", velocityY),
-					//zap.Float64("dt", dt),
-				)
+				if debugEnabled {
+					s.logger.Debug("Entity movement",
+						zap.Uint64("handle", uint64(h)),
+						zap.Any("old", old),
+						zap.Any("new", types.Vector2{X: newX, Y: newY}),
+						//zap.Float64("velocity_x", velocityX),
+						//zap.Float64("velocity_y", velocityY),
+						//zap.Float64("dt", dt),
+					)
+				}
 			}
 		}
 	}
