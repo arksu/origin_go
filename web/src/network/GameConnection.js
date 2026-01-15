@@ -234,6 +234,11 @@ class GameConnection {
         gameStore.setPlayerPosition(newPosition)
         console.log('Updated player position:', newPosition)
       }
+
+      // Store player movement data for target rendering
+      gameStore.setPlayerMovement(objectMove.movement)
+      console.log('Updated player movement:', objectMove.movement)
+
       return // Don't add player as a game object
     }
 
