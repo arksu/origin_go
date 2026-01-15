@@ -116,6 +116,11 @@ func (s *CollisionSystem) sweepCollision(
 	queryRadius := math.Max(math.Abs(dx), math.Abs(dy)) + math.Max(entityHalfW, entityHalfH) + 64
 	chunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &candidates)
 
+	// Original velocity for slide calculations
+	originalSpeed := math.Sqrt(dx*dx + dy*dy)
+	originalDX := dx
+	originalDY := dy
+
 	// Remaining movement
 	remainingDX := dx
 	remainingDY := dy
@@ -216,11 +221,29 @@ func (s *CollisionSystem) sweepCollision(
 				result.CollidedWith = append(result.CollidedWith, collidedWith)
 			}
 
-			// Slide along wall
-			remainingTime := 1.0 - earliestT
-			dotProduct := (remainingDX*hitNormalY + remainingDY*(-hitNormalX)) * remainingTime
-			remainingDX = dotProduct * hitNormalY
-			remainingDY = dotProduct * (-hitNormalX)
+			// Slide along wall: maintain original speed in slide direction
+			// Two perpendicular directions to the normal
+			slide1X := -hitNormalY
+			slide1Y := hitNormalX
+			slide2X := hitNormalY
+			slide2Y := -hitNormalX
+
+			// Choose slide direction that's closer to ORIGINAL movement (not current)
+			dot1 := originalDX*slide1X + originalDY*slide1Y
+			dot2 := originalDX*slide2X + originalDY*slide2Y
+
+			var slideX, slideY float64
+			if dot1 > dot2 {
+				slideX = slide1X
+				slideY = slide1Y
+			} else {
+				slideX = slide2X
+				slideY = slide2Y
+			}
+
+			// Apply original speed in slide direction
+			remainingDX = slideX * originalSpeed
+			remainingDY = slideY * originalSpeed
 		} else {
 			// No collision - move full distance
 			currentX += remainingDX
