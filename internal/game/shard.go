@@ -257,7 +257,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 
 	entityID := types.EntityID(character.ID)
 
-	halfSize := utils.PlayerAABBSize / 2
+	halfSize := utils.PlayerColliderSize / 2
 	minX := worldX - halfSize
 	minY := worldY - halfSize
 	maxX := worldX + halfSize

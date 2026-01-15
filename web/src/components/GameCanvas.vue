@@ -137,24 +137,22 @@ function renderChunks() {
     renderGameObject(gameObject, cameraX, cameraY)
   })
 
-  // Draw player marker at screen center (red aim crosshair)
-  const playerScreenX = canvasWidth.value / 2
-  const playerScreenY = canvasHeight.value / 2
+  // Render player hitbox
+  const playerPixelWidth = (gameStore.playerSize.x / COORD_PER_TILE) * TILE_SIZE_PIXELS
+  const playerPixelHeight = (gameStore.playerSize.y / COORD_PER_TILE) * TILE_SIZE_PIXELS
   
-  // Draw red aim crosshair for player
-  ctx.value.strokeStyle = '#ff0000'
+  // Calculate centered screen position for player hitbox
+  const playerScreenX = canvasWidth.value / 2 - (playerPixelWidth / 2)
+  const playerScreenY = canvasHeight.value / 2 - (playerPixelHeight / 2)
+  
+  // Draw green rectangle for player hitbox
+  ctx.value.fillStyle = '#ff2200'
+  ctx.value.fillRect(playerScreenX, playerScreenY, playerPixelWidth, playerPixelHeight)
+  
+  // Draw white border for player hitbox
+  ctx.value.strokeStyle = '#ffffff'
   ctx.value.lineWidth = 2
-  ctx.value.beginPath()
-  ctx.value.moveTo(playerScreenX - 10, playerScreenY)
-  ctx.value.lineTo(playerScreenX + 10, playerScreenY)
-  ctx.value.moveTo(playerScreenX, playerScreenY - 10)
-  ctx.value.lineTo(playerScreenX, playerScreenY + 10)
-  ctx.value.stroke()
-  
-  // Draw red circle around aim
-  ctx.value.beginPath()
-  ctx.value.arc(playerScreenX, playerScreenY, 5, 0, 2 * Math.PI)
-  ctx.value.stroke()
+  ctx.value.strokeRect(playerScreenX, playerScreenY, playerPixelWidth, playerPixelHeight)
   ctx.value.lineWidth = 1
 
   // Draw movement target line for player
@@ -166,12 +164,16 @@ function renderChunks() {
     const targetScreenX = targetPixelX - cameraX
     const targetScreenY = targetPixelY - cameraY
     
-    // Draw line from player to target
-    ctx.value.strokeStyle = '#ff2200'  // Green line for movement target
+    // Player center position for movement line
+    const playerCenterScreenX = canvasWidth.value / 2
+    const playerCenterScreenY = canvasHeight.value / 2
+    
+    // Draw line from player center to target
+    ctx.value.strokeStyle = '#ff2200'  // Red line for movement target
     ctx.value.lineWidth = 2
     ctx.value.setLineDash([5, 5])  // Dashed line
     ctx.value.beginPath()
-    ctx.value.moveTo(playerScreenX, playerScreenY)
+    ctx.value.moveTo(playerCenterScreenX, playerCenterScreenY)
     ctx.value.lineTo(targetScreenX, targetScreenY)
     ctx.value.stroke()
     
@@ -303,9 +305,9 @@ function renderGameObject(gameObject, cameraX, cameraY) {
   const pixelWidth = (width / COORD_PER_TILE) * TILE_SIZE_PIXELS
   const pixelHeight = (height / COORD_PER_TILE) * TILE_SIZE_PIXELS
   
-  // Calculate screen position
-  const screenX = pixelX - cameraX
-  const screenY = pixelY - cameraY
+  // Calculate screen position (centered)
+  const screenX = pixelX - cameraX - (pixelWidth / 2)
+  const screenY = pixelY - cameraY - (pixelHeight / 2)
   
   // Only render if visible
   if (
@@ -370,9 +372,9 @@ onUnmounted(() => {
   // Animation frame will stop when component unmounts
 })
 
-// Re-render when chunks, player position, or game objects change
+// Re-render when chunks, player position, player size, or game objects change
 watch(
-  () => [gameStore.chunks.size, gameStore.playerPosition, gameStore.gameObjects.size],
+  () => [gameStore.chunks.size, gameStore.playerPosition, gameStore.playerSize, gameStore.gameObjects.size],
   () => {
     // Rendering happens in animation loop
   },
