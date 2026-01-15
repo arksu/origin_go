@@ -80,9 +80,6 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 					})
 				}
 
-				if collisionResult.HasCollision {
-					s.logger.Debug("Collision detected")
-				}
 				// Apply collision-adjusted position
 				finalX = collisionResult.FinalX
 				finalY = collisionResult.FinalY

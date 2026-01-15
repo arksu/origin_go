@@ -194,7 +194,7 @@ func (s *CollisionSystem) sweepCollision(
 				currentX, currentY, entityHalfW, entityHalfH,
 				remainingDX, remainingDY,
 				candidateTransform.X, candidateTransform.Y,
-				float64(candidateCollider.HalfWidth), float64(candidateCollider.HalfHeight),
+				candidateCollider.HalfWidth, candidateCollider.HalfHeight,
 			)
 
 			if hit && t < earliestT {
@@ -230,14 +230,16 @@ func (s *CollisionSystem) sweepCollision(
 			if parallelSpeed < epsilon {
 				// Moving perpendicular to wall - stop
 				result.PerpendicularOscillation = true
-				s.logger.Debug("Perpendicular collision - stopping",
-					zap.Uint64("handle", uint64(entityHandle)),
-					zap.Float64("normalX", hitNormalX),
-					zap.Float64("normalY", hitNormalY),
-					zap.Float64("remainingDX", remainingDX),
-					zap.Float64("remainingDY", remainingDY),
-					zap.Float64("parallelSpeed", parallelSpeed),
-				)
+				if debugEnabled {
+					s.logger.Debug("Perpendicular collision - stopping",
+						zap.Uint64("handle", uint64(entityHandle)),
+						zap.Float64("normalX", hitNormalX),
+						zap.Float64("normalY", hitNormalY),
+						zap.Float64("remainingDX", remainingDX),
+						zap.Float64("remainingDY", remainingDY),
+						zap.Float64("parallelSpeed", parallelSpeed),
+					)
+				}
 				break
 			}
 
@@ -283,13 +285,15 @@ func (s *CollisionSystem) sweepCollision(
 			}
 		}
 
-		s.logger.Debug("Collision",
-			zap.Uint64("handle", uint64(entityHandle)),
-			zap.Any("CollidedWith", result.CollidedWith),
-			zap.Float64("finalX", result.FinalX),
-			zap.Float64("finalY", result.FinalY),
-			zap.Bool("perpendicular", result.PerpendicularOscillation),
-		)
+		if debugEnabled {
+			s.logger.Debug("Collision",
+				zap.Uint64("handle", uint64(entityHandle)),
+				zap.Any("CollidedWith", result.CollidedWith),
+				zap.Float64("finalX", result.FinalX),
+				zap.Float64("finalY", result.FinalY),
+				zap.Bool("perpendicular", result.PerpendicularOscillation),
+			)
+		}
 	}
 	return result
 }
