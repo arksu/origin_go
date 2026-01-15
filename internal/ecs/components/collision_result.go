@@ -12,6 +12,9 @@ type CollisionResult struct {
 	IsPhantom                          bool
 	CollidedWith                       []types.EntityID // С кем столкнулись
 	HasCollision                       bool
+	PerpendicularOscillation           bool           // движение дальше невозможно, скольжение невозможно
+	PrevFinalX, PrevFinalY             float64        // Позиция с предыдущего кадра для обнаружения осцилляции
+	PrevCollidedWith                   types.EntityID // Объект коллизии с предыдущего кадра
 }
 
 const CollisionResultComponentID ecs.ComponentID = 15
