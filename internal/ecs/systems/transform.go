@@ -73,6 +73,13 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 			var finalX, finalY float64
 			if hasCollision {
+				if collisionResult.PerpendicularOscillation {
+					// stop movement
+					ecs.WithComponent(w, h, func(m *components.Movement) {
+						m.ClearTarget()
+					})
+				}
+
 				if collisionResult.HasCollision {
 					s.logger.Debug("Collision detected")
 				}
@@ -163,14 +170,22 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				)
 			}
 
-			// Clear collision result for next frame
+			// Save collision state for next frame (for oscillation detection)
 			if hasCollision {
 				ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+					// Save current collision position for next frame
+					cr.PrevFinalX = cr.FinalX
+					cr.PrevFinalY = cr.FinalY
+					if len(cr.CollidedWith) > 0 {
+						cr.PrevCollidedWith = cr.CollidedWith[0]
+					}
+					// Clear collision result for next frame
 					cr.HasCollision = false
 					cr.CollidedWith = nil
 					cr.CollisionNormalX = 0
 					cr.CollisionNormalY = 0
 					cr.IsPhantom = false
+					cr.PerpendicularOscillation = false
 				})
 			}
 		}

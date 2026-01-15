@@ -229,6 +229,15 @@ func (s *CollisionSystem) sweepCollision(
 			parallelSpeed := math.Sqrt(parallelX*parallelX + parallelY*parallelY)
 			if parallelSpeed < epsilon {
 				// Moving perpendicular to wall - stop
+				result.PerpendicularOscillation = true
+				s.logger.Debug("Perpendicular collision - stopping",
+					zap.Uint64("handle", uint64(entityHandle)),
+					zap.Float64("normalX", hitNormalX),
+					zap.Float64("normalY", hitNormalY),
+					zap.Float64("remainingDX", remainingDX),
+					zap.Float64("remainingDY", remainingDY),
+					zap.Float64("parallelSpeed", parallelSpeed),
+				)
 				break
 			}
 
@@ -245,12 +254,41 @@ func (s *CollisionSystem) sweepCollision(
 
 	result.FinalX = currentX
 	result.FinalY = currentY
-	if result.HasCollision {
+
+	// Detect oscillation: if object didn't move in intended direction
+	if result.HasCollision && originalSpeed > 0.1 {
+		// Check if object moved in the direction of original intent
+		dotProduct := (result.FinalX-transform.X)*dx + (result.FinalY-transform.Y)*dy
+
+		// If dot product is negative or very small, object moved opposite or perpendicular to intent
+		if dotProduct < originalSpeed*0.1 {
+			result.PerpendicularOscillation = true
+		}
+
+		// Also detect oscillation by checking if object is bouncing between two positions
+		// Get previous collision result to compare
+		prevCollisionResult, hasPrevCollision := ecs.GetComponent[components.CollisionResult](w, entityHandle)
+		if hasPrevCollision && prevCollisionResult.HasCollision && len(result.CollidedWith) > 0 && len(prevCollisionResult.CollidedWith) > 0 {
+			// Check if colliding with same object
+			if result.CollidedWith[0] == prevCollisionResult.CollidedWith[0] {
+				// Check if positions are very close (bouncing between two spots)
+				distToPrev := math.Sqrt(
+					(result.FinalX-prevCollisionResult.FinalX)*(result.FinalX-prevCollisionResult.FinalX) +
+						(result.FinalY-prevCollisionResult.FinalY)*(result.FinalY-prevCollisionResult.FinalY),
+				)
+				// If distance to previous collision position is small, it's oscillation
+				if distToPrev < 2.0 && distToPrev > 0.5 {
+					result.PerpendicularOscillation = true
+				}
+			}
+		}
+
 		s.logger.Debug("Collision",
 			zap.Uint64("handle", uint64(entityHandle)),
 			zap.Any("CollidedWith", result.CollidedWith),
 			zap.Float64("finalX", result.FinalX),
 			zap.Float64("finalY", result.FinalY),
+			zap.Bool("perpendicular", result.PerpendicularOscillation),
 		)
 	}
 	return result
