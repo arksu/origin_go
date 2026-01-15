@@ -253,6 +253,19 @@ func (s *CollisionSystem) sweptAABB(
 	mHalfW := aHalfW + bHalfW
 	mHalfH := aHalfH + bHalfH
 
+	// Check if sweep path can possibly intersect B
+	// If no movement on an axis, objects must overlap on that axis
+	if dx == 0 {
+		if math.Abs(ax-bx) >= mHalfW {
+			return 1.0, 0, 0, false
+		}
+	}
+	if dy == 0 {
+		if math.Abs(ay-by) >= mHalfH {
+			return 1.0, 0, 0, false
+		}
+	}
+
 	// Ray from A's center against expanded B
 	// Entry and exit times for each axis
 	var xInvEntry, yInvEntry float64
