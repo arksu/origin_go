@@ -10,6 +10,8 @@ import (
 	"origin/internal/types"
 )
 
+const treeSize = 10
+
 type TreeBuilder struct{}
 
 func (b *TreeBuilder) ObjectType() types.ObjectType { return types.ObjectTypeTree }
@@ -32,8 +34,8 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle,
 
 	// TODO object size
 	ecs.AddComponent(w, h, components.Collider{
-		HalfWidth:  10.0 / 2,
-		HalfHeight: 10.0 / 2,
+		HalfWidth:  treeSize / 2.0,
+		HalfHeight: treeSize / 2.0,
 		Layer:      1,
 		Mask:       1,
 	})

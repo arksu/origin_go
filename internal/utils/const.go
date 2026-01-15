@@ -1,9 +1,9 @@
 package utils
 
 const (
-	ChunkSize      = 128
-	CoordPerTile   = 12
-	PlayerAABBSize = 10
+	ChunkSize          = 128
+	CoordPerTile       = 12
+	PlayerColliderSize = 10
 )
 
 const (

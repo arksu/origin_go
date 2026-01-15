@@ -11,6 +11,7 @@ export const useGameStore = defineStore('game', () => {
   const chunks = ref(new Map())
   const playerPosition = ref({ x: 0, y: 0, heading: 0 })
   const playerMovement = ref(null)
+  const playerSize = ref({ x: 32, y: 32 }) // Default player size
   const gameObjects = ref(new Map())
 
   const isConnected = computed(() => connectionState.value === 'connected')
@@ -38,6 +39,11 @@ export const useGameStore = defineStore('game', () => {
 
   function setPlayerMovement(movement) {
     playerMovement.value = movement
+  }
+
+  function setPlayerSize(size) {
+    console.warn("setPlayerSize", size)
+    playerSize.value = size
   }
 
   function addChunk(coord, data) {
@@ -80,6 +86,7 @@ export const useGameStore = defineStore('game', () => {
     chunks.value.clear()
     playerPosition.value = { x: 0, y: 0, heading: 0 }
     playerMovement.value = null
+    playerSize.value = { x: 10, y: 10 }
     gameObjects.value.clear()
   }
 
@@ -93,6 +100,7 @@ export const useGameStore = defineStore('game', () => {
     chunks,
     playerPosition,
     playerMovement,
+    playerSize,
     gameObjects,
     isConnected,
     setWsToken,
@@ -101,6 +109,7 @@ export const useGameStore = defineStore('game', () => {
     setWorldReady,
     setPlayerPosition,
     setPlayerMovement,
+    setPlayerSize,
     addChunk,
     removeChunk,
     addGameObject,

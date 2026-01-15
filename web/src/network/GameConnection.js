@@ -198,7 +198,6 @@ class GameConnection {
 
   handleObject(object) {
     const gameStore = useGameStore()
-    console.log('Object received:', object)
 
     // Check if this is the player's entity
     if (object.entityId === gameStore.characterId) {
@@ -211,6 +210,16 @@ class GameConnection {
         }
         gameStore.setPlayerPosition(newPosition)
         console.log('Set initial player position:', newPosition)
+      }
+
+      // Store player size from collider
+      if (object.position && object.position.size) {
+        const playerSize = {
+          x: object.position.size.x || 10,
+          y: object.position.size.y || 10
+        }
+        gameStore.setPlayerSize(playerSize)
+        console.log('Set player size:', playerSize)
       }
       return // Don't add player as a game object
     }

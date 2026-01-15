@@ -365,8 +365,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				InteractionRange: 5.0,
 			})
 			ecs.AddComponent(shard.world, handle, components.Collider{
-				HalfWidth:  utils.PlayerAABBSize / 2,
-				HalfHeight: utils.PlayerAABBSize / 2,
+				HalfWidth:  utils.PlayerColliderSize / 2,
+				HalfHeight: utils.PlayerColliderSize / 2,
 				Layer:      1,
 				Mask:       1,
 			})
@@ -492,7 +492,7 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 		}
 
 		// Send all static handles to client - S2C_Object
-		handles := chunk.GetStaticHandles()
+		handles := chunk.GetHandles()
 		world := shard.World()
 		for _, h := range handles {
 			if !world.Alive(h) {
@@ -509,6 +509,11 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				continue
 			}
 
+			collider, hasCollider := ecs.GetComponent[components.Collider](world, h)
+			if !hasCollider {
+				continue
+			}
+
 			objectMsg := &netproto.ServerMessage{
 				Payload: &netproto.ServerMessage_Object{
 					Object: &netproto.S2C_Object{
@@ -521,8 +526,8 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 								Heading: uint32(transform.Direction),
 							},
 							Size: &netproto.Vector2{
-								X: 10, // Static objects are 5x5
-								Y: 10, // Static objects are 5x5
+								X: int32(collider.HalfWidth * 2),
+								Y: int32(collider.HalfHeight * 2),
 							},
 						},
 					},
