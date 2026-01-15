@@ -80,13 +80,7 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 
 			// Store collision result
 			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-				cr.HasCollision = result.HasCollision
-				cr.CollidedWith = result.CollidedWith
-				cr.IsPhantom = result.IsPhantom
-				cr.FinalX = result.FinalX
-				cr.FinalY = result.FinalY
-				cr.CollisionNormalX = result.CollisionNormalX
-				cr.CollisionNormalY = result.CollisionNormalY
+				*cr = result
 			})
 		}
 	}

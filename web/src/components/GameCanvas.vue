@@ -157,6 +157,35 @@ function renderChunks() {
   ctx.value.stroke()
   ctx.value.lineWidth = 1
 
+  // Draw movement target line for player
+  if (gameStore.playerMovement && gameStore.playerMovement.targetPosition) {
+    const targetWorldX = gameStore.playerMovement.targetPosition.x || 0
+    const targetWorldY = gameStore.playerMovement.targetPosition.y || 0
+    const targetPixelX = (targetWorldX / COORD_PER_TILE) * TILE_SIZE_PIXELS
+    const targetPixelY = (targetWorldY / COORD_PER_TILE) * TILE_SIZE_PIXELS
+    const targetScreenX = targetPixelX - cameraX
+    const targetScreenY = targetPixelY - cameraY
+    
+    // Draw line from player to target
+    ctx.value.strokeStyle = '#ff2200'  // Green line for movement target
+    ctx.value.lineWidth = 2
+    ctx.value.setLineDash([5, 5])  // Dashed line
+    ctx.value.beginPath()
+    ctx.value.moveTo(playerScreenX, playerScreenY)
+    ctx.value.lineTo(targetScreenX, targetScreenY)
+    ctx.value.stroke()
+    
+    // Draw target marker
+    ctx.value.fillStyle = '#ff2200'
+    ctx.value.beginPath()
+    ctx.value.arc(targetScreenX, targetScreenY, 3, 0, 2 * Math.PI)
+    ctx.value.fill()
+    
+    // Reset line style
+    ctx.value.setLineDash([])
+    ctx.value.lineWidth = 1
+  }
+
   // Draw center crosshair at world origin (0,0)
   const originScreenX = 0 - cameraX
   const originScreenY = 0 - cameraY
