@@ -49,6 +49,14 @@ func (gs GameState) String() string {
 	}
 }
 
+type tickStats struct {
+	durationSum time.Duration
+	count       uint64
+	minDuration time.Duration
+	maxDuration time.Duration
+	lastLog     time.Time
+}
+
 type Game struct {
 	cfg    *config.Config
 	db     *persistence.Postgres
@@ -63,6 +71,7 @@ type Game struct {
 	tickPeriod  time.Duration
 	currentTick uint64
 	state       atomic.Int32 // GameState
+	tickStats   tickStats
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -81,6 +90,10 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *Object
 		tickPeriod:    time.Second / time.Duration(cfg.Game.TickRate),
 		ctx:           ctx,
 		cancel:        cancel,
+		tickStats: tickStats{
+			lastLog:     time.Now(),
+			minDuration: time.Hour, // Initialize with large value
+		},
 	}
 	g.state.Store(int32(GameStateStarting))
 
@@ -587,11 +600,6 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 		return
 	}
 
-	g.logger.Debug("Received player action",
-		zap.Uint64("client_id", c.ID),
-		zap.Uint64("character_id", uint64(c.CharacterID)),
-		zap.Any("action", action))
-
 	// Get the shard for this player
 	shard := g.shardManager.GetShard(c.Layer)
 	if shard == nil {
@@ -757,11 +765,37 @@ func (g *Game) update(dt float64) {
 	g.shardManager.Update(dt)
 
 	duration := time.Since(start)
-	g.logger.Debug("Game tick completed",
-		zap.Uint64("tick", g.currentTick),
-		zap.Duration("duration", duration),
-		zap.Float64("dt", dt),
-	)
+
+	// Collect statistics
+	g.tickStats.durationSum += duration
+	g.tickStats.count++
+
+	// Log every 5 seconds
+	if time.Since(g.tickStats.lastLog) >= 5*time.Second {
+		if g.tickStats.count > 0 {
+			avgDuration := g.tickStats.durationSum / time.Duration(g.tickStats.count)
+			g.logger.Info("Game tick statistics (5s)",
+				zap.Uint64("ticks", g.tickStats.count),
+				zap.Duration("avg_duration", avgDuration),
+				zap.Duration("min_duration", g.tickStats.minDuration),
+				zap.Duration("max_duration", g.tickStats.maxDuration),
+			)
+		}
+
+		// Reset statistics
+		g.tickStats = tickStats{
+			lastLog:     time.Now(),
+			minDuration: time.Hour, // Initialize with large value
+		}
+	}
+
+	// Update min/max for current period
+	if duration < g.tickStats.minDuration {
+		g.tickStats.minDuration = duration
+	}
+	if duration > g.tickStats.maxDuration {
+		g.tickStats.maxDuration = duration
+	}
 }
 
 func (g *Game) Stop() {
