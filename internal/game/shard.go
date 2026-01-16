@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"fmt"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/persistence/repository"
@@ -164,9 +165,6 @@ func (s *Shard) Update(dt float64) {
 }
 
 func (s *Shard) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.chunkManager.Stop()
 }
 
@@ -232,6 +230,23 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 				zap.Error(err),
 			)
 			return err
+		}
+	}
+	// Verify all chunks are in correct state (preloaded or better, not unloaded)
+	for _, coord := range coords {
+		chunk := s.chunkManager.GetChunk(coord)
+		if chunk == nil || chunk.GetState() == types.ChunkStateUnloaded {
+			s.logger.Error("Chunk is not in expected preloaded state after WaitPreloaded",
+				zap.Int("chunk_x", coord.X),
+				zap.Int("chunk_y", coord.Y),
+				zap.String("state", func() string {
+					if chunk == nil {
+						return "nil"
+					}
+					return chunk.GetState().String()
+				}()),
+			)
+			return fmt.Errorf("chunk %v is not preloaded", coord)
 		}
 	}
 
