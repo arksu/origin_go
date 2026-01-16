@@ -95,6 +95,43 @@ func (q *Queries) GetAccountByToken(ctx context.Context, token sql.NullString) (
 	return i, err
 }
 
+const getAllAccounts = `-- name: GetAllAccounts :many
+SELECT id, login, password_hash, status, token, last_logged_at, created_at, updated_at
+FROM account
+`
+
+func (q *Queries) GetAllAccounts(ctx context.Context) ([]Account, error) {
+	rows, err := q.db.QueryContext(ctx, getAllAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Account
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.Login,
+			&i.PasswordHash,
+			&i.Status,
+			&i.Token,
+			&i.LastLoggedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAccountToken = `-- name: UpdateAccountToken :exec
 UPDATE account
 SET token = $1, last_logged_at = now(), updated_at = now()
