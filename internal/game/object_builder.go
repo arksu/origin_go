@@ -8,6 +8,8 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 const treeSize = 10
@@ -23,7 +25,7 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle,
 	}
 
 	// Direction = raw.Heading * 45 degrees
-	ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, int(raw.Heading.Int16*45)))
+	ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, int(raw.Heading.Int16)))
 
 	ecs.AddComponent(w, h, components.EntityInfo{
 		ObjectType: types.ObjectType(raw.ObjectType),
@@ -44,7 +46,7 @@ func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle,
 }
 
 func (b *TreeBuilder) Serialize(w *ecs.World, h types.Handle) (*repository.Object, error) {
-	extID, ok := ecs.GetComponent[ecs.ExternalID](w, h)
+	externalID, ok := ecs.GetComponent[ecs.ExternalID](w, h)
 	if !ok {
 		return nil, ErrEntityNotFound
 	}
@@ -54,19 +56,37 @@ func (b *TreeBuilder) Serialize(w *ecs.World, h types.Handle) (*repository.Objec
 		return nil, ErrEntityNotFound
 	}
 
-	obj := &repository.Object{
-		ID:         int64(extID.ID),
-		ObjectType: int(info.ObjectType),
-		Region:     info.Region,
-		Layer:      info.Layer,
-		IsStatic:   sql.NullBool{Bool: info.IsStatic, Valid: true},
-		UpdatedAt:  sql.NullTime{Time: time.Now(), Valid: true},
+	transform, ok := ecs.GetComponent[components.Transform](w, h)
+	if !ok {
+		return nil, ErrEntityNotFound
 	}
 
-	if pos, ok := ecs.GetComponent[components.Transform](w, h); ok {
-		obj.X = int(pos.X)
-		obj.Y = int(pos.Y)
-		obj.Heading = sql.NullInt16{Int16: int16(pos.Direction / 45), Valid: true}
+	chunkRef, ok := ecs.GetComponent[components.ChunkRef](w, h)
+	if !ok {
+		return nil, ErrEntityNotFound
+	}
+
+	obj := &repository.Object{
+		ID:         int64(externalID.ID),
+		ObjectType: int(info.ObjectType),
+		Region:     info.Region,
+		X:          int(transform.X),
+		Y:          int(transform.Y),
+		Layer:      info.Layer,
+		ChunkX:     chunkRef.CurrentChunkX,
+		ChunkY:     chunkRef.CurrentChunkY,
+		Heading:    sql.NullInt16{Int16: int16(transform.Direction), Valid: true},
+		Quality:    sql.NullInt16{Int16: 10, Valid: true},  // TODO
+		HpCurrent:  sql.NullInt32{Int32: 100, Valid: true}, // todo
+		HpMax:      sql.NullInt32{Int32: 100, Valid: true}, // todo
+		IsStatic:   sql.NullBool{Bool: info.IsStatic, Valid: true},
+		OwnerID:    sql.NullInt64{},
+		DataJsonb:  pqtype.NullRawMessage{},
+		CreatedAt:  sql.NullTime{},
+		CreateTick: 0,
+		LastTick:   0, // todo
+		UpdatedAt:  sql.NullTime{Time: time.Now(), Valid: true},
+		DeletedAt:  sql.NullTime{},
 	}
 
 	return obj, nil

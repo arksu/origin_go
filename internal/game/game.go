@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/rand"
 	"origin/internal/ecs"
@@ -254,7 +255,7 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	})
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			g.sendAuthResult(c, sequence, false, "Invalid token")
 			return
 		}
@@ -330,7 +331,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		return
 	}
 
-	candidates := g.generateSpawnCandidates(int(character.X), int(character.Y))
+	candidates := g.generateSpawnCandidates(character.X, character.Y)
 
 	playerEntityID := types.EntityID(character.ID)
 	spawned := false
