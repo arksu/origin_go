@@ -46,13 +46,17 @@ func (p *AccountPool) Init(ctx context.Context) error {
 	}
 
 	for _, acc := range accounts {
-		p.accounts = append(p.accounts, AccountInfo{
-			ID:    acc.ID,
-			Login: acc.Login,
-		})
+		// Only load accounts with "lt_" prefix (load test accounts)
+		if len(acc.Login) >= 3 && acc.Login[:3] == "lt_" {
+			p.accounts = append(p.accounts, AccountInfo{
+				ID:       acc.ID,
+				Login:    acc.Login,
+				Password: "123",
+			})
+		}
 	}
 
-	p.logger.Info("Loaded accounts from database", zap.Int("count", len(p.accounts)))
+	p.logger.Info("Loaded load test accounts from database", zap.Int("count", len(p.accounts)))
 	return nil
 }
 

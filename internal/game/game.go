@@ -356,6 +356,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character)
 		if ok {
 			// add player components
+			shard.mu.Lock()
 			ecs.AddComponent(shard.world, handle, components.EntityInfo{
 				ObjectType: types.ObjectTypePlayer,
 				IsStatic:   false,
@@ -385,6 +386,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(shard.world, handle, components.CollisionResult{
 				HasCollision: false,
 			})
+			shard.mu.Unlock()
 
 			character.X = pos.X
 			character.Y = pos.Y
@@ -392,7 +394,10 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			spawned = true
 			break
 		}
+		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
+		shard.mu.Unlock()
+
 		g.logger.Debug("failed to spawn player", zap.Int64("character_id", character.ID), zap.Any("coord", pos))
 	}
 
@@ -406,7 +411,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	select {
 	case <-ctx.Done():
 		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
+		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
+		shard.mu.Unlock()
 		return
 	default:
 	}
@@ -479,6 +486,16 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 }
 
 func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, shard *Shard, character repository.Character) {
+	type objectSnapshot struct {
+		handle     uint64
+		objectType int32
+		x          int32
+		y          int32
+		heading    uint32
+		sizeX      int32
+		sizeY      int32
+	}
+
 	chunks := shard.ChunkManager().GetEntityActiveChunks(entityID)
 
 	// Send chunks first so client can start rendering
@@ -503,9 +520,13 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 			},
 		}
 
-		// Send all static handles to client - S2C_Object
+		// --- Snapshot world state under shard lock (World is NOT thread-safe) ---
 		handles := chunk.GetHandles()
+
+		shard.mu.Lock()
 		world := shard.World()
+
+		objects := make([]objectSnapshot, 0, len(handles))
 		for _, h := range handles {
 			if !world.Alive(h) {
 				continue
@@ -526,20 +547,35 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				continue
 			}
 
+			objects = append(objects, objectSnapshot{
+				handle:     uint64(h),
+				objectType: int32(entityInfo.ObjectType),
+				x:          int32(transform.X),
+				y:          int32(transform.Y),
+				heading:    uint32(transform.Direction),
+				sizeX:      int32(collider.HalfWidth * 2),
+				sizeY:      int32(collider.HalfHeight * 2),
+			})
+		}
+		shard.mu.Unlock()
+		// --- end snapshot ---
+
+		// Send all static handles to client - S2C_Object (no shard lock here)
+		for _, o := range objects {
 			objectMsg := &netproto.ServerMessage{
 				Payload: &netproto.ServerMessage_Object{
 					Object: &netproto.S2C_Object{
-						EntityId:   uint64(h),
-						ObjectType: int32(entityInfo.ObjectType),
+						EntityId:   o.handle,
+						ObjectType: o.objectType,
 						Position: &netproto.EntityPosition{
 							Position: &netproto.Position{
-								X:       int32(transform.X),
-								Y:       int32(transform.Y),
-								Heading: uint32(transform.Direction),
+								X:       o.x,
+								Y:       o.y,
+								Heading: o.heading,
 							},
 							Size: &netproto.Vector2{
-								X: int32(collider.HalfWidth * 2),
-								Y: int32(collider.HalfHeight * 2),
+								X: o.sizeX,
+								Y: o.sizeY,
 							},
 						},
 					},
@@ -629,6 +665,9 @@ func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netpr
 	//	zap.Uint64("client_id", c.ID),
 	//	zap.Int32("target_x", moveTo.X),
 	//	zap.Int32("target_y", moveTo.Y))
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
 	// TODO: Validate target position (bounds, walkable, etc.)
 
