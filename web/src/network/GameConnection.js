@@ -229,7 +229,7 @@ class GameConnection {
 
   handleObjectMove(objectMove) {
     const gameStore = useGameStore()
-    console.log('Object move received:', objectMove)
+    // console.log('Object move received:', objectMove)
 
     // Check if this is the player's entity
     if (objectMove.entityId === gameStore.characterId) {

@@ -227,9 +227,8 @@ func (r *Runner) startPacketStatsLogger(ctx context.Context) {
 			packetsReceived := r.metrics.packetsReceived.Load()
 
 			r.logger.Info("Packet Statistics (5s interval)",
-				zap.Int64("packets_sent", packetsSent),
-				zap.Int64("packets_received", packetsReceived),
-				zap.Int64("packets_total", packetsSent+packetsReceived),
+				zap.Int64("pkt_sent", packetsSent),
+				zap.Int64("pkt_recv", packetsReceived),
 			)
 		}
 	}

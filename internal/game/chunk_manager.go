@@ -516,7 +516,16 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 		return
 	}
 
-	chunk.LoadFromDB(cm.db, cm.region, cm.layer, cm.logger)
+	if err := chunk.LoadFromDB(cm.db, cm.region, cm.layer, cm.logger); err != nil {
+		cm.logger.Error("failed to load chunk from database",
+			zap.Int("chunk_x", coord.X),
+			zap.Int("chunk_y", coord.Y),
+			zap.Error(err),
+		)
+		chunk.SetState(types.ChunkStateUnloaded)
+		cm.completeFuture(coord)
+		return
+	}
 
 	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
 
