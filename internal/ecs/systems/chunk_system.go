@@ -4,6 +4,7 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/utils"
 
 	"go.uber.org/zap"
 )
@@ -44,9 +45,7 @@ func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
 
 			// Calculate current chunk from position
 			// TODO: implement chunk size constant from config
-			const chunkSize = 128
-			const coordPerTile = 12
-			const chunkWorldSize = chunkSize * coordPerTile
+			const chunkWorldSize = utils.ChunkSize * utils.CoordPerTile
 
 			newChunkX := int(transform.X) / chunkWorldSize
 			newChunkY := int(transform.Y) / chunkWorldSize

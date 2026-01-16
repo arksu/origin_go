@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS object
     layer       INT    NOT NULL,
     chunk_x     INT    NOT NULL,          -- redundant data for loading by chunk
     chunk_y     INT    NOT NULL,          -- redundant data for loading by chunk
-    heading     SMALLINT CHECK (heading >= 0 AND heading < 8),
+    heading     SMALLINT CHECK (heading >= 0 AND heading < 365),
 
     quality     SMALLINT CHECK (quality >= 0),
     hp_current  INT CHECK (hp_current >= 0),

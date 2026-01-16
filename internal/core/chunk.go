@@ -255,31 +255,31 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		}
 
 		obj.LastTick = int64(lastTick)
-		//err = db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
-		//	ID:         obj.ID,
-		//	ObjectType: obj.ObjectType,
-		//	Region:     obj.Region,
-		//	X:          obj.X,
-		//	Y:          obj.Y,
-		//	Layer:      obj.Layer,
-		//	ChunkX:     obj.ChunkX,
-		//	ChunkY:     obj.ChunkY,
-		//	Heading:    obj.Heading,
-		//	Quality:    obj.Quality,
-		//	HpCurrent:  obj.HpCurrent,
-		//	HpMax:      obj.HpMax,
-		//	IsStatic:   obj.IsStatic,
-		//	OwnerID:    obj.OwnerID,
-		//	DataJsonb:  obj.DataJsonb,
-		//	CreateTick: obj.CreateTick,
-		//	LastTick:   obj.LastTick,
-		//})
-		//if err != nil {
-		//	logger.Error("failed to save object",
-		//		zap.Int64("object_id", obj.ID),
-		//		zap.Error(err),
-		//	)
-		//}
+		err = db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
+			ID:         obj.ID,
+			ObjectType: obj.ObjectType,
+			Region:     obj.Region,
+			X:          obj.X,
+			Y:          obj.Y,
+			Layer:      obj.Layer,
+			ChunkX:     obj.ChunkX,
+			ChunkY:     obj.ChunkY,
+			Heading:    obj.Heading,
+			Quality:    obj.Quality,
+			HpCurrent:  obj.HpCurrent,
+			HpMax:      obj.HpMax,
+			IsStatic:   obj.IsStatic,
+			OwnerID:    obj.OwnerID,
+			DataJsonb:  obj.DataJsonb,
+			CreateTick: obj.CreateTick,
+			LastTick:   obj.LastTick,
+		})
+		if err != nil {
+			logger.Error("failed to save object",
+				zap.Int64("object_id", obj.ID),
+				zap.Error(err),
+			)
+		}
 	}
 	logger.Debug("saved chunk", zap.Any("coord", c.Coord), zap.Int("count", len(objectsToSave)))
 }
