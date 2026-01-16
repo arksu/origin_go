@@ -133,7 +133,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		eventBus:        eb,
 	}
 
-	s.chunkManager = NewChunkManager(cfg, db, s.world, layer, cfg.Game.Region, objectFactory, eb, logger)
+	s.chunkManager = NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, eb, logger)
 
 	s.world.AddSystem(systems.NewMovementSystem(s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.chunkManager, logger))
