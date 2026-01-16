@@ -41,7 +41,7 @@ func newTestChunkManager() *ChunkManager {
 		Logger:     logger,
 	})
 
-	return NewChunkManager(cfg, nil, world, 0, 1, objectFactory, eb, logger)
+	return NewChunkManager(cfg, nil, world, nil, 0, 1, objectFactory, eb, logger)
 }
 
 func TestChunkState_String(t *testing.T) {
@@ -273,16 +273,17 @@ func TestChunk_SaveToDB_HandlesInactiveChunks(t *testing.T) {
 
 	// Create some mock raw objects (simulating inactive chunk state)
 	rawObjects := make([]*repository.Object, 3)
-	for i := 0; i < 3; i++ {
+	var i int
+	for i = 0; i < 3; i++ {
 		rawObjects[i] = &repository.Object{
 			ID:         int64(i + 1),
-			ObjectType: int32(i + 1),
+			ObjectType: int(int32(i + 1)),
 			Region:     0,
-			X:          int32(i * 10),
-			Y:          int32(i * 10),
+			X:          i * 10,
+			Y:          i * 10,
 			Layer:      0,
-			ChunkX:     int32(coord.X),
-			ChunkY:     int32(coord.Y),
+			ChunkX:     coord.X,
+			ChunkY:     coord.Y,
 		}
 	}
 

@@ -86,6 +86,7 @@ type ChunkManager struct {
 	cfg           *config.Config
 	db            *persistence.Postgres
 	world         *ecs.World
+	shard         *Shard
 	layer         int
 	region        int
 	objectFactory *ObjectFactory
@@ -131,6 +132,7 @@ func NewChunkManager(
 	cfg *config.Config,
 	db *persistence.Postgres,
 	world *ecs.World,
+	shard *Shard,
 	layer int,
 	region int,
 	objectFactory *ObjectFactory,
@@ -143,6 +145,7 @@ func NewChunkManager(
 		cfg:            cfg,
 		db:             db,
 		world:          world,
+		shard:          shard,
 		layer:          layer,
 		region:         region,
 		objectFactory:  objectFactory,
@@ -489,7 +492,9 @@ func (cm *ChunkManager) saveWorker() {
 		case <-cm.stopCh:
 			return
 		case req := <-cm.saveQueue:
+			cm.shard.mu.RLock()
 			req.chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+			cm.shard.mu.RUnlock()
 		}
 	}
 }
@@ -550,7 +555,9 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 			zap.Int("chunk_x", coord.X),
 			zap.Int("chunk_y", coord.Y),
 		)
+		cm.shard.mu.RLock()
 		chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+		cm.shard.mu.RUnlock()
 	}
 
 	cm.chunksMu.Lock()
@@ -1050,7 +1057,9 @@ func (cm *ChunkManager) Stop() {
 		if chunk := cm.GetChunk(coord); chunk != nil {
 			state := chunk.GetState()
 			if state == types.ChunkStateActive || state == types.ChunkStatePreloaded || state == types.ChunkStateInactive {
+				cm.shard.mu.RLock()
 				chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+				cm.shard.mu.RUnlock()
 				savedCount++
 			}
 		}
