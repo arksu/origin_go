@@ -162,6 +162,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	testCtx, cancel := context.WithTimeout(ctx, r.cfg.Duration)
 	defer cancel()
 
+	// Start packet statistics logger
+	go r.startPacketStatsLogger(testCtx)
+
 	rampUpInterval := time.Second / time.Duration(r.cfg.RampUp)
 	clientsStarted := 0
 
@@ -208,5 +211,26 @@ func (r *Runner) runClient(ctx context.Context, clientNum int) {
 
 	if err := vu.Run(ctx); err != nil {
 		r.logger.Debug("Virtual client finished with error", zap.Int("vu", clientNum), zap.Error(err))
+	}
+}
+
+func (r *Runner) startPacketStatsLogger(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			packetsSent := r.metrics.packetsSent.Load()
+			packetsReceived := r.metrics.packetsReceived.Load()
+
+			r.logger.Info("Packet Statistics (5s interval)",
+				zap.Int64("packets_sent", packetsSent),
+				zap.Int64("packets_received", packetsReceived),
+				zap.Int64("packets_total", packetsSent+packetsReceived),
+			)
+		}
 	}
 }

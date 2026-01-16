@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -32,6 +33,7 @@ func main() {
 		chunksX = flag.Int("chunks-x", 50, "number of chunks in X direction")
 		chunksY = flag.Int("chunks-y", 50, "number of chunks in Y direction")
 		seed    = flag.Int64("seed", 0, "random seed (0 = use current time)")
+		threads = flag.Int("threads", 4, "number of worker threads")
 	)
 	flag.Parse()
 
@@ -58,15 +60,17 @@ func main() {
 		coordPerTile: utils.CoordPerTile,
 		region:       cfg.Game.Region,
 		perlin:       NewPerlinNoise(*seed),
+		seed:         *seed,
 	}
 
 	logger.Info("starting map generation",
 		zap.Int("chunks_x", *chunksX),
 		zap.Int("chunks_y", *chunksY),
 		zap.Int64("seed", *seed),
-		zap.Int("region", cfg.Game.Region))
+		zap.Int("region", cfg.Game.Region),
+		zap.Int("threads", *threads))
 
-	if err := gen.Generate(ctx, *chunksX, *chunksY); err != nil {
+	if err := gen.Generate(ctx, *chunksX, *chunksY, *threads); err != nil {
 		logger.Fatal("map generation failed", zap.Error(err))
 	}
 
@@ -82,10 +86,16 @@ type MapGenerator struct {
 	coordPerTile int
 	region       int
 	perlin       *PerlinNoise
-	lastEntityID uint64
+	seed         int64
+	lastEntityID atomic.Uint64
+	generated    atomic.Int32
 }
 
-func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY int) error {
+type ChunkTask struct {
+	X, Y int
+}
+
+func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY, threads int) error {
 	g.logger.Info("truncating existing data for region", zap.Int("region", g.region))
 	if err := g.db.Queries().DeleteChunksByRegion(ctx, g.region); err != nil {
 		return fmt.Errorf("delete chunks: %w", err)
@@ -94,33 +104,70 @@ func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY int) error
 		return fmt.Errorf("delete objects: %w", err)
 	}
 
-	g.lastEntityID = uint64(g.db.GetGlobalVarLong(ctx, "last_used_id"))
-	g.logger.Info("loaded last entity ID", zap.Uint64("last_entity_id", g.lastEntityID))
+	g.lastEntityID.Store(uint64(g.db.GetGlobalVarLong(ctx, "last_used_id")))
+	g.logger.Info("loaded last entity ID", zap.Uint64("last_entity_id", g.lastEntityID.Load()))
 
 	totalChunks := chunksX * chunksY
-	generated := 0
+	g.generated.Store(0)
 
-	for cy := 0; cy < chunksY; cy++ {
-		for cx := 0; cx < chunksX; cx++ {
-			if err := g.generateChunk(ctx, cx, cy); err != nil {
-				return fmt.Errorf("generate chunk (%d,%d): %w", cx, cy, err)
+	// Create task channel
+	tasks := make(chan ChunkTask, threads*2)
+	errs := make(chan error, threads)
+
+	// Start workers
+	for i := 0; i < threads; i++ {
+		go g.worker(ctx, tasks, errs, i)
+	}
+
+	// Send tasks
+	go func() {
+		defer close(tasks)
+		for cy := 0; cy < chunksY; cy++ {
+			for cx := 0; cx < chunksX; cx++ {
+				tasks <- ChunkTask{X: cx, Y: cy}
 			}
-			generated++
-			if generated%10 == 0 {
-				g.logger.Info("progress", zap.Int("generated", generated), zap.Int("total", totalChunks))
+		}
+	}()
+
+	// Wait for completion or errors
+	completed := 0
+	for completed < totalChunks {
+		select {
+		case err := <-errs:
+			return err
+		default:
+			if g.generated.Load() > int32(completed) {
+				completed = int(g.generated.Load())
+				if completed%10 == 0 || completed == totalChunks {
+					g.logger.Info("progress", zap.Int("generated", completed), zap.Int("total", totalChunks))
+				}
 			}
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 
-	if err := g.db.SetGlobalVarLong(ctx, "last_used_id", int64(g.lastEntityID)); err != nil {
+	if err := g.db.SetGlobalVarLong(ctx, "last_used_id", int64(g.lastEntityID.Load())); err != nil {
 		return fmt.Errorf("save last entity ID: %w", err)
 	}
-	g.logger.Info("saved last entity ID", zap.Uint64("last_entity_id", g.lastEntityID))
+	g.logger.Info("saved last entity ID", zap.Uint64("last_entity_id", g.lastEntityID.Load()))
 
 	return nil
 }
 
-func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) error {
+func (g *MapGenerator) worker(ctx context.Context, tasks <-chan ChunkTask, errs chan<- error, workerID int) {
+	// Create separate RNG for each worker
+	rng := rand.New(rand.NewSource(g.seed + int64(workerID*1000)))
+
+	for task := range tasks {
+		if err := g.generateChunkWithRNG(ctx, task.X, task.Y, rng); err != nil {
+			errs <- fmt.Errorf("generate chunk (%d,%d): %w", task.X, task.Y, err)
+			return
+		}
+		g.generated.Add(1)
+	}
+}
+
+func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY int, rng *rand.Rand) error {
 	tilesPerChunk := g.chunkSize
 	tiles := make([]byte, tilesPerChunk*tilesPerChunk)
 	var entities []repository.UpsertObjectParams
@@ -136,13 +183,13 @@ func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) er
 			tile := g.getTileType(worldX, worldY)
 			tiles[ty*g.chunkSize+tx] = tile
 
-			if (tile == types.TileForestPine || tile == types.TileForestLeaf) && g.rng.Float64() < TreeDensity {
-				g.lastEntityID++
-				tileWorldX := int(worldOffsetX) + tx*g.coordPerTile + g.rng.Intn(g.coordPerTile)
-				tileWorldY := int(worldOffsetY) + ty*g.coordPerTile + g.rng.Intn(g.coordPerTile)
+			if (tile == types.TileForestPine || tile == types.TileForestLeaf) && rng.Float64() < TreeDensity {
+				entityID := g.lastEntityID.Add(1)
+				tileWorldX := int(worldOffsetX) + tx*g.coordPerTile + rng.Intn(g.coordPerTile)
+				tileWorldY := int(worldOffsetY) + ty*g.coordPerTile + rng.Intn(g.coordPerTile)
 
 				entities = append(entities, repository.UpsertObjectParams{
-					ID:         int64(g.lastEntityID),
+					ID:         int64(entityID),
 					ObjectType: ObjectTypeTree,
 					Region:     g.region,
 					X:          tileWorldX,
@@ -150,7 +197,7 @@ func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) er
 					Layer:      0,
 					ChunkX:     chunkX,
 					ChunkY:     chunkY,
-					Heading:    sql.NullInt16{Int16: int16(g.rng.Intn(8)), Valid: true},
+					Heading:    sql.NullInt16{Int16: int16(rng.Intn(8)), Valid: true},
 					Quality:    sql.NullInt16{},
 					HpCurrent:  sql.NullInt32{Int32: TreeHP, Valid: true},
 					HpMax:      sql.NullInt32{Int32: TreeHP, Valid: true},
@@ -182,6 +229,11 @@ func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) er
 	}
 
 	return nil
+}
+
+func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) error {
+	// Use the original RNG for backward compatibility
+	return g.generateChunkWithRNG(ctx, chunkX, chunkY, g.rng)
 }
 
 func (g *MapGenerator) getTileType(worldX, worldY float64) byte {

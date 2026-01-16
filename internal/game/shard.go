@@ -239,8 +239,9 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 		zap.Int64("entity_id", int64(entityID)),
 		zap.Int("chunks_loaded", len(coords)),
 	)
-
+	s.mu.Lock()
 	s.chunkManager.RegisterEntity(entityID, centerWorldX, centerWorldY)
+	s.mu.Unlock()
 
 	s.logger.Debug("Entity registered with chunk manager",
 		zap.Int64("entity_id", int64(entityID)),
