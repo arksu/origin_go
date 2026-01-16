@@ -99,7 +99,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *Object
 
 	g.entityIDManager = NewEntityIDManager(cfg, db, logger)
 	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, logger)
-	g.networkServer = network.NewServer(&cfg.Network, logger)
+	g.networkServer = network.NewServer(&cfg.Network, &cfg.Game, logger)
 
 	g.setupNetworkHandlers()
 	g.setupEventHandlers()

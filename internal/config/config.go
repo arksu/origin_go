@@ -56,6 +56,7 @@ type GameConfig struct {
 	WorldMinYChunks          int           `mapstructure:"world_min_y_chunks"`
 	WorldWidthChunks         int           `mapstructure:"world_width_chunks"`
 	WorldHeightChunks        int           `mapstructure:"world_height_chunks"`
+	SendChannelBuffer        int           `mapstructure:"send_channel_buffer"`
 }
 
 type EntityIDConfig struct {
@@ -125,7 +126,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("database.max_conn_idle_time", 5*time.Minute)
 
 	// Game defaults
-	v.SetDefault("game.tick_rate", 20)
+	v.SetDefault("game.tick_rate", 10)
 	v.SetDefault("game.player_active_chunk_radius", 1)
 	v.SetDefault("game.player_preload_chunk_radius", 2)
 	v.SetDefault("game.save_workers", 2)
@@ -136,8 +137,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.chunk_lru_ttl", 20)
 	v.SetDefault("game.max_entities", 1048576)
 	v.SetDefault("game.worker_pool_size", 4)
-	v.SetDefault("game.load_workers", 2)
-	v.SetDefault("game.save_workers", 2)
+	v.SetDefault("game.load_workers", 16)
+	v.SetDefault("game.save_workers", 16)
 	v.SetDefault("game.spawn_timeout", 30*time.Second)
 	v.SetDefault("game.near_spawn_radius", 10)
 	v.SetDefault("game.near_spawn_tries", 5)
@@ -146,6 +147,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.world_min_y_chunks", 0)
 	v.SetDefault("game.world_width_chunks", 50)
 	v.SetDefault("game.world_height_chunks", 50)
+	v.SetDefault("game.send_channel_buffer", 132000)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)
