@@ -19,6 +19,7 @@ import (
 
 type Server struct {
 	cfg        *config.NetworkConfig
+	gameCfg    *config.GameConfig
 	listener   net.Listener
 	httpServer *http.Server
 	logger     *zap.Logger
@@ -48,10 +49,11 @@ type Client struct {
 	Layer       int
 }
 
-func NewServer(cfg *config.NetworkConfig, logger *zap.Logger) *Server {
+func NewServer(cfg *config.NetworkConfig, gameCfg *config.GameConfig, logger *zap.Logger) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		cfg:     cfg,
+		gameCfg: gameCfg,
 		logger:  logger,
 		clients: make(map[uint64]*Client),
 		ctx:     ctx,
@@ -142,7 +144,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn:    conn,
 		server:  s,
 		logger:  s.logger.Named("client").With(zap.Uint64("id", clientID)),
-		sendCh:  make(chan []byte, 132000),
+		sendCh:  make(chan []byte, s.gameCfg.SendChannelBuffer),
 		closeCh: make(chan struct{}),
 	}
 
