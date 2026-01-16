@@ -343,9 +343,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		default:
 		}
 
-		shard.mu.Lock()
 		if err := shard.PrepareEntityAOI(ctx, playerEntityID, pos.X, pos.Y); err != nil {
-			shard.mu.Unlock()
 			g.logger.Error("Failed to prepare entity AOI",
 				zap.Uint64("client_id", c.ID),
 				zap.Int64("character_id", character.ID),
@@ -354,11 +352,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			g.sendError(c, "Spawn failed: AOI preparation error")
 			return
 		}
-		shard.mu.Unlock()
 
 		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character)
 		if ok {
-			shard.mu.Lock()
 			// add player components
 			ecs.AddComponent(shard.world, handle, components.EntityInfo{
 				ObjectType: types.ObjectTypePlayer,
@@ -389,7 +385,6 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(shard.world, handle, components.CollisionResult{
 				HasCollision: false,
 			})
-			shard.mu.Unlock()
 
 			character.X = pos.X
 			character.Y = pos.Y
@@ -484,9 +479,6 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 }
 
 func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, shard *Shard, character repository.Character) {
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-
 	chunks := shard.ChunkManager().GetEntityActiveChunks(entityID)
 
 	// Send chunks first so client can start rendering

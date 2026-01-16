@@ -71,3 +71,15 @@ func (b *TreeBuilder) Serialize(w *ecs.World, h types.Handle) (*repository.Objec
 
 	return obj, nil
 }
+
+type PlayerBuilder struct{}
+
+func (b *PlayerBuilder) ObjectType() types.ObjectType { return types.ObjectTypePlayer }
+
+func (b *PlayerBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle, error) {
+	return types.InvalidHandle, nil
+}
+
+func (b *PlayerBuilder) Serialize(w *ecs.World, h types.Handle) (*repository.Object, error) {
+	return nil, nil
+}

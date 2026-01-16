@@ -828,8 +828,9 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 			)
 			continue
 		}
-
-		rawObjects = append(rawObjects, obj)
+		if obj != nil {
+			rawObjects = append(rawObjects, obj)
+		}
 		cm.world.Despawn(h)
 	}
 
@@ -905,7 +906,9 @@ func (cm *ChunkManager) MigrateObject(h types.Handle, fromCoord, toCoord types.C
 		}
 
 		// TODO update chunk and coord into obj
-		toChunk.AddRawObject(obj)
+		if obj != nil {
+			toChunk.AddRawObject(obj)
+		}
 
 		cm.world.Despawn(h)
 	}
