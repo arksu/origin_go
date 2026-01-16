@@ -142,7 +142,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn:    conn,
 		server:  s,
 		logger:  s.logger.Named("client").With(zap.Uint64("id", clientID)),
-		sendCh:  make(chan []byte, 32768),
+		sendCh:  make(chan []byte, 132000),
 		closeCh: make(chan struct{}),
 	}
 

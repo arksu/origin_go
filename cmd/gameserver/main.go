@@ -36,6 +36,7 @@ func main() {
 
 	objectFactory := game.NewObjectFactory()
 	objectFactory.RegisterBuilder(&game.TreeBuilder{})
+	objectFactory.RegisterBuilder(&game.PlayerBuilder{})
 
 	g := game.NewGame(cfg, db, objectFactory, logger)
 
