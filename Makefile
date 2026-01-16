@@ -1,4 +1,4 @@
-.PHONY: proto build run map-gen-build map-gen clean
+.PHONY: proto build run map-gen-build map-gen load-test-build load-test clean
 
 # generate sqlc files
 sqlc:
@@ -32,9 +32,17 @@ map-gen-build: proto sqlc
 map-gen: proto sqlc
 	go run ./cmd/mapgen
 
+# Build the load test runner
+load-test-build:
+	go build -trimpath -o load_test ./cmd/load_test
+
+# Run the load test
+load-test:
+	go run ./cmd/load_test
+
 # Clean build artifacts
 clean:
-	rm -f gameserver mapgen
+	rm -f gameserver mapgen load_test
 	rm -rf internal/network/pb
 
 # Install dependencies

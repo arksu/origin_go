@@ -181,7 +181,7 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.logger.Warn("Failed to unmarshal packet", zap.Uint64("client_id", c.ID), zap.Error(err))
 		return
 	}
-	g.logger.Debug("Received packet", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
+	//g.logger.Debug("Received packet", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
 
 	switch payload := msg.Payload.(type) {
 	case *netproto.ClientMessage_Ping:
@@ -343,7 +343,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		default:
 		}
 
+		shard.mu.Lock()
 		if err := shard.PrepareEntityAOI(ctx, playerEntityID, pos.X, pos.Y); err != nil {
+			shard.mu.Unlock()
 			g.logger.Error("Failed to prepare entity AOI",
 				zap.Uint64("client_id", c.ID),
 				zap.Int64("character_id", character.ID),
@@ -352,10 +354,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			g.sendError(c, "Spawn failed: AOI preparation error")
 			return
 		}
+		shard.mu.Unlock()
 
 		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character)
 		if ok {
-
+			shard.mu.Lock()
 			// add player components
 			ecs.AddComponent(shard.world, handle, components.EntityInfo{
 				ObjectType: types.ObjectTypePlayer,
@@ -386,6 +389,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(shard.world, handle, components.CollisionResult{
 				HasCollision: false,
 			})
+			shard.mu.Unlock()
 
 			character.X = pos.X
 			character.Y = pos.Y
@@ -480,6 +484,9 @@ func (g *Game) sendError(c *network.Client, errorMsg string) {
 }
 
 func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, shard *Shard, character repository.Character) {
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
 	chunks := shard.ChunkManager().GetEntityActiveChunks(entityID)
 
 	// Send chunks first so client can start rendering
@@ -626,10 +633,10 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 }
 
 func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netproto.MoveTo) {
-	g.logger.Debug("MoveTo action",
-		zap.Uint64("client_id", c.ID),
-		zap.Int32("target_x", moveTo.X),
-		zap.Int32("target_y", moveTo.Y))
+	//g.logger.Debug("MoveTo action",
+	//	zap.Uint64("client_id", c.ID),
+	//	zap.Int32("target_x", moveTo.X),
+	//	zap.Int32("target_y", moveTo.Y))
 
 	// TODO: Validate target position (bounds, walkable, etc.)
 
@@ -664,10 +671,10 @@ func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netpr
 		mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
 	})
 
-	g.logger.Debug("Set movement target",
-		zap.Uint64("client_id", c.ID),
-		zap.Int32("target_x", moveTo.X),
-		zap.Int32("target_y", moveTo.Y))
+	//g.logger.Debug("Set movement target",
+	//	zap.Uint64("client_id", c.ID),
+	//	zap.Int32("target_x", moveTo.X),
+	//	zap.Int32("target_y", moveTo.Y))
 }
 
 func (g *Game) handleMoveToEntityAction(c *network.Client, shard *Shard, moveToEntity *netproto.MoveToEntity) {
@@ -701,7 +708,9 @@ func (g *Game) handleDisconnect(c *network.Client) {
 		if g.getState() == GameStateRunning {
 			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
 				playerEntityID := c.CharacterID
+				shard.mu.Lock()
 				shard.UnregisterEntityAOI(playerEntityID)
+				shard.mu.Unlock()
 				g.logger.Debug("Unregistered entity AOI",
 					zap.Uint64("client_id", c.ID),
 					zap.Int64("character_id", int64(c.CharacterID)),
