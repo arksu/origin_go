@@ -23,7 +23,7 @@ func (q *Queries) ClearAuthToken(ctx context.Context, id int64) error {
 
 const createCharacter = `-- name: CreateCharacter :one
 INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp)
-VALUES ($1, $2, $3, 1, 0, 0, 0, 0, 100, 100, 100)
+VALUES ($1, $2, $3, 1, $4, $5, 0, 0, 100, 100, 100)
 RETURNING id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, paperdoll, inventory, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 `
 
@@ -31,10 +31,18 @@ type CreateCharacterParams struct {
 	ID        int64  `json:"id"`
 	AccountID int64  `json:"account_id"`
 	Name      string `json:"name"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
 }
 
 func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams) (Character, error) {
-	row := q.db.QueryRowContext(ctx, createCharacter, arg.ID, arg.AccountID, arg.Name)
+	row := q.db.QueryRowContext(ctx, createCharacter,
+		arg.ID,
+		arg.AccountID,
+		arg.Name,
+		arg.X,
+		arg.Y,
+	)
 	var i Character
 	err := row.Scan(
 		&i.ID,
@@ -172,6 +180,7 @@ SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, pa
 FROM character
 WHERE account_id = $1
   AND deleted_at IS NULL
+ORDER BY id
 `
 
 func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64) ([]Character, error) {

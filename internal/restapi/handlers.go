@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	mathrand "math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,22 +16,26 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
+	"origin/internal/config"
 	"origin/internal/game"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
+	"origin/internal/utils"
 )
 
 type Handler struct {
 	db              *persistence.Postgres
 	entityIDManager *game.EntityIDManager
 	logger          *zap.Logger
+	gameConfig      *config.GameConfig
 }
 
-func NewHandler(db *persistence.Postgres, entityIDManager *game.EntityIDManager, logger *zap.Logger) *Handler {
+func NewHandler(db *persistence.Postgres, entityIDManager *game.EntityIDManager, logger *zap.Logger, gameConfig *config.GameConfig) *Handler {
 	return &Handler{
 		db:              db,
 		entityIDManager: entityIDManager,
 		logger:          logger,
+		gameConfig:      gameConfig,
 	}
 }
 
@@ -232,10 +237,28 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	}
 
 	id := h.entityIDManager.GetFreeID()
+
+	// Generate random position within world bounds with margin from borders
+	marginTiles := 50
+	worldWidthTiles := h.gameConfig.WorldWidthChunks * utils.ChunkSize
+	worldHeightTiles := h.gameConfig.WorldHeightChunks * utils.ChunkSize
+
+	// Calculate valid spawn area
+	minX := marginTiles
+	maxX := worldWidthTiles - marginTiles
+	minY := marginTiles
+	maxY := worldHeightTiles - marginTiles
+
+	// Generate random position
+	x := mathrand.Intn(maxX-minX+1) + minX
+	y := mathrand.Intn(maxY-minY+1) + minY
+
 	_, err = h.db.Queries().CreateCharacter(r.Context(), repository.CreateCharacterParams{
 		ID:        int64(id),
 		AccountID: accountID,
 		Name:      req.Name,
+		X:         x,
+		Y:         y,
 	})
 	if err != nil {
 		h.logger.Error("failed to create character", zap.Error(err))
