@@ -8,7 +8,8 @@ WHERE id = $1
 SELECT *
 FROM character
 WHERE account_id = $1
-  AND deleted_at IS NULL;
+  AND deleted_at IS NULL
+ORDER BY id;
 
 -- name: GetCharacterByTokenForUpdate :one
 SELECT *
@@ -28,7 +29,7 @@ WHERE id = $1;
 
 -- name: CreateCharacter :one
 INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp)
-VALUES ($1, $2, $3, 1, 0, 0, 0, 0, 100, 100, 100)
+VALUES ($1, $2, $3, 1, $4, $5, 0, 0, 100, 100, 100)
 RETURNING *;
 
 -- name: DeleteCharacter :exec

@@ -41,7 +41,7 @@ func main() {
 	g := game.NewGame(cfg, db, objectFactory, logger)
 
 	mux := http.NewServeMux()
-	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger)
+	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger, &cfg.Game)
 	httpHandler.RegisterRoutes(mux)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
