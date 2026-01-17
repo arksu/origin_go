@@ -15,7 +15,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Runs first, resets arrays               |
 | 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Appends to MovedEntities buffer         |
 | 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer         |
-| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities, removes MoveTag |
+| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions        |
 
 ## System Details
@@ -35,7 +35,6 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 - Handles both point targets and entity targets
 - Calculates velocity based on movement mode and speed
 - Sets `Transform.IntentX/Y` for movement intent
-- Adds `MoveTag` component when real movement occurs
 - Clears movement target when destination is reached
 
 **Performance Notes**:
@@ -51,7 +50,6 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 **Components Required**:
 
 - `Transform` - Current position and movement intent
-- `MoveTag` - Marker for entities that moved this frame
 - `ChunkRef` - Current chunk for spatial queries
 - `Collider` - Collision dimensions and layers
 - `CollisionResult` - Output for collision resolution
@@ -79,7 +77,6 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 **Components Required**:
 
 - `Transform` - Current and final positions
-- `MoveTag` - Marker for entities that moved this frame
 - `CollisionResult` - Collision resolution data
 
 **Behavior**:
@@ -88,7 +85,6 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 - Updates entity positions from collision results
 - Publishes movement events to event bus
 - Manages collision state for oscillation detection
-- Removes MoveTag component after processing
 - Clears temporary collision data for next frame
 
 **Event Publishing**:
@@ -137,24 +133,6 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 - Zero allocations - reuses pre-allocated arrays
 - O(1) operation - only resets slice lengths
 
-### MoveTag Component
-
-**Purpose**: Temporal marker for entities that moved during the current frame.
-
-**Lifecycle**:
-
-- Added by MovementSystem when real movement occurs
-- Used by CollisionSystem and TransformUpdateSystem for efficient queries
-- Removed by TransformUpdateSystem after processing
-- Only exists for one frame, ensuring temporal accuracy
-
-**Benefits**:
-
-- Efficient queries for recently moved entities
-- Temporal movement detection without persistent flags
-- Performance optimization for movement-dependent systems
-- Clean separation of movement intent from actual movement
-
 ## System Dependencies
 
 ```
@@ -165,7 +143,6 @@ MovementSystem (100)
 CollisionSystem (200) 
     ↓ (reads from MovedEntities)
 TransformUpdateSystem (300)
-    ↓ (removes MoveTag)
 ChunkSystem (400)
 ```
 
@@ -182,10 +159,9 @@ ChunkSystem (400)
 ### Memory Management
 
 1. **MovedEntities Buffer**: Pre-allocated arrays (capacity 256) reused each frame
-2. **MoveTag Lifecycle**: Temporary tags created by MovementSystem, removed by TransformUpdateSystem
-3. **Spatial Hash**: Chunk-based spatial indexing for efficient collision queries
-4. **Component Storage**: Columnar storage for cache-friendly access patterns
-5. **Array Reuse**: ResetSystem clears arrays without deallocating, maintaining capacity
+2. **Spatial Hash**: Chunk-based spatial indexing for efficient collision queries
+3. **Component Storage**: Columnar storage for cache-friendly access patterns
+4. **Array Reuse**: ResetSystem clears arrays without deallocating, maintaining capacity
 
 ## Adding New Systems
 
