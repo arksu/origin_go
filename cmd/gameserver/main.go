@@ -7,6 +7,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"go.uber.org/zap"
@@ -18,6 +19,9 @@ import (
 )
 
 func main() {
+	runtime.SetBlockProfileRate(10000)
+	runtime.SetMutexProfileFraction(1)
+
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
