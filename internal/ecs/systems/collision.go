@@ -18,6 +18,12 @@ type CollisionSystem struct {
 	chunkManager core.ChunkManager
 	logger       *zap.Logger
 	movedQuery   *ecs.PreparedQuery
+	// Pooled buffer for candidates to avoid allocations
+	candidatesBuffer []types.Handle
+	// Cached component storages for hot path
+	colliderStorage  *ecs.ComponentStorage[components.Collider]
+	transformStorage *ecs.ComponentStorage[components.Transform]
+	movementStorage  *ecs.ComponentStorage[components.Movement]
 }
 
 func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger) *CollisionSystem {
@@ -30,11 +36,20 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 		0, // no exclusions
 	)
 
+	// Cache component storages for hot path optimization
+	colliderStorage := ecs.GetOrCreateStorage[components.Collider](world)
+	transformStorage := ecs.GetOrCreateStorage[components.Transform](world)
+	movementStorage := ecs.GetOrCreateStorage[components.Movement](world)
+
 	return &CollisionSystem{
-		BaseSystem:   ecs.NewBaseSystem("CollisionSystem", 200),
-		chunkManager: chunkManager,
-		logger:       logger,
-		movedQuery:   movedQuery,
+		BaseSystem:       ecs.NewBaseSystem("CollisionSystem", 200),
+		chunkManager:     chunkManager,
+		logger:           logger,
+		movedQuery:       movedQuery,
+		candidatesBuffer: make([]types.Handle, 0, 128),
+		colliderStorage:  colliderStorage,
+		transformStorage: transformStorage,
+		movementStorage:  movementStorage,
 	}
 }
 
@@ -141,10 +156,11 @@ func (s *CollisionSystem) sweepCollision(
 	entityHalfW := collider.HalfWidth
 	entityHalfH := collider.HalfHeight
 
-	// Query potential colliders from spatial hash
-	candidates := make([]types.Handle, 0, 64)
+	// Query potential colliders from spatial hash using pooled buffer
+	s.candidatesBuffer = s.candidatesBuffer[:0] // Reset buffer, keep capacity
 	queryRadius := math.Max(math.Abs(dx), math.Abs(dy)) + math.Max(entityHalfW, entityHalfH) + 64
-	chunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &candidates)
+	chunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &s.candidatesBuffer)
+	candidates := s.candidatesBuffer
 
 	// Original velocity magnitude
 	originalSpeed := math.Sqrt(dx*dx + dy*dy)
@@ -175,7 +191,8 @@ func (s *CollisionSystem) sweepCollision(
 				continue
 			}
 
-			candidateCollider, ok := ecs.GetComponent[components.Collider](w, candidateHandle)
+			// Use cached storage for faster component access
+			candidateCollider, ok := s.colliderStorage.Get(candidateHandle)
 			if !ok {
 				continue
 			}
@@ -190,13 +207,13 @@ func (s *CollisionSystem) sweepCollision(
 				continue
 			}
 
-			candidateTransform, ok := ecs.GetComponent[components.Transform](w, candidateHandle)
+			candidateTransform, ok := s.transformStorage.Get(candidateHandle)
 			if !ok {
 				continue
 			}
 
 			// Check if candidate is also moving (dynamic collision)
-			candidateMovement, candidateMoving := ecs.GetComponent[components.Movement](w, candidateHandle)
+			candidateMovement, candidateMoving := s.movementStorage.Get(candidateHandle)
 			if candidateMoving && candidateMovement.State == components.StateMoving {
 				// Both moving - stop, do not push back
 				t, nx, ny, hit := s.sweptAABB(
@@ -246,7 +263,7 @@ func (s *CollisionSystem) sweepCollision(
 			result.CollisionNormalX = hitNormalX
 			result.CollisionNormalY = hitNormalY
 			if collidedWith != 0 {
-				result.CollidedWith = append(result.CollidedWith, collidedWith)
+				result.CollidedWith = &collidedWith
 			}
 
 			// Slide along wall: maintain original speed in slide direction
@@ -300,9 +317,9 @@ func (s *CollisionSystem) sweepCollision(
 		// Also detect oscillation by checking if object is bouncing between two positions
 		// Get previous collision result to compare
 		prevCollisionResult, hasPrevCollision := ecs.GetComponent[components.CollisionResult](w, entityHandle)
-		if hasPrevCollision && prevCollisionResult.HasCollision && len(result.CollidedWith) > 0 && len(prevCollisionResult.CollidedWith) > 0 {
+		if hasPrevCollision && prevCollisionResult.HasCollision && result.CollidedWith != nil && prevCollisionResult.CollidedWith != nil {
 			// Check if colliding with same object
-			if result.CollidedWith[0] == prevCollisionResult.CollidedWith[0] {
+			if *result.CollidedWith == *prevCollisionResult.CollidedWith {
 				// Check if positions are very close (bouncing between two spots)
 				distToPrev := math.Sqrt(
 					(result.FinalX-prevCollisionResult.FinalX)*(result.FinalX-prevCollisionResult.FinalX) +
@@ -472,7 +489,7 @@ func (s *CollisionSystem) checkPhantomCollision(
 		result.CollisionNormalY = normalY
 
 		if extID, ok := w.GetExternalID(entityHandle); ok {
-			result.CollidedWith = []types.EntityID{extID}
+			result.CollidedWith = &extID
 		}
 	}
 
