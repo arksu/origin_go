@@ -12,9 +12,10 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 | Priority | System Name           | Description                                                  | Dependencies                  | Notes                                   |
 |----------|-----------------------|--------------------------------------------------------------|-------------------------------|-----------------------------------------|
-| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Sets MoveTag on real movement           |
-| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, MoveTag, Collider, ChunkRef | Uses optimized component storage access |
-| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, MoveTag, CollisionResult    | Processes moved entities and removes MoveTag |
+| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Runs first, resets arrays               |
+| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Appends to MovedEntities buffer         |
+| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer         |
+| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities, removes MoveTag |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions        |
 
 ## System Details
@@ -39,8 +40,9 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 **Performance Notes**:
 
-- Uses PreparedQuery for efficient entity iteration
+- Appends to pre-allocated MovedEntities buffer
 - Zero allocations during normal operation
+- Direct buffer append for moved entities tracking
 
 ### CollisionSystem (Priority: 200)
 
@@ -56,7 +58,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 **Behavior**:
 
-- Processes entities with MoveTag (moved this frame)
+- Reads from MovedEntities buffer (populated by MovementSystem)
 - Performs swept AABB collision detection
 - Handles sliding along walls and obstacle avoidance
 - Supports collision layers and masks
@@ -65,6 +67,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 **Performance Optimizations**:
 
+- Direct buffer iteration instead of PreparedQuery
 - Pooled candidates buffer to avoid allocations
 - Cached component storages for direct access
 - Optimized spatial queries via chunk-based spatial hash
@@ -81,7 +84,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 **Behavior**:
 
-- Processes entities with MoveTag using PreparedQuery
+- Reads from MovedEntities buffer (populated by MovementSystem)
 - Updates entity positions from collision results
 - Publishes movement events to event bus
 - Manages collision state for oscillation detection
@@ -114,6 +117,26 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 - Chunk state transitions
 - Entity spatial indexing
 
+### ResetSystem (Priority: 0)
+
+**Purpose**: Clears temporary data structures at the beginning of each frame.
+
+**Components Required**:
+
+- `MovedEntities` buffer - Shared tracking of moved entities
+
+**Behavior**:
+
+- Clears `Handles` array (sets length to 0, keeps capacity)
+- Clears `IntentX` array (sets length to 0, keeps capacity)
+- Clears `IntentY` array (sets length to 0, keeps capacity)
+- Runs first in system execution order
+
+**Performance Notes**:
+
+- Zero allocations - reuses pre-allocated arrays
+- O(1) operation - only resets slice lengths
+
 ### MoveTag Component
 
 **Purpose**: Temporal marker for entities that moved during the current frame.
@@ -135,10 +158,12 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 ## System Dependencies
 
 ```
+ResetSystem (0)
+    ↓ (clears buffers)
 MovementSystem (100)
-    ↓ (adds MoveTag)
+    ↓ (appends to MovedEntities)
 CollisionSystem (200) 
-    ↓ (uses MoveTag)
+    ↓ (reads from MovedEntities)
 TransformUpdateSystem (300)
     ↓ (removes MoveTag)
 ChunkSystem (400)
@@ -148,27 +173,29 @@ ChunkSystem (400)
 
 ### Hot Path Optimizations
 
-1. **PreparedQuery Caching**: All systems use PreparedQuery with cached archetype lists
+1. **MovedEntities Buffer**: Direct array iteration for moved entities (no query overhead)
 2. **Component Storage Caching**: CollisionSystem caches component storages for direct access
 3. **Buffer Pooling**: CollisionSystem uses pooled candidates buffer to avoid allocations
 4. **Zero-Allocation Iteration**: Systems minimize allocations during hot path execution
+5. **Pre-allocated Arrays**: MovedEntities arrays allocated once with capacity 256
 
 ### Memory Management
 
-1. **MoveTag Lifecycle**: Temporary tags are created by MovementSystem and removed by TransformUpdateSystem
-2. **Spatial Hash**: Chunk-based spatial indexing for efficient collision queries
-3. **Component Storage**: Columnar storage for cache-friendly access patterns
-4. **PreparedQuery Caching**: All systems use cached archetype lists for zero-allocation iteration
+1. **MovedEntities Buffer**: Pre-allocated arrays (capacity 256) reused each frame
+2. **MoveTag Lifecycle**: Temporary tags created by MovementSystem, removed by TransformUpdateSystem
+3. **Spatial Hash**: Chunk-based spatial indexing for efficient collision queries
+4. **Component Storage**: Columnar storage for cache-friendly access patterns
+5. **Array Reuse**: ResetSystem clears arrays without deallocating, maintaining capacity
 
 ## Adding New Systems
 
 When adding a new system:
 
-1. **Choose Priority**: Place it appropriately in the execution order
+1. **Choose Priority**: Place it appropriately in the execution order (0-400 reserved)
 2. **Define Dependencies**: Ensure required components are available
-3. **Use PreparedQuery**: For efficient entity iteration
+3. **Data Access Pattern**: Use MovedEntities buffer for moved entities, PreparedQuery for other queries
 4. **Update Registry**: Add to the system registry table above
-5. **Register in Shard**: Add to system initialization in shard.go
+5. **Register in Shard**: Add to system initialization in shard.go with movedEntities parameter if needed
 
 ### Example System Registration
 
@@ -182,7 +209,7 @@ s.world.AddSystem(systems.NewYourSystem(s.world, logger))
 1. **Single Responsibility**: Each system should have one clear purpose
 2. **Component Isolation**: Avoid modifying components outside system scope
 3. **Deterministic Order**: System dependencies should be clear via priority
-4. **Performance First**: Use PreparedQuery and minimize allocations
+4. **Performance First**: Use MovedEntities buffer for moved entities, PreparedQuery for other queries
 5. **Event-Driven**: Use event bus for cross-system communication when appropriate
 
 ## Debugging and Monitoring

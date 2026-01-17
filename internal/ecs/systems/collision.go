@@ -15,9 +15,9 @@ const epsilon = 0.001
 
 type CollisionSystem struct {
 	ecs.BaseSystem
-	chunkManager core.ChunkManager
-	logger       *zap.Logger
-	movedQuery   *ecs.PreparedQuery
+	chunkManager  core.ChunkManager
+	logger        *zap.Logger
+	movedEntities *MovedEntities
 	// Pooled buffer for candidates to avoid allocations
 	candidatesBuffer []types.Handle
 	// Cached component storages for hot path
@@ -26,17 +26,7 @@ type CollisionSystem struct {
 	movementStorage  *ecs.ComponentStorage[components.Movement]
 }
 
-func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger) *CollisionSystem {
-	// Query for entities with Transform and ChunkRef components (moved entities)
-	movedQuery := ecs.NewPreparedQuery(
-		world,
-		0|
-			(1<<components.TransformComponentID)|
-			(1<<components.MovementComponentID)|
-			(1<<components.MoveTagComponentID),
-		0, // no exclusions
-	)
-
+func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger) *CollisionSystem {
 	// Cache component storages for hot path optimization
 	colliderStorage := ecs.GetOrCreateStorage[components.Collider](world)
 	transformStorage := ecs.GetOrCreateStorage[components.Transform](world)
@@ -46,7 +36,7 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 		BaseSystem:       ecs.NewBaseSystem("CollisionSystem", 200),
 		chunkManager:     chunkManager,
 		logger:           logger,
-		movedQuery:       movedQuery,
+		movedEntities:    movedEntities,
 		candidatesBuffer: make([]types.Handle, 0, 128),
 		colliderStorage:  colliderStorage,
 		transformStorage: transformStorage,
@@ -55,23 +45,30 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 }
 
 func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
-	// Use prepared query to iterate over entities with Transform
-	s.movedQuery.ForEach(func(h types.Handle) {
+	// Iterate through moved entities from the buffer
+	for i, h := range s.movedEntities.Handles {
+		if !w.Alive(h) {
+			continue
+		}
+
 		transform, ok := ecs.GetComponent[components.Transform](w, h)
 		if !ok {
-			return
+			continue
 		}
+
+		intentX := s.movedEntities.IntentX[i]
+		intentY := s.movedEntities.IntentY[i]
 
 		collider, hasCollider := ecs.GetComponent[components.Collider](w, h)
 		if !hasCollider {
 			// No collider - just allow movement
 			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-				cr.FinalX = transform.IntentX
-				cr.FinalY = transform.IntentY
+				cr.FinalX = intentX
+				cr.FinalY = intentY
 				cr.HasCollision = false
-				cr.CollidedWith = nil
+				cr.CollidedWith = 0
 			})
-			return
+			continue
 		}
 
 		// Get chunk reference
@@ -79,17 +76,17 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 		if !ok {
 			// No chunk ref - allow movement without collision
 			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-				cr.FinalX = transform.IntentX
-				cr.FinalY = transform.IntentY
+				cr.FinalX = intentX
+				cr.FinalY = intentY
 				cr.HasCollision = false
-				cr.CollidedWith = nil
+				cr.CollidedWith = 0
 			})
-			return
+			continue
 		}
 
 		// Calculate movement delta
-		dx := transform.IntentX - transform.X
-		dy := transform.IntentY - transform.Y
+		dx := intentX - transform.X
+		dy := intentY - transform.Y
 
 		// Get chunk for spatial queries using ChunkRef
 		chunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
@@ -97,12 +94,12 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 		if chunk == nil {
 			// Entity outside valid chunks - allow movement without collision
 			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-				cr.FinalX = transform.IntentX
-				cr.FinalY = transform.IntentY
+				cr.FinalX = intentX
+				cr.FinalY = intentY
 				cr.HasCollision = false
-				cr.CollidedWith = nil
+				cr.CollidedWith = 0
 			})
-			return
+			continue
 		}
 
 		// Check phantom collider first (owner's build intent)
@@ -124,7 +121,7 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 		ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
 			*cr = result
 		})
-	})
+	}
 }
 
 // sweepCollision performs swept AABB collision using Minkowski difference
@@ -258,9 +255,7 @@ func (s *CollisionSystem) sweepCollision(
 			result.HasCollision = true
 			result.CollisionNormalX = hitNormalX
 			result.CollisionNormalY = hitNormalY
-			if collidedWith != 0 {
-				result.CollidedWith = &collidedWith
-			}
+			result.CollidedWith = collidedWith
 
 			// Slide along wall: maintain original speed in slide direction
 			// Calculate parallel component from current movement direction
@@ -313,9 +308,9 @@ func (s *CollisionSystem) sweepCollision(
 		// Also detect oscillation by checking if object is bouncing between two positions
 		// Get previous collision result to compare
 		prevCollisionResult, hasPrevCollision := ecs.GetComponent[components.CollisionResult](w, entityHandle)
-		if hasPrevCollision && prevCollisionResult.HasCollision && result.CollidedWith != nil && prevCollisionResult.CollidedWith != nil {
+		if hasPrevCollision && prevCollisionResult.HasCollision && result.CollidedWith != 0 && prevCollisionResult.CollidedWith != 0 {
 			// Check if colliding with same object
-			if *result.CollidedWith == *prevCollisionResult.CollidedWith {
+			if result.CollidedWith == prevCollisionResult.CollidedWith {
 				// Check if positions are very close (bouncing between two spots)
 				distToPrev := math.Sqrt(
 					(result.FinalX-prevCollisionResult.FinalX)*(result.FinalX-prevCollisionResult.FinalX) +
@@ -485,7 +480,7 @@ func (s *CollisionSystem) checkPhantomCollision(
 		result.CollisionNormalY = normalY
 
 		if extID, ok := w.GetExternalID(entityHandle); ok {
-			result.CollidedWith = &extID
+			result.CollidedWith = extID
 		}
 	}
 
