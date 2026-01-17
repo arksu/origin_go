@@ -1,6 +1,9 @@
 package systems
 
-import "origin/internal/types"
+import (
+	"origin/internal/types"
+	"time"
+)
 
 type MovedEntities struct {
 	Handles []types.Handle
@@ -35,4 +38,14 @@ func (me *MovedEntities) grow() {
 	newIntentY := make([]float64, newCap)
 	copy(newIntentY, me.IntentY)
 	me.IntentY = newIntentY
+}
+
+type VisibilityState struct {
+	VisibleByObserver map[types.Handle]ObserverVisibility
+	// TODO ObserversByVisibleTarget
+}
+
+type ObserverVisibility struct {
+	Known          map[types.Handle]struct{} // кого видит эта сущность
+	NextUpdateTime time.Time
 }
