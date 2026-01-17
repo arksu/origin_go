@@ -17,73 +17,103 @@ type CollisionSystem struct {
 	ecs.BaseSystem
 	chunkManager core.ChunkManager
 	logger       *zap.Logger
+	movedQuery   *ecs.PreparedQuery
 }
 
-func NewCollisionSystem(chunkManager core.ChunkManager, logger *zap.Logger) *CollisionSystem {
+func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger) *CollisionSystem {
+	// Query for entities with Transform and ChunkRef components (moved entities)
+	movedQuery := ecs.NewPreparedQuery(
+		world,
+		0|
+			(1<<components.TransformComponentID)|
+			(1<<components.MovementComponentID),
+		0, // no exclusions
+	)
+
 	return &CollisionSystem{
 		BaseSystem:   ecs.NewBaseSystem("CollisionSystem", 200),
 		chunkManager: chunkManager,
 		logger:       logger,
+		movedQuery:   movedQuery,
 	}
 }
 
 func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
-	activeChunks := s.chunkManager.ActiveChunks()
-	for _, chunk := range activeChunks {
-		dynamicHandles := chunk.GetDynamicHandles()
-
-		for _, h := range dynamicHandles {
-			if !w.Alive(h) {
-				continue
-			}
-
-			transform, ok := ecs.GetComponent[components.Transform](w, h)
-			if !ok {
-				continue
-			}
-
-			// Skip if no movement intent
-			if !transform.WasMoved {
-				continue
-			}
-
-			collider, hasCollider := ecs.GetComponent[components.Collider](w, h)
-			if !hasCollider {
-				// No collider - just allow movement
-				ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-					cr.FinalX = transform.IntentX
-					cr.FinalY = transform.IntentY
-					cr.HasCollision = false
-					cr.CollidedWith = nil
-				})
-				continue
-			}
-
-			// Calculate movement delta
-			dx := transform.IntentX - transform.X
-			dy := transform.IntentY - transform.Y
-
-			// Check phantom collider first (owner's build intent)
-			if collider.Phantom != nil {
-				phantomResult := s.checkPhantomCollision(w, h, transform, collider, dx, dy, chunk)
-				if phantomResult.HasCollision {
-					// Hard stop at phantom border - do not slide
-					ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-						*cr = phantomResult
-					})
-					continue
-				}
-			}
-
-			// Perform swept AABB collision
-			result := s.sweepCollision(w, h, transform, collider, dx, dy, chunk)
-
-			// Store collision result
-			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-				*cr = result
-			})
+	// Use prepared query to iterate over entities with Transform
+	s.movedQuery.ForEach(func(h types.Handle) {
+		transform, ok := ecs.GetComponent[components.Transform](w, h)
+		if !ok {
+			return
 		}
-	}
+
+		// Skip if no movement intent
+		if !transform.WasMoved {
+			return
+		}
+
+		collider, hasCollider := ecs.GetComponent[components.Collider](w, h)
+		if !hasCollider {
+			// No collider - just allow movement
+			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+				cr.FinalX = transform.IntentX
+				cr.FinalY = transform.IntentY
+				cr.HasCollision = false
+				cr.CollidedWith = nil
+			})
+			return
+		}
+
+		// Get chunk reference
+		chunkRef, ok := ecs.GetComponent[components.ChunkRef](w, h)
+		if !ok {
+			// No chunk ref - allow movement without collision
+			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+				cr.FinalX = transform.IntentX
+				cr.FinalY = transform.IntentY
+				cr.HasCollision = false
+				cr.CollidedWith = nil
+			})
+			return
+		}
+
+		// Calculate movement delta
+		dx := transform.IntentX - transform.X
+		dy := transform.IntentY - transform.Y
+
+		// Get chunk for spatial queries using ChunkRef
+		chunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
+		chunk := s.chunkManager.GetChunk(chunkCoord)
+		if chunk == nil {
+			// Entity outside valid chunks - allow movement without collision
+			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+				cr.FinalX = transform.IntentX
+				cr.FinalY = transform.IntentY
+				cr.HasCollision = false
+				cr.CollidedWith = nil
+			})
+			return
+		}
+
+		// Check phantom collider first (owner's build intent)
+		if collider.Phantom != nil {
+			phantomResult := s.checkPhantomCollision(w, h, transform, collider, dx, dy, chunk)
+			if phantomResult.HasCollision {
+				// Hard stop at phantom border - do not slide
+				ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+					*cr = phantomResult
+				})
+				return
+			}
+		}
+
+		// Perform swept AABB collision
+		result := s.sweepCollision(w, h, transform, collider, dx, dy, chunk)
+
+		// Store collision result
+		ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+			*cr = result
+		})
+	})
 }
 
 // sweepCollision performs swept AABB collision using Minkowski difference

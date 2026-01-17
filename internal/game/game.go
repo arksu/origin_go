@@ -825,9 +825,9 @@ func (g *Game) update(dt float64) {
 			avgDuration := g.tickStats.durationSum / time.Duration(g.tickStats.count)
 			g.logger.Info("Game tick statistics (5s)",
 				zap.Uint64("ticks", g.tickStats.count),
-				zap.Duration("avg_duration", avgDuration),
-				zap.Duration("min_duration", g.tickStats.minDuration),
-				zap.Duration("max_duration", g.tickStats.maxDuration),
+				zap.Duration("avg", avgDuration),
+				zap.Duration("min", g.tickStats.minDuration),
+				zap.Duration("max", g.tickStats.maxDuration),
 			)
 		}
 
