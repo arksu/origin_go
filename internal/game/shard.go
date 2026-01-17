@@ -86,11 +86,11 @@ func (sm *ShardManager) Update(dt float64) {
 }
 
 func (sm *ShardManager) Stop() {
+	sm.workerPool.Stop()
+
 	for _, s := range sm.shards {
 		s.Stop()
 	}
-
-	sm.workerPool.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*1e9)
 	defer cancel()
@@ -100,6 +100,13 @@ func (sm *ShardManager) Stop() {
 func (sm *ShardManager) EventBus() *eventbus.EventBus {
 	return sm.eventBus
 }
+
+type ShardState int
+
+const (
+	ShardStateRunning ShardState = iota
+	ShardStateStopping
+)
 
 type Shard struct {
 	layer           int
@@ -115,7 +122,8 @@ type Shard struct {
 	// данные о том, какие сущности передвигались между системами
 	movedEntities systems.MovedEntities
 
-	mu sync.RWMutex
+	state ShardState
+	mu    sync.RWMutex
 }
 
 func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *ObjectFactory, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
@@ -127,6 +135,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger:          logger,
 		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities)),
 		eventBus:        eb,
+		state:           ShardStateRunning,
 		movedEntities: systems.MovedEntities{
 			Handles: make([]types.Handle, 2048),
 			IntentX: make([]float64, 2048),
@@ -171,12 +180,19 @@ func (s *Shard) MovedEntities() *systems.MovedEntities {
 func (s *Shard) Update(dt float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.state != ShardStateRunning {
+		return
+	}
 
 	s.chunkManager.Update(dt)
 	s.world.Update(dt)
 }
 
 func (s *Shard) Stop() {
+	s.mu.Lock()
+	s.state = ShardStateStopping
+	s.mu.Unlock()
+
 	s.chunkManager.Stop()
 }
 
