@@ -123,8 +123,8 @@ type Shard struct {
 	chunkManager *ChunkManager
 	eventBus     *eventbus.EventBus
 
-	// данные о том, какие сущности передвигались между системами
-	movedEntities systems.MovedEntities
+	// Resources:
+	movedEntities systems.MovedEntities // данные о том, какие сущности передвигались между системами
 
 	state ShardState
 	mu    sync.RWMutex
