@@ -172,7 +172,9 @@ func (g *Game) handleObjectMove(event *systems.ObjectMoveEvent) {
 		return
 	}
 
-	g.networkServer.Broadcast(data)
+	if event.EntityID == 3519523 {
+		g.networkServer.Broadcast(data)
+	}
 	//g.logger.Debug("Broadcasted S2C_ObjectMove", zap.Uint64("entity_id", uint64(event.EntityID)))
 }
 
@@ -365,6 +367,12 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Layer:      character.Layer,
 			})
 			ecs.AddComponent(shard.world, handle, components.CreateTransform(pos.X, pos.Y, int(character.Heading)*45))
+			ecs.AddComponent(shard.world, handle, components.ChunkRef{
+				CurrentChunkX: pos.X / utils.ChunkWorldSize,
+				CurrentChunkY: pos.Y / utils.ChunkWorldSize,
+				PrevChunkX:    pos.X / utils.ChunkWorldSize,
+				PrevChunkY:    pos.Y / utils.ChunkWorldSize,
+			})
 			ecs.AddComponent(shard.world, handle, components.Movement{
 				VelocityX: 0,
 				VelocityY: 0,
@@ -381,8 +389,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(shard.world, handle, components.Collider{
 				HalfWidth:  utils.PlayerColliderSize / 2,
 				HalfHeight: utils.PlayerColliderSize / 2,
-				Layer:      1,
-				Mask:       1,
+				Layer:      utils.PlayerLayer,
+				Mask:       utils.PlayerMask,
 			})
 			ecs.AddComponent(shard.world, handle, components.CollisionResult{
 				HasCollision: false,

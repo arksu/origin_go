@@ -319,6 +319,12 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 			continue
 		}
 
+		// Check if collision layers/masks overlap
+		if utils.PlayerLayer&collider.Mask == 0 && collider.Layer&utils.PlayerMask == 0 {
+			// No collision layer overlap, skip this object
+			continue
+		}
+
 		objMinX := int(transform.X - collider.HalfWidth)
 		objMinY := int(transform.Y - collider.HalfHeight)
 		objMaxX := int(transform.X + collider.HalfWidth)
