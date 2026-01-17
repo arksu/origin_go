@@ -69,7 +69,7 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 				cr.FinalX = transform.IntentX
 				cr.FinalY = transform.IntentY
 				cr.HasCollision = false
-				cr.CollidedWith = nil
+				cr.CollidedWith = 0
 			})
 			return
 		}
@@ -82,7 +82,7 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 				cr.FinalX = transform.IntentX
 				cr.FinalY = transform.IntentY
 				cr.HasCollision = false
-				cr.CollidedWith = nil
+				cr.CollidedWith = 0
 			})
 			return
 		}
@@ -100,7 +100,7 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 				cr.FinalX = transform.IntentX
 				cr.FinalY = transform.IntentY
 				cr.HasCollision = false
-				cr.CollidedWith = nil
+				cr.CollidedWith = 0
 			})
 			return
 		}
@@ -177,7 +177,7 @@ func (s *CollisionSystem) sweepCollision(
 
 		earliestT := 1.0
 		var hitNormalX, hitNormalY float64
-		var collidedWith types.EntityID
+		var collidedWith types.EntityID = 0
 
 		for _, candidateHandle := range candidates {
 			if candidateHandle == entityHandle {
@@ -222,6 +222,7 @@ func (s *CollisionSystem) sweepCollision(
 					earliestT = t
 					hitNormalX = nx
 					hitNormalY = ny
+					collidedWith = 0
 					if id, ok := w.GetExternalID(candidateHandle); ok {
 						collidedWith = id
 					}
@@ -244,6 +245,7 @@ func (s *CollisionSystem) sweepCollision(
 				earliestT = t
 				hitNormalX = nx
 				hitNormalY = ny
+				collidedWith = 0
 				if id, ok := w.GetExternalID(candidateHandle); ok {
 					collidedWith = id
 				}
@@ -258,9 +260,7 @@ func (s *CollisionSystem) sweepCollision(
 			result.HasCollision = true
 			result.CollisionNormalX = hitNormalX
 			result.CollisionNormalY = hitNormalY
-			if collidedWith != 0 {
-				result.CollidedWith = &collidedWith
-			}
+			result.CollidedWith = collidedWith
 
 			// Slide along wall: maintain original speed in slide direction
 			// Calculate parallel component from current movement direction
@@ -313,9 +313,9 @@ func (s *CollisionSystem) sweepCollision(
 		// Also detect oscillation by checking if object is bouncing between two positions
 		// Get previous collision result to compare
 		prevCollisionResult, hasPrevCollision := ecs.GetComponent[components.CollisionResult](w, entityHandle)
-		if hasPrevCollision && prevCollisionResult.HasCollision && result.CollidedWith != nil && prevCollisionResult.CollidedWith != nil {
+		if hasPrevCollision && prevCollisionResult.HasCollision && result.CollidedWith != 0 && prevCollisionResult.CollidedWith != 0 {
 			// Check if colliding with same object
-			if *result.CollidedWith == *prevCollisionResult.CollidedWith {
+			if result.CollidedWith == prevCollisionResult.CollidedWith {
 				// Check if positions are very close (bouncing between two spots)
 				distToPrev := math.Sqrt(
 					(result.FinalX-prevCollisionResult.FinalX)*(result.FinalX-prevCollisionResult.FinalX) +
@@ -485,7 +485,7 @@ func (s *CollisionSystem) checkPhantomCollision(
 		result.CollisionNormalY = normalY
 
 		if extID, ok := w.GetExternalID(entityHandle); ok {
-			result.CollidedWith = &extID
+			result.CollidedWith = extID
 		}
 	}
 
