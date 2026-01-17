@@ -57,6 +57,7 @@ type GameConfig struct {
 	WorldWidthChunks         int           `mapstructure:"world_width_chunks"`
 	WorldHeightChunks        int           `mapstructure:"world_height_chunks"`
 	SendChannelBuffer        int           `mapstructure:"send_channel_buffer"`
+	PprofEnabled             bool          `mapstructure:"pprof_enabled"`
 }
 
 type EntityIDConfig struct {
@@ -148,6 +149,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.world_width_chunks", 50)
 	v.SetDefault("game.world_height_chunks", 50)
 	v.SetDefault("game.send_channel_buffer", 132000)
+	v.SetDefault("game.pprof_enabled", false)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)
