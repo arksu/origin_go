@@ -94,9 +94,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 					m.ClearTarget()
 				})
 				// Add to moved entities buffer
-				s.movedEntities.Handles = append(s.movedEntities.Handles, h)
-				s.movedEntities.IntentX = append(s.movedEntities.IntentX, movement.TargetX)
-				s.movedEntities.IntentY = append(s.movedEntities.IntentY, movement.TargetY)
+				s.movedEntities.Add(h, movement.TargetX, movement.TargetY)
 				return
 			}
 
@@ -120,9 +118,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				t.Direction = math.Atan2(velocityY, velocityX)
 			})
 			// Add to moved entities buffer
-			s.movedEntities.Handles = append(s.movedEntities.Handles, h)
-			s.movedEntities.IntentX = append(s.movedEntities.IntentX, newX)
-			s.movedEntities.IntentY = append(s.movedEntities.IntentY, newY)
+			s.movedEntities.Add(h, newX, newY)
 
 			if debugEnabled {
 				s.logger.Debug("Entity movement",

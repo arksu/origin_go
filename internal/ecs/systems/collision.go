@@ -46,7 +46,8 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedE
 
 func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 	// Iterate through moved entities from the buffer
-	for i, h := range s.movedEntities.Handles {
+	for i := 0; i < s.movedEntities.Count; i++ {
+		h := s.movedEntities.Handles[i]
 		if !w.Alive(h) {
 			continue
 		}
