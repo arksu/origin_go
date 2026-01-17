@@ -404,6 +404,7 @@ func (g *Game) gameLoop() {
 	defer ticker.Stop()
 
 	lastTime := time.Now()
+	maxDt := g.tickPeriod.Seconds() * 2 // Cap dt to 2x the tick period
 
 	for {
 		select {
@@ -414,6 +415,9 @@ func (g *Game) gameLoop() {
 				return
 			}
 			dt := now.Sub(lastTime).Seconds()
+			if dt > maxDt {
+				dt = maxDt
+			}
 			lastTime = now
 
 			g.currentTick++
