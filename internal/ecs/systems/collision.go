@@ -7,6 +7,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
+	"origin/internal/utils"
 
 	"go.uber.org/zap"
 )
@@ -150,14 +151,59 @@ func (s *CollisionSystem) sweepCollision(
 	entityHalfW := collider.HalfWidth
 	entityHalfH := collider.HalfHeight
 
-	// Query potential colliders from spatial hash using pooled buffer
-	s.candidatesBuffer = s.candidatesBuffer[:0] // Reset buffer, keep capacity
-	queryRadius := math.Max(math.Abs(dx), math.Abs(dy)) + math.Max(entityHalfW, entityHalfH) + 64
-	chunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &s.candidatesBuffer)
-	candidates := s.candidatesBuffer
-
 	// Original velocity magnitude
 	originalSpeed := math.Sqrt(dx*dx + dy*dy)
+
+	// сколько в мировых координатах запрашиваем вокруг объекта для коллизий
+	spatialRequestSize := 20.0
+
+	// Query potential colliders from spatial hash using pooled buffer
+	s.candidatesBuffer = s.candidatesBuffer[:0] // Reset buffer, keep capacity
+	queryRadius := math.Max(math.Abs(dx), math.Abs(dy)) + math.Max(entityHalfW, entityHalfH) + spatialRequestSize
+
+	// Query current chunk
+	chunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &s.candidatesBuffer)
+
+	// Check if query rectangle intersects neighboring chunks
+	chunkWorldSize := float64(utils.ChunkWorldSize)
+
+	// Calculate query rectangle bounds
+	queryMinX := transform.X - queryRadius
+	queryMaxX := transform.X + queryRadius
+	queryMinY := transform.Y - queryRadius
+	queryMaxY := transform.Y + queryRadius
+
+	// Check each neighboring chunk (8 directions)
+	neighborOffsets := []struct{ dx, dy int }{
+		{-1, -1}, {0, -1}, {1, -1},
+		{-1, 0}, {1, 0},
+		{-1, 1}, {0, 1}, {1, 1},
+	}
+
+	for _, offset := range neighborOffsets {
+		neighborChunkX := chunk.Coord.X + offset.dx
+		neighborChunkY := chunk.Coord.Y + offset.dy
+
+		// Calculate neighbor chunk boundaries
+		neighborMinX := float64(neighborChunkX) * chunkWorldSize
+		neighborMaxX := float64(neighborChunkX+1) * chunkWorldSize
+		neighborMinY := float64(neighborChunkY) * chunkWorldSize
+		neighborMaxY := float64(neighborChunkY+1) * chunkWorldSize
+
+		// Check if query rectangle intersects neighbor chunk
+		intersects := !(queryMaxX < neighborMinX || queryMinX > neighborMaxX ||
+			queryMaxY < neighborMinY || queryMinY > neighborMaxY)
+
+		if intersects {
+			neighborCoord := types.ChunkCoord{X: neighborChunkX, Y: neighborChunkY}
+			neighborChunk := s.chunkManager.GetChunk(neighborCoord)
+			if neighborChunk != nil {
+				neighborChunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &s.candidatesBuffer)
+			}
+		}
+	}
+
+	candidates := s.candidatesBuffer
 
 	// Remaining movement
 	remainingDX := dx
