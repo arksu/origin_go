@@ -211,27 +211,6 @@ func (g *SpatialHashGrid) GetAllHandles() []types.Handle {
 	return result
 }
 
-func (g *SpatialHashGrid) GetDynamicHandles() []types.Handle {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	result := make([]types.Handle, 0, 256)
-	for _, handles := range g.dynamicCells {
-		result = append(result, handles...)
-	}
-	return result
-}
-
-func (g *SpatialHashGrid) GetStaticHandles() []types.Handle {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	result := make([]types.Handle, 0, 256)
-	for _, handles := range g.staticCells {
-		result = append(result, handles...)
-	}
-	return result
-}
-
 func (g *SpatialHashGrid) DynamicCount() int {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
