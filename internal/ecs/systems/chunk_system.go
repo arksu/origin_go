@@ -98,6 +98,17 @@ func (s *ChunkSystem) migrateEntity(w *ecs.World, h types.Handle, chunkRef compo
 		}
 	}
 
+	// Get entity ID for UpdateEntityPosition call
+	entityID, hasEntityID := w.GetExternalID(h)
+	if !hasEntityID {
+		s.logger.Error("Entity missing external ID for chunk migration",
+			zap.Uint64("handle", uint64(h)),
+			zap.Int("new_chunk_x", newChunkX),
+			zap.Int("new_chunk_y", newChunkY),
+		)
+		return
+	}
+
 	// Update ChunkRef component
 	ecs.WithComponent(w, h, func(cr *components.ChunkRef) {
 		cr.PrevChunkX = cr.CurrentChunkX
@@ -106,11 +117,14 @@ func (s *ChunkSystem) migrateEntity(w *ecs.World, h types.Handle, chunkRef compo
 		cr.CurrentChunkY = newChunkY
 	})
 
-	s.logger.Debug("Entity migrated between chunks",
-		zap.Uint64("handle", uint64(h)),
-		zap.Int("from_chunk_x", chunkRef.CurrentChunkX),
-		zap.Int("from_chunk_y", chunkRef.CurrentChunkY),
-		zap.Int("to_chunk_x", newChunkX),
-		zap.Int("to_chunk_y", newChunkY),
-	)
+	// Update entity position in chunk manager
+	s.chunkManager.UpdateEntityPosition(entityID, newChunkCoord)
+
+	//s.logger.Debug("Entity migrated between chunks",
+	//	zap.Uint64("handle", uint64(h)),
+	//	zap.Int("from_chunk_x", chunkRef.CurrentChunkX),
+	//	zap.Int("from_chunk_y", chunkRef.CurrentChunkY),
+	//	zap.Int("to_chunk_x", newChunkX),
+	//	zap.Int("to_chunk_y", newChunkY),
+	//)
 }

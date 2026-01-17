@@ -17,6 +17,7 @@ import (
 type ChunkManager interface {
 	ActiveChunks() []*Chunk
 	GetChunk(coord types.ChunkCoord) *Chunk
+	UpdateEntityPosition(entityID types.EntityID, newCenter types.ChunkCoord)
 }
 
 // Chunk represents a game chunk with all its data and functionality

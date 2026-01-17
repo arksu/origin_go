@@ -345,6 +345,24 @@ func (g *Game) handleDisconnect(c *network.Client) {
 			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
 				playerEntityID := c.CharacterID
 				shard.mu.Lock()
+				// Get the player's handle and despawn the entity
+				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
+				if playerHandle != types.InvalidHandle {
+					// Remove from chunk spatial index before despawning
+					if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](shard.world, playerHandle); hasChunkRef {
+						if transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, playerHandle); hasTransform {
+							if chunk := shard.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
+								// Check if entity is static or dynamic and remove from appropriate spatial index
+								if entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.world, playerHandle); hasEntityInfo && entityInfo.IsStatic {
+									chunk.Spatial().RemoveStatic(playerHandle, int(transform.X), int(transform.Y))
+								} else {
+									chunk.Spatial().RemoveDynamic(playerHandle, int(transform.X), int(transform.Y))
+								}
+							}
+						}
+					}
+					shard.world.Despawn(playerHandle)
+				}
 				shard.UnregisterEntityAOI(playerEntityID)
 				shard.mu.Unlock()
 				g.logger.Debug("Unregistered entity AOI",
