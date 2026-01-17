@@ -67,6 +67,10 @@ func (sm *ShardManager) GetShard(layer int) *Shard {
 	return sm.shards[layer]
 }
 
+func (sm *ShardManager) GetShards() map[int]*Shard {
+	return sm.shards
+}
+
 func (sm *ShardManager) Update(dt float64) {
 	shards := make([]*Shard, 0, len(sm.shards))
 	for _, s := range sm.shards {
