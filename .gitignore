@@ -9,6 +9,7 @@
 *.dylib
 gameserver
 mapgen
+load_test
 
 .windsurf/
 .vscode/

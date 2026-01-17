@@ -134,9 +134,10 @@ type PreparedQuery struct {
 // NewPreparedQuery creates a prepared query with cached archetype list
 func NewPreparedQuery(world *World, required, excluded ComponentMask) *PreparedQuery {
 	pq := &PreparedQuery{
-		world:    world,
-		required: required,
-		excluded: excluded,
+		world:      world,
+		required:   required,
+		excluded:   excluded,
+		archetypes: make([]*Archetype, 0, 16), // Initial capacity, will grow as needed
 	}
 	pq.Refresh()
 	return pq
@@ -148,15 +149,15 @@ func NewPreparedQuery(world *World, required, excluded ComponentMask) *PreparedQ
 func (pq *PreparedQuery) Refresh() {
 	archetypes := pq.world.archetypes.QueryArchetypes(pq.required)
 
-	filtered := make([]*Archetype, 0, len(archetypes))
+	// Reuse existing slice to avoid allocation
+	pq.archetypes = pq.archetypes[:0] // Reset length, keep capacity
 	for _, arch := range archetypes {
 		if pq.excluded != 0 && arch.Mask()&pq.excluded != 0 {
 			continue
 		}
-		filtered = append(filtered, arch)
+		pq.archetypes = append(pq.archetypes, arch)
 	}
 
-	pq.archetypes = filtered
 	pq.seenVersion = pq.world.archetypes.Version()
 }
 
