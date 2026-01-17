@@ -52,6 +52,14 @@ type tickStats struct {
 	lastLog     time.Time
 }
 
+type GameStats struct {
+	ConnectedClients int
+	TotalPlayers     int
+	CurrentTick      uint64
+	TickRate         int
+	AvgTickDuration  time.Duration
+}
+
 type Game struct {
 	cfg    *config.Config
 	db     *persistence.Postgres
@@ -504,4 +512,28 @@ func (g *Game) CurrentTick() uint64 {
 
 func (g *Game) State() GameState {
 	return g.getState()
+}
+
+func (g *Game) Stats() GameStats {
+	connectedClients := g.networkServer.ClientCount()
+
+	totalPlayers := 0
+	for _, shard := range g.shardManager.shards {
+		shard.mu.RLock()
+		totalPlayers += shard.world.EntityCount()
+		shard.mu.RUnlock()
+	}
+
+	avgTickDuration := time.Duration(0)
+	if g.tickStats.count > 0 {
+		avgTickDuration = g.tickStats.durationSum / time.Duration(g.tickStats.count)
+	}
+
+	return GameStats{
+		ConnectedClients: connectedClients,
+		TotalPlayers:     totalPlayers,
+		CurrentTick:      g.currentTick,
+		TickRate:         g.tickRate,
+		AvgTickDuration:  avgTickDuration,
+	}
 }

@@ -10,10 +10,13 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"origin/internal/config"
 	"origin/internal/game"
+	"origin/internal/metrics"
 	"origin/internal/persistence"
 	"origin/internal/restapi"
 )
@@ -55,6 +58,12 @@ func main() {
 
 	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger, &cfg.Game)
 	httpHandler.RegisterRoutes(mux)
+
+	// Register Prometheus metrics
+	metricsCollector := metrics.NewCollector(g)
+	prometheus.MustRegister(metricsCollector)
+	mux.Handle("/metrics", promhttp.Handler())
+	logger.Info("Prometheus metrics enabled", zap.String("endpoint", "/metrics"))
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	if err := g.NetworkServer().Start(addr, mux); err != nil {

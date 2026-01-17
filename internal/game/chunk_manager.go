@@ -36,6 +36,7 @@ type ChunkStats struct {
 	PreloadedCount int64
 	InactiveCount  int64
 	LoadRequests   int64
+	SaveRequests   int64
 	CacheHits      int64
 	CacheMisses    int64
 }
@@ -472,6 +473,7 @@ func (cm *ChunkManager) saveWorker() {
 		case <-cm.stopCh:
 			return
 		case req := <-cm.saveQueue:
+			atomic.AddInt64(&cm.stats.SaveRequests, 1)
 			cm.shard.mu.RLock()
 			req.chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 			cm.shard.mu.RUnlock()
@@ -1010,6 +1012,7 @@ func (cm *ChunkManager) Stats() ChunkStats {
 		PreloadedCount: atomic.LoadInt64(&cm.stats.PreloadedCount),
 		InactiveCount:  atomic.LoadInt64(&cm.stats.InactiveCount),
 		LoadRequests:   atomic.LoadInt64(&cm.stats.LoadRequests),
+		SaveRequests:   atomic.LoadInt64(&cm.stats.SaveRequests),
 		CacheHits:      atomic.LoadInt64(&cm.stats.CacheHits),
 		CacheMisses:    atomic.LoadInt64(&cm.stats.CacheMisses),
 	}
