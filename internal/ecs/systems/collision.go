@@ -32,7 +32,8 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 		world,
 		0|
 			(1<<components.TransformComponentID)|
-			(1<<components.MovementComponentID),
+			(1<<components.MovementComponentID)|
+			(1<<components.MoveTagComponentID),
 		0, // no exclusions
 	)
 
@@ -58,11 +59,6 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 	s.movedQuery.ForEach(func(h types.Handle) {
 		transform, ok := ecs.GetComponent[components.Transform](w, h)
 		if !ok {
-			return
-		}
-
-		// Skip if no movement intent
-		if !transform.WasMoved {
 			return
 		}
 

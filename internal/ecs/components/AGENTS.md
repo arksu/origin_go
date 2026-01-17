@@ -3,6 +3,7 @@
 ## Overview
 
 All ECS components must be registered with **explicit, stable IDs** during package initialization. This ensures:
+
 - **Deterministic behavior** across builds and processes
 - **Compatibility** with persistence and replication systems
 - **Stable component masks** for serialization
@@ -12,6 +13,7 @@ All ECS components must be registered with **explicit, stable IDs** during packa
 Component IDs are `uint8` values from 0-63 (64 total slots).
 
 ### Reserved IDs
+
 - **ID 0**: `ExternalID` (mandatory component for all entities)
 - **IDs 1-9**: Reserved for core system components
 - **IDs 10-63**: Available for game-specific components
@@ -47,16 +49,16 @@ package components
 import "origin/internal/ecs"
 
 const (
-    TransformComponentID = 10
-    ChunkRefComponentID = 11
-    MovementComponentID = 12
-    EntityInfoComponentID = 13
-    ColliderComponentID = 14
-    CollisionResultComponentID = 15
+	TransformComponentID       = 10
+	ChunkRefComponentID        = 11
+	MovementComponentID        = 12
+	EntityInfoComponentID      = 13
+	ColliderComponentID        = 14
+	CollisionResultComponentID = 15
 )
 
 func init() {
-    ecs.RegisterComponent[Transform](TransformComponentID)
+	ecs.RegisterComponent[Transform](TransformComponentID)
 
 ```
 
@@ -66,50 +68,50 @@ func init() {
 package game
 
 import (
-    "origin/internal/ecs"
-    "origin/internal/ecs/components"
+	"origin/internal/ecs"
+	"origin/internal/ecs/components"
 )
 
 func SpawnPlayer(world *ecs.World, entityID ecs.EntityID) ecs.Handle {
-    h := world.Spawn(entityID)
-    
-    // Add components
-    ecs.AddComponent(world, h, components.Position{X: 100, Y: 200, Z: 0})
-    ecs.AddComponent(world, h, components.Velocity{DX: 0, DY: 0, DZ: 0})
-    ecs.AddComponent(world, h, components.Health{Current: 100, Maximum: 100})
-    
-    return h
+	h := world.Spawn(entityID)
+
+	// Add components
+	ecs.AddComponent(world, h, components.Position{X: 100, Y: 200, Z: 0})
+	ecs.AddComponent(world, h, components.Velocity{DX: 0, DY: 0, DZ: 0})
+	ecs.AddComponent(world, h, components.Health{Current: 100, Maximum: 100})
+
+	return h
 }
 
 func UpdateMovement(world *ecs.World, h ecs.Handle, deltaTime float64) {
-    // Get position and velocity
-    pos, hasPos := ecs.GetComponent[components.Position](world, h)
-    vel, hasVel := ecs.GetComponent[components.Velocity](world, h)
-    
-    if !hasPos || !hasVel {
-        return
-    }
-    
-    // Mutate position
-    ecs.WithComponent(world, h, func(p *components.Position) {
-        p.X += vel.DX * deltaTime
-        p.Y += vel.DY * deltaTime
-        p.Z += vel.DZ * deltaTime
-    })
+	// Get position and velocity
+	pos, hasPos := ecs.GetComponent[components.Position](world, h)
+	vel, hasVel := ecs.GetComponent[components.Velocity](world, h)
+
+	if !hasPos || !hasVel {
+		return
+	}
+
+	// Mutate position
+	ecs.WithComponent(world, h, func(p *components.Position) {
+		p.X += vel.DX * deltaTime
+		p.Y += vel.DY * deltaTime
+		p.Z += vel.DZ * deltaTime
+	})
 }
 
 func TakeDamage(world *ecs.World, h ecs.Handle, damage int32) bool {
-    // Conditional mutation with return value
-    return ecs.MutateComponent(world, h, func(health *components.Health) bool {
-        if health.Current <= 0 {
-            return false // Already dead
-        }
-        health.Current -= damage
-        if health.Current < 0 {
-            health.Current = 0
-        }
-        return true
-    })
+	// Conditional mutation with return value
+	return ecs.MutateComponent(world, h, func(health *components.Health) bool {
+		if health.Current <= 0 {
+			return false // Already dead
+		}
+		health.Current -= damage
+		if health.Current < 0 {
+			health.Current = 0
+		}
+		return true
+	})
 }
 ```
 
@@ -125,13 +127,17 @@ func TakeDamage(world *ecs.World, h ecs.Handle, damage int32) bool {
 
 Maintain this list as you add new components:
 
-| ID | Component | Description |
-|----|-----------|-------------|
-| 0  | ExternalID | Maps Handle to global EntityID (mandatory) |
-| 10 | Position | Entity world position |
-| 11 | Velocity | Entity movement velocity |
-| 12 | Health | Entity health points |
-| ... | ... | ... |
+| ID  | Component                  | Description                                |
+|-----|----------------------------|--------------------------------------------|
+| 0   | ExternalID                 | Maps Handle to global EntityID (mandatory) |
+| 10  | TransformComponentID       | Entity world position                      |
+| 11  | ChunkRefComponentID        | Reference to current chunk                 |
+| 12  | MovementComponentID        | Entity movement velocity                   |
+| 13  | EntityInfoComponentID      | Base Entity info (isStatic, region, layer) |
+| 14  | ColliderComponentID        | Collider for collision system              |
+| 15  | CollisionResultComponentID | Result of collision calculations           |
+| 16  | MoveTagComponentID         | Tag for entities that moved this frame     |
+| ... | ...                        | ...                                        |
 
 ## Migration from Auto-Assignment
 

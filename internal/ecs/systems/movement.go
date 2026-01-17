@@ -88,12 +88,13 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				ecs.WithComponent(w, h, func(t *components.Transform) {
 					t.IntentX = movement.TargetX
 					t.IntentY = movement.TargetY
-					t.WasMoved = true
 					t.Direction = math.Atan2(dy, dx)
 				})
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.ClearTarget()
 				})
+				// Add MoveTag to indicate real movement occurred
+				ecs.AddComponent(w, h, components.MoveTag{})
 				// TODO впереди еще проверка коллизий, поэтому пишем просто в Intent, и только после будет фактическая смена позиции
 				return
 			}
@@ -116,10 +117,11 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			ecs.WithComponent(w, h, func(t *components.Transform) {
 				t.IntentX = newX
 				t.IntentY = newY
-				t.WasMoved = true
 				// Direction based on actual velocity vector
 				t.Direction = math.Atan2(velocityY, velocityX)
 			})
+			// Add MoveTag to indicate real movement occurred
+			ecs.AddComponent(w, h, components.MoveTag{})
 
 			if debugEnabled {
 				s.logger.Debug("Entity movement",

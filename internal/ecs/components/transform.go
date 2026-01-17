@@ -8,9 +8,8 @@ type Transform struct {
 	X float64
 	Y float64
 	// то куда передвигаемся на текущем тике
-	WasMoved bool
-	IntentX  float64
-	IntentY  float64
+	IntentX float64
+	IntentY float64
 	// направление вращения в градусах
 	Direction float64
 }
