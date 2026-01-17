@@ -97,8 +97,6 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				s.movedEntities.Handles = append(s.movedEntities.Handles, h)
 				s.movedEntities.IntentX = append(s.movedEntities.IntentX, movement.TargetX)
 				s.movedEntities.IntentY = append(s.movedEntities.IntentY, movement.TargetY)
-				// Add MoveTag to indicate real movement occurred
-				ecs.AddComponent(w, h, components.MoveTag{})
 				return
 			}
 
@@ -125,8 +123,6 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			s.movedEntities.Handles = append(s.movedEntities.Handles, h)
 			s.movedEntities.IntentX = append(s.movedEntities.IntentX, newX)
 			s.movedEntities.IntentY = append(s.movedEntities.IntentY, newY)
-			// Add MoveTag to indicate real movement occurred
-			ecs.AddComponent(w, h, components.MoveTag{})
 
 			if debugEnabled {
 				s.logger.Debug("Entity movement",

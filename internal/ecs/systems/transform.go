@@ -106,8 +106,6 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			t.X = finalX
 			t.Y = finalY
 		})
-		// Remove MoveTag component
-		ecs.RemoveComponent[components.MoveTag](w, h)
 
 		// Send to client S2C_ObjectMove with current data
 		if entityID, ok := w.GetExternalID(h); ok {

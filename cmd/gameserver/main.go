@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -41,6 +42,10 @@ func main() {
 	g := game.NewGame(cfg, db, objectFactory, logger)
 
 	mux := http.NewServeMux()
+
+	// Register pprof endpoints
+	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
+
 	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger, &cfg.Game)
 	httpHandler.RegisterRoutes(mux)
 
