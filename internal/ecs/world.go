@@ -320,22 +320,6 @@ func GetComponent[T Component](w *World, h types.Handle) (T, bool) {
 	return storage.Get(h)
 }
 
-// MutateComponent executes a callback with a pointer to the component for mutation
-// The callback returns bool to indicate success/failure or conditional logic
-// The pointer is only valid within the callback scope
-func MutateComponent[T Component](w *World, h types.Handle, fn func(*T) bool) bool {
-	storage := GetOrCreateStorage[T](w)
-	return storage.Mutate(h, fn)
-}
-
-// WithComponent executes a callback with a pointer to the component for mutation
-// The pointer is only valid within the callback scope
-// Returns false if the component doesn't exist
-func WithComponent[T Component](w *World, h types.Handle, fn func(*T)) bool {
-	storage := GetOrCreateStorage[T](w)
-	return storage.WithPtr(h, fn)
-}
-
 // RemoveComponent removes a component from an entity
 // Single-threaded - no lock needed
 func RemoveComponent[T Component](w *World, h types.Handle) bool {
@@ -351,6 +335,22 @@ func RemoveComponent[T Component](w *World, h types.Handle) bool {
 	newMask.Clear(componentID)
 	w.updateEntityArchetype(h, oldMask, newMask)
 	return true
+}
+
+// MutateComponent executes a callback with a pointer to the component for mutation
+// The callback returns bool to indicate success/failure or conditional logic
+// The pointer is only valid within the callback scope
+func MutateComponent[T Component](w *World, h types.Handle, fn func(*T) bool) bool {
+	storage := GetOrCreateStorage[T](w)
+	return storage.Mutate(h, fn)
+}
+
+// WithComponent executes a callback with a pointer to the component for mutation
+// The pointer is only valid within the callback scope
+// Returns false if the component doesn't exist
+func WithComponent[T Component](w *World, h types.Handle, fn func(*T)) bool {
+	storage := GetOrCreateStorage[T](w)
+	return storage.WithPtr(h, fn)
 }
 
 // HasComponent checks if an entity has a component
