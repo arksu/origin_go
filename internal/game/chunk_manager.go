@@ -1025,15 +1025,10 @@ func (cm *ChunkManager) Stop() {
 	close(cm.stopCh)
 	cm.wg.Wait()
 
-	// Collect all chunks that need saving
-	cm.interestMu.RLock()
-	interestedCoords := make([]types.ChunkCoord, 0, len(cm.chunkInterests))
-	for coord := range cm.chunkInterests {
-		interestedCoords = append(interestedCoords, coord)
-	}
-	cm.interestMu.RUnlock()
+	// Now purge the LRU cache - evictions won't save because stopped flag is set
+	cm.lruCache.Purge()
 
-	// Also save all loaded chunks
+	// Collect all chunks that need saving
 	cm.chunksMu.RLock()
 	allCoords := make([]types.ChunkCoord, 0, len(cm.chunks))
 	for coord := range cm.chunks {
@@ -1041,25 +1036,45 @@ func (cm *ChunkManager) Stop() {
 	}
 	cm.chunksMu.RUnlock()
 
-	savedCount := 0
-	for _, coord := range allCoords {
-		if chunk := cm.GetChunk(coord); chunk != nil {
-			state := chunk.GetState()
-			if state == types.ChunkStateActive || state == types.ChunkStatePreloaded || state == types.ChunkStateInactive {
-				cm.shard.mu.RLock()
-				chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
-				cm.shard.mu.RUnlock()
-				savedCount++
-			}
-		}
+	// Save chunks in parallel using worker pool
+	numWorkers := cm.cfg.Game.SaveWorkers
+	if numWorkers <= 0 {
+		numWorkers = 1
 	}
 
-	// Now purge the LRU cache - evictions won't save because stopped flag is set
-	cm.lruCache.Purge()
+	workCh := make(chan types.ChunkCoord, numWorkers)
+	var wg sync.WaitGroup
+
+	cm.shard.mu.Lock()
+	// Start save workers
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for coord := range workCh {
+				if chunk := cm.GetChunk(coord); chunk != nil {
+					state := chunk.GetState()
+					if state == types.ChunkStateActive || state == types.ChunkStatePreloaded || state == types.ChunkStateInactive {
+						chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+					}
+				}
+			}
+		}()
+	}
+
+	// Send work to workers
+	for _, coord := range allCoords {
+		workCh <- coord
+	}
+	close(workCh)
+
+	// Wait for all saves to finish
+	wg.Wait()
+	cm.shard.mu.Unlock()
 
 	cm.logger.Info("chunk manager stopped",
 		zap.Int("layer", cm.layer),
-		zap.Int("chunks_saved", savedCount),
+		zap.Int("chunks_saved", len(allCoords)),
 	)
 }
 
