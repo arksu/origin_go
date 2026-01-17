@@ -15,12 +15,13 @@ const debugEnabled = false
 
 type MovementSystem struct {
 	ecs.BaseSystem
-	chunkManager core.ChunkManager
-	logger       *zap.Logger
-	movingQuery  *ecs.PreparedQuery
+	chunkManager  core.ChunkManager
+	logger        *zap.Logger
+	movingQuery   *ecs.PreparedQuery
+	movedEntities *MovedEntities
 }
 
-func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger) *MovementSystem {
+func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger) *MovementSystem {
 	// Query for entities with Transform and Movement components
 	movingQuery := ecs.NewPreparedQuery(
 		world,
@@ -31,10 +32,11 @@ func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger 
 	)
 
 	return &MovementSystem{
-		BaseSystem:   ecs.NewBaseSystem("MovementSystem", 100),
-		chunkManager: chunkManager,
-		logger:       logger,
-		movingQuery:  movingQuery,
+		BaseSystem:    ecs.NewBaseSystem("MovementSystem", 100),
+		chunkManager:  chunkManager,
+		logger:        logger,
+		movingQuery:   movingQuery,
+		movedEntities: movedEntities,
 	}
 }
 
@@ -86,16 +88,17 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			if step >= dist {
 				// Reached target, snap to exact position
 				ecs.WithComponent(w, h, func(t *components.Transform) {
-					t.IntentX = movement.TargetX
-					t.IntentY = movement.TargetY
 					t.Direction = math.Atan2(dy, dx)
 				})
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.ClearTarget()
 				})
+				// Add to moved entities buffer
+				s.movedEntities.Handles = append(s.movedEntities.Handles, h)
+				s.movedEntities.IntentX = append(s.movedEntities.IntentX, movement.TargetX)
+				s.movedEntities.IntentY = append(s.movedEntities.IntentY, movement.TargetY)
 				// Add MoveTag to indicate real movement occurred
 				ecs.AddComponent(w, h, components.MoveTag{})
-				// TODO впереди еще проверка коллизий, поэтому пишем просто в Intent, и только после будет фактическая смена позиции
 				return
 			}
 
@@ -115,11 +118,13 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			newY := transform.Y + velocityY*dt
 
 			ecs.WithComponent(w, h, func(t *components.Transform) {
-				t.IntentX = newX
-				t.IntentY = newY
 				// Direction based on actual velocity vector
 				t.Direction = math.Atan2(velocityY, velocityX)
 			})
+			// Add to moved entities buffer
+			s.movedEntities.Handles = append(s.movedEntities.Handles, h)
+			s.movedEntities.IntentX = append(s.movedEntities.IntentX, newX)
+			s.movedEntities.IntentY = append(s.movedEntities.IntentY, newY)
 			// Add MoveTag to indicate real movement occurred
 			ecs.AddComponent(w, h, components.MoveTag{})
 

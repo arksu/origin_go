@@ -34,41 +34,32 @@ func NewObjectMoveEvent(entityID types.EntityID, movement *proto.EntityMovement)
 
 type TransformUpdateSystem struct {
 	ecs.BaseSystem
-	chunkManager core.ChunkManager
-	eventBus     *eventbus.EventBus
-	logger       *zap.Logger
-	movedQuery   *ecs.PreparedQuery
+	chunkManager  core.ChunkManager
+	eventBus      *eventbus.EventBus
+	logger        *zap.Logger
+	movedEntities *MovedEntities
 }
 
-func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
-	// Query for entities with Transform and MoveTag (entities that moved this frame)
-	movedQuery := ecs.NewPreparedQuery(
-		world,
-		0|
-			(1<<components.TransformComponentID)|
-			(1<<components.MoveTagComponentID),
-		0, // no exclusions
-	)
-
+func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
 	return &TransformUpdateSystem{
-		BaseSystem:   ecs.NewBaseSystem("TransformUpdateSystem", 300),
-		chunkManager: chunkManager,
-		eventBus:     eventBus,
-		logger:       logger,
-		movedQuery:   movedQuery,
+		BaseSystem:    ecs.NewBaseSystem("TransformUpdateSystem", 300),
+		chunkManager:  chunkManager,
+		eventBus:      eventBus,
+		logger:        logger,
+		movedEntities: movedEntities,
 	}
 }
 
 func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
-	// Process entities that moved this frame (have MoveTag)
-	s.movedQuery.ForEach(func(h types.Handle) {
+	// Process entities that moved this frame (from movedEntities buffer)
+	for _, h := range s.movedEntities.Handles {
 		if !w.Alive(h) {
-			return
+			continue
 		}
 
 		transform, ok := ecs.GetComponent[components.Transform](w, h)
 		if !ok {
-			return
+			continue
 		}
 
 		// Check for collision result
@@ -87,9 +78,8 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			finalX = collisionResult.FinalX
 			finalY = collisionResult.FinalY
 		} else {
-			// No collision result - apply intent directly
-			finalX = transform.IntentX
-			finalY = transform.IntentY
+			// No collision result - should not happen if movedEntities is properly managed
+			continue
 		}
 
 		// Get chunk for spatial hash update
@@ -115,8 +105,6 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 		ecs.WithComponent(w, h, func(t *components.Transform) {
 			t.X = finalX
 			t.Y = finalY
-			t.IntentX = finalX
-			t.IntentY = finalY
 		})
 		// Remove MoveTag component
 		ecs.RemoveComponent[components.MoveTag](w, h)
@@ -185,17 +173,17 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				// Save current collision position for next frame
 				cr.PrevFinalX = cr.FinalX
 				cr.PrevFinalY = cr.FinalY
-				if cr.CollidedWith != nil {
-					cr.PrevCollidedWith = *cr.CollidedWith
+				if cr.CollidedWith != 0 {
+					cr.PrevCollidedWith = cr.CollidedWith
 				}
 				// Clear collision result for next frame
 				cr.HasCollision = false
-				cr.CollidedWith = nil
+				cr.CollidedWith = 0
 				cr.CollisionNormalX = 0
 				cr.CollisionNormalY = 0
 				cr.IsPhantom = false
 				cr.PerpendicularOscillation = false
 			})
 		}
-	})
+	}
 }
