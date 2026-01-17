@@ -8,7 +8,6 @@ type ChunkRef struct {
 	CurrentChunkY int
 	PrevChunkX    int
 	PrevChunkY    int
-	IsMigrating   bool
 }
 
 const ChunkRefComponentID ecs.ComponentID = 11
