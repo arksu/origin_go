@@ -31,6 +31,7 @@ type CollisionSystem struct {
 	worldMinY   float64
 	worldMaxY   float64
 	marginTiles int
+	chunkSize   int
 }
 
 func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger, worldMinX, worldMaxX, worldMinY, worldMaxY float64, marginTiles int) *CollisionSystem {
@@ -55,6 +56,7 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedE
 		worldMinY:        worldMinY + marginPixels,
 		worldMaxY:        worldMaxY - marginPixels,
 		marginTiles:      marginTiles,
+		chunkSize:        utils.ChunkSize,
 	}
 }
 
@@ -157,6 +159,20 @@ func (s *CollisionSystem) sweepCollision(
 	if math.Abs(dx) < 0.001 && math.Abs(dy) < 0.001 {
 		result.FinalX = transform.X
 		result.FinalY = transform.Y
+		return result
+	}
+
+	// Check tile collisions first
+	movement, hasMovement := s.movementStorage.Get(entityHandle)
+	isSwimming := hasMovement && movement.Mode == components.Swim
+	tileCollisionX, tileCollisionY, hasTileCollision := s.checkTileCollision(
+		transform.X, transform.Y, dx, dy, chunk, isSwimming,
+	)
+	if hasTileCollision {
+		// Stop at tile collision point
+		result.FinalX = tileCollisionX
+		result.FinalY = tileCollisionY
+		result.HasCollision = true
 		return result
 	}
 
@@ -398,6 +414,105 @@ func (s *CollisionSystem) sweepCollision(
 		}
 	}
 	return result
+}
+
+// checkTileCollision checks if movement path crosses impassable tiles
+// Returns collision point (x, y) and whether collision occurred
+func (s *CollisionSystem) checkTileCollision(
+	startX, startY, dx, dy float64,
+	chunk *core.Chunk,
+	isSwimming bool,
+) (float64, float64, bool) {
+	tileSize := float64(utils.CoordPerTile)
+	movementLength := math.Sqrt(dx*dx + dy*dy)
+
+	// If movement is less than one tile, check only destination
+	if movementLength <= tileSize {
+		endX := startX + dx
+		endY := startY + dy
+		if !s.isTilePassableAt(endX, endY, chunk, isSwimming) {
+			return startX, startY, true
+		}
+		return endX, endY, false
+	}
+
+	// Split movement into tile-sized steps
+	numSteps := int(math.Ceil(movementLength / tileSize))
+	stepX := dx / float64(numSteps)
+	stepY := dy / float64(numSteps)
+
+	currentX := startX
+	currentY := startY
+
+	for i := 1; i <= numSteps; i++ {
+		nextX := startX + stepX*float64(i)
+		nextY := startY + stepY*float64(i)
+
+		if !s.isTilePassableAt(nextX, nextY, chunk, isSwimming) {
+			// Return last valid position
+			return currentX, currentY, true
+		}
+
+		currentX = nextX
+		currentY = nextY
+	}
+
+	return currentX, currentY, false
+}
+
+// isTilePassableAt checks if a tile at world coordinates is passable
+func (s *CollisionSystem) isTilePassableAt(
+	worldX, worldY float64,
+	chunk *core.Chunk,
+	isSwimming bool,
+) bool {
+	// Convert world coordinates to tile coordinates
+	tileSize := float64(utils.CoordPerTile)
+	tileX := int(math.Floor(worldX / tileSize))
+	tileY := int(math.Floor(worldY / tileSize))
+
+	// Convert to chunk-local coordinates
+	chunkWorldX := chunk.Coord.X * s.chunkSize
+	chunkWorldY := chunk.Coord.Y * s.chunkSize
+	localTileX := tileX - chunkWorldX
+	localTileY := tileY - chunkWorldY
+
+	// Check if coordinates are within current chunk
+	if localTileX < 0 || localTileX >= s.chunkSize || localTileY < 0 || localTileY >= s.chunkSize {
+		// Need to check neighboring chunk
+		targetChunkX := chunkWorldX
+		targetChunkY := chunkWorldY
+
+		if localTileX < 0 {
+			targetChunkX--
+			localTileX += s.chunkSize
+		} else if localTileX >= s.chunkSize {
+			targetChunkX++
+			localTileX -= s.chunkSize
+		}
+
+		if localTileY < 0 {
+			targetChunkY--
+			localTileY += s.chunkSize
+		} else if localTileY >= s.chunkSize {
+			targetChunkY++
+			localTileY -= s.chunkSize
+		}
+
+		neighborCoord := types.ChunkCoord{X: targetChunkX, Y: targetChunkY}
+		neighborChunk := s.chunkManager.GetChunk(neighborCoord)
+		if neighborChunk == nil {
+			// No chunk loaded - consider impassable
+			return false
+		}
+		chunk = neighborChunk
+	}
+
+	// Check tile passability based on movement mode
+	if isSwimming {
+		return chunk.IsTileSwimmable(localTileX, localTileY, s.chunkSize)
+	}
+	return chunk.IsTilePassable(localTileX, localTileY, s.chunkSize)
 }
 
 // sweptAABB performs swept AABB collision using Minkowski difference
