@@ -19,8 +19,6 @@ import (
 )
 
 func main() {
-	runtime.SetBlockProfileRate(10000)
-	runtime.SetMutexProfileFraction(1)
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
@@ -47,8 +45,13 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// Register pprof endpoints
-	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
+	// Register pprof endpoints if enabled
+	if cfg.Game.PprofEnabled {
+		mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
+		runtime.SetBlockProfileRate(10000)
+		runtime.SetMutexProfileFraction(1)
+		logger.Info("pprof enabled")
+	}
 
 	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger, &cfg.Game)
 	httpHandler.RegisterRoutes(mux)
