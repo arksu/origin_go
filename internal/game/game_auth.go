@@ -241,10 +241,23 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	)
 }
 
+func (g *Game) isValidSpawnPos(x, y int) bool {
+	chunkSize := utils.ChunkSize * utils.CoordPerTile
+	marginPixels := g.cfg.Game.WorldMarginTiles * utils.CoordPerTile
+	minX := g.cfg.Game.WorldMinXChunks*chunkSize + marginPixels
+	maxX := (g.cfg.Game.WorldMinXChunks+g.cfg.Game.WorldWidthChunks)*chunkSize - marginPixels
+	minY := g.cfg.Game.WorldMinYChunks*chunkSize + marginPixels
+	maxY := (g.cfg.Game.WorldMinYChunks+g.cfg.Game.WorldHeightChunks)*chunkSize - marginPixels
+
+	return x >= minX && x < maxX && y >= minY && y < maxY
+}
+
 func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 	candidates := make([]spawnPos, 0, 1+g.cfg.Game.NearSpawnTries+g.cfg.Game.RandomSpawnTries)
 
-	candidates = append(candidates, spawnPos{X: dbX, Y: dbY})
+	if g.isValidSpawnPos(dbX, dbY) {
+		candidates = append(candidates, spawnPos{X: dbX, Y: dbY})
+	}
 
 	radius := g.cfg.Game.NearSpawnRadius
 	visited := make(map[spawnPos]struct{})
@@ -256,19 +269,31 @@ func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 		pos := spawnPos{X: dbX + dx, Y: dbY + dy}
 		if _, exists := visited[pos]; !exists {
 			visited[pos] = struct{}{}
-			candidates = append(candidates, pos)
+			if g.isValidSpawnPos(pos.X, pos.Y) {
+				candidates = append(candidates, pos)
+			}
 		}
 	}
 
 	chunkSize := utils.ChunkSize * utils.CoordPerTile
-	worldWidth := chunkSize * g.cfg.Game.WorldWidthChunks
-	worldHeight := chunkSize * g.cfg.Game.WorldHeightChunks
+	marginPixels := g.cfg.Game.WorldMarginTiles * utils.CoordPerTile
 	for i := 0; i < g.cfg.Game.RandomSpawnTries; i++ {
-		pos := spawnPos{
-			X: g.cfg.Game.WorldMinXChunks*chunkSize + rand.Intn(worldWidth),
-			Y: g.cfg.Game.WorldMinYChunks*chunkSize + rand.Intn(worldHeight),
+		minX := g.cfg.Game.WorldMinXChunks*chunkSize + marginPixels
+		maxX := (g.cfg.Game.WorldMinXChunks+g.cfg.Game.WorldWidthChunks)*chunkSize - marginPixels
+		minY := g.cfg.Game.WorldMinYChunks*chunkSize + marginPixels
+		maxY := (g.cfg.Game.WorldMinYChunks+g.cfg.Game.WorldHeightChunks)*chunkSize - marginPixels
+
+		if maxX <= minX || maxY <= minY {
+			break
 		}
-		candidates = append(candidates, pos)
+
+		pos := spawnPos{
+			X: minX + rand.Intn(maxX-minX),
+			Y: minY + rand.Intn(maxY-minY),
+		}
+		if g.isValidSpawnPos(pos.X, pos.Y) {
+			candidates = append(candidates, pos)
+		}
 	}
 
 	return candidates

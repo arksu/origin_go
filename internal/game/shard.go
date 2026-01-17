@@ -25,8 +25,7 @@ type ShardManager struct {
 	objectFactory   *ObjectFactory
 	logger          *zap.Logger
 
-	shards   map[int]*Shard
-	shardsMu sync.RWMutex
+	shards map[int]*Shard
 
 	workerPool *WorkerPool
 	eventBus   *eventbus.EventBus
@@ -65,18 +64,14 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 }
 
 func (sm *ShardManager) GetShard(layer int) *Shard {
-	sm.shardsMu.RLock()
-	defer sm.shardsMu.RUnlock()
 	return sm.shards[layer]
 }
 
 func (sm *ShardManager) Update(dt float64) {
-	sm.shardsMu.RLock()
 	shards := make([]*Shard, 0, len(sm.shards))
 	for _, s := range sm.shards {
 		shards = append(shards, s)
 	}
-	sm.shardsMu.RUnlock()
 
 	var wg sync.WaitGroup
 	for _, shard := range shards {
@@ -91,9 +86,6 @@ func (sm *ShardManager) Update(dt float64) {
 }
 
 func (sm *ShardManager) Stop() {
-	sm.shardsMu.Lock()
-	defer sm.shardsMu.Unlock()
-
 	for _, s := range sm.shards {
 		s.Stop()
 	}
@@ -145,9 +137,15 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	s.chunkManager = NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, eb, logger)
 
+	chunkSize := utils.ChunkSize * utils.CoordPerTile
+	worldMinX := float64(cfg.Game.WorldMinXChunks * chunkSize)
+	worldMaxX := float64((cfg.Game.WorldMinXChunks + cfg.Game.WorldWidthChunks) * chunkSize)
+	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
+	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
+
 	s.world.AddSystem(systems.NewResetSystem(&s.movedEntities, logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, &s.movedEntities, logger))
-	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, &s.movedEntities, logger))
+	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, &s.movedEntities, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, &s.movedEntities, s.eventBus, logger))
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, &s.movedEntities, logger))
 

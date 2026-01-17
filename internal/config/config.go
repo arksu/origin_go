@@ -56,6 +56,7 @@ type GameConfig struct {
 	WorldMinYChunks          int           `mapstructure:"world_min_y_chunks"`
 	WorldWidthChunks         int           `mapstructure:"world_width_chunks"`
 	WorldHeightChunks        int           `mapstructure:"world_height_chunks"`
+	WorldMarginTiles         int           `mapstructure:"world_margin_tiles"`
 	SendChannelBuffer        int           `mapstructure:"send_channel_buffer"`
 	PprofEnabled             bool          `mapstructure:"pprof_enabled"`
 }
@@ -147,6 +148,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.world_min_y_chunks", 0)
 	v.SetDefault("game.world_width_chunks", 50)
 	v.SetDefault("game.world_height_chunks", 50)
+	v.SetDefault("game.world_margin_tiles", 50)
 	v.SetDefault("game.send_channel_buffer", 132000)
 	v.SetDefault("game.pprof_enabled", false)
 
