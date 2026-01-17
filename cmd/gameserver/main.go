@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	_ "net/http/pprof"
+
 	"go.uber.org/zap"
 
 	"origin/internal/config"
@@ -41,6 +43,10 @@ func main() {
 	g := game.NewGame(cfg, db, objectFactory, logger)
 
 	mux := http.NewServeMux()
+
+	// Register pprof handlers
+	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
+
 	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger, &cfg.Game)
 	httpHandler.RegisterRoutes(mux)
 
