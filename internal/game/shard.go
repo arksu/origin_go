@@ -136,9 +136,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities)),
 		eventBus:        eb,
 		movedEntities: systems.MovedEntities{
-			Handles: make([]types.Handle, 0, 256),
-			IntentX: make([]float64, 0, 256),
-			IntentY: make([]float64, 0, 256),
+			Handles: make([]types.Handle, 2048),
+			IntentX: make([]float64, 2048),
+			IntentY: make([]float64, 2048),
+			Count:   0,
 		},
 	}
 

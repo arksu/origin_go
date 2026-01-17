@@ -52,7 +52,8 @@ func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, 
 
 func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 	// Process entities that moved this frame (from movedEntities buffer)
-	for _, h := range s.movedEntities.Handles {
+	for i := 0; i < s.movedEntities.Count; i++ {
+		h := s.movedEntities.Handles[i]
 		if !w.Alive(h) {
 			continue
 		}
