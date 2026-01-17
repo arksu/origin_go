@@ -97,24 +97,12 @@ func (c *Chunk) GetHandles() []types.Handle {
 	return c.spatial.GetAllHandles()
 }
 
-func (c *Chunk) GetDynamicHandles() []types.Handle {
-	return c.spatial.GetDynamicHandles()
-}
-
-func (c *Chunk) GetStaticHandles() []types.Handle {
-	return c.spatial.GetStaticHandles()
-}
-
 func (c *Chunk) ClearHandles() {
-	c.mu.Lock()
 	c.spatial.ClearDynamic()
 	c.spatial.ClearStatic()
-	c.mu.Unlock()
 }
 
 func (c *Chunk) Spatial() *SpatialHashGrid {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.spatial
 }
 

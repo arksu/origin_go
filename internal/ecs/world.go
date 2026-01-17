@@ -2,7 +2,6 @@ package ecs
 
 import (
 	"sort"
-	"sync"
 
 	"origin/internal/types"
 )
@@ -39,10 +38,6 @@ type World struct {
 
 	// Delta time for current tick
 	DeltaTime float64
-
-	// Optional: mutex for external command queue synchronization
-	// Only used if World is accessed from multiple threads (not recommended)
-	mu sync.RWMutex
 }
 
 // NewWorld creates a new ECS world with default capacity
