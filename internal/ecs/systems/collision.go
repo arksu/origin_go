@@ -25,13 +25,21 @@ type CollisionSystem struct {
 	colliderStorage  *ecs.ComponentStorage[components.Collider]
 	transformStorage *ecs.ComponentStorage[components.Transform]
 	movementStorage  *ecs.ComponentStorage[components.Movement]
+	// World boundary configuration
+	worldMinX   float64
+	worldMaxX   float64
+	worldMinY   float64
+	worldMaxY   float64
+	marginTiles int
 }
 
-func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger) *CollisionSystem {
+func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger, worldMinX, worldMaxX, worldMinY, worldMaxY float64, marginTiles int) *CollisionSystem {
 	// Cache component storages for hot path optimization
 	colliderStorage := ecs.GetOrCreateStorage[components.Collider](world)
 	transformStorage := ecs.GetOrCreateStorage[components.Transform](world)
 	movementStorage := ecs.GetOrCreateStorage[components.Movement](world)
+
+	marginPixels := float64(marginTiles) * float64(utils.CoordPerTile)
 
 	return &CollisionSystem{
 		BaseSystem:       ecs.NewBaseSystem("CollisionSystem", 200),
@@ -42,6 +50,11 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedE
 		colliderStorage:  colliderStorage,
 		transformStorage: transformStorage,
 		movementStorage:  movementStorage,
+		worldMinX:        worldMinX + marginPixels,
+		worldMaxX:        worldMaxX - marginPixels,
+		worldMinY:        worldMinY + marginPixels,
+		worldMaxY:        worldMaxY - marginPixels,
+		marginTiles:      marginTiles,
 	}
 }
 
@@ -341,6 +354,10 @@ func (s *CollisionSystem) sweepCollision(
 
 	result.FinalX = currentX
 	result.FinalY = currentY
+
+	// Clamp to world boundaries with margin
+	result.FinalX = math.Max(s.worldMinX, math.Min(s.worldMaxX, result.FinalX))
+	result.FinalY = math.Max(s.worldMinY, math.Min(s.worldMaxY, result.FinalY))
 
 	// Detect oscillation: if object didn't move in intended direction
 	if result.HasCollision && originalSpeed > 0.1 {
