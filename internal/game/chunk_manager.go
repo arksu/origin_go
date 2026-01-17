@@ -177,27 +177,7 @@ func NewChunkManager(
 		go cm.saveWorker()
 	}
 
-	cm.subscribeToEvents()
-
 	return cm
-}
-
-func (cm *ChunkManager) subscribeToEvents() {
-	cm.eventBus.SubscribeAsync(eventbus.TopicGameplayMovementMove, eventbus.PriorityMedium, func(ctx context.Context, e eventbus.Event) error {
-		if move, ok := e.(*eventbus.MovementEvent); ok {
-			cm.handleMovement(move)
-		}
-		return nil
-	})
-}
-
-func (cm *ChunkManager) handleMovement(move *eventbus.MovementEvent) {
-	oldChunk := types.WorldToChunkCoord(int(move.FromX), int(move.FromY), utils.ChunkSize, utils.CoordPerTile)
-	newChunk := types.WorldToChunkCoord(int(move.ToX), int(move.ToY), utils.ChunkSize, utils.CoordPerTile)
-
-	if oldChunk != newChunk {
-		cm.UpdateEntityPosition(move.EntityID, newChunk)
-	}
 }
 
 // RegisterEntity registers an entity for AOI tracking
