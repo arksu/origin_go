@@ -72,7 +72,9 @@ func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		s.updateObserverVisibility(w, visState, observerHandle, &observerVis, now)
+		visState.Mu.Lock()
 		visState.VisibleByObserver[observerHandle] = observerVis
+		visState.Mu.Unlock()
 	}
 }
 
@@ -270,6 +272,9 @@ func (s *VisionSystem) addToObserversByTarget(
 	visState *ecs.VisibilityState,
 	targetHandle, observerHandle types.Handle,
 ) {
+	visState.Mu.Lock()
+	defer visState.Mu.Unlock()
+
 	if visState.ObserversByVisibleTarget == nil {
 		visState.ObserversByVisibleTarget = make(map[types.Handle]map[types.Handle]struct{})
 	}
@@ -285,6 +290,9 @@ func (s *VisionSystem) removeFromObserversByTarget(
 	visState *ecs.VisibilityState,
 	targetHandle, observerHandle types.Handle,
 ) {
+	visState.Mu.Lock()
+	defer visState.Mu.Unlock()
+
 	if visState.ObserversByVisibleTarget == nil {
 		return
 	}
