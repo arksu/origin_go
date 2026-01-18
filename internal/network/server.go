@@ -2,9 +2,12 @@ package network
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
+	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -80,6 +83,7 @@ func (s *Server) Start(addr string, mux *http.ServeMux) error {
 		mux = http.NewServeMux()
 	}
 	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/freemem", s.handleFreeMem)
 
 	s.httpServer = &http.Server{
 		Addr:    addr,
@@ -161,6 +165,39 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.wg.Add(2)
 	go client.readLoop()
 	go client.writeLoop()
+}
+
+func (s *Server) handleFreeMem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.logger.Info("Freeing memory")
+
+	// Force garbage collection
+	runtime.GC()
+
+	// Force return memory to OS
+	debug.FreeOSMemory()
+
+	// Get memory stats after cleanup
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]interface{}{
+		"status": "ok",
+		"memory": map[string]interface{}{
+			"alloc_mb":       m.Alloc / 1024 / 1024,
+			"total_alloc_mb": m.TotalAlloc / 1024 / 1024,
+			"sys_mb":         m.Sys / 1024 / 1024,
+			"num_gc":         m.NumGC,
+		},
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
 
 func (c *Client) readLoop() {

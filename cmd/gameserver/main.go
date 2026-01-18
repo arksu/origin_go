@@ -22,6 +22,8 @@ import (
 )
 
 func main() {
+	//debug.SetGCPercent(40)
+	//debug.SetMemoryLimit(6 * 1024 * 1024 * 1024)
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
