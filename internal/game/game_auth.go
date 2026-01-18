@@ -81,6 +81,9 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	// Set character as online and update client association
 	c.CharacterID = types.EntityID(character.ID)
 	c.Layer = character.Layer
+	// Client is not yet in world during spawn attempts
+	c.InWorld = false
+
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
 	g.sendAuthResult(c, sequence, true, "")
@@ -234,10 +237,6 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	shard.clients[playerEntityID] = c
 	shard.clientsMu.Unlock()
 
-	// Update client info
-	c.CharacterID = playerEntityID
-	c.Layer = character.Layer
-
 	// Final check: ensure spawn context hasn't timed out before sending packets
 	select {
 	case <-ctx.Done():
@@ -252,7 +251,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	default:
 	}
 
+	// After successful spawn: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
+	c.StreamEpoch++
+	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID)
 	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
+	c.InWorld = true
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -370,6 +373,7 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				Name:         character.Name,
 				CoordPerTile: _const.CoordPerTile,
 				ChunkSize:    _const.ChunkSize,
+				StreamEpoch:  c.StreamEpoch,
 				Inventory: &netproto.Inventory{
 					Width:  10,                          // TODO: get from character data
 					Height: 5,                           // TODO: get from character data

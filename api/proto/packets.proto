@@ -276,6 +276,7 @@ message S2C_PlayerEnterWorld {
   Inventory inventory = 6;
   Paperdoll paperdoll = 7;
   optional uint64 dragging_entity_id = 8; // если тащим что-то
+  uint32 stream_epoch = 9; // для защиты от гонок состояний
 }
 
 message S2C_ObjectSpawn {

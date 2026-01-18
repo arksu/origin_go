@@ -43,18 +43,20 @@ type ChunkStats struct {
 
 // EntityAOI represents Area of Interest for a single entity
 type EntityAOI struct {
-	EntityID      types.EntityID
-	CenterChunk   types.ChunkCoord
-	ActiveChunks  map[types.ChunkCoord]struct{}
-	PreloadChunks map[types.ChunkCoord]struct{}
+	EntityID            types.EntityID
+	CenterChunk         types.ChunkCoord
+	ActiveChunks        map[types.ChunkCoord]struct{}
+	PreloadChunks       map[types.ChunkCoord]struct{}
+	SendChunkLoadEvents bool
 }
 
-func newEntityAOI(entityID types.EntityID, center types.ChunkCoord) *EntityAOI {
+func newEntityAOI(entityID types.EntityID, center types.ChunkCoord, sendChunkLoadEvents bool) *EntityAOI {
 	return &EntityAOI{
-		EntityID:      entityID,
-		CenterChunk:   center,
-		ActiveChunks:  make(map[types.ChunkCoord]struct{}),
-		PreloadChunks: make(map[types.ChunkCoord]struct{}),
+		EntityID:            entityID,
+		CenterChunk:         center,
+		ActiveChunks:        make(map[types.ChunkCoord]struct{}),
+		PreloadChunks:       make(map[types.ChunkCoord]struct{}),
+		SendChunkLoadEvents: sendChunkLoadEvents,
 	}
 }
 
@@ -182,7 +184,7 @@ func NewChunkManager(
 }
 
 // RegisterEntity registers an entity for AOI tracking
-func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY int) {
+func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY int, sendChunkLoadEvents bool) {
 	center := types.WorldToChunkCoord(worldX, worldY, _const.ChunkSize, _const.CoordPerTile)
 
 	cm.aoiMu.Lock()
@@ -190,11 +192,53 @@ func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY i
 		cm.aoiMu.Unlock()
 		return
 	}
-	aoi := newEntityAOI(entityID, center)
+	aoi := newEntityAOI(entityID, center, sendChunkLoadEvents)
 	cm.entityAOIs[entityID] = aoi
 	cm.aoiMu.Unlock()
 
 	cm.updateEntityAOI(entityID, center)
+}
+
+// EnableChunkLoadEvents enables chunk load events for an entity
+func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID) {
+	cm.aoiMu.Lock()
+	defer cm.aoiMu.Unlock()
+
+	aoi, exists := cm.entityAOIs[entityID]
+	if !exists {
+		return
+	}
+
+	// Enable chunk events and trigger initial load events
+	aoi.SendChunkLoadEvents = true
+
+	// Get current active chunks and send load events for them
+	center := aoi.CenterChunk
+	activeRadius := cm.cfg.Game.PlayerActiveChunkRadius
+
+	// Get client's stream epoch for event validation
+	var epoch uint32
+	if client, exists := cm.shard.clients[entityID]; exists {
+		epoch = client.StreamEpoch
+	}
+
+	// Send chunk load events for all currently active chunks
+	for dy := -activeRadius; dy <= activeRadius; dy++ {
+		for dx := -activeRadius; dx <= activeRadius; dx++ {
+			coord := types.ChunkCoord{X: center.X + dx, Y: center.Y + dy}
+			if cm.isWithinWorldBounds(coord) {
+				if _, isActive := aoi.ActiveChunks[coord]; isActive {
+					// Get chunk data to include tiles in the event
+					chunk := cm.GetChunk(coord)
+					var tiles []byte
+					if chunk != nil {
+						tiles = chunk.Tiles
+					}
+					cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch), eventbus.PriorityMedium)
+				}
+			}
+		}
+	}
 }
 
 // UnregisterEntity removes an entity from AOI tracking
@@ -332,20 +376,28 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 
 	cm.recalculateChunkStates()
 
-	// Publish chunk events for network layer
-	// Send deactivate first to free client memory, then activate
-	for _, coord := range toDeactivate {
-		cm.eventBus.PublishAsync(ecs.NewChunkUnloadEvent(entityID, coord.X, coord.Y, cm.layer), eventbus.PriorityMedium)
+	// Get client's stream epoch for event validation
+	var epoch uint32
+	if client, exists := cm.shard.clients[entityID]; exists {
+		epoch = client.StreamEpoch
 	}
 
-	for _, coord := range toActivate {
-		// Get chunk data to include tiles in the event
-		chunk := cm.GetChunk(coord)
-		var tiles []byte
-		if chunk != nil {
-			tiles = chunk.Tiles
+	// Publish chunk events for network layer only if enabled
+	// Send deactivate first to free client memory, then activate
+	if aoi.SendChunkLoadEvents {
+		for _, coord := range toDeactivate {
+			cm.eventBus.PublishAsync(ecs.NewChunkUnloadEvent(entityID, coord.X, coord.Y, cm.layer, epoch), eventbus.PriorityMedium)
 		}
-		cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles), eventbus.PriorityMedium)
+
+		for _, coord := range toActivate {
+			// Get chunk data to include tiles in the event
+			chunk := cm.GetChunk(coord)
+			var tiles []byte
+			if chunk != nil {
+				tiles = chunk.Tiles
+			}
+			cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch), eventbus.PriorityMedium)
+		}
 	}
 }
 

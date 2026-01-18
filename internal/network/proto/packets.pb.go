@@ -1847,6 +1847,7 @@ type S2C_PlayerEnterWorld struct {
 	Inventory        *Inventory `protobuf:"bytes,6,opt,name=inventory,proto3" json:"inventory,omitempty"`
 	Paperdoll        *Paperdoll `protobuf:"bytes,7,opt,name=paperdoll,proto3" json:"paperdoll,omitempty"`
 	DraggingEntityId *uint64    `protobuf:"varint,8,opt,name=dragging_entity_id,json=draggingEntityId,proto3,oneof" json:"dragging_entity_id,omitempty"` // если тащим что-то
+	StreamEpoch      uint32     `protobuf:"varint,9,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"`                        // для защиты от гонок состояний
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1926,6 +1927,13 @@ func (x *S2C_PlayerEnterWorld) GetPaperdoll() *Paperdoll {
 func (x *S2C_PlayerEnterWorld) GetDraggingEntityId() uint64 {
 	if x != nil && x.DraggingEntityId != nil {
 		return *x.DraggingEntityId
+	}
+	return 0
+}
+
+func (x *S2C_PlayerEnterWorld) GetStreamEpoch() uint32 {
+	if x != nil {
+		return x.StreamEpoch
 	}
 	return 0
 }
@@ -2616,7 +2624,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"V\n" +
 	"\bS2C_Pong\x12$\n" +
 	"\x0eclient_time_ms\x18\x01 \x01(\x03R\fclientTimeMs\x12$\n" +
-	"\x0eserver_time_ms\x18\x02 \x01(\x03R\fserverTimeMs\"\xb6\x02\n" +
+	"\x0eserver_time_ms\x18\x02 \x01(\x03R\fserverTimeMs\"\xd9\x02\n" +
 	"\x14S2C_PlayerEnterWorld\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12$\n" +
@@ -2625,7 +2633,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"chunk_size\x18\x04 \x01(\rR\tchunkSize\x12.\n" +
 	"\tinventory\x18\x06 \x01(\v2\x10.proto.InventoryR\tinventory\x12.\n" +
 	"\tpaperdoll\x18\a \x01(\v2\x10.proto.PaperdollR\tpaperdoll\x121\n" +
-	"\x12dragging_entity_id\x18\b \x01(\x04H\x00R\x10draggingEntityId\x88\x01\x01B\x15\n" +
+	"\x12dragging_entity_id\x18\b \x01(\x04H\x00R\x10draggingEntityId\x88\x01\x01\x12!\n" +
+	"\fstream_epoch\x18\t \x01(\rR\vstreamEpochB\x15\n" +
 	"\x13_dragging_entity_id\"\x82\x01\n" +
 	"\x0fS2C_ObjectSpawn\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x1f\n" +

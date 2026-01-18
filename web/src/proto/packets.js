@@ -6428,6 +6428,7 @@ export const proto = $root.proto = (() => {
          * @property {proto.IInventory|null} [inventory] S2C_PlayerEnterWorld inventory
          * @property {proto.IPaperdoll|null} [paperdoll] S2C_PlayerEnterWorld paperdoll
          * @property {number|Long|null} [draggingEntityId] S2C_PlayerEnterWorld draggingEntityId
+         * @property {number|null} [streamEpoch] S2C_PlayerEnterWorld streamEpoch
          */
 
         /**
@@ -6501,6 +6502,14 @@ export const proto = $root.proto = (() => {
          */
         S2C_PlayerEnterWorld.prototype.draggingEntityId = null;
 
+        /**
+         * S2C_PlayerEnterWorld streamEpoch.
+         * @member {number} streamEpoch
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.streamEpoch = 0;
+
         // OneOf field names bound to virtual getters and setters
         let $oneOfFields;
 
@@ -6548,6 +6557,8 @@ export const proto = $root.proto = (() => {
                 $root.proto.Paperdoll.encode(message.paperdoll, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
             if (message.draggingEntityId != null && Object.hasOwnProperty.call(message, "draggingEntityId"))
                 writer.uint32(/* id 8, wireType 0 =*/64).uint64(message.draggingEntityId);
+            if (message.streamEpoch != null && Object.hasOwnProperty.call(message, "streamEpoch"))
+                writer.uint32(/* id 9, wireType 0 =*/72).uint32(message.streamEpoch);
             return writer;
         };
 
@@ -6610,6 +6621,10 @@ export const proto = $root.proto = (() => {
                     }
                 case 8: {
                         message.draggingEntityId = reader.uint64();
+                        break;
+                    }
+                case 9: {
+                        message.streamEpoch = reader.uint32();
                         break;
                     }
                 default:
@@ -6675,6 +6690,9 @@ export const proto = $root.proto = (() => {
                 if (!$util.isInteger(message.draggingEntityId) && !(message.draggingEntityId && $util.isInteger(message.draggingEntityId.low) && $util.isInteger(message.draggingEntityId.high)))
                     return "draggingEntityId: integer|Long expected";
             }
+            if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
+                if (!$util.isInteger(message.streamEpoch))
+                    return "streamEpoch: integer expected";
             return null;
         };
 
@@ -6724,6 +6742,8 @@ export const proto = $root.proto = (() => {
                     message.draggingEntityId = object.draggingEntityId;
                 else if (typeof object.draggingEntityId === "object")
                     message.draggingEntityId = new $util.LongBits(object.draggingEntityId.low >>> 0, object.draggingEntityId.high >>> 0).toNumber(true);
+            if (object.streamEpoch != null)
+                message.streamEpoch = object.streamEpoch >>> 0;
             return message;
         };
 
@@ -6751,6 +6771,7 @@ export const proto = $root.proto = (() => {
                 object.chunkSize = 0;
                 object.inventory = null;
                 object.paperdoll = null;
+                object.streamEpoch = 0;
             }
             if (message.entityId != null && message.hasOwnProperty("entityId"))
                 if (typeof message.entityId === "number")
@@ -6775,6 +6796,8 @@ export const proto = $root.proto = (() => {
                 if (options.oneofs)
                     object._draggingEntityId = "draggingEntityId";
             }
+            if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
+                object.streamEpoch = message.streamEpoch;
             return object;
         };
 

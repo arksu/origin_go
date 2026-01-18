@@ -22,7 +22,7 @@ const gameStore = useGameStore()
 const canvas = ref(null)
 const ctx = ref(null)
 
-const TILE_SIZE_PIXELS = 20
+const TILE_SIZE_PIXELS = 4
 const CHUNK_SIZE = 128
 const CHUNK_PIXEL_SIZE = CHUNK_SIZE * TILE_SIZE_PIXELS
 const COORD_PER_TILE = 12
