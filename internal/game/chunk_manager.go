@@ -2,7 +2,7 @@ package game
 
 import (
 	"context"
-	"origin/internal/const"
+	_const "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
@@ -512,11 +512,6 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
 
 	cm.completeFuture(coord)
-
-	cm.eventBus.PublishAsync(
-		ecs.NewChunkLoadEvent(coord.X, coord.Y, cm.layer),
-		eventbus.PriorityLow,
-	)
 }
 
 func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
@@ -556,11 +551,6 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	cm.chunksMu.Unlock()
 
 	atomic.AddInt64(&cm.stats.InactiveCount, -1)
-
-	cm.eventBus.PublishAsync(
-		ecs.NewChunkUnloadEvent(coord.X, coord.Y, cm.layer),
-		eventbus.PriorityLow,
-	)
 }
 
 // isWithinWorldBounds checks if a chunk coordinate is within world boundaries

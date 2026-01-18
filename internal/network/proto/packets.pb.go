@@ -1837,10 +1837,11 @@ func (x *S2C_Pong) GetServerTimeMs() int64 {
 
 // when all is ready to player enter, than send chunks, entities, etc
 type S2C_PlayerEnterWorld struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	EntityId uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Movement *EntityMovement        `protobuf:"bytes,3,opt,name=movement,proto3" json:"movement,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	EntityId     uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	Name         string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	CoordPerTile uint32                 `protobuf:"varint,3,opt,name=coord_per_tile,json=coordPerTile,proto3" json:"coord_per_tile,omitempty"`
+	ChunkSize    uint32                 `protobuf:"varint,4,opt,name=chunk_size,json=chunkSize,proto3" json:"chunk_size,omitempty"`
 	// EntityStats stats = 4;
 	// EntitySkills skills = 5;
 	Inventory        *Inventory `protobuf:"bytes,6,opt,name=inventory,proto3" json:"inventory,omitempty"`
@@ -1894,11 +1895,18 @@ func (x *S2C_PlayerEnterWorld) GetName() string {
 	return ""
 }
 
-func (x *S2C_PlayerEnterWorld) GetMovement() *EntityMovement {
+func (x *S2C_PlayerEnterWorld) GetCoordPerTile() uint32 {
 	if x != nil {
-		return x.Movement
+		return x.CoordPerTile
 	}
-	return nil
+	return 0
+}
+
+func (x *S2C_PlayerEnterWorld) GetChunkSize() uint32 {
+	if x != nil {
+		return x.ChunkSize
+	}
+	return 0
 }
 
 func (x *S2C_PlayerEnterWorld) GetInventory() *Inventory {
@@ -2123,27 +2131,27 @@ func (x *S2C_PlayerLeaveWorld) GetEntityId() uint64 {
 	return 0
 }
 
-type S2C_LoadChunk struct {
+type S2C_ChunkLoad struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Chunk         *ChunkData             `protobuf:"bytes,1,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *S2C_LoadChunk) Reset() {
-	*x = S2C_LoadChunk{}
+func (x *S2C_ChunkLoad) Reset() {
+	*x = S2C_ChunkLoad{}
 	mi := &file_api_proto_packets_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *S2C_LoadChunk) String() string {
+func (x *S2C_ChunkLoad) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*S2C_LoadChunk) ProtoMessage() {}
+func (*S2C_ChunkLoad) ProtoMessage() {}
 
-func (x *S2C_LoadChunk) ProtoReflect() protoreflect.Message {
+func (x *S2C_ChunkLoad) ProtoReflect() protoreflect.Message {
 	mi := &file_api_proto_packets_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2155,39 +2163,39 @@ func (x *S2C_LoadChunk) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use S2C_LoadChunk.ProtoReflect.Descriptor instead.
-func (*S2C_LoadChunk) Descriptor() ([]byte, []int) {
+// Deprecated: Use S2C_ChunkLoad.ProtoReflect.Descriptor instead.
+func (*S2C_ChunkLoad) Descriptor() ([]byte, []int) {
 	return file_api_proto_packets_proto_rawDescGZIP(), []int{29}
 }
 
-func (x *S2C_LoadChunk) GetChunk() *ChunkData {
+func (x *S2C_ChunkLoad) GetChunk() *ChunkData {
 	if x != nil {
 		return x.Chunk
 	}
 	return nil
 }
 
-type S2C_UnloadChunk struct {
+type S2C_ChunkUnload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Coord         *ChunkCoord            `protobuf:"bytes,1,opt,name=coord,proto3" json:"coord,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *S2C_UnloadChunk) Reset() {
-	*x = S2C_UnloadChunk{}
+func (x *S2C_ChunkUnload) Reset() {
+	*x = S2C_ChunkUnload{}
 	mi := &file_api_proto_packets_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *S2C_UnloadChunk) String() string {
+func (x *S2C_ChunkUnload) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*S2C_UnloadChunk) ProtoMessage() {}
+func (*S2C_ChunkUnload) ProtoMessage() {}
 
-func (x *S2C_UnloadChunk) ProtoReflect() protoreflect.Message {
+func (x *S2C_ChunkUnload) ProtoReflect() protoreflect.Message {
 	mi := &file_api_proto_packets_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2199,12 +2207,12 @@ func (x *S2C_UnloadChunk) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use S2C_UnloadChunk.ProtoReflect.Descriptor instead.
-func (*S2C_UnloadChunk) Descriptor() ([]byte, []int) {
+// Deprecated: Use S2C_ChunkUnload.ProtoReflect.Descriptor instead.
+func (*S2C_ChunkUnload) Descriptor() ([]byte, []int) {
 	return file_api_proto_packets_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *S2C_UnloadChunk) GetCoord() *ChunkCoord {
+func (x *S2C_ChunkUnload) GetCoord() *ChunkCoord {
 	if x != nil {
 		return x.Coord
 	}
@@ -2271,8 +2279,8 @@ type ServerMessage struct {
 	//
 	//	*ServerMessage_AuthResult
 	//	*ServerMessage_Pong
-	//	*ServerMessage_LoadChunk
-	//	*ServerMessage_UnloadChunk
+	//	*ServerMessage_ChunkLoad
+	//	*ServerMessage_ChunkUnload
 	//	*ServerMessage_PlayerEnterWorld
 	//	*ServerMessage_PlayerLeaveWorld
 	//	*ServerMessage_ObjectSpawn
@@ -2346,19 +2354,19 @@ func (x *ServerMessage) GetPong() *S2C_Pong {
 	return nil
 }
 
-func (x *ServerMessage) GetLoadChunk() *S2C_LoadChunk {
+func (x *ServerMessage) GetChunkLoad() *S2C_ChunkLoad {
 	if x != nil {
-		if x, ok := x.Payload.(*ServerMessage_LoadChunk); ok {
-			return x.LoadChunk
+		if x, ok := x.Payload.(*ServerMessage_ChunkLoad); ok {
+			return x.ChunkLoad
 		}
 	}
 	return nil
 }
 
-func (x *ServerMessage) GetUnloadChunk() *S2C_UnloadChunk {
+func (x *ServerMessage) GetChunkUnload() *S2C_ChunkUnload {
 	if x != nil {
-		if x, ok := x.Payload.(*ServerMessage_UnloadChunk); ok {
-			return x.UnloadChunk
+		if x, ok := x.Payload.(*ServerMessage_ChunkUnload); ok {
+			return x.ChunkUnload
 		}
 	}
 	return nil
@@ -2430,12 +2438,12 @@ type ServerMessage_Pong struct {
 	Pong *S2C_Pong `protobuf:"bytes,11,opt,name=pong,proto3,oneof"`
 }
 
-type ServerMessage_LoadChunk struct {
-	LoadChunk *S2C_LoadChunk `protobuf:"bytes,12,opt,name=load_chunk,json=loadChunk,proto3,oneof"`
+type ServerMessage_ChunkLoad struct {
+	ChunkLoad *S2C_ChunkLoad `protobuf:"bytes,12,opt,name=chunk_load,json=chunkLoad,proto3,oneof"`
 }
 
-type ServerMessage_UnloadChunk struct {
-	UnloadChunk *S2C_UnloadChunk `protobuf:"bytes,13,opt,name=unload_chunk,json=unloadChunk,proto3,oneof"`
+type ServerMessage_ChunkUnload struct {
+	ChunkUnload *S2C_ChunkUnload `protobuf:"bytes,13,opt,name=chunk_unload,json=chunkUnload,proto3,oneof"`
 }
 
 type ServerMessage_PlayerEnterWorld struct {
@@ -2495,9 +2503,9 @@ func (*ServerMessage_AuthResult) isServerMessage_Payload() {}
 
 func (*ServerMessage_Pong) isServerMessage_Payload() {}
 
-func (*ServerMessage_LoadChunk) isServerMessage_Payload() {}
+func (*ServerMessage_ChunkLoad) isServerMessage_Payload() {}
 
-func (*ServerMessage_UnloadChunk) isServerMessage_Payload() {}
+func (*ServerMessage_ChunkUnload) isServerMessage_Payload() {}
 
 func (*ServerMessage_PlayerEnterWorld) isServerMessage_Payload() {}
 
@@ -2608,11 +2616,13 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"V\n" +
 	"\bS2C_Pong\x12$\n" +
 	"\x0eclient_time_ms\x18\x01 \x01(\x03R\fclientTimeMs\x12$\n" +
-	"\x0eserver_time_ms\x18\x02 \x01(\x03R\fserverTimeMs\"\xa4\x02\n" +
+	"\x0eserver_time_ms\x18\x02 \x01(\x03R\fserverTimeMs\"\xb6\x02\n" +
 	"\x14S2C_PlayerEnterWorld\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x121\n" +
-	"\bmovement\x18\x03 \x01(\v2\x15.proto.EntityMovementR\bmovement\x12.\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12$\n" +
+	"\x0ecoord_per_tile\x18\x03 \x01(\rR\fcoordPerTile\x12\x1d\n" +
+	"\n" +
+	"chunk_size\x18\x04 \x01(\rR\tchunkSize\x12.\n" +
 	"\tinventory\x18\x06 \x01(\v2\x10.proto.InventoryR\tinventory\x12.\n" +
 	"\tpaperdoll\x18\a \x01(\v2\x10.proto.PaperdollR\tpaperdoll\x121\n" +
 	"\x12dragging_entity_id\x18\b \x01(\x04H\x00R\x10draggingEntityId\x88\x01\x01B\x15\n" +
@@ -2629,9 +2639,9 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\bmovement\x18\x02 \x01(\v2\x15.proto.EntityMovementR\bmovement\"3\n" +
 	"\x14S2C_PlayerLeaveWorld\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"7\n" +
-	"\rS2C_LoadChunk\x12&\n" +
+	"\rS2C_ChunkLoad\x12&\n" +
 	"\x05chunk\x18\x01 \x01(\v2\x10.proto.ChunkDataR\x05chunk\":\n" +
-	"\x0fS2C_UnloadChunk\x12'\n" +
+	"\x0fS2C_ChunkUnload\x12'\n" +
 	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"K\n" +
 	"\tS2C_Error\x12$\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x10.proto.ErrorCodeR\x04code\x12\x18\n" +
@@ -2643,8 +2653,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"authResult\x12%\n" +
 	"\x04pong\x18\v \x01(\v2\x0f.proto.S2C_PongH\x00R\x04pong\x125\n" +
 	"\n" +
-	"load_chunk\x18\f \x01(\v2\x14.proto.S2C_LoadChunkH\x00R\tloadChunk\x12;\n" +
-	"\funload_chunk\x18\r \x01(\v2\x16.proto.S2C_UnloadChunkH\x00R\vunloadChunk\x12K\n" +
+	"chunk_load\x18\f \x01(\v2\x14.proto.S2C_ChunkLoadH\x00R\tchunkLoad\x12;\n" +
+	"\fchunk_unload\x18\r \x01(\v2\x16.proto.S2C_ChunkUnloadH\x00R\vchunkUnload\x12K\n" +
 	"\x12player_enter_world\x18\x0e \x01(\v2\x1b.proto.S2C_PlayerEnterWorldH\x00R\x10playerEnterWorld\x12K\n" +
 	"\x12player_leave_world\x18\x0f \x01(\v2\x1b.proto.S2C_PlayerLeaveWorldH\x00R\x10playerLeaveWorld\x12;\n" +
 	"\fobject_spawn\x18\x10 \x01(\v2\x16.proto.S2C_ObjectSpawnH\x00R\vobjectSpawn\x12A\n" +
@@ -2758,8 +2768,8 @@ var file_api_proto_packets_proto_goTypes = []any{
 	(*S2C_ObjectDespawn)(nil),    // 32: proto.S2C_ObjectDespawn
 	(*S2C_ObjectMove)(nil),       // 33: proto.S2C_ObjectMove
 	(*S2C_PlayerLeaveWorld)(nil), // 34: proto.S2C_PlayerLeaveWorld
-	(*S2C_LoadChunk)(nil),        // 35: proto.S2C_LoadChunk
-	(*S2C_UnloadChunk)(nil),      // 36: proto.S2C_UnloadChunk
+	(*S2C_ChunkLoad)(nil),        // 35: proto.S2C_ChunkLoad
+	(*S2C_ChunkUnload)(nil),      // 36: proto.S2C_ChunkUnload
 	(*S2C_Error)(nil),            // 37: proto.S2C_Error
 	(*ServerMessage)(nil),        // 38: proto.ServerMessage
 }
@@ -2785,29 +2795,28 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	26, // 18: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
 	23, // 19: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
 	24, // 20: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
-	15, // 21: proto.S2C_PlayerEnterWorld.movement:type_name -> proto.EntityMovement
-	12, // 22: proto.S2C_PlayerEnterWorld.inventory:type_name -> proto.Inventory
-	14, // 23: proto.S2C_PlayerEnterWorld.paperdoll:type_name -> proto.Paperdoll
-	16, // 24: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
-	15, // 25: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
-	19, // 26: proto.S2C_LoadChunk.chunk:type_name -> proto.ChunkData
-	18, // 27: proto.S2C_UnloadChunk.coord:type_name -> proto.ChunkCoord
-	4,  // 28: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	28, // 29: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	29, // 30: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	35, // 31: proto.ServerMessage.load_chunk:type_name -> proto.S2C_LoadChunk
-	36, // 32: proto.ServerMessage.unload_chunk:type_name -> proto.S2C_UnloadChunk
-	30, // 33: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	34, // 34: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	31, // 35: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	32, // 36: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	33, // 37: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	37, // 38: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	39, // [39:39] is the sub-list for method output_type
-	39, // [39:39] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	12, // 21: proto.S2C_PlayerEnterWorld.inventory:type_name -> proto.Inventory
+	14, // 22: proto.S2C_PlayerEnterWorld.paperdoll:type_name -> proto.Paperdoll
+	16, // 23: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
+	15, // 24: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
+	19, // 25: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
+	18, // 26: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
+	4,  // 27: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	28, // 28: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	29, // 29: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	35, // 30: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	36, // 31: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	30, // 32: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	34, // 33: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	31, // 34: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	32, // 35: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	33, // 36: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	37, // 37: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	38, // [38:38] is the sub-list for method output_type
+	38, // [38:38] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -2831,8 +2840,8 @@ func file_api_proto_packets_proto_init() {
 	file_api_proto_packets_proto_msgTypes[32].OneofWrappers = []any{
 		(*ServerMessage_AuthResult)(nil),
 		(*ServerMessage_Pong)(nil),
-		(*ServerMessage_LoadChunk)(nil),
-		(*ServerMessage_UnloadChunk)(nil),
+		(*ServerMessage_ChunkLoad)(nil),
+		(*ServerMessage_ChunkUnload)(nil),
 		(*ServerMessage_PlayerEnterWorld)(nil),
 		(*ServerMessage_PlayerLeaveWorld)(nil),
 		(*ServerMessage_ObjectSpawn)(nil),

@@ -269,7 +269,8 @@ message S2C_Pong {
 message S2C_PlayerEnterWorld {
   uint64 entity_id = 1;
   string name = 2;
-  EntityMovement movement = 3;
+  uint32 coord_per_tile = 3;
+  uint32 chunk_size = 4;
   //  EntityStats stats = 4;
   //  EntitySkills skills = 5;
   Inventory inventory = 6;
@@ -297,11 +298,11 @@ message S2C_PlayerLeaveWorld {
   uint64 entity_id = 1;
 }
 
-message S2C_LoadChunk {
+message S2C_ChunkLoad {
   ChunkData chunk = 1;
 }
 
-message S2C_UnloadChunk {
+message S2C_ChunkUnload {
   ChunkCoord coord = 1;
 }
 
@@ -316,8 +317,8 @@ message ServerMessage {
   oneof payload {
     S2C_AuthResult auth_result = 10;
     S2C_Pong pong = 11;
-    S2C_LoadChunk load_chunk = 12;
-    S2C_UnloadChunk unload_chunk = 13;
+    S2C_ChunkLoad chunk_load = 12;
+    S2C_ChunkUnload chunk_unload = 13;
     S2C_PlayerEnterWorld player_enter_world = 14;
     S2C_PlayerLeaveWorld player_leave_world = 15;
     S2C_ObjectSpawn object_spawn = 16;
