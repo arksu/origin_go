@@ -563,9 +563,7 @@ func (cm *ChunkManager) saveWorker() {
 			return
 		case req := <-cm.saveQueue:
 			atomic.AddInt64(&cm.stats.SaveRequests, 1)
-			cm.shard.mu.RLock()
 			req.chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
-			cm.shard.mu.RUnlock()
 		}
 	}
 }
@@ -630,9 +628,7 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 			zap.Int("chunk_x", coord.X),
 			zap.Int("chunk_y", coord.Y),
 		)
-		cm.shard.mu.RLock()
 		chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
-		cm.shard.mu.RUnlock()
 	}
 
 	cm.chunksMu.Lock()
@@ -1093,7 +1089,6 @@ func (cm *ChunkManager) Stop() {
 	workCh := make(chan types.ChunkCoord, numWorkers)
 	var wg sync.WaitGroup
 
-	cm.shard.mu.Lock()
 	// Start save workers
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -1118,7 +1113,6 @@ func (cm *ChunkManager) Stop() {
 
 	// Wait for all saves to finish
 	wg.Wait()
-	cm.shard.mu.Unlock()
 
 	cm.logger.Info("chunk manager stopped",
 		zap.Int("layer", cm.layer),
