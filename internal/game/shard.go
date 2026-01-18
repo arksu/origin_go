@@ -151,6 +151,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
+	s.world.AddSystem(systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
 
 	return s
@@ -188,7 +189,18 @@ func (s *Shard) Stop() {
 }
 
 func (s *Shard) spawnEntityLocked(id types.EntityID, x int, y int) types.Handle {
-	handle := s.world.Spawn(id)
+	handle := s.world.Spawn(id, nil)
+
+	s.PublishEvent(
+		eventbus.NewEntitySpawnEvent(id, "entity", x, y),
+		eventbus.PriorityMedium,
+	)
+
+	return handle
+}
+
+func (s *Shard) spawnEntityWithComponentsLocked(id types.EntityID, x int, y int, setupFunc func(*ecs.World, types.Handle)) types.Handle {
+	handle := s.world.Spawn(id, setupFunc)
 
 	s.PublishEvent(
 		eventbus.NewEntitySpawnEvent(id, "entity", x, y),
@@ -286,7 +298,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 	return nil
 }
 
-func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Character) (bool, types.Handle) {
+func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Character, setupFunc func(*ecs.World, types.Handle)) (bool, types.Handle) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -354,7 +366,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		}
 	}
 
-	handle := s.spawnEntityLocked(entityID, worldX, worldY)
+	handle := s.spawnEntityWithComponentsLocked(entityID, worldX, worldY, setupFunc)
 	if chunk, ok := s.chunkManager.GetEntityChunk(entityID); ok {
 		chunk.Spatial().AddDynamic(handle, worldX, worldY)
 	}

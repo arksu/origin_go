@@ -19,28 +19,28 @@ type TreeBuilder struct{}
 func (b *TreeBuilder) ObjectType() types.ObjectType { return types.ObjectTypeTree }
 
 func (b *TreeBuilder) Build(w *ecs.World, raw *repository.Object) (types.Handle, error) {
-	h := w.Spawn(types.EntityID(raw.ID))
+	h := w.Spawn(types.EntityID(raw.ID), func(w *ecs.World, h types.Handle) {
+		// Direction = raw.Heading * 45 degrees
+		ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, int(raw.Heading.Int16)))
+
+		ecs.AddComponent(w, h, components.EntityInfo{
+			ObjectType: types.ObjectType(raw.ObjectType),
+			IsStatic:   raw.IsStatic.Valid && raw.IsStatic.Bool,
+			Region:     raw.Region,
+			Layer:      raw.Layer,
+		})
+
+		// TODO object size
+		ecs.AddComponent(w, h, components.Collider{
+			HalfWidth:  treeSize / 2.0,
+			HalfHeight: treeSize / 2.0,
+			Layer:      1,
+			Mask:       1,
+		})
+	})
 	if h == types.InvalidHandle {
 		return types.InvalidHandle, ErrEntitySpawnFailed
 	}
-
-	// Direction = raw.Heading * 45 degrees
-	ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, int(raw.Heading.Int16)))
-
-	ecs.AddComponent(w, h, components.EntityInfo{
-		ObjectType: types.ObjectType(raw.ObjectType),
-		IsStatic:   raw.IsStatic.Valid && raw.IsStatic.Bool,
-		Region:     raw.Region,
-		Layer:      raw.Layer,
-	})
-
-	// TODO object size
-	ecs.AddComponent(w, h, components.Collider{
-		HalfWidth:  treeSize / 2.0,
-		HalfHeight: treeSize / 2.0,
-		Layer:      1,
-		Mask:       1,
-	})
 
 	return h, nil
 }

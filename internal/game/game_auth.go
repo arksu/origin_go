@@ -159,24 +159,21 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			return
 		}
 
-		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character)
-		if ok {
-			// add player components
-			shard.mu.Lock()
-			ecs.AddComponent(shard.world, handle, components.EntityInfo{
+		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character, func(w *ecs.World, h types.Handle) {
+			ecs.AddComponent(w, h, components.EntityInfo{
 				ObjectType: types.ObjectTypePlayer,
 				IsStatic:   false,
 				Region:     character.Region,
 				Layer:      character.Layer,
 			})
-			ecs.AddComponent(shard.world, handle, components.CreateTransform(pos.X, pos.Y, int(character.Heading)*45))
-			ecs.AddComponent(shard.world, handle, components.ChunkRef{
+			ecs.AddComponent(w, h, components.CreateTransform(pos.X, pos.Y, int(character.Heading)*45))
+			ecs.AddComponent(w, h, components.ChunkRef{
 				CurrentChunkX: pos.X / utils.ChunkWorldSize,
 				CurrentChunkY: pos.Y / utils.ChunkWorldSize,
 				PrevChunkX:    pos.X / utils.ChunkWorldSize,
 				PrevChunkY:    pos.Y / utils.ChunkWorldSize,
 			})
-			ecs.AddComponent(shard.world, handle, components.Movement{
+			ecs.AddComponent(w, h, components.Movement{
 				VelocityX: 0,
 				VelocityY: 0,
 				Mode:      components.Walk,
@@ -189,16 +186,29 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				TargetHandle:     types.InvalidHandle,
 				InteractionRange: 5.0,
 			})
-			ecs.AddComponent(shard.world, handle, components.Collider{
+			ecs.AddComponent(w, h, components.Collider{
 				HalfWidth:  utils.PlayerColliderSize / 2,
 				HalfHeight: utils.PlayerColliderSize / 2,
 				Layer:      utils.PlayerLayer,
 				Mask:       utils.PlayerMask,
 			})
-			ecs.AddComponent(shard.world, handle, components.CollisionResult{
+			ecs.AddComponent(w, h, components.CollisionResult{
 				HasCollision: false,
 			})
-			shard.mu.Unlock()
+			ecs.AddComponent(w, h, components.Vision{
+				Radius: 240.0,
+				Power:  100.0,
+			})
+
+			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
+			visState := w.VisibilityState()
+			visState.VisibleByObserver[h] = ecs.ObserverVisibility{
+				Known:          make(map[types.Handle]struct{}, 32),
+				NextUpdateTime: time.Time{}, // Zero time for immediate update
+			}
+		})
+		if ok {
+			_ = handle // Use the handle to avoid unused variable error
 
 			character.X = pos.X
 			character.Y = pos.Y

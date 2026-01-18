@@ -66,6 +66,10 @@ func NewWorldWithCapacity(maxHandles uint32) *World {
 			IntentY: make([]float64, 2048),
 			Count:   0,
 		},
+		visibilityState: VisibilityState{
+			VisibleByObserver:        make(map[types.Handle]ObserverVisibility, 256),
+			ObserversByVisibleTarget: make(map[types.Handle]map[types.Handle]struct{}, 256),
+		},
 	}
 	return w
 }
@@ -93,8 +97,9 @@ func (s BaseSystem) Name() string  { return s.name }
 // Spawn creates a new entity with the given external EntityID
 // Returns the Handle for internal ECS operations
 // The ExternalID component is automatically added to map Handle -> EntityID
+// The setupFunc callback is called to add all other components
 // Single-threaded - no lock needed
-func (w *World) Spawn(externalID types.EntityID) types.Handle {
+func (w *World) Spawn(externalID types.EntityID, setupFunc func(*World, types.Handle)) types.Handle {
 	h := w.handles.Alloc()
 	if h == types.InvalidHandle {
 		return types.InvalidHandle
@@ -110,6 +115,11 @@ func (w *World) Spawn(externalID types.EntityID) types.Handle {
 
 	// Add ExternalID component
 	AddComponent(w, h, ExternalID{ID: externalID})
+
+	// Call setup function to add all other components
+	if setupFunc != nil {
+		setupFunc(w, h)
+	}
 
 	return h
 }
@@ -367,4 +377,9 @@ func HasComponent[T Component](w *World, h types.Handle) bool {
 // MovedEntities returns the moved entities buffer
 func (w *World) MovedEntities() *MovedEntities {
 	return &w.movedEntities
+}
+
+// VisibilityState returns the visibility state resource
+func (w *World) VisibilityState() *VisibilityState {
+	return &w.visibilityState
 }
