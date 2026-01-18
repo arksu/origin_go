@@ -6,8 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"origin/internal/const"
-	constt "origin/internal/const"
+	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/network"
@@ -177,11 +176,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(w, h, components.Movement{
 				VelocityX: 0,
 				VelocityY: 0,
-				Mode:      constt.Walk,
-				State:     constt.StateIdle,
+				Mode:      _const.Walk,
+				State:     _const.StateIdle,
 				// TODO player speed
 				Speed:            32.0,
-				TargetType:       constt.TargetNone,
+				TargetType:       _const.TargetNone,
 				TargetX:          0,
 				TargetY:          0,
 				TargetHandle:     types.InvalidHandle,
@@ -335,9 +334,9 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 		}
 
 		// TODO delete after events system
-		loadChunk := &netproto.ServerMessage{
-			Payload: &netproto.ServerMessage_LoadChunk{
-				LoadChunk: &netproto.S2C_LoadChunk{
+		chunkLoad := &netproto.ServerMessage{
+			Payload: &netproto.ServerMessage_ChunkLoad{
+				ChunkLoad: &netproto.S2C_ChunkLoad{
 					Chunk: &netproto.ChunkData{
 						Coord: &netproto.ChunkCoord{
 							X: int32(chunk.Coord.X),
@@ -349,7 +348,7 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 			},
 		}
 
-		chunkData, err := proto.Marshal(loadChunk)
+		chunkData, err := proto.Marshal(chunkLoad)
 		if err != nil {
 			g.logger.Error("Failed to marshal load chunk", zap.Uint64("client_id", c.ID), zap.Error(err))
 			continue
@@ -367,13 +366,17 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 	enterWorld := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_PlayerEnterWorld{
 			PlayerEnterWorld: &netproto.S2C_PlayerEnterWorld{
-				EntityId: uint64(entityID),
-				Movement: &netproto.EntityMovement{
-					Position: &netproto.Position{
-						X:       int32(character.X),
-						Y:       int32(character.Y),
-						Heading: uint32(character.Heading),
-					},
+				EntityId:     uint64(entityID),
+				Name:         character.Name,
+				CoordPerTile: _const.CoordPerTile,
+				ChunkSize:    _const.ChunkSize,
+				Inventory: &netproto.Inventory{
+					Width:  10,                          // TODO: get from character data
+					Height: 5,                           // TODO: get from character data
+					Slots:  []*netproto.InventorySlot{}, // TODO: load from database
+				},
+				Paperdoll: &netproto.Paperdoll{
+					Slots: []*netproto.PaperdollSlot{}, // TODO: load from database
 				},
 			},
 		},

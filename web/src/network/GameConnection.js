@@ -109,10 +109,10 @@ class GameConnection {
         this.handlePong(message.pong)
       } else if (message.playerEnterWorld) {
         this.handlePlayerEnterWorld(message.playerEnterWorld)
-      } else if (message.loadChunk) {
-        this.handleLoadChunk(message.loadChunk)
-      } else if (message.unloadChunk) {
-        this.handleUnloadChunk(message.unloadChunk)
+      } else if (message.chunkLoad) {
+        this.handleChunkLoad(message.chunkLoad)
+      } else if (message.chunkUnload) {
+        this.handleChunkUnload(message.chunkUnload)
       } else if (message.objectSpawn) {
         this.handleObject(message.objectSpawn)
       } else if (message.objectDespawn) {
@@ -184,18 +184,18 @@ class GameConnection {
     console.log('Player entered world:', enterWorld)
   }
 
-  handleLoadChunk(loadChunk) {
+  handleChunkLoad(chunkLoad) {
     const gameStore = useGameStore()
-    if (loadChunk.chunk) {
-      console.log('Chunk loaded:', loadChunk.chunk.coord, 'tiles length:', loadChunk.chunk.tiles?.length)
-      gameStore.addChunk(loadChunk.chunk.coord, loadChunk.chunk.tiles)
+    if (chunkLoad.chunk) {
+      console.log('Chunk loaded:', chunkLoad.chunk.coord, 'tiles length:', chunkLoad.chunk.tiles?.length)
+      gameStore.addChunk(chunkLoad.chunk.coord, chunkLoad.chunk.tiles)
     }
   }
 
-  handleUnloadChunk(unloadChunk) {
+  handleChunkUnload(chunkUnload) {
     const gameStore = useGameStore()
-    gameStore.removeChunk(unloadChunk.coord)
-    console.log('Chunk unloaded:', unloadChunk.coord)
+    gameStore.removeChunk(chunkUnload.coord)
+    console.log('Chunk unloaded:', chunkUnload.coord)
   }
 
   handleObject(object) {

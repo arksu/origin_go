@@ -6423,7 +6423,8 @@ export const proto = $root.proto = (() => {
          * @interface IS2C_PlayerEnterWorld
          * @property {number|Long|null} [entityId] S2C_PlayerEnterWorld entityId
          * @property {string|null} [name] S2C_PlayerEnterWorld name
-         * @property {proto.IEntityMovement|null} [movement] S2C_PlayerEnterWorld movement
+         * @property {number|null} [coordPerTile] S2C_PlayerEnterWorld coordPerTile
+         * @property {number|null} [chunkSize] S2C_PlayerEnterWorld chunkSize
          * @property {proto.IInventory|null} [inventory] S2C_PlayerEnterWorld inventory
          * @property {proto.IPaperdoll|null} [paperdoll] S2C_PlayerEnterWorld paperdoll
          * @property {number|Long|null} [draggingEntityId] S2C_PlayerEnterWorld draggingEntityId
@@ -6461,12 +6462,20 @@ export const proto = $root.proto = (() => {
         S2C_PlayerEnterWorld.prototype.name = "";
 
         /**
-         * S2C_PlayerEnterWorld movement.
-         * @member {proto.IEntityMovement|null|undefined} movement
+         * S2C_PlayerEnterWorld coordPerTile.
+         * @member {number} coordPerTile
          * @memberof proto.S2C_PlayerEnterWorld
          * @instance
          */
-        S2C_PlayerEnterWorld.prototype.movement = null;
+        S2C_PlayerEnterWorld.prototype.coordPerTile = 0;
+
+        /**
+         * S2C_PlayerEnterWorld chunkSize.
+         * @member {number} chunkSize
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.chunkSize = 0;
 
         /**
          * S2C_PlayerEnterWorld inventory.
@@ -6529,8 +6538,10 @@ export const proto = $root.proto = (() => {
                 writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
             if (message.name != null && Object.hasOwnProperty.call(message, "name"))
                 writer.uint32(/* id 2, wireType 2 =*/18).string(message.name);
-            if (message.movement != null && Object.hasOwnProperty.call(message, "movement"))
-                $root.proto.EntityMovement.encode(message.movement, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            if (message.coordPerTile != null && Object.hasOwnProperty.call(message, "coordPerTile"))
+                writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.coordPerTile);
+            if (message.chunkSize != null && Object.hasOwnProperty.call(message, "chunkSize"))
+                writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.chunkSize);
             if (message.inventory != null && Object.hasOwnProperty.call(message, "inventory"))
                 $root.proto.Inventory.encode(message.inventory, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
             if (message.paperdoll != null && Object.hasOwnProperty.call(message, "paperdoll"))
@@ -6582,7 +6593,11 @@ export const proto = $root.proto = (() => {
                         break;
                     }
                 case 3: {
-                        message.movement = $root.proto.EntityMovement.decode(reader, reader.uint32());
+                        message.coordPerTile = reader.uint32();
+                        break;
+                    }
+                case 4: {
+                        message.chunkSize = reader.uint32();
                         break;
                     }
                 case 6: {
@@ -6639,11 +6654,12 @@ export const proto = $root.proto = (() => {
             if (message.name != null && message.hasOwnProperty("name"))
                 if (!$util.isString(message.name))
                     return "name: string expected";
-            if (message.movement != null && message.hasOwnProperty("movement")) {
-                let error = $root.proto.EntityMovement.verify(message.movement);
-                if (error)
-                    return "movement." + error;
-            }
+            if (message.coordPerTile != null && message.hasOwnProperty("coordPerTile"))
+                if (!$util.isInteger(message.coordPerTile))
+                    return "coordPerTile: integer expected";
+            if (message.chunkSize != null && message.hasOwnProperty("chunkSize"))
+                if (!$util.isInteger(message.chunkSize))
+                    return "chunkSize: integer expected";
             if (message.inventory != null && message.hasOwnProperty("inventory")) {
                 let error = $root.proto.Inventory.verify(message.inventory);
                 if (error)
@@ -6685,11 +6701,10 @@ export const proto = $root.proto = (() => {
                     message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
             if (object.name != null)
                 message.name = String(object.name);
-            if (object.movement != null) {
-                if (typeof object.movement !== "object")
-                    throw TypeError(".proto.S2C_PlayerEnterWorld.movement: object expected");
-                message.movement = $root.proto.EntityMovement.fromObject(object.movement);
-            }
+            if (object.coordPerTile != null)
+                message.coordPerTile = object.coordPerTile >>> 0;
+            if (object.chunkSize != null)
+                message.chunkSize = object.chunkSize >>> 0;
             if (object.inventory != null) {
                 if (typeof object.inventory !== "object")
                     throw TypeError(".proto.S2C_PlayerEnterWorld.inventory: object expected");
@@ -6732,7 +6747,8 @@ export const proto = $root.proto = (() => {
                 } else
                     object.entityId = options.longs === String ? "0" : 0;
                 object.name = "";
-                object.movement = null;
+                object.coordPerTile = 0;
+                object.chunkSize = 0;
                 object.inventory = null;
                 object.paperdoll = null;
             }
@@ -6743,8 +6759,10 @@ export const proto = $root.proto = (() => {
                     object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
             if (message.name != null && message.hasOwnProperty("name"))
                 object.name = message.name;
-            if (message.movement != null && message.hasOwnProperty("movement"))
-                object.movement = $root.proto.EntityMovement.toObject(message.movement, options);
+            if (message.coordPerTile != null && message.hasOwnProperty("coordPerTile"))
+                object.coordPerTile = message.coordPerTile;
+            if (message.chunkSize != null && message.hasOwnProperty("chunkSize"))
+                object.chunkSize = message.chunkSize;
             if (message.inventory != null && message.hasOwnProperty("inventory"))
                 object.inventory = $root.proto.Inventory.toObject(message.inventory, options);
             if (message.paperdoll != null && message.hasOwnProperty("paperdoll"))
@@ -7746,24 +7764,24 @@ export const proto = $root.proto = (() => {
         return S2C_PlayerLeaveWorld;
     })();
 
-    proto.S2C_LoadChunk = (function() {
+    proto.S2C_ChunkLoad = (function() {
 
         /**
-         * Properties of a S2C_LoadChunk.
+         * Properties of a S2C_ChunkLoad.
          * @memberof proto
-         * @interface IS2C_LoadChunk
-         * @property {proto.IChunkData|null} [chunk] S2C_LoadChunk chunk
+         * @interface IS2C_ChunkLoad
+         * @property {proto.IChunkData|null} [chunk] S2C_ChunkLoad chunk
          */
 
         /**
-         * Constructs a new S2C_LoadChunk.
+         * Constructs a new S2C_ChunkLoad.
          * @memberof proto
-         * @classdesc Represents a S2C_LoadChunk.
-         * @implements IS2C_LoadChunk
+         * @classdesc Represents a S2C_ChunkLoad.
+         * @implements IS2C_ChunkLoad
          * @constructor
-         * @param {proto.IS2C_LoadChunk=} [properties] Properties to set
+         * @param {proto.IS2C_ChunkLoad=} [properties] Properties to set
          */
-        function S2C_LoadChunk(properties) {
+        function S2C_ChunkLoad(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -7771,35 +7789,35 @@ export const proto = $root.proto = (() => {
         }
 
         /**
-         * S2C_LoadChunk chunk.
+         * S2C_ChunkLoad chunk.
          * @member {proto.IChunkData|null|undefined} chunk
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @instance
          */
-        S2C_LoadChunk.prototype.chunk = null;
+        S2C_ChunkLoad.prototype.chunk = null;
 
         /**
-         * Creates a new S2C_LoadChunk instance using the specified properties.
+         * Creates a new S2C_ChunkLoad instance using the specified properties.
          * @function create
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
-         * @param {proto.IS2C_LoadChunk=} [properties] Properties to set
-         * @returns {proto.S2C_LoadChunk} S2C_LoadChunk instance
+         * @param {proto.IS2C_ChunkLoad=} [properties] Properties to set
+         * @returns {proto.S2C_ChunkLoad} S2C_ChunkLoad instance
          */
-        S2C_LoadChunk.create = function create(properties) {
-            return new S2C_LoadChunk(properties);
+        S2C_ChunkLoad.create = function create(properties) {
+            return new S2C_ChunkLoad(properties);
         };
 
         /**
-         * Encodes the specified S2C_LoadChunk message. Does not implicitly {@link proto.S2C_LoadChunk.verify|verify} messages.
+         * Encodes the specified S2C_ChunkLoad message. Does not implicitly {@link proto.S2C_ChunkLoad.verify|verify} messages.
          * @function encode
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
-         * @param {proto.IS2C_LoadChunk} message S2C_LoadChunk message or plain object to encode
+         * @param {proto.IS2C_ChunkLoad} message S2C_ChunkLoad message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        S2C_LoadChunk.encode = function encode(message, writer) {
+        S2C_ChunkLoad.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             if (message.chunk != null && Object.hasOwnProperty.call(message, "chunk"))
@@ -7808,33 +7826,33 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Encodes the specified S2C_LoadChunk message, length delimited. Does not implicitly {@link proto.S2C_LoadChunk.verify|verify} messages.
+         * Encodes the specified S2C_ChunkLoad message, length delimited. Does not implicitly {@link proto.S2C_ChunkLoad.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
-         * @param {proto.IS2C_LoadChunk} message S2C_LoadChunk message or plain object to encode
+         * @param {proto.IS2C_ChunkLoad} message S2C_ChunkLoad message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        S2C_LoadChunk.encodeDelimited = function encodeDelimited(message, writer) {
+        S2C_ChunkLoad.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a S2C_LoadChunk message from the specified reader or buffer.
+         * Decodes a S2C_ChunkLoad message from the specified reader or buffer.
          * @function decode
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {proto.S2C_LoadChunk} S2C_LoadChunk
+         * @returns {proto.S2C_ChunkLoad} S2C_ChunkLoad
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        S2C_LoadChunk.decode = function decode(reader, length, error) {
+        S2C_ChunkLoad.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_LoadChunk();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ChunkLoad();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 if (tag === error)
@@ -7853,30 +7871,30 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Decodes a S2C_LoadChunk message from the specified reader or buffer, length delimited.
+         * Decodes a S2C_ChunkLoad message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.S2C_LoadChunk} S2C_LoadChunk
+         * @returns {proto.S2C_ChunkLoad} S2C_ChunkLoad
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        S2C_LoadChunk.decodeDelimited = function decodeDelimited(reader) {
+        S2C_ChunkLoad.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a S2C_LoadChunk message.
+         * Verifies a S2C_ChunkLoad message.
          * @function verify
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        S2C_LoadChunk.verify = function verify(message) {
+        S2C_ChunkLoad.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.chunk != null && message.hasOwnProperty("chunk")) {
@@ -7888,35 +7906,35 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Creates a S2C_LoadChunk message from a plain object. Also converts values to their respective internal types.
+         * Creates a S2C_ChunkLoad message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {proto.S2C_LoadChunk} S2C_LoadChunk
+         * @returns {proto.S2C_ChunkLoad} S2C_ChunkLoad
          */
-        S2C_LoadChunk.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.S2C_LoadChunk)
+        S2C_ChunkLoad.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ChunkLoad)
                 return object;
-            let message = new $root.proto.S2C_LoadChunk();
+            let message = new $root.proto.S2C_ChunkLoad();
             if (object.chunk != null) {
                 if (typeof object.chunk !== "object")
-                    throw TypeError(".proto.S2C_LoadChunk.chunk: object expected");
+                    throw TypeError(".proto.S2C_ChunkLoad.chunk: object expected");
                 message.chunk = $root.proto.ChunkData.fromObject(object.chunk);
             }
             return message;
         };
 
         /**
-         * Creates a plain object from a S2C_LoadChunk message. Also converts values to other types if specified.
+         * Creates a plain object from a S2C_ChunkLoad message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
-         * @param {proto.S2C_LoadChunk} message S2C_LoadChunk
+         * @param {proto.S2C_ChunkLoad} message S2C_ChunkLoad
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        S2C_LoadChunk.toObject = function toObject(message, options) {
+        S2C_ChunkLoad.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
@@ -7928,52 +7946,52 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Converts this S2C_LoadChunk to JSON.
+         * Converts this S2C_ChunkLoad to JSON.
          * @function toJSON
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        S2C_LoadChunk.prototype.toJSON = function toJSON() {
+        S2C_ChunkLoad.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
         /**
-         * Gets the default type url for S2C_LoadChunk
+         * Gets the default type url for S2C_ChunkLoad
          * @function getTypeUrl
-         * @memberof proto.S2C_LoadChunk
+         * @memberof proto.S2C_ChunkLoad
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        S2C_LoadChunk.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        S2C_ChunkLoad.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/proto.S2C_LoadChunk";
+            return typeUrlPrefix + "/proto.S2C_ChunkLoad";
         };
 
-        return S2C_LoadChunk;
+        return S2C_ChunkLoad;
     })();
 
-    proto.S2C_UnloadChunk = (function() {
+    proto.S2C_ChunkUnload = (function() {
 
         /**
-         * Properties of a S2C_UnloadChunk.
+         * Properties of a S2C_ChunkUnload.
          * @memberof proto
-         * @interface IS2C_UnloadChunk
-         * @property {proto.IChunkCoord|null} [coord] S2C_UnloadChunk coord
+         * @interface IS2C_ChunkUnload
+         * @property {proto.IChunkCoord|null} [coord] S2C_ChunkUnload coord
          */
 
         /**
-         * Constructs a new S2C_UnloadChunk.
+         * Constructs a new S2C_ChunkUnload.
          * @memberof proto
-         * @classdesc Represents a S2C_UnloadChunk.
-         * @implements IS2C_UnloadChunk
+         * @classdesc Represents a S2C_ChunkUnload.
+         * @implements IS2C_ChunkUnload
          * @constructor
-         * @param {proto.IS2C_UnloadChunk=} [properties] Properties to set
+         * @param {proto.IS2C_ChunkUnload=} [properties] Properties to set
          */
-        function S2C_UnloadChunk(properties) {
+        function S2C_ChunkUnload(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -7981,35 +7999,35 @@ export const proto = $root.proto = (() => {
         }
 
         /**
-         * S2C_UnloadChunk coord.
+         * S2C_ChunkUnload coord.
          * @member {proto.IChunkCoord|null|undefined} coord
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @instance
          */
-        S2C_UnloadChunk.prototype.coord = null;
+        S2C_ChunkUnload.prototype.coord = null;
 
         /**
-         * Creates a new S2C_UnloadChunk instance using the specified properties.
+         * Creates a new S2C_ChunkUnload instance using the specified properties.
          * @function create
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
-         * @param {proto.IS2C_UnloadChunk=} [properties] Properties to set
-         * @returns {proto.S2C_UnloadChunk} S2C_UnloadChunk instance
+         * @param {proto.IS2C_ChunkUnload=} [properties] Properties to set
+         * @returns {proto.S2C_ChunkUnload} S2C_ChunkUnload instance
          */
-        S2C_UnloadChunk.create = function create(properties) {
-            return new S2C_UnloadChunk(properties);
+        S2C_ChunkUnload.create = function create(properties) {
+            return new S2C_ChunkUnload(properties);
         };
 
         /**
-         * Encodes the specified S2C_UnloadChunk message. Does not implicitly {@link proto.S2C_UnloadChunk.verify|verify} messages.
+         * Encodes the specified S2C_ChunkUnload message. Does not implicitly {@link proto.S2C_ChunkUnload.verify|verify} messages.
          * @function encode
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
-         * @param {proto.IS2C_UnloadChunk} message S2C_UnloadChunk message or plain object to encode
+         * @param {proto.IS2C_ChunkUnload} message S2C_ChunkUnload message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        S2C_UnloadChunk.encode = function encode(message, writer) {
+        S2C_ChunkUnload.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             if (message.coord != null && Object.hasOwnProperty.call(message, "coord"))
@@ -8018,33 +8036,33 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Encodes the specified S2C_UnloadChunk message, length delimited. Does not implicitly {@link proto.S2C_UnloadChunk.verify|verify} messages.
+         * Encodes the specified S2C_ChunkUnload message, length delimited. Does not implicitly {@link proto.S2C_ChunkUnload.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
-         * @param {proto.IS2C_UnloadChunk} message S2C_UnloadChunk message or plain object to encode
+         * @param {proto.IS2C_ChunkUnload} message S2C_ChunkUnload message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        S2C_UnloadChunk.encodeDelimited = function encodeDelimited(message, writer) {
+        S2C_ChunkUnload.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a S2C_UnloadChunk message from the specified reader or buffer.
+         * Decodes a S2C_ChunkUnload message from the specified reader or buffer.
          * @function decode
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {proto.S2C_UnloadChunk} S2C_UnloadChunk
+         * @returns {proto.S2C_ChunkUnload} S2C_ChunkUnload
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        S2C_UnloadChunk.decode = function decode(reader, length, error) {
+        S2C_ChunkUnload.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_UnloadChunk();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ChunkUnload();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 if (tag === error)
@@ -8063,30 +8081,30 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Decodes a S2C_UnloadChunk message from the specified reader or buffer, length delimited.
+         * Decodes a S2C_ChunkUnload message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.S2C_UnloadChunk} S2C_UnloadChunk
+         * @returns {proto.S2C_ChunkUnload} S2C_ChunkUnload
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        S2C_UnloadChunk.decodeDelimited = function decodeDelimited(reader) {
+        S2C_ChunkUnload.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a S2C_UnloadChunk message.
+         * Verifies a S2C_ChunkUnload message.
          * @function verify
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        S2C_UnloadChunk.verify = function verify(message) {
+        S2C_ChunkUnload.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.coord != null && message.hasOwnProperty("coord")) {
@@ -8098,35 +8116,35 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Creates a S2C_UnloadChunk message from a plain object. Also converts values to their respective internal types.
+         * Creates a S2C_ChunkUnload message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {proto.S2C_UnloadChunk} S2C_UnloadChunk
+         * @returns {proto.S2C_ChunkUnload} S2C_ChunkUnload
          */
-        S2C_UnloadChunk.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.S2C_UnloadChunk)
+        S2C_ChunkUnload.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ChunkUnload)
                 return object;
-            let message = new $root.proto.S2C_UnloadChunk();
+            let message = new $root.proto.S2C_ChunkUnload();
             if (object.coord != null) {
                 if (typeof object.coord !== "object")
-                    throw TypeError(".proto.S2C_UnloadChunk.coord: object expected");
+                    throw TypeError(".proto.S2C_ChunkUnload.coord: object expected");
                 message.coord = $root.proto.ChunkCoord.fromObject(object.coord);
             }
             return message;
         };
 
         /**
-         * Creates a plain object from a S2C_UnloadChunk message. Also converts values to other types if specified.
+         * Creates a plain object from a S2C_ChunkUnload message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
-         * @param {proto.S2C_UnloadChunk} message S2C_UnloadChunk
+         * @param {proto.S2C_ChunkUnload} message S2C_ChunkUnload
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        S2C_UnloadChunk.toObject = function toObject(message, options) {
+        S2C_ChunkUnload.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
@@ -8138,32 +8156,32 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Converts this S2C_UnloadChunk to JSON.
+         * Converts this S2C_ChunkUnload to JSON.
          * @function toJSON
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        S2C_UnloadChunk.prototype.toJSON = function toJSON() {
+        S2C_ChunkUnload.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
         /**
-         * Gets the default type url for S2C_UnloadChunk
+         * Gets the default type url for S2C_ChunkUnload
          * @function getTypeUrl
-         * @memberof proto.S2C_UnloadChunk
+         * @memberof proto.S2C_ChunkUnload
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        S2C_UnloadChunk.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        S2C_ChunkUnload.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/proto.S2C_UnloadChunk";
+            return typeUrlPrefix + "/proto.S2C_ChunkUnload";
         };
 
-        return S2C_UnloadChunk;
+        return S2C_ChunkUnload;
     })();
 
     proto.S2C_Error = (function() {
@@ -8488,8 +8506,8 @@ export const proto = $root.proto = (() => {
          * @property {number|null} [sequence] ServerMessage sequence
          * @property {proto.IS2C_AuthResult|null} [authResult] ServerMessage authResult
          * @property {proto.IS2C_Pong|null} [pong] ServerMessage pong
-         * @property {proto.IS2C_LoadChunk|null} [loadChunk] ServerMessage loadChunk
-         * @property {proto.IS2C_UnloadChunk|null} [unloadChunk] ServerMessage unloadChunk
+         * @property {proto.IS2C_ChunkLoad|null} [chunkLoad] ServerMessage chunkLoad
+         * @property {proto.IS2C_ChunkUnload|null} [chunkUnload] ServerMessage chunkUnload
          * @property {proto.IS2C_PlayerEnterWorld|null} [playerEnterWorld] ServerMessage playerEnterWorld
          * @property {proto.IS2C_PlayerLeaveWorld|null} [playerLeaveWorld] ServerMessage playerLeaveWorld
          * @property {proto.IS2C_ObjectSpawn|null} [objectSpawn] ServerMessage objectSpawn
@@ -8538,20 +8556,20 @@ export const proto = $root.proto = (() => {
         ServerMessage.prototype.pong = null;
 
         /**
-         * ServerMessage loadChunk.
-         * @member {proto.IS2C_LoadChunk|null|undefined} loadChunk
+         * ServerMessage chunkLoad.
+         * @member {proto.IS2C_ChunkLoad|null|undefined} chunkLoad
          * @memberof proto.ServerMessage
          * @instance
          */
-        ServerMessage.prototype.loadChunk = null;
+        ServerMessage.prototype.chunkLoad = null;
 
         /**
-         * ServerMessage unloadChunk.
-         * @member {proto.IS2C_UnloadChunk|null|undefined} unloadChunk
+         * ServerMessage chunkUnload.
+         * @member {proto.IS2C_ChunkUnload|null|undefined} chunkUnload
          * @memberof proto.ServerMessage
          * @instance
          */
-        ServerMessage.prototype.unloadChunk = null;
+        ServerMessage.prototype.chunkUnload = null;
 
         /**
          * ServerMessage playerEnterWorld.
@@ -8606,12 +8624,12 @@ export const proto = $root.proto = (() => {
 
         /**
          * ServerMessage payload.
-         * @member {"authResult"|"pong"|"loadChunk"|"unloadChunk"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"error"|undefined} payload
+         * @member {"authResult"|"pong"|"chunkLoad"|"chunkUnload"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"error"|undefined} payload
          * @memberof proto.ServerMessage
          * @instance
          */
         Object.defineProperty(ServerMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "loadChunk", "unloadChunk", "playerEnterWorld", "playerLeaveWorld", "objectSpawn", "objectDespawn", "objectMove", "error"]),
+            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "chunkLoad", "chunkUnload", "playerEnterWorld", "playerLeaveWorld", "objectSpawn", "objectDespawn", "objectMove", "error"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -8645,10 +8663,10 @@ export const proto = $root.proto = (() => {
                 $root.proto.S2C_AuthResult.encode(message.authResult, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
             if (message.pong != null && Object.hasOwnProperty.call(message, "pong"))
                 $root.proto.S2C_Pong.encode(message.pong, writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
-            if (message.loadChunk != null && Object.hasOwnProperty.call(message, "loadChunk"))
-                $root.proto.S2C_LoadChunk.encode(message.loadChunk, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
-            if (message.unloadChunk != null && Object.hasOwnProperty.call(message, "unloadChunk"))
-                $root.proto.S2C_UnloadChunk.encode(message.unloadChunk, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
+            if (message.chunkLoad != null && Object.hasOwnProperty.call(message, "chunkLoad"))
+                $root.proto.S2C_ChunkLoad.encode(message.chunkLoad, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
+            if (message.chunkUnload != null && Object.hasOwnProperty.call(message, "chunkUnload"))
+                $root.proto.S2C_ChunkUnload.encode(message.chunkUnload, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
             if (message.playerEnterWorld != null && Object.hasOwnProperty.call(message, "playerEnterWorld"))
                 $root.proto.S2C_PlayerEnterWorld.encode(message.playerEnterWorld, writer.uint32(/* id 14, wireType 2 =*/114).fork()).ldelim();
             if (message.playerLeaveWorld != null && Object.hasOwnProperty.call(message, "playerLeaveWorld"))
@@ -8710,11 +8728,11 @@ export const proto = $root.proto = (() => {
                         break;
                     }
                 case 12: {
-                        message.loadChunk = $root.proto.S2C_LoadChunk.decode(reader, reader.uint32());
+                        message.chunkLoad = $root.proto.S2C_ChunkLoad.decode(reader, reader.uint32());
                         break;
                     }
                 case 13: {
-                        message.unloadChunk = $root.proto.S2C_UnloadChunk.decode(reader, reader.uint32());
+                        message.chunkUnload = $root.proto.S2C_ChunkUnload.decode(reader, reader.uint32());
                         break;
                     }
                 case 14: {
@@ -8798,24 +8816,24 @@ export const proto = $root.proto = (() => {
                         return "pong." + error;
                 }
             }
-            if (message.loadChunk != null && message.hasOwnProperty("loadChunk")) {
+            if (message.chunkLoad != null && message.hasOwnProperty("chunkLoad")) {
                 if (properties.payload === 1)
                     return "payload: multiple values";
                 properties.payload = 1;
                 {
-                    let error = $root.proto.S2C_LoadChunk.verify(message.loadChunk);
+                    let error = $root.proto.S2C_ChunkLoad.verify(message.chunkLoad);
                     if (error)
-                        return "loadChunk." + error;
+                        return "chunkLoad." + error;
                 }
             }
-            if (message.unloadChunk != null && message.hasOwnProperty("unloadChunk")) {
+            if (message.chunkUnload != null && message.hasOwnProperty("chunkUnload")) {
                 if (properties.payload === 1)
                     return "payload: multiple values";
                 properties.payload = 1;
                 {
-                    let error = $root.proto.S2C_UnloadChunk.verify(message.unloadChunk);
+                    let error = $root.proto.S2C_ChunkUnload.verify(message.chunkUnload);
                     if (error)
-                        return "unloadChunk." + error;
+                        return "chunkUnload." + error;
                 }
             }
             if (message.playerEnterWorld != null && message.hasOwnProperty("playerEnterWorld")) {
@@ -8905,15 +8923,15 @@ export const proto = $root.proto = (() => {
                     throw TypeError(".proto.ServerMessage.pong: object expected");
                 message.pong = $root.proto.S2C_Pong.fromObject(object.pong);
             }
-            if (object.loadChunk != null) {
-                if (typeof object.loadChunk !== "object")
-                    throw TypeError(".proto.ServerMessage.loadChunk: object expected");
-                message.loadChunk = $root.proto.S2C_LoadChunk.fromObject(object.loadChunk);
+            if (object.chunkLoad != null) {
+                if (typeof object.chunkLoad !== "object")
+                    throw TypeError(".proto.ServerMessage.chunkLoad: object expected");
+                message.chunkLoad = $root.proto.S2C_ChunkLoad.fromObject(object.chunkLoad);
             }
-            if (object.unloadChunk != null) {
-                if (typeof object.unloadChunk !== "object")
-                    throw TypeError(".proto.ServerMessage.unloadChunk: object expected");
-                message.unloadChunk = $root.proto.S2C_UnloadChunk.fromObject(object.unloadChunk);
+            if (object.chunkUnload != null) {
+                if (typeof object.chunkUnload !== "object")
+                    throw TypeError(".proto.ServerMessage.chunkUnload: object expected");
+                message.chunkUnload = $root.proto.S2C_ChunkUnload.fromObject(object.chunkUnload);
             }
             if (object.playerEnterWorld != null) {
                 if (typeof object.playerEnterWorld !== "object")
@@ -8975,15 +8993,15 @@ export const proto = $root.proto = (() => {
                 if (options.oneofs)
                     object.payload = "pong";
             }
-            if (message.loadChunk != null && message.hasOwnProperty("loadChunk")) {
-                object.loadChunk = $root.proto.S2C_LoadChunk.toObject(message.loadChunk, options);
+            if (message.chunkLoad != null && message.hasOwnProperty("chunkLoad")) {
+                object.chunkLoad = $root.proto.S2C_ChunkLoad.toObject(message.chunkLoad, options);
                 if (options.oneofs)
-                    object.payload = "loadChunk";
+                    object.payload = "chunkLoad";
             }
-            if (message.unloadChunk != null && message.hasOwnProperty("unloadChunk")) {
-                object.unloadChunk = $root.proto.S2C_UnloadChunk.toObject(message.unloadChunk, options);
+            if (message.chunkUnload != null && message.hasOwnProperty("chunkUnload")) {
+                object.chunkUnload = $root.proto.S2C_ChunkUnload.toObject(message.chunkUnload, options);
                 if (options.oneofs)
-                    object.payload = "unloadChunk";
+                    object.payload = "chunkUnload";
             }
             if (message.playerEnterWorld != null && message.hasOwnProperty("playerEnterWorld")) {
                 object.playerEnterWorld = $root.proto.S2C_PlayerEnterWorld.toObject(message.playerEnterWorld, options);

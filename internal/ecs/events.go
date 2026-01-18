@@ -99,10 +99,11 @@ func NewPlayerEnteredWorldEvent(entityID types.EntityID, layer, x, y int) *Playe
 	}
 }
 
-// ChunkLoadEvent represents when a chunk is loaded
+// ChunkLoadEvent represents when a chunk is loaded for a specific entity
 type ChunkLoadEvent struct {
 	topic     string
 	Timestamp time.Time
+	EntityID  types.EntityID // Entity for whom the chunk is being loaded
 	X         int
 	Y         int
 	Layer     int
@@ -110,20 +111,22 @@ type ChunkLoadEvent struct {
 
 func (e *ChunkLoadEvent) Topic() string { return e.topic }
 
-func NewChunkLoadEvent(x, y, layer int) *ChunkLoadEvent {
+func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int) *ChunkLoadEvent {
 	return &ChunkLoadEvent{
 		topic:     TopicGameplayChunkLoad,
 		Timestamp: time.Now(),
+		EntityID:  entityID,
 		X:         x,
 		Y:         y,
 		Layer:     layer,
 	}
 }
 
-// ChunkUnloadEvent represents when a chunk is unloaded
+// ChunkUnloadEvent represents when a chunk is unloaded for a specific entity
 type ChunkUnloadEvent struct {
 	topic     string
 	Timestamp time.Time
+	EntityID  types.EntityID // Entity for whom the chunk is being unloaded
 	X         int
 	Y         int
 	Layer     int
@@ -131,10 +134,11 @@ type ChunkUnloadEvent struct {
 
 func (e *ChunkUnloadEvent) Topic() string { return e.topic }
 
-func NewChunkUnloadEvent(x, y, layer int) *ChunkUnloadEvent {
+func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int) *ChunkUnloadEvent {
 	return &ChunkUnloadEvent{
 		topic:     TopicGameplayChunkUnload,
 		Timestamp: time.Now(),
+		EntityID:  entityID,
 		X:         x,
 		Y:         y,
 		Layer:     layer,

@@ -425,10 +425,7 @@ func (vc *VirtualClient) handleMessage(data []byte) {
 	case *netproto.ServerMessage_PlayerEnterWorld:
 		vc.mu.Lock()
 		vc.playerEntityID = payload.PlayerEnterWorld.EntityId
-		if payload.PlayerEnterWorld.Movement != nil && payload.PlayerEnterWorld.Movement.Position != nil {
-			vc.playerX = payload.PlayerEnterWorld.Movement.Position.X
-			vc.playerY = payload.PlayerEnterWorld.Movement.Position.Y
-		}
+		// TODO: Handle player position through separate position update messages
 		vc.mu.Unlock()
 
 		select {
