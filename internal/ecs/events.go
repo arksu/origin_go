@@ -1,7 +1,9 @@
 package ecs
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/types"
+
 	"time"
 )
 
@@ -149,7 +151,7 @@ type ObjectMoveEvent struct {
 	Heading   int
 	VelocityX int
 	VelocityY int
-	MoveMode  int // 0=Walk, 1=Run, 2=FastRun, 3=Swim
+	MoveMode  constt.MoveMode // 0=Walk, 1=Run, 2=FastRun, 3=Swim
 	IsMoving  bool
 	TargetX   *int
 	TargetY   *int
@@ -158,7 +160,7 @@ type ObjectMoveEvent struct {
 
 func (e *ObjectMoveEvent) Topic() string { return e.topic }
 
-func NewObjectMoveEvent(entityID types.EntityID, x, y, heading, velocityX, velocityY int, moveMode int, isMoving bool, targetX, targetY *int, layer int) *ObjectMoveEvent {
+func NewObjectMoveEvent(entityID types.EntityID, x, y, heading, velocityX, velocityY int, moveMode constt.MoveMode, isMoving bool, targetX, targetY *int, layer int) *ObjectMoveEvent {
 	return &ObjectMoveEvent{
 		topic:     TopicGameplayMovementMove,
 		Timestamp: time.Now(),

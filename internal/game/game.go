@@ -5,7 +5,6 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/eventbus"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence"
@@ -146,81 +145,6 @@ func (g *Game) setupEventHandlers() {
 	// Create and subscribe NetworkVisibilityDispatcher
 	dispatcher := NewNetworkVisibilityDispatcher(g.shardManager, g.logger.Named("visibility-dispatcher"))
 	dispatcher.Subscribe(g.shardManager.EventBus())
-
-	// Subscribe to object move events from systems (legacy handler, can be removed if not needed)
-	eventBus := g.shardManager.EventBus()
-	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMove, eventbus.PriorityMedium, func(ctx context.Context, e eventbus.Event) error {
-		if objectMove, ok := e.(*ecs.ObjectMoveEvent); ok {
-			g.handleObjectMove(objectMove)
-		}
-		return nil
-	})
-}
-
-// getProtoMoveMode converts int move mode to protobuf enum
-func getProtoMoveMode(moveMode int) netproto.MovementMode {
-	switch moveMode {
-	case 0: // Walk
-		return netproto.MovementMode_MOVE_MODE_WALK
-	case 1: // Run
-		return netproto.MovementMode_MOVE_MODE_RUN
-	case 2: // FastRun
-		return netproto.MovementMode_MOVE_MODE_FAST_RUN
-	case 3: // Swim
-		return netproto.MovementMode_MOVE_MODE_SWIM
-	default:
-		return netproto.MovementMode_MOVE_MODE_WALK
-	}
-}
-
-func (g *Game) handleObjectMove(event *ecs.ObjectMoveEvent) {
-	// Create protobuf movement data from event data
-	movement := &netproto.EntityMovement{
-		Position: &netproto.Position{
-			X:       int32(event.X),
-			Y:       int32(event.Y),
-			Heading: uint32(event.Heading),
-		},
-		Velocity: &netproto.Vector2{
-			X: int32(event.VelocityX),
-			Y: int32(event.VelocityY),
-		},
-		MoveMode: getProtoMoveMode(event.MoveMode),
-		IsMoving: event.IsMoving,
-	}
-
-	// Add target position if available
-	if event.TargetX != nil && event.TargetY != nil {
-		movement.TargetPosition = &netproto.Vector2{
-			X: int32(*event.TargetX),
-			Y: int32(*event.TargetY),
-		}
-	}
-
-	// Create S2C_ObjectMove packet
-	objectMoveMsg := &netproto.S2C_ObjectMove{
-		EntityId: uint64(event.EntityID),
-		Movement: movement,
-	}
-
-	// Create server message
-	serverMsg := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_ObjectMove{
-			ObjectMove: objectMoveMsg,
-		},
-	}
-
-	// BroadcastToAllClients to all connected clients
-	data, err := proto.Marshal(serverMsg)
-	if err != nil {
-		g.logger.Error("Failed to marshal S2C_ObjectMove", zap.Error(err))
-		return
-	}
-
-	if event.EntityID == 3519523 {
-		g.networkServer.BroadcastToAllClients(data)
-	}
-	//g.logger.Debug("Broadcasted S2C_ObjectMove", zap.Uint64("entity_id", uint64(event.EntityID)))
 }
 
 func (g *Game) handlePacket(c *network.Client, data []byte) {
