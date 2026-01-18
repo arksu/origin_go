@@ -10,13 +10,14 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 ## System Registry
 
-| Priority | System Name           | Description                                                  | Dependencies                  | Notes                                   |
-|----------|-----------------------|--------------------------------------------------------------|-------------------------------|-----------------------------------------|
-| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Runs first, resets arrays               |
-| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Appends to MovedEntities buffer         |
-| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer         |
-| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                |
-| 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions        |
+| Priority | System Name           | Description                                                  | Dependencies                  | Notes                                     |
+|----------|-----------------------|--------------------------------------------------------------|-------------------------------|-------------------------------------------|
+| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Runs first, resets arrays                 |
+| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Appends to MovedEntities buffer           |
+| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer           |
+| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                  |
+| 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef   | Updates VisibilityState, publishes events |
+| 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions          |
 
 ## System Details
 
@@ -92,6 +93,39 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 - Movement events for network synchronization
 - Position updates for client-side prediction
 
+### VisionSystem (Priority: 350)
+
+**Purpose**: Calculates entity visibility and manages observer state for vision-based gameplay mechanics.
+
+**Components Required**:
+
+- `Vision` - Observer's vision capabilities (radius and power)
+- `Transform` - Current position for spatial queries
+- `ChunkRef` - Current chunk for spatial hash access
+
+**Behavior**:
+
+- Iterates over entities with Vision components (observers)
+- Uses time-based updates (3-second intervals) to throttle visibility calculations
+- Performs spatial queries using neighboring chunks and `QueryRadius`
+- Calculates visibility based on distance, vision power, and target stealth
+- Maintains `VisibilityState` with `VisibleByObserver` and `ObserversByVisibleTarget` maps
+- Publishes `ObjectSpawn` and `ObjectDespawn` events for visibility changes
+- Automatically registers new Vision entities during entity spawning
+
+**Event Publishing**:
+
+- `ObjectSpawnEvent` - When entities enter visibility range
+- `ObjectDespawnEvent` - When entities leave visibility range
+
+**Performance Optimizations**:
+
+- Time-throttled updates (3-second intervals per observer)
+- Pre-allocated buffers for candidates and visible sets
+- Cached component storages for direct access
+- Spatial queries limited to vision radius
+- Zero-allocation iteration patterns
+
 ### ChunkSystem (Priority: 400)
 
 **Purpose**: Manages entity migration between chunks and chunk lifecycle.
@@ -143,6 +177,8 @@ MovementSystem (100)
 CollisionSystem (200) 
     ↓ (reads from MovedEntities)
 TransformUpdateSystem (300)
+VisionSystem (350)
+    ↓ (updates VisibilityState)
 ChunkSystem (400)
 ```
 
@@ -151,10 +187,11 @@ ChunkSystem (400)
 ### Hot Path Optimizations
 
 1. **MovedEntities Buffer**: Direct array iteration for moved entities (no query overhead)
-2. **Component Storage Caching**: CollisionSystem caches component storages for direct access
-3. **Buffer Pooling**: CollisionSystem uses pooled candidates buffer to avoid allocations
+2. **Component Storage Caching**: CollisionSystem and VisionSystem cache component storages for direct access
+3. **Buffer Pooling**: CollisionSystem and VisionSystem use pooled candidates buffer to avoid allocations
 4. **Zero-Allocation Iteration**: Systems minimize allocations during hot path execution
 5. **Pre-allocated Arrays**: MovedEntities arrays allocated once with capacity 256
+6. **Time-Throttled Updates**: VisionSystem uses 3-second intervals per observer to reduce computational load
 
 ### Memory Management
 

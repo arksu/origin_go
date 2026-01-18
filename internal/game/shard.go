@@ -188,22 +188,12 @@ func (s *Shard) Stop() {
 	s.chunkManager.Stop()
 }
 
-func (s *Shard) spawnEntityLocked(id types.EntityID, x int, y int) types.Handle {
-	handle := s.world.Spawn(id, nil)
-
-	s.PublishEvent(
-		eventbus.NewEntitySpawnEvent(id, "entity", x, y),
-		eventbus.PriorityMedium,
-	)
-
-	return handle
-}
-
-func (s *Shard) spawnEntityWithComponentsLocked(id types.EntityID, x int, y int, setupFunc func(*ecs.World, types.Handle)) types.Handle {
+func (s *Shard) spawnEntityLocked(id types.EntityID, x int, y int, setupFunc func(*ecs.World, types.Handle)) types.Handle {
 	handle := s.world.Spawn(id, setupFunc)
 
-	s.PublishEvent(
-		eventbus.NewEntitySpawnEvent(id, "entity", x, y),
+	// Publish event when player enters the world
+	s.PublishEventAsync(
+		ecs.NewPlayerEnteredWorldEvent(id, s.layer, x, y),
 		eventbus.PriorityMedium,
 	)
 
@@ -214,7 +204,7 @@ func (s *Shard) EventBus() *eventbus.EventBus {
 	return s.eventBus
 }
 
-func (s *Shard) PublishEvent(event eventbus.Event, priority eventbus.Priority) {
+func (s *Shard) PublishEventAsync(event eventbus.Event, priority eventbus.Priority) {
 	s.eventBus.PublishAsync(event, priority)
 }
 
@@ -366,7 +356,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		}
 	}
 
-	handle := s.spawnEntityWithComponentsLocked(entityID, worldX, worldY, setupFunc)
+	handle := s.spawnEntityLocked(entityID, worldX, worldY, setupFunc)
 	if chunk, ok := s.chunkManager.GetEntityChunk(entityID); ok {
 		chunk.Spatial().AddDynamic(handle, worldX, worldY)
 	}

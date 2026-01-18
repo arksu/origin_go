@@ -514,7 +514,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	cm.completeFuture(coord)
 
 	cm.eventBus.PublishAsync(
-		eventbus.NewChunkLoadEvent(coord.X, coord.Y, cm.layer),
+		ecs.NewChunkLoadEvent(coord.X, coord.Y, cm.layer),
 		eventbus.PriorityLow,
 	)
 }
@@ -558,7 +558,7 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	atomic.AddInt64(&cm.stats.InactiveCount, -1)
 
 	cm.eventBus.PublishAsync(
-		eventbus.NewChunkUnloadEvent(coord.X, coord.Y, cm.layer),
+		ecs.NewChunkUnloadEvent(coord.X, coord.Y, cm.layer),
 		eventbus.PriorityLow,
 	)
 }

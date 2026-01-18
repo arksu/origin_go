@@ -18,44 +18,6 @@ const (
 	visionUpdateInterval = 3 * time.Second
 )
 
-type ObjectSpawnEvent struct {
-	topic        string
-	Timestamp    time.Time
-	ObserverID   types.EntityID
-	TargetID     types.EntityID
-	TargetHandle types.Handle
-}
-
-func (e *ObjectSpawnEvent) Topic() string { return e.topic }
-
-func NewObjectSpawnEvent(observerID, targetID types.EntityID, targetHandle types.Handle) *ObjectSpawnEvent {
-	return &ObjectSpawnEvent{
-		topic:        "gameplay.object.spawn",
-		Timestamp:    time.Now(),
-		ObserverID:   observerID,
-		TargetID:     targetID,
-		TargetHandle: targetHandle,
-	}
-}
-
-type ObjectDespawnEvent struct {
-	topic      string
-	Timestamp  time.Time
-	ObserverID types.EntityID
-	TargetID   types.EntityID
-}
-
-func (e *ObjectDespawnEvent) Topic() string { return e.topic }
-
-func NewObjectDespawnEvent(observerID, targetID types.EntityID) *ObjectDespawnEvent {
-	return &ObjectDespawnEvent{
-		topic:      "gameplay.object.despawn",
-		Timestamp:  time.Now(),
-		ObserverID: observerID,
-		TargetID:   targetID,
-	}
-}
-
 type VisionSystem struct {
 	ecs.BaseSystem
 	chunkManager core.ChunkManager
@@ -194,7 +156,7 @@ func (s *VisionSystem) updateObserverVisibility(
 			s.addToObserversByTarget(visState, targetHandle, observerHandle)
 
 			s.eventBus.PublishAsync(
-				NewObjectSpawnEvent(observerID, targetID, targetHandle),
+				ecs.NewEntitySpawnEvent(observerID, targetID, targetHandle),
 				eventbus.PriorityMedium,
 			)
 		}
@@ -210,7 +172,7 @@ func (s *VisionSystem) updateObserverVisibility(
 			s.removeFromObserversByTarget(visState, targetHandle, observerHandle)
 
 			s.eventBus.PublishAsync(
-				NewObjectDespawnEvent(observerID, targetID),
+				ecs.NewEntityDespawnEvent(observerID, targetID),
 				eventbus.PriorityMedium,
 			)
 		}
