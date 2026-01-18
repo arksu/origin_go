@@ -1,6 +1,7 @@
 package systems
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -87,81 +88,82 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			t.Y = finalY
 		})
 
-		// Send to client S2C_ObjectMove with current data
+		// Send to client event with current data
 		if entityID, ok := w.GetExternalID(h); ok {
+			// Get entity layer from EntityInfo component
+			entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](w, h)
+			layer := 0 // default layer
+			if hasEntityInfo {
+				layer = entityInfo.Layer
+			}
+
+			// Visibility guard: only publish move events if entity is visible to at least one observer
+			visState := w.VisibilityState()
+			if visState != nil {
+				// Check if any observer can see this entity
+				observers, hasObservers := visState.ObserversByVisibleTarget[h]
+				if !hasObservers || len(observers) == 0 {
+					// No observers can see this entity, skip publishing move event
+					continue
+				}
+			}
+
 			// Get movement component for velocity data
 			movement, hasMovement := ecs.GetComponent[components.Movement](w, h)
 
 			// Create movement data for packet
-			moveMode := proto.MovementMode_MOVE_MODE_WALK
+			moveMode := constt.Walk
 			isMoving := false
 			var velocity proto.Vector2
-			var targetPosition *proto.Vector2
 
 			if hasMovement {
-				// Convert movement mode
-				switch movement.Mode {
-				case components.Walk:
-					moveMode = proto.MovementMode_MOVE_MODE_WALK
-				case components.Run:
-					moveMode = proto.MovementMode_MOVE_MODE_RUN
-				case components.FastRun:
-					moveMode = proto.MovementMode_MOVE_MODE_FAST_RUN
-				case components.Swim:
-					moveMode = proto.MovementMode_MOVE_MODE_SWIM
-				}
+				moveMode = movement.Mode
 
-				isMoving = movement.State == components.StateMoving
+				isMoving = movement.State == constt.StateMoving
 				velocity = proto.Vector2{
 					X: int32(movement.VelocityX),
 					Y: int32(movement.VelocityY),
 				}
-
-				if movement.TargetType == components.TargetPoint {
-					targetPosition = &proto.Vector2{
-						X: int32(movement.TargetX),
-						Y: int32(movement.TargetY),
-					}
-				}
 			}
 
-			// Publish network event for S2C_ObjectMove
+			// Prepare target position as pointers
+			var targetX, targetY *int
+			if movement.TargetType == constt.TargetPoint {
+				tx := int(movement.TargetX)
+				ty := int(movement.TargetY)
+				targetX = &tx
+				targetY = &ty
+			}
+
+			// Publish movement event with raw data
 			s.eventBus.PublishAsync(
 				ecs.NewObjectMoveEvent(
 					entityID,
-					&proto.EntityMovement{
-						Position: &proto.Position{
-							X:       int32(finalX),
-							Y:       int32(finalY),
-							Heading: 0, // TODO: get from transform component
-						},
-						Velocity:       &velocity,
-						MoveMode:       moveMode,
-						IsMoving:       isMoving,
-						TargetPosition: targetPosition,
-					},
+					int(finalX), int(finalY), int(transform.Direction),
+					int(velocity.X), int(velocity.Y),
+					int(moveMode), isMoving,
+					targetX, targetY,
+					layer,
 				),
 				eventbus.PriorityMedium,
 			)
 		}
 
 		// Save collision state for next frame (for oscillation detection)
-		if hasCollision {
-			ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-				// Save current collision position for next frame
-				cr.PrevFinalX = cr.FinalX
-				cr.PrevFinalY = cr.FinalY
-				if cr.CollidedWith != 0 {
-					cr.PrevCollidedWith = cr.CollidedWith
-				}
-				// Clear collision result for next frame
-				cr.HasCollision = false
-				cr.CollidedWith = 0
-				cr.CollisionNormalX = 0
-				cr.CollisionNormalY = 0
-				cr.IsPhantom = false
-				cr.PerpendicularOscillation = false
-			})
-		}
+		ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
+			// Save current collision position for next frame
+			cr.PrevFinalX = cr.FinalX
+			cr.PrevFinalY = cr.FinalY
+			if cr.CollidedWith != 0 {
+				cr.PrevCollidedWith = cr.CollidedWith
+			}
+			// Clear collision result for next frame
+			cr.HasCollision = false
+			cr.CollidedWith = 0
+			cr.CollisionNormalX = 0
+			cr.CollisionNormalY = 0
+			cr.IsPhantom = false
+			cr.PerpendicularOscillation = false
+		})
 	}
 }

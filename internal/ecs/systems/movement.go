@@ -2,6 +2,7 @@ package systems
 
 import (
 	"math"
+	constt "origin/internal/const"
 	"origin/internal/types"
 
 	"origin/internal/core"
@@ -47,7 +48,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			return
 		}
 
-		if movement.State != components.StateMoving {
+		if movement.State != constt.StateMoving {
 			return
 		}
 
@@ -56,7 +57,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			return
 		}
 
-		if movement.TargetType == components.TargetEntity {
+		if movement.TargetType == constt.TargetEntity {
 			targetTransform, ok := ecs.GetComponent[components.Transform](w, movement.TargetHandle)
 			if !ok {
 				ecs.WithComponent(w, h, func(m *components.Movement) {

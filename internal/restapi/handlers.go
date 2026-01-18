@@ -9,6 +9,7 @@ import (
 	"errors"
 	mathrand "math/rand"
 	"net/http"
+	"origin/internal/const"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"origin/internal/game"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
-	"origin/internal/utils"
 )
 
 type Handler struct {
@@ -240,8 +240,8 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 
 	// Generate random position within world bounds with margin from borders
 	marginTiles := 50
-	worldWidthTiles := h.gameConfig.WorldWidthChunks * utils.ChunkSize
-	worldHeightTiles := h.gameConfig.WorldHeightChunks * utils.ChunkSize
+	worldWidthTiles := h.gameConfig.WorldWidthChunks * _const.ChunkSize
+	worldHeightTiles := h.gameConfig.WorldHeightChunks * _const.ChunkSize
 
 	// Calculate valid spawn area
 	minX := marginTiles

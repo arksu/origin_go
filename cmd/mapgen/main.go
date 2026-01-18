@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"origin/internal/const"
 	"sync/atomic"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
-	"origin/internal/utils"
 )
 
 const (
@@ -56,8 +56,8 @@ func main() {
 		db:           db,
 		logger:       logger,
 		rng:          rng,
-		chunkSize:    utils.ChunkSize,
-		coordPerTile: utils.CoordPerTile,
+		chunkSize:    _const.ChunkSize,
+		coordPerTile: _const.CoordPerTile,
 		region:       cfg.Game.Region,
 		perlin:       NewPerlinNoise(*seed),
 		seed:         *seed,

@@ -37,17 +37,19 @@ type EntitySpawnEvent struct {
 	ObserverID   types.EntityID
 	TargetID     types.EntityID
 	TargetHandle types.Handle
+	Layer        int
 }
 
 func (e *EntitySpawnEvent) Topic() string { return e.topic }
 
-func NewEntitySpawnEvent(observerID, targetID types.EntityID, targetHandle types.Handle) *EntitySpawnEvent {
+func NewEntitySpawnEvent(observerID, targetID types.EntityID, targetHandle types.Handle, layer int) *EntitySpawnEvent {
 	return &EntitySpawnEvent{
 		topic:        TopicGameplayEntitySpawn,
 		Timestamp:    time.Now(),
 		ObserverID:   observerID,
 		TargetID:     targetID,
 		TargetHandle: targetHandle,
+		Layer:        layer,
 	}
 }
 
@@ -57,16 +59,18 @@ type EntityDespawnEvent struct {
 	Timestamp  time.Time
 	ObserverID types.EntityID
 	TargetID   types.EntityID
+	Layer      int
 }
 
 func (e *EntityDespawnEvent) Topic() string { return e.topic }
 
-func NewEntityDespawnEvent(observerID, targetID types.EntityID) *EntityDespawnEvent {
+func NewEntityDespawnEvent(observerID, targetID types.EntityID, layer int) *EntityDespawnEvent {
 	return &EntityDespawnEvent{
 		topic:      TopicGameplayEntityDespawn,
 		Timestamp:  time.Now(),
 		ObserverID: observerID,
 		TargetID:   targetID,
+		Layer:      layer,
 	}
 }
 
@@ -135,21 +139,39 @@ func NewChunkUnloadEvent(x, y, layer int) *ChunkUnloadEvent {
 	}
 }
 
-// ObjectMoveEvent represents an object movement event for network transmission
+// ObjectMoveEvent represents an object movement event with raw data
 type ObjectMoveEvent struct {
 	topic     string
 	Timestamp time.Time
 	EntityID  types.EntityID
-	Movement  interface{} // Using interface{} to avoid import cycle with proto package
+	X         int
+	Y         int
+	Heading   int
+	VelocityX int
+	VelocityY int
+	MoveMode  int // 0=Walk, 1=Run, 2=FastRun, 3=Swim
+	IsMoving  bool
+	TargetX   *int
+	TargetY   *int
+	Layer     int
 }
 
 func (e *ObjectMoveEvent) Topic() string { return e.topic }
 
-func NewObjectMoveEvent(entityID types.EntityID, movement interface{}) *ObjectMoveEvent {
+func NewObjectMoveEvent(entityID types.EntityID, x, y, heading, velocityX, velocityY int, moveMode int, isMoving bool, targetX, targetY *int, layer int) *ObjectMoveEvent {
 	return &ObjectMoveEvent{
 		topic:     TopicGameplayMovementMove,
 		Timestamp: time.Now(),
 		EntityID:  entityID,
-		Movement:  movement,
+		X:         x,
+		Y:         y,
+		Heading:   heading,
+		VelocityX: velocityX,
+		VelocityY: velocityY,
+		MoveMode:  moveMode,
+		IsMoving:  isMoving,
+		TargetX:   targetX,
+		TargetY:   targetY,
+		Layer:     layer,
 	}
 }

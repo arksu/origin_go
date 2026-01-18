@@ -1,38 +1,9 @@
 package components
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/types"
-)
-
-const StopDistance float64 = 0.2
-
-// MoveMode represents different movement states
-type MoveMode uint8
-
-const (
-	Walk MoveMode = iota
-	Run
-	FastRun
-	Swim
-)
-
-// MoveState представляет текущее состояние движения
-type MoveState uint8
-
-const (
-	StateIdle MoveState = iota
-	StateMoving
-	StateInteracting
-	StateStunned // не может двигаться
-)
-
-type TargetType uint8
-
-const (
-	TargetNone TargetType = iota
-	TargetPoint
-	TargetEntity
 )
 
 // Movement represents an entity's movement capabilities and state
@@ -41,11 +12,11 @@ type Movement struct {
 	VelocityX float64
 	VelocityY float64
 
-	Mode  MoveMode
-	State MoveState
+	Mode  constt.MoveMode
+	State constt.MoveState
 	Speed float64
 
-	TargetType   TargetType
+	TargetType   constt.TargetType
 	TargetX      float64
 	TargetY      float64
 	TargetHandle types.Handle
@@ -67,51 +38,51 @@ func init() {
 }
 
 func (m *Movement) HasReachedTarget(currentX, currentY float64) bool {
-	if m.TargetType == TargetNone {
+	if m.TargetType == constt.TargetNone {
 		return true
 	}
 
 	dx := m.TargetX - currentX
 	dy := m.TargetY - currentY
 	distSq := dx*dx + dy*dy
-	stopDistSq := StopDistance * StopDistance
+	stopDistSq := constt.StopDistance * constt.StopDistance
 
 	return distSq <= stopDistSq
 }
 
 func (m *Movement) ClearTarget() {
-	m.TargetType = TargetNone
+	m.TargetType = constt.TargetNone
 	m.TargetHandle = types.InvalidHandle
 	m.VelocityX = 0
 	m.VelocityY = 0
-	m.State = StateIdle
+	m.State = constt.StateIdle
 }
 
 func (m *Movement) SetTargetPoint(x, y int) {
-	m.TargetType = TargetPoint
+	m.TargetType = constt.TargetPoint
 	m.TargetX = float64(x)
 	m.TargetY = float64(y)
 	m.TargetHandle = types.InvalidHandle
-	m.State = StateMoving
+	m.State = constt.StateMoving
 }
 
 func (m *Movement) SetTargetHandle(handle types.Handle, x, y int) {
-	m.TargetType = TargetEntity
+	m.TargetType = constt.TargetEntity
 	m.TargetHandle = handle
 	m.TargetX = float64(x)
 	m.TargetY = float64(y)
-	m.State = StateMoving
+	m.State = constt.StateMoving
 }
 
 func (m *Movement) GetCurrentSpeed() float64 {
 	switch m.Mode {
-	case Walk:
+	case constt.Walk:
 		return m.Speed
-	case Run:
+	case constt.Run:
 		return m.Speed * 1.5
-	case FastRun:
+	case constt.FastRun:
 		return m.Speed * 2.0
-	case Swim:
+	case constt.Swim:
 		return m.Speed * 0.7
 	default:
 		return m.Speed

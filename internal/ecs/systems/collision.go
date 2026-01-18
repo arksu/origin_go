@@ -2,12 +2,13 @@ package systems
 
 import (
 	"math"
+	"origin/internal/const"
+	constt "origin/internal/const"
 
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
-	"origin/internal/utils"
 
 	"go.uber.org/zap"
 )
@@ -39,7 +40,7 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 	transformStorage := ecs.GetOrCreateStorage[components.Transform](world)
 	movementStorage := ecs.GetOrCreateStorage[components.Movement](world)
 
-	marginPixels := float64(marginTiles) * float64(utils.CoordPerTile)
+	marginPixels := float64(marginTiles) * float64(_const.CoordPerTile)
 
 	return &CollisionSystem{
 		BaseSystem:       ecs.NewBaseSystem("CollisionSystem", 200),
@@ -54,7 +55,7 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 		worldMinY:        worldMinY + marginPixels,
 		worldMaxY:        worldMaxY - marginPixels,
 		marginTiles:      marginTiles,
-		chunkSize:        utils.ChunkSize,
+		chunkSize:        _const.ChunkSize,
 	}
 }
 
@@ -163,7 +164,7 @@ func (s *CollisionSystem) sweepCollision(
 
 	// Check tile collisions first
 	movement, hasMovement := s.movementStorage.Get(entityHandle)
-	isSwimming := hasMovement && movement.Mode == components.Swim
+	isSwimming := hasMovement && movement.Mode == constt.Swim
 	tileCollisionX, tileCollisionY, hasTileCollision := s.checkTileCollision(
 		transform.X, transform.Y, dx, dy, chunk, isSwimming,
 	)
@@ -193,7 +194,7 @@ func (s *CollisionSystem) sweepCollision(
 	chunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &s.candidatesBuffer)
 
 	// Check if query rectangle intersects neighboring chunks
-	chunkWorldSize := float64(utils.ChunkWorldSize)
+	chunkWorldSize := float64(_const.ChunkWorldSize)
 
 	// Calculate query rectangle bounds
 	queryMinX := transform.X - queryRadius
@@ -282,7 +283,7 @@ func (s *CollisionSystem) sweepCollision(
 
 			// Check if candidate is also moving (dynamic collision)
 			candidateMovement, candidateMoving := s.movementStorage.Get(candidateHandle)
-			if candidateMoving && candidateMovement.State == components.StateMoving {
+			if candidateMoving && candidateMovement.State == constt.StateMoving {
 				// Both moving - stop, do not push back
 				t, nx, ny, hit := s.sweptAABB(
 					currentX, currentY, entityHalfW, entityHalfH,
@@ -422,7 +423,7 @@ func (s *CollisionSystem) checkTileCollision(
 	chunk *core.Chunk,
 	isSwimming bool,
 ) (float64, float64, bool) {
-	tileSize := float64(utils.CoordPerTile)
+	tileSize := float64(_const.CoordPerTile)
 	movementLength := math.Sqrt(dx*dx + dy*dy)
 
 	// If movement is less than one tile, check only destination
@@ -466,7 +467,7 @@ func (s *CollisionSystem) isTilePassableAt(
 	isSwimming bool,
 ) bool {
 	// Convert world coordinates to tile coordinates
-	tileSize := float64(utils.CoordPerTile)
+	tileSize := float64(_const.CoordPerTile)
 	tileX := int(math.Floor(worldX / tileSize))
 	tileY := int(math.Floor(worldY / tileSize))
 
