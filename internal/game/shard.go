@@ -193,7 +193,7 @@ func (s *Shard) Stop() {
 	s.chunkManager.Stop()
 }
 
-func (s *Shard) spawnEntityLocked(id types.EntityID, x int, y int, setupFunc func(*ecs.World, types.Handle)) types.Handle {
+func (s *Shard) spawnPlayerLocked(id types.EntityID, x int, y int, setupFunc func(*ecs.World, types.Handle)) types.Handle {
 	handle := s.world.Spawn(id, setupFunc)
 
 	// Publish event when player enters the world
@@ -361,7 +361,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		}
 	}
 
-	handle := s.spawnEntityLocked(entityID, worldX, worldY, setupFunc)
+	handle := s.spawnPlayerLocked(entityID, worldX, worldY, setupFunc)
 	if chunk, ok := s.chunkManager.GetEntityChunk(entityID); ok {
 		chunk.Spatial().AddDynamic(handle, worldX, worldY)
 	}

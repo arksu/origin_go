@@ -16,6 +16,7 @@ const (
 	TopicGameplayMovement         = "gameplay.movement.*"
 	TopicGameplayMovementMove     = "gameplay.movement.move"
 	TopicGameplayMovementTeleport = "gameplay.movement.teleport"
+	TopicGameplayPlayerEnterWorld = "gameplay.player.enter_world"
 	TopicGameplayEntity           = "gameplay.entity.*"
 	TopicGameplayEntitySpawn      = "gameplay.entity.spawn"
 	TopicGameplayEntityDespawn    = "gameplay.entity.despawn"
@@ -90,7 +91,7 @@ func (e *PlayerEnteredWorldEvent) Topic() string { return e.topic }
 
 func NewPlayerEnteredWorldEvent(entityID types.EntityID, layer, x, y int) *PlayerEnteredWorldEvent {
 	return &PlayerEnteredWorldEvent{
-		topic:     TopicGameplayEntitySpawn, // Reuse entity spawn topic for now
+		topic:     TopicGameplayPlayerEnterWorld,
 		Timestamp: time.Now(),
 		EntityID:  entityID,
 		Layer:     layer,
@@ -107,11 +108,12 @@ type ChunkLoadEvent struct {
 	X         int
 	Y         int
 	Layer     int
+	Tiles     []byte
 }
 
 func (e *ChunkLoadEvent) Topic() string { return e.topic }
 
-func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int) *ChunkLoadEvent {
+func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int, tiles []byte) *ChunkLoadEvent {
 	return &ChunkLoadEvent{
 		topic:     TopicGameplayChunkLoad,
 		Timestamp: time.Now(),
@@ -119,6 +121,7 @@ func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int) *ChunkLoadEvent
 		X:         x,
 		Y:         y,
 		Layer:     layer,
+		Tiles:     tiles,
 	}
 }
 
