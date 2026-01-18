@@ -1,11 +1,11 @@
 package systems
 
 import (
+	"origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
-	"origin/internal/utils"
 
 	"go.uber.org/zap"
 )
@@ -42,8 +42,8 @@ func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		// Calculate current chunk from new position
-		newChunkX := int(newX) / utils.ChunkWorldSize
-		newChunkY := int(newY) / utils.ChunkWorldSize
+		newChunkX := int(newX) / _const.ChunkWorldSize
+		newChunkY := int(newY) / _const.ChunkWorldSize
 
 		// Check if entity needs to migrate to different chunk
 		if newChunkX != chunkRef.CurrentChunkX || newChunkY != chunkRef.CurrentChunkY {

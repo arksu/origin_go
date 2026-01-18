@@ -2,12 +2,12 @@ package restapi
 
 import (
 	"math/rand"
+	"origin/internal/const"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"origin/internal/config"
-	"origin/internal/utils"
 )
 
 func TestGenerateRandomPosition(t *testing.T) {
@@ -19,8 +19,8 @@ func TestGenerateRandomPosition(t *testing.T) {
 
 	// Test the position generation logic (same as in handleCreateCharacter)
 	marginTiles := 50
-	worldWidthTiles := gameConfig.WorldWidthChunks * utils.ChunkSize
-	worldHeightTiles := gameConfig.WorldHeightChunks * utils.ChunkSize
+	worldWidthTiles := gameConfig.WorldWidthChunks * _const.ChunkSize
+	worldHeightTiles := gameConfig.WorldHeightChunks * _const.ChunkSize
 
 	// Calculate valid spawn area
 	minX := marginTiles

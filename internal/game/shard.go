@@ -3,11 +3,12 @@ package game
 import (
 	"context"
 	"fmt"
+	"origin/internal/const"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/network"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
-	"origin/internal/utils"
 	"sync"
 
 	"go.uber.org/zap"
@@ -123,6 +124,9 @@ type Shard struct {
 	chunkManager *ChunkManager
 	eventBus     *eventbus.EventBus
 
+	clients   map[types.EntityID]*network.Client
+	clientsMu sync.RWMutex
+
 	state ShardState
 	mu    sync.RWMutex
 }
@@ -136,12 +140,13 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger:          logger,
 		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities)),
 		eventBus:        eb,
+		clients:         make(map[types.EntityID]*network.Client),
 		state:           ShardStateRunning,
 	}
 
 	s.chunkManager = NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, eb, logger)
 
-	chunkSize := utils.ChunkSize * utils.CoordPerTile
+	chunkSize := _const.ChunkSize * _const.CoordPerTile
 	worldMinX := float64(cfg.Game.WorldMinXChunks * chunkSize)
 	worldMaxX := float64((cfg.Game.WorldMinXChunks + cfg.Game.WorldWidthChunks) * chunkSize)
 	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
@@ -220,7 +225,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 		zap.Int("layer", s.layer),
 	)
 
-	centerChunk := types.WorldToChunkCoord(centerWorldX, centerWorldY, utils.ChunkSize, utils.CoordPerTile)
+	centerChunk := types.WorldToChunkCoord(centerWorldX, centerWorldY, _const.ChunkSize, _const.CoordPerTile)
 	radius := s.cfg.Game.PlayerActiveChunkRadius
 
 	coords := make([]types.ChunkCoord, 0, (2*radius+1)*(2*radius+1))
@@ -294,13 +299,13 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 
 	entityID := types.EntityID(character.ID)
 
-	halfSize := utils.PlayerColliderSize / 2
+	halfSize := _const.PlayerColliderSize / 2
 	minX := worldX - halfSize
 	minY := worldY - halfSize
 	maxX := worldX + halfSize
 	maxY := worldY + halfSize
 
-	coordPerTile := utils.CoordPerTile
+	coordPerTile := _const.CoordPerTile
 	minTileX := minX / coordPerTile
 	minTileY := minY / coordPerTile
 	maxTileX := (maxX - 1) / coordPerTile
@@ -341,7 +346,7 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		}
 
 		// Check if collision layers/masks overlap
-		if utils.PlayerLayer&collider.Mask == 0 && collider.Layer&utils.PlayerMask == 0 {
+		if _const.PlayerLayer&collider.Mask == 0 && collider.Layer&_const.PlayerMask == 0 {
 			// No collision layer overlap, skip this object
 			continue
 		}

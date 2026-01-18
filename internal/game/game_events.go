@@ -1,0 +1,226 @@
+package game
+
+import (
+	"context"
+	"origin/internal/ecs"
+	"origin/internal/ecs/components"
+	"origin/internal/eventbus"
+	netproto "origin/internal/network/proto"
+	"origin/internal/types"
+
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
+)
+
+type NetworkVisibilityDispatcher struct {
+	shardManager *ShardManager
+	logger       *zap.Logger
+}
+
+func NewNetworkVisibilityDispatcher(shardManager *ShardManager, logger *zap.Logger) *NetworkVisibilityDispatcher {
+	return &NetworkVisibilityDispatcher{
+		shardManager: shardManager,
+		logger:       logger,
+	}
+}
+
+func (d *NetworkVisibilityDispatcher) Subscribe(eventBus *eventbus.EventBus) {
+	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMove, eventbus.PriorityMedium, d.handleObjectMove)
+	eventBus.SubscribeAsync(ecs.TopicGameplayEntitySpawn, eventbus.PriorityMedium, d.handleEntitySpawn)
+	eventBus.SubscribeAsync(ecs.TopicGameplayEntityDespawn, eventbus.PriorityMedium, d.handleEntityDespawn)
+}
+
+func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e eventbus.Event) error {
+	event, ok := e.(*ecs.ObjectMoveEvent)
+	if !ok {
+		return nil
+	}
+
+	// Get the specific shard by layer
+	shard := d.shardManager.GetShard(event.Layer)
+	if shard == nil {
+		return nil
+	}
+
+	shard.clientsMu.RLock()
+	visibilityState := shard.World().VisibilityState()
+	if visibilityState == nil {
+		shard.clientsMu.RUnlock()
+		return nil
+	}
+
+	for entityID, client := range shard.clients {
+		observerHandle := shard.World().GetHandleByEntityID(entityID)
+		if observerHandle == types.InvalidHandle {
+			continue
+		}
+
+		visibility, exists := visibilityState.VisibleByObserver[observerHandle]
+		if !exists {
+			continue
+		}
+
+		targetHandle := shard.World().GetHandleByEntityID(event.EntityID)
+		if targetHandle == types.InvalidHandle {
+			continue
+		}
+
+		if _, isVisible := visibility.Known[targetHandle]; !isVisible {
+			continue
+		}
+
+		movement := &netproto.EntityMovement{
+			Position: &netproto.Position{
+				X:       int32(event.X),
+				Y:       int32(event.Y),
+				Heading: uint32(event.Heading),
+			},
+			Velocity: &netproto.Vector2{
+				X: int32(event.VelocityX),
+				Y: int32(event.VelocityY),
+			},
+			MoveMode: convertMoveMode(event.MoveMode),
+			IsMoving: event.IsMoving,
+		}
+
+		if event.TargetX != nil && event.TargetY != nil {
+			movement.TargetPosition = &netproto.Vector2{
+				X: int32(*event.TargetX),
+				Y: int32(*event.TargetY),
+			}
+		}
+
+		msg := &netproto.ServerMessage{
+			Payload: &netproto.ServerMessage_ObjectMove{
+				ObjectMove: &netproto.S2C_ObjectMove{
+					EntityId: uint64(event.EntityID),
+					Movement: movement,
+				},
+			},
+		}
+
+		data, err := proto.Marshal(msg)
+		if err != nil {
+			d.logger.Error("failed to marshal ObjectMove message",
+				zap.Error(err),
+				zap.Int64("entity_id", int64(event.EntityID)),
+			)
+			continue
+		}
+
+		client.Send(data)
+	}
+	shard.clientsMu.RUnlock()
+
+	return nil
+}
+
+func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e eventbus.Event) error {
+	event, ok := e.(*ecs.EntitySpawnEvent)
+	if !ok {
+		return nil
+	}
+
+	// Get the specific shard by layer
+	shard := d.shardManager.GetShard(event.Layer)
+	if shard == nil {
+		return nil
+	}
+
+	shard.clientsMu.RLock()
+	// Find the client that is the observer
+	if client, exists := shard.clients[event.ObserverID]; exists {
+		// Get the target entity's transform component
+		transform, hasTransform := ecs.GetComponent[components.Transform](shard.World(), event.TargetHandle)
+		if !hasTransform {
+			shard.clientsMu.RUnlock()
+			return nil
+		}
+
+		msg := &netproto.ServerMessage{
+			Payload: &netproto.ServerMessage_ObjectSpawn{
+				ObjectSpawn: &netproto.S2C_ObjectSpawn{
+					EntityId: uint64(event.TargetID),
+					Position: &netproto.EntityPosition{
+						Position: &netproto.Position{
+							X: int32(transform.X),
+							Y: int32(transform.Y),
+						},
+					},
+				},
+			},
+		}
+
+		data, err := proto.Marshal(msg)
+		if err != nil {
+			d.logger.Error("failed to marshal ObjectSpawn message",
+				zap.Error(err),
+				zap.Int64("observer_id", int64(event.ObserverID)),
+				zap.Int64("target_id", int64(event.TargetID)),
+			)
+			shard.clientsMu.RUnlock()
+			return nil
+		}
+
+		client.Send(data)
+	}
+	shard.clientsMu.RUnlock()
+
+	return nil
+}
+
+func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e eventbus.Event) error {
+	event, ok := e.(*ecs.EntityDespawnEvent)
+	if !ok {
+		return nil
+	}
+
+	// Get the specific shard by layer
+	shard := d.shardManager.GetShard(event.Layer)
+	if shard == nil {
+		return nil
+	}
+
+	shard.clientsMu.RLock()
+	// Find the client that is the observer
+	if client, exists := shard.clients[event.ObserverID]; exists {
+		msg := &netproto.ServerMessage{
+			Payload: &netproto.ServerMessage_ObjectDespawn{
+				ObjectDespawn: &netproto.S2C_ObjectDespawn{
+					EntityId: uint64(event.TargetID),
+				},
+			},
+		}
+
+		data, err := proto.Marshal(msg)
+		if err != nil {
+			d.logger.Error("failed to marshal ObjectDespawn message",
+				zap.Error(err),
+				zap.Int64("observer_id", int64(event.ObserverID)),
+				zap.Int64("target_id", int64(event.TargetID)),
+			)
+			shard.clientsMu.RUnlock()
+			return nil
+		}
+
+		client.Send(data)
+	}
+	shard.clientsMu.RUnlock()
+
+	return nil
+}
+
+func convertMoveMode(mode int) netproto.MovementMode {
+	switch mode {
+	case 0: // Walk
+		return netproto.MovementMode_MOVE_MODE_WALK
+	case 1: // Run
+		return netproto.MovementMode_MOVE_MODE_RUN
+	case 2: // FastRun
+		return netproto.MovementMode_MOVE_MODE_FAST_RUN
+	case 3: // Swim
+		return netproto.MovementMode_MOVE_MODE_SWIM
+	default:
+		return netproto.MovementMode_MOVE_MODE_WALK
+	}
+}

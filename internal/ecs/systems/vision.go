@@ -2,6 +2,7 @@ package systems
 
 import (
 	"math"
+	_const "origin/internal/const"
 	"time"
 
 	"origin/internal/core"
@@ -9,7 +10,6 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
 	"origin/internal/types"
-	"origin/internal/utils"
 
 	"go.uber.org/zap"
 )
@@ -153,10 +153,17 @@ func (s *VisionSystem) updateObserverVisibility(
 				continue
 			}
 
+			// Get target entity layer
+			targetEntityInfo, hasTargetEntityInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+			layer := 0 // default layer
+			if hasTargetEntityInfo {
+				layer = targetEntityInfo.Layer
+			}
+
 			s.addToObserversByTarget(visState, targetHandle, observerHandle)
 
 			s.eventBus.PublishAsync(
-				ecs.NewEntitySpawnEvent(observerID, targetID, targetHandle),
+				ecs.NewEntitySpawnEvent(observerID, targetID, targetHandle, layer),
 				eventbus.PriorityMedium,
 			)
 		}
@@ -169,10 +176,17 @@ func (s *VisionSystem) updateObserverVisibility(
 				targetID = 0
 			}
 
+			// Get target entity layer
+			targetEntityInfo, hasTargetEntityInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+			layer := 0 // default layer
+			if hasTargetEntityInfo {
+				layer = targetEntityInfo.Layer
+			}
+
 			s.removeFromObserversByTarget(visState, targetHandle, observerHandle)
 
 			s.eventBus.PublishAsync(
-				ecs.NewEntityDespawnEvent(observerID, targetID),
+				ecs.NewEntityDespawnEvent(observerID, targetID, layer),
 				eventbus.PriorityMedium,
 			)
 		}
@@ -202,7 +216,7 @@ func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.
 
 	chunk.Spatial().QueryRadius(x, y, radius, &s.candidatesBuffer)
 
-	chunkWorldSize := float64(utils.ChunkWorldSize)
+	chunkWorldSize := float64(_const.ChunkWorldSize)
 
 	queryMinX := x - radius
 	queryMaxX := x + radius

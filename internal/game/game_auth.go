@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"origin/internal/const"
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
-	"origin/internal/utils"
 	"time"
 
 	"go.uber.org/zap"
@@ -168,29 +169,29 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			})
 			ecs.AddComponent(w, h, components.CreateTransform(pos.X, pos.Y, int(character.Heading)*45))
 			ecs.AddComponent(w, h, components.ChunkRef{
-				CurrentChunkX: pos.X / utils.ChunkWorldSize,
-				CurrentChunkY: pos.Y / utils.ChunkWorldSize,
-				PrevChunkX:    pos.X / utils.ChunkWorldSize,
-				PrevChunkY:    pos.Y / utils.ChunkWorldSize,
+				CurrentChunkX: pos.X / _const.ChunkWorldSize,
+				CurrentChunkY: pos.Y / _const.ChunkWorldSize,
+				PrevChunkX:    pos.X / _const.ChunkWorldSize,
+				PrevChunkY:    pos.Y / _const.ChunkWorldSize,
 			})
 			ecs.AddComponent(w, h, components.Movement{
 				VelocityX: 0,
 				VelocityY: 0,
-				Mode:      components.Walk,
-				State:     components.StateIdle,
+				Mode:      constt.Walk,
+				State:     constt.StateIdle,
 				// TODO player speed
 				Speed:            32.0,
-				TargetType:       components.TargetNone,
+				TargetType:       constt.TargetNone,
 				TargetX:          0,
 				TargetY:          0,
 				TargetHandle:     types.InvalidHandle,
 				InteractionRange: 5.0,
 			})
 			ecs.AddComponent(w, h, components.Collider{
-				HalfWidth:  utils.PlayerColliderSize / 2,
-				HalfHeight: utils.PlayerColliderSize / 2,
-				Layer:      utils.PlayerLayer,
-				Mask:       utils.PlayerMask,
+				HalfWidth:  _const.PlayerColliderSize / 2,
+				HalfHeight: _const.PlayerColliderSize / 2,
+				Layer:      _const.PlayerLayer,
+				Mask:       _const.PlayerMask,
 			})
 			ecs.AddComponent(w, h, components.CollisionResult{
 				HasCollision: false,
@@ -229,10 +230,22 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		return
 	}
 
+	// Add client to shard's client map
+	shard.clientsMu.Lock()
+	shard.clients[playerEntityID] = c
+	shard.clientsMu.Unlock()
+
+	// Update client info
+	c.CharacterID = playerEntityID
+	c.Layer = character.Layer
+
 	// Final check: ensure spawn context hasn't timed out before sending packets
 	select {
 	case <-ctx.Done():
 		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
+		shard.clientsMu.Lock()
+		delete(shard.clients, playerEntityID)
+		shard.clientsMu.Unlock()
 		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
 		shard.mu.Unlock()
@@ -252,8 +265,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 }
 
 func (g *Game) isValidSpawnPos(x, y int) bool {
-	chunkSize := utils.ChunkSize * utils.CoordPerTile
-	marginPixels := g.cfg.Game.WorldMarginTiles * utils.CoordPerTile
+	chunkSize := _const.ChunkSize * _const.CoordPerTile
+	marginPixels := g.cfg.Game.WorldMarginTiles * _const.CoordPerTile
 	minX := g.cfg.Game.WorldMinXChunks*chunkSize + marginPixels
 	maxX := (g.cfg.Game.WorldMinXChunks+g.cfg.Game.WorldWidthChunks)*chunkSize - marginPixels
 	minY := g.cfg.Game.WorldMinYChunks*chunkSize + marginPixels
@@ -285,8 +298,8 @@ func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 		}
 	}
 
-	chunkSize := utils.ChunkSize * utils.CoordPerTile
-	marginPixels := g.cfg.Game.WorldMarginTiles * utils.CoordPerTile
+	chunkSize := _const.ChunkSize * _const.CoordPerTile
+	marginPixels := g.cfg.Game.WorldMarginTiles * _const.CoordPerTile
 	for i := 0; i < g.cfg.Game.RandomSpawnTries; i++ {
 		minX := g.cfg.Game.WorldMinXChunks*chunkSize + marginPixels
 		maxX := (g.cfg.Game.WorldMinXChunks+g.cfg.Game.WorldWidthChunks)*chunkSize - marginPixels
@@ -310,15 +323,6 @@ func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 }
 
 func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, shard *Shard, character repository.Character) {
-	type objectSnapshot struct {
-		handle     uint64
-		objectType int32
-		x          int32
-		y          int32
-		heading    uint32
-		sizeX      int32
-		sizeY      int32
-	}
 
 	chunks := shard.ChunkManager().GetEntityActiveChunks(entityID)
 
@@ -330,6 +334,7 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 		default:
 		}
 
+		// TODO delete after events system
 		loadChunk := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_LoadChunk{
 				LoadChunk: &netproto.S2C_LoadChunk{
@@ -342,76 +347,6 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 					},
 				},
 			},
-		}
-
-		// --- Snapshot world state under shard lock (World is NOT thread-safe) ---
-		handles := chunk.GetHandles()
-
-		shard.mu.Lock()
-		world := shard.World()
-
-		objects := make([]objectSnapshot, 0, len(handles))
-		for _, h := range handles {
-			if !world.Alive(h) {
-				continue
-			}
-
-			transform, hasTransform := ecs.GetComponent[components.Transform](world, h)
-			if !hasTransform {
-				continue
-			}
-
-			entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](world, h)
-			if !hasEntityInfo {
-				continue
-			}
-
-			collider, hasCollider := ecs.GetComponent[components.Collider](world, h)
-			if !hasCollider {
-				continue
-			}
-
-			objects = append(objects, objectSnapshot{
-				handle:     uint64(h),
-				objectType: int32(entityInfo.ObjectType),
-				x:          int32(transform.X),
-				y:          int32(transform.Y),
-				heading:    uint32(transform.Direction),
-				sizeX:      int32(collider.HalfWidth * 2),
-				sizeY:      int32(collider.HalfHeight * 2),
-			})
-		}
-		shard.mu.Unlock()
-		// --- end snapshot ---
-
-		// Send all static handles to client - S2C_Object (no shard lock here)
-		for _, o := range objects {
-			objectMsg := &netproto.ServerMessage{
-				Payload: &netproto.ServerMessage_ObjectSpawn{
-					ObjectSpawn: &netproto.S2C_ObjectSpawn{
-						EntityId:   o.handle,
-						ObjectType: o.objectType,
-						Position: &netproto.EntityPosition{
-							Position: &netproto.Position{
-								X:       o.x,
-								Y:       o.y,
-								Heading: o.heading,
-							},
-							Size: &netproto.Vector2{
-								X: o.sizeX,
-								Y: o.sizeY,
-							},
-						},
-					},
-				},
-			}
-
-			objectData, err := proto.Marshal(objectMsg)
-			if err != nil {
-				g.logger.Error("Failed to marshal object", zap.Uint64("client_id", c.ID), zap.Error(err))
-				continue
-			}
-			c.Send(objectData)
 		}
 
 		chunkData, err := proto.Marshal(loadChunk)

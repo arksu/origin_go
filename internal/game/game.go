@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -142,7 +143,11 @@ func (g *Game) setupNetworkHandlers() {
 }
 
 func (g *Game) setupEventHandlers() {
-	// Subscribe to object move events from systems
+	// Create and subscribe NetworkVisibilityDispatcher
+	dispatcher := NewNetworkVisibilityDispatcher(g.shardManager, g.logger.Named("visibility-dispatcher"))
+	dispatcher.Subscribe(g.shardManager.EventBus())
+
+	// Subscribe to object move events from systems (legacy handler, can be removed if not needed)
 	eventBus := g.shardManager.EventBus()
 	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMove, eventbus.PriorityMedium, func(ctx context.Context, e eventbus.Event) error {
 		if objectMove, ok := e.(*ecs.ObjectMoveEvent); ok {
@@ -152,11 +157,44 @@ func (g *Game) setupEventHandlers() {
 	})
 }
 
+// getProtoMoveMode converts int move mode to protobuf enum
+func getProtoMoveMode(moveMode int) netproto.MovementMode {
+	switch moveMode {
+	case 0: // Walk
+		return netproto.MovementMode_MOVE_MODE_WALK
+	case 1: // Run
+		return netproto.MovementMode_MOVE_MODE_RUN
+	case 2: // FastRun
+		return netproto.MovementMode_MOVE_MODE_FAST_RUN
+	case 3: // Swim
+		return netproto.MovementMode_MOVE_MODE_SWIM
+	default:
+		return netproto.MovementMode_MOVE_MODE_WALK
+	}
+}
+
 func (g *Game) handleObjectMove(event *ecs.ObjectMoveEvent) {
-	// Type assert the movement data back to the expected proto type
-	movement, ok := event.Movement.(*netproto.EntityMovement)
-	if !ok {
-		return
+	// Create protobuf movement data from event data
+	movement := &netproto.EntityMovement{
+		Position: &netproto.Position{
+			X:       int32(event.X),
+			Y:       int32(event.Y),
+			Heading: uint32(event.Heading),
+		},
+		Velocity: &netproto.Vector2{
+			X: int32(event.VelocityX),
+			Y: int32(event.VelocityY),
+		},
+		MoveMode: getProtoMoveMode(event.MoveMode),
+		IsMoving: event.IsMoving,
+	}
+
+	// Add target position if available
+	if event.TargetX != nil && event.TargetY != nil {
+		movement.TargetPosition = &netproto.Vector2{
+			X: int32(*event.TargetX),
+			Y: int32(*event.TargetY),
+		}
 	}
 
 	// Create S2C_ObjectMove packet
@@ -308,7 +346,7 @@ func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netpr
 	}
 
 	// Only allow movement if not stunned
-	if mov.State == components.StateStunned {
+	if mov.State == constt.StateStunned {
 		g.logger.Debug("Cannot move while stunned",
 			zap.Uint64("client_id", c.ID),
 			zap.Uint64("entity_id", uint64(c.CharacterID)))
@@ -357,6 +395,12 @@ func (g *Game) handleDisconnect(c *network.Client) {
 		if g.getState() == GameStateRunning {
 			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
 				playerEntityID := c.CharacterID
+
+				// Remove client from shard's client map
+				shard.clientsMu.Lock()
+				delete(shard.clients, playerEntityID)
+				shard.clientsMu.Unlock()
+
 				shard.mu.Lock()
 				// Get the player's handle and despawn the entity
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
