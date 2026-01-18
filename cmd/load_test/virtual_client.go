@@ -436,16 +436,16 @@ func (vc *VirtualClient) handleMessage(data []byte) {
 		default:
 		}
 
-	case *netproto.ServerMessage_Object:
+	case *netproto.ServerMessage_ObjectSpawn:
 		vc.mu.Lock()
-		vc.entities[payload.Object.EntityId] = &EntityState{
-			EntityID: payload.Object.EntityId,
-			X:        payload.Object.Position.Position.X,
-			Y:        payload.Object.Position.Position.Y,
+		vc.entities[payload.ObjectSpawn.EntityId] = &EntityState{
+			EntityID: payload.ObjectSpawn.EntityId,
+			X:        payload.ObjectSpawn.Position.Position.X,
+			Y:        payload.ObjectSpawn.Position.Position.Y,
 		}
-		if payload.Object.EntityId == vc.playerEntityID {
-			vc.playerX = payload.Object.Position.Position.X
-			vc.playerY = payload.Object.Position.Position.Y
+		if payload.ObjectSpawn.EntityId == vc.playerEntityID {
+			vc.playerX = payload.ObjectSpawn.Position.Position.X
+			vc.playerY = payload.ObjectSpawn.Position.Position.Y
 		}
 		vc.mu.Unlock()
 

@@ -5,32 +5,12 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
-	"time"
 
 	"go.uber.org/zap"
 
 	"origin/internal/eventbus"
 	"origin/internal/network/proto"
 )
-
-// ObjectMoveEvent represents an object movement event for network transmission
-type ObjectMoveEvent struct {
-	topic     string
-	Timestamp time.Time
-	EntityID  types.EntityID
-	Movement  *proto.EntityMovement
-}
-
-func (e *ObjectMoveEvent) Topic() string { return e.topic }
-
-func NewObjectMoveEvent(entityID types.EntityID, movement *proto.EntityMovement) *ObjectMoveEvent {
-	return &ObjectMoveEvent{
-		topic:     "gameplay.object.move",
-		Timestamp: time.Now(),
-		EntityID:  entityID,
-		Movement:  movement,
-	}
-}
 
 type TransformUpdateSystem struct {
 	ecs.BaseSystem
@@ -147,7 +127,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 			// Publish network event for S2C_ObjectMove
 			s.eventBus.PublishAsync(
-				NewObjectMoveEvent(
+				ecs.NewObjectMoveEvent(
 					entityID,
 					&proto.EntityMovement{
 						Position: &proto.Position{

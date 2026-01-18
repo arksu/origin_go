@@ -249,7 +249,7 @@ func (s *Server) ClientCount() int {
 	return len(s.clients)
 }
 
-func (s *Server) Broadcast(data []byte) {
+func (s *Server) BroadcastToAllClients(data []byte) {
 	s.clientsMu.RLock()
 	defer s.clientsMu.RUnlock()
 	for _, c := range s.clients {
