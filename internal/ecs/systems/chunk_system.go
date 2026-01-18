@@ -12,26 +12,25 @@ import (
 
 type ChunkSystem struct {
 	ecs.BaseSystem
-	chunkManager  core.ChunkManager
-	movedEntities *MovedEntities
-	logger        *zap.Logger
+	chunkManager core.ChunkManager
+	logger       *zap.Logger
 }
 
-func NewChunkSystem(chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger) *ChunkSystem {
+func NewChunkSystem(chunkManager core.ChunkManager, logger *zap.Logger) *ChunkSystem {
 	return &ChunkSystem{
-		BaseSystem:    ecs.NewBaseSystem("ChunkSystem", 400),
-		chunkManager:  chunkManager,
-		movedEntities: movedEntities,
-		logger:        logger,
+		BaseSystem:   ecs.NewBaseSystem("ChunkSystem", 400),
+		chunkManager: chunkManager,
+		logger:       logger,
 	}
 }
 
 func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
+	movedEntities := w.MovedEntities()
 	// Process only entities that moved this frame
-	for i := 0; i < s.movedEntities.Count; i++ {
-		h := s.movedEntities.Handles[i]
-		newX := s.movedEntities.IntentX[i]
-		newY := s.movedEntities.IntentY[i]
+	for i := 0; i < movedEntities.Count; i++ {
+		h := movedEntities.Handles[i]
+		newX := movedEntities.IntentX[i]
+		newY := movedEntities.IntentY[i]
 
 		if !w.Alive(h) {
 			continue

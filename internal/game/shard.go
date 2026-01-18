@@ -123,9 +123,6 @@ type Shard struct {
 	chunkManager *ChunkManager
 	eventBus     *eventbus.EventBus
 
-	// Resources:
-	movedEntities systems.MovedEntities // данные о том, какие сущности передвигались между системами
-
 	state ShardState
 	mu    sync.RWMutex
 }
@@ -140,12 +137,6 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities)),
 		eventBus:        eb,
 		state:           ShardStateRunning,
-		movedEntities: systems.MovedEntities{
-			Handles: make([]types.Handle, 2048),
-			IntentX: make([]float64, 2048),
-			IntentY: make([]float64, 2048),
-			Count:   0,
-		},
 	}
 
 	s.chunkManager = NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, eb, logger)
@@ -156,11 +147,11 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
-	s.world.AddSystem(systems.NewResetSystem(&s.movedEntities, logger))
-	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, &s.movedEntities, logger))
-	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, &s.movedEntities, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
-	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, &s.movedEntities, s.eventBus, logger))
-	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, &s.movedEntities, logger))
+	s.world.AddSystem(systems.NewResetSystem(logger))
+	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
+	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
+	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
+	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
 
 	return s
 }
@@ -175,10 +166,6 @@ func (s *Shard) World() *ecs.World {
 
 func (s *Shard) ChunkManager() *ChunkManager {
 	return s.chunkManager
-}
-
-func (s *Shard) MovedEntities() *systems.MovedEntities {
-	return &s.movedEntities
 }
 
 func (s *Shard) Update(dt float64) {

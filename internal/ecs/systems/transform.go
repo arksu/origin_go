@@ -34,26 +34,25 @@ func NewObjectMoveEvent(entityID types.EntityID, movement *proto.EntityMovement)
 
 type TransformUpdateSystem struct {
 	ecs.BaseSystem
-	chunkManager  core.ChunkManager
-	eventBus      *eventbus.EventBus
-	logger        *zap.Logger
-	movedEntities *MovedEntities
+	chunkManager core.ChunkManager
+	eventBus     *eventbus.EventBus
+	logger       *zap.Logger
 }
 
-func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
+func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
 	return &TransformUpdateSystem{
-		BaseSystem:    ecs.NewBaseSystem("TransformUpdateSystem", 300),
-		chunkManager:  chunkManager,
-		eventBus:      eventBus,
-		logger:        logger,
-		movedEntities: movedEntities,
+		BaseSystem:   ecs.NewBaseSystem("TransformUpdateSystem", 300),
+		chunkManager: chunkManager,
+		eventBus:     eventBus,
+		logger:       logger,
 	}
 }
 
 func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
+	movedEntities := w.MovedEntities()
 	// Process entities that moved this frame (from movedEntities buffer)
-	for i := 0; i < s.movedEntities.Count; i++ {
-		h := s.movedEntities.Handles[i]
+	for i := 0; i < movedEntities.Count; i++ {
+		h := movedEntities.Handles[i]
 		if !w.Alive(h) {
 			continue
 		}
