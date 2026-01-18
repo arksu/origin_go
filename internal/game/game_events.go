@@ -58,7 +58,10 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 	}
 
 	// Get observers who can see this target entity directly from ObserversByVisibleTarget
+	visibilityState.Mu.RLock()
 	observers, hasObservers := visibilityState.ObserversByVisibleTarget[targetHandle]
+	visibilityState.Mu.RUnlock()
+
 	if !hasObservers || len(observers) == 0 {
 		// No observers can see this entity, nothing to send
 		return nil

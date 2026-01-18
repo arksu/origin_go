@@ -2,6 +2,7 @@ package ecs
 
 import (
 	"origin/internal/types"
+	"sync"
 	"time"
 )
 
@@ -47,6 +48,7 @@ type VisibilityState struct {
 	// кто видит эту сущность, у кого я нахожусь в списке Known
 	// нужно для отправки пакетов (broadcast) о событиях, отправляем только тем, кто меня видит.
 	ObserversByVisibleTarget map[types.Handle]map[types.Handle]struct{}
+	Mu                       sync.RWMutex // Protects visibility maps for concurrent access
 }
 
 type ObserverVisibility struct {

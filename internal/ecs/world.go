@@ -2,6 +2,7 @@ package ecs
 
 import (
 	"sort"
+	"sync"
 
 	"origin/internal/types"
 )
@@ -23,6 +24,7 @@ type World struct {
 	entities         map[types.Handle]ComponentMask
 	locations        map[types.Handle]EntityLocation // O(1) archetype removal
 	entityIDToHandle map[types.EntityID]types.Handle // O(1) EntityID -> Handle lookup
+	entityIDMu       sync.RWMutex                    // Protects entityIDToHandle map for concurrent access
 	archetypes       *ArchetypeGraph
 	handles          *HandleAllocator
 
@@ -111,7 +113,9 @@ func (w *World) Spawn(externalID types.EntityID, setupFunc func(*World, types.Ha
 	w.locations[h] = EntityLocation{archetype: arch, index: index}
 
 	// Maintain reverse lookup map
+	w.entityIDMu.Lock()
 	w.entityIDToHandle[externalID] = h
+	w.entityIDMu.Unlock()
 
 	// Add ExternalID component
 	AddComponent(w, h, ExternalID{ID: externalID})
@@ -150,7 +154,9 @@ func (w *World) Despawn(h types.Handle) bool {
 
 	// Remove from entityIDToHandle map if entity has ExternalID
 	if extID, ok := GetComponent[ExternalID](w, h); ok {
+		w.entityIDMu.Lock()
 		delete(w.entityIDToHandle, extID.ID)
+		w.entityIDMu.Unlock()
 	}
 
 	if loc, ok := w.locations[h]; ok {
@@ -218,6 +224,9 @@ func (w *World) GetExternalID(h types.Handle) (types.EntityID, bool) {
 // O(1) lookup using reverse map - optimized for frequent packet handling
 // Returns InvalidHandle if entity not found
 func (w *World) GetHandleByEntityID(entityID types.EntityID) types.Handle {
+	w.entityIDMu.RLock()
+	defer w.entityIDMu.RUnlock()
+
 	if h, ok := w.entityIDToHandle[entityID]; ok {
 		return h
 	}
