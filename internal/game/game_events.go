@@ -29,6 +29,8 @@ func (d *NetworkVisibilityDispatcher) Subscribe(eventBus *eventbus.EventBus) {
 	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMove, eventbus.PriorityMedium, d.handleObjectMove)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntitySpawn, eventbus.PriorityMedium, d.handleEntitySpawn)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntityDespawn, eventbus.PriorityMedium, d.handleEntityDespawn)
+	eventBus.SubscribeAsync(ecs.TopicGameplayChunkUnload, eventbus.PriorityMedium, d.handleChunkUnload)
+	eventBus.SubscribeAsync(ecs.TopicGameplayChunkLoad, eventbus.PriorityMedium, d.handleChunkLoad)
 }
 
 func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e eventbus.Event) error {
@@ -212,6 +214,107 @@ func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e
 			return nil
 		}
 
+		client.Send(data)
+	}
+	shard.clientsMu.RUnlock()
+
+	return nil
+}
+
+func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e eventbus.Event) error {
+	event, ok := e.(*ecs.ChunkUnloadEvent)
+	if !ok {
+		return nil
+	}
+
+	shard := d.shardManager.GetShard(event.Layer)
+	if shard == nil {
+		return nil
+	}
+
+	shard.clientsMu.RLock()
+	client, exists := shard.clients[event.EntityID]
+	if !exists {
+		shard.clientsMu.RUnlock()
+		return nil
+	}
+
+	msg := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ChunkUnload{
+			ChunkUnload: &netproto.S2C_ChunkUnload{
+				Coord: &netproto.ChunkCoord{
+					X: int32(event.X),
+					Y: int32(event.Y),
+				},
+			},
+		},
+	}
+
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		d.logger.Error("failed to marshal ChunkUnload message",
+			zap.Error(err),
+			zap.Int64("entity_id", int64(event.EntityID)),
+			zap.Int("x", event.X),
+			zap.Int("y", event.Y),
+		)
+		shard.clientsMu.RUnlock()
+		return nil
+	}
+
+	client.Send(data)
+	shard.clientsMu.RUnlock()
+
+	return nil
+}
+
+func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eventbus.Event) error {
+	event, ok := e.(*ecs.ChunkLoadEvent)
+	if !ok {
+		return nil
+	}
+
+	shard := d.shardManager.GetShard(event.Layer)
+	if shard == nil {
+		return nil
+	}
+
+	shard.clientsMu.RLock()
+	_, exists := shard.clients[event.EntityID]
+	if !exists {
+		shard.clientsMu.RUnlock()
+		return nil
+	}
+	shard.clientsMu.RUnlock()
+
+	// Use tiles from the event instead of fetching chunk data again
+	msg := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ChunkLoad{
+			ChunkLoad: &netproto.S2C_ChunkLoad{
+				Chunk: &netproto.ChunkData{
+					Coord: &netproto.ChunkCoord{
+						X: int32(event.X),
+						Y: int32(event.Y),
+					},
+					Tiles: event.Tiles,
+				},
+			},
+		},
+	}
+
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		d.logger.Error("failed to marshal ChunkLoad message",
+			zap.Error(err),
+			zap.Int64("entity_id", int64(event.EntityID)),
+			zap.Int("x", event.X),
+			zap.Int("y", event.Y),
+		)
+		return nil
+	}
+
+	shard.clientsMu.RLock()
+	if client, exists := shard.clients[event.EntityID]; exists {
 		client.Send(data)
 	}
 	shard.clientsMu.RUnlock()

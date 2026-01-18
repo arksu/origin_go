@@ -273,6 +273,24 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 	aoi.PreloadChunks = newPreload
 	cm.aoiMu.Unlock()
 
+	// Calculate delta for network events
+	// toDeactivate = oldActive - newActive (chunks that were active but no longer are)
+	// toActivate = newActive - oldActive (chunks that are now active but weren't before)
+	toDeactivate := make([]types.ChunkCoord, 0)
+	toActivate := make([]types.ChunkCoord, 0)
+
+	for coord := range oldActive {
+		if _, stillActive := newActive[coord]; !stillActive {
+			toDeactivate = append(toDeactivate, coord)
+		}
+	}
+
+	for coord := range newActive {
+		if _, wasActive := oldActive[coord]; !wasActive {
+			toActivate = append(toActivate, coord)
+		}
+	}
+
 	// Update global chunk interests
 	cm.interestMu.Lock()
 
@@ -313,6 +331,22 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 	cm.interestMu.Unlock()
 
 	cm.recalculateChunkStates()
+
+	// Publish chunk events for network layer
+	// Send deactivate first to free client memory, then activate
+	for _, coord := range toDeactivate {
+		cm.eventBus.PublishAsync(ecs.NewChunkUnloadEvent(entityID, coord.X, coord.Y, cm.layer), eventbus.PriorityMedium)
+	}
+
+	for _, coord := range toActivate {
+		// Get chunk data to include tiles in the event
+		chunk := cm.GetChunk(coord)
+		var tiles []byte
+		if chunk != nil {
+			tiles = chunk.Tiles
+		}
+		cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles), eventbus.PriorityMedium)
+	}
 }
 
 // removeEntityInterests removes all interests for an entity
@@ -367,7 +401,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 				switch state {
 				case types.ChunkStatePreloaded, types.ChunkStateInactive:
 					if err := cm.activateChunkInternal(coord, chunk); err != nil {
-						cm.logger.Debug("failed to activate chunk",
+						cm.logger.Warn("failed to activate chunk (activateChunkInternal)",
 							zap.Int("chunk_x", coord.X),
 							zap.Int("chunk_y", coord.Y),
 							zap.Error(err),
@@ -389,7 +423,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 				switch state {
 				case types.ChunkStateActive:
 					if err := cm.deactivateChunkInternal(chunk); err != nil {
-						cm.logger.Debug("failed to deactivate chunk",
+						cm.logger.Warn("failed to deactivate chunk (deactivateChunkInternal)",
 							zap.Int("chunk_x", coord.X),
 							zap.Int("chunk_y", coord.Y),
 							zap.Error(err),
@@ -683,40 +717,6 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord types.ChunkCoor
 		cm.cleanupFuture(coord)
 		return ErrChunkNotLoaded
 	}
-}
-
-// ActivateChunk transitions a chunk to an active state based on its current state.
-// Returns an error if the chunk cannot be activated or is in an invalid state.
-func (cm *ChunkManager) ActivateChunk(coord types.ChunkCoord) error {
-	chunk := cm.GetOrCreateChunk(coord)
-	if chunk == nil {
-		return ErrChunkNotLoaded
-	}
-	state := chunk.GetState()
-
-	switch state {
-	case types.ChunkStateUnloaded:
-		return ErrChunkNotLoaded
-
-	case types.ChunkStateLoading:
-		return ErrChunkNotLoaded
-
-	case types.ChunkStatePreloaded:
-		return cm.activatePreloadedChunk(coord, chunk)
-
-	case types.ChunkStateActive:
-		return nil
-
-	case types.ChunkStateInactive:
-		return cm.activatePreloadedChunk(coord, chunk)
-
-	default:
-		return ErrInvalidState
-	}
-}
-
-func (cm *ChunkManager) activatePreloadedChunk(coord types.ChunkCoord, chunk *core.Chunk) error {
-	return cm.activateChunkInternal(coord, chunk)
 }
 
 // activateChunkInternal activates a chunk by building entities from raw objects
