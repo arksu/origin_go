@@ -115,6 +115,8 @@ class GameConnection {
         this.handleUnloadChunk(message.unloadChunk)
       } else if (message.objectSpawn) {
         this.handleObject(message.objectSpawn)
+      } else if (message.objectDespawn) {
+        this.handleObjectDespawn(message.objectDespawn)
       } else if (message.objectMove) {
         this.handleObjectMove(message.objectMove)
       } else if (message.error) {
@@ -268,6 +270,23 @@ class GameConnection {
         position: objectMove.movement.position
       }
       gameStore.addGameObject(objectMove.entityId, newObject)
+    }
+  }
+
+  handleObjectDespawn(objectDespawn) {
+    const gameStore = useGameStore()
+
+    // Check if this is the player's entity (shouldn't happen, but handle gracefully)
+    if (objectDespawn.entityId === gameStore.characterId) {
+      console.warn('Received despawn for player entity:', objectDespawn.entityId)
+      return // Don't remove player entity
+    }
+
+    // Check if object exists before removing
+    if (gameStore.gameObjects.has(objectDespawn.entityId)) {
+      gameStore.removeGameObject(objectDespawn.entityId)
+    } else {
+      console.warn('Attempted to remove non-existent game object:', objectDespawn.entityId)
     }
   }
 

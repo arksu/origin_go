@@ -44,74 +44,79 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 	}
 
 	shard.clientsMu.RLock()
+	defer shard.clientsMu.RUnlock()
+
 	visibilityState := shard.World().VisibilityState()
 	if visibilityState == nil {
-		shard.clientsMu.RUnlock()
 		return nil
 	}
 
-	for entityID, client := range shard.clients {
-		observerHandle := shard.World().GetHandleByEntityID(entityID)
-		if observerHandle == types.InvalidHandle {
-			continue
-		}
-
-		visibility, exists := visibilityState.VisibleByObserver[observerHandle]
-		if !exists {
-			continue
-		}
-
-		targetHandle := shard.World().GetHandleByEntityID(event.EntityID)
-		if targetHandle == types.InvalidHandle {
-			continue
-		}
-
-		if _, isVisible := visibility.Known[targetHandle]; !isVisible {
-			continue
-		}
-
-		movement := &netproto.EntityMovement{
-			Position: &netproto.Position{
-				X:       int32(event.X),
-				Y:       int32(event.Y),
-				Heading: uint32(event.Heading),
-			},
-			Velocity: &netproto.Vector2{
-				X: int32(event.VelocityX),
-				Y: int32(event.VelocityY),
-			},
-			MoveMode: convertMoveMode(event.MoveMode),
-			IsMoving: event.IsMoving,
-		}
-
-		if event.TargetX != nil && event.TargetY != nil {
-			movement.TargetPosition = &netproto.Vector2{
-				X: int32(*event.TargetX),
-				Y: int32(*event.TargetY),
-			}
-		}
-
-		msg := &netproto.ServerMessage{
-			Payload: &netproto.ServerMessage_ObjectMove{
-				ObjectMove: &netproto.S2C_ObjectMove{
-					EntityId: uint64(event.EntityID),
-					Movement: movement,
-				},
-			},
-		}
-
-		data, err := proto.Marshal(msg)
-		if err != nil {
-			d.logger.Error("failed to marshal ObjectMove message",
-				zap.Error(err),
-				zap.Int64("entity_id", int64(event.EntityID)),
-			)
-			continue
-		}
-
-		client.Send(data)
+	// Get the target entity's handle
+	targetHandle := shard.World().GetHandleByEntityID(event.EntityID)
+	if targetHandle == types.InvalidHandle {
+		return nil
 	}
-	shard.clientsMu.RUnlock()
+
+	// Get observers who can see this target entity directly from ObserversByVisibleTarget
+	observers, hasObservers := visibilityState.ObserversByVisibleTarget[targetHandle]
+	if !hasObservers || len(observers) == 0 {
+		// No observers can see this entity, nothing to send
+		return nil
+	}
+
+	// Create the movement message once (reuse for all observers)
+	movement := &netproto.EntityMovement{
+		Position: &netproto.Position{
+			X:       int32(event.X),
+			Y:       int32(event.Y),
+			Heading: uint32(event.Heading),
+		},
+		Velocity: &netproto.Vector2{
+			X: int32(event.VelocityX),
+			Y: int32(event.VelocityY),
+		},
+		MoveMode: convertMoveMode(event.MoveMode),
+		IsMoving: event.IsMoving,
+	}
+
+	if event.TargetX != nil && event.TargetY != nil {
+		movement.TargetPosition = &netproto.Vector2{
+			X: int32(*event.TargetX),
+			Y: int32(*event.TargetY),
+		}
+	}
+
+	msg := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ObjectMove{
+			ObjectMove: &netproto.S2C_ObjectMove{
+				EntityId: uint64(event.EntityID),
+				Movement: movement,
+			},
+		},
+	}
+
+	// Marshal the message once
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		d.logger.Error("failed to marshal ObjectMove message",
+			zap.Error(err),
+			zap.Int64("entity_id", int64(event.EntityID)),
+		)
+		return nil
+	}
+
+	// Send only to observers who can see the target entity
+	for observerHandle := range observers {
+		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
+		if !ok {
+			continue
+		}
+
+		// Check if this observer is a connected client
+		if client, exists := shard.clients[observerEntityID]; exists {
+			client.Send(data)
+		}
+	}
 
 	return nil
 }
