@@ -199,8 +199,19 @@ func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY i
 	cm.updateEntityAOI(entityID, center)
 }
 
+// GetEntityEpoch returns the current stream epoch for an entity
+func (cm *ChunkManager) GetEntityEpoch(entityID types.EntityID) uint32 {
+	cm.shard.clientsMu.RLock()
+	defer cm.shard.clientsMu.RUnlock()
+
+	if client, exists := cm.shard.clients[entityID]; exists {
+		return client.StreamEpoch.Load()
+	}
+	return 0
+}
+
 // EnableChunkLoadEvents enables chunk load events for an entity
-func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID) {
+func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uint32) {
 	cm.aoiMu.Lock()
 	defer cm.aoiMu.Unlock()
 
@@ -216,12 +227,6 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID) {
 	center := aoi.CenterChunk
 	activeRadius := cm.cfg.Game.PlayerActiveChunkRadius
 
-	// Get client's stream epoch for event validation
-	var epoch uint32
-	if client, exists := cm.shard.clients[entityID]; exists {
-		epoch = client.StreamEpoch
-	}
-
 	// Send chunk load events for all currently active chunks
 	for dy := -activeRadius; dy <= activeRadius; dy++ {
 		for dx := -activeRadius; dx <= activeRadius; dx++ {
@@ -232,7 +237,7 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID) {
 					chunk := cm.GetChunk(coord)
 					var tiles []byte
 					if chunk != nil {
-						tiles = chunk.Tiles
+						tiles = append([]byte(nil), chunk.Tiles...) // Create copy of tiles
 					}
 					cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch), eventbus.PriorityMedium)
 				}
@@ -315,6 +320,7 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 	aoi.CenterChunk = newCenter
 	aoi.ActiveChunks = newActive
 	aoi.PreloadChunks = newPreload
+	sendChunkLoadEvents := aoi.SendChunkLoadEvents // Copy flag while holding lock
 	cm.aoiMu.Unlock()
 
 	// Calculate delta for network events
@@ -377,14 +383,11 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 	cm.recalculateChunkStates()
 
 	// Get client's stream epoch for event validation
-	var epoch uint32
-	if client, exists := cm.shard.clients[entityID]; exists {
-		epoch = client.StreamEpoch
-	}
+	epoch := cm.GetEntityEpoch(entityID)
 
 	// Publish chunk events for network layer only if enabled
 	// Send deactivate first to free client memory, then activate
-	if aoi.SendChunkLoadEvents {
+	if sendChunkLoadEvents {
 		for _, coord := range toDeactivate {
 			cm.eventBus.PublishAsync(ecs.NewChunkUnloadEvent(entityID, coord.X, coord.Y, cm.layer, epoch), eventbus.PriorityMedium)
 		}
@@ -394,7 +397,7 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 			chunk := cm.GetChunk(coord)
 			var tiles []byte
 			if chunk != nil {
-				tiles = chunk.Tiles
+				tiles = append([]byte(nil), chunk.Tiles...) // Create copy of tiles
 			}
 			cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch), eventbus.PriorityMedium)
 		}

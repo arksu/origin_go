@@ -321,8 +321,8 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				playerEntityID := c.CharacterID
 
 				// Reset client state and remove from shard's client map
-				c.InWorld = false
-				c.StreamEpoch = 0
+				c.InWorld.Store(false)
+				c.StreamEpoch.Store(0)
 				shard.clientsMu.Lock()
 				delete(shard.clients, playerEntityID)
 				shard.clientsMu.Unlock()

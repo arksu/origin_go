@@ -240,7 +240,7 @@ func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e e
 	}
 
 	// Check if client is in world and epoch matches
-	if !client.InWorld || event.Epoch != client.StreamEpoch {
+	if !client.InWorld.Load() || event.Epoch != client.StreamEpoch.Load() {
 		shard.clientsMu.RUnlock()
 		return nil
 	}
@@ -291,9 +291,15 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 		shard.clientsMu.RUnlock()
 		return nil
 	}
+	d.logger.Debug("handleChunkLoad",
+		zap.Int64("entity_id", int64(event.EntityID)),
+		zap.Uint32("epoch", event.Epoch),
+		zap.Any("coord", types.ChunkCoord{X: event.X, Y: event.Y}),
+		zap.Int("tiles_len", len(event.Tiles)))
+	d.logger.Debug("handleChunkLoad", zap.Any("client", client))
 
 	// Check if client is in world and epoch matches
-	if !client.InWorld || event.Epoch != client.StreamEpoch || client.StreamEpoch == 0 {
+	if !client.InWorld.Load() || event.Epoch != client.StreamEpoch.Load() || client.StreamEpoch.Load() == 0 {
 		shard.clientsMu.RUnlock()
 		return nil
 	}
@@ -313,6 +319,7 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 			},
 		},
 	}
+	d.logger.Debug("ChunkLoad send", zap.Int64("entity_id", int64(event.EntityID)), zap.Int("tiles_len", len(event.Tiles)))
 
 	data, err := proto.Marshal(msg)
 	if err != nil {

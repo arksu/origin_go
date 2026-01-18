@@ -47,8 +47,8 @@ type Client struct {
 	closeOnce   sync.Once
 	CharacterID types.EntityID
 	Layer       int
-	StreamEpoch uint32
-	InWorld     bool
+	StreamEpoch atomic.Uint32
+	InWorld     atomic.Bool
 }
 
 func NewServer(cfg *config.NetworkConfig, gameCfg *config.GameConfig, logger *zap.Logger) *Server {
