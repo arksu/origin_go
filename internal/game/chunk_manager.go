@@ -502,7 +502,6 @@ func (cm *ChunkManager) recalculateChunkStates() {
 					if err := cm.deactivateChunkInternal(chunk); err == nil {
 						chunk.SetState(types.ChunkStateInactive)
 						cm.lruCache.Add(coord, chunk)
-						atomic.AddInt64(&cm.stats.PreloadedCount, -1)
 						atomic.AddInt64(&cm.stats.InactiveCount, 1)
 						deactivatedChunks = append(deactivatedChunks, coord)
 					}
@@ -635,7 +634,16 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	delete(cm.chunks, coord)
 	cm.chunksMu.Unlock()
 
-	atomic.AddInt64(&cm.stats.InactiveCount, -1)
+	// Decrement appropriate counter based on chunk state
+	state := chunk.GetState()
+	switch state {
+	case types.ChunkStateActive:
+		atomic.AddInt64(&cm.stats.ActiveCount, -1)
+	case types.ChunkStatePreloaded:
+		atomic.AddInt64(&cm.stats.PreloadedCount, -1)
+	case types.ChunkStateInactive:
+		atomic.AddInt64(&cm.stats.InactiveCount, -1)
+	}
 }
 
 // isWithinWorldBounds checks if a chunk coordinate is within world boundaries
