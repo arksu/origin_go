@@ -177,12 +177,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				PrevChunkY:    pos.Y / _const.ChunkWorldSize,
 			})
 			ecs.AddComponent(w, h, components.Movement{
-				VelocityX: 0,
-				VelocityY: 0,
-				Mode:      _const.Walk,
-				State:     _const.StateIdle,
-				// TODO player speed
-				Speed:            32.0,
+				VelocityX:        0,
+				VelocityY:        0,
+				Mode:             _const.Walk,
+				State:            _const.StateIdle,
+				Speed:            _const.PlayerSpeed,
 				TargetType:       _const.TargetNone,
 				TargetX:          0,
 				TargetY:          0,

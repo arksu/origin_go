@@ -7,6 +7,7 @@ const (
 )
 
 const (
+	PlayerSpeed        = 32.0
 	PlayerColliderSize = 10
 	PlayerLayer        = uint64(1)
 	PlayerMask         = uint64(1)
