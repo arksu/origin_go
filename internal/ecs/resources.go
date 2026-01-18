@@ -45,7 +45,8 @@ type VisibilityState struct {
 	// кого видит эта сущность
 	VisibleByObserver map[types.Handle]ObserverVisibility
 	// кто видит эту сущность, у кого я нахожусь в списке Known
-	ObserversByVisibleTarget map[types.Handle][]types.Handle
+	// нужно для отправки пакетов (broadcast) о событиях, отправляем только тем, кто меня видит.
+	ObserversByVisibleTarget map[types.Handle]map[types.Handle]struct{}
 }
 
 type ObserverVisibility struct {
