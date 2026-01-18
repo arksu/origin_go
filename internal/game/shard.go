@@ -3,7 +3,7 @@ package game
 import (
 	"context"
 	"fmt"
-	"origin/internal/const"
+	_const "origin/internal/const"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/network"
@@ -281,7 +281,7 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 		zap.Int("chunks_loaded", len(coords)),
 	)
 	s.mu.Lock()
-	s.chunkManager.RegisterEntity(entityID, centerWorldX, centerWorldY)
+	s.chunkManager.RegisterEntity(entityID, centerWorldX, centerWorldY, false) // Don't send chunk load events during preparation
 	s.mu.Unlock()
 
 	s.logger.Debug("Entity registered with chunk manager",

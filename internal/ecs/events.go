@@ -109,11 +109,12 @@ type ChunkLoadEvent struct {
 	Y         int
 	Layer     int
 	Tiles     []byte
+	Epoch     uint32
 }
 
 func (e *ChunkLoadEvent) Topic() string { return e.topic }
 
-func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int, tiles []byte) *ChunkLoadEvent {
+func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int, tiles []byte, epoch uint32) *ChunkLoadEvent {
 	return &ChunkLoadEvent{
 		topic:     TopicGameplayChunkLoad,
 		Timestamp: time.Now(),
@@ -122,6 +123,7 @@ func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int, tiles []byte) *
 		Y:         y,
 		Layer:     layer,
 		Tiles:     tiles,
+		Epoch:     epoch,
 	}
 }
 
@@ -133,11 +135,12 @@ type ChunkUnloadEvent struct {
 	X         int
 	Y         int
 	Layer     int
+	Epoch     uint32
 }
 
 func (e *ChunkUnloadEvent) Topic() string { return e.topic }
 
-func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int) *ChunkUnloadEvent {
+func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int, epoch uint32) *ChunkUnloadEvent {
 	return &ChunkUnloadEvent{
 		topic:     TopicGameplayChunkUnload,
 		Timestamp: time.Now(),
@@ -145,6 +148,7 @@ func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int) *ChunkUnloadE
 		X:         x,
 		Y:         y,
 		Layer:     layer,
+		Epoch:     epoch,
 	}
 }
 

@@ -239,6 +239,12 @@ func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e e
 		return nil
 	}
 
+	// Check if client is in world and epoch matches
+	if !client.InWorld || event.Epoch != client.StreamEpoch {
+		shard.clientsMu.RUnlock()
+		return nil
+	}
+
 	msg := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_ChunkUnload{
 			ChunkUnload: &netproto.S2C_ChunkUnload{
@@ -280,8 +286,14 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 	}
 
 	shard.clientsMu.RLock()
-	_, exists := shard.clients[event.EntityID]
+	client, exists := shard.clients[event.EntityID]
 	if !exists {
+		shard.clientsMu.RUnlock()
+		return nil
+	}
+
+	// Check if client is in world and epoch matches
+	if !client.InWorld || event.Epoch != client.StreamEpoch || client.StreamEpoch == 0 {
 		shard.clientsMu.RUnlock()
 		return nil
 	}
