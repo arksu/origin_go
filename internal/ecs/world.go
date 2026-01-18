@@ -36,6 +36,10 @@ type World struct {
 	// Resources (singleton data shared across systems)
 	resources map[any]any
 
+	// MovedEntities buffer for tracking moved entities between systems
+	movedEntities   MovedEntities
+	visibilityState VisibilityState
+
 	// Delta time for current tick
 	DeltaTime float64
 }
@@ -56,6 +60,12 @@ func NewWorldWithCapacity(maxHandles uint32) *World {
 		systems:          make([]System, 0, 16),
 		storages:         make(map[ComponentID]any),
 		resources:        make(map[any]any),
+		movedEntities: MovedEntities{
+			Handles: make([]types.Handle, 2048),
+			IntentX: make([]float64, 2048),
+			IntentY: make([]float64, 2048),
+			Count:   0,
+		},
 	}
 	return w
 }
@@ -352,4 +362,9 @@ func WithComponent[T Component](w *World, h types.Handle, fn func(*T)) bool {
 func HasComponent[T Component](w *World, h types.Handle) bool {
 	storage := GetOrCreateStorage[T](w)
 	return storage.Has(h)
+}
+
+// MovedEntities returns the moved entities buffer
+func (w *World) MovedEntities() *MovedEntities {
+	return &w.movedEntities
 }

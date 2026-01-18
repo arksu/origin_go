@@ -15,13 +15,12 @@ const debugEnabled = false
 
 type MovementSystem struct {
 	ecs.BaseSystem
-	chunkManager  core.ChunkManager
-	logger        *zap.Logger
-	movingQuery   *ecs.PreparedQuery
-	movedEntities *MovedEntities
+	chunkManager core.ChunkManager
+	logger       *zap.Logger
+	movingQuery  *ecs.PreparedQuery
 }
 
-func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger) *MovementSystem {
+func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger) *MovementSystem {
 	// Query for entities with Transform and Movement components
 	movingQuery := ecs.NewPreparedQuery(
 		world,
@@ -32,15 +31,15 @@ func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, movedEn
 	)
 
 	return &MovementSystem{
-		BaseSystem:    ecs.NewBaseSystem("MovementSystem", 100),
-		chunkManager:  chunkManager,
-		logger:        logger,
-		movingQuery:   movingQuery,
-		movedEntities: movedEntities,
+		BaseSystem:   ecs.NewBaseSystem("MovementSystem", 100),
+		chunkManager: chunkManager,
+		logger:       logger,
+		movingQuery:  movingQuery,
 	}
 }
 
 func (s *MovementSystem) Update(w *ecs.World, dt float64) {
+	movedEntities := w.MovedEntities()
 	// Use prepared query to iterate over entities with Transform and Movement
 	s.movingQuery.ForEach(func(h types.Handle) {
 		movement, ok := ecs.GetComponent[components.Movement](w, h)
@@ -94,7 +93,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 					m.ClearTarget()
 				})
 				// Add to moved entities buffer
-				s.movedEntities.Add(h, movement.TargetX, movement.TargetY)
+				movedEntities.Add(h, movement.TargetX, movement.TargetY)
 				return
 			}
 
@@ -118,7 +117,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				t.Direction = math.Atan2(velocityY, velocityX)
 			})
 			// Add to moved entities buffer
-			s.movedEntities.Add(h, newX, newY)
+			movedEntities.Add(h, newX, newY)
 
 			if debugEnabled {
 				s.logger.Debug("Entity movement",

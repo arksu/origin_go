@@ -377,8 +377,8 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 		// Send all static handles to client - S2C_Object (no shard lock here)
 		for _, o := range objects {
 			objectMsg := &netproto.ServerMessage{
-				Payload: &netproto.ServerMessage_Object{
-					Object: &netproto.S2C_Object{
+				Payload: &netproto.ServerMessage_ObjectSpawn{
+					ObjectSpawn: &netproto.S2C_ObjectSpawn{
 						EntityId:   o.handle,
 						ObjectType: o.objectType,
 						Position: &netproto.EntityPosition{

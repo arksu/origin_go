@@ -16,9 +16,8 @@ const epsilon = 0.001
 
 type CollisionSystem struct {
 	ecs.BaseSystem
-	chunkManager  core.ChunkManager
-	logger        *zap.Logger
-	movedEntities *MovedEntities
+	chunkManager core.ChunkManager
+	logger       *zap.Logger
 	// Pooled buffer for candidates to avoid allocations
 	candidatesBuffer []types.Handle
 	// Cached component storages for hot path
@@ -34,7 +33,7 @@ type CollisionSystem struct {
 	chunkSize   int
 }
 
-func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedEntities *MovedEntities, logger *zap.Logger, worldMinX, worldMaxX, worldMinY, worldMaxY float64, marginTiles int) *CollisionSystem {
+func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger, worldMinX, worldMaxX, worldMinY, worldMaxY float64, marginTiles int) *CollisionSystem {
 	// Cache component storages for hot path optimization
 	colliderStorage := ecs.GetOrCreateStorage[components.Collider](world)
 	transformStorage := ecs.GetOrCreateStorage[components.Transform](world)
@@ -46,7 +45,6 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedE
 		BaseSystem:       ecs.NewBaseSystem("CollisionSystem", 200),
 		chunkManager:     chunkManager,
 		logger:           logger,
-		movedEntities:    movedEntities,
 		candidatesBuffer: make([]types.Handle, 0, 128),
 		colliderStorage:  colliderStorage,
 		transformStorage: transformStorage,
@@ -61,9 +59,10 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, movedE
 }
 
 func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
+	movedEntities := w.MovedEntities()
 	// Iterate through moved entities from the buffer
-	for i := 0; i < s.movedEntities.Count; i++ {
-		h := s.movedEntities.Handles[i]
+	for i := 0; i < movedEntities.Count; i++ {
+		h := movedEntities.Handles[i]
 		if !w.Alive(h) {
 			continue
 		}
@@ -73,8 +72,8 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 
-		intentX := s.movedEntities.IntentX[i]
-		intentY := s.movedEntities.IntentY[i]
+		intentX := movedEntities.IntentX[i]
+		intentY := movedEntities.IntentY[i]
 
 		collider, hasCollider := ecs.GetComponent[components.Collider](w, h)
 		if !hasCollider {

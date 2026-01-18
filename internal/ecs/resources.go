@@ -1,10 +1,11 @@
-package systems
+package ecs
 
 import (
 	"origin/internal/types"
 	"time"
 )
 
+// MovedEntities tracks entities that moved during the current frame
 type MovedEntities struct {
 	Handles []types.Handle
 	IntentX []float64
@@ -41,8 +42,10 @@ func (me *MovedEntities) grow() {
 }
 
 type VisibilityState struct {
+	// кого видит эта сущность
 	VisibleByObserver map[types.Handle]ObserverVisibility
-	// TODO ObserversByVisibleTarget
+	// кто видит эту сущность, у кого я нахожусь в списке Known
+	ObserversByVisibleTarget map[types.Handle][]types.Handle
 }
 
 type ObserverVisibility struct {

@@ -113,8 +113,8 @@ class GameConnection {
         this.handleLoadChunk(message.loadChunk)
       } else if (message.unloadChunk) {
         this.handleUnloadChunk(message.unloadChunk)
-      } else if (message.object) {
-        this.handleObject(message.object)
+      } else if (message.objectSpawn) {
+        this.handleObject(message.objectSpawn)
       } else if (message.objectMove) {
         this.handleObjectMove(message.objectMove)
       } else if (message.error) {
