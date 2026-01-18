@@ -141,7 +141,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 					entityID,
 					int(finalX), int(finalY), int(transform.Direction),
 					int(velocity.X), int(velocity.Y),
-					int(moveMode), isMoving,
+					moveMode, isMoving,
 					targetX, targetY,
 					layer,
 				),

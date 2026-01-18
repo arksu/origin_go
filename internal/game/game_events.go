@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -210,15 +211,15 @@ func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e
 	return nil
 }
 
-func convertMoveMode(mode int) netproto.MovementMode {
+func convertMoveMode(mode constt.MoveMode) netproto.MovementMode {
 	switch mode {
-	case 0: // Walk
+	case constt.Walk: // Walk
 		return netproto.MovementMode_MOVE_MODE_WALK
-	case 1: // Run
+	case constt.Run: // Run
 		return netproto.MovementMode_MOVE_MODE_RUN
-	case 2: // FastRun
+	case constt.FastRun: // FastRun
 		return netproto.MovementMode_MOVE_MODE_FAST_RUN
-	case 3: // Swim
+	case constt.Swim: // Swim
 		return netproto.MovementMode_MOVE_MODE_SWIM
 	default:
 		return netproto.MovementMode_MOVE_MODE_WALK

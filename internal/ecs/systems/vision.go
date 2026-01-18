@@ -110,10 +110,13 @@ func (s *VisionSystem) updateObserverVisibility(
 	}
 
 	for _, candidateHandle := range s.candidatesBuffer {
-		if candidateHandle == observerHandle {
+		if !w.Alive(candidateHandle) {
 			continue
 		}
-		if !w.Alive(candidateHandle) {
+
+		// Always include self in visible set for proper ObserversByVisibleTarget mapping
+		if candidateHandle == observerHandle {
+			s.newVisibleSet[candidateHandle] = struct{}{}
 			continue
 		}
 
