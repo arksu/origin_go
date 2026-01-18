@@ -82,7 +82,7 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	c.CharacterID = types.EntityID(character.ID)
 	c.Layer = character.Layer
 	// Client is not yet in world during spawn attempts
-	c.InWorld = false
+	c.InWorld.Store(false)
 
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
@@ -252,10 +252,10 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	}
 
 	// After successful spawn: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
-	c.StreamEpoch++
-	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID)
+	c.StreamEpoch.Add(1)
+	c.InWorld.Store(true)
+	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
-	c.InWorld = true
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -326,39 +326,6 @@ func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
 
 func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, shard *Shard, character repository.Character) {
 
-	chunks := shard.ChunkManager().GetEntityActiveChunks(entityID)
-
-	// Send chunks first so client can start rendering
-	for _, chunk := range chunks {
-		select {
-		case <-c.Done():
-			return
-		default:
-		}
-
-		// TODO delete after events system
-		chunkLoad := &netproto.ServerMessage{
-			Payload: &netproto.ServerMessage_ChunkLoad{
-				ChunkLoad: &netproto.S2C_ChunkLoad{
-					Chunk: &netproto.ChunkData{
-						Coord: &netproto.ChunkCoord{
-							X: int32(chunk.Coord.X),
-							Y: int32(chunk.Coord.Y),
-						},
-						Tiles: chunk.Tiles,
-					},
-				},
-			},
-		}
-
-		chunkData, err := proto.Marshal(chunkLoad)
-		if err != nil {
-			g.logger.Error("Failed to marshal load chunk", zap.Uint64("client_id", c.ID), zap.Error(err))
-			continue
-		}
-		c.Send(chunkData)
-	}
-
 	select {
 	case <-c.Done():
 		return
@@ -373,7 +340,7 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				Name:         character.Name,
 				CoordPerTile: _const.CoordPerTile,
 				ChunkSize:    _const.ChunkSize,
-				StreamEpoch:  c.StreamEpoch,
+				StreamEpoch:  c.StreamEpoch.Load(),
 				Inventory: &netproto.Inventory{
 					Width:  10,                          // TODO: get from character data
 					Height: 5,                           // TODO: get from character data
