@@ -9,6 +9,7 @@ import (
 	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/eventbus"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
@@ -315,17 +316,35 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		posY = int(transform.Y)
 	}
 
+	// After successful reattach: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
+	c.StreamEpoch.Add(1)
+	c.InWorld.Store(true)
+	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
+
 	// Force immediate visibility update for the reattached observer
 	visState := shard.world.VisibilityState()
 	if observerVis, ok := visState.VisibleByObserver[handle]; ok {
 		observerVis.NextUpdateTime = time.Time{} // Zero time for immediate update
 		visState.VisibleByObserver[handle] = observerVis
+
+		// Send spawn events for all currently visible entities
+		g.logger.Debug("Sending spawn events for reattached player's visible entities",
+			zap.Uint64("client_id", c.ID),
+			zap.Int64("character_id", int64(playerEntityID)),
+			zap.Int("visible_count", len(observerVis.Known)),
+		)
+
+		for targetHandle, targetEntityID := range observerVis.Known {
+			if shard.world.Alive(targetHandle) {
+				// Send spawn event for each visible entity
+				shard.PublishEventAsync(
+					ecs.NewEntitySpawnEvent(playerEntityID, targetEntityID, targetHandle, character.Layer),
+					eventbus.PriorityMedium,
+				)
+			}
+		}
 	}
 
-	// After successful reattach: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
-	c.StreamEpoch.Add(1)
-	c.InWorld.Store(true)
-	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 
 	g.logger.Info("Player reattached to existing entity",
