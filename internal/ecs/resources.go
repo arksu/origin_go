@@ -55,3 +55,7 @@ type ObserverVisibility struct {
 	Known          map[types.Handle]types.EntityID // кого видит эта сущность (Handle -> EntityID)
 	NextUpdateTime time.Time
 }
+
+type DetachedEntities struct {
+	ExpirationTime map[types.Handle]time.Time
+}
