@@ -4,6 +4,15 @@
 
 This document describes all ECS (Entity Component System) systems in the game engine. Systems are responsible for processing entities with specific components in a defined order based on priority.
 
+## World Architecture
+
+The ECS World is the central component that manages entities, components, and systems for each shard. Each World instance has:
+
+- **Event Bus**: For publishing events (despawn, spawn, movement, etc.)
+- **Layer**: Shard layer identifier for multi-layer deployments
+- **Visibility State**: Manages observer-target visibility relationships
+- **Component Storage**: Type-erased storage for all component types
+
 ## System Execution Order
 
 Systems are executed in ascending order of priority (lower priority numbers run first). This ensures deterministic behavior and proper system dependencies.
@@ -110,8 +119,26 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 - Performs spatial queries using neighboring chunks and `QueryRadius`
 - Calculates visibility based on distance, vision power, and target stealth
 - Maintains `VisibilityState` with `VisibleByObserver` and `ObserversByVisibleTarget` maps
+- Stores EntityID in Known maps for reliable despawn events
 - Publishes `ObjectSpawn` and `ObjectDespawn` events for visibility changes
 - Automatically registers new Vision entities during entity spawning
+
+**Visibility State Management**:
+
+The VisionSystem maintains a bidirectional visibility relationship:
+
+```go
+type ObserverVisibility struct {
+    Known map[types.Handle]types.EntityID // Handle -> EntityID mapping
+    NextUpdateTime time.Time
+}
+
+type VisibilityState struct {
+    VisibleByObserver map[types.Handle]ObserverVisibility
+    ObserversByVisibleTarget map[types.Handle]map[types.Handle]struct{}
+    Mu sync.RWMutex
+}
+```
 
 **Event Publishing**:
 
@@ -125,6 +152,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 - Cached component storages for direct access
 - Spatial queries limited to vision radius
 - Zero-allocation iteration patterns
+- EntityID caching prevents despawn failures
 
 ### ChunkSystem (Priority: 400)
 
@@ -207,14 +235,50 @@ When adding a new system:
 1. **Choose Priority**: Place it appropriately in the execution order (0-400 reserved)
 2. **Define Dependencies**: Ensure required components are available
 3. **Data Access Pattern**: Use MovedEntities buffer for moved entities, PreparedQuery for other queries
-4. **Update Registry**: Add to the system registry table above
-5. **Register in Shard**: Add to system initialization in shard.go with movedEntities parameter if needed
+4. **Event Bus Access**: Systems can access event bus through World for event publishing
+5. **Update Registry**: Add to the system registry table above
+6. **Register in Shard**: Add to system initialization in shard.go
 
 ### Example System Registration
 
 ```go
 // In shard.go
-s.world.AddSystem(systems.NewYourSystem(s.world, logger))
+s.world.AddSystem(systems.NewYourSystem(s.world, s.eventBus, logger))
+```
+
+### System Constructor Pattern
+
+```go
+func NewYourSystem(world *ecs.World, eventBus *eventbus.EventBus, logger *zap.Logger) *YourSystem {
+    return &YourSystem{
+        BaseSystem: ecs.NewBaseSystem("YourSystem", 250), // Between Collision and Transform
+        world:      world,
+        eventBus:   eventBus,
+        logger:     logger,
+    }
+}
+```
+
+### Accessing World Resources
+
+Systems can access World resources:
+
+```go
+func (s *YourSystem) Update(world *ecs.World, dt float64) {
+    // Access visibility state
+    visState := world.VisibilityState()
+    
+    // Access moved entities buffer
+    movedEntities := world.MovedEntities()
+    
+    // Get world layer
+    layer := world.Layer
+    
+    // Publish events via world's event bus
+    if world.eventBus != nil {
+        world.eventBus.PublishAsync(yourEvent, eventbus.PriorityMedium)
+    }
+}
 ```
 
 ## System Best Practices
@@ -224,6 +288,9 @@ s.world.AddSystem(systems.NewYourSystem(s.world, logger))
 3. **Deterministic Order**: System dependencies should be clear via priority
 4. **Performance First**: Use MovedEntities buffer for moved entities, PreparedQuery for other queries
 5. **Event-Driven**: Use event bus for cross-system communication when appropriate
+6. **World Integration**: Leverage World's event bus and layer information
+7. **Visibility Awareness**: Consider visibility state when modifying entities
+8. **Despawn Safety**: Rely on World.Despawn() for automatic cleanup
 
 ## Debugging and Monitoring
 
@@ -231,3 +298,5 @@ s.world.AddSystem(systems.NewYourSystem(s.world, logger))
 - Component counts can be tracked via ECS world queries
 - Performance profiling should focus on hot path systems (Movement, Collision)
 - Event bus provides visibility into system interactions
+- Visibility state can be inspected for debugging observer relationships
+- Despawn events can be monitored for proper cleanup
