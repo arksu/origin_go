@@ -66,3 +66,16 @@ SET is_online = false
 WHERE region = $1
   AND is_online = true
   AND deleted_at IS NULL;
+
+-- name: BatchUpdateCharacters :exec
+UPDATE character
+SET 
+	x = $2,
+	y = $3,
+	heading = $4,
+	stamina = $5,
+	shp = $6,
+	hhp = $7,
+	last_save_at = now(),
+	updated_at = now()
+WHERE id = $1;

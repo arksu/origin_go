@@ -10,6 +10,43 @@ import (
 	"database/sql"
 )
 
+const batchUpdateCharacters = `-- name: BatchUpdateCharacters :exec
+UPDATE character
+SET 
+	x = $2,
+	y = $3,
+	heading = $4,
+	stamina = $5,
+	shp = $6,
+	hhp = $7,
+	last_save_at = now(),
+	updated_at = now()
+WHERE id = $1
+`
+
+type BatchUpdateCharactersParams struct {
+	ID      int64 `json:"id"`
+	X       int   `json:"x"`
+	Y       int   `json:"y"`
+	Heading int16 `json:"heading"`
+	Stamina int   `json:"stamina"`
+	Shp     int   `json:"shp"`
+	Hhp     int   `json:"hhp"`
+}
+
+func (q *Queries) BatchUpdateCharacters(ctx context.Context, arg BatchUpdateCharactersParams) error {
+	_, err := q.db.ExecContext(ctx, batchUpdateCharacters,
+		arg.ID,
+		arg.X,
+		arg.Y,
+		arg.Heading,
+		arg.Stamina,
+		arg.Shp,
+		arg.Hhp,
+	)
+	return err
+}
+
 const clearAuthToken = `-- name: ClearAuthToken :exec
 UPDATE character
 SET auth_token = NULL

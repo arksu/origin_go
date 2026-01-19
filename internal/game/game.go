@@ -368,6 +368,9 @@ func (g *Game) handleDisconnect(c *network.Client) {
 							}
 						}
 						shard.world.Despawn(playerHandle)
+
+						// Remove from CharacterEntities
+						shard.world.CharacterEntities().Remove(playerEntityID)
 					}
 					shard.UnregisterEntityAOI(playerEntityID)
 					shard.mu.Unlock()

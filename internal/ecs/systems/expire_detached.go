@@ -77,6 +77,9 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 		// Despawn the entity
 		w.Despawn(handle)
 
+		// Remove from CharacterEntities (stop periodic saves while detached)
+		w.CharacterEntities().Remove(entityID)
+
 		// Remove from detachedEntities map
 		detachedEntities.RemoveDetachedEntity(entityID)
 	}

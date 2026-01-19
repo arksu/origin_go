@@ -217,7 +217,10 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			}
 		})
 		if ok {
-			_ = handle // Use the handle to avoid unused variable error
+			// Register character entity for periodic saving
+			charEntities := shard.world.CharacterEntities()
+			nextSaveAt := time.Now().Add(g.cfg.Game.PlayerSaveInterval)
+			charEntities.Add(playerEntityID, handle, nextSaveAt)
 
 			character.X = pos.X
 			character.Y = pos.Y
@@ -301,6 +304,11 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 
 	// Remove from detached map (cancel expiration timer)
 	detachedEntities.RemoveDetachedEntity(playerEntityID)
+
+	// Re-register character entity for periodic saving
+	charEntities := shard.world.CharacterEntities()
+	nextSaveAt := time.Now().Add(g.cfg.Game.PlayerSaveInterval)
+	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
 	detachedDuration := time.Since(detachedEntity.DetachedAt)
 
