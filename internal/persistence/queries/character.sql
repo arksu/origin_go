@@ -67,15 +67,25 @@ WHERE region = $1
   AND is_online = true
   AND deleted_at IS NULL;
 
--- name: BatchUpdateCharacters :exec
+-- name: UpdateCharacters :exec
 UPDATE character
-SET 
-	x = $2,
-	y = $3,
-	heading = $4,
-	stamina = $5,
-	shp = $6,
-	hhp = $7,
-	last_save_at = now(),
-	updated_at = now()
-WHERE id = $1;
+SET
+    x = v.x,
+    y = v.y,
+    heading = v.heading,
+    stamina = v.stamina,
+    shp = v.shp,
+    hhp = v.hhp,
+    last_save_at = now(),
+    updated_at = now()
+FROM (
+         SELECT
+             unnest(sqlc.arg(ids)::int[]) as id,
+             unnest(sqlc.arg(xs)::float8[]) as x,
+             unnest(sqlc.arg(ys)::float8[]) as y,
+             unnest(sqlc.arg(headings)::float8[]) as heading,
+             unnest(sqlc.arg(staminas)::int[]) as stamina,
+             unnest(sqlc.arg(shps)::int[]) as shp,
+             unnest(sqlc.arg(hhps)::int[]) as hhp
+     ) AS v
+WHERE character.id = v.id;
