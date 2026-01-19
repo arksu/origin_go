@@ -2,6 +2,7 @@ package systems
 
 import (
 	"context"
+	"math"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/persistence"
@@ -92,7 +93,7 @@ func NewCharacterSaver(db *persistence.Postgres, numWorkers int, logger *zap.Log
 		cancel:          cancel,
 	}
 
-	for i := 0; i < numWorkers; i++ {
+	for i := 0; i < 2; i++ {
 		cs.wg.Add(1)
 		go cs.saveWorker(i)
 	}
@@ -112,7 +113,7 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 		CharacterID: int64(entityID),
 		X:           int(transform.X),
 		Y:           int(transform.Y),
-		Heading:     int16(transform.Direction),
+		Heading:     int16(math.Mod(transform.Direction*180/math.Pi+360, 360)),
 		Stamina:     100, // TODO
 		SHP:         100, // TODO
 		HHP:         100, // TODO
@@ -199,6 +200,7 @@ func (s *CharacterSaver) flushBatch(batch []CharacterSnapshot) {
 	if err != nil {
 		s.logger.Error("Failed to execute batch update",
 			zap.Int("batch_size", len(batch)),
+			zap.Any("params", params),
 			zap.Error(err))
 		return
 	}

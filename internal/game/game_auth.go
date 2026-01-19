@@ -176,7 +176,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Region:     character.Region,
 				Layer:      character.Layer,
 			})
-			ecs.AddComponent(w, h, components.CreateTransform(pos.X, pos.Y, int(character.Heading)*45))
+			ecs.AddComponent(w, h, components.CreateTransform(pos.X, pos.Y, int(character.Heading)))
 			ecs.AddComponent(w, h, components.ChunkRef{
 				CurrentChunkX: pos.X / _const.ChunkWorldSize,
 				CurrentChunkY: pos.Y / _const.ChunkWorldSize,
