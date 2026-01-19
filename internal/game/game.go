@@ -369,6 +369,11 @@ func (g *Game) handleDisconnect(c *network.Client) {
 						}
 						shard.world.Despawn(playerHandle)
 
+						// Save character data before despawn
+						if shard.characterSaver != nil {
+							shard.characterSaver.Save(shard.world, playerEntityID, playerHandle)
+						}
+
 						// Remove from CharacterEntities
 						shard.world.CharacterEntities().Remove(playerEntityID)
 					}

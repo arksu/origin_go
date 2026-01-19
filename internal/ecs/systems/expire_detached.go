@@ -20,18 +20,22 @@ type ExpireDetachedSystem struct {
 	// Callback to perform cleanup outside ECS (spatial index, AOI, etc.)
 	onExpire func(entityID types.EntityID, handle types.Handle)
 
+	// CharacterSaver for saving character data before despawn
+	characterSaver *CharacterSaver
+
 	// Reusable buffer for expired entities to avoid allocations
 	expiredBuffer []types.EntityID
 }
 
 // NewExpireDetachedSystem creates a new ExpireDetachedSystem
 // onExpire callback is called for each expired entity before despawn to allow cleanup
-func NewExpireDetachedSystem(logger *zap.Logger, onExpire func(entityID types.EntityID, handle types.Handle)) *ExpireDetachedSystem {
+func NewExpireDetachedSystem(logger *zap.Logger, characterSaver *CharacterSaver, onExpire func(entityID types.EntityID, handle types.Handle)) *ExpireDetachedSystem {
 	return &ExpireDetachedSystem{
-		BaseSystem:    ecs.NewBaseSystem("ExpireDetachedSystem", 950), // Run after ChunkSystem
-		logger:        logger,
-		onExpire:      onExpire,
-		expiredBuffer: make([]types.EntityID, 0, 64),
+		BaseSystem:     ecs.NewBaseSystem("ExpireDetachedSystem", 950), // Run after ChunkSystem
+		logger:         logger,
+		onExpire:       onExpire,
+		characterSaver: characterSaver,
+		expiredBuffer:  make([]types.EntityID, 0, 64),
 	}
 }
 
@@ -68,6 +72,11 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 			zap.Duration("detached_duration", detachedDuration),
 			zap.Int("layer", w.Layer),
 		)
+
+		// Save character data before despawn
+		if s.characterSaver != nil {
+			s.characterSaver.Save(w, entityID, handle)
+		}
 
 		// Call cleanup callback before despawn (for spatial index, AOI, etc.)
 		if s.onExpire != nil {
