@@ -28,8 +28,9 @@ type loadRequest struct {
 }
 
 type saveRequest struct {
-	coord types.ChunkCoord
-	chunk *core.Chunk
+	coord   types.ChunkCoord
+	chunk   *core.Chunk
+	version uint64 // Версия чанка на момент eviction
 }
 
 type ChunkStats struct {
@@ -649,36 +650,35 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 		return
 	}
 
-	// Проверяем что это ТОТ ЖЕ chunk объект
-	cm.chunksMu.Lock()
-	currentChunk := cm.chunks[coord]
-	isCurrentChunk := currentChunk == chunk
-	if isCurrentChunk {
-		delete(cm.chunks, coord)
-	}
-	cm.chunksMu.Unlock()
-
-	if !isCurrentChunk {
-		cm.logger.Debug("chunk was replaced, skipping save of old instance",
-			zap.Int("chunk_x", coord.X),
-			zap.Int("chunk_y", coord.Y),
-		)
-		return
-	}
-
-	// Безопасно сохраняем
+	// Сохраняем в БД
 	chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 
-	// Обновляем статистику
-	state := chunk.GetState()
-	switch state {
-	case types.ChunkStateActive:
-		atomic.AddInt64(&cm.stats.ActiveCount, -1)
-	case types.ChunkStatePreloaded:
-		atomic.AddInt64(&cm.stats.PreloadedCount, -1)
-	case types.ChunkStateInactive:
-		atomic.AddInt64(&cm.stats.InactiveCount, -1)
+	// Удаляем из памяти с финальными проверками
+	cm.chunksMu.Lock()
+	currentChunk := cm.chunks[coord]
+
+	if currentChunk == chunk {
+
+		cm.interestMu.RLock()
+		interest, hasInterest := cm.chunkInterests[coord]
+		stillNotInterested := !hasInterest || interest.isEmpty()
+		cm.interestMu.RUnlock()
+
+		if stillNotInterested {
+			delete(cm.chunks, coord)
+
+			state := chunk.GetState()
+			switch state {
+			case types.ChunkStateActive:
+				atomic.AddInt64(&cm.stats.ActiveCount, -1)
+			case types.ChunkStatePreloaded:
+				atomic.AddInt64(&cm.stats.PreloadedCount, -1)
+			case types.ChunkStateInactive:
+				atomic.AddInt64(&cm.stats.InactiveCount, -1)
+			}
+		}
 	}
+	cm.chunksMu.Unlock()
 }
 
 // isWithinWorldBounds checks if a chunk coordinate is within world boundaries
@@ -706,19 +706,6 @@ func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *core.Chunk {
 		atomic.AddInt64(&cm.stats.CacheMisses, 1)
 	}
 
-	return chunk
-}
-
-func (cm *ChunkManager) GetOrCreateChunk(coord types.ChunkCoord) *core.Chunk {
-	cm.chunksMu.Lock()
-	defer cm.chunksMu.Unlock()
-
-	if chunk, exists := cm.chunks[coord]; exists {
-		return chunk
-	}
-
-	chunk := core.NewChunk(coord, cm.region, cm.layer, _const.ChunkSize)
-	cm.chunks[coord] = chunk
 	return chunk
 }
 
