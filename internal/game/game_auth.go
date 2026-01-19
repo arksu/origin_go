@@ -253,8 +253,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	// After successful spawn: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
 	c.StreamEpoch.Add(1)
 	c.InWorld.Store(true)
-	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
+	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
