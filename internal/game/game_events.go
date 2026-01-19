@@ -141,9 +141,15 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 	shard.clientsMu.RLock()
 	// Find the client that is the observer
 	if client, exists := shard.clients[event.ObserverID]; exists {
-		// Get the target entity's transform component
+		// Get the target entity's components
 		transform, hasTransform := ecs.GetComponent[components.Transform](shard.World(), event.TargetHandle)
 		if !hasTransform {
+			shard.clientsMu.RUnlock()
+			return nil
+		}
+
+		entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.World(), event.TargetHandle)
+		if !hasEntityInfo {
 			shard.clientsMu.RUnlock()
 			return nil
 		}
@@ -151,7 +157,8 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 		msg := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_ObjectSpawn{
 				ObjectSpawn: &netproto.S2C_ObjectSpawn{
-					EntityId: uint64(event.TargetID),
+					EntityId:   uint64(event.TargetID),
+					ObjectType: int32(entityInfo.ObjectType),
 					Position: &netproto.EntityPosition{
 						Position: &netproto.Position{
 							X: int32(transform.X),

@@ -226,7 +226,14 @@ class GameConnection {
       return // Don't add player as a game object
     }
 
-    gameStore.addGameObject(object.entityId, object)
+    // Add object type to the game object for rendering
+    const gameObject = {
+      ...object,
+      objectType: object.objectType || 0
+    }
+
+    gameStore.addGameObject(object.entityId, gameObject)
+    console.log('Added game object:', object.entityId, 'type:', object.objectType)
   }
 
   handleObjectMove(objectMove) {
@@ -266,6 +273,7 @@ class GameConnection {
       // If object doesn't exist, create it with basic info
       const newObject = {
         entityId: objectMove.entityId,
+        objectType: objectMove.objectType || 0,
         movement: objectMove.movement,
         position: objectMove.movement.position
       }
@@ -286,7 +294,7 @@ class GameConnection {
     if (gameStore.gameObjects.has(objectDespawn.entityId)) {
       gameStore.removeGameObject(objectDespawn.entityId)
     } else {
-      console.warn('Attempted to remove non-existent game object:', objectDespawn.entityId)
+      console.warn('Attempted to remove non-existent game object:', objectDespawn.entityId, objectDespawn)
     }
   }
 

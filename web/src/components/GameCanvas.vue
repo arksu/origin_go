@@ -295,11 +295,11 @@ function renderGameObject(gameObject, cameraX, cameraY) {
   }
   if (gameObject.movement && gameObject.movement.velocity) {
     // For moving objects, use a default size if none specified
-    size = size || { x: 32, y: 32 }
+    size = size || { x: 10, y: 10 }
   }
   
-  const width = size?.x || 32  // Default width if not specified
-  const height = size?.y || 32  // Default height if not specified
+  const width = size?.x || 10  // Default width if not specified
+  const height = size?.y || 10  // Default height if not specified
   
   // Convert size from world units to pixels
   const pixelWidth = (width / COORD_PER_TILE) * TILE_SIZE_PIXELS
@@ -316,8 +316,12 @@ function renderGameObject(gameObject, cameraX, cameraY) {
     screenY + pixelHeight > 0 &&
     screenY < canvasHeight.value
   ) {
-    // Draw blue rectangle for game object
-    ctx.value.fillStyle = '#0011ff'
+    // Draw rectangle with color based on object type
+    if (gameObject.objectType === 6) { // Player type
+      ctx.value.fillStyle = '#ff0000' // Red for players
+    } else {
+      ctx.value.fillStyle = '#0011ff' // Blue for other objects
+    }
     ctx.value.fillRect(screenX, screenY, pixelWidth, pixelHeight)
     
     if (DEBUG) {
