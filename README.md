@@ -1,3 +1,4 @@
+[![Go](https://github.com/arksu/origin_go/actions/workflows/go.yml/badge.svg)](https://github.com/arksu/origin_go/actions/workflows/go.yml)
 # Game server
 ## Build
 ```shell
