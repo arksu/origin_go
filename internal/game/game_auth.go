@@ -205,7 +205,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
 			visState := w.VisibilityState()
 			visState.VisibleByObserver[h] = ecs.ObserverVisibility{
-				Known:          make(map[types.Handle]struct{}, 32),
+				Known:          make(map[types.Handle]types.EntityID, 32),
 				NextUpdateTime: time.Time{}, // Zero time for immediate update
 			}
 		})

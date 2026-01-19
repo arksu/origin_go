@@ -148,7 +148,7 @@ func (s *VisionSystem) updateObserverVisibility(
 
 	oldKnown := observerVis.Known
 	if oldKnown == nil {
-		oldKnown = make(map[types.Handle]struct{}, 32)
+		oldKnown = make(map[types.Handle]types.EntityID, 32)
 	}
 
 	for targetHandle := range s.newVisibleSet {
@@ -174,12 +174,9 @@ func (s *VisionSystem) updateObserverVisibility(
 		}
 	}
 
-	for targetHandle := range oldKnown {
+	for targetHandle, targetID := range oldKnown {
 		if _, stillVisible := s.newVisibleSet[targetHandle]; !stillVisible {
-			targetID, ok := w.GetExternalID(targetHandle)
-			if !ok {
-				targetID = 0
-			}
+			// Use saved EntityID from Known map (works even if entity is already despawned)
 
 			// Get target entity layer
 			targetEntityInfo, hasTargetEntityInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
@@ -198,14 +195,18 @@ func (s *VisionSystem) updateObserverVisibility(
 	}
 
 	if observerVis.Known == nil {
-		observerVis.Known = make(map[types.Handle]struct{}, len(s.newVisibleSet))
+		observerVis.Known = make(map[types.Handle]types.EntityID, len(s.newVisibleSet))
 	} else {
 		for k := range observerVis.Known {
 			delete(observerVis.Known, k)
 		}
 	}
 	for h := range s.newVisibleSet {
-		observerVis.Known[h] = struct{}{}
+		// Save EntityID for later despawn events
+		entityID, ok := w.GetExternalID(h)
+		if ok {
+			observerVis.Known[h] = entityID
+		}
 	}
 	//s.logger.Debug("VisionSystem updated", zap.Any("newVisibleSet", s.newVisibleSet), zap.Any("observerVis", observerVis))
 
@@ -260,7 +261,7 @@ func (s *VisionSystem) cleanupDeadObserver(
 	w *ecs.World,
 	visState *ecs.VisibilityState,
 	observerHandle types.Handle,
-	known map[types.Handle]struct{},
+	known map[types.Handle]types.EntityID,
 ) {
 	for targetHandle := range known {
 		s.removeFromObserversByTarget(visState, targetHandle, observerHandle)
