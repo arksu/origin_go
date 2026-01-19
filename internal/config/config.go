@@ -39,6 +39,7 @@ type GameConfig struct {
 	TickRate                 int           `mapstructure:"tick_rate"`
 	PlayerActiveChunkRadius  int           `mapstructure:"player_active_chunk_radius"`
 	PlayerPreloadChunkRadius int           `mapstructure:"player_preload_chunk_radius"`
+	PlayerSaveInterval       time.Duration `mapstructure:"player_save_interval"`
 	Region                   int           `mapstructure:"region"`
 	MaxLayers                int           `mapstructure:"max_layers"`
 	DisconnectDelay          int           `mapstructure:"disconnect_delay"`
@@ -131,9 +132,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.tick_rate", 10)
 	v.SetDefault("game.player_active_chunk_radius", 1)
 	v.SetDefault("game.player_preload_chunk_radius", 2)
+	v.SetDefault("game.player_save_interval", 10*time.Second)
 	v.SetDefault("game.region", 1)
 	v.SetDefault("game.max_layers", 3)
-	v.SetDefault("game.disconnect_delay", 8)
+	v.SetDefault("game.disconnect_delay", 3)
 	v.SetDefault("game.chunk_lru_capacity", 2000)
 	v.SetDefault("game.chunk_lru_ttl", 20)
 	v.SetDefault("game.max_entities", 1048576)

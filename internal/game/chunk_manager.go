@@ -846,25 +846,6 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	return nil
 }
 
-func (cm *ChunkManager) DeactivateChunk(coord types.ChunkCoord) error {
-	chunk := cm.GetChunk(coord)
-	if chunk == nil {
-		return nil
-	}
-
-	if chunk.GetState() != types.ChunkStateActive {
-		return nil
-	}
-
-	err := cm.deactivateChunkInternal(chunk)
-	if err == nil {
-		cm.activeChunksMu.Lock()
-		delete(cm.activeChunks, coord)
-		cm.activeChunksMu.Unlock()
-	}
-	return err
-}
-
 // deactivateChunkInternal deactivates a chunk by serializing entities to raw objects
 func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 	if chunk.GetState() != types.ChunkStateActive {
