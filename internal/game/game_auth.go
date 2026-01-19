@@ -139,9 +139,15 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		return
 	}
 
-	candidates := g.generateSpawnCandidates(character.X, character.Y)
-
 	playerEntityID := types.EntityID(character.ID)
+
+	// Check if entity is detached (reconnect scenario)
+	if g.tryReattachPlayer(c, shard, playerEntityID, character) {
+		return
+	}
+
+	// Normal spawn flow
+	candidates := g.generateSpawnCandidates(character.X, character.Y)
 	spawned := false
 
 	for _, pos := range candidates {
@@ -263,6 +269,75 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		zap.Any("posX", character.X),
 		zap.Any("posY", character.Y),
 	)
+}
+
+// tryReattachPlayer attempts to reattach a client to an existing detached entity
+// Returns true if reattach was successful, false if normal spawn should proceed
+func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID types.EntityID, character repository.Character) bool {
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	detachedEntities := shard.world.DetachedEntities()
+
+	// Check if entity is detached
+	detachedEntity, isDetached := detachedEntities.GetDetachedEntity(playerEntityID)
+	if !isDetached {
+		return false
+	}
+
+	handle := detachedEntity.Handle
+
+	// Verify entity is still alive
+	if !shard.world.Alive(handle) {
+		// Entity was despawned (e.g., killed), remove from detached map and proceed with normal spawn
+		detachedEntities.RemoveDetachedEntity(playerEntityID)
+		g.logger.Info("Detached entity no longer alive, proceeding with normal spawn",
+			zap.Uint64("client_id", c.ID),
+			zap.Int64("character_id", int64(playerEntityID)),
+		)
+		return false
+	}
+
+	// Remove from detached map (cancel expiration timer)
+	detachedEntities.RemoveDetachedEntity(playerEntityID)
+
+	detachedDuration := time.Since(detachedEntity.DetachedAt)
+
+	// Add client to shard's client map
+	shard.clientsMu.Lock()
+	shard.clients[playerEntityID] = c
+	shard.clientsMu.Unlock()
+
+	// Get current position from entity
+	var posX, posY int
+	if transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, handle); hasTransform {
+		posX = int(transform.X)
+		posY = int(transform.Y)
+	}
+
+	// Force immediate visibility update for the reattached observer
+	visState := shard.world.VisibilityState()
+	if observerVis, ok := visState.VisibleByObserver[handle]; ok {
+		observerVis.NextUpdateTime = time.Time{} // Zero time for immediate update
+		visState.VisibleByObserver[handle] = observerVis
+	}
+
+	// After successful reattach: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
+	c.StreamEpoch.Add(1)
+	c.InWorld.Store(true)
+	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
+	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
+
+	g.logger.Info("Player reattached to existing entity",
+		zap.Uint64("client_id", c.ID),
+		zap.Int64("character_id", int64(playerEntityID)),
+		zap.Int("layer", character.Layer),
+		zap.Duration("detached_duration", detachedDuration),
+		zap.Int("pos_x", posX),
+		zap.Int("pos_y", posY),
+	)
+
+	return true
 }
 
 func (g *Game) isValidSpawnPos(x, y int) bool {
