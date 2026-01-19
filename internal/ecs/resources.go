@@ -92,3 +92,14 @@ func (d *DetachedEntities) IsDetached(entityID types.EntityID) bool {
 	_, ok := d.Map[entityID]
 	return ok
 }
+
+type CharacterEntities struct {
+	Map map[types.EntityID]CharacterEntity
+}
+
+type CharacterEntity struct {
+	Handle     types.Handle
+	LastSaveAt time.Time
+	NextSaveAt time.Time
+	SavesCount int
+}
