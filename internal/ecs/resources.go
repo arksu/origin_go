@@ -52,6 +52,6 @@ type VisibilityState struct {
 }
 
 type ObserverVisibility struct {
-	Known          map[types.Handle]struct{} // кого видит эта сущность
+	Known          map[types.Handle]types.EntityID // кого видит эта сущность (Handle -> EntityID)
 	NextUpdateTime time.Time
 }
