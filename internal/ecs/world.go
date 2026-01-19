@@ -1,11 +1,10 @@
 package ecs
 
 import (
-	"sort"
-	"sync"
-
 	"origin/internal/eventbus"
 	"origin/internal/types"
+	"sort"
+	"sync"
 )
 
 // DefaultMaxHandles is the default maximum number of active entities
@@ -42,6 +41,10 @@ type World struct {
 	// MovedEntities buffer for tracking moved entities between systems
 	movedEntities   MovedEntities
 	visibilityState VisibilityState
+
+	// DetachedEntities tracks players who disconnected but entity remains in world
+	// Key: EntityID, Value: expiration time (when entity should be despawned)
+	detachedEntities DetachedEntities
 
 	// Event bus for publishing events
 	eventBus *eventbus.EventBus
@@ -83,6 +86,9 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		visibilityState: VisibilityState{
 			VisibleByObserver:        make(map[types.Handle]ObserverVisibility, 256),
 			ObserversByVisibleTarget: make(map[types.Handle]map[types.Handle]struct{}, 256),
+		},
+		detachedEntities: DetachedEntities{
+			Map: make(map[types.EntityID]DetachedEntity, 64),
 		},
 		eventBus: eventBus,
 		Layer:    layer,
@@ -411,4 +417,9 @@ func (w *World) MovedEntities() *MovedEntities {
 // VisibilityState returns the visibility state resource
 func (w *World) VisibilityState() *VisibilityState {
 	return &w.visibilityState
+}
+
+// DetachedEntities returns the detached entities map
+func (w *World) DetachedEntities() *DetachedEntities {
+	return &w.detachedEntities
 }

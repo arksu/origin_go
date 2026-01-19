@@ -57,5 +57,38 @@ type ObserverVisibility struct {
 }
 
 type DetachedEntities struct {
-	ExpirationTime map[types.Handle]time.Time
+	Map map[types.EntityID]DetachedEntity
+}
+
+// DetachedEntity represents a player entity that has disconnected but remains in the world
+type DetachedEntity struct {
+	Handle         types.Handle
+	ExpirationTime time.Time
+	DetachedAt     time.Time
+}
+
+// AddDetachedEntity adds an entity to the detached entities map
+func (d *DetachedEntities) AddDetachedEntity(entityID types.EntityID, handle types.Handle, expirationTime time.Time) {
+	d.Map[entityID] = DetachedEntity{
+		Handle:         handle,
+		ExpirationTime: expirationTime,
+		DetachedAt:     time.Now(),
+	}
+}
+
+// RemoveDetachedEntity removes an entity from the detached entities map
+func (d *DetachedEntities) RemoveDetachedEntity(entityID types.EntityID) {
+	delete(d.Map, entityID)
+}
+
+// GetDetachedEntity returns a detached entity by EntityID
+func (d *DetachedEntities) GetDetachedEntity(entityID types.EntityID) (DetachedEntity, bool) {
+	entity, ok := d.Map[entityID]
+	return entity, ok
+}
+
+// IsDetached checks if an entity is in detached state
+func (d *DetachedEntities) IsDetached(entityID types.EntityID) bool {
+	_, ok := d.Map[entityID]
+	return ok
 }

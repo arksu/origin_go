@@ -327,34 +327,60 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				delete(shard.clients, playerEntityID)
 				shard.clientsMu.Unlock()
 
+				disconnectDelay := g.cfg.Game.DisconnectDelay
+
 				shard.mu.Lock()
-				// Get the player's handle and despawn the entity
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
-				if playerHandle != types.InvalidHandle {
-					// Remove from chunk spatial index before despawning
-					if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](shard.world, playerHandle); hasChunkRef {
-						if transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, playerHandle); hasTransform {
-							if chunk := shard.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
-								// Check if entity is static or dynamic and remove from appropriate spatial index
-								if entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.world, playerHandle); hasEntityInfo && entityInfo.IsStatic {
-									chunk.Spatial().RemoveStatic(playerHandle, int(transform.X), int(transform.Y))
-								} else {
-									chunk.Spatial().RemoveDynamic(playerHandle, int(transform.X), int(transform.Y))
+
+				if disconnectDelay > 0 && playerHandle != types.InvalidHandle {
+					// Detached mode: keep entity in world for DisconnectDelay seconds
+					expirationTime := time.Now().Add(time.Duration(disconnectDelay) * time.Second)
+					shard.world.DetachedEntities().AddDetachedEntity(playerEntityID, playerHandle, expirationTime)
+
+					// Stop movement for detached entity
+					ecs.MutateComponent[components.Movement](shard.world, playerHandle, func(m *components.Movement) bool {
+						m.ClearTarget()
+						return true
+					})
+
+					shard.mu.Unlock()
+
+					g.logger.Info("Player detached, entity remains in world",
+						zap.Uint64("client_id", c.ID),
+						zap.Int64("character_id", int64(c.CharacterID)),
+						zap.Int("layer", c.Layer),
+						zap.Int("disconnect_delay_sec", disconnectDelay),
+						zap.Time("expiration_time", expirationTime),
+					)
+				} else {
+					// Immediate despawn (DisconnectDelay=0 or entity not found)
+					if playerHandle != types.InvalidHandle {
+						// Remove from chunk spatial index before despawning
+						if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](shard.world, playerHandle); hasChunkRef {
+							if transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, playerHandle); hasTransform {
+								if chunk := shard.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
+									if entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.world, playerHandle); hasEntityInfo && entityInfo.IsStatic {
+										chunk.Spatial().RemoveStatic(playerHandle, int(transform.X), int(transform.Y))
+									} else {
+										chunk.Spatial().RemoveDynamic(playerHandle, int(transform.X), int(transform.Y))
+									}
 								}
 							}
 						}
+						shard.world.Despawn(playerHandle)
 					}
-					shard.world.Despawn(playerHandle)
+					shard.UnregisterEntityAOI(playerEntityID)
+					shard.mu.Unlock()
+
+					g.logger.Debug("Unregistered entity AOI",
+						zap.Uint64("client_id", c.ID),
+						zap.Int64("character_id", int64(c.CharacterID)),
+						zap.Int("layer", c.Layer),
+					)
 				}
-				shard.UnregisterEntityAOI(playerEntityID)
-				shard.mu.Unlock()
-				g.logger.Debug("Unregistered entity AOI",
-					zap.Uint64("client_id", c.ID),
-					zap.Int64("character_id", int64(c.CharacterID)),
-					zap.Int("layer", c.Layer),
-				)
 			}
 
+			// Set character offline in DB immediately (per requirement)
 			if err := g.db.Queries().SetCharacterOffline(g.ctx, int64(c.CharacterID)); err != nil {
 				g.logger.Error("Failed to set character offline", zap.Uint64("client_id", c.ID), zap.Uint64("character_id", uint64(c.CharacterID)), zap.Error(err))
 			} else {

@@ -158,6 +158,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
+	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.onDetachedEntityExpired))
 
 	return s
 }
@@ -369,6 +370,26 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 }
 
 func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
+	s.chunkManager.UnregisterEntity(entityID)
+}
+
+// onDetachedEntityExpired is called when a detached entity's TTL expires
+// It handles cleanup of spatial index and AOI before the entity is despawned
+func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
+	// Remove from chunk spatial index
+	if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](s.world, handle); hasChunkRef {
+		if transform, hasTransform := ecs.GetComponent[components.Transform](s.world, handle); hasTransform {
+			if chunk := s.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
+				if entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](s.world, handle); hasEntityInfo && entityInfo.IsStatic {
+					chunk.Spatial().RemoveStatic(handle, int(transform.X), int(transform.Y))
+				} else {
+					chunk.Spatial().RemoveDynamic(handle, int(transform.X), int(transform.Y))
+				}
+			}
+		}
+	}
+
+	// Unregister from AOI
 	s.chunkManager.UnregisterEntity(entityID)
 }
 
