@@ -33,9 +33,10 @@ type Shard struct {
 	entityIDManager *EntityIDManager
 	logger          *zap.Logger
 
-	world        *ecs.World
-	chunkManager *ChunkManager
-	eventBus     *eventbus.EventBus
+	world          *ecs.World
+	chunkManager   *ChunkManager
+	eventBus       *eventbus.EventBus
+	characterSaver *systems.CharacterSaver
 
 	clients   map[types.EntityID]*network.Client
 	clientsMu sync.RWMutex
@@ -73,6 +74,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.onDetachedEntityExpired))
 
+	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, logger)
+	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
+
 	return s
 }
 
@@ -104,6 +108,9 @@ func (s *Shard) Stop() {
 	s.state = ShardStateStopping
 	s.mu.Unlock()
 
+	if s.characterSaver != nil {
+		s.characterSaver.Stop()
+	}
 	s.chunkManager.Stop()
 }
 

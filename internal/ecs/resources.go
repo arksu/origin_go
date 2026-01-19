@@ -103,3 +103,25 @@ type CharacterEntity struct {
 	NextSaveAt time.Time
 	SavesCount int
 }
+
+func (c *CharacterEntities) Add(entityID types.EntityID, handle types.Handle, nextSaveAt time.Time) {
+	c.Map[entityID] = CharacterEntity{
+		Handle:     handle,
+		LastSaveAt: time.Time{},
+		NextSaveAt: nextSaveAt,
+		SavesCount: 0,
+	}
+}
+
+func (c *CharacterEntities) Remove(entityID types.EntityID) {
+	delete(c.Map, entityID)
+}
+
+func (c *CharacterEntities) UpdateSaveTime(entityID types.EntityID, lastSaveAt, nextSaveAt time.Time) {
+	if entity, ok := c.Map[entityID]; ok {
+		entity.LastSaveAt = lastSaveAt
+		entity.NextSaveAt = nextSaveAt
+		entity.SavesCount++
+		c.Map[entityID] = entity
+	}
+}

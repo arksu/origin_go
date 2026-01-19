@@ -46,6 +46,9 @@ type World struct {
 	// Key: EntityID, Value: expiration time (when entity should be despawned)
 	detachedEntities DetachedEntities
 
+	// CharacterEntities tracks player characters and their save state
+	characterEntities CharacterEntities
+
 	// Event bus for publishing events
 	eventBus *eventbus.EventBus
 
@@ -89,6 +92,9 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		},
 		detachedEntities: DetachedEntities{
 			Map: make(map[types.EntityID]DetachedEntity, 64),
+		},
+		characterEntities: CharacterEntities{
+			Map: make(map[types.EntityID]CharacterEntity, 64),
 		},
 		eventBus: eventBus,
 		Layer:    layer,
@@ -422,4 +428,9 @@ func (w *World) VisibilityState() *VisibilityState {
 // DetachedEntities returns the detached entities map
 func (w *World) DetachedEntities() *DetachedEntities {
 	return &w.detachedEntities
+}
+
+// CharacterEntities returns the character entities map
+func (w *World) CharacterEntities() *CharacterEntities {
+	return &w.characterEntities
 }
