@@ -27,12 +27,6 @@ jobs:
         run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
-      - name: Generate protobuf code
-        run: |
-          mkdir -p ./internal/proto
-          protoc --go_out=. --go_opt=module=origin \
-          api/proto/packets.proto          
-
       - name: Install sqlc
         run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
@@ -46,6 +40,12 @@ jobs:
           git diff
           exit 1
           fi
+
+      - name: Generate protobuf code
+        run: |
+          mkdir -p ./internal/proto
+          protoc --go_out=. --go_opt=module=origin \
+          api/proto/packets.proto          
 
       - name: Build
         run: go build -trimpath -o gameserver ./cmd/gameserver
