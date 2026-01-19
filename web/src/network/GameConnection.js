@@ -121,6 +121,8 @@ class GameConnection {
         this.handleObjectMove(message.objectMove)
       } else if (message.error) {
         this.handleError(message.error)
+      } else {
+        console.warn("Unknown message type:", message)
       }
 
       // Notify registered handlers
@@ -142,8 +144,12 @@ class GameConnection {
       gameStore.setPlayerState(authResult.playerState)
       this.startPing()
     } else {
+      console.error('Authentication failed:', authResult.errorMessage)
       gameStore.setError(authResult.errorMessage || 'Authentication failed')
       this.disconnect()
+      if (this.router) {
+        this.router.push('/characters')
+      }
     }
   }
 
@@ -283,6 +289,7 @@ class GameConnection {
 
   handleObjectDespawn(objectDespawn) {
     const gameStore = useGameStore()
+    console.debug("objectDespawn", objectDespawn)
 
     // Check if this is the player's entity (shouldn't happen, but handle gracefully)
     if (objectDespawn.entityId === gameStore.characterId) {

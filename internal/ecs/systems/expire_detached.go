@@ -74,20 +74,6 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 			s.onExpire(entityID, handle)
 		}
 
-		// Remove from visibility state
-		visState := w.VisibilityState()
-		visState.Mu.Lock()
-		delete(visState.VisibleByObserver, handle)
-		if observers, ok := visState.ObserversByVisibleTarget[handle]; ok {
-			for observerHandle := range observers {
-				if observerVis, ok := visState.VisibleByObserver[observerHandle]; ok {
-					delete(observerVis.Known, handle)
-				}
-			}
-			delete(visState.ObserversByVisibleTarget, handle)
-		}
-		visState.Mu.Unlock()
-
 		// Despawn the entity
 		w.Despawn(handle)
 
@@ -117,20 +103,6 @@ func DespawnDetachedEntity(w *ecs.World, entityID types.EntityID, logger *zap.Lo
 		zap.Duration("detached_duration", detachedDuration),
 		zap.Int("layer", w.Layer),
 	)
-
-	// Remove from visibility state
-	visState := w.VisibilityState()
-	visState.Mu.Lock()
-	delete(visState.VisibleByObserver, handle)
-	if observers, ok := visState.ObserversByVisibleTarget[handle]; ok {
-		for observerHandle := range observers {
-			if observerVis, ok := visState.VisibleByObserver[observerHandle]; ok {
-				delete(observerVis.Known, handle)
-			}
-		}
-		delete(visState.ObserversByVisibleTarget, handle)
-	}
-	visState.Mu.Unlock()
 
 	// Despawn the entity
 	w.Despawn(handle)
