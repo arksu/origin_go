@@ -163,40 +163,48 @@ func (s *CharacterSaver) flushBatch(batch []CharacterSnapshot) {
 		return
 	}
 
+	// Convert batch to arrays for batch update
+	ids := make([]int, len(batch))
+	xs := make([]float64, len(batch))
+	ys := make([]float64, len(batch))
+	headings := make([]float64, len(batch))
+	staminas := make([]int, len(batch))
+	shps := make([]int, len(batch))
+	hhps := make([]int, len(batch))
+
+	for i, snapshot := range batch {
+		ids[i] = int(snapshot.CharacterID)
+		xs[i] = float64(snapshot.X)
+		ys[i] = float64(snapshot.Y)
+		headings[i] = float64(snapshot.Heading)
+		staminas[i] = int(snapshot.Stamina)
+		shps[i] = int(snapshot.SHP)
+		hhps[i] = int(snapshot.HHP)
+	}
+
+	params := repository.UpdateCharactersParams{
+		Ids:      ids,
+		Xs:       xs,
+		Ys:       ys,
+		Headings: headings,
+		Staminas: staminas,
+		Shps:     shps,
+		Hhps:     hhps,
+	}
+
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
 
-	successCount := 0
-	for _, snapshot := range batch {
-		params := repository.BatchUpdateCharactersParams{
-			ID:      snapshot.CharacterID,
-			X:       snapshot.X,
-			Y:       snapshot.Y,
-			Heading: snapshot.Heading,
-			Stamina: int(snapshot.Stamina),
-			Shp:     int(snapshot.SHP),
-			Hhp:     int(snapshot.HHP),
-		}
-
-		err := s.db.Queries().BatchUpdateCharacters(ctx, params)
-		if err != nil {
-			s.logger.Error("Failed to update character",
-				zap.Int64("character_id", snapshot.CharacterID),
-				zap.Error(err))
-			continue
-		}
-		successCount++
+	err := s.db.Queries().UpdateCharacters(ctx, params)
+	if err != nil {
+		s.logger.Error("Failed to execute batch update",
+			zap.Int("batch_size", len(batch)),
+			zap.Error(err))
+		return
 	}
 
 	s.logger.Debug("Batch character save completed",
-		zap.Int("batch_size", len(batch)),
-		zap.Int("success_count", successCount))
-
-	if successCount != len(batch) {
-		s.logger.Warn("Some character updates failed",
-			zap.Int("batch_size", len(batch)),
-			zap.Int("success_count", successCount))
-	}
+		zap.Int("batch_size", len(batch)))
 }
 
 func (s *CharacterSaver) Stop() {

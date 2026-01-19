@@ -8,44 +8,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+
+	"github.com/lib/pq"
 )
-
-const batchUpdateCharacters = `-- name: BatchUpdateCharacters :exec
-UPDATE character
-SET 
-	x = $2,
-	y = $3,
-	heading = $4,
-	stamina = $5,
-	shp = $6,
-	hhp = $7,
-	last_save_at = now(),
-	updated_at = now()
-WHERE id = $1
-`
-
-type BatchUpdateCharactersParams struct {
-	ID      int64 `json:"id"`
-	X       int   `json:"x"`
-	Y       int   `json:"y"`
-	Heading int16 `json:"heading"`
-	Stamina int   `json:"stamina"`
-	Shp     int   `json:"shp"`
-	Hhp     int   `json:"hhp"`
-}
-
-func (q *Queries) BatchUpdateCharacters(ctx context.Context, arg BatchUpdateCharactersParams) error {
-	_, err := q.db.ExecContext(ctx, batchUpdateCharacters,
-		arg.ID,
-		arg.X,
-		arg.Y,
-		arg.Heading,
-		arg.Stamina,
-		arg.Shp,
-		arg.Hhp,
-	)
-	return err
-}
 
 const clearAuthToken = `-- name: ClearAuthToken :exec
 UPDATE character
@@ -348,5 +313,52 @@ type UpdateCharacterPositionParams struct {
 
 func (q *Queries) UpdateCharacterPosition(ctx context.Context, arg UpdateCharacterPositionParams) error {
 	_, err := q.db.ExecContext(ctx, updateCharacterPosition, arg.ID, arg.X, arg.Y)
+	return err
+}
+
+const updateCharacters = `-- name: UpdateCharacters :exec
+UPDATE character
+SET
+    x = v.x,
+    y = v.y,
+    heading = v.heading,
+    stamina = v.stamina,
+    shp = v.shp,
+    hhp = v.hhp,
+    last_save_at = now(),
+    updated_at = now()
+FROM (
+         SELECT
+             unnest($1::int[]) as id,
+             unnest($2::float8[]) as x,
+             unnest($3::float8[]) as y,
+             unnest($4::float8[]) as heading,
+             unnest($5::int[]) as stamina,
+             unnest($6::int[]) as shp,
+             unnest($7::int[]) as hhp
+     ) AS v
+WHERE character.id = v.id
+`
+
+type UpdateCharactersParams struct {
+	Ids      []int     `json:"ids"`
+	Xs       []float64 `json:"xs"`
+	Ys       []float64 `json:"ys"`
+	Headings []float64 `json:"headings"`
+	Staminas []int     `json:"staminas"`
+	Shps     []int     `json:"shps"`
+	Hhps     []int     `json:"hhps"`
+}
+
+func (q *Queries) UpdateCharacters(ctx context.Context, arg UpdateCharactersParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacters,
+		pq.Array(arg.Ids),
+		pq.Array(arg.Xs),
+		pq.Array(arg.Ys),
+		pq.Array(arg.Headings),
+		pq.Array(arg.Staminas),
+		pq.Array(arg.Shps),
+		pq.Array(arg.Hhps),
+	)
 	return err
 }

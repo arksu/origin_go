@@ -11,6 +11,7 @@ sql:
         emit_prepared_queries: false
         emit_interface: false
         emit_exact_table_names: false
+        emit_pointers_for_null_types: true
         overrides:
           - db_type: "integer"
             go_type: "int"
@@ -24,3 +25,7 @@ sql:
 #            go_type: "int"
 #          - db_type: "bigint"
 #            go_type: "int"
+          - go_type: "github.com/lib/pq.Int32Array"
+            db_type: "int[]"
+          - go_type: "github.com/lib/pq.Float64Array"
+            db_type: "float8[]"
