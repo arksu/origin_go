@@ -28,6 +28,7 @@ type loadRequest struct {
 }
 
 type saveRequest struct {
+	coord types.ChunkCoord
 	chunk *core.Chunk
 }
 
@@ -562,7 +563,7 @@ func (cm *ChunkManager) saveWorker() {
 			return
 		case req := <-cm.saveQueue:
 			atomic.AddInt64(&cm.stats.SaveRequests, 1)
-			req.chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+			cm.safeSaveAndRemove(req.coord, req.chunk)
 		}
 	}
 }
@@ -579,6 +580,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	cm.chunksMu.Unlock()
 
 	state := chunk.GetState()
+
 	if state != types.ChunkStateUnloaded {
 		cm.completeFuture(coord)
 		return
@@ -621,20 +623,53 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	}
 
 	select {
-	case cm.saveQueue <- saveRequest{chunk: chunk}:
+	case cm.saveQueue <- saveRequest{coord: coord, chunk: chunk}:
 	default:
 		cm.logger.Warn("save queue full, saving synchronously",
 			zap.Int("chunk_x", coord.X),
 			zap.Int("chunk_y", coord.Y),
 		)
-		chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+		// Синхронное сохранение с проверкой актуальности
+		cm.safeSaveAndRemove(coord, chunk)
+	}
+}
+
+func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Chunk) {
+	// Повторная проверка interest
+	cm.interestMu.RLock()
+	interest, hasInterest := cm.chunkInterests[coord]
+	isInterested := hasInterest && !interest.isEmpty()
+	cm.interestMu.RUnlock()
+
+	if isInterested {
+		cm.logger.Debug("chunk became interested during save, keeping in memory",
+			zap.Int("chunk_x", coord.X),
+			zap.Int("chunk_y", coord.Y),
+		)
+		return
 	}
 
+	// Проверяем что это ТОТ ЖЕ chunk объект
 	cm.chunksMu.Lock()
-	delete(cm.chunks, coord)
+	currentChunk := cm.chunks[coord]
+	isCurrentChunk := currentChunk == chunk
+	if isCurrentChunk {
+		delete(cm.chunks, coord)
+	}
 	cm.chunksMu.Unlock()
 
-	// Decrement appropriate counter based on chunk state
+	if !isCurrentChunk {
+		cm.logger.Debug("chunk was replaced, skipping save of old instance",
+			zap.Int("chunk_x", coord.X),
+			zap.Int("chunk_y", coord.Y),
+		)
+		return
+	}
+
+	// Безопасно сохраняем
+	chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+
+	// Обновляем статистику
 	state := chunk.GetState()
 	switch state {
 	case types.ChunkStateActive:
