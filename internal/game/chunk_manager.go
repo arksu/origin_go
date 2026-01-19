@@ -650,6 +650,10 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 		return
 	}
 
+	if chunk.State != types.ChunkStateInactive {
+		return
+	}
+
 	// Сохраняем в БД
 	chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 
@@ -664,18 +668,8 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 		stillNotInterested := !hasInterest || interest.isEmpty()
 		cm.interestMu.RUnlock()
 
-		if stillNotInterested {
+		if stillNotInterested && chunk.State == types.ChunkStateInactive {
 			delete(cm.chunks, coord)
-
-			state := chunk.GetState()
-			switch state {
-			case types.ChunkStateActive:
-				atomic.AddInt64(&cm.stats.ActiveCount, -1)
-			case types.ChunkStatePreloaded:
-				atomic.AddInt64(&cm.stats.PreloadedCount, -1)
-			case types.ChunkStateInactive:
-				atomic.AddInt64(&cm.stats.InactiveCount, -1)
-			}
 		}
 	}
 	cm.chunksMu.Unlock()
@@ -909,78 +903,6 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 
 	atomic.AddInt64(&cm.stats.ActiveCount, -1)
 	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
-
-	return nil
-}
-
-// MigrateObject moves an entity identified by the given handle from one chunk to another, updating all relevant spatial and reference data. Returns an error if the operation cannot be completed.
-// переход только из активного в другой активный или preloaded чанк
-func (cm *ChunkManager) MigrateObject(h types.Handle, fromCoord, toCoord types.ChunkCoord, toX, toY float64) error {
-	if fromCoord == toCoord {
-		return nil
-	}
-
-	fromChunk := cm.GetChunk(fromCoord)
-	toChunk := cm.GetChunk(toCoord)
-
-	if fromChunk == nil || toChunk == nil {
-		return ErrChunkNotFound
-	}
-
-	if fromChunk.GetState() != types.ChunkStateActive {
-		return ErrChunkNotActive
-	}
-
-	info, ok := ecs.GetComponent[components.EntityInfo](cm.world, h)
-	if !ok {
-		return ErrEntityNotFound
-	}
-	chunkRef, ok := ecs.GetComponent[components.ChunkRef](cm.world, h)
-	if !ok {
-		return ErrEntityNotFound
-	}
-	if chunkRef.CurrentChunkX != fromCoord.X || chunkRef.CurrentChunkY != fromCoord.Y {
-		return ErrEntityNotInChunk
-	}
-
-	isStatic := info.IsStatic
-
-	fromSpatial := fromChunk.Spatial()
-	if isStatic {
-		fromSpatial.RemoveStatic(h, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY)
-	} else {
-		fromSpatial.RemoveDynamic(h, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY)
-	}
-
-	ecs.WithComponent(cm.world, h, func(ref *components.ChunkRef) {
-		ref.PrevChunkX = chunkRef.CurrentChunkX
-		ref.PrevChunkY = chunkRef.CurrentChunkY
-		ref.CurrentChunkX = toCoord.X
-		ref.CurrentChunkY = toCoord.Y
-	})
-
-	if toChunk.GetState() == types.ChunkStateActive {
-		//toSpatial := toChunk.Spatial()
-		if isStatic {
-			// TODO fix world coord
-			//toSpatial.AddStatic(h, toX, toY)
-		} else {
-			// TODO fix world coord
-			//toSpatial.AddDynamic(h, toX, toY)
-		}
-	} else {
-		obj, err := cm.objectFactory.Serialize(cm.world, h, info.ObjectType)
-		if err != nil {
-			return err
-		}
-
-		// TODO update chunk and coord into obj
-		if obj != nil {
-			toChunk.AddRawObject(obj)
-		}
-
-		cm.world.Despawn(h)
-	}
 
 	return nil
 }
