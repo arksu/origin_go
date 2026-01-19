@@ -70,7 +70,7 @@ func BenchmarkMemoryOverhead(b *testing.B) {
 	b.Run("World-1M", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_ = NewWorldWithCapacity(1000000)
+			_ = NewWorldForTesting()
 		}
 	})
 }

@@ -32,7 +32,7 @@ func newTestConfig() *config.Config {
 
 func newTestChunkManager() *ChunkManager {
 	cfg := newTestConfig()
-	world := ecs.NewWorld()
+	world := ecs.NewWorldForTesting()
 	logger := zap.NewNop()
 	objectFactory := NewObjectFactory()
 	eb := eventbus.New(&eventbus.Config{

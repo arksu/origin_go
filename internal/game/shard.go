@@ -138,7 +138,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		db:              db,
 		entityIDManager: entityIDManager,
 		logger:          logger,
-		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities)),
+		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities), eb, layer),
 		eventBus:        eb,
 		clients:         make(map[types.EntityID]*network.Client),
 		state:           ShardStateRunning,

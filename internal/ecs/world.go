@@ -4,6 +4,7 @@ import (
 	"sort"
 	"sync"
 
+	"origin/internal/eventbus"
 	"origin/internal/types"
 )
 
@@ -42,17 +43,28 @@ type World struct {
 	movedEntities   MovedEntities
 	visibilityState VisibilityState
 
+	// Event bus for publishing events
+	eventBus *eventbus.EventBus
+
+	// Layer for this world (shard layer)
+	Layer int
+
 	// Delta time for current tick
 	DeltaTime float64
 }
 
 // NewWorld creates a new ECS world with default capacity
-func NewWorld() *World {
-	return NewWorldWithCapacity(DefaultMaxHandles)
+func NewWorld(eventBus *eventbus.EventBus, layer int) *World {
+	return NewWorldWithCapacity(DefaultMaxHandles, eventBus, layer)
+}
+
+// NewWorldForTesting creates a new ECS world for testing (without event bus)
+func NewWorldForTesting() *World {
+	return NewWorldWithCapacity(DefaultMaxHandles, nil, 0)
 }
 
 // NewWorldWithCapacity creates a new ECS world with specified max handles
-func NewWorldWithCapacity(maxHandles uint32) *World {
+func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer int) *World {
 	w := &World{
 		entities:         make(map[types.Handle]ComponentMask, 1024),
 		locations:        make(map[types.Handle]EntityLocation, 1024),
@@ -72,6 +84,8 @@ func NewWorldWithCapacity(maxHandles uint32) *World {
 			VisibleByObserver:        make(map[types.Handle]ObserverVisibility, 256),
 			ObserversByVisibleTarget: make(map[types.Handle]map[types.Handle]struct{}, 256),
 		},
+		eventBus: eventBus,
+		Layer:    layer,
 	}
 	return w
 }
@@ -152,10 +166,16 @@ func (w *World) Despawn(h types.Handle) bool {
 		return false
 	}
 
-	// Remove from entityIDToHandle map if entity has ExternalID
+	// Get EntityID before removing components
+	var targetID types.EntityID
 	if extID, ok := GetComponent[ExternalID](w, h); ok {
+		targetID = extID.ID
+	}
+
+	// Remove from entityIDToHandle map if entity has ExternalID
+	if targetID != 0 {
 		w.entityIDMu.Lock()
-		delete(w.entityIDToHandle, extID.ID)
+		delete(w.entityIDToHandle, targetID)
 		w.entityIDMu.Unlock()
 	}
 
