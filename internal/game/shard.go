@@ -109,6 +109,7 @@ func (s *Shard) Stop() {
 	s.mu.Unlock()
 
 	if s.characterSaver != nil {
+		s.characterSaver.SaveAll(s.world)
 		s.characterSaver.Stop()
 	}
 	s.chunkManager.Stop()

@@ -125,3 +125,12 @@ func (c *CharacterEntities) UpdateSaveTime(entityID types.EntityID, lastSaveAt, 
 		c.Map[entityID] = entity
 	}
 }
+
+// GetAll returns all character entity IDs
+func (c *CharacterEntities) GetAll() []types.EntityID {
+	entityIDs := make([]types.EntityID, 0, len(c.Map))
+	for entityID := range c.Map {
+		entityIDs = append(entityIDs, entityID)
+	}
+	return entityIDs
+}
