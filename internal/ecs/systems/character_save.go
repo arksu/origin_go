@@ -139,7 +139,11 @@ func (s *CharacterSaver) saveWorker(workerID int) {
 		select {
 		case <-s.ctx.Done():
 			if len(batch) > 0 {
-				s.flushBatch(batch)
+				// Create a new context for final save to avoid context cancellation
+				ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+				defer cancel()
+
+				s.flushBatchWithContext(ctx, batch)
 			}
 			return
 
@@ -160,6 +164,10 @@ func (s *CharacterSaver) saveWorker(workerID int) {
 }
 
 func (s *CharacterSaver) flushBatch(batch []CharacterSnapshot) {
+	s.flushBatchWithContext(s.ctx, batch)
+}
+
+func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []CharacterSnapshot) {
 	if len(batch) == 0 {
 		return
 	}
@@ -193,9 +201,6 @@ func (s *CharacterSaver) flushBatch(batch []CharacterSnapshot) {
 		Hhps:     hhps,
 	}
 
-	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
-	defer cancel()
-
 	err := s.db.Queries().UpdateCharacters(ctx, params)
 	if err != nil {
 		s.logger.Error("Failed to execute batch update",
@@ -209,7 +214,45 @@ func (s *CharacterSaver) flushBatch(batch []CharacterSnapshot) {
 		zap.Int("batch_size", len(batch)))
 }
 
+// SaveAll saves all characters from CharacterEntities
+func (s *CharacterSaver) SaveAll(w *ecs.World) {
+	characterEntities := w.CharacterEntities()
+	entityIDs := characterEntities.GetAll()
+
+	s.logger.Info("Saving all characters", zap.Int("count", len(entityIDs)))
+
+	for _, entityID := range entityIDs {
+		if charEntity, exists := characterEntities.Map[entityID]; exists {
+			s.Save(w, entityID, charEntity.Handle)
+		}
+	}
+
+	s.logger.Info("All characters saved")
+}
+
 func (s *CharacterSaver) Stop() {
+	// Process any remaining snapshots in the channel
+	remaining := make([]CharacterSnapshot, 0)
+	for {
+		select {
+		case snapshot := <-s.snapshotChannel:
+			remaining = append(remaining, snapshot)
+		default:
+			// No more snapshots
+			goto processRemaining
+		}
+	}
+
+processRemaining:
+	if len(remaining) > 0 {
+		// Create a new context for final save to avoid context cancellation
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+		defer cancel()
+
+		s.flushBatchWithContext(ctx, remaining)
+	}
+
+	// Signal workers to stop and wait for them
 	s.cancel()
 	s.wg.Wait()
 	close(s.snapshotChannel)
