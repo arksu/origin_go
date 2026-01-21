@@ -12,6 +12,8 @@ The ECS World is the central component that manages entities, components, and sy
 - **Layer**: Shard layer identifier for multi-layer deployments
 - **Visibility State**: Manages observer-target visibility relationships
 - **Component Storage**: Type-erased storage for all component types
+- **CharacterEntities**: Tracks player characters and their save state
+- **DetachedEntities**: Tracks players who disconnected but entity remains in world
 
 ## System Execution Order
 
@@ -279,6 +281,12 @@ visState := world.VisibilityState()
 
 // Access moved entities buffer
 movedEntities := world.MovedEntities()
+
+// Access character entities
+characterEntities := world.CharacterEntities()
+
+// Access detached entities
+detachedEntities := world.DetachedEntities()
 
 // Get world layer
 layer := world.Layer
