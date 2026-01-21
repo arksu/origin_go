@@ -22,8 +22,10 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | Priority | System Name           | Description                                                  | Dependencies                  | Notes                                     |
 |----------|-----------------------|--------------------------------------------------------------|-------------------------------|-------------------------------------------|
 | 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Runs first, resets arrays                 |
+| 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character          | Batch saves character positions/stats     |
 | 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Appends to MovedEntities buffer           |
 | 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer           |
+| 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character           | Saves character data before despawn       |
 | 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                  |
 | 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef   | Updates VisibilityState, publishes events |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions          |
@@ -129,14 +131,14 @@ The VisionSystem maintains a bidirectional visibility relationship:
 
 ```go
 type ObserverVisibility struct {
-    Known map[types.Handle]types.EntityID // Handle -> EntityID mapping
-    NextUpdateTime time.Time
+Known map[types.Handle]types.EntityID // Handle -> EntityID mapping
+NextUpdateTime time.Time
 }
 
 type VisibilityState struct {
-    VisibleByObserver map[types.Handle]ObserverVisibility
-    ObserversByVisibleTarget map[types.Handle]map[types.Handle]struct{}
-    Mu sync.RWMutex
+VisibleByObserver map[types.Handle]ObserverVisibility
+ObserversByVisibleTarget map[types.Handle]map[types.Handle]struct{}
+Mu sync.RWMutex
 }
 ```
 
@@ -200,10 +202,14 @@ type VisibilityState struct {
 ```
 ResetSystem (0)
     ↓ (clears buffers)
+CharacterSaveSystem (50)
+    ↓ (periodic saves)
 MovementSystem (100)
     ↓ (appends to MovedEntities)
 CollisionSystem (200) 
     ↓ (reads from MovedEntities)
+ExpireDetachedSystem (250)
+    ↓ (saves before despawn)
 TransformUpdateSystem (300)
 VisionSystem (350)
     ↓ (updates VisibilityState)
@@ -220,6 +226,9 @@ ChunkSystem (400)
 4. **Zero-Allocation Iteration**: Systems minimize allocations during hot path execution
 5. **Pre-allocated Arrays**: MovedEntities arrays allocated once with capacity 256
 6. **Time-Throttled Updates**: VisionSystem uses 3-second intervals per observer to reduce computational load
+7. **Batch Database Operations**: CharacterSaveSystem uses PostgreSQL unnest for efficient bulk updates
+8. **Async Processing**: CharacterSaveSystem worker pool prevents database operations from blocking game loop
+9. **Context Isolation**: Separate contexts for shutdown operations prevent cancellation during critical saves
 
 ### Memory Management
 
@@ -250,12 +259,12 @@ s.world.AddSystem(systems.NewYourSystem(s.world, s.eventBus, logger))
 
 ```go
 func NewYourSystem(world *ecs.World, eventBus *eventbus.EventBus, logger *zap.Logger) *YourSystem {
-    return &YourSystem{
-        BaseSystem: ecs.NewBaseSystem("YourSystem", 250), // Between Collision and Transform
-        world:      world,
-        eventBus:   eventBus,
-        logger:     logger,
-    }
+return &YourSystem{
+BaseSystem: ecs.NewBaseSystem("YourSystem", 250), // Between Collision and Transform
+world:      world,
+eventBus:   eventBus,
+logger:     logger,
+}
 }
 ```
 
@@ -265,19 +274,19 @@ Systems can access World resources:
 
 ```go
 func (s *YourSystem) Update(world *ecs.World, dt float64) {
-    // Access visibility state
-    visState := world.VisibilityState()
-    
-    // Access moved entities buffer
-    movedEntities := world.MovedEntities()
-    
-    // Get world layer
-    layer := world.Layer
-    
-    // Publish events via world's event bus
-    if world.eventBus != nil {
-        world.eventBus.PublishAsync(yourEvent, eventbus.PriorityMedium)
-    }
+// Access visibility state
+visState := world.VisibilityState()
+
+// Access moved entities buffer
+movedEntities := world.MovedEntities()
+
+// Get world layer
+layer := world.Layer
+
+// Publish events via world's event bus
+if world.eventBus != nil {
+world.eventBus.PublishAsync(yourEvent, eventbus.PriorityMedium)
+}
 }
 ```
 
