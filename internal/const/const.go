@@ -50,6 +50,7 @@ const (
 type InventoryType uint8
 
 const (
-	InventoryPlayer InventoryType = iota
+	InventoryCharacter InventoryType = iota
+	InventoryHand      InventoryType = iota
 	InventoryContainer
 )
