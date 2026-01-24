@@ -226,32 +226,24 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 		return
 	}
 
-	// Determine command type and marshal payload
+	// Determine command type and payload
 	var cmdType network.CommandType
-	var payload []byte
-	var err error
+	var payload any
 
 	switch act := action.Action.(type) {
 	case *netproto.C2S_PlayerAction_MoveTo:
 		cmdType = network.CmdMoveTo
-		payload, err = proto.Marshal(act.MoveTo)
+		payload = act.MoveTo
 	case *netproto.C2S_PlayerAction_MoveToEntity:
 		cmdType = network.CmdMoveToEntity
-		payload, err = proto.Marshal(act.MoveToEntity)
+		payload = act.MoveToEntity
 	case *netproto.C2S_PlayerAction_Interact:
 		cmdType = network.CmdInteract
-		payload, err = proto.Marshal(act.Interact)
+		payload = act.Interact
 	default:
 		g.logger.Warn("Unknown player action type",
 			zap.Uint64("client_id", c.ID),
 			zap.Any("action_type", action.Action))
-		return
-	}
-
-	if err != nil {
-		g.logger.Error("Failed to marshal action payload",
-			zap.Uint64("client_id", c.ID),
-			zap.Error(err))
 		return
 	}
 
@@ -266,8 +258,7 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 		Layer:       c.Layer,
 	}
 
-	err = shard.PlayerInbox().Enqueue(cmd)
-	if err != nil {
+	if err := shard.PlayerInbox().Enqueue(cmd); err != nil {
 		var overflowError network.OverflowError
 		var rateLimitError network.RateLimitError
 		var duplicateCommandError network.DuplicateCommandError

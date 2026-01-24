@@ -23,7 +23,7 @@ type PlayerCommand struct {
 	CharacterID types.EntityID
 	CommandID   uint64 // Monotonic per-connection for idempotency
 	CommandType CommandType
-	Payload     []byte
+	Payload     any
 	ReceivedAt  time.Time
 	Layer       int
 }
