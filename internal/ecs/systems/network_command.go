@@ -9,7 +9,6 @@ import (
 	"origin/internal/types"
 
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -105,12 +104,11 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 }
 
 func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	// Unmarshal payload
-	var moveTo netproto.MoveTo
-	if err := proto.Unmarshal(cmd.Payload, &moveTo); err != nil {
-		s.logger.Error("Failed to unmarshal MoveTo",
-			zap.Uint64("client_id", cmd.ClientID),
-			zap.Error(err))
+	// Type assert payload
+	moveTo, ok := cmd.Payload.(*netproto.MoveTo)
+	if !ok {
+		s.logger.Error("Invalid payload type for MoveTo",
+			zap.Uint64("client_id", cmd.ClientID))
 		return
 	}
 
@@ -138,12 +136,11 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 }
 
 func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	// Unmarshal payload
-	var moveToEntity netproto.MoveToEntity
-	if err := proto.Unmarshal(cmd.Payload, &moveToEntity); err != nil {
-		s.logger.Error("Failed to unmarshal MoveToEntity",
-			zap.Uint64("client_id", cmd.ClientID),
-			zap.Error(err))
+	// Type assert payload
+	moveToEntity, ok := cmd.Payload.(*netproto.MoveToEntity)
+	if !ok {
+		s.logger.Error("Invalid payload type for MoveToEntity",
+			zap.Uint64("client_id", cmd.ClientID))
 		return
 	}
 
@@ -159,12 +156,11 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 }
 
 func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	// Unmarshal payload
-	var interact netproto.Interact
-	if err := proto.Unmarshal(cmd.Payload, &interact); err != nil {
-		s.logger.Error("Failed to unmarshal Interact",
-			zap.Uint64("client_id", cmd.ClientID),
-			zap.Error(err))
+	// Type assert payload
+	interact, ok := cmd.Payload.(*netproto.Interact)
+	if !ok {
+		s.logger.Error("Invalid payload type for Interact",
+			zap.Uint64("client_id", cmd.ClientID))
 		return
 	}
 
