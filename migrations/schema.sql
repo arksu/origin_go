@@ -36,9 +36,6 @@ CREATE TABLE IF NOT EXISTS character
     shp              INT          NOT NULL CHECK (shp >= 0),     -- soft health points
     hhp              INT          NOT NULL CHECK (hhp >= 0),     -- hard health points
 
-    paperdoll        JSONB,
-    inventory        JSONB,
-
     -- Опыт (денормализация для быстрого доступа)
     exp_nature       BIGINT                DEFAULT 0,
     exp_industry     BIGINT                DEFAULT 0,
@@ -72,20 +69,20 @@ ALTER TABLE character
         autovacuum_vacuum_cost_delay = 5
         );
 
--- CONTAINER -----------------------------------------------------------
+-- INVENTORY -----------------------------------------------------------
 
-CREATE TABLE container
+CREATE TABLE inventory
 (
-    id           BIGSERIAL PRIMARY KEY,
-    owner_id     BIGINT   NOT NULL, -- character_id
-    owner_type   SMALLINT NOT NULL, -- 1=static object
-    container_id BIGINT   NOT NULL, -- уникальный ID контейнера (внутри одного объекта может быть несколько инвентарей)
-    width        int      not null check ( width > 0 ),
-    height       int      not null check ( height > 0 ),
-    data         JSONB    NOT NULL, -- содержимое контейнера (inventory)
-    updated_at   TIMESTAMPTZ DEFAULT now(),
+    id            BIGSERIAL PRIMARY KEY,
+    owner_id      BIGINT   NOT NULL, -- character_id
+    kind          smallint not null, -- 0=grid, 1=hand, 2=equipment 3=machine_input, 4=machine_output
+    inventory_key smallint NOT NULL, -- уникальный ID контейнера (внутри одного объекта может быть несколько инвентарей)
+    width         smallint check ( width > 0 ),
+    height        smallint check ( height > 0 ),
+    data          JSONB    NOT NULL, -- содержимое контейнера (inventory)
+    updated_at    TIMESTAMPTZ DEFAULT now(),
 
-    UNIQUE (owner_type, owner_id, container_id)
+    UNIQUE (owner_id, kind, inventory_key)
 );
 
 -- CHUNK ----------------------------------------------------------------
