@@ -16,6 +16,7 @@ import (
 
 	"origin/internal/config"
 	"origin/internal/game"
+	"origin/internal/itemdefs"
 	"origin/internal/metrics"
 	"origin/internal/persistence"
 	"origin/internal/restapi"
@@ -32,6 +33,13 @@ func main() {
 	defer logger.Sync()
 
 	cfg := config.MustLoad(logger)
+
+	// Load item definitions before game loop starts
+	itemRegistry, err := itemdefs.LoadFromDirectory("./data/items", logger)
+	if err != nil {
+		logger.Fatal("Failed to load item definitions", zap.Error(err))
+	}
+	itemdefs.SetGlobal(itemRegistry)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

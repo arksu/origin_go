@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "source": "food",
+  "items": [
+    {
+      "defId": 2001,
+      "key": "food_apple",
+      "name": "Apple",
+      "tags": [
+        "food"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    }
+  ]
+}
