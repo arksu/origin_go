@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"errors"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -225,18 +226,68 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 		return
 	}
 
-	// Handle different action types
+	// Determine command type and marshal payload
+	var cmdType network.CommandType
+	var payload []byte
+	var err error
+
 	switch act := action.Action.(type) {
 	case *netproto.C2S_PlayerAction_MoveTo:
-		g.handleMoveToAction(c, shard, act.MoveTo)
+		cmdType = network.CmdMoveTo
+		payload, err = proto.Marshal(act.MoveTo)
 	case *netproto.C2S_PlayerAction_MoveToEntity:
-		g.handleMoveToEntityAction(c, shard, act.MoveToEntity)
+		cmdType = network.CmdMoveToEntity
+		payload, err = proto.Marshal(act.MoveToEntity)
 	case *netproto.C2S_PlayerAction_Interact:
-		g.handleInteractAction(c, shard, act.Interact)
+		cmdType = network.CmdInteract
+		payload, err = proto.Marshal(act.Interact)
 	default:
 		g.logger.Warn("Unknown player action type",
 			zap.Uint64("client_id", c.ID),
 			zap.Any("action_type", action.Action))
+		return
+	}
+
+	if err != nil {
+		g.logger.Error("Failed to marshal action payload",
+			zap.Uint64("client_id", c.ID),
+			zap.Error(err))
+		return
+	}
+
+	// Create command and enqueue
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   c.NextCommandID(),
+		CommandType: cmdType,
+		Payload:     payload,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	}
+
+	err = shard.PlayerInbox().Enqueue(cmd)
+	if err != nil {
+		var overflowError network.OverflowError
+		var rateLimitError network.RateLimitError
+		var duplicateCommandError network.DuplicateCommandError
+		switch {
+		case errors.As(err, &overflowError):
+			g.logger.Warn("Command queue overflow",
+				zap.Uint64("client_id", c.ID))
+			// TODO: Send S2C_Warning with WARN_INPUT_QUEUE_OVERFLOW
+		case errors.As(err, &rateLimitError):
+			g.logger.Warn("Rate limit exceeded",
+				zap.Uint64("client_id", c.ID))
+			// TODO: Send ERROR_PACKET_PER_SECOND_LIMIT_EXCEEDED and disconnect
+			c.Close()
+		case errors.As(err, &duplicateCommandError):
+			// Ignore silently - already processed
+		default:
+			g.logger.Error("Failed to enqueue command",
+				zap.Uint64("client_id", c.ID),
+				zap.Error(err))
+		}
 	}
 }
 
@@ -319,6 +370,9 @@ func (g *Game) handleDisconnect(c *network.Client) {
 		if g.getState() == GameStateRunning {
 			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
 				playerEntityID := c.CharacterID
+
+				// Remove client from command queue to clean up rate limiting state
+				shard.PlayerInbox().RemoveClient(c.ID)
 
 				// Reset client state and remove from shard's client map
 				c.InWorld.Store(false)

@@ -1,10 +1,15 @@
 package systems
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/ecs"
+	"origin/internal/ecs/components"
 	"origin/internal/network"
+	netproto "origin/internal/network/proto"
+	"origin/internal/types"
 
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -77,24 +82,101 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 	if handle == 0 || !w.Alive(handle) {
 		s.logger.Debug("Command for non-existent entity",
 			zap.Uint64("client_id", cmd.ClientID),
-			zap.Int64("character_id", int64(cmd.CharacterID)),
-			zap.Uint16("command_type", uint16(cmd.CommandType)),
-		)
+			zap.Uint64("character_id", uint64(cmd.CharacterID)))
 		return
 	}
 
-	// Route command by type
-	// TODO: Implement command routing to specific handlers
-	// switch cmd.CommandType {
-	// case network.CmdMoveItem:
-	//     s.handleMoveItem(w, handle, cmd)
-	// case network.CmdEquip:
-	//     s.handleEquip(w, handle, cmd)
-	// ...
-	// }
+	// Route to command handlers
+	switch cmd.CommandType {
+	case network.CmdMoveTo:
+		s.handleMoveTo(w, handle, cmd)
+	case network.CmdMoveToEntity:
+		s.handleMoveToEntity(w, handle, cmd)
+	case network.CmdInteract:
+		s.handleInteract(w, handle, cmd)
+	default:
+		s.logger.Warn("Unknown command type",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Uint16("command_type", uint16(cmd.CommandType)))
+	}
 
-	// Mark command as processed for deduplication
+	// Mark as processed for deduplication
 	s.playerInbox.MarkProcessed(cmd.ClientID, cmd.CommandID)
+}
+
+func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	// Unmarshal payload
+	var moveTo netproto.MoveTo
+	if err := proto.Unmarshal(cmd.Payload, &moveTo); err != nil {
+		s.logger.Error("Failed to unmarshal MoveTo",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Error(err))
+		return
+	}
+
+	// Get movement component
+	mov, ok := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !ok {
+		s.logger.Error("Movement component not found",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Uint64("entity_id", uint64(cmd.CharacterID)))
+		return
+	}
+
+	// Only allow movement if not stunned
+	if mov.State == constt.StateStunned {
+		s.logger.Debug("Cannot move while stunned",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Uint64("entity_id", uint64(cmd.CharacterID)))
+		return
+	}
+
+	// Set movement target
+	ecs.WithComponent(w, playerHandle, func(mov *components.Movement) {
+		mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
+	})
+}
+
+func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	// Unmarshal payload
+	var moveToEntity netproto.MoveToEntity
+	if err := proto.Unmarshal(cmd.Payload, &moveToEntity); err != nil {
+		s.logger.Error("Failed to unmarshal MoveToEntity",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Error(err))
+		return
+	}
+
+	s.logger.Debug("MoveToEntity action",
+		zap.Uint64("client_id", cmd.ClientID),
+		zap.Uint64("target_entity_id", moveToEntity.EntityId),
+		zap.Bool("auto_interact", moveToEntity.AutoInteract))
+
+	// TODO: Implement entity targeting and pathfinding
+	// 1. Validate target entity exists and is reachable
+	// 2. Set movement target to entity position
+	// 3. If auto_interact, queue interaction when reached
+}
+
+func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	// Unmarshal payload
+	var interact netproto.Interact
+	if err := proto.Unmarshal(cmd.Payload, &interact); err != nil {
+		s.logger.Error("Failed to unmarshal Interact",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Error(err))
+		return
+	}
+
+	s.logger.Debug("Interact action",
+		zap.Uint64("client_id", cmd.ClientID),
+		zap.Uint64("target_entity_id", interact.EntityId),
+		zap.Int32("interaction_type", int32(interact.Type)))
+
+	// TODO: Implement interaction system
+	// 1. Validate target entity exists and is in range
+	// 2. Check if interaction is valid for entity type
+	// 3. Execute interaction (gather, open container, use, pickup, etc.)
 }
 
 // processServerJob routes a server job to the appropriate handler
@@ -102,7 +184,6 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.ServerJob) {
 	// Route job by type
 	// TODO: Implement job routing to specific handlers
-	// switch job.JobType {
 	// case JobMachineOfflineTick:
 	//     s.handleMachineOfflineTick(w, job)
 	// case JobAutoDropOverflow:

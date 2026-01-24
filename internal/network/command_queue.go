@@ -11,6 +11,12 @@ import (
 // CommandType identifies the type of player command
 type CommandType uint16
 
+const (
+	CmdMoveTo CommandType = iota + 1
+	CmdMoveToEntity
+	CmdInteract
+)
+
 // PlayerCommand represents an intent from a client to be processed by ECS
 type PlayerCommand struct {
 	ClientID    uint64
