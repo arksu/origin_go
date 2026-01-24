@@ -13,6 +13,7 @@ const (
 	PlayerMask         = uint64(1)
 )
 
+// keys for global_var
 const (
 	LAST_USED_ID = "last_used_id"
 )
@@ -49,8 +50,13 @@ const (
 
 type InventoryType uint8
 
+type InventoryKind uint8
+
 const (
-	InventoryCharacter InventoryType = iota
-	InventoryHand      InventoryType = iota
-	InventoryContainer
+	// Basic container like box, chest. with size
+	InventoryGrid InventoryKind = 0
+	// InventoryHand represents the inventory type associated with items held in the hand. can receive only ONE item any size
+	InventoryHand        InventoryKind = 1
+	InventoryEquipment   InventoryKind = 2
+	InventoryDroppedItem InventoryKind = 3
 )
