@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "source": "ores",
+  "items": [
+    {
+      "defId": 3001,
+      "key": "ore_tin",
+      "name": "Tin Ore",
+      "tags": [
+        "ore"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 3002,
+      "key": "ore_copper",
+      "name": "Copper Ore",
+      "tags": [
+        "ore"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 3003,
+      "key": "ore_iron",
+      "name": "Iron Ore",
+      "tags": [
+        "ore"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    }
+  ]
+}
