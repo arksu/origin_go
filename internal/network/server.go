@@ -52,6 +52,12 @@ type Client struct {
 	Layer       int
 	StreamEpoch atomic.Uint32
 	InWorld     atomic.Bool
+	commandID   atomic.Uint64
+}
+
+// NextCommandID returns the next monotonic command ID for this client
+func (c *Client) NextCommandID() uint64 {
+	return c.commandID.Add(1)
 }
 
 func NewServer(cfg *config.NetworkConfig, gameCfg *config.GameConfig, logger *zap.Logger) *Server {
