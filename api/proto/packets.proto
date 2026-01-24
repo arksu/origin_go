@@ -90,6 +90,12 @@ enum ErrorCode {
   ERROR_CODE_ALREADY_IN_PROGRESS = 12;
   ERROR_CODE_BUILDING_INCOMPLETE = 13;
   ERROR_CODE_RECIPE_UNKNOWN = 14;
+  ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED = 15;
+
+}
+
+enum WarningCode {
+  WARN_INPUT_QUEUE_OVERFLOW = 0;
 }
 
 // ============================================================================
@@ -312,6 +318,11 @@ message S2C_Error {
   string message = 2;
 }
 
+message S2C_Warning {
+  WarningCode code = 1;
+  string message = 2;
+}
+
 // Обёртка для всех серверных сообщений
 message ServerMessage {
   uint32 sequence = 1;          // для ack если нужно
@@ -356,6 +367,7 @@ message ServerMessage {
     //    S2C_ChatMessage chat = 40;
     //    S2C_SystemMessage system_message = 41;
     S2C_Error error = 42;
+    S2C_Warning warning = 43;
     //    S2C_Disconnect disconnect = 44;
     //    S2C_EventBatch event_batch = 45;
   }
