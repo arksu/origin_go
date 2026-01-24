@@ -268,10 +268,11 @@ const (
 	ErrorCode_ERROR_CODE_INSUFFICIENT_STAMINA           ErrorCode = 9
 	ErrorCode_ERROR_CODE_TARGET_INVALID                 ErrorCode = 10
 	ErrorCode_ERROR_CODE_PATH_BLOCKED                   ErrorCode = 11
-	ErrorCode_ERROR_CODE_ALREADY_IN_PROGRESS            ErrorCode = 12
+	ErrorCode_ERROR_CODE_TIMEOUT_EXCEEDED               ErrorCode = 12
 	ErrorCode_ERROR_CODE_BUILDING_INCOMPLETE            ErrorCode = 13
 	ErrorCode_ERROR_CODE_RECIPE_UNKNOWN                 ErrorCode = 14
 	ErrorCode_ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED ErrorCode = 15
+	ErrorCode_ERROR_CODE_INTERNAL_ERROR                 ErrorCode = 16
 )
 
 // Enum value maps for ErrorCode.
@@ -289,10 +290,11 @@ var (
 		9:  "ERROR_CODE_INSUFFICIENT_STAMINA",
 		10: "ERROR_CODE_TARGET_INVALID",
 		11: "ERROR_CODE_PATH_BLOCKED",
-		12: "ERROR_CODE_ALREADY_IN_PROGRESS",
+		12: "ERROR_CODE_TIMEOUT_EXCEEDED",
 		13: "ERROR_CODE_BUILDING_INCOMPLETE",
 		14: "ERROR_CODE_RECIPE_UNKNOWN",
 		15: "ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED",
+		16: "ERROR_CODE_INTERNAL_ERROR",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_NONE":                           0,
@@ -307,10 +309,11 @@ var (
 		"ERROR_CODE_INSUFFICIENT_STAMINA":           9,
 		"ERROR_CODE_TARGET_INVALID":                 10,
 		"ERROR_CODE_PATH_BLOCKED":                   11,
-		"ERROR_CODE_ALREADY_IN_PROGRESS":            12,
+		"ERROR_CODE_TIMEOUT_EXCEEDED":               12,
 		"ERROR_CODE_BUILDING_INCOMPLETE":            13,
 		"ERROR_CODE_RECIPE_UNKNOWN":                 14,
 		"ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED": 15,
+		"ERROR_CODE_INTERNAL_ERROR":                 16,
 	}
 )
 
@@ -2818,7 +2821,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x11WEATHER_TYPE_RAIN\x10\x01\x12\x14\n" +
 	"\x10WEATHER_TYPE_FOG\x10\x02\x12\x16\n" +
 	"\x12WEATHER_TYPE_STORM\x10\x03\x12\x15\n" +
-	"\x11WEATHER_TYPE_SNOW\x10\x04*\x9d\x04\n" +
+	"\x11WEATHER_TYPE_SNOW\x10\x04*\xb9\x04\n" +
 	"\tErrorCode\x12\x13\n" +
 	"\x0fERROR_CODE_NONE\x10\x00\x12\x1e\n" +
 	"\x1aERROR_CODE_INVALID_REQUEST\x10\x01\x12 \n" +
@@ -2832,11 +2835,12 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x1fERROR_CODE_INSUFFICIENT_STAMINA\x10\t\x12\x1d\n" +
 	"\x19ERROR_CODE_TARGET_INVALID\x10\n" +
 	"\x12\x1b\n" +
-	"\x17ERROR_CODE_PATH_BLOCKED\x10\v\x12\"\n" +
-	"\x1eERROR_CODE_ALREADY_IN_PROGRESS\x10\f\x12\"\n" +
+	"\x17ERROR_CODE_PATH_BLOCKED\x10\v\x12\x1f\n" +
+	"\x1bERROR_CODE_TIMEOUT_EXCEEDED\x10\f\x12\"\n" +
 	"\x1eERROR_CODE_BUILDING_INCOMPLETE\x10\r\x12\x1d\n" +
 	"\x19ERROR_CODE_RECIPE_UNKNOWN\x10\x0e\x12-\n" +
-	")ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED\x10\x0f*,\n" +
+	")ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED\x10\x0f\x12\x1d\n" +
+	"\x19ERROR_CODE_INTERNAL_ERROR\x10\x10*,\n" +
 	"\vWarningCode\x12\x1d\n" +
 	"\x19WARN_INPUT_QUEUE_OVERFLOW\x10\x00*P\n" +
 	"\x0fInteractionType\x12\b\n" +
