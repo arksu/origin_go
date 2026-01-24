@@ -26,7 +26,7 @@ func (q *Queries) ClearAuthToken(ctx context.Context, id int64) error {
 const createCharacter = `-- name: CreateCharacter :one
 INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp)
 VALUES ($1, $2, $3, 1, $4, $5, 0, 0, 100, 100, 100)
-RETURNING id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, paperdoll, inventory, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+RETURNING id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 `
 
 type CreateCharacterParams struct {
@@ -58,8 +58,6 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
-		&i.Paperdoll,
-		&i.Inventory,
 		&i.ExpNature,
 		&i.ExpIndustry,
 		&i.ExpCombat,
@@ -96,7 +94,7 @@ func (q *Queries) DeleteCharacter(ctx context.Context, arg DeleteCharacterParams
 }
 
 const getCharacter = `-- name: GetCharacter :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, paperdoll, inventory, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 FROM character
 WHERE id = $1
   AND deleted_at IS NULL
@@ -117,8 +115,6 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
-		&i.Paperdoll,
-		&i.Inventory,
 		&i.ExpNature,
 		&i.ExpIndustry,
 		&i.ExpCombat,
@@ -137,7 +133,7 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 }
 
 const getCharacterByTokenForUpdate = `-- name: GetCharacterByTokenForUpdate :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, paperdoll, inventory, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 from character
 where auth_token = $1
 FOR UPDATE
@@ -158,8 +154,6 @@ func (q *Queries) GetCharacterByTokenForUpdate(ctx context.Context, authToken sq
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
-		&i.Paperdoll,
-		&i.Inventory,
 		&i.ExpNature,
 		&i.ExpIndustry,
 		&i.ExpCombat,
@@ -178,7 +172,7 @@ func (q *Queries) GetCharacterByTokenForUpdate(ctx context.Context, authToken sq
 }
 
 const getCharactersByAccountID = `-- name: GetCharactersByAccountID :many
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, paperdoll, inventory, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 FROM character
 WHERE account_id = $1
   AND deleted_at IS NULL
@@ -206,8 +200,6 @@ func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64)
 			&i.Stamina,
 			&i.Shp,
 			&i.Hhp,
-			&i.Paperdoll,
-			&i.Inventory,
 			&i.ExpNature,
 			&i.ExpIndustry,
 			&i.ExpCombat,

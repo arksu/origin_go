@@ -38,32 +38,30 @@ type BuildSite struct {
 }
 
 type Character struct {
-	ID             int64                 `json:"id"`
-	AccountID      int64                 `json:"account_id"`
-	Name           string                `json:"name"`
-	Region         int                   `json:"region"`
-	X              int                   `json:"x"`
-	Y              int                   `json:"y"`
-	Layer          int                   `json:"layer"`
-	Heading        int16                 `json:"heading"`
-	Stamina        int                   `json:"stamina"`
-	Shp            int                   `json:"shp"`
-	Hhp            int                   `json:"hhp"`
-	Paperdoll      pqtype.NullRawMessage `json:"paperdoll"`
-	Inventory      pqtype.NullRawMessage `json:"inventory"`
-	ExpNature      sql.NullInt64         `json:"exp_nature"`
-	ExpIndustry    sql.NullInt64         `json:"exp_industry"`
-	ExpCombat      sql.NullInt64         `json:"exp_combat"`
-	OnlineTime     int64                 `json:"online_time"`
-	AuthToken      sql.NullString        `json:"auth_token"`
-	TokenExpiresAt sql.NullTime          `json:"token_expires_at"`
-	IsOnline       sql.NullBool          `json:"is_online"`
-	DisconnectAt   sql.NullTime          `json:"disconnect_at"`
-	IsGhost        sql.NullBool          `json:"is_ghost"`
-	LastSaveAt     sql.NullTime          `json:"last_save_at"`
-	DeletedAt      sql.NullTime          `json:"deleted_at"`
-	CreatedAt      time.Time             `json:"created_at"`
-	UpdatedAt      sql.NullTime          `json:"updated_at"`
+	ID             int64          `json:"id"`
+	AccountID      int64          `json:"account_id"`
+	Name           string         `json:"name"`
+	Region         int            `json:"region"`
+	X              int            `json:"x"`
+	Y              int            `json:"y"`
+	Layer          int            `json:"layer"`
+	Heading        int16          `json:"heading"`
+	Stamina        int            `json:"stamina"`
+	Shp            int            `json:"shp"`
+	Hhp            int            `json:"hhp"`
+	ExpNature      sql.NullInt64  `json:"exp_nature"`
+	ExpIndustry    sql.NullInt64  `json:"exp_industry"`
+	ExpCombat      sql.NullInt64  `json:"exp_combat"`
+	OnlineTime     int64          `json:"online_time"`
+	AuthToken      sql.NullString `json:"auth_token"`
+	TokenExpiresAt sql.NullTime   `json:"token_expires_at"`
+	IsOnline       sql.NullBool   `json:"is_online"`
+	DisconnectAt   sql.NullTime   `json:"disconnect_at"`
+	IsGhost        sql.NullBool   `json:"is_ghost"`
+	LastSaveAt     sql.NullTime   `json:"last_save_at"`
+	DeletedAt      sql.NullTime   `json:"deleted_at"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      sql.NullTime   `json:"updated_at"`
 }
 
 type Chat struct {
@@ -104,21 +102,21 @@ type Chunk struct {
 	EntityCount sql.NullInt32 `json:"entity_count"`
 }
 
-type Container struct {
-	ID          int64           `json:"id"`
-	OwnerID     int64           `json:"owner_id"`
-	OwnerType   int16           `json:"owner_type"`
-	ContainerID int64           `json:"container_id"`
-	Width       int             `json:"width"`
-	Height      int             `json:"height"`
-	Data        json.RawMessage `json:"data"`
-	UpdatedAt   sql.NullTime    `json:"updated_at"`
-}
-
 type GlobalVar struct {
 	Name        string         `json:"name"`
 	ValueLong   sql.NullInt64  `json:"value_long"`
 	ValueString sql.NullString `json:"value_string"`
+}
+
+type Inventory struct {
+	ID           int64           `json:"id"`
+	OwnerID      int64           `json:"owner_id"`
+	Kind         int16           `json:"kind"`
+	InventoryKey int16           `json:"inventory_key"`
+	Width        sql.NullInt16   `json:"width"`
+	Height       sql.NullInt16   `json:"height"`
+	Data         json.RawMessage `json:"data"`
+	UpdatedAt    sql.NullTime    `json:"updated_at"`
 }
 
 type Object struct {
