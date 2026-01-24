@@ -14,7 +14,7 @@ type ResetSystem struct {
 
 func NewResetSystem(logger *zap.Logger) *ResetSystem {
 	return &ResetSystem{
-		BaseSystem: ecs.NewBaseSystem("ResetSystem", 0), // Run first
+		BaseSystem: ecs.NewBaseSystem("ResetSystem", 10), // Run after NetworkCommandSystem
 		logger:     logger,
 	}
 }
