@@ -60,6 +60,11 @@ type GameConfig struct {
 	WorldMarginTiles         int           `mapstructure:"world_margin_tiles"`
 	SendChannelBuffer        int           `mapstructure:"send_channel_buffer"`
 	PprofEnabled             bool          `mapstructure:"pprof_enabled"`
+
+	// Command queue settings
+	CommandQueueSize            int `mapstructure:"command_queue_size"`               // Max commands in queue (default: 500)
+	MaxPacketsPerSecond         int `mapstructure:"max_packets_per_second"`           // Per-client rate limit (default: 40)
+	MaxCommandsPerTickPerClient int `mapstructure:"max_commands_per_tick_per_client"` // Fairness limit (default: 20)
 }
 
 type EntityIDConfig struct {
@@ -153,6 +158,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.world_margin_tiles", 50)
 	v.SetDefault("game.send_channel_buffer", 132000)
 	v.SetDefault("game.pprof_enabled", false)
+	v.SetDefault("game.command_queue_size", 500)
+	v.SetDefault("game.max_packets_per_second", 40)
+	v.SetDefault("game.max_commands_per_tick_per_client", 20)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)

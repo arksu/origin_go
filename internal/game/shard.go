@@ -38,6 +38,10 @@ type Shard struct {
 	eventBus       *eventbus.EventBus
 	characterSaver *systems.CharacterSaver
 
+	// Command queues for network/ECS separation
+	playerInbox *network.PlayerCommandInbox
+	serverInbox *network.ServerJobInbox
+
 	clients   map[types.EntityID]*network.Client
 	clientsMu sync.RWMutex
 
@@ -46,6 +50,13 @@ type Shard struct {
 }
 
 func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *ObjectFactory, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
+	// Initialize command queue config from game config
+	queueConfig := network.CommandQueueConfig{
+		MaxQueueSize:                cfg.Game.CommandQueueSize,
+		MaxPacketsPerSecond:         cfg.Game.MaxPacketsPerSecond,
+		MaxCommandsPerTickPerClient: cfg.Game.MaxCommandsPerTickPerClient,
+	}
+
 	s := &Shard{
 		layer:           layer,
 		cfg:             cfg,
@@ -54,6 +65,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger:          logger,
 		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities), eb, layer),
 		eventBus:        eb,
+		playerInbox:     network.NewPlayerCommandInbox(queueConfig),
+		serverInbox:     network.NewServerJobInbox(queueConfig),
 		clients:         make(map[types.EntityID]*network.Client),
 		state:           ShardStateRunning,
 	}
@@ -66,6 +79,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
+	s.world.AddSystem(systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, logger))
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
@@ -129,6 +143,16 @@ func (s *Shard) spawnPlayerLocked(id types.EntityID, x int, y int, setupFunc fun
 
 func (s *Shard) EventBus() *eventbus.EventBus {
 	return s.eventBus
+}
+
+// PlayerInbox returns the player command inbox for this shard
+func (s *Shard) PlayerInbox() *network.PlayerCommandInbox {
+	return s.playerInbox
+}
+
+// ServerInbox returns the server job inbox for this shard
+func (s *Shard) ServerInbox() *network.ServerJobInbox {
+	return s.serverInbox
 }
 
 func (s *Shard) PublishEventAsync(event eventbus.Event, priority eventbus.Priority) {
