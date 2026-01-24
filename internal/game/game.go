@@ -3,7 +3,6 @@ package game
 import (
 	"context"
 	"errors"
-	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/network"
@@ -190,29 +189,10 @@ func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S
 	c.Send(data)
 }
 
-func (g *Game) sendError(c *network.Client, errorMsg string) {
-	response := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_Error{
-			Error: &netproto.S2C_Error{
-				Code:    netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
-				Message: errorMsg,
-			},
-		},
-	}
-
-	data, err := proto.Marshal(response)
-	if err != nil {
-		g.logger.Error("Failed to marshal error", zap.Uint64("client_id", c.ID), zap.Error(err))
-		return
-	}
-
-	c.Send(data)
-}
-
 func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *netproto.C2S_PlayerAction) {
 	if c.CharacterID == 0 {
 		g.logger.Warn("Player action from unauthenticated client", zap.Uint64("client_id", c.ID))
-		g.sendError(c, "Not authenticated")
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
 		return
 	}
 
@@ -222,7 +202,7 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 		g.logger.Error("Shard not found for player action",
 			zap.Uint64("client_id", c.ID),
 			zap.Int("layer", c.Layer))
-		g.sendError(c, "Invalid shard")
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
 		return
 	}
 
@@ -266,11 +246,11 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 		case errors.As(err, &overflowError):
 			g.logger.Warn("Command queue overflow",
 				zap.Uint64("client_id", c.ID))
-			// TODO: Send S2C_Warning with WARN_INPUT_QUEUE_OVERFLOW
+			c.SendWarning(netproto.WarningCode_WARN_INPUT_QUEUE_OVERFLOW, "Command queue overflow")
 		case errors.As(err, &rateLimitError):
 			g.logger.Warn("Rate limit exceeded",
 				zap.Uint64("client_id", c.ID))
-			// TODO: Send ERROR_PACKET_PER_SECOND_LIMIT_EXCEEDED and disconnect
+			c.SendError(netproto.ErrorCode_ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED, "Rate limit exceeded")
 			c.Close()
 		case errors.As(err, &duplicateCommandError):
 			// Ignore silently - already processed
@@ -280,78 +260,6 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 				zap.Error(err))
 		}
 	}
-}
-
-func (g *Game) handleMoveToAction(c *network.Client, shard *Shard, moveTo *netproto.MoveTo) {
-	//g.logger.Debug("MoveTo action",
-	//	zap.Uint64("client_id", c.ID),
-	//	zap.Int32("target_x", moveTo.X),
-	//	zap.Int32("target_y", moveTo.Y))
-
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-
-	// TODO: Validate target position (bounds, walkable, etc.)
-
-	// Find player entity handle by EntityID (O(1) lookup)
-	playerHandle := shard.world.GetHandleByEntityID(c.CharacterID)
-	if playerHandle == types.InvalidHandle {
-		g.logger.Error("Player entity not found",
-			zap.Uint64("client_id", c.ID),
-			zap.Uint64("entity_id", uint64(c.CharacterID)))
-		return
-	}
-
-	// Get movement component
-	mov, ok := ecs.GetComponent[components.Movement](shard.world, playerHandle)
-	if !ok {
-		g.logger.Error("Movement component not found",
-			zap.Uint64("client_id", c.ID),
-			zap.Uint64("entity_id", uint64(c.CharacterID)))
-		return
-	}
-
-	// Only allow movement if not stunned
-	if mov.State == constt.StateStunned {
-		g.logger.Debug("Cannot move while stunned",
-			zap.Uint64("client_id", c.ID),
-			zap.Uint64("entity_id", uint64(c.CharacterID)))
-		return
-	}
-
-	// Set movement target using helper method
-	ecs.WithComponent(shard.world, playerHandle, func(mov *components.Movement) {
-		mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
-	})
-
-	//g.logger.Debug("Set movement target",
-	//	zap.Uint64("client_id", c.ID),
-	//	zap.Int32("target_x", moveTo.X),
-	//	zap.Int32("target_y", moveTo.Y))
-}
-
-func (g *Game) handleMoveToEntityAction(c *network.Client, shard *Shard, moveToEntity *netproto.MoveToEntity) {
-	g.logger.Debug("MoveToEntity action",
-		zap.Uint64("client_id", c.ID),
-		zap.Uint64("target_entity_id", moveToEntity.EntityId),
-		zap.Bool("auto_interact", moveToEntity.AutoInteract))
-
-	// TODO: Implement entity targeting and pathfinding
-	// 1. Validate target entity exists and is reachable
-	// 2. Set movement target to entity position
-	// 3. If auto_interact, queue interaction when reached
-}
-
-func (g *Game) handleInteractAction(c *network.Client, shard *Shard, interact *netproto.Interact) {
-	g.logger.Debug("Interact action",
-		zap.Uint64("client_id", c.ID),
-		zap.Uint64("target_entity_id", interact.EntityId),
-		zap.Int32("interaction_type", int32(interact.Type)))
-
-	// TODO: Implement interaction system
-	// 1. Validate target entity exists and is in range
-	// 2. Check if interaction is valid for entity type
-	// 3. Execute interaction (gather, open container, use, pickup, etc.)
 }
 
 func (g *Game) handleDisconnect(c *network.Client) {

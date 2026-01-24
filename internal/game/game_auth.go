@@ -136,7 +136,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	shard := g.shardManager.GetShard(character.Layer)
 	if shard == nil {
 		g.logger.Error("Shard not found for layer", zap.Int("layer", character.Layer), zap.Int64("character_id", character.ID))
-		g.sendError(c, "Spawn failed: invalid layer")
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: invalid layer")
 		return
 	}
 
@@ -154,18 +154,18 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	for _, pos := range candidates {
 		select {
 		case <-ctx.Done():
-			g.sendError(c, "Spawn timeout")
+			c.SendError(netproto.ErrorCode_ERROR_CODE_TIMEOUT_EXCEEDED, "Spawn timeout")
 			return
 		default:
 		}
 
 		if err := shard.PrepareEntityAOI(ctx, playerEntityID, pos.X, pos.Y); err != nil {
-			g.logger.Error("Failed to prepare entity AOI",
+			g.logger.Error("Failed to prepare AOI for player",
 				zap.Uint64("client_id", c.ID),
 				zap.Int64("character_id", character.ID),
 				zap.Error(err),
 			)
-			g.sendError(c, "Spawn failed: AOI preparation error")
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: AOI preparation error")
 			return
 		}
 
@@ -237,7 +237,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 	if !spawned {
 		g.logger.Debug("Player NOT spawned", zap.Int64("character_id", character.ID))
-		g.sendError(c, "Spawn failed: no valid position")
+		c.SendError(netproto.ErrorCode_ERROR_CODE_PATH_BLOCKED, "Spawn failed: no valid position")
 		return
 	}
 

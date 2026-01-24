@@ -15,8 +15,10 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 
 	"origin/internal/config"
+	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
 
@@ -58,6 +60,46 @@ type Client struct {
 // NextCommandID returns the next monotonic command ID for this client
 func (c *Client) NextCommandID() uint64 {
 	return c.commandID.Add(1)
+}
+
+// SendError sends an error message to the client
+func (c *Client) SendError(errorCode netproto.ErrorCode, errorMsg string) {
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_Error{
+			Error: &netproto.S2C_Error{
+				Code:    errorCode,
+				Message: errorMsg,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		c.logger.Error("Failed to marshal error", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+
+	c.Send(data)
+}
+
+// SendWarning sends a warning message to the client
+func (c *Client) SendWarning(warningCode netproto.WarningCode, message string) {
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_Warning{
+			Warning: &netproto.S2C_Warning{
+				Code:    warningCode,
+				Message: message,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		c.logger.Error("Failed to marshal warning", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+
+	c.Send(data)
 }
 
 func NewServer(cfg *config.NetworkConfig, gameCfg *config.GameConfig, logger *zap.Logger) *Server {
