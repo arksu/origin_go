@@ -16,7 +16,7 @@ const (
 )
 
 func IsTilePassable(tileID byte) bool {
-	return tileID > TileWater && tileID != TileSwamp
+	return tileID != TileWaterDeep && tileID != TileSwamp
 }
 
 func IsTileSwimmable(tileID byte) bool {
