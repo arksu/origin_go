@@ -231,7 +231,7 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 	cmd := &network.PlayerCommand{
 		ClientID:    c.ID,
 		CharacterID: c.CharacterID,
-		CommandID:   c.NextCommandID(),
+		CommandID:   uint64(sequence), // Use sequence from ClientMessage as CommandID
 		CommandType: cmdType,
 		Payload:     payload,
 		ReceivedAt:  time.Now(),
