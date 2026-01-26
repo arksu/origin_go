@@ -442,14 +442,6 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				CoordPerTile: _const.CoordPerTile,
 				ChunkSize:    _const.ChunkSize,
 				StreamEpoch:  c.StreamEpoch.Load(),
-				Inventory: &netproto.Inventory{
-					Width:  10,                          // TODO: get from character data
-					Height: 5,                           // TODO: get from character data
-					Slots:  []*netproto.InventorySlot{}, // TODO: load from database
-				},
-				Paperdoll: &netproto.Paperdoll{
-					Slots: []*netproto.PaperdollSlot{}, // TODO: load from database
-				},
 			},
 		},
 	}

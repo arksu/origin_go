@@ -74,6 +74,13 @@ enum WeatherType {
   WEATHER_TYPE_SNOW = 4;
 }
 
+enum InventoryKind {
+  INVENTORY_KIND_GRID = 0;
+  INVENTORY_KIND_HAND = 1;
+  INVENTORY_KIND_EQUIPMENT = 2;
+  INVENTORY_KIND_DROPPED_ITEM = 3;
+}
+
 enum ErrorCode {
   ERROR_CODE_NONE = 0;
   ERROR_CODE_INVALID_REQUEST = 1;
@@ -102,33 +109,113 @@ enum WarningCode {
 // ITEM & INVENTORY
 // ============================================================================
 
-message Item {
-  uint32 item_id = 1;           // ID типа предмета
-  string resource = 2;
-  uint32 quality = 3;
-  uint32 quantity = 4;
-  uint32 durability = 5;        // 0-100, если применимо
+// Универсальная ссылка на контейнер/инвентарь.
+// owner_entity_id: entity, которому принадлежит контейнер (player, chest, dropped entity).
+message InventoryRef {
+  InventoryKind kind = 1;
+  uint64 owner_entity_id = 2;
+  uint32 inventory_key = 3; // если у entity может быть несколько grid-контейнеров (рюкзак/карман/сундук#N)
 }
 
-message InventorySlot {
-  uint32 x = 1;
+message ItemInstance {
+  uint64 item_id = 1;
+  uint32 type_id = 2;           // ID типа предмета
+  string resource = 3;
+  uint32 quality = 4;
+  uint32 quantity = 5;
+
+  uint32 w = 10;            // размеры в слотах
+  uint32 h = 11;
+}
+
+message GridItem {
+  uint32 x = 1;              // top-left
   uint32 y = 2;
-  Item item = 3;
+  ItemInstance item = 3;
 }
 
-message Inventory {
+message InventoryGridState {
   uint32 width = 1;
   uint32 height = 2;
-  repeated InventorySlot slots = 3;
+  repeated GridItem items = 3;
 }
 
-message PaperdollSlot {
+message EquipmentItem {
   EquipSlot slot = 1;
-  Item item = 2;
+  ItemInstance item = 2;
 }
 
-message Paperdoll {
-  repeated PaperdollSlot slots = 1;
+message InventoryEquipmentState {
+  repeated EquipmentItem items = 1;
+}
+
+message InventoryHandState {
+  optional ItemInstance item = 1; // 0/1 item
+}
+
+message InventoryState {
+  InventoryRef ref = 1;
+  uint64 revision = 2;            // монотонная ревизия контейнера
+  oneof state {
+    InventoryGridState grid = 10;
+    InventoryEquipmentState equipment = 11;
+    InventoryHandState hand = 12;
+  }
+}
+
+message InventoryExpected {
+  InventoryRef ref = 1;
+  uint64 expected_revision = 2;
+}
+
+message GridPos {
+  uint32 x = 1;
+  uint32 y = 2;
+}
+
+message InventoryMoveSpec {
+  InventoryRef src = 1;
+  InventoryRef dst = 2;
+
+  uint64 item_uid = 3;
+
+  // Куда кладём в dst (актуально для GRID). Для HAND/EQUIP можно не задавать.
+  optional GridPos dst_pos = 4;
+
+  // Для EQUIPMENT: в какой слот хотим положить (если dst.kind == EQUIPMENT)
+  optional EquipSlot dst_equip_slot = 5;
+
+  // Если предмет стэкуемый и в dst уже есть стак: сколько переносим (<= quantity)
+  // Если не задано — переносим “как получится” по правилам сервера (обычно всё).
+  optional uint32 quantity = 6;
+
+  // Поведение при коллизии/занятости:
+  // - если false: операция должна фейлиться
+  // - если true: сервер может выполнить swap, merge stack, или другое определённое поведение
+  bool allow_swap_or_merge = 7;
+}
+
+message InventoryOp {
+  uint64 op_id = 1; // клиентский id для идемпотентности/повторной отправки
+
+  // optimistic concurrency для максимум двух контейнеров
+  repeated InventoryExpected expected = 2; // 1..2 entries
+
+  oneof kind {
+    InventoryMoveSpec move = 10;
+
+    // Удобный шорткат: “выбросить из контейнера в мир (дроп)”
+    // (фактически move src -> dropped + spawn entity)
+    InventoryMoveSpec drop_to_world = 12;
+
+    // Удобный шорткат: “поднять дроп в контейнер”
+    // (фактически move dropped -> dst + despawn entity)
+    InventoryMoveSpec pickup_from_world = 13;
+  }
+}
+
+message C2S_InventoryOp {
+  InventoryOp op = 1;
 }
 
 // ============================================================================
@@ -279,8 +366,8 @@ message S2C_PlayerEnterWorld {
   uint32 chunk_size = 4;
   //  EntityStats stats = 4;
   //  EntitySkills skills = 5;
-  Inventory inventory = 6;
-  Paperdoll paperdoll = 7;
+//  Inventory inventory = 6;
+//  Paperdoll paperdoll = 7;
   optional uint64 dragging_entity_id = 8; // если тащим что-то
   uint32 stream_epoch = 9; // для защиты от гонок состояний
 }
