@@ -177,7 +177,7 @@ message InventoryMoveSpec {
   InventoryRef src = 1;
   InventoryRef dst = 2;
 
-  uint64 item_uid = 3;
+  uint64 item_id = 3;
 
   // Куда кладём в dst (актуально для GRID). Для HAND/EQUIP можно не задавать.
   optional GridPos dst_pos = 4;
