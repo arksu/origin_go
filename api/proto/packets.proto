@@ -277,6 +277,7 @@ enum InteractionType {
   AUTO = 0; // сервер решает
   GATHER = 1;
   OPEN_CONTAINER = 2;
+  CLOSE_CONTAINER = 3;
   USE = 4;
   PICKUP = 5;
 }
@@ -320,6 +321,7 @@ message ClientMessage {
     C2S_Ping ping = 11;
     C2S_PlayerAction player_action = 12;
     C2S_MovementMode movement_mode = 13;
+    C2S_InventoryOp inventory_op = 14;
     //    C2S_MoveTo move_to = 11;
     //    C2S_MoveToEntity move_to_entity = 12;
     //    C2S_StopMovement stop_movement = 13;
@@ -366,10 +368,23 @@ message S2C_PlayerEnterWorld {
   uint32 chunk_size = 4;
   //  EntityStats stats = 4;
   //  EntitySkills skills = 5;
-//  Inventory inventory = 6;
-//  Paperdoll paperdoll = 7;
-  optional uint64 dragging_entity_id = 8; // если тащим что-то
+  //  Inventory inventory = 6;
+  //  Paperdoll paperdoll = 7;
+  //  optional uint64 dragging_entity_id = 8; // если тащим что-то
   uint32 stream_epoch = 9; // для защиты от гонок состояний
+}
+
+// on teleport, layer change - show loading screen on client, remove all chunks, entities
+message S2C_PlayerLeaveWorld {
+  uint64 entity_id = 1;
+}
+
+message S2C_ChunkLoad {
+  ChunkData chunk = 1;
+}
+
+message S2C_ChunkUnload {
+  ChunkCoord coord = 1;
 }
 
 message S2C_ObjectSpawn {
@@ -387,17 +402,30 @@ message S2C_ObjectMove {
   EntityMovement movement = 2;
 }
 
-// on teleport, layer change - show loading screen on client, remove all chunks, entities
-message S2C_PlayerLeaveWorld {
+message S2C_InventoryOpResult {
+  uint64 op_id = 1;
+  bool success = 2;
+  ErrorCode error = 3;
+  string message = 4;
+
+  // Полные состояния контейнеров, которые изменились в этой операции (0..2).
+  repeated InventoryState updated = 10;
+
+  // Если операция породила/удалила dropped entity — сообщаем (доп. к обычным spawn/despawn).
+  optional uint64 spawned_dropped_entity_id = 20;
+  optional uint64 despawned_dropped_entity_id = 21;
+}
+
+message S2C_InventoryUpdate {
+  repeated InventoryState updated = 1; // может быть 1..N, но на практике 1..2
+}
+
+message S2C_ContainerOpened {
+  InventoryState state = 1;      // полный снапшот
+}
+
+message S2C_ContainerClosed {
   uint64 entity_id = 1;
-}
-
-message S2C_ChunkLoad {
-  ChunkData chunk = 1;
-}
-
-message S2C_ChunkUnload {
-  ChunkCoord coord = 1;
 }
 
 message S2C_Error {
@@ -423,13 +451,16 @@ message ServerMessage {
     S2C_ObjectSpawn object_spawn = 16;
     S2C_ObjectDespawn object_despawn = 17;
     S2C_ObjectMove object_move = 18;
+    S2C_InventoryOpResult inventory_op_result = 19;
+    S2C_InventoryUpdate inventory_update = 20;
+    S2C_ContainerOpened container_opened = 21;
+    S2C_ContainerClosed container_closed = 22;
 
     //    S2C_SpawnEntity spawn_entity = 13;
     //    S2C_DespawnEntity despawn_entity = 14;
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
     //    S2C_InventoryUpdate inventory_update = 17;
-    //    S2C_PaperdollUpdate paperdoll_update = 18;
     //    S2C_ContainerOpen container_open = 19;
     //    S2C_ContainerClose container_close = 20;
     //    S2C_ContainerUpdate container_update = 21;
