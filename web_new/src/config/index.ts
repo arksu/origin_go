@@ -1,5 +1,5 @@
 export const config = {
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
+  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api',
   WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws',
   DEBUG: import.meta.env.VITE_DEBUG === 'true' || import.meta.env.DEV,
   BUILD_INFO: {
