@@ -1358,10 +1358,10 @@ func (x *GridPos) GetY() uint32 {
 }
 
 type InventoryMoveSpec struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Src     *InventoryRef          `protobuf:"bytes,1,opt,name=src,proto3" json:"src,omitempty"`
-	Dst     *InventoryRef          `protobuf:"bytes,2,opt,name=dst,proto3" json:"dst,omitempty"`
-	ItemUid uint64                 `protobuf:"varint,3,opt,name=item_uid,json=itemUid,proto3" json:"item_uid,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Src    *InventoryRef          `protobuf:"bytes,1,opt,name=src,proto3" json:"src,omitempty"`
+	Dst    *InventoryRef          `protobuf:"bytes,2,opt,name=dst,proto3" json:"dst,omitempty"`
+	ItemId uint64                 `protobuf:"varint,3,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	// Куда кладём в dst (актуально для GRID). Для HAND/EQUIP можно не задавать.
 	DstPos *GridPos `protobuf:"bytes,4,opt,name=dst_pos,json=dstPos,proto3,oneof" json:"dst_pos,omitempty"`
 	// Для EQUIPMENT: в какой слот хотим положить (если dst.kind == EQUIPMENT)
@@ -1421,9 +1421,9 @@ func (x *InventoryMoveSpec) GetDst() *InventoryRef {
 	return nil
 }
 
-func (x *InventoryMoveSpec) GetItemUid() uint64 {
+func (x *InventoryMoveSpec) GetItemId() uint64 {
 	if x != nil {
-		return x.ItemUid
+		return x.ItemId
 	}
 	return 0
 }
@@ -3646,11 +3646,11 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x11expected_revision\x18\x02 \x01(\x04R\x10expectedRevision\"%\n" +
 	"\aGridPos\x12\f\n" +
 	"\x01x\x18\x01 \x01(\rR\x01x\x12\f\n" +
-	"\x01y\x18\x02 \x01(\rR\x01y\"\xe3\x02\n" +
+	"\x01y\x18\x02 \x01(\rR\x01y\"\xe1\x02\n" +
 	"\x11InventoryMoveSpec\x12%\n" +
 	"\x03src\x18\x01 \x01(\v2\x13.proto.InventoryRefR\x03src\x12%\n" +
-	"\x03dst\x18\x02 \x01(\v2\x13.proto.InventoryRefR\x03dst\x12\x19\n" +
-	"\bitem_uid\x18\x03 \x01(\x04R\aitemUid\x12,\n" +
+	"\x03dst\x18\x02 \x01(\v2\x13.proto.InventoryRefR\x03dst\x12\x17\n" +
+	"\aitem_id\x18\x03 \x01(\x04R\x06itemId\x12,\n" +
 	"\adst_pos\x18\x04 \x01(\v2\x0e.proto.GridPosH\x00R\x06dstPos\x88\x01\x01\x12;\n" +
 	"\x0edst_equip_slot\x18\x05 \x01(\x0e2\x10.proto.EquipSlotH\x01R\fdstEquipSlot\x88\x01\x01\x12\x1f\n" +
 	"\bquantity\x18\x06 \x01(\rH\x02R\bquantity\x88\x01\x01\x12-\n" +
