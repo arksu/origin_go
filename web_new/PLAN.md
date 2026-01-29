@@ -30,7 +30,8 @@
    ├── api/           # HTTP API для авторизации
    ├── assets/        # Статические ресурсы
    ├── components/    # Vue компоненты
-   ├── game/          # Игровая логика (PixiJS)
+   ├── config/        # Конфигурация приложения
+   ├── game/          # Игровая логика (PixiJS) — ФАСАД для рендера
    ├── network/       # WebSocket и Protobuf
    ├── router/        # Vue Router
    ├── stores/        # Pinia stores
@@ -38,12 +39,30 @@
    ├── utils/         # Утилиты
    └── views/         # Страницы
    ```
-6. Добавить npm скрипт для генерации protobuf типов
+6. Создать `src/config/index.ts` — единый модуль конфигурации:
+   - `API_BASE_URL` — базовый URL для HTTP API
+   - `WS_URL` — URL для WebSocket соединения
+   - `DEBUG` — флаг режима отладки
+   - `BUILD_INFO` — версия сборки, дата, commit hash
+7. Добавить npm скрипт для генерации protobuf типов
+
+### Архитектурные правила
+
+> **ВАЖНО**: Код PixiJS **НЕ импортируется** в Vue-компоненты напрямую.
+> Вся работа с рендером — только через фасад `game/`.
+> Это предотвращает неуправляемую связь UI ↔ Render.
+
+```
+✅ Vue component → game/GameFacade.ts → game/Render.ts → PIXI
+❌ Vue component → import * as PIXI from 'pixi.js'
+```
 
 ### Критерии завершения
-- [x] Проект запускается командой `npm run dev`
-- [x] Пустая страница открывается в браузере без ошибок
-- [x] TypeScript компилируется без ошибок
+- [ ] Проект запускается командой `npm run dev`
+- [ ] Пустая страница открывается в браузере без ошибок
+- [ ] TypeScript компилируется без ошибок
+- [ ] Конфигурация читается из `config/index.ts`
+- [ ] ESLint правило запрещает импорт `pixi.js` вне `game/`
 
 ---
 
@@ -53,20 +72,45 @@
 Реализовать страницы авторизации и выбора персонажа с HTTP API.
 
 ### Задачи
-1. Создать Pinia store для авторизации (`authStore.ts`)
-2. Реализовать API клиент (`api/client.ts`, `api/auth.ts`, `api/characters.ts`)
+1. Создать Pinia store для авторизации (`authStore.ts`):
+   - Хранение токена в localStorage
+   - Проверка валидности токена (exp claim если JWT)
+   - Методы: `login()`, `logout()`, `isAuthenticated`, `isTokenExpired`
+2. Реализовать API клиент (`api/client.ts`, `api/auth.ts`, `api/characters.ts`):
+   - Axios instance с interceptors
+   - Классификация ошибок: `ValidationError`, `AuthError`, `NetworkError`
+   - **НЕ делать автоматический logout** при ошибках валидации или сети
 3. Создать Vue компоненты:
    - `LoginView.vue` — страница входа
-   - `RegisterView.vue` — страница регистрации
+   - `RegisterView.vue` — страница регистрации  
    - `CharactersView.vue` — список персонажей
-4. Настроить Vue Router с guards для защищённых маршрутов
+4. Настроить Vue Router с guards:
+   - `/login`, `/register` — публичные
+   - `/characters`, `/game` — требуют авторизации
+   - **После обновления страницы** → редирект на `/characters` (если токен валиден)
+   - Guard корректно обрабатывает:
+     - Токена нет → `/login`
+     - Токен есть, но протух → `/login` + очистка токена
+     - Токен валиден → пропустить
 5. Добавить базовые UI компоненты (формы, кнопки, спиннер)
+
+### Обработка ошибок API
+
+| Тип ошибки | HTTP код | Действие |
+|------------|----------|----------|
+| Валидация | 400, 422 | Показать ошибку в форме, **НЕ logout** |
+| Auth | 401 | Logout + редирект на `/login` |
+| Forbidden | 403 | Показать сообщение |
+| Сеть | 0, timeout | Показать "Нет соединения", **НЕ logout** |
+| Сервер | 500+ | Показать "Ошибка сервера" |
 
 ### Критерии завершения
 - [ ] Пользователь может войти/зарегистрироваться
 - [ ] Отображается список персонажей
 - [ ] Можно создать нового персонажа
 - [ ] Можно выбрать персонажа для входа в игру
+- [ ] F5 на любой странице → корректный редирект
+- [ ] Ошибка сети не вызывает ложный logout
 
 ---
 
@@ -78,55 +122,217 @@
 ### Задачи
 1. Сгенерировать TypeScript типы из `packets.proto`
 2. Создать `network/GameConnection.ts`:
-   - Подключение по WebSocket
+   - Подключение по WebSocket (binaryType: 'arraybuffer')
    - Отправка/приём бинарных сообщений (Protobuf)
-   - Авторизация по токену
    - Ping/Pong для поддержания соединения
-3. Создать Pinia store для игрового состояния (`gameStore.ts`):
-   - Состояние подключения
-   - Позиция игрока
-   - Чанки карты
-   - Игровые объекты
-4. Реализовать обработчики серверных сообщений:
-   - `S2C_AuthResult`
-   - `S2C_PlayerEnterWorld`
-   - `S2C_ChunkLoad` / `S2C_ChunkUnload`
-   - `S2C_ObjectSpawn` / `S2C_ObjectDespawn` / `S2C_ObjectMove`
-   - `S2C_Error`
+   - Версионирование протокола: отправлять `client_version` в `C2S_Auth`
+3. **Handshake авторизации** (строгая последовательность):
+   ```
+   1. HTTP POST /auth/login → получить wsToken
+   2. new WebSocket(WS_URL)
+   3. ws.onopen → отправить C2S_Auth { token, client_version }
+   4. Ждать S2C_AuthResult
+   5. Если success=false → disconnect, показать ошибку
+   6. Если success=true → состояние 'connected', запустить ping
+   ```
+   > ⚠️ **Частая ошибка**: считать соединение успешным сразу после `ws.onopen`
+4. Создать `network/MessageDispatcher.ts`:
+   - Таблица `messageType → handler`
+   - Строгая обработка неизвестных типов: `console.warn` + метрика
+   - Кольцевой буфер последних N сообщений (для дебага десинхронов)
+5. Создать Pinia store для игрового состояния (`gameStore.ts`):
+   - Состояние подключения: `disconnected | connecting | authenticating | connected | error`
+   - Позиция игрока (POJO: `{ x, y, heading }`)
+   - Чанки карты (Map<string, ChunkData>)
+   - Игровые объекты (Map<entityId, GameObjectData>)
+   - Параметры мира: `coordPerTile`, `chunkSize` (из `S2C_PlayerEnterWorld`)
+
+   > ⚠️ **ВАЖНО**: В store хранить только **чистые данные (POJO)**, не Pixi-объекты!
+   > Pixi-объекты создаются отдельным слоем `game/` на основе данных из store.
+   > Иначе: утечки памяти, сложности с пересозданием сцены.
+
+6. Реализовать обработчики серверных сообщений:
+   - `S2C_AuthResult` → установить состояние connected/error
+   - `S2C_PlayerEnterWorld` → сохранить entityId, coordPerTile, chunkSize
+   - `S2C_ChunkLoad` / `S2C_ChunkUnload` → обновить Map чанков
+   - `S2C_ObjectSpawn` / `S2C_ObjectDespawn` / `S2C_ObjectMove` → обновить Map объектов
+   - `S2C_Error` / `S2C_Warning` → показать пользователю
+
+### Структура данных в gameStore
+
+```typescript
+interface GameObjectData {
+  entityId: number
+  objectType: number
+  position: { x: number, y: number }
+  movement?: {
+    targetX: number
+    targetY: number
+    velocity: { x: number, y: number }
+    isMoving: boolean
+  }
+}
+
+interface ChunkData {
+  coord: { x: number, y: number }
+  tiles: Uint8Array
+  version: number
+}
+```
+
+### Debug: кольцевой лог сообщений
+
+```typescript
+class MessageLog {
+  private buffer: Array<{ time: number, type: string, data: any }>
+  private maxSize = 100
+  
+  add(type: string, data: any) { ... }
+  getLast(n: number): Array<...> { ... }
+  dump(): void { console.table(this.buffer) }
+}
+```
 
 ### Критерии завершения
 - [ ] Клиент подключается к серверу
-- [ ] Успешная авторизация по токену
-- [ ] Получение и хранение чанков карты
-- [ ] Получение и хранение игровых объектов
-- [ ] Консольный лог всех входящих сообщений
+- [ ] Handshake выполняется корректно (не считаем connected до S2C_AuthResult)
+- [ ] Получение и хранение чанков карты (как POJO)
+- [ ] Получение и хранение игровых объектов (как POJO)
+- [ ] Неизвестные сообщения логируются, не крашат клиент
+- [ ] `gameStore.debugDumpMessages()` выводит последние 100 сообщений
 
 ---
 
 ## Этап 4: Базовый рендер (PixiJS)
 
 ### Цель
-Инициализировать PixiJS и отобразить пустую сцену.
+Инициализировать PixiJS и отобразить пустую сцену с debug overlay.
 
 ### Задачи
-1. Создать `game/Render.ts` — основной класс рендера:
-   - Инициализация PIXI.Application
-   - Контейнеры: `mapContainer`, `objectsContainer`, `uiContainer`
-   - Обработка resize
+
+#### 4.1 Жизненный цикл Pixi
+
+1. Создать `game/GameFacade.ts` — единственная точка входа для Vue:
+   ```typescript
+   class GameFacade {
+     private render: Render | null = null
+     
+     async init(canvas: HTMLCanvasElement): Promise<void>
+     destroy(): void
+     isInitialized(): boolean
+     
+     // Методы для Vue
+     onPlayerClick(screenX: number, screenY: number): void
+     setZoom(zoom: number): void
+     getDebugInfo(): DebugInfo
+   }
+   ```
+
+2. Создать `game/Render.ts` — основной класс рендера:
+   - **Владелец**: `Render` владеет `PIXI.Application`
+   - Инициализация через `app.init()` (async в PixiJS v8)
+   - Контейнеры: `mapContainer`, `objectsContainer`
    - Игровой цикл (ticker)
-2. Создать Vue компонент `GameView.vue`:
-   - Canvas для PixiJS
-   - Интеграция с Vue lifecycle
-3. Создать `game/Camera.ts`:
-   - Позиция камеры (центрирование на игроке)
-   - Масштабирование (zoom)
-   - Перетаскивание карты
+
+3. **Destroy при уходе со страницы**:
+   ```typescript
+   // В GameView.vue
+   onUnmounted(() => {
+     gameFacade.destroy()
+   })
+   
+   // В Render.ts
+   destroy() {
+     this.app.ticker.stop()
+     this.app.destroy({ removeView: true }, { children: true, texture: true })
+     // Очистить все ссылки
+   }
+   ```
+
+4. **Защита от повторной инициализации**:
+   - Флаг `isInitialized` в GameFacade
+   - Проверка перед `init()`: если уже инициализирован — сначала `destroy()`
+
+#### 4.2 Resize и разрешение
+
+1. Обработка resize:
+   - `resizeTo: window` или ручной resize
+   - Учёт `window.devicePixelRatio` для чёткости на Retina
+   - Настройка `resolution` в PIXI.Application
+   
+   ```typescript
+   const resolution = Math.min(window.devicePixelRatio, 2) // Ограничить для производительности
+   await app.init({
+     resolution,
+     autoDensity: true,
+     resizeTo: window,
+   })
+   ```
+
+#### 4.3 Минимальный pointer mapping
+
+Для возможности тестировать этап 5 (конвертация координат):
+
+1. Слушать `pointerdown` на canvas
+2. Сохранять последние экранные координаты клика
+3. Эмитить событие для debug overlay
+
+```typescript
+canvas.addEventListener('pointerdown', (e) => {
+  this.lastClickScreen = { x: e.clientX, y: e.clientY }
+  this.emit('debug:click', this.lastClickScreen)
+})
+```
+
+#### 4.4 Debug Overlay
+
+Создать `game/DebugOverlay.ts` (PIXI.Text):
+
+| Метрика | Источник |
+|---------|----------|
+| FPS | `app.ticker.FPS` |
+| Camera X, Y | `camera.position` |
+| Zoom | `camera.scale` |
+| Viewport | `app.screen.width x height` |
+| Last click (screen) | из pointer mapping |
+| Last click (world) | после этапа 5 |
+| Objects count | из gameStore |
+| Chunks loaded | из gameStore |
+
+```typescript
+class DebugOverlay {
+  private text: PIXI.Text
+  
+  update(info: DebugInfo) {
+    this.text.text = `
+      FPS: ${info.fps.toFixed(0)}
+      Camera: ${info.cameraX}, ${info.cameraY}
+      Zoom: ${info.zoom.toFixed(2)}
+      Viewport: ${info.viewportWidth}x${info.viewportHeight}
+      Click: ${info.lastClickX}, ${info.lastClickY}
+    `
+  }
+}
+```
+
+Включать/выключать по клавише \` (backtick) или из config.DEBUG.
+
+#### 4.5 Vue компонент
+
+1. Создать `GameView.vue`:
+   - `<canvas ref="gameCanvas">` для PixiJS
+   - `onMounted` → `gameFacade.init(canvas)`
+   - `onUnmounted` → `gameFacade.destroy()`
+   - Не импортировать PIXI напрямую!
 
 ### Критерии завершения
 - [ ] Canvas отображается на странице игры
 - [ ] PixiJS инициализируется без ошибок
-- [ ] Работает изменение размера окна
-- [ ] Фон canvas перекрашивается в цвет (для теста)
+- [ ] Уход со страницы `/game` → корректный destroy (без утечек)
+- [ ] Повторный вход на `/game` → reinit без ошибок
+- [ ] Resize работает, картинка не мыльная на Retina
+- [ ] Debug overlay показывает FPS, viewport, click coords
+- [ ] Клик по canvas регистрируется (в debug overlay)
 
 ---
 
@@ -137,15 +343,16 @@
 
 ### Задачи
 1. Создать `game/Tile.ts` с константами:
-   - `TILE_SIZE` =  (игровые единицы на тайл), брать из пакета S2C_PlayerEnterWorld coord_per_tile
+   - `COORD_PER_TILE` =  (игровые единицы на тайл), брать из пакета S2C_PlayerEnterWorld coord_per_tile
    - `TEXTURE_WIDTH` = 64, `TEXTURE_HEIGHT` = 32
-   - `GRID_SIZE` = (тайлов в гриде), брать из пакета S2C_PlayerEnterWorld chunk_size
-   - `FULL_GRID_SIZE` = пересчитать из GRID_SIZE * TILE_SIZE
+   - `CHUNK_SIZE` = (тайлов в чанке), брать из пакета S2C_PlayerEnterWorld chunk_size
+   - `FULL_CHUNK_SIZE` = пересчитать из CHUNK_SIZE * COORD_PER_TILE
 2. Создать `utils/Point.ts` — класс для работы с координатами
 3. Создать `utils/Coord.ts` — тип для координат
 4. Реализовать функции конвертации:
    - `coordGame2Screen(x, y)` — игровые → экранные
    - `coordScreen2Game(screenX, screenY)` — экранные → игровые
+   - **Учитывать текущую позицию и масштаб камеры** (`camera.x`, `camera.y`, `zoom`) при преобразовании координат, чтобы перемещение/масштабирование камеры корректно отражалось в результатах конвертации. 
 
 ### Критерии завершения
 - [ ] Функции конвертации работают корректно (unit тесты)
@@ -153,7 +360,7 @@
 
 ---
 
-## Этап 6: Рендер тайлов (Grid)
+## Этап 6: Рендер тайлов (Chunk)
 
 ### Цель
 Отобразить тайловую карту с изометрической проекцией.
@@ -163,13 +370,16 @@
 2. Создать `game/TileSet.ts`:
    - Загрузка конфигураций тайлов (ground, borders, corners)
    - Случайный выбор текстуры по координатам
-3. Создать `game/Grid.ts`:
-   - Построение меша для чанка
-   - WebGL шейдеры для оптимизации
-   - Автоматические переходы между тайлами (borders/corners)
-4. Интегрировать с `gameStore`:
-   - При получении `S2C_ChunkLoad` создавать Grid
-   - При получении `S2C_ChunkUnload` скрывать Grid
++3. Создать `game/Chunk.ts`:
+   - **Запекание (baking) геометрии тайлов чанка в VBO** при получении данных о чанке.
+     Это позволяет один раз сформировать Vertex Buffer Object и переиспользовать его
+     до тех пор, пока чанк не будет выгружен, минимизируя динамические загрузки в GPU.
+     Дробим чанк на subchunks (divide_factor = 4), значи дробим чанк на области 4x4 и создаем для каждой из них отдельный  VBO
+   - Построение меша для чанка (используя заранее запечённые VBO)
+   - WebGL‑шейдеры для оптимизации отрисовки
+   - Автоматические переходы между тайлами (borders/corners)4. Интегрировать с `gameStore`:
+   - При получении `S2C_ChunkLoad` создавать Chunk
+   - При получении `S2C_ChunkUnload` скрывать Chunk
 5. Добавить кэширование и удаление старых гридов
 
 ### Критерии завершения
@@ -177,6 +387,7 @@
 - [ ] Переходы между типами тайлов плавные
 - [ ] Карта прокручивается при движении игрока
 - [ ] Производительность: 60 FPS при 9+ видимых чанках
+- [ ] При загрузке чанка создаётся несколько VBO, количество draw‑calls не растёт с ростом количества тайлов в чанке
 
 ---
 
@@ -285,7 +496,7 @@
 ### Задачи
 1. Портировать `TerrainObjects` из `web_old`
 2. Загрузить конфигурации terrain (`wald.json`, `heath.json`)
-3. При создании Grid генерировать terrain sprites
+3. При создании Chunk генерировать terrain sprites
 4. Правильная Z-сортировка terrain с объектами
 
 ### Критерии завершения
@@ -419,7 +630,7 @@
 
 ### Из `web_old` (адаптировать):
 - `game/Render.ts` — основа рендера
-- `game/Grid.ts` — рендер тайлов
+- `game/Chunk.ts` — рендер тайлов
 - `game/Tile.ts` — константы и TileSet
 - `game/ObjectView.ts` — отображение объектов
 - `game/MoveController.ts` — интерполяция движения
