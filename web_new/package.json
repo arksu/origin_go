@@ -1,0 +1,37 @@
+{
+  "name": "origin-web-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --build && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --build --force",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
+    "proto": "pbjs -t static-module -w es6 -o src/network/proto/packets.js ../../api/proto/packets.proto && pbts -o src/network/proto/packets.d.ts src/network/proto/packets.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "pinia": "^2.3.1",
+    "pixi.js": "^8.7.3",
+    "protobufjs": "^7.5.4",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@rushstack/eslint-patch": "^1.10.5",
+    "@tsconfig/node20": "^20.1.4",
+    "@types/node": "^22.13.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/eslint-config-typescript": "^14.3.0",
+    "@vue/tsconfig": "^0.7.0",
+    "eslint": "^9.19.0",
+    "eslint-plugin-vue": "^9.32.0",
+    "protobufjs-cli": "^2.0.0",
+    "sass": "^1.83.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.11",
+    "vue-tsc": "^2.2.0"
+  }
+}
