@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/gameStore'
 import { connectToGame, disconnectFromGame } from '@/network'
+import { gameFacade } from '@/game'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 
 const router = useRouter()
 const gameStore = useGameStore()
+
+const gameCanvas = ref<HTMLCanvasElement | null>(null)
+const canvasInitialized = ref(false)
 
 const connectionState = computed(() => gameStore.connectionState)
 const connectionError = computed(() => gameStore.connectionError)
@@ -17,6 +21,28 @@ const isConnecting = computed(() =>
 )
 const isConnected = computed(() => connectionState.value === 'connected')
 const hasError = computed(() => connectionState.value === 'error')
+
+async function initCanvas() {
+  if (!gameCanvas.value || canvasInitialized.value) return
+
+  try {
+    await gameFacade.init(gameCanvas.value)
+    canvasInitialized.value = true
+
+    gameFacade.onPlayerClick((screenX, screenY) => {
+      console.debug('[GameView] Click:', screenX, screenY)
+    })
+  } catch (err) {
+    console.error('[GameView] Failed to init canvas:', err)
+  }
+}
+
+watch(isConnected, async (connected) => {
+  if (connected) {
+    await nextTick()
+    await initCanvas()
+  }
+})
 
 onMounted(() => {
   if (!gameStore.wsToken) {
@@ -28,6 +54,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  gameFacade.destroy()
+  canvasInitialized.value = false
   disconnectFromGame()
   gameStore.reset()
 })
@@ -65,16 +93,11 @@ function handleRetry() {
     </div>
 
     <!-- Connected state -->
-    <div v-else-if="isConnected" class="game-canvas">
-      <div class="game-debug">
-        <p><strong>Entity ID:</strong> {{ gameStore.playerEntityId }}</p>
-        <p><strong>Name:</strong> {{ gameStore.playerName }}</p>
-        <p><strong>Position:</strong> {{ gameStore.playerPosition.x }}, {{ gameStore.playerPosition.y }}</p>
-        <p><strong>Chunks:</strong> {{ gameStore.chunks.size }}</p>
-        <p><strong>Entities:</strong> {{ gameStore.entities.size }}</p>
+    <div v-else-if="isConnected" class="game-canvas-wrapper">
+      <canvas ref="gameCanvas" class="game-canvas"></canvas>
+      <div class="game-ui">
+        <AppButton variant="secondary" size="sm" @click="handleBack">Выйти</AppButton>
       </div>
-      <p class="game-placeholder">Canvas будет добавлен на этапе 4</p>
-      <AppButton variant="secondary" @click="handleBack">Выйти</AppButton>
     </div>
 
     <!-- Disconnected state -->
@@ -121,34 +144,24 @@ function handleRetry() {
   }
 }
 
-.game-canvas {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
+.game-canvas-wrapper {
+  position: relative;
   width: 100%;
   height: 100%;
-  padding: 1rem;
+  overflow: hidden;
 }
 
-.game-debug {
+.game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.game-ui {
   position: absolute;
   top: 1rem;
-  left: 1rem;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.7);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  color: #e0e0e0;
-
-  p {
-    margin: 0.25rem 0;
-  }
-}
-
-.game-placeholder {
-  color: #a0a0a0;
-  font-size: 1.125rem;
+  right: 1rem;
+  z-index: 100;
 }
 
 .game-disconnected {

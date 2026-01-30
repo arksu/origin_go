@@ -1,0 +1,100 @@
+import { Render } from './Render'
+import type { DebugInfo, ScreenPoint } from './types'
+
+export class GameFacade {
+  private render: Render | null = null
+  private initialized: boolean = false
+
+  async init(canvas: HTMLCanvasElement): Promise<void> {
+    if (this.initialized) {
+      this.destroy()
+    }
+
+    this.render = new Render()
+    await this.render.init(canvas)
+    this.initialized = true
+  }
+
+  destroy(): void {
+    if (this.render) {
+      this.render.destroy()
+      this.render = null
+    }
+    this.initialized = false
+  }
+
+  isInitialized(): boolean {
+    return this.initialized
+  }
+
+  onPlayerClick(callback: (screenX: number, screenY: number) => void): void {
+    this.render?.onPointerClick((point: ScreenPoint) => {
+      callback(point.x, point.y)
+    })
+  }
+
+  setCamera(x: number, y: number): void {
+    this.render?.setCamera(x, y)
+  }
+
+  setZoom(zoom: number): void {
+    this.render?.setZoom(zoom)
+  }
+
+  getZoom(): number {
+    return this.render?.getZoom() ?? 1
+  }
+
+  getCameraPosition(): ScreenPoint {
+    return this.render?.getCameraPosition() ?? { x: 0, y: 0 }
+  }
+
+  screenToWorld(screenX: number, screenY: number): ScreenPoint {
+    return this.render?.screenToWorld(screenX, screenY) ?? { x: 0, y: 0 }
+  }
+
+  worldToScreen(worldX: number, worldY: number): ScreenPoint {
+    return this.render?.worldToScreen(worldX, worldY) ?? { x: 0, y: 0 }
+  }
+
+  updateDebugStats(objectsCount: number, chunksLoaded: number): void {
+    this.render?.updateDebugStats(objectsCount, chunksLoaded)
+  }
+
+  getDebugInfo(): DebugInfo {
+    if (!this.render) {
+      return {
+        fps: 0,
+        cameraX: 0,
+        cameraY: 0,
+        zoom: 1,
+        viewportWidth: 0,
+        viewportHeight: 0,
+        lastClickScreenX: 0,
+        lastClickScreenY: 0,
+        lastClickWorldX: 0,
+        lastClickWorldY: 0,
+        objectsCount: 0,
+        chunksLoaded: 0,
+      }
+    }
+
+    const cam = this.render.getCameraPosition()
+    return {
+      fps: this.render.getApp().ticker.FPS,
+      cameraX: cam.x,
+      cameraY: cam.y,
+      zoom: this.render.getZoom(),
+      viewportWidth: Math.round(this.render.getApp().screen.width),
+      viewportHeight: Math.round(this.render.getApp().screen.height),
+      lastClickScreenX: 0,
+      lastClickScreenY: 0,
+      lastClickWorldX: 0,
+      lastClickWorldY: 0,
+      objectsCount: 0,
+      chunksLoaded: 0,
+    }
+  }
+}
+
+export const gameFacade = new GameFacade()
