@@ -1,4 +1,7 @@
 export { GameFacade, gameFacade } from './GameFacade'
 export { Render } from './Render'
 export { DebugOverlay } from './DebugOverlay'
+export { Chunk } from './Chunk'
+export * from './Tile'
+export * from './utils'
 export type { DebugInfo, ScreenPoint } from './types'
