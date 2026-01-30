@@ -37,8 +37,7 @@ export interface CreateCharacterResponse {
 }
 
 export interface EnterCharacterResponse {
-  ws_token: string
-  character_id: number
+  auth_token: string
 }
 
 export interface ApiError {
