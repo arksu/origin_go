@@ -61,6 +61,18 @@ export class GameFacade {
     this.render?.updateDebugStats(objectsCount, chunksLoaded)
   }
 
+  setWorldParams(coordPerTile: number, chunkSize: number): void {
+    this.render?.setWorldParams(coordPerTile, chunkSize)
+  }
+
+  loadChunk(x: number, y: number, tiles: Uint8Array): void {
+    this.render?.loadChunk(x, y, tiles)
+  }
+
+  unloadChunk(x: number, y: number): void {
+    this.render?.unloadChunk(x, y)
+  }
+
   getDebugInfo(): DebugInfo {
     if (!this.render) {
       return {
