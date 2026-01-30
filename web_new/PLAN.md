@@ -203,7 +203,7 @@ class MessageLog {
 
 ---
 
-## Этап 4: Базовый рендер (PixiJS)
+## ✅ Этап 4: Базовый рендер (PixiJS)
 
 ### Цель
 Инициализировать PixiJS и отобразить пустую сцену с debug overlay.
@@ -326,13 +326,13 @@ class DebugOverlay {
    - Не импортировать PIXI напрямую!
 
 ### Критерии завершения
-- [ ] Canvas отображается на странице игры
-- [ ] PixiJS инициализируется без ошибок
-- [ ] Уход со страницы `/game` → корректный destroy (без утечек)
-- [ ] Повторный вход на `/game` → reinit без ошибок
-- [ ] Resize работает, картинка не мыльная на Retina
-- [ ] Debug overlay показывает FPS, viewport, click coords
-- [ ] Клик по canvas регистрируется (в debug overlay)
+- [x] Canvas отображается на странице игры
+- [x] PixiJS инициализируется без ошибок
+- [x] Уход со страницы `/game` → корректный destroy (без утечек)
+- [x] Повторный вход на `/game` → reinit без ошибок
+- [x] Resize работает, картинка не мыльная на Retina
+- [x] Debug overlay показывает FPS, viewport, click coords
+- [x] Клик по canvas регистрируется (в debug overlay)
 
 ---
 
