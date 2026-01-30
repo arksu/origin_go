@@ -3,7 +3,7 @@ import { DebugOverlay } from './DebugOverlay'
 import { ChunkManager } from './ChunkManager'
 import { ObjectManager } from './ObjectManager'
 import { moveController } from './MoveController'
-import { coordGame2Screen } from './utils/coordConvert'
+import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
 import { config } from '@/config'
 import type { DebugInfo, ScreenPoint } from './types'
@@ -114,18 +114,20 @@ export class Render {
     for (const [entityId, renderPos] of positions) {
       this.objectManager.updateObjectPosition(entityId, renderPos.x, renderPos.y)
 
-      // Update camera to follow player
+      // Update camera to follow player (cameraX/Y should be world coordinates)
       if (this.playerEntityId !== null && entityId === this.playerEntityId) {
-        const screenPos = coordGame2Screen(renderPos.x, renderPos.y)
-        this.cameraX = screenPos.x
-        this.cameraY = screenPos.y
+        this.cameraX = renderPos.x
+        this.cameraY = renderPos.y
       }
     }
   }
 
   private updateCamera(): void {
-    this.mapContainer.x = -this.cameraX * this.zoom + this.app.screen.width / 2
-    this.mapContainer.y = -this.cameraY * this.zoom + this.app.screen.height / 2
+    // Convert world coordinates to screen coordinates for camera positioning
+    const screenPos = coordGame2Screen(this.cameraX, this.cameraY)
+
+    this.mapContainer.x = -screenPos.x * this.zoom + this.app.screen.width / 2
+    this.mapContainer.y = -screenPos.y * this.zoom + this.app.screen.height / 2
     this.mapContainer.scale.set(this.zoom)
 
     this.objectsContainer.x = this.mapContainer.x
@@ -167,14 +169,24 @@ export class Render {
   }
 
   screenToWorld(screenX: number, screenY: number): ScreenPoint {
-    const worldX = (screenX - this.app.screen.width / 2) / this.zoom + this.cameraX
-    const worldY = (screenY - this.app.screen.height / 2) / this.zoom + this.cameraY
-    return { x: worldX, y: worldY }
+    // Convert screen coordinates to world coordinates using isometric projection
+    const cameraScreenPos = coordGame2Screen(this.cameraX, this.cameraY)
+
+    // Convert screen coordinates to game coordinates relative to camera
+    const relativeScreenX = (screenX - this.app.screen.width / 2) / this.zoom + cameraScreenPos.x
+    const relativeScreenY = (screenY - this.app.screen.height / 2) / this.zoom + cameraScreenPos.y
+
+    // Convert screen coordinates to world coordinates
+    return coordScreen2Game(relativeScreenX, relativeScreenY)
   }
 
   worldToScreen(worldX: number, worldY: number): ScreenPoint {
-    const screenX = (worldX - this.cameraX) * this.zoom + this.app.screen.width / 2
-    const screenY = (worldY - this.cameraY) * this.zoom + this.app.screen.height / 2
+    // Convert world coordinates to screen coordinates using isometric projection
+    const screenPos = coordGame2Screen(worldX, worldY)
+    const cameraScreenPos = coordGame2Screen(this.cameraX, this.cameraY)
+
+    const screenX = (screenPos.x - cameraScreenPos.x) * this.zoom + this.app.screen.width / 2
+    const screenY = (screenPos.y - cameraScreenPos.y) * this.zoom + this.app.screen.height / 2
     return { x: screenX, y: screenY }
   }
 
