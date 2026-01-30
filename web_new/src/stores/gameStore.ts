@@ -19,6 +19,7 @@ export interface EntityMovement {
 export interface GameObjectData {
   entityId: number
   objectType: number
+  resourcePath: string
   position: { x: number; y: number }
   size: { x: number; y: number }
   movement?: EntityMovement

@@ -22,7 +22,7 @@ const error = ref('')
 const fieldErrors = ref<Record<string, string>>({})
 
 const isFormValid = computed(() => {
-  return form.value.login.trim().length >= 3 && form.value.password.length >= 4
+  return form.value.login.trim().length >= 3 && form.value.password.length > 0
 })
 
 async function handleSubmit() {

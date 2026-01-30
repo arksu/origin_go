@@ -390,7 +390,8 @@ message S2C_ChunkUnload {
 message S2C_ObjectSpawn {
   uint64 entity_id = 1;
   int32 object_type = 2;
-  EntityPosition position = 3;
+  string resource_path = 3;
+  EntityPosition position = 4;
 }
 
 message S2C_ObjectDespawn {

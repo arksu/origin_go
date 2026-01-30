@@ -2776,7 +2776,8 @@ type S2C_ObjectSpawn struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EntityId      uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
 	ObjectType    int32                  `protobuf:"varint,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	Position      *EntityPosition        `protobuf:"bytes,3,opt,name=position,proto3" json:"position,omitempty"`
+	ResourcePath  string                 `protobuf:"bytes,3,opt,name=resource_path,json=resourcePath,proto3" json:"resource_path,omitempty"`
+	Position      *EntityPosition        `protobuf:"bytes,4,opt,name=position,proto3" json:"position,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2823,6 +2824,13 @@ func (x *S2C_ObjectSpawn) GetObjectType() int32 {
 		return x.ObjectType
 	}
 	return 0
+}
+
+func (x *S2C_ObjectSpawn) GetResourcePath() string {
+	if x != nil {
+		return x.ResourcePath
+	}
+	return ""
 }
 
 func (x *S2C_ObjectSpawn) GetPosition() *EntityPosition {
@@ -3740,12 +3748,13 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rS2C_ChunkLoad\x12&\n" +
 	"\x05chunk\x18\x01 \x01(\v2\x10.proto.ChunkDataR\x05chunk\":\n" +
 	"\x0fS2C_ChunkUnload\x12'\n" +
-	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\x82\x01\n" +
+	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\xa7\x01\n" +
 	"\x0fS2C_ObjectSpawn\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x1f\n" +
 	"\vobject_type\x18\x02 \x01(\x05R\n" +
-	"objectType\x121\n" +
-	"\bposition\x18\x03 \x01(\v2\x15.proto.EntityPositionR\bposition\"0\n" +
+	"objectType\x12#\n" +
+	"\rresource_path\x18\x03 \x01(\tR\fresourcePath\x121\n" +
+	"\bposition\x18\x04 \x01(\v2\x15.proto.EntityPositionR\bposition\"0\n" +
 	"\x11S2C_ObjectDespawn\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"`\n" +
 	"\x0eS2C_ObjectMove\x12\x1b\n" +

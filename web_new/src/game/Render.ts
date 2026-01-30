@@ -1,6 +1,7 @@
 import { Application, Container } from 'pixi.js'
 import { DebugOverlay } from './DebugOverlay'
 import { ChunkManager } from './ChunkManager'
+import { ObjectManager } from './ObjectManager'
 import { config } from '@/config'
 import type { DebugInfo, ScreenPoint } from './types'
 
@@ -11,6 +12,7 @@ export class Render {
   private uiContainer: Container
   private debugOverlay: DebugOverlay
   private chunkManager: ChunkManager
+  private objectManager: ObjectManager
 
   private cameraX: number = 0
   private cameraY: number = 0
@@ -32,6 +34,7 @@ export class Render {
     this.uiContainer = new Container()
     this.debugOverlay = new DebugOverlay()
     this.chunkManager = new ChunkManager()
+    this.objectManager = new ObjectManager()
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -53,6 +56,7 @@ export class Render {
 
     await this.chunkManager.init()
     this.mapContainer.addChild(this.chunkManager.getContainer())
+    this.objectsContainer.addChild(this.objectManager.getContainer())
 
     this.app.stage.addChild(this.mapContainer)
     this.app.stage.addChild(this.objectsContainer)
@@ -90,6 +94,7 @@ export class Render {
   }
 
   private update(): void {
+    this.objectManager.update()
     this.updateCamera()
     this.updateDebugOverlay()
   }
@@ -118,7 +123,7 @@ export class Render {
       lastClickScreenY: this.lastClickScreen.y,
       lastClickWorldX: this.lastClickWorld.x,
       lastClickWorldY: this.lastClickWorld.y,
-      objectsCount: 0,
+      objectsCount: this.objectManager.getObjectCount(),
       chunksLoaded: this.chunkManager.getLoadedChunksCount(),
     }
 
@@ -182,6 +187,18 @@ export class Render {
     this.chunkManager.unloadChunk(x, y)
   }
 
+  spawnObject(options: { entityId: number; objectType: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {
+    this.objectManager.spawnObject(options)
+  }
+
+  despawnObject(entityId: number): void {
+    this.objectManager.despawnObject(entityId)
+  }
+
+  updateObjectPosition(entityId: number, x: number, y: number): void {
+    this.objectManager.updateObjectPosition(entityId, x, y)
+  }
+
   onPointerClick(callback: (screen: ScreenPoint) => void): void {
     this.onClickCallback = callback
   }
@@ -219,6 +236,7 @@ export class Render {
     }
 
     this.chunkManager.destroy()
+    this.objectManager.destroy()
     this.debugOverlay.destroy()
     this.app.destroy(true, { children: true, texture: true })
 

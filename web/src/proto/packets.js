@@ -1080,6 +1080,24 @@ export const proto = $root.proto = (() => {
     })();
 
     /**
+     * InventoryKind enum.
+     * @name proto.InventoryKind
+     * @enum {number}
+     * @property {number} INVENTORY_KIND_GRID=0 INVENTORY_KIND_GRID value
+     * @property {number} INVENTORY_KIND_HAND=1 INVENTORY_KIND_HAND value
+     * @property {number} INVENTORY_KIND_EQUIPMENT=2 INVENTORY_KIND_EQUIPMENT value
+     * @property {number} INVENTORY_KIND_DROPPED_ITEM=3 INVENTORY_KIND_DROPPED_ITEM value
+     */
+    proto.InventoryKind = (function() {
+        const valuesById = {}, values = Object.create(valuesById);
+        values[valuesById[0] = "INVENTORY_KIND_GRID"] = 0;
+        values[valuesById[1] = "INVENTORY_KIND_HAND"] = 1;
+        values[valuesById[2] = "INVENTORY_KIND_EQUIPMENT"] = 2;
+        values[valuesById[3] = "INVENTORY_KIND_DROPPED_ITEM"] = 3;
+        return values;
+    })();
+
+    /**
      * ErrorCode enum.
      * @name proto.ErrorCode
      * @enum {number}
@@ -1095,9 +1113,11 @@ export const proto = $root.proto = (() => {
      * @property {number} ERROR_CODE_INSUFFICIENT_STAMINA=9 ERROR_CODE_INSUFFICIENT_STAMINA value
      * @property {number} ERROR_CODE_TARGET_INVALID=10 ERROR_CODE_TARGET_INVALID value
      * @property {number} ERROR_CODE_PATH_BLOCKED=11 ERROR_CODE_PATH_BLOCKED value
-     * @property {number} ERROR_CODE_ALREADY_IN_PROGRESS=12 ERROR_CODE_ALREADY_IN_PROGRESS value
+     * @property {number} ERROR_CODE_TIMEOUT_EXCEEDED=12 ERROR_CODE_TIMEOUT_EXCEEDED value
      * @property {number} ERROR_CODE_BUILDING_INCOMPLETE=13 ERROR_CODE_BUILDING_INCOMPLETE value
      * @property {number} ERROR_CODE_RECIPE_UNKNOWN=14 ERROR_CODE_RECIPE_UNKNOWN value
+     * @property {number} ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED=15 ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED value
+     * @property {number} ERROR_CODE_INTERNAL_ERROR=16 ERROR_CODE_INTERNAL_ERROR value
      */
     proto.ErrorCode = (function() {
         const valuesById = {}, values = Object.create(valuesById);
@@ -1113,34 +1133,46 @@ export const proto = $root.proto = (() => {
         values[valuesById[9] = "ERROR_CODE_INSUFFICIENT_STAMINA"] = 9;
         values[valuesById[10] = "ERROR_CODE_TARGET_INVALID"] = 10;
         values[valuesById[11] = "ERROR_CODE_PATH_BLOCKED"] = 11;
-        values[valuesById[12] = "ERROR_CODE_ALREADY_IN_PROGRESS"] = 12;
+        values[valuesById[12] = "ERROR_CODE_TIMEOUT_EXCEEDED"] = 12;
         values[valuesById[13] = "ERROR_CODE_BUILDING_INCOMPLETE"] = 13;
         values[valuesById[14] = "ERROR_CODE_RECIPE_UNKNOWN"] = 14;
+        values[valuesById[15] = "ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED"] = 15;
+        values[valuesById[16] = "ERROR_CODE_INTERNAL_ERROR"] = 16;
         return values;
     })();
 
-    proto.Item = (function() {
+    /**
+     * WarningCode enum.
+     * @name proto.WarningCode
+     * @enum {number}
+     * @property {number} WARN_INPUT_QUEUE_OVERFLOW=0 WARN_INPUT_QUEUE_OVERFLOW value
+     */
+    proto.WarningCode = (function() {
+        const valuesById = {}, values = Object.create(valuesById);
+        values[valuesById[0] = "WARN_INPUT_QUEUE_OVERFLOW"] = 0;
+        return values;
+    })();
+
+    proto.InventoryRef = (function() {
 
         /**
-         * Properties of an Item.
+         * Properties of an InventoryRef.
          * @memberof proto
-         * @interface IItem
-         * @property {number|null} [itemId] Item itemId
-         * @property {string|null} [resource] Item resource
-         * @property {number|null} [quality] Item quality
-         * @property {number|null} [quantity] Item quantity
-         * @property {number|null} [durability] Item durability
+         * @interface IInventoryRef
+         * @property {proto.InventoryKind|null} [kind] InventoryRef kind
+         * @property {number|Long|null} [ownerEntityId] InventoryRef ownerEntityId
+         * @property {number|null} [inventoryKey] InventoryRef inventoryKey
          */
 
         /**
-         * Constructs a new Item.
+         * Constructs a new InventoryRef.
          * @memberof proto
-         * @classdesc Represents an Item.
-         * @implements IItem
+         * @classdesc Represents an InventoryRef.
+         * @implements IInventoryRef
          * @constructor
-         * @param {proto.IItem=} [properties] Properties to set
+         * @param {proto.IInventoryRef=} [properties] Properties to set
          */
-        function Item(properties) {
+        function InventoryRef(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -1148,133 +1180,105 @@ export const proto = $root.proto = (() => {
         }
 
         /**
-         * Item itemId.
-         * @member {number} itemId
-         * @memberof proto.Item
+         * InventoryRef kind.
+         * @member {proto.InventoryKind} kind
+         * @memberof proto.InventoryRef
          * @instance
          */
-        Item.prototype.itemId = 0;
+        InventoryRef.prototype.kind = 0;
 
         /**
-         * Item resource.
-         * @member {string} resource
-         * @memberof proto.Item
+         * InventoryRef ownerEntityId.
+         * @member {number|Long} ownerEntityId
+         * @memberof proto.InventoryRef
          * @instance
          */
-        Item.prototype.resource = "";
+        InventoryRef.prototype.ownerEntityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
-         * Item quality.
-         * @member {number} quality
-         * @memberof proto.Item
+         * InventoryRef inventoryKey.
+         * @member {number} inventoryKey
+         * @memberof proto.InventoryRef
          * @instance
          */
-        Item.prototype.quality = 0;
+        InventoryRef.prototype.inventoryKey = 0;
 
         /**
-         * Item quantity.
-         * @member {number} quantity
-         * @memberof proto.Item
-         * @instance
-         */
-        Item.prototype.quantity = 0;
-
-        /**
-         * Item durability.
-         * @member {number} durability
-         * @memberof proto.Item
-         * @instance
-         */
-        Item.prototype.durability = 0;
-
-        /**
-         * Creates a new Item instance using the specified properties.
+         * Creates a new InventoryRef instance using the specified properties.
          * @function create
-         * @memberof proto.Item
+         * @memberof proto.InventoryRef
          * @static
-         * @param {proto.IItem=} [properties] Properties to set
-         * @returns {proto.Item} Item instance
+         * @param {proto.IInventoryRef=} [properties] Properties to set
+         * @returns {proto.InventoryRef} InventoryRef instance
          */
-        Item.create = function create(properties) {
-            return new Item(properties);
+        InventoryRef.create = function create(properties) {
+            return new InventoryRef(properties);
         };
 
         /**
-         * Encodes the specified Item message. Does not implicitly {@link proto.Item.verify|verify} messages.
+         * Encodes the specified InventoryRef message. Does not implicitly {@link proto.InventoryRef.verify|verify} messages.
          * @function encode
-         * @memberof proto.Item
+         * @memberof proto.InventoryRef
          * @static
-         * @param {proto.IItem} message Item message or plain object to encode
+         * @param {proto.IInventoryRef} message InventoryRef message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Item.encode = function encode(message, writer) {
+        InventoryRef.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.itemId != null && Object.hasOwnProperty.call(message, "itemId"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.itemId);
-            if (message.resource != null && Object.hasOwnProperty.call(message, "resource"))
-                writer.uint32(/* id 2, wireType 2 =*/18).string(message.resource);
-            if (message.quality != null && Object.hasOwnProperty.call(message, "quality"))
-                writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.quality);
-            if (message.quantity != null && Object.hasOwnProperty.call(message, "quantity"))
-                writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.quantity);
-            if (message.durability != null && Object.hasOwnProperty.call(message, "durability"))
-                writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.durability);
+            if (message.kind != null && Object.hasOwnProperty.call(message, "kind"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.kind);
+            if (message.ownerEntityId != null && Object.hasOwnProperty.call(message, "ownerEntityId"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.ownerEntityId);
+            if (message.inventoryKey != null && Object.hasOwnProperty.call(message, "inventoryKey"))
+                writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.inventoryKey);
             return writer;
         };
 
         /**
-         * Encodes the specified Item message, length delimited. Does not implicitly {@link proto.Item.verify|verify} messages.
+         * Encodes the specified InventoryRef message, length delimited. Does not implicitly {@link proto.InventoryRef.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof proto.Item
+         * @memberof proto.InventoryRef
          * @static
-         * @param {proto.IItem} message Item message or plain object to encode
+         * @param {proto.IInventoryRef} message InventoryRef message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Item.encodeDelimited = function encodeDelimited(message, writer) {
+        InventoryRef.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes an Item message from the specified reader or buffer.
+         * Decodes an InventoryRef message from the specified reader or buffer.
          * @function decode
-         * @memberof proto.Item
+         * @memberof proto.InventoryRef
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {proto.Item} Item
+         * @returns {proto.InventoryRef} InventoryRef
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Item.decode = function decode(reader, length, error) {
+        InventoryRef.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.Item();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryRef();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
                 case 1: {
-                        message.itemId = reader.uint32();
+                        message.kind = reader.int32();
                         break;
                     }
                 case 2: {
-                        message.resource = reader.string();
+                        message.ownerEntityId = reader.uint64();
                         break;
                     }
                 case 3: {
-                        message.quality = reader.uint32();
-                        break;
-                    }
-                case 4: {
-                        message.quantity = reader.uint32();
-                        break;
-                    }
-                case 5: {
-                        message.durability = reader.uint32();
+                        message.inventoryKey = reader.uint32();
                         break;
                     }
                 default:
@@ -1286,35 +1290,393 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Decodes an Item message from the specified reader or buffer, length delimited.
+         * Decodes an InventoryRef message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof proto.Item
+         * @memberof proto.InventoryRef
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.Item} Item
+         * @returns {proto.InventoryRef} InventoryRef
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Item.decodeDelimited = function decodeDelimited(reader) {
+        InventoryRef.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies an Item message.
+         * Verifies an InventoryRef message.
          * @function verify
-         * @memberof proto.Item
+         * @memberof proto.InventoryRef
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        Item.verify = function verify(message) {
+        InventoryRef.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.kind != null && message.hasOwnProperty("kind"))
+                switch (message.kind) {
+                default:
+                    return "kind: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    break;
+                }
+            if (message.ownerEntityId != null && message.hasOwnProperty("ownerEntityId"))
+                if (!$util.isInteger(message.ownerEntityId) && !(message.ownerEntityId && $util.isInteger(message.ownerEntityId.low) && $util.isInteger(message.ownerEntityId.high)))
+                    return "ownerEntityId: integer|Long expected";
+            if (message.inventoryKey != null && message.hasOwnProperty("inventoryKey"))
+                if (!$util.isInteger(message.inventoryKey))
+                    return "inventoryKey: integer expected";
+            return null;
+        };
+
+        /**
+         * Creates an InventoryRef message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.InventoryRef
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.InventoryRef} InventoryRef
+         */
+        InventoryRef.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryRef)
+                return object;
+            let message = new $root.proto.InventoryRef();
+            switch (object.kind) {
+            default:
+                if (typeof object.kind === "number") {
+                    message.kind = object.kind;
+                    break;
+                }
+                break;
+            case "INVENTORY_KIND_GRID":
+            case 0:
+                message.kind = 0;
+                break;
+            case "INVENTORY_KIND_HAND":
+            case 1:
+                message.kind = 1;
+                break;
+            case "INVENTORY_KIND_EQUIPMENT":
+            case 2:
+                message.kind = 2;
+                break;
+            case "INVENTORY_KIND_DROPPED_ITEM":
+            case 3:
+                message.kind = 3;
+                break;
+            }
+            if (object.ownerEntityId != null)
+                if ($util.Long)
+                    (message.ownerEntityId = $util.Long.fromValue(object.ownerEntityId)).unsigned = true;
+                else if (typeof object.ownerEntityId === "string")
+                    message.ownerEntityId = parseInt(object.ownerEntityId, 10);
+                else if (typeof object.ownerEntityId === "number")
+                    message.ownerEntityId = object.ownerEntityId;
+                else if (typeof object.ownerEntityId === "object")
+                    message.ownerEntityId = new $util.LongBits(object.ownerEntityId.low >>> 0, object.ownerEntityId.high >>> 0).toNumber(true);
+            if (object.inventoryKey != null)
+                message.inventoryKey = object.inventoryKey >>> 0;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an InventoryRef message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.InventoryRef
+         * @static
+         * @param {proto.InventoryRef} message InventoryRef
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        InventoryRef.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.kind = options.enums === String ? "INVENTORY_KIND_GRID" : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.ownerEntityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.ownerEntityId = options.longs === String ? "0" : 0;
+                object.inventoryKey = 0;
+            }
+            if (message.kind != null && message.hasOwnProperty("kind"))
+                object.kind = options.enums === String ? $root.proto.InventoryKind[message.kind] === undefined ? message.kind : $root.proto.InventoryKind[message.kind] : message.kind;
+            if (message.ownerEntityId != null && message.hasOwnProperty("ownerEntityId"))
+                if (typeof message.ownerEntityId === "number")
+                    object.ownerEntityId = options.longs === String ? String(message.ownerEntityId) : message.ownerEntityId;
+                else
+                    object.ownerEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.ownerEntityId) : options.longs === Number ? new $util.LongBits(message.ownerEntityId.low >>> 0, message.ownerEntityId.high >>> 0).toNumber(true) : message.ownerEntityId;
+            if (message.inventoryKey != null && message.hasOwnProperty("inventoryKey"))
+                object.inventoryKey = message.inventoryKey;
+            return object;
+        };
+
+        /**
+         * Converts this InventoryRef to JSON.
+         * @function toJSON
+         * @memberof proto.InventoryRef
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        InventoryRef.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for InventoryRef
+         * @function getTypeUrl
+         * @memberof proto.InventoryRef
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        InventoryRef.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.InventoryRef";
+        };
+
+        return InventoryRef;
+    })();
+
+    proto.ItemInstance = (function() {
+
+        /**
+         * Properties of an ItemInstance.
+         * @memberof proto
+         * @interface IItemInstance
+         * @property {number|Long|null} [itemId] ItemInstance itemId
+         * @property {number|null} [typeId] ItemInstance typeId
+         * @property {string|null} [resource] ItemInstance resource
+         * @property {number|null} [quality] ItemInstance quality
+         * @property {number|null} [quantity] ItemInstance quantity
+         * @property {number|null} [w] ItemInstance w
+         * @property {number|null} [h] ItemInstance h
+         */
+
+        /**
+         * Constructs a new ItemInstance.
+         * @memberof proto
+         * @classdesc Represents an ItemInstance.
+         * @implements IItemInstance
+         * @constructor
+         * @param {proto.IItemInstance=} [properties] Properties to set
+         */
+        function ItemInstance(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * ItemInstance itemId.
+         * @member {number|Long} itemId
+         * @memberof proto.ItemInstance
+         * @instance
+         */
+        ItemInstance.prototype.itemId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * ItemInstance typeId.
+         * @member {number} typeId
+         * @memberof proto.ItemInstance
+         * @instance
+         */
+        ItemInstance.prototype.typeId = 0;
+
+        /**
+         * ItemInstance resource.
+         * @member {string} resource
+         * @memberof proto.ItemInstance
+         * @instance
+         */
+        ItemInstance.prototype.resource = "";
+
+        /**
+         * ItemInstance quality.
+         * @member {number} quality
+         * @memberof proto.ItemInstance
+         * @instance
+         */
+        ItemInstance.prototype.quality = 0;
+
+        /**
+         * ItemInstance quantity.
+         * @member {number} quantity
+         * @memberof proto.ItemInstance
+         * @instance
+         */
+        ItemInstance.prototype.quantity = 0;
+
+        /**
+         * ItemInstance w.
+         * @member {number} w
+         * @memberof proto.ItemInstance
+         * @instance
+         */
+        ItemInstance.prototype.w = 0;
+
+        /**
+         * ItemInstance h.
+         * @member {number} h
+         * @memberof proto.ItemInstance
+         * @instance
+         */
+        ItemInstance.prototype.h = 0;
+
+        /**
+         * Creates a new ItemInstance instance using the specified properties.
+         * @function create
+         * @memberof proto.ItemInstance
+         * @static
+         * @param {proto.IItemInstance=} [properties] Properties to set
+         * @returns {proto.ItemInstance} ItemInstance instance
+         */
+        ItemInstance.create = function create(properties) {
+            return new ItemInstance(properties);
+        };
+
+        /**
+         * Encodes the specified ItemInstance message. Does not implicitly {@link proto.ItemInstance.verify|verify} messages.
+         * @function encode
+         * @memberof proto.ItemInstance
+         * @static
+         * @param {proto.IItemInstance} message ItemInstance message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        ItemInstance.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.itemId != null && Object.hasOwnProperty.call(message, "itemId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.itemId);
+            if (message.typeId != null && Object.hasOwnProperty.call(message, "typeId"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.typeId);
+            if (message.resource != null && Object.hasOwnProperty.call(message, "resource"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.resource);
+            if (message.quality != null && Object.hasOwnProperty.call(message, "quality"))
+                writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.quality);
+            if (message.quantity != null && Object.hasOwnProperty.call(message, "quantity"))
+                writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.quantity);
+            if (message.w != null && Object.hasOwnProperty.call(message, "w"))
+                writer.uint32(/* id 10, wireType 0 =*/80).uint32(message.w);
+            if (message.h != null && Object.hasOwnProperty.call(message, "h"))
+                writer.uint32(/* id 11, wireType 0 =*/88).uint32(message.h);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified ItemInstance message, length delimited. Does not implicitly {@link proto.ItemInstance.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.ItemInstance
+         * @static
+         * @param {proto.IItemInstance} message ItemInstance message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        ItemInstance.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an ItemInstance message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.ItemInstance
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.ItemInstance} ItemInstance
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        ItemInstance.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.ItemInstance();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.itemId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.typeId = reader.uint32();
+                        break;
+                    }
+                case 3: {
+                        message.resource = reader.string();
+                        break;
+                    }
+                case 4: {
+                        message.quality = reader.uint32();
+                        break;
+                    }
+                case 5: {
+                        message.quantity = reader.uint32();
+                        break;
+                    }
+                case 10: {
+                        message.w = reader.uint32();
+                        break;
+                    }
+                case 11: {
+                        message.h = reader.uint32();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an ItemInstance message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.ItemInstance
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.ItemInstance} ItemInstance
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        ItemInstance.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an ItemInstance message.
+         * @function verify
+         * @memberof proto.ItemInstance
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        ItemInstance.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.itemId != null && message.hasOwnProperty("itemId"))
-                if (!$util.isInteger(message.itemId))
-                    return "itemId: integer expected";
+                if (!$util.isInteger(message.itemId) && !(message.itemId && $util.isInteger(message.itemId.low) && $util.isInteger(message.itemId.high)))
+                    return "itemId: integer|Long expected";
+            if (message.typeId != null && message.hasOwnProperty("typeId"))
+                if (!$util.isInteger(message.typeId))
+                    return "typeId: integer expected";
             if (message.resource != null && message.hasOwnProperty("resource"))
                 if (!$util.isString(message.resource))
                     return "resource: string expected";
@@ -1324,119 +1686,146 @@ export const proto = $root.proto = (() => {
             if (message.quantity != null && message.hasOwnProperty("quantity"))
                 if (!$util.isInteger(message.quantity))
                     return "quantity: integer expected";
-            if (message.durability != null && message.hasOwnProperty("durability"))
-                if (!$util.isInteger(message.durability))
-                    return "durability: integer expected";
+            if (message.w != null && message.hasOwnProperty("w"))
+                if (!$util.isInteger(message.w))
+                    return "w: integer expected";
+            if (message.h != null && message.hasOwnProperty("h"))
+                if (!$util.isInteger(message.h))
+                    return "h: integer expected";
             return null;
         };
 
         /**
-         * Creates an Item message from a plain object. Also converts values to their respective internal types.
+         * Creates an ItemInstance message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof proto.Item
+         * @memberof proto.ItemInstance
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {proto.Item} Item
+         * @returns {proto.ItemInstance} ItemInstance
          */
-        Item.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.Item)
+        ItemInstance.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.ItemInstance)
                 return object;
-            let message = new $root.proto.Item();
+            let message = new $root.proto.ItemInstance();
             if (object.itemId != null)
-                message.itemId = object.itemId >>> 0;
+                if ($util.Long)
+                    (message.itemId = $util.Long.fromValue(object.itemId)).unsigned = true;
+                else if (typeof object.itemId === "string")
+                    message.itemId = parseInt(object.itemId, 10);
+                else if (typeof object.itemId === "number")
+                    message.itemId = object.itemId;
+                else if (typeof object.itemId === "object")
+                    message.itemId = new $util.LongBits(object.itemId.low >>> 0, object.itemId.high >>> 0).toNumber(true);
+            if (object.typeId != null)
+                message.typeId = object.typeId >>> 0;
             if (object.resource != null)
                 message.resource = String(object.resource);
             if (object.quality != null)
                 message.quality = object.quality >>> 0;
             if (object.quantity != null)
                 message.quantity = object.quantity >>> 0;
-            if (object.durability != null)
-                message.durability = object.durability >>> 0;
+            if (object.w != null)
+                message.w = object.w >>> 0;
+            if (object.h != null)
+                message.h = object.h >>> 0;
             return message;
         };
 
         /**
-         * Creates a plain object from an Item message. Also converts values to other types if specified.
+         * Creates a plain object from an ItemInstance message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof proto.Item
+         * @memberof proto.ItemInstance
          * @static
-         * @param {proto.Item} message Item
+         * @param {proto.ItemInstance} message ItemInstance
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        Item.toObject = function toObject(message, options) {
+        ItemInstance.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
             if (options.defaults) {
-                object.itemId = 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.itemId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.itemId = options.longs === String ? "0" : 0;
+                object.typeId = 0;
                 object.resource = "";
                 object.quality = 0;
                 object.quantity = 0;
-                object.durability = 0;
+                object.w = 0;
+                object.h = 0;
             }
             if (message.itemId != null && message.hasOwnProperty("itemId"))
-                object.itemId = message.itemId;
+                if (typeof message.itemId === "number")
+                    object.itemId = options.longs === String ? String(message.itemId) : message.itemId;
+                else
+                    object.itemId = options.longs === String ? $util.Long.prototype.toString.call(message.itemId) : options.longs === Number ? new $util.LongBits(message.itemId.low >>> 0, message.itemId.high >>> 0).toNumber(true) : message.itemId;
+            if (message.typeId != null && message.hasOwnProperty("typeId"))
+                object.typeId = message.typeId;
             if (message.resource != null && message.hasOwnProperty("resource"))
                 object.resource = message.resource;
             if (message.quality != null && message.hasOwnProperty("quality"))
                 object.quality = message.quality;
             if (message.quantity != null && message.hasOwnProperty("quantity"))
                 object.quantity = message.quantity;
-            if (message.durability != null && message.hasOwnProperty("durability"))
-                object.durability = message.durability;
+            if (message.w != null && message.hasOwnProperty("w"))
+                object.w = message.w;
+            if (message.h != null && message.hasOwnProperty("h"))
+                object.h = message.h;
             return object;
         };
 
         /**
-         * Converts this Item to JSON.
+         * Converts this ItemInstance to JSON.
          * @function toJSON
-         * @memberof proto.Item
+         * @memberof proto.ItemInstance
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        Item.prototype.toJSON = function toJSON() {
+        ItemInstance.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
         /**
-         * Gets the default type url for Item
+         * Gets the default type url for ItemInstance
          * @function getTypeUrl
-         * @memberof proto.Item
+         * @memberof proto.ItemInstance
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        Item.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        ItemInstance.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/proto.Item";
+            return typeUrlPrefix + "/proto.ItemInstance";
         };
 
-        return Item;
+        return ItemInstance;
     })();
 
-    proto.InventorySlot = (function() {
+    proto.GridItem = (function() {
 
         /**
-         * Properties of an InventorySlot.
+         * Properties of a GridItem.
          * @memberof proto
-         * @interface IInventorySlot
-         * @property {number|null} [x] InventorySlot x
-         * @property {number|null} [y] InventorySlot y
-         * @property {proto.IItem|null} [item] InventorySlot item
+         * @interface IGridItem
+         * @property {number|null} [x] GridItem x
+         * @property {number|null} [y] GridItem y
+         * @property {proto.IItemInstance|null} [item] GridItem item
          */
 
         /**
-         * Constructs a new InventorySlot.
+         * Constructs a new GridItem.
          * @memberof proto
-         * @classdesc Represents an InventorySlot.
-         * @implements IInventorySlot
+         * @classdesc Represents a GridItem.
+         * @implements IGridItem
          * @constructor
-         * @param {proto.IInventorySlot=} [properties] Properties to set
+         * @param {proto.IGridItem=} [properties] Properties to set
          */
-        function InventorySlot(properties) {
+        function GridItem(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -1444,51 +1833,51 @@ export const proto = $root.proto = (() => {
         }
 
         /**
-         * InventorySlot x.
+         * GridItem x.
          * @member {number} x
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @instance
          */
-        InventorySlot.prototype.x = 0;
+        GridItem.prototype.x = 0;
 
         /**
-         * InventorySlot y.
+         * GridItem y.
          * @member {number} y
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @instance
          */
-        InventorySlot.prototype.y = 0;
+        GridItem.prototype.y = 0;
 
         /**
-         * InventorySlot item.
-         * @member {proto.IItem|null|undefined} item
-         * @memberof proto.InventorySlot
+         * GridItem item.
+         * @member {proto.IItemInstance|null|undefined} item
+         * @memberof proto.GridItem
          * @instance
          */
-        InventorySlot.prototype.item = null;
+        GridItem.prototype.item = null;
 
         /**
-         * Creates a new InventorySlot instance using the specified properties.
+         * Creates a new GridItem instance using the specified properties.
          * @function create
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
-         * @param {proto.IInventorySlot=} [properties] Properties to set
-         * @returns {proto.InventorySlot} InventorySlot instance
+         * @param {proto.IGridItem=} [properties] Properties to set
+         * @returns {proto.GridItem} GridItem instance
          */
-        InventorySlot.create = function create(properties) {
-            return new InventorySlot(properties);
+        GridItem.create = function create(properties) {
+            return new GridItem(properties);
         };
 
         /**
-         * Encodes the specified InventorySlot message. Does not implicitly {@link proto.InventorySlot.verify|verify} messages.
+         * Encodes the specified GridItem message. Does not implicitly {@link proto.GridItem.verify|verify} messages.
          * @function encode
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
-         * @param {proto.IInventorySlot} message InventorySlot message or plain object to encode
+         * @param {proto.IGridItem} message GridItem message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        InventorySlot.encode = function encode(message, writer) {
+        GridItem.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             if (message.x != null && Object.hasOwnProperty.call(message, "x"))
@@ -1496,38 +1885,38 @@ export const proto = $root.proto = (() => {
             if (message.y != null && Object.hasOwnProperty.call(message, "y"))
                 writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.y);
             if (message.item != null && Object.hasOwnProperty.call(message, "item"))
-                $root.proto.Item.encode(message.item, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                $root.proto.ItemInstance.encode(message.item, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
             return writer;
         };
 
         /**
-         * Encodes the specified InventorySlot message, length delimited. Does not implicitly {@link proto.InventorySlot.verify|verify} messages.
+         * Encodes the specified GridItem message, length delimited. Does not implicitly {@link proto.GridItem.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
-         * @param {proto.IInventorySlot} message InventorySlot message or plain object to encode
+         * @param {proto.IGridItem} message GridItem message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        InventorySlot.encodeDelimited = function encodeDelimited(message, writer) {
+        GridItem.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes an InventorySlot message from the specified reader or buffer.
+         * Decodes a GridItem message from the specified reader or buffer.
          * @function decode
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {proto.InventorySlot} InventorySlot
+         * @returns {proto.GridItem} GridItem
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        InventorySlot.decode = function decode(reader, length, error) {
+        GridItem.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventorySlot();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.GridItem();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 if (tag === error)
@@ -1542,7 +1931,7 @@ export const proto = $root.proto = (() => {
                         break;
                     }
                 case 3: {
-                        message.item = $root.proto.Item.decode(reader, reader.uint32());
+                        message.item = $root.proto.ItemInstance.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -1554,30 +1943,30 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Decodes an InventorySlot message from the specified reader or buffer, length delimited.
+         * Decodes a GridItem message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.InventorySlot} InventorySlot
+         * @returns {proto.GridItem} GridItem
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        InventorySlot.decodeDelimited = function decodeDelimited(reader) {
+        GridItem.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies an InventorySlot message.
+         * Verifies a GridItem message.
          * @function verify
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        InventorySlot.verify = function verify(message) {
+        GridItem.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.x != null && message.hasOwnProperty("x"))
@@ -1587,7 +1976,7 @@ export const proto = $root.proto = (() => {
                 if (!$util.isInteger(message.y))
                     return "y: integer expected";
             if (message.item != null && message.hasOwnProperty("item")) {
-                let error = $root.proto.Item.verify(message.item);
+                let error = $root.proto.ItemInstance.verify(message.item);
                 if (error)
                     return "item." + error;
             }
@@ -1595,39 +1984,39 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Creates an InventorySlot message from a plain object. Also converts values to their respective internal types.
+         * Creates a GridItem message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {proto.InventorySlot} InventorySlot
+         * @returns {proto.GridItem} GridItem
          */
-        InventorySlot.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.InventorySlot)
+        GridItem.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.GridItem)
                 return object;
-            let message = new $root.proto.InventorySlot();
+            let message = new $root.proto.GridItem();
             if (object.x != null)
                 message.x = object.x >>> 0;
             if (object.y != null)
                 message.y = object.y >>> 0;
             if (object.item != null) {
                 if (typeof object.item !== "object")
-                    throw TypeError(".proto.InventorySlot.item: object expected");
-                message.item = $root.proto.Item.fromObject(object.item);
+                    throw TypeError(".proto.GridItem.item: object expected");
+                message.item = $root.proto.ItemInstance.fromObject(object.item);
             }
             return message;
         };
 
         /**
-         * Creates a plain object from an InventorySlot message. Also converts values to other types if specified.
+         * Creates a plain object from a GridItem message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
-         * @param {proto.InventorySlot} message InventorySlot
+         * @param {proto.GridItem} message GridItem
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        InventorySlot.toObject = function toObject(message, options) {
+        GridItem.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
@@ -1641,60 +2030,60 @@ export const proto = $root.proto = (() => {
             if (message.y != null && message.hasOwnProperty("y"))
                 object.y = message.y;
             if (message.item != null && message.hasOwnProperty("item"))
-                object.item = $root.proto.Item.toObject(message.item, options);
+                object.item = $root.proto.ItemInstance.toObject(message.item, options);
             return object;
         };
 
         /**
-         * Converts this InventorySlot to JSON.
+         * Converts this GridItem to JSON.
          * @function toJSON
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        InventorySlot.prototype.toJSON = function toJSON() {
+        GridItem.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
         /**
-         * Gets the default type url for InventorySlot
+         * Gets the default type url for GridItem
          * @function getTypeUrl
-         * @memberof proto.InventorySlot
+         * @memberof proto.GridItem
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        InventorySlot.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        GridItem.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/proto.InventorySlot";
+            return typeUrlPrefix + "/proto.GridItem";
         };
 
-        return InventorySlot;
+        return GridItem;
     })();
 
-    proto.Inventory = (function() {
+    proto.InventoryGridState = (function() {
 
         /**
-         * Properties of an Inventory.
+         * Properties of an InventoryGridState.
          * @memberof proto
-         * @interface IInventory
-         * @property {number|null} [width] Inventory width
-         * @property {number|null} [height] Inventory height
-         * @property {Array.<proto.IInventorySlot>|null} [slots] Inventory slots
+         * @interface IInventoryGridState
+         * @property {number|null} [width] InventoryGridState width
+         * @property {number|null} [height] InventoryGridState height
+         * @property {Array.<proto.IGridItem>|null} [items] InventoryGridState items
          */
 
         /**
-         * Constructs a new Inventory.
+         * Constructs a new InventoryGridState.
          * @memberof proto
-         * @classdesc Represents an Inventory.
-         * @implements IInventory
+         * @classdesc Represents an InventoryGridState.
+         * @implements IInventoryGridState
          * @constructor
-         * @param {proto.IInventory=} [properties] Properties to set
+         * @param {proto.IInventoryGridState=} [properties] Properties to set
          */
-        function Inventory(properties) {
-            this.slots = [];
+        function InventoryGridState(properties) {
+            this.items = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -1702,91 +2091,91 @@ export const proto = $root.proto = (() => {
         }
 
         /**
-         * Inventory width.
+         * InventoryGridState width.
          * @member {number} width
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @instance
          */
-        Inventory.prototype.width = 0;
+        InventoryGridState.prototype.width = 0;
 
         /**
-         * Inventory height.
+         * InventoryGridState height.
          * @member {number} height
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @instance
          */
-        Inventory.prototype.height = 0;
+        InventoryGridState.prototype.height = 0;
 
         /**
-         * Inventory slots.
-         * @member {Array.<proto.IInventorySlot>} slots
-         * @memberof proto.Inventory
+         * InventoryGridState items.
+         * @member {Array.<proto.IGridItem>} items
+         * @memberof proto.InventoryGridState
          * @instance
          */
-        Inventory.prototype.slots = $util.emptyArray;
+        InventoryGridState.prototype.items = $util.emptyArray;
 
         /**
-         * Creates a new Inventory instance using the specified properties.
+         * Creates a new InventoryGridState instance using the specified properties.
          * @function create
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
-         * @param {proto.IInventory=} [properties] Properties to set
-         * @returns {proto.Inventory} Inventory instance
+         * @param {proto.IInventoryGridState=} [properties] Properties to set
+         * @returns {proto.InventoryGridState} InventoryGridState instance
          */
-        Inventory.create = function create(properties) {
-            return new Inventory(properties);
+        InventoryGridState.create = function create(properties) {
+            return new InventoryGridState(properties);
         };
 
         /**
-         * Encodes the specified Inventory message. Does not implicitly {@link proto.Inventory.verify|verify} messages.
+         * Encodes the specified InventoryGridState message. Does not implicitly {@link proto.InventoryGridState.verify|verify} messages.
          * @function encode
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
-         * @param {proto.IInventory} message Inventory message or plain object to encode
+         * @param {proto.IInventoryGridState} message InventoryGridState message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Inventory.encode = function encode(message, writer) {
+        InventoryGridState.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             if (message.width != null && Object.hasOwnProperty.call(message, "width"))
                 writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.width);
             if (message.height != null && Object.hasOwnProperty.call(message, "height"))
                 writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.height);
-            if (message.slots != null && message.slots.length)
-                for (let i = 0; i < message.slots.length; ++i)
-                    $root.proto.InventorySlot.encode(message.slots[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            if (message.items != null && message.items.length)
+                for (let i = 0; i < message.items.length; ++i)
+                    $root.proto.GridItem.encode(message.items[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
             return writer;
         };
 
         /**
-         * Encodes the specified Inventory message, length delimited. Does not implicitly {@link proto.Inventory.verify|verify} messages.
+         * Encodes the specified InventoryGridState message, length delimited. Does not implicitly {@link proto.InventoryGridState.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
-         * @param {proto.IInventory} message Inventory message or plain object to encode
+         * @param {proto.IInventoryGridState} message InventoryGridState message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Inventory.encodeDelimited = function encodeDelimited(message, writer) {
+        InventoryGridState.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes an Inventory message from the specified reader or buffer.
+         * Decodes an InventoryGridState message from the specified reader or buffer.
          * @function decode
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {proto.Inventory} Inventory
+         * @returns {proto.InventoryGridState} InventoryGridState
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Inventory.decode = function decode(reader, length, error) {
+        InventoryGridState.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.Inventory();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryGridState();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 if (tag === error)
@@ -1801,9 +2190,9 @@ export const proto = $root.proto = (() => {
                         break;
                     }
                 case 3: {
-                        if (!(message.slots && message.slots.length))
-                            message.slots = [];
-                        message.slots.push($root.proto.InventorySlot.decode(reader, reader.uint32()));
+                        if (!(message.items && message.items.length))
+                            message.items = [];
+                        message.items.push($root.proto.GridItem.decode(reader, reader.uint32()));
                         break;
                     }
                 default:
@@ -1815,30 +2204,30 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Decodes an Inventory message from the specified reader or buffer, length delimited.
+         * Decodes an InventoryGridState message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.Inventory} Inventory
+         * @returns {proto.InventoryGridState} InventoryGridState
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Inventory.decodeDelimited = function decodeDelimited(reader) {
+        InventoryGridState.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies an Inventory message.
+         * Verifies an InventoryGridState message.
          * @function verify
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        Inventory.verify = function verify(message) {
+        InventoryGridState.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.width != null && message.hasOwnProperty("width"))
@@ -1847,62 +2236,62 @@ export const proto = $root.proto = (() => {
             if (message.height != null && message.hasOwnProperty("height"))
                 if (!$util.isInteger(message.height))
                     return "height: integer expected";
-            if (message.slots != null && message.hasOwnProperty("slots")) {
-                if (!Array.isArray(message.slots))
-                    return "slots: array expected";
-                for (let i = 0; i < message.slots.length; ++i) {
-                    let error = $root.proto.InventorySlot.verify(message.slots[i]);
+            if (message.items != null && message.hasOwnProperty("items")) {
+                if (!Array.isArray(message.items))
+                    return "items: array expected";
+                for (let i = 0; i < message.items.length; ++i) {
+                    let error = $root.proto.GridItem.verify(message.items[i]);
                     if (error)
-                        return "slots." + error;
+                        return "items." + error;
                 }
             }
             return null;
         };
 
         /**
-         * Creates an Inventory message from a plain object. Also converts values to their respective internal types.
+         * Creates an InventoryGridState message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {proto.Inventory} Inventory
+         * @returns {proto.InventoryGridState} InventoryGridState
          */
-        Inventory.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.Inventory)
+        InventoryGridState.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryGridState)
                 return object;
-            let message = new $root.proto.Inventory();
+            let message = new $root.proto.InventoryGridState();
             if (object.width != null)
                 message.width = object.width >>> 0;
             if (object.height != null)
                 message.height = object.height >>> 0;
-            if (object.slots) {
-                if (!Array.isArray(object.slots))
-                    throw TypeError(".proto.Inventory.slots: array expected");
-                message.slots = [];
-                for (let i = 0; i < object.slots.length; ++i) {
-                    if (typeof object.slots[i] !== "object")
-                        throw TypeError(".proto.Inventory.slots: object expected");
-                    message.slots[i] = $root.proto.InventorySlot.fromObject(object.slots[i]);
+            if (object.items) {
+                if (!Array.isArray(object.items))
+                    throw TypeError(".proto.InventoryGridState.items: array expected");
+                message.items = [];
+                for (let i = 0; i < object.items.length; ++i) {
+                    if (typeof object.items[i] !== "object")
+                        throw TypeError(".proto.InventoryGridState.items: object expected");
+                    message.items[i] = $root.proto.GridItem.fromObject(object.items[i]);
                 }
             }
             return message;
         };
 
         /**
-         * Creates a plain object from an Inventory message. Also converts values to other types if specified.
+         * Creates a plain object from an InventoryGridState message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
-         * @param {proto.Inventory} message Inventory
+         * @param {proto.InventoryGridState} message InventoryGridState
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        Inventory.toObject = function toObject(message, options) {
+        InventoryGridState.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
             if (options.arrays || options.defaults)
-                object.slots = [];
+                object.items = [];
             if (options.defaults) {
                 object.width = 0;
                 object.height = 0;
@@ -1911,62 +2300,62 @@ export const proto = $root.proto = (() => {
                 object.width = message.width;
             if (message.height != null && message.hasOwnProperty("height"))
                 object.height = message.height;
-            if (message.slots && message.slots.length) {
-                object.slots = [];
-                for (let j = 0; j < message.slots.length; ++j)
-                    object.slots[j] = $root.proto.InventorySlot.toObject(message.slots[j], options);
+            if (message.items && message.items.length) {
+                object.items = [];
+                for (let j = 0; j < message.items.length; ++j)
+                    object.items[j] = $root.proto.GridItem.toObject(message.items[j], options);
             }
             return object;
         };
 
         /**
-         * Converts this Inventory to JSON.
+         * Converts this InventoryGridState to JSON.
          * @function toJSON
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        Inventory.prototype.toJSON = function toJSON() {
+        InventoryGridState.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
         /**
-         * Gets the default type url for Inventory
+         * Gets the default type url for InventoryGridState
          * @function getTypeUrl
-         * @memberof proto.Inventory
+         * @memberof proto.InventoryGridState
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        Inventory.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        InventoryGridState.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/proto.Inventory";
+            return typeUrlPrefix + "/proto.InventoryGridState";
         };
 
-        return Inventory;
+        return InventoryGridState;
     })();
 
-    proto.PaperdollSlot = (function() {
+    proto.EquipmentItem = (function() {
 
         /**
-         * Properties of a PaperdollSlot.
+         * Properties of an EquipmentItem.
          * @memberof proto
-         * @interface IPaperdollSlot
-         * @property {proto.EquipSlot|null} [slot] PaperdollSlot slot
-         * @property {proto.IItem|null} [item] PaperdollSlot item
+         * @interface IEquipmentItem
+         * @property {proto.EquipSlot|null} [slot] EquipmentItem slot
+         * @property {proto.IItemInstance|null} [item] EquipmentItem item
          */
 
         /**
-         * Constructs a new PaperdollSlot.
+         * Constructs a new EquipmentItem.
          * @memberof proto
-         * @classdesc Represents a PaperdollSlot.
-         * @implements IPaperdollSlot
+         * @classdesc Represents an EquipmentItem.
+         * @implements IEquipmentItem
          * @constructor
-         * @param {proto.IPaperdollSlot=} [properties] Properties to set
+         * @param {proto.IEquipmentItem=} [properties] Properties to set
          */
-        function PaperdollSlot(properties) {
+        function EquipmentItem(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -1974,80 +2363,80 @@ export const proto = $root.proto = (() => {
         }
 
         /**
-         * PaperdollSlot slot.
+         * EquipmentItem slot.
          * @member {proto.EquipSlot} slot
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @instance
          */
-        PaperdollSlot.prototype.slot = 0;
+        EquipmentItem.prototype.slot = 0;
 
         /**
-         * PaperdollSlot item.
-         * @member {proto.IItem|null|undefined} item
-         * @memberof proto.PaperdollSlot
+         * EquipmentItem item.
+         * @member {proto.IItemInstance|null|undefined} item
+         * @memberof proto.EquipmentItem
          * @instance
          */
-        PaperdollSlot.prototype.item = null;
+        EquipmentItem.prototype.item = null;
 
         /**
-         * Creates a new PaperdollSlot instance using the specified properties.
+         * Creates a new EquipmentItem instance using the specified properties.
          * @function create
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
-         * @param {proto.IPaperdollSlot=} [properties] Properties to set
-         * @returns {proto.PaperdollSlot} PaperdollSlot instance
+         * @param {proto.IEquipmentItem=} [properties] Properties to set
+         * @returns {proto.EquipmentItem} EquipmentItem instance
          */
-        PaperdollSlot.create = function create(properties) {
-            return new PaperdollSlot(properties);
+        EquipmentItem.create = function create(properties) {
+            return new EquipmentItem(properties);
         };
 
         /**
-         * Encodes the specified PaperdollSlot message. Does not implicitly {@link proto.PaperdollSlot.verify|verify} messages.
+         * Encodes the specified EquipmentItem message. Does not implicitly {@link proto.EquipmentItem.verify|verify} messages.
          * @function encode
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
-         * @param {proto.IPaperdollSlot} message PaperdollSlot message or plain object to encode
+         * @param {proto.IEquipmentItem} message EquipmentItem message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        PaperdollSlot.encode = function encode(message, writer) {
+        EquipmentItem.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             if (message.slot != null && Object.hasOwnProperty.call(message, "slot"))
                 writer.uint32(/* id 1, wireType 0 =*/8).int32(message.slot);
             if (message.item != null && Object.hasOwnProperty.call(message, "item"))
-                $root.proto.Item.encode(message.item, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                $root.proto.ItemInstance.encode(message.item, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
             return writer;
         };
 
         /**
-         * Encodes the specified PaperdollSlot message, length delimited. Does not implicitly {@link proto.PaperdollSlot.verify|verify} messages.
+         * Encodes the specified EquipmentItem message, length delimited. Does not implicitly {@link proto.EquipmentItem.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
-         * @param {proto.IPaperdollSlot} message PaperdollSlot message or plain object to encode
+         * @param {proto.IEquipmentItem} message EquipmentItem message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        PaperdollSlot.encodeDelimited = function encodeDelimited(message, writer) {
+        EquipmentItem.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a PaperdollSlot message from the specified reader or buffer.
+         * Decodes an EquipmentItem message from the specified reader or buffer.
          * @function decode
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {proto.PaperdollSlot} PaperdollSlot
+         * @returns {proto.EquipmentItem} EquipmentItem
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        PaperdollSlot.decode = function decode(reader, length, error) {
+        EquipmentItem.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.PaperdollSlot();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.EquipmentItem();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 if (tag === error)
@@ -2058,7 +2447,7 @@ export const proto = $root.proto = (() => {
                         break;
                     }
                 case 2: {
-                        message.item = $root.proto.Item.decode(reader, reader.uint32());
+                        message.item = $root.proto.ItemInstance.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -2070,30 +2459,30 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Decodes a PaperdollSlot message from the specified reader or buffer, length delimited.
+         * Decodes an EquipmentItem message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.PaperdollSlot} PaperdollSlot
+         * @returns {proto.EquipmentItem} EquipmentItem
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        PaperdollSlot.decodeDelimited = function decodeDelimited(reader) {
+        EquipmentItem.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a PaperdollSlot message.
+         * Verifies an EquipmentItem message.
          * @function verify
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        PaperdollSlot.verify = function verify(message) {
+        EquipmentItem.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.slot != null && message.hasOwnProperty("slot"))
@@ -2115,7 +2504,7 @@ export const proto = $root.proto = (() => {
                     break;
                 }
             if (message.item != null && message.hasOwnProperty("item")) {
-                let error = $root.proto.Item.verify(message.item);
+                let error = $root.proto.ItemInstance.verify(message.item);
                 if (error)
                     return "item." + error;
             }
@@ -2123,17 +2512,17 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Creates a PaperdollSlot message from a plain object. Also converts values to their respective internal types.
+         * Creates an EquipmentItem message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {proto.PaperdollSlot} PaperdollSlot
+         * @returns {proto.EquipmentItem} EquipmentItem
          */
-        PaperdollSlot.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.PaperdollSlot)
+        EquipmentItem.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.EquipmentItem)
                 return object;
-            let message = new $root.proto.PaperdollSlot();
+            let message = new $root.proto.EquipmentItem();
             switch (object.slot) {
             default:
                 if (typeof object.slot === "number") {
@@ -2192,22 +2581,22 @@ export const proto = $root.proto = (() => {
             }
             if (object.item != null) {
                 if (typeof object.item !== "object")
-                    throw TypeError(".proto.PaperdollSlot.item: object expected");
-                message.item = $root.proto.Item.fromObject(object.item);
+                    throw TypeError(".proto.EquipmentItem.item: object expected");
+                message.item = $root.proto.ItemInstance.fromObject(object.item);
             }
             return message;
         };
 
         /**
-         * Creates a plain object from a PaperdollSlot message. Also converts values to other types if specified.
+         * Creates a plain object from an EquipmentItem message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
-         * @param {proto.PaperdollSlot} message PaperdollSlot
+         * @param {proto.EquipmentItem} message EquipmentItem
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        PaperdollSlot.toObject = function toObject(message, options) {
+        EquipmentItem.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
@@ -2218,58 +2607,58 @@ export const proto = $root.proto = (() => {
             if (message.slot != null && message.hasOwnProperty("slot"))
                 object.slot = options.enums === String ? $root.proto.EquipSlot[message.slot] === undefined ? message.slot : $root.proto.EquipSlot[message.slot] : message.slot;
             if (message.item != null && message.hasOwnProperty("item"))
-                object.item = $root.proto.Item.toObject(message.item, options);
+                object.item = $root.proto.ItemInstance.toObject(message.item, options);
             return object;
         };
 
         /**
-         * Converts this PaperdollSlot to JSON.
+         * Converts this EquipmentItem to JSON.
          * @function toJSON
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        PaperdollSlot.prototype.toJSON = function toJSON() {
+        EquipmentItem.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
         /**
-         * Gets the default type url for PaperdollSlot
+         * Gets the default type url for EquipmentItem
          * @function getTypeUrl
-         * @memberof proto.PaperdollSlot
+         * @memberof proto.EquipmentItem
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        PaperdollSlot.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        EquipmentItem.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/proto.PaperdollSlot";
+            return typeUrlPrefix + "/proto.EquipmentItem";
         };
 
-        return PaperdollSlot;
+        return EquipmentItem;
     })();
 
-    proto.Paperdoll = (function() {
+    proto.InventoryEquipmentState = (function() {
 
         /**
-         * Properties of a Paperdoll.
+         * Properties of an InventoryEquipmentState.
          * @memberof proto
-         * @interface IPaperdoll
-         * @property {Array.<proto.IPaperdollSlot>|null} [slots] Paperdoll slots
+         * @interface IInventoryEquipmentState
+         * @property {Array.<proto.IEquipmentItem>|null} [items] InventoryEquipmentState items
          */
 
         /**
-         * Constructs a new Paperdoll.
+         * Constructs a new InventoryEquipmentState.
          * @memberof proto
-         * @classdesc Represents a Paperdoll.
-         * @implements IPaperdoll
+         * @classdesc Represents an InventoryEquipmentState.
+         * @implements IInventoryEquipmentState
          * @constructor
-         * @param {proto.IPaperdoll=} [properties] Properties to set
+         * @param {proto.IInventoryEquipmentState=} [properties] Properties to set
          */
-        function Paperdoll(properties) {
-            this.slots = [];
+        function InventoryEquipmentState(properties) {
+            this.items = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -2277,80 +2666,80 @@ export const proto = $root.proto = (() => {
         }
 
         /**
-         * Paperdoll slots.
-         * @member {Array.<proto.IPaperdollSlot>} slots
-         * @memberof proto.Paperdoll
+         * InventoryEquipmentState items.
+         * @member {Array.<proto.IEquipmentItem>} items
+         * @memberof proto.InventoryEquipmentState
          * @instance
          */
-        Paperdoll.prototype.slots = $util.emptyArray;
+        InventoryEquipmentState.prototype.items = $util.emptyArray;
 
         /**
-         * Creates a new Paperdoll instance using the specified properties.
+         * Creates a new InventoryEquipmentState instance using the specified properties.
          * @function create
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
-         * @param {proto.IPaperdoll=} [properties] Properties to set
-         * @returns {proto.Paperdoll} Paperdoll instance
+         * @param {proto.IInventoryEquipmentState=} [properties] Properties to set
+         * @returns {proto.InventoryEquipmentState} InventoryEquipmentState instance
          */
-        Paperdoll.create = function create(properties) {
-            return new Paperdoll(properties);
+        InventoryEquipmentState.create = function create(properties) {
+            return new InventoryEquipmentState(properties);
         };
 
         /**
-         * Encodes the specified Paperdoll message. Does not implicitly {@link proto.Paperdoll.verify|verify} messages.
+         * Encodes the specified InventoryEquipmentState message. Does not implicitly {@link proto.InventoryEquipmentState.verify|verify} messages.
          * @function encode
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
-         * @param {proto.IPaperdoll} message Paperdoll message or plain object to encode
+         * @param {proto.IInventoryEquipmentState} message InventoryEquipmentState message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Paperdoll.encode = function encode(message, writer) {
+        InventoryEquipmentState.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.slots != null && message.slots.length)
-                for (let i = 0; i < message.slots.length; ++i)
-                    $root.proto.PaperdollSlot.encode(message.slots[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.items != null && message.items.length)
+                for (let i = 0; i < message.items.length; ++i)
+                    $root.proto.EquipmentItem.encode(message.items[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
             return writer;
         };
 
         /**
-         * Encodes the specified Paperdoll message, length delimited. Does not implicitly {@link proto.Paperdoll.verify|verify} messages.
+         * Encodes the specified InventoryEquipmentState message, length delimited. Does not implicitly {@link proto.InventoryEquipmentState.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
-         * @param {proto.IPaperdoll} message Paperdoll message or plain object to encode
+         * @param {proto.IInventoryEquipmentState} message InventoryEquipmentState message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Paperdoll.encodeDelimited = function encodeDelimited(message, writer) {
+        InventoryEquipmentState.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a Paperdoll message from the specified reader or buffer.
+         * Decodes an InventoryEquipmentState message from the specified reader or buffer.
          * @function decode
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {proto.Paperdoll} Paperdoll
+         * @returns {proto.InventoryEquipmentState} InventoryEquipmentState
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Paperdoll.decode = function decode(reader, length, error) {
+        InventoryEquipmentState.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.Paperdoll();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryEquipmentState();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
                 case 1: {
-                        if (!(message.slots && message.slots.length))
-                            message.slots = [];
-                        message.slots.push($root.proto.PaperdollSlot.decode(reader, reader.uint32()));
+                        if (!(message.items && message.items.length))
+                            message.items = [];
+                        message.items.push($root.proto.EquipmentItem.decode(reader, reader.uint32()));
                         break;
                     }
                 default:
@@ -2362,119 +2751,2255 @@ export const proto = $root.proto = (() => {
         };
 
         /**
-         * Decodes a Paperdoll message from the specified reader or buffer, length delimited.
+         * Decodes an InventoryEquipmentState message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.Paperdoll} Paperdoll
+         * @returns {proto.InventoryEquipmentState} InventoryEquipmentState
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Paperdoll.decodeDelimited = function decodeDelimited(reader) {
+        InventoryEquipmentState.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a Paperdoll message.
+         * Verifies an InventoryEquipmentState message.
          * @function verify
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        Paperdoll.verify = function verify(message) {
+        InventoryEquipmentState.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.slots != null && message.hasOwnProperty("slots")) {
-                if (!Array.isArray(message.slots))
-                    return "slots: array expected";
-                for (let i = 0; i < message.slots.length; ++i) {
-                    let error = $root.proto.PaperdollSlot.verify(message.slots[i]);
+            if (message.items != null && message.hasOwnProperty("items")) {
+                if (!Array.isArray(message.items))
+                    return "items: array expected";
+                for (let i = 0; i < message.items.length; ++i) {
+                    let error = $root.proto.EquipmentItem.verify(message.items[i]);
                     if (error)
-                        return "slots." + error;
+                        return "items." + error;
                 }
             }
             return null;
         };
 
         /**
-         * Creates a Paperdoll message from a plain object. Also converts values to their respective internal types.
+         * Creates an InventoryEquipmentState message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {proto.Paperdoll} Paperdoll
+         * @returns {proto.InventoryEquipmentState} InventoryEquipmentState
          */
-        Paperdoll.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.Paperdoll)
+        InventoryEquipmentState.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryEquipmentState)
                 return object;
-            let message = new $root.proto.Paperdoll();
-            if (object.slots) {
-                if (!Array.isArray(object.slots))
-                    throw TypeError(".proto.Paperdoll.slots: array expected");
-                message.slots = [];
-                for (let i = 0; i < object.slots.length; ++i) {
-                    if (typeof object.slots[i] !== "object")
-                        throw TypeError(".proto.Paperdoll.slots: object expected");
-                    message.slots[i] = $root.proto.PaperdollSlot.fromObject(object.slots[i]);
+            let message = new $root.proto.InventoryEquipmentState();
+            if (object.items) {
+                if (!Array.isArray(object.items))
+                    throw TypeError(".proto.InventoryEquipmentState.items: array expected");
+                message.items = [];
+                for (let i = 0; i < object.items.length; ++i) {
+                    if (typeof object.items[i] !== "object")
+                        throw TypeError(".proto.InventoryEquipmentState.items: object expected");
+                    message.items[i] = $root.proto.EquipmentItem.fromObject(object.items[i]);
                 }
             }
             return message;
         };
 
         /**
-         * Creates a plain object from a Paperdoll message. Also converts values to other types if specified.
+         * Creates a plain object from an InventoryEquipmentState message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
-         * @param {proto.Paperdoll} message Paperdoll
+         * @param {proto.InventoryEquipmentState} message InventoryEquipmentState
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        Paperdoll.toObject = function toObject(message, options) {
+        InventoryEquipmentState.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
             if (options.arrays || options.defaults)
-                object.slots = [];
-            if (message.slots && message.slots.length) {
-                object.slots = [];
-                for (let j = 0; j < message.slots.length; ++j)
-                    object.slots[j] = $root.proto.PaperdollSlot.toObject(message.slots[j], options);
+                object.items = [];
+            if (message.items && message.items.length) {
+                object.items = [];
+                for (let j = 0; j < message.items.length; ++j)
+                    object.items[j] = $root.proto.EquipmentItem.toObject(message.items[j], options);
             }
             return object;
         };
 
         /**
-         * Converts this Paperdoll to JSON.
+         * Converts this InventoryEquipmentState to JSON.
          * @function toJSON
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        Paperdoll.prototype.toJSON = function toJSON() {
+        InventoryEquipmentState.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
         /**
-         * Gets the default type url for Paperdoll
+         * Gets the default type url for InventoryEquipmentState
          * @function getTypeUrl
-         * @memberof proto.Paperdoll
+         * @memberof proto.InventoryEquipmentState
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        Paperdoll.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        InventoryEquipmentState.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/proto.Paperdoll";
+            return typeUrlPrefix + "/proto.InventoryEquipmentState";
         };
 
-        return Paperdoll;
+        return InventoryEquipmentState;
+    })();
+
+    proto.InventoryHandState = (function() {
+
+        /**
+         * Properties of an InventoryHandState.
+         * @memberof proto
+         * @interface IInventoryHandState
+         * @property {proto.IItemInstance|null} [item] InventoryHandState item
+         */
+
+        /**
+         * Constructs a new InventoryHandState.
+         * @memberof proto
+         * @classdesc Represents an InventoryHandState.
+         * @implements IInventoryHandState
+         * @constructor
+         * @param {proto.IInventoryHandState=} [properties] Properties to set
+         */
+        function InventoryHandState(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * InventoryHandState item.
+         * @member {proto.IItemInstance|null|undefined} item
+         * @memberof proto.InventoryHandState
+         * @instance
+         */
+        InventoryHandState.prototype.item = null;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(InventoryHandState.prototype, "_item", {
+            get: $util.oneOfGetter($oneOfFields = ["item"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new InventoryHandState instance using the specified properties.
+         * @function create
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {proto.IInventoryHandState=} [properties] Properties to set
+         * @returns {proto.InventoryHandState} InventoryHandState instance
+         */
+        InventoryHandState.create = function create(properties) {
+            return new InventoryHandState(properties);
+        };
+
+        /**
+         * Encodes the specified InventoryHandState message. Does not implicitly {@link proto.InventoryHandState.verify|verify} messages.
+         * @function encode
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {proto.IInventoryHandState} message InventoryHandState message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryHandState.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.item != null && Object.hasOwnProperty.call(message, "item"))
+                $root.proto.ItemInstance.encode(message.item, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified InventoryHandState message, length delimited. Does not implicitly {@link proto.InventoryHandState.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {proto.IInventoryHandState} message InventoryHandState message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryHandState.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an InventoryHandState message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.InventoryHandState} InventoryHandState
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryHandState.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryHandState();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.item = $root.proto.ItemInstance.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an InventoryHandState message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.InventoryHandState} InventoryHandState
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryHandState.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an InventoryHandState message.
+         * @function verify
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        InventoryHandState.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.item != null && message.hasOwnProperty("item")) {
+                properties._item = 1;
+                {
+                    let error = $root.proto.ItemInstance.verify(message.item);
+                    if (error)
+                        return "item." + error;
+                }
+            }
+            return null;
+        };
+
+        /**
+         * Creates an InventoryHandState message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.InventoryHandState} InventoryHandState
+         */
+        InventoryHandState.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryHandState)
+                return object;
+            let message = new $root.proto.InventoryHandState();
+            if (object.item != null) {
+                if (typeof object.item !== "object")
+                    throw TypeError(".proto.InventoryHandState.item: object expected");
+                message.item = $root.proto.ItemInstance.fromObject(object.item);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an InventoryHandState message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {proto.InventoryHandState} message InventoryHandState
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        InventoryHandState.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (message.item != null && message.hasOwnProperty("item")) {
+                object.item = $root.proto.ItemInstance.toObject(message.item, options);
+                if (options.oneofs)
+                    object._item = "item";
+            }
+            return object;
+        };
+
+        /**
+         * Converts this InventoryHandState to JSON.
+         * @function toJSON
+         * @memberof proto.InventoryHandState
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        InventoryHandState.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for InventoryHandState
+         * @function getTypeUrl
+         * @memberof proto.InventoryHandState
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        InventoryHandState.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.InventoryHandState";
+        };
+
+        return InventoryHandState;
+    })();
+
+    proto.InventoryState = (function() {
+
+        /**
+         * Properties of an InventoryState.
+         * @memberof proto
+         * @interface IInventoryState
+         * @property {proto.IInventoryRef|null} [ref] InventoryState ref
+         * @property {number|Long|null} [revision] InventoryState revision
+         * @property {proto.IInventoryGridState|null} [grid] InventoryState grid
+         * @property {proto.IInventoryEquipmentState|null} [equipment] InventoryState equipment
+         * @property {proto.IInventoryHandState|null} [hand] InventoryState hand
+         */
+
+        /**
+         * Constructs a new InventoryState.
+         * @memberof proto
+         * @classdesc Represents an InventoryState.
+         * @implements IInventoryState
+         * @constructor
+         * @param {proto.IInventoryState=} [properties] Properties to set
+         */
+        function InventoryState(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * InventoryState ref.
+         * @member {proto.IInventoryRef|null|undefined} ref
+         * @memberof proto.InventoryState
+         * @instance
+         */
+        InventoryState.prototype.ref = null;
+
+        /**
+         * InventoryState revision.
+         * @member {number|Long} revision
+         * @memberof proto.InventoryState
+         * @instance
+         */
+        InventoryState.prototype.revision = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * InventoryState grid.
+         * @member {proto.IInventoryGridState|null|undefined} grid
+         * @memberof proto.InventoryState
+         * @instance
+         */
+        InventoryState.prototype.grid = null;
+
+        /**
+         * InventoryState equipment.
+         * @member {proto.IInventoryEquipmentState|null|undefined} equipment
+         * @memberof proto.InventoryState
+         * @instance
+         */
+        InventoryState.prototype.equipment = null;
+
+        /**
+         * InventoryState hand.
+         * @member {proto.IInventoryHandState|null|undefined} hand
+         * @memberof proto.InventoryState
+         * @instance
+         */
+        InventoryState.prototype.hand = null;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        /**
+         * InventoryState state.
+         * @member {"grid"|"equipment"|"hand"|undefined} state
+         * @memberof proto.InventoryState
+         * @instance
+         */
+        Object.defineProperty(InventoryState.prototype, "state", {
+            get: $util.oneOfGetter($oneOfFields = ["grid", "equipment", "hand"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new InventoryState instance using the specified properties.
+         * @function create
+         * @memberof proto.InventoryState
+         * @static
+         * @param {proto.IInventoryState=} [properties] Properties to set
+         * @returns {proto.InventoryState} InventoryState instance
+         */
+        InventoryState.create = function create(properties) {
+            return new InventoryState(properties);
+        };
+
+        /**
+         * Encodes the specified InventoryState message. Does not implicitly {@link proto.InventoryState.verify|verify} messages.
+         * @function encode
+         * @memberof proto.InventoryState
+         * @static
+         * @param {proto.IInventoryState} message InventoryState message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryState.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.ref != null && Object.hasOwnProperty.call(message, "ref"))
+                $root.proto.InventoryRef.encode(message.ref, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.revision != null && Object.hasOwnProperty.call(message, "revision"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.revision);
+            if (message.grid != null && Object.hasOwnProperty.call(message, "grid"))
+                $root.proto.InventoryGridState.encode(message.grid, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+            if (message.equipment != null && Object.hasOwnProperty.call(message, "equipment"))
+                $root.proto.InventoryEquipmentState.encode(message.equipment, writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
+            if (message.hand != null && Object.hasOwnProperty.call(message, "hand"))
+                $root.proto.InventoryHandState.encode(message.hand, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified InventoryState message, length delimited. Does not implicitly {@link proto.InventoryState.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.InventoryState
+         * @static
+         * @param {proto.IInventoryState} message InventoryState message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryState.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an InventoryState message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.InventoryState
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.InventoryState} InventoryState
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryState.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryState();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.ref = $root.proto.InventoryRef.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 2: {
+                        message.revision = reader.uint64();
+                        break;
+                    }
+                case 10: {
+                        message.grid = $root.proto.InventoryGridState.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 11: {
+                        message.equipment = $root.proto.InventoryEquipmentState.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 12: {
+                        message.hand = $root.proto.InventoryHandState.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an InventoryState message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.InventoryState
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.InventoryState} InventoryState
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryState.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an InventoryState message.
+         * @function verify
+         * @memberof proto.InventoryState
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        InventoryState.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.ref != null && message.hasOwnProperty("ref")) {
+                let error = $root.proto.InventoryRef.verify(message.ref);
+                if (error)
+                    return "ref." + error;
+            }
+            if (message.revision != null && message.hasOwnProperty("revision"))
+                if (!$util.isInteger(message.revision) && !(message.revision && $util.isInteger(message.revision.low) && $util.isInteger(message.revision.high)))
+                    return "revision: integer|Long expected";
+            if (message.grid != null && message.hasOwnProperty("grid")) {
+                properties.state = 1;
+                {
+                    let error = $root.proto.InventoryGridState.verify(message.grid);
+                    if (error)
+                        return "grid." + error;
+                }
+            }
+            if (message.equipment != null && message.hasOwnProperty("equipment")) {
+                if (properties.state === 1)
+                    return "state: multiple values";
+                properties.state = 1;
+                {
+                    let error = $root.proto.InventoryEquipmentState.verify(message.equipment);
+                    if (error)
+                        return "equipment." + error;
+                }
+            }
+            if (message.hand != null && message.hasOwnProperty("hand")) {
+                if (properties.state === 1)
+                    return "state: multiple values";
+                properties.state = 1;
+                {
+                    let error = $root.proto.InventoryHandState.verify(message.hand);
+                    if (error)
+                        return "hand." + error;
+                }
+            }
+            return null;
+        };
+
+        /**
+         * Creates an InventoryState message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.InventoryState
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.InventoryState} InventoryState
+         */
+        InventoryState.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryState)
+                return object;
+            let message = new $root.proto.InventoryState();
+            if (object.ref != null) {
+                if (typeof object.ref !== "object")
+                    throw TypeError(".proto.InventoryState.ref: object expected");
+                message.ref = $root.proto.InventoryRef.fromObject(object.ref);
+            }
+            if (object.revision != null)
+                if ($util.Long)
+                    (message.revision = $util.Long.fromValue(object.revision)).unsigned = true;
+                else if (typeof object.revision === "string")
+                    message.revision = parseInt(object.revision, 10);
+                else if (typeof object.revision === "number")
+                    message.revision = object.revision;
+                else if (typeof object.revision === "object")
+                    message.revision = new $util.LongBits(object.revision.low >>> 0, object.revision.high >>> 0).toNumber(true);
+            if (object.grid != null) {
+                if (typeof object.grid !== "object")
+                    throw TypeError(".proto.InventoryState.grid: object expected");
+                message.grid = $root.proto.InventoryGridState.fromObject(object.grid);
+            }
+            if (object.equipment != null) {
+                if (typeof object.equipment !== "object")
+                    throw TypeError(".proto.InventoryState.equipment: object expected");
+                message.equipment = $root.proto.InventoryEquipmentState.fromObject(object.equipment);
+            }
+            if (object.hand != null) {
+                if (typeof object.hand !== "object")
+                    throw TypeError(".proto.InventoryState.hand: object expected");
+                message.hand = $root.proto.InventoryHandState.fromObject(object.hand);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an InventoryState message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.InventoryState
+         * @static
+         * @param {proto.InventoryState} message InventoryState
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        InventoryState.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.ref = null;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.revision = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.revision = options.longs === String ? "0" : 0;
+            }
+            if (message.ref != null && message.hasOwnProperty("ref"))
+                object.ref = $root.proto.InventoryRef.toObject(message.ref, options);
+            if (message.revision != null && message.hasOwnProperty("revision"))
+                if (typeof message.revision === "number")
+                    object.revision = options.longs === String ? String(message.revision) : message.revision;
+                else
+                    object.revision = options.longs === String ? $util.Long.prototype.toString.call(message.revision) : options.longs === Number ? new $util.LongBits(message.revision.low >>> 0, message.revision.high >>> 0).toNumber(true) : message.revision;
+            if (message.grid != null && message.hasOwnProperty("grid")) {
+                object.grid = $root.proto.InventoryGridState.toObject(message.grid, options);
+                if (options.oneofs)
+                    object.state = "grid";
+            }
+            if (message.equipment != null && message.hasOwnProperty("equipment")) {
+                object.equipment = $root.proto.InventoryEquipmentState.toObject(message.equipment, options);
+                if (options.oneofs)
+                    object.state = "equipment";
+            }
+            if (message.hand != null && message.hasOwnProperty("hand")) {
+                object.hand = $root.proto.InventoryHandState.toObject(message.hand, options);
+                if (options.oneofs)
+                    object.state = "hand";
+            }
+            return object;
+        };
+
+        /**
+         * Converts this InventoryState to JSON.
+         * @function toJSON
+         * @memberof proto.InventoryState
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        InventoryState.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for InventoryState
+         * @function getTypeUrl
+         * @memberof proto.InventoryState
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        InventoryState.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.InventoryState";
+        };
+
+        return InventoryState;
+    })();
+
+    proto.InventoryExpected = (function() {
+
+        /**
+         * Properties of an InventoryExpected.
+         * @memberof proto
+         * @interface IInventoryExpected
+         * @property {proto.IInventoryRef|null} [ref] InventoryExpected ref
+         * @property {number|Long|null} [expectedRevision] InventoryExpected expectedRevision
+         */
+
+        /**
+         * Constructs a new InventoryExpected.
+         * @memberof proto
+         * @classdesc Represents an InventoryExpected.
+         * @implements IInventoryExpected
+         * @constructor
+         * @param {proto.IInventoryExpected=} [properties] Properties to set
+         */
+        function InventoryExpected(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * InventoryExpected ref.
+         * @member {proto.IInventoryRef|null|undefined} ref
+         * @memberof proto.InventoryExpected
+         * @instance
+         */
+        InventoryExpected.prototype.ref = null;
+
+        /**
+         * InventoryExpected expectedRevision.
+         * @member {number|Long} expectedRevision
+         * @memberof proto.InventoryExpected
+         * @instance
+         */
+        InventoryExpected.prototype.expectedRevision = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Creates a new InventoryExpected instance using the specified properties.
+         * @function create
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {proto.IInventoryExpected=} [properties] Properties to set
+         * @returns {proto.InventoryExpected} InventoryExpected instance
+         */
+        InventoryExpected.create = function create(properties) {
+            return new InventoryExpected(properties);
+        };
+
+        /**
+         * Encodes the specified InventoryExpected message. Does not implicitly {@link proto.InventoryExpected.verify|verify} messages.
+         * @function encode
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {proto.IInventoryExpected} message InventoryExpected message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryExpected.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.ref != null && Object.hasOwnProperty.call(message, "ref"))
+                $root.proto.InventoryRef.encode(message.ref, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.expectedRevision != null && Object.hasOwnProperty.call(message, "expectedRevision"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.expectedRevision);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified InventoryExpected message, length delimited. Does not implicitly {@link proto.InventoryExpected.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {proto.IInventoryExpected} message InventoryExpected message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryExpected.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an InventoryExpected message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.InventoryExpected} InventoryExpected
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryExpected.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryExpected();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.ref = $root.proto.InventoryRef.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 2: {
+                        message.expectedRevision = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an InventoryExpected message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.InventoryExpected} InventoryExpected
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryExpected.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an InventoryExpected message.
+         * @function verify
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        InventoryExpected.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.ref != null && message.hasOwnProperty("ref")) {
+                let error = $root.proto.InventoryRef.verify(message.ref);
+                if (error)
+                    return "ref." + error;
+            }
+            if (message.expectedRevision != null && message.hasOwnProperty("expectedRevision"))
+                if (!$util.isInteger(message.expectedRevision) && !(message.expectedRevision && $util.isInteger(message.expectedRevision.low) && $util.isInteger(message.expectedRevision.high)))
+                    return "expectedRevision: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates an InventoryExpected message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.InventoryExpected} InventoryExpected
+         */
+        InventoryExpected.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryExpected)
+                return object;
+            let message = new $root.proto.InventoryExpected();
+            if (object.ref != null) {
+                if (typeof object.ref !== "object")
+                    throw TypeError(".proto.InventoryExpected.ref: object expected");
+                message.ref = $root.proto.InventoryRef.fromObject(object.ref);
+            }
+            if (object.expectedRevision != null)
+                if ($util.Long)
+                    (message.expectedRevision = $util.Long.fromValue(object.expectedRevision)).unsigned = true;
+                else if (typeof object.expectedRevision === "string")
+                    message.expectedRevision = parseInt(object.expectedRevision, 10);
+                else if (typeof object.expectedRevision === "number")
+                    message.expectedRevision = object.expectedRevision;
+                else if (typeof object.expectedRevision === "object")
+                    message.expectedRevision = new $util.LongBits(object.expectedRevision.low >>> 0, object.expectedRevision.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an InventoryExpected message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {proto.InventoryExpected} message InventoryExpected
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        InventoryExpected.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.ref = null;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.expectedRevision = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.expectedRevision = options.longs === String ? "0" : 0;
+            }
+            if (message.ref != null && message.hasOwnProperty("ref"))
+                object.ref = $root.proto.InventoryRef.toObject(message.ref, options);
+            if (message.expectedRevision != null && message.hasOwnProperty("expectedRevision"))
+                if (typeof message.expectedRevision === "number")
+                    object.expectedRevision = options.longs === String ? String(message.expectedRevision) : message.expectedRevision;
+                else
+                    object.expectedRevision = options.longs === String ? $util.Long.prototype.toString.call(message.expectedRevision) : options.longs === Number ? new $util.LongBits(message.expectedRevision.low >>> 0, message.expectedRevision.high >>> 0).toNumber(true) : message.expectedRevision;
+            return object;
+        };
+
+        /**
+         * Converts this InventoryExpected to JSON.
+         * @function toJSON
+         * @memberof proto.InventoryExpected
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        InventoryExpected.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for InventoryExpected
+         * @function getTypeUrl
+         * @memberof proto.InventoryExpected
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        InventoryExpected.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.InventoryExpected";
+        };
+
+        return InventoryExpected;
+    })();
+
+    proto.GridPos = (function() {
+
+        /**
+         * Properties of a GridPos.
+         * @memberof proto
+         * @interface IGridPos
+         * @property {number|null} [x] GridPos x
+         * @property {number|null} [y] GridPos y
+         */
+
+        /**
+         * Constructs a new GridPos.
+         * @memberof proto
+         * @classdesc Represents a GridPos.
+         * @implements IGridPos
+         * @constructor
+         * @param {proto.IGridPos=} [properties] Properties to set
+         */
+        function GridPos(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * GridPos x.
+         * @member {number} x
+         * @memberof proto.GridPos
+         * @instance
+         */
+        GridPos.prototype.x = 0;
+
+        /**
+         * GridPos y.
+         * @member {number} y
+         * @memberof proto.GridPos
+         * @instance
+         */
+        GridPos.prototype.y = 0;
+
+        /**
+         * Creates a new GridPos instance using the specified properties.
+         * @function create
+         * @memberof proto.GridPos
+         * @static
+         * @param {proto.IGridPos=} [properties] Properties to set
+         * @returns {proto.GridPos} GridPos instance
+         */
+        GridPos.create = function create(properties) {
+            return new GridPos(properties);
+        };
+
+        /**
+         * Encodes the specified GridPos message. Does not implicitly {@link proto.GridPos.verify|verify} messages.
+         * @function encode
+         * @memberof proto.GridPos
+         * @static
+         * @param {proto.IGridPos} message GridPos message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        GridPos.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.x != null && Object.hasOwnProperty.call(message, "x"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.x);
+            if (message.y != null && Object.hasOwnProperty.call(message, "y"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.y);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified GridPos message, length delimited. Does not implicitly {@link proto.GridPos.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.GridPos
+         * @static
+         * @param {proto.IGridPos} message GridPos message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        GridPos.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a GridPos message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.GridPos
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.GridPos} GridPos
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        GridPos.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.GridPos();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.x = reader.uint32();
+                        break;
+                    }
+                case 2: {
+                        message.y = reader.uint32();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a GridPos message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.GridPos
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.GridPos} GridPos
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        GridPos.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a GridPos message.
+         * @function verify
+         * @memberof proto.GridPos
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        GridPos.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.x != null && message.hasOwnProperty("x"))
+                if (!$util.isInteger(message.x))
+                    return "x: integer expected";
+            if (message.y != null && message.hasOwnProperty("y"))
+                if (!$util.isInteger(message.y))
+                    return "y: integer expected";
+            return null;
+        };
+
+        /**
+         * Creates a GridPos message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.GridPos
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.GridPos} GridPos
+         */
+        GridPos.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.GridPos)
+                return object;
+            let message = new $root.proto.GridPos();
+            if (object.x != null)
+                message.x = object.x >>> 0;
+            if (object.y != null)
+                message.y = object.y >>> 0;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a GridPos message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.GridPos
+         * @static
+         * @param {proto.GridPos} message GridPos
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        GridPos.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.x = 0;
+                object.y = 0;
+            }
+            if (message.x != null && message.hasOwnProperty("x"))
+                object.x = message.x;
+            if (message.y != null && message.hasOwnProperty("y"))
+                object.y = message.y;
+            return object;
+        };
+
+        /**
+         * Converts this GridPos to JSON.
+         * @function toJSON
+         * @memberof proto.GridPos
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        GridPos.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for GridPos
+         * @function getTypeUrl
+         * @memberof proto.GridPos
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        GridPos.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.GridPos";
+        };
+
+        return GridPos;
+    })();
+
+    proto.InventoryMoveSpec = (function() {
+
+        /**
+         * Properties of an InventoryMoveSpec.
+         * @memberof proto
+         * @interface IInventoryMoveSpec
+         * @property {proto.IInventoryRef|null} [src] InventoryMoveSpec src
+         * @property {proto.IInventoryRef|null} [dst] InventoryMoveSpec dst
+         * @property {number|Long|null} [itemId] InventoryMoveSpec itemId
+         * @property {proto.IGridPos|null} [dstPos] InventoryMoveSpec dstPos
+         * @property {proto.EquipSlot|null} [dstEquipSlot] InventoryMoveSpec dstEquipSlot
+         * @property {number|null} [quantity] InventoryMoveSpec quantity
+         * @property {boolean|null} [allowSwapOrMerge] InventoryMoveSpec allowSwapOrMerge
+         */
+
+        /**
+         * Constructs a new InventoryMoveSpec.
+         * @memberof proto
+         * @classdesc Represents an InventoryMoveSpec.
+         * @implements IInventoryMoveSpec
+         * @constructor
+         * @param {proto.IInventoryMoveSpec=} [properties] Properties to set
+         */
+        function InventoryMoveSpec(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * InventoryMoveSpec src.
+         * @member {proto.IInventoryRef|null|undefined} src
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         */
+        InventoryMoveSpec.prototype.src = null;
+
+        /**
+         * InventoryMoveSpec dst.
+         * @member {proto.IInventoryRef|null|undefined} dst
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         */
+        InventoryMoveSpec.prototype.dst = null;
+
+        /**
+         * InventoryMoveSpec itemId.
+         * @member {number|Long} itemId
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         */
+        InventoryMoveSpec.prototype.itemId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * InventoryMoveSpec dstPos.
+         * @member {proto.IGridPos|null|undefined} dstPos
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         */
+        InventoryMoveSpec.prototype.dstPos = null;
+
+        /**
+         * InventoryMoveSpec dstEquipSlot.
+         * @member {proto.EquipSlot|null|undefined} dstEquipSlot
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         */
+        InventoryMoveSpec.prototype.dstEquipSlot = null;
+
+        /**
+         * InventoryMoveSpec quantity.
+         * @member {number|null|undefined} quantity
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         */
+        InventoryMoveSpec.prototype.quantity = null;
+
+        /**
+         * InventoryMoveSpec allowSwapOrMerge.
+         * @member {boolean} allowSwapOrMerge
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         */
+        InventoryMoveSpec.prototype.allowSwapOrMerge = false;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(InventoryMoveSpec.prototype, "_dstPos", {
+            get: $util.oneOfGetter($oneOfFields = ["dstPos"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(InventoryMoveSpec.prototype, "_dstEquipSlot", {
+            get: $util.oneOfGetter($oneOfFields = ["dstEquipSlot"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(InventoryMoveSpec.prototype, "_quantity", {
+            get: $util.oneOfGetter($oneOfFields = ["quantity"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new InventoryMoveSpec instance using the specified properties.
+         * @function create
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {proto.IInventoryMoveSpec=} [properties] Properties to set
+         * @returns {proto.InventoryMoveSpec} InventoryMoveSpec instance
+         */
+        InventoryMoveSpec.create = function create(properties) {
+            return new InventoryMoveSpec(properties);
+        };
+
+        /**
+         * Encodes the specified InventoryMoveSpec message. Does not implicitly {@link proto.InventoryMoveSpec.verify|verify} messages.
+         * @function encode
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {proto.IInventoryMoveSpec} message InventoryMoveSpec message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryMoveSpec.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.src != null && Object.hasOwnProperty.call(message, "src"))
+                $root.proto.InventoryRef.encode(message.src, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.dst != null && Object.hasOwnProperty.call(message, "dst"))
+                $root.proto.InventoryRef.encode(message.dst, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            if (message.itemId != null && Object.hasOwnProperty.call(message, "itemId"))
+                writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.itemId);
+            if (message.dstPos != null && Object.hasOwnProperty.call(message, "dstPos"))
+                $root.proto.GridPos.encode(message.dstPos, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+            if (message.dstEquipSlot != null && Object.hasOwnProperty.call(message, "dstEquipSlot"))
+                writer.uint32(/* id 5, wireType 0 =*/40).int32(message.dstEquipSlot);
+            if (message.quantity != null && Object.hasOwnProperty.call(message, "quantity"))
+                writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.quantity);
+            if (message.allowSwapOrMerge != null && Object.hasOwnProperty.call(message, "allowSwapOrMerge"))
+                writer.uint32(/* id 7, wireType 0 =*/56).bool(message.allowSwapOrMerge);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified InventoryMoveSpec message, length delimited. Does not implicitly {@link proto.InventoryMoveSpec.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {proto.IInventoryMoveSpec} message InventoryMoveSpec message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryMoveSpec.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an InventoryMoveSpec message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.InventoryMoveSpec} InventoryMoveSpec
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryMoveSpec.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryMoveSpec();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.src = $root.proto.InventoryRef.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 2: {
+                        message.dst = $root.proto.InventoryRef.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 3: {
+                        message.itemId = reader.uint64();
+                        break;
+                    }
+                case 4: {
+                        message.dstPos = $root.proto.GridPos.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 5: {
+                        message.dstEquipSlot = reader.int32();
+                        break;
+                    }
+                case 6: {
+                        message.quantity = reader.uint32();
+                        break;
+                    }
+                case 7: {
+                        message.allowSwapOrMerge = reader.bool();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an InventoryMoveSpec message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.InventoryMoveSpec} InventoryMoveSpec
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryMoveSpec.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an InventoryMoveSpec message.
+         * @function verify
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        InventoryMoveSpec.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.src != null && message.hasOwnProperty("src")) {
+                let error = $root.proto.InventoryRef.verify(message.src);
+                if (error)
+                    return "src." + error;
+            }
+            if (message.dst != null && message.hasOwnProperty("dst")) {
+                let error = $root.proto.InventoryRef.verify(message.dst);
+                if (error)
+                    return "dst." + error;
+            }
+            if (message.itemId != null && message.hasOwnProperty("itemId"))
+                if (!$util.isInteger(message.itemId) && !(message.itemId && $util.isInteger(message.itemId.low) && $util.isInteger(message.itemId.high)))
+                    return "itemId: integer|Long expected";
+            if (message.dstPos != null && message.hasOwnProperty("dstPos")) {
+                properties._dstPos = 1;
+                {
+                    let error = $root.proto.GridPos.verify(message.dstPos);
+                    if (error)
+                        return "dstPos." + error;
+                }
+            }
+            if (message.dstEquipSlot != null && message.hasOwnProperty("dstEquipSlot")) {
+                properties._dstEquipSlot = 1;
+                switch (message.dstEquipSlot) {
+                default:
+                    return "dstEquipSlot: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                case 6:
+                case 7:
+                case 8:
+                case 9:
+                case 10:
+                case 11:
+                    break;
+                }
+            }
+            if (message.quantity != null && message.hasOwnProperty("quantity")) {
+                properties._quantity = 1;
+                if (!$util.isInteger(message.quantity))
+                    return "quantity: integer expected";
+            }
+            if (message.allowSwapOrMerge != null && message.hasOwnProperty("allowSwapOrMerge"))
+                if (typeof message.allowSwapOrMerge !== "boolean")
+                    return "allowSwapOrMerge: boolean expected";
+            return null;
+        };
+
+        /**
+         * Creates an InventoryMoveSpec message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.InventoryMoveSpec} InventoryMoveSpec
+         */
+        InventoryMoveSpec.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryMoveSpec)
+                return object;
+            let message = new $root.proto.InventoryMoveSpec();
+            if (object.src != null) {
+                if (typeof object.src !== "object")
+                    throw TypeError(".proto.InventoryMoveSpec.src: object expected");
+                message.src = $root.proto.InventoryRef.fromObject(object.src);
+            }
+            if (object.dst != null) {
+                if (typeof object.dst !== "object")
+                    throw TypeError(".proto.InventoryMoveSpec.dst: object expected");
+                message.dst = $root.proto.InventoryRef.fromObject(object.dst);
+            }
+            if (object.itemId != null)
+                if ($util.Long)
+                    (message.itemId = $util.Long.fromValue(object.itemId)).unsigned = true;
+                else if (typeof object.itemId === "string")
+                    message.itemId = parseInt(object.itemId, 10);
+                else if (typeof object.itemId === "number")
+                    message.itemId = object.itemId;
+                else if (typeof object.itemId === "object")
+                    message.itemId = new $util.LongBits(object.itemId.low >>> 0, object.itemId.high >>> 0).toNumber(true);
+            if (object.dstPos != null) {
+                if (typeof object.dstPos !== "object")
+                    throw TypeError(".proto.InventoryMoveSpec.dstPos: object expected");
+                message.dstPos = $root.proto.GridPos.fromObject(object.dstPos);
+            }
+            switch (object.dstEquipSlot) {
+            default:
+                if (typeof object.dstEquipSlot === "number") {
+                    message.dstEquipSlot = object.dstEquipSlot;
+                    break;
+                }
+                break;
+            case "EQUIP_SLOT_NONE":
+            case 0:
+                message.dstEquipSlot = 0;
+                break;
+            case "EQUIP_SLOT_HEAD":
+            case 1:
+                message.dstEquipSlot = 1;
+                break;
+            case "EQUIP_SLOT_CHEST":
+            case 2:
+                message.dstEquipSlot = 2;
+                break;
+            case "EQUIP_SLOT_LEGS":
+            case 3:
+                message.dstEquipSlot = 3;
+                break;
+            case "EQUIP_SLOT_FEET":
+            case 4:
+                message.dstEquipSlot = 4;
+                break;
+            case "EQUIP_SLOT_HANDS":
+            case 5:
+                message.dstEquipSlot = 5;
+                break;
+            case "EQUIP_SLOT_LEFT_HAND":
+            case 6:
+                message.dstEquipSlot = 6;
+                break;
+            case "EQUIP_SLOT_RIGHT_HAND":
+            case 7:
+                message.dstEquipSlot = 7;
+                break;
+            case "EQUIP_SLOT_BACK":
+            case 8:
+                message.dstEquipSlot = 8;
+                break;
+            case "EQUIP_SLOT_NECK":
+            case 9:
+                message.dstEquipSlot = 9;
+                break;
+            case "EQUIP_SLOT_RING_1":
+            case 10:
+                message.dstEquipSlot = 10;
+                break;
+            case "EQUIP_SLOT_RING_2":
+            case 11:
+                message.dstEquipSlot = 11;
+                break;
+            }
+            if (object.quantity != null)
+                message.quantity = object.quantity >>> 0;
+            if (object.allowSwapOrMerge != null)
+                message.allowSwapOrMerge = Boolean(object.allowSwapOrMerge);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an InventoryMoveSpec message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {proto.InventoryMoveSpec} message InventoryMoveSpec
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        InventoryMoveSpec.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.src = null;
+                object.dst = null;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.itemId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.itemId = options.longs === String ? "0" : 0;
+                object.allowSwapOrMerge = false;
+            }
+            if (message.src != null && message.hasOwnProperty("src"))
+                object.src = $root.proto.InventoryRef.toObject(message.src, options);
+            if (message.dst != null && message.hasOwnProperty("dst"))
+                object.dst = $root.proto.InventoryRef.toObject(message.dst, options);
+            if (message.itemId != null && message.hasOwnProperty("itemId"))
+                if (typeof message.itemId === "number")
+                    object.itemId = options.longs === String ? String(message.itemId) : message.itemId;
+                else
+                    object.itemId = options.longs === String ? $util.Long.prototype.toString.call(message.itemId) : options.longs === Number ? new $util.LongBits(message.itemId.low >>> 0, message.itemId.high >>> 0).toNumber(true) : message.itemId;
+            if (message.dstPos != null && message.hasOwnProperty("dstPos")) {
+                object.dstPos = $root.proto.GridPos.toObject(message.dstPos, options);
+                if (options.oneofs)
+                    object._dstPos = "dstPos";
+            }
+            if (message.dstEquipSlot != null && message.hasOwnProperty("dstEquipSlot")) {
+                object.dstEquipSlot = options.enums === String ? $root.proto.EquipSlot[message.dstEquipSlot] === undefined ? message.dstEquipSlot : $root.proto.EquipSlot[message.dstEquipSlot] : message.dstEquipSlot;
+                if (options.oneofs)
+                    object._dstEquipSlot = "dstEquipSlot";
+            }
+            if (message.quantity != null && message.hasOwnProperty("quantity")) {
+                object.quantity = message.quantity;
+                if (options.oneofs)
+                    object._quantity = "quantity";
+            }
+            if (message.allowSwapOrMerge != null && message.hasOwnProperty("allowSwapOrMerge"))
+                object.allowSwapOrMerge = message.allowSwapOrMerge;
+            return object;
+        };
+
+        /**
+         * Converts this InventoryMoveSpec to JSON.
+         * @function toJSON
+         * @memberof proto.InventoryMoveSpec
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        InventoryMoveSpec.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for InventoryMoveSpec
+         * @function getTypeUrl
+         * @memberof proto.InventoryMoveSpec
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        InventoryMoveSpec.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.InventoryMoveSpec";
+        };
+
+        return InventoryMoveSpec;
+    })();
+
+    proto.InventoryOp = (function() {
+
+        /**
+         * Properties of an InventoryOp.
+         * @memberof proto
+         * @interface IInventoryOp
+         * @property {number|Long|null} [opId] InventoryOp opId
+         * @property {Array.<proto.IInventoryExpected>|null} [expected] InventoryOp expected
+         * @property {proto.IInventoryMoveSpec|null} [move] InventoryOp move
+         * @property {proto.IInventoryMoveSpec|null} [dropToWorld] InventoryOp dropToWorld
+         * @property {proto.IInventoryMoveSpec|null} [pickupFromWorld] InventoryOp pickupFromWorld
+         */
+
+        /**
+         * Constructs a new InventoryOp.
+         * @memberof proto
+         * @classdesc Represents an InventoryOp.
+         * @implements IInventoryOp
+         * @constructor
+         * @param {proto.IInventoryOp=} [properties] Properties to set
+         */
+        function InventoryOp(properties) {
+            this.expected = [];
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * InventoryOp opId.
+         * @member {number|Long} opId
+         * @memberof proto.InventoryOp
+         * @instance
+         */
+        InventoryOp.prototype.opId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * InventoryOp expected.
+         * @member {Array.<proto.IInventoryExpected>} expected
+         * @memberof proto.InventoryOp
+         * @instance
+         */
+        InventoryOp.prototype.expected = $util.emptyArray;
+
+        /**
+         * InventoryOp move.
+         * @member {proto.IInventoryMoveSpec|null|undefined} move
+         * @memberof proto.InventoryOp
+         * @instance
+         */
+        InventoryOp.prototype.move = null;
+
+        /**
+         * InventoryOp dropToWorld.
+         * @member {proto.IInventoryMoveSpec|null|undefined} dropToWorld
+         * @memberof proto.InventoryOp
+         * @instance
+         */
+        InventoryOp.prototype.dropToWorld = null;
+
+        /**
+         * InventoryOp pickupFromWorld.
+         * @member {proto.IInventoryMoveSpec|null|undefined} pickupFromWorld
+         * @memberof proto.InventoryOp
+         * @instance
+         */
+        InventoryOp.prototype.pickupFromWorld = null;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        /**
+         * InventoryOp kind.
+         * @member {"move"|"dropToWorld"|"pickupFromWorld"|undefined} kind
+         * @memberof proto.InventoryOp
+         * @instance
+         */
+        Object.defineProperty(InventoryOp.prototype, "kind", {
+            get: $util.oneOfGetter($oneOfFields = ["move", "dropToWorld", "pickupFromWorld"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new InventoryOp instance using the specified properties.
+         * @function create
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {proto.IInventoryOp=} [properties] Properties to set
+         * @returns {proto.InventoryOp} InventoryOp instance
+         */
+        InventoryOp.create = function create(properties) {
+            return new InventoryOp(properties);
+        };
+
+        /**
+         * Encodes the specified InventoryOp message. Does not implicitly {@link proto.InventoryOp.verify|verify} messages.
+         * @function encode
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {proto.IInventoryOp} message InventoryOp message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryOp.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.opId != null && Object.hasOwnProperty.call(message, "opId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.opId);
+            if (message.expected != null && message.expected.length)
+                for (let i = 0; i < message.expected.length; ++i)
+                    $root.proto.InventoryExpected.encode(message.expected[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            if (message.move != null && Object.hasOwnProperty.call(message, "move"))
+                $root.proto.InventoryMoveSpec.encode(message.move, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+            if (message.dropToWorld != null && Object.hasOwnProperty.call(message, "dropToWorld"))
+                $root.proto.InventoryMoveSpec.encode(message.dropToWorld, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
+            if (message.pickupFromWorld != null && Object.hasOwnProperty.call(message, "pickupFromWorld"))
+                $root.proto.InventoryMoveSpec.encode(message.pickupFromWorld, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified InventoryOp message, length delimited. Does not implicitly {@link proto.InventoryOp.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {proto.IInventoryOp} message InventoryOp message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        InventoryOp.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an InventoryOp message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.InventoryOp} InventoryOp
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryOp.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.InventoryOp();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.opId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        if (!(message.expected && message.expected.length))
+                            message.expected = [];
+                        message.expected.push($root.proto.InventoryExpected.decode(reader, reader.uint32()));
+                        break;
+                    }
+                case 10: {
+                        message.move = $root.proto.InventoryMoveSpec.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 12: {
+                        message.dropToWorld = $root.proto.InventoryMoveSpec.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 13: {
+                        message.pickupFromWorld = $root.proto.InventoryMoveSpec.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an InventoryOp message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.InventoryOp} InventoryOp
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        InventoryOp.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an InventoryOp message.
+         * @function verify
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        InventoryOp.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.opId != null && message.hasOwnProperty("opId"))
+                if (!$util.isInteger(message.opId) && !(message.opId && $util.isInteger(message.opId.low) && $util.isInteger(message.opId.high)))
+                    return "opId: integer|Long expected";
+            if (message.expected != null && message.hasOwnProperty("expected")) {
+                if (!Array.isArray(message.expected))
+                    return "expected: array expected";
+                for (let i = 0; i < message.expected.length; ++i) {
+                    let error = $root.proto.InventoryExpected.verify(message.expected[i]);
+                    if (error)
+                        return "expected." + error;
+                }
+            }
+            if (message.move != null && message.hasOwnProperty("move")) {
+                properties.kind = 1;
+                {
+                    let error = $root.proto.InventoryMoveSpec.verify(message.move);
+                    if (error)
+                        return "move." + error;
+                }
+            }
+            if (message.dropToWorld != null && message.hasOwnProperty("dropToWorld")) {
+                if (properties.kind === 1)
+                    return "kind: multiple values";
+                properties.kind = 1;
+                {
+                    let error = $root.proto.InventoryMoveSpec.verify(message.dropToWorld);
+                    if (error)
+                        return "dropToWorld." + error;
+                }
+            }
+            if (message.pickupFromWorld != null && message.hasOwnProperty("pickupFromWorld")) {
+                if (properties.kind === 1)
+                    return "kind: multiple values";
+                properties.kind = 1;
+                {
+                    let error = $root.proto.InventoryMoveSpec.verify(message.pickupFromWorld);
+                    if (error)
+                        return "pickupFromWorld." + error;
+                }
+            }
+            return null;
+        };
+
+        /**
+         * Creates an InventoryOp message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.InventoryOp} InventoryOp
+         */
+        InventoryOp.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.InventoryOp)
+                return object;
+            let message = new $root.proto.InventoryOp();
+            if (object.opId != null)
+                if ($util.Long)
+                    (message.opId = $util.Long.fromValue(object.opId)).unsigned = true;
+                else if (typeof object.opId === "string")
+                    message.opId = parseInt(object.opId, 10);
+                else if (typeof object.opId === "number")
+                    message.opId = object.opId;
+                else if (typeof object.opId === "object")
+                    message.opId = new $util.LongBits(object.opId.low >>> 0, object.opId.high >>> 0).toNumber(true);
+            if (object.expected) {
+                if (!Array.isArray(object.expected))
+                    throw TypeError(".proto.InventoryOp.expected: array expected");
+                message.expected = [];
+                for (let i = 0; i < object.expected.length; ++i) {
+                    if (typeof object.expected[i] !== "object")
+                        throw TypeError(".proto.InventoryOp.expected: object expected");
+                    message.expected[i] = $root.proto.InventoryExpected.fromObject(object.expected[i]);
+                }
+            }
+            if (object.move != null) {
+                if (typeof object.move !== "object")
+                    throw TypeError(".proto.InventoryOp.move: object expected");
+                message.move = $root.proto.InventoryMoveSpec.fromObject(object.move);
+            }
+            if (object.dropToWorld != null) {
+                if (typeof object.dropToWorld !== "object")
+                    throw TypeError(".proto.InventoryOp.dropToWorld: object expected");
+                message.dropToWorld = $root.proto.InventoryMoveSpec.fromObject(object.dropToWorld);
+            }
+            if (object.pickupFromWorld != null) {
+                if (typeof object.pickupFromWorld !== "object")
+                    throw TypeError(".proto.InventoryOp.pickupFromWorld: object expected");
+                message.pickupFromWorld = $root.proto.InventoryMoveSpec.fromObject(object.pickupFromWorld);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an InventoryOp message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {proto.InventoryOp} message InventoryOp
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        InventoryOp.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.arrays || options.defaults)
+                object.expected = [];
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.opId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.opId = options.longs === String ? "0" : 0;
+            if (message.opId != null && message.hasOwnProperty("opId"))
+                if (typeof message.opId === "number")
+                    object.opId = options.longs === String ? String(message.opId) : message.opId;
+                else
+                    object.opId = options.longs === String ? $util.Long.prototype.toString.call(message.opId) : options.longs === Number ? new $util.LongBits(message.opId.low >>> 0, message.opId.high >>> 0).toNumber(true) : message.opId;
+            if (message.expected && message.expected.length) {
+                object.expected = [];
+                for (let j = 0; j < message.expected.length; ++j)
+                    object.expected[j] = $root.proto.InventoryExpected.toObject(message.expected[j], options);
+            }
+            if (message.move != null && message.hasOwnProperty("move")) {
+                object.move = $root.proto.InventoryMoveSpec.toObject(message.move, options);
+                if (options.oneofs)
+                    object.kind = "move";
+            }
+            if (message.dropToWorld != null && message.hasOwnProperty("dropToWorld")) {
+                object.dropToWorld = $root.proto.InventoryMoveSpec.toObject(message.dropToWorld, options);
+                if (options.oneofs)
+                    object.kind = "dropToWorld";
+            }
+            if (message.pickupFromWorld != null && message.hasOwnProperty("pickupFromWorld")) {
+                object.pickupFromWorld = $root.proto.InventoryMoveSpec.toObject(message.pickupFromWorld, options);
+                if (options.oneofs)
+                    object.kind = "pickupFromWorld";
+            }
+            return object;
+        };
+
+        /**
+         * Converts this InventoryOp to JSON.
+         * @function toJSON
+         * @memberof proto.InventoryOp
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        InventoryOp.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for InventoryOp
+         * @function getTypeUrl
+         * @memberof proto.InventoryOp
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        InventoryOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.InventoryOp";
+        };
+
+        return InventoryOp;
+    })();
+
+    proto.C2S_InventoryOp = (function() {
+
+        /**
+         * Properties of a C2S_InventoryOp.
+         * @memberof proto
+         * @interface IC2S_InventoryOp
+         * @property {proto.IInventoryOp|null} [op] C2S_InventoryOp op
+         */
+
+        /**
+         * Constructs a new C2S_InventoryOp.
+         * @memberof proto
+         * @classdesc Represents a C2S_InventoryOp.
+         * @implements IC2S_InventoryOp
+         * @constructor
+         * @param {proto.IC2S_InventoryOp=} [properties] Properties to set
+         */
+        function C2S_InventoryOp(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * C2S_InventoryOp op.
+         * @member {proto.IInventoryOp|null|undefined} op
+         * @memberof proto.C2S_InventoryOp
+         * @instance
+         */
+        C2S_InventoryOp.prototype.op = null;
+
+        /**
+         * Creates a new C2S_InventoryOp instance using the specified properties.
+         * @function create
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {proto.IC2S_InventoryOp=} [properties] Properties to set
+         * @returns {proto.C2S_InventoryOp} C2S_InventoryOp instance
+         */
+        C2S_InventoryOp.create = function create(properties) {
+            return new C2S_InventoryOp(properties);
+        };
+
+        /**
+         * Encodes the specified C2S_InventoryOp message. Does not implicitly {@link proto.C2S_InventoryOp.verify|verify} messages.
+         * @function encode
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {proto.IC2S_InventoryOp} message C2S_InventoryOp message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_InventoryOp.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.op != null && Object.hasOwnProperty.call(message, "op"))
+                $root.proto.InventoryOp.encode(message.op, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified C2S_InventoryOp message, length delimited. Does not implicitly {@link proto.C2S_InventoryOp.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {proto.IC2S_InventoryOp} message C2S_InventoryOp message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_InventoryOp.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a C2S_InventoryOp message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.C2S_InventoryOp} C2S_InventoryOp
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_InventoryOp.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.C2S_InventoryOp();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.op = $root.proto.InventoryOp.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a C2S_InventoryOp message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.C2S_InventoryOp} C2S_InventoryOp
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_InventoryOp.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a C2S_InventoryOp message.
+         * @function verify
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        C2S_InventoryOp.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.op != null && message.hasOwnProperty("op")) {
+                let error = $root.proto.InventoryOp.verify(message.op);
+                if (error)
+                    return "op." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a C2S_InventoryOp message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.C2S_InventoryOp} C2S_InventoryOp
+         */
+        C2S_InventoryOp.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.C2S_InventoryOp)
+                return object;
+            let message = new $root.proto.C2S_InventoryOp();
+            if (object.op != null) {
+                if (typeof object.op !== "object")
+                    throw TypeError(".proto.C2S_InventoryOp.op: object expected");
+                message.op = $root.proto.InventoryOp.fromObject(object.op);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a C2S_InventoryOp message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {proto.C2S_InventoryOp} message C2S_InventoryOp
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        C2S_InventoryOp.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                object.op = null;
+            if (message.op != null && message.hasOwnProperty("op"))
+                object.op = $root.proto.InventoryOp.toObject(message.op, options);
+            return object;
+        };
+
+        /**
+         * Converts this C2S_InventoryOp to JSON.
+         * @function toJSON
+         * @memberof proto.C2S_InventoryOp
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        C2S_InventoryOp.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for C2S_InventoryOp
+         * @function getTypeUrl
+         * @memberof proto.C2S_InventoryOp
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        C2S_InventoryOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.C2S_InventoryOp";
+        };
+
+        return C2S_InventoryOp;
     })();
 
     proto.EntityMovement = (function() {
@@ -4427,6 +6952,7 @@ export const proto = $root.proto = (() => {
                 case 0:
                 case 1:
                 case 2:
+                case 3:
                 case 4:
                 case 5:
                     break;
@@ -4473,6 +6999,10 @@ export const proto = $root.proto = (() => {
             case "OPEN_CONTAINER":
             case 2:
                 message.type = 2;
+                break;
+            case "CLOSE_CONTAINER":
+            case 3:
+                message.type = 3;
                 break;
             case "USE":
             case 4:
@@ -4553,6 +7083,7 @@ export const proto = $root.proto = (() => {
      * @property {number} AUTO=0 AUTO value
      * @property {number} GATHER=1 GATHER value
      * @property {number} OPEN_CONTAINER=2 OPEN_CONTAINER value
+     * @property {number} CLOSE_CONTAINER=3 CLOSE_CONTAINER value
      * @property {number} USE=4 USE value
      * @property {number} PICKUP=5 PICKUP value
      */
@@ -4561,6 +7092,7 @@ export const proto = $root.proto = (() => {
         values[valuesById[0] = "AUTO"] = 0;
         values[valuesById[1] = "GATHER"] = 1;
         values[valuesById[2] = "OPEN_CONTAINER"] = 2;
+        values[valuesById[3] = "CLOSE_CONTAINER"] = 3;
         values[valuesById[4] = "USE"] = 4;
         values[valuesById[5] = "PICKUP"] = 5;
         return values;
@@ -5582,6 +8114,7 @@ export const proto = $root.proto = (() => {
          * @property {proto.IC2S_Ping|null} [ping] ClientMessage ping
          * @property {proto.IC2S_PlayerAction|null} [playerAction] ClientMessage playerAction
          * @property {proto.IC2S_MovementMode|null} [movementMode] ClientMessage movementMode
+         * @property {proto.IC2S_InventoryOp|null} [inventoryOp] ClientMessage inventoryOp
          */
 
         /**
@@ -5639,17 +8172,25 @@ export const proto = $root.proto = (() => {
          */
         ClientMessage.prototype.movementMode = null;
 
+        /**
+         * ClientMessage inventoryOp.
+         * @member {proto.IC2S_InventoryOp|null|undefined} inventoryOp
+         * @memberof proto.ClientMessage
+         * @instance
+         */
+        ClientMessage.prototype.inventoryOp = null;
+
         // OneOf field names bound to virtual getters and setters
         let $oneOfFields;
 
         /**
          * ClientMessage payload.
-         * @member {"auth"|"ping"|"playerAction"|"movementMode"|undefined} payload
+         * @member {"auth"|"ping"|"playerAction"|"movementMode"|"inventoryOp"|undefined} payload
          * @memberof proto.ClientMessage
          * @instance
          */
         Object.defineProperty(ClientMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["auth", "ping", "playerAction", "movementMode"]),
+            get: $util.oneOfGetter($oneOfFields = ["auth", "ping", "playerAction", "movementMode", "inventoryOp"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -5687,6 +8228,8 @@ export const proto = $root.proto = (() => {
                 $root.proto.C2S_PlayerAction.encode(message.playerAction, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
             if (message.movementMode != null && Object.hasOwnProperty.call(message, "movementMode"))
                 $root.proto.C2S_MovementMode.encode(message.movementMode, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
+            if (message.inventoryOp != null && Object.hasOwnProperty.call(message, "inventoryOp"))
+                $root.proto.C2S_InventoryOp.encode(message.inventoryOp, writer.uint32(/* id 14, wireType 2 =*/114).fork()).ldelim();
             return writer;
         };
 
@@ -5741,6 +8284,10 @@ export const proto = $root.proto = (() => {
                     }
                 case 13: {
                         message.movementMode = $root.proto.C2S_MovementMode.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 14: {
+                        message.inventoryOp = $root.proto.C2S_InventoryOp.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -5820,6 +8367,16 @@ export const proto = $root.proto = (() => {
                         return "movementMode." + error;
                 }
             }
+            if (message.inventoryOp != null && message.hasOwnProperty("inventoryOp")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.C2S_InventoryOp.verify(message.inventoryOp);
+                    if (error)
+                        return "inventoryOp." + error;
+                }
+            }
             return null;
         };
 
@@ -5856,6 +8413,11 @@ export const proto = $root.proto = (() => {
                 if (typeof object.movementMode !== "object")
                     throw TypeError(".proto.ClientMessage.movementMode: object expected");
                 message.movementMode = $root.proto.C2S_MovementMode.fromObject(object.movementMode);
+            }
+            if (object.inventoryOp != null) {
+                if (typeof object.inventoryOp !== "object")
+                    throw TypeError(".proto.ClientMessage.inventoryOp: object expected");
+                message.inventoryOp = $root.proto.C2S_InventoryOp.fromObject(object.inventoryOp);
             }
             return message;
         };
@@ -5896,6 +8458,11 @@ export const proto = $root.proto = (() => {
                 object.movementMode = $root.proto.C2S_MovementMode.toObject(message.movementMode, options);
                 if (options.oneofs)
                     object.payload = "movementMode";
+            }
+            if (message.inventoryOp != null && message.hasOwnProperty("inventoryOp")) {
+                object.inventoryOp = $root.proto.C2S_InventoryOp.toObject(message.inventoryOp, options);
+                if (options.oneofs)
+                    object.payload = "inventoryOp";
             }
             return object;
         };
@@ -6425,9 +8992,6 @@ export const proto = $root.proto = (() => {
          * @property {string|null} [name] S2C_PlayerEnterWorld name
          * @property {number|null} [coordPerTile] S2C_PlayerEnterWorld coordPerTile
          * @property {number|null} [chunkSize] S2C_PlayerEnterWorld chunkSize
-         * @property {proto.IInventory|null} [inventory] S2C_PlayerEnterWorld inventory
-         * @property {proto.IPaperdoll|null} [paperdoll] S2C_PlayerEnterWorld paperdoll
-         * @property {number|Long|null} [draggingEntityId] S2C_PlayerEnterWorld draggingEntityId
          * @property {number|null} [streamEpoch] S2C_PlayerEnterWorld streamEpoch
          */
 
@@ -6479,45 +9043,12 @@ export const proto = $root.proto = (() => {
         S2C_PlayerEnterWorld.prototype.chunkSize = 0;
 
         /**
-         * S2C_PlayerEnterWorld inventory.
-         * @member {proto.IInventory|null|undefined} inventory
-         * @memberof proto.S2C_PlayerEnterWorld
-         * @instance
-         */
-        S2C_PlayerEnterWorld.prototype.inventory = null;
-
-        /**
-         * S2C_PlayerEnterWorld paperdoll.
-         * @member {proto.IPaperdoll|null|undefined} paperdoll
-         * @memberof proto.S2C_PlayerEnterWorld
-         * @instance
-         */
-        S2C_PlayerEnterWorld.prototype.paperdoll = null;
-
-        /**
-         * S2C_PlayerEnterWorld draggingEntityId.
-         * @member {number|Long|null|undefined} draggingEntityId
-         * @memberof proto.S2C_PlayerEnterWorld
-         * @instance
-         */
-        S2C_PlayerEnterWorld.prototype.draggingEntityId = null;
-
-        /**
          * S2C_PlayerEnterWorld streamEpoch.
          * @member {number} streamEpoch
          * @memberof proto.S2C_PlayerEnterWorld
          * @instance
          */
         S2C_PlayerEnterWorld.prototype.streamEpoch = 0;
-
-        // OneOf field names bound to virtual getters and setters
-        let $oneOfFields;
-
-        // Virtual OneOf for proto3 optional field
-        Object.defineProperty(S2C_PlayerEnterWorld.prototype, "_draggingEntityId", {
-            get: $util.oneOfGetter($oneOfFields = ["draggingEntityId"]),
-            set: $util.oneOfSetter($oneOfFields)
-        });
 
         /**
          * Creates a new S2C_PlayerEnterWorld instance using the specified properties.
@@ -6551,12 +9082,6 @@ export const proto = $root.proto = (() => {
                 writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.coordPerTile);
             if (message.chunkSize != null && Object.hasOwnProperty.call(message, "chunkSize"))
                 writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.chunkSize);
-            if (message.inventory != null && Object.hasOwnProperty.call(message, "inventory"))
-                $root.proto.Inventory.encode(message.inventory, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
-            if (message.paperdoll != null && Object.hasOwnProperty.call(message, "paperdoll"))
-                $root.proto.Paperdoll.encode(message.paperdoll, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
-            if (message.draggingEntityId != null && Object.hasOwnProperty.call(message, "draggingEntityId"))
-                writer.uint32(/* id 8, wireType 0 =*/64).uint64(message.draggingEntityId);
             if (message.streamEpoch != null && Object.hasOwnProperty.call(message, "streamEpoch"))
                 writer.uint32(/* id 9, wireType 0 =*/72).uint32(message.streamEpoch);
             return writer;
@@ -6611,18 +9136,6 @@ export const proto = $root.proto = (() => {
                         message.chunkSize = reader.uint32();
                         break;
                     }
-                case 6: {
-                        message.inventory = $root.proto.Inventory.decode(reader, reader.uint32());
-                        break;
-                    }
-                case 7: {
-                        message.paperdoll = $root.proto.Paperdoll.decode(reader, reader.uint32());
-                        break;
-                    }
-                case 8: {
-                        message.draggingEntityId = reader.uint64();
-                        break;
-                    }
                 case 9: {
                         message.streamEpoch = reader.uint32();
                         break;
@@ -6662,7 +9175,6 @@ export const proto = $root.proto = (() => {
         S2C_PlayerEnterWorld.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            let properties = {};
             if (message.entityId != null && message.hasOwnProperty("entityId"))
                 if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
                     return "entityId: integer|Long expected";
@@ -6675,21 +9187,6 @@ export const proto = $root.proto = (() => {
             if (message.chunkSize != null && message.hasOwnProperty("chunkSize"))
                 if (!$util.isInteger(message.chunkSize))
                     return "chunkSize: integer expected";
-            if (message.inventory != null && message.hasOwnProperty("inventory")) {
-                let error = $root.proto.Inventory.verify(message.inventory);
-                if (error)
-                    return "inventory." + error;
-            }
-            if (message.paperdoll != null && message.hasOwnProperty("paperdoll")) {
-                let error = $root.proto.Paperdoll.verify(message.paperdoll);
-                if (error)
-                    return "paperdoll." + error;
-            }
-            if (message.draggingEntityId != null && message.hasOwnProperty("draggingEntityId")) {
-                properties._draggingEntityId = 1;
-                if (!$util.isInteger(message.draggingEntityId) && !(message.draggingEntityId && $util.isInteger(message.draggingEntityId.low) && $util.isInteger(message.draggingEntityId.high)))
-                    return "draggingEntityId: integer|Long expected";
-            }
             if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
                 if (!$util.isInteger(message.streamEpoch))
                     return "streamEpoch: integer expected";
@@ -6723,25 +9220,6 @@ export const proto = $root.proto = (() => {
                 message.coordPerTile = object.coordPerTile >>> 0;
             if (object.chunkSize != null)
                 message.chunkSize = object.chunkSize >>> 0;
-            if (object.inventory != null) {
-                if (typeof object.inventory !== "object")
-                    throw TypeError(".proto.S2C_PlayerEnterWorld.inventory: object expected");
-                message.inventory = $root.proto.Inventory.fromObject(object.inventory);
-            }
-            if (object.paperdoll != null) {
-                if (typeof object.paperdoll !== "object")
-                    throw TypeError(".proto.S2C_PlayerEnterWorld.paperdoll: object expected");
-                message.paperdoll = $root.proto.Paperdoll.fromObject(object.paperdoll);
-            }
-            if (object.draggingEntityId != null)
-                if ($util.Long)
-                    (message.draggingEntityId = $util.Long.fromValue(object.draggingEntityId)).unsigned = true;
-                else if (typeof object.draggingEntityId === "string")
-                    message.draggingEntityId = parseInt(object.draggingEntityId, 10);
-                else if (typeof object.draggingEntityId === "number")
-                    message.draggingEntityId = object.draggingEntityId;
-                else if (typeof object.draggingEntityId === "object")
-                    message.draggingEntityId = new $util.LongBits(object.draggingEntityId.low >>> 0, object.draggingEntityId.high >>> 0).toNumber(true);
             if (object.streamEpoch != null)
                 message.streamEpoch = object.streamEpoch >>> 0;
             return message;
@@ -6769,8 +9247,6 @@ export const proto = $root.proto = (() => {
                 object.name = "";
                 object.coordPerTile = 0;
                 object.chunkSize = 0;
-                object.inventory = null;
-                object.paperdoll = null;
                 object.streamEpoch = 0;
             }
             if (message.entityId != null && message.hasOwnProperty("entityId"))
@@ -6784,18 +9260,6 @@ export const proto = $root.proto = (() => {
                 object.coordPerTile = message.coordPerTile;
             if (message.chunkSize != null && message.hasOwnProperty("chunkSize"))
                 object.chunkSize = message.chunkSize;
-            if (message.inventory != null && message.hasOwnProperty("inventory"))
-                object.inventory = $root.proto.Inventory.toObject(message.inventory, options);
-            if (message.paperdoll != null && message.hasOwnProperty("paperdoll"))
-                object.paperdoll = $root.proto.Paperdoll.toObject(message.paperdoll, options);
-            if (message.draggingEntityId != null && message.hasOwnProperty("draggingEntityId")) {
-                if (typeof message.draggingEntityId === "number")
-                    object.draggingEntityId = options.longs === String ? String(message.draggingEntityId) : message.draggingEntityId;
-                else
-                    object.draggingEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.draggingEntityId) : options.longs === Number ? new $util.LongBits(message.draggingEntityId.low >>> 0, message.draggingEntityId.high >>> 0).toNumber(true) : message.draggingEntityId;
-                if (options.oneofs)
-                    object._draggingEntityId = "draggingEntityId";
-            }
             if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
                 object.streamEpoch = message.streamEpoch;
             return object;
@@ -6828,744 +9292,6 @@ export const proto = $root.proto = (() => {
         };
 
         return S2C_PlayerEnterWorld;
-    })();
-
-    proto.S2C_ObjectSpawn = (function() {
-
-        /**
-         * Properties of a S2C_ObjectSpawn.
-         * @memberof proto
-         * @interface IS2C_ObjectSpawn
-         * @property {number|Long|null} [entityId] S2C_ObjectSpawn entityId
-         * @property {number|null} [objectType] S2C_ObjectSpawn objectType
-         * @property {proto.IEntityPosition|null} [position] S2C_ObjectSpawn position
-         */
-
-        /**
-         * Constructs a new S2C_ObjectSpawn.
-         * @memberof proto
-         * @classdesc Represents a S2C_ObjectSpawn.
-         * @implements IS2C_ObjectSpawn
-         * @constructor
-         * @param {proto.IS2C_ObjectSpawn=} [properties] Properties to set
-         */
-        function S2C_ObjectSpawn(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * S2C_ObjectSpawn entityId.
-         * @member {number|Long} entityId
-         * @memberof proto.S2C_ObjectSpawn
-         * @instance
-         */
-        S2C_ObjectSpawn.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-        /**
-         * S2C_ObjectSpawn objectType.
-         * @member {number} objectType
-         * @memberof proto.S2C_ObjectSpawn
-         * @instance
-         */
-        S2C_ObjectSpawn.prototype.objectType = 0;
-
-        /**
-         * S2C_ObjectSpawn position.
-         * @member {proto.IEntityPosition|null|undefined} position
-         * @memberof proto.S2C_ObjectSpawn
-         * @instance
-         */
-        S2C_ObjectSpawn.prototype.position = null;
-
-        /**
-         * Creates a new S2C_ObjectSpawn instance using the specified properties.
-         * @function create
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {proto.IS2C_ObjectSpawn=} [properties] Properties to set
-         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn instance
-         */
-        S2C_ObjectSpawn.create = function create(properties) {
-            return new S2C_ObjectSpawn(properties);
-        };
-
-        /**
-         * Encodes the specified S2C_ObjectSpawn message. Does not implicitly {@link proto.S2C_ObjectSpawn.verify|verify} messages.
-         * @function encode
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {proto.IS2C_ObjectSpawn} message S2C_ObjectSpawn message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        S2C_ObjectSpawn.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
-            if (message.objectType != null && Object.hasOwnProperty.call(message, "objectType"))
-                writer.uint32(/* id 2, wireType 0 =*/16).int32(message.objectType);
-            if (message.position != null && Object.hasOwnProperty.call(message, "position"))
-                $root.proto.EntityPosition.encode(message.position, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-            return writer;
-        };
-
-        /**
-         * Encodes the specified S2C_ObjectSpawn message, length delimited. Does not implicitly {@link proto.S2C_ObjectSpawn.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {proto.IS2C_ObjectSpawn} message S2C_ObjectSpawn message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        S2C_ObjectSpawn.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a S2C_ObjectSpawn message from the specified reader or buffer.
-         * @function decode
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        S2C_ObjectSpawn.decode = function decode(reader, length, error) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ObjectSpawn();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                if (tag === error)
-                    break;
-                switch (tag >>> 3) {
-                case 1: {
-                        message.entityId = reader.uint64();
-                        break;
-                    }
-                case 2: {
-                        message.objectType = reader.int32();
-                        break;
-                    }
-                case 3: {
-                        message.position = $root.proto.EntityPosition.decode(reader, reader.uint32());
-                        break;
-                    }
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a S2C_ObjectSpawn message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        S2C_ObjectSpawn.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a S2C_ObjectSpawn message.
-         * @function verify
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        S2C_ObjectSpawn.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
-                    return "entityId: integer|Long expected";
-            if (message.objectType != null && message.hasOwnProperty("objectType"))
-                if (!$util.isInteger(message.objectType))
-                    return "objectType: integer expected";
-            if (message.position != null && message.hasOwnProperty("position")) {
-                let error = $root.proto.EntityPosition.verify(message.position);
-                if (error)
-                    return "position." + error;
-            }
-            return null;
-        };
-
-        /**
-         * Creates a S2C_ObjectSpawn message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn
-         */
-        S2C_ObjectSpawn.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.S2C_ObjectSpawn)
-                return object;
-            let message = new $root.proto.S2C_ObjectSpawn();
-            if (object.entityId != null)
-                if ($util.Long)
-                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
-                else if (typeof object.entityId === "string")
-                    message.entityId = parseInt(object.entityId, 10);
-                else if (typeof object.entityId === "number")
-                    message.entityId = object.entityId;
-                else if (typeof object.entityId === "object")
-                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
-            if (object.objectType != null)
-                message.objectType = object.objectType | 0;
-            if (object.position != null) {
-                if (typeof object.position !== "object")
-                    throw TypeError(".proto.S2C_ObjectSpawn.position: object expected");
-                message.position = $root.proto.EntityPosition.fromObject(object.position);
-            }
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a S2C_ObjectSpawn message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {proto.S2C_ObjectSpawn} message S2C_ObjectSpawn
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        S2C_ObjectSpawn.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults) {
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, true);
-                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.entityId = options.longs === String ? "0" : 0;
-                object.objectType = 0;
-                object.position = null;
-            }
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (typeof message.entityId === "number")
-                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
-                else
-                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
-            if (message.objectType != null && message.hasOwnProperty("objectType"))
-                object.objectType = message.objectType;
-            if (message.position != null && message.hasOwnProperty("position"))
-                object.position = $root.proto.EntityPosition.toObject(message.position, options);
-            return object;
-        };
-
-        /**
-         * Converts this S2C_ObjectSpawn to JSON.
-         * @function toJSON
-         * @memberof proto.S2C_ObjectSpawn
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        S2C_ObjectSpawn.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        /**
-         * Gets the default type url for S2C_ObjectSpawn
-         * @function getTypeUrl
-         * @memberof proto.S2C_ObjectSpawn
-         * @static
-         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
-         * @returns {string} The default type url
-         */
-        S2C_ObjectSpawn.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
-            if (typeUrlPrefix === undefined) {
-                typeUrlPrefix = "type.googleapis.com";
-            }
-            return typeUrlPrefix + "/proto.S2C_ObjectSpawn";
-        };
-
-        return S2C_ObjectSpawn;
-    })();
-
-    proto.S2C_ObjectDespawn = (function() {
-
-        /**
-         * Properties of a S2C_ObjectDespawn.
-         * @memberof proto
-         * @interface IS2C_ObjectDespawn
-         * @property {number|Long|null} [entityId] S2C_ObjectDespawn entityId
-         */
-
-        /**
-         * Constructs a new S2C_ObjectDespawn.
-         * @memberof proto
-         * @classdesc Represents a S2C_ObjectDespawn.
-         * @implements IS2C_ObjectDespawn
-         * @constructor
-         * @param {proto.IS2C_ObjectDespawn=} [properties] Properties to set
-         */
-        function S2C_ObjectDespawn(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * S2C_ObjectDespawn entityId.
-         * @member {number|Long} entityId
-         * @memberof proto.S2C_ObjectDespawn
-         * @instance
-         */
-        S2C_ObjectDespawn.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-        /**
-         * Creates a new S2C_ObjectDespawn instance using the specified properties.
-         * @function create
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {proto.IS2C_ObjectDespawn=} [properties] Properties to set
-         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn instance
-         */
-        S2C_ObjectDespawn.create = function create(properties) {
-            return new S2C_ObjectDespawn(properties);
-        };
-
-        /**
-         * Encodes the specified S2C_ObjectDespawn message. Does not implicitly {@link proto.S2C_ObjectDespawn.verify|verify} messages.
-         * @function encode
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {proto.IS2C_ObjectDespawn} message S2C_ObjectDespawn message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        S2C_ObjectDespawn.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified S2C_ObjectDespawn message, length delimited. Does not implicitly {@link proto.S2C_ObjectDespawn.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {proto.IS2C_ObjectDespawn} message S2C_ObjectDespawn message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        S2C_ObjectDespawn.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a S2C_ObjectDespawn message from the specified reader or buffer.
-         * @function decode
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        S2C_ObjectDespawn.decode = function decode(reader, length, error) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ObjectDespawn();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                if (tag === error)
-                    break;
-                switch (tag >>> 3) {
-                case 1: {
-                        message.entityId = reader.uint64();
-                        break;
-                    }
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a S2C_ObjectDespawn message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        S2C_ObjectDespawn.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a S2C_ObjectDespawn message.
-         * @function verify
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        S2C_ObjectDespawn.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
-                    return "entityId: integer|Long expected";
-            return null;
-        };
-
-        /**
-         * Creates a S2C_ObjectDespawn message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn
-         */
-        S2C_ObjectDespawn.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.S2C_ObjectDespawn)
-                return object;
-            let message = new $root.proto.S2C_ObjectDespawn();
-            if (object.entityId != null)
-                if ($util.Long)
-                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
-                else if (typeof object.entityId === "string")
-                    message.entityId = parseInt(object.entityId, 10);
-                else if (typeof object.entityId === "number")
-                    message.entityId = object.entityId;
-                else if (typeof object.entityId === "object")
-                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a S2C_ObjectDespawn message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {proto.S2C_ObjectDespawn} message S2C_ObjectDespawn
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        S2C_ObjectDespawn.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults)
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, true);
-                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.entityId = options.longs === String ? "0" : 0;
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (typeof message.entityId === "number")
-                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
-                else
-                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
-            return object;
-        };
-
-        /**
-         * Converts this S2C_ObjectDespawn to JSON.
-         * @function toJSON
-         * @memberof proto.S2C_ObjectDespawn
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        S2C_ObjectDespawn.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        /**
-         * Gets the default type url for S2C_ObjectDespawn
-         * @function getTypeUrl
-         * @memberof proto.S2C_ObjectDespawn
-         * @static
-         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
-         * @returns {string} The default type url
-         */
-        S2C_ObjectDespawn.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
-            if (typeUrlPrefix === undefined) {
-                typeUrlPrefix = "type.googleapis.com";
-            }
-            return typeUrlPrefix + "/proto.S2C_ObjectDespawn";
-        };
-
-        return S2C_ObjectDespawn;
-    })();
-
-    proto.S2C_ObjectMove = (function() {
-
-        /**
-         * Properties of a S2C_ObjectMove.
-         * @memberof proto
-         * @interface IS2C_ObjectMove
-         * @property {number|Long|null} [entityId] S2C_ObjectMove entityId
-         * @property {proto.IEntityMovement|null} [movement] S2C_ObjectMove movement
-         */
-
-        /**
-         * Constructs a new S2C_ObjectMove.
-         * @memberof proto
-         * @classdesc Represents a S2C_ObjectMove.
-         * @implements IS2C_ObjectMove
-         * @constructor
-         * @param {proto.IS2C_ObjectMove=} [properties] Properties to set
-         */
-        function S2C_ObjectMove(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * S2C_ObjectMove entityId.
-         * @member {number|Long} entityId
-         * @memberof proto.S2C_ObjectMove
-         * @instance
-         */
-        S2C_ObjectMove.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-        /**
-         * S2C_ObjectMove movement.
-         * @member {proto.IEntityMovement|null|undefined} movement
-         * @memberof proto.S2C_ObjectMove
-         * @instance
-         */
-        S2C_ObjectMove.prototype.movement = null;
-
-        /**
-         * Creates a new S2C_ObjectMove instance using the specified properties.
-         * @function create
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {proto.IS2C_ObjectMove=} [properties] Properties to set
-         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove instance
-         */
-        S2C_ObjectMove.create = function create(properties) {
-            return new S2C_ObjectMove(properties);
-        };
-
-        /**
-         * Encodes the specified S2C_ObjectMove message. Does not implicitly {@link proto.S2C_ObjectMove.verify|verify} messages.
-         * @function encode
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {proto.IS2C_ObjectMove} message S2C_ObjectMove message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        S2C_ObjectMove.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
-            if (message.movement != null && Object.hasOwnProperty.call(message, "movement"))
-                $root.proto.EntityMovement.encode(message.movement, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-            return writer;
-        };
-
-        /**
-         * Encodes the specified S2C_ObjectMove message, length delimited. Does not implicitly {@link proto.S2C_ObjectMove.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {proto.IS2C_ObjectMove} message S2C_ObjectMove message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        S2C_ObjectMove.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a S2C_ObjectMove message from the specified reader or buffer.
-         * @function decode
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        S2C_ObjectMove.decode = function decode(reader, length, error) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ObjectMove();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                if (tag === error)
-                    break;
-                switch (tag >>> 3) {
-                case 1: {
-                        message.entityId = reader.uint64();
-                        break;
-                    }
-                case 2: {
-                        message.movement = $root.proto.EntityMovement.decode(reader, reader.uint32());
-                        break;
-                    }
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a S2C_ObjectMove message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        S2C_ObjectMove.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a S2C_ObjectMove message.
-         * @function verify
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        S2C_ObjectMove.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
-                    return "entityId: integer|Long expected";
-            if (message.movement != null && message.hasOwnProperty("movement")) {
-                let error = $root.proto.EntityMovement.verify(message.movement);
-                if (error)
-                    return "movement." + error;
-            }
-            return null;
-        };
-
-        /**
-         * Creates a S2C_ObjectMove message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
-         */
-        S2C_ObjectMove.fromObject = function fromObject(object) {
-            if (object instanceof $root.proto.S2C_ObjectMove)
-                return object;
-            let message = new $root.proto.S2C_ObjectMove();
-            if (object.entityId != null)
-                if ($util.Long)
-                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
-                else if (typeof object.entityId === "string")
-                    message.entityId = parseInt(object.entityId, 10);
-                else if (typeof object.entityId === "number")
-                    message.entityId = object.entityId;
-                else if (typeof object.entityId === "object")
-                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
-            if (object.movement != null) {
-                if (typeof object.movement !== "object")
-                    throw TypeError(".proto.S2C_ObjectMove.movement: object expected");
-                message.movement = $root.proto.EntityMovement.fromObject(object.movement);
-            }
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a S2C_ObjectMove message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {proto.S2C_ObjectMove} message S2C_ObjectMove
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        S2C_ObjectMove.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults) {
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, true);
-                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.entityId = options.longs === String ? "0" : 0;
-                object.movement = null;
-            }
-            if (message.entityId != null && message.hasOwnProperty("entityId"))
-                if (typeof message.entityId === "number")
-                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
-                else
-                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
-            if (message.movement != null && message.hasOwnProperty("movement"))
-                object.movement = $root.proto.EntityMovement.toObject(message.movement, options);
-            return object;
-        };
-
-        /**
-         * Converts this S2C_ObjectMove to JSON.
-         * @function toJSON
-         * @memberof proto.S2C_ObjectMove
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        S2C_ObjectMove.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        /**
-         * Gets the default type url for S2C_ObjectMove
-         * @function getTypeUrl
-         * @memberof proto.S2C_ObjectMove
-         * @static
-         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
-         * @returns {string} The default type url
-         */
-        S2C_ObjectMove.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
-            if (typeUrlPrefix === undefined) {
-                typeUrlPrefix = "type.googleapis.com";
-            }
-            return typeUrlPrefix + "/proto.S2C_ObjectMove";
-        };
-
-        return S2C_ObjectMove;
     })();
 
     proto.S2C_PlayerLeaveWorld = (function() {
@@ -8207,6 +9933,1940 @@ export const proto = $root.proto = (() => {
         return S2C_ChunkUnload;
     })();
 
+    proto.S2C_ObjectSpawn = (function() {
+
+        /**
+         * Properties of a S2C_ObjectSpawn.
+         * @memberof proto
+         * @interface IS2C_ObjectSpawn
+         * @property {number|Long|null} [entityId] S2C_ObjectSpawn entityId
+         * @property {number|null} [objectType] S2C_ObjectSpawn objectType
+         * @property {string|null} [resourcePath] S2C_ObjectSpawn resourcePath
+         * @property {proto.IEntityPosition|null} [position] S2C_ObjectSpawn position
+         */
+
+        /**
+         * Constructs a new S2C_ObjectSpawn.
+         * @memberof proto
+         * @classdesc Represents a S2C_ObjectSpawn.
+         * @implements IS2C_ObjectSpawn
+         * @constructor
+         * @param {proto.IS2C_ObjectSpawn=} [properties] Properties to set
+         */
+        function S2C_ObjectSpawn(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_ObjectSpawn entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_ObjectSpawn
+         * @instance
+         */
+        S2C_ObjectSpawn.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * S2C_ObjectSpawn objectType.
+         * @member {number} objectType
+         * @memberof proto.S2C_ObjectSpawn
+         * @instance
+         */
+        S2C_ObjectSpawn.prototype.objectType = 0;
+
+        /**
+         * S2C_ObjectSpawn resourcePath.
+         * @member {string} resourcePath
+         * @memberof proto.S2C_ObjectSpawn
+         * @instance
+         */
+        S2C_ObjectSpawn.prototype.resourcePath = "";
+
+        /**
+         * S2C_ObjectSpawn position.
+         * @member {proto.IEntityPosition|null|undefined} position
+         * @memberof proto.S2C_ObjectSpawn
+         * @instance
+         */
+        S2C_ObjectSpawn.prototype.position = null;
+
+        /**
+         * Creates a new S2C_ObjectSpawn instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {proto.IS2C_ObjectSpawn=} [properties] Properties to set
+         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn instance
+         */
+        S2C_ObjectSpawn.create = function create(properties) {
+            return new S2C_ObjectSpawn(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectSpawn message. Does not implicitly {@link proto.S2C_ObjectSpawn.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {proto.IS2C_ObjectSpawn} message S2C_ObjectSpawn message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectSpawn.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            if (message.objectType != null && Object.hasOwnProperty.call(message, "objectType"))
+                writer.uint32(/* id 2, wireType 0 =*/16).int32(message.objectType);
+            if (message.resourcePath != null && Object.hasOwnProperty.call(message, "resourcePath"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.resourcePath);
+            if (message.position != null && Object.hasOwnProperty.call(message, "position"))
+                $root.proto.EntityPosition.encode(message.position, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectSpawn message, length delimited. Does not implicitly {@link proto.S2C_ObjectSpawn.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {proto.IS2C_ObjectSpawn} message S2C_ObjectSpawn message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectSpawn.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_ObjectSpawn message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectSpawn.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ObjectSpawn();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.objectType = reader.int32();
+                        break;
+                    }
+                case 3: {
+                        message.resourcePath = reader.string();
+                        break;
+                    }
+                case 4: {
+                        message.position = $root.proto.EntityPosition.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_ObjectSpawn message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectSpawn.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_ObjectSpawn message.
+         * @function verify
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_ObjectSpawn.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            if (message.objectType != null && message.hasOwnProperty("objectType"))
+                if (!$util.isInteger(message.objectType))
+                    return "objectType: integer expected";
+            if (message.resourcePath != null && message.hasOwnProperty("resourcePath"))
+                if (!$util.isString(message.resourcePath))
+                    return "resourcePath: string expected";
+            if (message.position != null && message.hasOwnProperty("position")) {
+                let error = $root.proto.EntityPosition.verify(message.position);
+                if (error)
+                    return "position." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_ObjectSpawn message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_ObjectSpawn} S2C_ObjectSpawn
+         */
+        S2C_ObjectSpawn.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ObjectSpawn)
+                return object;
+            let message = new $root.proto.S2C_ObjectSpawn();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            if (object.objectType != null)
+                message.objectType = object.objectType | 0;
+            if (object.resourcePath != null)
+                message.resourcePath = String(object.resourcePath);
+            if (object.position != null) {
+                if (typeof object.position !== "object")
+                    throw TypeError(".proto.S2C_ObjectSpawn.position: object expected");
+                message.position = $root.proto.EntityPosition.fromObject(object.position);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_ObjectSpawn message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {proto.S2C_ObjectSpawn} message S2C_ObjectSpawn
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_ObjectSpawn.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+                object.objectType = 0;
+                object.resourcePath = "";
+                object.position = null;
+            }
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            if (message.objectType != null && message.hasOwnProperty("objectType"))
+                object.objectType = message.objectType;
+            if (message.resourcePath != null && message.hasOwnProperty("resourcePath"))
+                object.resourcePath = message.resourcePath;
+            if (message.position != null && message.hasOwnProperty("position"))
+                object.position = $root.proto.EntityPosition.toObject(message.position, options);
+            return object;
+        };
+
+        /**
+         * Converts this S2C_ObjectSpawn to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_ObjectSpawn
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_ObjectSpawn.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_ObjectSpawn
+         * @function getTypeUrl
+         * @memberof proto.S2C_ObjectSpawn
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_ObjectSpawn.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_ObjectSpawn";
+        };
+
+        return S2C_ObjectSpawn;
+    })();
+
+    proto.S2C_ObjectDespawn = (function() {
+
+        /**
+         * Properties of a S2C_ObjectDespawn.
+         * @memberof proto
+         * @interface IS2C_ObjectDespawn
+         * @property {number|Long|null} [entityId] S2C_ObjectDespawn entityId
+         */
+
+        /**
+         * Constructs a new S2C_ObjectDespawn.
+         * @memberof proto
+         * @classdesc Represents a S2C_ObjectDespawn.
+         * @implements IS2C_ObjectDespawn
+         * @constructor
+         * @param {proto.IS2C_ObjectDespawn=} [properties] Properties to set
+         */
+        function S2C_ObjectDespawn(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_ObjectDespawn entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_ObjectDespawn
+         * @instance
+         */
+        S2C_ObjectDespawn.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Creates a new S2C_ObjectDespawn instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {proto.IS2C_ObjectDespawn=} [properties] Properties to set
+         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn instance
+         */
+        S2C_ObjectDespawn.create = function create(properties) {
+            return new S2C_ObjectDespawn(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectDespawn message. Does not implicitly {@link proto.S2C_ObjectDespawn.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {proto.IS2C_ObjectDespawn} message S2C_ObjectDespawn message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectDespawn.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectDespawn message, length delimited. Does not implicitly {@link proto.S2C_ObjectDespawn.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {proto.IS2C_ObjectDespawn} message S2C_ObjectDespawn message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectDespawn.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_ObjectDespawn message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectDespawn.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ObjectDespawn();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_ObjectDespawn message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectDespawn.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_ObjectDespawn message.
+         * @function verify
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_ObjectDespawn.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates a S2C_ObjectDespawn message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_ObjectDespawn} S2C_ObjectDespawn
+         */
+        S2C_ObjectDespawn.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ObjectDespawn)
+                return object;
+            let message = new $root.proto.S2C_ObjectDespawn();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_ObjectDespawn message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {proto.S2C_ObjectDespawn} message S2C_ObjectDespawn
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_ObjectDespawn.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            return object;
+        };
+
+        /**
+         * Converts this S2C_ObjectDespawn to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_ObjectDespawn
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_ObjectDespawn.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_ObjectDespawn
+         * @function getTypeUrl
+         * @memberof proto.S2C_ObjectDespawn
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_ObjectDespawn.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_ObjectDespawn";
+        };
+
+        return S2C_ObjectDespawn;
+    })();
+
+    proto.S2C_ObjectMove = (function() {
+
+        /**
+         * Properties of a S2C_ObjectMove.
+         * @memberof proto
+         * @interface IS2C_ObjectMove
+         * @property {number|Long|null} [entityId] S2C_ObjectMove entityId
+         * @property {proto.IEntityMovement|null} [movement] S2C_ObjectMove movement
+         */
+
+        /**
+         * Constructs a new S2C_ObjectMove.
+         * @memberof proto
+         * @classdesc Represents a S2C_ObjectMove.
+         * @implements IS2C_ObjectMove
+         * @constructor
+         * @param {proto.IS2C_ObjectMove=} [properties] Properties to set
+         */
+        function S2C_ObjectMove(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_ObjectMove entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * S2C_ObjectMove movement.
+         * @member {proto.IEntityMovement|null|undefined} movement
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.movement = null;
+
+        /**
+         * Creates a new S2C_ObjectMove instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.IS2C_ObjectMove=} [properties] Properties to set
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove instance
+         */
+        S2C_ObjectMove.create = function create(properties) {
+            return new S2C_ObjectMove(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectMove message. Does not implicitly {@link proto.S2C_ObjectMove.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.IS2C_ObjectMove} message S2C_ObjectMove message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectMove.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            if (message.movement != null && Object.hasOwnProperty.call(message, "movement"))
+                $root.proto.EntityMovement.encode(message.movement, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_ObjectMove message, length delimited. Does not implicitly {@link proto.S2C_ObjectMove.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.IS2C_ObjectMove} message S2C_ObjectMove message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ObjectMove.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_ObjectMove message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectMove.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ObjectMove();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.movement = $root.proto.EntityMovement.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_ObjectMove message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ObjectMove.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_ObjectMove message.
+         * @function verify
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_ObjectMove.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            if (message.movement != null && message.hasOwnProperty("movement")) {
+                let error = $root.proto.EntityMovement.verify(message.movement);
+                if (error)
+                    return "movement." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_ObjectMove message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_ObjectMove} S2C_ObjectMove
+         */
+        S2C_ObjectMove.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ObjectMove)
+                return object;
+            let message = new $root.proto.S2C_ObjectMove();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            if (object.movement != null) {
+                if (typeof object.movement !== "object")
+                    throw TypeError(".proto.S2C_ObjectMove.movement: object expected");
+                message.movement = $root.proto.EntityMovement.fromObject(object.movement);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_ObjectMove message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {proto.S2C_ObjectMove} message S2C_ObjectMove
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_ObjectMove.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+                object.movement = null;
+            }
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            if (message.movement != null && message.hasOwnProperty("movement"))
+                object.movement = $root.proto.EntityMovement.toObject(message.movement, options);
+            return object;
+        };
+
+        /**
+         * Converts this S2C_ObjectMove to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_ObjectMove.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_ObjectMove
+         * @function getTypeUrl
+         * @memberof proto.S2C_ObjectMove
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_ObjectMove.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_ObjectMove";
+        };
+
+        return S2C_ObjectMove;
+    })();
+
+    proto.S2C_InventoryOpResult = (function() {
+
+        /**
+         * Properties of a S2C_InventoryOpResult.
+         * @memberof proto
+         * @interface IS2C_InventoryOpResult
+         * @property {number|Long|null} [opId] S2C_InventoryOpResult opId
+         * @property {boolean|null} [success] S2C_InventoryOpResult success
+         * @property {proto.ErrorCode|null} [error] S2C_InventoryOpResult error
+         * @property {string|null} [message] S2C_InventoryOpResult message
+         * @property {Array.<proto.IInventoryState>|null} [updated] S2C_InventoryOpResult updated
+         * @property {number|Long|null} [spawnedDroppedEntityId] S2C_InventoryOpResult spawnedDroppedEntityId
+         * @property {number|Long|null} [despawnedDroppedEntityId] S2C_InventoryOpResult despawnedDroppedEntityId
+         */
+
+        /**
+         * Constructs a new S2C_InventoryOpResult.
+         * @memberof proto
+         * @classdesc Represents a S2C_InventoryOpResult.
+         * @implements IS2C_InventoryOpResult
+         * @constructor
+         * @param {proto.IS2C_InventoryOpResult=} [properties] Properties to set
+         */
+        function S2C_InventoryOpResult(properties) {
+            this.updated = [];
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_InventoryOpResult opId.
+         * @member {number|Long} opId
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         */
+        S2C_InventoryOpResult.prototype.opId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * S2C_InventoryOpResult success.
+         * @member {boolean} success
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         */
+        S2C_InventoryOpResult.prototype.success = false;
+
+        /**
+         * S2C_InventoryOpResult error.
+         * @member {proto.ErrorCode} error
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         */
+        S2C_InventoryOpResult.prototype.error = 0;
+
+        /**
+         * S2C_InventoryOpResult message.
+         * @member {string} message
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         */
+        S2C_InventoryOpResult.prototype.message = "";
+
+        /**
+         * S2C_InventoryOpResult updated.
+         * @member {Array.<proto.IInventoryState>} updated
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         */
+        S2C_InventoryOpResult.prototype.updated = $util.emptyArray;
+
+        /**
+         * S2C_InventoryOpResult spawnedDroppedEntityId.
+         * @member {number|Long|null|undefined} spawnedDroppedEntityId
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         */
+        S2C_InventoryOpResult.prototype.spawnedDroppedEntityId = null;
+
+        /**
+         * S2C_InventoryOpResult despawnedDroppedEntityId.
+         * @member {number|Long|null|undefined} despawnedDroppedEntityId
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         */
+        S2C_InventoryOpResult.prototype.despawnedDroppedEntityId = null;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(S2C_InventoryOpResult.prototype, "_spawnedDroppedEntityId", {
+            get: $util.oneOfGetter($oneOfFields = ["spawnedDroppedEntityId"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(S2C_InventoryOpResult.prototype, "_despawnedDroppedEntityId", {
+            get: $util.oneOfGetter($oneOfFields = ["despawnedDroppedEntityId"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new S2C_InventoryOpResult instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {proto.IS2C_InventoryOpResult=} [properties] Properties to set
+         * @returns {proto.S2C_InventoryOpResult} S2C_InventoryOpResult instance
+         */
+        S2C_InventoryOpResult.create = function create(properties) {
+            return new S2C_InventoryOpResult(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_InventoryOpResult message. Does not implicitly {@link proto.S2C_InventoryOpResult.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {proto.IS2C_InventoryOpResult} message S2C_InventoryOpResult message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_InventoryOpResult.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.opId != null && Object.hasOwnProperty.call(message, "opId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.opId);
+            if (message.success != null && Object.hasOwnProperty.call(message, "success"))
+                writer.uint32(/* id 2, wireType 0 =*/16).bool(message.success);
+            if (message.error != null && Object.hasOwnProperty.call(message, "error"))
+                writer.uint32(/* id 3, wireType 0 =*/24).int32(message.error);
+            if (message.message != null && Object.hasOwnProperty.call(message, "message"))
+                writer.uint32(/* id 4, wireType 2 =*/34).string(message.message);
+            if (message.updated != null && message.updated.length)
+                for (let i = 0; i < message.updated.length; ++i)
+                    $root.proto.InventoryState.encode(message.updated[i], writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+            if (message.spawnedDroppedEntityId != null && Object.hasOwnProperty.call(message, "spawnedDroppedEntityId"))
+                writer.uint32(/* id 20, wireType 0 =*/160).uint64(message.spawnedDroppedEntityId);
+            if (message.despawnedDroppedEntityId != null && Object.hasOwnProperty.call(message, "despawnedDroppedEntityId"))
+                writer.uint32(/* id 21, wireType 0 =*/168).uint64(message.despawnedDroppedEntityId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_InventoryOpResult message, length delimited. Does not implicitly {@link proto.S2C_InventoryOpResult.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {proto.IS2C_InventoryOpResult} message S2C_InventoryOpResult message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_InventoryOpResult.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_InventoryOpResult message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_InventoryOpResult} S2C_InventoryOpResult
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_InventoryOpResult.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_InventoryOpResult();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.opId = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.success = reader.bool();
+                        break;
+                    }
+                case 3: {
+                        message.error = reader.int32();
+                        break;
+                    }
+                case 4: {
+                        message.message = reader.string();
+                        break;
+                    }
+                case 10: {
+                        if (!(message.updated && message.updated.length))
+                            message.updated = [];
+                        message.updated.push($root.proto.InventoryState.decode(reader, reader.uint32()));
+                        break;
+                    }
+                case 20: {
+                        message.spawnedDroppedEntityId = reader.uint64();
+                        break;
+                    }
+                case 21: {
+                        message.despawnedDroppedEntityId = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_InventoryOpResult message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_InventoryOpResult} S2C_InventoryOpResult
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_InventoryOpResult.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_InventoryOpResult message.
+         * @function verify
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_InventoryOpResult.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.opId != null && message.hasOwnProperty("opId"))
+                if (!$util.isInteger(message.opId) && !(message.opId && $util.isInteger(message.opId.low) && $util.isInteger(message.opId.high)))
+                    return "opId: integer|Long expected";
+            if (message.success != null && message.hasOwnProperty("success"))
+                if (typeof message.success !== "boolean")
+                    return "success: boolean expected";
+            if (message.error != null && message.hasOwnProperty("error"))
+                switch (message.error) {
+                default:
+                    return "error: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                case 6:
+                case 7:
+                case 8:
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                case 13:
+                case 14:
+                case 15:
+                case 16:
+                    break;
+                }
+            if (message.message != null && message.hasOwnProperty("message"))
+                if (!$util.isString(message.message))
+                    return "message: string expected";
+            if (message.updated != null && message.hasOwnProperty("updated")) {
+                if (!Array.isArray(message.updated))
+                    return "updated: array expected";
+                for (let i = 0; i < message.updated.length; ++i) {
+                    let error = $root.proto.InventoryState.verify(message.updated[i]);
+                    if (error)
+                        return "updated." + error;
+                }
+            }
+            if (message.spawnedDroppedEntityId != null && message.hasOwnProperty("spawnedDroppedEntityId")) {
+                properties._spawnedDroppedEntityId = 1;
+                if (!$util.isInteger(message.spawnedDroppedEntityId) && !(message.spawnedDroppedEntityId && $util.isInteger(message.spawnedDroppedEntityId.low) && $util.isInteger(message.spawnedDroppedEntityId.high)))
+                    return "spawnedDroppedEntityId: integer|Long expected";
+            }
+            if (message.despawnedDroppedEntityId != null && message.hasOwnProperty("despawnedDroppedEntityId")) {
+                properties._despawnedDroppedEntityId = 1;
+                if (!$util.isInteger(message.despawnedDroppedEntityId) && !(message.despawnedDroppedEntityId && $util.isInteger(message.despawnedDroppedEntityId.low) && $util.isInteger(message.despawnedDroppedEntityId.high)))
+                    return "despawnedDroppedEntityId: integer|Long expected";
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_InventoryOpResult message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_InventoryOpResult} S2C_InventoryOpResult
+         */
+        S2C_InventoryOpResult.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_InventoryOpResult)
+                return object;
+            let message = new $root.proto.S2C_InventoryOpResult();
+            if (object.opId != null)
+                if ($util.Long)
+                    (message.opId = $util.Long.fromValue(object.opId)).unsigned = true;
+                else if (typeof object.opId === "string")
+                    message.opId = parseInt(object.opId, 10);
+                else if (typeof object.opId === "number")
+                    message.opId = object.opId;
+                else if (typeof object.opId === "object")
+                    message.opId = new $util.LongBits(object.opId.low >>> 0, object.opId.high >>> 0).toNumber(true);
+            if (object.success != null)
+                message.success = Boolean(object.success);
+            switch (object.error) {
+            default:
+                if (typeof object.error === "number") {
+                    message.error = object.error;
+                    break;
+                }
+                break;
+            case "ERROR_CODE_NONE":
+            case 0:
+                message.error = 0;
+                break;
+            case "ERROR_CODE_INVALID_REQUEST":
+            case 1:
+                message.error = 1;
+                break;
+            case "ERROR_CODE_NOT_AUTHENTICATED":
+            case 2:
+                message.error = 2;
+                break;
+            case "ERROR_CODE_ENTITY_NOT_FOUND":
+            case 3:
+                message.error = 3;
+                break;
+            case "ERROR_CODE_OUT_OF_RANGE":
+            case 4:
+                message.error = 4;
+                break;
+            case "ERROR_CODE_INSUFFICIENT_RESOURCES":
+            case 5:
+                message.error = 5;
+                break;
+            case "ERROR_CODE_INVENTORY_FULL":
+            case 6:
+                message.error = 6;
+                break;
+            case "ERROR_CODE_CANNOT_INTERACT":
+            case 7:
+                message.error = 7;
+                break;
+            case "ERROR_CODE_COOLDOWN_ACTIVE":
+            case 8:
+                message.error = 8;
+                break;
+            case "ERROR_CODE_INSUFFICIENT_STAMINA":
+            case 9:
+                message.error = 9;
+                break;
+            case "ERROR_CODE_TARGET_INVALID":
+            case 10:
+                message.error = 10;
+                break;
+            case "ERROR_CODE_PATH_BLOCKED":
+            case 11:
+                message.error = 11;
+                break;
+            case "ERROR_CODE_TIMEOUT_EXCEEDED":
+            case 12:
+                message.error = 12;
+                break;
+            case "ERROR_CODE_BUILDING_INCOMPLETE":
+            case 13:
+                message.error = 13;
+                break;
+            case "ERROR_CODE_RECIPE_UNKNOWN":
+            case 14:
+                message.error = 14;
+                break;
+            case "ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED":
+            case 15:
+                message.error = 15;
+                break;
+            case "ERROR_CODE_INTERNAL_ERROR":
+            case 16:
+                message.error = 16;
+                break;
+            }
+            if (object.message != null)
+                message.message = String(object.message);
+            if (object.updated) {
+                if (!Array.isArray(object.updated))
+                    throw TypeError(".proto.S2C_InventoryOpResult.updated: array expected");
+                message.updated = [];
+                for (let i = 0; i < object.updated.length; ++i) {
+                    if (typeof object.updated[i] !== "object")
+                        throw TypeError(".proto.S2C_InventoryOpResult.updated: object expected");
+                    message.updated[i] = $root.proto.InventoryState.fromObject(object.updated[i]);
+                }
+            }
+            if (object.spawnedDroppedEntityId != null)
+                if ($util.Long)
+                    (message.spawnedDroppedEntityId = $util.Long.fromValue(object.spawnedDroppedEntityId)).unsigned = true;
+                else if (typeof object.spawnedDroppedEntityId === "string")
+                    message.spawnedDroppedEntityId = parseInt(object.spawnedDroppedEntityId, 10);
+                else if (typeof object.spawnedDroppedEntityId === "number")
+                    message.spawnedDroppedEntityId = object.spawnedDroppedEntityId;
+                else if (typeof object.spawnedDroppedEntityId === "object")
+                    message.spawnedDroppedEntityId = new $util.LongBits(object.spawnedDroppedEntityId.low >>> 0, object.spawnedDroppedEntityId.high >>> 0).toNumber(true);
+            if (object.despawnedDroppedEntityId != null)
+                if ($util.Long)
+                    (message.despawnedDroppedEntityId = $util.Long.fromValue(object.despawnedDroppedEntityId)).unsigned = true;
+                else if (typeof object.despawnedDroppedEntityId === "string")
+                    message.despawnedDroppedEntityId = parseInt(object.despawnedDroppedEntityId, 10);
+                else if (typeof object.despawnedDroppedEntityId === "number")
+                    message.despawnedDroppedEntityId = object.despawnedDroppedEntityId;
+                else if (typeof object.despawnedDroppedEntityId === "object")
+                    message.despawnedDroppedEntityId = new $util.LongBits(object.despawnedDroppedEntityId.low >>> 0, object.despawnedDroppedEntityId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_InventoryOpResult message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {proto.S2C_InventoryOpResult} message S2C_InventoryOpResult
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_InventoryOpResult.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.arrays || options.defaults)
+                object.updated = [];
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.opId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.opId = options.longs === String ? "0" : 0;
+                object.success = false;
+                object.error = options.enums === String ? "ERROR_CODE_NONE" : 0;
+                object.message = "";
+            }
+            if (message.opId != null && message.hasOwnProperty("opId"))
+                if (typeof message.opId === "number")
+                    object.opId = options.longs === String ? String(message.opId) : message.opId;
+                else
+                    object.opId = options.longs === String ? $util.Long.prototype.toString.call(message.opId) : options.longs === Number ? new $util.LongBits(message.opId.low >>> 0, message.opId.high >>> 0).toNumber(true) : message.opId;
+            if (message.success != null && message.hasOwnProperty("success"))
+                object.success = message.success;
+            if (message.error != null && message.hasOwnProperty("error"))
+                object.error = options.enums === String ? $root.proto.ErrorCode[message.error] === undefined ? message.error : $root.proto.ErrorCode[message.error] : message.error;
+            if (message.message != null && message.hasOwnProperty("message"))
+                object.message = message.message;
+            if (message.updated && message.updated.length) {
+                object.updated = [];
+                for (let j = 0; j < message.updated.length; ++j)
+                    object.updated[j] = $root.proto.InventoryState.toObject(message.updated[j], options);
+            }
+            if (message.spawnedDroppedEntityId != null && message.hasOwnProperty("spawnedDroppedEntityId")) {
+                if (typeof message.spawnedDroppedEntityId === "number")
+                    object.spawnedDroppedEntityId = options.longs === String ? String(message.spawnedDroppedEntityId) : message.spawnedDroppedEntityId;
+                else
+                    object.spawnedDroppedEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.spawnedDroppedEntityId) : options.longs === Number ? new $util.LongBits(message.spawnedDroppedEntityId.low >>> 0, message.spawnedDroppedEntityId.high >>> 0).toNumber(true) : message.spawnedDroppedEntityId;
+                if (options.oneofs)
+                    object._spawnedDroppedEntityId = "spawnedDroppedEntityId";
+            }
+            if (message.despawnedDroppedEntityId != null && message.hasOwnProperty("despawnedDroppedEntityId")) {
+                if (typeof message.despawnedDroppedEntityId === "number")
+                    object.despawnedDroppedEntityId = options.longs === String ? String(message.despawnedDroppedEntityId) : message.despawnedDroppedEntityId;
+                else
+                    object.despawnedDroppedEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.despawnedDroppedEntityId) : options.longs === Number ? new $util.LongBits(message.despawnedDroppedEntityId.low >>> 0, message.despawnedDroppedEntityId.high >>> 0).toNumber(true) : message.despawnedDroppedEntityId;
+                if (options.oneofs)
+                    object._despawnedDroppedEntityId = "despawnedDroppedEntityId";
+            }
+            return object;
+        };
+
+        /**
+         * Converts this S2C_InventoryOpResult to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_InventoryOpResult
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_InventoryOpResult.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_InventoryOpResult
+         * @function getTypeUrl
+         * @memberof proto.S2C_InventoryOpResult
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_InventoryOpResult.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_InventoryOpResult";
+        };
+
+        return S2C_InventoryOpResult;
+    })();
+
+    proto.S2C_InventoryUpdate = (function() {
+
+        /**
+         * Properties of a S2C_InventoryUpdate.
+         * @memberof proto
+         * @interface IS2C_InventoryUpdate
+         * @property {Array.<proto.IInventoryState>|null} [updated] S2C_InventoryUpdate updated
+         */
+
+        /**
+         * Constructs a new S2C_InventoryUpdate.
+         * @memberof proto
+         * @classdesc Represents a S2C_InventoryUpdate.
+         * @implements IS2C_InventoryUpdate
+         * @constructor
+         * @param {proto.IS2C_InventoryUpdate=} [properties] Properties to set
+         */
+        function S2C_InventoryUpdate(properties) {
+            this.updated = [];
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_InventoryUpdate updated.
+         * @member {Array.<proto.IInventoryState>} updated
+         * @memberof proto.S2C_InventoryUpdate
+         * @instance
+         */
+        S2C_InventoryUpdate.prototype.updated = $util.emptyArray;
+
+        /**
+         * Creates a new S2C_InventoryUpdate instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {proto.IS2C_InventoryUpdate=} [properties] Properties to set
+         * @returns {proto.S2C_InventoryUpdate} S2C_InventoryUpdate instance
+         */
+        S2C_InventoryUpdate.create = function create(properties) {
+            return new S2C_InventoryUpdate(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_InventoryUpdate message. Does not implicitly {@link proto.S2C_InventoryUpdate.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {proto.IS2C_InventoryUpdate} message S2C_InventoryUpdate message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_InventoryUpdate.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.updated != null && message.updated.length)
+                for (let i = 0; i < message.updated.length; ++i)
+                    $root.proto.InventoryState.encode(message.updated[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_InventoryUpdate message, length delimited. Does not implicitly {@link proto.S2C_InventoryUpdate.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {proto.IS2C_InventoryUpdate} message S2C_InventoryUpdate message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_InventoryUpdate.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_InventoryUpdate message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_InventoryUpdate} S2C_InventoryUpdate
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_InventoryUpdate.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_InventoryUpdate();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        if (!(message.updated && message.updated.length))
+                            message.updated = [];
+                        message.updated.push($root.proto.InventoryState.decode(reader, reader.uint32()));
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_InventoryUpdate message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_InventoryUpdate} S2C_InventoryUpdate
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_InventoryUpdate.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_InventoryUpdate message.
+         * @function verify
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_InventoryUpdate.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.updated != null && message.hasOwnProperty("updated")) {
+                if (!Array.isArray(message.updated))
+                    return "updated: array expected";
+                for (let i = 0; i < message.updated.length; ++i) {
+                    let error = $root.proto.InventoryState.verify(message.updated[i]);
+                    if (error)
+                        return "updated." + error;
+                }
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_InventoryUpdate message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_InventoryUpdate} S2C_InventoryUpdate
+         */
+        S2C_InventoryUpdate.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_InventoryUpdate)
+                return object;
+            let message = new $root.proto.S2C_InventoryUpdate();
+            if (object.updated) {
+                if (!Array.isArray(object.updated))
+                    throw TypeError(".proto.S2C_InventoryUpdate.updated: array expected");
+                message.updated = [];
+                for (let i = 0; i < object.updated.length; ++i) {
+                    if (typeof object.updated[i] !== "object")
+                        throw TypeError(".proto.S2C_InventoryUpdate.updated: object expected");
+                    message.updated[i] = $root.proto.InventoryState.fromObject(object.updated[i]);
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_InventoryUpdate message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {proto.S2C_InventoryUpdate} message S2C_InventoryUpdate
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_InventoryUpdate.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.arrays || options.defaults)
+                object.updated = [];
+            if (message.updated && message.updated.length) {
+                object.updated = [];
+                for (let j = 0; j < message.updated.length; ++j)
+                    object.updated[j] = $root.proto.InventoryState.toObject(message.updated[j], options);
+            }
+            return object;
+        };
+
+        /**
+         * Converts this S2C_InventoryUpdate to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_InventoryUpdate
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_InventoryUpdate.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_InventoryUpdate
+         * @function getTypeUrl
+         * @memberof proto.S2C_InventoryUpdate
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_InventoryUpdate.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_InventoryUpdate";
+        };
+
+        return S2C_InventoryUpdate;
+    })();
+
+    proto.S2C_ContainerOpened = (function() {
+
+        /**
+         * Properties of a S2C_ContainerOpened.
+         * @memberof proto
+         * @interface IS2C_ContainerOpened
+         * @property {proto.IInventoryState|null} [state] S2C_ContainerOpened state
+         */
+
+        /**
+         * Constructs a new S2C_ContainerOpened.
+         * @memberof proto
+         * @classdesc Represents a S2C_ContainerOpened.
+         * @implements IS2C_ContainerOpened
+         * @constructor
+         * @param {proto.IS2C_ContainerOpened=} [properties] Properties to set
+         */
+        function S2C_ContainerOpened(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_ContainerOpened state.
+         * @member {proto.IInventoryState|null|undefined} state
+         * @memberof proto.S2C_ContainerOpened
+         * @instance
+         */
+        S2C_ContainerOpened.prototype.state = null;
+
+        /**
+         * Creates a new S2C_ContainerOpened instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {proto.IS2C_ContainerOpened=} [properties] Properties to set
+         * @returns {proto.S2C_ContainerOpened} S2C_ContainerOpened instance
+         */
+        S2C_ContainerOpened.create = function create(properties) {
+            return new S2C_ContainerOpened(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_ContainerOpened message. Does not implicitly {@link proto.S2C_ContainerOpened.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {proto.IS2C_ContainerOpened} message S2C_ContainerOpened message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ContainerOpened.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.state != null && Object.hasOwnProperty.call(message, "state"))
+                $root.proto.InventoryState.encode(message.state, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_ContainerOpened message, length delimited. Does not implicitly {@link proto.S2C_ContainerOpened.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {proto.IS2C_ContainerOpened} message S2C_ContainerOpened message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ContainerOpened.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_ContainerOpened message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_ContainerOpened} S2C_ContainerOpened
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ContainerOpened.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ContainerOpened();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.state = $root.proto.InventoryState.decode(reader, reader.uint32());
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_ContainerOpened message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_ContainerOpened} S2C_ContainerOpened
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ContainerOpened.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_ContainerOpened message.
+         * @function verify
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_ContainerOpened.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.state != null && message.hasOwnProperty("state")) {
+                let error = $root.proto.InventoryState.verify(message.state);
+                if (error)
+                    return "state." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_ContainerOpened message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_ContainerOpened} S2C_ContainerOpened
+         */
+        S2C_ContainerOpened.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ContainerOpened)
+                return object;
+            let message = new $root.proto.S2C_ContainerOpened();
+            if (object.state != null) {
+                if (typeof object.state !== "object")
+                    throw TypeError(".proto.S2C_ContainerOpened.state: object expected");
+                message.state = $root.proto.InventoryState.fromObject(object.state);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_ContainerOpened message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {proto.S2C_ContainerOpened} message S2C_ContainerOpened
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_ContainerOpened.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                object.state = null;
+            if (message.state != null && message.hasOwnProperty("state"))
+                object.state = $root.proto.InventoryState.toObject(message.state, options);
+            return object;
+        };
+
+        /**
+         * Converts this S2C_ContainerOpened to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_ContainerOpened
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_ContainerOpened.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_ContainerOpened
+         * @function getTypeUrl
+         * @memberof proto.S2C_ContainerOpened
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_ContainerOpened.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_ContainerOpened";
+        };
+
+        return S2C_ContainerOpened;
+    })();
+
+    proto.S2C_ContainerClosed = (function() {
+
+        /**
+         * Properties of a S2C_ContainerClosed.
+         * @memberof proto
+         * @interface IS2C_ContainerClosed
+         * @property {number|Long|null} [entityId] S2C_ContainerClosed entityId
+         */
+
+        /**
+         * Constructs a new S2C_ContainerClosed.
+         * @memberof proto
+         * @classdesc Represents a S2C_ContainerClosed.
+         * @implements IS2C_ContainerClosed
+         * @constructor
+         * @param {proto.IS2C_ContainerClosed=} [properties] Properties to set
+         */
+        function S2C_ContainerClosed(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_ContainerClosed entityId.
+         * @member {number|Long} entityId
+         * @memberof proto.S2C_ContainerClosed
+         * @instance
+         */
+        S2C_ContainerClosed.prototype.entityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Creates a new S2C_ContainerClosed instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {proto.IS2C_ContainerClosed=} [properties] Properties to set
+         * @returns {proto.S2C_ContainerClosed} S2C_ContainerClosed instance
+         */
+        S2C_ContainerClosed.create = function create(properties) {
+            return new S2C_ContainerClosed(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_ContainerClosed message. Does not implicitly {@link proto.S2C_ContainerClosed.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {proto.IS2C_ContainerClosed} message S2C_ContainerClosed message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ContainerClosed.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.entityId != null && Object.hasOwnProperty.call(message, "entityId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_ContainerClosed message, length delimited. Does not implicitly {@link proto.S2C_ContainerClosed.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {proto.IS2C_ContainerClosed} message S2C_ContainerClosed message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ContainerClosed.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_ContainerClosed message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_ContainerClosed} S2C_ContainerClosed
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ContainerClosed.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ContainerClosed();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.entityId = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_ContainerClosed message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_ContainerClosed} S2C_ContainerClosed
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ContainerClosed.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_ContainerClosed message.
+         * @function verify
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_ContainerClosed.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (!$util.isInteger(message.entityId) && !(message.entityId && $util.isInteger(message.entityId.low) && $util.isInteger(message.entityId.high)))
+                    return "entityId: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates a S2C_ContainerClosed message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_ContainerClosed} S2C_ContainerClosed
+         */
+        S2C_ContainerClosed.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ContainerClosed)
+                return object;
+            let message = new $root.proto.S2C_ContainerClosed();
+            if (object.entityId != null)
+                if ($util.Long)
+                    (message.entityId = $util.Long.fromValue(object.entityId)).unsigned = true;
+                else if (typeof object.entityId === "string")
+                    message.entityId = parseInt(object.entityId, 10);
+                else if (typeof object.entityId === "number")
+                    message.entityId = object.entityId;
+                else if (typeof object.entityId === "object")
+                    message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_ContainerClosed message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {proto.S2C_ContainerClosed} message S2C_ContainerClosed
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_ContainerClosed.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.entityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.entityId = options.longs === String ? "0" : 0;
+            if (message.entityId != null && message.hasOwnProperty("entityId"))
+                if (typeof message.entityId === "number")
+                    object.entityId = options.longs === String ? String(message.entityId) : message.entityId;
+                else
+                    object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
+            return object;
+        };
+
+        /**
+         * Converts this S2C_ContainerClosed to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_ContainerClosed
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_ContainerClosed.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_ContainerClosed
+         * @function getTypeUrl
+         * @memberof proto.S2C_ContainerClosed
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_ContainerClosed.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_ContainerClosed";
+        };
+
+        return S2C_ContainerClosed;
+    })();
+
     proto.S2C_Error = (function() {
 
         /**
@@ -8374,6 +12034,8 @@ export const proto = $root.proto = (() => {
                 case 12:
                 case 13:
                 case 14:
+                case 15:
+                case 16:
                     break;
                 }
             if (message.message != null && message.hasOwnProperty("message"))
@@ -8449,7 +12111,7 @@ export const proto = $root.proto = (() => {
             case 11:
                 message.code = 11;
                 break;
-            case "ERROR_CODE_ALREADY_IN_PROGRESS":
+            case "ERROR_CODE_TIMEOUT_EXCEEDED":
             case 12:
                 message.code = 12;
                 break;
@@ -8460,6 +12122,14 @@ export const proto = $root.proto = (() => {
             case "ERROR_CODE_RECIPE_UNKNOWN":
             case 14:
                 message.code = 14;
+                break;
+            case "ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED":
+            case 15:
+                message.code = 15;
+                break;
+            case "ERROR_CODE_INTERNAL_ERROR":
+            case 16:
+                message.code = 16;
                 break;
             }
             if (object.message != null)
@@ -8520,6 +12190,249 @@ export const proto = $root.proto = (() => {
         return S2C_Error;
     })();
 
+    proto.S2C_Warning = (function() {
+
+        /**
+         * Properties of a S2C_Warning.
+         * @memberof proto
+         * @interface IS2C_Warning
+         * @property {proto.WarningCode|null} [code] S2C_Warning code
+         * @property {string|null} [message] S2C_Warning message
+         */
+
+        /**
+         * Constructs a new S2C_Warning.
+         * @memberof proto
+         * @classdesc Represents a S2C_Warning.
+         * @implements IS2C_Warning
+         * @constructor
+         * @param {proto.IS2C_Warning=} [properties] Properties to set
+         */
+        function S2C_Warning(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_Warning code.
+         * @member {proto.WarningCode} code
+         * @memberof proto.S2C_Warning
+         * @instance
+         */
+        S2C_Warning.prototype.code = 0;
+
+        /**
+         * S2C_Warning message.
+         * @member {string} message
+         * @memberof proto.S2C_Warning
+         * @instance
+         */
+        S2C_Warning.prototype.message = "";
+
+        /**
+         * Creates a new S2C_Warning instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {proto.IS2C_Warning=} [properties] Properties to set
+         * @returns {proto.S2C_Warning} S2C_Warning instance
+         */
+        S2C_Warning.create = function create(properties) {
+            return new S2C_Warning(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_Warning message. Does not implicitly {@link proto.S2C_Warning.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {proto.IS2C_Warning} message S2C_Warning message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_Warning.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.code != null && Object.hasOwnProperty.call(message, "code"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.code);
+            if (message.message != null && Object.hasOwnProperty.call(message, "message"))
+                writer.uint32(/* id 2, wireType 2 =*/18).string(message.message);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_Warning message, length delimited. Does not implicitly {@link proto.S2C_Warning.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {proto.IS2C_Warning} message S2C_Warning message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_Warning.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_Warning message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_Warning} S2C_Warning
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_Warning.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_Warning();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.code = reader.int32();
+                        break;
+                    }
+                case 2: {
+                        message.message = reader.string();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_Warning message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_Warning} S2C_Warning
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_Warning.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_Warning message.
+         * @function verify
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_Warning.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.code != null && message.hasOwnProperty("code"))
+                switch (message.code) {
+                default:
+                    return "code: enum value expected";
+                case 0:
+                    break;
+                }
+            if (message.message != null && message.hasOwnProperty("message"))
+                if (!$util.isString(message.message))
+                    return "message: string expected";
+            return null;
+        };
+
+        /**
+         * Creates a S2C_Warning message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_Warning} S2C_Warning
+         */
+        S2C_Warning.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_Warning)
+                return object;
+            let message = new $root.proto.S2C_Warning();
+            switch (object.code) {
+            default:
+                if (typeof object.code === "number") {
+                    message.code = object.code;
+                    break;
+                }
+                break;
+            case "WARN_INPUT_QUEUE_OVERFLOW":
+            case 0:
+                message.code = 0;
+                break;
+            }
+            if (object.message != null)
+                message.message = String(object.message);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_Warning message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {proto.S2C_Warning} message S2C_Warning
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_Warning.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.code = options.enums === String ? "WARN_INPUT_QUEUE_OVERFLOW" : 0;
+                object.message = "";
+            }
+            if (message.code != null && message.hasOwnProperty("code"))
+                object.code = options.enums === String ? $root.proto.WarningCode[message.code] === undefined ? message.code : $root.proto.WarningCode[message.code] : message.code;
+            if (message.message != null && message.hasOwnProperty("message"))
+                object.message = message.message;
+            return object;
+        };
+
+        /**
+         * Converts this S2C_Warning to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_Warning
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_Warning.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_Warning
+         * @function getTypeUrl
+         * @memberof proto.S2C_Warning
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_Warning.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_Warning";
+        };
+
+        return S2C_Warning;
+    })();
+
     proto.ServerMessage = (function() {
 
         /**
@@ -8536,7 +12449,12 @@ export const proto = $root.proto = (() => {
          * @property {proto.IS2C_ObjectSpawn|null} [objectSpawn] ServerMessage objectSpawn
          * @property {proto.IS2C_ObjectDespawn|null} [objectDespawn] ServerMessage objectDespawn
          * @property {proto.IS2C_ObjectMove|null} [objectMove] ServerMessage objectMove
+         * @property {proto.IS2C_InventoryOpResult|null} [inventoryOpResult] ServerMessage inventoryOpResult
+         * @property {proto.IS2C_InventoryUpdate|null} [inventoryUpdate] ServerMessage inventoryUpdate
+         * @property {proto.IS2C_ContainerOpened|null} [containerOpened] ServerMessage containerOpened
+         * @property {proto.IS2C_ContainerClosed|null} [containerClosed] ServerMessage containerClosed
          * @property {proto.IS2C_Error|null} [error] ServerMessage error
+         * @property {proto.IS2C_Warning|null} [warning] ServerMessage warning
          */
 
         /**
@@ -8635,6 +12553,38 @@ export const proto = $root.proto = (() => {
         ServerMessage.prototype.objectMove = null;
 
         /**
+         * ServerMessage inventoryOpResult.
+         * @member {proto.IS2C_InventoryOpResult|null|undefined} inventoryOpResult
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.inventoryOpResult = null;
+
+        /**
+         * ServerMessage inventoryUpdate.
+         * @member {proto.IS2C_InventoryUpdate|null|undefined} inventoryUpdate
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.inventoryUpdate = null;
+
+        /**
+         * ServerMessage containerOpened.
+         * @member {proto.IS2C_ContainerOpened|null|undefined} containerOpened
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.containerOpened = null;
+
+        /**
+         * ServerMessage containerClosed.
+         * @member {proto.IS2C_ContainerClosed|null|undefined} containerClosed
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.containerClosed = null;
+
+        /**
          * ServerMessage error.
          * @member {proto.IS2C_Error|null|undefined} error
          * @memberof proto.ServerMessage
@@ -8642,17 +12592,25 @@ export const proto = $root.proto = (() => {
          */
         ServerMessage.prototype.error = null;
 
+        /**
+         * ServerMessage warning.
+         * @member {proto.IS2C_Warning|null|undefined} warning
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.warning = null;
+
         // OneOf field names bound to virtual getters and setters
         let $oneOfFields;
 
         /**
          * ServerMessage payload.
-         * @member {"authResult"|"pong"|"chunkLoad"|"chunkUnload"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"error"|undefined} payload
+         * @member {"authResult"|"pong"|"chunkLoad"|"chunkUnload"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"inventoryOpResult"|"inventoryUpdate"|"containerOpened"|"containerClosed"|"error"|"warning"|undefined} payload
          * @memberof proto.ServerMessage
          * @instance
          */
         Object.defineProperty(ServerMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "chunkLoad", "chunkUnload", "playerEnterWorld", "playerLeaveWorld", "objectSpawn", "objectDespawn", "objectMove", "error"]),
+            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "chunkLoad", "chunkUnload", "playerEnterWorld", "playerLeaveWorld", "objectSpawn", "objectDespawn", "objectMove", "inventoryOpResult", "inventoryUpdate", "containerOpened", "containerClosed", "error", "warning"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -8700,8 +12658,18 @@ export const proto = $root.proto = (() => {
                 $root.proto.S2C_ObjectDespawn.encode(message.objectDespawn, writer.uint32(/* id 17, wireType 2 =*/138).fork()).ldelim();
             if (message.objectMove != null && Object.hasOwnProperty.call(message, "objectMove"))
                 $root.proto.S2C_ObjectMove.encode(message.objectMove, writer.uint32(/* id 18, wireType 2 =*/146).fork()).ldelim();
+            if (message.inventoryOpResult != null && Object.hasOwnProperty.call(message, "inventoryOpResult"))
+                $root.proto.S2C_InventoryOpResult.encode(message.inventoryOpResult, writer.uint32(/* id 19, wireType 2 =*/154).fork()).ldelim();
+            if (message.inventoryUpdate != null && Object.hasOwnProperty.call(message, "inventoryUpdate"))
+                $root.proto.S2C_InventoryUpdate.encode(message.inventoryUpdate, writer.uint32(/* id 20, wireType 2 =*/162).fork()).ldelim();
+            if (message.containerOpened != null && Object.hasOwnProperty.call(message, "containerOpened"))
+                $root.proto.S2C_ContainerOpened.encode(message.containerOpened, writer.uint32(/* id 21, wireType 2 =*/170).fork()).ldelim();
+            if (message.containerClosed != null && Object.hasOwnProperty.call(message, "containerClosed"))
+                $root.proto.S2C_ContainerClosed.encode(message.containerClosed, writer.uint32(/* id 22, wireType 2 =*/178).fork()).ldelim();
             if (message.error != null && Object.hasOwnProperty.call(message, "error"))
                 $root.proto.S2C_Error.encode(message.error, writer.uint32(/* id 42, wireType 2 =*/338).fork()).ldelim();
+            if (message.warning != null && Object.hasOwnProperty.call(message, "warning"))
+                $root.proto.S2C_Warning.encode(message.warning, writer.uint32(/* id 43, wireType 2 =*/346).fork()).ldelim();
             return writer;
         };
 
@@ -8778,8 +12746,28 @@ export const proto = $root.proto = (() => {
                         message.objectMove = $root.proto.S2C_ObjectMove.decode(reader, reader.uint32());
                         break;
                     }
+                case 19: {
+                        message.inventoryOpResult = $root.proto.S2C_InventoryOpResult.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 20: {
+                        message.inventoryUpdate = $root.proto.S2C_InventoryUpdate.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 21: {
+                        message.containerOpened = $root.proto.S2C_ContainerOpened.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 22: {
+                        message.containerClosed = $root.proto.S2C_ContainerClosed.decode(reader, reader.uint32());
+                        break;
+                    }
                 case 42: {
                         message.error = $root.proto.S2C_Error.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 43: {
+                        message.warning = $root.proto.S2C_Warning.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -8909,6 +12897,46 @@ export const proto = $root.proto = (() => {
                         return "objectMove." + error;
                 }
             }
+            if (message.inventoryOpResult != null && message.hasOwnProperty("inventoryOpResult")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_InventoryOpResult.verify(message.inventoryOpResult);
+                    if (error)
+                        return "inventoryOpResult." + error;
+                }
+            }
+            if (message.inventoryUpdate != null && message.hasOwnProperty("inventoryUpdate")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_InventoryUpdate.verify(message.inventoryUpdate);
+                    if (error)
+                        return "inventoryUpdate." + error;
+                }
+            }
+            if (message.containerOpened != null && message.hasOwnProperty("containerOpened")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_ContainerOpened.verify(message.containerOpened);
+                    if (error)
+                        return "containerOpened." + error;
+                }
+            }
+            if (message.containerClosed != null && message.hasOwnProperty("containerClosed")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_ContainerClosed.verify(message.containerClosed);
+                    if (error)
+                        return "containerClosed." + error;
+                }
+            }
             if (message.error != null && message.hasOwnProperty("error")) {
                 if (properties.payload === 1)
                     return "payload: multiple values";
@@ -8917,6 +12945,16 @@ export const proto = $root.proto = (() => {
                     let error = $root.proto.S2C_Error.verify(message.error);
                     if (error)
                         return "error." + error;
+                }
+            }
+            if (message.warning != null && message.hasOwnProperty("warning")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_Warning.verify(message.warning);
+                    if (error)
+                        return "warning." + error;
                 }
             }
             return null;
@@ -8981,10 +13019,35 @@ export const proto = $root.proto = (() => {
                     throw TypeError(".proto.ServerMessage.objectMove: object expected");
                 message.objectMove = $root.proto.S2C_ObjectMove.fromObject(object.objectMove);
             }
+            if (object.inventoryOpResult != null) {
+                if (typeof object.inventoryOpResult !== "object")
+                    throw TypeError(".proto.ServerMessage.inventoryOpResult: object expected");
+                message.inventoryOpResult = $root.proto.S2C_InventoryOpResult.fromObject(object.inventoryOpResult);
+            }
+            if (object.inventoryUpdate != null) {
+                if (typeof object.inventoryUpdate !== "object")
+                    throw TypeError(".proto.ServerMessage.inventoryUpdate: object expected");
+                message.inventoryUpdate = $root.proto.S2C_InventoryUpdate.fromObject(object.inventoryUpdate);
+            }
+            if (object.containerOpened != null) {
+                if (typeof object.containerOpened !== "object")
+                    throw TypeError(".proto.ServerMessage.containerOpened: object expected");
+                message.containerOpened = $root.proto.S2C_ContainerOpened.fromObject(object.containerOpened);
+            }
+            if (object.containerClosed != null) {
+                if (typeof object.containerClosed !== "object")
+                    throw TypeError(".proto.ServerMessage.containerClosed: object expected");
+                message.containerClosed = $root.proto.S2C_ContainerClosed.fromObject(object.containerClosed);
+            }
             if (object.error != null) {
                 if (typeof object.error !== "object")
                     throw TypeError(".proto.ServerMessage.error: object expected");
                 message.error = $root.proto.S2C_Error.fromObject(object.error);
+            }
+            if (object.warning != null) {
+                if (typeof object.warning !== "object")
+                    throw TypeError(".proto.ServerMessage.warning: object expected");
+                message.warning = $root.proto.S2C_Warning.fromObject(object.warning);
             }
             return message;
         };
@@ -9051,10 +13114,35 @@ export const proto = $root.proto = (() => {
                 if (options.oneofs)
                     object.payload = "objectMove";
             }
+            if (message.inventoryOpResult != null && message.hasOwnProperty("inventoryOpResult")) {
+                object.inventoryOpResult = $root.proto.S2C_InventoryOpResult.toObject(message.inventoryOpResult, options);
+                if (options.oneofs)
+                    object.payload = "inventoryOpResult";
+            }
+            if (message.inventoryUpdate != null && message.hasOwnProperty("inventoryUpdate")) {
+                object.inventoryUpdate = $root.proto.S2C_InventoryUpdate.toObject(message.inventoryUpdate, options);
+                if (options.oneofs)
+                    object.payload = "inventoryUpdate";
+            }
+            if (message.containerOpened != null && message.hasOwnProperty("containerOpened")) {
+                object.containerOpened = $root.proto.S2C_ContainerOpened.toObject(message.containerOpened, options);
+                if (options.oneofs)
+                    object.payload = "containerOpened";
+            }
+            if (message.containerClosed != null && message.hasOwnProperty("containerClosed")) {
+                object.containerClosed = $root.proto.S2C_ContainerClosed.toObject(message.containerClosed, options);
+                if (options.oneofs)
+                    object.payload = "containerClosed";
+            }
             if (message.error != null && message.hasOwnProperty("error")) {
                 object.error = $root.proto.S2C_Error.toObject(message.error, options);
                 if (options.oneofs)
                     object.payload = "error";
+            }
+            if (message.warning != null && message.hasOwnProperty("warning")) {
+                object.warning = $root.proto.S2C_Warning.toObject(message.warning, options);
+                if (options.oneofs)
+                    object.payload = "warning";
             }
             return object;
         };

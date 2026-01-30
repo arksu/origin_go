@@ -73,6 +73,18 @@ export class GameFacade {
     this.render?.unloadChunk(x, y)
   }
 
+  spawnObject(options: { entityId: number; objectType: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {
+    this.render?.spawnObject(options)
+  }
+
+  despawnObject(entityId: number): void {
+    this.render?.despawnObject(entityId)
+  }
+
+  updateObjectPosition(entityId: number, x: number, y: number): void {
+    this.render?.updateObjectPosition(entityId, x, y)
+  }
+
   getDebugInfo(): DebugInfo {
     if (!this.render) {
       return {
