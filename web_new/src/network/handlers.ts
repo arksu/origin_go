@@ -1,7 +1,7 @@
 import { proto } from './proto/packets.js'
 import { messageDispatcher } from './MessageDispatcher'
 import { useGameStore, type EntityMovement } from '@/stores/gameStore'
-import { gameFacade, coordGame2Screen, moveController } from '@/game'
+import { gameFacade, moveController } from '@/game'
 
 function toNumber(value: number | Long): number {
   if (typeof value === 'number') return value
@@ -92,9 +92,8 @@ export function registerMessageHandlers(): void {
 
     // If this is the player entity, set initial camera position
     if (entityId === gameStore.playerEntityId) {
-      const screenPos = coordGame2Screen(posX, posY)
-      console.log(`[Handlers] Player spawned at game(${posX}, ${posY}) -> screen(${screenPos.x.toFixed(0)}, ${screenPos.y.toFixed(0)})`)
-      gameFacade.setCamera(screenPos.x, screenPos.y)
+      console.log(`[Handlers] Player spawned at game(${posX}, ${posY})`)
+      gameFacade.setCamera(posX, posY)
     }
   })
 
