@@ -1,5 +1,6 @@
 import { Application, Container } from 'pixi.js'
 import { DebugOverlay } from './DebugOverlay'
+import { ChunkManager } from './ChunkManager'
 import { config } from '@/config'
 import type { DebugInfo, ScreenPoint } from './types'
 
@@ -9,6 +10,7 @@ export class Render {
   private objectsContainer: Container
   private uiContainer: Container
   private debugOverlay: DebugOverlay
+  private chunkManager: ChunkManager
 
   private cameraX: number = 0
   private cameraY: number = 0
@@ -29,6 +31,7 @@ export class Render {
     this.objectsContainer = new Container()
     this.uiContainer = new Container()
     this.debugOverlay = new DebugOverlay()
+    this.chunkManager = new ChunkManager()
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -47,6 +50,9 @@ export class Render {
     this.mapContainer.sortableChildren = true
     this.objectsContainer.sortableChildren = true
     this.uiContainer.sortableChildren = true
+
+    await this.chunkManager.init()
+    this.mapContainer.addChild(this.chunkManager.getContainer())
 
     this.app.stage.addChild(this.mapContainer)
     this.app.stage.addChild(this.objectsContainer)
@@ -113,7 +119,7 @@ export class Render {
       lastClickWorldX: this.lastClickWorld.x,
       lastClickWorldY: this.lastClickWorld.y,
       objectsCount: 0,
-      chunksLoaded: 0,
+      chunksLoaded: this.chunkManager.getLoadedChunksCount(),
     }
 
     this.debugOverlay.update(info)
@@ -160,6 +166,22 @@ export class Render {
     return this.app
   }
 
+  getChunkManager(): ChunkManager {
+    return this.chunkManager
+  }
+
+  setWorldParams(coordPerTile: number, chunkSize: number): void {
+    this.chunkManager.setWorldParams(coordPerTile, chunkSize)
+  }
+
+  loadChunk(x: number, y: number, tiles: Uint8Array): void {
+    this.chunkManager.loadChunk(x, y, tiles)
+  }
+
+  unloadChunk(x: number, y: number): void {
+    this.chunkManager.unloadChunk(x, y)
+  }
+
   onPointerClick(callback: (screen: ScreenPoint) => void): void {
     this.onClickCallback = callback
   }
@@ -196,6 +218,7 @@ export class Render {
       window.removeEventListener('keydown', this.keyDownHandler)
     }
 
+    this.chunkManager.destroy()
     this.debugOverlay.destroy()
     this.app.destroy(true, { children: true, texture: true })
 
