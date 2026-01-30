@@ -5,7 +5,7 @@ interface TileVariant {
   w: number
 }
 
-class TileArray {
+export class TileArray {
   private tiles: TileVariant[]
   private totalWeight: number
 

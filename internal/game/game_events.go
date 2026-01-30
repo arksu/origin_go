@@ -157,8 +157,9 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 		msg := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_ObjectSpawn{
 				ObjectSpawn: &netproto.S2C_ObjectSpawn{
-					EntityId:   uint64(event.TargetID),
-					ObjectType: int32(entityInfo.ObjectType),
+					EntityId:     uint64(event.TargetID),
+					ObjectType:   int32(entityInfo.ObjectType),
+					ResourcePath: "",
 					Position: &netproto.EntityPosition{
 						Position: &netproto.Position{
 							X: int32(transform.X),

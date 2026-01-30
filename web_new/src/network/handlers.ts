@@ -59,18 +59,23 @@ export function registerMessageHandlers(): void {
     const entityId = toNumber(msg.entityId!)
     const posX = msg.position?.position?.x || 0
     const posY = msg.position?.position?.y || 0
+    const resourcePath = msg.resourcePath || ''
 
-    console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.objectType}, pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
+    console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.objectType}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
 
-    gameStore.spawnEntity({
+    const objectData = {
       entityId,
       objectType: msg.objectType || 0,
+      resourcePath,
       position: { x: posX, y: posY },
       size: {
         x: msg.position?.size?.x || 0,
         y: msg.position?.size?.y || 0,
       },
-    })
+    }
+
+    gameStore.spawnEntity(objectData)
+    gameFacade.spawnObject(objectData)
 
     // If this is the player entity, set initial camera position
     if (entityId === gameStore.playerEntityId) {
@@ -81,7 +86,10 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('objectDespawn', (msg: proto.IS2C_ObjectDespawn) => {
-    gameStore.despawnEntity(toNumber(msg.entityId!))
+    const entityId = toNumber(msg.entityId!)
+    console.log(`[Handlers] objectDespawn: entityId=${entityId}`)
+    gameStore.despawnEntity(entityId)
+    gameFacade.despawnObject(entityId)
   })
 
   messageDispatcher.on('objectMove', (msg: proto.IS2C_ObjectMove) => {
@@ -123,6 +131,7 @@ export function registerMessageHandlers(): void {
       }
 
       gameStore.updateEntityMovement(entityId, movement)
+      gameFacade.updateObjectPosition(entityId, movement.position.x, movement.position.y)
     }
   })
 

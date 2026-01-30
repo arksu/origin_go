@@ -3972,6 +3972,9 @@ export namespace proto {
         /** S2C_ObjectSpawn objectType */
         objectType?: (number|null);
 
+        /** S2C_ObjectSpawn resourcePath */
+        resourcePath?: (string|null);
+
         /** S2C_ObjectSpawn position */
         position?: (proto.IEntityPosition|null);
     }
@@ -3990,6 +3993,9 @@ export namespace proto {
 
         /** S2C_ObjectSpawn objectType. */
         public objectType: number;
+
+        /** S2C_ObjectSpawn resourcePath. */
+        public resourcePath: string;
 
         /** S2C_ObjectSpawn position. */
         public position?: (proto.IEntityPosition|null);

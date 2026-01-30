@@ -9941,6 +9941,7 @@ export const proto = $root.proto = (() => {
          * @interface IS2C_ObjectSpawn
          * @property {number|Long|null} [entityId] S2C_ObjectSpawn entityId
          * @property {number|null} [objectType] S2C_ObjectSpawn objectType
+         * @property {string|null} [resourcePath] S2C_ObjectSpawn resourcePath
          * @property {proto.IEntityPosition|null} [position] S2C_ObjectSpawn position
          */
 
@@ -9974,6 +9975,14 @@ export const proto = $root.proto = (() => {
          * @instance
          */
         S2C_ObjectSpawn.prototype.objectType = 0;
+
+        /**
+         * S2C_ObjectSpawn resourcePath.
+         * @member {string} resourcePath
+         * @memberof proto.S2C_ObjectSpawn
+         * @instance
+         */
+        S2C_ObjectSpawn.prototype.resourcePath = "";
 
         /**
          * S2C_ObjectSpawn position.
@@ -10011,8 +10020,10 @@ export const proto = $root.proto = (() => {
                 writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
             if (message.objectType != null && Object.hasOwnProperty.call(message, "objectType"))
                 writer.uint32(/* id 2, wireType 0 =*/16).int32(message.objectType);
+            if (message.resourcePath != null && Object.hasOwnProperty.call(message, "resourcePath"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.resourcePath);
             if (message.position != null && Object.hasOwnProperty.call(message, "position"))
-                $root.proto.EntityPosition.encode(message.position, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                $root.proto.EntityPosition.encode(message.position, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
             return writer;
         };
 
@@ -10058,6 +10069,10 @@ export const proto = $root.proto = (() => {
                         break;
                     }
                 case 3: {
+                        message.resourcePath = reader.string();
+                        break;
+                    }
+                case 4: {
                         message.position = $root.proto.EntityPosition.decode(reader, reader.uint32());
                         break;
                     }
@@ -10102,6 +10117,9 @@ export const proto = $root.proto = (() => {
             if (message.objectType != null && message.hasOwnProperty("objectType"))
                 if (!$util.isInteger(message.objectType))
                     return "objectType: integer expected";
+            if (message.resourcePath != null && message.hasOwnProperty("resourcePath"))
+                if (!$util.isString(message.resourcePath))
+                    return "resourcePath: string expected";
             if (message.position != null && message.hasOwnProperty("position")) {
                 let error = $root.proto.EntityPosition.verify(message.position);
                 if (error)
@@ -10133,6 +10151,8 @@ export const proto = $root.proto = (() => {
                     message.entityId = new $util.LongBits(object.entityId.low >>> 0, object.entityId.high >>> 0).toNumber(true);
             if (object.objectType != null)
                 message.objectType = object.objectType | 0;
+            if (object.resourcePath != null)
+                message.resourcePath = String(object.resourcePath);
             if (object.position != null) {
                 if (typeof object.position !== "object")
                     throw TypeError(".proto.S2C_ObjectSpawn.position: object expected");
@@ -10161,6 +10181,7 @@ export const proto = $root.proto = (() => {
                 } else
                     object.entityId = options.longs === String ? "0" : 0;
                 object.objectType = 0;
+                object.resourcePath = "";
                 object.position = null;
             }
             if (message.entityId != null && message.hasOwnProperty("entityId"))
@@ -10170,6 +10191,8 @@ export const proto = $root.proto = (() => {
                     object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
             if (message.objectType != null && message.hasOwnProperty("objectType"))
                 object.objectType = message.objectType;
+            if (message.resourcePath != null && message.hasOwnProperty("resourcePath"))
+                object.resourcePath = message.resourcePath;
             if (message.position != null && message.hasOwnProperty("position"))
                 object.position = $root.proto.EntityPosition.toObject(message.position, options);
             return object;
