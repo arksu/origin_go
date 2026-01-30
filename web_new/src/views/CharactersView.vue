@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useGameStore } from '@/stores/gameStore'
@@ -10,6 +10,8 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+
+const MAX_CHARACTERS = 5
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -26,6 +28,8 @@ const createError = ref('')
 
 const enteringId = ref<number | null>(null)
 const deletingId = ref<number | null>(null)
+
+const canCreateCharacter = computed(() => characters.value.length < MAX_CHARACTERS)
 
 async function loadCharacters() {
   loading.value = true
@@ -101,7 +105,7 @@ async function handleEnter(id: number) {
 
   try {
     const response = await enterCharacter(id)
-    gameStore.setGameSession(response.ws_token, response.character_id)
+    gameStore.setGameSession(response.auth_token, id)
     router.push('/game')
   } catch (e) {
     if (ApiException.isNetwork(e)) {
@@ -178,9 +182,15 @@ onMounted(() => {
 
         <div class="characters-create">
           <template v-if="!showCreateForm">
-            <AppButton @click="showCreateForm = true">
+            <AppButton 
+              v-if="canCreateCharacter"
+              @click="showCreateForm = true"
+            >
               Создать персонажа
             </AppButton>
+            <p v-else class="characters-limit">
+              Достигнут лимит персонажей ({{ MAX_CHARACTERS }})
+            </p>
           </template>
 
           <form v-else class="create-form" @submit.prevent="handleCreate">
@@ -295,6 +305,13 @@ onMounted(() => {
 
 .characters-create {
   margin-top: 1rem;
+}
+
+.characters-limit {
+  text-align: center;
+  padding: 1rem;
+  color: #a0a0a0;
+  font-size: 0.875rem;
 }
 
 .create-form {
