@@ -1,7 +1,7 @@
 import { proto } from './proto/packets.js'
 import { messageDispatcher } from './MessageDispatcher'
 import { useGameStore, type EntityMovement } from '@/stores/gameStore'
-import { gameFacade, coordGame2Screen } from '@/game'
+import { gameFacade, coordGame2Screen, moveController } from '@/game'
 
 function toNumber(value: number | Long): number {
   if (typeof value === 'number') return value
@@ -14,22 +14,31 @@ export function registerMessageHandlers(): void {
   messageDispatcher.on('playerEnterWorld', (msg: proto.IS2C_PlayerEnterWorld) => {
     const coordPerTile = msg.coordPerTile || 32
     const chunkSize = msg.chunkSize || 128
+    const streamEpoch = msg.streamEpoch || 0
 
-    console.log(`[Handlers] playerEnterWorld: coordPerTile=${coordPerTile}, chunkSize=${chunkSize}`)
+    console.log(`[Handlers] playerEnterWorld: coordPerTile=${coordPerTile}, chunkSize=${chunkSize}, streamEpoch=${streamEpoch}`)
 
     gameStore.setPlayerEnterWorld(
       toNumber(msg.entityId!),
       msg.name || '',
       coordPerTile,
       chunkSize,
-      msg.streamEpoch || 0,
+      streamEpoch,
     )
+
+    // Set stream epoch for MoveController to validate incoming movement packets
+    moveController.setStreamEpoch(streamEpoch)
+
+    // Set player entity ID for camera following
+    gameFacade.setPlayerEntityId(toNumber(msg.entityId!))
 
     gameFacade.setWorldParams(coordPerTile, chunkSize)
   })
 
   messageDispatcher.on('playerLeaveWorld', () => {
     gameStore.setPlayerLeaveWorld()
+    gameFacade.setPlayerEntityId(null)
+    moveController.clear()
   })
 
   messageDispatcher.on('chunkLoad', (msg: proto.IS2C_ChunkLoad) => {
@@ -59,6 +68,7 @@ export function registerMessageHandlers(): void {
     const entityId = toNumber(msg.entityId!)
     const posX = msg.position?.position?.x || 0
     const posY = msg.position?.position?.y || 0
+    const heading = msg.position?.position?.heading || 0
     const resourcePath = msg.resourcePath || ''
 
     console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.objectType}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
@@ -77,6 +87,9 @@ export function registerMessageHandlers(): void {
     gameStore.spawnEntity(objectData)
     gameFacade.spawnObject(objectData)
 
+    // Initialize entity in MoveController for smooth movement
+    moveController.initEntity(entityId, posX, posY, heading)
+
     // If this is the player entity, set initial camera position
     if (entityId === gameStore.playerEntityId) {
       const screenPos = coordGame2Screen(posX, posY)
@@ -90,48 +103,61 @@ export function registerMessageHandlers(): void {
     console.log(`[Handlers] objectDespawn: entityId=${entityId}`)
     gameStore.despawnEntity(entityId)
     gameFacade.despawnObject(entityId)
+    moveController.removeEntity(entityId)
   })
 
   messageDispatcher.on('objectMove', (msg: proto.IS2C_ObjectMove) => {
     const entityId = toNumber(msg.entityId!)
-    console.log(`[Handlers] objectMove: entityId=${entityId}, playerEntityId=${gameStore.playerEntityId}, hasMovement=${!!msg.movement}`)
 
-    if (msg.movement) {
-      const movement: EntityMovement = {
-        position: {
-          x: msg.movement.position?.x || 0,
-          y: msg.movement.position?.y || 0,
-          heading: msg.movement.position?.heading || 0,
-        },
-        velocity: {
-          x: msg.movement.velocity?.x || 0,
-          y: msg.movement.velocity?.y || 0,
-        },
-        moveMode: msg.movement.moveMode || 0,
-        isMoving: msg.movement.isMoving || false,
+    if (!msg.movement) return
+
+    const serverTimeMs = Number(msg.serverTimeMs || 0)
+    const moveSeq = msg.moveSeq || 0
+    const streamEpoch = msg.streamEpoch || 0
+    const isTeleport = msg.isTeleport || false
+
+    const x = msg.movement.position?.x || 0
+    const y = msg.movement.position?.y || 0
+    const heading = msg.movement.position?.heading || 0
+    const vx = msg.movement.velocity?.x || 0
+    const vy = msg.movement.velocity?.y || 0
+    const isMoving = msg.movement.isMoving || false
+    const moveMode = msg.movement.moveMode || 0
+
+    // Feed movement data to MoveController for interpolation
+    moveController.onObjectMove(
+      entityId,
+      serverTimeMs,
+      moveSeq,
+      streamEpoch,
+      isTeleport,
+      x, y,
+      vx, vy,
+      isMoving,
+      moveMode,
+      heading,
+    )
+
+    // Update store with server data (source of truth)
+    const movement: EntityMovement = {
+      position: { x, y, heading },
+      velocity: { x: vx, y: vy },
+      moveMode,
+      isMoving,
+    }
+
+    if (msg.movement.targetPosition) {
+      movement.targetPosition = {
+        x: msg.movement.targetPosition.x || 0,
+        y: msg.movement.targetPosition.y || 0,
       }
+    }
 
-      if (msg.movement.targetPosition) {
-        movement.targetPosition = {
-          x: msg.movement.targetPosition.x || 0,
-          y: msg.movement.targetPosition.y || 0,
-        }
-      }
+    gameStore.updateEntityMovement(entityId, movement)
 
-      const entityId = toNumber(msg.entityId!)
-
-      // Update player position if this is the player entity
-      if (entityId === gameStore.playerEntityId) {
-        gameStore.updatePlayerPosition(movement.position)
-
-        // Update camera to follow player
-        const screenPos = coordGame2Screen(movement.position.x, movement.position.y)
-        console.log(`[Handlers] Player moved: game(${movement.position.x}, ${movement.position.y}) -> screen(${screenPos.x.toFixed(0)}, ${screenPos.y.toFixed(0)})`)
-        gameFacade.setCamera(screenPos.x, screenPos.y)
-      }
-
-      gameStore.updateEntityMovement(entityId, movement)
-      gameFacade.updateObjectPosition(entityId, movement.position.x, movement.position.y)
+    // Update player position in store if this is the player entity
+    if (entityId === gameStore.playerEntityId) {
+      gameStore.updatePlayerPosition(movement.position)
     }
   })
 

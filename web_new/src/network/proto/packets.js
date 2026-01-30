@@ -10454,6 +10454,10 @@ export const proto = $root.proto = (() => {
          * @interface IS2C_ObjectMove
          * @property {number|Long|null} [entityId] S2C_ObjectMove entityId
          * @property {proto.IEntityMovement|null} [movement] S2C_ObjectMove movement
+         * @property {number|Long|null} [serverTimeMs] S2C_ObjectMove serverTimeMs
+         * @property {number|null} [moveSeq] S2C_ObjectMove moveSeq
+         * @property {boolean|null} [isTeleport] S2C_ObjectMove isTeleport
+         * @property {number|null} [streamEpoch] S2C_ObjectMove streamEpoch
          */
 
         /**
@@ -10488,6 +10492,38 @@ export const proto = $root.proto = (() => {
         S2C_ObjectMove.prototype.movement = null;
 
         /**
+         * S2C_ObjectMove serverTimeMs.
+         * @member {number|Long} serverTimeMs
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.serverTimeMs = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * S2C_ObjectMove moveSeq.
+         * @member {number} moveSeq
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.moveSeq = 0;
+
+        /**
+         * S2C_ObjectMove isTeleport.
+         * @member {boolean} isTeleport
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.isTeleport = false;
+
+        /**
+         * S2C_ObjectMove streamEpoch.
+         * @member {number} streamEpoch
+         * @memberof proto.S2C_ObjectMove
+         * @instance
+         */
+        S2C_ObjectMove.prototype.streamEpoch = 0;
+
+        /**
          * Creates a new S2C_ObjectMove instance using the specified properties.
          * @function create
          * @memberof proto.S2C_ObjectMove
@@ -10515,6 +10551,14 @@ export const proto = $root.proto = (() => {
                 writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.entityId);
             if (message.movement != null && Object.hasOwnProperty.call(message, "movement"))
                 $root.proto.EntityMovement.encode(message.movement, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            if (message.serverTimeMs != null && Object.hasOwnProperty.call(message, "serverTimeMs"))
+                writer.uint32(/* id 3, wireType 0 =*/24).int64(message.serverTimeMs);
+            if (message.moveSeq != null && Object.hasOwnProperty.call(message, "moveSeq"))
+                writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.moveSeq);
+            if (message.isTeleport != null && Object.hasOwnProperty.call(message, "isTeleport"))
+                writer.uint32(/* id 5, wireType 0 =*/40).bool(message.isTeleport);
+            if (message.streamEpoch != null && Object.hasOwnProperty.call(message, "streamEpoch"))
+                writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.streamEpoch);
             return writer;
         };
 
@@ -10557,6 +10601,22 @@ export const proto = $root.proto = (() => {
                     }
                 case 2: {
                         message.movement = $root.proto.EntityMovement.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 3: {
+                        message.serverTimeMs = reader.int64();
+                        break;
+                    }
+                case 4: {
+                        message.moveSeq = reader.uint32();
+                        break;
+                    }
+                case 5: {
+                        message.isTeleport = reader.bool();
+                        break;
+                    }
+                case 6: {
+                        message.streamEpoch = reader.uint32();
                         break;
                     }
                 default:
@@ -10602,6 +10662,18 @@ export const proto = $root.proto = (() => {
                 if (error)
                     return "movement." + error;
             }
+            if (message.serverTimeMs != null && message.hasOwnProperty("serverTimeMs"))
+                if (!$util.isInteger(message.serverTimeMs) && !(message.serverTimeMs && $util.isInteger(message.serverTimeMs.low) && $util.isInteger(message.serverTimeMs.high)))
+                    return "serverTimeMs: integer|Long expected";
+            if (message.moveSeq != null && message.hasOwnProperty("moveSeq"))
+                if (!$util.isInteger(message.moveSeq))
+                    return "moveSeq: integer expected";
+            if (message.isTeleport != null && message.hasOwnProperty("isTeleport"))
+                if (typeof message.isTeleport !== "boolean")
+                    return "isTeleport: boolean expected";
+            if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
+                if (!$util.isInteger(message.streamEpoch))
+                    return "streamEpoch: integer expected";
             return null;
         };
 
@@ -10631,6 +10703,21 @@ export const proto = $root.proto = (() => {
                     throw TypeError(".proto.S2C_ObjectMove.movement: object expected");
                 message.movement = $root.proto.EntityMovement.fromObject(object.movement);
             }
+            if (object.serverTimeMs != null)
+                if ($util.Long)
+                    (message.serverTimeMs = $util.Long.fromValue(object.serverTimeMs)).unsigned = false;
+                else if (typeof object.serverTimeMs === "string")
+                    message.serverTimeMs = parseInt(object.serverTimeMs, 10);
+                else if (typeof object.serverTimeMs === "number")
+                    message.serverTimeMs = object.serverTimeMs;
+                else if (typeof object.serverTimeMs === "object")
+                    message.serverTimeMs = new $util.LongBits(object.serverTimeMs.low >>> 0, object.serverTimeMs.high >>> 0).toNumber();
+            if (object.moveSeq != null)
+                message.moveSeq = object.moveSeq >>> 0;
+            if (object.isTeleport != null)
+                message.isTeleport = Boolean(object.isTeleport);
+            if (object.streamEpoch != null)
+                message.streamEpoch = object.streamEpoch >>> 0;
             return message;
         };
 
@@ -10654,6 +10741,14 @@ export const proto = $root.proto = (() => {
                 } else
                     object.entityId = options.longs === String ? "0" : 0;
                 object.movement = null;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.serverTimeMs = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.serverTimeMs = options.longs === String ? "0" : 0;
+                object.moveSeq = 0;
+                object.isTeleport = false;
+                object.streamEpoch = 0;
             }
             if (message.entityId != null && message.hasOwnProperty("entityId"))
                 if (typeof message.entityId === "number")
@@ -10662,6 +10757,17 @@ export const proto = $root.proto = (() => {
                     object.entityId = options.longs === String ? $util.Long.prototype.toString.call(message.entityId) : options.longs === Number ? new $util.LongBits(message.entityId.low >>> 0, message.entityId.high >>> 0).toNumber(true) : message.entityId;
             if (message.movement != null && message.hasOwnProperty("movement"))
                 object.movement = $root.proto.EntityMovement.toObject(message.movement, options);
+            if (message.serverTimeMs != null && message.hasOwnProperty("serverTimeMs"))
+                if (typeof message.serverTimeMs === "number")
+                    object.serverTimeMs = options.longs === String ? String(message.serverTimeMs) : message.serverTimeMs;
+                else
+                    object.serverTimeMs = options.longs === String ? $util.Long.prototype.toString.call(message.serverTimeMs) : options.longs === Number ? new $util.LongBits(message.serverTimeMs.low >>> 0, message.serverTimeMs.high >>> 0).toNumber() : message.serverTimeMs;
+            if (message.moveSeq != null && message.hasOwnProperty("moveSeq"))
+                object.moveSeq = message.moveSeq;
+            if (message.isTeleport != null && message.hasOwnProperty("isTeleport"))
+                object.isTeleport = message.isTeleport;
+            if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
+                object.streamEpoch = message.streamEpoch;
             return object;
         };
 

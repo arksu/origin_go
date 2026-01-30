@@ -1,6 +1,7 @@
 import { proto } from './proto/packets.js'
 import { config } from '@/config'
 import type { ConnectionState, ConnectionError } from './types'
+import { timeSync } from './TimeSync'
 
 type MessageHandler = (message: proto.ServerMessage) => void
 type StateChangeHandler = (state: ConnectionState, error?: ConnectionError) => void
@@ -141,9 +142,14 @@ export class GameConnection {
   }
 
   private handlePong(pong: proto.IS2C_Pong): void {
+    const clientSendMs = Number(pong.clientTimeMs)
+    const serverTimeMs = Number(pong.serverTimeMs)
+
+    timeSync.onPong(clientSendMs, serverTimeMs)
+
     if (config.DEBUG) {
-      const latency = Date.now() - Number(pong.clientTimeMs)
-      console.debug(`[GameConnection] Pong: latency=${latency}ms`)
+      const metrics = timeSync.getDebugMetrics()
+      console.debug(`[GameConnection] Pong: rtt=${metrics.rttMs}ms, jitter=${metrics.jitterMs}ms, offset=${metrics.offsetMs}ms`)
     }
   }
 

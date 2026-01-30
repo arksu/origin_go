@@ -4183,6 +4183,18 @@ export namespace proto {
 
         /** S2C_ObjectMove movement */
         movement?: (proto.IEntityMovement|null);
+
+        /** S2C_ObjectMove serverTimeMs */
+        serverTimeMs?: (number|Long|null);
+
+        /** S2C_ObjectMove moveSeq */
+        moveSeq?: (number|null);
+
+        /** S2C_ObjectMove isTeleport */
+        isTeleport?: (boolean|null);
+
+        /** S2C_ObjectMove streamEpoch */
+        streamEpoch?: (number|null);
     }
 
     /** Represents a S2C_ObjectMove. */
@@ -4199,6 +4211,18 @@ export namespace proto {
 
         /** S2C_ObjectMove movement. */
         public movement?: (proto.IEntityMovement|null);
+
+        /** S2C_ObjectMove serverTimeMs. */
+        public serverTimeMs: (number|Long);
+
+        /** S2C_ObjectMove moveSeq. */
+        public moveSeq: number;
+
+        /** S2C_ObjectMove isTeleport. */
+        public isTeleport: boolean;
+
+        /** S2C_ObjectMove streamEpoch. */
+        public streamEpoch: number;
 
         /**
          * Creates a new S2C_ObjectMove instance using the specified properties.

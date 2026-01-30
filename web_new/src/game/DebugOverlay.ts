@@ -30,7 +30,7 @@ export class DebugOverlay {
   update(info: DebugInfo): void {
     if (!this.visible) return
 
-    this.text.text = [
+    const lines = [
       `FPS: ${info.fps.toFixed(0)}`,
       `Camera: ${info.cameraX.toFixed(0)}, ${info.cameraY.toFixed(0)}`,
       `Zoom: ${info.zoom.toFixed(2)}`,
@@ -39,7 +39,19 @@ export class DebugOverlay {
       `Click (world): ${info.lastClickWorldX.toFixed(0)}, ${info.lastClickWorldY.toFixed(0)}`,
       `Objects: ${info.objectsCount}`,
       `Chunks: ${info.chunksLoaded}`,
-    ].join('\n')
+    ]
+
+    // Add movement metrics if available
+    if (info.rttMs !== undefined) {
+      lines.push('')
+      lines.push('--- Movement ---')
+      lines.push(`RTT: ${info.rttMs}ms  Jitter: ${info.jitterMs ?? 0}ms`)
+      lines.push(`Offset: ${info.timeOffsetMs ?? 0}ms  Delay: ${info.interpolationDelayMs ?? 0}ms`)
+      lines.push(`Entities: ${info.moveEntityCount ?? 0}`)
+      lines.push(`Snaps: ${info.totalSnapCount ?? 0}  OoO: ${info.totalIgnoredOutOfOrder ?? 0}  Underrun: ${info.totalBufferUnderrun ?? 0}`)
+    }
+
+    this.text.text = lines.join('\n')
   }
 
   toggle(): void {
