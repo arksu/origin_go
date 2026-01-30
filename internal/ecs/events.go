@@ -167,24 +167,32 @@ type ObjectMoveEvent struct {
 	TargetX   *int
 	TargetY   *int
 	Layer     int
+
+	// New fields for client-side prediction
+	ServerTimeMs int64  // server timestamp when this movement state was authored
+	MoveSeq      uint32 // monotonically increasing per entity (wrap ok)
+	IsTeleport   bool   // if true: client should snap/reset buffer
 }
 
 func (e *ObjectMoveEvent) Topic() string { return e.topic }
 
-func NewObjectMoveEvent(entityID types.EntityID, x, y, heading, velocityX, velocityY int, moveMode constt.MoveMode, isMoving bool, targetX, targetY *int, layer int) *ObjectMoveEvent {
+func NewObjectMoveEvent(entityID types.EntityID, x, y, heading, velocityX, velocityY int, moveMode constt.MoveMode, isMoving bool, targetX, targetY *int, layer int, serverTimeMs int64, moveSeq uint32, isTeleport bool) *ObjectMoveEvent {
 	return &ObjectMoveEvent{
-		topic:     TopicGameplayMovementMove,
-		Timestamp: time.Now(),
-		EntityID:  entityID,
-		X:         x,
-		Y:         y,
-		Heading:   heading,
-		VelocityX: velocityX,
-		VelocityY: velocityY,
-		MoveMode:  moveMode,
-		IsMoving:  isMoving,
-		TargetX:   targetX,
-		TargetY:   targetY,
-		Layer:     layer,
+		topic:        TopicGameplayMovementMove,
+		Timestamp:    time.Now(),
+		EntityID:     entityID,
+		X:            x,
+		Y:            y,
+		Heading:      heading,
+		VelocityX:    velocityX,
+		VelocityY:    velocityY,
+		MoveMode:     moveMode,
+		IsMoving:     isMoving,
+		TargetX:      targetX,
+		TargetY:      targetY,
+		Layer:        layer,
+		ServerTimeMs: serverTimeMs,
+		MoveSeq:      moveSeq,
+		IsTeleport:   isTeleport,
 	}
 }

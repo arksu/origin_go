@@ -91,25 +91,6 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 		}
 	}
 
-	msg := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_ObjectMove{
-			ObjectMove: &netproto.S2C_ObjectMove{
-				EntityId: uint64(event.EntityID),
-				Movement: movement,
-			},
-		},
-	}
-
-	// Marshal the message once
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		d.logger.Error("failed to marshal ObjectMove message",
-			zap.Error(err),
-			zap.Int64("entity_id", int64(event.EntityID)),
-		)
-		return nil
-	}
-
 	// Send only to observers who can see the target entity
 	for observerHandle := range observers {
 		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
@@ -119,6 +100,31 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 
 		// Check if this observer is a connected client
 		if client, exists := shard.clients[observerEntityID]; exists {
+			// Create message with client-specific StreamEpoch
+			msg := &netproto.ServerMessage{
+				Payload: &netproto.ServerMessage_ObjectMove{
+					ObjectMove: &netproto.S2C_ObjectMove{
+						EntityId:     uint64(event.EntityID),
+						Movement:     movement,
+						ServerTimeMs: event.ServerTimeMs,
+						MoveSeq:      event.MoveSeq,
+						IsTeleport:   event.IsTeleport,
+						StreamEpoch:  client.StreamEpoch.Load(),
+					},
+				},
+			}
+
+			// Marshal the message for this specific client
+			data, err := proto.Marshal(msg)
+			if err != nil {
+				d.logger.Error("failed to marshal ObjectMove message",
+					zap.Error(err),
+					zap.Int64("entity_id", int64(event.EntityID)),
+					zap.Uint64("client_id", client.ID),
+				)
+				continue
+			}
+
 			client.Send(data)
 		}
 	}
