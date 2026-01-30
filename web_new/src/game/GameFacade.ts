@@ -65,6 +65,10 @@ export class GameFacade {
     this.render?.setWorldParams(coordPerTile, chunkSize)
   }
 
+  setPlayerEntityId(entityId: number | null): void {
+    this.render?.setPlayerEntityId(entityId)
+  }
+
   loadChunk(x: number, y: number, tiles: Uint8Array): void {
     this.render?.loadChunk(x, y, tiles)
   }

@@ -2,6 +2,9 @@ import { Application, Container } from 'pixi.js'
 import { DebugOverlay } from './DebugOverlay'
 import { ChunkManager } from './ChunkManager'
 import { ObjectManager } from './ObjectManager'
+import { moveController } from './MoveController'
+import { coordGame2Screen } from './utils/coordConvert'
+import { timeSync } from '@/network/TimeSync'
 import { config } from '@/config'
 import type { DebugInfo, ScreenPoint } from './types'
 
@@ -26,6 +29,8 @@ export class Render {
   private canvas: HTMLCanvasElement | null = null
   private pointerDownHandler: ((e: PointerEvent) => void) | null = null
   private keyDownHandler: ((e: KeyboardEvent) => void) | null = null
+
+  private playerEntityId: number | null = null
 
   constructor() {
     this.app = new Application()
@@ -94,9 +99,28 @@ export class Render {
   }
 
   private update(): void {
+    this.updateMovement()
     this.objectManager.update()
     this.updateCamera()
     this.updateDebugOverlay()
+  }
+
+  private updateMovement(): void {
+    // Get interpolated positions from MoveController
+    const positions = moveController.update()
+
+    // Update visual positions for all tracked entities
+    // ObjectView handles game->screen conversion internally
+    for (const [entityId, renderPos] of positions) {
+      this.objectManager.updateObjectPosition(entityId, renderPos.x, renderPos.y)
+
+      // Update camera to follow player
+      if (this.playerEntityId !== null && entityId === this.playerEntityId) {
+        const screenPos = coordGame2Screen(renderPos.x, renderPos.y)
+        this.cameraX = screenPos.x
+        this.cameraY = screenPos.y
+      }
+    }
   }
 
   private updateCamera(): void {
@@ -112,6 +136,9 @@ export class Render {
   private updateDebugOverlay(): void {
     if (!this.debugOverlay.isVisible()) return
 
+    const timeSyncMetrics = timeSync.getDebugMetrics()
+    const moveMetrics = moveController.getGlobalDebugMetrics()
+
     const info: DebugInfo = {
       fps: this.app.ticker.FPS,
       cameraX: this.cameraX,
@@ -125,6 +152,15 @@ export class Render {
       lastClickWorldY: this.lastClickWorld.y,
       objectsCount: this.objectManager.getObjectCount(),
       chunksLoaded: this.chunkManager.getLoadedChunksCount(),
+      // Movement metrics
+      rttMs: timeSyncMetrics.rttMs,
+      jitterMs: timeSyncMetrics.jitterMs,
+      timeOffsetMs: timeSyncMetrics.offsetMs,
+      interpolationDelayMs: timeSyncMetrics.interpolationDelayMs,
+      moveEntityCount: moveMetrics.entityCount,
+      totalSnapCount: moveMetrics.totalSnapCount,
+      totalIgnoredOutOfOrder: moveMetrics.totalIgnoredOutOfOrder,
+      totalBufferUnderrun: moveMetrics.totalBufferUnderrun,
     }
 
     this.debugOverlay.update(info)
@@ -177,6 +213,10 @@ export class Render {
 
   setWorldParams(coordPerTile: number, chunkSize: number): void {
     this.chunkManager.setWorldParams(coordPerTile, chunkSize)
+  }
+
+  setPlayerEntityId(entityId: number | null): void {
+    this.playerEntityId = entityId
   }
 
   loadChunk(x: number, y: number, tiles: Uint8Array): void {

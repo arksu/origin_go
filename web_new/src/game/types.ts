@@ -11,6 +11,15 @@ export interface DebugInfo {
   lastClickWorldY: number
   objectsCount: number
   chunksLoaded: number
+  // Movement metrics
+  rttMs?: number
+  jitterMs?: number
+  timeOffsetMs?: number
+  interpolationDelayMs?: number
+  moveEntityCount?: number
+  totalSnapCount?: number
+  totalIgnoredOutOfOrder?: number
+  totalBufferUnderrun?: number
 }
 
 export interface ScreenPoint {
