@@ -401,6 +401,17 @@ message S2C_ObjectDespawn {
 message S2C_ObjectMove {
   uint64 entity_id = 1;
   EntityMovement movement = 2;
+
+  // server timestamp when this movement state was authored
+  int64 server_time_ms = 3;
+  // monotonically increasing per entity (wrap ok)
+  uint32 move_seq = 4;
+
+  // if true: client should snap/reset buffer
+  bool is_teleport = 5;
+
+  // should match S2C_PlayerEnterWorld.stream_epoch
+  uint32 stream_epoch = 6;
 }
 
 message S2C_InventoryOpResult {

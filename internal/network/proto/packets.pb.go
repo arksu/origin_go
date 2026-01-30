@@ -2885,9 +2885,17 @@ func (x *S2C_ObjectDespawn) GetEntityId() uint64 {
 }
 
 type S2C_ObjectMove struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EntityId      uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Movement      *EntityMovement        `protobuf:"bytes,2,opt,name=movement,proto3" json:"movement,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	EntityId uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	Movement *EntityMovement        `protobuf:"bytes,2,opt,name=movement,proto3" json:"movement,omitempty"`
+	// server timestamp when this movement state was authored
+	ServerTimeMs int64 `protobuf:"varint,3,opt,name=server_time_ms,json=serverTimeMs,proto3" json:"server_time_ms,omitempty"`
+	// monotonically increasing per entity (wrap ok)
+	MoveSeq uint32 `protobuf:"varint,4,opt,name=move_seq,json=moveSeq,proto3" json:"move_seq,omitempty"`
+	// if true: client should snap/reset buffer
+	IsTeleport bool `protobuf:"varint,5,opt,name=is_teleport,json=isTeleport,proto3" json:"is_teleport,omitempty"`
+	// should match S2C_PlayerEnterWorld.stream_epoch
+	StreamEpoch   uint32 `protobuf:"varint,6,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2934,6 +2942,34 @@ func (x *S2C_ObjectMove) GetMovement() *EntityMovement {
 		return x.Movement
 	}
 	return nil
+}
+
+func (x *S2C_ObjectMove) GetServerTimeMs() int64 {
+	if x != nil {
+		return x.ServerTimeMs
+	}
+	return 0
+}
+
+func (x *S2C_ObjectMove) GetMoveSeq() uint32 {
+	if x != nil {
+		return x.MoveSeq
+	}
+	return 0
+}
+
+func (x *S2C_ObjectMove) GetIsTeleport() bool {
+	if x != nil {
+		return x.IsTeleport
+	}
+	return false
+}
+
+func (x *S2C_ObjectMove) GetStreamEpoch() uint32 {
+	if x != nil {
+		return x.StreamEpoch
+	}
+	return 0
 }
 
 type S2C_InventoryOpResult struct {
@@ -3756,10 +3792,15 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rresource_path\x18\x03 \x01(\tR\fresourcePath\x121\n" +
 	"\bposition\x18\x04 \x01(\v2\x15.proto.EntityPositionR\bposition\"0\n" +
 	"\x11S2C_ObjectDespawn\x12\x1b\n" +
-	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"`\n" +
+	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"\xe5\x01\n" +
 	"\x0eS2C_ObjectMove\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x121\n" +
-	"\bmovement\x18\x02 \x01(\v2\x15.proto.EntityMovementR\bmovement\"\xfb\x02\n" +
+	"\bmovement\x18\x02 \x01(\v2\x15.proto.EntityMovementR\bmovement\x12$\n" +
+	"\x0eserver_time_ms\x18\x03 \x01(\x03R\fserverTimeMs\x12\x19\n" +
+	"\bmove_seq\x18\x04 \x01(\rR\amoveSeq\x12\x1f\n" +
+	"\vis_teleport\x18\x05 \x01(\bR\n" +
+	"isTeleport\x12!\n" +
+	"\fstream_epoch\x18\x06 \x01(\rR\vstreamEpoch\"\xfb\x02\n" +
 	"\x15S2C_InventoryOpResult\x12\x13\n" +
 	"\x05op_id\x18\x01 \x01(\x04R\x04opId\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12&\n" +

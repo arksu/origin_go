@@ -29,6 +29,9 @@ type Movement struct {
 	LastCollisionNormY float64 // Last collision normal Y
 	SteeringMode       bool    // Currently steering around obstacle
 	RetryDirectCounter int     // Ticks until retry direct path
+
+	// Movement sequence number (monotonically increasing per entity, wrap ok)
+	MoveSeq uint32
 }
 
 const MovementComponentID ecs.ComponentID = 12

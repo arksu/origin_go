@@ -6,6 +6,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -115,6 +116,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			moveMode := constt.Walk
 			isMoving := false
 			var velocity proto.Vector2
+			var moveSeq uint32
 
 			if hasMovement {
 				moveMode = movement.Mode
@@ -124,16 +126,28 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 					X: int32(movement.VelocityX),
 					Y: int32(movement.VelocityY),
 				}
+				moveSeq = movement.MoveSeq
+
+				// Increment MoveSeq for next movement
+				ecs.WithComponent(w, h, func(m *components.Movement) {
+					m.MoveSeq++
+				})
 			}
 
 			// Prepare target position as pointers
 			var targetX, targetY *int
-			if movement.TargetType == constt.TargetPoint {
+			if hasMovement && movement.TargetType == constt.TargetPoint {
 				tx := int(movement.TargetX)
 				ty := int(movement.TargetY)
 				targetX = &tx
 				targetY = &ty
 			}
+
+			// Get server time in milliseconds
+			serverTimeMs := time.Now().UnixMilli()
+
+			// Determine if this is a teleport (for now, always false - can be set by teleport system)
+			isTeleport := false
 
 			// Publish movement event with raw data
 			s.eventBus.PublishAsync(
@@ -144,6 +158,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 					moveMode, isMoving,
 					targetX, targetY,
 					layer,
+					serverTimeMs, moveSeq, isTeleport,
 				),
 				eventbus.PriorityMedium,
 			)
