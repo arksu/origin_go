@@ -167,6 +167,21 @@ export class ObjectView {
   }
 
   /**
+   * Check if a world point is within this object's bounds.
+   */
+  containsWorldPoint(worldX: number, worldY: number): boolean {
+    const halfSizeX = this.size.x / 2
+    const halfSizeY = this.size.y / 2
+
+    return (
+      worldX >= this.position.x - halfSizeX &&
+      worldX <= this.position.x + halfSizeX &&
+      worldY >= this.position.y - halfSizeY &&
+      worldY <= this.position.y + halfSizeY
+    )
+  }
+
+  /**
    * Enable/disable debug visualization.
    */
   setDebugMode(enabled: boolean): void {

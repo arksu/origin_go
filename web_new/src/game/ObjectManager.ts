@@ -32,9 +32,9 @@ export class ObjectManager {
     const objectView = new ObjectView(options)
     this.objects.set(options.entityId, objectView)
     this.container.addChild(objectView.getContainer())
-    
+
     this.needsSort = true
-    
+
     console.log(`[ObjectManager] Spawned object ${options.entityId}, type=${options.objectType}, total=${this.objects.size}`)
   }
 
@@ -51,7 +51,7 @@ export class ObjectManager {
     this.container.removeChild(objectView.getContainer())
     objectView.destroy()
     this.objects.delete(entityId)
-    
+
     console.log(`[ObjectManager] Despawned object ${entityId}, remaining=${this.objects.size}`)
   }
 
@@ -74,6 +74,26 @@ export class ObjectManager {
    */
   getObject(entityId: number): ObjectView | undefined {
     return this.objects.get(entityId)
+  }
+
+  /**
+   * Find entity at screen coordinates.
+   * Returns entityId if found, null otherwise.
+   */
+  getEntityAtScreen(
+    screenX: number,
+    screenY: number,
+    screenToWorld: (x: number, y: number) => { x: number; y: number }
+  ): number | null {
+    const worldPos = screenToWorld(screenX, screenY)
+
+    for (const [entityId, objectView] of this.objects) {
+      if (objectView.containsWorldPoint(worldPos.x, worldPos.y)) {
+        return entityId
+      }
+    }
+
+    return null
   }
 
   /**

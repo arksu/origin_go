@@ -3,6 +3,9 @@ import { DebugOverlay } from './DebugOverlay'
 import { ChunkManager } from './ChunkManager'
 import { ObjectManager } from './ObjectManager'
 import { moveController } from './MoveController'
+import { InputController } from './InputController'
+import { cameraController } from './CameraController'
+import { playerCommandController } from './PlayerCommandController'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
 import { config } from '@/config'
@@ -16,10 +19,7 @@ export class Render {
   private debugOverlay: DebugOverlay
   private chunkManager: ChunkManager
   private objectManager: ObjectManager
-
-  private cameraX: number = 0
-  private cameraY: number = 0
-  private zoom: number = 1
+  private inputController: InputController
 
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
@@ -27,10 +27,7 @@ export class Render {
   private onClickCallback: ((screen: ScreenPoint) => void) | null = null
 
   private canvas: HTMLCanvasElement | null = null
-  private pointerDownHandler: ((e: PointerEvent) => void) | null = null
   private keyDownHandler: ((e: KeyboardEvent) => void) | null = null
-
-  private playerEntityId: number | null = null
 
   constructor() {
     this.app = new Application()
@@ -40,6 +37,7 @@ export class Render {
     this.debugOverlay = new DebugOverlay()
     this.chunkManager = new ChunkManager()
     this.objectManager = new ObjectManager()
+    this.inputController = new InputController()
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -70,22 +68,62 @@ export class Render {
 
     this.debugOverlay.setVisible(config.DEBUG)
 
-    this.setupPointerEvents()
+    this.setupInputController()
     this.setupKeyboardEvents()
 
     this.app.ticker.add(this.update.bind(this))
   }
 
-  private setupPointerEvents(): void {
+  private setupInputController(): void {
     if (!this.canvas) return
 
-    this.pointerDownHandler = (e: PointerEvent) => {
-      this.lastClickScreen = { x: e.clientX, y: e.clientY }
-      this.lastClickWorld = this.screenToWorld(e.clientX, e.clientY)
-      this.onClickCallback?.(this.lastClickScreen)
-    }
+    this.inputController.init(this.canvas)
 
-    this.canvas.addEventListener('pointerdown', this.pointerDownHandler)
+    this.inputController.onClick((event) => {
+      this.lastClickScreen = { x: event.screenX, y: event.screenY }
+      this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
+      this.onClickCallback?.(this.lastClickScreen)
+
+      if (event.button === 0) {
+        const clickedEntity = this.objectManager.getEntityAtScreen(
+          event.screenX,
+          event.screenY,
+          this.screenToWorld.bind(this)
+        )
+
+        if (clickedEntity !== null) {
+          playerCommandController.sendMoveToEntity(clickedEntity, true, event.modifiers)
+        } else {
+          playerCommandController.sendMoveTo(
+            this.lastClickWorld.x,
+            this.lastClickWorld.y,
+            event.modifiers
+          )
+        }
+      }
+    })
+
+    this.inputController.onDragStart((button) => {
+      if (button === 1) {
+        cameraController.startPan()
+      }
+    })
+
+    this.inputController.onDragMove((event) => {
+      if (event.button === 1) {
+        cameraController.pan(event.deltaX, event.deltaY)
+      }
+    })
+
+    this.inputController.onDragEnd((button) => {
+      if (button === 1) {
+        cameraController.endPan()
+      }
+    })
+
+    this.inputController.onWheel((event) => {
+      cameraController.adjustZoom(event.deltaY > 0 ? 1 : -1)
+    })
   }
 
   private setupKeyboardEvents(): void {
@@ -113,26 +151,23 @@ export class Render {
     // ObjectView handles game->screen conversion internally
     for (const [entityId, renderPos] of positions) {
       this.objectManager.updateObjectPosition(entityId, renderPos.x, renderPos.y)
-
-      // Update camera to follow player (cameraX/Y should be world coordinates)
-      if (this.playerEntityId !== null && entityId === this.playerEntityId) {
-        this.cameraX = renderPos.x
-        this.cameraY = renderPos.y
-      }
     }
   }
 
   private updateCamera(): void {
-    // Convert world coordinates to screen coordinates for camera positioning
-    const screenPos = coordGame2Screen(this.cameraX, this.cameraY)
+    // Update camera controller (handles follow logic)
+    const camState = cameraController.update()
 
-    this.mapContainer.x = -screenPos.x * this.zoom + this.app.screen.width / 2
-    this.mapContainer.y = -screenPos.y * this.zoom + this.app.screen.height / 2
-    this.mapContainer.scale.set(this.zoom)
+    // Convert world coordinates to screen coordinates for camera positioning
+    const screenPos = coordGame2Screen(camState.x, camState.y)
+
+    this.mapContainer.x = -screenPos.x * camState.zoom + this.app.screen.width / 2
+    this.mapContainer.y = -screenPos.y * camState.zoom + this.app.screen.height / 2
+    this.mapContainer.scale.set(camState.zoom)
 
     this.objectsContainer.x = this.mapContainer.x
     this.objectsContainer.y = this.mapContainer.y
-    this.objectsContainer.scale.set(this.zoom)
+    this.objectsContainer.scale.set(camState.zoom)
   }
 
   private updateDebugOverlay(): void {
@@ -140,12 +175,13 @@ export class Render {
 
     const timeSyncMetrics = timeSync.getDebugMetrics()
     const moveMetrics = moveController.getGlobalDebugMetrics()
+    const camState = cameraController.getState()
 
     const info: DebugInfo = {
       fps: this.app.ticker.FPS,
-      cameraX: this.cameraX,
-      cameraY: this.cameraY,
-      zoom: this.zoom,
+      cameraX: camState.x,
+      cameraY: camState.y,
+      zoom: camState.zoom,
       viewportWidth: Math.round(this.app.screen.width),
       viewportHeight: Math.round(this.app.screen.height),
       lastClickScreenX: this.lastClickScreen.x,
@@ -169,42 +205,39 @@ export class Render {
   }
 
   screenToWorld(screenX: number, screenY: number): ScreenPoint {
-    // Convert screen coordinates to world coordinates using isometric projection
-    const cameraScreenPos = coordGame2Screen(this.cameraX, this.cameraY)
+    const camState = cameraController.getState()
+    const cameraScreenPos = coordGame2Screen(camState.x, camState.y)
 
-    // Convert screen coordinates to game coordinates relative to camera
-    const relativeScreenX = (screenX - this.app.screen.width / 2) / this.zoom + cameraScreenPos.x
-    const relativeScreenY = (screenY - this.app.screen.height / 2) / this.zoom + cameraScreenPos.y
+    const relativeScreenX = (screenX - this.app.screen.width / 2) / camState.zoom + cameraScreenPos.x
+    const relativeScreenY = (screenY - this.app.screen.height / 2) / camState.zoom + cameraScreenPos.y
 
-    // Convert screen coordinates to world coordinates
     return coordScreen2Game(relativeScreenX, relativeScreenY)
   }
 
   worldToScreen(worldX: number, worldY: number): ScreenPoint {
-    // Convert world coordinates to screen coordinates using isometric projection
+    const camState = cameraController.getState()
     const screenPos = coordGame2Screen(worldX, worldY)
-    const cameraScreenPos = coordGame2Screen(this.cameraX, this.cameraY)
+    const cameraScreenPos = coordGame2Screen(camState.x, camState.y)
 
-    const screenX = (screenPos.x - cameraScreenPos.x) * this.zoom + this.app.screen.width / 2
-    const screenY = (screenPos.y - cameraScreenPos.y) * this.zoom + this.app.screen.height / 2
+    const screenX = (screenPos.x - cameraScreenPos.x) * camState.zoom + this.app.screen.width / 2
+    const screenY = (screenPos.y - cameraScreenPos.y) * camState.zoom + this.app.screen.height / 2
     return { x: screenX, y: screenY }
   }
 
   setCamera(x: number, y: number): void {
-    this.cameraX = x
-    this.cameraY = y
+    cameraController.setPosition(x, y)
   }
 
   setZoom(zoom: number): void {
-    this.zoom = Math.max(0.25, Math.min(4, zoom))
+    cameraController.setZoom(zoom)
   }
 
   getZoom(): number {
-    return this.zoom
+    return cameraController.getZoom()
   }
 
   getCameraPosition(): ScreenPoint {
-    return { x: this.cameraX, y: this.cameraY }
+    return cameraController.getPosition()
   }
 
   getMapContainer(): Container {
@@ -228,7 +261,7 @@ export class Render {
   }
 
   setPlayerEntityId(entityId: number | null): void {
-    this.playerEntityId = entityId
+    cameraController.setTargetEntity(entityId)
   }
 
   loadChunk(x: number, y: number, tiles: Uint8Array): void {
@@ -258,11 +291,12 @@ export class Render {
   updateDebugStats(objectsCount: number, chunksLoaded: number): void {
     if (!this.debugOverlay.isVisible()) return
 
+    const camState = cameraController.getState()
     const info: DebugInfo = {
       fps: this.app.ticker.FPS,
-      cameraX: this.cameraX,
-      cameraY: this.cameraY,
-      zoom: this.zoom,
+      cameraX: camState.x,
+      cameraY: camState.y,
+      zoom: camState.zoom,
       viewportWidth: Math.round(this.app.screen.width),
       viewportHeight: Math.round(this.app.screen.height),
       lastClickScreenX: this.lastClickScreen.x,
@@ -279,9 +313,7 @@ export class Render {
   destroy(): void {
     this.app.ticker.stop()
 
-    if (this.canvas && this.pointerDownHandler) {
-      this.canvas.removeEventListener('pointerdown', this.pointerDownHandler)
-    }
+    this.inputController.destroy()
 
     if (this.keyDownHandler) {
       window.removeEventListener('keydown', this.keyDownHandler)
@@ -290,10 +322,10 @@ export class Render {
     this.chunkManager.destroy()
     this.objectManager.destroy()
     this.debugOverlay.destroy()
+    cameraController.reset()
     this.app.destroy(true, { children: true, texture: true })
 
     this.canvas = null
-    this.pointerDownHandler = null
     this.keyDownHandler = null
     this.onClickCallback = null
   }
