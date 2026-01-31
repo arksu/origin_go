@@ -2564,6 +2564,7 @@ type S2C_PlayerEnterWorld struct {
 	Name         string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	CoordPerTile uint32                 `protobuf:"varint,3,opt,name=coord_per_tile,json=coordPerTile,proto3" json:"coord_per_tile,omitempty"`
 	ChunkSize    uint32                 `protobuf:"varint,4,opt,name=chunk_size,json=chunkSize,proto3" json:"chunk_size,omitempty"`
+	TickRate     uint32                 `protobuf:"varint,5,opt,name=tick_rate,json=tickRate,proto3" json:"tick_rate,omitempty"`
 	// EntityStats stats = 4;
 	// EntitySkills skills = 5;
 	// Inventory inventory = 6;
@@ -2628,6 +2629,13 @@ func (x *S2C_PlayerEnterWorld) GetCoordPerTile() uint32 {
 func (x *S2C_PlayerEnterWorld) GetChunkSize() uint32 {
 	if x != nil {
 		return x.ChunkSize
+	}
+	return 0
+}
+
+func (x *S2C_PlayerEnterWorld) GetTickRate() uint32 {
+	if x != nil {
+		return x.TickRate
 	}
 	return 0
 }
@@ -3771,13 +3779,14 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"V\n" +
 	"\bS2C_Pong\x12$\n" +
 	"\x0eclient_time_ms\x18\x01 \x01(\x03R\fclientTimeMs\x12$\n" +
-	"\x0eserver_time_ms\x18\x02 \x01(\x03R\fserverTimeMs\"\xaf\x01\n" +
+	"\x0eserver_time_ms\x18\x02 \x01(\x03R\fserverTimeMs\"\xcc\x01\n" +
 	"\x14S2C_PlayerEnterWorld\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12$\n" +
 	"\x0ecoord_per_tile\x18\x03 \x01(\rR\fcoordPerTile\x12\x1d\n" +
 	"\n" +
-	"chunk_size\x18\x04 \x01(\rR\tchunkSize\x12!\n" +
+	"chunk_size\x18\x04 \x01(\rR\tchunkSize\x12\x1b\n" +
+	"\ttick_rate\x18\x05 \x01(\rR\btickRate\x12!\n" +
 	"\fstream_epoch\x18\t \x01(\rR\vstreamEpoch\"3\n" +
 	"\x14S2C_PlayerLeaveWorld\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"7\n" +

@@ -18,6 +18,8 @@ const MAX_KEYFRAMES = 32
 const MAX_EXTRAPOLATION_MS = 180
 const SNAP_DISTANCE_SQUARED = 2400 * 2400 // ~0.75 tiles at 32 coord/tile -> (0.75 * 32 * 100)^2
 const ERROR_CORRECTION_SPEED = 0.15 // per-frame lerp factor for small corrections
+const ERROR_CORRECTION_SPEED_LOW = 0.03 // reduced correction during movement start
+const ERROR_CORRECTION_RAMP_MS = 200 // time to ramp up correction speed
 const VELOCITY_DECAY_RATE = 0.9 // decay rate when extrapolating past max time
 
 export interface MoveKeyframe {
@@ -55,6 +57,10 @@ export interface EntityMoveState {
   isExtrapolating: boolean
   extrapolationStartMs: number
 
+  // Movement start tracking for smooth ramp-in
+  movementStartClientMs: number
+  wasMovingLastFrame: boolean
+
   // Debug metrics
   ignoredOutOfOrder: number
   snapCount: number
@@ -76,12 +82,23 @@ export interface MoveDebugMetrics {
 class MoveController {
   private entities: Map<number, EntityMoveState> = new Map()
   private globalStreamEpoch = 0
+  private tickRate = 10 // Default fallback (100ms per tick)
 
   /**
-   * Set the global stream epoch (from S2C_PlayerEnterWorld).
+   * Set the global stream epoch and tick rate (from S2C_PlayerEnterWorld).
    */
-  setStreamEpoch(epoch: number): void {
+  setStreamEpoch(epoch: number, tickRate?: number): void {
     this.globalStreamEpoch = epoch
+    if (tickRate && tickRate > 0) {
+      this.tickRate = tickRate
+    }
+  }
+
+  /**
+   * Get the current tick rate.
+   */
+  getTickRate(): number {
+    return this.tickRate
   }
 
   /**
@@ -98,6 +115,8 @@ class MoveController {
       visualHeading: heading,
       isExtrapolating: false,
       extrapolationStartMs: 0,
+      movementStartClientMs: 0,
+      wasMovingLastFrame: false,
       ignoredOutOfOrder: 0,
       snapCount: 0,
       bufferUnderrunCount: 0,
@@ -181,6 +200,34 @@ class MoveController {
     state.lastMoveSeq = moveSeq
     state.isExtrapolating = false
 
+    // Detect movement start: buffer was empty or entity wasn't moving
+    const isMovementStart = state.keyframes.length === 0 || !state.wasMovingLastFrame
+
+    // Add synthetic pre-roll keyframe for smooth movement start
+    if (isMovementStart && isMoving) {
+      const syntheticOffsetMs = Math.floor(1000 / this.tickRate) // One tick duration in ms
+      const syntheticKeyframe: MoveKeyframe = {
+        tServerMs: serverTimeMs - syntheticOffsetMs,
+        x: state.visualX,
+        y: state.visualY,
+        vx, vy, // Use incoming velocity
+        isMoving: false,
+        moveMode,
+        heading: state.visualHeading,
+        moveSeq: moveSeq - 1,
+      }
+      state.keyframes.push(syntheticKeyframe)
+      state.movementStartClientMs = Date.now()
+
+      if (config.DEBUG_MOVEMENT) {
+        console.log(`[MoveController] Synthetic pre-roll keyframe for entity ${entityId}:`, {
+          pos: `(${state.visualX.toFixed(2)}, ${state.visualY.toFixed(2)})`,
+          offsetMs: syntheticOffsetMs,
+          tickRate: this.tickRate,
+        })
+      }
+    }
+
     // Add keyframe to buffer
     const keyframe: MoveKeyframe = {
       tServerMs: serverTimeMs,
@@ -189,6 +236,7 @@ class MoveController {
     }
 
     state.keyframes.push(keyframe)
+    state.wasMovingLastFrame = isMoving
 
     // Log keyframe addition for debugging
     if (config.DEBUG_MOVEMENT) {
@@ -236,7 +284,7 @@ class MoveController {
       const dy = pos.y - prevPos.y
       const distance = Math.sqrt(dx * dx + dy * dy)
 
-      if (config.DEBUG_MOVEMENT && (distance > 0.04 )) {
+      if (config.DEBUG_MOVEMENT && (distance > 0.04)) {
         console.log(`[MoveController] Entity ${entityId}:`, {
           prevPos: `(${prevPos.x.toFixed(2)}, ${prevPos.y.toFixed(2)})`,
           newPos: `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`,
@@ -364,7 +412,7 @@ class MoveController {
       }
     }
 
-    // Apply error correction (smooth damping)
+    // Apply error correction (smooth damping with adaptive ramp-in)
     const errorX = targetX - state.visualX
     const errorY = targetY - state.visualY
     const errorDistSq = errorX * errorX + errorY * errorY
@@ -375,9 +423,23 @@ class MoveController {
       state.visualY = targetY
       state.snapCount++
     } else {
-      // Small error - smooth correction
-      state.visualX += errorX * ERROR_CORRECTION_SPEED
-      state.visualY += errorY * ERROR_CORRECTION_SPEED
+      // Small error - smooth correction with adaptive speed
+      // Ramp up correction speed during first 200ms of movement
+      let correctionSpeed = ERROR_CORRECTION_SPEED
+
+      if (state.movementStartClientMs > 0) {
+        const timeSinceMovementStart = clientNowMs - state.movementStartClientMs
+        if (timeSinceMovementStart < ERROR_CORRECTION_RAMP_MS) {
+          // Lerp from LOW to NORMAL over ramp duration
+          const rampProgress = timeSinceMovementStart / ERROR_CORRECTION_RAMP_MS
+          const easedProgress = rampProgress * rampProgress // ease-in quadratic
+          correctionSpeed = ERROR_CORRECTION_SPEED_LOW +
+            (ERROR_CORRECTION_SPEED - ERROR_CORRECTION_SPEED_LOW) * easedProgress
+        }
+      }
+
+      state.visualX += errorX * correctionSpeed
+      state.visualY += errorY * correctionSpeed
     }
 
     state.visualHeading = heading

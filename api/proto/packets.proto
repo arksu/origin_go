@@ -366,6 +366,7 @@ message S2C_PlayerEnterWorld {
   string name = 2;
   uint32 coord_per_tile = 3;
   uint32 chunk_size = 4;
+  uint32 tick_rate = 5;
   //  EntityStats stats = 4;
   //  EntitySkills skills = 5;
   //  Inventory inventory = 6;

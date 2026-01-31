@@ -16,8 +16,9 @@ export function registerMessageHandlers(): void {
     const coordPerTile = msg.coordPerTile || 32
     const chunkSize = msg.chunkSize || 128
     const streamEpoch = msg.streamEpoch || 0
+    const tickRate = msg.tickRate || 10 // Default to 10 ticks/sec
 
-    console.log(`[Handlers] playerEnterWorld: coordPerTile=${coordPerTile}, chunkSize=${chunkSize}, streamEpoch=${streamEpoch}`)
+    console.log(`[Handlers] playerEnterWorld: coordPerTile=${coordPerTile}, chunkSize=${chunkSize}, streamEpoch=${streamEpoch}, tickRate=${tickRate}`)
 
     gameStore.setPlayerEnterWorld(
       toNumber(msg.entityId!),
@@ -28,7 +29,7 @@ export function registerMessageHandlers(): void {
     )
 
     // Set stream epoch for MoveController to validate incoming movement packets
-    moveController.setStreamEpoch(streamEpoch)
+    moveController.setStreamEpoch(streamEpoch, tickRate)
 
     // Set player entity ID for camera following
     gameFacade.setPlayerEntityId(toNumber(msg.entityId!))
