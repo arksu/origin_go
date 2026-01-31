@@ -79,6 +79,9 @@ export class CameraController {
   }
 
   update(): CameraState {
+    const prevX = this.x
+    const prevY = this.y
+
     if (this.targetEntityId !== null) {
       const renderPos = moveController.getRenderPosition(this.targetEntityId)
 
@@ -92,6 +95,25 @@ export class CameraController {
         } else {
           this.x += (targetX - this.x) * config.CAMERA_FOLLOW_LERP
           this.y += (targetY - this.y) * config.CAMERA_FOLLOW_LERP
+        }
+
+        // Log camera movement for debugging
+        if (config.DEBUG_MOVEMENT) {
+          const dx = this.x - prevX
+          const dy = this.y - prevY
+          const distance = Math.sqrt(dx * dx + dy * dy)
+
+          if (distance > 0.1) {
+            // console.log(`[CameraController] Following entity ${this.targetEntityId}:`, {
+            //   entityPos: `(${renderPos.x.toFixed(2)}, ${renderPos.y.toFixed(2)})`,
+            //   targetPos: `(${targetX.toFixed(2)}, ${targetY.toFixed(2)})`,
+            //   currentPos: `(${this.x.toFixed(2)}, ${this.y.toFixed(2)})`,
+            //   delta: `(${dx.toFixed(2)}, ${dy.toFixed(2)})`,
+            //   distance: distance.toFixed(2),
+            //   panOffset: `(${this.panOffsetX.toFixed(2)}, ${this.panOffsetY.toFixed(2)})`,
+            //   isMoving: renderPos.isMoving,
+            // })
+          }
         }
       }
     }
