@@ -11,6 +11,7 @@
  */
 
 import { timeSync } from '@/network/TimeSync'
+import { config } from '@/config'
 
 // Constants
 const MAX_KEYFRAMES = 32
@@ -91,7 +92,7 @@ class MoveController {
       entityId,
       streamEpoch: this.globalStreamEpoch,
       keyframes: [],
-      lastMoveSeq: 0,
+      lastMoveSeq: -1,
       visualX: x,
       visualY: y,
       visualHeading: heading,
@@ -131,6 +132,9 @@ class MoveController {
 
     // If entity not tracked, initialize it
     if (!state) {
+      if (config.DEBUG_MOVEMENT) {
+        console.log(`[MoveController] Initializing entity ${entityId} at (${x.toFixed(2)}, ${y.toFixed(2)})`)
+      }
       this.initEntity(entityId, x, y, heading)
       state = this.entities.get(entityId)!
     }
@@ -138,11 +142,15 @@ class MoveController {
     // Validate stream epoch
     if (streamEpoch !== this.globalStreamEpoch) {
       // Epoch mismatch - ignore this packet
+      console.warn(`[MoveController] Epoch mismatch for entity ${entityId}: expected ${this.globalStreamEpoch}, got ${streamEpoch}`)
       return
     }
 
     // Handle teleport - snap and reset buffer
     if (isTeleport) {
+      if (config.DEBUG_MOVEMENT) {
+        console.log(`[MoveController] Teleport entity ${entityId} to (${x.toFixed(2)}, ${y.toFixed(2)})`)
+      }
       state.keyframes = []
       state.visualX = x
       state.visualY = y
@@ -163,6 +171,9 @@ class MoveController {
     // Check move_seq for out-of-order detection
     // Simple comparison - assumes seq doesn't wrap frequently
     if (moveSeq <= state.lastMoveSeq && state.lastMoveSeq - moveSeq < 1000) {
+      if (config.DEBUG_MOVEMENT) {
+        console.warn(`[MoveController] Out-of-order packet for entity ${entityId}: seq ${moveSeq} <= last ${state.lastMoveSeq}`)
+      }
       state.ignoredOutOfOrder++
       return
     }
@@ -178,6 +189,23 @@ class MoveController {
     }
 
     state.keyframes.push(keyframe)
+
+    // Log keyframe addition for debugging
+    if (config.DEBUG_MOVEMENT) {
+      const prevKeyframe = state.keyframes.length > 1 ? state.keyframes[state.keyframes.length - 2] : null
+      const timeDelta = prevKeyframe ? serverTimeMs - prevKeyframe.tServerMs : 0
+      const posDelta = prevKeyframe ? Math.sqrt((x - prevKeyframe.x) ** 2 + (y - prevKeyframe.y) ** 2) : 0
+
+      console.log(`[MoveController] Keyframe added for entity ${entityId}:`, {
+        seq: moveSeq,
+        pos: `(${x.toFixed(2)}, ${y.toFixed(2)})`,
+        velocity: `(${vx.toFixed(2)}, ${vy.toFixed(2)})`,
+        isMoving,
+        timeDelta: `${timeDelta}ms`,
+        posDelta: posDelta.toFixed(2),
+        bufferSize: state.keyframes.length,
+      })
+    }
 
     // Trim buffer if too large
     while (state.keyframes.length > MAX_KEYFRAMES) {
@@ -200,7 +228,28 @@ class MoveController {
     const renderTimeMs = serverNowMs - interpolationDelayMs
 
     for (const [entityId, state] of this.entities) {
+      const prevPos = { x: state.visualX, y: state.visualY }
       const pos = this.interpolateEntity(state, renderTimeMs, clientNowMs)
+
+      // Log movement details for debugging
+      const dx = pos.x - prevPos.x
+      const dy = pos.y - prevPos.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+
+      if (config.DEBUG_MOVEMENT && (distance > 0.04 )) {
+        console.log(`[MoveController] Entity ${entityId}:`, {
+          prevPos: `(${prevPos.x.toFixed(2)}, ${prevPos.y.toFixed(2)})`,
+          newPos: `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`,
+          distance: distance.toFixed(2),
+          isMoving: pos.isMoving,
+          isExtrapolating: state.isExtrapolating,
+          keyframes: state.keyframes.length,
+          renderTimeMs: renderTimeMs,
+          lastKeyframe: state.keyframes.length > 0 ? state.keyframes[state.keyframes.length - 1]?.tServerMs : 'none',
+          moveSeq: state.lastMoveSeq,
+        })
+      }
+
       result.set(entityId, pos)
     }
 

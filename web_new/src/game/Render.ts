@@ -136,7 +136,18 @@ export class Render {
     window.addEventListener('keydown', this.keyDownHandler)
   }
 
+  private lastUpdateTime: number = 0
+
   private update(): void {
+    const now = performance.now()
+    const dt = this.lastUpdateTime > 0 ? now - this.lastUpdateTime : 16.67 // Default 60 FPS
+    this.lastUpdateTime = now
+
+    // Log frame time for debugging
+    if (config.DEBUG_MOVEMENT && (dt > 20 || dt < 4)) { // Log unusual frame times
+      console.log(`[Render] Frame time: ${dt.toFixed(2)}ms (${(1000 / dt).toFixed(1)} FPS)`)
+    }
+
     this.updateMovement()
     this.objectManager.update()
     this.updateCamera()

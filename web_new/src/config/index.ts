@@ -17,6 +17,9 @@ export const config = {
   ZOOM_SPEED: 0.1,
   CAMERA_FOLLOW_LERP: 0.1,
   CAMERA_FOLLOW_HARD: false, // true = hard follow, false = smooth lerp
+
+  // Debug logging for movement analysis
+  DEBUG_MOVEMENT: true, // Enable detailed movement logging
 } as const
 
 declare global {

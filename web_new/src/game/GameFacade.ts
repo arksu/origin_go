@@ -1,4 +1,5 @@
 import { Render } from './Render'
+import { playerCommandController } from './PlayerCommandController'
 import type { DebugInfo, ScreenPoint } from './types'
 
 export class GameFacade {
@@ -67,6 +68,9 @@ export class GameFacade {
 
   setPlayerEntityId(entityId: number | null): void {
     this.render?.setPlayerEntityId(entityId)
+    if (entityId !== null) {
+      playerCommandController.setPlayerId(entityId)
+    }
   }
 
   loadChunk(x: number, y: number, tiles: Uint8Array): void {
