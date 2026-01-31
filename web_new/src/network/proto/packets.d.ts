@@ -3566,6 +3566,9 @@ export namespace proto {
         /** S2C_PlayerEnterWorld chunkSize */
         chunkSize?: (number|null);
 
+        /** S2C_PlayerEnterWorld tickRate */
+        tickRate?: (number|null);
+
         /** S2C_PlayerEnterWorld streamEpoch */
         streamEpoch?: (number|null);
     }
@@ -3590,6 +3593,9 @@ export namespace proto {
 
         /** S2C_PlayerEnterWorld chunkSize. */
         public chunkSize: number;
+
+        /** S2C_PlayerEnterWorld tickRate. */
+        public tickRate: number;
 
         /** S2C_PlayerEnterWorld streamEpoch. */
         public streamEpoch: number;

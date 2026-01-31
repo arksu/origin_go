@@ -12,9 +12,9 @@ export const config = {
 
   // Input & Camera controls (Stage 9)
   CLICK_DRAG_THRESHOLD_PX: 8,
-  ZOOM_MIN: 0.25,
-  ZOOM_MAX: 4,
-  ZOOM_SPEED: 0.1,
+  ZOOM_MIN: 0.12,
+  ZOOM_MAX: 10,
+  ZOOM_SPEED: 0.01,
   CAMERA_FOLLOW_LERP: 0.1,
   CAMERA_FOLLOW_HARD: false, // true = hard follow, false = smooth lerp
 

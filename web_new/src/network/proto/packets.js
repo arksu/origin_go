@@ -8992,6 +8992,7 @@ export const proto = $root.proto = (() => {
          * @property {string|null} [name] S2C_PlayerEnterWorld name
          * @property {number|null} [coordPerTile] S2C_PlayerEnterWorld coordPerTile
          * @property {number|null} [chunkSize] S2C_PlayerEnterWorld chunkSize
+         * @property {number|null} [tickRate] S2C_PlayerEnterWorld tickRate
          * @property {number|null} [streamEpoch] S2C_PlayerEnterWorld streamEpoch
          */
 
@@ -9043,6 +9044,14 @@ export const proto = $root.proto = (() => {
         S2C_PlayerEnterWorld.prototype.chunkSize = 0;
 
         /**
+         * S2C_PlayerEnterWorld tickRate.
+         * @member {number} tickRate
+         * @memberof proto.S2C_PlayerEnterWorld
+         * @instance
+         */
+        S2C_PlayerEnterWorld.prototype.tickRate = 0;
+
+        /**
          * S2C_PlayerEnterWorld streamEpoch.
          * @member {number} streamEpoch
          * @memberof proto.S2C_PlayerEnterWorld
@@ -9082,6 +9091,8 @@ export const proto = $root.proto = (() => {
                 writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.coordPerTile);
             if (message.chunkSize != null && Object.hasOwnProperty.call(message, "chunkSize"))
                 writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.chunkSize);
+            if (message.tickRate != null && Object.hasOwnProperty.call(message, "tickRate"))
+                writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.tickRate);
             if (message.streamEpoch != null && Object.hasOwnProperty.call(message, "streamEpoch"))
                 writer.uint32(/* id 9, wireType 0 =*/72).uint32(message.streamEpoch);
             return writer;
@@ -9136,6 +9147,10 @@ export const proto = $root.proto = (() => {
                         message.chunkSize = reader.uint32();
                         break;
                     }
+                case 5: {
+                        message.tickRate = reader.uint32();
+                        break;
+                    }
                 case 9: {
                         message.streamEpoch = reader.uint32();
                         break;
@@ -9187,6 +9202,9 @@ export const proto = $root.proto = (() => {
             if (message.chunkSize != null && message.hasOwnProperty("chunkSize"))
                 if (!$util.isInteger(message.chunkSize))
                     return "chunkSize: integer expected";
+            if (message.tickRate != null && message.hasOwnProperty("tickRate"))
+                if (!$util.isInteger(message.tickRate))
+                    return "tickRate: integer expected";
             if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
                 if (!$util.isInteger(message.streamEpoch))
                     return "streamEpoch: integer expected";
@@ -9220,6 +9238,8 @@ export const proto = $root.proto = (() => {
                 message.coordPerTile = object.coordPerTile >>> 0;
             if (object.chunkSize != null)
                 message.chunkSize = object.chunkSize >>> 0;
+            if (object.tickRate != null)
+                message.tickRate = object.tickRate >>> 0;
             if (object.streamEpoch != null)
                 message.streamEpoch = object.streamEpoch >>> 0;
             return message;
@@ -9247,6 +9267,7 @@ export const proto = $root.proto = (() => {
                 object.name = "";
                 object.coordPerTile = 0;
                 object.chunkSize = 0;
+                object.tickRate = 0;
                 object.streamEpoch = 0;
             }
             if (message.entityId != null && message.hasOwnProperty("entityId"))
@@ -9260,6 +9281,8 @@ export const proto = $root.proto = (() => {
                 object.coordPerTile = message.coordPerTile;
             if (message.chunkSize != null && message.hasOwnProperty("chunkSize"))
                 object.chunkSize = message.chunkSize;
+            if (message.tickRate != null && message.hasOwnProperty("tickRate"))
+                object.tickRate = message.tickRate;
             if (message.streamEpoch != null && message.hasOwnProperty("streamEpoch"))
                 object.streamEpoch = message.streamEpoch;
             return object;
