@@ -2,8 +2,6 @@
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/gameStore'
-import { connectToGame, disconnectFromGame } from '@/network'
-import { gameFacade } from '@/game'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
@@ -13,6 +11,9 @@ const gameStore = useGameStore()
 
 const gameCanvas = ref<HTMLCanvasElement | null>(null)
 const canvasInitialized = ref(false)
+let gameFacade: any = null
+let connectToGame: any = null
+let disconnectFromGame: any = null
 
 const connectionState = computed(() => gameStore.connectionState)
 const connectionError = computed(() => gameStore.connectionError)
@@ -29,7 +30,7 @@ async function initCanvas() {
     await gameFacade.init(gameCanvas.value)
     canvasInitialized.value = true
 
-    gameFacade.onPlayerClick((screenX, screenY) => {
+    gameFacade.onPlayerClick((screenX: number, screenY: number) => {
       console.debug('[GameView] Click:', screenX, screenY)
     })
   } catch (err) {
@@ -44,19 +45,32 @@ watch(isConnected, async (connected) => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   if (!gameStore.wsToken) {
     router.push('/characters')
     return
   }
 
+  const [gameModule, networkModule] = await Promise.all([
+    import('@/game'),
+    import('@/network')
+  ])
+
+  gameFacade = gameModule.gameFacade
+  connectToGame = networkModule.connectToGame
+  disconnectFromGame = networkModule.disconnectFromGame
+
   connectToGame(gameStore.wsToken)
 })
 
 onUnmounted(() => {
-  gameFacade.destroy()
+  if (gameFacade) {
+    gameFacade.destroy()
+  }
   canvasInitialized.value = false
-  disconnectFromGame()
+  if (disconnectFromGame) {
+    disconnectFromGame()
+  }
   gameStore.reset()
 })
 
