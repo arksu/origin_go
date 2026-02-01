@@ -57,6 +57,7 @@ export class Render {
     this.objectsContainer.sortableChildren = true
     this.uiContainer.sortableChildren = true
 
+    this.chunkManager.setObjectsContainer(this.objectsContainer)
     await this.chunkManager.init()
     this.mapContainer.addChild(this.chunkManager.getContainer())
     this.objectsContainer.addChild(this.objectManager.getContainer())

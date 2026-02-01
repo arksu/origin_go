@@ -1,0 +1,6 @@
+export * from './types'
+export * from './TerrainGenerator'
+export * from './TerrainRegistry'
+export * from './TerrainSpriteRenderer'
+export * from './TerrainManager'
+export type { ITerrainRenderer } from './ITerrainRenderer'
