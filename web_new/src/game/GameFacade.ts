@@ -73,8 +73,8 @@ export class GameFacade {
     }
   }
 
-  loadChunk(x: number, y: number, tiles: Uint8Array): void {
-    this.render?.loadChunk(x, y, tiles)
+  loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
+    this.render?.loadChunk(x, y, tiles, version)
   }
 
   unloadChunk(x: number, y: number): void {

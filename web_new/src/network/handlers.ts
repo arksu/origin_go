@@ -51,8 +51,9 @@ export function registerMessageHandlers(): void {
 
       console.log(`[Handlers] chunkLoad: x=${x}, y=${y}, tiles.length=${tiles.length}`)
 
-      gameStore.loadChunk(x, y, tiles, msg.chunk.version || 0)
-      gameFacade.loadChunk(x, y, tiles)
+      const version = msg.chunk.version || 0
+      gameStore.loadChunk(x, y, tiles, version)
+      gameFacade.loadChunk(x, y, tiles, version)
     }
   })
 
