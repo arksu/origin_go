@@ -1,7 +1,7 @@
 import { Container, Assets, Spritesheet } from 'pixi.js'
 import { Chunk, type ChunkBuildResult } from './Chunk'
 import { initTileSets } from './tiles/tileSetLoader'
-import { setWorldParams } from './tiles/Tile'
+import { setWorldParams, getChunkSize } from './tiles/Tile'
 import { terrainManager } from './terrain'
 import { cullingController } from './culling'
 import {
@@ -104,8 +104,14 @@ export class ChunkManager {
    * Update camera position for priority calculation.
    */
   setCameraPosition(x: number, y: number): void {
+    const prevX = this.cameraX
+    const prevY = this.cameraY
     this.cameraX = x
     this.cameraY = y
+
+    if (Math.abs(x - prevX) > 1 || Math.abs(y - prevY) > 1) {
+      console.log(`[ChunkManager] Camera moved: (${x.toFixed(0)}, ${y.toFixed(0)})`)
+    }
   }
 
   /**
@@ -273,6 +279,7 @@ export class ChunkManager {
 
     // Generate terrain
     const terrainStart = performance.now()
+    console.log(`[ChunkManager] Building terrain for chunk (${task.x},${task.y})`)
     terrainManager.generateTerrainForChunk(task.x, task.y, task.tiles, buildResult.hasBordersOrCorners)
     const terrainTime = performance.now() - terrainStart
 
@@ -449,11 +456,14 @@ export class ChunkManager {
    * Calculate distance from chunk to camera (in chunk units).
    */
   private calculateDistance(x: number, y: number): number {
-    // Convert camera position to chunk coordinates
-    // This is a simplification - would need proper conversion
-    const dx = x - Math.floor(this.cameraX / 128) // Assuming chunkSize = 128
-    const dy = y - Math.floor(this.cameraY / 128)
-    return Math.sqrt(dx * dx + dy * dy)
+    const chunkSize = getChunkSize()
+    const cameraChunkX = Math.floor(this.cameraX / chunkSize)
+    const cameraChunkY = Math.floor(this.cameraY / chunkSize)
+    const dx = x - cameraChunkX
+    const dy = y - cameraChunkY
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    console.log(`[ChunkManager] Distance from chunk (${x},${y}) to camera (${cameraChunkX},${cameraChunkY}): ${distance.toFixed(2)}`)
+    return distance
   }
 
   /**

@@ -4,14 +4,16 @@ import { getTerrainGenerator } from './TerrainRegistry'
 import type { TerrainRenderContext } from './types'
 import type { TerrainSubchunk, TerrainBuildTask } from './TerrainSubchunkTypes'
 import { TerrainSubchunkState } from './TerrainSubchunkTypes'
-import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getChunkSize } from '../tiles/Tile'
+import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getChunkSize, getFullChunkSize } from '../tiles/Tile'
 import { terrainBuildQueue } from './TerrainBuildQueue'
 import { terrainMetrics } from './TerrainMetricsCollector'
 import { terrainSpritePool } from './TerrainSpritePool'
 import {
   TERRAIN_SUBCHUNK_DIVIDER,
-  TERRAIN_SHOW_RADIUS_SUBCHUNKS,
-  TERRAIN_HIDE_RADIUS_SUBCHUNKS,
+  TERRAIN_VISIBLE_WIDTH_SUBCHUNKS,
+  TERRAIN_VISIBLE_HEIGHT_SUBCHUNKS,
+  TERRAIN_HIDE_WIDTH_SUBCHUNKS,
+  TERRAIN_HIDE_HEIGHT_SUBCHUNKS,
 } from './constants'
 
 interface ChunkData {
@@ -48,13 +50,20 @@ export class TerrainManager {
    * Call this from render loop.
    */
   setCameraPosition(gameX: number, gameY: number): void {
-    const chunkSize = getChunkSize()
-    // Convert game coords to chunk coords first
-    const chunkX = gameX / chunkSize
-    const chunkY = gameY / chunkSize
-    // Then to subchunk coords (each chunk has TERRAIN_SUBCHUNK_DIVIDER subchunks)
-    this.cameraSubchunkX = chunkX * TERRAIN_SUBCHUNK_DIVIDER
-    this.cameraSubchunkY = chunkY * TERRAIN_SUBCHUNK_DIVIDER
+    // Convert game coords to subchunk coords directly
+    // Game coords are in tile units, subchunk coords are in subchunk units
+    const chunkSize = getFullChunkSize()
+    const subchunkSize = chunkSize / TERRAIN_SUBCHUNK_DIVIDER
+
+    // const prevX = this.cameraSubchunkX
+    // const prevY = this.cameraSubchunkY
+
+    this.cameraSubchunkX = gameX / subchunkSize
+    this.cameraSubchunkY = gameY / subchunkSize
+
+    // if (Math.abs(this.cameraSubchunkX - prevX) > 0.5 || Math.abs(this.cameraSubchunkY - prevY) > 0.5) {
+    //   console.log(`[TerrainManager] Camera moved: game=(${gameX.toFixed(0)},${gameY.toFixed(0)}) -> subchunk=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
+    // }
   }
 
   /**
@@ -73,8 +82,7 @@ export class TerrainManager {
     }
 
     const chunkKey = `${chunkX},${chunkY}`
-
-    // Increment epoch for this chunk (cancels old builds)
+    console.log(`[TerrainManager] Enqueuing terrain for chunk ${chunkKey}, camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
     const epoch = ++this.globalEpoch
     this.chunkEpochs.set(chunkKey, epoch)
 
@@ -113,11 +121,6 @@ export class TerrainManager {
       for (let cy = 0; cy < TERRAIN_SUBCHUNK_DIVIDER; cy++) {
         const subchunkKey = `${chunkKey}:${cx},${cy}`
 
-        // Calculate distance to camera for priority
-        const subchunkGlobalX = chunkX * TERRAIN_SUBCHUNK_DIVIDER + cx
-        const subchunkGlobalY = chunkY * TERRAIN_SUBCHUNK_DIVIDER + cy
-        const distance = this.calculateSubchunkDistance(subchunkGlobalX, subchunkGlobalY)
-
         // Initialize subchunk state
         this.subchunks.set(subchunkKey, {
           key: subchunkKey,
@@ -139,7 +142,7 @@ export class TerrainManager {
           tiles,
           hasBordersOrCorners,
           epoch,
-          distanceToCamera: distance,
+          distanceToCamera: 0,
           createdAt: performance.now(),
         }
 
@@ -252,10 +255,30 @@ export class TerrainManager {
 
   /**
    * Update subchunk visibility based on camera position.
-   * Uses hysteresis to prevent flickering.
+   * Uses rectangular visibility area with hysteresis.
    */
   private updateSubchunkVisibility(): void {
     if (!this.renderer) return
+
+    let hiddenCount = 0
+    let visibleCount = 0
+    let shownCount = 0
+
+    // Calculate visibility rect around camera
+    const halfVisibleWidth = TERRAIN_VISIBLE_WIDTH_SUBCHUNKS / 2
+    const halfVisibleHeight = TERRAIN_VISIBLE_HEIGHT_SUBCHUNKS / 2
+    const halfHideWidth = TERRAIN_HIDE_WIDTH_SUBCHUNKS / 2
+    const halfHideHeight = TERRAIN_HIDE_HEIGHT_SUBCHUNKS / 2
+
+    const visibleMinX = this.cameraSubchunkX - halfVisibleWidth
+    const visibleMaxX = this.cameraSubchunkX + halfVisibleWidth
+    const visibleMinY = this.cameraSubchunkY - halfVisibleHeight
+    const visibleMaxY = this.cameraSubchunkY + halfVisibleHeight
+
+    const hideMinX = this.cameraSubchunkX - halfHideWidth
+    const hideMaxX = this.cameraSubchunkX + halfHideWidth
+    const hideMinY = this.cameraSubchunkY - halfHideHeight
+    const hideMaxY = this.cameraSubchunkY + halfHideHeight
 
     for (const [subchunkKey, subchunk] of this.subchunks) {
       if (subchunk.state === TerrainSubchunkState.NotBuilt ||
@@ -269,17 +292,20 @@ export class TerrainManager {
 
       const subchunkGlobalX = chunkData.chunkX * TERRAIN_SUBCHUNK_DIVIDER + subchunk.cx
       const subchunkGlobalY = chunkData.chunkY * TERRAIN_SUBCHUNK_DIVIDER + subchunk.cy
-      const distance = this.calculateSubchunkDistance(subchunkGlobalX, subchunkGlobalY)
 
       const isVisible = subchunk.state === TerrainSubchunkState.BuiltVisible
 
-      // Hysteresis: use different thresholds for show/hide
-      if (isVisible && distance > TERRAIN_HIDE_RADIUS_SUBCHUNKS) {
-        // Hide
-        this.renderer.hideSubchunk(subchunkKey)
-        subchunk.state = TerrainSubchunkState.BuiltHidden
-      } else if (!isVisible && distance <= TERRAIN_SHOW_RADIUS_SUBCHUNKS) {
+      // Check if within visible rect
+      const inVisibleRect = subchunkGlobalX >= visibleMinX && subchunkGlobalX <= visibleMaxX &&
+        subchunkGlobalY >= visibleMinY && subchunkGlobalY <= visibleMaxY
+
+      // Check if within hide rect (hysteresis)
+      const inHideRect = subchunkGlobalX >= hideMinX && subchunkGlobalX <= hideMaxX &&
+        subchunkGlobalY >= hideMinY && subchunkGlobalY <= hideMaxY
+
+      if (inVisibleRect && !isVisible) {
         // Show - need to rebuild since sprites were returned to pool
+        console.log(`[TerrainManager] Showing subchunk ${subchunkKey}, subchunkGlobal=(${subchunkGlobalX},${subchunkGlobalY}), camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
         const data = this.chunkData.get(subchunk.chunkKey)
         if (data) {
           const task: TerrainBuildTask = {
@@ -292,25 +318,30 @@ export class TerrainManager {
             tiles: data.tiles,
             hasBordersOrCorners: data.hasBordersOrCorners,
             epoch: subchunk.epoch,
-            distanceToCamera: distance,
+            distanceToCamera: 0,
             createdAt: performance.now(),
           }
           // Rebuild immediately for show (high priority)
           this.buildSubchunk(task)
           subchunk.state = TerrainSubchunkState.BuiltVisible
+          shownCount++
         }
+      } else if (!inHideRect && isVisible) {
+        // Hide - outside hide rect
+        console.log(`[TerrainManager] Hiding subchunk ${subchunkKey}, subchunkGlobal=(${subchunkGlobalX},${subchunkGlobalY}), camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
+        this.renderer.hideSubchunk(subchunkKey)
+        subchunk.state = TerrainSubchunkState.BuiltHidden
+        hiddenCount++
+      } else if (isVisible) {
+        visibleCount++
       }
+    }
+
+    if (hiddenCount > 0 || shownCount > 0) {
+      console.log(`[TerrainManager] Visibility: visible=${visibleCount}, shown=${shownCount}, hidden=${hiddenCount}, camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
     }
   }
 
-  /**
-   * Calculate distance from subchunk to camera (in subchunk units).
-   */
-  private calculateSubchunkDistance(subchunkGlobalX: number, subchunkGlobalY: number): number {
-    const dx = subchunkGlobalX - this.cameraSubchunkX
-    const dy = subchunkGlobalY - this.cameraSubchunkY
-    return Math.sqrt(dx * dx + dy * dy)
-  }
 
   /**
    * Clear subchunk states for a chunk.
