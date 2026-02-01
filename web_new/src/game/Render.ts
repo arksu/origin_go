@@ -11,6 +11,7 @@ import { timeSync } from '@/network/TimeSync'
 import { config } from '@/config'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
+import { terrainManager } from './terrain'
 import type { DebugInfo, ScreenPoint } from './types'
 
 export class Render {
@@ -185,8 +186,14 @@ export class Render {
     const camState = cameraController.getState()
     this.chunkManager.setCameraPosition(camState.x, camState.y)
 
+    // Update terrain manager camera position for visibility radius
+    terrainManager.setCameraPosition(camState.x, camState.y)
+
     // Process pending chunk builds within frame budget
     this.chunkManager.update()
+
+    // Process pending terrain subchunk builds within frame budget
+    terrainManager.update()
   }
 
   private updateMovement(): void {
@@ -229,6 +236,7 @@ export class Render {
 
     const cullingMetrics = cullingController.getMetrics()
     const cacheMetricsData = cacheMetrics.getMetrics()
+    const terrainMetricsData = terrainManager.getMetrics()
 
     const info: DebugInfo = {
       fps: this.app.ticker.FPS,
@@ -268,6 +276,11 @@ export class Render {
       cacheBytesKb: cacheMetricsData.bytesTotal / 1024,
       buildQueueLength: cacheMetricsData.buildQueueLength,
       buildAvgMs: cacheMetricsData.cpuBuildMsAvg,
+      // Terrain metrics
+      terrainSpritesActive: terrainMetricsData.spritesActive,
+      terrainSpritesPooled: terrainMetricsData.spritesPooled,
+      terrainSubchunksQueued: terrainMetricsData.subchunksQueued,
+      terrainBuildMsAvg: terrainMetricsData.buildMsAvg,
     }
 
     this.debugOverlay.update(info)

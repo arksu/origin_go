@@ -1,117 +1,151 @@
 import { Sprite, Container, Spritesheet } from 'pixi.js'
 import type { ITerrainRenderer } from './ITerrainRenderer'
 import type { TerrainDrawCmd, TerrainRenderContext } from './types'
-import { TILE_HEIGHT_HALF, TILE_WIDTH_HALF } from '../tiles/Tile'
-import { coordGame2Screen } from '../utils/coordConvert'
-import { cullingController } from '../culling'
-import { type AABB, fromMinMax } from '../culling/AABB'
-
-const BASE_Z_INDEX = 100
+import { TILE_HEIGHT_HALF } from '../tiles/Tile'
+import { terrainSpritePool } from './TerrainSpritePool'
+import { terrainMetrics } from './TerrainMetricsCollector'
+import { TERRAIN_BASE_Z_INDEX } from './constants'
 
 interface TerrainSpriteData {
   sprite: Sprite
-  cullingKey: string
+  subchunkKey: string
 }
 
+/**
+ * Sprite-based terrain renderer with object pooling.
+ * Uses anchorScreenY directly for zIndex calculation (no coordGame2Screen call).
+ * Does NOT register individual sprites with culling - uses bulk clearTerrainForSubchunk.
+ */
 export class TerrainSpriteRenderer implements ITerrainRenderer {
   private objectsContainer: Container
-  private spritesheet: Spritesheet
-  private chunkSprites: Map<string, TerrainSpriteData[]> = new Map()
-  private currentChunkKey: string = ''
-  private terrainCounter: number = 0
+  // Map: subchunkKey -> sprites
+  private subchunkSprites: Map<string, TerrainSpriteData[]> = new Map()
+  private currentSubchunkKey: string = ''
+  private _activeSpritesCount: number = 0
 
   constructor(objectsContainer: Container, spritesheet: Spritesheet) {
     this.objectsContainer = objectsContainer
-    this.spritesheet = spritesheet
+    terrainSpritePool.init(spritesheet)
   }
 
-  setCurrentChunk(chunkKey: string): void {
-    this.currentChunkKey = chunkKey
-  }
-
-  addTile(cmds: TerrainDrawCmd[], context: TerrainRenderContext): void {
-    for (const cmd of cmds) {
-      const texture = this.spritesheet.textures[cmd.textureFrameId]
-      if (!texture) {
-        continue
-      }
-
-      const sprite = new Sprite(texture)
-      sprite.x = cmd.x
-      sprite.y = cmd.y
-
-      const screenPos = coordGame2Screen(context.tileX, context.tileY)
-      sprite.zIndex = BASE_Z_INDEX + screenPos.y + TILE_HEIGHT_HALF + cmd.zOffset
-
-      this.objectsContainer.addChild(sprite)
-
-      // Generate unique key for this terrain sprite
-      const cullingKey = `${this.currentChunkKey}:t${this.terrainCounter++}`
-
-      // Compute bounds for culling (in objectsContainer local coordinates)
-      const bounds = this.computeTerrainBounds(sprite, texture.width, texture.height)
-
-      // Register with culling controller
-      cullingController.registerTerrain(cullingKey, sprite, bounds)
-
-      let sprites = this.chunkSprites.get(this.currentChunkKey)
-      if (!sprites) {
-        sprites = []
-        this.chunkSprites.set(this.currentChunkKey, sprites)
-      }
-      sprites.push({ sprite, cullingKey })
-    }
+  setCurrentSubchunk(subchunkKey: string): void {
+    this.currentSubchunkKey = subchunkKey
   }
 
   /**
-   * Compute AABB bounds for a terrain sprite in objectsContainer coordinates.
+   * Add terrain sprites for a tile.
+   * Uses anchorScreenY from context for zIndex (optimization: no coordGame2Screen call).
    */
-  private computeTerrainBounds(sprite: Sprite, width: number, height: number): AABB {
-    // Sprite position is its top-left corner (default anchor is 0,0)
-    const minX = sprite.x
-    const minY = sprite.y
-    const maxX = sprite.x + width
-    const maxY = sprite.y + height
+  addTile(cmds: TerrainDrawCmd[], context: TerrainRenderContext): void {
+    for (const cmd of cmds) {
+      // Use anchorScreenY directly for zIndex calculation (spec item 4)
+      const zIndex = TERRAIN_BASE_Z_INDEX + context.anchorScreenY + TILE_HEIGHT_HALF + cmd.zOffset
 
-    // Add some padding for safety
-    return fromMinMax(
-      minX - TILE_WIDTH_HALF,
-      minY - TILE_HEIGHT_HALF,
-      maxX + TILE_WIDTH_HALF,
-      maxY + TILE_HEIGHT_HALF,
-    )
+      const sprite = terrainSpritePool.acquire(cmd.textureFrameId, cmd.x, cmd.y, zIndex)
+      if (!sprite) continue
+
+      this.objectsContainer.addChild(sprite)
+      this._activeSpritesCount++
+
+      let sprites = this.subchunkSprites.get(this.currentSubchunkKey)
+      if (!sprites) {
+        sprites = []
+        this.subchunkSprites.set(this.currentSubchunkKey, sprites)
+      }
+      sprites.push({ sprite, subchunkKey: this.currentSubchunkKey })
+    }
+
+    terrainMetrics.setActiveSprites(this._activeSpritesCount)
   }
 
   finalize(): void {
     // No-op for sprite renderer
   }
 
-  destroy(): void {
-    for (const spriteDataList of this.chunkSprites.values()) {
-      for (const data of spriteDataList) {
-        cullingController.unregisterTerrain(data.cullingKey)
-        data.sprite.destroy()
-      }
+  /**
+   * Hide sprites for a subchunk (return to pool).
+   */
+  hideSubchunk(subchunkKey: string): void {
+    const sprites = this.subchunkSprites.get(subchunkKey)
+    if (!sprites) return
+
+    const start = performance.now()
+    for (const data of sprites) {
+      terrainSpritePool.release(data.sprite)
+      this._activeSpritesCount--
     }
-    this.chunkSprites.clear()
+    this.subchunkSprites.delete(subchunkKey)
+    terrainMetrics.recordClearTime(performance.now() - start)
+    terrainMetrics.setActiveSprites(this._activeSpritesCount)
   }
 
-  getTerrainSpritesForChunk(chunkKey: string): Sprite[] {
-    const dataList = this.chunkSprites.get(chunkKey)
+  /**
+   * Clear all sprites for a subchunk (return to pool).
+   * This is the single contract for cleanup - no individual unregister.
+   */
+  clearSubchunk(subchunkKey: string): void {
+    this.hideSubchunk(subchunkKey)
+  }
+
+  /**
+   * Clear all sprites for a chunk (all subchunks).
+   */
+  clearChunk(chunkKey: string): void {
+    const start = performance.now()
+    const prefix = chunkKey + ':'
+    const keysToDelete: string[] = []
+
+    for (const key of this.subchunkSprites.keys()) {
+      if (key.startsWith(prefix)) {
+        keysToDelete.push(key)
+      }
+    }
+
+    for (const key of keysToDelete) {
+      const sprites = this.subchunkSprites.get(key)
+      if (sprites) {
+        for (const data of sprites) {
+          terrainSpritePool.release(data.sprite)
+          this._activeSpritesCount--
+        }
+        this.subchunkSprites.delete(key)
+      }
+    }
+
+    terrainMetrics.recordClearTime(performance.now() - start)
+    terrainMetrics.setActiveSprites(this._activeSpritesCount)
+  }
+
+  /**
+   * Get sprites for a subchunk.
+   */
+  getSpritesForSubchunk(subchunkKey: string): Sprite[] {
+    const dataList = this.subchunkSprites.get(subchunkKey)
     return dataList ? dataList.map(d => d.sprite) : []
   }
 
-  clearChunk(chunkKey: string): void {
-    const spriteDataList = this.chunkSprites.get(chunkKey)
-    if (spriteDataList) {
-      for (const data of spriteDataList) {
-        cullingController.unregisterTerrain(data.cullingKey)
-        this.objectsContainer.removeChild(data.sprite)
-        data.sprite.destroy()
+  /**
+   * Check if subchunk has sprites built.
+   */
+  hasSubchunk(subchunkKey: string): boolean {
+    return this.subchunkSprites.has(subchunkKey)
+  }
+
+  /**
+   * Get active sprites count.
+   */
+  getActiveSpritesCount(): number {
+    return this._activeSpritesCount
+  }
+
+  destroy(): void {
+    for (const sprites of this.subchunkSprites.values()) {
+      for (const data of sprites) {
+        terrainSpritePool.release(data.sprite)
       }
-      this.chunkSprites.delete(chunkKey)
     }
-    // Also clear from culling controller by chunk prefix
-    cullingController.clearTerrainForChunk(chunkKey)
+    this.subchunkSprites.clear()
+    this._activeSpritesCount = 0
+    terrainSpritePool.destroy()
   }
 }
