@@ -1,5 +1,5 @@
 import type { Coord } from './Coord'
-import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getCoordPerTile } from '../Tile'
+import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getCoordPerTile } from '../tiles/Tile'
 
 export function coordGame2Screen(gameX: number, gameY: number): Coord {
   const tileX = gameX / getCoordPerTile()

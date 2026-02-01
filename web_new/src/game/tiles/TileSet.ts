@@ -1,4 +1,4 @@
-import { getRandomByCoord } from './utils/random'
+import { getRandomByCoord } from '../utils/random'
 
 interface TileVariant {
   img: string

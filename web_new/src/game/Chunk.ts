@@ -6,8 +6,8 @@ import {
   TILE_WIDTH_HALF,
   TILE_HEIGHT_HALF,
   getChunkSize,
-} from './Tile'
-import { getGroundTextureName, getTileSet } from './TileSet'
+} from './tiles/Tile'
+import { getGroundTextureName, getTileSet } from './tiles/TileSet'
 
 const DIVIDER = 4
 
