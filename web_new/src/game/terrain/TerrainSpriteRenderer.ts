@@ -71,6 +71,7 @@ export class TerrainSpriteRenderer implements ITerrainRenderer {
 
     const start = performance.now()
     for (const data of sprites) {
+      this.objectsContainer.removeChild(data.sprite)
       terrainSpritePool.release(data.sprite)
       this._activeSpritesCount--
     }

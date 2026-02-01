@@ -36,6 +36,25 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    sourcemap: true
+    sourcemap: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'pixi': ['pixi.js'],
+          'game-system': [
+            '@/game',
+            '@/network'
+          ],
+          'vendor': [
+            'vue',
+            'vue-router',
+            'pinia',
+            'axios',
+            'protobufjs'
+          ]
+        }
+      }
+    }
   }
 })
