@@ -98,13 +98,13 @@ export class Chunk {
   }
 
   buildTiles(tiles: Uint8Array, spritesheet: Spritesheet, neighborTiles?: Map<string, Uint8Array>): ChunkBuildResult {
+    const start = performance.now()
     console.log(`[Chunk ${this.key}] buildTiles called, tiles.length=${tiles.length}`)
     this.destroySubchunks()
     this.tiles = tiles
 
     const chunkSize = getChunkSize()
     const subchunkSize = chunkSize / DIVIDER
-    console.log(`[Chunk ${this.key}] chunkSize=${chunkSize}, subchunkSize=${subchunkSize}, DIVIDER=${DIVIDER}`)
 
     const hasBordersOrCorners: boolean[][] = []
     for (let i = 0; i < chunkSize; i++) {
@@ -112,9 +112,12 @@ export class Chunk {
     }
 
     let subchunksCreated = 0
+    const subchunkTimes: number[] = []
     for (let cx = 0; cx < DIVIDER; cx++) {
       for (let cy = 0; cy < DIVIDER; cy++) {
+        const subStart = performance.now()
         const result = this.buildSubchunk(cx, cy, subchunkSize, tiles, spritesheet, neighborTiles, hasBordersOrCorners)
+        subchunkTimes.push(performance.now() - subStart)
         if (result) {
           this.subchunks.push(result.container)
           this.subchunkDataList.push(result)
@@ -123,7 +126,16 @@ export class Chunk {
         }
       }
     }
-    console.log(`[Chunk ${this.key}] Created ${subchunksCreated} subchunks`)
+
+    const totalTime = performance.now() - start
+    const avgSubchunk = subchunkTimes.reduce((a, b) => a + b, 0) / subchunkTimes.length
+    const maxSubchunk = Math.max(...subchunkTimes)
+
+    if (totalTime > 10 || maxSubchunk > 5) {
+      console.warn(`[Chunk ${this.key}] SLOW: total=${totalTime.toFixed(2)}ms, avg subchunk=${avgSubchunk.toFixed(2)}ms, max subchunk=${maxSubchunk.toFixed(2)}ms`)
+    } else {
+      console.log(`[Chunk ${this.key}] Built ${subchunksCreated} subchunks in ${totalTime.toFixed(2)}ms`)
+    }
 
     this.lastBuildResult = { hasBordersOrCorners }
     return this.lastBuildResult
@@ -142,6 +154,7 @@ export class Chunk {
     neighborTiles: Map<string, Uint8Array> | undefined,
     hasBordersOrCorners: boolean[][],
   ): SubchunkData | null {
+    const start = performance.now()
     const chunkSize = getChunkSize()
     const subchunkContainer = new Container()
     subchunkContainer.sortableChildren = true
@@ -163,6 +176,7 @@ export class Chunk {
     let texturesFound = 0
     let texturesMissing = 0
     let firstMissingTexture = ''
+    let borderTime = 0
 
     for (let tx = 0; tx < subchunkSize; tx++) {
       for (let ty = 0; ty < subchunkSize; ty++) {
@@ -197,6 +211,7 @@ export class Chunk {
 
         vertexBuffer.addVertex(sx, sy, TEXTURE_WIDTH, TEXTURE_HEIGHT, texture)
 
+        const borderStart = performance.now()
         const hadBordersOrCorners = this.addBordersAndCorners(
           vertexBuffer,
           spritesheet,
@@ -209,6 +224,7 @@ export class Chunk {
           sy,
           neighborTiles,
         )
+        borderTime += performance.now() - borderStart
 
         if (hadBordersOrCorners) {
           hasBordersOrCorners[x]![y] = true
@@ -217,7 +233,8 @@ export class Chunk {
     }
 
     if (cx === 0 && cy === 0) {
-      console.log(`[Chunk ${this.key}] Subchunk(0,0) stats: tiles=${tilesProcessed}, texturesFound=${texturesFound}, missing=${texturesMissing}, firstMissing="${firstMissingTexture}"`)
+      const totalTime = performance.now() - start
+      console.log(`[Chunk ${this.key}] Subchunk(0,0) tiles=${tilesProcessed}, found=${texturesFound}, missing=${texturesMissing}, time=${totalTime.toFixed(2)}ms, borders=${borderTime.toFixed(2)}ms`)
     }
 
     if (vertexBuffer.count === 0) {

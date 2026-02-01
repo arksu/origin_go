@@ -146,16 +146,37 @@ export class Render {
     const dt = this.lastUpdateTime > 0 ? now - this.lastUpdateTime : 16.67 // Default 60 FPS
     this.lastUpdateTime = now
 
-    // Log frame time for debugging
-    if (config.DEBUG_MOVEMENT && (dt > 20 || dt < 4)) { // Log unusual frame times
-      console.log(`[Render] Frame time: ${dt.toFixed(2)}ms (${(1000 / dt).toFixed(1)} FPS)`)
+    // Always log slow frames (>20ms = <50 FPS)
+    if (dt > 20) {
+      console.warn(`[Render] SLOW FRAME: ${dt.toFixed(2)}ms (${(1000 / dt).toFixed(1)} FPS)`)
     }
 
+    const start = performance.now()
     this.updateMovement()
+    const moveTime = performance.now() - start
+
+    const camStart = performance.now()
     this.updateCamera()
+    const camTime = performance.now() - camStart
+
+    const chunkStart = performance.now()
     this.updateChunkBuilds()
+    const chunkTime = performance.now() - chunkStart
+
+    const cullStart = performance.now()
     this.updateCulling()
+    const cullTime = performance.now() - cullStart
+
+    const objStart = performance.now()
     this.objectManager.update()
+    const objTime = performance.now() - objStart
+
+    const totalUpdate = moveTime + camTime + chunkTime + cullTime + objTime
+
+    if (dt > 20 || totalUpdate > 10) {
+      console.warn(`[Render] Frame breakdown: move=${moveTime.toFixed(2)}ms, cam=${camTime.toFixed(2)}ms, chunks=${chunkTime.toFixed(2)}ms, cull=${cullTime.toFixed(2)}ms, objects=${objTime.toFixed(2)}ms, total=${totalUpdate.toFixed(2)}ms, frame=${dt.toFixed(2)}ms`)
+    }
+
     this.updateDebugOverlay()
   }
 
