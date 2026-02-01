@@ -72,7 +72,7 @@ export class ObjectManager {
   updateObjectPosition(entityId: number, x: number, y: number): void {
     const objectView = this.objects.get(entityId)
     if (!objectView) {
-      console.warn(`[ObjectManager] Cannot update position for object ${entityId}: not found`)
+     // console.warn(`[ObjectManager] Cannot update position for object ${entityId}: not found`)
       return
     }
 

@@ -100,12 +100,12 @@ export class ObjectView {
     })
 
     placeholder.on('pointerover', () => {
-      console.log(`[ObjectView] Hover over entity ${this.entityId}`)
+     // console.log(`[ObjectView] Hover over entity ${this.entityId}`)
       this.setHovered(true)
     })
 
     placeholder.on('pointerout', () => {
-      console.log(`[ObjectView] Hover out from entity ${this.entityId}`)
+     // console.log(`[ObjectView] Hover out from entity ${this.entityId}`)
       this.setHovered(false)
     })
 
