@@ -8,6 +8,7 @@ import {
   getChunkSize,
 } from './tiles/Tile'
 import { getGroundTextureName, getTileSet } from './tiles/TileSet'
+import { type AABB, fromMinMax } from './culling/AABB'
 
 const DIVIDER = 4
 
@@ -59,6 +60,14 @@ export interface ChunkBuildResult {
   hasBordersOrCorners: boolean[][]
 }
 
+export interface SubchunkData {
+  key: string
+  container: Container
+  bounds: AABB
+  cx: number
+  cy: number
+}
+
 export class Chunk {
   readonly x: number
   readonly y: number
@@ -66,6 +75,7 @@ export class Chunk {
 
   private container: Container
   private subchunks: Container[] = []
+  private subchunkDataList: SubchunkData[] = []
   private _visible: boolean = true
   private tiles: Uint8Array | null = null
   private lastBuildResult: ChunkBuildResult | null = null
@@ -104,10 +114,11 @@ export class Chunk {
     let subchunksCreated = 0
     for (let cx = 0; cx < DIVIDER; cx++) {
       for (let cy = 0; cy < DIVIDER; cy++) {
-        const subchunk = this.buildSubchunk(cx, cy, subchunkSize, tiles, spritesheet, neighborTiles, hasBordersOrCorners)
-        if (subchunk) {
-          this.subchunks.push(subchunk)
-          this.container.addChild(subchunk)
+        const result = this.buildSubchunk(cx, cy, subchunkSize, tiles, spritesheet, neighborTiles, hasBordersOrCorners)
+        if (result) {
+          this.subchunks.push(result.container)
+          this.subchunkDataList.push(result)
+          this.container.addChild(result.container)
           subchunksCreated++
         }
       }
@@ -130,7 +141,7 @@ export class Chunk {
     spritesheet: Spritesheet,
     neighborTiles: Map<string, Uint8Array> | undefined,
     hasBordersOrCorners: boolean[][],
-  ): Container | null {
+  ): SubchunkData | null {
     const chunkSize = getChunkSize()
     const subchunkContainer = new Container()
     subchunkContainer.sortableChildren = true
@@ -236,7 +247,77 @@ export class Chunk {
     })
 
     subchunkContainer.addChild(mesh)
-    return subchunkContainer
+
+    // Compute bounds for this subchunk in parent (chunk container) coordinates
+    // The subchunk covers tiles from (cx*subchunkSize, cy*subchunkSize) to ((cx+1)*subchunkSize-1, (cy+1)*subchunkSize-1)
+    // We need to compute the screen-space bounding box
+    const bounds = this.computeSubchunkBounds(cx, cy, subchunkSize)
+    const subchunkKey = `${this.key}:${cx},${cy}`
+
+    return {
+      key: subchunkKey,
+      container: subchunkContainer,
+      bounds,
+      cx,
+      cy,
+    }
+  }
+
+  /**
+   * Compute AABB bounds for a subchunk in chunk container local coordinates.
+   */
+  private computeSubchunkBounds(cx: number, cy: number, subchunkSize: number): AABB {
+    const chunkSize = getChunkSize()
+
+    // Subchunk tile range within chunk
+    const startTileX = cx * subchunkSize
+    const startTileY = cy * subchunkSize
+    const endTileX = startTileX + subchunkSize - 1
+    const endTileY = startTileY + subchunkSize - 1
+
+    // Convert to global tile coordinates
+    const globalStartX = this.x * chunkSize + startTileX
+    const globalStartY = this.y * chunkSize + startTileY
+    const globalEndX = this.x * chunkSize + endTileX
+    const globalEndY = this.y * chunkSize + endTileY
+
+    // Compute screen positions for all 4 corners of the subchunk
+    // For isometric projection, we need to find the actual bounding box
+    // Top corner (min Y in screen): tile at (maxX, minY)
+    // Bottom corner (max Y in screen): tile at (minX, maxY)
+    // Left corner (min X in screen): tile at (minX, minY)
+    // Right corner (max X in screen): tile at (maxX, maxY)
+
+    const corners = [
+      { tx: globalStartX, ty: globalStartY }, // top-left in tile space
+      { tx: globalEndX, ty: globalStartY },   // top-right in tile space
+      { tx: globalStartX, ty: globalEndY },   // bottom-left in tile space
+      { tx: globalEndX, ty: globalEndY },     // bottom-right in tile space
+    ]
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    for (const corner of corners) {
+      // Convert tile to screen coordinates (relative to world origin)
+      const sx = corner.tx * TILE_WIDTH_HALF - corner.ty * TILE_WIDTH_HALF
+      const sy = corner.tx * TILE_HEIGHT_HALF + corner.ty * TILE_HEIGHT_HALF
+
+      if (sx < minX) minX = sx
+      if (sy < minY) minY = sy
+      if (sx > maxX) maxX = sx
+      if (sy > maxY) maxY = sy
+    }
+
+    // Add padding for tile dimensions (tiles extend beyond their anchor point)
+    minX -= TILE_WIDTH_HALF
+    maxX += TILE_WIDTH_HALF
+    minY -= TILE_HEIGHT_HALF // Some padding for top
+    maxY += TEXTURE_HEIGHT   // Tiles extend down from anchor
+
+    return fromMinMax(minX, minY, maxX, maxY)
   }
 
   private addBordersAndCorners(
@@ -343,6 +424,14 @@ export class Chunk {
       subchunk.destroy({ children: true })
     }
     this.subchunks = []
+    this.subchunkDataList = []
+  }
+
+  /**
+   * Get all subchunk data for culling registration.
+   */
+  getSubchunkDataList(): SubchunkData[] {
+    return this.subchunkDataList
   }
 
   set visible(v: boolean) {

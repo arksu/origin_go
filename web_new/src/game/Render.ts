@@ -9,6 +9,7 @@ import { playerCommandController } from './PlayerCommandController'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
 import { config } from '@/config'
+import { cullingController } from './culling'
 import type { DebugInfo, ScreenPoint } from './types'
 
 export class Render {
@@ -150,8 +151,9 @@ export class Render {
     }
 
     this.updateMovement()
-    this.objectManager.update()
     this.updateCamera()
+    this.updateCulling()
+    this.objectManager.update()
     this.updateDebugOverlay()
   }
 
@@ -182,12 +184,18 @@ export class Render {
     this.objectsContainer.scale.set(camState.zoom)
   }
 
+  private updateCulling(): void {
+    cullingController.update(this.app, this.mapContainer, this.objectsContainer)
+  }
+
   private updateDebugOverlay(): void {
     if (!this.debugOverlay.isVisible()) return
 
     const timeSyncMetrics = timeSync.getDebugMetrics()
     const moveMetrics = moveController.getGlobalDebugMetrics()
     const camState = cameraController.getState()
+
+    const cullingMetrics = cullingController.getMetrics()
 
     const info: DebugInfo = {
       fps: this.app.ticker.FPS,
@@ -211,6 +219,16 @@ export class Render {
       totalSnapCount: moveMetrics.totalSnapCount,
       totalIgnoredOutOfOrder: moveMetrics.totalIgnoredOutOfOrder,
       totalBufferUnderrun: moveMetrics.totalBufferUnderrun,
+      // Culling metrics
+      subchunksTotal: cullingMetrics.subchunksTotal,
+      subchunksVisible: cullingMetrics.subchunksVisible,
+      subchunksCulled: cullingMetrics.subchunksCulled,
+      terrainTotal: cullingMetrics.terrainTotal,
+      terrainVisible: cullingMetrics.terrainVisible,
+      terrainCulled: cullingMetrics.terrainCulled,
+      objectsVisibleCulling: cullingMetrics.objectsVisible,
+      objectsCulled: cullingMetrics.objectsCulled,
+      cullingTimeMs: cullingMetrics.cullingTimeMs,
     }
 
     this.debugOverlay.update(info)

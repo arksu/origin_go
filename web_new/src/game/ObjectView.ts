@@ -1,6 +1,7 @@
 import { Container, Sprite, Graphics, Text, Rectangle } from 'pixi.js'
 import { ResourceLoader } from './ResourceLoader'
 import { coordGame2Screen } from './utils/coordConvert'
+import { type AABB, fromMinMax } from './culling/AABB'
 
 export interface ObjectViewOptions {
   entityId: number
@@ -164,6 +165,35 @@ export class ObjectView {
    */
   getDepthY(): number {
     return this.position.y + this.size.y
+  }
+
+  /**
+   * Compute AABB bounds in screen/local coordinates for culling.
+   * Uses conservative bounds based on object size.
+   */
+  computeScreenBounds(): AABB {
+    // Container position is already in screen coordinates
+    const cx = this.container.x
+    const cy = this.container.y
+
+    // Estimate screen-space size based on game size
+    // For isometric, we use a conservative estimate
+    const halfWidth = Math.max(this.size.x, this.size.y) * 2 + 32 // Extra padding
+    const halfHeight = Math.max(this.size.x, this.size.y) + 64 // Extra padding for height
+
+    return fromMinMax(
+      cx - halfWidth,
+      cy - halfHeight,
+      cx + halfWidth,
+      cy,
+    )
+  }
+
+  /**
+   * Get current game position.
+   */
+  getPosition(): { x: number; y: number } {
+    return { x: this.position.x, y: this.position.y }
   }
 
   /**

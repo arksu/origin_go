@@ -20,6 +20,16 @@ export interface DebugInfo {
   totalSnapCount?: number
   totalIgnoredOutOfOrder?: number
   totalBufferUnderrun?: number
+  // Culling metrics
+  subchunksTotal?: number
+  subchunksVisible?: number
+  subchunksCulled?: number
+  terrainTotal?: number
+  terrainVisible?: number
+  terrainCulled?: number
+  objectsVisibleCulling?: number
+  objectsCulled?: number
+  cullingTimeMs?: number
 }
 
 export interface ScreenPoint {
