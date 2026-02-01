@@ -70,6 +70,14 @@ export class DebugOverlay {
       lines.push(`Build queue: ${info.buildQueueLength ?? 0}  Avg: ${(info.buildAvgMs ?? 0).toFixed(2)}ms`)
     }
 
+    // Add terrain metrics if available
+    if (info.terrainSpritesActive !== undefined) {
+      lines.push('')
+      lines.push('--- Terrain ---')
+      lines.push(`Sprites: ${info.terrainSpritesActive} active, ${info.terrainSpritesPooled ?? 0} pooled`)
+      lines.push(`Subchunks queued: ${info.terrainSubchunksQueued ?? 0}  Build avg: ${(info.terrainBuildMsAvg ?? 0).toFixed(2)}ms`)
+    }
+
     this.text.text = lines.join('\n')
   }
 

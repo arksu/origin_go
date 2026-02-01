@@ -4,14 +4,28 @@
 
 Terrain system generates client-side decorative objects (trees, bushes, stones) on top of tiles. Terrain is **not stored on server** — it's generated deterministically on the client.
 
+**Key optimizations (chunk_terrain_opt.md):**
+- Subchunk-based incremental building with frame budget
+- Sprite pooling to avoid GC pressure
+- Visibility radius with hysteresis
+- Optimized zIndex calculation using `anchorScreenY`
+- No individual culling registration (bulk cleanup only)
+
 ## Architecture
 
 ```
+TerrainManager (singleton)
+    ├─ TerrainBuildQueue (priority queue with frame budget)
+    │   └─ TerrainBuildTask[] (sorted by distance to camera)
+    ├─ TerrainSpriteRenderer
+    │   └─ TerrainSpritePool (sprite reuse)
+    └─ TerrainMetricsCollector (debug stats)
+
 TerrainGenerator (per tile type)
   ↓ generates
 TerrainDrawCmd[]
   ↓ rendered by
-ITerrainRenderer → TerrainSpriteRenderer (now) / TerrainMeshRenderer (future)
+TerrainSpriteRenderer (with pooling)
   ↓ adds to
 objectsContainer (shared with game objects for correct Z-sorting)
 ```
@@ -102,13 +116,82 @@ if (hadBordersOrCorners) {
 
 ## Lifecycle
 
-1. **Chunk load** → `TerrainManager.generateTerrainForChunk()` creates sprites
-2. **Chunk unload** → `TerrainManager.clearChunk()` destroys sprites
-3. **Chunk rebuild** → old terrain cleared, new deterministic generation
+1. **Chunk load** → `TerrainManager.generateTerrainForChunk()` enqueues subchunk build tasks
+2. **Frame update** → `TerrainManager.update()` processes tasks within budget
+3. **Visibility update** → Subchunks outside radius are hidden (sprites returned to pool)
+4. **Chunk unload** → `TerrainManager.clearChunk()` returns sprites to pool
+5. **World reset** → `TerrainManager.resetWorld()` clears all and shrinks pool
+
+### Subchunk States
+
+| State | Description |
+|-------|-------------|
+| `NotBuilt` | Initial state, waiting in queue |
+| `Building` | Currently being built |
+| `BuiltVisible` | Built and within show radius |
+| `BuiltHidden` | Built but outside hide radius (sprites in pool) |
+
+### Visibility Radius (Hysteresis)
+
+- `TERRAIN_SHOW_RADIUS_SUBCHUNKS = 3` — Show when entering this radius
+- `TERRAIN_HIDE_RADIUS_SUBCHUNKS = 4` — Hide when leaving this radius
+- Prevents flickering at boundary
+
+## Sprite Pooling
+
+`TerrainSpritePool` manages sprite lifecycle:
+
+```typescript
+// Acquire from pool or create new
+const sprite = terrainSpritePool.acquire(textureFrameId, x, y, zIndex)
+
+// Return to pool (not destroyed)
+terrainSpritePool.release(sprite)
+```
+
+**Configuration** (`constants.ts`):
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `MAX_TERRAIN_SPRITES_IN_POOL` | 2000 | Max pooled sprites |
+| `TERRAIN_POOL_SHRINK_THRESHOLD` | 3000 | Shrink trigger |
+| `TERRAIN_POOL_SHRINK_TARGET` | 2000 | Shrink target |
+
+## Incremental Building
+
+`TerrainBuildQueue` processes subchunks within frame budget:
+
+**Configuration**:
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `TERRAIN_BUILD_BUDGET_MS` | 2 | Max ms per frame |
+| `MAX_TERRAIN_SUBCHUNKS_PER_FRAME` | 4 | Max subchunks per frame |
+
+**Priority**: Tasks sorted by distance to camera (nearest first).
+
+**Cancellation**: Epoch tokens ensure stale builds are ignored after chunk unload.
+
+## zIndex Optimization
+
+Uses `anchorScreenY` directly instead of calling `coordGame2Screen()`:
+
+```typescript
+// Before (slow)
+const screenPos = coordGame2Screen(context.tileX, context.tileY)
+sprite.zIndex = BASE_Z_INDEX + screenPos.y + TILE_HEIGHT_HALF + cmd.zOffset
+
+// After (fast)
+sprite.zIndex = TERRAIN_BASE_Z_INDEX + context.anchorScreenY + TILE_HEIGHT_HALF + cmd.zOffset
+```
+
+## No Individual Culling
+
+Terrain sprites are NOT registered with `cullingController` individually.
+Cleanup uses bulk `clearChunk()` / `clearSubchunk()` methods.
+This avoids double-clearing overhead.
 
 ## Future: VBO Baking
 
-Current: `TerrainSpriteRenderer` creates individual PIXI.Sprite instances
+Current: `TerrainSpriteRenderer` creates individual PIXI.Sprite instances with pooling
 
 Future: `TerrainMeshRenderer` will batch terrain into VBO meshes (like ground tiles):
 - Collect `TerrainDrawCmd[]` into `VertexBuffer`
@@ -126,12 +209,28 @@ Interface `ITerrainRenderer` abstracts both approaches.
 | 17 (grass) | `configs/heath.json` | Grassland features |
 | 18 (heath) | `configs/heath.json` | Heathland vegetation |
 
+## Metrics
+
+Available via `terrainManager.getMetrics()` and debug overlay:
+
+- `spritesActive` / `spritesPooled` / `spritesCreatedTotal`
+- `subchunksQueued` / `subchunksDone` / `subchunksCanceled`
+- `buildMsAvg` / `buildMsP95`
+- `clearMsAvg` / `clearMsP95`
+
 ## Files
 
-- `types.ts` — TypeScript interfaces
-- `TerrainGenerator.ts` — Deterministic generation logic
-- `TerrainRegistry.ts` — Type → Generator mapping
-- `TerrainManager.ts` — Chunk-level lifecycle management
-- `ITerrainRenderer.ts` — Renderer interface
-- `TerrainSpriteRenderer.ts` — Sprite-based implementation
-- `configs/` — JSON configurations
+| File | Purpose |
+|------|--------|
+| `constants.ts` | Configuration constants |
+| `types.ts` | TypeScript interfaces |
+| `TerrainSubchunkTypes.ts` | Subchunk state and task types |
+| `TerrainGenerator.ts` | Deterministic generation logic |
+| `TerrainRegistry.ts` | Type → Generator mapping |
+| `TerrainManager.ts` | Subchunk lifecycle, visibility, queue processing |
+| `TerrainSpriteRenderer.ts` | Sprite-based implementation with pooling |
+| `TerrainSpritePool.ts` | Sprite object pool |
+| `TerrainBuildQueue.ts` | Priority queue with frame budget |
+| `TerrainMetricsCollector.ts` | Metrics aggregation |
+| `ITerrainRenderer.ts` | Renderer interface |
+| `configs/` | JSON configurations |

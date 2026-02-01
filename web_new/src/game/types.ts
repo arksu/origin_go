@@ -36,6 +36,11 @@ export interface DebugInfo {
   cacheBytesKb?: number
   buildQueueLength?: number
   buildAvgMs?: number
+  // Terrain metrics
+  terrainSpritesActive?: number
+  terrainSpritesPooled?: number
+  terrainSubchunksQueued?: number
+  terrainBuildMsAvg?: number
 }
 
 export interface ScreenPoint {
