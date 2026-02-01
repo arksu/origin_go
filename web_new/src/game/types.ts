@@ -30,6 +30,12 @@ export interface DebugInfo {
   objectsVisibleCulling?: number
   objectsCulled?: number
   cullingTimeMs?: number
+  // Cache metrics
+  cacheEntries?: number
+  cacheHitRate?: number
+  cacheBytesKb?: number
+  buildQueueLength?: number
+  buildAvgMs?: number
 }
 
 export interface ScreenPoint {

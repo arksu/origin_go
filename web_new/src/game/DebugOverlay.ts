@@ -61,6 +61,15 @@ export class DebugOverlay {
       lines.push(`Snaps: ${info.totalSnapCount ?? 0}  OoO: ${info.totalIgnoredOutOfOrder ?? 0}  Underrun: ${info.totalBufferUnderrun ?? 0}`)
     }
 
+    // Add cache metrics if available
+    if (info.cacheEntries !== undefined) {
+      lines.push('')
+      lines.push('--- Cache ---')
+      lines.push(`Entries: ${info.cacheEntries}  Hit rate: ${((info.cacheHitRate ?? 0) * 100).toFixed(1)}%`)
+      lines.push(`Size: ${(info.cacheBytesKb ?? 0).toFixed(1)}KB`)
+      lines.push(`Build queue: ${info.buildQueueLength ?? 0}  Avg: ${(info.buildAvgMs ?? 0).toFixed(2)}ms`)
+    }
+
     this.text.text = lines.join('\n')
   }
 

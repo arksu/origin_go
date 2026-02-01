@@ -10,6 +10,7 @@ import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
 import { config } from '@/config'
 import { cullingController } from './culling'
+import { cacheMetrics } from './cache'
 import type { DebugInfo, ScreenPoint } from './types'
 
 export class Render {
@@ -152,9 +153,19 @@ export class Render {
 
     this.updateMovement()
     this.updateCamera()
+    this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
     this.updateDebugOverlay()
+  }
+
+  private updateChunkBuilds(): void {
+    // Update camera position for chunk priority calculation
+    const camState = cameraController.getState()
+    this.chunkManager.setCameraPosition(camState.x, camState.y)
+
+    // Process pending chunk builds within frame budget
+    this.chunkManager.update()
   }
 
   private updateMovement(): void {
@@ -196,6 +207,7 @@ export class Render {
     const camState = cameraController.getState()
 
     const cullingMetrics = cullingController.getMetrics()
+    const cacheMetricsData = cacheMetrics.getMetrics()
 
     const info: DebugInfo = {
       fps: this.app.ticker.FPS,
@@ -229,6 +241,12 @@ export class Render {
       objectsVisibleCulling: cullingMetrics.objectsVisible,
       objectsCulled: cullingMetrics.objectsCulled,
       cullingTimeMs: cullingMetrics.cullingTimeMs,
+      // Cache metrics
+      cacheEntries: cacheMetricsData.entries,
+      cacheHitRate: cacheMetricsData.hitRate,
+      cacheBytesKb: cacheMetricsData.bytesTotal / 1024,
+      buildQueueLength: cacheMetricsData.buildQueueLength,
+      buildAvgMs: cacheMetricsData.cpuBuildMsAvg,
     }
 
     this.debugOverlay.update(info)
@@ -294,8 +312,8 @@ export class Render {
     cameraController.setTargetEntity(entityId)
   }
 
-  loadChunk(x: number, y: number, tiles: Uint8Array): void {
-    this.chunkManager.loadChunk(x, y, tiles)
+  loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
+    this.chunkManager.loadChunk(x, y, tiles, version)
   }
 
   unloadChunk(x: number, y: number): void {
