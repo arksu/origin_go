@@ -2,6 +2,7 @@ import { Container, Assets, Spritesheet } from 'pixi.js'
 import { Chunk } from './Chunk'
 import { initTileSets } from './tileSetLoader'
 import { setWorldParams } from './Tile'
+import { terrainManager } from './terrain'
 
 interface PendingChunk {
   x: number
@@ -15,6 +16,7 @@ export class ChunkManager {
   private spritesheet: Spritesheet | null = null
   private initialized: boolean = false
   private pendingChunks: PendingChunk[] = []
+  private objectsContainer: Container | null = null
 
   constructor() {
     this.container = new Container()
@@ -23,6 +25,10 @@ export class ChunkManager {
 
   getContainer(): Container {
     return this.container
+  }
+
+  setObjectsContainer(container: Container): void {
+    this.objectsContainer = container
   }
 
   async init(): Promise<void> {
@@ -44,6 +50,12 @@ export class ChunkManager {
     }
 
     this.initialized = true
+
+    if (this.objectsContainer && this.spritesheet) {
+      terrainManager.init(this.objectsContainer, this.spritesheet)
+      console.log('[ChunkManager] TerrainManager initialized')
+    }
+
     console.log('[ChunkManager] Initialization complete')
 
     // Process any chunks that arrived before spritesheet was loaded
@@ -92,9 +104,11 @@ export class ChunkManager {
 
     const neighborTiles = this.getNeighborTiles(x, y)
     console.log(`[ChunkManager] Building tiles for chunk ${key}... (neighbors: ${neighborTiles.size})`)
-    chunk.buildTiles(tiles, this.spritesheet, neighborTiles)
+    const buildResult = chunk.buildTiles(tiles, this.spritesheet, neighborTiles)
     chunk.visible = true
     console.log(`[ChunkManager] Chunk ${key} built and visible`)
+
+    terrainManager.generateTerrainForChunk(x, y, tiles, buildResult.hasBordersOrCorners)
 
     // Rebuild neighbor chunks so they can use this chunk's tiles for borders/corners
     this.rebuildNeighborChunks(x, y)
@@ -130,6 +144,7 @@ export class ChunkManager {
 
     if (chunk) {
       chunk.visible = false
+      terrainManager.clearChunk(x, y)
     }
   }
 
@@ -141,6 +156,7 @@ export class ChunkManager {
       this.container.removeChild(chunk.getContainer())
       chunk.destroy()
       this.chunks.delete(key)
+      terrainManager.clearChunk(x, y)
     }
   }
 
@@ -186,8 +202,10 @@ export class ChunkManager {
 
   destroy(): void {
     this.clear()
+    terrainManager.destroy()
     this.container.destroy({ children: true })
     this.spritesheet = null
     this.initialized = false
+    this.objectsContainer = null
   }
 }

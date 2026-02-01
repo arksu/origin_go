@@ -55,6 +55,10 @@ const BY = [1, 0, 1, 2]
 const CX = [0, 0, 2, 2]
 const CY = [0, 2, 2, 0]
 
+export interface ChunkBuildResult {
+  hasBordersOrCorners: boolean[][]
+}
+
 export class Chunk {
   readonly x: number
   readonly y: number
@@ -64,6 +68,7 @@ export class Chunk {
   private subchunks: Container[] = []
   private _visible: boolean = true
   private tiles: Uint8Array | null = null
+  private lastBuildResult: ChunkBuildResult | null = null
 
   constructor(x: number, y: number) {
     this.x = x
@@ -82,7 +87,7 @@ export class Chunk {
     return this.tiles
   }
 
-  buildTiles(tiles: Uint8Array, spritesheet: Spritesheet, neighborTiles?: Map<string, Uint8Array>): void {
+  buildTiles(tiles: Uint8Array, spritesheet: Spritesheet, neighborTiles?: Map<string, Uint8Array>): ChunkBuildResult {
     console.log(`[Chunk ${this.key}] buildTiles called, tiles.length=${tiles.length}`)
     this.destroySubchunks()
     this.tiles = tiles
@@ -91,10 +96,15 @@ export class Chunk {
     const subchunkSize = chunkSize / DIVIDER
     console.log(`[Chunk ${this.key}] chunkSize=${chunkSize}, subchunkSize=${subchunkSize}, DIVIDER=${DIVIDER}`)
 
+    const hasBordersOrCorners: boolean[][] = []
+    for (let i = 0; i < chunkSize; i++) {
+      hasBordersOrCorners.push(new Array(chunkSize).fill(false))
+    }
+
     let subchunksCreated = 0
     for (let cx = 0; cx < DIVIDER; cx++) {
       for (let cy = 0; cy < DIVIDER; cy++) {
-        const subchunk = this.buildSubchunk(cx, cy, subchunkSize, tiles, spritesheet, neighborTiles)
+        const subchunk = this.buildSubchunk(cx, cy, subchunkSize, tiles, spritesheet, neighborTiles, hasBordersOrCorners)
         if (subchunk) {
           this.subchunks.push(subchunk)
           this.container.addChild(subchunk)
@@ -103,6 +113,13 @@ export class Chunk {
       }
     }
     console.log(`[Chunk ${this.key}] Created ${subchunksCreated} subchunks`)
+
+    this.lastBuildResult = { hasBordersOrCorners }
+    return this.lastBuildResult
+  }
+
+  getLastBuildResult(): ChunkBuildResult | null {
+    return this.lastBuildResult
   }
 
   private buildSubchunk(
@@ -111,7 +128,8 @@ export class Chunk {
     subchunkSize: number,
     tiles: Uint8Array,
     spritesheet: Spritesheet,
-    neighborTiles?: Map<string, Uint8Array>,
+    neighborTiles: Map<string, Uint8Array> | undefined,
+    hasBordersOrCorners: boolean[][],
   ): Container | null {
     const chunkSize = getChunkSize()
     const subchunkContainer = new Container()
@@ -168,7 +186,7 @@ export class Chunk {
 
         vertexBuffer.addVertex(sx, sy, TEXTURE_WIDTH, TEXTURE_HEIGHT, texture)
 
-        this.addBordersAndCorners(
+        const hadBordersOrCorners = this.addBordersAndCorners(
           vertexBuffer,
           spritesheet,
           tiles,
@@ -180,6 +198,10 @@ export class Chunk {
           sy,
           neighborTiles,
         )
+
+        if (hadBordersOrCorners) {
+          hasBordersOrCorners[x]![y] = true
+        }
       }
     }
 
@@ -228,7 +250,8 @@ export class Chunk {
     sx: number,
     sy: number,
     neighborTiles?: Map<string, Uint8Array>,
-  ): void {
+  ): boolean {
+    let hadBordersOrCorners = false
     const tr: number[][] = [
       [0, 0, 0],
       [0, 0, 0],
@@ -295,6 +318,7 @@ export class Chunk {
           const texture = spritesheet.textures[textureName]
           if (texture) {
             vertexBuffer.addVertex(sx, sy, TEXTURE_WIDTH, TEXTURE_HEIGHT, texture)
+            hadBordersOrCorners = true
           }
         }
       }
@@ -305,10 +329,13 @@ export class Chunk {
           const texture = spritesheet.textures[textureName]
           if (texture) {
             vertexBuffer.addVertex(sx, sy, TEXTURE_WIDTH, TEXTURE_HEIGHT, texture)
+            hadBordersOrCorners = true
           }
         }
       }
     }
+
+    return hadBordersOrCorners
   }
 
   private destroySubchunks(): void {
