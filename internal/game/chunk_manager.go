@@ -238,10 +238,12 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uin
 					// Get chunk data to include tiles in the event
 					chunk := cm.GetChunk(coord)
 					var tiles []byte
+					var version uint32
 					if chunk != nil {
 						tiles = append([]byte(nil), chunk.Tiles...) // Create copy of tiles
+						version = chunk.Version
 					}
-					cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch), eventbus.PriorityMedium)
+					cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch, version), eventbus.PriorityMedium)
 				}
 			}
 		}
@@ -398,10 +400,12 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 			// Get chunk data to include tiles in the event
 			chunk := cm.GetChunk(coord)
 			var tiles []byte
+			var version uint32
 			if chunk != nil {
 				tiles = append([]byte(nil), chunk.Tiles...) // Create copy of tiles
+				version = chunk.Version
 			}
-			cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch), eventbus.PriorityMedium)
+			cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch, version), eventbus.PriorityMedium)
 		}
 	}
 }

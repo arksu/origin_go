@@ -28,6 +28,7 @@ type Chunk struct {
 	State    types.ChunkState
 	Tiles    []byte
 	LastTick uint64
+	Version  uint32 // версия чанка (инкрементируется при изменении тайлов)
 
 	isPassable  []uint64
 	isSwimmable []uint64
@@ -106,10 +107,11 @@ func (c *Chunk) Spatial() *SpatialHashGrid {
 	return c.spatial
 }
 
-func (c *Chunk) SetTiles(Tiles []byte, lastTick uint64) {
+func (c *Chunk) SetTiles(tiles []byte, lastTick uint64) {
 	c.mu.Lock()
-	c.Tiles = Tiles
+	c.Tiles = tiles
 	c.LastTick = lastTick
+	c.Version++ // инкрементируем версию при изменении тайлов
 	c.populateTileBitsets()
 	c.mu.Unlock()
 }
