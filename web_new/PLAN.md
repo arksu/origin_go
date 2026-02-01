@@ -682,40 +682,90 @@ class DebugOverlay {
 
 ---
 
-## Этап 11: Terrain объекты
+## Этап 11: Terrain объекты (sprites сейчас, VBO позже)
 
 ### Цель
-Добавить детерминированную генерацию декоративных terrain-объектов (деревья, кусты, камни) поверх тайлов, как в `web_old`.
+Добавить **детерминированную** генерацию декоративных terrain-объектов (деревья, кусты, камни) поверх тайлов.
+В текущей версии — **обычными спрайтами** с корректным **z-order относительно игрока**.
+Архитектурно заложить возможность будущего **baking terrain в VBO Mesh** (все текстуры в одном атласе).
+
+### Принципы (обязательно)
+1. **Terrain = client-only декор**, НЕ хранится в Pinia store и НЕ приходит с сервера.
+2. **Один атлас** для всех terrain-текстур → ожидаем хорошее batching, но z-order остаётся важнее.
+3. **Корректный z-order с игроком**:
+    - terrain и игровые объекты должны сортироваться **в одном sortable-контейнере** (единая сортировка по `y`).
+4. **Детерминированность**:
+    - генерация (вариант/слои) зависит от `(tileX, tileY, layerIndex, seed)` — при rebuild раскладка не меняется.
+
+---
 
 ### Задачи
-1. Портировать систему terrain-генераторов из `web_old` в `game/terrain/`:
-    - `TerrainGenerator.generate(tileX, tileY, anchorScreenX, anchorScreenY) -> DisplayObject[]`
-    - `TerrainRegistry` (tileType -> generator/config)
 
-2. Загрузить конфигурации terrain (`wald.json`, `heath.json`) и описать TS-типы:
-    - variants: `{ chance, offset, layers[] }`
-    - layer: `{ img, offset, p }`
+#### 11.1 Модели и загрузка конфигов
+1. Добавить `game/terrain/types.ts`:
+    - `TerrainConfig`, `TerrainVariant`, `TerrainLayer`
+2. Добавить `game/terrain/TerrainGenerator.ts`:
+    - `generate(tileX, tileY, anchorScreenX, anchorScreenY): PIXI.Sprite[] | undefined`
+    - детерминированный выбор варианта (chance) и слоёв (p), опциональные `z`-offsets per layer
+3. Добавить `game/terrain/TerrainRegistry.ts`:
+    - `tileType -> TerrainGenerator` (например: лес/пустошь)
+4. Подключить загрузку конфигов `wald.json`, `heath.json` через `ResourceLoader` (или аналог), без динамических `fetch` в рендер-цикле.
 
-3. Интеграция в построение чанка/subchunk:
-    - порядок: ground -> borders/corners
-    - terrain генерировать **только если** borders/corners для этого тайла не были добавлены (аналог `wasCorners` в `web_old`)
+#### 11.2 Интеграция в построение чанка (без запекания)
+1. При сборке subchunk (в этапе 6) после ground/borders/corners:
+    - terrain генерировать **только если** на тайле **не** были добавлены borders/corners (аналог `wasCorners`).
+2. Terrain-спрайты добавлять **не в mapContainer**, а в общий слой объектов:
+    - `objectsContainer` (или `objectManager.getContainer()`), чтобы игрок и terrain сортировались вместе.
 
-4. Детерминированный random по координатам:
-    - выбор варианта/слоёв должен зависеть от `(tileX, tileY)` и id генератора,
-      чтобы при пересоздании чанка декор не “прыгал”.
+> Примечание: при текущей архитектуре `objectsContainer` сортируется отдельно (и mapContainer тоже). Поэтому terrain, который должен перекрывать игрока, обязан жить в том же контейнере, что и игрок.
 
-5. Z-сортировка с объектами:
-    - terrain-спрайты должны участвовать в сортировке глубины (zIndex по screenY/anchorY),
-      чтобы персонажи/объекты корректно перекрывались кустами/деревьями.
+#### 11.3 Z-order (единая формула)
+1. Ввести единое правило `zIndex` для всех drawable-объектов (игроки/объекты/terrain):
+    - базово: `zIndex = sprite.y + localZOffset`
+2. Для многослойного terrain:
+    - `localZOffset` берётся из слоя конфига (`layer.z`, если есть), иначе 0.
+3. Обеспечить сортировку:
+    - `objectsContainer.sortableChildren = true`
+    - сортировку выполнять **после** обновления позиций (terrain статичен, игроки двигаются).
 
-6. Cleanup:
-    - при destroy/unload чанка удалять terrain-спрайты вместе с контейнером subchunk.
+#### 11.4 Cleanup / жизненный цикл
+1. Terrain принадлежит чанку/subchunk’у по данным, но живёт в objectsContainer:
+    - при `unloadChunk` необходимо удалить все terrain-спрайты, принадлежащие этому чанку/subchunk’у.
+2. Ввести структуру учёта:
+    - `chunkKey -> Sprite[]` или `subChunkKey -> Sprite[]` (чтобы быстро чистить).
+3. При rebuild чанка:
+    - сначала удалить старые terrain спрайты для чанка
+    - затем сгенерировать заново (результат детерминирован — визуально не меняется).
+
+---
+
+### 11.5 Архитектурная закладка под будущее VBO-baking (не реализуем сейчас)
+Добавить абстракцию рендера terrain:
+
+- `ITerrainRenderer`
+    - `addTile(tileX, tileY, anchorScreenX, anchorScreenY, tileType, context)`
+    - `finalize()` / `destroy()`
+
+Две реализации (в будущем):
+1. `TerrainSpriteRenderer` (делаем в этом этапе)
+    - создаёт `Sprite` и добавляет в `objectsContainer`
+2. `TerrainMeshRenderer` (будущий этап оптимизации)
+    - собирает terrain-quad’ы в `VertexBuffer` и строит `Mesh` по subchunk’ам
+    - использует один атлас (один sampler), как у земли
+
+Критично: формат входных данных должен позволять обоим рендерам работать одинаково.
+Поэтому `TerrainGenerator` должен уметь выдавать не только `Sprite`, но и “render commands”:
+- `TerrainDrawCmd = { textureFrameId, x, y, w, h, zOffset }`
+  а `TerrainSpriteRenderer` уже превращает cmds в Sprite, `TerrainMeshRenderer` — в VBO.
+
+---
 
 ### Критерии завершения
-- [ ] На тайлах леса появляются кустики/деревья (wald).
-- [ ] На тайлах пустоши появляется растительность (heath).
-- [ ] Декор детерминирован: rebuild чанка не меняет раскладку.
-- [ ] Terrain корректно сортируется с объектами (персонаж может “заходить” за куст).
+- [ ] Terrain рендерится обычными спрайтами, корректно перекрывается с игроком (единая сортировка в objectsContainer).
+- [ ] Детерминированность: rebuild/unload+load не меняет раскладку terrain.
+- [ ] Все terrain текстуры берутся из одного атласа, без лишних draw calls из-за разных texture sources.
+- [ ] Архитектура допускает замену рендера terrain на Mesh/VBO без изменения логики генерации (через `TerrainDrawCmd` + `ITerrainRenderer`).
+
 ---
 
 ## Этап 12: Инвентарь (UI)
