@@ -1,7 +1,7 @@
 import { Container, Assets, Spritesheet } from 'pixi.js'
 import { Chunk } from './Chunk'
-import { initTileSets } from './tileSetLoader'
-import { setWorldParams } from './Tile'
+import { initTileSets } from './tiles/tileSetLoader'
+import { setWorldParams } from './tiles/Tile'
 import { terrainManager } from './terrain'
 
 interface PendingChunk {

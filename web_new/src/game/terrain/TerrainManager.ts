@@ -2,7 +2,7 @@ import { Container, Spritesheet } from 'pixi.js'
 import { TerrainSpriteRenderer } from './TerrainSpriteRenderer'
 import { getTerrainGenerator } from './TerrainRegistry'
 import type { TerrainRenderContext } from './types'
-import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getChunkSize } from '../Tile'
+import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getChunkSize } from '../tiles/Tile'
 
 export class TerrainManager {
   private renderer: TerrainSpriteRenderer | null = null

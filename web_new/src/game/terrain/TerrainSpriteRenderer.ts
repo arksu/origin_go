@@ -1,7 +1,7 @@
 import { Sprite, Container, Spritesheet } from 'pixi.js'
 import type { ITerrainRenderer } from './ITerrainRenderer'
 import type { TerrainDrawCmd, TerrainRenderContext } from './types'
-import { TILE_HEIGHT_HALF } from '../Tile'
+import { TILE_HEIGHT_HALF } from '../tiles/Tile'
 import { coordGame2Screen } from '../utils/coordConvert'
 
 const BASE_Z_INDEX = 100
