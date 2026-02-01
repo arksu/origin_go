@@ -22,6 +22,7 @@ export class TerrainManager {
       return
     }
 
+    const start = performance.now()
     const chunkSize = getChunkSize()
     const chunkKey = `${chunkX},${chunkY}`
 
@@ -65,8 +66,11 @@ export class TerrainManager {
       }
     }
 
-    if (terrainCount > 0) {
-      console.log(`[TerrainManager] Generated ${terrainCount} terrain objects for chunk ${chunkKey}`)
+    const totalTime = performance.now() - start
+    if (totalTime > 5) {
+      console.warn(`[TerrainManager] SLOW: Generated ${terrainCount} terrain objects for chunk ${chunkKey} in ${totalTime.toFixed(2)}ms`)
+    } else if (terrainCount > 0) {
+      console.log(`[TerrainManager] Generated ${terrainCount} terrain objects for chunk ${chunkKey} in ${totalTime.toFixed(2)}ms`)
     }
   }
 

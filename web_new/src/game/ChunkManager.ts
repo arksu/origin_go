@@ -233,7 +233,7 @@ export class ChunkManager {
    * Process a build task - build the chunk.
    */
   private processBuildTask(task: BuildTask): void {
-    const startTime = performance.now()
+    const taskStart = performance.now()
 
     // Check if task is still valid
     const currentToken = this.buildTokens.get(task.chunkKey)
@@ -261,24 +261,35 @@ export class ChunkManager {
     this.unregisterSubchunksFromCulling(chunk)
 
     const neighborTiles = this.getNeighborTiles(task.x, task.y)
+
+    const buildStart = performance.now()
     const buildResult = chunk.buildTiles(task.tiles, this.spritesheet, neighborTiles)
+    const buildTime = performance.now() - buildStart
+
     chunk.visible = true
 
     // Register new subchunks for culling
     this.registerSubchunksForCulling(chunk)
 
     // Generate terrain
+    const terrainStart = performance.now()
     terrainManager.generateTerrainForChunk(task.x, task.y, task.tiles, buildResult.hasBordersOrCorners)
+    const terrainTime = performance.now() - terrainStart
 
     // Cache the chunk
     this.cacheChunk(task.x, task.y, task.tiles, task.version, buildResult, neighborTiles)
 
     // Record build time
-    const buildTime = performance.now() - startTime
     buildQueue.recordCpuBuildTime(buildTime)
     buildQueue.buildComplete()
 
-    console.log(`[ChunkManager] Built chunk ${key} in ${buildTime.toFixed(2)}ms`)
+    const totalTime = performance.now() - taskStart
+
+    if (totalTime > 16 || buildTime > 8 || terrainTime > 8) {
+      console.warn(`[ChunkManager] SLOW BUILD chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
+    } else {
+      console.log(`[ChunkManager] Built chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
+    }
 
     // Notify neighbors (deferred border refresh instead of immediate rebuild)
     this.notifyNeighborsOfLoad(task.x, task.y)
