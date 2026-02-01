@@ -133,9 +133,11 @@ if (hadBordersOrCorners) {
 
 ### Visibility Radius (Hysteresis)
 
-- `TERRAIN_SHOW_RADIUS_SUBCHUNKS = 3` — Show when entering this radius
-- `TERRAIN_HIDE_RADIUS_SUBCHUNKS = 4` — Hide when leaving this radius
-- Prevents flickering at boundary
+- `TERRAIN_VISIBLE_WIDTH_SUBCHUNKS = 7` — Show radius width (3.5 subchunks on each side)
+- `TERRAIN_VISIBLE_HEIGHT_SUBCHUNKS = 7` — Show radius height (3.5 subchunks on each side)
+- `TERRAIN_HIDE_WIDTH_SUBCHUNKS = 7.5` — Hide radius width (3.75 subchunks on each side)
+- `TERRAIN_HIDE_HEIGHT_SUBCHUNKS = 7.5` — Hide radius height (3.75 subchunks on each side)
+- Hysteresis prevents flickering at boundary: show when entering visible rect, hide when leaving hide rect
 
 ## Sprite Pooling
 
@@ -152,9 +154,9 @@ terrainSpritePool.release(sprite)
 **Configuration** (`constants.ts`):
 | Constant | Default | Description |
 |----------|---------|-------------|
-| `MAX_TERRAIN_SPRITES_IN_POOL` | 2000 | Max pooled sprites |
-| `TERRAIN_POOL_SHRINK_THRESHOLD` | 3000 | Shrink trigger |
-| `TERRAIN_POOL_SHRINK_TARGET` | 2000 | Shrink target |
+| `MAX_TERRAIN_SPRITES_IN_POOL` | 20000 | Max pooled sprites |
+| `TERRAIN_POOL_SHRINK_THRESHOLD` | 30000 | Shrink trigger |
+| `TERRAIN_POOL_SHRINK_TARGET` | 20000 | Shrink target |
 
 ## Incremental Building
 
@@ -183,11 +185,21 @@ sprite.zIndex = BASE_Z_INDEX + screenPos.y + TILE_HEIGHT_HALF + cmd.zOffset
 sprite.zIndex = TERRAIN_BASE_Z_INDEX + context.anchorScreenY + TILE_HEIGHT_HALF + cmd.zOffset
 ```
 
-## No Individual Culling
+## Viewport Culling
 
-Terrain sprites are NOT registered with `cullingController` individually.
-Cleanup uses bulk `clearChunk()` / `clearSubchunk()` methods.
-This avoids double-clearing overhead.
+Terrain uses **visibility-based culling** (not individual sprite registration):
+
+**How it works:**
+1. `TerrainManager.setCameraPosition()` updates camera position every frame
+2. `TerrainManager.updateSubchunkVisibility()` checks each subchunk against visibility rects:
+   - **Show**: If subchunk enters visible rect → rebuild sprites immediately
+   - **Hide**: If subchunk leaves hide rect → remove sprites from container and return to pool
+3. `TerrainSpriteRenderer.hideSubchunk()` removes sprites from `objectsContainer` before pooling
+
+**Benefits:**
+- Avoids overhead of registering/unregistering thousands of individual sprites with culling controller
+- Bulk cleanup is more efficient than per-sprite operations
+- Hysteresis prevents flickering at visibility boundaries
 
 ## Future: VBO Baking
 
