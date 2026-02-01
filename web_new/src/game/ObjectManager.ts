@@ -1,5 +1,6 @@
 import { Container } from 'pixi.js'
 import { ObjectView, type ObjectViewOptions } from './ObjectView'
+import { cullingController } from './culling'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
@@ -33,6 +34,13 @@ export class ObjectManager {
     this.objects.set(options.entityId, objectView)
     this.container.addChild(objectView.getContainer())
 
+    // Register with culling controller
+    cullingController.registerObject(
+      options.entityId,
+      objectView.getContainer(),
+      objectView.computeScreenBounds(),
+    )
+
     this.needsSort = true
 
     console.log(`[ObjectManager] Spawned object ${options.entityId}, type=${options.objectType}, total=${this.objects.size}`)
@@ -47,6 +55,9 @@ export class ObjectManager {
       console.warn(`[ObjectManager] Cannot despawn object ${entityId}: not found`)
       return
     }
+
+    // Unregister from culling controller
+    cullingController.unregisterObject(entityId)
 
     this.container.removeChild(objectView.getContainer())
     objectView.destroy()
@@ -66,6 +77,10 @@ export class ObjectManager {
     }
 
     objectView.updatePosition(x, y)
+
+    // Update bounds in culling controller
+    cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
+
     this.needsSort = true
   }
 
@@ -117,13 +132,25 @@ export class ObjectManager {
   /**
    * Sort objects by depth (Y coordinate).
    * Objects with higher Y should be drawn on top.
+   * Only sorts visible objects for performance optimization.
    */
   private sortByDepth(): void {
-    const sorted = Array.from(this.objects.values()).sort((a, b) => {
-      return a.getDepthY() - b.getDepthY()
-    })
+    // Get only visible objects for sorting
+    const visibleIds = cullingController.getVisibleObjectIds()
+    const visibleObjects: ObjectView[] = []
 
-    sorted.forEach((obj, index) => {
+    for (const entityId of visibleIds) {
+      const obj = this.objects.get(entityId)
+      if (obj) {
+        visibleObjects.push(obj)
+      }
+    }
+
+    // Sort visible objects by depth
+    visibleObjects.sort((a, b) => a.getDepthY() - b.getDepthY())
+
+    // Assign zIndex only to visible objects
+    visibleObjects.forEach((obj, index) => {
       obj.getContainer().zIndex = index
     })
   }
@@ -132,6 +159,10 @@ export class ObjectManager {
    * Clear all objects.
    */
   clear(): void {
+    // Unregister all objects from culling
+    for (const entityId of this.objects.keys()) {
+      cullingController.unregisterObject(entityId)
+    }
     this.objects.forEach(obj => obj.destroy())
     this.objects.clear()
     this.container.removeChildren()

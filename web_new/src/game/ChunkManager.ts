@@ -3,6 +3,7 @@ import { Chunk } from './Chunk'
 import { initTileSets } from './tiles/tileSetLoader'
 import { setWorldParams } from './tiles/Tile'
 import { terrainManager } from './terrain'
+import { cullingController } from './culling'
 
 interface PendingChunk {
   x: number
@@ -104,9 +105,16 @@ export class ChunkManager {
 
     const neighborTiles = this.getNeighborTiles(x, y)
     console.log(`[ChunkManager] Building tiles for chunk ${key}... (neighbors: ${neighborTiles.size})`)
+
+    // Unregister old subchunks before rebuild
+    this.unregisterSubchunksFromCulling(chunk)
+
     const buildResult = chunk.buildTiles(tiles, this.spritesheet, neighborTiles)
     chunk.visible = true
     console.log(`[ChunkManager] Chunk ${key} built and visible`)
+
+    // Register new subchunks for culling
+    this.registerSubchunksForCulling(chunk)
 
     terrainManager.generateTerrainForChunk(x, y, tiles, buildResult.hasBordersOrCorners)
 
@@ -126,8 +134,14 @@ export class ChunkManager {
         const neighborChunk = this.chunks.get(neighborKey)
 
         if (neighborChunk && neighborChunk.getTiles()) {
+          // Unregister old subchunks before rebuild
+          this.unregisterSubchunksFromCulling(neighborChunk)
+
           const neighborTiles = this.getNeighborTiles(neighborX, neighborY)
           neighborChunk.buildTiles(neighborChunk.getTiles()!, this.spritesheet!, neighborTiles)
+
+          // Register new subchunks for culling
+          this.registerSubchunksForCulling(neighborChunk)
           rebuiltCount++
         }
       }
@@ -144,6 +158,7 @@ export class ChunkManager {
 
     if (chunk) {
       chunk.visible = false
+      this.unregisterSubchunksFromCulling(chunk)
       terrainManager.clearChunk(x, y)
     }
   }
@@ -153,10 +168,33 @@ export class ChunkManager {
     const chunk = this.chunks.get(key)
 
     if (chunk) {
+      this.unregisterSubchunksFromCulling(chunk)
       this.container.removeChild(chunk.getContainer())
       chunk.destroy()
       this.chunks.delete(key)
       terrainManager.clearChunk(x, y)
+    }
+  }
+
+  /**
+   * Register all subchunks of a chunk for culling.
+   */
+  private registerSubchunksForCulling(chunk: Chunk): void {
+    for (const subchunkData of chunk.getSubchunkDataList()) {
+      cullingController.registerSubchunk(
+        subchunkData.key,
+        subchunkData.container,
+        subchunkData.bounds,
+      )
+    }
+  }
+
+  /**
+   * Unregister all subchunks of a chunk from culling.
+   */
+  private unregisterSubchunksFromCulling(chunk: Chunk): void {
+    for (const subchunkData of chunk.getSubchunkDataList()) {
+      cullingController.unregisterSubchunk(subchunkData.key)
     }
   }
 

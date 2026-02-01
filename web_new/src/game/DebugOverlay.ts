@@ -41,6 +41,16 @@ export class DebugOverlay {
       `Chunks: ${info.chunksLoaded}`,
     ]
 
+    // Add culling metrics if available
+    if (info.subchunksTotal !== undefined) {
+      lines.push('')
+      lines.push('--- Culling ---')
+      lines.push(`Subchunks: ${info.subchunksVisible}/${info.subchunksTotal} (culled: ${info.subchunksCulled})`)
+      lines.push(`Terrain: ${info.terrainVisible}/${info.terrainTotal} (culled: ${info.terrainCulled})`)
+      lines.push(`Objects: ${info.objectsVisibleCulling}/${info.objectsCount} (culled: ${info.objectsCulled})`)
+      lines.push(`Culling time: ${info.cullingTimeMs?.toFixed(2) ?? 0}ms`)
+    }
+
     // Add movement metrics if available
     if (info.rttMs !== undefined) {
       lines.push('')

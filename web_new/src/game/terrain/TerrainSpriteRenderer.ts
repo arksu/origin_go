@@ -1,16 +1,24 @@
 import { Sprite, Container, Spritesheet } from 'pixi.js'
 import type { ITerrainRenderer } from './ITerrainRenderer'
 import type { TerrainDrawCmd, TerrainRenderContext } from './types'
-import { TILE_HEIGHT_HALF } from '../tiles/Tile'
+import { TILE_HEIGHT_HALF, TILE_WIDTH_HALF } from '../tiles/Tile'
 import { coordGame2Screen } from '../utils/coordConvert'
+import { cullingController } from '../culling'
+import { type AABB, fromMinMax } from '../culling/AABB'
 
 const BASE_Z_INDEX = 100
+
+interface TerrainSpriteData {
+  sprite: Sprite
+  cullingKey: string
+}
 
 export class TerrainSpriteRenderer implements ITerrainRenderer {
   private objectsContainer: Container
   private spritesheet: Spritesheet
-  private chunkSprites: Map<string, Sprite[]> = new Map()
+  private chunkSprites: Map<string, TerrainSpriteData[]> = new Map()
   private currentChunkKey: string = ''
+  private terrainCounter: number = 0
 
   constructor(objectsContainer: Container, spritesheet: Spritesheet) {
     this.objectsContainer = objectsContainer
@@ -37,13 +45,41 @@ export class TerrainSpriteRenderer implements ITerrainRenderer {
 
       this.objectsContainer.addChild(sprite)
 
+      // Generate unique key for this terrain sprite
+      const cullingKey = `${this.currentChunkKey}:t${this.terrainCounter++}`
+
+      // Compute bounds for culling (in objectsContainer local coordinates)
+      const bounds = this.computeTerrainBounds(sprite, texture.width, texture.height)
+
+      // Register with culling controller
+      cullingController.registerTerrain(cullingKey, sprite, bounds)
+
       let sprites = this.chunkSprites.get(this.currentChunkKey)
       if (!sprites) {
         sprites = []
         this.chunkSprites.set(this.currentChunkKey, sprites)
       }
-      sprites.push(sprite)
+      sprites.push({ sprite, cullingKey })
     }
+  }
+
+  /**
+   * Compute AABB bounds for a terrain sprite in objectsContainer coordinates.
+   */
+  private computeTerrainBounds(sprite: Sprite, width: number, height: number): AABB {
+    // Sprite position is its top-left corner (default anchor is 0,0)
+    const minX = sprite.x
+    const minY = sprite.y
+    const maxX = sprite.x + width
+    const maxY = sprite.y + height
+
+    // Add some padding for safety
+    return fromMinMax(
+      minX - TILE_WIDTH_HALF,
+      minY - TILE_HEIGHT_HALF,
+      maxX + TILE_WIDTH_HALF,
+      maxY + TILE_HEIGHT_HALF,
+    )
   }
 
   finalize(): void {
@@ -51,26 +87,31 @@ export class TerrainSpriteRenderer implements ITerrainRenderer {
   }
 
   destroy(): void {
-    for (const sprites of this.chunkSprites.values()) {
-      for (const sprite of sprites) {
-        sprite.destroy()
+    for (const spriteDataList of this.chunkSprites.values()) {
+      for (const data of spriteDataList) {
+        cullingController.unregisterTerrain(data.cullingKey)
+        data.sprite.destroy()
       }
     }
     this.chunkSprites.clear()
   }
 
   getTerrainSpritesForChunk(chunkKey: string): Sprite[] {
-    return this.chunkSprites.get(chunkKey) ?? []
+    const dataList = this.chunkSprites.get(chunkKey)
+    return dataList ? dataList.map(d => d.sprite) : []
   }
 
   clearChunk(chunkKey: string): void {
-    const sprites = this.chunkSprites.get(chunkKey)
-    if (sprites) {
-      for (const sprite of sprites) {
-        this.objectsContainer.removeChild(sprite)
-        sprite.destroy()
+    const spriteDataList = this.chunkSprites.get(chunkKey)
+    if (spriteDataList) {
+      for (const data of spriteDataList) {
+        cullingController.unregisterTerrain(data.cullingKey)
+        this.objectsContainer.removeChild(data.sprite)
+        data.sprite.destroy()
       }
       this.chunkSprites.delete(chunkKey)
     }
+    // Also clear from culling controller by chunk prefix
+    cullingController.clearTerrainForChunk(chunkKey)
   }
 }
