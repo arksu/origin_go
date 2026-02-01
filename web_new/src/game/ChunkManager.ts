@@ -163,12 +163,9 @@ export class ChunkManager {
       isBorderRefresh: false,
     }
 
-    buildQueue.enqueue(task)
-
-    // For P0 (visible) chunks, build immediately
-    if (priority === BuildPriority.P0_VISIBLE) {
-      this.processBuildTask(task)
-    }
+    // Build immediately on first load (not from cache)
+    // Only use queue for border refresh tasks
+    this.processBuildTask(task)
   }
 
   /**
