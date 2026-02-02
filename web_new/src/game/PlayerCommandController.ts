@@ -9,7 +9,7 @@
 
 import { gameConnection } from '@/network/GameConnection'
 import { proto } from '@/network/proto/packets.js'
-import { config } from '@/config'
+import { DEBUG_MOVEMENT } from '@/constants/game'
 import { moveController } from './MoveController'
 
 export class PlayerCommandController {
@@ -20,7 +20,7 @@ export class PlayerCommandController {
   }
 
   sendMoveTo(x: number, y: number, modifiers: number): void {
-    if (config.DEBUG_MOVEMENT) {
+    if (DEBUG_MOVEMENT) {
       let currentPos = 'unknown'
       if (this.playerId !== null) {
         const pos = moveController.getRenderPosition(this.playerId)
@@ -49,7 +49,7 @@ export class PlayerCommandController {
   }
 
   sendMoveToEntity(entityId: number, autoInteract: boolean, modifiers: number): void {
-    if (config.DEBUG_MOVEMENT) {
+    if (DEBUG_MOVEMENT) {
       console.log(`[PlayerCommandController] Sending MoveToEntity:`, {
         entityId,
         autoInteract,
@@ -70,7 +70,7 @@ export class PlayerCommandController {
   }
 
   sendInteract(entityId: number, interactionType: proto.InteractionType = proto.InteractionType.AUTO): void {
-    if (config.DEBUG_MOVEMENT) {
+    if (DEBUG_MOVEMENT) {
       console.log(`[PlayerCommandController] Sending Interact:`, {
         entityId,
         interactionType,

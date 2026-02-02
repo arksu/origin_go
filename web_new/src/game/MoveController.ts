@@ -11,7 +11,7 @@
  */
 
 import { timeSync } from '@/network/TimeSync'
-import { config } from '@/config'
+import { DEBUG_MOVEMENT } from '@/constants/game'
 
 // Constants
 const MAX_KEYFRAMES = 32
@@ -151,7 +151,7 @@ class MoveController {
 
     // If entity not tracked, initialize it
     if (!state) {
-      if (config.DEBUG_MOVEMENT) {
+      if (DEBUG_MOVEMENT) {
         console.log(`[MoveController] Initializing entity ${entityId} at (${x.toFixed(2)}, ${y.toFixed(2)})`)
       }
       this.initEntity(entityId, x, y, heading)
@@ -167,7 +167,7 @@ class MoveController {
 
     // Handle teleport - snap and reset buffer
     if (isTeleport) {
-      if (config.DEBUG_MOVEMENT) {
+      if (DEBUG_MOVEMENT) {
         console.log(`[MoveController] Teleport entity ${entityId} to (${x.toFixed(2)}, ${y.toFixed(2)})`)
       }
       state.keyframes = []
@@ -190,7 +190,7 @@ class MoveController {
     // Check move_seq for out-of-order detection
     // Simple comparison - assumes seq doesn't wrap frequently
     if (moveSeq <= state.lastMoveSeq && state.lastMoveSeq - moveSeq < 1000) {
-      if (config.DEBUG_MOVEMENT) {
+      if (DEBUG_MOVEMENT) {
         console.warn(`[MoveController] Out-of-order packet for entity ${entityId}: seq ${moveSeq} <= last ${state.lastMoveSeq}`)
       }
       state.ignoredOutOfOrder++
@@ -219,7 +219,7 @@ class MoveController {
       state.keyframes.push(syntheticKeyframe)
       state.movementStartClientMs = Date.now()
 
-      if (config.DEBUG_MOVEMENT) {
+      if (DEBUG_MOVEMENT) {
         console.log(`[MoveController] Synthetic pre-roll keyframe for entity ${entityId}:`, {
           pos: `(${state.visualX.toFixed(2)}, ${state.visualY.toFixed(2)})`,
           offsetMs: syntheticOffsetMs,
@@ -239,7 +239,7 @@ class MoveController {
     state.wasMovingLastFrame = isMoving
 
     // Log keyframe addition for debugging
-    if (config.DEBUG_MOVEMENT) {
+    if (DEBUG_MOVEMENT) {
       const prevKeyframe = state.keyframes.length > 1 ? state.keyframes[state.keyframes.length - 2] : null
       const timeDelta = prevKeyframe ? serverTimeMs - prevKeyframe.tServerMs : 0
       const posDelta = prevKeyframe ? Math.sqrt((x - prevKeyframe.x) ** 2 + (y - prevKeyframe.y) ** 2) : 0
@@ -284,7 +284,7 @@ class MoveController {
       const dy = pos.y - prevPos.y
       const distance = Math.sqrt(dx * dx + dy * dy)
 
-      if (config.DEBUG_MOVEMENT && (distance > 0.04)) {
+      if (DEBUG_MOVEMENT && (distance > 0.04)) {
         console.log(`[MoveController] Entity ${entityId}:`, {
           prevPos: `(${prevPos.x.toFixed(2)}, ${prevPos.y.toFixed(2)})`,
           newPos: `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`,

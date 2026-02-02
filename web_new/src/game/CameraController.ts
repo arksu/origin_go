@@ -7,7 +7,14 @@
  * - Zoom with limits and zoom-to-cursor
  */
 
-import { config } from '@/config'
+import {
+  ZOOM_MIN,
+  ZOOM_MAX,
+  ZOOM_SPEED,
+  CAMERA_FOLLOW_LERP,
+  CAMERA_FOLLOW_HARD,
+  DEBUG_MOVEMENT,
+} from '@/constants/game'
 import { moveController } from './MoveController'
 
 export interface CameraState {
@@ -48,7 +55,7 @@ export class CameraController {
   }
 
   setZoom(zoom: number): void {
-    this.zoom = Math.max(config.ZOOM_MIN, Math.min(config.ZOOM_MAX, zoom))
+    this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom))
   }
 
   getZoom(): number {
@@ -56,7 +63,11 @@ export class CameraController {
   }
 
   adjustZoom(delta: number): void {
-    const newZoom = this.zoom - delta * config.ZOOM_SPEED
+    // Use logarithmic scale for linear perception
+    // Convert current zoom to log scale, adjust linearly, then convert back
+    const logZoom = Math.log(this.zoom)
+    const newLogZoom = logZoom - delta * ZOOM_SPEED
+    const newZoom = Math.exp(newLogZoom)
     this.setZoom(newZoom)
   }
 
@@ -89,16 +100,16 @@ export class CameraController {
         const targetX = renderPos.x + this.panOffsetX
         const targetY = renderPos.y + this.panOffsetY
 
-        if (config.CAMERA_FOLLOW_HARD) {
+        if (CAMERA_FOLLOW_HARD) {
           this.x = targetX
           this.y = targetY
         } else {
-          this.x += (targetX - this.x) * config.CAMERA_FOLLOW_LERP
-          this.y += (targetY - this.y) * config.CAMERA_FOLLOW_LERP
+          this.x += (targetX - this.x) * CAMERA_FOLLOW_LERP
+          this.y += (targetY - this.y) * CAMERA_FOLLOW_LERP
         }
 
         // Log camera movement for debugging
-        if (config.DEBUG_MOVEMENT) {
+        if (DEBUG_MOVEMENT) {
           const dx = this.x - prevX
           const dy = this.y - prevY
           const distance = Math.sqrt(dx * dx + dy * dy)
