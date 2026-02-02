@@ -2,7 +2,7 @@ import { proto } from './proto/packets.js'
 import { messageDispatcher } from './MessageDispatcher'
 import { useGameStore, type EntityMovement } from '@/stores/gameStore'
 import { gameFacade, moveController } from '@/game'
-import { config } from '@/config'
+import { DEBUG_MOVEMENT } from '@/constants/game'
 
 function toNumber(value: number | Long): number {
   if (typeof value === 'number') return value
@@ -127,7 +127,7 @@ export function registerMessageHandlers(): void {
     const moveMode = msg.movement.moveMode || 0
 
     // Log every objectMove packet for debugging
-    if (config.DEBUG_MOVEMENT) {
+    if (DEBUG_MOVEMENT) {
       console.log(`[Handlers] IS2C_ObjectMove:`, {
         entityId,
         serverTimeMs,

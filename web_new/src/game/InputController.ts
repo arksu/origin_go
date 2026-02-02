@@ -8,7 +8,7 @@
  * - Emit normalized input events to other controllers
  */
 
-import { config } from '@/config'
+import { CLICK_DRAG_THRESHOLD_PX } from '@/constants/game'
 import type { ScreenPoint } from './types'
 
 export const enum Modifiers {
@@ -156,7 +156,7 @@ export class InputController {
     const dy = e.clientY - this.pointerDownPos.y
     const distance = Math.sqrt(dx * dx + dy * dy)
 
-    if (!this.isDragging && distance > config.CLICK_DRAG_THRESHOLD_PX) {
+    if (!this.isDragging && distance > CLICK_DRAG_THRESHOLD_PX) {
       this.isDragging = true
       this.onDragStartHandler?.(this.pointerDownButton)
     }
