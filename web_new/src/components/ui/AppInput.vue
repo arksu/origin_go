@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+
 interface Props {
   modelValue: string
   type?: 'text' | 'password' | 'email'
@@ -8,6 +10,8 @@ interface Props {
   disabled?: boolean
   autocomplete?: string
 }
+
+const inputRef = ref<HTMLInputElement>()
 
 withDefaults(defineProps<Props>(), {
   type: 'text',
@@ -21,12 +25,27 @@ withDefaults(defineProps<Props>(), {
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+function focus() {
+  inputRef.value?.focus()
+}
+
+function blur() {
+  inputRef.value?.blur()
+}
+
+// Expose methods to parent
+defineExpose({
+  focus,
+  blur
+})
 </script>
 
 <template>
   <div class="app-input" :class="{ 'app-input--error': error }">
     <label v-if="label" class="app-input__label">{{ label }}</label>
     <input
+      ref="inputRef"
       :type="type"
       :value="modelValue"
       :placeholder="placeholder"

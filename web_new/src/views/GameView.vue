@@ -7,11 +7,14 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import ChatContainer from '@/components/ui/ChatContainer.vue'
 import { sendChatMessage } from '@/network'
+import { useHotkeys } from '@/composables/useHotkeys'
+import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 
 const router = useRouter()
 const gameStore = useGameStore()
 
 const gameCanvas = ref<HTMLCanvasElement | null>(null)
+const chatContainerRef = ref<InstanceType<typeof ChatContainer>>()
 const canvasInitialized = ref(false)
 let gameFacade: any = null
 let connectToGame: any = null
@@ -89,6 +92,30 @@ function handleRetry() {
 function handleChatSend(text: string) {
   sendChatMessage(text)
 }
+
+// Setup hotkeys
+const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
+  ...config,
+  action: () => {
+    switch (config.key) {
+      case 'Enter':
+        chatContainerRef.value?.focusChat()
+        break
+      case 'Escape':
+        chatContainerRef.value?.unfocusChat()
+        break
+      case '/':
+        if (config.modifiers?.includes('shift')) {
+          chatContainerRef.value?.focusChatWithSlash()
+        }
+        break
+      default:
+        config.action()
+    }
+  }
+}))
+
+useHotkeys(hotkeys)
 </script>
 
 <template>
@@ -119,7 +146,7 @@ function handleChatSend(text: string) {
         <AppButton variant="secondary" size="sm" @click="handleBack">Выйти</AppButton>
       </div>
       <div class="game-chat">
-        <ChatContainer @send="handleChatSend" />
+        <ChatContainer ref="chatContainerRef" @send="handleChatSend" />
       </div>
     </div>
 
