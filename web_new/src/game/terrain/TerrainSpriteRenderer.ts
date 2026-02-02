@@ -4,7 +4,7 @@ import type { TerrainDrawCmd, TerrainRenderContext } from './types'
 import { TILE_HEIGHT_HALF } from '../tiles/Tile'
 import { terrainSpritePool } from './TerrainSpritePool'
 import { terrainMetrics } from './TerrainMetricsCollector'
-import { TERRAIN_BASE_Z_INDEX } from './constants'
+import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
 
 interface TerrainSpriteData {
   sprite: Sprite

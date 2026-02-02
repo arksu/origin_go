@@ -4,7 +4,7 @@ import {
   BUILD_QUEUE_MAX_LENGTH,
   MAX_IN_FLIGHT_BUILDS,
   BuildPriority,
-} from './constants'
+} from '@/constants/cache'
 
 /**
  * Priority queue for chunk build tasks with time budget per frame.
@@ -72,7 +72,7 @@ export class BuildQueue {
     for (let i = 0; i < this.queue.length; i++) {
       const other = this.queue[i]!
       if (task.priority < other.priority ||
-          (task.priority === other.priority && task.distanceToCamera < other.distanceToCamera)) {
+        (task.priority === other.priority && task.distanceToCamera < other.distanceToCamera)) {
         insertIdx = i
         break
       }
