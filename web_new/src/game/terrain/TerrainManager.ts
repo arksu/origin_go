@@ -328,7 +328,7 @@ export class TerrainManager {
         }
       } else if (!inHideRect && isVisible) {
         // Hide - outside hide rect
-        console.log(`[TerrainManager] Hiding subchunk ${subchunkKey}, subchunkGlobal=(${subchunkGlobalX},${subchunkGlobalY}), camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
+        //console.log(`[TerrainManager] Hiding subchunk ${subchunkKey}, subchunkGlobal=(${subchunkGlobalX},${subchunkGlobalY}), camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
         this.renderer.hideSubchunk(subchunkKey)
         subchunk.state = TerrainSubchunkState.BuiltHidden
         hiddenCount++
@@ -337,9 +337,9 @@ export class TerrainManager {
       }
     }
 
-    if (hiddenCount > 0 || shownCount > 0) {
-      console.log(`[TerrainManager] Visibility: visible=${visibleCount}, shown=${shownCount}, hidden=${hiddenCount}, camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
-    }
+    // if (hiddenCount > 0 || shownCount > 0) {
+    // console.log(`[TerrainManager] Visibility: visible=${visibleCount}, shown=${shownCount}, hidden=${hiddenCount}, camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
+    // }
   }
 
 

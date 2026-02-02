@@ -160,16 +160,30 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 			return nil
 		}
 
+		// Get collider component for size information
+		collider, hasCollider := ecs.GetComponent[components.Collider](shard.World(), event.TargetHandle)
+
+		// Calculate size - use collider if available, otherwise zero size
+		var sizeX, sizeY int32
+		if hasCollider {
+			sizeX = int32(collider.HalfWidth * 2)  // Convert from half-width to full width
+			sizeY = int32(collider.HalfHeight * 2) // Convert from half-height to full height
+		}
+
 		msg := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_ObjectSpawn{
 				ObjectSpawn: &netproto.S2C_ObjectSpawn{
 					EntityId:     uint64(event.TargetID),
 					ObjectType:   int32(entityInfo.ObjectType),
-					ResourcePath: "",
+					ResourcePath: "", // TODO
 					Position: &netproto.EntityPosition{
 						Position: &netproto.Position{
 							X: int32(transform.X),
 							Y: int32(transform.Y),
+						},
+						Size: &netproto.Vector2{
+							X: sizeX,
+							Y: sizeY,
 						},
 					},
 				},
