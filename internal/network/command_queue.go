@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
 
@@ -15,6 +16,7 @@ const (
 	CmdMoveTo CommandType = iota + 1
 	CmdMoveToEntity
 	CmdInteract
+	CmdChat
 )
 
 // PlayerCommand represents an intent from a client to be processed by ECS
@@ -26,6 +28,12 @@ type PlayerCommand struct {
 	Payload     any
 	ReceivedAt  time.Time
 	Layer       int
+}
+
+// ChatCommandPayload contains chat message data
+type ChatCommandPayload struct {
+	Channel netproto.ChatChannel
+	Text    string
 }
 
 // ServerJob represents an internal job to be processed by ECS

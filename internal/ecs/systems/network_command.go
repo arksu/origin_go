@@ -16,15 +16,23 @@ const (
 	NetworkCommandSystemPriority = 0
 )
 
-// NetworkCommandSystem processes player commands from the network layer
+// ChatDeliveryService NetworkCommandSystem processes player commands from the network layer
 // This is the bridge between network I/O and ECS game state
 // Commands are drained from the inbox at the start of each tick
+// ChatDeliveryService provides methods to send chat messages to clients
+type ChatDeliveryService interface {
+	SendChatMessage(entityID types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string)
+	BroadcastChatMessage(entityIDs []types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string)
+}
+
 type NetworkCommandSystem struct {
 	ecs.BaseSystem
 
-	playerInbox *network.PlayerCommandInbox
-	serverInbox *network.ServerJobInbox
-	logger      *zap.Logger
+	playerInbox       *network.PlayerCommandInbox
+	serverInbox       *network.ServerJobInbox
+	logger            *zap.Logger
+	chatDelivery      ChatDeliveryService
+	chatLocalRadiusSq float64
 
 	// Reusable buffers to avoid allocations
 	playerCommands []*network.PlayerCommand
@@ -35,15 +43,20 @@ type NetworkCommandSystem struct {
 func NewNetworkCommandSystem(
 	playerInbox *network.PlayerCommandInbox,
 	serverInbox *network.ServerJobInbox,
+	chatDelivery ChatDeliveryService,
+	chatLocalRadius int,
 	logger *zap.Logger,
 ) *NetworkCommandSystem {
+	radiusSq := float64(chatLocalRadius * chatLocalRadius)
 	return &NetworkCommandSystem{
-		BaseSystem:     ecs.NewBaseSystem("NetworkCommandSystem", NetworkCommandSystemPriority),
-		playerInbox:    playerInbox,
-		serverInbox:    serverInbox,
-		logger:         logger,
-		playerCommands: make([]*network.PlayerCommand, 0, 256),
-		serverJobs:     make([]*network.ServerJob, 0, 64),
+		BaseSystem:        ecs.NewBaseSystem("NetworkCommandSystem", NetworkCommandSystemPriority),
+		playerInbox:       playerInbox,
+		serverInbox:       serverInbox,
+		logger:            logger,
+		chatDelivery:      chatDelivery,
+		chatLocalRadiusSq: radiusSq,
+		playerCommands:    make([]*network.PlayerCommand, 0, 256),
+		serverJobs:        make([]*network.ServerJob, 0, 64),
 	}
 }
 
@@ -93,6 +106,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleMoveToEntity(w, handle, cmd)
 	case network.CmdInteract:
 		s.handleInteract(w, handle, cmd)
+	case network.CmdChat:
+		s.handleChat(w, handle, cmd)
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -173,6 +188,84 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 	// 1. Validate target entity exists and is in range
 	// 2. Check if interaction is valid for entity type
 	// 3. Execute interaction (gather, open container, use, pickup, etc.)
+}
+
+func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	payload, ok := cmd.Payload.(*network.ChatCommandPayload)
+	if !ok {
+		s.logger.Warn("Invalid chat command payload",
+			zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+
+	senderTransform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	if !hasTransform {
+		s.logger.Debug("Chat sender has no Transform component",
+			zap.Int64("character_id", int64(cmd.CharacterID)))
+		return
+	}
+
+	senderAppearance, hasAppearance := ecs.GetComponent[components.Appearance](w, playerHandle)
+	if !hasAppearance {
+		s.logger.Debug("Chat sender has no Appearance component",
+			zap.Int64("character_id", int64(cmd.CharacterID)))
+		return
+	}
+
+	senderName := senderAppearance.Name
+	if senderName == "" {
+		senderName = "Unknown"
+	}
+
+	recipients := s.findChatRecipients(w, senderTransform.X, senderTransform.Y, cmd.CharacterID)
+
+	if len(recipients) == 0 {
+		s.logger.Debug("No recipients found for chat message",
+			zap.Int64("sender_id", int64(cmd.CharacterID)),
+			zap.Int("layer", cmd.Layer))
+		return
+	}
+
+	s.chatDelivery.BroadcastChatMessage(
+		recipients,
+		netproto.ChatChannel_CHAT_CHANNEL_LOCAL,
+		cmd.CharacterID,
+		senderName,
+		payload.Text,
+	)
+
+	s.logger.Debug("Chat message delivered",
+		zap.Int64("sender_id", int64(cmd.CharacterID)),
+		zap.Int("recipients", len(recipients)),
+		zap.Int("text_len", len(payload.Text)))
+}
+
+func (s *NetworkCommandSystem) findChatRecipients(w *ecs.World, senderX, senderY float64, senderID types.EntityID) []types.EntityID {
+	recipients := make([]types.EntityID, 0, 32)
+
+	characterEntities := w.CharacterEntities()
+
+	for entityID := range characterEntities.Map {
+		handle := w.GetHandleByEntityID(entityID)
+		if handle == types.InvalidHandle || !w.Alive(handle) {
+			continue
+		}
+
+		transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
+		if !hasTransform {
+			continue
+		}
+
+		dx := transform.X - senderX
+		dy := transform.Y - senderY
+		distSq := dx*dx + dy*dy
+
+		if distSq <= s.chatLocalRadiusSq {
+			recipients = append(recipients, entityID)
+		}
+	}
+
+	return recipients
 }
 
 // processServerJob routes a server job to the appropriate handler

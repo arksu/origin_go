@@ -65,6 +65,11 @@ type GameConfig struct {
 	CommandQueueSize            int `mapstructure:"command_queue_size"`               // Max commands in queue (default: 500)
 	MaxPacketsPerSecond         int `mapstructure:"max_packets_per_second"`           // Per-client rate limit (default: 40)
 	MaxCommandsPerTickPerClient int `mapstructure:"max_commands_per_tick_per_client"` // Fairness limit (default: 20)
+
+	// Chat settings
+	ChatLocalRadius   int `mapstructure:"chat_local_radius"`    // Radius for local chat (default: 1000)
+	ChatMaxLen        int `mapstructure:"chat_max_len"`         // Max chat message length (default: 256)
+	ChatMinIntervalMs int `mapstructure:"chat_min_interval_ms"` // Min interval between messages in ms (default: 400)
 }
 
 type EntityIDConfig struct {
@@ -161,6 +166,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.command_queue_size", 500)
 	v.SetDefault("game.max_packets_per_second", 40)
 	v.SetDefault("game.max_commands_per_tick_per_client", 20)
+	v.SetDefault("game.chat_local_radius", 1000)
+	v.SetDefault("game.chat_max_len", 256)
+	v.SetDefault("game.chat_min_interval_ms", 400)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)
