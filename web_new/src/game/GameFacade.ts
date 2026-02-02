@@ -93,6 +93,10 @@ export class GameFacade {
     this.render?.updateObjectPosition(entityId, x, y)
   }
 
+  toggleDebugOverlay(): void {
+    this.render?.toggleDebugOverlay()
+  }
+
   getDebugInfo(): DebugInfo {
     if (!this.render) {
       return {

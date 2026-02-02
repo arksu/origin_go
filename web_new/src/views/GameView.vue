@@ -109,6 +109,12 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
           chatContainerRef.value?.focusChatWithSlash()
         }
         break
+      case '`':
+        // Toggle debug overlay
+        if (gameFacade && gameFacade.isInitialized()) {
+          gameFacade.toggleDebugOverlay()
+        }
+        break
       default:
         config.action()
     }
