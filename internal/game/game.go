@@ -9,6 +9,7 @@ import (
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence"
 	"origin/internal/types"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -162,6 +163,8 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleAuth(c, msg.Sequence, payload.Auth)
 	case *netproto.ClientMessage_PlayerAction:
 		g.handlePlayerAction(c, msg.Sequence, payload.PlayerAction)
+	case *netproto.ClientMessage_Chat:
+		g.handleChatMessage(c, msg.Sequence, payload.Chat)
 	default:
 		g.logger.Warn("Unknown packet type", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
 	}
@@ -260,6 +263,83 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 				zap.Error(err))
 		}
 	}
+}
+
+func (g *Game) handleChatMessage(c *network.Client, sequence uint32, chat *netproto.C2S_ChatMessage) {
+	if c.CharacterID == 0 {
+		g.logger.Warn("Chat message from unauthenticated client", zap.Uint64("client_id", c.ID))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+
+	// Validate channel (only LOCAL supported for now)
+	if chat.Channel != netproto.ChatChannel_CHAT_CHANNEL_LOCAL {
+		g.logger.Debug("Unsupported chat channel",
+			zap.Uint64("client_id", c.ID),
+			zap.String("channel", chat.Channel.String()))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Only local chat is supported")
+		return
+	}
+
+	// Validate text
+	text := strings.TrimSpace(chat.Text)
+	if text == "" {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Empty message")
+		return
+	}
+
+	if len(text) > g.cfg.Game.ChatMaxLen {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Message too long")
+		return
+	}
+
+	// Normalize text: strip CR, collapse multiple newlines
+	text = strings.ReplaceAll(text, "\r", "")
+	text = strings.TrimSpace(text)
+
+	// Get shard
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		g.logger.Error("Shard not found for chat message",
+			zap.Uint64("client_id", c.ID),
+			zap.Int("layer", c.Layer))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+
+	// Enqueue chat command to player inbox
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdChat,
+		Payload: &network.ChatCommandPayload{
+			Channel: netproto.ChatChannel_CHAT_CHANNEL_LOCAL,
+			Text:    text,
+		},
+		ReceivedAt: time.Now(),
+		Layer:      c.Layer,
+	}
+
+	if err := shard.PlayerInbox().Enqueue(cmd); err != nil {
+		switch err.(type) {
+		case network.OverflowError:
+			c.SendWarning(netproto.WarningCode_WARN_INPUT_QUEUE_OVERFLOW, "Command queue overflow")
+		case network.RateLimitError:
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Rate limit exceeded")
+		default:
+			g.logger.Error("Failed to enqueue chat command",
+				zap.Uint64("client_id", c.ID),
+				zap.Error(err))
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Failed to process chat message")
+		}
+		return
+	}
+
+	g.logger.Debug("Chat command enqueued",
+		zap.Uint64("client_id", c.ID),
+		zap.Int64("character_id", int64(c.CharacterID)),
+		zap.Int("text_len", len(text)))
 }
 
 func (g *Game) handleDisconnect(c *network.Client) {

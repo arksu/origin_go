@@ -7,11 +7,13 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/network"
+	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"sync"
 
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 
 	"origin/internal/config"
 	"origin/internal/ecs"
@@ -79,7 +81,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
-	s.world.AddSystem(systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, logger))
+	s.world.AddSystem(systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, cfg.Game.ChatLocalRadius, logger))
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
@@ -336,4 +338,75 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 
 	// Unregister from AOI
 	s.chunkManager.UnregisterEntity(entityID)
+}
+
+// SendChatMessage sends a chat message to a single entity
+func (s *Shard) SendChatMessage(entityID types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string) {
+	s.clientsMu.RLock()
+	client, ok := s.clients[entityID]
+	s.clientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	msg := &netproto.S2C_ChatMessage{
+		Channel:      channel,
+		FromEntityId: uint64(fromEntityID),
+		FromName:     fromName,
+		Text:         text,
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_Chat{
+			Chat: msg,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal chat message",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// BroadcastChatMessage sends a chat message to multiple entities
+func (s *Shard) BroadcastChatMessage(entityIDs []types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string) {
+	if len(entityIDs) == 0 {
+		return
+	}
+
+	msg := &netproto.S2C_ChatMessage{
+		Channel:      channel,
+		FromEntityId: uint64(fromEntityID),
+		FromName:     fromName,
+		Text:         text,
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_Chat{
+			Chat: msg,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal chat message for broadcast",
+			zap.Int("recipient_count", len(entityIDs)),
+			zap.Error(err))
+		return
+	}
+
+	s.clientsMu.RLock()
+	defer s.clientsMu.RUnlock()
+
+	for _, entityID := range entityIDs {
+		if client, ok := s.clients[entityID]; ok && client != nil {
+			client.Send(data)
+		}
+	}
 }

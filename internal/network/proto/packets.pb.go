@@ -497,6 +497,58 @@ func (InteractionType) EnumDescriptor() ([]byte, []int) {
 	return file_api_proto_packets_proto_rawDescGZIP(), []int{7}
 }
 
+type ChatChannel int32
+
+const (
+	ChatChannel_CHAT_CHANNEL_LOCAL   ChatChannel = 0 // слышат все вокруг игрока (radius на сервере)
+	ChatChannel_CHAT_CHANNEL_GLOBAL  ChatChannel = 1 // системный/глобальный (всем, либо особая логика)
+	ChatChannel_CHAT_CHANNEL_PRIVATE ChatChannel = 2 // 1 игрок -> 1 игрок
+	ChatChannel_CHAT_CHANNEL_PARTY   ChatChannel = 3 // party chat
+)
+
+// Enum value maps for ChatChannel.
+var (
+	ChatChannel_name = map[int32]string{
+		0: "CHAT_CHANNEL_LOCAL",
+		1: "CHAT_CHANNEL_GLOBAL",
+		2: "CHAT_CHANNEL_PRIVATE",
+		3: "CHAT_CHANNEL_PARTY",
+	}
+	ChatChannel_value = map[string]int32{
+		"CHAT_CHANNEL_LOCAL":   0,
+		"CHAT_CHANNEL_GLOBAL":  1,
+		"CHAT_CHANNEL_PRIVATE": 2,
+		"CHAT_CHANNEL_PARTY":   3,
+	}
+)
+
+func (x ChatChannel) Enum() *ChatChannel {
+	p := new(ChatChannel)
+	*p = x
+	return p
+}
+
+func (x ChatChannel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ChatChannel) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_proto_packets_proto_enumTypes[8].Descriptor()
+}
+
+func (ChatChannel) Type() protoreflect.EnumType {
+	return &file_api_proto_packets_proto_enumTypes[8]
+}
+
+func (x ChatChannel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ChatChannel.Descriptor instead.
+func (ChatChannel) EnumDescriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{8}
+}
+
 // Позиция в мире
 type Position struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2218,6 +2270,88 @@ func (x *C2S_MovementMode) GetMode() MovementMode {
 	return MovementMode_MOVE_MODE_WALK
 }
 
+type C2S_ChatMessage struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Text    string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Channel ChatChannel            `protobuf:"varint,2,opt,name=channel,proto3,enum=proto.ChatChannel" json:"channel,omitempty"`
+	// Types that are valid to be assigned to Target:
+	//
+	//	*C2S_ChatMessage_PrivateEntityId
+	Target        isC2S_ChatMessage_Target `protobuf_oneof:"target"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *C2S_ChatMessage) Reset() {
+	*x = C2S_ChatMessage{}
+	mi := &file_api_proto_packets_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *C2S_ChatMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*C2S_ChatMessage) ProtoMessage() {}
+
+func (x *C2S_ChatMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_packets_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use C2S_ChatMessage.ProtoReflect.Descriptor instead.
+func (*C2S_ChatMessage) Descriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *C2S_ChatMessage) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *C2S_ChatMessage) GetChannel() ChatChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return ChatChannel_CHAT_CHANNEL_LOCAL
+}
+
+func (x *C2S_ChatMessage) GetTarget() isC2S_ChatMessage_Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *C2S_ChatMessage) GetPrivateEntityId() uint64 {
+	if x != nil {
+		if x, ok := x.Target.(*C2S_ChatMessage_PrivateEntityId); ok {
+			return x.PrivateEntityId
+		}
+	}
+	return 0
+}
+
+type isC2S_ChatMessage_Target interface {
+	isC2S_ChatMessage_Target()
+}
+
+type C2S_ChatMessage_PrivateEntityId struct {
+	PrivateEntityId uint64 `protobuf:"varint,3,opt,name=private_entity_id,json=privateEntityId,proto3,oneof"` // обязателен если channel == CHAT_CHANNEL_PRIVATE
+}
+
+func (*C2S_ChatMessage_PrivateEntityId) isC2S_ChatMessage_Target() {}
+
 type C2S_Auth struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -2228,7 +2362,7 @@ type C2S_Auth struct {
 
 func (x *C2S_Auth) Reset() {
 	*x = C2S_Auth{}
-	mi := &file_api_proto_packets_proto_msgTypes[27]
+	mi := &file_api_proto_packets_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2240,7 +2374,7 @@ func (x *C2S_Auth) String() string {
 func (*C2S_Auth) ProtoMessage() {}
 
 func (x *C2S_Auth) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[27]
+	mi := &file_api_proto_packets_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2253,7 +2387,7 @@ func (x *C2S_Auth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use C2S_Auth.ProtoReflect.Descriptor instead.
 func (*C2S_Auth) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{27}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *C2S_Auth) GetToken() string {
@@ -2279,7 +2413,7 @@ type C2S_Ping struct {
 
 func (x *C2S_Ping) Reset() {
 	*x = C2S_Ping{}
-	mi := &file_api_proto_packets_proto_msgTypes[28]
+	mi := &file_api_proto_packets_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2291,7 +2425,7 @@ func (x *C2S_Ping) String() string {
 func (*C2S_Ping) ProtoMessage() {}
 
 func (x *C2S_Ping) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[28]
+	mi := &file_api_proto_packets_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2304,7 +2438,7 @@ func (x *C2S_Ping) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use C2S_Ping.ProtoReflect.Descriptor instead.
 func (*C2S_Ping) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{28}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *C2S_Ping) GetClientTimeMs() int64 {
@@ -2325,6 +2459,7 @@ type ClientMessage struct {
 	//	*ClientMessage_PlayerAction
 	//	*ClientMessage_MovementMode
 	//	*ClientMessage_InventoryOp
+	//	*ClientMessage_Chat
 	Payload       isClientMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2332,7 +2467,7 @@ type ClientMessage struct {
 
 func (x *ClientMessage) Reset() {
 	*x = ClientMessage{}
-	mi := &file_api_proto_packets_proto_msgTypes[29]
+	mi := &file_api_proto_packets_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2344,7 +2479,7 @@ func (x *ClientMessage) String() string {
 func (*ClientMessage) ProtoMessage() {}
 
 func (x *ClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[29]
+	mi := &file_api_proto_packets_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2357,7 +2492,7 @@ func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
 func (*ClientMessage) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{29}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ClientMessage) GetSequence() uint32 {
@@ -2419,6 +2554,15 @@ func (x *ClientMessage) GetInventoryOp() *C2S_InventoryOp {
 	return nil
 }
 
+func (x *ClientMessage) GetChat() *C2S_ChatMessage {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_Chat); ok {
+			return x.Chat
+		}
+	}
+	return nil
+}
+
 type isClientMessage_Payload interface {
 	isClientMessage_Payload()
 }
@@ -2443,6 +2587,10 @@ type ClientMessage_InventoryOp struct {
 	InventoryOp *C2S_InventoryOp `protobuf:"bytes,14,opt,name=inventory_op,json=inventoryOp,proto3,oneof"`
 }
 
+type ClientMessage_Chat struct {
+	Chat *C2S_ChatMessage `protobuf:"bytes,15,opt,name=chat,proto3,oneof"`
+}
+
 func (*ClientMessage_Auth) isClientMessage_Payload() {}
 
 func (*ClientMessage_Ping) isClientMessage_Payload() {}
@@ -2452,6 +2600,8 @@ func (*ClientMessage_PlayerAction) isClientMessage_Payload() {}
 func (*ClientMessage_MovementMode) isClientMessage_Payload() {}
 
 func (*ClientMessage_InventoryOp) isClientMessage_Payload() {}
+
+func (*ClientMessage_Chat) isClientMessage_Payload() {}
 
 type S2C_AuthResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2463,7 +2613,7 @@ type S2C_AuthResult struct {
 
 func (x *S2C_AuthResult) Reset() {
 	*x = S2C_AuthResult{}
-	mi := &file_api_proto_packets_proto_msgTypes[30]
+	mi := &file_api_proto_packets_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2475,7 +2625,7 @@ func (x *S2C_AuthResult) String() string {
 func (*S2C_AuthResult) ProtoMessage() {}
 
 func (x *S2C_AuthResult) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[30]
+	mi := &file_api_proto_packets_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2488,7 +2638,7 @@ func (x *S2C_AuthResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_AuthResult.ProtoReflect.Descriptor instead.
 func (*S2C_AuthResult) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{30}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *S2C_AuthResult) GetSuccess() bool {
@@ -2515,7 +2665,7 @@ type S2C_Pong struct {
 
 func (x *S2C_Pong) Reset() {
 	*x = S2C_Pong{}
-	mi := &file_api_proto_packets_proto_msgTypes[31]
+	mi := &file_api_proto_packets_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2527,7 +2677,7 @@ func (x *S2C_Pong) String() string {
 func (*S2C_Pong) ProtoMessage() {}
 
 func (x *S2C_Pong) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[31]
+	mi := &file_api_proto_packets_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2540,7 +2690,7 @@ func (x *S2C_Pong) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_Pong.ProtoReflect.Descriptor instead.
 func (*S2C_Pong) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{31}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *S2C_Pong) GetClientTimeMs() int64 {
@@ -2577,7 +2727,7 @@ type S2C_PlayerEnterWorld struct {
 
 func (x *S2C_PlayerEnterWorld) Reset() {
 	*x = S2C_PlayerEnterWorld{}
-	mi := &file_api_proto_packets_proto_msgTypes[32]
+	mi := &file_api_proto_packets_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2589,7 +2739,7 @@ func (x *S2C_PlayerEnterWorld) String() string {
 func (*S2C_PlayerEnterWorld) ProtoMessage() {}
 
 func (x *S2C_PlayerEnterWorld) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[32]
+	mi := &file_api_proto_packets_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2602,7 +2752,7 @@ func (x *S2C_PlayerEnterWorld) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_PlayerEnterWorld.ProtoReflect.Descriptor instead.
 func (*S2C_PlayerEnterWorld) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{32}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *S2C_PlayerEnterWorld) GetEntityId() uint64 {
@@ -2657,7 +2807,7 @@ type S2C_PlayerLeaveWorld struct {
 
 func (x *S2C_PlayerLeaveWorld) Reset() {
 	*x = S2C_PlayerLeaveWorld{}
-	mi := &file_api_proto_packets_proto_msgTypes[33]
+	mi := &file_api_proto_packets_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2669,7 +2819,7 @@ func (x *S2C_PlayerLeaveWorld) String() string {
 func (*S2C_PlayerLeaveWorld) ProtoMessage() {}
 
 func (x *S2C_PlayerLeaveWorld) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[33]
+	mi := &file_api_proto_packets_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2682,7 +2832,7 @@ func (x *S2C_PlayerLeaveWorld) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_PlayerLeaveWorld.ProtoReflect.Descriptor instead.
 func (*S2C_PlayerLeaveWorld) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{33}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *S2C_PlayerLeaveWorld) GetEntityId() uint64 {
@@ -2701,7 +2851,7 @@ type S2C_ChunkLoad struct {
 
 func (x *S2C_ChunkLoad) Reset() {
 	*x = S2C_ChunkLoad{}
-	mi := &file_api_proto_packets_proto_msgTypes[34]
+	mi := &file_api_proto_packets_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2713,7 +2863,7 @@ func (x *S2C_ChunkLoad) String() string {
 func (*S2C_ChunkLoad) ProtoMessage() {}
 
 func (x *S2C_ChunkLoad) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[34]
+	mi := &file_api_proto_packets_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2726,7 +2876,7 @@ func (x *S2C_ChunkLoad) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ChunkLoad.ProtoReflect.Descriptor instead.
 func (*S2C_ChunkLoad) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{34}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *S2C_ChunkLoad) GetChunk() *ChunkData {
@@ -2745,7 +2895,7 @@ type S2C_ChunkUnload struct {
 
 func (x *S2C_ChunkUnload) Reset() {
 	*x = S2C_ChunkUnload{}
-	mi := &file_api_proto_packets_proto_msgTypes[35]
+	mi := &file_api_proto_packets_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2757,7 +2907,7 @@ func (x *S2C_ChunkUnload) String() string {
 func (*S2C_ChunkUnload) ProtoMessage() {}
 
 func (x *S2C_ChunkUnload) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[35]
+	mi := &file_api_proto_packets_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2770,7 +2920,7 @@ func (x *S2C_ChunkUnload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ChunkUnload.ProtoReflect.Descriptor instead.
 func (*S2C_ChunkUnload) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{35}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *S2C_ChunkUnload) GetCoord() *ChunkCoord {
@@ -2792,7 +2942,7 @@ type S2C_ObjectSpawn struct {
 
 func (x *S2C_ObjectSpawn) Reset() {
 	*x = S2C_ObjectSpawn{}
-	mi := &file_api_proto_packets_proto_msgTypes[36]
+	mi := &file_api_proto_packets_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2804,7 +2954,7 @@ func (x *S2C_ObjectSpawn) String() string {
 func (*S2C_ObjectSpawn) ProtoMessage() {}
 
 func (x *S2C_ObjectSpawn) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[36]
+	mi := &file_api_proto_packets_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2817,7 +2967,7 @@ func (x *S2C_ObjectSpawn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ObjectSpawn.ProtoReflect.Descriptor instead.
 func (*S2C_ObjectSpawn) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{36}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *S2C_ObjectSpawn) GetEntityId() uint64 {
@@ -2857,7 +3007,7 @@ type S2C_ObjectDespawn struct {
 
 func (x *S2C_ObjectDespawn) Reset() {
 	*x = S2C_ObjectDespawn{}
-	mi := &file_api_proto_packets_proto_msgTypes[37]
+	mi := &file_api_proto_packets_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2869,7 +3019,7 @@ func (x *S2C_ObjectDespawn) String() string {
 func (*S2C_ObjectDespawn) ProtoMessage() {}
 
 func (x *S2C_ObjectDespawn) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[37]
+	mi := &file_api_proto_packets_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2882,7 +3032,7 @@ func (x *S2C_ObjectDespawn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ObjectDespawn.ProtoReflect.Descriptor instead.
 func (*S2C_ObjectDespawn) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{37}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *S2C_ObjectDespawn) GetEntityId() uint64 {
@@ -2910,7 +3060,7 @@ type S2C_ObjectMove struct {
 
 func (x *S2C_ObjectMove) Reset() {
 	*x = S2C_ObjectMove{}
-	mi := &file_api_proto_packets_proto_msgTypes[38]
+	mi := &file_api_proto_packets_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2922,7 +3072,7 @@ func (x *S2C_ObjectMove) String() string {
 func (*S2C_ObjectMove) ProtoMessage() {}
 
 func (x *S2C_ObjectMove) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[38]
+	mi := &file_api_proto_packets_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2935,7 +3085,7 @@ func (x *S2C_ObjectMove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ObjectMove.ProtoReflect.Descriptor instead.
 func (*S2C_ObjectMove) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{38}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *S2C_ObjectMove) GetEntityId() uint64 {
@@ -2997,7 +3147,7 @@ type S2C_InventoryOpResult struct {
 
 func (x *S2C_InventoryOpResult) Reset() {
 	*x = S2C_InventoryOpResult{}
-	mi := &file_api_proto_packets_proto_msgTypes[39]
+	mi := &file_api_proto_packets_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3009,7 +3159,7 @@ func (x *S2C_InventoryOpResult) String() string {
 func (*S2C_InventoryOpResult) ProtoMessage() {}
 
 func (x *S2C_InventoryOpResult) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[39]
+	mi := &file_api_proto_packets_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3022,7 +3172,7 @@ func (x *S2C_InventoryOpResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_InventoryOpResult.ProtoReflect.Descriptor instead.
 func (*S2C_InventoryOpResult) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{39}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *S2C_InventoryOpResult) GetOpId() uint64 {
@@ -3083,7 +3233,7 @@ type S2C_InventoryUpdate struct {
 
 func (x *S2C_InventoryUpdate) Reset() {
 	*x = S2C_InventoryUpdate{}
-	mi := &file_api_proto_packets_proto_msgTypes[40]
+	mi := &file_api_proto_packets_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3095,7 +3245,7 @@ func (x *S2C_InventoryUpdate) String() string {
 func (*S2C_InventoryUpdate) ProtoMessage() {}
 
 func (x *S2C_InventoryUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[40]
+	mi := &file_api_proto_packets_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3108,7 +3258,7 @@ func (x *S2C_InventoryUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_InventoryUpdate.ProtoReflect.Descriptor instead.
 func (*S2C_InventoryUpdate) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{40}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *S2C_InventoryUpdate) GetUpdated() []*InventoryState {
@@ -3127,7 +3277,7 @@ type S2C_ContainerOpened struct {
 
 func (x *S2C_ContainerOpened) Reset() {
 	*x = S2C_ContainerOpened{}
-	mi := &file_api_proto_packets_proto_msgTypes[41]
+	mi := &file_api_proto_packets_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3139,7 +3289,7 @@ func (x *S2C_ContainerOpened) String() string {
 func (*S2C_ContainerOpened) ProtoMessage() {}
 
 func (x *S2C_ContainerOpened) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[41]
+	mi := &file_api_proto_packets_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3152,7 +3302,7 @@ func (x *S2C_ContainerOpened) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ContainerOpened.ProtoReflect.Descriptor instead.
 func (*S2C_ContainerOpened) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{41}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *S2C_ContainerOpened) GetState() *InventoryState {
@@ -3171,7 +3321,7 @@ type S2C_ContainerClosed struct {
 
 func (x *S2C_ContainerClosed) Reset() {
 	*x = S2C_ContainerClosed{}
-	mi := &file_api_proto_packets_proto_msgTypes[42]
+	mi := &file_api_proto_packets_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3183,7 +3333,7 @@ func (x *S2C_ContainerClosed) String() string {
 func (*S2C_ContainerClosed) ProtoMessage() {}
 
 func (x *S2C_ContainerClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[42]
+	mi := &file_api_proto_packets_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3196,12 +3346,89 @@ func (x *S2C_ContainerClosed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ContainerClosed.ProtoReflect.Descriptor instead.
 func (*S2C_ContainerClosed) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{42}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *S2C_ContainerClosed) GetEntityId() uint64 {
 	if x != nil {
 		return x.EntityId
+	}
+	return 0
+}
+
+type S2C_ChatMessage struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Channel      ChatChannel            `protobuf:"varint,1,opt,name=channel,proto3,enum=proto.ChatChannel" json:"channel,omitempty"`
+	FromEntityId uint64                 `protobuf:"varint,2,opt,name=from_entity_id,json=fromEntityId,proto3" json:"from_entity_id,omitempty"`
+	FromName     string                 `protobuf:"bytes,3,opt,name=from_name,json=fromName,proto3" json:"from_name,omitempty"`
+	Text         string                 `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
+	// для приватного чата: кому адресовано (полезно клиенту для UI/логов)
+	ToEntityId    *uint64 `protobuf:"varint,5,opt,name=to_entity_id,json=toEntityId,proto3,oneof" json:"to_entity_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *S2C_ChatMessage) Reset() {
+	*x = S2C_ChatMessage{}
+	mi := &file_api_proto_packets_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *S2C_ChatMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*S2C_ChatMessage) ProtoMessage() {}
+
+func (x *S2C_ChatMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_packets_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use S2C_ChatMessage.ProtoReflect.Descriptor instead.
+func (*S2C_ChatMessage) Descriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *S2C_ChatMessage) GetChannel() ChatChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return ChatChannel_CHAT_CHANNEL_LOCAL
+}
+
+func (x *S2C_ChatMessage) GetFromEntityId() uint64 {
+	if x != nil {
+		return x.FromEntityId
+	}
+	return 0
+}
+
+func (x *S2C_ChatMessage) GetFromName() string {
+	if x != nil {
+		return x.FromName
+	}
+	return ""
+}
+
+func (x *S2C_ChatMessage) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *S2C_ChatMessage) GetToEntityId() uint64 {
+	if x != nil && x.ToEntityId != nil {
+		return *x.ToEntityId
 	}
 	return 0
 }
@@ -3216,7 +3443,7 @@ type S2C_Error struct {
 
 func (x *S2C_Error) Reset() {
 	*x = S2C_Error{}
-	mi := &file_api_proto_packets_proto_msgTypes[43]
+	mi := &file_api_proto_packets_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3228,7 +3455,7 @@ func (x *S2C_Error) String() string {
 func (*S2C_Error) ProtoMessage() {}
 
 func (x *S2C_Error) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[43]
+	mi := &file_api_proto_packets_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3241,7 +3468,7 @@ func (x *S2C_Error) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_Error.ProtoReflect.Descriptor instead.
 func (*S2C_Error) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{43}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *S2C_Error) GetCode() ErrorCode {
@@ -3268,7 +3495,7 @@ type S2C_Warning struct {
 
 func (x *S2C_Warning) Reset() {
 	*x = S2C_Warning{}
-	mi := &file_api_proto_packets_proto_msgTypes[44]
+	mi := &file_api_proto_packets_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3280,7 +3507,7 @@ func (x *S2C_Warning) String() string {
 func (*S2C_Warning) ProtoMessage() {}
 
 func (x *S2C_Warning) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[44]
+	mi := &file_api_proto_packets_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3293,7 +3520,7 @@ func (x *S2C_Warning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_Warning.ProtoReflect.Descriptor instead.
 func (*S2C_Warning) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{44}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *S2C_Warning) GetCode() WarningCode {
@@ -3329,6 +3556,7 @@ type ServerMessage struct {
 	//	*ServerMessage_InventoryUpdate
 	//	*ServerMessage_ContainerOpened
 	//	*ServerMessage_ContainerClosed
+	//	*ServerMessage_Chat
 	//	*ServerMessage_Error
 	//	*ServerMessage_Warning
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
@@ -3338,7 +3566,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_api_proto_packets_proto_msgTypes[45]
+	mi := &file_api_proto_packets_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3350,7 +3578,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[45]
+	mi := &file_api_proto_packets_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3363,7 +3591,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{45}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ServerMessage) GetSequence() uint32 {
@@ -3497,6 +3725,15 @@ func (x *ServerMessage) GetContainerClosed() *S2C_ContainerClosed {
 	return nil
 }
 
+func (x *ServerMessage) GetChat() *S2C_ChatMessage {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_Chat); ok {
+			return x.Chat
+		}
+	}
+	return nil
+}
+
 func (x *ServerMessage) GetError() *S2C_Error {
 	if x != nil {
 		if x, ok := x.Payload.(*ServerMessage_Error); ok {
@@ -3571,9 +3808,11 @@ type ServerMessage_ContainerClosed struct {
 	ContainerClosed *S2C_ContainerClosed `protobuf:"bytes,22,opt,name=container_closed,json=containerClosed,proto3,oneof"`
 }
 
+type ServerMessage_Chat struct {
+	Chat *S2C_ChatMessage `protobuf:"bytes,23,opt,name=chat,proto3,oneof"`
+}
+
 type ServerMessage_Error struct {
-	// S2C_SpawnEntity spawn_entity = 13;
-	// S2C_DespawnEntity despawn_entity = 14;
 	// S2C_EntityUpdate entity_update = 15;
 	// S2C_PlayerStateUpdate player_state = 16;
 	// S2C_InventoryUpdate inventory_update = 17;
@@ -3632,6 +3871,8 @@ func (*ServerMessage_InventoryUpdate) isServerMessage_Payload() {}
 func (*ServerMessage_ContainerOpened) isServerMessage_Payload() {}
 
 func (*ServerMessage_ContainerClosed) isServerMessage_Payload() {}
+
+func (*ServerMessage_Chat) isServerMessage_Payload() {}
 
 func (*ServerMessage_Error) isServerMessage_Payload() {}
 
@@ -3759,12 +4000,17 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	" \x01(\rR\tmodifiersB\b\n" +
 	"\x06action\";\n" +
 	"\x10C2S_MovementMode\x12'\n" +
-	"\x04mode\x18\x01 \x01(\x0e2\x13.proto.MovementModeR\x04mode\"G\n" +
+	"\x04mode\x18\x01 \x01(\x0e2\x13.proto.MovementModeR\x04mode\"\x8b\x01\n" +
+	"\x0fC2S_ChatMessage\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12,\n" +
+	"\achannel\x18\x02 \x01(\x0e2\x12.proto.ChatChannelR\achannel\x12,\n" +
+	"\x11private_entity_id\x18\x03 \x01(\x04H\x00R\x0fprivateEntityIdB\b\n" +
+	"\x06target\"G\n" +
 	"\bC2S_Auth\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12%\n" +
 	"\x0eclient_version\x18\x02 \x01(\tR\rclientVersion\"0\n" +
 	"\bC2S_Ping\x12$\n" +
-	"\x0eclient_time_ms\x18\x01 \x01(\x03R\fclientTimeMs\"\xc1\x02\n" +
+	"\x0eclient_time_ms\x18\x01 \x01(\x03R\fclientTimeMs\"\xef\x02\n" +
 	"\rClientMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\rR\bsequence\x12%\n" +
 	"\x04auth\x18\n" +
@@ -3772,7 +4018,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x04ping\x18\v \x01(\v2\x0f.proto.C2S_PingH\x00R\x04ping\x12>\n" +
 	"\rplayer_action\x18\f \x01(\v2\x17.proto.C2S_PlayerActionH\x00R\fplayerAction\x12>\n" +
 	"\rmovement_mode\x18\r \x01(\v2\x17.proto.C2S_MovementModeH\x00R\fmovementMode\x12;\n" +
-	"\finventory_op\x18\x0e \x01(\v2\x16.proto.C2S_InventoryOpH\x00R\vinventoryOpB\t\n" +
+	"\finventory_op\x18\x0e \x01(\v2\x16.proto.C2S_InventoryOpH\x00R\vinventoryOp\x12,\n" +
+	"\x04chat\x18\x0f \x01(\v2\x16.proto.C2S_ChatMessageH\x00R\x04chatB\t\n" +
 	"\apayload\"O\n" +
 	"\x0eS2C_AuthResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
@@ -3826,13 +4073,21 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x13S2C_ContainerOpened\x12+\n" +
 	"\x05state\x18\x01 \x01(\v2\x15.proto.InventoryStateR\x05state\"2\n" +
 	"\x13S2C_ContainerClosed\x12\x1b\n" +
-	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"K\n" +
+	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"\xce\x01\n" +
+	"\x0fS2C_ChatMessage\x12,\n" +
+	"\achannel\x18\x01 \x01(\x0e2\x12.proto.ChatChannelR\achannel\x12$\n" +
+	"\x0efrom_entity_id\x18\x02 \x01(\x04R\ffromEntityId\x12\x1b\n" +
+	"\tfrom_name\x18\x03 \x01(\tR\bfromName\x12\x12\n" +
+	"\x04text\x18\x04 \x01(\tR\x04text\x12%\n" +
+	"\fto_entity_id\x18\x05 \x01(\x04H\x00R\n" +
+	"toEntityId\x88\x01\x01B\x0f\n" +
+	"\r_to_entity_id\"K\n" +
 	"\tS2C_Error\x12$\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x10.proto.ErrorCodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"O\n" +
 	"\vS2C_Warning\x12&\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x12.proto.WarningCodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xe4\a\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x92\b\n" +
 	"\rServerMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\rR\bsequence\x128\n" +
 	"\vauth_result\x18\n" +
@@ -3851,7 +4106,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x13inventory_op_result\x18\x13 \x01(\v2\x1c.proto.S2C_InventoryOpResultH\x00R\x11inventoryOpResult\x12G\n" +
 	"\x10inventory_update\x18\x14 \x01(\v2\x1a.proto.S2C_InventoryUpdateH\x00R\x0finventoryUpdate\x12G\n" +
 	"\x10container_opened\x18\x15 \x01(\v2\x1a.proto.S2C_ContainerOpenedH\x00R\x0fcontainerOpened\x12G\n" +
-	"\x10container_closed\x18\x16 \x01(\v2\x1a.proto.S2C_ContainerClosedH\x00R\x0fcontainerClosed\x12(\n" +
+	"\x10container_closed\x18\x16 \x01(\v2\x1a.proto.S2C_ContainerClosedH\x00R\x0fcontainerClosed\x12,\n" +
+	"\x04chat\x18\x17 \x01(\v2\x16.proto.S2C_ChatMessageH\x00R\x04chat\x12(\n" +
 	"\x05error\x18* \x01(\v2\x10.proto.S2C_ErrorH\x00R\x05error\x12.\n" +
 	"\awarning\x18+ \x01(\v2\x12.proto.S2C_WarningH\x00R\awarningB\t\n" +
 	"\apayload*a\n" +
@@ -3918,7 +4174,12 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x0fCLOSE_CONTAINER\x10\x03\x12\a\n" +
 	"\x03USE\x10\x04\x12\n" +
 	"\n" +
-	"\x06PICKUP\x10\x05B\x1fZ\x1dorigin/internal/network/protob\x06proto3"
+	"\x06PICKUP\x10\x05*p\n" +
+	"\vChatChannel\x12\x16\n" +
+	"\x12CHAT_CHANNEL_LOCAL\x10\x00\x12\x17\n" +
+	"\x13CHAT_CHANNEL_GLOBAL\x10\x01\x12\x18\n" +
+	"\x14CHAT_CHANNEL_PRIVATE\x10\x02\x12\x16\n" +
+	"\x12CHAT_CHANNEL_PARTY\x10\x03B\x1fZ\x1dorigin/internal/network/protob\x06proto3"
 
 var (
 	file_api_proto_packets_proto_rawDescOnce sync.Once
@@ -3932,8 +4193,8 @@ func file_api_proto_packets_proto_rawDescGZIP() []byte {
 	return file_api_proto_packets_proto_rawDescData
 }
 
-var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_api_proto_packets_proto_goTypes = []any{
 	(MovementMode)(0),               // 0: proto.MovementMode
 	(EquipSlot)(0),                  // 1: proto.EquipSlot
@@ -3943,122 +4204,129 @@ var file_api_proto_packets_proto_goTypes = []any{
 	(ErrorCode)(0),                  // 5: proto.ErrorCode
 	(WarningCode)(0),                // 6: proto.WarningCode
 	(InteractionType)(0),            // 7: proto.InteractionType
-	(*Position)(nil),                // 8: proto.Position
-	(*Vector2)(nil),                 // 9: proto.Vector2
-	(*AABB)(nil),                    // 10: proto.AABB
-	(*Timestamp)(nil),               // 11: proto.Timestamp
-	(*InventoryRef)(nil),            // 12: proto.InventoryRef
-	(*ItemInstance)(nil),            // 13: proto.ItemInstance
-	(*GridItem)(nil),                // 14: proto.GridItem
-	(*InventoryGridState)(nil),      // 15: proto.InventoryGridState
-	(*EquipmentItem)(nil),           // 16: proto.EquipmentItem
-	(*InventoryEquipmentState)(nil), // 17: proto.InventoryEquipmentState
-	(*InventoryHandState)(nil),      // 18: proto.InventoryHandState
-	(*InventoryState)(nil),          // 19: proto.InventoryState
-	(*InventoryExpected)(nil),       // 20: proto.InventoryExpected
-	(*GridPos)(nil),                 // 21: proto.GridPos
-	(*InventoryMoveSpec)(nil),       // 22: proto.InventoryMoveSpec
-	(*InventoryOp)(nil),             // 23: proto.InventoryOp
-	(*C2S_InventoryOp)(nil),         // 24: proto.C2S_InventoryOp
-	(*EntityMovement)(nil),          // 25: proto.EntityMovement
-	(*EntityPosition)(nil),          // 26: proto.EntityPosition
-	(*EntityAppearance)(nil),        // 27: proto.EntityAppearance
-	(*ChunkCoord)(nil),              // 28: proto.ChunkCoord
-	(*ChunkData)(nil),               // 29: proto.ChunkData
-	(*MoveTo)(nil),                  // 30: proto.MoveTo
-	(*MoveToEntity)(nil),            // 31: proto.MoveToEntity
-	(*Interact)(nil),                // 32: proto.Interact
-	(*C2S_PlayerAction)(nil),        // 33: proto.C2S_PlayerAction
-	(*C2S_MovementMode)(nil),        // 34: proto.C2S_MovementMode
-	(*C2S_Auth)(nil),                // 35: proto.C2S_Auth
-	(*C2S_Ping)(nil),                // 36: proto.C2S_Ping
-	(*ClientMessage)(nil),           // 37: proto.ClientMessage
-	(*S2C_AuthResult)(nil),          // 38: proto.S2C_AuthResult
-	(*S2C_Pong)(nil),                // 39: proto.S2C_Pong
-	(*S2C_PlayerEnterWorld)(nil),    // 40: proto.S2C_PlayerEnterWorld
-	(*S2C_PlayerLeaveWorld)(nil),    // 41: proto.S2C_PlayerLeaveWorld
-	(*S2C_ChunkLoad)(nil),           // 42: proto.S2C_ChunkLoad
-	(*S2C_ChunkUnload)(nil),         // 43: proto.S2C_ChunkUnload
-	(*S2C_ObjectSpawn)(nil),         // 44: proto.S2C_ObjectSpawn
-	(*S2C_ObjectDespawn)(nil),       // 45: proto.S2C_ObjectDespawn
-	(*S2C_ObjectMove)(nil),          // 46: proto.S2C_ObjectMove
-	(*S2C_InventoryOpResult)(nil),   // 47: proto.S2C_InventoryOpResult
-	(*S2C_InventoryUpdate)(nil),     // 48: proto.S2C_InventoryUpdate
-	(*S2C_ContainerOpened)(nil),     // 49: proto.S2C_ContainerOpened
-	(*S2C_ContainerClosed)(nil),     // 50: proto.S2C_ContainerClosed
-	(*S2C_Error)(nil),               // 51: proto.S2C_Error
-	(*S2C_Warning)(nil),             // 52: proto.S2C_Warning
-	(*ServerMessage)(nil),           // 53: proto.ServerMessage
+	(ChatChannel)(0),                // 8: proto.ChatChannel
+	(*Position)(nil),                // 9: proto.Position
+	(*Vector2)(nil),                 // 10: proto.Vector2
+	(*AABB)(nil),                    // 11: proto.AABB
+	(*Timestamp)(nil),               // 12: proto.Timestamp
+	(*InventoryRef)(nil),            // 13: proto.InventoryRef
+	(*ItemInstance)(nil),            // 14: proto.ItemInstance
+	(*GridItem)(nil),                // 15: proto.GridItem
+	(*InventoryGridState)(nil),      // 16: proto.InventoryGridState
+	(*EquipmentItem)(nil),           // 17: proto.EquipmentItem
+	(*InventoryEquipmentState)(nil), // 18: proto.InventoryEquipmentState
+	(*InventoryHandState)(nil),      // 19: proto.InventoryHandState
+	(*InventoryState)(nil),          // 20: proto.InventoryState
+	(*InventoryExpected)(nil),       // 21: proto.InventoryExpected
+	(*GridPos)(nil),                 // 22: proto.GridPos
+	(*InventoryMoveSpec)(nil),       // 23: proto.InventoryMoveSpec
+	(*InventoryOp)(nil),             // 24: proto.InventoryOp
+	(*C2S_InventoryOp)(nil),         // 25: proto.C2S_InventoryOp
+	(*EntityMovement)(nil),          // 26: proto.EntityMovement
+	(*EntityPosition)(nil),          // 27: proto.EntityPosition
+	(*EntityAppearance)(nil),        // 28: proto.EntityAppearance
+	(*ChunkCoord)(nil),              // 29: proto.ChunkCoord
+	(*ChunkData)(nil),               // 30: proto.ChunkData
+	(*MoveTo)(nil),                  // 31: proto.MoveTo
+	(*MoveToEntity)(nil),            // 32: proto.MoveToEntity
+	(*Interact)(nil),                // 33: proto.Interact
+	(*C2S_PlayerAction)(nil),        // 34: proto.C2S_PlayerAction
+	(*C2S_MovementMode)(nil),        // 35: proto.C2S_MovementMode
+	(*C2S_ChatMessage)(nil),         // 36: proto.C2S_ChatMessage
+	(*C2S_Auth)(nil),                // 37: proto.C2S_Auth
+	(*C2S_Ping)(nil),                // 38: proto.C2S_Ping
+	(*ClientMessage)(nil),           // 39: proto.ClientMessage
+	(*S2C_AuthResult)(nil),          // 40: proto.S2C_AuthResult
+	(*S2C_Pong)(nil),                // 41: proto.S2C_Pong
+	(*S2C_PlayerEnterWorld)(nil),    // 42: proto.S2C_PlayerEnterWorld
+	(*S2C_PlayerLeaveWorld)(nil),    // 43: proto.S2C_PlayerLeaveWorld
+	(*S2C_ChunkLoad)(nil),           // 44: proto.S2C_ChunkLoad
+	(*S2C_ChunkUnload)(nil),         // 45: proto.S2C_ChunkUnload
+	(*S2C_ObjectSpawn)(nil),         // 46: proto.S2C_ObjectSpawn
+	(*S2C_ObjectDespawn)(nil),       // 47: proto.S2C_ObjectDespawn
+	(*S2C_ObjectMove)(nil),          // 48: proto.S2C_ObjectMove
+	(*S2C_InventoryOpResult)(nil),   // 49: proto.S2C_InventoryOpResult
+	(*S2C_InventoryUpdate)(nil),     // 50: proto.S2C_InventoryUpdate
+	(*S2C_ContainerOpened)(nil),     // 51: proto.S2C_ContainerOpened
+	(*S2C_ContainerClosed)(nil),     // 52: proto.S2C_ContainerClosed
+	(*S2C_ChatMessage)(nil),         // 53: proto.S2C_ChatMessage
+	(*S2C_Error)(nil),               // 54: proto.S2C_Error
+	(*S2C_Warning)(nil),             // 55: proto.S2C_Warning
+	(*ServerMessage)(nil),           // 56: proto.ServerMessage
 }
 var file_api_proto_packets_proto_depIdxs = []int32{
 	4,  // 0: proto.InventoryRef.kind:type_name -> proto.InventoryKind
-	13, // 1: proto.GridItem.item:type_name -> proto.ItemInstance
-	14, // 2: proto.InventoryGridState.items:type_name -> proto.GridItem
+	14, // 1: proto.GridItem.item:type_name -> proto.ItemInstance
+	15, // 2: proto.InventoryGridState.items:type_name -> proto.GridItem
 	1,  // 3: proto.EquipmentItem.slot:type_name -> proto.EquipSlot
-	13, // 4: proto.EquipmentItem.item:type_name -> proto.ItemInstance
-	16, // 5: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
-	13, // 6: proto.InventoryHandState.item:type_name -> proto.ItemInstance
-	12, // 7: proto.InventoryState.ref:type_name -> proto.InventoryRef
-	15, // 8: proto.InventoryState.grid:type_name -> proto.InventoryGridState
-	17, // 9: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
-	18, // 10: proto.InventoryState.hand:type_name -> proto.InventoryHandState
-	12, // 11: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
-	12, // 12: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
-	12, // 13: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
-	21, // 14: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
+	14, // 4: proto.EquipmentItem.item:type_name -> proto.ItemInstance
+	17, // 5: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
+	14, // 6: proto.InventoryHandState.item:type_name -> proto.ItemInstance
+	13, // 7: proto.InventoryState.ref:type_name -> proto.InventoryRef
+	16, // 8: proto.InventoryState.grid:type_name -> proto.InventoryGridState
+	18, // 9: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
+	19, // 10: proto.InventoryState.hand:type_name -> proto.InventoryHandState
+	13, // 11: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
+	13, // 12: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
+	13, // 13: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
+	22, // 14: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
 	1,  // 15: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
-	20, // 16: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
-	22, // 17: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
-	22, // 18: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
-	22, // 19: proto.InventoryOp.pickup_from_world:type_name -> proto.InventoryMoveSpec
-	23, // 20: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
-	8,  // 21: proto.EntityMovement.position:type_name -> proto.Position
-	9,  // 22: proto.EntityMovement.velocity:type_name -> proto.Vector2
+	21, // 16: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
+	23, // 17: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
+	23, // 18: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
+	23, // 19: proto.InventoryOp.pickup_from_world:type_name -> proto.InventoryMoveSpec
+	24, // 20: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
+	9,  // 21: proto.EntityMovement.position:type_name -> proto.Position
+	10, // 22: proto.EntityMovement.velocity:type_name -> proto.Vector2
 	0,  // 23: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
-	9,  // 24: proto.EntityMovement.target_position:type_name -> proto.Vector2
-	8,  // 25: proto.EntityPosition.position:type_name -> proto.Position
-	9,  // 26: proto.EntityPosition.size:type_name -> proto.Vector2
-	28, // 27: proto.ChunkData.coord:type_name -> proto.ChunkCoord
+	10, // 24: proto.EntityMovement.target_position:type_name -> proto.Vector2
+	9,  // 25: proto.EntityPosition.position:type_name -> proto.Position
+	10, // 26: proto.EntityPosition.size:type_name -> proto.Vector2
+	29, // 27: proto.ChunkData.coord:type_name -> proto.ChunkCoord
 	7,  // 28: proto.Interact.type:type_name -> proto.InteractionType
-	30, // 29: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
-	31, // 30: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
-	32, // 31: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
+	31, // 29: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
+	32, // 30: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
+	33, // 31: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
 	0,  // 32: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
-	35, // 33: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
-	36, // 34: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
-	33, // 35: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
-	34, // 36: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
-	24, // 37: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
-	29, // 38: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
-	28, // 39: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
-	26, // 40: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
-	25, // 41: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
-	5,  // 42: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
-	19, // 43: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
-	19, // 44: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
-	19, // 45: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
-	5,  // 46: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	6,  // 47: proto.S2C_Warning.code:type_name -> proto.WarningCode
-	38, // 48: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	39, // 49: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	42, // 50: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
-	43, // 51: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
-	40, // 52: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	41, // 53: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	44, // 54: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	45, // 55: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	46, // 56: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	47, // 57: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
-	48, // 58: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
-	49, // 59: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
-	50, // 60: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
-	51, // 61: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	52, // 62: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
-	63, // [63:63] is the sub-list for method output_type
-	63, // [63:63] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	8,  // 33: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
+	37, // 34: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
+	38, // 35: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
+	34, // 36: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
+	35, // 37: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
+	25, // 38: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
+	36, // 39: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
+	30, // 40: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
+	29, // 41: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
+	27, // 42: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
+	26, // 43: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
+	5,  // 44: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
+	20, // 45: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
+	20, // 46: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
+	20, // 47: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
+	8,  // 48: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
+	5,  // 49: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	6,  // 50: proto.S2C_Warning.code:type_name -> proto.WarningCode
+	40, // 51: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	41, // 52: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	44, // 53: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	45, // 54: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	42, // 55: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	43, // 56: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	46, // 57: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	47, // 58: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	48, // 59: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	49, // 60: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
+	50, // 61: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
+	51, // 62: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
+	52, // 63: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
+	53, // 64: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
+	54, // 65: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	55, // 66: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
+	67, // [67:67] is the sub-list for method output_type
+	67, // [67:67] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -4084,15 +4352,20 @@ func file_api_proto_packets_proto_init() {
 		(*C2S_PlayerAction_MoveToEntity)(nil),
 		(*C2S_PlayerAction_Interact)(nil),
 	}
-	file_api_proto_packets_proto_msgTypes[29].OneofWrappers = []any{
+	file_api_proto_packets_proto_msgTypes[27].OneofWrappers = []any{
+		(*C2S_ChatMessage_PrivateEntityId)(nil),
+	}
+	file_api_proto_packets_proto_msgTypes[30].OneofWrappers = []any{
 		(*ClientMessage_Auth)(nil),
 		(*ClientMessage_Ping)(nil),
 		(*ClientMessage_PlayerAction)(nil),
 		(*ClientMessage_MovementMode)(nil),
 		(*ClientMessage_InventoryOp)(nil),
+		(*ClientMessage_Chat)(nil),
 	}
-	file_api_proto_packets_proto_msgTypes[39].OneofWrappers = []any{}
-	file_api_proto_packets_proto_msgTypes[45].OneofWrappers = []any{
+	file_api_proto_packets_proto_msgTypes[40].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[44].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[47].OneofWrappers = []any{
 		(*ServerMessage_AuthResult)(nil),
 		(*ServerMessage_Pong)(nil),
 		(*ServerMessage_ChunkLoad)(nil),
@@ -4106,6 +4379,7 @@ func file_api_proto_packets_proto_init() {
 		(*ServerMessage_InventoryUpdate)(nil),
 		(*ServerMessage_ContainerOpened)(nil),
 		(*ServerMessage_ContainerClosed)(nil),
+		(*ServerMessage_Chat)(nil),
 		(*ServerMessage_Error)(nil),
 		(*ServerMessage_Warning)(nil),
 	}
@@ -4114,8 +4388,8 @@ func file_api_proto_packets_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_packets_proto_rawDesc), len(file_api_proto_packets_proto_rawDesc)),
-			NumEnums:      8,
-			NumMessages:   46,
+			NumEnums:      9,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
