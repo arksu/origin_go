@@ -40,6 +40,8 @@ export class TerrainManager {
   // Camera position for priority calculation
   private cameraSubchunkX: number = 0
   private cameraSubchunkY: number = 0
+  private lastPriorityUpdateX: number = 0
+  private lastPriorityUpdateY: number = 0
 
   init(objectsContainer: Container, spritesheet: Spritesheet): void {
     this.renderer = new TerrainSpriteRenderer(objectsContainer, spritesheet)
@@ -55,15 +57,24 @@ export class TerrainManager {
     const chunkSize = getFullChunkSize()
     const subchunkSize = chunkSize / TERRAIN_SUBCHUNK_DIVIDER
 
-    // const prevX = this.cameraSubchunkX
-    // const prevY = this.cameraSubchunkY
+    const prevX = this.cameraSubchunkX
+    const prevY = this.cameraSubchunkY
 
     this.cameraSubchunkX = gameX / subchunkSize
     this.cameraSubchunkY = gameY / subchunkSize
 
-    // if (Math.abs(this.cameraSubchunkX - prevX) > 0.5 || Math.abs(this.cameraSubchunkY - prevY) > 0.5) {
-    //   console.log(`[TerrainManager] Camera moved: game=(${gameX.toFixed(0)},${gameY.toFixed(0)}) -> subchunk=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
-    // }
+    // Recalculate queue priorities if camera moved significantly
+    const dx = this.cameraSubchunkX - this.lastPriorityUpdateX
+    const dy = this.cameraSubchunkY - this.lastPriorityUpdateY
+    const distanceMoved = Math.sqrt(dx * dx + dy * dy)
+
+    // Recalculate if moved more than 1 subchunk or if this is first update (both were 0)
+    if (distanceMoved > 1 || (prevX === 0 && prevY === 0 && (this.cameraSubchunkX !== 0 || this.cameraSubchunkY !== 0))) {
+      terrainBuildQueue.recalculatePriorities(this.cameraSubchunkX, this.cameraSubchunkY)
+      this.lastPriorityUpdateX = this.cameraSubchunkX
+      this.lastPriorityUpdateY = this.cameraSubchunkY
+      console.log(`[TerrainManager] Recalculated priorities: camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)}), queue=${terrainBuildQueue.length}`)
+    }
   }
 
   /**
@@ -132,6 +143,15 @@ export class TerrainManager {
           epoch,
         })
 
+        // Calculate subchunk global position
+        const subchunkGlobalX = chunkX * TERRAIN_SUBCHUNK_DIVIDER + cx
+        const subchunkGlobalY = chunkY * TERRAIN_SUBCHUNK_DIVIDER + cy
+
+        // Calculate distance to camera for priority
+        const dx = subchunkGlobalX - this.cameraSubchunkX
+        const dy = subchunkGlobalY - this.cameraSubchunkY
+        const distanceToCamera = Math.sqrt(dx * dx + dy * dy)
+
         const task: TerrainBuildTask = {
           subchunkKey,
           chunkKey,
@@ -142,7 +162,7 @@ export class TerrainManager {
           tiles,
           hasBordersOrCorners,
           epoch,
-          distanceToCamera: 0,
+          distanceToCamera,
           createdAt: performance.now(),
         }
 
@@ -308,6 +328,11 @@ export class TerrainManager {
         console.log(`[TerrainManager] Showing subchunk ${subchunkKey}, subchunkGlobal=(${subchunkGlobalX},${subchunkGlobalY}), camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
         const data = this.chunkData.get(subchunk.chunkKey)
         if (data) {
+          // Calculate distance to camera for priority
+          const dx = subchunkGlobalX - this.cameraSubchunkX
+          const dy = subchunkGlobalY - this.cameraSubchunkY
+          const distanceToCamera = Math.sqrt(dx * dx + dy * dy)
+
           const task: TerrainBuildTask = {
             subchunkKey,
             chunkKey: subchunk.chunkKey,
@@ -318,7 +343,7 @@ export class TerrainManager {
             tiles: data.tiles,
             hasBordersOrCorners: data.hasBordersOrCorners,
             epoch: subchunk.epoch,
-            distanceToCamera: 0,
+            distanceToCamera,
             createdAt: performance.now(),
           }
           // Rebuild immediately for show (high priority)
