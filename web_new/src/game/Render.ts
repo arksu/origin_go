@@ -370,6 +370,10 @@ export class Render {
     this.onClickCallback = callback
   }
 
+  toggleDebugOverlay(): void {
+    this.debugOverlay.toggle()
+  }
+
   updateDebugStats(objectsCount: number, chunksLoaded: number): void {
     if (!this.debugOverlay.isVisible()) return
 
