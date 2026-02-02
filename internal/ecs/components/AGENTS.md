@@ -137,7 +137,8 @@ Maintain this list as you add new components:
 | 14  | ColliderComponentID        | Collider for collision system              |
 | 15  | CollisionResultComponentID | Result of collision calculations           |
 | 16  | VisionComponentID          | Entity vision radius and power             |
-| 17  | StealthComponentID         | Entity stealth value                        |
+| 17  | StealthComponentID         | Entity stealth value                       |
+| 18  | AppearanceComponentID      | Entity visual appearance (name)            |
 | ... | ...                        | ...                                        |
 
 ## Migration from Auto-Assignment

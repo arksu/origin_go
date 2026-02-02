@@ -204,6 +204,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(w, h, components.CollisionResult{
 				HasCollision: false,
 			})
+			ecs.AddComponent(w, h, components.Appearance{
+				Name: character.Name,
+			})
 			ecs.AddComponent(w, h, components.Vision{
 				Radius: 240.0,
 				Power:  100.0,
