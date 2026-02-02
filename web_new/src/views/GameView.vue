@@ -5,6 +5,8 @@ import { useGameStore } from '@/stores/gameStore'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
+import ChatInput from '@/components/ui/ChatInput.vue'
+import { sendChatMessage } from '@/network'
 
 const router = useRouter()
 const gameStore = useGameStore()
@@ -83,6 +85,10 @@ function handleRetry() {
     connectToGame(gameStore.wsToken)
   }
 }
+
+function handleChatSend(text: string) {
+  sendChatMessage(text)
+}
 </script>
 
 <template>
@@ -111,6 +117,9 @@ function handleRetry() {
       <canvas ref="gameCanvas" class="game-canvas"></canvas>
       <div class="game-ui">
         <AppButton variant="secondary" size="sm" @click="handleBack">Выйти</AppButton>
+      </div>
+      <div class="game-chat">
+        <ChatInput @send="handleChatSend" />
       </div>
     </div>
 
@@ -175,6 +184,13 @@ function handleRetry() {
   position: absolute;
   top: 1rem;
   right: 1rem;
+  z-index: 100;
+}
+
+.game-chat {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
   z-index: 100;
 }
 

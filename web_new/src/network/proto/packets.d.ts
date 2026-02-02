@@ -3015,6 +3015,126 @@ export namespace proto {
         public static getTypeUrl(typeUrlPrefix?: string): string;
     }
 
+    /** ChatChannel enum. */
+    enum ChatChannel {
+        CHAT_CHANNEL_LOCAL = 0,
+        CHAT_CHANNEL_GLOBAL = 1,
+        CHAT_CHANNEL_PRIVATE = 2,
+        CHAT_CHANNEL_PARTY = 3
+    }
+
+    /** Properties of a C2S_ChatMessage. */
+    interface IC2S_ChatMessage {
+
+        /** C2S_ChatMessage text */
+        text?: (string|null);
+
+        /** C2S_ChatMessage channel */
+        channel?: (proto.ChatChannel|null);
+
+        /** C2S_ChatMessage privateEntityId */
+        privateEntityId?: (number|Long|null);
+    }
+
+    /** Represents a C2S_ChatMessage. */
+    class C2S_ChatMessage implements IC2S_ChatMessage {
+
+        /**
+         * Constructs a new C2S_ChatMessage.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: proto.IC2S_ChatMessage);
+
+        /** C2S_ChatMessage text. */
+        public text: string;
+
+        /** C2S_ChatMessage channel. */
+        public channel: proto.ChatChannel;
+
+        /** C2S_ChatMessage privateEntityId. */
+        public privateEntityId?: (number|Long|null);
+
+        /** C2S_ChatMessage target. */
+        public target?: "privateEntityId";
+
+        /**
+         * Creates a new C2S_ChatMessage instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns C2S_ChatMessage instance
+         */
+        public static create(properties?: proto.IC2S_ChatMessage): proto.C2S_ChatMessage;
+
+        /**
+         * Encodes the specified C2S_ChatMessage message. Does not implicitly {@link proto.C2S_ChatMessage.verify|verify} messages.
+         * @param message C2S_ChatMessage message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: proto.IC2S_ChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified C2S_ChatMessage message, length delimited. Does not implicitly {@link proto.C2S_ChatMessage.verify|verify} messages.
+         * @param message C2S_ChatMessage message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: proto.IC2S_ChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a C2S_ChatMessage message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns C2S_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): proto.C2S_ChatMessage;
+
+        /**
+         * Decodes a C2S_ChatMessage message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns C2S_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): proto.C2S_ChatMessage;
+
+        /**
+         * Verifies a C2S_ChatMessage message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a C2S_ChatMessage message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns C2S_ChatMessage
+         */
+        public static fromObject(object: { [k: string]: any }): proto.C2S_ChatMessage;
+
+        /**
+         * Creates a plain object from a C2S_ChatMessage message. Also converts values to other types if specified.
+         * @param message C2S_ChatMessage
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: proto.C2S_ChatMessage, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this C2S_ChatMessage to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for C2S_ChatMessage
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
+    }
+
     /** Properties of a C2S_Auth. */
     interface IC2S_Auth {
 
@@ -3235,6 +3355,9 @@ export namespace proto {
 
         /** ClientMessage inventoryOp */
         inventoryOp?: (proto.IC2S_InventoryOp|null);
+
+        /** ClientMessage chat */
+        chat?: (proto.IC2S_ChatMessage|null);
     }
 
     /** Represents a ClientMessage. */
@@ -3264,8 +3387,11 @@ export namespace proto {
         /** ClientMessage inventoryOp. */
         public inventoryOp?: (proto.IC2S_InventoryOp|null);
 
+        /** ClientMessage chat. */
+        public chat?: (proto.IC2S_ChatMessage|null);
+
         /** ClientMessage payload. */
-        public payload?: ("auth"|"ping"|"playerAction"|"movementMode"|"inventoryOp");
+        public payload?: ("auth"|"ping"|"playerAction"|"movementMode"|"inventoryOp"|"chat");
 
         /**
          * Creates a new ClientMessage instance using the specified properties.
@@ -4732,6 +4858,127 @@ export namespace proto {
         public static getTypeUrl(typeUrlPrefix?: string): string;
     }
 
+    /** Properties of a S2C_ChatMessage. */
+    interface IS2C_ChatMessage {
+
+        /** S2C_ChatMessage channel */
+        channel?: (proto.ChatChannel|null);
+
+        /** S2C_ChatMessage fromEntityId */
+        fromEntityId?: (number|Long|null);
+
+        /** S2C_ChatMessage fromName */
+        fromName?: (string|null);
+
+        /** S2C_ChatMessage text */
+        text?: (string|null);
+
+        /** S2C_ChatMessage toEntityId */
+        toEntityId?: (number|Long|null);
+    }
+
+    /** Represents a S2C_ChatMessage. */
+    class S2C_ChatMessage implements IS2C_ChatMessage {
+
+        /**
+         * Constructs a new S2C_ChatMessage.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: proto.IS2C_ChatMessage);
+
+        /** S2C_ChatMessage channel. */
+        public channel: proto.ChatChannel;
+
+        /** S2C_ChatMessage fromEntityId. */
+        public fromEntityId: (number|Long);
+
+        /** S2C_ChatMessage fromName. */
+        public fromName: string;
+
+        /** S2C_ChatMessage text. */
+        public text: string;
+
+        /** S2C_ChatMessage toEntityId. */
+        public toEntityId?: (number|Long|null);
+
+        /**
+         * Creates a new S2C_ChatMessage instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns S2C_ChatMessage instance
+         */
+        public static create(properties?: proto.IS2C_ChatMessage): proto.S2C_ChatMessage;
+
+        /**
+         * Encodes the specified S2C_ChatMessage message. Does not implicitly {@link proto.S2C_ChatMessage.verify|verify} messages.
+         * @param message S2C_ChatMessage message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: proto.IS2C_ChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified S2C_ChatMessage message, length delimited. Does not implicitly {@link proto.S2C_ChatMessage.verify|verify} messages.
+         * @param message S2C_ChatMessage message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: proto.IS2C_ChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a S2C_ChatMessage message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns S2C_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): proto.S2C_ChatMessage;
+
+        /**
+         * Decodes a S2C_ChatMessage message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns S2C_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): proto.S2C_ChatMessage;
+
+        /**
+         * Verifies a S2C_ChatMessage message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a S2C_ChatMessage message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns S2C_ChatMessage
+         */
+        public static fromObject(object: { [k: string]: any }): proto.S2C_ChatMessage;
+
+        /**
+         * Creates a plain object from a S2C_ChatMessage message. Also converts values to other types if specified.
+         * @param message S2C_ChatMessage
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: proto.S2C_ChatMessage, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this S2C_ChatMessage to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for S2C_ChatMessage
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
+    }
+
     /** Properties of a S2C_Error. */
     interface IS2C_Error {
 
@@ -4983,6 +5230,9 @@ export namespace proto {
         /** ServerMessage containerClosed */
         containerClosed?: (proto.IS2C_ContainerClosed|null);
 
+        /** ServerMessage chat */
+        chat?: (proto.IS2C_ChatMessage|null);
+
         /** ServerMessage error */
         error?: (proto.IS2C_Error|null);
 
@@ -5041,6 +5291,9 @@ export namespace proto {
         /** ServerMessage containerClosed. */
         public containerClosed?: (proto.IS2C_ContainerClosed|null);
 
+        /** ServerMessage chat. */
+        public chat?: (proto.IS2C_ChatMessage|null);
+
         /** ServerMessage error. */
         public error?: (proto.IS2C_Error|null);
 
@@ -5048,7 +5301,7 @@ export namespace proto {
         public warning?: (proto.IS2C_Warning|null);
 
         /** ServerMessage payload. */
-        public payload?: ("authResult"|"pong"|"chunkLoad"|"chunkUnload"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"inventoryOpResult"|"inventoryUpdate"|"containerOpened"|"containerClosed"|"error"|"warning");
+        public payload?: ("authResult"|"pong"|"chunkLoad"|"chunkUnload"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"inventoryOpResult"|"inventoryUpdate"|"containerOpened"|"containerClosed"|"chat"|"error"|"warning");
 
         /**
          * Creates a new ServerMessage instance using the specified properties.

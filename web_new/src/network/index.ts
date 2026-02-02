@@ -2,6 +2,7 @@ import { gameConnection } from './GameConnection'
 import { messageDispatcher } from './MessageDispatcher'
 import { registerMessageHandlers } from './handlers'
 import { useGameStore } from '@/stores/gameStore'
+import { proto } from './proto/packets.js'
 
 let initialized = false
 
@@ -36,6 +37,17 @@ export function connectToGame(authToken: string): void {
 
 export function disconnectFromGame(): void {
   gameConnection.disconnect()
+}
+
+export function sendChatMessage(text: string): void {
+  if (!text.trim()) return
+
+  gameConnection.send({
+    chat: proto.C2S_ChatMessage.create({
+      text: text.trim(),
+      channel: proto.ChatChannel.CHAT_CHANNEL_LOCAL
+    })
+  })
 }
 
 export { gameConnection, messageDispatcher }
