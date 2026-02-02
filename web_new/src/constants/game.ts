@@ -8,3 +8,6 @@ export const CAMERA_FOLLOW_HARD = false // true = hard follow, false = smooth le
 
 // Debug logging for movement analysis
 export const DEBUG_MOVEMENT = false // Enable detailed movement logging
+
+// Debug visualization settings
+export const DEBUG_SHOW_OBJECT_BOUNDS = true // Show object bounds when debug info is enabled

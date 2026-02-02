@@ -75,6 +75,8 @@ export class Render {
     this.uiContainer.addChild(this.debugOverlay.getContainer())
 
     this.debugOverlay.setVisible(config.DEBUG)
+    // Show object bounds if debug is enabled
+    this.objectManager.setBoundsVisible(config.DEBUG)
 
     this.setupInputController()
     this.setupKeyboardEvents()
@@ -138,6 +140,8 @@ export class Render {
     this.keyDownHandler = (e: KeyboardEvent) => {
       if (e.key === '`') {
         this.debugOverlay.toggle()
+        // Toggle object bounds when debug overlay is toggled
+        this.objectManager.setBoundsVisible(this.debugOverlay.isVisible())
       }
     }
 

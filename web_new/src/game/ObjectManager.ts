@@ -72,7 +72,7 @@ export class ObjectManager {
   updateObjectPosition(entityId: number, x: number, y: number): void {
     const objectView = this.objects.get(entityId)
     if (!objectView) {
-     // console.warn(`[ObjectManager] Cannot update position for object ${entityId}: not found`)
+      // console.warn(`[ObjectManager] Cannot update position for object ${entityId}: not found`)
       return
     }
 
@@ -153,6 +153,29 @@ export class ObjectManager {
     visibleObjects.forEach((obj, index) => {
       obj.getContainer().zIndex = index
     })
+  }
+
+  /**
+   * Set bounds visibility for all objects.
+   * Used when debug mode is toggled.
+   */
+  setBoundsVisible(visible: boolean): void {
+    for (const objectView of this.objects.values()) {
+      objectView.setBoundsVisible(visible)
+    }
+  }
+
+  /**
+   * Get bounds visibility state.
+   */
+  areBoundsVisible(): boolean {
+    // Return true if any object has bounds visible
+    for (const objectView of this.objects.values()) {
+      if (objectView.isBoundsVisible()) {
+        return true
+      }
+    }
+    return false
   }
 
   /**

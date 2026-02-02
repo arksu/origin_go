@@ -2,6 +2,7 @@ import { Container, Sprite, Graphics, Text, Rectangle } from 'pixi.js'
 import { ResourceLoader } from './ResourceLoader'
 import { coordGame2Screen } from './utils/coordConvert'
 import { type AABB, fromMinMax } from './culling/AABB'
+import { OBJECT_BOUNDS_COLOR, OBJECT_BOUNDS_WIDTH } from '@/constants/render'
 
 export interface ObjectViewOptions {
   entityId: number
@@ -28,6 +29,7 @@ export class ObjectView {
   private container: Container
   private sprite: Sprite
   private debugText: Text | null = null
+  private boundsGraphics: Graphics | null = null
 
   private resourcePath: string
   private position: { x: number; y: number }
@@ -100,12 +102,12 @@ export class ObjectView {
     })
 
     placeholder.on('pointerover', () => {
-     // console.log(`[ObjectView] Hover over entity ${this.entityId}`)
+      // console.log(`[ObjectView] Hover over entity ${this.entityId}`)
       this.setHovered(true)
     })
 
     placeholder.on('pointerout', () => {
-     // console.log(`[ObjectView] Hover out from entity ${this.entityId}`)
+      // console.log(`[ObjectView] Hover out from entity ${this.entityId}`)
       this.setHovered(false)
     })
 
@@ -151,6 +153,7 @@ export class ObjectView {
     this.position.x = x
     this.position.y = y
     this.updateScreenPosition()
+    this.updateBoundsGraphics()
   }
 
   private updateScreenPosition(): void {
@@ -256,7 +259,75 @@ export class ObjectView {
     }
   }
 
+  /**
+   * Enable/disable bounds visualization.
+   */
+  setBoundsVisible(visible: boolean): void {
+    if (visible && !this.boundsGraphics) {
+      this.createBoundsGraphics()
+    } else if (!visible && this.boundsGraphics) {
+      this.removeBoundsGraphics()
+    }
+  }
+
+  /**
+   * Check if bounds are currently visible.
+   */
+  isBoundsVisible(): boolean {
+    return this.boundsGraphics !== null
+  }
+
+  /**
+   * Create bounds graphics for the object.
+   */
+  private createBoundsGraphics(): void {
+    if (this.boundsGraphics) return
+
+    this.boundsGraphics = new Graphics()
+    this.updateBoundsGraphics()
+    this.container.addChild(this.boundsGraphics)
+  }
+
+  /**
+   * Remove bounds graphics.
+   */
+  private removeBoundsGraphics(): void {
+    if (this.boundsGraphics) {
+      this.container.removeChild(this.boundsGraphics)
+      this.boundsGraphics.destroy()
+      this.boundsGraphics = null
+    }
+  }
+
+  /**
+   * Update bounds graphics to match current object size and position.
+   */
+  private updateBoundsGraphics(): void {
+    if (!this.boundsGraphics) return
+
+    this.boundsGraphics.clear()
+
+    // Draw rectangle around object bounds
+    const halfWidthX = this.size.x / 2
+    const halfHeightY = this.size.y / 2
+
+    this.boundsGraphics.setStrokeStyle({
+      width: OBJECT_BOUNDS_WIDTH,
+      color: OBJECT_BOUNDS_COLOR,
+      alpha: 1.0
+    })
+
+    this.boundsGraphics.rect(
+      -halfWidthX,
+      -halfHeightY,
+      this.size.x,
+      this.size.y
+    )
+    this.boundsGraphics.stroke()
+  }
+
   destroy(): void {
+    this.removeBoundsGraphics()
     this.sprite.destroy({ children: true })
     this.container.destroy({ children: true })
   }
