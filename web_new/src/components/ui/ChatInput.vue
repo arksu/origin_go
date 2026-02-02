@@ -4,6 +4,7 @@ import AppInput from './AppInput.vue'
 import AppButton from './AppButton.vue'
 
 const message = ref('')
+const inputRef = ref<InstanceType<typeof AppInput>>()
 const emit = defineEmits<{
   send: [text: string]
 }>()
@@ -24,11 +25,32 @@ function handleKeydown(event: KeyboardEvent) {
     handleSend()
   }
 }
+
+function focus() {
+  inputRef.value?.focus()
+}
+
+function blur() {
+  inputRef.value?.blur()
+}
+
+function focusWithSlash() {
+  message.value = '/'
+  focus()
+}
+
+// Expose methods to parent
+defineExpose({
+  focus,
+  blur,
+  focusWithSlash
+})
 </script>
 
 <template>
   <div class="chat-input">
     <AppInput
+      ref="inputRef"
       v-model="message"
       placeholder="Enter message..."
       @keydown="handleKeydown"
