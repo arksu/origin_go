@@ -301,6 +301,24 @@ message C2S_MovementMode {
 }
 
 // ============================================================================
+// CHAT
+// ============================================================================
+
+enum ChatChannel {
+  CHAT_CHANNEL_LOCAL = 0;   // слышат все вокруг игрока (radius на сервере)
+  CHAT_CHANNEL_GLOBAL = 1;  // системный/глобальный (всем, либо особая логика)
+  CHAT_CHANNEL_PRIVATE = 2; // 1 игрок -> 1 игрок
+  CHAT_CHANNEL_PARTY = 3;   // party chat
+}
+
+message C2S_ChatMessage {
+  string text = 1;
+  ChatChannel channel = 2;
+  oneof target {
+    uint64 private_entity_id = 3; // обязателен если channel == CHAT_CHANNEL_PRIVATE
+  }}
+
+// ============================================================================
 // CLIENT -> SERVER MESSAGES
 // ============================================================================
 
@@ -322,8 +340,7 @@ message ClientMessage {
     C2S_PlayerAction player_action = 12;
     C2S_MovementMode movement_mode = 13;
     C2S_InventoryOp inventory_op = 14;
-    //    C2S_MoveTo move_to = 11;
-    //    C2S_MoveToEntity move_to_entity = 12;
+    C2S_ChatMessage chat = 15;
     //    C2S_StopMovement stop_movement = 13;
     //    C2S_Interact interact = 14;
     //    C2S_Attack attack = 15;
@@ -340,7 +357,6 @@ message ClientMessage {
     //    C2S_PlaceItemInBuildSite place_in_build = 26;
     //    C2S_StartDragging start_dragging = 27;
     //    C2S_StopDragging stop_dragging = 28;
-    //    C2S_ChatMessage chat = 29;
     //    C2S_RequestChunk request_chunk = 30;
   }
 }
@@ -441,6 +457,18 @@ message S2C_ContainerClosed {
   uint64 entity_id = 1;
 }
 
+message S2C_ChatMessage {
+  ChatChannel channel = 1;
+
+  uint64 from_entity_id = 2;
+  string from_name = 3;
+
+  string text = 4;
+
+  // для приватного чата: кому адресовано (полезно клиенту для UI/логов)
+  optional uint64 to_entity_id = 5;
+}
+
 message S2C_Error {
   ErrorCode code = 1;
   string message = 2;
@@ -468,9 +496,8 @@ message ServerMessage {
     S2C_InventoryUpdate inventory_update = 20;
     S2C_ContainerOpened container_opened = 21;
     S2C_ContainerClosed container_closed = 22;
+    S2C_ChatMessage chat = 23;
 
-    //    S2C_SpawnEntity spawn_entity = 13;
-    //    S2C_DespawnEntity despawn_entity = 14;
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
     //    S2C_InventoryUpdate inventory_update = 17;
