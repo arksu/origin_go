@@ -86,6 +86,7 @@ export class MessageDispatcher {
     if (message.inventoryUpdate) return 'inventoryUpdate'
     if (message.containerOpened) return 'containerOpened'
     if (message.containerClosed) return 'containerClosed'
+    if (message.chat) return 'chat'
     if (message.error) return 'error'
     if (message.warning) return 'warning'
     return null

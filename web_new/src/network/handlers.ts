@@ -180,6 +180,17 @@ export function registerMessageHandlers(): void {
     }
   })
 
+  messageDispatcher.on('chat', (msg: proto.IS2C_ChatMessage) => {
+    console.log('[Game] Chat message:', msg.fromName, msg.text, msg.channel)
+
+    // Add message to store
+    gameStore.addChatMessage(
+      msg.fromName || 'Unknown',
+      msg.text || '',
+      msg.channel || proto.ChatChannel.CHAT_CHANNEL_LOCAL
+    )
+  })
+
   messageDispatcher.on('error', (msg: proto.IS2C_Error) => {
     console.error('[Game] Server error:', msg.code, msg.message)
   })

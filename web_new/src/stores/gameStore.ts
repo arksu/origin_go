@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ConnectionState, ConnectionError } from '@/network/types'
+import { proto } from '@/network/proto/packets.js'
 
 export interface Position {
   x: number
@@ -38,6 +39,20 @@ export interface WorldParams {
   streamEpoch: number
 }
 
+export interface ChatMessage {
+  id: string
+  fromName: string
+  text: string
+  timestamp: number
+  channel: proto.ChatChannel
+}
+
+// Constants
+const CHAT_MESSAGE_LIFETIME_MS = 5000  // 5 seconds full visibility
+const CHAT_FADEOUT_DURATION_MS = 2000  // 2 seconds fade out
+const CHAT_CLEANUP_INTERVAL_MS = 500   // Check every 50ms
+const CHAT_MAX_MESSAGES = 50           // Prevent memory leaks
+
 export const useGameStore = defineStore('game', () => {
   // Session
   const wsToken = ref('')
@@ -56,6 +71,10 @@ export const useGameStore = defineStore('game', () => {
   const worldParams = ref<WorldParams | null>(null)
   const chunks = ref(new Map<string, ChunkData>())
   const entities = ref(new Map<number, GameObjectData>())
+
+  // Chat
+  const chatMessages = ref<ChatMessage[]>([])
+  let cleanupTimer: ReturnType<typeof setInterval> | null = null
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
@@ -132,11 +151,56 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  // Chat actions
+  function addChatMessage(fromName: string, text: string, channel: proto.ChatChannel) {
+    const message: ChatMessage = {
+      id: `${Date.now()}-${Math.random()}`,
+      fromName,
+      text,
+      timestamp: Date.now(),
+      channel
+    }
+
+    chatMessages.value.push(message)
+
+    // Limit message count to prevent memory leaks
+    if (chatMessages.value.length > CHAT_MAX_MESSAGES) {
+      chatMessages.value = chatMessages.value.slice(-CHAT_MAX_MESSAGES)
+    }
+
+    // Start cleanup timer if not running
+    if (!cleanupTimer) {
+      cleanupTimer = setInterval(cleanupExpiredMessages, CHAT_CLEANUP_INTERVAL_MS)
+    }
+  }
+
+  function cleanupExpiredMessages() {
+    const now = Date.now()
+    const totalLifetime = CHAT_MESSAGE_LIFETIME_MS + CHAT_FADEOUT_DURATION_MS
+    const cutoffTime = now - totalLifetime
+
+    // Remove messages that have completely faded out
+    chatMessages.value = chatMessages.value.filter(msg => msg.timestamp > cutoffTime)
+
+    // Stop timer if no messages
+    if (chatMessages.value.length === 0 && cleanupTimer) {
+      clearInterval(cleanupTimer)
+      cleanupTimer = null
+    }
+  }
+
   // Reset
   function reset() {
     clearGameSession()
     setConnectionState('disconnected')
     setPlayerLeaveWorld()
+
+    // Cleanup chat
+    if (cleanupTimer) {
+      clearInterval(cleanupTimer)
+      cleanupTimer = null
+    }
+    chatMessages.value = []
   }
 
   return {
@@ -151,6 +215,7 @@ export const useGameStore = defineStore('game', () => {
     worldParams,
     chunks,
     entities,
+    chatMessages,
 
     // Computed
     isConnected,
@@ -168,6 +233,8 @@ export const useGameStore = defineStore('game', () => {
     spawnEntity,
     despawnEntity,
     updateEntityMovement,
+    addChatMessage,
+    cleanupExpiredMessages,
     reset,
   }
 })

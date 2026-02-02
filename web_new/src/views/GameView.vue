@@ -5,7 +5,7 @@ import { useGameStore } from '@/stores/gameStore'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
-import ChatInput from '@/components/ui/ChatInput.vue'
+import ChatContainer from '@/components/ui/ChatContainer.vue'
 import { sendChatMessage } from '@/network'
 
 const router = useRouter()
@@ -119,7 +119,7 @@ function handleChatSend(text: string) {
         <AppButton variant="secondary" size="sm" @click="handleBack">Выйти</AppButton>
       </div>
       <div class="game-chat">
-        <ChatInput @send="handleChatSend" />
+        <ChatContainer @send="handleChatSend" />
       </div>
     </div>
 
