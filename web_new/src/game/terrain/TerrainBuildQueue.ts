@@ -1,5 +1,5 @@
 import type { TerrainBuildTask } from './TerrainSubchunkTypes'
-import { TERRAIN_BUILD_BUDGET_MS, MAX_TERRAIN_SUBCHUNKS_PER_FRAME } from '@/constants/terrain'
+import { TERRAIN_BUILD_BUDGET_MS, MAX_TERRAIN_SUBCHUNKS_PER_FRAME, TERRAIN_SUBCHUNK_DIVIDER } from '@/constants/terrain'
 
 /**
  * Priority queue for terrain subchunk build tasks with frame budget.
@@ -105,6 +105,25 @@ export class TerrainBuildQueue {
     const sorted = [...this.buildTimes].sort((a, b) => a - b)
     const idx = Math.floor(sorted.length * 0.95)
     return sorted[idx] ?? sorted[sorted.length - 1] ?? 0
+  }
+
+  /**
+   * Recalculate priorities for all tasks in queue based on new camera position.
+   */
+  recalculatePriorities(cameraSubchunkX: number, cameraSubchunkY: number): void {
+    if (this.queue.length === 0) return
+
+    // Recalculate distance for each task
+    for (const task of this.queue) {
+      const subchunkGlobalX = task.chunkX * TERRAIN_SUBCHUNK_DIVIDER + task.cx
+      const subchunkGlobalY = task.chunkY * TERRAIN_SUBCHUNK_DIVIDER + task.cy
+      const dx = subchunkGlobalX - cameraSubchunkX
+      const dy = subchunkGlobalY - cameraSubchunkY
+      task.distanceToCamera = Math.sqrt(dx * dx + dy * dy)
+    }
+
+    // Re-sort queue by distance
+    this.queue.sort((a, b) => a.distanceToCamera - b.distanceToCamera)
   }
 
   /**
