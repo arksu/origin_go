@@ -35,4 +35,5 @@ go.work.sum
 # env file
 .env
 
-web/node_modules
+web_new/node_modules
+web_new/src/network/proto/*
