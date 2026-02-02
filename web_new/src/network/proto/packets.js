@@ -7655,6 +7655,334 @@ export const proto = $root.proto = (() => {
         return C2S_MovementMode;
     })();
 
+    /**
+     * ChatChannel enum.
+     * @name proto.ChatChannel
+     * @enum {number}
+     * @property {number} CHAT_CHANNEL_LOCAL=0 CHAT_CHANNEL_LOCAL value
+     * @property {number} CHAT_CHANNEL_GLOBAL=1 CHAT_CHANNEL_GLOBAL value
+     * @property {number} CHAT_CHANNEL_PRIVATE=2 CHAT_CHANNEL_PRIVATE value
+     * @property {number} CHAT_CHANNEL_PARTY=3 CHAT_CHANNEL_PARTY value
+     */
+    proto.ChatChannel = (function() {
+        const valuesById = {}, values = Object.create(valuesById);
+        values[valuesById[0] = "CHAT_CHANNEL_LOCAL"] = 0;
+        values[valuesById[1] = "CHAT_CHANNEL_GLOBAL"] = 1;
+        values[valuesById[2] = "CHAT_CHANNEL_PRIVATE"] = 2;
+        values[valuesById[3] = "CHAT_CHANNEL_PARTY"] = 3;
+        return values;
+    })();
+
+    proto.C2S_ChatMessage = (function() {
+
+        /**
+         * Properties of a C2S_ChatMessage.
+         * @memberof proto
+         * @interface IC2S_ChatMessage
+         * @property {string|null} [text] C2S_ChatMessage text
+         * @property {proto.ChatChannel|null} [channel] C2S_ChatMessage channel
+         * @property {number|Long|null} [privateEntityId] C2S_ChatMessage privateEntityId
+         */
+
+        /**
+         * Constructs a new C2S_ChatMessage.
+         * @memberof proto
+         * @classdesc Represents a C2S_ChatMessage.
+         * @implements IC2S_ChatMessage
+         * @constructor
+         * @param {proto.IC2S_ChatMessage=} [properties] Properties to set
+         */
+        function C2S_ChatMessage(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * C2S_ChatMessage text.
+         * @member {string} text
+         * @memberof proto.C2S_ChatMessage
+         * @instance
+         */
+        C2S_ChatMessage.prototype.text = "";
+
+        /**
+         * C2S_ChatMessage channel.
+         * @member {proto.ChatChannel} channel
+         * @memberof proto.C2S_ChatMessage
+         * @instance
+         */
+        C2S_ChatMessage.prototype.channel = 0;
+
+        /**
+         * C2S_ChatMessage privateEntityId.
+         * @member {number|Long|null|undefined} privateEntityId
+         * @memberof proto.C2S_ChatMessage
+         * @instance
+         */
+        C2S_ChatMessage.prototype.privateEntityId = null;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        /**
+         * C2S_ChatMessage target.
+         * @member {"privateEntityId"|undefined} target
+         * @memberof proto.C2S_ChatMessage
+         * @instance
+         */
+        Object.defineProperty(C2S_ChatMessage.prototype, "target", {
+            get: $util.oneOfGetter($oneOfFields = ["privateEntityId"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new C2S_ChatMessage instance using the specified properties.
+         * @function create
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {proto.IC2S_ChatMessage=} [properties] Properties to set
+         * @returns {proto.C2S_ChatMessage} C2S_ChatMessage instance
+         */
+        C2S_ChatMessage.create = function create(properties) {
+            return new C2S_ChatMessage(properties);
+        };
+
+        /**
+         * Encodes the specified C2S_ChatMessage message. Does not implicitly {@link proto.C2S_ChatMessage.verify|verify} messages.
+         * @function encode
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {proto.IC2S_ChatMessage} message C2S_ChatMessage message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_ChatMessage.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.text != null && Object.hasOwnProperty.call(message, "text"))
+                writer.uint32(/* id 1, wireType 2 =*/10).string(message.text);
+            if (message.channel != null && Object.hasOwnProperty.call(message, "channel"))
+                writer.uint32(/* id 2, wireType 0 =*/16).int32(message.channel);
+            if (message.privateEntityId != null && Object.hasOwnProperty.call(message, "privateEntityId"))
+                writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.privateEntityId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified C2S_ChatMessage message, length delimited. Does not implicitly {@link proto.C2S_ChatMessage.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {proto.IC2S_ChatMessage} message C2S_ChatMessage message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        C2S_ChatMessage.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a C2S_ChatMessage message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.C2S_ChatMessage} C2S_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_ChatMessage.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.C2S_ChatMessage();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.text = reader.string();
+                        break;
+                    }
+                case 2: {
+                        message.channel = reader.int32();
+                        break;
+                    }
+                case 3: {
+                        message.privateEntityId = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a C2S_ChatMessage message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.C2S_ChatMessage} C2S_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        C2S_ChatMessage.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a C2S_ChatMessage message.
+         * @function verify
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        C2S_ChatMessage.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.text != null && message.hasOwnProperty("text"))
+                if (!$util.isString(message.text))
+                    return "text: string expected";
+            if (message.channel != null && message.hasOwnProperty("channel"))
+                switch (message.channel) {
+                default:
+                    return "channel: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    break;
+                }
+            if (message.privateEntityId != null && message.hasOwnProperty("privateEntityId")) {
+                properties.target = 1;
+                if (!$util.isInteger(message.privateEntityId) && !(message.privateEntityId && $util.isInteger(message.privateEntityId.low) && $util.isInteger(message.privateEntityId.high)))
+                    return "privateEntityId: integer|Long expected";
+            }
+            return null;
+        };
+
+        /**
+         * Creates a C2S_ChatMessage message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.C2S_ChatMessage} C2S_ChatMessage
+         */
+        C2S_ChatMessage.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.C2S_ChatMessage)
+                return object;
+            let message = new $root.proto.C2S_ChatMessage();
+            if (object.text != null)
+                message.text = String(object.text);
+            switch (object.channel) {
+            default:
+                if (typeof object.channel === "number") {
+                    message.channel = object.channel;
+                    break;
+                }
+                break;
+            case "CHAT_CHANNEL_LOCAL":
+            case 0:
+                message.channel = 0;
+                break;
+            case "CHAT_CHANNEL_GLOBAL":
+            case 1:
+                message.channel = 1;
+                break;
+            case "CHAT_CHANNEL_PRIVATE":
+            case 2:
+                message.channel = 2;
+                break;
+            case "CHAT_CHANNEL_PARTY":
+            case 3:
+                message.channel = 3;
+                break;
+            }
+            if (object.privateEntityId != null)
+                if ($util.Long)
+                    (message.privateEntityId = $util.Long.fromValue(object.privateEntityId)).unsigned = true;
+                else if (typeof object.privateEntityId === "string")
+                    message.privateEntityId = parseInt(object.privateEntityId, 10);
+                else if (typeof object.privateEntityId === "number")
+                    message.privateEntityId = object.privateEntityId;
+                else if (typeof object.privateEntityId === "object")
+                    message.privateEntityId = new $util.LongBits(object.privateEntityId.low >>> 0, object.privateEntityId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a C2S_ChatMessage message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {proto.C2S_ChatMessage} message C2S_ChatMessage
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        C2S_ChatMessage.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.text = "";
+                object.channel = options.enums === String ? "CHAT_CHANNEL_LOCAL" : 0;
+            }
+            if (message.text != null && message.hasOwnProperty("text"))
+                object.text = message.text;
+            if (message.channel != null && message.hasOwnProperty("channel"))
+                object.channel = options.enums === String ? $root.proto.ChatChannel[message.channel] === undefined ? message.channel : $root.proto.ChatChannel[message.channel] : message.channel;
+            if (message.privateEntityId != null && message.hasOwnProperty("privateEntityId")) {
+                if (typeof message.privateEntityId === "number")
+                    object.privateEntityId = options.longs === String ? String(message.privateEntityId) : message.privateEntityId;
+                else
+                    object.privateEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.privateEntityId) : options.longs === Number ? new $util.LongBits(message.privateEntityId.low >>> 0, message.privateEntityId.high >>> 0).toNumber(true) : message.privateEntityId;
+                if (options.oneofs)
+                    object.target = "privateEntityId";
+            }
+            return object;
+        };
+
+        /**
+         * Converts this C2S_ChatMessage to JSON.
+         * @function toJSON
+         * @memberof proto.C2S_ChatMessage
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        C2S_ChatMessage.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for C2S_ChatMessage
+         * @function getTypeUrl
+         * @memberof proto.C2S_ChatMessage
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        C2S_ChatMessage.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.C2S_ChatMessage";
+        };
+
+        return C2S_ChatMessage;
+    })();
+
     proto.C2S_Auth = (function() {
 
         /**
@@ -8115,6 +8443,7 @@ export const proto = $root.proto = (() => {
          * @property {proto.IC2S_PlayerAction|null} [playerAction] ClientMessage playerAction
          * @property {proto.IC2S_MovementMode|null} [movementMode] ClientMessage movementMode
          * @property {proto.IC2S_InventoryOp|null} [inventoryOp] ClientMessage inventoryOp
+         * @property {proto.IC2S_ChatMessage|null} [chat] ClientMessage chat
          */
 
         /**
@@ -8180,17 +8509,25 @@ export const proto = $root.proto = (() => {
          */
         ClientMessage.prototype.inventoryOp = null;
 
+        /**
+         * ClientMessage chat.
+         * @member {proto.IC2S_ChatMessage|null|undefined} chat
+         * @memberof proto.ClientMessage
+         * @instance
+         */
+        ClientMessage.prototype.chat = null;
+
         // OneOf field names bound to virtual getters and setters
         let $oneOfFields;
 
         /**
          * ClientMessage payload.
-         * @member {"auth"|"ping"|"playerAction"|"movementMode"|"inventoryOp"|undefined} payload
+         * @member {"auth"|"ping"|"playerAction"|"movementMode"|"inventoryOp"|"chat"|undefined} payload
          * @memberof proto.ClientMessage
          * @instance
          */
         Object.defineProperty(ClientMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["auth", "ping", "playerAction", "movementMode", "inventoryOp"]),
+            get: $util.oneOfGetter($oneOfFields = ["auth", "ping", "playerAction", "movementMode", "inventoryOp", "chat"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -8230,6 +8567,8 @@ export const proto = $root.proto = (() => {
                 $root.proto.C2S_MovementMode.encode(message.movementMode, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
             if (message.inventoryOp != null && Object.hasOwnProperty.call(message, "inventoryOp"))
                 $root.proto.C2S_InventoryOp.encode(message.inventoryOp, writer.uint32(/* id 14, wireType 2 =*/114).fork()).ldelim();
+            if (message.chat != null && Object.hasOwnProperty.call(message, "chat"))
+                $root.proto.C2S_ChatMessage.encode(message.chat, writer.uint32(/* id 15, wireType 2 =*/122).fork()).ldelim();
             return writer;
         };
 
@@ -8288,6 +8627,10 @@ export const proto = $root.proto = (() => {
                     }
                 case 14: {
                         message.inventoryOp = $root.proto.C2S_InventoryOp.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 15: {
+                        message.chat = $root.proto.C2S_ChatMessage.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -8377,6 +8720,16 @@ export const proto = $root.proto = (() => {
                         return "inventoryOp." + error;
                 }
             }
+            if (message.chat != null && message.hasOwnProperty("chat")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.C2S_ChatMessage.verify(message.chat);
+                    if (error)
+                        return "chat." + error;
+                }
+            }
             return null;
         };
 
@@ -8418,6 +8771,11 @@ export const proto = $root.proto = (() => {
                 if (typeof object.inventoryOp !== "object")
                     throw TypeError(".proto.ClientMessage.inventoryOp: object expected");
                 message.inventoryOp = $root.proto.C2S_InventoryOp.fromObject(object.inventoryOp);
+            }
+            if (object.chat != null) {
+                if (typeof object.chat !== "object")
+                    throw TypeError(".proto.ClientMessage.chat: object expected");
+                message.chat = $root.proto.C2S_ChatMessage.fromObject(object.chat);
             }
             return message;
         };
@@ -8463,6 +8821,11 @@ export const proto = $root.proto = (() => {
                 object.inventoryOp = $root.proto.C2S_InventoryOp.toObject(message.inventoryOp, options);
                 if (options.oneofs)
                     object.payload = "inventoryOp";
+            }
+            if (message.chat != null && message.hasOwnProperty("chat")) {
+                object.chat = $root.proto.C2S_ChatMessage.toObject(message.chat, options);
+                if (options.oneofs)
+                    object.payload = "chat";
             }
             return object;
         };
@@ -11996,6 +12359,371 @@ export const proto = $root.proto = (() => {
         return S2C_ContainerClosed;
     })();
 
+    proto.S2C_ChatMessage = (function() {
+
+        /**
+         * Properties of a S2C_ChatMessage.
+         * @memberof proto
+         * @interface IS2C_ChatMessage
+         * @property {proto.ChatChannel|null} [channel] S2C_ChatMessage channel
+         * @property {number|Long|null} [fromEntityId] S2C_ChatMessage fromEntityId
+         * @property {string|null} [fromName] S2C_ChatMessage fromName
+         * @property {string|null} [text] S2C_ChatMessage text
+         * @property {number|Long|null} [toEntityId] S2C_ChatMessage toEntityId
+         */
+
+        /**
+         * Constructs a new S2C_ChatMessage.
+         * @memberof proto
+         * @classdesc Represents a S2C_ChatMessage.
+         * @implements IS2C_ChatMessage
+         * @constructor
+         * @param {proto.IS2C_ChatMessage=} [properties] Properties to set
+         */
+        function S2C_ChatMessage(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * S2C_ChatMessage channel.
+         * @member {proto.ChatChannel} channel
+         * @memberof proto.S2C_ChatMessage
+         * @instance
+         */
+        S2C_ChatMessage.prototype.channel = 0;
+
+        /**
+         * S2C_ChatMessage fromEntityId.
+         * @member {number|Long} fromEntityId
+         * @memberof proto.S2C_ChatMessage
+         * @instance
+         */
+        S2C_ChatMessage.prototype.fromEntityId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * S2C_ChatMessage fromName.
+         * @member {string} fromName
+         * @memberof proto.S2C_ChatMessage
+         * @instance
+         */
+        S2C_ChatMessage.prototype.fromName = "";
+
+        /**
+         * S2C_ChatMessage text.
+         * @member {string} text
+         * @memberof proto.S2C_ChatMessage
+         * @instance
+         */
+        S2C_ChatMessage.prototype.text = "";
+
+        /**
+         * S2C_ChatMessage toEntityId.
+         * @member {number|Long|null|undefined} toEntityId
+         * @memberof proto.S2C_ChatMessage
+         * @instance
+         */
+        S2C_ChatMessage.prototype.toEntityId = null;
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        // Virtual OneOf for proto3 optional field
+        Object.defineProperty(S2C_ChatMessage.prototype, "_toEntityId", {
+            get: $util.oneOfGetter($oneOfFields = ["toEntityId"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+
+        /**
+         * Creates a new S2C_ChatMessage instance using the specified properties.
+         * @function create
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {proto.IS2C_ChatMessage=} [properties] Properties to set
+         * @returns {proto.S2C_ChatMessage} S2C_ChatMessage instance
+         */
+        S2C_ChatMessage.create = function create(properties) {
+            return new S2C_ChatMessage(properties);
+        };
+
+        /**
+         * Encodes the specified S2C_ChatMessage message. Does not implicitly {@link proto.S2C_ChatMessage.verify|verify} messages.
+         * @function encode
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {proto.IS2C_ChatMessage} message S2C_ChatMessage message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ChatMessage.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.channel != null && Object.hasOwnProperty.call(message, "channel"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.channel);
+            if (message.fromEntityId != null && Object.hasOwnProperty.call(message, "fromEntityId"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.fromEntityId);
+            if (message.fromName != null && Object.hasOwnProperty.call(message, "fromName"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.fromName);
+            if (message.text != null && Object.hasOwnProperty.call(message, "text"))
+                writer.uint32(/* id 4, wireType 2 =*/34).string(message.text);
+            if (message.toEntityId != null && Object.hasOwnProperty.call(message, "toEntityId"))
+                writer.uint32(/* id 5, wireType 0 =*/40).uint64(message.toEntityId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified S2C_ChatMessage message, length delimited. Does not implicitly {@link proto.S2C_ChatMessage.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {proto.IS2C_ChatMessage} message S2C_ChatMessage message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        S2C_ChatMessage.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a S2C_ChatMessage message from the specified reader or buffer.
+         * @function decode
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {proto.S2C_ChatMessage} S2C_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ChatMessage.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.proto.S2C_ChatMessage();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.channel = reader.int32();
+                        break;
+                    }
+                case 2: {
+                        message.fromEntityId = reader.uint64();
+                        break;
+                    }
+                case 3: {
+                        message.fromName = reader.string();
+                        break;
+                    }
+                case 4: {
+                        message.text = reader.string();
+                        break;
+                    }
+                case 5: {
+                        message.toEntityId = reader.uint64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a S2C_ChatMessage message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {proto.S2C_ChatMessage} S2C_ChatMessage
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        S2C_ChatMessage.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a S2C_ChatMessage message.
+         * @function verify
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        S2C_ChatMessage.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            let properties = {};
+            if (message.channel != null && message.hasOwnProperty("channel"))
+                switch (message.channel) {
+                default:
+                    return "channel: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    break;
+                }
+            if (message.fromEntityId != null && message.hasOwnProperty("fromEntityId"))
+                if (!$util.isInteger(message.fromEntityId) && !(message.fromEntityId && $util.isInteger(message.fromEntityId.low) && $util.isInteger(message.fromEntityId.high)))
+                    return "fromEntityId: integer|Long expected";
+            if (message.fromName != null && message.hasOwnProperty("fromName"))
+                if (!$util.isString(message.fromName))
+                    return "fromName: string expected";
+            if (message.text != null && message.hasOwnProperty("text"))
+                if (!$util.isString(message.text))
+                    return "text: string expected";
+            if (message.toEntityId != null && message.hasOwnProperty("toEntityId")) {
+                properties._toEntityId = 1;
+                if (!$util.isInteger(message.toEntityId) && !(message.toEntityId && $util.isInteger(message.toEntityId.low) && $util.isInteger(message.toEntityId.high)))
+                    return "toEntityId: integer|Long expected";
+            }
+            return null;
+        };
+
+        /**
+         * Creates a S2C_ChatMessage message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {proto.S2C_ChatMessage} S2C_ChatMessage
+         */
+        S2C_ChatMessage.fromObject = function fromObject(object) {
+            if (object instanceof $root.proto.S2C_ChatMessage)
+                return object;
+            let message = new $root.proto.S2C_ChatMessage();
+            switch (object.channel) {
+            default:
+                if (typeof object.channel === "number") {
+                    message.channel = object.channel;
+                    break;
+                }
+                break;
+            case "CHAT_CHANNEL_LOCAL":
+            case 0:
+                message.channel = 0;
+                break;
+            case "CHAT_CHANNEL_GLOBAL":
+            case 1:
+                message.channel = 1;
+                break;
+            case "CHAT_CHANNEL_PRIVATE":
+            case 2:
+                message.channel = 2;
+                break;
+            case "CHAT_CHANNEL_PARTY":
+            case 3:
+                message.channel = 3;
+                break;
+            }
+            if (object.fromEntityId != null)
+                if ($util.Long)
+                    (message.fromEntityId = $util.Long.fromValue(object.fromEntityId)).unsigned = true;
+                else if (typeof object.fromEntityId === "string")
+                    message.fromEntityId = parseInt(object.fromEntityId, 10);
+                else if (typeof object.fromEntityId === "number")
+                    message.fromEntityId = object.fromEntityId;
+                else if (typeof object.fromEntityId === "object")
+                    message.fromEntityId = new $util.LongBits(object.fromEntityId.low >>> 0, object.fromEntityId.high >>> 0).toNumber(true);
+            if (object.fromName != null)
+                message.fromName = String(object.fromName);
+            if (object.text != null)
+                message.text = String(object.text);
+            if (object.toEntityId != null)
+                if ($util.Long)
+                    (message.toEntityId = $util.Long.fromValue(object.toEntityId)).unsigned = true;
+                else if (typeof object.toEntityId === "string")
+                    message.toEntityId = parseInt(object.toEntityId, 10);
+                else if (typeof object.toEntityId === "number")
+                    message.toEntityId = object.toEntityId;
+                else if (typeof object.toEntityId === "object")
+                    message.toEntityId = new $util.LongBits(object.toEntityId.low >>> 0, object.toEntityId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a S2C_ChatMessage message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {proto.S2C_ChatMessage} message S2C_ChatMessage
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        S2C_ChatMessage.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.channel = options.enums === String ? "CHAT_CHANNEL_LOCAL" : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.fromEntityId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.fromEntityId = options.longs === String ? "0" : 0;
+                object.fromName = "";
+                object.text = "";
+            }
+            if (message.channel != null && message.hasOwnProperty("channel"))
+                object.channel = options.enums === String ? $root.proto.ChatChannel[message.channel] === undefined ? message.channel : $root.proto.ChatChannel[message.channel] : message.channel;
+            if (message.fromEntityId != null && message.hasOwnProperty("fromEntityId"))
+                if (typeof message.fromEntityId === "number")
+                    object.fromEntityId = options.longs === String ? String(message.fromEntityId) : message.fromEntityId;
+                else
+                    object.fromEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.fromEntityId) : options.longs === Number ? new $util.LongBits(message.fromEntityId.low >>> 0, message.fromEntityId.high >>> 0).toNumber(true) : message.fromEntityId;
+            if (message.fromName != null && message.hasOwnProperty("fromName"))
+                object.fromName = message.fromName;
+            if (message.text != null && message.hasOwnProperty("text"))
+                object.text = message.text;
+            if (message.toEntityId != null && message.hasOwnProperty("toEntityId")) {
+                if (typeof message.toEntityId === "number")
+                    object.toEntityId = options.longs === String ? String(message.toEntityId) : message.toEntityId;
+                else
+                    object.toEntityId = options.longs === String ? $util.Long.prototype.toString.call(message.toEntityId) : options.longs === Number ? new $util.LongBits(message.toEntityId.low >>> 0, message.toEntityId.high >>> 0).toNumber(true) : message.toEntityId;
+                if (options.oneofs)
+                    object._toEntityId = "toEntityId";
+            }
+            return object;
+        };
+
+        /**
+         * Converts this S2C_ChatMessage to JSON.
+         * @function toJSON
+         * @memberof proto.S2C_ChatMessage
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        S2C_ChatMessage.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for S2C_ChatMessage
+         * @function getTypeUrl
+         * @memberof proto.S2C_ChatMessage
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        S2C_ChatMessage.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/proto.S2C_ChatMessage";
+        };
+
+        return S2C_ChatMessage;
+    })();
+
     proto.S2C_Error = (function() {
 
         /**
@@ -12582,6 +13310,7 @@ export const proto = $root.proto = (() => {
          * @property {proto.IS2C_InventoryUpdate|null} [inventoryUpdate] ServerMessage inventoryUpdate
          * @property {proto.IS2C_ContainerOpened|null} [containerOpened] ServerMessage containerOpened
          * @property {proto.IS2C_ContainerClosed|null} [containerClosed] ServerMessage containerClosed
+         * @property {proto.IS2C_ChatMessage|null} [chat] ServerMessage chat
          * @property {proto.IS2C_Error|null} [error] ServerMessage error
          * @property {proto.IS2C_Warning|null} [warning] ServerMessage warning
          */
@@ -12714,6 +13443,14 @@ export const proto = $root.proto = (() => {
         ServerMessage.prototype.containerClosed = null;
 
         /**
+         * ServerMessage chat.
+         * @member {proto.IS2C_ChatMessage|null|undefined} chat
+         * @memberof proto.ServerMessage
+         * @instance
+         */
+        ServerMessage.prototype.chat = null;
+
+        /**
          * ServerMessage error.
          * @member {proto.IS2C_Error|null|undefined} error
          * @memberof proto.ServerMessage
@@ -12734,12 +13471,12 @@ export const proto = $root.proto = (() => {
 
         /**
          * ServerMessage payload.
-         * @member {"authResult"|"pong"|"chunkLoad"|"chunkUnload"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"inventoryOpResult"|"inventoryUpdate"|"containerOpened"|"containerClosed"|"error"|"warning"|undefined} payload
+         * @member {"authResult"|"pong"|"chunkLoad"|"chunkUnload"|"playerEnterWorld"|"playerLeaveWorld"|"objectSpawn"|"objectDespawn"|"objectMove"|"inventoryOpResult"|"inventoryUpdate"|"containerOpened"|"containerClosed"|"chat"|"error"|"warning"|undefined} payload
          * @memberof proto.ServerMessage
          * @instance
          */
         Object.defineProperty(ServerMessage.prototype, "payload", {
-            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "chunkLoad", "chunkUnload", "playerEnterWorld", "playerLeaveWorld", "objectSpawn", "objectDespawn", "objectMove", "inventoryOpResult", "inventoryUpdate", "containerOpened", "containerClosed", "error", "warning"]),
+            get: $util.oneOfGetter($oneOfFields = ["authResult", "pong", "chunkLoad", "chunkUnload", "playerEnterWorld", "playerLeaveWorld", "objectSpawn", "objectDespawn", "objectMove", "inventoryOpResult", "inventoryUpdate", "containerOpened", "containerClosed", "chat", "error", "warning"]),
             set: $util.oneOfSetter($oneOfFields)
         });
 
@@ -12795,6 +13532,8 @@ export const proto = $root.proto = (() => {
                 $root.proto.S2C_ContainerOpened.encode(message.containerOpened, writer.uint32(/* id 21, wireType 2 =*/170).fork()).ldelim();
             if (message.containerClosed != null && Object.hasOwnProperty.call(message, "containerClosed"))
                 $root.proto.S2C_ContainerClosed.encode(message.containerClosed, writer.uint32(/* id 22, wireType 2 =*/178).fork()).ldelim();
+            if (message.chat != null && Object.hasOwnProperty.call(message, "chat"))
+                $root.proto.S2C_ChatMessage.encode(message.chat, writer.uint32(/* id 23, wireType 2 =*/186).fork()).ldelim();
             if (message.error != null && Object.hasOwnProperty.call(message, "error"))
                 $root.proto.S2C_Error.encode(message.error, writer.uint32(/* id 42, wireType 2 =*/338).fork()).ldelim();
             if (message.warning != null && Object.hasOwnProperty.call(message, "warning"))
@@ -12889,6 +13628,10 @@ export const proto = $root.proto = (() => {
                     }
                 case 22: {
                         message.containerClosed = $root.proto.S2C_ContainerClosed.decode(reader, reader.uint32());
+                        break;
+                    }
+                case 23: {
+                        message.chat = $root.proto.S2C_ChatMessage.decode(reader, reader.uint32());
                         break;
                     }
                 case 42: {
@@ -13066,6 +13809,16 @@ export const proto = $root.proto = (() => {
                         return "containerClosed." + error;
                 }
             }
+            if (message.chat != null && message.hasOwnProperty("chat")) {
+                if (properties.payload === 1)
+                    return "payload: multiple values";
+                properties.payload = 1;
+                {
+                    let error = $root.proto.S2C_ChatMessage.verify(message.chat);
+                    if (error)
+                        return "chat." + error;
+                }
+            }
             if (message.error != null && message.hasOwnProperty("error")) {
                 if (properties.payload === 1)
                     return "payload: multiple values";
@@ -13168,6 +13921,11 @@ export const proto = $root.proto = (() => {
                     throw TypeError(".proto.ServerMessage.containerClosed: object expected");
                 message.containerClosed = $root.proto.S2C_ContainerClosed.fromObject(object.containerClosed);
             }
+            if (object.chat != null) {
+                if (typeof object.chat !== "object")
+                    throw TypeError(".proto.ServerMessage.chat: object expected");
+                message.chat = $root.proto.S2C_ChatMessage.fromObject(object.chat);
+            }
             if (object.error != null) {
                 if (typeof object.error !== "object")
                     throw TypeError(".proto.ServerMessage.error: object expected");
@@ -13262,6 +14020,11 @@ export const proto = $root.proto = (() => {
                 object.containerClosed = $root.proto.S2C_ContainerClosed.toObject(message.containerClosed, options);
                 if (options.oneofs)
                     object.payload = "containerClosed";
+            }
+            if (message.chat != null && message.hasOwnProperty("chat")) {
+                object.chat = $root.proto.S2C_ChatMessage.toObject(message.chat, options);
+                if (options.oneofs)
+                    object.payload = "chat";
             }
             if (message.error != null && message.hasOwnProperty("error")) {
                 object.error = $root.proto.S2C_Error.toObject(message.error, options);
