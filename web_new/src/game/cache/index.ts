@@ -1,4 +1,4 @@
-export * from './constants'
+export * from '@/constants/cache'
 export * from './types'
 export { ChunkCache, chunkCache } from './ChunkCache'
 export { BuildQueue, buildQueue } from './BuildQueue'

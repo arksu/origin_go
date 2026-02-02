@@ -1,5 +1,5 @@
 import type { TerrainBuildTask } from './TerrainSubchunkTypes'
-import { TERRAIN_BUILD_BUDGET_MS, MAX_TERRAIN_SUBCHUNKS_PER_FRAME } from './constants'
+import { TERRAIN_BUILD_BUDGET_MS, MAX_TERRAIN_SUBCHUNKS_PER_FRAME } from '@/constants/terrain'
 
 /**
  * Priority queue for terrain subchunk build tasks with frame budget.

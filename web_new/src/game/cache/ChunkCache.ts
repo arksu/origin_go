@@ -1,5 +1,5 @@
 import type { CachedChunk, CacheMetrics, SubchunkGpuResources } from './types'
-import { CACHE_MAX_ENTRIES, CACHE_TTL_MS, CACHE_SWEEP_INTERVAL_MS } from './constants'
+import { CACHE_MAX_ENTRIES, CACHE_TTL_MS, CACHE_SWEEP_INTERVAL_MS } from '@/constants/cache'
 
 /**
  * LRU cache for chunk data with TTL support.

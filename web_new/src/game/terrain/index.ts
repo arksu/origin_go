@@ -1,5 +1,5 @@
 export * from './types'
-export * from './constants'
+export * from '@/constants/terrain'
 export * from './TerrainSubchunkTypes'
 export * from './TerrainGenerator'
 export * from './TerrainRegistry'

@@ -14,7 +14,7 @@ import {
   TERRAIN_VISIBLE_HEIGHT_SUBCHUNKS,
   TERRAIN_HIDE_WIDTH_SUBCHUNKS,
   TERRAIN_HIDE_HEIGHT_SUBCHUNKS,
-} from './constants'
+} from '@/constants/terrain'
 
 interface ChunkData {
   chunkX: number

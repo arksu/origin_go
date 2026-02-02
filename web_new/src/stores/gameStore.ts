@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ConnectionState, ConnectionError } from '@/network/types'
 import { proto } from '@/network/proto/packets.js'
+import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERVAL_MS, CHAT_MAX_MESSAGES } from '@/constants/chat'
+import type { ConnectionState, ConnectionError } from '@/network/types'
 
 export interface Position {
   x: number
@@ -46,12 +47,6 @@ export interface ChatMessage {
   timestamp: number
   channel: proto.ChatChannel
 }
-
-// Constants
-const CHAT_MESSAGE_LIFETIME_MS = 5000  // 5 seconds full visibility
-const CHAT_FADEOUT_DURATION_MS = 2000  // 2 seconds fade out
-const CHAT_CLEANUP_INTERVAL_MS = 500   // Check every 50ms
-const CHAT_MAX_MESSAGES = 50           // Prevent memory leaks
 
 export const useGameStore = defineStore('game', () => {
   // Session

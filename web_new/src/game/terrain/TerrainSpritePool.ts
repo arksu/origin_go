@@ -3,7 +3,7 @@ import {
   MAX_TERRAIN_SPRITES_IN_POOL,
   TERRAIN_POOL_SHRINK_THRESHOLD,
   TERRAIN_POOL_SHRINK_TARGET,
-} from './constants'
+} from '@/constants/terrain'
 
 /**
  * Object pool for terrain sprites to avoid GC pressure from new Sprite() / destroy()

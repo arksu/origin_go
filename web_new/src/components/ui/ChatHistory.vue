@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { computed, watch, nextTick, ref, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '@/stores/gameStore'
+import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS } from '@/constants/chat'
 
 const gameStore = useGameStore()
 const chatHistoryRef = ref<HTMLElement>()
-
-// Constants
-const CHAT_MESSAGE_LIFETIME_MS = 5000 // 5 seconds full visibility
-const CHAT_FADEOUT_DURATION_MS = 1000  // 1 second fade out
 
 // Reactive time for smooth animations
 const currentTime = ref(Date.now())
