@@ -9,6 +9,7 @@ import { playerCommandController } from './PlayerCommandController'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
 import { config } from '@/config'
+import { MAX_FPS } from '@/constants/render'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
@@ -55,6 +56,9 @@ export class Render {
       background: '#1a1a2e',
       antialias: true,
     })
+
+    // Limit maximum FPS to reduce system load
+    this.app.ticker.maxFPS = MAX_FPS
 
     this.mapContainer.sortableChildren = true
     this.objectsContainer.sortableChildren = true
