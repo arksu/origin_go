@@ -2,7 +2,7 @@ import { Container, Sprite, Graphics, Text, Rectangle } from 'pixi.js'
 import { ResourceLoader } from './ResourceLoader'
 import { coordGame2Screen } from './utils/coordConvert'
 import { type AABB, fromMinMax } from './culling/AABB'
-import { OBJECT_BOUNDS_COLOR, OBJECT_BOUNDS_WIDTH } from '@/constants/render'
+import { OBJECT_BOUNDS_COLOR, OBJECT_BOUNDS_WIDTH, OBJECT_BOUNDS_ALPHA } from '@/constants/render'
 
 export interface ObjectViewOptions {
   entityId: number
@@ -301,28 +301,52 @@ export class ObjectView {
 
   /**
    * Update bounds graphics to match current object size and position.
+   * Draws bounds in isometric projection using game coordinates.
    */
   private updateBoundsGraphics(): void {
     if (!this.boundsGraphics) return
 
     this.boundsGraphics.clear()
 
-    // Draw rectangle around object bounds
+    // Skip if size is zero
+    if (this.size.x === 0 || this.size.y === 0) {
+      return
+    }
+
+    // Calculate bounds in game coordinates
     const halfWidthX = this.size.x / 2
     const halfHeightY = this.size.y / 2
 
+    // Four corners of the bounding box in game coordinates
+    const corners = [
+      { x: this.position.x - halfWidthX, y: this.position.y - halfHeightY }, // Top-left
+      { x: this.position.x + halfWidthX, y: this.position.y - halfHeightY }, // Top-right
+      { x: this.position.x + halfWidthX, y: this.position.y + halfHeightY }, // Bottom-right
+      { x: this.position.x - halfWidthX, y: this.position.y + halfHeightY }, // Bottom-left
+    ]
+
+    // Transform corners to screen coordinates
+    const screenCorners = corners.map(corner => coordGame2Screen(corner.x, corner.y))
+
+    // Transform to local coordinates relative to container position
+    const containerScreenPos = coordGame2Screen(this.position.x, this.position.y)
+    const localCorners = screenCorners.map(screen => ({
+      x: screen.x - containerScreenPos.x,
+      y: screen.y - containerScreenPos.y
+    }))
+
+    // Draw isometric rectangle
     this.boundsGraphics.setStrokeStyle({
       width: OBJECT_BOUNDS_WIDTH,
       color: OBJECT_BOUNDS_COLOR,
-      alpha: 1.0
+      alpha: OBJECT_BOUNDS_ALPHA
     })
 
-    this.boundsGraphics.rect(
-      -halfWidthX,
-      -halfHeightY,
-      this.size.x,
-      this.size.y
-    )
+    this.boundsGraphics.moveTo(localCorners[0]?.x || 0, localCorners[0]?.y || 0)
+    this.boundsGraphics.lineTo(localCorners[1]?.x || 0, localCorners[1]?.y || 0)
+    this.boundsGraphics.lineTo(localCorners[2]?.x || 0, localCorners[2]?.y || 0)
+    this.boundsGraphics.lineTo(localCorners[3]?.x || 0, localCorners[3]?.y || 0)
+    this.boundsGraphics.lineTo(localCorners[0]?.x || 0, localCorners[0]?.y || 0)
     this.boundsGraphics.stroke()
   }
 

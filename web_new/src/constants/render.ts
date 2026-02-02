@@ -5,3 +5,4 @@ export const FRAME_TIME_MS = 1000 / MAX_FPS  // Minimum frame time in millisecon
 // Object bounds visualization constants
 export const OBJECT_BOUNDS_COLOR = 0xff8800  // Orange color for object bounds
 export const OBJECT_BOUNDS_WIDTH = 2         // Line width for object bounds in pixels
+export const OBJECT_BOUNDS_ALPHA = 0.5       // Transparency for object bounds (0.0-1.0)

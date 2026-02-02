@@ -10,6 +10,7 @@ export class ObjectManager {
   private container: Container
   private objects: Map<number, ObjectView> = new Map()
   private needsSort = false
+  private boundsVisible: boolean = false
 
   constructor() {
     this.container = new Container()
@@ -40,6 +41,11 @@ export class ObjectManager {
       objectView.getContainer(),
       objectView.computeScreenBounds(),
     )
+
+    // Set bounds visibility if currently enabled
+    if (this.areBoundsVisible()) {
+      objectView.setBoundsVisible(true)
+    }
 
     this.needsSort = true
 
@@ -160,6 +166,7 @@ export class ObjectManager {
    * Used when debug mode is toggled.
    */
   setBoundsVisible(visible: boolean): void {
+    this.boundsVisible = visible
     for (const objectView of this.objects.values()) {
       objectView.setBoundsVisible(visible)
     }
@@ -169,13 +176,7 @@ export class ObjectManager {
    * Get bounds visibility state.
    */
   areBoundsVisible(): boolean {
-    // Return true if any object has bounds visible
-    for (const objectView of this.objects.values()) {
-      if (objectView.isBoundsVisible()) {
-        return true
-      }
-    }
-    return false
+    return this.boundsVisible
   }
 
   /**
