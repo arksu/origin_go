@@ -150,6 +150,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	// Normal spawn flow
 	candidates := g.generateSpawnCandidates(character.X, character.Y)
 	spawned := false
+	var playerHandle *types.Handle
 
 	for _, pos := range candidates {
 		select {
@@ -218,6 +219,27 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Known:          make(map[types.Handle]types.EntityID, 32),
 				NextUpdateTime: time.Time{}, // Zero time for immediate update
 			}
+
+			// Load player inventories from database
+			loadResult, err := g.inventoryLoader.LoadPlayerInventories(ctx, g.db.Queries(), w, h, character.ID)
+			if err != nil {
+				g.logger.Error("Failed to load player inventories",
+					zap.Int64("character_id", character.ID),
+					zap.Error(err),
+				)
+			} else {
+				if len(loadResult.Warnings) > 0 {
+					g.logger.Warn("Inventory load warnings",
+						zap.Int64("character_id", character.ID),
+						zap.Strings("warnings", loadResult.Warnings),
+					)
+				}
+				g.logger.Debug("Player inventories loaded",
+					zap.Int64("character_id", character.ID),
+					zap.Int("containers", len(loadResult.ContainerHandles)),
+					zap.Bool("lost_and_found_used", loadResult.LostAndFoundUsed),
+				)
+			}
 		})
 		if ok {
 			// Register character entity for periodic saving
@@ -229,6 +251,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			character.Y = pos.Y
 
 			spawned = true
+			playerHandle = &handle
 			break
 		}
 		shard.mu.Lock()
@@ -268,6 +291,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	c.InWorld.Store(true)
 	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
+
+	// Send inventory snapshots to client
+	g.sendInventorySnapshots(c, *playerHandle, shard.world)
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -357,6 +383,11 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	}
 
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
+
+	// Send inventory snapshots to client
+	if handle != types.InvalidHandle {
+		g.sendInventorySnapshots(c, handle, shard.world)
+	}
 
 	g.logger.Info("Player reattached to existing entity",
 		zap.Uint64("client_id", c.ID),

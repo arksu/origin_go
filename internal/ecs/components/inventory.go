@@ -2,6 +2,7 @@ package components
 
 import (
 	constt "origin/internal/const"
+	"origin/internal/ecs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
@@ -65,4 +66,15 @@ type InvItem struct {
 	X         uint8
 	Y         uint8
 	EquipSlot netproto.EquipSlot
+}
+
+// Component IDs for inventory system
+const (
+	InventoryOwnerComponentID     = 19
+	InventoryContainerComponentID = 20
+)
+
+func init() {
+	ecs.RegisterComponent[InventoryOwner](InventoryOwnerComponentID)
+	ecs.RegisterComponent[InventoryContainer](InventoryContainerComponentID)
 }

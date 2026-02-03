@@ -99,7 +99,7 @@ export class Chunk {
 
   buildTiles(tiles: Uint8Array, spritesheet: Spritesheet, neighborTiles?: Map<string, Uint8Array>): ChunkBuildResult {
     const start = performance.now()
-    console.log(`[Chunk ${this.key}] buildTiles called, tiles.length=${tiles.length}`)
+    // console.log(`[Chunk ${this.key}] buildTiles called, tiles.length=${tiles.length}`)
     this.destroySubchunks()
     this.tiles = tiles
 
@@ -128,13 +128,13 @@ export class Chunk {
     }
 
     const totalTime = performance.now() - start
-    const avgSubchunk = subchunkTimes.reduce((a, b) => a + b, 0) / subchunkTimes.length
+    // const avgSubchunk = subchunkTimes.reduce((a, b) => a + b, 0) / subchunkTimes.length
     const maxSubchunk = Math.max(...subchunkTimes)
 
     if (totalTime > 10 || maxSubchunk > 5) {
-      console.warn(`[Chunk ${this.key}] SLOW: total=${totalTime.toFixed(2)}ms, avg subchunk=${avgSubchunk.toFixed(2)}ms, max subchunk=${maxSubchunk.toFixed(2)}ms`)
+      //console.warn(`[Chunk ${this.key}] SLOW: total=${totalTime.toFixed(2)}ms, avg subchunk=${avgSubchunk.toFixed(2)}ms, max subchunk=${maxSubchunk.toFixed(2)}ms`)
     } else {
-      console.log(`[Chunk ${this.key}] Built ${subchunksCreated} subchunks in ${totalTime.toFixed(2)}ms`)
+      // console.log(`[Chunk ${this.key}] Built ${subchunksCreated} subchunks in ${totalTime.toFixed(2)}ms`)
     }
 
     this.lastBuildResult = { hasBordersOrCorners }
@@ -154,7 +154,7 @@ export class Chunk {
     neighborTiles: Map<string, Uint8Array> | undefined,
     hasBordersOrCorners: boolean[][],
   ): SubchunkData | null {
-    const start = performance.now()
+    // const start = performance.now()
     const chunkSize = getChunkSize()
     const subchunkContainer = new Container()
     subchunkContainer.sortableChildren = true
@@ -233,12 +233,12 @@ export class Chunk {
     }
 
     if (cx === 0 && cy === 0) {
-      const totalTime = performance.now() - start
-      console.log(`[Chunk ${this.key}] Subchunk(0,0) tiles=${tilesProcessed}, found=${texturesFound}, missing=${texturesMissing}, time=${totalTime.toFixed(2)}ms, borders=${borderTime.toFixed(2)}ms`)
+      // const totalTime = performance.now() - start
+      // console.log(`[Chunk ${this.key}] Subchunk(0,0) tiles=${tilesProcessed}, found=${texturesFound}, missing=${texturesMissing}, time=${totalTime.toFixed(2)}ms, borders=${borderTime.toFixed(2)}ms`)
     }
 
     if (vertexBuffer.count === 0) {
-      console.log(`[Chunk ${this.key}] Subchunk(${cx},${cy}) has 0 vertices, skipping`)
+      // console.log(`[Chunk ${this.key}] Subchunk(${cx},${cy}) has 0 vertices, skipping`)
       return null
     }
 

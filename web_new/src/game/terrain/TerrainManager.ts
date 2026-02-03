@@ -93,7 +93,7 @@ export class TerrainManager {
     }
 
     const chunkKey = `${chunkX},${chunkY}`
-    console.log(`[TerrainManager] Enqueuing terrain for chunk ${chunkKey}, camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
+    // console.log(`[TerrainManager] Enqueuing terrain for chunk ${chunkKey}, camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
     const epoch = ++this.globalEpoch
     this.chunkEpochs.set(chunkKey, epoch)
 

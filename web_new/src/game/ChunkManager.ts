@@ -118,10 +118,10 @@ export class ChunkManager {
    * Load a chunk from server. Uses cache if available and version matches.
    */
   loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
-    console.log(`[ChunkManager] loadChunk(${x}, ${y}) tiles.length=${tiles.length}, version=${version}`)
+    // console.log(`[ChunkManager] loadChunk(${x}, ${y}) tiles.length=${tiles.length}, version=${version}`)
 
     if (!this.spritesheet) {
-      console.log(`[ChunkManager] Spritesheet not ready, buffering chunk (${x}, ${y})`)
+      // console.log(`[ChunkManager] Spritesheet not ready, buffering chunk (${x}, ${y})`)
       this.pendingChunks.push({ x, y, tiles, version })
       return
     }
@@ -279,7 +279,7 @@ export class ChunkManager {
 
     // Generate terrain
     const terrainStart = performance.now()
-    console.log(`[ChunkManager] Building terrain for chunk (${task.x},${task.y})`)
+    // console.log(`[ChunkManager] Building terrain for chunk (${task.x},${task.y})`)
     terrainManager.generateTerrainForChunk(task.x, task.y, task.tiles, buildResult.hasBordersOrCorners)
     const terrainTime = performance.now() - terrainStart
 
@@ -293,9 +293,9 @@ export class ChunkManager {
     const totalTime = performance.now() - taskStart
 
     if (totalTime > 16 || buildTime > 8 || terrainTime > 8) {
-      console.warn(`[ChunkManager] SLOW BUILD chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
+      //console.warn(`[ChunkManager] SLOW BUILD chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
     } else {
-      console.log(`[ChunkManager] Built chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
+      //console.log(`[ChunkManager] Built chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
     }
 
     // Notify neighbors (deferred border refresh instead of immediate rebuild)
@@ -462,7 +462,7 @@ export class ChunkManager {
     const dx = x - cameraChunkX
     const dy = y - cameraChunkY
     const distance = Math.sqrt(dx * dx + dy * dy)
-    console.log(`[ChunkManager] Distance from chunk (${x},${y}) to camera (${cameraChunkX},${cameraChunkY}): ${distance.toFixed(2)}`)
+    //console.log(`[ChunkManager] Distance from chunk (${x},${y}) to camera (${cameraChunkX},${cameraChunkY}): ${distance.toFixed(2)}`)
     return distance
   }
 
