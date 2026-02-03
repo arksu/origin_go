@@ -33,7 +33,7 @@ export class MessageDispatcher {
 
     if (!type) {
       this.unknownMessageCount++
-      console.warn('[MessageDispatcher] Unknown message type:', message)
+      console.error('[MessageDispatcher] Unknown message type:', message)
       return
     }
 
@@ -55,7 +55,7 @@ export class MessageDispatcher {
       }
     } else {
       if (config.DEBUG) {
-        console.debug(`[MessageDispatcher] No handler for: ${type}`)
+        console.error(`[MessageDispatcher] No handler for: ${type}`, payload)
       }
     }
   }

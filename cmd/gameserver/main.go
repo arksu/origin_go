@@ -54,7 +54,9 @@ func main() {
 	objectFactory.RegisterBuilder(&game.TreeBuilder{})
 	objectFactory.RegisterBuilder(&game.PlayerBuilder{})
 
-	g := game.NewGame(cfg, db, objectFactory, logger)
+	inventoryLoader := game.NewInventoryLoader(itemRegistry, logger)
+
+	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, logger)
 
 	mux := http.NewServeMux()
 

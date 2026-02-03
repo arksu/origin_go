@@ -71,7 +71,7 @@ ALTER TABLE character
 
 -- INVENTORY -----------------------------------------------------------
 
-CREATE TABLE inventory
+CREATE TABLE IF NOT EXISTS inventory
 (
     id            BIGSERIAL PRIMARY KEY,
     owner_id      BIGINT   NOT NULL, -- character_id

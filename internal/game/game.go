@@ -69,6 +69,7 @@ type Game struct {
 	shardManager    *ShardManager
 	entityIDManager *EntityIDManager
 	networkServer   *network.Server
+	inventoryLoader *InventoryLoader
 
 	tickRate    int
 	tickPeriod  time.Duration
@@ -81,21 +82,22 @@ type Game struct {
 	wg     sync.WaitGroup
 }
 
-func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *ObjectFactory, logger *zap.Logger) *Game {
+func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *ObjectFactory, inventoryLoader *InventoryLoader, logger *zap.Logger) *Game {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	g := &Game{
-		cfg:           cfg,
-		db:            db,
-		objectFactory: objectFactory,
-		logger:        logger,
-		tickRate:      cfg.Game.TickRate,
-		tickPeriod:    time.Second / time.Duration(cfg.Game.TickRate),
-		ctx:           ctx,
-		cancel:        cancel,
+		cfg:             cfg,
+		db:              db,
+		objectFactory:   objectFactory,
+		inventoryLoader: inventoryLoader,
+		logger:          logger,
+		tickRate:        cfg.Game.TickRate,
+		tickPeriod:      time.Second / time.Duration(cfg.Game.TickRate),
+		ctx:             ctx,
+		cancel:          cancel,
 		tickStats: tickStats{
 			lastLog:     time.Now(),
-			minDuration: time.Hour, // Initialize with large value
+			minDuration: time.Hour,
 		},
 	}
 	g.state.Store(int32(GameStateStarting))
