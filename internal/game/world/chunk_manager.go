@@ -1,4 +1,8 @@
-package game
+package world
+
+import (
+	"errors"
+)
 
 import (
 	"context"
@@ -87,11 +91,15 @@ func (ci *ChunkInterest) hasPreload() bool {
 	return len(ci.preloadEntities) > 0
 }
 
+var (
+	ErrChunkNotLoaded = errors.New("chunk not loaded")
+)
+
 type ChunkManager struct {
 	cfg           *config.Config
 	db            *persistence.Postgres
 	world         *ecs.World
-	shard         *Shard
+	shard         interface{}
 	layer         int
 	region        int
 	objectFactory *ObjectFactory
@@ -137,7 +145,7 @@ func NewChunkManager(
 	cfg *config.Config,
 	db *persistence.Postgres,
 	world *ecs.World,
-	shard *Shard,
+	shard interface{},
 	layer int,
 	region int,
 	objectFactory *ObjectFactory,
@@ -203,12 +211,7 @@ func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY i
 
 // GetEntityEpoch returns the current stream epoch for an entity
 func (cm *ChunkManager) GetEntityEpoch(entityID types.EntityID) uint32 {
-	cm.shard.clientsMu.RLock()
-	defer cm.shard.clientsMu.RUnlock()
-
-	if client, exists := cm.shard.clients[entityID]; exists {
-		return client.StreamEpoch.Load()
-	}
+	// TODO: Implement proper epoch retrieval without direct shard access
 	return 0
 }
 

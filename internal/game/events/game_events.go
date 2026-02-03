@@ -1,4 +1,4 @@
-package game
+package events
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/game"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -14,11 +15,11 @@ import (
 )
 
 type NetworkVisibilityDispatcher struct {
-	shardManager *ShardManager
+	shardManager *game.ShardManager
 	logger       *zap.Logger
 }
 
-func NewNetworkVisibilityDispatcher(shardManager *ShardManager, logger *zap.Logger) *NetworkVisibilityDispatcher {
+func NewNetworkVisibilityDispatcher(shardManager *game.ShardManager, logger *zap.Logger) *NetworkVisibilityDispatcher {
 	return &NetworkVisibilityDispatcher{
 		shardManager: shardManager,
 		logger:       logger,
@@ -45,8 +46,8 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 		return nil
 	}
 
-	shard.clientsMu.RLock()
-	defer shard.clientsMu.RUnlock()
+	shard.ClientsMu.RLock()
+	defer shard.ClientsMu.RUnlock()
 
 	visibilityState := shard.World().VisibilityState()
 	if visibilityState == nil {
@@ -99,7 +100,7 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 		}
 
 		// Check if this observer is a connected client
-		if client, exists := shard.clients[observerEntityID]; exists {
+		if client, exists := shard.Clients[observerEntityID]; exists {
 			// Create message with client-specific StreamEpoch
 			msg := &netproto.ServerMessage{
 				Payload: &netproto.ServerMessage_ObjectMove{
@@ -144,19 +145,19 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 		return nil
 	}
 
-	shard.clientsMu.RLock()
+	shard.ClientsMu.RLock()
 	// Find the client that is the observer
-	if client, exists := shard.clients[event.ObserverID]; exists {
+	if client, exists := shard.Clients[event.ObserverID]; exists {
 		// Get the target entity's components
 		transform, hasTransform := ecs.GetComponent[components.Transform](shard.World(), event.TargetHandle)
 		if !hasTransform {
-			shard.clientsMu.RUnlock()
+			shard.ClientsMu.RUnlock()
 			return nil
 		}
 
 		entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.World(), event.TargetHandle)
 		if !hasEntityInfo {
-			shard.clientsMu.RUnlock()
+			shard.ClientsMu.RUnlock()
 			return nil
 		}
 
@@ -197,13 +198,13 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 				zap.Int64("observer_id", int64(event.ObserverID)),
 				zap.Int64("target_id", int64(event.TargetID)),
 			)
-			shard.clientsMu.RUnlock()
+			shard.ClientsMu.RUnlock()
 			return nil
 		}
 
 		client.Send(data)
 	}
-	shard.clientsMu.RUnlock()
+	shard.ClientsMu.RUnlock()
 
 	return nil
 }
@@ -220,9 +221,9 @@ func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e
 		return nil
 	}
 
-	shard.clientsMu.RLock()
+	shard.ClientsMu.RLock()
 	// Find the client that is the observer
-	if client, exists := shard.clients[event.ObserverID]; exists {
+	if client, exists := shard.Clients[event.ObserverID]; exists {
 		msg := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_ObjectDespawn{
 				ObjectDespawn: &netproto.S2C_ObjectDespawn{
@@ -238,13 +239,13 @@ func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e
 				zap.Int64("observer_id", int64(event.ObserverID)),
 				zap.Int64("target_id", int64(event.TargetID)),
 			)
-			shard.clientsMu.RUnlock()
+			shard.ClientsMu.RUnlock()
 			return nil
 		}
 
 		client.Send(data)
 	}
-	shard.clientsMu.RUnlock()
+	shard.ClientsMu.RUnlock()
 
 	return nil
 }
@@ -260,16 +261,16 @@ func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e e
 		return nil
 	}
 
-	shard.clientsMu.RLock()
-	client, exists := shard.clients[event.EntityID]
+	shard.ClientsMu.RLock()
+	client, exists := shard.Clients[event.EntityID]
 	if !exists {
-		shard.clientsMu.RUnlock()
+		shard.ClientsMu.RUnlock()
 		return nil
 	}
 
 	// Check if client is in world and epoch matches
 	if !client.InWorld.Load() || event.Epoch != client.StreamEpoch.Load() {
-		shard.clientsMu.RUnlock()
+		shard.ClientsMu.RUnlock()
 		return nil
 	}
 
@@ -292,12 +293,12 @@ func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e e
 			zap.Int("x", event.X),
 			zap.Int("y", event.Y),
 		)
-		shard.clientsMu.RUnlock()
+		shard.ClientsMu.RUnlock()
 		return nil
 	}
 
 	client.Send(data)
-	shard.clientsMu.RUnlock()
+	shard.ClientsMu.RUnlock()
 
 	return nil
 }
@@ -313,10 +314,10 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 		return nil
 	}
 
-	shard.clientsMu.RLock()
-	client, exists := shard.clients[event.EntityID]
+	shard.ClientsMu.RLock()
+	client, exists := shard.Clients[event.EntityID]
 	if !exists {
-		shard.clientsMu.RUnlock()
+		shard.ClientsMu.RUnlock()
 		return nil
 	}
 	//d.logger.Debug("handleChunkLoad",
@@ -328,10 +329,10 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 
 	// Check if client is in world and epoch matches
 	if !client.InWorld.Load() || event.Epoch != client.StreamEpoch.Load() || client.StreamEpoch.Load() == 0 {
-		shard.clientsMu.RUnlock()
+		shard.ClientsMu.RUnlock()
 		return nil
 	}
-	shard.clientsMu.RUnlock()
+	shard.ClientsMu.RUnlock()
 
 	// Use tiles from the event instead of fetching chunk data again
 	msg := &netproto.ServerMessage{
@@ -361,11 +362,11 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 		return nil
 	}
 
-	shard.clientsMu.RLock()
-	if client, exists := shard.clients[event.EntityID]; exists {
+	shard.ClientsMu.RLock()
+	if client, exists := shard.Clients[event.EntityID]; exists {
 		client.Send(data)
 	}
-	shard.clientsMu.RUnlock()
+	shard.ClientsMu.RUnlock()
 
 	return nil
 }

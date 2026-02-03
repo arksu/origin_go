@@ -13,6 +13,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
+	"origin/internal/game/inventory"
 	"origin/internal/types"
 	"time"
 
@@ -268,17 +269,17 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	}
 
 	// Add client to shard's client map
-	shard.clientsMu.Lock()
-	shard.clients[playerEntityID] = c
-	shard.clientsMu.Unlock()
+	shard.ClientsMu.Lock()
+	shard.Clients[playerEntityID] = c
+	shard.ClientsMu.Unlock()
 
 	// Final check: ensure spawn context hasn't timed out before sending packets
 	select {
 	case <-ctx.Done():
 		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
-		shard.clientsMu.Lock()
-		delete(shard.clients, playerEntityID)
-		shard.clientsMu.Unlock()
+		shard.ClientsMu.Lock()
+		delete(shard.Clients, playerEntityID)
+		shard.ClientsMu.Unlock()
 		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
 		shard.mu.Unlock()
@@ -293,7 +294,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 
 	// Send inventory snapshots to client
-	g.sendInventorySnapshots(c, *playerHandle, shard.world)
+	snapshotSender := inventory.NewSnapshotSender(c, g.logger)
+	snapshotSender.SendInventorySnapshots(c, *playerHandle, shard.world)
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -342,9 +344,9 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	detachedDuration := time.Since(detachedEntity.DetachedAt)
 
 	// Add client to shard's client map
-	shard.clientsMu.Lock()
-	shard.clients[playerEntityID] = c
-	shard.clientsMu.Unlock()
+	shard.ClientsMu.Lock()
+	shard.Clients[playerEntityID] = c
+	shard.ClientsMu.Unlock()
 
 	// Get current position from entity
 	var posX, posY int
@@ -386,7 +388,8 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 
 	// Send inventory snapshots to client
 	if handle != types.InvalidHandle {
-		g.sendInventorySnapshots(c, handle, shard.world)
+		snapshotSender := inventory.NewSnapshotSender(c, g.logger)
+		snapshotSender.SendInventorySnapshots(c, handle, shard.world)
 	}
 
 	g.logger.Info("Player reattached to existing entity",

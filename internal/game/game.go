@@ -17,6 +17,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
+	"origin/internal/game/inventory"
+	"origin/internal/game/world"
 	"origin/internal/config"
 )
 
@@ -65,11 +67,11 @@ type Game struct {
 	db     *persistence.Postgres
 	logger *zap.Logger
 
-	objectFactory   *ObjectFactory
+	objectFactory   *world.ObjectFactory
 	shardManager    *ShardManager
 	entityIDManager *EntityIDManager
 	networkServer   *network.Server
-	inventoryLoader *InventoryLoader
+	inventoryLoader *inventory.InventoryLoader
 
 	tickRate    int
 	tickPeriod  time.Duration
@@ -82,7 +84,7 @@ type Game struct {
 	wg     sync.WaitGroup
 }
 
-func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *ObjectFactory, inventoryLoader *InventoryLoader, logger *zap.Logger) *Game {
+func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.ObjectFactory, inventoryLoader *inventory.InventoryLoader, logger *zap.Logger) *Game {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	g := &Game{
@@ -107,7 +109,6 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *Object
 	g.networkServer = network.NewServer(&cfg.Network, &cfg.Game, logger)
 
 	g.setupNetworkHandlers()
-	g.setupEventHandlers()
 
 	g.resetOnlinePlayers()
 
@@ -142,12 +143,6 @@ func (g *Game) setupNetworkHandlers() {
 			g.handlePacket(c, data)
 		}
 	})
-}
-
-func (g *Game) setupEventHandlers() {
-	// Create and subscribe NetworkVisibilityDispatcher
-	dispatcher := NewNetworkVisibilityDispatcher(g.shardManager, g.logger.Named("visibility-dispatcher"))
-	dispatcher.Subscribe(g.shardManager.EventBus())
 }
 
 func (g *Game) handlePacket(c *network.Client, data []byte) {
@@ -357,9 +352,9 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				// Reset client state and remove from shard's client map
 				c.InWorld.Store(false)
 				c.StreamEpoch.Store(0)
-				shard.clientsMu.Lock()
-				delete(shard.clients, playerEntityID)
-				shard.clientsMu.Unlock()
+				shard.ClientsMu.Lock()
+				delete(shard.Clients, playerEntityID)
+				shard.ClientsMu.Unlock()
 
 				disconnectDelay := g.cfg.Game.DisconnectDelay
 
