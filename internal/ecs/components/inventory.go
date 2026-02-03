@@ -28,7 +28,7 @@ type InventoryContainer struct {
 	OwnerEntityID types.EntityID
 	Kind          constt.InventoryKind
 	Key           uint32
-	Revision      uint64
+	Version       uint64
 
 	// Only for Kind=InventoryGrid. For other kinds must be 0.
 	Width  uint8
