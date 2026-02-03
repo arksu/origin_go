@@ -117,6 +117,7 @@ type Inventory struct {
 	Height       sql.NullInt16   `json:"height"`
 	Data         json.RawMessage `json:"data"`
 	UpdatedAt    sql.NullTime    `json:"updated_at"`
+	Version      int             `json:"version"`
 }
 
 type Object struct {

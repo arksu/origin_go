@@ -154,7 +154,6 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.logger.Warn("Failed to unmarshal packet", zap.Uint64("client_id", c.ID), zap.Error(err))
 		return
 	}
-	//g.logger.Debug("Received packet", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
 
 	switch payload := msg.Payload.(type) {
 	case *netproto.ClientMessage_Ping:

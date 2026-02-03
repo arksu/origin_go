@@ -23,6 +23,12 @@ type Stack struct {
 	Max  int    `json:"max"`
 }
 
+// StackModeNone indicates item cannot be stacked.
+const StackModeNone = "none"
+
+// StackModeStack indicates item can be stacked.
+const StackModeStack = "stack"
+
 // Allowed represents where an item can be placed.
 type Allowed struct {
 	Hand           *bool    `json:"hand,omitempty"`
@@ -36,9 +42,3 @@ type ItemsFile struct {
 	Source  string    `json:"source"`
 	Items   []ItemDef `json:"items"`
 }
-
-// StackModeNone indicates item cannot be stacked.
-const StackModeNone = "none"
-
-// StackModeStack indicates item can be stacked.
-const StackModeStack = "stack"
