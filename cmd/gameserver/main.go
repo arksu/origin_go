@@ -16,6 +16,9 @@ import (
 
 	"origin/internal/config"
 	"origin/internal/game"
+	"origin/internal/game/events"
+	"origin/internal/game/inventory"
+	"origin/internal/game/world"
 	"origin/internal/itemdefs"
 	"origin/internal/metrics"
 	"origin/internal/persistence"
@@ -50,13 +53,17 @@ func main() {
 	}
 	defer db.Close()
 
-	objectFactory := game.NewObjectFactory()
-	objectFactory.RegisterBuilder(&game.TreeBuilder{})
-	objectFactory.RegisterBuilder(&game.PlayerBuilder{})
+	objectFactory := world.NewObjectFactory()
+	objectFactory.RegisterBuilder(&world.TreeBuilder{})
+	objectFactory.RegisterBuilder(&world.PlayerBuilder{})
 
-	inventoryLoader := game.NewInventoryLoader(itemRegistry, logger)
+	inventoryLoader := inventory.NewInventoryLoader(itemRegistry, logger)
 
 	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, logger)
+
+	// Setup event handlers after game creation
+	dispatcher := events.NewNetworkVisibilityDispatcher(g.ShardManager(), logger.Named("visibility-dispatcher"))
+	dispatcher.Subscribe(g.ShardManager().EventBus())
 
 	mux := http.NewServeMux()
 

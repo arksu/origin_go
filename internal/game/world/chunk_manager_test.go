@@ -1,7 +1,8 @@
-package game
+package world
 
 import (
 	"origin/internal/config"
+	"origin/internal/game"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
@@ -34,7 +35,7 @@ func newTestChunkManager() *ChunkManager {
 	cfg := newTestConfig()
 	world := ecs.NewWorldForTesting()
 	logger := zap.NewNop()
-	objectFactory := NewObjectFactory()
+	objectFactory := world.NewObjectFactory()
 	eb := eventbus.New(&eventbus.Config{
 		MinWorkers: 1,
 		MaxWorkers: 2,
@@ -179,6 +180,10 @@ func TestChunkManager_ObjectFactory(t *testing.T) {
 	factory := cm.ObjectFactory()
 	if factory == nil {
 		t.Fatal("ObjectFactory() returned nil")
+	}
+	// Test that factory is of correct type
+	if _, ok := factory.(*world.ObjectFactory); !ok {
+		t.Fatalf("Expected *world.ObjectFactory, got %T", factory)
 	}
 }
 

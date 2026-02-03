@@ -1,4 +1,4 @@
-package game
+package inventory
 
 import (
 	_const "origin/internal/const"
@@ -12,10 +12,22 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (g *Game) sendInventorySnapshots(c *network.Client, playerHandle types.Handle, world *ecs.World) {
+type SnapshotSender struct {
+	network *network.Client
+	logger  *zap.Logger
+}
+
+func NewSnapshotSender(network *network.Client, logger *zap.Logger) *SnapshotSender {
+	return &SnapshotSender{
+		network: network,
+		logger:  logger,
+	}
+}
+
+func (ss *SnapshotSender) SendInventorySnapshots(c *network.Client, playerHandle types.Handle, world *ecs.World) {
 	inventoryOwner, hasInventory := ecs.GetComponent[components.InventoryOwner](world, playerHandle)
 	if !hasInventory {
-		g.logger.Warn("Player has no InventoryOwner component",
+		ss.logger.Warn("Player has no InventoryOwner component",
 			zap.Uint64("client_id", c.ID),
 			zap.Int64("character_id", int64(c.CharacterID)),
 		)
@@ -27,7 +39,7 @@ func (g *Game) sendInventorySnapshots(c *network.Client, playerHandle types.Hand
 	for _, link := range inventoryOwner.Inventories {
 		container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
 		if !hasContainer {
-			g.logger.Warn("Container handle invalid",
+			ss.logger.Warn("Container handle invalid",
 				zap.Uint64("client_id", c.ID),
 				zap.Uint8("kind", uint8(link.Kind)),
 				zap.Uint32("key", link.Key),
@@ -35,14 +47,14 @@ func (g *Game) sendInventorySnapshots(c *network.Client, playerHandle types.Hand
 			continue
 		}
 
-		state := g.buildInventoryState(&container)
+		state := ss.buildInventoryState(&container)
 		if state != nil {
 			inventoryStates = append(inventoryStates, state)
 		}
 	}
 
 	if len(inventoryStates) == 0 {
-		g.logger.Debug("No inventory states to send",
+		ss.logger.Debug("No inventory states to send",
 			zap.Uint64("client_id", c.ID),
 			zap.Int64("character_id", int64(c.CharacterID)),
 		)
@@ -59,7 +71,7 @@ func (g *Game) sendInventorySnapshots(c *network.Client, playerHandle types.Hand
 
 	data, err := proto.Marshal(msg)
 	if err != nil {
-		g.logger.Error("Failed to marshal inventory update",
+		ss.logger.Error("Failed to marshal inventory update",
 			zap.Uint64("client_id", c.ID),
 			zap.Error(err),
 		)
@@ -68,18 +80,18 @@ func (g *Game) sendInventorySnapshots(c *network.Client, playerHandle types.Hand
 
 	c.Send(data)
 
-	g.logger.Debug("Sent inventory snapshots to client",
+	ss.logger.Debug("Sent inventory snapshots to client",
 		zap.Uint64("client_id", c.ID),
 		zap.Int64("character_id", int64(c.CharacterID)),
 		zap.Int("containers", len(inventoryStates)),
 	)
 }
 
-func (g *Game) buildInventoryState(container *components.InventoryContainer) *netproto.InventoryState {
+func (ss *SnapshotSender) buildInventoryState(container *components.InventoryContainer) *netproto.InventoryState {
 	state := &netproto.InventoryState{
 		Ref: &netproto.InventoryRef{
 			OwnerEntityId: uint64(container.OwnerEntityID),
-			Kind:          g.convertInventoryKind(container.Kind),
+			Kind:          ss.convertInventoryKind(container.Kind),
 			InventoryKey:  container.Key,
 		},
 		Revision: container.Version,
@@ -148,7 +160,7 @@ func (g *Game) buildInventoryState(container *components.InventoryContainer) *ne
 		state.State = &netproto.InventoryState_Hand{Hand: handState}
 
 	default:
-		g.logger.Warn("Unknown inventory kind",
+		ss.logger.Warn("Unknown inventory kind",
 			zap.Uint8("kind", uint8(container.Kind)),
 		)
 		return nil
@@ -157,7 +169,7 @@ func (g *Game) buildInventoryState(container *components.InventoryContainer) *ne
 	return state
 }
 
-func (g *Game) convertInventoryKind(kind _const.InventoryKind) netproto.InventoryKind {
+func (ss *SnapshotSender) convertInventoryKind(kind _const.InventoryKind) netproto.InventoryKind {
 	switch kind {
 	case _const.InventoryGrid:
 		return netproto.InventoryKind_INVENTORY_KIND_GRID

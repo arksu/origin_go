@@ -8,6 +8,7 @@ import (
 
 	"origin/internal/config"
 	"origin/internal/eventbus"
+	"origin/internal/game/world"
 	"origin/internal/persistence"
 )
 
@@ -15,7 +16,7 @@ type ShardManager struct {
 	cfg             *config.Config
 	db              *persistence.Postgres
 	entityIDManager *EntityIDManager
-	objectFactory   *ObjectFactory
+	objectFactory   *world.ObjectFactory
 	logger          *zap.Logger
 
 	shards map[int]*Shard
@@ -24,7 +25,7 @@ type ShardManager struct {
 	eventBus   *eventbus.EventBus
 }
 
-func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *ObjectFactory, logger *zap.Logger) *ShardManager {
+func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, logger *zap.Logger) *ShardManager {
 	ebCfg := &eventbus.Config{
 		MinWorkers: cfg.Game.WorkerPoolSize,
 		MaxWorkers: cfg.Game.WorkerPoolSize * 4,

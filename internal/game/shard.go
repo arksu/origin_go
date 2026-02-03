@@ -18,6 +18,8 @@ import (
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
+	"origin/internal/game/inventory"
+	"origin/internal/game/world"
 	"origin/internal/persistence"
 )
 
@@ -36,7 +38,7 @@ type Shard struct {
 	logger          *zap.Logger
 
 	world          *ecs.World
-	chunkManager   *ChunkManager
+	chunkManager   *world.ChunkManager
 	eventBus       *eventbus.EventBus
 	characterSaver *systems.CharacterSaver
 
@@ -44,14 +46,14 @@ type Shard struct {
 	playerInbox *network.PlayerCommandInbox
 	serverInbox *network.ServerJobInbox
 
-	clients   map[types.EntityID]*network.Client
-	clientsMu sync.RWMutex
+	Clients   map[types.EntityID]*network.Client
+	ClientsMu sync.RWMutex
 
 	state ShardState
 	mu    sync.RWMutex
 }
 
-func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *ObjectFactory, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
+func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
 	// Initialize command queue config from game config
 	queueConfig := network.CommandQueueConfig{
 		MaxQueueSize:                cfg.Game.CommandQueueSize,
@@ -69,11 +71,11 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		eventBus:        eb,
 		playerInbox:     network.NewPlayerCommandInbox(queueConfig),
 		serverInbox:     network.NewServerJobInbox(queueConfig),
-		clients:         make(map[types.EntityID]*network.Client),
+		Clients:         make(map[types.EntityID]*network.Client),
 		state:           ShardStateRunning,
 	}
 
-	s.chunkManager = NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, eb, logger)
+	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, eb, logger)
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
 	worldMinX := float64(cfg.Game.WorldMinXChunks * chunkSize)
@@ -89,7 +91,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
 
-	inventorySaver := NewInventorySaver(logger)
+	inventorySaver := inventory.NewInventorySaver(logger)
 	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, inventorySaver, logger)
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired))
@@ -105,7 +107,7 @@ func (s *Shard) World() *ecs.World {
 	return s.world
 }
 
-func (s *Shard) ChunkManager() *ChunkManager {
+func (s *Shard) ChunkManager() *world.ChunkManager {
 	return s.chunkManager
 }
 
@@ -343,9 +345,9 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 
 // SendChatMessage sends a chat message to a single entity
 func (s *Shard) SendChatMessage(entityID types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string) {
-	s.clientsMu.RLock()
-	client, ok := s.clients[entityID]
-	s.clientsMu.RUnlock()
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
 
 	if !ok || client == nil {
 		return
@@ -402,11 +404,11 @@ func (s *Shard) BroadcastChatMessage(entityIDs []types.EntityID, channel netprot
 		return
 	}
 
-	s.clientsMu.RLock()
-	defer s.clientsMu.RUnlock()
+	s.ClientsMu.RLock()
+	defer s.ClientsMu.RUnlock()
 
 	for _, entityID := range entityIDs {
-		if client, ok := s.clients[entityID]; ok && client != nil {
+		if client, ok := s.Clients[entityID]; ok && client != nil {
 			client.Send(data)
 		}
 	}

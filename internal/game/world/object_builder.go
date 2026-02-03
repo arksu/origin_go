@@ -1,4 +1,8 @@
-package game
+package world
+
+import (
+	"errors"
+)
 
 import (
 	"database/sql"
@@ -13,6 +17,12 @@ import (
 )
 
 const treeSize = 10
+
+var (
+	ErrEntitySpawnFailed = errors.New("entity spawn failed")
+	ErrEntityNotFound  = errors.New("entity not found")
+	ErrBuilderNotFound = errors.New("builder not found")
+)
 
 type TreeBuilder struct{}
 
