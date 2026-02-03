@@ -89,7 +89,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
 
-	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, logger)
+	inventorySaver := NewInventorySaver(logger)
+	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, inventorySaver, logger)
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired))
 

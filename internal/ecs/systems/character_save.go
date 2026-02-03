@@ -2,6 +2,8 @@ package systems
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"math"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -19,6 +21,24 @@ const (
 	batchSize           = 50
 	batchTimeout        = 100 * time.Millisecond
 )
+
+// InventorySnapshot represents a serialized inventory container for database storage
+type InventorySnapshot struct {
+	CharacterID  int64
+	Kind         int16
+	InventoryKey int16
+	Width        sql.NullInt16
+	Height       sql.NullInt16
+	Data         json.RawMessage
+	Version      int
+}
+
+// InventorySaverInterface defines the contract for inventory serialization
+// This interface breaks circular dependencies between game and systems packages
+type InventorySaverInterface interface {
+	// SerializeInventories extracts and serializes all inventory containers for a character
+	SerializeInventories(world interface{}, characterID types.EntityID, handle types.Handle) []InventorySnapshot
+}
 
 type CharacterSaveSystem struct {
 	ecs.BaseSystem
@@ -69,6 +89,7 @@ type CharacterSnapshot struct {
 	Stamina     int16
 	SHP         int16
 	HHP         int16
+	Inventories []InventorySnapshot
 }
 
 type CharacterSaver struct {
@@ -79,9 +100,10 @@ type CharacterSaver struct {
 	wg              sync.WaitGroup
 	ctx             context.Context
 	cancel          context.CancelFunc
+	inventorySaver  InventorySaverInterface
 }
 
-func NewCharacterSaver(db *persistence.Postgres, numWorkers int, logger *zap.Logger) *CharacterSaver {
+func NewCharacterSaver(db *persistence.Postgres, numWorkers int, inventorySaver InventorySaverInterface, logger *zap.Logger) *CharacterSaver {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cs := &CharacterSaver{
@@ -91,6 +113,7 @@ func NewCharacterSaver(db *persistence.Postgres, numWorkers int, logger *zap.Log
 		logger:          logger,
 		ctx:             ctx,
 		cancel:          cancel,
+		inventorySaver:  inventorySaver,
 	}
 
 	for i := 0; i < 2; i++ {
@@ -109,6 +132,8 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 		return
 	}
 
+	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
+
 	snapshot := CharacterSnapshot{
 		CharacterID: int64(entityID),
 		X:           int(transform.X),
@@ -117,6 +142,7 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 		Stamina:     100, // TODO
 		SHP:         100, // TODO
 		HHP:         100, // TODO
+		Inventories: inventories,
 	}
 
 	select {
@@ -210,8 +236,37 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		return
 	}
 
+	// Save inventories for each character
+	inventoriesSaved := 0
+	inventoriesErrors := 0
+	for _, snapshot := range batch {
+		for _, inv := range snapshot.Inventories {
+			_, err := s.db.Queries().UpsertInventory(ctx, repository.UpsertInventoryParams{
+				OwnerID:      inv.CharacterID,
+				Kind:         inv.Kind,
+				InventoryKey: inv.InventoryKey,
+				Width:        inv.Width,
+				Height:       inv.Height,
+				Data:         inv.Data,
+				Version:      inv.Version,
+			})
+			if err != nil {
+				inventoriesErrors++
+				s.logger.Error("Failed to upsert inventory",
+					zap.Int64("character_id", inv.CharacterID),
+					zap.Int16("kind", inv.Kind),
+					zap.Int16("key", inv.InventoryKey),
+					zap.Error(err))
+			} else {
+				inventoriesSaved++
+			}
+		}
+	}
+
 	s.logger.Debug("Batch character save completed",
-		zap.Int("batch_size", len(batch)))
+		zap.Int("batch_size", len(batch)),
+		zap.Int("inventories_saved", inventoriesSaved),
+		zap.Int("inventories_errors", inventoriesErrors))
 }
 
 // SaveAll saves all characters from CharacterEntities
