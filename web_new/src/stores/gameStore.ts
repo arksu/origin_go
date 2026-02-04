@@ -74,6 +74,7 @@ export const useGameStore = defineStore('game', () => {
   // Inventory
   const inventories = ref(new Map<string, proto.IInventoryState>())
   const playerInventoryVisible = ref(false)
+  const openNestedInventories = ref(new Map<string, { data: proto.IInventoryGridState, itemId: number }>())
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
@@ -111,6 +112,7 @@ export const useGameStore = defineStore('game', () => {
     // Clear inventories when entering new world
     console.log('[gameStore] Clearing inventories on world enter')
     inventories.value.clear()
+    openNestedInventories.value.clear()  // Clear nested inventories
     playerInventoryVisible.value = false
   }
 
@@ -124,6 +126,7 @@ export const useGameStore = defineStore('game', () => {
     // Clear inventories when leaving world
     console.log('[gameStore] Clearing inventories on world leave')
     inventories.value.clear()
+    openNestedInventories.value.clear()  // Clear nested inventories
     playerInventoryVisible.value = false
   }
 
@@ -257,6 +260,33 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible.value = visible
   }
 
+  function openNestedInventory(itemId: number, inventoryKey: string, nestedData: proto.IInventoryGridState): string {
+    const windowKey = `item_${itemId}_${inventoryKey}`
+
+    // Check if window is already open - toggle behavior
+    if (openNestedInventories.value.has(windowKey)) {
+      console.log('[gameStore] Closing existing nested inventory window:', windowKey)
+      openNestedInventories.value.delete(windowKey)
+      return windowKey
+    }
+
+    console.log('[gameStore] Opening new nested inventory window:', windowKey)
+    openNestedInventories.value.set(windowKey, { data: nestedData, itemId })
+    return windowKey
+  }
+
+  function closeNestedInventory(windowKey: string) {
+    openNestedInventories.value.delete(windowKey)
+  }
+
+  function closeAllNestedInventories() {
+    openNestedInventories.value.clear()
+  }
+
+  function getNestedInventoryData(windowKey: string): { data: proto.IInventoryGridState, itemId: number } | undefined {
+    return openNestedInventories.value.get(windowKey)
+  }
+
   // Chat actions
   function addChatMessage(fromName: string, text: string, channel: proto.ChatChannel) {
     const message: ChatMessage = {
@@ -301,6 +331,9 @@ export const useGameStore = defineStore('game', () => {
     setConnectionState('disconnected')
     setPlayerLeaveWorld()
 
+    // Clear nested inventories
+    openNestedInventories.value.clear()
+
     // Cleanup chat
     if (cleanupTimer) {
       clearInterval(cleanupTimer)
@@ -324,6 +357,7 @@ export const useGameStore = defineStore('game', () => {
     chatMessages,
     inventories,
     playerInventoryVisible,
+    openNestedInventories,
 
     // Computed
     isConnected,
@@ -348,6 +382,10 @@ export const useGameStore = defineStore('game', () => {
     getPlayerInventory,
     togglePlayerInventory,
     setPlayerInventoryVisible,
+    openNestedInventory,
+    closeNestedInventory,
+    closeAllNestedInventories,
+    getNestedInventoryData,
     reset,
   }
 })

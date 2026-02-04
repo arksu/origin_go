@@ -6,7 +6,7 @@
             "defId": 4002,
             "key": "seed_wheat",
             "name": "Wheat Seeds",
-            "resource": "items/bag_seed_full.png",
+            "resource": "items/yarn.png",
             "tags": [
                 "seed"
             ],
@@ -19,7 +19,7 @@
             "defId": 4003,
             "key": "seed_carrot",
             "name": "Carrot Seeds",
-            "resource": "items/bag_seed_full.png",
+            "resource": "items/yarn.png",
             "tags": [
                 "seed"
             ],
@@ -32,7 +32,7 @@
             "defId": 4004,
             "key": "seed_beet",
             "name": "Beet Seeds",
-            "resource": "items/bag_seed_full.png",
+            "resource": "items/yarn.png",
             "tags": [
                 "seed"
             ],
@@ -45,7 +45,7 @@
             "defId": 4005,
             "key": "seed_potato",
             "name": "Potato Seeds",
-            "resource": "items/bag_seed_full.png",
+            "resource": "items/yarn.png",
             "tags": [
                 "seed"
             ],
