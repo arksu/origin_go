@@ -17,9 +17,9 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
+	"origin/internal/config"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
-	"origin/internal/config"
 )
 
 type GameState int32
@@ -67,11 +67,12 @@ type Game struct {
 	db     *persistence.Postgres
 	logger *zap.Logger
 
-	objectFactory   *world.ObjectFactory
-	shardManager    *ShardManager
-	entityIDManager *EntityIDManager
-	networkServer   *network.Server
-	inventoryLoader *inventory.InventoryLoader
+	objectFactory           *world.ObjectFactory
+	shardManager            *ShardManager
+	entityIDManager         *EntityIDManager
+	networkServer           *network.Server
+	inventoryLoader         *inventory.InventoryLoader
+	inventorySnapshotSender *inventory.SnapshotSender
 
 	tickRate    int
 	tickPeriod  time.Duration
@@ -84,19 +85,20 @@ type Game struct {
 	wg     sync.WaitGroup
 }
 
-func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.ObjectFactory, inventoryLoader *inventory.InventoryLoader, logger *zap.Logger) *Game {
+func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.ObjectFactory, inventoryLoader *inventory.InventoryLoader, inventorySnapshotSender *inventory.SnapshotSender, logger *zap.Logger) *Game {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	g := &Game{
-		cfg:             cfg,
-		db:              db,
-		objectFactory:   objectFactory,
-		inventoryLoader: inventoryLoader,
-		logger:          logger,
-		tickRate:        cfg.Game.TickRate,
-		tickPeriod:      time.Second / time.Duration(cfg.Game.TickRate),
-		ctx:             ctx,
-		cancel:          cancel,
+		cfg:                     cfg,
+		db:                      db,
+		objectFactory:           objectFactory,
+		inventoryLoader:         inventoryLoader,
+		inventorySnapshotSender: inventorySnapshotSender,
+		logger:                  logger,
+		tickRate:                cfg.Game.TickRate,
+		tickPeriod:              time.Second / time.Duration(cfg.Game.TickRate),
+		ctx:                     ctx,
+		cancel:                  cancel,
 		tickStats: tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour,

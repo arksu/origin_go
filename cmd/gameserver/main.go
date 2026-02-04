@@ -58,8 +58,9 @@ func main() {
 	objectFactory.RegisterBuilder(&world.PlayerBuilder{})
 
 	inventoryLoader := inventory.NewInventoryLoader(itemRegistry, logger)
+	inventorySnapshotSender := inventory.NewSnapshotSender(logger)
 
-	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, logger)
+	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, inventorySnapshotSender, logger)
 
 	// Setup event handlers after game creation
 	dispatcher := events.NewNetworkVisibilityDispatcher(g.ShardManager(), logger.Named("visibility-dispatcher"))

@@ -26,10 +26,10 @@ type InventoryLink struct {
 // - Equipment (slot-based)
 // - DroppedItem (single item in world)
 type InventoryContainer struct {
-	OwnerEntityID types.EntityID
-	Kind          constt.InventoryKind
-	Key           uint32
-	Version       uint64
+	OwnerID types.EntityID
+	Kind    constt.InventoryKind
+	Key     uint32
+	Version uint64
 
 	// Only for Kind=InventoryGrid. For other kinds must be 0.
 	Width  uint8

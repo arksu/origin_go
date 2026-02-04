@@ -3,7 +3,7 @@ package inventory
 import (
 	"database/sql"
 	"encoding/json"
-	_const "origin/internal/const"
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -24,86 +24,156 @@ func NewInventorySaver(logger *zap.Logger) *InventorySaver {
 }
 
 func (is *InventorySaver) SerializeInventories(
-	world interface{},
+	w interface{},
 	characterID types.EntityID,
 	handle types.Handle,
 ) []systems.InventorySnapshot {
-	w, ok := world.(*ecs.World)
-	if !ok {
-		is.logger.Error("Invalid world type passed to SerializeInventories")
-		return nil
-	}
-	inventoryOwner, hasInventory := ecs.GetComponent[components.InventoryOwner](w, handle)
-	if !hasInventory {
-		is.logger.Debug("Character has no InventoryOwner component",
-			zap.Int64("character_id", int64(characterID)))
-		return nil
+	world := w.(*ecs.World)
+	result := make([]systems.InventorySnapshot, 0)
+
+	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](world, handle)
+	if !hasOwner {
+		return result
 	}
 
-	snapshots := make([]systems.InventorySnapshot, 0, len(inventoryOwner.Inventories))
+	for _, link := range owner.Inventories {
+		if !world.Alive(link.Handle) {
+			continue
+		}
 
-	for _, link := range inventoryOwner.Inventories {
-		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
 		if !hasContainer {
-			is.logger.Warn("Invalid container handle in InventoryOwner",
-				zap.Int64("character_id", int64(characterID)),
-				zap.Uint8("kind", uint8(link.Kind)),
-				zap.Uint32("key", link.Key))
 			continue
 		}
 
-		data := is.buildInventoryData(&container)
-		jsonData, err := json.Marshal(data)
-		if err != nil {
-			is.logger.Error("Failed to marshal inventory data",
-				zap.Int64("character_id", int64(characterID)),
-				zap.Uint8("kind", uint8(container.Kind)),
-				zap.Uint32("key", container.Key),
-				zap.Error(err))
+		if container.OwnerID != characterID {
 			continue
 		}
 
-		snapshot := systems.InventorySnapshot{
-			CharacterID:  int64(characterID),
-			Kind:         int16(container.Kind),
-			InventoryKey: int16(container.Key),
-			Data:         jsonData,
-			Version:      int(container.Version + 1),
-		}
-
-		if container.Kind == _const.InventoryGrid {
-			snapshot.Width = sql.NullInt16{Int16: int16(container.Width), Valid: true}
-			snapshot.Height = sql.NullInt16{Int16: int16(container.Height), Valid: true}
-		}
-
-		snapshots = append(snapshots, snapshot)
+		snapshot := is.serializeContainer(world, characterID, container)
+		result = append(result, snapshot)
 	}
 
-	return snapshots
+	return result
 }
 
-func (is *InventorySaver) buildInventoryData(container *components.InventoryContainer) InventoryDataV1 {
-	items := make([]InventoryItemV1, len(container.Items))
+func (is *InventorySaver) serializeContainer(
+	world *ecs.World,
+	characterID types.EntityID,
+	container components.InventoryContainer,
+) systems.InventorySnapshot {
+	items := make([]InventoryItemV1, 0, len(container.Items))
 
-	for i, item := range container.Items {
-		items[i] = InventoryItemV1{
-			ItemID:   item.ItemID,
-			TypeID:   item.TypeID,
-			Quality:  item.Quality,
-			Quantity: item.Quantity,
-			X:        item.X,
-			Y:        item.Y,
+	for _, invItem := range container.Items {
+		dbItem := InventoryItemV1{
+			ItemID:    invItem.ItemID,
+			TypeID:    invItem.TypeID,
+			Quality:   invItem.Quality,
+			Quantity:  invItem.Quantity,
+			X:         invItem.X,
+			Y:         invItem.Y,
+			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
 		}
 
-		if container.Kind == _const.InventoryEquipment {
-			items[i].EquipSlot = is.convertEquipSlot(item.EquipSlot)
+		nestedContainer := is.findNestedInventory(world, invItem.ItemID)
+		if nestedContainer != nil {
+			nestedData := is.serializeNestedInventory(world, *nestedContainer)
+			dbItem.NestedInventory = &nestedData
 		}
+
+		items = append(items, dbItem)
+	}
+
+	invData := InventoryDataV1{
+		Kind:    uint8(container.Kind),
+		Key:     container.Key,
+		Width:   container.Width,
+		Height:  container.Height,
+		Version: int(container.Version),
+		Items:   items,
+	}
+
+	data, err := json.Marshal(invData)
+	if err != nil {
+		is.logger.Error("Failed to marshal inventory data",
+			zap.Uint64("character_id", uint64(characterID)),
+			zap.Uint8("kind", uint8(container.Kind)),
+			zap.Uint32("key", container.Key),
+			zap.Error(err))
+		data = []byte("{}")
+	}
+
+	var width, height sql.NullInt16
+	if container.Kind == constt.InventoryGrid {
+		width = sql.NullInt16{Int16: int16(container.Width), Valid: true}
+		height = sql.NullInt16{Int16: int16(container.Height), Valid: true}
+	}
+
+	return systems.InventorySnapshot{
+		CharacterID:  int64(characterID),
+		Kind:         int16(container.Kind),
+		InventoryKey: int16(container.Key),
+		Width:        width,
+		Height:       height,
+		Data:         data,
+		Version:      int(container.Version),
+	}
+}
+
+func (is *InventorySaver) serializeNestedInventory(
+	world *ecs.World,
+	container components.InventoryContainer,
+) InventoryDataV1 {
+	items := make([]InventoryItemV1, 0, len(container.Items))
+
+	for _, invItem := range container.Items {
+		dbItem := InventoryItemV1{
+			ItemID:    invItem.ItemID,
+			TypeID:    invItem.TypeID,
+			Quality:   invItem.Quality,
+			Quantity:  invItem.Quantity,
+			X:         invItem.X,
+			Y:         invItem.Y,
+			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
+		}
+
+		nestedContainer := is.findNestedInventory(world, invItem.ItemID)
+		if nestedContainer != nil {
+			nestedData := is.serializeNestedInventory(world, *nestedContainer)
+			dbItem.NestedInventory = &nestedData
+		}
+
+		items = append(items, dbItem)
 	}
 
 	return InventoryDataV1{
-		Version: 1,
+		Kind:    uint8(container.Kind),
+		Key:     container.Key,
+		Width:   container.Width,
+		Height:  container.Height,
+		Version: int(container.Version),
 		Items:   items,
 	}
+}
+
+func (is *InventorySaver) findNestedInventory(
+	world *ecs.World,
+	itemID uint64,
+) *components.InventoryContainer {
+	query := world.Query().With(components.InventoryContainerComponentID)
+	var found *components.InventoryContainer
+
+	query.ForEach(func(h types.Handle) {
+		if found != nil {
+			return
+		}
+		container, ok := ecs.GetComponent[components.InventoryContainer](world, h)
+		if ok && container.OwnerID == types.EntityID(itemID) {
+			found = &container
+		}
+	})
+
+	return found
 }
 
 func (is *InventorySaver) convertEquipSlot(slot netproto.EquipSlot) string {

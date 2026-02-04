@@ -888,7 +888,7 @@ type ItemInstance struct {
 	H        uint32                 `protobuf:"varint,11,opt,name=h,proto3" json:"h,omitempty"`
 	// Если предмет является контейнером (seed_bag, backpack, etc.),
 	// то nested_inventory указывает на вложенный инвентарь
-	NestedInventory *InventoryRef `protobuf:"bytes,12,opt,name=nested_inventory,json=nestedInventory,proto3,oneof" json:"nested_inventory,omitempty"`
+	NestedInventory *InventoryGridState `protobuf:"bytes,12,opt,name=nested_inventory,json=nestedInventory,proto3,oneof" json:"nested_inventory,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -972,7 +972,7 @@ func (x *ItemInstance) GetH() uint32 {
 	return 0
 }
 
-func (x *ItemInstance) GetNestedInventory() *InventoryRef {
+func (x *ItemInstance) GetNestedInventory() *InventoryGridState {
 	if x != nil {
 		return x.NestedInventory
 	}
@@ -3950,7 +3950,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x0fowner_entity_id\x18\x02 \x01(\x04H\x00R\rownerEntityId\x12$\n" +
 	"\rowner_item_id\x18\x03 \x01(\x04H\x00R\vownerItemId\x12#\n" +
 	"\rinventory_key\x18\x04 \x01(\rR\finventoryKeyB\a\n" +
-	"\x05owner\"\x88\x02\n" +
+	"\x05owner\"\x8e\x02\n" +
 	"\fItemInstance\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\x04R\x06itemId\x12\x17\n" +
 	"\atype_id\x18\x02 \x01(\rR\x06typeId\x12\x1a\n" +
@@ -3959,8 +3959,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\bquantity\x18\x05 \x01(\rR\bquantity\x12\f\n" +
 	"\x01w\x18\n" +
 	" \x01(\rR\x01w\x12\f\n" +
-	"\x01h\x18\v \x01(\rR\x01h\x12C\n" +
-	"\x10nested_inventory\x18\f \x01(\v2\x13.proto.InventoryRefH\x00R\x0fnestedInventory\x88\x01\x01B\x13\n" +
+	"\x01h\x18\v \x01(\rR\x01h\x12I\n" +
+	"\x10nested_inventory\x18\f \x01(\v2\x19.proto.InventoryGridStateH\x00R\x0fnestedInventory\x88\x01\x01B\x13\n" +
 	"\x11_nested_inventory\"O\n" +
 	"\bGridItem\x12\f\n" +
 	"\x01x\x18\x01 \x01(\rR\x01x\x12\f\n" +
@@ -4308,7 +4308,7 @@ var file_api_proto_packets_proto_goTypes = []any{
 }
 var file_api_proto_packets_proto_depIdxs = []int32{
 	4,  // 0: proto.InventoryRef.kind:type_name -> proto.InventoryKind
-	13, // 1: proto.ItemInstance.nested_inventory:type_name -> proto.InventoryRef
+	16, // 1: proto.ItemInstance.nested_inventory:type_name -> proto.InventoryGridState
 	14, // 2: proto.GridItem.item:type_name -> proto.ItemInstance
 	15, // 3: proto.InventoryGridState.items:type_name -> proto.GridItem
 	1,  // 4: proto.EquipmentItem.slot:type_name -> proto.EquipSlot
