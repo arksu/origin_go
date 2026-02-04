@@ -131,6 +131,10 @@ message ItemInstance {
 
   uint32 w = 10;            // размеры в слотах
   uint32 h = 11;
+  
+  // Если предмет является контейнером (seed_bag, backpack, etc.), 
+  // то nested_inventory указывает на вложенный инвентарь
+  optional InventoryRef nested_inventory = 12;
 }
 
 message GridItem {

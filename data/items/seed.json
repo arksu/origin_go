@@ -1,0 +1,54 @@
+{
+    "v": 1,
+    "source": "seeds",
+    "items": [
+        {
+            "defId": 4002,
+            "key": "seed_wheat",
+            "name": "Wheat Seeds",
+            "tags": [
+                "seed"
+            ],
+            "size": {
+                "w": 1,
+                "h": 1
+            }
+        },
+        {
+            "defId": 4003,
+            "key": "seed_carrot",
+            "name": "Carrot Seeds",
+            "tags": [
+                "seed"
+            ],
+            "size": {
+                "w": 1,
+                "h": 1
+            }
+        },
+        {
+            "defId": 4004,
+            "key": "seed_beet",
+            "name": "Beet Seeds",
+            "tags": [
+                "seed"
+            ],
+            "size": {
+                "w": 1,
+                "h": 1
+            }
+        },
+        {
+            "defId": 4005,
+            "key": "seed_potato",
+            "name": "Potato Seeds",
+            "tags": [
+                "seed"
+            ],
+            "size": {
+                "w": 1,
+                "h": 1
+            }
+        }
+    ]
+}

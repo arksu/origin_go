@@ -10,10 +10,10 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/game/inventory"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
-	"origin/internal/game/inventory"
 	"origin/internal/types"
 	"time"
 
@@ -294,7 +294,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 
 	// Send inventory snapshots to client
-	snapshotSender := inventory.NewSnapshotSender(c, g.logger)
+	snapshotSender := inventory.NewSnapshotSender(c, g.inventoryLoader.ItemRegistry(), g.logger)
 	snapshotSender.SendInventorySnapshots(c, *playerHandle, shard.world)
 
 	g.logger.Info("Player spawned",
@@ -388,7 +388,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 
 	// Send inventory snapshots to client
 	if handle != types.InvalidHandle {
-		snapshotSender := inventory.NewSnapshotSender(c, g.logger)
+		snapshotSender := inventory.NewSnapshotSender(c, g.inventoryLoader.ItemRegistry(), g.logger)
 		snapshotSender.SendInventorySnapshots(c, handle, shard.world)
 	}
 

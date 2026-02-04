@@ -4,6 +4,7 @@ import (
 	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/itemdefs"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -13,14 +14,16 @@ import (
 )
 
 type SnapshotSender struct {
-	network *network.Client
-	logger  *zap.Logger
+	network      *network.Client
+	itemRegistry *itemdefs.Registry
+	logger       *zap.Logger
 }
 
-func NewSnapshotSender(network *network.Client, logger *zap.Logger) *SnapshotSender {
+func NewSnapshotSender(network *network.Client, itemRegistry *itemdefs.Registry, logger *zap.Logger) *SnapshotSender {
 	return &SnapshotSender{
-		network: network,
-		logger:  logger,
+		network:      network,
+		itemRegistry: itemRegistry,
+		logger:       logger,
 	}
 }
 
@@ -90,9 +93,11 @@ func (ss *SnapshotSender) SendInventorySnapshots(c *network.Client, playerHandle
 func (ss *SnapshotSender) buildInventoryState(container *components.InventoryContainer) *netproto.InventoryState {
 	state := &netproto.InventoryState{
 		Ref: &netproto.InventoryRef{
-			OwnerEntityId: uint64(container.OwnerEntityID),
-			Kind:          ss.convertInventoryKind(container.Kind),
-			InventoryKey:  container.Key,
+			Kind: ss.convertInventoryKind(container.Kind),
+			Owner: &netproto.InventoryRef_OwnerEntityId{
+				OwnerEntityId: uint64(container.OwnerEntityID),
+			},
+			InventoryKey: container.Key,
 		},
 		Revision: container.Version,
 	}
@@ -107,15 +112,9 @@ func (ss *SnapshotSender) buildInventoryState(container *components.InventoryCon
 
 		for _, item := range container.Items {
 			gridItem := &netproto.GridItem{
-				Item: &netproto.ItemInstance{
-					ItemId:   item.ItemID,
-					TypeId:   item.TypeID,
-					Resource: item.Resource,
-					Quality:  item.Quality,
-					Quantity: item.Quantity,
-				},
-				X: uint32(item.X),
-				Y: uint32(item.Y),
+				Item: ss.buildItemInstance(&item),
+				X:    uint32(item.X),
+				Y:    uint32(item.Y),
 			}
 			gridState.Items = append(gridState.Items, gridItem)
 		}
@@ -129,13 +128,7 @@ func (ss *SnapshotSender) buildInventoryState(container *components.InventoryCon
 
 		for _, item := range container.Items {
 			equipItem := &netproto.EquipmentItem{
-				Item: &netproto.ItemInstance{
-					ItemId:   item.ItemID,
-					TypeId:   item.TypeID,
-					Resource: item.Resource,
-					Quality:  item.Quality,
-					Quantity: item.Quantity,
-				},
+				Item: ss.buildItemInstance(&item),
 				Slot: item.EquipSlot,
 			}
 			equipState.Items = append(equipState.Items, equipItem)
@@ -148,13 +141,7 @@ func (ss *SnapshotSender) buildInventoryState(container *components.InventoryCon
 
 		if len(container.Items) > 0 {
 			item := container.Items[0]
-			handState.Item = &netproto.ItemInstance{
-				ItemId:   item.ItemID,
-				TypeId:   item.TypeID,
-				Resource: item.Resource,
-				Quality:  item.Quality,
-				Quantity: item.Quantity,
-			}
+			handState.Item = ss.buildItemInstance(&item)
 		}
 
 		state.State = &netproto.InventoryState_Hand{Hand: handState}
@@ -167,6 +154,31 @@ func (ss *SnapshotSender) buildInventoryState(container *components.InventoryCon
 	}
 
 	return state
+}
+
+func (ss *SnapshotSender) buildItemInstance(item *components.InvItem) *netproto.ItemInstance {
+	instance := &netproto.ItemInstance{
+		ItemId:   item.ItemID,
+		TypeId:   item.TypeID,
+		Resource: item.Resource,
+		Quality:  item.Quality,
+		Quantity: item.Quantity,
+	}
+
+	itemDef, exists := ss.itemRegistry.GetByID(int(item.TypeID))
+	if !exists || itemDef.Container == nil {
+		return instance
+	}
+
+	instance.NestedInventory = &netproto.InventoryRef{
+		Kind: netproto.InventoryKind_INVENTORY_KIND_GRID,
+		Owner: &netproto.InventoryRef_OwnerItemId{
+			OwnerItemId: item.ItemID,
+		},
+		InventoryKey: 0,
+	}
+
+	return instance
 }
 
 func (ss *SnapshotSender) convertInventoryKind(kind _const.InventoryKind) netproto.InventoryKind {
