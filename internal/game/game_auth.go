@@ -10,6 +10,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/game/inventory"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
@@ -234,6 +235,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 						zap.Int64("character_id", character.ID),
 						zap.Strings("warnings", parseWarnings))
 				}
+
+				// Always take inventories from database and enrich with missing defaults by kind+key
+				inventoryDataList = g.enrichWithMissingDefaults(inventoryDataList)
 
 				// Load inventories into ECS
 				loadResult, err := g.inventoryLoader.LoadPlayerInventories(w, playerEntityID, inventoryDataList)
@@ -520,4 +524,49 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 		return
 	}
 	c.Send(data)
+}
+
+// enrichWithMissingDefaults enriches database inventories with missing default inventories by kind+key
+func (g *Game) enrichWithMissingDefaults(dbInventories []inventory.InventoryDataV1) []inventory.InventoryDataV1 {
+	// Create map of existing inventories by kind+key for quick lookup
+	existing := make(map[string]bool)
+	for _, inv := range dbInventories {
+		key := fmt.Sprintf("%d_%d", inv.Kind, inv.Key)
+		existing[key] = true
+	}
+
+	result := make([]inventory.InventoryDataV1, len(dbInventories))
+	copy(result, dbInventories)
+
+	// Define required default inventories by kind+key
+	defaultInventories := []inventory.InventoryDataV1{
+		{
+			Kind:    uint8(_const.InventoryGrid),
+			Key:     0, // Default key for Grid inventory
+			Width:   inventory.DefaultBackpackWidth,
+			Height:  inventory.DefaultBackpackHeight,
+			Version: 1,
+			Items:   []inventory.InventoryItemV1{}, // Empty inventory
+		},
+		{
+			Kind:    uint8(_const.InventoryEquipment),
+			Key:     0, // Default key for Equipment inventory
+			Version: 1,
+			Items:   []inventory.InventoryItemV1{}, // Empty inventory
+		},
+		// Note: Hand inventory is NOT added by default - only if exists in database
+	}
+
+	// Add missing default inventories
+	for _, defaultInv := range defaultInventories {
+		key := fmt.Sprintf("%d_%d", defaultInv.Kind, defaultInv.Key)
+		if !existing[key] {
+			g.logger.Debug("Adding missing default inventory",
+				zap.Uint8("kind", defaultInv.Kind),
+				zap.Uint32("key", defaultInv.Key))
+			result = append(result, defaultInv)
+		}
+	}
+
+	return result
 }
