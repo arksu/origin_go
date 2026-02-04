@@ -10,7 +10,6 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
-	"origin/internal/game/inventory"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
@@ -222,24 +221,57 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			}
 
 			// Load player inventories from database
-			loadResult, err := g.inventoryLoader.LoadPlayerInventories(ctx, g.db.Queries(), w, h, character.ID)
+			dbInventories, err := g.db.Queries().GetInventoriesByOwner(ctx, character.ID)
 			if err != nil {
-				g.logger.Error("Failed to load player inventories",
+				g.logger.Error("Failed to load inventories from database",
 					zap.Int64("character_id", character.ID),
-					zap.Error(err),
-				)
+					zap.Error(err))
 			} else {
-				if len(loadResult.Warnings) > 0 {
-					g.logger.Warn("Inventory load warnings",
+				// Parse inventories from database format
+				inventoryDataList, parseWarnings := g.inventoryLoader.ParseInventoriesFromDB(dbInventories)
+				if len(parseWarnings) > 0 {
+					g.logger.Warn("Inventory parse warnings",
 						zap.Int64("character_id", character.ID),
-						zap.Strings("warnings", loadResult.Warnings),
-					)
+						zap.Strings("warnings", parseWarnings))
 				}
-				g.logger.Debug("Player inventories loaded",
-					zap.Int64("character_id", character.ID),
-					zap.Int("containers", len(loadResult.ContainerHandles)),
-					zap.Bool("lost_and_found_used", loadResult.LostAndFoundUsed),
-				)
+
+				// Load inventories into ECS
+				loadResult, err := g.inventoryLoader.LoadPlayerInventories(w, playerEntityID, inventoryDataList)
+				if err != nil {
+					g.logger.Error("Failed to load player inventories",
+						zap.Int64("character_id", character.ID),
+						zap.Error(err))
+				} else {
+					if len(loadResult.Warnings) > 0 {
+						g.logger.Warn("Inventory load warnings",
+							zap.Int64("character_id", character.ID),
+							zap.Strings("warnings", loadResult.Warnings))
+					}
+
+					// Create InventoryOwner component with all inventory links (including nested)
+					inventoryLinks := make([]components.InventoryLink, 0, len(loadResult.ContainerHandles))
+					for _, containerHandle := range loadResult.ContainerHandles {
+						if !w.Alive(containerHandle) {
+							continue
+						}
+						container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+						if hasContainer {
+							inventoryLinks = append(inventoryLinks, components.InventoryLink{
+								Kind:   container.Kind,
+								Key:    container.Key,
+								Handle: containerHandle,
+							})
+						}
+					}
+					ecs.AddComponent(w, h, components.InventoryOwner{
+						Inventories: inventoryLinks,
+					})
+
+					g.logger.Debug("Player inventories loaded",
+						zap.Int64("character_id", character.ID),
+						zap.Int("containers", len(loadResult.ContainerHandles)),
+						zap.Bool("lost_and_found_used", loadResult.LostAndFoundUsed))
+				}
 			}
 		})
 		if ok {
@@ -294,8 +326,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 
 	// Send inventory snapshots to client
-	snapshotSender := inventory.NewSnapshotSender(c, g.inventoryLoader.ItemRegistry(), g.logger)
-	snapshotSender.SendInventorySnapshots(c, *playerHandle, shard.world)
+	g.inventorySnapshotSender.SendInventorySnapshots(shard.world, c, playerEntityID, *playerHandle)
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -388,8 +419,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 
 	// Send inventory snapshots to client
 	if handle != types.InvalidHandle {
-		snapshotSender := inventory.NewSnapshotSender(c, g.inventoryLoader.ItemRegistry(), g.logger)
-		snapshotSender.SendInventorySnapshots(c, handle, shard.world)
+		g.inventorySnapshotSender.SendInventorySnapshots(shard.world, c, playerEntityID, handle)
 	}
 
 	g.logger.Info("Player reattached to existing entity",

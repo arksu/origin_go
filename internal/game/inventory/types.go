@@ -9,6 +9,10 @@ const (
 )
 
 type InventoryDataV1 struct {
+	Kind    uint8             `json:"kind"`
+	Key     uint32            `json:"key"`
+	Width   uint8             `json:"width,omitempty"`
+	Height  uint8             `json:"height,omitempty"`
 	Version int               `json:"v"`
 	Items   []InventoryItemV1 `json:"items"`
 }
