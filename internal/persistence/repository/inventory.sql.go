@@ -7,7 +7,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 )
 
@@ -28,7 +27,7 @@ func (q *Queries) DeleteInventory(ctx context.Context, arg DeleteInventoryParams
 }
 
 const getInventoriesByOwner = `-- name: GetInventoriesByOwner :many
-SELECT id, owner_id, kind, inventory_key, width, height, data, updated_at, version
+SELECT id, owner_id, kind, inventory_key, data, updated_at, version
 FROM inventory
 WHERE owner_id = $1
 ORDER BY kind, inventory_key
@@ -48,8 +47,6 @@ func (q *Queries) GetInventoriesByOwner(ctx context.Context, ownerID int64) ([]I
 			&i.OwnerID,
 			&i.Kind,
 			&i.InventoryKey,
-			&i.Width,
-			&i.Height,
 			&i.Data,
 			&i.UpdatedAt,
 			&i.Version,
@@ -95,24 +92,20 @@ func (q *Queries) UpdateInventory(ctx context.Context, arg UpdateInventoryParams
 }
 
 const upsertInventory = `-- name: UpsertInventory :one
-INSERT INTO inventory (owner_id, kind, inventory_key, width, height, data, version)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (owner_id, kind, inventory_key)
 DO UPDATE SET
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
     data = EXCLUDED.data,
     version = EXCLUDED.version,
     updated_at = now()
-RETURNING id, owner_id, kind, inventory_key, width, height, data, updated_at, version
+RETURNING id, owner_id, kind, inventory_key, data, updated_at, version
 `
 
 type UpsertInventoryParams struct {
 	OwnerID      int64           `json:"owner_id"`
 	Kind         int16           `json:"kind"`
 	InventoryKey int16           `json:"inventory_key"`
-	Width        sql.NullInt16   `json:"width"`
-	Height       sql.NullInt16   `json:"height"`
 	Data         json.RawMessage `json:"data"`
 	Version      int             `json:"version"`
 }
@@ -122,8 +115,6 @@ func (q *Queries) UpsertInventory(ctx context.Context, arg UpsertInventoryParams
 		arg.OwnerID,
 		arg.Kind,
 		arg.InventoryKey,
-		arg.Width,
-		arg.Height,
 		arg.Data,
 		arg.Version,
 	)
@@ -133,8 +124,6 @@ func (q *Queries) UpsertInventory(ctx context.Context, arg UpsertInventoryParams
 		&i.OwnerID,
 		&i.Kind,
 		&i.InventoryKey,
-		&i.Width,
-		&i.Height,
 		&i.Data,
 		&i.UpdatedAt,
 		&i.Version,

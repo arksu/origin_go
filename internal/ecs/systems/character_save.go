@@ -2,7 +2,6 @@ package systems
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"math"
 	"origin/internal/ecs"
@@ -27,8 +26,6 @@ type InventorySnapshot struct {
 	CharacterID  int64
 	Kind         int16
 	InventoryKey int16
-	Width        sql.NullInt16
-	Height       sql.NullInt16
 	Data         json.RawMessage
 	Version      int
 }
@@ -245,8 +242,6 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 				OwnerID:      inv.CharacterID,
 				Kind:         inv.Kind,
 				InventoryKey: inv.InventoryKey,
-				Width:        inv.Width,
-				Height:       inv.Height,
 				Data:         inv.Data,
 				Version:      inv.Version,
 			})

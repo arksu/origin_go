@@ -176,12 +176,6 @@ func (il *InventoryLoader) ParseInventoriesFromDB(dbInventories []repository.Inv
 		}
 		invData.Kind = uint8(dbInv.Kind)
 		invData.Key = uint32(dbInv.InventoryKey)
-		if dbInv.Width.Valid {
-			invData.Width = uint8(dbInv.Width.Int16)
-		}
-		if dbInv.Height.Valid {
-			invData.Height = uint8(dbInv.Height.Int16)
-		}
 		invData.Version = dbInv.Version
 		inventoryDataList = append(inventoryDataList, invData)
 	}
