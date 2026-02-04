@@ -180,6 +180,26 @@ export function registerMessageHandlers(): void {
     }
   })
 
+  messageDispatcher.on('inventoryUpdate', (msg: proto.IS2C_InventoryUpdate) => {
+    console.log('[Handlers] inventoryUpdate:', msg.updated?.length || 0, 'inventories')
+
+    if (msg.updated) {
+      for (const inventoryState of msg.updated) {
+        console.log('[Handlers] Full inventory state:', {
+          ref: inventoryState.ref,
+          revision: inventoryState.revision,
+          hasGrid: !!inventoryState.grid,
+          hasEquipment: !!inventoryState.equipment,
+          hasHand: !!inventoryState.hand,
+          grid: inventoryState.grid,
+          equipment: inventoryState.equipment,
+          hand: inventoryState.hand
+        })
+        gameStore.updateInventory(inventoryState)
+      }
+    }
+  })
+
   messageDispatcher.on('chat', (msg: proto.IS2C_ChatMessage) => {
     console.log('[Game] Chat message:', msg.fromName, msg.text, msg.channel)
 

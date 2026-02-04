@@ -3,8 +3,8 @@ package inventory
 // Constants and types for inventory system
 
 const (
-	DefaultBackpackWidth  = 10
-	DefaultBackpackHeight = 10
+	DefaultBackpackWidth  = 5
+	DefaultBackpackHeight = 5
 	LostAndFoundKey       = 9999
 )
 

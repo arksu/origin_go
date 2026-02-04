@@ -38,8 +38,15 @@ export const DEFAULT_HOTKEYS: HotkeyConfig[] = [
     }
   },
   {
+    key: 'tab',
+    description: 'Toggle inventory',
+    action: () => {
+      console.log('[Hotkeys] Inventory toggle - not implemented yet')
+    }
+  },
+  {
     key: 'i',
-    description: 'Toggle inventory (if implemented)',
+    description: 'Toggle inventory (alternative)',
     action: () => {
       console.log('[Hotkeys] Inventory toggle - not implemented yet')
     }
