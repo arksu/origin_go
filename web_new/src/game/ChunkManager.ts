@@ -118,10 +118,10 @@ export class ChunkManager {
    * Load a chunk from server. Uses cache if available and version matches.
    */
   loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
-    // console.log(`[ChunkManager] loadChunk(${x}, ${y}) tiles.length=${tiles.length}, version=${version}`)
+    console.log(`[ChunkManager] loadChunk(${x}, ${y}) tiles.length=${tiles.length}, version=${version}`)
 
     if (!this.spritesheet) {
-      // console.log(`[ChunkManager] Spritesheet not ready, buffering chunk (${x}, ${y})`)
+      console.log(`[ChunkManager] Spritesheet not ready, buffering chunk (${x}, ${y})`)
       this.pendingChunks.push({ x, y, tiles, version })
       return
     }
@@ -136,6 +136,7 @@ export class ChunkManager {
     }
 
     const key = `${x},${y}`
+    console.log(`[ChunkManager] loadChunkInternal(${x}, ${y}) key=${key}`)
 
     // Cancel any pending build for this chunk
     this.cancelBuild(key)
@@ -155,6 +156,8 @@ export class ChunkManager {
     const distance = this.calculateDistance(x, y)
     const buildToken = buildQueue.nextBuildToken()
     this.buildTokens.set(key, buildToken)
+
+    console.log(`[ChunkManager] Building chunk ${key} priority=${priority} distance=${distance}`)
 
     const task: BuildTask = {
       chunkKey: key,
@@ -179,24 +182,30 @@ export class ChunkManager {
    */
   private attachFromCache(cached: CachedChunk): void {
     const key = cached.key
+    console.log(`[ChunkManager] attachFromCache(${key})`)
 
     let chunk = this.chunks.get(key)
     if (!chunk) {
+      console.log(`[ChunkManager] Creating new chunk for ${key}`)
       chunk = new Chunk(cached.x, cached.y)
       this.chunks.set(key, chunk)
       this.container.addChild(chunk.getContainer())
+      console.log(`[ChunkManager] Chunk ${key} added to container, container children: ${this.container.children.length}`)
     }
 
     // If GPU resources are cached, reuse them
     if (cached.gpu && cached.gpu.size > 0) {
+      console.log(`[ChunkManager] Reattaching GPU resources for ${key}`)
       // Reattach GPU resources
       this.reattachGpuResources(chunk, cached)
     } else {
+      console.log(`[ChunkManager] Rebuilding from CPU cache for ${key}`)
       // Need to rebuild from CPU cache
       this.rebuildFromCpuCache(chunk, cached)
     }
 
     chunk.visible = true
+    console.log(`[ChunkManager] Chunk ${key} set visible=true`)
     this.registerSubchunksForCulling(chunk)
 
     // Update neighbor mask and check if border refresh needed
@@ -240,6 +249,7 @@ export class ChunkManager {
    */
   private processBuildTask(task: BuildTask): void {
     const taskStart = performance.now()
+    console.log(`[ChunkManager] processBuildTask(${task.chunkKey}) started`)
 
     // Check if task is still valid
     const currentToken = this.buildTokens.get(task.chunkKey)
@@ -250,6 +260,7 @@ export class ChunkManager {
     }
 
     if (!this.spritesheet) {
+      console.log(`[ChunkManager] Build task for ${task.chunkKey} canceled (no spritesheet)`)
       buildQueue.buildComplete()
       return
     }
@@ -258,9 +269,13 @@ export class ChunkManager {
 
     let chunk = this.chunks.get(key)
     if (!chunk) {
+      console.log(`[ChunkManager] Creating new chunk for ${task.chunkKey}`)
       chunk = new Chunk(task.x, task.y)
       this.chunks.set(key, chunk)
-      this.container.addChild(chunk.getContainer())
+      const chunkContainer = chunk.getContainer()
+      this.container.addChild(chunkContainer)
+      console.log(`[ChunkManager] Chunk ${task.chunkKey} added to container, total children: ${this.container.children.length}`)
+      console.log(`[ChunkManager] Chunk ${task.chunkKey} container position: x=${chunkContainer.x}, y=${chunkContainer.y}`)
     }
 
     // Unregister old subchunks before rebuild
@@ -273,13 +288,14 @@ export class ChunkManager {
     const buildTime = performance.now() - buildStart
 
     chunk.visible = true
+    console.log(`[ChunkManager] Chunk ${task.chunkKey} set visible=true`)
 
     // Register new subchunks for culling
     this.registerSubchunksForCulling(chunk)
 
     // Generate terrain
     const terrainStart = performance.now()
-    // console.log(`[ChunkManager] Building terrain for chunk (${task.x},${task.y})`)
+    console.log(`[ChunkManager] Building terrain for chunk (${task.x},${task.y})`)
     terrainManager.generateTerrainForChunk(task.x, task.y, task.tiles, buildResult.hasBordersOrCorners)
     const terrainTime = performance.now() - terrainStart
 
@@ -288,14 +304,15 @@ export class ChunkManager {
 
     // Record build time
     buildQueue.recordCpuBuildTime(buildTime)
-    buildQueue.buildComplete()
 
     const totalTime = performance.now() - taskStart
+    console.log(`[ChunkManager] processBuildTask(${task.chunkKey}) completed: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
+    console.log(`[ChunkManager] Main container position: x=${this.container.x}, y=${this.container.y}`)
+    console.log(`[ChunkManager] Camera position: x=${this.cameraX}, y=${this.cameraY}`)
+    buildQueue.buildComplete()
 
     if (totalTime > 16 || buildTime > 8 || terrainTime > 8) {
-      //console.warn(`[ChunkManager] SLOW BUILD chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
-    } else {
-      //console.log(`[ChunkManager] Built chunk ${key}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
+      console.warn(`[ChunkManager] SLOW BUILD chunk ${task.chunkKey}: total=${totalTime.toFixed(2)}ms, build=${buildTime.toFixed(2)}ms, terrain=${terrainTime.toFixed(2)}ms`)
     }
 
     // Notify neighbors (deferred border refresh instead of immediate rebuild)

@@ -6,6 +6,7 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import ChatContainer from '@/components/ui/ChatContainer.vue'
+import InventoryWindow from '@/components/ui/InventoryWindow.vue'
 import { sendChatMessage } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
@@ -27,6 +28,18 @@ const isConnecting = computed(() =>
 )
 const isConnected = computed(() => connectionState.value === 'connected')
 const hasError = computed(() => connectionState.value === 'error')
+const playerInventory = computed(() => {
+  const inv = gameStore.getPlayerInventory()
+  console.log('[GameView] playerInventory computed:', inv)
+  return inv
+})
+const showInventory = computed(() => {
+  const visible = gameStore.playerInventoryVisible
+  const hasInventory = !!playerInventory.value
+  const hasGrid = !!playerInventory.value?.grid
+  console.log('[GameView] showInventory computed:', { visible, hasInventory, hasGrid, inventory: playerInventory.value })
+  return visible && hasInventory && hasGrid
+})
 
 async function initCanvas() {
   if (!gameCanvas.value || canvasInitialized.value) return
@@ -93,6 +106,10 @@ function handleChatSend(text: string) {
   sendChatMessage(text)
 }
 
+function handleInventoryClose() {
+  gameStore.setPlayerInventoryVisible(false)
+}
+
 // Setup hotkeys
 const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
   ...config,
@@ -103,14 +120,20 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         break
       case 'Escape':
         chatContainerRef.value?.unfocusChat()
+        gameStore.setPlayerInventoryVisible(false)
         break
       case '/':
         if (config.modifiers?.includes('shift')) {
           chatContainerRef.value?.focusChatWithSlash()
         }
         break
+      case 'tab':
+      case 'i':
+        console.log('[GameView] Toggling inventory, current state:', gameStore.playerInventoryVisible)
+        gameStore.togglePlayerInventory()
+        console.log('[GameView] New inventory state:', gameStore.playerInventoryVisible)
+        break
       case '`':
-        // Toggle debug overlay
         if (gameFacade && gameFacade.isInitialized()) {
           gameFacade.toggleDebugOverlay()
         }
@@ -153,6 +176,9 @@ useHotkeys(hotkeys)
       </div>
       <div class="game-chat">
         <ChatContainer ref="chatContainerRef" @send="handleChatSend" />
+      </div>
+      <div v-if="showInventory" class="game-inventory">
+        <InventoryWindow :inventory="playerInventory!" @close="handleInventoryClose" />
       </div>
     </div>
 
@@ -225,6 +251,16 @@ useHotkeys(hotkeys)
   bottom: 1rem;
   left: 1rem;
   z-index: 100;
+}
+
+.game-inventory {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 200;
 }
 
 .game-disconnected {

@@ -71,6 +71,10 @@ export const useGameStore = defineStore('game', () => {
   const chatMessages = ref<ChatMessage[]>([])
   let cleanupTimer: ReturnType<typeof setInterval> | null = null
 
+  // Inventory
+  const inventories = ref(new Map<string, proto.IInventoryState>())
+  const playerInventoryVisible = ref(false)
+
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
   const isInGame = computed(() => isConnected.value && playerEntityId.value !== null)
@@ -103,6 +107,11 @@ export const useGameStore = defineStore('game', () => {
     playerEntityId.value = entityId
     playerName.value = name
     worldParams.value = { coordPerTile, chunkSize, streamEpoch }
+
+    // Clear inventories when entering new world
+    console.log('[gameStore] Clearing inventories on world enter')
+    inventories.value.clear()
+    playerInventoryVisible.value = false
   }
 
   function setPlayerLeaveWorld() {
@@ -111,6 +120,11 @@ export const useGameStore = defineStore('game', () => {
     worldParams.value = null
     chunks.value.clear()
     entities.value.clear()
+
+    // Clear inventories when leaving world
+    console.log('[gameStore] Clearing inventories on world leave')
+    inventories.value.clear()
+    playerInventoryVisible.value = false
   }
 
   function updatePlayerPosition(position: Position) {
@@ -144,6 +158,103 @@ export const useGameStore = defineStore('game', () => {
     if (entity) {
       entity.movement = movement
     }
+  }
+
+  // Inventory actions
+  function inventoryKey(state: proto.IInventoryState): string {
+    if (!state.ref) return 'no_ref'
+
+    // Determine inventory type
+    let type = 'unknown'
+    if (state.grid) type = 'grid'
+    else if (state.equipment) type = 'equipment'
+    else if (state.hand) type = 'hand'
+
+    const key = state.ref.ownerEntityId
+      ? `entity_${state.ref.ownerEntityId}_${state.ref.inventoryKey}_${type}`
+      : state.ref.ownerItemId
+        ? `item_${state.ref.ownerItemId}_${state.ref.inventoryKey}_${type}`
+        : `unknown_${state.ref.inventoryKey}_${type}`
+
+    console.log('[gameStore] inventoryKey generated:', {
+      ref: state.ref,
+      type,
+      key,
+      ownerEntityId: state.ref.ownerEntityId,
+      ownerItemId: state.ref.ownerItemId,
+      inventoryKey: state.ref.inventoryKey,
+      hasGrid: !!state.grid,
+      hasEquipment: !!state.equipment,
+      hasHand: !!state.hand
+    })
+
+    return key
+  }
+
+  function updateInventory(state: proto.IInventoryState) {
+    if (state.ref) {
+      inventories.value.set(inventoryKey(state), state)
+    }
+  }
+
+  function removeInventory(state: proto.IInventoryState) {
+    inventories.value.delete(inventoryKey(state))
+  }
+
+  function getPlayerInventory(): proto.IInventoryState | undefined {
+    if (!playerEntityId.value) return undefined
+
+    console.log('[gameStore] All inventories:', Array.from(inventories.value.entries()))
+
+    // Try to find grid inventory with new key format
+    const gridKey = `entity_${playerEntityId.value}_0_grid`
+    const equipmentKey = `entity_${playerEntityId.value}_0_equipment`
+    const handKey = `entity_${playerEntityId.value}_0_hand`
+
+    const gridInv = inventories.value.get(gridKey)
+    const equipmentInv = inventories.value.get(equipmentKey)
+    const handInv = inventories.value.get(handKey)
+
+    console.log('[gameStore] Looking for inventory:', {
+      playerEntityId: playerEntityId.value,
+      gridKey,
+      equipmentKey,
+      handKey,
+      hasGrid: !!gridInv,
+      hasEquipment: !!equipmentInv,
+      hasHand: !!handInv,
+      gridInv,
+      equipmentInv,
+      handInv
+    })
+
+    // Return grid inventory first
+    if (gridInv && gridInv.grid) {
+      console.log('[gameStore] Found grid inventory at key:', gridKey)
+      return gridInv
+    }
+
+    // Search all inventories for one with grid
+    for (const [key, inv] of inventories.value.entries()) {
+      if (inv.grid) {
+        console.log('[gameStore] Found grid inventory at key:', key)
+        return inv
+      }
+    }
+
+    console.log('[gameStore] No grid inventory found')
+    return undefined
+  }
+
+  function togglePlayerInventory() {
+    console.log('[gameStore] togglePlayerInventory called, current:', playerInventoryVisible.value)
+    playerInventoryVisible.value = !playerInventoryVisible.value
+    console.log('[gameStore] togglePlayerInventory new value:', playerInventoryVisible.value)
+    console.log('[gameStore] Player inventory data:', getPlayerInventory())
+  }
+
+  function setPlayerInventoryVisible(visible: boolean) {
+    playerInventoryVisible.value = visible
   }
 
   // Chat actions
@@ -211,6 +322,8 @@ export const useGameStore = defineStore('game', () => {
     chunks,
     entities,
     chatMessages,
+    inventories,
+    playerInventoryVisible,
 
     // Computed
     isConnected,
@@ -230,6 +343,11 @@ export const useGameStore = defineStore('game', () => {
     updateEntityMovement,
     addChatMessage,
     cleanupExpiredMessages,
+    updateInventory,
+    removeInventory,
+    getPlayerInventory,
+    togglePlayerInventory,
+    setPlayerInventoryVisible,
     reset,
   }
 })
