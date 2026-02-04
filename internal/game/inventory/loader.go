@@ -106,7 +106,7 @@ func (il *InventoryLoader) loadInventoryRecursive(
 		invItem := components.InvItem{
 			ItemID:    dbItem.ItemID,
 			TypeID:    dbItem.TypeID,
-			Resource:  itemDef.Key,
+			Resource:  itemDef.Resource,
 			Quality:   dbItem.Quality,
 			Quantity:  dbItem.Quantity,
 			W:         uint8(itemDef.Size.W),

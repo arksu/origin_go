@@ -6,6 +6,7 @@
       "defId": 4001,
       "key": "seed_bag",
       "name": "Seed Bag",
+      "resource": "items/bag_seed_empty.png",
       "tags": [
         "container"
       ],
