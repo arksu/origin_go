@@ -229,4 +229,7 @@ func applyDefaults(item *ItemDef) {
 	if item.Allowed.EquipmentSlots == nil {
 		item.Allowed.EquipmentSlots = emptySlice
 	}
+	if item.Resource == "" {
+		item.Resource = item.Key
+	}
 }

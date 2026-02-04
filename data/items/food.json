@@ -6,6 +6,7 @@
       "defId": 2001,
       "key": "food_apple",
       "name": "Apple",
+      "resource": "items/apple.png",
       "tags": [
         "food"
       ],
