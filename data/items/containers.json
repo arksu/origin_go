@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "source": "containers",
+  "items": [
+    {
+      "defId": 4001,
+      "key": "seed_bag",
+      "name": "Seed Bag",
+      "tags": [
+        "container"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      },
+      "container": {
+        "size": {
+          "w": 5,
+          "h": 5
+        },
+        "rules": {
+          "allowTags": [
+            "seed"
+          ]
+        }
+      }
+    }
+  ]
+}
