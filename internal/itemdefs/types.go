@@ -10,6 +10,7 @@ type ItemDef struct {
 	Stack    *Stack   `json:"stack"`
 	Allowed  Allowed  `json:"allowed"`
 	Resource string   `json:"resource,omitempty"`
+	Visual   *Visual  `json:"visual,omitempty"`
 
 	// Container describes nested inventory capabilities for this item (e.g. seed bag).
 	// If nil, the item is not a container.
@@ -60,6 +61,31 @@ type ContentRules struct {
 
 	// Optional точечный blacklist по key.
 	DenyItemKeys []string `json:"denyItemKeys,omitempty"`
+}
+
+// Visual defines rules for computing resource path dynamically.
+type Visual struct {
+	NestedInventory *NestedInventoryVisual `json:"nestedInventory,omitempty"`
+}
+
+// NestedInventoryVisual defines resource paths based on nested inventory state.
+type NestedInventoryVisual struct {
+	HasItems string `json:"hasItems"` // Resource when nested inventory has items
+	Empty    string `json:"empty"`    // Resource when nested inventory is empty
+}
+
+// ResolveResource computes the resource path based on visual rules and item state.
+// If no visual rules apply, returns the base resource field.
+func (def *ItemDef) ResolveResource(hasNestedItems bool) string {
+	if def.Visual != nil && def.Visual.NestedInventory != nil {
+		if hasNestedItems && def.Visual.NestedInventory.HasItems != "" {
+			return def.Visual.NestedInventory.HasItems
+		}
+		if !hasNestedItems && def.Visual.NestedInventory.Empty != "" {
+			return def.Visual.NestedInventory.Empty
+		}
+	}
+	return def.Resource
 }
 
 // ItemsFile represents a JSON file containing item definitions.

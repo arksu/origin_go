@@ -103,10 +103,12 @@ func (il *InventoryLoader) loadInventoryRecursive(
 			continue
 		}
 
+		hasNestedItems := dbItem.NestedInventory != nil && len(dbItem.NestedInventory.Items) > 0
+
 		invItem := components.InvItem{
 			ItemID:    dbItem.ItemID,
 			TypeID:    dbItem.TypeID,
-			Resource:  itemDef.Resource,
+			Resource:  itemDef.ResolveResource(hasNestedItems),
 			Quality:   dbItem.Quality,
 			Quantity:  dbItem.Quantity,
 			W:         uint8(itemDef.Size.W),

@@ -58,7 +58,7 @@ func main() {
 	objectFactory.RegisterBuilder(&world.PlayerBuilder{})
 
 	inventoryLoader := inventory.NewInventoryLoader(itemRegistry, logger)
-	inventorySnapshotSender := inventory.NewSnapshotSender(logger)
+	inventorySnapshotSender := inventory.NewSnapshotSender(logger, itemRegistry)
 
 	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, inventorySnapshotSender, logger)
 
