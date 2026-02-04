@@ -1,9 +1,7 @@
 package inventory
 
 import (
-	"database/sql"
 	"encoding/json"
-	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -103,18 +101,10 @@ func (is *InventorySaver) serializeContainer(
 		data = []byte("{}")
 	}
 
-	var width, height sql.NullInt16
-	if container.Kind == constt.InventoryGrid {
-		width = sql.NullInt16{Int16: int16(container.Width), Valid: true}
-		height = sql.NullInt16{Int16: int16(container.Height), Valid: true}
-	}
-
 	return systems.InventorySnapshot{
 		CharacterID:  int64(characterID),
 		Kind:         int16(container.Kind),
 		InventoryKey: int16(container.Key),
-		Width:        width,
-		Height:       height,
 		Data:         data,
 		Version:      int(container.Version),
 	}

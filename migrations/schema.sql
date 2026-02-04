@@ -77,8 +77,6 @@ CREATE TABLE IF NOT EXISTS inventory
     owner_id      BIGINT   NOT NULL, -- character_id
     kind          smallint not null, -- 0=grid, 1=hand, 2=equipment 3=machine_input, 4=machine_output
     inventory_key smallint NOT NULL, -- уникальный ID контейнера (внутри одного объекта может быть несколько инвентарей)
-    width         smallint check ( width >= 0 ),
-    height        smallint check ( height >= 0 ),
     data          JSONB    NOT NULL, -- содержимое контейнера (inventory)
     updated_at    TIMESTAMPTZ DEFAULT now(),
     version       integer  not null,

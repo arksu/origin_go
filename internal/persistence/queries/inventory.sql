@@ -5,12 +5,10 @@ WHERE owner_id = $1
 ORDER BY kind, inventory_key;
 
 -- name: UpsertInventory :one
-INSERT INTO inventory (owner_id, kind, inventory_key, width, height, data, version)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (owner_id, kind, inventory_key)
 DO UPDATE SET
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
     data = EXCLUDED.data,
     version = EXCLUDED.version,
     updated_at = now()

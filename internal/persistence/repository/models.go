@@ -113,8 +113,6 @@ type Inventory struct {
 	OwnerID      int64           `json:"owner_id"`
 	Kind         int16           `json:"kind"`
 	InventoryKey int16           `json:"inventory_key"`
-	Width        sql.NullInt16   `json:"width"`
-	Height       sql.NullInt16   `json:"height"`
 	Data         json.RawMessage `json:"data"`
 	UpdatedAt    sql.NullTime    `json:"updated_at"`
 	Version      int             `json:"version"`
