@@ -4,6 +4,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/itemdefs"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -13,12 +14,14 @@ import (
 )
 
 type SnapshotSender struct {
-	logger *zap.Logger
+	logger       *zap.Logger
+	itemRegistry *itemdefs.Registry
 }
 
-func NewSnapshotSender(logger *zap.Logger) *SnapshotSender {
+func NewSnapshotSender(logger *zap.Logger, itemRegistry *itemdefs.Registry) *SnapshotSender {
 	return &SnapshotSender{
-		logger: logger,
+		logger:       logger,
+		itemRegistry: itemRegistry,
 	}
 }
 
@@ -191,17 +194,25 @@ func (ss *SnapshotSender) buildItemInstance(
 	invItem components.InvItem,
 	owner *components.InventoryOwner,
 ) *netproto.ItemInstance {
+	nestedContainer := ss.findNestedInventory(world, invItem.ItemID, owner)
+	hasNestedItems := nestedContainer != nil && len(nestedContainer.Items) > 0
+
+	// Recompute resource based on current nested inventory state
+	resource := invItem.Resource
+	if itemDef, ok := ss.itemRegistry.GetByID(int(invItem.TypeID)); ok {
+		resource = itemDef.ResolveResource(hasNestedItems)
+	}
+
 	itemInstance := &netproto.ItemInstance{
 		ItemId:   invItem.ItemID,
 		TypeId:   invItem.TypeID,
-		Resource: invItem.Resource,
+		Resource: resource,
 		Quality:  invItem.Quality,
 		Quantity: invItem.Quantity,
 		W:        uint32(invItem.W),
 		H:        uint32(invItem.H),
 	}
 
-	nestedContainer := ss.findNestedInventory(world, invItem.ItemID, owner)
 	if nestedContainer != nil {
 		nestedGridState := ss.buildNestedGridState(world, *nestedContainer, owner)
 		itemInstance.NestedInventory = nestedGridState

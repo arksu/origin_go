@@ -7,6 +7,12 @@
       "key": "seed_bag",
       "name": "Seed Bag",
       "resource": "items/bag_seed_empty.png",
+      "visual": {
+        "nestedInventory": {
+          "hasItems": "items/bag_seed_full.png",
+          "empty": "items/bag_seed_empty.png"
+        }
+      },
       "tags": [
         "container"
       ],
