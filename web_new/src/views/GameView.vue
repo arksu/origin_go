@@ -7,6 +7,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import ChatContainer from '@/components/ui/ChatContainer.vue'
 import InventoryWindow from '@/components/ui/InventoryWindow.vue'
+import NestedInventoryWindow from '@/components/ui/NestedInventoryWindow.vue'
 import { sendChatMessage } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
@@ -39,6 +40,19 @@ const showInventory = computed(() => {
   const hasGrid = !!playerInventory.value?.grid
   console.log('[GameView] showInventory computed:', { visible, hasInventory, hasGrid, inventory: playerInventory.value })
   return visible && hasInventory && hasGrid
+})
+
+const openNestedInventoryWindows = computed(() => {
+  const openWindows = Array.from(gameStore.openNestedInventories.keys()).filter(windowKey => 
+    gameStore.openNestedInventories.get(windowKey)
+  )
+  console.log('[GameView] openNestedInventoryWindows computed:', {
+    openWindows,
+    totalOpenInventories: gameStore.openNestedInventories.size,
+    allKeys: Array.from(gameStore.openNestedInventories.keys()),
+    values: Array.from(gameStore.openNestedInventories.values())
+  })
+  return openWindows
 })
 
 async function initCanvas() {
@@ -110,6 +124,10 @@ function handleInventoryClose() {
   gameStore.setPlayerInventoryVisible(false)
 }
 
+function handleNestedInventoryClose(windowKey: string) {
+  gameStore.closeNestedInventory(windowKey)
+}
+
 // Setup hotkeys
 const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
   ...config,
@@ -179,6 +197,17 @@ useHotkeys(hotkeys)
       </div>
       <div v-if="showInventory" class="game-inventory">
         <InventoryWindow :inventory="playerInventory!" @close="handleInventoryClose" />
+      </div>
+      
+      <!-- Nested inventory windows -->
+      <div v-for="windowKey in openNestedInventoryWindows" :key="windowKey" class="game-nested-inventory">
+        <NestedInventoryWindow 
+          v-if="gameStore.getNestedInventoryData(windowKey)"
+          :window-key="windowKey" 
+          :nested-inventory-data="gameStore.getNestedInventoryData(windowKey)!.data"
+          :item-id="gameStore.getNestedInventoryData(windowKey)!.itemId"
+          @close="() => handleNestedInventoryClose(windowKey)" 
+        />
       </div>
     </div>
 
@@ -261,6 +290,16 @@ useHotkeys(hotkeys)
   height: 100%;
   pointer-events: none;
   z-index: 200;
+}
+
+.game-nested-inventory {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 300;
 }
 
 .game-disconnected {

@@ -7,7 +7,9 @@ import ItemSlot from './ItemSlot.vue'
 import InventoryItem from './InventoryItem.vue'
 
 interface Props {
-  inventory: proto.IInventoryState
+  windowKey: string
+  nestedInventoryData: proto.IInventoryGridState
+  itemId: number
 }
 
 const props = defineProps<Props>()
@@ -16,28 +18,29 @@ const emit = defineEmits<{
 }>()
 
 const gameStore = useGameStore()
-const gridState = computed(() => props.inventory.grid)
-const inventoryRef = computed(() => props.inventory.ref)
+
+// Use the nested inventory data directly from props instead of store
+const gridState = computed(() => props.nestedInventoryData)
 
 const onClose = () => {
+  gameStore.closeNestedInventory(props.windowKey)
   emit('close')
 }
 
 const onSlotClick = (_x: number, _y: number, _ox: number, _oy: number) => {
-  console.log('Slot click - inventory operations not yet implemented')
+  console.log('Nested slot click - inventory operations not yet implemented')
 }
 
 const onItemClick = (_item: { x: number; y: number; instance: proto.IItemInstance }, _ox: number, _oy: number) => {
-  console.log('Item click - inventory operations not yet implemented')
+  console.log('Nested item click - inventory operations not yet implemented')
 }
 
 const onItemRightClick = (item: { x: number; y: number; instance: proto.IItemInstance }) => {
-  console.log('Item right click:', item)
-  console.log('Item nestedInventory data:', item.instance.nestedInventory)
+  console.log('Nested item right click:', item)
   
-  // Check if item has nested inventory
+  // Check if this nested item also has a nested inventory (recursive support)
   if (item.instance.nestedInventory && item.instance.itemId) {
-    console.log('Toggle nested inventory for item:', item.instance.itemId)
+    console.log('Toggle deeper nested inventory for item:', item.instance.itemId)
     
     // Create inventory key for nested inventory (assuming key 0 for nested inventory)
     const inventoryKey = 0
@@ -46,14 +49,18 @@ const onItemRightClick = (item: { x: number; y: number; instance: proto.IItemIns
     
     // Check if window was closed (toggle behavior)
     const isClosed = !gameStore.openNestedInventories.has(windowKey)
-    console.log('Nested inventory window', isClosed ? 'closed' : 'opened', 'with key:', windowKey)
+    console.log('Deeper nested inventory window', isClosed ? 'closed' : 'opened', 'with key:', windowKey)
   } else {
-    console.log('Item right click - inventory operations not yet implemented')
+    console.log('Nested item right click - inventory operations not yet implemented')
   }
 }
 
 const getWindowId = () => {
-  return inventoryRef.value?.ownerEntityId ? Number(inventoryRef.value.ownerEntityId) : 0
+  return props.itemId
+}
+
+const getWindowTitle = () => {
+  return `Container ${props.itemId}`
 }
 </script>
 
@@ -63,7 +70,7 @@ const getWindowId = () => {
     :id="getWindowId()"
     :inner-height="gridState.height! * 31"
     :inner-width="gridState.width! * 31"
-    title="Inventory"
+    :title="getWindowTitle()"
     @close="onClose"
   >
     <div v-for="y in gridState.height" :key="y">
@@ -81,7 +88,7 @@ const getWindowId = () => {
     <div v-for="(gridItem, idx) in gridState.items" :key="idx">
       <inventory-item 
         v-if="gridItem.item"
-        :inventory-ref="inventoryRef!"
+        :inventory-ref="{ ownerItemId: props.itemId, inventoryKey: 0 }"
         :item="{ x: gridItem.x!, y: gridItem.y!, instance: gridItem.item }"
         @item-click="onItemClick"
         @item-right-click="onItemRightClick"
