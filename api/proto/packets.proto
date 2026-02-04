@@ -113,8 +113,13 @@ enum WarningCode {
 // owner_entity_id: entity, которому принадлежит контейнер (player, chest, dropped entity).
 message InventoryRef {
   InventoryKind kind = 1;
-  uint64 owner_entity_id = 2;
-  uint32 inventory_key = 3; // если у entity может быть несколько grid-контейнеров (рюкзак/карман/сундук#N)
+
+  oneof owner {
+    uint64 owner_entity_id = 2;
+    uint64 owner_item_id = 3;
+  }
+
+  uint32 inventory_key = 4; // если у entity может быть несколько grid-контейнеров (рюкзак/карман/сундук#N)
 }
 
 message ItemInstance {

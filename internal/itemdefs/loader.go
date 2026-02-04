@@ -194,6 +194,25 @@ func validateItem(item *ItemDef, filePath string) error {
 		}
 	}
 
+	if item.Container != nil {
+		if item.Container.Size.W < 1 {
+			return &LoadError{
+				FilePath: filePath,
+				DefID:    item.DefID,
+				Key:      item.Key,
+				Message:  "container.size.w must be >= 1",
+			}
+		}
+		if item.Container.Size.H < 1 {
+			return &LoadError{
+				FilePath: filePath,
+				DefID:    item.DefID,
+				Key:      item.Key,
+				Message:  "container.size.h must be >= 1",
+			}
+		}
+	}
+
 	return nil
 }
 

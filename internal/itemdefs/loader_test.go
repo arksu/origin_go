@@ -318,3 +318,98 @@ func TestLoadFromDirectory_ExplicitValues(t *testing.T) {
 	assert.Equal(t, "head", item.Allowed.EquipmentSlots[0])
 	assert.Equal(t, "chest", item.Allowed.EquipmentSlots[1])
 }
+
+func TestLoadFromDirectory_ContainerSuccess(t *testing.T) {
+	dir := t.TempDir()
+
+	json := `{
+		"v": 1,
+		"source": "containers",
+		"items": [
+			{
+				"defId": 4001,
+				"key": "seed_bag",
+				"name": "Seed Bag",
+				"tags": ["container"],
+				"size": { "w": 2, "h": 2 },
+				"container": {
+					"size": { "w": 5, "h": 5 },
+					"rules": {
+						"allowTags": ["seed"]
+					}
+				}
+			}
+		]
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "containers.json"), []byte(json), 0644))
+
+	registry, err := LoadFromDirectory(dir, testLogger())
+	require.NoError(t, err)
+
+	item, ok := registry.GetByKey("seed_bag")
+	require.True(t, ok)
+	assert.Equal(t, 4001, item.DefID)
+	assert.Equal(t, "Seed Bag", item.Name)
+	assert.Equal(t, 2, item.Size.W)
+	assert.Equal(t, 2, item.Size.H)
+
+	require.NotNil(t, item.Container)
+	assert.Equal(t, 5, item.Container.Size.W)
+	assert.Equal(t, 5, item.Container.Size.H)
+	assert.Equal(t, 1, len(item.Container.Rules.AllowTags))
+	assert.Equal(t, "seed", item.Container.Rules.AllowTags[0])
+}
+
+func TestLoadFromDirectory_InvalidContainerWidth(t *testing.T) {
+	dir := t.TempDir()
+
+	json := `{
+		"v": 1,
+		"source": "test",
+		"items": [
+			{
+				"defId": 1001,
+				"key": "bad_container",
+				"name": "Bad Container",
+				"tags": [],
+				"size": { "w": 1, "h": 1 },
+				"container": {
+					"size": { "w": 0, "h": 5 },
+					"rules": {}
+				}
+			}
+		]
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.json"), []byte(json), 0644))
+
+	_, err := LoadFromDirectory(dir, testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "container.size.w must be >= 1")
+}
+
+func TestLoadFromDirectory_InvalidContainerHeight(t *testing.T) {
+	dir := t.TempDir()
+
+	json := `{
+		"v": 1,
+		"source": "test",
+		"items": [
+			{
+				"defId": 1001,
+				"key": "bad_container",
+				"name": "Bad Container",
+				"tags": [],
+				"size": { "w": 1, "h": 1 },
+				"container": {
+					"size": { "w": 5, "h": 0 },
+					"rules": {}
+				}
+			}
+		]
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.json"), []byte(json), 0644))
+
+	_, err := LoadFromDirectory(dir, testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "container.size.h must be >= 1")
+}

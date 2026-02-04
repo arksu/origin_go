@@ -9,6 +9,10 @@ type ItemDef struct {
 	Size    Size     `json:"size"`
 	Stack   *Stack   `json:"stack"`
 	Allowed Allowed  `json:"allowed"`
+
+	// Container describes nested inventory capabilities for this item (e.g. seed bag).
+	// If nil, the item is not a container.
+	Container *ContainerDef `json:"container,omitempty"`
 }
 
 // Size represents item dimensions in inventory grid.
@@ -34,6 +38,27 @@ type Allowed struct {
 	Hand           *bool    `json:"hand,omitempty"`
 	Grid           *bool    `json:"grid,omitempty"`
 	EquipmentSlots []string `json:"equipmentSlots,omitempty"`
+}
+
+type ContainerDef struct {
+	Size Size `json:"size"`
+	// ContentRules limit what items can be placed into this container.
+	Rules ContentRules `json:"rules"`
+}
+
+// ContentRules defines allow/deny constraints for items placed inside the container.
+type ContentRules struct {
+	// If non-empty: item must have at least one of these tags.
+	AllowTags []string `json:"allowTags,omitempty"`
+
+	// If item has any of these tags => forbidden.
+	DenyTags []string `json:"denyTags,omitempty"`
+
+	// Optional точечный whitelist по key (удобнее, чем typeId).
+	AllowItemKeys []string `json:"allowItemKeys,omitempty"`
+
+	// Optional точечный blacklist по key.
+	DenyItemKeys []string `json:"denyItemKeys,omitempty"`
 }
 
 // ItemsFile represents a JSON file containing item definitions.
