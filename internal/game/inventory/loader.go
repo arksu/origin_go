@@ -27,6 +27,10 @@ func NewInventoryLoader(itemRegistry *itemdefs.Registry, logger *zap.Logger) *In
 	}
 }
 
+func (il *InventoryLoader) ItemRegistry() *itemdefs.Registry {
+	return il.itemRegistry
+}
+
 type LoadResult struct {
 	ContainerHandles []types.Handle
 	Warnings         []string
@@ -146,7 +150,7 @@ func (il *InventoryLoader) buildContainer(
 		}
 	}
 
-	sanitizedItems, itemWarnings := il.sanitizeItems(data.Items, kind, width, height)
+	sanitizedItems, itemWarnings := il.sanitizeItems(world, data.Items, kind, width, height)
 	warnings = append(warnings, itemWarnings...)
 
 	playerEntityID, _ := ecs.GetComponent[ecs.ExternalID](world, playerHandle)
@@ -176,6 +180,7 @@ func (il *InventoryLoader) buildContainer(
 }
 
 func (il *InventoryLoader) sanitizeItems(
+	world *ecs.World,
 	items []InventoryItemV1,
 	kind _const.InventoryKind,
 	width, height uint8,
@@ -219,6 +224,20 @@ func (il *InventoryLoader) sanitizeItems(
 			H:        uint8(itemDef.Size.H),
 			X:        item.X,
 			Y:        item.Y,
+		}
+
+		// Process nested inventory if present
+		if item.NestedInventory != nil {
+			if itemDef.Container == nil {
+				warnings = append(warnings, fmt.Sprintf("item_id=%d has nested_inventory but is not a container, ignoring", item.ItemID))
+			} else {
+				// Create nested container entity
+				nestedHandle := il.createNestedContainer(world, item.ItemID, item.NestedInventory, itemDef.Container)
+				if nestedHandle != types.InvalidHandle {
+					// Store reference to nested container if needed
+					// For now, the nested container will be linked via OwnerItemId in snapshot
+				}
+			}
 		}
 
 		switch kind {
@@ -280,6 +299,45 @@ func (il *InventoryLoader) sanitizeItems(
 	}
 
 	return result, warnings
+}
+
+func (il *InventoryLoader) createNestedContainer(
+	world *ecs.World,
+	ownerItemID uint64,
+	nestedData *InventoryDataV1,
+	containerDef *itemdefs.ContainerDef,
+) types.Handle {
+	// Validate nested data version
+	if nestedData.Version != 1 {
+		return types.InvalidHandle
+	}
+
+	// Sanitize nested items
+	nestedItems, _ := il.sanitizeItems(world, nestedData.Items, _const.InventoryGrid, uint8(containerDef.Size.W), uint8(containerDef.Size.H))
+
+	// Create nested container entity
+	nestedContainer := components.InventoryContainer{
+		OwnerEntityID: 0, // Will be set to the item's entity ID later
+		Kind:          _const.InventoryGrid,
+		Key:           0, // Default key for nested containers
+		Version:       0, // Will be set when saved
+		Width:         uint8(containerDef.Size.W),
+		Height:        uint8(containerDef.Size.H),
+		Items:         nestedItems,
+	}
+
+	// Create occupancy cache for nested grid
+	nestedContainer.Occupied = make([]uint8, int(nestedContainer.Width)*int(nestedContainer.Height))
+	for _, item := range nestedItems {
+		il.markOccupied(nestedContainer.Occupied, nestedContainer.Width, nestedContainer.Height, item.X, item.Y, item.W, item.H)
+	}
+
+	// Spawn nested container entity
+	nestedHandle := world.Spawn(types.EntityID(0), func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, nestedContainer)
+	})
+
+	return nestedHandle
 }
 
 func (il *InventoryLoader) canPlaceInGrid(grid [][]bool, width, height, x, y, w, h uint8) bool {

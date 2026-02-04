@@ -780,10 +780,14 @@ func (x *Timestamp) GetMillis() int64 {
 // Универсальная ссылка на контейнер/инвентарь.
 // owner_entity_id: entity, которому принадлежит контейнер (player, chest, dropped entity).
 type InventoryRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          InventoryKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=proto.InventoryKind" json:"kind,omitempty"`
-	OwnerEntityId uint64                 `protobuf:"varint,2,opt,name=owner_entity_id,json=ownerEntityId,proto3" json:"owner_entity_id,omitempty"`
-	InventoryKey  uint32                 `protobuf:"varint,3,opt,name=inventory_key,json=inventoryKey,proto3" json:"inventory_key,omitempty"` // если у entity может быть несколько grid-контейнеров (рюкзак/карман/сундук#N)
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  InventoryKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=proto.InventoryKind" json:"kind,omitempty"`
+	// Types that are valid to be assigned to Owner:
+	//
+	//	*InventoryRef_OwnerEntityId
+	//	*InventoryRef_OwnerItemId
+	Owner         isInventoryRef_Owner `protobuf_oneof:"owner"`
+	InventoryKey  uint32               `protobuf:"varint,4,opt,name=inventory_key,json=inventoryKey,proto3" json:"inventory_key,omitempty"` // если у entity может быть несколько grid-контейнеров (рюкзак/карман/сундук#N)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -825,9 +829,27 @@ func (x *InventoryRef) GetKind() InventoryKind {
 	return InventoryKind_INVENTORY_KIND_GRID
 }
 
+func (x *InventoryRef) GetOwner() isInventoryRef_Owner {
+	if x != nil {
+		return x.Owner
+	}
+	return nil
+}
+
 func (x *InventoryRef) GetOwnerEntityId() uint64 {
 	if x != nil {
-		return x.OwnerEntityId
+		if x, ok := x.Owner.(*InventoryRef_OwnerEntityId); ok {
+			return x.OwnerEntityId
+		}
+	}
+	return 0
+}
+
+func (x *InventoryRef) GetOwnerItemId() uint64 {
+	if x != nil {
+		if x, ok := x.Owner.(*InventoryRef_OwnerItemId); ok {
+			return x.OwnerItemId
+		}
 	}
 	return 0
 }
@@ -839,17 +861,36 @@ func (x *InventoryRef) GetInventoryKey() uint32 {
 	return 0
 }
 
+type isInventoryRef_Owner interface {
+	isInventoryRef_Owner()
+}
+
+type InventoryRef_OwnerEntityId struct {
+	OwnerEntityId uint64 `protobuf:"varint,2,opt,name=owner_entity_id,json=ownerEntityId,proto3,oneof"`
+}
+
+type InventoryRef_OwnerItemId struct {
+	OwnerItemId uint64 `protobuf:"varint,3,opt,name=owner_item_id,json=ownerItemId,proto3,oneof"`
+}
+
+func (*InventoryRef_OwnerEntityId) isInventoryRef_Owner() {}
+
+func (*InventoryRef_OwnerItemId) isInventoryRef_Owner() {}
+
 type ItemInstance struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        uint64                 `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	TypeId        uint32                 `protobuf:"varint,2,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"` // ID типа предмета
-	Resource      string                 `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
-	Quality       uint32                 `protobuf:"varint,4,opt,name=quality,proto3" json:"quality,omitempty"`
-	Quantity      uint32                 `protobuf:"varint,5,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	W             uint32                 `protobuf:"varint,10,opt,name=w,proto3" json:"w,omitempty"` // размеры в слотах
-	H             uint32                 `protobuf:"varint,11,opt,name=h,proto3" json:"h,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ItemId   uint64                 `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	TypeId   uint32                 `protobuf:"varint,2,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"` // ID типа предмета
+	Resource string                 `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
+	Quality  uint32                 `protobuf:"varint,4,opt,name=quality,proto3" json:"quality,omitempty"`
+	Quantity uint32                 `protobuf:"varint,5,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	W        uint32                 `protobuf:"varint,10,opt,name=w,proto3" json:"w,omitempty"` // размеры в слотах
+	H        uint32                 `protobuf:"varint,11,opt,name=h,proto3" json:"h,omitempty"`
+	// Если предмет является контейнером (seed_bag, backpack, etc.),
+	// то nested_inventory указывает на вложенный инвентарь
+	NestedInventory *InventoryRef `protobuf:"bytes,12,opt,name=nested_inventory,json=nestedInventory,proto3,oneof" json:"nested_inventory,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ItemInstance) Reset() {
@@ -929,6 +970,13 @@ func (x *ItemInstance) GetH() uint32 {
 		return x.H
 	}
 	return 0
+}
+
+func (x *ItemInstance) GetNestedInventory() *InventoryRef {
+	if x != nil {
+		return x.NestedInventory
+	}
+	return nil
 }
 
 type GridItem struct {
@@ -3896,11 +3944,13 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x05max_x\x18\x03 \x01(\x05R\x04maxX\x12\x13\n" +
 	"\x05max_y\x18\x04 \x01(\x05R\x04maxY\"#\n" +
 	"\tTimestamp\x12\x16\n" +
-	"\x06millis\x18\x01 \x01(\x03R\x06millis\"\x85\x01\n" +
+	"\x06millis\x18\x01 \x01(\x03R\x06millis\"\xb6\x01\n" +
 	"\fInventoryRef\x12(\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x14.proto.InventoryKindR\x04kind\x12&\n" +
-	"\x0fowner_entity_id\x18\x02 \x01(\x04R\rownerEntityId\x12#\n" +
-	"\rinventory_key\x18\x03 \x01(\rR\finventoryKey\"\xae\x01\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x14.proto.InventoryKindR\x04kind\x12(\n" +
+	"\x0fowner_entity_id\x18\x02 \x01(\x04H\x00R\rownerEntityId\x12$\n" +
+	"\rowner_item_id\x18\x03 \x01(\x04H\x00R\vownerItemId\x12#\n" +
+	"\rinventory_key\x18\x04 \x01(\rR\finventoryKeyB\a\n" +
+	"\x05owner\"\x88\x02\n" +
 	"\fItemInstance\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\x04R\x06itemId\x12\x17\n" +
 	"\atype_id\x18\x02 \x01(\rR\x06typeId\x12\x1a\n" +
@@ -3909,7 +3959,9 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\bquantity\x18\x05 \x01(\rR\bquantity\x12\f\n" +
 	"\x01w\x18\n" +
 	" \x01(\rR\x01w\x12\f\n" +
-	"\x01h\x18\v \x01(\rR\x01h\"O\n" +
+	"\x01h\x18\v \x01(\rR\x01h\x12C\n" +
+	"\x10nested_inventory\x18\f \x01(\v2\x13.proto.InventoryRefH\x00R\x0fnestedInventory\x88\x01\x01B\x13\n" +
+	"\x11_nested_inventory\"O\n" +
 	"\bGridItem\x12\f\n" +
 	"\x01x\x18\x01 \x01(\rR\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\rR\x01y\x12'\n" +
@@ -4256,77 +4308,78 @@ var file_api_proto_packets_proto_goTypes = []any{
 }
 var file_api_proto_packets_proto_depIdxs = []int32{
 	4,  // 0: proto.InventoryRef.kind:type_name -> proto.InventoryKind
-	14, // 1: proto.GridItem.item:type_name -> proto.ItemInstance
-	15, // 2: proto.InventoryGridState.items:type_name -> proto.GridItem
-	1,  // 3: proto.EquipmentItem.slot:type_name -> proto.EquipSlot
-	14, // 4: proto.EquipmentItem.item:type_name -> proto.ItemInstance
-	17, // 5: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
-	14, // 6: proto.InventoryHandState.item:type_name -> proto.ItemInstance
-	13, // 7: proto.InventoryState.ref:type_name -> proto.InventoryRef
-	16, // 8: proto.InventoryState.grid:type_name -> proto.InventoryGridState
-	18, // 9: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
-	19, // 10: proto.InventoryState.hand:type_name -> proto.InventoryHandState
-	13, // 11: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
-	13, // 12: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
-	13, // 13: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
-	22, // 14: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
-	1,  // 15: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
-	21, // 16: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
-	23, // 17: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
-	23, // 18: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
-	23, // 19: proto.InventoryOp.pickup_from_world:type_name -> proto.InventoryMoveSpec
-	24, // 20: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
-	9,  // 21: proto.EntityMovement.position:type_name -> proto.Position
-	10, // 22: proto.EntityMovement.velocity:type_name -> proto.Vector2
-	0,  // 23: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
-	10, // 24: proto.EntityMovement.target_position:type_name -> proto.Vector2
-	9,  // 25: proto.EntityPosition.position:type_name -> proto.Position
-	10, // 26: proto.EntityPosition.size:type_name -> proto.Vector2
-	29, // 27: proto.ChunkData.coord:type_name -> proto.ChunkCoord
-	7,  // 28: proto.Interact.type:type_name -> proto.InteractionType
-	31, // 29: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
-	32, // 30: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
-	33, // 31: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
-	0,  // 32: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
-	8,  // 33: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
-	37, // 34: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
-	38, // 35: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
-	34, // 36: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
-	35, // 37: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
-	25, // 38: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
-	36, // 39: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
-	30, // 40: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
-	29, // 41: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
-	27, // 42: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
-	26, // 43: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
-	5,  // 44: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
-	20, // 45: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
-	20, // 46: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
-	20, // 47: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
-	8,  // 48: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
-	5,  // 49: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	6,  // 50: proto.S2C_Warning.code:type_name -> proto.WarningCode
-	40, // 51: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	41, // 52: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	44, // 53: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
-	45, // 54: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
-	42, // 55: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	43, // 56: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	46, // 57: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	47, // 58: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	48, // 59: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	49, // 60: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
-	50, // 61: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
-	51, // 62: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
-	52, // 63: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
-	53, // 64: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
-	54, // 65: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	55, // 66: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
-	67, // [67:67] is the sub-list for method output_type
-	67, // [67:67] is the sub-list for method input_type
-	67, // [67:67] is the sub-list for extension type_name
-	67, // [67:67] is the sub-list for extension extendee
-	0,  // [0:67] is the sub-list for field type_name
+	13, // 1: proto.ItemInstance.nested_inventory:type_name -> proto.InventoryRef
+	14, // 2: proto.GridItem.item:type_name -> proto.ItemInstance
+	15, // 3: proto.InventoryGridState.items:type_name -> proto.GridItem
+	1,  // 4: proto.EquipmentItem.slot:type_name -> proto.EquipSlot
+	14, // 5: proto.EquipmentItem.item:type_name -> proto.ItemInstance
+	17, // 6: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
+	14, // 7: proto.InventoryHandState.item:type_name -> proto.ItemInstance
+	13, // 8: proto.InventoryState.ref:type_name -> proto.InventoryRef
+	16, // 9: proto.InventoryState.grid:type_name -> proto.InventoryGridState
+	18, // 10: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
+	19, // 11: proto.InventoryState.hand:type_name -> proto.InventoryHandState
+	13, // 12: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
+	13, // 13: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
+	13, // 14: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
+	22, // 15: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
+	1,  // 16: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
+	21, // 17: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
+	23, // 18: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
+	23, // 19: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
+	23, // 20: proto.InventoryOp.pickup_from_world:type_name -> proto.InventoryMoveSpec
+	24, // 21: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
+	9,  // 22: proto.EntityMovement.position:type_name -> proto.Position
+	10, // 23: proto.EntityMovement.velocity:type_name -> proto.Vector2
+	0,  // 24: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
+	10, // 25: proto.EntityMovement.target_position:type_name -> proto.Vector2
+	9,  // 26: proto.EntityPosition.position:type_name -> proto.Position
+	10, // 27: proto.EntityPosition.size:type_name -> proto.Vector2
+	29, // 28: proto.ChunkData.coord:type_name -> proto.ChunkCoord
+	7,  // 29: proto.Interact.type:type_name -> proto.InteractionType
+	31, // 30: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
+	32, // 31: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
+	33, // 32: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
+	0,  // 33: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
+	8,  // 34: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
+	37, // 35: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
+	38, // 36: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
+	34, // 37: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
+	35, // 38: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
+	25, // 39: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
+	36, // 40: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
+	30, // 41: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
+	29, // 42: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
+	27, // 43: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
+	26, // 44: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
+	5,  // 45: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
+	20, // 46: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
+	20, // 47: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
+	20, // 48: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
+	8,  // 49: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
+	5,  // 50: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	6,  // 51: proto.S2C_Warning.code:type_name -> proto.WarningCode
+	40, // 52: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	41, // 53: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	44, // 54: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	45, // 55: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	42, // 56: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	43, // 57: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	46, // 58: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	47, // 59: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	48, // 60: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	49, // 61: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
+	50, // 62: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
+	51, // 63: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
+	52, // 64: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
+	53, // 65: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
+	54, // 66: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	55, // 67: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
+	68, // [68:68] is the sub-list for method output_type
+	68, // [68:68] is the sub-list for method input_type
+	68, // [68:68] is the sub-list for extension type_name
+	68, // [68:68] is the sub-list for extension extendee
+	0,  // [0:68] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -4334,6 +4387,11 @@ func file_api_proto_packets_proto_init() {
 	if File_api_proto_packets_proto != nil {
 		return
 	}
+	file_api_proto_packets_proto_msgTypes[4].OneofWrappers = []any{
+		(*InventoryRef_OwnerEntityId)(nil),
+		(*InventoryRef_OwnerItemId)(nil),
+	}
+	file_api_proto_packets_proto_msgTypes[5].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[10].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[11].OneofWrappers = []any{
 		(*InventoryState_Grid)(nil),
