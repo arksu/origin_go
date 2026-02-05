@@ -163,6 +163,8 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handlePlayerAction(c, msg.Sequence, payload.PlayerAction)
 	case *netproto.ClientMessage_Chat:
 		g.handleChatMessage(c, msg.Sequence, payload.Chat)
+	case *netproto.ClientMessage_InventoryOp:
+		g.handleInventoryOp(c, msg.Sequence, payload.InventoryOp)
 	default:
 		g.logger.Warn("Unknown packet type", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
 	}
@@ -338,6 +340,61 @@ func (g *Game) handleChatMessage(c *network.Client, sequence uint32, chat *netpr
 		zap.Uint64("client_id", c.ID),
 		zap.Int64("character_id", int64(c.CharacterID)),
 		zap.Int("text_len", len(text)))
+}
+
+func (g *Game) handleInventoryOp(c *network.Client, sequence uint32, inventoryOp *netproto.C2S_InventoryOp) {
+	if c.CharacterID == 0 {
+		g.logger.Warn("Inventory op from unauthenticated client", zap.Uint64("client_id", c.ID))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+
+	if inventoryOp == nil || inventoryOp.Op == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid inventory operation")
+		return
+	}
+
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		g.logger.Error("Shard not found for inventory op",
+			zap.Uint64("client_id", c.ID),
+			zap.Int("layer", c.Layer))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdInventoryOp,
+		Payload:     inventoryOp.Op,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	}
+
+	if err := shard.PlayerInbox().Enqueue(cmd); err != nil {
+		var overflowError network.OverflowError
+		var rateLimitError network.RateLimitError
+		var duplicateCommandError network.DuplicateCommandError
+		switch {
+		case errors.As(err, &overflowError):
+			g.logger.Warn("Command queue overflow for inventory op",
+				zap.Uint64("client_id", c.ID))
+			c.SendWarning(netproto.WarningCode_WARN_INPUT_QUEUE_OVERFLOW, "Command queue overflow")
+		case errors.As(err, &rateLimitError):
+			g.logger.Warn("Rate limit exceeded for inventory op",
+				zap.Uint64("client_id", c.ID))
+			c.SendError(netproto.ErrorCode_ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED, "Rate limit exceeded")
+			c.Close()
+		case errors.As(err, &duplicateCommandError):
+			// Ignore silently - already processed
+		default:
+			g.logger.Error("Failed to enqueue inventory op command",
+				zap.Uint64("client_id", c.ID),
+				zap.Error(err))
+		}
+	}
 }
 
 func (g *Game) handleDisconnect(c *network.Client) {

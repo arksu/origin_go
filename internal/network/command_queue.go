@@ -17,6 +17,7 @@ const (
 	CmdMoveToEntity
 	CmdInteract
 	CmdChat
+	CmdInventoryOp
 )
 
 // PlayerCommand represents an intent from a client to be processed by ECS

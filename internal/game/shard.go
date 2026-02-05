@@ -83,7 +83,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
-	s.world.AddSystem(systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, cfg.Game.ChatLocalRadius, logger))
+	inventoryExecutor := inventory.NewInventoryExecutor(logger)
+	s.world.AddSystem(systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, cfg.Game.ChatLocalRadius, logger))
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
@@ -369,6 +370,33 @@ func (s *Shard) SendChatMessage(entityID types.EntityID, channel netproto.ChatCh
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal chat message",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendInventoryOpResult sends an inventory operation result to a client
+func (s *Shard) SendInventoryOpResult(entityID types.EntityID, result *netproto.S2C_InventoryOpResult) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_InventoryOpResult{
+			InventoryOpResult: result,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal inventory op result",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return
