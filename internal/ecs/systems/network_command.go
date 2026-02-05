@@ -213,7 +213,7 @@ func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handl
 	}
 
 	senderName := senderAppearance.Name
-	if senderName == "" {
+	if senderName == nil {
 		senderName = "Unknown"
 	}
 

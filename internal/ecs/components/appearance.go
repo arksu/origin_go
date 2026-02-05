@@ -4,7 +4,8 @@ import "origin/internal/ecs"
 
 // Appearance represents an entity's visual appearance and identity
 type Appearance struct {
-	Name string // Display name for the entity (player or NPC)
+	Name     *string // Display name for the entity (player or NPC), can be empty
+	Resource string  // Resource identifier for the entity's visual representation
 }
 
 const AppearanceComponentID ecs.ComponentID = 18

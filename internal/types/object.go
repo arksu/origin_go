@@ -4,11 +4,11 @@ package types
 type ObjectType int
 
 const (
-	ObjectTypeUnknown ObjectType = iota
-	ObjectTypeTree
-	ObjectTypeRock
-	ObjectTypeBuilding
-	ObjectTypeItem
-	ObjectTypeNPC
-	ObjectTypePlayer
+	ObjectTypeUnknown     ObjectType = iota
+	ObjectTypeTree                   = 1
+	ObjectTypeRock                   = 2
+	ObjectTypeDroppedItem            = 3
+	ObjectTypeBuilding               = 4
+	ObjectTypeNPC                    = 5
+	ObjectTypePlayer                 = 6
 )

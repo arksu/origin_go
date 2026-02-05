@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS object
 
     is_static   BOOLEAN     DEFAULT true, -- статичный или динамичный
     owner_id    BIGINT,                   -- кто создал/владеет (для построек)
-    data_jsonb  JSONB,
+    data  JSONB,
 
     created_at  TIMESTAMPTZ DEFAULT now(),
     create_tick BIGINT NOT NULL,
@@ -148,8 +148,8 @@ CREATE INDEX idx_object_type ON object (object_type)
     WHERE deleted_at IS NULL;
 CREATE INDEX idx_object_static ON object (is_static, region)
     WHERE is_static = false AND deleted_at IS NULL; -- для dynamic объектов
-CREATE INDEX idx_object_data ON object USING GIN (data_jsonb)
-    WHERE data_jsonb IS NOT NULL;
+CREATE INDEX idx_object_data ON object USING GIN (data)
+    WHERE data IS NOT NULL;
 ALTER TABLE object
     ALTER COLUMN region SET STATISTICS 1000;
 ALTER TABLE object
