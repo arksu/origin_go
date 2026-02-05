@@ -110,16 +110,10 @@ enum WarningCode {
 // ============================================================================
 
 // Универсальная ссылка на контейнер/инвентарь.
-// owner_entity_id: entity, которому принадлежит контейнер (player, chest, dropped entity).
 message InventoryRef {
   InventoryKind kind = 1;
-
-  oneof owner {
-    uint64 owner_entity_id = 2;
-    uint64 owner_item_id = 3;
-  }
-
-  uint32 inventory_key = 4; // если у entity может быть несколько grid-контейнеров (рюкзак/карман/сундук#N)
+  uint64 owner_id = 2; // entity, которому принадлежит контейнер (player, chest, dropped entity). либо item_id если бросаем вещь
+  uint32 inventory_key = 3; // если у entity может быть несколько grid-контейнеров (рюкзак/карман/сундук#N)
 }
 
 message ItemInstance {
@@ -182,6 +176,11 @@ message GridPos {
   uint32 y = 2;
 }
 
+message HandPos {
+  int32 mouse_offset_x = 1;
+  int32 mouse_offset_y = 2;
+}
+
 message InventoryMoveSpec {
   InventoryRef src = 1;
   InventoryRef dst = 2;
@@ -194,14 +193,17 @@ message InventoryMoveSpec {
   // Для EQUIPMENT: в какой слот хотим положить (если dst.kind == EQUIPMENT)
   optional EquipSlot dst_equip_slot = 5;
 
+  // Для HAND: как взяли в руку (отступ от курсора мыши), показываем на клиенте
+  optional HandPos hand_pos = 6;
+
   // Если предмет стэкуемый и в dst уже есть стак: сколько переносим (<= quantity)
   // Если не задано — переносим “как получится” по правилам сервера (обычно всё).
-  optional uint32 quantity = 6;
+  optional uint32 quantity = 7;
 
   // Поведение при коллизии/занятости:
   // - если false: операция должна фейлиться
   // - если true: сервер может выполнить swap, merge stack, или другое определённое поведение
-  bool allow_swap_or_merge = 7;
+  bool allow_swap_or_merge = 8;
 }
 
 message InventoryOp {
@@ -216,10 +218,6 @@ message InventoryOp {
     // Удобный шорткат: “выбросить из контейнера в мир (дроп)”
     // (фактически move src -> dropped + spawn entity)
     InventoryMoveSpec drop_to_world = 12;
-
-    // Удобный шорткат: “поднять дроп в контейнер”
-    // (фактически move dropped -> dst + despawn entity)
-    InventoryMoveSpec pickup_from_world = 13;
   }
 }
 
