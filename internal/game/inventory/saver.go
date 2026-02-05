@@ -64,7 +64,7 @@ func (is *InventorySaver) serializeContainer(
 
 	for _, invItem := range container.Items {
 		dbItem := InventoryItemV1{
-			ItemID:    invItem.ItemID,
+			ItemID:    uint64(invItem.ItemID),
 			TypeID:    invItem.TypeID,
 			Quality:   invItem.Quality,
 			Quantity:  invItem.Quantity,
@@ -118,7 +118,7 @@ func (is *InventorySaver) serializeNestedInventory(
 
 	for _, invItem := range container.Items {
 		dbItem := InventoryItemV1{
-			ItemID:    invItem.ItemID,
+			ItemID:    uint64(invItem.ItemID),
 			TypeID:    invItem.TypeID,
 			Quality:   invItem.Quality,
 			Quantity:  invItem.Quantity,
@@ -148,7 +148,7 @@ func (is *InventorySaver) serializeNestedInventory(
 
 func (is *InventorySaver) findNestedInventory(
 	world *ecs.World,
-	itemID uint64,
+	itemID types.EntityID,
 ) *components.InventoryContainer {
 	query := world.Query().With(components.InventoryContainerComponentID)
 	var found *components.InventoryContainer
@@ -158,7 +158,7 @@ func (is *InventorySaver) findNestedInventory(
 			return
 		}
 		container, ok := ecs.GetComponent[components.InventoryContainer](world, h)
-		if ok && container.OwnerID == types.EntityID(itemID) {
+		if ok && container.OwnerID == itemID {
 			found = &container
 		}
 	})

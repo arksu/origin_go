@@ -40,7 +40,7 @@ type InventoryContainer struct {
 
 type InvItem struct {
 	// item instance uid (proto.ItemInstance.item_id / InventoryMoveSpec.item_id)
-	ItemID uint64
+	ItemID types.EntityID
 
 	// item def id (proto.ItemInstance.type_id)
 	TypeID uint32

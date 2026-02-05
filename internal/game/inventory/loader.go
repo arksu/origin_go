@@ -47,7 +47,7 @@ func (il *InventoryLoader) LoadPlayerInventories(
 		Warnings:         make([]string, 0),
 	}
 
-	itemIDToHandle := make(map[uint64]types.Handle)
+	itemIDToHandle := make(map[types.EntityID]types.Handle)
 	allHandles := make([]types.Handle, 0)
 
 	for _, dbInv := range dbInventories {
@@ -74,7 +74,7 @@ func (il *InventoryLoader) loadInventoryRecursive(
 	world *ecs.World,
 	ownerID types.EntityID,
 	dbInv InventoryDataV1,
-	itemIDToHandle map[uint64]types.Handle,
+	itemIDToHandle map[types.EntityID]types.Handle,
 	allHandles *[]types.Handle,
 ) (types.Handle, []string) {
 	warnings := make([]string, 0)
@@ -101,7 +101,7 @@ func (il *InventoryLoader) loadInventoryRecursive(
 		hasNestedItems := dbItem.NestedInventory != nil && len(dbItem.NestedInventory.Items) > 0
 
 		invItem := components.InvItem{
-			ItemID:    dbItem.ItemID,
+			ItemID:    types.EntityID(dbItem.ItemID),
 			TypeID:    dbItem.TypeID,
 			Resource:  itemDef.ResolveResource(hasNestedItems),
 			Quality:   dbItem.Quality,
@@ -124,7 +124,7 @@ func (il *InventoryLoader) loadInventoryRecursive(
 				allHandles,
 			)
 			if nestedHandle != 0 {
-				itemIDToHandle[dbItem.ItemID] = nestedHandle
+				itemIDToHandle[types.EntityID(dbItem.ItemID)] = nestedHandle
 			}
 			warnings = append(warnings, nestedWarnings...)
 		}
