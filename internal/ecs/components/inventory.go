@@ -36,11 +36,6 @@ type InventoryContainer struct {
 	Height uint8
 
 	Items []InvItem
-
-	// Optional occupancy cache for Grid:
-	// len = int(Width)*int(Height), 0 = free, 1 = occupied
-	// For non-grid kinds must be nil.
-	Occupied []uint8
 }
 
 type InvItem struct {

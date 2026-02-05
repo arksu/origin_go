@@ -91,11 +91,6 @@ func (il *InventoryLoader) loadInventoryRecursive(
 		Items:   make([]components.InvItem, 0, len(dbInv.Items)),
 	}
 
-	if constt.InventoryKind(dbInv.Kind) == constt.InventoryGrid && dbInv.Width > 0 && dbInv.Height > 0 {
-		size := int(dbInv.Width) * int(dbInv.Height)
-		container.Occupied = make([]uint8, size)
-	}
-
 	for _, dbItem := range dbInv.Items {
 		itemDef, ok := il.itemRegistry.GetByID(int(dbItem.TypeID))
 		if !ok {
@@ -120,10 +115,6 @@ func (il *InventoryLoader) loadInventoryRecursive(
 
 		container.Items = append(container.Items, invItem)
 
-		if constt.InventoryKind(dbInv.Kind) == constt.InventoryGrid {
-			il.markOccupied(&container, invItem.X, invItem.Y, invItem.W, invItem.H)
-		}
-
 		if dbItem.NestedInventory != nil {
 			nestedHandle, nestedWarnings := il.loadInventoryRecursive(
 				world,
@@ -145,24 +136,6 @@ func (il *InventoryLoader) loadInventoryRecursive(
 	*allHandles = append(*allHandles, containerHandle)
 
 	return containerHandle, warnings
-}
-
-func (il *InventoryLoader) markOccupied(container *components.InventoryContainer, x, y, w, h uint8) {
-	if container.Occupied == nil {
-		return
-	}
-	width := int(container.Width)
-	height := int(container.Height)
-	for dy := uint8(0); dy < h; dy++ {
-		for dx := uint8(0); dx < w; dx++ {
-			cx := int(x) + int(dx)
-			cy := int(y) + int(dy)
-			if cx >= 0 && cx < width && cy >= 0 && cy < height {
-				idx := cy*width + cx
-				container.Occupied[idx] = 1
-			}
-		}
-	}
 }
 
 // ParseInventoriesFromDB converts database inventory records to InventoryDataV1 format
