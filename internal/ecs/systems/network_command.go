@@ -25,6 +25,50 @@ type ChatDeliveryService interface {
 	BroadcastChatMessage(entityIDs []types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string)
 }
 
+// InventoryResultSender sends inventory operation results to clients
+type InventoryResultSender interface {
+	SendInventoryOpResult(entityID types.EntityID, result *netproto.S2C_InventoryOpResult)
+}
+
+// InventoryOperationExecutor executes inventory operations
+type InventoryOperationExecutor interface {
+	ExecuteOperation(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, op *netproto.InventoryOp) InventoryOpResult
+}
+
+// InventoryOpResult represents the result of an inventory operation
+type InventoryOpResult struct {
+	Success           bool
+	ErrorCode         netproto.ErrorCode
+	Message           string
+	UpdatedContainers []InventoryContainerState
+}
+
+// InventoryContainerState represents the state of an inventory container for sending to client
+type InventoryContainerState struct {
+	OwnerID types.EntityID
+	Kind    uint8
+	Key     uint32
+	Version uint64
+	Width   uint8
+	Height  uint8
+	Items   []InventoryItemState
+}
+
+// InventoryItemState represents an item in inventory for sending to client
+type InventoryItemState struct {
+	ItemID    types.EntityID
+	TypeID    uint32
+	Resource  string
+	Quality   uint32
+	Quantity  uint32
+	W, H      uint8
+	X, Y      uint8
+	EquipSlot netproto.EquipSlot
+
+	// NestedInventory contains the nested inventory state if this item is a container
+	NestedInventory *InventoryContainerState
+}
+
 type NetworkCommandSystem struct {
 	ecs.BaseSystem
 
@@ -33,6 +77,10 @@ type NetworkCommandSystem struct {
 	logger            *zap.Logger
 	chatDelivery      ChatDeliveryService
 	chatLocalRadiusSq float64
+
+	// Inventory operation handling
+	inventoryExecutor     InventoryOperationExecutor
+	inventoryResultSender InventoryResultSender
 
 	// Reusable buffers to avoid allocations
 	playerCommands []*network.PlayerCommand
@@ -44,19 +92,23 @@ func NewNetworkCommandSystem(
 	playerInbox *network.PlayerCommandInbox,
 	serverInbox *network.ServerJobInbox,
 	chatDelivery ChatDeliveryService,
+	inventoryExecutor InventoryOperationExecutor,
+	inventoryResultSender InventoryResultSender,
 	chatLocalRadius int,
 	logger *zap.Logger,
 ) *NetworkCommandSystem {
 	radiusSq := float64(chatLocalRadius * chatLocalRadius)
 	return &NetworkCommandSystem{
-		BaseSystem:        ecs.NewBaseSystem("NetworkCommandSystem", NetworkCommandSystemPriority),
-		playerInbox:       playerInbox,
-		serverInbox:       serverInbox,
-		logger:            logger,
-		chatDelivery:      chatDelivery,
-		chatLocalRadiusSq: radiusSq,
-		playerCommands:    make([]*network.PlayerCommand, 0, 256),
-		serverJobs:        make([]*network.ServerJob, 0, 64),
+		BaseSystem:            ecs.NewBaseSystem("NetworkCommandSystem", NetworkCommandSystemPriority),
+		playerInbox:           playerInbox,
+		serverInbox:           serverInbox,
+		logger:                logger,
+		chatDelivery:          chatDelivery,
+		inventoryExecutor:     inventoryExecutor,
+		inventoryResultSender: inventoryResultSender,
+		chatLocalRadiusSq:     radiusSq,
+		playerCommands:        make([]*network.PlayerCommand, 0, 256),
+		serverJobs:            make([]*network.ServerJob, 0, 64),
 	}
 }
 
@@ -108,6 +160,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleInteract(w, handle, cmd)
 	case network.CmdChat:
 		s.handleChat(w, handle, cmd)
+	case network.CmdInventoryOp:
+		s.handleInventoryOp(w, handle, cmd)
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -266,6 +320,168 @@ func (s *NetworkCommandSystem) findChatRecipients(w *ecs.World, senderX, senderY
 	}
 
 	return recipients
+}
+
+func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	op, ok := cmd.Payload.(*netproto.InventoryOp)
+	if !ok {
+		s.logger.Error("Invalid payload type for InventoryOp",
+			zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+
+	s.logger.Debug("InventoryOp received",
+		zap.Uint64("client_id", cmd.ClientID),
+		zap.Uint64("op_id", op.OpId))
+
+	// Check if inventory executor is configured
+	if s.inventoryExecutor == nil {
+		s.logger.Warn("Inventory executor not configured")
+		s.sendInventoryError(cmd.CharacterID, op.OpId, netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Inventory system not available")
+		return
+	}
+
+	// Execute the operation
+	result := s.inventoryExecutor.ExecuteOperation(w, cmd.CharacterID, playerHandle, op)
+
+	// Build and send response
+	response := &netproto.S2C_InventoryOpResult{
+		OpId:    op.OpId,
+		Success: result.Success,
+		Error:   result.ErrorCode,
+		Message: result.Message,
+		Updated: make([]*netproto.InventoryState, 0, len(result.UpdatedContainers)),
+	}
+
+	// Convert updated containers to proto format
+	for _, container := range result.UpdatedContainers {
+		invState := s.buildInventoryStateProto(container)
+		response.Updated = append(response.Updated, invState)
+	}
+
+	// Send result to client
+	if s.inventoryResultSender != nil {
+		s.inventoryResultSender.SendInventoryOpResult(cmd.CharacterID, response)
+	}
+
+	s.logger.Debug("InventoryOp completed",
+		zap.Uint64("client_id", cmd.ClientID),
+		zap.Uint64("op_id", op.OpId),
+		zap.Bool("success", result.Success))
+}
+
+func (s *NetworkCommandSystem) sendInventoryError(entityID types.EntityID, opID uint64, code netproto.ErrorCode, message string) {
+	if s.inventoryResultSender == nil {
+		return
+	}
+	response := &netproto.S2C_InventoryOpResult{
+		OpId:    opID,
+		Success: false,
+		Error:   code,
+		Message: message,
+	}
+	s.inventoryResultSender.SendInventoryOpResult(entityID, response)
+}
+
+func (s *NetworkCommandSystem) buildInventoryStateProto(container InventoryContainerState) *netproto.InventoryState {
+	ref := &netproto.InventoryRef{
+		Kind:         netproto.InventoryKind(container.Kind),
+		OwnerId:      uint64(container.OwnerID),
+		InventoryKey: container.Key,
+	}
+
+	invState := &netproto.InventoryState{
+		Ref:      ref,
+		Revision: container.Version,
+	}
+
+	// Build items based on container kind
+	switch constt.InventoryKind(container.Kind) {
+	case constt.InventoryGrid:
+		gridItems := make([]*netproto.GridItem, 0, len(container.Items))
+		for _, item := range container.Items {
+			gridItems = append(gridItems, &netproto.GridItem{
+				X:    uint32(item.X),
+				Y:    uint32(item.Y),
+				Item: s.buildItemInstanceProto(item),
+			})
+		}
+		invState.State = &netproto.InventoryState_Grid{
+			Grid: &netproto.InventoryGridState{
+				Width:  uint32(container.Width),
+				Height: uint32(container.Height),
+				Items:  gridItems,
+			},
+		}
+
+	case constt.InventoryHand:
+		handState := &netproto.InventoryHandState{}
+		if len(container.Items) > 0 {
+			handState.Item = s.buildItemInstanceProto(container.Items[0])
+		}
+		invState.State = &netproto.InventoryState_Hand{
+			Hand: handState,
+		}
+
+	case constt.InventoryEquipment:
+		equipItems := make([]*netproto.EquipmentItem, 0, len(container.Items))
+		for _, item := range container.Items {
+			equipItems = append(equipItems, &netproto.EquipmentItem{
+				Slot: item.EquipSlot,
+				Item: s.buildItemInstanceProto(item),
+			})
+		}
+		invState.State = &netproto.InventoryState_Equipment{
+			Equipment: &netproto.InventoryEquipmentState{
+				Items: equipItems,
+			},
+		}
+	}
+
+	return invState
+}
+
+// buildItemInstanceProto creates a proto ItemInstance from InventoryItemState,
+// including nested inventory if the item is a container
+func (s *NetworkCommandSystem) buildItemInstanceProto(item InventoryItemState) *netproto.ItemInstance {
+	instance := &netproto.ItemInstance{
+		ItemId:   uint64(item.ItemID),
+		TypeId:   item.TypeID,
+		Resource: item.Resource,
+		Quality:  item.Quality,
+		Quantity: item.Quantity,
+		W:        uint32(item.W),
+		H:        uint32(item.H),
+	}
+
+	// Add nested inventory if present
+	if item.NestedInventory != nil {
+		instance.NestedInventory = s.buildNestedGridStateProto(item.NestedInventory)
+	}
+
+	return instance
+}
+
+// buildNestedGridStateProto builds InventoryGridState for nested containers
+func (s *NetworkCommandSystem) buildNestedGridStateProto(container *InventoryContainerState) *netproto.InventoryGridState {
+	if container == nil {
+		return nil
+	}
+
+	gridItems := make([]*netproto.GridItem, 0, len(container.Items))
+	for _, item := range container.Items {
+		gridItems = append(gridItems, &netproto.GridItem{
+			X:    uint32(item.X),
+			Y:    uint32(item.Y),
+			Item: s.buildItemInstanceProto(item),
+		})
+	}
+
+	return &netproto.InventoryGridState{
+		Width:  uint32(container.Width),
+		Height: uint32(container.Height),
+		Items:  gridItems,
+	}
 }
 
 // processServerJob routes a server job to the appropriate handler
