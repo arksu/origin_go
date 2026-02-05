@@ -99,11 +99,8 @@ func (ss *SnapshotSender) buildInventoryState(
 ) *netproto.InventoryState {
 	ref := &netproto.InventoryRef{
 		Kind:         netproto.InventoryKind(container.Kind),
+		OwnerId:      uint64(characterID),
 		InventoryKey: container.Key,
-	}
-
-	ref.Owner = &netproto.InventoryRef_OwnerEntityId{
-		OwnerEntityId: uint64(characterID),
 	}
 
 	invState := &netproto.InventoryState{

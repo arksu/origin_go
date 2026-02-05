@@ -212,9 +212,9 @@ func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handl
 		return
 	}
 
-	senderName := senderAppearance.Name
-	if senderName == "" {
-		senderName = "Unknown"
+	senderName := "Unknown"
+	if senderAppearance.Name != nil && *senderAppearance.Name != "" {
+		senderName = *senderAppearance.Name
 	}
 
 	recipients := s.findChatRecipients(w, senderTransform.X, senderTransform.Y, cmd.CharacterID)
