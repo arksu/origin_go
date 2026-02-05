@@ -201,7 +201,7 @@ func (ss *SnapshotSender) buildItemInstance(
 	}
 
 	itemInstance := &netproto.ItemInstance{
-		ItemId:   invItem.ItemID,
+		ItemId:   uint64(invItem.ItemID),
 		TypeId:   invItem.TypeID,
 		Resource: resource,
 		Quality:  invItem.Quality,
@@ -244,7 +244,7 @@ func (ss *SnapshotSender) buildNestedGridState(
 
 func (ss *SnapshotSender) findNestedInventory(
 	world *ecs.World,
-	itemID uint64,
+	itemID types.EntityID,
 	owner *components.InventoryOwner,
 ) *components.InventoryContainer {
 	// Use InventoryOwner links instead of full world query
@@ -253,7 +253,7 @@ func (ss *SnapshotSender) findNestedInventory(
 			continue
 		}
 		container, ok := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
-		if ok && container.OwnerID == types.EntityID(itemID) {
+		if ok && container.OwnerID == itemID {
 			return &container
 		}
 	}
