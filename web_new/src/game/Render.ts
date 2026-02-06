@@ -41,6 +41,7 @@ export class Render {
     this.debugOverlay = new DebugOverlay()
     this.chunkManager = new ChunkManager()
     this.objectManager = new ObjectManager()
+    this.objectManager.setParentContainer(this.objectsContainer)
     this.inputController = new InputController()
   }
 
@@ -67,8 +68,6 @@ export class Render {
     this.chunkManager.setObjectsContainer(this.objectsContainer)
     await this.chunkManager.init()
     this.mapContainer.addChild(this.chunkManager.getContainer())
-    this.objectsContainer.addChild(this.objectManager.getContainer())
-
     this.app.stage.addChild(this.mapContainer)
     this.app.stage.addChild(this.objectsContainer)
     this.app.stage.addChild(this.uiContainer)

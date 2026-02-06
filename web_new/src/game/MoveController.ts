@@ -460,11 +460,14 @@ class MoveController {
       dir = calcDirection(lastKf.vx, lastKf.vy)
     }
 
+    const hasVelocity = !!lastKf && (Math.abs(lastKf.vx) > 1e-6 || Math.abs(lastKf.vy) > 1e-6)
+    const finalIsMoving = isMoving && hasVelocity
+
     return {
       x: state.visualX,
       y: state.visualY,
       heading: state.visualHeading,
-      isMoving,
+      isMoving: finalIsMoving,
       moveMode,
       direction: dir,
     }
