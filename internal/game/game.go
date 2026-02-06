@@ -367,6 +367,8 @@ func (g *Game) handleInventoryOp(c *network.Client, sequence uint32, inventoryOp
 		return
 	}
 
+	g.logger.Debug("handleInventoryOp", zap.Uint64("client_id", c.ID), zap.Any("inventory_op", inventoryOp))
+
 	cmd := &network.PlayerCommand{
 		ClientID:    c.ID,
 		CharacterID: c.CharacterID,

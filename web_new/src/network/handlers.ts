@@ -200,6 +200,24 @@ export function registerMessageHandlers(): void {
     }
   })
 
+  messageDispatcher.on('inventoryOpResult', (msg: proto.IS2C_InventoryOpResult) => {
+    if (!msg.success) {
+      console.warn('[Handlers] inventoryOpResult FAILED:', {
+        opId: msg.opId,
+        error: msg.error,
+        message: msg.message,
+      })
+    } else {
+      console.log('[Handlers] inventoryOpResult OK:', { msg: msg })
+    }
+
+    if (msg.updated) {
+      for (const inventoryState of msg.updated) {
+        gameStore.updateInventory(inventoryState)
+      }
+    }
+  })
+
   messageDispatcher.on('containerOpened', (msg: proto.IS2C_ContainerOpened) => {
     console.log('[Handlers] containerOpened:', msg.state)
     if (msg.state) {

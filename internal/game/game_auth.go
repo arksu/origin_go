@@ -557,7 +557,12 @@ func (g *Game) enrichWithMissingDefaults(dbInventories []inventory.InventoryData
 			Version: 1,
 			Items:   []inventory.InventoryItemV1{}, // Empty inventory
 		},
-		// Note: Hand inventory is NOT added by default - only if exists in database
+		{
+			Kind:    uint8(_const.InventoryHand),
+			Key:     0,
+			Version: 1,
+			Items:   []inventory.InventoryItemV1{},
+		},
 	}
 
 	// Add missing default inventories
