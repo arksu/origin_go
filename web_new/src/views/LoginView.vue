@@ -64,105 +64,144 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="login-view">
-    <div class="login-card">
-      <h1 class="login-card__title">Вход</h1>
+  <div class="padding-all">
+    <div class="form-container">
+      <div class="logo-container">
+        <img src="/assets/img/origin_logo3.webp" alt="logo">
+      </div>
 
-      <AppAlert v-if="error" type="error" class="login-card__alert">
-        {{ error }}
-      </AppAlert>
+      <div class="login-panel">
+        <AppAlert v-if="error" type="error" class="login-panel__alert">
+          {{ error }}
+        </AppAlert>
 
-      <form class="login-card__form" @submit.prevent="handleSubmit">
-        <AppInput
-          v-model="form.login"
-          label="Логин"
-          placeholder="Введите логин"
-          :error="fieldErrors.login"
-          :disabled="loading"
-          autocomplete="username"
-        />
+        <form @submit.prevent="handleSubmit">
+          <AppInput
+            v-model="form.login"
+            placeholder="Login"
+            :error="fieldErrors.login"
+            :disabled="loading"
+            autocomplete="username"
+            autofocus
+          />
 
-        <AppInput
-          v-model="form.password"
-          type="password"
-          label="Пароль"
-          placeholder="Введите пароль"
-          :error="fieldErrors.password"
-          :disabled="loading"
-          autocomplete="current-password"
-        />
+          <AppInput
+            v-model="form.password"
+            type="password"
+            placeholder="Password"
+            :error="fieldErrors.password"
+            :disabled="loading"
+            autocomplete="current-password"
+          />
 
-        <AppButton
-          type="submit"
-          :loading="loading"
-          :disabled="!isFormValid"
-          class="login-card__submit"
-        >
-          Войти
-        </AppButton>
-      </form>
+          <AppButton
+            type="submit"
+            :loading="loading"
+            :disabled="!isFormValid"
+            class="login-panel__submit"
+          >
+            login
+          </AppButton>
+        </form>
 
-      <p class="login-card__footer">
-        Нет аккаунта?
-        <RouterLink to="/register">Зарегистрироваться</RouterLink>
-      </p>
+        <div class="signup-link">
+          Not a member?
+          <RouterLink to="/register">Signup now</RouterLink>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-.login-view {
+.padding-all {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100%;
-  padding: 1rem;
+  height: 100vh;
 }
 
-.login-card {
-  width: 100%;
-  max-width: 400px;
-  padding: 2rem;
-  background-color: #1f2937;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+.form-container {
+  margin-top: -12%;
+  width: 36%;
+  max-width: 600px;
+}
 
-  &__title {
-    margin-bottom: 1.5rem;
-    font-size: 1.75rem;
-    font-weight: 600;
-    text-align: center;
-    color: #e0e0e0;
+.logo-container {
+  line-height: 55px;
+  text-align: center;
+  margin-bottom: 1rem;
+
+  img {
+    display: inline;
+    max-width: 100%;
+    max-height: 100%;
+    vertical-align: middle;
+    filter: drop-shadow(2px 11px 8px rgba(0, 0, 0, 0.8));
+    transform: scale(1.2);
   }
+}
+
+.login-panel {
+  border-radius: 18px;
+  padding: 30px;
+  text-align: center;
+  background: rgba(16, 96, 109, 0.65);
+  color: #d5eeed;
+  margin: 0 auto;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+  font-size: 19px;
 
   &__alert {
     margin-bottom: 1rem;
   }
 
-  &__form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
   &__submit {
-    margin-top: 0.5rem;
     width: 100%;
   }
+}
 
-  &__footer {
-    margin-top: 1.5rem;
-    text-align: center;
-    font-size: 0.875rem;
-    color: #a0a0a0;
+.signup-link {
+  font-size: 15px;
+  color: #bebebe;
+  padding-top: 20px;
+  text-align: center;
 
-    a {
-      color: #42b883;
-      
-      &:hover {
-        text-decoration: underline;
-      }
-    }
+  a {
+    color: #7ed0fc;
+    text-decoration: none;
   }
+}
+
+@media screen and (max-width: 1440px) {
+  .form-container { width: 40%; }
+}
+@media screen and (max-width: 1280px) {
+  .form-container { width: 46%; }
+  .login-panel { padding: 25px; border-radius: 15px; }
+}
+@media screen and (max-width: 991px) {
+  .form-container { width: 54%; }
+}
+@media screen and (max-width: 800px) {
+  .form-container { width: 60%; }
+}
+@media screen and (max-width: 667px) {
+  .form-container { width: 75%; }
+}
+@media screen and (max-width: 640px) {
+  .login-panel { padding: 25px; border-radius: 10px; }
+  .signup-link { font-size: 13px; }
+}
+@media screen and (max-width: 480px) {
+  .form-container { width: 92%; }
+  .login-panel { padding: 15px; border-radius: 10px; }
+  .signup-link { font-size: 12px; }
+}
+@media screen and (max-width: 384px) {
+  .form-container { width: 100%; }
+}
+@media screen and (max-height: 600px) {
+  .form-container { margin-top: -2%; }
 }
 </style>
