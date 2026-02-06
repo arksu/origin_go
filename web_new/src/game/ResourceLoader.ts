@@ -1,107 +1,188 @@
-import { Assets, Texture } from 'pixi.js'
+import { Assets, Texture, Sprite } from 'pixi.js'
+import { Spine } from '@esotericsoftware/spine-pixi-v8'
+import objects from './objects.json'
+
+// --- Types matching objects.json structure ---
+
+export interface LayerDef {
+  img?: string
+  spine?: SpineDef
+  interactive?: boolean
+  offset?: [number, number]
+  z?: number
+  shadow?: boolean
+  frames?: FrameDef[]
+}
+
+export interface FrameDef {
+  img: string
+  offset?: [number, number]
+}
+
+export interface SpineDef {
+  file: string
+  scale?: number
+  skin?: string
+  dirs?: Directions
+}
+
+export type Directions = {
+  [key: string]: string[]
+}
+
+export interface ResourceDef {
+  layers: LayerDef[]
+  size?: [number, number]
+  offset?: [number, number]
+  fps?: number
+}
 
 /**
- * ResourceLoader manages loading and caching of game object resources.
- * 
- * Future extensions:
- * - Support for sprite sheets and animations
- * - Multi-layer objects (shadows, overlays)
- * - Resource preloading and bundling
- * - Fallback textures for missing resources
+ * ResourceLoader manages loading and caching of game assets.
+ * Supports multi-layer sprites, Spine animations, and resource definitions from objects.json.
  */
 export class ResourceLoader {
-  private static cache = new Map<string, Texture>()
-  private static loading = new Map<string, Promise<Texture>>()
-  private static placeholderTexture: Texture | null = null
+  private static textureCache = new Map<string, Texture>()
+  private static textureLoading = new Map<string, Promise<Texture>>()
 
   /**
-   * Load a texture from the given resource path.
-   * Returns cached texture if already loaded.
-   * Returns placeholder if path is empty or loading fails.
+   * Resolve a resource path (e.g. "trees/oak/6") to its ResourceDef from objects.json.
    */
-  static async loadTexture(resourcePath: string): Promise<Texture> {
-    // Empty path - return placeholder
-    if (!resourcePath || resourcePath.trim() === '') {
-      return this.getPlaceholder()
+  static getResourceDef(resourcePath: string): ResourceDef | undefined {
+    if (!resourcePath) return undefined
+
+    const parts = resourcePath.split('/')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let node: any = objects
+    for (const part of parts) {
+      if (node == null || typeof node !== 'object') return undefined
+      node = node[part]
     }
 
-    // Check cache
-    const cached = this.cache.get(resourcePath)
-    if (cached) {
-      return cached
+    if (node && node.layers) {
+      return node as ResourceDef
     }
-
-    // Check if already loading
-    const loading = this.loading.get(resourcePath)
-    if (loading) {
-      return loading
-    }
-
-    // Start loading
-    const loadPromise = this.loadTextureInternal(resourcePath)
-    this.loading.set(resourcePath, loadPromise)
-
-    try {
-      const texture = await loadPromise
-      this.cache.set(resourcePath, texture)
-      return texture
-    } catch (error) {
-      console.warn(`[ResourceLoader] Failed to load texture: ${resourcePath}`, error)
-      return this.getPlaceholder()
-    } finally {
-      this.loading.delete(resourcePath)
-    }
-  }
-
-  private static async loadTextureInternal(resourcePath: string): Promise<Texture> {
-    // Future: support different resource types (sprite sheets, animations, etc.)
-    // For now, just load as a simple texture
-    const texture = await Assets.load(resourcePath)
-    return texture
+    return undefined
   }
 
   /**
-   * Get or create a placeholder texture for objects without resources.
+   * Load a texture by path. Prepends /assets/game/ for file paths.
+   * Returns cached texture if available.
    */
-  private static getPlaceholder(): Texture {
-    if (!this.placeholderTexture) {
-      // Create a simple colored rectangle as placeholder
-      // Future: load from a dedicated placeholder asset
-      this.placeholderTexture = Texture.WHITE
+  static async loadTexture(imgPath: string): Promise<Texture> {
+    const fullPath = imgPath.includes('.') ? '/assets/game/' + imgPath : imgPath
+
+    const cached = this.textureCache.get(fullPath)
+    if (cached) return cached
+
+    const loading = this.textureLoading.get(fullPath)
+    if (loading) return loading
+
+    const promise = Assets.load(fullPath).then((tex: Texture) => {
+      this.textureCache.set(fullPath, tex)
+      this.textureLoading.delete(fullPath)
+      return tex
+    }).catch((err: unknown) => {
+      console.warn(`[ResourceLoader] Failed to load texture: ${fullPath}`, err)
+      this.textureLoading.delete(fullPath)
+      return Texture.WHITE
+    })
+
+    this.textureLoading.set(fullPath, promise)
+    return promise
+  }
+
+  /**
+   * Create a Sprite from a loaded texture with layer offsets applied.
+   */
+  static async createSprite(layer: LayerDef, resDef: ResourceDef): Promise<Sprite> {
+    const tex = await this.loadTexture(layer.img!)
+    const spr = new Sprite(tex)
+
+    if (layer.offset) {
+      spr.x = layer.offset[0]
+      spr.y = layer.offset[1]
     }
-    return this.placeholderTexture
-  }
-
-  /**
-   * Preload multiple resources at once.
-   * Useful for loading resources for visible chunks.
-   */
-  static async preloadResources(resourcePaths: string[]): Promise<void> {
-    const validPaths = resourcePaths.filter(path => path && path.trim() !== '')
-    if (validPaths.length === 0) return
-
-    await Promise.all(validPaths.map(path => this.loadTexture(path)))
-  }
-
-  /**
-   * Clear cached resources to free memory.
-   * Can specify paths to clear, or clear all if not specified.
-   */
-  static clearCache(resourcePaths?: string[]): void {
-    if (resourcePaths) {
-      resourcePaths.forEach(path => this.cache.delete(path))
+    if (resDef.offset) {
+      spr.x -= resDef.offset[0]
+      spr.y -= resDef.offset[1]
+    }
+    if (layer.shadow) {
+      spr.zIndex = -1
     } else {
-      this.cache.clear()
+      spr.zIndex = layer.z ?? 0
     }
+
+    return spr
+  }
+
+  private static spineLoading = new Map<string, Promise<void>>()
+
+  /**
+   * Load and create a Spine animation from a layer definition.
+   * Assets must be preloaded via PIXI.Assets before Spine.from() can be called.
+   */
+  static async loadSpine(layer: LayerDef, resDef: ResourceDef): Promise<Spine> {
+    const spineDef = layer.spine!
+    const basePath = '/assets/game/' + spineDef.file
+    const dataAlias = spineDef.file + '-data'
+    const atlasAlias = spineDef.file + '-atlas'
+
+    // Deduplicate concurrent loads for the same spine file
+    const cacheKey = spineDef.file
+    if (!Assets.cache.has(basePath)) {
+      let loadPromise = this.spineLoading.get(cacheKey)
+      if (!loadPromise) {
+        if (!Assets.resolver.hasKey(dataAlias)) {
+          Assets.add({ alias: dataAlias, src: basePath + '.json' })
+          Assets.add({ alias: atlasAlias, src: basePath + '.atlas' })
+        }
+        loadPromise = Assets.load([dataAlias, atlasAlias]).then(() => {
+          this.spineLoading.delete(cacheKey)
+        })
+        this.spineLoading.set(cacheKey, loadPromise)
+      }
+      await loadPromise
+    }
+
+    const spineAnim = Spine.from({ skeleton: dataAlias, atlas: atlasAlias, autoUpdate: true })
+
+    if (layer.offset) {
+      spineAnim.x = layer.offset[0]
+      spineAnim.y = layer.offset[1]
+    }
+    if (resDef.offset) {
+      spineAnim.x -= resDef.offset[0]
+      spineAnim.y -= resDef.offset[1]
+    }
+    if (spineDef.scale != null) {
+      spineAnim.scale = spineDef.scale
+    }
+    if (spineDef.skin) {
+      spineAnim.skeleton.setSkinByName(spineDef.skin)
+    }
+    spineAnim.state.data.defaultMix = 0.25
+
+    return spineAnim
   }
 
   /**
-   * Get cache statistics for debugging.
+   * Reload a texture (cache-bust for hot-reload).
    */
+  static async reloadTexture(imgPath: string): Promise<Texture> {
+    const fullPath = '/assets/game/' + imgPath + '?' + Date.now()
+    const tex = await Assets.load(fullPath)
+    return tex
+  }
+
+  static clearCache(): void {
+    this.textureCache.clear()
+  }
+
   static getCacheStats(): { cached: number; loading: number } {
     return {
-      cached: this.cache.size,
-      loading: this.loading.size,
+      cached: this.textureCache.size,
+      loading: this.textureLoading.size,
     }
   }
 }

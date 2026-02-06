@@ -176,10 +176,12 @@ export class Render {
     // Get interpolated positions from MoveController
     const positions = moveController.update()
 
-    // Update visual positions for all tracked entities
-    // ObjectView handles game->screen conversion internally
+    // Update visual positions and movement state for all tracked entities
     for (const [entityId, renderPos] of positions) {
-      this.objectManager.updateObjectPosition(entityId, renderPos.x, renderPos.y)
+      this.objectManager.updateObjectPosition(
+        entityId, renderPos.x, renderPos.y,
+        renderPos.isMoving, renderPos.direction,
+      )
     }
   }
 
