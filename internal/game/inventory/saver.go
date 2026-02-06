@@ -48,7 +48,7 @@ func (is *InventorySaver) SerializeInventories(
 			continue
 		}
 
-		snapshot := is.serializeContainer(world, characterID, container)
+		snapshot := is.serializeContainer(world, &owner, characterID, container)
 		result = append(result, snapshot)
 	}
 
@@ -57,6 +57,7 @@ func (is *InventorySaver) SerializeInventories(
 
 func (is *InventorySaver) serializeContainer(
 	world *ecs.World,
+	owner *components.InventoryOwner,
 	characterID types.EntityID,
 	container components.InventoryContainer,
 ) systems.InventorySnapshot {
@@ -73,9 +74,9 @@ func (is *InventorySaver) serializeContainer(
 			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
 		}
 
-		nestedContainer := is.findNestedInventory(world, invItem.ItemID)
+		nestedContainer := is.findNestedInventory(world, owner, invItem.ItemID)
 		if nestedContainer != nil {
-			nestedData := is.serializeNestedInventory(world, *nestedContainer)
+			nestedData := is.serializeNestedInventory(world, owner, *nestedContainer)
 			dbItem.NestedInventory = &nestedData
 		}
 
@@ -112,6 +113,7 @@ func (is *InventorySaver) serializeContainer(
 
 func (is *InventorySaver) serializeNestedInventory(
 	world *ecs.World,
+	owner *components.InventoryOwner,
 	container components.InventoryContainer,
 ) InventoryDataV1 {
 	items := make([]InventoryItemV1, 0, len(container.Items))
@@ -127,9 +129,9 @@ func (is *InventorySaver) serializeNestedInventory(
 			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
 		}
 
-		nestedContainer := is.findNestedInventory(world, invItem.ItemID)
+		nestedContainer := is.findNestedInventory(world, owner, invItem.ItemID)
 		if nestedContainer != nil {
-			nestedData := is.serializeNestedInventory(world, *nestedContainer)
+			nestedData := is.serializeNestedInventory(world, owner, *nestedContainer)
 			dbItem.NestedInventory = &nestedData
 		}
 
@@ -148,22 +150,24 @@ func (is *InventorySaver) serializeNestedInventory(
 
 func (is *InventorySaver) findNestedInventory(
 	world *ecs.World,
+	owner *components.InventoryOwner,
 	itemID types.EntityID,
 ) *components.InventoryContainer {
-	query := world.Query().With(components.InventoryContainerComponentID)
-	var found *components.InventoryContainer
+	if owner == nil {
+		return nil
+	}
 
-	query.ForEach(func(h types.Handle) {
-		if found != nil {
-			return
+	// Search for inventory where OwnerID matches the itemID using InventoryLink.OwnerID
+	for _, link := range owner.Inventories {
+		if link.OwnerID == itemID {
+			container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
+			if hasContainer {
+				return &container
+			}
 		}
-		container, ok := ecs.GetComponent[components.InventoryContainer](world, h)
-		if ok && container.OwnerID == itemID {
-			found = &container
-		}
-	})
+	}
 
-	return found
+	return nil
 }
 
 func (is *InventorySaver) convertEquipSlot(slot netproto.EquipSlot) string {

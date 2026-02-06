@@ -261,9 +261,10 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 						container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
 						if hasContainer {
 							inventoryLinks = append(inventoryLinks, components.InventoryLink{
-								Kind:   container.Kind,
-								Key:    container.Key,
-								Handle: containerHandle,
+								Kind:    container.Kind,
+								Key:     container.Key,
+								OwnerID: container.OwnerID,
+								Handle:  containerHandle,
 							})
 						}
 					}

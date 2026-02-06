@@ -99,14 +99,13 @@ func (e *InventoryExecutor) findNestedInventory(w *ecs.World, owner *components.
 		return nil
 	}
 
-	// Search for inventory where OwnerID matches the itemID
+	// Search for inventory where OwnerID matches the itemID using InventoryLink.OwnerID
 	for _, link := range owner.Inventories {
-		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
-		if !hasContainer {
-			continue
-		}
-		if container.OwnerID == itemID {
-			return &container
+		if link.OwnerID == itemID {
+			container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+			if hasContainer {
+				return &container
+			}
 		}
 	}
 

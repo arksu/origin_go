@@ -126,8 +126,8 @@ func setupPlayerWithInventories(world *ecs.World, playerID types.EntityID, playe
 
 	owner := components.InventoryOwner{
 		Inventories: []components.InventoryLink{
-			{Kind: constt.InventoryGrid, Key: 0, Handle: gridHandle},
-			{Kind: constt.InventoryHand, Key: 0, Handle: handHandle},
+			{Kind: constt.InventoryGrid, Key: 0, OwnerID: playerID, Handle: gridHandle},
+			{Kind: constt.InventoryHand, Key: 0, OwnerID: playerID, Handle: handHandle},
 		},
 	}
 	ecs.AddComponent(world, playerHandle, owner)

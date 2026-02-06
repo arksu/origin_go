@@ -16,6 +16,9 @@ type InventoryOwner struct {
 type InventoryLink struct {
 	Kind constt.InventoryKind
 	Key  uint32
+
+	// OwnerID represents the unique identifier of the entity that owns the inventory link.
+	OwnerID types.EntityID
 	// Handle of entity that has InventoryContainer component
 	Handle types.Handle
 }
