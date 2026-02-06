@@ -39,6 +39,12 @@ type InventoryContainer struct {
 	Height uint8
 
 	Items []InvItem
+
+	// HandMouseOffsetX/Y — оффсет клика внутри предмета при взятии в "руку".
+	// Используется только когда Kind == InventoryHand и len(Items) == 1.
+	// Единицы: UI-пиксели (координаты клиентского инвентарного UI).
+	HandMouseOffsetX int16
+	HandMouseOffsetY int16
 }
 
 type InvItem struct {

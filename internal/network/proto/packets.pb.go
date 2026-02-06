@@ -1157,8 +1157,13 @@ func (x *InventoryEquipmentState) GetItems() []*EquipmentItem {
 }
 
 type InventoryHandState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Item          *ItemInstance          `protobuf:"bytes,1,opt,name=item,proto3,oneof" json:"item,omitempty"` // 0/1 item
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Item  *ItemInstance          `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	// Оффсет клика внутри предмета при взятии "в руку".
+	// Нужен клиенту, чтобы рисовать предмет, привязанный к курсору:
+	// item_top_left = mouse_pos - hand_pos
+	// Единицы: UI-пиксели (координаты клиентского инвентарного UI).
+	HandPos       *HandPos `protobuf:"bytes,2,opt,name=hand_pos,json=handPos,proto3" json:"hand_pos,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1196,6 +1201,13 @@ func (*InventoryHandState) Descriptor() ([]byte, []int) {
 func (x *InventoryHandState) GetItem() *ItemInstance {
 	if x != nil {
 		return x.Item
+	}
+	return nil
+}
+
+func (x *InventoryHandState) GetHandPos() *HandPos {
+	if x != nil {
+		return x.HandPos
 	}
 	return nil
 }
@@ -4097,10 +4109,10 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x04slot\x18\x01 \x01(\x0e2\x10.proto.EquipSlotR\x04slot\x12'\n" +
 	"\x04item\x18\x02 \x01(\v2\x13.proto.ItemInstanceR\x04item\"E\n" +
 	"\x17InventoryEquipmentState\x12*\n" +
-	"\x05items\x18\x01 \x03(\v2\x14.proto.EquipmentItemR\x05items\"K\n" +
-	"\x12InventoryHandState\x12,\n" +
-	"\x04item\x18\x01 \x01(\v2\x13.proto.ItemInstanceH\x00R\x04item\x88\x01\x01B\a\n" +
-	"\x05_item\"\xfe\x01\n" +
+	"\x05items\x18\x01 \x03(\v2\x14.proto.EquipmentItemR\x05items\"h\n" +
+	"\x12InventoryHandState\x12'\n" +
+	"\x04item\x18\x01 \x01(\v2\x13.proto.ItemInstanceR\x04item\x12)\n" +
+	"\bhand_pos\x18\x02 \x01(\v2\x0e.proto.HandPosR\ahandPos\"\xfe\x01\n" +
 	"\x0eInventoryState\x12%\n" +
 	"\x03ref\x18\x01 \x01(\v2\x13.proto.InventoryRefR\x03ref\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\x04R\brevision\x12/\n" +
@@ -4451,76 +4463,77 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	14, // 5: proto.EquipmentItem.item:type_name -> proto.ItemInstance
 	17, // 6: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
 	14, // 7: proto.InventoryHandState.item:type_name -> proto.ItemInstance
-	13, // 8: proto.InventoryState.ref:type_name -> proto.InventoryRef
-	16, // 9: proto.InventoryState.grid:type_name -> proto.InventoryGridState
-	18, // 10: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
-	19, // 11: proto.InventoryState.hand:type_name -> proto.InventoryHandState
-	13, // 12: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
-	13, // 13: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
-	13, // 14: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
-	22, // 15: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
-	1,  // 16: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
-	23, // 17: proto.InventoryMoveSpec.hand_pos:type_name -> proto.HandPos
-	21, // 18: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
-	24, // 19: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
-	24, // 20: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
-	25, // 21: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
-	13, // 22: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
-	13, // 23: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
-	9,  // 24: proto.EntityMovement.position:type_name -> proto.Position
-	10, // 25: proto.EntityMovement.velocity:type_name -> proto.Vector2
-	0,  // 26: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
-	10, // 27: proto.EntityMovement.target_position:type_name -> proto.Vector2
-	9,  // 28: proto.EntityPosition.position:type_name -> proto.Position
-	10, // 29: proto.EntityPosition.size:type_name -> proto.Vector2
-	32, // 30: proto.ChunkData.coord:type_name -> proto.ChunkCoord
-	7,  // 31: proto.Interact.type:type_name -> proto.InteractionType
-	34, // 32: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
-	35, // 33: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
-	36, // 34: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
-	0,  // 35: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
-	8,  // 36: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
-	40, // 37: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
-	41, // 38: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
-	37, // 39: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
-	38, // 40: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
-	26, // 41: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
-	39, // 42: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
-	27, // 43: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
-	28, // 44: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
-	33, // 45: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
-	32, // 46: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
-	30, // 47: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
-	29, // 48: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
-	5,  // 49: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
-	20, // 50: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
-	20, // 51: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
-	20, // 52: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
-	13, // 53: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
-	8,  // 54: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
-	5,  // 55: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	6,  // 56: proto.S2C_Warning.code:type_name -> proto.WarningCode
-	43, // 57: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	44, // 58: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	47, // 59: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
-	48, // 60: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
-	45, // 61: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	46, // 62: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	49, // 63: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	50, // 64: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	51, // 65: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	52, // 66: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
-	53, // 67: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
-	54, // 68: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
-	55, // 69: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
-	56, // 70: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
-	57, // 71: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	58, // 72: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
-	73, // [73:73] is the sub-list for method output_type
-	73, // [73:73] is the sub-list for method input_type
-	73, // [73:73] is the sub-list for extension type_name
-	73, // [73:73] is the sub-list for extension extendee
-	0,  // [0:73] is the sub-list for field type_name
+	23, // 8: proto.InventoryHandState.hand_pos:type_name -> proto.HandPos
+	13, // 9: proto.InventoryState.ref:type_name -> proto.InventoryRef
+	16, // 10: proto.InventoryState.grid:type_name -> proto.InventoryGridState
+	18, // 11: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
+	19, // 12: proto.InventoryState.hand:type_name -> proto.InventoryHandState
+	13, // 13: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
+	13, // 14: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
+	13, // 15: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
+	22, // 16: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
+	1,  // 17: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
+	23, // 18: proto.InventoryMoveSpec.hand_pos:type_name -> proto.HandPos
+	21, // 19: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
+	24, // 20: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
+	24, // 21: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
+	25, // 22: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
+	13, // 23: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
+	13, // 24: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
+	9,  // 25: proto.EntityMovement.position:type_name -> proto.Position
+	10, // 26: proto.EntityMovement.velocity:type_name -> proto.Vector2
+	0,  // 27: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
+	10, // 28: proto.EntityMovement.target_position:type_name -> proto.Vector2
+	9,  // 29: proto.EntityPosition.position:type_name -> proto.Position
+	10, // 30: proto.EntityPosition.size:type_name -> proto.Vector2
+	32, // 31: proto.ChunkData.coord:type_name -> proto.ChunkCoord
+	7,  // 32: proto.Interact.type:type_name -> proto.InteractionType
+	34, // 33: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
+	35, // 34: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
+	36, // 35: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
+	0,  // 36: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
+	8,  // 37: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
+	40, // 38: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
+	41, // 39: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
+	37, // 40: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
+	38, // 41: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
+	26, // 42: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
+	39, // 43: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
+	27, // 44: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
+	28, // 45: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
+	33, // 46: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
+	32, // 47: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
+	30, // 48: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
+	29, // 49: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
+	5,  // 50: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
+	20, // 51: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
+	20, // 52: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
+	20, // 53: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
+	13, // 54: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
+	8,  // 55: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
+	5,  // 56: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	6,  // 57: proto.S2C_Warning.code:type_name -> proto.WarningCode
+	43, // 58: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	44, // 59: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	47, // 60: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	48, // 61: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	45, // 62: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	46, // 63: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	49, // 64: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	50, // 65: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	51, // 66: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	52, // 67: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
+	53, // 68: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
+	54, // 69: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
+	55, // 70: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
+	56, // 71: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
+	57, // 72: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	58, // 73: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
+	74, // [74:74] is the sub-list for method output_type
+	74, // [74:74] is the sub-list for method input_type
+	74, // [74:74] is the sub-list for extension type_name
+	74, // [74:74] is the sub-list for extension extendee
+	0,  // [0:74] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -4529,7 +4542,6 @@ func file_api_proto_packets_proto_init() {
 		return
 	}
 	file_api_proto_packets_proto_msgTypes[5].OneofWrappers = []any{}
-	file_api_proto_packets_proto_msgTypes[10].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[11].OneofWrappers = []any{
 		(*InventoryState_Grid)(nil),
 		(*InventoryState_Equipment)(nil),
