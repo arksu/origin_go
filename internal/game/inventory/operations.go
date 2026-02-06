@@ -121,7 +121,7 @@ func (s *InventoryOperationService) ExecuteMove(
 		dstEquipSlot = *moveSpec.DstEquipSlot
 	}
 
-	if err := s.validator.ValidateItemAllowedInContainer(srcItem, dstInfo.Container, dstEquipSlot); err != nil {
+	if err := s.validator.ValidateItemAllowedInContainer(w, srcItem, dstInfo, dstEquipSlot); err != nil {
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: err.Code,

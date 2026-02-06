@@ -63,6 +63,12 @@ func SetGlobal(r *Registry) {
 	})
 }
 
+// SetGlobalForTesting replaces the global registry without sync.Once protection.
+// Must only be used in tests.
+func SetGlobalForTesting(r *Registry) {
+	globalRegistry = r
+}
+
 // Global returns the global registry.
 func Global() *Registry {
 	return globalRegistry
