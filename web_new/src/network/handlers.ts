@@ -200,6 +200,20 @@ export function registerMessageHandlers(): void {
     }
   })
 
+  messageDispatcher.on('containerOpened', (msg: proto.IS2C_ContainerOpened) => {
+    console.log('[Handlers] containerOpened:', msg.state)
+    if (msg.state) {
+      gameStore.onContainerOpened(msg.state)
+    }
+  })
+
+  messageDispatcher.on('containerClosed', (msg: proto.IS2C_ContainerClosed) => {
+    console.log('[Handlers] containerClosed:', msg.ref)
+    if (msg.ref) {
+      gameStore.onContainerClosed(msg.ref)
+    }
+  })
+
   messageDispatcher.on('chat', (msg: proto.IS2C_ChatMessage) => {
     console.log('[Game] Chat message:', msg.fromName, msg.text, msg.channel)
 

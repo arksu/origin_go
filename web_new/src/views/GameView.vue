@@ -204,8 +204,7 @@ useHotkeys(hotkeys)
         <NestedInventoryWindow 
           v-if="gameStore.getNestedInventoryData(windowKey)"
           :window-key="windowKey" 
-          :nested-inventory-data="gameStore.getNestedInventoryData(windowKey)!.data"
-          :item-id="gameStore.getNestedInventoryData(windowKey)!.itemId"
+          :inventory-state="gameStore.getNestedInventoryData(windowKey)!"
           @close="() => handleNestedInventoryClose(windowKey)" 
         />
       </div>

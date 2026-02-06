@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { proto } from '@/network/proto/packets.js'
 import { useGameStore } from '@/stores/gameStore'
+import { sendOpenContainer } from '@/network'
 import GameWindow from './GameWindow.vue'
 import ItemSlot from './ItemSlot.vue'
 import InventoryItem from './InventoryItem.vue'
@@ -33,27 +34,27 @@ const onItemClick = (_item: { x: number; y: number; instance: proto.IItemInstanc
 
 const onItemRightClick = (item: { x: number; y: number; instance: proto.IItemInstance }) => {
   console.log('Item right click:', item)
-  console.log('Item nestedInventory data:', item.instance.nestedInventory)
   
-  // Check if item has nested inventory
-  if (item.instance.nestedInventory && item.instance.itemId) {
-    console.log('Toggle nested inventory for item:', item.instance.itemId)
+  // Check if item has nested container ref
+  if (item.instance.nestedRef) {
+    const ref = item.instance.nestedRef
+    const windowKey = `${ref.kind ?? 0}_${ref.ownerId ?? 0}_${ref.inventoryKey ?? 0}`
     
-    // Create inventory key for nested inventory (assuming key 0 for nested inventory)
-    const inventoryKey = 0
-    const itemId = typeof item.instance.itemId === 'number' ? item.instance.itemId : Number(item.instance.itemId)
-    const windowKey = gameStore.openNestedInventory(itemId, inventoryKey.toString(), item.instance.nestedInventory)
-    
-    // Check if window was closed (toggle behavior)
-    const isClosed = !gameStore.openNestedInventories.has(windowKey)
-    console.log('Nested inventory window', isClosed ? 'closed' : 'opened', 'with key:', windowKey)
+    // Toggle: if already open, close it
+    if (gameStore.openNestedInventories.has(windowKey)) {
+      console.log('Closing nested inventory:', windowKey)
+      gameStore.closeNestedInventory(windowKey)
+    } else {
+      console.log('Requesting open container:', ref)
+      sendOpenContainer(ref)
+    }
   } else {
-    console.log('Item right click - inventory operations not yet implemented')
+    console.log('Item right click - no nested container')
   }
 }
 
 const getWindowId = () => {
-  return inventoryRef.value?.ownerEntityId ? Number(inventoryRef.value.ownerEntityId) : 0
+  return inventoryRef.value?.ownerId ? Number(inventoryRef.value.ownerId) : 0
 }
 </script>
 
