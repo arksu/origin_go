@@ -185,7 +185,7 @@ func (s *InventoryOperationService) ExecuteMove(
 
 	if placementResult.MergedQuantity > 0 {
 		// Merge operation
-		return s.executeMerge(w, srcInfo, dstInfo, srcItemIndex, placementResult, sameSrcDst)
+		return s.executeMerge(w, srcInfo, dstInfo, srcItemIndex, placementResult, sameSrcDst, moveSpec)
 	}
 
 	if placementResult.SwapItem != nil {
@@ -201,11 +201,11 @@ func (s *InventoryOperationService) ExecuteMove(
 				Message:   "Cannot swap items - destination item doesn't fit in source",
 			}
 		}
-		return s.executeSwap(w, srcInfo, dstInfo, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst)
+		return s.executeSwap(w, srcInfo, dstInfo, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst, moveSpec)
 	}
 
 	// Simple move
-	return s.executeSimpleMove(w, srcInfo, dstInfo, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst)
+	return s.executeSimpleMove(w, srcInfo, dstInfo, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst, moveSpec)
 }
 
 func (s *InventoryOperationService) executeMerge(
@@ -214,6 +214,7 @@ func (s *InventoryOperationService) executeMerge(
 	srcItemIndex int,
 	placement *PlacementResult,
 	sameSrcDst bool,
+	moveSpec *netproto.InventoryMoveSpec,
 ) *OperationResult {
 	// Update destination item quantity
 	ecs.MutateComponent[components.InventoryContainer](w, dstInfo.Handle, func(c *components.InventoryContainer) bool {
@@ -227,6 +228,11 @@ func (s *InventoryOperationService) executeMerge(
 		if placement.RemainingInSrc == 0 {
 			// Remove item from source
 			c.Items = append(c.Items[:srcItemIndex], c.Items[srcItemIndex+1:]...)
+			// If source was HAND and item fully consumed, reset hand offset
+			if c.Kind == constt.InventoryHand {
+				c.HandMouseOffsetX = 0
+				c.HandMouseOffsetY = 0
+			}
 		} else {
 			c.Items[srcItemIndex].Quantity = placement.RemainingInSrc
 		}
@@ -261,6 +267,7 @@ func (s *InventoryOperationService) executeSwap(
 	placement *PlacementResult,
 	dstEquipSlot netproto.EquipSlot,
 	sameSrcDst bool,
+	moveSpec *netproto.InventoryMoveSpec,
 ) *OperationResult {
 	// Get the items to swap
 	srcItem := srcInfo.Container.Items[srcItemIndex]
@@ -277,6 +284,11 @@ func (s *InventoryOperationService) executeSwap(
 		swapItem.Y = origSrcY
 		swapItem.EquipSlot = origSrcSlot
 		c.Items[srcItemIndex] = swapItem
+		// If source is HAND, swap item goes into hand — use default offset
+		if c.Kind == constt.InventoryHand {
+			c.HandMouseOffsetX = constt.DefaultHandMouseOffset
+			c.HandMouseOffsetY = constt.DefaultHandMouseOffset
+		}
 		c.Version++
 		return true
 	})
@@ -287,6 +299,10 @@ func (s *InventoryOperationService) executeSwap(
 		srcItem.Y = placement.Y
 		srcItem.EquipSlot = dstEquipSlot
 		c.Items[placement.SwapItemIndex] = srcItem
+		// If dst is HAND, set hand offset from moveSpec or use default
+		if c.Kind == constt.InventoryHand {
+			applyHandOffset(c, moveSpec)
+		}
 		if !sameSrcDst {
 			c.Version++
 		}
@@ -318,6 +334,7 @@ func (s *InventoryOperationService) executeSimpleMove(
 	placement *PlacementResult,
 	dstEquipSlot netproto.EquipSlot,
 	sameSrcDst bool,
+	moveSpec *netproto.InventoryMoveSpec,
 ) *OperationResult {
 	// Get the item to move
 	srcItem := srcInfo.Container.Items[srcItemIndex]
@@ -336,6 +353,11 @@ func (s *InventoryOperationService) executeSimpleMove(
 		// Remove from source
 		ecs.MutateComponent[components.InventoryContainer](w, srcInfo.Handle, func(c *components.InventoryContainer) bool {
 			c.Items = append(c.Items[:srcItemIndex], c.Items[srcItemIndex+1:]...)
+			// If source was HAND, reset hand offset
+			if c.Kind == constt.InventoryHand {
+				c.HandMouseOffsetX = 0
+				c.HandMouseOffsetY = 0
+			}
 			c.Version++
 			return true
 		})
@@ -346,6 +368,10 @@ func (s *InventoryOperationService) executeSimpleMove(
 			srcItem.Y = placement.Y
 			srcItem.EquipSlot = dstEquipSlot
 			c.Items = append(c.Items, srcItem)
+			// If dst is HAND, set hand offset from moveSpec or use default
+			if c.Kind == constt.InventoryHand {
+				applyHandOffset(c, moveSpec)
+			}
 			c.Version++
 			return true
 		})
@@ -367,6 +393,18 @@ func (s *InventoryOperationService) executeSimpleMove(
 	}
 
 	return result
+}
+
+// applyHandOffset sets HandMouseOffsetX/Y on the container from moveSpec.HandPos,
+// or uses DefaultHandMouseOffset if not provided.
+func applyHandOffset(c *components.InventoryContainer, moveSpec *netproto.InventoryMoveSpec) {
+	if moveSpec.HandPos != nil {
+		c.HandMouseOffsetX = int16(moveSpec.HandPos.MouseOffsetX)
+		c.HandMouseOffsetY = int16(moveSpec.HandPos.MouseOffsetY)
+	} else {
+		c.HandMouseOffsetX = constt.DefaultHandMouseOffset
+		c.HandMouseOffsetY = constt.DefaultHandMouseOffset
+	}
 }
 
 func (s *InventoryOperationService) ExecuteDropToWorld(

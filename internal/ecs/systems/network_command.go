@@ -53,6 +53,10 @@ type InventoryContainerState struct {
 	Width   uint8
 	Height  uint8
 	Items   []InventoryItemState
+
+	// HandMouseOffsetX/Y — only used when Kind == HAND and len(Items) == 1.
+	HandMouseOffsetX int16
+	HandMouseOffsetY int16
 }
 
 // InventoryItemState represents an item in inventory for sending to client
@@ -424,13 +428,15 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 
 	// Build and send S2C_ContainerOpened
 	containerState := InventoryContainerState{
-		OwnerID: container.OwnerID,
-		Kind:    uint8(container.Kind),
-		Key:     container.Key,
-		Version: container.Version,
-		Width:   container.Width,
-		Height:  container.Height,
-		Items:   make([]InventoryItemState, 0, len(container.Items)),
+		OwnerID:          container.OwnerID,
+		Kind:             uint8(container.Kind),
+		Key:              container.Key,
+		Version:          container.Version,
+		Width:            container.Width,
+		Height:           container.Height,
+		Items:            make([]InventoryItemState, 0, len(container.Items)),
+		HandMouseOffsetX: container.HandMouseOffsetX,
+		HandMouseOffsetY: container.HandMouseOffsetY,
 	}
 	for _, item := range container.Items {
 		itemState := InventoryItemState{
@@ -511,6 +517,10 @@ func (s *NetworkCommandSystem) buildInventoryStateProto(container InventoryConta
 		handState := &netproto.InventoryHandState{}
 		if len(container.Items) > 0 {
 			handState.Item = s.buildItemInstanceProto(container.Items[0])
+			handState.HandPos = &netproto.HandPos{
+				MouseOffsetX: int32(container.HandMouseOffsetX),
+				MouseOffsetY: int32(container.HandMouseOffsetY),
+			}
 		}
 		invState.State = &netproto.InventoryState_Hand{
 			Hand: handState,

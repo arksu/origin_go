@@ -60,3 +60,7 @@ const (
 	InventoryEquipment   InventoryKind = 2
 	InventoryDroppedItem InventoryKind = 3
 )
+
+// DefaultHandMouseOffset — дефолтный оффсет курсора при взятии предмета в руку,
+// если клиент не прислал hand_pos.
+const DefaultHandMouseOffset int16 = 15

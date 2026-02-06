@@ -153,7 +153,13 @@ message InventoryEquipmentState {
 }
 
 message InventoryHandState {
-  optional ItemInstance item = 1; // 0/1 item
+  ItemInstance item = 1;
+
+  // Оффсет клика внутри предмета при взятии "в руку".
+  // Нужен клиенту, чтобы рисовать предмет, привязанный к курсору:
+  // item_top_left = mouse_pos - hand_pos
+  // Единицы: UI-пиксели (координаты клиентского инвентарного UI).
+  HandPos hand_pos = 2;
 }
 
 message InventoryState {

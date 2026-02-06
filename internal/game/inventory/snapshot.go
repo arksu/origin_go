@@ -174,6 +174,10 @@ func (ss *SnapshotSender) buildHandState(
 	if len(container.Items) > 0 {
 		itemInstance := ss.buildItemInstance(world, container.Items[0])
 		handState.Item = itemInstance
+		handState.HandPos = &netproto.HandPos{
+			MouseOffsetX: int32(container.HandMouseOffsetX),
+			MouseOffsetY: int32(container.HandMouseOffsetY),
+		}
 	}
 
 	return handState

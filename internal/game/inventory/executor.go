@@ -148,13 +148,15 @@ func (e *InventoryExecutor) findParentContainer(
 
 func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *ContainerInfo) systems.InventoryContainerState {
 	state := systems.InventoryContainerState{
-		OwnerID: info.Container.OwnerID,
-		Kind:    uint8(info.Container.Kind),
-		Key:     info.Container.Key,
-		Version: info.Container.Version,
-		Width:   info.Container.Width,
-		Height:  info.Container.Height,
-		Items:   make([]systems.InventoryItemState, 0, len(info.Container.Items)),
+		OwnerID:          info.Container.OwnerID,
+		Kind:             uint8(info.Container.Kind),
+		Key:              info.Container.Key,
+		Version:          info.Container.Version,
+		Width:            info.Container.Width,
+		Height:           info.Container.Height,
+		Items:            make([]systems.InventoryItemState, 0, len(info.Container.Items)),
+		HandMouseOffsetX: info.Container.HandMouseOffsetX,
+		HandMouseOffsetY: info.Container.HandMouseOffsetY,
 	}
 
 	refIndex := w.InventoryRefIndex()
