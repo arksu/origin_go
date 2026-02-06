@@ -74,7 +74,7 @@ export const useGameStore = defineStore('game', () => {
   // Inventory
   const inventories = ref(new Map<string, proto.IInventoryState>())
   const playerInventoryVisible = ref(false)
-  const openNestedInventories = ref(new Map<string, { data: proto.IInventoryGridState, itemId: number }>())
+  const openNestedInventories = ref(new Map<string, proto.IInventoryState>())
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
@@ -164,34 +164,13 @@ export const useGameStore = defineStore('game', () => {
   }
 
   // Inventory actions
+  function refKey(r: proto.IInventoryRef): string {
+    return `${r.kind ?? 0}_${r.ownerId ?? 0}_${r.inventoryKey ?? 0}`
+  }
+
   function inventoryKey(state: proto.IInventoryState): string {
     if (!state.ref) return 'no_ref'
-
-    // Determine inventory type
-    let type = 'unknown'
-    if (state.grid) type = 'grid'
-    else if (state.equipment) type = 'equipment'
-    else if (state.hand) type = 'hand'
-
-    const key = state.ref.ownerEntityId
-      ? `entity_${state.ref.ownerEntityId}_${state.ref.inventoryKey}_${type}`
-      : state.ref.ownerItemId
-        ? `item_${state.ref.ownerItemId}_${state.ref.inventoryKey}_${type}`
-        : `unknown_${state.ref.inventoryKey}_${type}`
-
-    console.log('[gameStore] inventoryKey generated:', {
-      ref: state.ref,
-      type,
-      key,
-      ownerEntityId: state.ref.ownerEntityId,
-      ownerItemId: state.ref.ownerItemId,
-      inventoryKey: state.ref.inventoryKey,
-      hasGrid: !!state.grid,
-      hasEquipment: !!state.equipment,
-      hasHand: !!state.hand
-    })
-
-    return key
+    return refKey(state.ref)
   }
 
   function updateInventory(state: proto.IInventoryState) {
@@ -207,45 +186,22 @@ export const useGameStore = defineStore('game', () => {
   function getPlayerInventory(): proto.IInventoryState | undefined {
     if (!playerEntityId.value) return undefined
 
-    console.log('[gameStore] All inventories:', Array.from(inventories.value.entries()))
-
-    // Try to find grid inventory with new key format
-    const gridKey = `entity_${playerEntityId.value}_0_grid`
-    const equipmentKey = `entity_${playerEntityId.value}_0_equipment`
-    const handKey = `entity_${playerEntityId.value}_0_hand`
-
+    // key format: kind_ownerId_inventoryKey
+    // INVENTORY_KIND_GRID=0
+    const gridKey = `0_${playerEntityId.value}_0`
     const gridInv = inventories.value.get(gridKey)
-    const equipmentInv = inventories.value.get(equipmentKey)
-    const handInv = inventories.value.get(handKey)
 
-    console.log('[gameStore] Looking for inventory:', {
-      playerEntityId: playerEntityId.value,
-      gridKey,
-      equipmentKey,
-      handKey,
-      hasGrid: !!gridInv,
-      hasEquipment: !!equipmentInv,
-      hasHand: !!handInv,
-      gridInv,
-      equipmentInv,
-      handInv
-    })
-
-    // Return grid inventory first
     if (gridInv && gridInv.grid) {
-      console.log('[gameStore] Found grid inventory at key:', gridKey)
       return gridInv
     }
 
-    // Search all inventories for one with grid
-    for (const [key, inv] of inventories.value.entries()) {
-      if (inv.grid) {
-        console.log('[gameStore] Found grid inventory at key:', key)
+    // Fallback: search all inventories for one with grid belonging to player
+    for (const [, inv] of inventories.value.entries()) {
+      if (inv.grid && inv.ref && Number(inv.ref.ownerId) === playerEntityId.value) {
         return inv
       }
     }
 
-    console.log('[gameStore] No grid inventory found')
     return undefined
   }
 
@@ -260,19 +216,17 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible.value = visible
   }
 
-  function openNestedInventory(itemId: number, inventoryKey: string, nestedData: proto.IInventoryGridState): string {
-    const windowKey = `item_${itemId}_${inventoryKey}`
+  function onContainerOpened(state: proto.IInventoryState) {
+    if (!state.ref) return
+    const key = refKey(state.ref)
+    console.log('[gameStore] onContainerOpened:', key)
+    openNestedInventories.value.set(key, state)
+  }
 
-    // Check if window is already open - toggle behavior
-    if (openNestedInventories.value.has(windowKey)) {
-      console.log('[gameStore] Closing existing nested inventory window:', windowKey)
-      openNestedInventories.value.delete(windowKey)
-      return windowKey
-    }
-
-    console.log('[gameStore] Opening new nested inventory window:', windowKey)
-    openNestedInventories.value.set(windowKey, { data: nestedData, itemId })
-    return windowKey
+  function onContainerClosed(r: proto.IInventoryRef) {
+    const key = refKey(r)
+    console.log('[gameStore] onContainerClosed:', key)
+    openNestedInventories.value.delete(key)
   }
 
   function closeNestedInventory(windowKey: string) {
@@ -283,7 +237,7 @@ export const useGameStore = defineStore('game', () => {
     openNestedInventories.value.clear()
   }
 
-  function getNestedInventoryData(windowKey: string): { data: proto.IInventoryGridState, itemId: number } | undefined {
+  function getNestedInventoryData(windowKey: string): proto.IInventoryState | undefined {
     return openNestedInventories.value.get(windowKey)
   }
 
@@ -382,7 +336,8 @@ export const useGameStore = defineStore('game', () => {
     getPlayerInventory,
     togglePlayerInventory,
     setPlayerInventoryVisible,
-    openNestedInventory,
+    onContainerOpened,
+    onContainerClosed,
     closeNestedInventory,
     closeAllNestedInventories,
     getNestedInventoryData,
