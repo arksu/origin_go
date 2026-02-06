@@ -49,6 +49,9 @@ type World struct {
 	// CharacterEntities tracks player characters and their save state
 	characterEntities CharacterEntities
 
+	// InventoryRefIndex provides O(1) lookup from (kind, owner_id, key) to container Handle
+	inventoryRefIndex InventoryRefIndex
+
 	// Event bus for publishing events
 	eventBus *eventbus.EventBus
 
@@ -95,6 +98,9 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		},
 		characterEntities: CharacterEntities{
 			Map: make(map[types.EntityID]CharacterEntity, 64),
+		},
+		inventoryRefIndex: InventoryRefIndex{
+			index: make(map[InventoryRefKey]types.Handle, 64),
 		},
 		eventBus: eventBus,
 		Layer:    layer,
@@ -433,4 +439,9 @@ func (w *World) DetachedEntities() *DetachedEntities {
 // CharacterEntities returns the character entities map
 func (w *World) CharacterEntities() *CharacterEntities {
 	return &w.characterEntities
+}
+
+// InventoryRefIndex returns the inventory ref index for O(1) container lookup
+func (w *World) InventoryRefIndex() *InventoryRefIndex {
+	return &w.inventoryRefIndex
 }

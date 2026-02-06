@@ -18,6 +18,8 @@ const (
 	CmdInteract
 	CmdChat
 	CmdInventoryOp
+	CmdOpenContainer
+	CmdCloseContainer
 )
 
 // PlayerCommand represents an intent from a client to be processed by ECS

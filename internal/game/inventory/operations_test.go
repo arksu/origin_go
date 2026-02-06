@@ -132,6 +132,11 @@ func setupPlayerWithInventories(world *ecs.World, playerID types.EntityID, playe
 	}
 	ecs.AddComponent(world, playerHandle, owner)
 
+	// Populate InventoryRefIndex for O(1) lookup
+	refIndex := world.InventoryRefIndex()
+	refIndex.Add(uint8(constt.InventoryGrid), playerID, 0, gridHandle)
+	refIndex.Add(uint8(constt.InventoryHand), playerID, 0, handHandle)
+
 	return gridHandle, handHandle
 }
 

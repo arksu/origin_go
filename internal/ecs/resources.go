@@ -134,3 +134,28 @@ func (c *CharacterEntities) GetAll() []types.EntityID {
 	}
 	return entityIDs
 }
+
+// InventoryRefKey uniquely identifies an inventory container: (kind, owner_id, inventory_key)
+type InventoryRefKey struct {
+	Kind    uint8
+	OwnerID types.EntityID
+	Key     uint32
+}
+
+// InventoryRefIndex provides O(1) lookup from InventoryRef to Handle
+type InventoryRefIndex struct {
+	index map[InventoryRefKey]types.Handle
+}
+
+func (idx *InventoryRefIndex) Add(kind uint8, ownerID types.EntityID, key uint32, handle types.Handle) {
+	idx.index[InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}] = handle
+}
+
+func (idx *InventoryRefIndex) Remove(kind uint8, ownerID types.EntityID, key uint32) {
+	delete(idx.index, InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key})
+}
+
+func (idx *InventoryRefIndex) Lookup(kind uint8, ownerID types.EntityID, key uint32) (types.Handle, bool) {
+	h, ok := idx.index[InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}]
+	return h, ok
+}

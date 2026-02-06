@@ -165,6 +165,10 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleChatMessage(c, msg.Sequence, payload.Chat)
 	case *netproto.ClientMessage_InventoryOp:
 		g.handleInventoryOp(c, msg.Sequence, payload.InventoryOp)
+	case *netproto.ClientMessage_OpenContainer:
+		g.handleOpenContainer(c, msg.Sequence, payload.OpenContainer)
+	case *netproto.ClientMessage_CloseContainer:
+		g.handleCloseContainer(c, msg.Sequence, payload.CloseContainer)
 	default:
 		g.logger.Warn("Unknown packet type", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
 	}
@@ -395,6 +399,62 @@ func (g *Game) handleInventoryOp(c *network.Client, sequence uint32, inventoryOp
 				zap.Error(err))
 		}
 	}
+}
+
+func (g *Game) handleOpenContainer(c *network.Client, sequence uint32, msg *netproto.C2S_OpenContainer) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || msg.Ref == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid open container request")
+		return
+	}
+
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdOpenContainer,
+		Payload:     msg.Ref,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	}
+	_ = shard.PlayerInbox().Enqueue(cmd)
+}
+
+func (g *Game) handleCloseContainer(c *network.Client, sequence uint32, msg *netproto.C2S_CloseContainer) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || msg.Ref == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid close container request")
+		return
+	}
+
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdCloseContainer,
+		Payload:     msg.Ref,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	}
+	_ = shard.PlayerInbox().Enqueue(cmd)
 }
 
 func (g *Game) handleDisconnect(c *network.Client) {

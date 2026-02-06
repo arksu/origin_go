@@ -254,6 +254,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 					// Create InventoryOwner component with all inventory links (including nested)
 					inventoryLinks := make([]components.InventoryLink, 0, len(loadResult.ContainerHandles))
+					refIndex := w.InventoryRefIndex()
 					for _, containerHandle := range loadResult.ContainerHandles {
 						if !w.Alive(containerHandle) {
 							continue
@@ -266,6 +267,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 								OwnerID: container.OwnerID,
 								Handle:  containerHandle,
 							})
+							refIndex.Add(uint8(container.Kind), container.OwnerID, container.Key, containerHandle)
 						}
 					}
 					ecs.AddComponent(w, h, components.InventoryOwner{
