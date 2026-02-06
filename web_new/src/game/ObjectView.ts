@@ -1,5 +1,6 @@
 import { Container, Sprite, Graphics, Text, Rectangle } from 'pixi.js'
-import { ResourceLoader } from './ResourceLoader'
+import type { Spine } from '@esotericsoftware/spine-pixi-v8'
+import { ResourceLoader, type ResourceDef, type LayerDef } from './ResourceLoader'
 import { coordGame2Screen } from './utils/coordConvert'
 import { type AABB, fromMinMax } from './culling/AABB'
 import { OBJECT_BOUNDS_COLOR, OBJECT_BOUNDS_WIDTH, OBJECT_BOUNDS_ALPHA } from '@/constants/render'
@@ -13,137 +14,165 @@ export interface ObjectViewOptions {
 }
 
 /**
- * ObjectView represents a visual game object (character, resource, building, etc.)
- * 
- * Architecture for future extensions:
- * - Multi-layer rendering (shadow, base, overlay, effects)
- * - Animation support (sprite sheets, frame sequences)
- * - Interactive states (hover, selected, targeted)
- * - Health bars, labels, status indicators
- * - Equipment and appearance customization
+ * ObjectView represents a visual game object with multi-layer rendering.
+ * Supports: static sprites, shadow layers, Spine animations with 8-direction movement.
  */
 export class ObjectView {
   readonly entityId: number
   readonly objectType: number
 
   private container: Container
-  private sprite: Sprite
   private debugText: Text | null = null
   private boundsGraphics: Graphics | null = null
+  private placeholder: Graphics | null = null
 
-  private resourcePath: string
   private position: { x: number; y: number }
   private size: { x: number; y: number }
 
-  private isResourceLoaded = false
+  private resDef: ResourceDef | undefined
+  private sprites: Sprite[] = []
+  private spineAnimations: Spine[] = []
+  private layerIndexMap: Map<number, number> = new Map() // layerIdx -> spineAnimations index
+  private lastDir = 4 // default south
+  private isDestroyed = false
 
   constructor(options: ObjectViewOptions) {
     this.entityId = options.entityId
     this.objectType = options.objectType
-    this.resourcePath = options.resourcePath
     this.position = options.position
     this.size = options.size
 
     this.container = new Container()
     this.container.sortableChildren = true
 
-    // Create placeholder sprite
-    this.sprite = new Sprite()
-    this.sprite.anchor.set(0.5, 1) // Bottom-center anchor for isometric
-    this.container.addChild(this.sprite)
+    this.resDef = ResourceLoader.getResourceDef(options.resourcePath)
+    if (!this.resDef) {
+      this.resDef = ResourceLoader.getResourceDef('unknown')
+    }
 
-    // Initialize visual representation
-    this.createPlaceholder()
+    if (this.resDef) {
+      this.buildLayers()
+    } else {
+      this.createPlaceholder()
+    }
+
     this.updateScreenPosition()
-
-    // Load actual resource asynchronously
-    this.loadResource()
+    this.onStopped()
   }
 
   getContainer(): Container {
     return this.container
   }
 
-  /**
-   * Create a temporary placeholder visual until resource loads.
-   * Temporary: type 0 = blue cross, type 6 = red cross
-   */
-  private createPlaceholder(): void {
-    const placeholder = new Graphics()
-
-    // Choose color based on object type
-    let color = 0x00ff00 // default green
-    if (this.objectType === 1) {
-      color = 0x0000ff // blue for type 0
-    } else if (this.objectType === 6) {
-      color = 0xff0000 // red for type 6
+  private buildLayers(): void {
+    if (!this.resDef) return
+    let spineIdx = 0
+    for (let i = 0; i < this.resDef.layers.length; i++) {
+      const layer = this.resDef.layers[i]
+      if (!layer) continue
+      if (layer.img) {
+        this.addSpriteLayer(layer)
+      }
+      if (layer.spine) {
+        this.layerIndexMap.set(i, spineIdx++)
+        this.addSpineLayer(layer)
+      }
     }
+  }
 
-    // Draw cross (X shape)
-    const size = 10
-    placeholder.moveTo(-size, -size)
-    placeholder.lineTo(size, size)
-    placeholder.moveTo(size, -size)
-    placeholder.lineTo(-size, size)
-    placeholder.stroke({ color, width: 3 })
-
-    // Set hit area for interaction (larger than visual for easier clicking)
-    const hitSize = size + 5
-    placeholder.hitArea = new Rectangle(-hitSize, -hitSize, hitSize * 2, hitSize * 2)
-
-    // Make interactive
-    placeholder.eventMode = 'static'
-    placeholder.cursor = 'pointer'
-
-    // Add event handlers
-    placeholder.on('pointerdown', () => {
-      console.log(`[ObjectView] Pointer down on entity ${this.entityId}`)
-      this.onClick()
+  private addSpriteLayer(layer: LayerDef): void {
+    ResourceLoader.createSprite(layer, this.resDef!).then((spr) => {
+      if (this.isDestroyed) {
+        spr.destroy()
+        return
+      }
+      if (layer.interactive) {
+        this.setInteractive(spr)
+      }
+      this.sprites.push(spr)
+      this.container.addChild(spr)
     })
+  }
 
-    placeholder.on('pointerover', () => {
-      // console.log(`[ObjectView] Hover over entity ${this.entityId}`)
-      this.setHovered(true)
+  private addSpineLayer(layer: LayerDef): void {
+    ResourceLoader.loadSpine(layer, this.resDef!).then((spineAnim) => {
+      if (this.isDestroyed) {
+        spineAnim.destroy()
+        return
+      }
+      // set default idle animation
+      const dirs = layer.spine?.dirs
+      const idleAnim = dirs?.['idle']?.[this.lastDir]
+      if (idleAnim) {
+        spineAnim.state.setAnimation(0, idleAnim, true)
+      }
+      this.spineAnimations.push(spineAnim)
+      this.container.addChild(spineAnim)
     })
+  }
 
-    placeholder.on('pointerout', () => {
-      // console.log(`[ObjectView] Hover out from entity ${this.entityId}`)
-      this.setHovered(false)
-    })
+  private createPlaceholder(): void {
+    const ph = new Graphics()
+    const color = this.objectType === 1 ? 0x0000ff : this.objectType === 6 ? 0xff0000 : 0x00ff00
+    const s = 10
+    ph.moveTo(-s, -s).lineTo(s, s).moveTo(s, -s).lineTo(-s, s)
+    ph.stroke({ color, width: 3 })
+    ph.hitArea = new Rectangle(-15, -15, 30, 30)
+    ph.eventMode = 'static'
+    ph.cursor = 'pointer'
+    ph.on('pointerdown', () => this.onClick())
+    this.placeholder = ph
+    this.container.addChild(ph)
+  }
 
-    // Add Graphics directly to container, not to sprite
-    this.container.addChild(placeholder)
+  private setInteractive(target: Sprite | Container): void {
+    target.eventMode = 'static'
+    target.cursor = 'pointer'
+    target.on('pointerdown', () => this.onClick())
   }
 
   /**
-   * Load the actual resource for this object.
-   * Future: support animations, multi-layer objects, etc.
+   * Called when the entity is moving in a direction (0-7).
    */
-  private async loadResource(): Promise<void> {
-    if (this.isResourceLoaded) return
+  onMoved(dir: number): void {
+    this.lastDir = dir
+    if (!this.resDef) return
 
-    try {
-      const texture = await ResourceLoader.loadTexture(this.resourcePath)
+    this.resDef.layers.forEach((layer, layerIdx) => {
+      if (!layer.spine?.dirs) return
+      const animName = layer.spine.dirs['walk']?.[dir]
+      if (!animName) return
 
-      // Remove placeholder
-      this.sprite.removeChildren()
+      const spineIdx = this.layerIndexMap.get(layerIdx)
+      if (spineIdx == null) return
+      const anim = this.spineAnimations[spineIdx]
+      if (!anim) return
 
-      // Set loaded texture
-      this.sprite.texture = texture
-
-      // Future: handle multi-layer objects
-      // - Load shadow texture
-      // - Load overlay textures
-      // - Setup animation frames
-
-      this.isResourceLoaded = true
-
-      if (this.resourcePath) {
-        console.log(`[ObjectView] Resource loaded for entity ${this.entityId}: ${this.resourcePath}`)
+      const current = anim.state.getCurrent(0)?.animation?.name
+      if (current !== animName) {
+        anim.state.setAnimation(0, animName, true)
       }
-    } catch (error) {
-      console.warn(`[ObjectView] Failed to load resource for entity ${this.entityId}:`, error)
-    }
+    })
+  }
+
+  /**
+   * Called when the entity stops moving.
+   */
+  onStopped(): void {
+    if (!this.resDef) return
+
+    this.resDef.layers.forEach((layer, layerIdx) => {
+      if (!layer.spine?.dirs) return
+      const animName = layer.spine.dirs['idle']?.[this.lastDir]
+      if (!animName) return
+
+      const spineIdx = this.layerIndexMap.get(layerIdx)
+      if (spineIdx == null) return
+      const anim = this.spineAnimations[spineIdx]
+      if (!anim) return
+
+      anim.state.setAnimation(0, animName, true)
+    })
   }
 
   /**
@@ -162,50 +191,26 @@ export class ObjectView {
     this.container.y = screenPos.y
   }
 
-  /**
-   * Get Y coordinate for depth sorting.
-   * Objects with higher Y should be drawn on top.
-   */
   getDepthY(): number {
     return this.position.y + this.size.y
   }
 
-  /**
-   * Compute AABB bounds in screen/local coordinates for culling.
-   * Uses conservative bounds based on object size.
-   */
   computeScreenBounds(): AABB {
-    // Container position is already in screen coordinates
     const cx = this.container.x
     const cy = this.container.y
+    const halfWidth = Math.max(this.size.x, this.size.y) * 2 + 64
+    const halfHeight = Math.max(this.size.x, this.size.y) + 128
 
-    // Estimate screen-space size based on game size
-    // For isometric, we use a conservative estimate
-    const halfWidth = Math.max(this.size.x, this.size.y) * 2 + 32 // Extra padding
-    const halfHeight = Math.max(this.size.x, this.size.y) + 64 // Extra padding for height
-
-    return fromMinMax(
-      cx - halfWidth,
-      cy - halfHeight,
-      cx + halfWidth,
-      cy,
-    )
+    return fromMinMax(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy)
   }
 
-  /**
-   * Get current game position.
-   */
   getPosition(): { x: number; y: number } {
     return { x: this.position.x, y: this.position.y }
   }
 
-  /**
-   * Check if a world point is within this object's bounds.
-   */
   containsWorldPoint(worldX: number, worldY: number): boolean {
     const halfSizeX = this.size.x / 2
     const halfSizeY = this.size.y / 2
-
     return (
       worldX >= this.position.x - halfSizeX &&
       worldX <= this.position.x + halfSizeX &&
@@ -214,9 +219,6 @@ export class ObjectView {
     )
   }
 
-  /**
-   * Enable/disable debug visualization.
-   */
   setDebugMode(enabled: boolean): void {
     if (enabled && !this.debugText) {
       this.debugText = new Text({
@@ -237,31 +239,17 @@ export class ObjectView {
     }
   }
 
-  /**
-   * Handle click interaction.
-   * Future: emit events for game logic to handle.
-   */
   onClick(): void {
     console.log(`[ObjectView] Clicked entity ${this.entityId}`)
-    // Future: emit event to game logic
   }
 
-  /**
-   * Handle hover state.
-   * Future: visual feedback, tooltips, etc.
-   */
   setHovered(hovered: boolean): void {
-    // Future: change tint, show outline, etc.
-    if (hovered) {
-      this.sprite.tint = 0xcccccc
-    } else {
-      this.sprite.tint = 0xffffff
+    const tint = hovered ? 0xcccccc : 0xffffff
+    for (const spr of this.sprites) {
+      spr.tint = tint
     }
   }
 
-  /**
-   * Enable/disable bounds visualization.
-   */
   setBoundsVisible(visible: boolean): void {
     if (visible && !this.boundsGraphics) {
       this.createBoundsGraphics()
@@ -270,27 +258,17 @@ export class ObjectView {
     }
   }
 
-  /**
-   * Check if bounds are currently visible.
-   */
   isBoundsVisible(): boolean {
     return this.boundsGraphics !== null
   }
 
-  /**
-   * Create bounds graphics for the object.
-   */
   private createBoundsGraphics(): void {
     if (this.boundsGraphics) return
-
     this.boundsGraphics = new Graphics()
     this.updateBoundsGraphics()
     this.container.addChild(this.boundsGraphics)
   }
 
-  /**
-   * Remove bounds graphics.
-   */
   private removeBoundsGraphics(): void {
     if (this.boundsGraphics) {
       this.container.removeChild(this.boundsGraphics)
@@ -299,49 +277,31 @@ export class ObjectView {
     }
   }
 
-  /**
-   * Update bounds graphics to match current object size and position.
-   * Draws bounds in isometric projection using game coordinates.
-   */
   private updateBoundsGraphics(): void {
     if (!this.boundsGraphics) return
-
     this.boundsGraphics.clear()
+    if (this.size.x === 0 || this.size.y === 0) return
 
-    // Skip if size is zero
-    if (this.size.x === 0 || this.size.y === 0) {
-      return
-    }
-
-    // Calculate bounds in game coordinates
     const halfWidthX = this.size.x / 2
     const halfHeightY = this.size.y / 2
-
-    // Four corners of the bounding box in game coordinates
     const corners = [
-      { x: this.position.x - halfWidthX, y: this.position.y - halfHeightY }, // Top-left
-      { x: this.position.x + halfWidthX, y: this.position.y - halfHeightY }, // Top-right
-      { x: this.position.x + halfWidthX, y: this.position.y + halfHeightY }, // Bottom-right
-      { x: this.position.x - halfWidthX, y: this.position.y + halfHeightY }, // Bottom-left
+      { x: this.position.x - halfWidthX, y: this.position.y - halfHeightY },
+      { x: this.position.x + halfWidthX, y: this.position.y - halfHeightY },
+      { x: this.position.x + halfWidthX, y: this.position.y + halfHeightY },
+      { x: this.position.x - halfWidthX, y: this.position.y + halfHeightY },
     ]
-
-    // Transform corners to screen coordinates
-    const screenCorners = corners.map(corner => coordGame2Screen(corner.x, corner.y))
-
-    // Transform to local coordinates relative to container position
+    const screenCorners = corners.map(c => coordGame2Screen(c.x, c.y))
     const containerScreenPos = coordGame2Screen(this.position.x, this.position.y)
-    const localCorners = screenCorners.map(screen => ({
-      x: screen.x - containerScreenPos.x,
-      y: screen.y - containerScreenPos.y
+    const localCorners = screenCorners.map(s => ({
+      x: s.x - containerScreenPos.x,
+      y: s.y - containerScreenPos.y,
     }))
 
-    // Draw isometric rectangle
     this.boundsGraphics.setStrokeStyle({
       width: OBJECT_BOUNDS_WIDTH,
       color: OBJECT_BOUNDS_COLOR,
-      alpha: OBJECT_BOUNDS_ALPHA
+      alpha: OBJECT_BOUNDS_ALPHA,
     })
-
     this.boundsGraphics.moveTo(localCorners[0]?.x || 0, localCorners[0]?.y || 0)
     this.boundsGraphics.lineTo(localCorners[1]?.x || 0, localCorners[1]?.y || 0)
     this.boundsGraphics.lineTo(localCorners[2]?.x || 0, localCorners[2]?.y || 0)
@@ -351,8 +311,18 @@ export class ObjectView {
   }
 
   destroy(): void {
+    if (this.isDestroyed) return
+    this.isDestroyed = true
     this.removeBoundsGraphics()
-    this.sprite.destroy({ children: true })
+    for (const spr of this.sprites) {
+      spr.destroy()
+    }
+    for (const spine of this.spineAnimations) {
+      spine.destroy()
+    }
+    if (this.placeholder) {
+      this.placeholder.destroy()
+    }
     this.container.destroy({ children: true })
   }
 }

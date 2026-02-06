@@ -25,14 +25,14 @@ let touchId = -1
 
 const onTouchDrag = function(event: TouchEvent) {
   event.preventDefault()
-  if (event.touches.length == 1 && event.touches[0].identifier == touchId) {
+  if (event.touches.length == 1 && event.touches[0]?.identifier == touchId) {
     const el = draggableTarget.value
     if (!el) return
 
-    movementX = clientX - event.touches[0].clientX
-    movementY = clientY - event.touches[0].clientY
-    clientX = event.touches[0].clientX
-    clientY = event.touches[0].clientY
+    movementX = clientX - (event.touches[0]?.clientX || 0)
+    movementY = clientY - (event.touches[0]?.clientY || 0)
+    clientX = event.touches[0]?.clientX || 0
+    clientY = event.touches[0]?.clientY || 0
 
     left.value = (el.offsetLeft - movementX)
     top.value = (el.offsetTop - movementY)
@@ -48,7 +48,7 @@ const onTouchDragEnd = function(event: TouchEvent) {
 }
 
 const onTouchStart = (event: TouchEvent) => {
-  if (event.touches.length == 1) {
+  if (event.touches.length == 1 && event.touches[0]) {
     clientX = event.touches[0].clientX
     clientY = event.touches[0].clientY
     touchId = event.touches[0].identifier

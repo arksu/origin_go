@@ -40,6 +40,7 @@ export interface RenderPosition {
   heading: number
   isMoving: boolean
   moveMode: number
+  direction: number // 0-7 index for 8-direction animations (NE,E,SE,S,SW,W,NW,N)
 }
 
 export interface EntityMoveState {
@@ -330,6 +331,7 @@ class MoveController {
         heading: state.visualHeading,
         isMoving: false,
         moveMode: 0,
+        direction: 4,
       }
     }
 
@@ -409,6 +411,7 @@ class MoveController {
         heading: state.visualHeading,
         isMoving: false,
         moveMode: 0,
+        direction: 4,
       }
     }
 
@@ -450,12 +453,20 @@ class MoveController {
       keyframes.shift()
     }
 
+    // Calculate 8-direction index from velocity of the latest relevant keyframe
+    let dir = 4 // default south
+    const lastKf = keyframes[keyframes.length - 1]
+    if (lastKf && (lastKf.vx !== 0 || lastKf.vy !== 0)) {
+      dir = calcDirection(lastKf.vx, lastKf.vy)
+    }
+
     return {
       x: state.visualX,
       y: state.visualY,
       heading: state.visualHeading,
       isMoving,
       moveMode,
+      direction: dir,
     }
   }
 
@@ -537,3 +548,20 @@ class MoveController {
 }
 
 export const moveController = new MoveController()
+
+/**
+ * Calculate 8-direction index from velocity vector.
+ * Returns 0-7: NE, E, SE, S, SW, W, NW, N
+ */
+function calcDirection(vx: number, vy: number): number {
+  if (vx === 0 && vy === 0) return 4 // default south
+
+  let angle = Math.atan2(vy, vx)
+  angle += Math.PI / 2
+
+  if (angle < 0) {
+    angle += 2 * Math.PI
+  }
+
+  return Math.floor((angle + Math.PI / 8) / (Math.PI / 4)) % 8
+}

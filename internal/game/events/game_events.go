@@ -171,12 +171,21 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 			sizeY = int32(collider.HalfHeight * 2) // Convert from half-height to full height
 		}
 
+		// Get appearance component for resource path
+		var resourcePath string
+		appearance, hasAppearance := ecs.GetComponent[components.Appearance](shard.World(), event.TargetHandle)
+		if hasAppearance && appearance.Resource != "" {
+			resourcePath = appearance.Resource
+		} else {
+			resourcePath = "unknown" // Fallback to unknown resource
+		}
+
 		msg := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_ObjectSpawn{
 				ObjectSpawn: &netproto.S2C_ObjectSpawn{
 					EntityId:     uint64(event.TargetID),
 					ObjectType:   int32(entityInfo.ObjectType),
-					ResourcePath: "", // TODO
+					ResourcePath: resourcePath,
 					Position: &netproto.EntityPosition{
 						Position: &netproto.Position{
 							X: int32(transform.X),

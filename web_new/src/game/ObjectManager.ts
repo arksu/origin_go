@@ -73,16 +73,23 @@ export class ObjectManager {
   }
 
   /**
-   * Update object position (for movement).
+   * Update object position and movement state.
    */
-  updateObjectPosition(entityId: number, x: number, y: number): void {
+  updateObjectPosition(entityId: number, x: number, y: number, isMoving?: boolean, direction?: number): void {
     const objectView = this.objects.get(entityId)
     if (!objectView) {
-      // console.warn(`[ObjectManager] Cannot update position for object ${entityId}: not found`)
       return
     }
 
     objectView.updatePosition(x, y)
+
+    if (isMoving !== undefined && direction !== undefined) {
+      if (isMoving) {
+        objectView.onMoved(direction)
+      } else {
+        objectView.onStopped()
+      }
+    }
 
     // Update bounds in culling controller
     cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
