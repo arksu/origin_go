@@ -1,24 +1,24 @@
 import { Container } from 'pixi.js'
 import { ObjectView, type ObjectViewOptions } from './ObjectView'
 import { cullingController } from './culling'
+import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
  * Handles spawning, despawning, updates, and Z-sorting.
  */
 export class ObjectManager {
-  private container: Container
+  private parentContainer: Container | null = null
   private objects: Map<number, ObjectView> = new Map()
   private needsSort = false
   private boundsVisible: boolean = false
 
-  constructor() {
-    this.container = new Container()
-    this.container.sortableChildren = true
-  }
-
-  getContainer(): Container {
-    return this.container
+  /**
+   * Set the shared parent container (objectsContainer) where object views
+   * are added directly alongside terrain sprites for correct z-sorting.
+   */
+  setParentContainer(container: Container): void {
+    this.parentContainer = container
   }
 
   /**
@@ -33,7 +33,7 @@ export class ObjectManager {
 
     const objectView = new ObjectView(options)
     this.objects.set(options.entityId, objectView)
-    this.container.addChild(objectView.getContainer())
+    this.parentContainer!.addChild(objectView.getContainer())
 
     // Register with culling controller
     cullingController.registerObject(
@@ -65,7 +65,7 @@ export class ObjectManager {
     // Unregister from culling controller
     cullingController.unregisterObject(entityId)
 
-    this.container.removeChild(objectView.getContainer())
+    this.parentContainer?.removeChild(objectView.getContainer())
     objectView.destroy()
     this.objects.delete(entityId)
 
@@ -145,27 +145,19 @@ export class ObjectManager {
   /**
    * Sort objects by depth (Y coordinate).
    * Objects with higher Y should be drawn on top.
-   * Only sorts visible objects for performance optimization.
+   * Uses screen Y position for zIndex so objects and terrain sprites
+   * share the same z-sorting coordinate space.
    */
   private sortByDepth(): void {
     // Get only visible objects for sorting
     const visibleIds = cullingController.getVisibleObjectIds()
-    const visibleObjects: ObjectView[] = []
 
     for (const entityId of visibleIds) {
       const obj = this.objects.get(entityId)
       if (obj) {
-        visibleObjects.push(obj)
+        obj.getContainer().zIndex = TERRAIN_BASE_Z_INDEX + obj.getContainer().y
       }
     }
-
-    // Sort visible objects by depth
-    visibleObjects.sort((a, b) => a.getDepthY() - b.getDepthY())
-
-    // Assign zIndex only to visible objects
-    visibleObjects.forEach((obj, index) => {
-      obj.getContainer().zIndex = index
-    })
   }
 
   /**
@@ -194,9 +186,11 @@ export class ObjectManager {
     for (const entityId of this.objects.keys()) {
       cullingController.unregisterObject(entityId)
     }
-    this.objects.forEach(obj => obj.destroy())
+    for (const obj of this.objects.values()) {
+      this.parentContainer?.removeChild(obj.getContainer())
+      obj.destroy()
+    }
     this.objects.clear()
-    this.container.removeChildren()
   }
 
   /**
@@ -204,6 +198,6 @@ export class ObjectManager {
    */
   destroy(): void {
     this.clear()
-    this.container.destroy({ children: true })
+    this.parentContainer = null
   }
 }

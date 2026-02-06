@@ -31,7 +31,7 @@ export class ObjectView {
 
   private resDef: ResourceDef | undefined
   private sprites: Sprite[] = []
-  private spineAnimations: Spine[] = []
+  private spineAnimations: Array<Spine | undefined> = []
   private layerIndexMap: Map<number, number> = new Map() // layerIdx -> spineAnimations index
   private lastDir = 4 // default south
   private isDestroyed = false
@@ -74,8 +74,9 @@ export class ObjectView {
         this.addSpriteLayer(layer)
       }
       if (layer.spine) {
-        this.layerIndexMap.set(i, spineIdx++)
-        this.addSpineLayer(layer)
+        const currentSpineIdx = spineIdx++
+        this.layerIndexMap.set(i, currentSpineIdx)
+        this.addSpineLayer(layer, currentSpineIdx)
       }
     }
   }
@@ -94,7 +95,7 @@ export class ObjectView {
     })
   }
 
-  private addSpineLayer(layer: LayerDef): void {
+  private addSpineLayer(layer: LayerDef, spineIdx: number): void {
     ResourceLoader.loadSpine(layer, this.resDef!).then((spineAnim) => {
       if (this.isDestroyed) {
         spineAnim.destroy()
@@ -106,7 +107,7 @@ export class ObjectView {
       if (idleAnim) {
         spineAnim.state.setAnimation(0, idleAnim, true)
       }
-      this.spineAnimations.push(spineAnim)
+      this.spineAnimations[spineIdx] = spineAnim
       this.container.addChild(spineAnim)
     })
   }
@@ -171,7 +172,10 @@ export class ObjectView {
       const anim = this.spineAnimations[spineIdx]
       if (!anim) return
 
-      anim.state.setAnimation(0, animName, true)
+      const current = anim.state.getCurrent(0)?.animation?.name
+      if (current !== animName) {
+        anim.state.setAnimation(0, animName, true)
+      }
     })
   }
 
@@ -318,7 +322,7 @@ export class ObjectView {
       spr.destroy()
     }
     for (const spine of this.spineAnimations) {
-      spine.destroy()
+      spine?.destroy()
     }
     if (this.placeholder) {
       this.placeholder.destroy()
