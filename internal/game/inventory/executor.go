@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -172,7 +173,7 @@ func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *Containe
 		}
 
 		// Check if this item has a nested container via index (O(1))
-		if _, found := refIndex.Lookup(uint8(0), item.ItemID, 0); found {
+		if _, found := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); found {
 			itemState.NestedRef = &netproto.InventoryRef{
 				Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
 				OwnerId:      uint64(item.ItemID),
