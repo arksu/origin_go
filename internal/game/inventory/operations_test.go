@@ -158,7 +158,7 @@ func TestExecuteMove_SimpleMove(t *testing.T) {
 	}
 	addItemToContainer(world, gridHandle, item)
 
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	service := NewInventoryOperationService(zap.NewNop())
 
 	// Move item from grid to hand
@@ -209,7 +209,7 @@ func TestExecuteMove_GridToGrid_SameContainer(t *testing.T) {
 	}
 	addItemToContainer(world, gridHandle, item)
 
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	service := NewInventoryOperationService(zap.NewNop())
 
 	// Move item within same grid to position (2,2)
@@ -273,7 +273,7 @@ func TestExecuteMove_Swap(t *testing.T) {
 	}
 	addItemToContainer(world, handHandle, handItem)
 
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	service := NewInventoryOperationService(zap.NewNop())
 
 	// Move grid item to hand (should swap)
@@ -339,7 +339,7 @@ func TestExecuteMove_Merge(t *testing.T) {
 	}
 	addItemToContainer(world, handHandle, handItem)
 
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	service := NewInventoryOperationService(zap.NewNop())
 
 	// Move hand item to grid (should merge)
@@ -377,7 +377,7 @@ func TestExecuteMove_ItemNotFound(t *testing.T) {
 	world, playerID, playerHandle := setupTestWorld(t)
 	setupPlayerWithInventories(world, playerID, playerHandle)
 
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	service := NewInventoryOperationService(zap.NewNop())
 
 	// Try to move non-existent item
@@ -419,7 +419,7 @@ func TestExecuteMove_VersionMismatch(t *testing.T) {
 	}
 	addItemToContainer(world, gridHandle, item)
 
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	service := NewInventoryOperationService(zap.NewNop())
 
 	// Try to move with wrong expected version
@@ -487,7 +487,7 @@ func TestExecuteMove_ItemNotAllowedInHand(t *testing.T) {
 	}
 	addItemToContainer(world, gridHandle, item)
 
-	itemdefs.SetGlobal(registry)
+	itemdefs.SetGlobalForTesting(registry)
 	service := NewInventoryOperationService(zap.NewNop())
 
 	// Try to move grid-only item to hand
@@ -512,7 +512,7 @@ func TestExecuteMove_ItemNotAllowedInHand(t *testing.T) {
 }
 
 func TestPlacementService_CheckGridPlacement_NoCollision(t *testing.T) {
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	ps := NewPlacementService()
 
 	container := &components.InventoryContainer{
@@ -537,7 +537,7 @@ func TestPlacementService_CheckGridPlacement_NoCollision(t *testing.T) {
 }
 
 func TestPlacementService_CheckGridPlacement_OutOfBounds(t *testing.T) {
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	ps := NewPlacementService()
 
 	container := &components.InventoryContainer{
@@ -560,7 +560,7 @@ func TestPlacementService_CheckGridPlacement_OutOfBounds(t *testing.T) {
 }
 
 func TestPlacementService_FindFreeSpace(t *testing.T) {
-	itemdefs.SetGlobal(createTestRegistry())
+	itemdefs.SetGlobalForTesting(createTestRegistry())
 	ps := NewPlacementService()
 
 	container := &components.InventoryContainer{

@@ -147,8 +147,9 @@ func (v *Validator) FindItemInContainer(
 }
 
 func (v *Validator) ValidateItemAllowedInContainer(
+	w *ecs.World,
 	item *components.InvItem,
-	dstContainer *components.InventoryContainer,
+	dstInfo *ContainerInfo,
 	dstEquipSlot netproto.EquipSlot,
 ) *ValidationError {
 	itemDef, ok := itemdefs.Global().GetByID(int(item.TypeID))
@@ -159,7 +160,7 @@ func (v *Validator) ValidateItemAllowedInContainer(
 		)
 	}
 
-	switch dstContainer.Kind {
+	switch dstInfo.Container.Kind {
 	case constt.InventoryHand:
 		if itemDef.Allowed.Hand != nil && !*itemDef.Allowed.Hand {
 			return NewValidationError(
@@ -175,8 +176,7 @@ func (v *Validator) ValidateItemAllowedInContainer(
 				"Item cannot be placed in grid inventory",
 			)
 		}
-		// Check container rules if this is a nested container
-		if err := v.validateContainerRules(item, dstContainer); err != nil {
+		if err := v.validateContainerRules(w, itemDef, dstInfo); err != nil {
 			return err
 		}
 
@@ -193,27 +193,107 @@ func (v *Validator) ValidateItemAllowedInContainer(
 }
 
 func (v *Validator) validateContainerRules(
-	item *components.InvItem,
-	dstContainer *components.InventoryContainer,
+	w *ecs.World,
+	itemDef *itemdefs.ItemDef,
+	dstInfo *ContainerInfo,
 ) *ValidationError {
-	// Find the item that owns this container (if it's a nested container)
-	// For now, we need to check if the container has rules via its owner item
-	// This requires looking up the parent item's definition
+	containerOwnerID := dstInfo.Container.OwnerID
 
-	// Get the item definition for the item being placed
-	_, ok := itemdefs.Global().GetByID(int(item.TypeID))
-	if !ok {
-		return nil // Already validated above
+	// Find the parent item's TypeID by searching through the owner's inventories
+	parentTypeID := v.findItemTypeID(w, dstInfo.Owner, containerOwnerID)
+	if parentTypeID == 0 {
+		return nil // Root container (backpack) — no content rules
 	}
 
-	// Find the container's parent item definition to get rules
-	// The container's OwnerID is the item_id of the parent item
-	// We need to find that item's type_id to get its ContainerDef
+	parentDef, ok := itemdefs.Global().GetByID(int(parentTypeID))
+	if !ok || parentDef.Container == nil {
+		return nil // No container definition — no rules
+	}
 
-	// For root containers (backpack, etc.), OwnerID is the character ID
-	// For nested containers, OwnerID is the item_id
-	// We can't easily get the parent item's definition here without more context
-	// So we'll skip container rules validation for now and implement it when needed
+	rules := &parentDef.Container.Rules
+	return v.checkContentRules(rules, itemDef)
+}
+
+// findItemTypeID searches through the owner's inventories for an item with the given ItemID
+// and returns its TypeID. Returns 0 if not found.
+func (v *Validator) findItemTypeID(
+	w *ecs.World,
+	owner *components.InventoryOwner,
+	itemID types.EntityID,
+) uint32 {
+	if owner == nil {
+		return 0
+	}
+	for _, link := range owner.Inventories {
+		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		if !ok {
+			continue
+		}
+		for _, item := range container.Items {
+			if item.ItemID == itemID {
+				return item.TypeID
+			}
+		}
+	}
+	return 0
+}
+
+// checkContentRules validates an item definition against container content rules.
+func (v *Validator) checkContentRules(
+	rules *itemdefs.ContentRules,
+	itemDef *itemdefs.ItemDef,
+) *ValidationError {
+	// DenyItemKeys: reject if item key is blacklisted
+	for _, denied := range rules.DenyItemKeys {
+		if itemDef.Key == denied {
+			return NewValidationError(
+				netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+				"Item is not allowed in this container",
+			)
+		}
+	}
+
+	// AllowItemKeys: if non-empty, item key must be in the list
+	if len(rules.AllowItemKeys) > 0 {
+		for _, allowed := range rules.AllowItemKeys {
+			if itemDef.Key == allowed {
+				return nil
+			}
+		}
+		// Key not in whitelist — reject (AllowItemKeys is strict)
+		return NewValidationError(
+			netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			"Item is not allowed in this container",
+		)
+	}
+
+	// DenyTags: reject if item has any denied tag
+	for _, denied := range rules.DenyTags {
+		for _, tag := range itemDef.Tags {
+			if tag == denied {
+				return NewValidationError(
+					netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+					"Item is not allowed in this container",
+				)
+			}
+		}
+	}
+
+	// AllowTags: if non-empty, item must have at least one allowed tag
+	if len(rules.AllowTags) > 0 {
+		for _, allowed := range rules.AllowTags {
+			for _, tag := range itemDef.Tags {
+				if tag == allowed {
+					return nil
+				}
+			}
+		}
+		return NewValidationError(
+			netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			"Item is not allowed in this container",
+		)
+	}
+
 	return nil
 }
 
