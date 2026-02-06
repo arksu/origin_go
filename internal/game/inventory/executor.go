@@ -4,6 +4,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -39,6 +40,9 @@ func (e *InventoryExecutor) ExecuteOperation(
 		UpdatedContainers: make([]systems.InventoryContainerState, 0, len(result.UpdatedContainers)),
 	}
 
+	// Check cascade: if operation changed a nested container, update parent item resource
+	e.checkNestedCascade(w, result)
+
 	// Convert updated containers
 	for _, container := range result.UpdatedContainers {
 		containerState := e.convertContainerToState(w, container)
@@ -46,6 +50,99 @@ func (e *InventoryExecutor) ExecuteOperation(
 	}
 
 	return opResult
+}
+
+// checkNestedCascade checks if any updated container is a nested one (owner_id = item_id).
+// If the item's visual depends on hasNestedItems and that changed, update the parent item's resource
+// and add the parent container to UpdatedContainers.
+func (e *InventoryExecutor) checkNestedCascade(w *ecs.World, result *OperationResult) {
+	if !result.Success {
+		return
+	}
+
+	for _, updatedInfo := range result.UpdatedContainers {
+		nestedOwnerID := updatedInfo.Container.OwnerID
+
+		// Find which parent container holds the item with ItemID == nestedOwnerID
+		parentInfo := e.findParentContainer(w, updatedInfo.Owner, nestedOwnerID)
+		if parentInfo == nil {
+			continue
+		}
+
+		// Find the item in parent container
+		hasNestedItems := len(updatedInfo.Container.Items) > 0
+		parentDirty := false
+
+		ecs.MutateComponent[components.InventoryContainer](w, parentInfo.Handle, func(c *components.InventoryContainer) bool {
+			for i := range c.Items {
+				if c.Items[i].ItemID == nestedOwnerID {
+					itemDef, ok := itemdefs.Global().GetByID(int(c.Items[i].TypeID))
+					if !ok {
+						break
+					}
+					newResource := itemDef.ResolveResource(hasNestedItems)
+					if c.Items[i].Resource != newResource {
+						c.Items[i].Resource = newResource
+						c.Version++
+						parentDirty = true
+					}
+					break
+				}
+			}
+			return parentDirty
+		})
+
+		if parentDirty {
+			updatedParent, _ := ecs.GetComponent[components.InventoryContainer](w, parentInfo.Handle)
+			parentInfo.Container = &updatedParent
+			// Add parent to updated list if not already there
+			alreadyIncluded := false
+			for _, existing := range result.UpdatedContainers {
+				if existing.Handle == parentInfo.Handle {
+					alreadyIncluded = true
+					break
+				}
+			}
+			if !alreadyIncluded {
+				result.UpdatedContainers = append(result.UpdatedContainers, parentInfo)
+			}
+		}
+	}
+}
+
+// findParentContainer finds the container that holds an item with the given itemID
+func (e *InventoryExecutor) findParentContainer(
+	w *ecs.World,
+	owner *components.InventoryOwner,
+	itemID types.EntityID,
+) *ContainerInfo {
+	if owner == nil {
+		return nil
+	}
+
+	for _, link := range owner.Inventories {
+		// Skip nested containers themselves
+		if link.OwnerID == itemID {
+			continue
+		}
+
+		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		if !ok {
+			continue
+		}
+
+		for _, item := range container.Items {
+			if item.ItemID == itemID {
+				return &ContainerInfo{
+					Handle:    link.Handle,
+					Container: &container,
+					Owner:     owner,
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *ContainerInfo) systems.InventoryContainerState {
@@ -59,55 +156,32 @@ func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *Containe
 		Items:   make([]systems.InventoryItemState, 0, len(info.Container.Items)),
 	}
 
+	refIndex := w.InventoryRefIndex()
 	for _, item := range info.Container.Items {
-		state.Items = append(state.Items, e.convertItemToState(w, info, item))
+		itemState := systems.InventoryItemState{
+			ItemID:    item.ItemID,
+			TypeID:    item.TypeID,
+			Resource:  item.Resource,
+			Quality:   item.Quality,
+			Quantity:  item.Quantity,
+			W:         item.W,
+			H:         item.H,
+			X:         item.X,
+			Y:         item.Y,
+			EquipSlot: item.EquipSlot,
+		}
+
+		// Check if this item has a nested container via index (O(1))
+		if _, found := refIndex.Lookup(uint8(0), item.ItemID, 0); found {
+			itemState.NestedRef = &netproto.InventoryRef{
+				Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
+				OwnerId:      uint64(item.ItemID),
+				InventoryKey: 0,
+			}
+		}
+
+		state.Items = append(state.Items, itemState)
 	}
 
 	return state
-}
-
-func (e *InventoryExecutor) convertItemToState(w *ecs.World, info *ContainerInfo, item components.InvItem) systems.InventoryItemState {
-	itemState := systems.InventoryItemState{
-		ItemID:    item.ItemID,
-		TypeID:    item.TypeID,
-		Resource:  item.Resource,
-		Quality:   item.Quality,
-		Quantity:  item.Quantity,
-		W:         item.W,
-		H:         item.H,
-		X:         item.X,
-		Y:         item.Y,
-		EquipSlot: item.EquipSlot,
-	}
-
-	// Look for nested inventory owned by this item using Owner from ContainerInfo
-	nestedContainer := e.findNestedInventory(w, info.Owner, item.ItemID)
-	if nestedContainer != nil {
-		nestedState := e.convertContainerToState(w, &ContainerInfo{
-			Container: nestedContainer,
-			Owner:     info.Owner,
-		})
-		itemState.NestedInventory = &nestedState
-	}
-
-	return itemState
-}
-
-// findNestedInventory searches for an inventory container owned by the given itemID
-func (e *InventoryExecutor) findNestedInventory(w *ecs.World, owner *components.InventoryOwner, itemID types.EntityID) *components.InventoryContainer {
-	if owner == nil {
-		return nil
-	}
-
-	// Search for inventory where OwnerID matches the itemID using InventoryLink.OwnerID
-	for _, link := range owner.Inventories {
-		if link.OwnerID == itemID {
-			container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
-			if hasContainer {
-				return &container
-			}
-		}
-	}
-
-	return nil
 }

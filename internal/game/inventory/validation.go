@@ -75,12 +75,32 @@ func (v *Validator) ResolveContainer(
 
 	ownerID := types.EntityID(ref.OwnerId)
 
-	// For now, only allow operations on player's own inventories
-	if ownerID != playerID {
+	// O(1) lookup via InventoryRefIndex
+	refIndex := w.InventoryRefIndex()
+	handle, found := refIndex.Lookup(uint8(ref.Kind), ownerID, ref.InventoryKey)
+	if !found || !w.Alive(handle) {
 		return nil, NewValidationError(
-			netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT,
-			"Cannot access other entity's inventory",
+			netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
+			"Container not found",
 		)
+	}
+
+	container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, handle)
+	if !hasContainer {
+		return nil, NewValidationError(
+			netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
+			"Container not found",
+		)
+	}
+
+	// Authorization: player can access own inventories and nested containers of own items
+	if ownerID != playerID {
+		if !v.isNestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
+			return nil, NewValidationError(
+				netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT,
+				"Cannot access other entity's inventory",
+			)
+		}
 	}
 
 	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
@@ -91,38 +111,27 @@ func (v *Validator) ResolveContainer(
 		)
 	}
 
-	// Find the container by kind and key
-	for _, link := range owner.Inventories {
-		if link.Kind != constt.InventoryKind(ref.Kind) {
-			continue
-		}
-		if link.Key != ref.InventoryKey {
-			continue
-		}
-		if !w.Alive(link.Handle) {
-			continue
-		}
+	return &ContainerInfo{
+		Handle:    handle,
+		Container: &container,
+		Owner:     &owner,
+	}, nil
+}
 
-		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
-		if !hasContainer {
-			continue
-		}
-
-		if container.OwnerID != ownerID {
-			continue
-		}
-
-		return &ContainerInfo{
-			Handle:    link.Handle,
-			Container: &container,
-			Owner:     &owner,
-		}, nil
+// isNestedContainerOwnedByPlayer checks if ownerID (item_id) belongs to an item in player's inventories
+func (v *Validator) isNestedContainerOwnedByPlayer(w *ecs.World, playerHandle types.Handle, itemOwnerID types.EntityID) bool {
+	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+	if !hasOwner {
+		return false
 	}
 
-	return nil, NewValidationError(
-		netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
-		"Container not found",
-	)
+	for _, link := range owner.Inventories {
+		// Skip nested containers themselves (they have OwnerID = itemID)
+		if link.OwnerID != types.EntityID(0) && link.OwnerID == itemOwnerID {
+			return true
+		}
+	}
+	return false
 }
 
 func (v *Validator) FindItemInContainer(

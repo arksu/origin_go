@@ -405,6 +405,35 @@ func (s *Shard) SendInventoryOpResult(entityID types.EntityID, result *netproto.
 	client.Send(data)
 }
 
+// SendContainerOpened sends a container opened state to a client
+func (s *Shard) SendContainerOpened(entityID types.EntityID, state *netproto.InventoryState) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ContainerOpened{
+			ContainerOpened: &netproto.S2C_ContainerOpened{
+				State: state,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal container opened",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
 // BroadcastChatMessage sends a chat message to multiple entities
 func (s *Shard) BroadcastChatMessage(entityIDs []types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string) {
 	if len(entityIDs) == 0 {

@@ -28,6 +28,7 @@ type ChatDeliveryService interface {
 // InventoryResultSender sends inventory operation results to clients
 type InventoryResultSender interface {
 	SendInventoryOpResult(entityID types.EntityID, result *netproto.S2C_InventoryOpResult)
+	SendContainerOpened(entityID types.EntityID, state *netproto.InventoryState)
 }
 
 // InventoryOperationExecutor executes inventory operations
@@ -65,8 +66,9 @@ type InventoryItemState struct {
 	X, Y      uint8
 	EquipSlot netproto.EquipSlot
 
-	// NestedInventory contains the nested inventory state if this item is a container
-	NestedInventory *InventoryContainerState
+	// NestedRef points to the nested inventory if this item is a container.
+	// The actual state is sent separately on open/change, not inlined.
+	NestedRef *netproto.InventoryRef
 }
 
 type NetworkCommandSystem struct {
@@ -162,6 +164,10 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleChat(w, handle, cmd)
 	case network.CmdInventoryOp:
 		s.handleInventoryOp(w, handle, cmd)
+	case network.CmdOpenContainer:
+		s.handleOpenContainer(w, handle, cmd)
+	case network.CmdCloseContainer:
+		// CloseContainer is client-side only (UI close), no server action needed
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -370,6 +376,93 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 		zap.Bool("success", result.Success))
 }
 
+func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	ref, ok := cmd.Payload.(*netproto.InventoryRef)
+	if !ok || ref == nil {
+		s.logger.Error("Invalid payload type for OpenContainer",
+			zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+
+	// O(1) lookup via InventoryRefIndex
+	refIndex := w.InventoryRefIndex()
+	handle, found := refIndex.Lookup(uint8(ref.Kind), types.EntityID(ref.OwnerId), ref.InventoryKey)
+	if !found || !w.Alive(handle) {
+		s.logger.Debug("OpenContainer: container not found",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Uint64("owner_id", ref.OwnerId))
+		return
+	}
+
+	container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, handle)
+	if !hasContainer {
+		return
+	}
+
+	ownerID := types.EntityID(ref.OwnerId)
+
+	// Authorization: if owner_id != player, check that item belongs to player's inventory
+	if ownerID != cmd.CharacterID {
+		owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+		if !hasOwner {
+			return
+		}
+		allowed := false
+		for _, link := range owner.Inventories {
+			if link.OwnerID == ownerID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			s.logger.Debug("OpenContainer: access denied",
+				zap.Uint64("client_id", cmd.ClientID),
+				zap.Uint64("owner_id", ref.OwnerId))
+			return
+		}
+	}
+
+	// Build and send S2C_ContainerOpened
+	containerState := InventoryContainerState{
+		OwnerID: container.OwnerID,
+		Kind:    uint8(container.Kind),
+		Key:     container.Key,
+		Version: container.Version,
+		Width:   container.Width,
+		Height:  container.Height,
+		Items:   make([]InventoryItemState, 0, len(container.Items)),
+	}
+	for _, item := range container.Items {
+		itemState := InventoryItemState{
+			ItemID:    item.ItemID,
+			TypeID:    item.TypeID,
+			Resource:  item.Resource,
+			Quality:   item.Quality,
+			Quantity:  item.Quantity,
+			W:         item.W,
+			H:         item.H,
+			X:         item.X,
+			Y:         item.Y,
+			EquipSlot: item.EquipSlot,
+		}
+		// Check nested ref for items inside this container
+		if _, nestedFound := refIndex.Lookup(uint8(0), item.ItemID, 0); nestedFound {
+			itemState.NestedRef = &netproto.InventoryRef{
+				Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
+				OwnerId:      uint64(item.ItemID),
+				InventoryKey: 0,
+			}
+		}
+		containerState.Items = append(containerState.Items, itemState)
+	}
+
+	invState := s.buildInventoryStateProto(containerState)
+
+	if s.inventoryResultSender != nil {
+		s.inventoryResultSender.SendContainerOpened(cmd.CharacterID, invState)
+	}
+}
+
 func (s *NetworkCommandSystem) sendInventoryError(entityID types.EntityID, opID uint64, code netproto.ErrorCode, message string) {
 	if s.inventoryResultSender == nil {
 		return
@@ -441,8 +534,7 @@ func (s *NetworkCommandSystem) buildInventoryStateProto(container InventoryConta
 	return invState
 }
 
-// buildItemInstanceProto creates a proto ItemInstance from InventoryItemState,
-// including nested inventory if the item is a container
+// buildItemInstanceProto creates a proto ItemInstance from InventoryItemState
 func (s *NetworkCommandSystem) buildItemInstanceProto(item InventoryItemState) *netproto.ItemInstance {
 	instance := &netproto.ItemInstance{
 		ItemId:   uint64(item.ItemID),
@@ -454,34 +546,12 @@ func (s *NetworkCommandSystem) buildItemInstanceProto(item InventoryItemState) *
 		H:        uint32(item.H),
 	}
 
-	// Add nested inventory if present
-	if item.NestedInventory != nil {
-		instance.NestedInventory = s.buildNestedGridStateProto(item.NestedInventory)
+	// Set nested ref if this item is a container (state sent separately)
+	if item.NestedRef != nil {
+		instance.NestedRef = item.NestedRef
 	}
 
 	return instance
-}
-
-// buildNestedGridStateProto builds InventoryGridState for nested containers
-func (s *NetworkCommandSystem) buildNestedGridStateProto(container *InventoryContainerState) *netproto.InventoryGridState {
-	if container == nil {
-		return nil
-	}
-
-	gridItems := make([]*netproto.GridItem, 0, len(container.Items))
-	for _, item := range container.Items {
-		gridItems = append(gridItems, &netproto.GridItem{
-			X:    uint32(item.X),
-			Y:    uint32(item.Y),
-			Item: s.buildItemInstanceProto(item),
-		})
-	}
-
-	return &netproto.InventoryGridState{
-		Width:  uint32(container.Width),
-		Height: uint32(container.Height),
-		Items:  gridItems,
-	}
 }
 
 // processServerJob routes a server job to the appropriate handler

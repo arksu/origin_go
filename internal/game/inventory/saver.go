@@ -11,6 +11,19 @@ import (
 	"go.uber.org/zap"
 )
 
+// findNestedContainer looks up a nested container via InventoryRefIndex (O(1))
+func findNestedContainer(world *ecs.World, itemID types.EntityID) *components.InventoryContainer {
+	handle, found := world.InventoryRefIndex().Lookup(uint8(0), itemID, 0)
+	if !found {
+		return nil
+	}
+	container, ok := ecs.GetComponent[components.InventoryContainer](world, handle)
+	if !ok {
+		return nil
+	}
+	return &container
+}
+
 type InventorySaver struct {
 	logger *zap.Logger
 }
@@ -48,7 +61,7 @@ func (is *InventorySaver) SerializeInventories(
 			continue
 		}
 
-		snapshot := is.serializeContainer(world, &owner, characterID, container)
+		snapshot := is.serializeContainer(world, characterID, container)
 		result = append(result, snapshot)
 	}
 
@@ -57,7 +70,6 @@ func (is *InventorySaver) SerializeInventories(
 
 func (is *InventorySaver) serializeContainer(
 	world *ecs.World,
-	owner *components.InventoryOwner,
 	characterID types.EntityID,
 	container components.InventoryContainer,
 ) systems.InventorySnapshot {
@@ -74,9 +86,9 @@ func (is *InventorySaver) serializeContainer(
 			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
 		}
 
-		nestedContainer := is.findNestedInventory(world, owner, invItem.ItemID)
+		nestedContainer := findNestedContainer(world, invItem.ItemID)
 		if nestedContainer != nil {
-			nestedData := is.serializeNestedInventory(world, owner, *nestedContainer)
+			nestedData := is.serializeNestedInventory(world, *nestedContainer)
 			dbItem.NestedInventory = &nestedData
 		}
 
@@ -111,9 +123,9 @@ func (is *InventorySaver) serializeContainer(
 	}
 }
 
+// serializeNestedInventory serializes a single-level nested container (no recursion beyond 1 level)
 func (is *InventorySaver) serializeNestedInventory(
 	world *ecs.World,
-	owner *components.InventoryOwner,
 	container components.InventoryContainer,
 ) InventoryDataV1 {
 	items := make([]InventoryItemV1, 0, len(container.Items))
@@ -128,13 +140,7 @@ func (is *InventorySaver) serializeNestedInventory(
 			Y:         invItem.Y,
 			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
 		}
-
-		nestedContainer := is.findNestedInventory(world, owner, invItem.ItemID)
-		if nestedContainer != nil {
-			nestedData := is.serializeNestedInventory(world, owner, *nestedContainer)
-			dbItem.NestedInventory = &nestedData
-		}
-
+		// 1 level of nesting only — no recursive lookup here
 		items = append(items, dbItem)
 	}
 
@@ -146,28 +152,6 @@ func (is *InventorySaver) serializeNestedInventory(
 		Version: int(container.Version),
 		Items:   items,
 	}
-}
-
-func (is *InventorySaver) findNestedInventory(
-	world *ecs.World,
-	owner *components.InventoryOwner,
-	itemID types.EntityID,
-) *components.InventoryContainer {
-	if owner == nil {
-		return nil
-	}
-
-	// Search for inventory where OwnerID matches the itemID using InventoryLink.OwnerID
-	for _, link := range owner.Inventories {
-		if link.OwnerID == itemID {
-			container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
-			if hasContainer {
-				return &container
-			}
-		}
-	}
-
-	return nil
 }
 
 func (is *InventorySaver) convertEquipSlot(slot netproto.EquipSlot) string {

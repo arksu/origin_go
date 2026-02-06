@@ -4,7 +4,6 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/itemdefs"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -14,14 +13,12 @@ import (
 )
 
 type SnapshotSender struct {
-	logger       *zap.Logger
-	itemRegistry *itemdefs.Registry
+	logger *zap.Logger
 }
 
-func NewSnapshotSender(logger *zap.Logger, itemRegistry *itemdefs.Registry) *SnapshotSender {
+func NewSnapshotSender(logger *zap.Logger) *SnapshotSender {
 	return &SnapshotSender{
-		logger:       logger,
-		itemRegistry: itemRegistry,
+		logger: logger,
 	}
 }
 
@@ -52,11 +49,12 @@ func (ss *SnapshotSender) SendInventorySnapshots(
 			continue
 		}
 
+		// Only send root-level inventories (owned by character), not nested ones
 		if container.OwnerID != characterID {
 			continue
 		}
 
-		invState := ss.buildInventoryState(world, characterID, container, &owner)
+		invState := ss.buildInventoryState(world, container)
 		if invState != nil {
 			inventoryStates = append(inventoryStates, invState)
 		}
@@ -93,13 +91,11 @@ func (ss *SnapshotSender) SendInventorySnapshots(
 
 func (ss *SnapshotSender) buildInventoryState(
 	world *ecs.World,
-	characterID types.EntityID,
 	container components.InventoryContainer,
-	owner *components.InventoryOwner,
 ) *netproto.InventoryState {
 	ref := &netproto.InventoryRef{
 		Kind:         netproto.InventoryKind(container.Kind),
-		OwnerId:      uint64(characterID),
+		OwnerId:      uint64(container.OwnerID),
 		InventoryKey: container.Key,
 	}
 
@@ -111,15 +107,15 @@ func (ss *SnapshotSender) buildInventoryState(
 	switch container.Kind {
 	case constt.InventoryGrid:
 		invState.State = &netproto.InventoryState_Grid{
-			Grid: ss.buildGridState(world, container, owner),
+			Grid: ss.buildGridState(world, container),
 		}
 	case constt.InventoryEquipment:
 		invState.State = &netproto.InventoryState_Equipment{
-			Equipment: ss.buildEquipmentState(world, container, owner),
+			Equipment: ss.buildEquipmentState(world, container),
 		}
 	case constt.InventoryHand:
 		invState.State = &netproto.InventoryState_Hand{
-			Hand: ss.buildHandState(world, container, owner),
+			Hand: ss.buildHandState(world, container),
 		}
 	}
 
@@ -129,12 +125,11 @@ func (ss *SnapshotSender) buildInventoryState(
 func (ss *SnapshotSender) buildGridState(
 	world *ecs.World,
 	container components.InventoryContainer,
-	owner *components.InventoryOwner,
 ) *netproto.InventoryGridState {
 	items := make([]*netproto.GridItem, 0, len(container.Items))
 
 	for _, invItem := range container.Items {
-		itemInstance := ss.buildItemInstance(world, invItem, owner)
+		itemInstance := ss.buildItemInstance(world, invItem)
 		gridItem := &netproto.GridItem{
 			X:    uint32(invItem.X),
 			Y:    uint32(invItem.Y),
@@ -153,12 +148,11 @@ func (ss *SnapshotSender) buildGridState(
 func (ss *SnapshotSender) buildEquipmentState(
 	world *ecs.World,
 	container components.InventoryContainer,
-	owner *components.InventoryOwner,
 ) *netproto.InventoryEquipmentState {
 	items := make([]*netproto.EquipmentItem, 0, len(container.Items))
 
 	for _, invItem := range container.Items {
-		itemInstance := ss.buildItemInstance(world, invItem, owner)
+		itemInstance := ss.buildItemInstance(world, invItem)
 		equipItem := &netproto.EquipmentItem{
 			Slot: invItem.EquipSlot,
 			Item: itemInstance,
@@ -174,12 +168,11 @@ func (ss *SnapshotSender) buildEquipmentState(
 func (ss *SnapshotSender) buildHandState(
 	world *ecs.World,
 	container components.InventoryContainer,
-	owner *components.InventoryOwner,
 ) *netproto.InventoryHandState {
 	handState := &netproto.InventoryHandState{}
 
 	if len(container.Items) > 0 {
-		itemInstance := ss.buildItemInstance(world, container.Items[0], owner)
+		itemInstance := ss.buildItemInstance(world, container.Items[0])
 		handState.Item = itemInstance
 	}
 
@@ -189,76 +182,26 @@ func (ss *SnapshotSender) buildHandState(
 func (ss *SnapshotSender) buildItemInstance(
 	world *ecs.World,
 	invItem components.InvItem,
-	owner *components.InventoryOwner,
 ) *netproto.ItemInstance {
-	nestedContainer := ss.findNestedInventory(world, invItem.ItemID, owner)
-	hasNestedItems := nestedContainer != nil && len(nestedContainer.Items) > 0
-
-	// Recompute resource based on current nested inventory state
-	resource := invItem.Resource
-	if itemDef, ok := ss.itemRegistry.GetByID(int(invItem.TypeID)); ok {
-		resource = itemDef.ResolveResource(hasNestedItems)
-	}
-
 	itemInstance := &netproto.ItemInstance{
 		ItemId:   uint64(invItem.ItemID),
 		TypeId:   invItem.TypeID,
-		Resource: resource,
+		Resource: invItem.Resource,
 		Quality:  invItem.Quality,
 		Quantity: invItem.Quantity,
 		W:        uint32(invItem.W),
 		H:        uint32(invItem.H),
 	}
 
-	if nestedContainer != nil {
-		nestedGridState := ss.buildNestedGridState(world, *nestedContainer, owner)
-		itemInstance.NestedInventory = nestedGridState
+	// Check if this item has a nested container via index (O(1))
+	refIndex := world.InventoryRefIndex()
+	if _, found := refIndex.Lookup(uint8(0), invItem.ItemID, 0); found {
+		itemInstance.NestedRef = &netproto.InventoryRef{
+			Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
+			OwnerId:      uint64(invItem.ItemID),
+			InventoryKey: 0,
+		}
 	}
 
 	return itemInstance
-}
-
-func (ss *SnapshotSender) buildNestedGridState(
-	world *ecs.World,
-	container components.InventoryContainer,
-	owner *components.InventoryOwner,
-) *netproto.InventoryGridState {
-	items := make([]*netproto.GridItem, 0, len(container.Items))
-
-	for _, invItem := range container.Items {
-		itemInstance := ss.buildItemInstance(world, invItem, owner)
-		gridItem := &netproto.GridItem{
-			X:    uint32(invItem.X),
-			Y:    uint32(invItem.Y),
-			Item: itemInstance,
-		}
-		items = append(items, gridItem)
-	}
-
-	return &netproto.InventoryGridState{
-		Width:  uint32(container.Width),
-		Height: uint32(container.Height),
-		Items:  items,
-	}
-}
-
-func (ss *SnapshotSender) findNestedInventory(
-	world *ecs.World,
-	itemID types.EntityID,
-	owner *components.InventoryOwner,
-) *components.InventoryContainer {
-	if owner == nil {
-		return nil
-	}
-
-	// Search for inventory where OwnerID matches the itemID using InventoryLink.OwnerID
-	for _, link := range owner.Inventories {
-		if link.OwnerID == itemID {
-			container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
-			if hasContainer {
-				return &container
-			}
-		}
-	}
-	return nil
 }

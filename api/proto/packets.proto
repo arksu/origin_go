@@ -126,9 +126,9 @@ message ItemInstance {
   uint32 w = 10;            // размеры в слотах
   uint32 h = 11;
 
-  // Если предмет является контейнером (seed_bag, backpack, etc.), 
-  // то nested_inventory указывает на вложенный инвентарь
-  optional InventoryGridState nested_inventory = 12;
+  // Если предмет является контейнером (seed_bag, backpack, etc.),
+  // nested_ref указывает на вложенный инвентарь (состояние приходит отдельно по запросу)
+  optional InventoryRef nested_ref = 12;
 }
 
 message GridItem {
@@ -223,6 +223,14 @@ message InventoryOp {
 
 message C2S_InventoryOp {
   InventoryOp op = 1;
+}
+
+message C2S_OpenContainer {
+  InventoryRef ref = 1;
+}
+
+message C2S_CloseContainer {
+  InventoryRef ref = 1;
 }
 
 // ============================================================================
@@ -348,6 +356,8 @@ message ClientMessage {
     C2S_MovementMode movement_mode = 13;
     C2S_InventoryOp inventory_op = 14;
     C2S_ChatMessage chat = 15;
+    C2S_OpenContainer open_container = 16;
+    C2S_CloseContainer close_container = 17;
     //    C2S_StopMovement stop_movement = 13;
     //    C2S_Interact interact = 14;
     //    C2S_Attack attack = 15;
@@ -461,7 +471,7 @@ message S2C_ContainerOpened {
 }
 
 message S2C_ContainerClosed {
-  uint64 entity_id = 1;
+  InventoryRef ref = 1;
 }
 
 message S2C_ChatMessage {
