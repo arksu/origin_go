@@ -247,14 +247,17 @@ func (ss *SnapshotSender) findNestedInventory(
 	itemID types.EntityID,
 	owner *components.InventoryOwner,
 ) *components.InventoryContainer {
-	// Use InventoryOwner links instead of full world query
+	if owner == nil {
+		return nil
+	}
+
+	// Search for inventory where OwnerID matches the itemID using InventoryLink.OwnerID
 	for _, link := range owner.Inventories {
-		if !world.Alive(link.Handle) {
-			continue
-		}
-		container, ok := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
-		if ok && container.OwnerID == itemID {
-			return &container
+		if link.OwnerID == itemID {
+			container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
+			if hasContainer {
+				return &container
+			}
 		}
 	}
 	return nil
