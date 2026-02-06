@@ -71,7 +71,7 @@ watch(visibleMessages, async () => {
       class="chat-message"
       :style="{ opacity: getMessageOpacity(message.timestamp) }"
     >
-      <span class="chat-message__name">{{ message.fromName }}:</span>
+      <span class="chat-message__name">{{ message.fromName }}: </span>
       <span class="chat-message__text">{{ message.text }}</span>
     </div>
   </div>
@@ -110,6 +110,7 @@ watch(visibleMessages, async () => {
 
   &__name {
     font-weight: 500;
+    color: #27c751;
   }
 
   &__text {
