@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"encoding/json"
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -13,7 +14,7 @@ import (
 
 // findNestedContainer looks up a nested container via InventoryRefIndex (O(1))
 func findNestedContainer(world *ecs.World, itemID types.EntityID) *components.InventoryContainer {
-	handle, found := world.InventoryRefIndex().Lookup(uint8(0), itemID, 0)
+	handle, found := world.InventoryRefIndex().Lookup(constt.InventoryGrid, itemID, 0)
 	if !found {
 		return nil
 	}

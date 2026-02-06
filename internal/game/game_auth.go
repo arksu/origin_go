@@ -267,7 +267,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 								OwnerID: container.OwnerID,
 								Handle:  containerHandle,
 							})
-							refIndex.Add(uint8(container.Kind), container.OwnerID, container.Key, containerHandle)
+							refIndex.Add(container.Kind, container.OwnerID, container.Key, containerHandle)
 						}
 					}
 					ecs.AddComponent(w, h, components.InventoryOwner{

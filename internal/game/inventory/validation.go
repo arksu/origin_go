@@ -77,7 +77,7 @@ func (v *Validator) ResolveContainer(
 
 	// O(1) lookup via InventoryRefIndex
 	refIndex := w.InventoryRefIndex()
-	handle, found := refIndex.Lookup(uint8(ref.Kind), ownerID, ref.InventoryKey)
+	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), ownerID, ref.InventoryKey)
 	if !found || !w.Alive(handle) {
 		return nil, NewValidationError(
 			netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,

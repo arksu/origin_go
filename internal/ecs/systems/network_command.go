@@ -386,7 +386,7 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 
 	// O(1) lookup via InventoryRefIndex
 	refIndex := w.InventoryRefIndex()
-	handle, found := refIndex.Lookup(uint8(ref.Kind), types.EntityID(ref.OwnerId), ref.InventoryKey)
+	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), types.EntityID(ref.OwnerId), ref.InventoryKey)
 	if !found || !w.Alive(handle) {
 		s.logger.Debug("OpenContainer: container not found",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -446,7 +446,7 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 			EquipSlot: item.EquipSlot,
 		}
 		// Check nested ref for items inside this container
-		if _, nestedFound := refIndex.Lookup(uint8(0), item.ItemID, 0); nestedFound {
+		if _, nestedFound := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); nestedFound {
 			itemState.NestedRef = &netproto.InventoryRef{
 				Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
 				OwnerId:      uint64(item.ItemID),

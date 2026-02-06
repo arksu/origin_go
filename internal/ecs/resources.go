@@ -1,6 +1,7 @@
 package ecs
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/types"
 	"sync"
 	"time"
@@ -137,7 +138,7 @@ func (c *CharacterEntities) GetAll() []types.EntityID {
 
 // InventoryRefKey uniquely identifies an inventory container: (kind, owner_id, inventory_key)
 type InventoryRefKey struct {
-	Kind    uint8
+	Kind    constt.InventoryKind
 	OwnerID types.EntityID
 	Key     uint32
 }
@@ -147,15 +148,15 @@ type InventoryRefIndex struct {
 	index map[InventoryRefKey]types.Handle
 }
 
-func (idx *InventoryRefIndex) Add(kind uint8, ownerID types.EntityID, key uint32, handle types.Handle) {
+func (idx *InventoryRefIndex) Add(kind constt.InventoryKind, ownerID types.EntityID, key uint32, handle types.Handle) {
 	idx.index[InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}] = handle
 }
 
-func (idx *InventoryRefIndex) Remove(kind uint8, ownerID types.EntityID, key uint32) {
+func (idx *InventoryRefIndex) Remove(kind constt.InventoryKind, ownerID types.EntityID, key uint32) {
 	delete(idx.index, InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key})
 }
 
-func (idx *InventoryRefIndex) Lookup(kind uint8, ownerID types.EntityID, key uint32) (types.Handle, bool) {
+func (idx *InventoryRefIndex) Lookup(kind constt.InventoryKind, ownerID types.EntityID, key uint32) (types.Handle, bool) {
 	h, ok := idx.index[InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}]
 	return h, ok
 }
