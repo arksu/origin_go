@@ -59,29 +59,41 @@ defineExpose({
 </template>
 
 <style scoped lang="scss">
+$inactiveTextColor: #bebebe;
+$textColor: #d5eeed;
+
 .app-input {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
   width: 100%;
+  margin-bottom: 25px;
 
   &__label {
     font-size: 0.875rem;
-    color: #a0a0a0;
+    color: $inactiveTextColor;
   }
 
   &__field {
-    padding: 0.625rem 0.875rem;
-    font-size: 1rem;
-    border: 1px solid #3a3a5c;
-    border-radius: 6px;
-    background-color: #16213e;
-    color: #e0e0e0;
+    padding: 8px 10px;
+    width: 100%;
+    outline: none;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid $inactiveTextColor;
+    border-radius: 4px;
+    font-size: 19px;
+    letter-spacing: 1.6px;
+    color: $textColor;
     transition: border-color 0.2s;
+
+    &::placeholder {
+      color: $inactiveTextColor;
+    }
 
     &:focus {
       outline: none;
-      border-color: #42b883;
+      border-bottom-color: #7ed0fc;
     }
 
     &:disabled {
@@ -91,7 +103,7 @@ defineExpose({
   }
 
   &--error &__field {
-    border-color: #e74c3c;
+    border-bottom-color: #e74c3c;
   }
 
   &__error {

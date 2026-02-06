@@ -21,9 +21,9 @@ withDefaults(defineProps<Props>(), {
   font-size: 0.875rem;
 
   &--error {
-    background-color: rgba(231, 76, 60, 0.15);
-    color: #e74c3c;
-    border: 1px solid rgba(231, 76, 60, 0.3);
+    background-color: rgba(252, 13, 13, 0.5);
+    color: #cdd2e0;
+    border: none;
   }
 
   &--success {

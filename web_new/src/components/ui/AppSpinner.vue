@@ -14,10 +14,11 @@ withDefaults(defineProps<Props>(), {
 
 <style scoped lang="scss">
 .app-spinner {
-  border: 3px solid #3a3a5c;
-  border-top-color: #42b883;
-  border-radius: 50%;
-  animation: spin 0.75s linear infinite;
+  display: inline-block;
+  border: 4px solid;
+  border-radius: 80%;
+  border-color: #fff transparent #fff transparent;
+  animation: button-loading-spinner 1.2s ease infinite;
 
   &--sm {
     width: 1rem;
@@ -33,13 +34,20 @@ withDefaults(defineProps<Props>(), {
   &--lg {
     width: 3rem;
     height: 3rem;
-    border-width: 4px;
   }
 }
 
-@keyframes spin {
-  to {
+@keyframes button-loading-spinner {
+  0% {
+    transform: rotate(0);
+    animation-timing-function: cubic-bezier(0.3, 0.055, 0.675, 0.19);
+  }
+  60% {
     transform: rotate(360deg);
+    animation-timing-function: cubic-bezier(0.215, 0.61, 0.5, 1);
+  }
+  100% {
+    transform: rotate(540deg);
   }
 }
 </style>

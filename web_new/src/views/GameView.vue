@@ -288,8 +288,10 @@ useHotkeys(hotkeys)
 
 .game-chat {
   position: absolute;
-  bottom: 1rem;
-  left: 1rem;
+  left: 12px;
+  bottom: 12px;
+  width: calc(100% - 70px);
+  max-width: 340px;
   z-index: 100;
 }
 

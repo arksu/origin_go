@@ -29,7 +29,7 @@ const createError = ref('')
 const enteringId = ref<number | null>(null)
 const deletingId = ref<number | null>(null)
 
-const canCreateCharacter = computed(() => characters.value.length < MAX_CHARACTERS)
+const emptySlots = computed(() => Math.max(0, MAX_CHARACTERS - characters.value.length))
 
 async function loadCharacters() {
   loading.value = true
@@ -129,206 +129,292 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="characters-view">
-    <div class="characters-container">
-      <header class="characters-header">
-        <h1 class="characters-header__title">Персонажи</h1>
-        <AppButton variant="secondary" size="sm" @click="handleLogout">
-          Выйти
-        </AppButton>
-      </header>
-
-      <AppAlert v-if="error" type="error" class="characters-alert">
-        {{ error }}
-      </AppAlert>
-
-      <div v-if="loading" class="characters-loading">
-        <AppSpinner size="lg" />
+  <div class="padding-all">
+    <div class="form-container">
+      <div class="logo-container">
+        <img src="/assets/img/origin_logo3.webp" alt="logo">
       </div>
 
-      <template v-else>
-        <div v-if="characters.length === 0" class="characters-empty">
-          <p>У вас пока нет персонажей</p>
+      <div class="login-panel">
+        Characters<br>
+
+        <AppAlert v-if="error" type="error" class="panel-alert">
+          {{ error }}
+        </AppAlert>
+
+        <div v-if="loading" class="loading-area">
+          <AppSpinner size="lg" />
         </div>
 
-        <ul v-else class="characters-list">
-          <li
+        <template v-else>
+          <!-- Existing characters -->
+          <div
             v-for="char in characters"
             :key="char.id"
-            class="character-item"
+            class="window-container"
           >
-            <span class="character-item__name">{{ char.name }}</span>
-            <div class="character-item__actions">
-              <AppButton
-                size="sm"
-                :loading="enteringId === char.id"
-                :disabled="enteringId !== null && enteringId !== char.id"
-                @click="handleEnter(char.id)"
-              >
-                Играть
-              </AppButton>
-              <AppButton
-                variant="danger"
-                size="sm"
-                :loading="deletingId === char.id"
-                :disabled="deletingId !== null && deletingId !== char.id"
-                @click="handleDelete(char.id)"
-              >
-                Удалить
-              </AppButton>
+            <div
+              class="row"
+              :class="{
+                bg_selecting: enteringId === char.id,
+                bg_deleting: deletingId === char.id,
+              }"
+              @click="handleEnter(char.id)"
+            >
+              {{ char.name }} [id {{ char.id }}]
             </div>
-          </li>
-        </ul>
 
-        <div class="characters-create">
-          <template v-if="!showCreateForm">
-            <AppButton 
-              v-if="canCreateCharacter"
+            <div
+              class="row delete-char"
+              :class="{ bg_selecting: enteringId === char.id }"
+              @click="handleDelete(char.id)"
+            >
+              <span v-if="deletingId === char.id">&#8987;</span>
+              <span v-else>&#128465;</span>
+            </div>
+          </div>
+
+          <!-- Empty slots for "Create New" -->
+          <div
+            v-for="i in emptySlots"
+            :key="'new-' + i"
+            class="window-container"
+          >
+            <div
+              class="row new_char"
               @click="showCreateForm = true"
             >
-              Создать персонажа
-            </AppButton>
-            <p v-else class="characters-limit">
-              Достигнут лимит персонажей ({{ MAX_CHARACTERS }})
-            </p>
-          </template>
+              Create New
+            </div>
+          </div>
 
-          <form v-else class="create-form" @submit.prevent="handleCreate">
-            <AppAlert v-if="createError" type="error" class="create-form__alert">
+          <!-- Create form overlay -->
+          <div v-if="showCreateForm" class="create-overlay">
+            <AppAlert v-if="createError" type="error" class="panel-alert">
               {{ createError }}
             </AppAlert>
 
-            <AppInput
-              v-model="newCharacterName"
-              label="Имя персонажа"
-              placeholder="Введите имя"
-              :disabled="creating"
-            />
-
-            <div class="create-form__actions">
-              <AppButton
-                type="submit"
-                :loading="creating"
-                :disabled="!newCharacterName.trim()"
-              >
-                Создать
-              </AppButton>
-              <AppButton
-                variant="secondary"
+            <form @submit.prevent="handleCreate">
+              <AppInput
+                v-model="newCharacterName"
+                placeholder="Name"
                 :disabled="creating"
-                @click="showCreateForm = false; newCharacterName = ''; createError = ''"
-              >
-                Отмена
-              </AppButton>
-            </div>
-          </form>
-        </div>
-      </template>
+                autofocus
+              />
+
+              <div class="create-actions">
+                <AppButton
+                  variant="secondary"
+                  :disabled="creating"
+                  @click="showCreateForm = false; newCharacterName = ''; createError = ''"
+                >
+                  back
+                </AppButton>
+                <AppButton
+                  type="submit"
+                  :loading="creating"
+                  :disabled="!newCharacterName.trim()"
+                >
+                  create
+                </AppButton>
+              </div>
+            </form>
+          </div>
+        </template>
+
+        <AppButton class="logout-btn" @click="handleLogout">
+          logout
+        </AppButton>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-.characters-view {
+.padding-all {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100%;
-  padding: 1rem;
+  height: 100vh;
 }
 
-.characters-container {
-  width: 100%;
-  max-width: 500px;
-  padding: 2rem;
-  background-color: #1f2937;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+.form-container {
+  margin-top: -12%;
+  width: 36%;
+  max-width: 600px;
 }
 
-.characters-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-
-  &__title {
-    font-size: 1.75rem;
-    font-weight: 600;
-    color: #e0e0e0;
-  }
-}
-
-.characters-alert {
+.logo-container {
+  line-height: 55px;
+  text-align: center;
   margin-bottom: 1rem;
+
+  img {
+    display: inline;
+    max-width: 100%;
+    max-height: 100%;
+    vertical-align: middle;
+    filter: drop-shadow(2px 11px 8px rgba(0, 0, 0, 0.8));
+    transform: scale(1.2);
+  }
 }
 
-.characters-loading {
+.login-panel {
+  border-radius: 18px;
+  padding: 30px;
+  text-align: center;
+  background: rgba(16, 96, 109, 0.65);
+  color: #d5eeed;
+  margin: 0 auto;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+  font-size: 19px;
+}
+
+.panel-alert {
+  margin: 10px 0;
+}
+
+.loading-area {
   display: flex;
   justify-content: center;
   padding: 2rem;
 }
 
-.characters-empty {
+.window-container {
+  width: 100%;
+  display: table;
+  margin: 10px 0;
+}
+
+.row {
+  display: table-cell;
+  border-radius: 6px;
+  border-color: rgba(30, 67, 91, 0.6);
+  border-width: 1px;
+  border-style: solid;
+  margin: 10px;
+  padding: 5px 0;
+  background-color: #105858aa;
+  cursor: pointer;
   text-align: center;
-  padding: 2rem;
-  color: #a0a0a0;
+  width: 80%;
+
+  &:hover:not(.bg_selecting):not(.new_char) {
+    transition-duration: 0.6s;
+    background: #228cbeff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+    animation: btn-glow 0.6s ease-in-out infinite alternate;
+  }
 }
 
-.characters-list {
-  list-style: none;
+.new_char {
+  background-color: rgba(35, 93, 41, 0.6);
+  width: 100%;
+
+  &:hover {
+    transition-duration: 0.6s;
+    background: #4a9854ff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+    animation: btn-glow 0.6s ease-in-out infinite alternate;
+  }
+}
+
+.delete-char {
+  width: 12%;
+  background-color: rgba(174, 35, 39, 0.6);
+
+  &:hover {
+    background: rgba(220, 41, 48, 0.6) !important;
+  }
+}
+
+.bg_deleting {
+  color: #c49e9e;
+  background: repeating-linear-gradient(
+    -45deg,
+    #6c6161,
+    #6c6161 10px,
+    #625253 10px,
+    #625253 20px
+  );
+  background-size: 400% 400%;
+  animation: moving-back 12s linear infinite;
+}
+
+.bg_selecting {
+  color: #7ec7d0;
+  background: repeating-linear-gradient(
+    -45deg,
+    #548f8f,
+    #548f8f 10px,
+    #4b7d83 10px,
+    #4b7d83 20px
+  );
+  background-size: 400% 400%;
+  animation: moving-back 12s linear infinite;
+}
+
+.create-overlay {
+  margin-top: 15px;
+  padding: 15px;
+  background: rgba(12, 70, 80, 0.5);
+  border-radius: 10px;
+}
+
+.create-actions {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 10px;
 }
 
-.character-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  background-color: #16213e;
-  border-radius: 8px;
+.logout-btn {
+  margin-top: 15px;
+  width: 100%;
+}
 
-  &__name {
-    font-size: 1.125rem;
-    font-weight: 500;
-    color: #e0e0e0;
-  }
-
-  &__actions {
-    display: flex;
-    gap: 0.5rem;
+@keyframes moving-back {
+  100% {
+    background-position: 100% 100%;
   }
 }
 
-.characters-create {
-  margin-top: 1rem;
+@keyframes btn-glow {
+  from {
+    box-shadow: 0 0 10px rgba(52, 78, 88, 0.71);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(23, 180, 200, 0.71);
+  }
 }
 
-.characters-limit {
-  text-align: center;
-  padding: 1rem;
-  color: #a0a0a0;
-  font-size: 0.875rem;
+@media screen and (max-width: 1440px) {
+  .form-container { width: 40%; }
 }
-
-.create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1rem;
-  background-color: #16213e;
-  border-radius: 8px;
-
-  &__alert {
-    margin-bottom: 0.5rem;
-  }
-
-  &__actions {
-    display: flex;
-    gap: 0.5rem;
-  }
+@media screen and (max-width: 1280px) {
+  .form-container { width: 46%; }
+  .login-panel { padding: 25px; border-radius: 15px; }
+}
+@media screen and (max-width: 991px) {
+  .form-container { width: 54%; }
+}
+@media screen and (max-width: 800px) {
+  .form-container { width: 60%; }
+}
+@media screen and (max-width: 667px) {
+  .form-container { width: 75%; }
+}
+@media screen and (max-width: 640px) {
+  .login-panel { padding: 25px; border-radius: 10px; }
+}
+@media screen and (max-width: 480px) {
+  .form-container { width: 92%; }
+  .login-panel { padding: 15px; border-radius: 10px; }
+}
+@media screen and (max-width: 384px) {
+  .form-container { width: 100%; }
+}
+@media screen and (max-height: 600px) {
+  .form-container { margin-top: -2%; }
 }
 </style>

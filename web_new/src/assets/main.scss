@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=BioRhyme:wght@400&display=swap");
+
 *,
 *::before,
 *::after {
@@ -14,12 +16,16 @@ body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-family: BioRhyme, Georgia, sans-serif;
   font-size: 16px;
   line-height: 1.5;
-  color: #e0e0e0;
-  background-color: #1a1a2e;
+  color: #d5eeed;
+  background-image: url("/assets/img/background.jpg");
+  background-position: 17% 70%;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-size: cover;
+  background-color: #453225;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -30,11 +36,12 @@ body {
 }
 
 a {
-  color: #42b883;
+  color: #7ed0fc;
   text-decoration: none;
+  transition: text-shadow 0.4s ease-in-out;
 
   &:hover {
-    text-decoration: underline;
+    animation: link-glow 0.6s ease-in-out infinite alternate;
   }
 }
 
@@ -45,6 +52,7 @@ button {
   font-size: 1rem;
   border-radius: 4px;
   transition: background-color 0.2s, opacity 0.2s;
+  font: inherit;
 
   &:disabled {
     opacity: 0.5;
@@ -58,10 +66,43 @@ input {
   border: 1px solid #3a3a5c;
   border-radius: 4px;
   background-color: #16213e;
-  color: #e0e0e0;
+  color: #d5eeed;
+  font: inherit;
 
   &:focus {
     outline: none;
     border-color: #42b883;
+  }
+}
+
+@keyframes link-glow {
+  from {
+    text-shadow: 0 0 6px #2a4f4f;
+  }
+  to {
+    text-shadow: 0 0 10px rgba(87, 248, 248, 0.8);
+  }
+}
+
+@keyframes btn-glow {
+  from {
+    box-shadow: 0 0 10px rgba(52, 78, 88, 0.71);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(23, 180, 200, 0.71);
+  }
+}
+
+@keyframes button-loading-spinner {
+  0% {
+    transform: rotate(0);
+    animation-timing-function: cubic-bezier(0.3, 0.055, 0.675, 0.19);
+  }
+  60% {
+    transform: rotate(360deg);
+    animation-timing-function: cubic-bezier(0.215, 0.61, 0.5, 1);
+  }
+  100% {
+    transform: rotate(540deg);
   }
 }

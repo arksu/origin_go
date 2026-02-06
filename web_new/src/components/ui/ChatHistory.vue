@@ -81,42 +81,39 @@ watch(visibleMessages, async () => {
 .chat-history {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  max-height: 300px; // Increased to fit 10 messages
+  pointer-events: none;
   overflow-y: auto;
   overflow-x: hidden;
-  pointer-events: none; // Allow clicks to pass through to game
-  margin-bottom: 0.5rem; // Space between history and input
-  
-  // Hide scrollbar but keep functionality
-  scrollbar-width: none; // Firefox
-  -ms-overflow-style: none; // IE/Edge
-  
+  max-height: 300px;
+  margin-bottom: 0.5rem;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
-    display: none; // Chrome/Safari/Opera
+    display: none;
   }
 }
 
 .chat-message {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-  font-size: 0.875rem;
-  line-height: 1.25;
-  transition: opacity 0.3s ease-out; // Smooth transition
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); // Improve readability
+  font-size: 16px;
+  line-height: 1.4;
+  color: #daedfa;
+  transition: opacity 0.3s ease-out;
+  text-shadow:
+    2px 2px 0 #000,
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000;
   word-wrap: break-word;
-  max-width: 400px;
 
   &__name {
-    color: #42b883; // Green for names
     font-weight: 500;
-    flex-shrink: 0;
   }
 
   &__text {
-    color: #e0e0e0; // Light gray for text
-    flex: 1;
+    color: #daedfa;
   }
 }
 </style>
