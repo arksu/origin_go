@@ -8,6 +8,7 @@ import AppAlert from '@/components/ui/AppAlert.vue'
 import ChatContainer from '@/components/ui/ChatContainer.vue'
 import InventoryWindow from '@/components/ui/InventoryWindow.vue'
 import NestedInventoryWindow from '@/components/ui/NestedInventoryWindow.vue'
+import HandOverlay from '@/components/ui/HandOverlay.vue'
 import { sendChatMessage } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
@@ -77,7 +78,13 @@ watch(isConnected, async (connected) => {
   }
 })
 
+function onMouseMove(e: MouseEvent) {
+  gameStore.updateMousePos(e.clientX, e.clientY)
+}
+
 onMounted(async () => {
+  window.addEventListener('mousemove', onMouseMove)
+
   if (!gameStore.wsToken) {
     router.push('/characters')
     return
@@ -96,6 +103,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('mousemove', onMouseMove)
+
   if (gameFacade) {
     gameFacade.destroy()
   }
@@ -208,6 +217,9 @@ useHotkeys(hotkeys)
           @close="() => handleNestedInventoryClose(windowKey)" 
         />
       </div>
+
+      <!-- Hand overlay (item following cursor) -->
+      <HandOverlay />
     </div>
 
     <!-- Disconnected state -->

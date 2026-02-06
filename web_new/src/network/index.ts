@@ -50,6 +50,12 @@ export function sendChatMessage(text: string): void {
   })
 }
 
+export function sendInventoryOp(op: proto.IInventoryOp): void {
+  gameConnection.send({
+    inventoryOp: proto.C2S_InventoryOp.create({ op })
+  })
+}
+
 export function sendOpenContainer(ref: proto.IInventoryRef): void {
   gameConnection.send({
     openContainer: proto.C2S_OpenContainer.create({ ref })

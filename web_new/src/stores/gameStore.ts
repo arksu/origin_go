@@ -75,10 +75,27 @@ export const useGameStore = defineStore('game', () => {
   const inventories = ref(new Map<string, proto.IInventoryState>())
   const playerInventoryVisible = ref(false)
   const openNestedInventories = ref(new Map<string, proto.IInventoryState>())
+  let nextOpId = 1
+  const mousePos = ref({ x: 0, y: 0 })
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
   const isInGame = computed(() => isConnected.value && playerEntityId.value !== null)
+
+  const handState = computed((): proto.IInventoryHandState | null => {
+    if (!playerEntityId.value) return null
+    // HAND = kind 1, inventoryKey 0
+    const key = `1_${playerEntityId.value}_0`
+    const inv = inventories.value.get(key)
+    if (!inv?.hand?.item) return null
+    return inv.hand
+  })
+
+  const handInventoryState = computed((): proto.IInventoryState | undefined => {
+    if (!playerEntityId.value) return undefined
+    const key = `1_${playerEntityId.value}_0`
+    return inventories.value.get(key)
+  })
 
   // Session actions
   function setGameSession(token: string, charId: number) {
@@ -175,7 +192,13 @@ export const useGameStore = defineStore('game', () => {
 
   function updateInventory(state: proto.IInventoryState) {
     if (state.ref) {
-      inventories.value.set(inventoryKey(state), state)
+      const key = inventoryKey(state)
+      inventories.value.set(key, state)
+
+      // Also update openNestedInventories if this container is currently open
+      if (openNestedInventories.value.has(key)) {
+        openNestedInventories.value.set(key, state)
+      }
     }
   }
 
@@ -203,6 +226,24 @@ export const useGameStore = defineStore('game', () => {
     }
 
     return undefined
+  }
+
+  function getPlayerHandRef(): proto.IInventoryRef | null {
+    if (!playerEntityId.value) return null
+    return {
+      kind: proto.InventoryKind.INVENTORY_KIND_HAND,
+      ownerId: playerEntityId.value,
+      inventoryKey: 0,
+    }
+  }
+
+  function allocOpId(): number {
+    return nextOpId++
+  }
+
+  function updateMousePos(x: number, y: number) {
+    mousePos.value.x = x
+    mousePos.value.y = y
   }
 
   function togglePlayerInventory() {
@@ -312,10 +353,13 @@ export const useGameStore = defineStore('game', () => {
     inventories,
     playerInventoryVisible,
     openNestedInventories,
+    mousePos,
 
     // Computed
     isConnected,
     isInGame,
+    handState,
+    handInventoryState,
 
     // Actions
     setGameSession,
@@ -341,6 +385,9 @@ export const useGameStore = defineStore('game', () => {
     closeNestedInventory,
     closeAllNestedInventories,
     getNestedInventoryData,
+    getPlayerHandRef,
+    allocOpId,
+    updateMousePos,
     reset,
   }
 })

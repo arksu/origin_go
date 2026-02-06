@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { proto } from '@/network/proto/packets.js'
 import { useGameStore } from '@/stores/gameStore'
 import { sendOpenContainer } from '@/network'
+import { useInventoryOps } from '@/composables/useInventoryOps'
 import GameWindow from './GameWindow.vue'
 import ItemSlot from './ItemSlot.vue'
 import InventoryItem from './InventoryItem.vue'
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const gameStore = useGameStore()
+const { pickUpItem, placeItem, placeOrSwapItem, findInventoryState } = useInventoryOps()
 const gridState = computed(() => props.inventory.grid)
 const inventoryRef = computed(() => props.inventory.ref)
 
@@ -24,12 +26,23 @@ const onClose = () => {
   emit('close')
 }
 
-const onSlotClick = (_x: number, _y: number, _ox: number, _oy: number) => {
-  console.log('Slot click - inventory operations not yet implemented')
+const onSlotClick = (x: number, y: number, _ox: number, _oy: number) => {
+  if (!inventoryRef.value) return
+  const hand = gameStore.handState
+  if (hand?.item) {
+    placeItem(inventoryRef.value, findInventoryState(inventoryRef.value), x, y)
+  }
 }
 
-const onItemClick = (_item: { x: number; y: number; instance: proto.IItemInstance }, _ox: number, _oy: number) => {
-  console.log('Item click - inventory operations not yet implemented')
+const onItemClick = (item: { x: number; y: number; instance: proto.IItemInstance }, ox: number, oy: number) => {
+  if (!inventoryRef.value) return
+  const hand = gameStore.handState
+  if (hand?.item) {
+    placeOrSwapItem(inventoryRef.value, findInventoryState(inventoryRef.value), item.x, item.y)
+  } else {
+    const itemId = Number(item.instance.itemId ?? 0)
+    pickUpItem(inventoryRef.value, findInventoryState(inventoryRef.value), itemId, ox, oy)
+  }
 }
 
 const onItemRightClick = (item: { x: number; y: number; instance: proto.IItemInstance }) => {
