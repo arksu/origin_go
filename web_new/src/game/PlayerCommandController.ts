@@ -8,6 +8,7 @@
  */
 
 import { gameConnection } from '@/network/GameConnection'
+import { sendInventoryOp } from '@/network'
 import { proto } from '@/network/proto/packets.js'
 import { DEBUG_MOVEMENT } from '@/constants/game'
 import { moveController } from './MoveController'
@@ -85,6 +86,30 @@ export class PlayerCommandController {
           type: interactionType,
         }),
       }),
+    })
+  }
+  sendDropToWorld(
+    handRef: proto.IInventoryRef,
+    handRevision: number,
+    itemId: number | Long,
+    opId: number,
+  ): void {
+    console.log(`[PlayerCommandController] Sending DropToWorld:`, {
+      handRef,
+      itemId,
+      opId,
+      timestamp: Date.now(),
+    })
+
+    sendInventoryOp({
+      opId,
+      expected: [
+        { ref: handRef, expectedRevision: handRevision },
+      ],
+      dropToWorld: {
+        src: handRef,
+        itemId,
+      },
     })
   }
 }

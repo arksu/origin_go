@@ -215,6 +215,10 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				)
 				continue
 			}
+			if obj == nil {
+				// Skip players and other non-persistent entities
+				continue
+			}
 			objectsToSave = append(objectsToSave, obj)
 		}
 	} else {
