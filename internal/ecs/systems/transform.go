@@ -6,6 +6,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -143,7 +144,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			}
 
 			// Get server time in milliseconds
-			serverTimeMs := ecs.GetResource[ecs.TimeState](w).UnixMs
+			serverTimeMs := time.Now().UnixMilli()
 
 			// Determine if this is a teleport (for now, always false - can be set by teleport system)
 			isTeleport := false

@@ -29,12 +29,12 @@ type MonotonicClock struct {
 	startMono time.Time
 }
 
-// NewMonotonicClock creates a production clock anchored to the current instant.
-func NewMonotonicClock() *MonotonicClock {
-	now := time.Now()
+// NewMonotonicClockAt creates a production clock anchored to a specific wall time.
+// The monotonic baseline is captured at creation to avoid NTP jumps.
+func NewMonotonicClockAt(startWall time.Time) *MonotonicClock {
 	return &MonotonicClock{
-		startWall: now,
-		startMono: now,
+		startWall: startWall,
+		startMono: time.Now(),
 	}
 }
 

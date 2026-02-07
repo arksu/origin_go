@@ -83,6 +83,8 @@ type Game struct {
 	state       atomic.Int32 // GameState
 	tickStats   tickStats
 
+	serverTimeManager *timeutil.ServerTimeManager
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -91,7 +93,10 @@ type Game struct {
 func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.ObjectFactory, inventoryLoader *inventory.InventoryLoader, inventorySnapshotSender *inventory.SnapshotSender, logger *zap.Logger) *Game {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	clk := timeutil.NewMonotonicClock()
+	serverTimeManager := timeutil.NewServerTimeManager(db, logger)
+	startWall := serverTimeManager.LoadServerTime()
+
+	clk := timeutil.NewMonotonicClockAt(startWall)
 
 	g := &Game{
 		cfg:                     cfg,
@@ -106,6 +111,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 		tickPeriod:              time.Second / time.Duration(cfg.Game.TickRate),
 		ctx:                     ctx,
 		cancel:                  cancel,
+		serverTimeManager:       serverTimeManager,
 		tickStats: tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour,
@@ -184,7 +190,7 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S_Ping) {
 	pong := &netproto.S2C_Pong{
 		ClientTimeMs: ping.ClientTimeMs,
-		ServerTimeMs: g.clock.UnixMilli(),
+		ServerTimeMs: time.Now().UnixMilli(),
 	}
 
 	response := &netproto.ServerMessage{
@@ -636,6 +642,8 @@ func (g *Game) update(ts ecs.TimeState) {
 
 	g.shardManager.Update(ts)
 
+	g.serverTimeManager.MaybePersistServerTime(ts.Now)
+
 	duration := time.Since(start)
 
 	// Collect statistics
@@ -673,6 +681,9 @@ func (g *Game) update(ts ecs.TimeState) {
 func (g *Game) Stop() {
 	g.logger.Info("Stopping game...")
 	g.setState(GameStateStopping)
+
+	// Save current server time before shutdown
+	g.serverTimeManager.SaveCurrentTime(g.clock)
 
 	g.resetOnlinePlayers()
 	g.cancel()
