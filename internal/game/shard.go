@@ -84,7 +84,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
 	droppedItemPersister := world.NewDroppedItemPersisterDB(db)
-	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister)
+	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister, s.chunkManager)
 	s.world.AddSystem(systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, cfg.Game.ChatLocalRadius, logger))
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))

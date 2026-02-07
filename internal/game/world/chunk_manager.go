@@ -1057,6 +1057,28 @@ func (cm *ChunkManager) ObjectFactory() *ObjectFactory {
 	return cm.objectFactory
 }
 
+// AddStaticToChunkSpatial adds a static entity to the chunk's spatial hash.
+// Used by inventory executor to register runtime-spawned dropped items.
+func (cm *ChunkManager) AddStaticToChunkSpatial(handle types.Handle, chunkX, chunkY, x, y int) {
+	coord := types.ChunkCoord{X: chunkX, Y: chunkY}
+	chunk := cm.GetChunk(coord)
+	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
+		return
+	}
+	chunk.Spatial().AddStatic(handle, x, y)
+}
+
+// RemoveStaticFromChunkSpatial removes a static entity from the chunk's spatial hash.
+// Used by inventory executor to unregister dropped items on pickup.
+func (cm *ChunkManager) RemoveStaticFromChunkSpatial(handle types.Handle, chunkX, chunkY, x, y int) {
+	coord := types.ChunkCoord{X: chunkX, Y: chunkY}
+	chunk := cm.GetChunk(coord)
+	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
+		return
+	}
+	chunk.Spatial().RemoveStatic(handle, x, y)
+}
+
 func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {
 	chunkSize := _const.ChunkSize
 	chunkCoord := types.ChunkCoord{
