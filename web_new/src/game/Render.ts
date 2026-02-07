@@ -1,4 +1,4 @@
-import { Application, Container } from 'pixi.js'
+import { Application, Container, TextureStyle } from 'pixi.js'
 import { DebugOverlay, setObjectManager } from './DebugOverlay'
 import { ChunkManager } from './ChunkManager'
 import { ObjectManager } from './ObjectManager'
@@ -48,14 +48,15 @@ export class Render {
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.canvas = canvas
     const resolution = Math.min(window.devicePixelRatio, 2)
+    TextureStyle.defaultOptions.scaleMode = 'nearest'
 
     await this.app.init({
       canvas,
       resolution,
       autoDensity: true,
       resizeTo: window,
-      background: '#1a1a2e',
-      antialias: true,
+      background: '#353e67ff',
+      antialias: false,
     })
 
     // Limit maximum FPS to reduce system load
