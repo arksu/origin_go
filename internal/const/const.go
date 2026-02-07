@@ -64,3 +64,11 @@ const (
 // DefaultHandMouseOffset — дефолтный оффсет курсора при взятии предмета в руку,
 // если клиент не прислал hand_pos.
 const DefaultHandMouseOffset int16 = 15
+
+// Dropped item constants
+const (
+	DroppedItemTypeID     = 1000
+	DroppedDespawnSeconds = 300
+	DroppedPickupRadius   = 5.0
+	DroppedPickupRadiusSq = DroppedPickupRadius * DroppedPickupRadius
+)

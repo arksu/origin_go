@@ -1,9 +1,13 @@
 package inventory
 
 import (
+	"encoding/json"
+
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/world"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -25,18 +29,35 @@ type OperationResult struct {
 	DespawnedDroppedEntityID *types.EntityID
 }
 
+// EntityIDAllocator provides unique entity IDs for new dropped items.
+type EntityIDAllocator interface {
+	GetFreeID() types.EntityID
+}
+
+// DroppedItemPersister handles DB persistence for dropped item objects.
+type DroppedItemPersister interface {
+	PersistDroppedObject(entityID types.EntityID, typeID int, region, x, y, layer, chunkX, chunkY int, data json.RawMessage) error
+	DeleteDroppedObject(region int, entityID types.EntityID) error
+}
+
 type InventoryOperationService struct {
 	validator        *Validator
 	placementService *PlacementService
+	idAllocator      EntityIDAllocator
+	persister        DroppedItemPersister
 	logger           *zap.Logger
 }
 
 func NewInventoryOperationService(
 	logger *zap.Logger,
+	idAlloc EntityIDAllocator,
+	persister DroppedItemPersister,
 ) *InventoryOperationService {
 	return &InventoryOperationService{
 		validator:        NewValidator(),
 		placementService: NewPlacementService(),
+		idAllocator:      idAlloc,
+		persister:        persister,
 		logger:           logger,
 	}
 }
@@ -415,20 +436,193 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	moveSpec *netproto.InventoryMoveSpec,
 	expected []*netproto.InventoryExpected,
 ) *OperationResult {
-	// TODO: Implement drop_to_world
-	// This requires:
-	// 1. Remove item from source container
-	// 2. Create a dropped entity in the world at player's position
-	// 3. Return the spawned entity ID
+	if s.idAllocator == nil || s.persister == nil {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "drop dependencies not configured",
+		}
+	}
 
-	s.logger.Debug("ExecuteDropToWorld not implemented yet",
-		zap.Uint64("op_id", opID),
-		zap.Uint64("player_id", uint64(playerID)))
+	// 1. Resolve source container and find item
+	srcInfo, verr := s.validator.ResolveContainer(w, moveSpec.Src, playerID, playerHandle)
+	if verr != nil {
+		return &OperationResult{Success: false, ErrorCode: verr.Code, Message: verr.Message}
+	}
+
+	itemID := types.EntityID(moveSpec.ItemId)
+	srcItemIndex, srcItem := s.validator.FindItemInContainer(srcInfo.Container, itemID)
+	if srcItem == nil {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
+			Message:   "Item not found in source container",
+		}
+	}
+
+	// 2. Validate expected versions
+	if len(expected) > 0 {
+		containers := map[string]*ContainerInfo{
+			MakeContainerKeyFromInfo(srcInfo.Container.OwnerID, srcInfo.Container.Kind, srcInfo.Container.Key): srcInfo,
+		}
+		if verr := s.validator.ValidateExpectedVersions(w, expected, containers); verr != nil {
+			return &OperationResult{Success: false, ErrorCode: verr.Code, Message: verr.Message}
+		}
+	}
+
+	// 3. Get player position for drop location
+	playerTransform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	if !hasTransform {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Player has no transform",
+		}
+	}
+
+	playerInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, playerHandle)
+	if !hasInfo {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Player has no entity info",
+		}
+	}
+
+	playerChunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, playerHandle)
+	if !hasChunkRef {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Player has no chunk ref",
+		}
+	}
+
+	// 4. Allocate entity ID for the dropped object (object.id == item.id == inventory.owner_id)
+	droppedEntityID := s.idAllocator.GetFreeID()
+	nowUnix := ecs.GetResource[ecs.TimeState](w).Now.Unix()
+
+	// Resolve item resource
+	resource := srcItem.Resource
+	if itemDef, ok := itemdefs.Global().GetByID(int(srcItem.TypeID)); ok {
+		resource = itemDef.ResolveResource(false)
+	}
+
+	dropX := int(playerTransform.X)
+	dropY := int(playerTransform.Y)
+
+	// 5. Remove item from source container
+	ecs.MutateComponent[components.InventoryContainer](w, srcInfo.Handle, func(c *components.InventoryContainer) bool {
+		c.Items = append(c.Items[:srcItemIndex], c.Items[srcItemIndex+1:]...)
+		if c.Kind == constt.InventoryHand {
+			c.HandMouseOffsetX = 0
+			c.HandMouseOffsetY = 0
+		}
+		c.Version++
+		return true
+	})
+
+	// 6. Create dropped entity in ECS
+	droppedHandle := w.Spawn(droppedEntityID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.CreateTransform(dropX, dropY, 0))
+
+		ecs.AddComponent(w, h, components.EntityInfo{
+			TypeID:   constt.DroppedItemTypeID,
+			IsStatic: true,
+			Region:   playerInfo.Region,
+			Layer:    playerInfo.Layer,
+		})
+
+		ecs.AddComponent(w, h, components.ChunkRef{
+			CurrentChunkX: playerChunkRef.CurrentChunkX,
+			CurrentChunkY: playerChunkRef.CurrentChunkY,
+		})
+
+		ecs.AddComponent(w, h, components.Appearance{
+			Name:     nil,
+			Resource: resource,
+		})
+
+		ecs.AddComponent(w, h, components.DroppedItem{
+			DropTime:        nowUnix,
+			DropperID:       playerID,
+			ContainedItemID: itemID,
+		})
+
+		// Create inventory container for the dropped item
+		container := components.InventoryContainer{
+			OwnerID: droppedEntityID,
+			Kind:    constt.InventoryDroppedItem,
+			Key:     0,
+			Version: 1,
+			Items: []components.InvItem{
+				{
+					ItemID:   itemID,
+					TypeID:   srcItem.TypeID,
+					Resource: resource,
+					Quality:  srcItem.Quality,
+					Quantity: srcItem.Quantity,
+					W:        srcItem.W,
+					H:        srcItem.H,
+				},
+			},
+		}
+		containerHandle := w.SpawnWithoutExternalID()
+		ecs.AddComponent(w, containerHandle, container)
+
+		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+		refIndex.Add(constt.InventoryDroppedItem, droppedEntityID, 0, containerHandle)
+	})
+
+	if droppedHandle == types.InvalidHandle {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Failed to spawn dropped entity",
+		}
+	}
+
+	// 7. Persist to DB
+	droppedData := world.DroppedItemData{
+		HasInventory:    true,
+		ContainedItemID: uint64(itemID),
+		DropTime:        nowUnix,
+		DropperID:       uint64(playerID),
+		ItemTypeID:      srcItem.TypeID,
+		ItemResource:    resource,
+		ItemQuality:     srcItem.Quality,
+		ItemQuantity:    srcItem.Quantity,
+		ItemW:           srcItem.W,
+		ItemH:           srcItem.H,
+	}
+	dataJSON, _ := json.Marshal(droppedData)
+
+	if err := s.persister.PersistDroppedObject(
+		droppedEntityID, constt.DroppedItemTypeID,
+		playerInfo.Region, dropX, dropY, playerInfo.Layer,
+		playerChunkRef.CurrentChunkX, playerChunkRef.CurrentChunkY,
+		dataJSON,
+	); err != nil {
+		s.logger.Error("Failed to persist dropped object",
+			zap.Uint64("entity_id", uint64(droppedEntityID)),
+			zap.Error(err))
+	}
+
+	// 8. Build result
+	updatedSrc, _ := ecs.GetComponent[components.InventoryContainer](w, srcInfo.Handle)
+	srcInfo.Container = &updatedSrc
+
+	s.logger.Debug("Item dropped to world",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.Uint64("dropped_entity_id", uint64(droppedEntityID)),
+		zap.Uint64("item_id", uint64(itemID)),
+		zap.Int("x", dropX),
+		zap.Int("y", dropY))
 
 	return &OperationResult{
-		Success:   false,
-		ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
-		Message:   "drop_to_world not implemented",
+		Success:                true,
+		UpdatedContainers:      []*ContainerInfo{srcInfo},
+		SpawnedDroppedEntityID: &droppedEntityID,
 	}
 }
 
@@ -436,24 +630,161 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
-	opID uint64,
-	moveSpec *netproto.InventoryMoveSpec,
-	expected []*netproto.InventoryExpected,
+	droppedEntityID types.EntityID,
+	dstRef *netproto.InventoryRef,
 ) *OperationResult {
-	// TODO: Implement pickup_from_world
-	// This requires:
-	// 1. Validate dropped entity exists and is in range
-	// 2. Remove dropped entity from world
-	// 3. Add item to destination container
-	// 4. Return the despawned entity ID
+	if s.persister == nil {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "drop dependencies not configured",
+		}
+	}
 
-	s.logger.Debug("ExecutePickupFromWorld not implemented yet",
-		zap.Uint64("op_id", opID),
-		zap.Uint64("player_id", uint64(playerID)))
+	// 1. Find the dropped entity by ID
+	droppedHandle := w.GetHandleByEntityID(droppedEntityID)
+	if droppedHandle == types.InvalidHandle {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
+			Message:   "Dropped entity not found",
+		}
+	}
+
+	// Verify it's actually a dropped item
+	_, hasDropped := ecs.GetComponent[components.DroppedItem](w, droppedHandle)
+	if !hasDropped {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Entity is not a dropped item",
+		}
+	}
+
+	// 2. Check distance
+	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	droppedTransform, hasDroppedTransform := ecs.GetComponent[components.Transform](w, droppedHandle)
+	if !hasPlayerTransform || !hasDroppedTransform {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Missing transform",
+		}
+	}
+
+	dx := playerTransform.X - droppedTransform.X
+	dy := playerTransform.Y - droppedTransform.Y
+	distSq := dx*dx + dy*dy
+	if distSq > constt.DroppedPickupRadiusSq {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_OUT_OF_RANGE,
+			Message:   "Too far to pick up",
+		}
+	}
+
+	// 3. Get the item from the dropped entity's container
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	containerHandle, found := refIndex.Lookup(constt.InventoryDroppedItem, droppedEntityID, 0)
+	if !found {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
+			Message:   "Dropped item container not found",
+		}
+	}
+
+	droppedContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+	if !hasContainer || len(droppedContainer.Items) == 0 {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
+			Message:   "Dropped item container is empty",
+		}
+	}
+
+	srcItem := droppedContainer.Items[0]
+
+	// 4. Resolve destination container
+	dstInfo, verr := s.validator.ResolveContainer(w, dstRef, playerID, playerHandle)
+	if verr != nil {
+		return &OperationResult{Success: false, ErrorCode: verr.Code, Message: verr.Message}
+	}
+
+	// 5. Validate item can be placed in destination
+	if verr := s.validator.ValidateItemAllowedInContainer(w, &srcItem, dstInfo, netproto.EquipSlot_EQUIP_SLOT_NONE); verr != nil {
+		return &OperationResult{Success: false, ErrorCode: verr.Code, Message: verr.Message}
+	}
+
+	// 6. Check placement
+	var placementResult *PlacementResult
+	switch dstInfo.Container.Kind {
+	case constt.InventoryGrid:
+		found, x, y := s.placementService.FindFreeSpace(dstInfo.Container, srcItem.W, srcItem.H)
+		if !found {
+			return &OperationResult{
+				Success:   false,
+				ErrorCode: netproto.ErrorCode_ERROR_CODE_INVENTORY_FULL,
+				Message:   "No free space in destination",
+			}
+		}
+		placementResult = s.placementService.CheckGridPlacement(dstInfo.Container, &srcItem, x, y, false)
+	case constt.InventoryHand:
+		placementResult = s.placementService.CheckHandPlacement(dstInfo.Container, &srcItem, false)
+	default:
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Unsupported destination container type for pickup",
+		}
+	}
+
+	if !placementResult.Success {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVENTORY_FULL,
+			Message:   "Cannot place item at destination",
+		}
+	}
+
+	// 7. Add item to destination container
+	ecs.MutateComponent[components.InventoryContainer](w, dstInfo.Handle, func(c *components.InventoryContainer) bool {
+		srcItem.X = placementResult.X
+		srcItem.Y = placementResult.Y
+		c.Items = append(c.Items, srcItem)
+		if c.Kind == constt.InventoryHand {
+			c.HandMouseOffsetX = constt.DefaultHandMouseOffset
+			c.HandMouseOffsetY = constt.DefaultHandMouseOffset
+		}
+		c.Version++
+		return true
+	})
+
+	// 8. Delete dropped entity from ECS and InventoryRefIndex
+	droppedInfo, _ := ecs.GetComponent[components.EntityInfo](w, droppedHandle)
+	world.DeleteDroppedObject(w, droppedEntityID, droppedHandle, s.logger)
+
+	// 9. Soft-delete from DB
+	if droppedInfo.Region > 0 {
+		if err := s.persister.DeleteDroppedObject(droppedInfo.Region, droppedEntityID); err != nil {
+			s.logger.Error("Failed to soft-delete picked up object from DB",
+				zap.Uint64("entity_id", uint64(droppedEntityID)),
+				zap.Error(err))
+		}
+	}
+
+	// 10. Build result
+	updatedDst, _ := ecs.GetComponent[components.InventoryContainer](w, dstInfo.Handle)
+	dstInfo.Container = &updatedDst
+
+	s.logger.Debug("Item picked up from world",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.Uint64("dropped_entity_id", uint64(droppedEntityID)),
+		zap.Uint64("item_id", uint64(srcItem.ItemID)))
 
 	return &OperationResult{
-		Success:   false,
-		ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
-		Message:   "pickup_from_world not implemented",
+		Success:                  true,
+		UpdatedContainers:        []*ContainerInfo{dstInfo},
+		DespawnedDroppedEntityID: &droppedEntityID,
 	}
 }
