@@ -69,6 +69,42 @@ func (e *InventoryExecutor) ExecuteOperation(
 	return opResult
 }
 
+// GiveItem creates a new item and adds it to the player's inventory (or drops it).
+// Returns updated container states for client sync.
+func (e *InventoryExecutor) GiveItem(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	itemKey string,
+	count uint32,
+	quality uint32,
+) *GiveItemResult {
+	result := e.service.GiveItem(w, playerID, playerHandle, itemKey, count, quality)
+
+	// Register dropped entity in chunk spatial if item was dropped
+	if result.Success && result.SpawnedDroppedEntityID != nil {
+		e.registerDroppedSpatial(w, *result.SpawnedDroppedEntityID)
+	}
+
+	return result
+}
+
+// registerDroppedSpatial adds a newly spawned dropped entity to chunk spatial.
+func (e *InventoryExecutor) registerDroppedSpatial(w *ecs.World, entityID types.EntityID) {
+	if e.spatialRegistrar == nil {
+		return
+	}
+	handle := w.GetHandleByEntityID(entityID)
+	if handle == types.InvalidHandle {
+		return
+	}
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
+	chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, handle)
+	if hasTransform && hasChunkRef {
+		e.spatialRegistrar.AddStaticToChunkSpatial(handle, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY, int(transform.X), int(transform.Y))
+	}
+}
+
 // handleDroppedItemSpatial registers/unregisters dropped item entities in chunk spatial
 // so that VisionSystem can discover them via QueryRadius.
 func (e *InventoryExecutor) handleDroppedItemSpatial(w *ecs.World, result *OperationResult) {
@@ -192,6 +228,16 @@ func (e *InventoryExecutor) findParentContainer(
 	}
 
 	return nil
+}
+
+// ConvertContainersToStates converts internal ContainerInfo list to systems.InventoryContainerState list.
+// Exported for use by admin commands and other mechanics that need to send inventory updates.
+func (e *InventoryExecutor) ConvertContainersToStates(w *ecs.World, containers []*ContainerInfo) []systems.InventoryContainerState {
+	states := make([]systems.InventoryContainerState, 0, len(containers))
+	for _, c := range containers {
+		states = append(states, e.convertContainerToState(w, c))
+	}
+	return states
 }
 
 func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *ContainerInfo) systems.InventoryContainerState {

@@ -85,7 +85,12 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	droppedItemPersister := world.NewDroppedItemPersisterDB(db)
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister, s.chunkManager)
-	s.world.AddSystem(systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, cfg.Game.ChatLocalRadius, logger))
+	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, cfg.Game.ChatLocalRadius, logger)
+
+	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, logger)
+	networkCmdSystem.SetAdminHandler(adminHandler)
+
+	s.world.AddSystem(networkCmdSystem)
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
