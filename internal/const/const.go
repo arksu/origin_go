@@ -16,7 +16,10 @@ const (
 // keys for global_var
 const (
 	LAST_USED_ID = "last_used_id"
+	SERVER_TIME  = "server_time"
 )
+
+const ServerTimeSavePeriodSeconds = 20
 
 const StopDistance float64 = 0.2
 
