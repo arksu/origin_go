@@ -36,6 +36,12 @@ type InventoryOperationExecutor interface {
 	ExecuteOperation(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, op *netproto.InventoryOp) InventoryOpResult
 }
 
+// AdminCommandHandler processes admin chat commands (e.g. /give).
+// Returns true if the text was recognized as an admin command.
+type AdminCommandHandler interface {
+	HandleCommand(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, text string) bool
+}
+
 // InventoryOpResult represents the result of an inventory operation
 type InventoryOpResult struct {
 	Success           bool
@@ -88,6 +94,9 @@ type NetworkCommandSystem struct {
 	inventoryExecutor     InventoryOperationExecutor
 	inventoryResultSender InventoryResultSender
 
+	// Admin command handling
+	adminHandler AdminCommandHandler
+
 	// Reusable buffers to avoid allocations
 	playerCommands []*network.PlayerCommand
 	serverJobs     []*network.ServerJob
@@ -116,6 +125,11 @@ func NewNetworkCommandSystem(
 		playerCommands:        make([]*network.PlayerCommand, 0, 256),
 		serverJobs:            make([]*network.ServerJob, 0, 64),
 	}
+}
+
+// SetAdminHandler sets the admin command handler for processing chat commands like /give.
+func (s *NetworkCommandSystem) SetAdminHandler(handler AdminCommandHandler) {
+	s.adminHandler = handler
 }
 
 // Update drains command queues and processes commands
@@ -260,6 +274,13 @@ func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handl
 		s.logger.Warn("Invalid chat command payload",
 			zap.Uint64("client_id", cmd.ClientID))
 		return
+	}
+
+	// Intercept admin commands (starting with "/")
+	if len(payload.Text) > 0 && payload.Text[0] == '/' {
+		if s.adminHandler != nil && s.adminHandler.HandleCommand(w, cmd.CharacterID, playerHandle, payload.Text) {
+			return
+		}
 	}
 
 	senderTransform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
