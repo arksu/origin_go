@@ -498,8 +498,8 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 		}
 	}
 
-	// 4. Allocate entity ID for the dropped object (object.id == item.id == inventory.owner_id)
-	droppedEntityID := s.idAllocator.GetFreeID()
+	// 4. Use item ID as the dropped entity ID (object.id == item.id == inventory.owner_id)
+	droppedEntityID := itemID
 	nowUnix := ecs.GetResource[ecs.TimeState](w).Now.Unix()
 
 	// Resolve item resource
