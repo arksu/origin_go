@@ -1,9 +1,19 @@
-import { Container, Sprite, Graphics, Text, Rectangle } from 'pixi.js'
+import { Container, Sprite, Graphics, Text, Texture, Rectangle } from 'pixi.js'
 import type { Spine } from '@esotericsoftware/spine-pixi-v8'
 import { ResourceLoader, type ResourceDef, type LayerDef } from './ResourceLoader'
 import { coordGame2Screen } from './utils/coordConvert'
 import { type AABB, fromMinMax } from './culling/AABB'
-import { OBJECT_BOUNDS_COLOR, OBJECT_BOUNDS_WIDTH, OBJECT_BOUNDS_ALPHA } from '@/constants/render'
+import { TEXTURE_WIDTH, TEXTURE_HEIGHT } from './tiles/Tile'
+import {
+  OBJECT_BOUNDS_COLOR,
+  OBJECT_BOUNDS_WIDTH,
+  OBJECT_BOUNDS_ALPHA,
+  DROP_ITEM_TYPE_ID,
+  DROP_ITEM_PAD,
+  DROP_ITEM_GROUND_BIAS,
+  DROP_ITEM_MIN_SCALE,
+  DROP_ITEM_MAX_SCALE,
+} from '@/constants/render'
 
 export interface ObjectViewOptions {
   entityId: number
@@ -35,6 +45,7 @@ export class ObjectView {
   private layerIndexMap: Map<number, number> = new Map() // layerIdx -> spineAnimations index
   private lastDir = 4 // default south
   private isDestroyed = false
+  private isDroppedItem = false
 
   constructor(options: ObjectViewOptions) {
     this.entityId = options.entityId
@@ -45,15 +56,20 @@ export class ObjectView {
     this.container = new Container()
     this.container.sortableChildren = true
 
-    this.resDef = ResourceLoader.getResourceDef(options.resourcePath)
-    if (!this.resDef) {
-      this.resDef = ResourceLoader.getResourceDef('unknown')
-    }
-
-    if (this.resDef) {
-      this.buildLayers()
+    if (this.typeId === DROP_ITEM_TYPE_ID) {
+      this.isDroppedItem = true
+      this.buildDroppedItem(options.resourcePath)
     } else {
-      this.createPlaceholder()
+      this.resDef = ResourceLoader.getResourceDef(options.resourcePath)
+      if (!this.resDef) {
+        this.resDef = ResourceLoader.getResourceDef('unknown')
+      }
+
+      if (this.resDef) {
+        this.buildLayers()
+      } else {
+        this.createPlaceholder()
+      }
     }
 
     this.updateScreenPosition()
@@ -62,6 +78,54 @@ export class ObjectView {
 
   getContainer(): Container {
     return this.container
+  }
+
+  private buildDroppedItem(resourcePath: string): void {
+    const tileW = TEXTURE_WIDTH
+    const tileH = TEXTURE_HEIGHT
+
+    ResourceLoader.loadTexture(resourcePath).then((tex) => {
+      if (this.isDestroyed) return
+
+      if (tex === Texture.WHITE) {
+        this.createDroppedItemFallback()
+        return
+      }
+
+      const spr = new Sprite(tex)
+      spr.anchor.set(0.5, 1.0)
+
+      const texW = tex.width
+      const texH = tex.height
+      const fitW = tileW * (1 - DROP_ITEM_PAD)
+      const fitH = tileH * (1 - DROP_ITEM_PAD)
+      const scale = Math.min(
+        Math.max(Math.min(fitW / texW, fitH / texH), DROP_ITEM_MIN_SCALE),
+        DROP_ITEM_MAX_SCALE,
+      )
+      spr.scale.set(scale)
+
+      spr.x = 0
+      spr.y = tileH * DROP_ITEM_GROUND_BIAS
+
+      this.setInteractive(spr)
+      this.sprites.push(spr)
+      this.container.addChild(spr)
+    })
+  }
+
+  private createDroppedItemFallback(): void {
+    const ph = new Graphics()
+    const s = 8
+    ph.rect(-s, -s * 2, s * 2, s * 2)
+    ph.fill({ color: 0xff00ff, alpha: 0.6 })
+    ph.stroke({ color: 0xffffff, width: 1 })
+    ph.hitArea = new Rectangle(-15, -15, 30, 30)
+    ph.eventMode = 'static'
+    ph.cursor = 'pointer'
+    ph.on('pointerdown', () => this.onClick())
+    this.placeholder = ph
+    this.container.addChild(ph)
   }
 
   private buildLayers(): void {
@@ -137,7 +201,7 @@ export class ObjectView {
    */
   onMoved(dir: number): void {
     this.lastDir = dir
-    if (!this.resDef) return
+    if (this.isDroppedItem || !this.resDef) return
 
     this.resDef.layers.forEach((layer, layerIdx) => {
       if (!layer.spine?.dirs) return
@@ -160,7 +224,7 @@ export class ObjectView {
    * Called when the entity stops moving.
    */
   onStopped(): void {
-    if (!this.resDef) return
+    if (this.isDroppedItem || !this.resDef) return
 
     this.resDef.layers.forEach((layer, layerIdx) => {
       if (!layer.spine?.dirs) return
