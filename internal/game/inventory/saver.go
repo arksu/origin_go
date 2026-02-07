@@ -14,7 +14,7 @@ import (
 
 // findNestedContainer looks up a nested container via InventoryRefIndex (O(1))
 func findNestedContainer(world *ecs.World, itemID types.EntityID) *components.InventoryContainer {
-	handle, found := world.InventoryRefIndex().Lookup(constt.InventoryGrid, itemID, 0)
+	handle, found := ecs.GetResource[ecs.InventoryRefIndex](world).Lookup(constt.InventoryGrid, itemID, 0)
 	if !found {
 		return nil
 	}

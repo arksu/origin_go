@@ -55,7 +55,7 @@ func NewCharacterSaveSystem(saver *CharacterSaver, saveInterval time.Duration, l
 
 func (s *CharacterSaveSystem) Update(w *ecs.World, dt float64) {
 	now := time.Now()
-	charEntities := w.CharacterEntities()
+	charEntities := ecs.GetResource[ecs.CharacterEntities](w)
 
 	for entityID, charEntity := range charEntities.Map {
 		if now.After(charEntity.NextSaveAt) {
@@ -266,7 +266,7 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 
 // SaveAll saves all characters from CharacterEntities
 func (s *CharacterSaver) SaveAll(w *ecs.World) {
-	characterEntities := w.CharacterEntities()
+	characterEntities := ecs.GetResource[ecs.CharacterEntities](w)
 	entityIDs := characterEntities.GetAll()
 
 	s.logger.Info("Saving all characters", zap.Int("count", len(entityIDs)))

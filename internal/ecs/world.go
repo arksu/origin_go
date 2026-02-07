@@ -3,6 +3,7 @@ package ecs
 import (
 	"origin/internal/eventbus"
 	"origin/internal/types"
+	"reflect"
 	"sort"
 	"sync"
 )
@@ -35,22 +36,8 @@ type World struct {
 	// Component storages (type-erased, accessed via typed helpers)
 	storages map[ComponentID]any
 
-	// Resources (singleton data shared across systems)
-	resources map[any]any
-
-	// MovedEntities buffer for tracking moved entities between systems
-	movedEntities   MovedEntities
-	visibilityState VisibilityState
-
-	// DetachedEntities tracks players who disconnected but entity remains in world
-	// Key: EntityID, Value: expiration time (when entity should be despawned)
-	detachedEntities DetachedEntities
-
-	// CharacterEntities tracks player characters and their save state
-	characterEntities CharacterEntities
-
-	// InventoryRefIndex provides O(1) lookup from (kind, owner_id, key) to container Handle
-	inventoryRefIndex InventoryRefIndex
+	// Resources (singleton data shared across systems, keyed by reflect.Type)
+	resources map[reflect.Type]any
 
 	// Event bus for publishing events
 	eventBus *eventbus.EventBus
@@ -82,29 +69,32 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		handles:          NewHandleAllocator(maxHandles),
 		systems:          make([]System, 0, 16),
 		storages:         make(map[ComponentID]any),
-		resources:        make(map[any]any),
-		movedEntities: MovedEntities{
-			Handles: make([]types.Handle, 2048),
-			IntentX: make([]float64, 2048),
-			IntentY: make([]float64, 2048),
-			Count:   0,
-		},
-		visibilityState: VisibilityState{
-			VisibleByObserver:        make(map[types.Handle]ObserverVisibility, 256),
-			ObserversByVisibleTarget: make(map[types.Handle]map[types.Handle]struct{}, 256),
-		},
-		detachedEntities: DetachedEntities{
-			Map: make(map[types.EntityID]DetachedEntity, 64),
-		},
-		characterEntities: CharacterEntities{
-			Map: make(map[types.EntityID]CharacterEntity, 64),
-		},
-		inventoryRefIndex: InventoryRefIndex{
-			index: make(map[InventoryRefKey]types.Handle, 64),
-		},
-		eventBus: eventBus,
-		Layer:    layer,
+		resources:        make(map[reflect.Type]any),
+		eventBus:         eventBus,
+		Layer:            layer,
 	}
+
+	// Initialise built-in resources
+	InitResource(w, MovedEntities{
+		Handles: make([]types.Handle, 2048),
+		IntentX: make([]float64, 2048),
+		IntentY: make([]float64, 2048),
+		Count:   0,
+	})
+	InitResource(w, VisibilityState{
+		VisibleByObserver:        make(map[types.Handle]ObserverVisibility, 256),
+		ObserversByVisibleTarget: make(map[types.Handle]map[types.Handle]struct{}, 256),
+	})
+	InitResource(w, DetachedEntities{
+		Map: make(map[types.EntityID]DetachedEntity, 64),
+	})
+	InitResource(w, CharacterEntities{
+		Map: make(map[types.EntityID]CharacterEntity, 64),
+	})
+	InitResource(w, InventoryRefIndex{
+		index: make(map[InventoryRefKey]types.Handle, 64),
+	})
+
 	return w
 }
 
@@ -320,19 +310,6 @@ func (w *World) Query() *Query {
 	return NewQuery(w)
 }
 
-// SetResource stores a singleton resource
-// Single-threaded - no lock needed
-func (w *World) SetResource(key, value any) {
-	w.resources[key] = value
-}
-
-// GetResource retrieves a singleton resource
-// Single-threaded - no lock needed
-func (w *World) GetResource(key any) (any, bool) {
-	v, ok := w.resources[key]
-	return v, ok
-}
-
 // GetStorage returns the component storage for a given component ID
 // Single-threaded - no lock needed
 func (w *World) GetStorage(componentID ComponentID) any {
@@ -419,29 +396,4 @@ func WithComponent[T Component](w *World, h types.Handle, fn func(*T)) bool {
 func HasComponent[T Component](w *World, h types.Handle) bool {
 	storage := GetOrCreateStorage[T](w)
 	return storage.Has(h)
-}
-
-// MovedEntities returns the moved entities buffer
-func (w *World) MovedEntities() *MovedEntities {
-	return &w.movedEntities
-}
-
-// VisibilityState returns the visibility state resource
-func (w *World) VisibilityState() *VisibilityState {
-	return &w.visibilityState
-}
-
-// DetachedEntities returns the detached entities map
-func (w *World) DetachedEntities() *DetachedEntities {
-	return &w.detachedEntities
-}
-
-// CharacterEntities returns the character entities map
-func (w *World) CharacterEntities() *CharacterEntities {
-	return &w.characterEntities
-}
-
-// InventoryRefIndex returns the inventory ref index for O(1) container lookup
-func (w *World) InventoryRefIndex() *InventoryRefIndex {
-	return &w.inventoryRefIndex
 }

@@ -485,7 +485,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				if disconnectDelay > 0 && playerHandle != types.InvalidHandle {
 					// Detached mode: keep entity in world for DisconnectDelay seconds
 					expirationTime := time.Now().Add(time.Duration(disconnectDelay) * time.Second)
-					shard.world.DetachedEntities().AddDetachedEntity(playerEntityID, playerHandle, expirationTime)
+					ecs.GetResource[ecs.DetachedEntities](shard.world).AddDetachedEntity(playerEntityID, playerHandle, expirationTime)
 
 					// Stop movement for detached entity
 					ecs.MutateComponent[components.Movement](shard.world, playerHandle, func(m *components.Movement) bool {
@@ -525,7 +525,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 						}
 
 						// Remove from CharacterEntities
-						shard.world.CharacterEntities().Remove(playerEntityID)
+						ecs.GetResource[ecs.CharacterEntities](shard.world).Remove(playerEntityID)
 					}
 					shard.UnregisterEntityAOI(playerEntityID)
 					shard.mu.Unlock()

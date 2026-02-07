@@ -159,7 +159,7 @@ func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *Containe
 		HandMouseOffsetY: info.Container.HandMouseOffsetY,
 	}
 
-	refIndex := w.InventoryRefIndex()
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	for _, item := range info.Container.Items {
 		itemState := systems.InventoryItemState{
 			ItemID:    item.ItemID,

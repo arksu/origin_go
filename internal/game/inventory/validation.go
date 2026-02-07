@@ -76,7 +76,7 @@ func (v *Validator) ResolveContainer(
 	ownerID := types.EntityID(ref.OwnerId)
 
 	// O(1) lookup via InventoryRefIndex
-	refIndex := w.InventoryRefIndex()
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), ownerID, ref.InventoryKey)
 	if !found || !w.Alive(handle) {
 		return nil, NewValidationError(

@@ -31,7 +31,7 @@ func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, 
 }
 
 func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
-	movedEntities := w.MovedEntities()
+	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
 	// Process entities that moved this frame (from movedEntities buffer)
 	for i := 0; i < movedEntities.Count; i++ {
 		h := movedEntities.Handles[i]
@@ -99,7 +99,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			}
 
 			// Visibility guard: only publish move events if entity is visible to at least one observer
-			visState := w.VisibilityState()
+			visState := ecs.GetResource[ecs.VisibilityState](w)
 			if visState != nil {
 				// Check if any observer can see this entity
 				observers, hasObservers := visState.ObserversByVisibleTarget[h]

@@ -184,7 +184,7 @@ func setupNestedContainer(
 	ecs.AddComponent(world, playerHandle, owner)
 
 	// Populate InventoryRefIndex
-	refIndex := world.InventoryRefIndex()
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](world)
 	refIndex.Add(constt.InventoryGrid, playerID, 0, backpackHandle)
 	refIndex.Add(constt.InventoryHand, playerID, 0, handHandle)
 	refIndex.Add(constt.InventoryGrid, bagItemID, 0, nestedHandle)
