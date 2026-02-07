@@ -41,7 +41,7 @@ func NewExpireDetachedSystem(logger *zap.Logger, characterSaver *CharacterSaver,
 
 func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 	now := time.Now()
-	detachedEntities := w.DetachedEntities()
+	detachedEntities := ecs.GetResource[ecs.DetachedEntities](w)
 
 	if len(detachedEntities.Map) == 0 {
 		return
@@ -87,7 +87,7 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 		w.Despawn(handle)
 
 		// Remove from CharacterEntities (stop periodic saves while detached)
-		w.CharacterEntities().Remove(entityID)
+		ecs.GetResource[ecs.CharacterEntities](w).Remove(entityID)
 
 		// Remove from detachedEntities map
 		detachedEntities.RemoveDetachedEntity(entityID)
@@ -97,7 +97,7 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 // DespawnDetachedEntity manually despawns a detached entity (e.g., when killed)
 // This is called from outside the system when a detached entity dies
 func DespawnDetachedEntity(w *ecs.World, entityID types.EntityID, logger *zap.Logger) bool {
-	detachedEntities := w.DetachedEntities()
+	detachedEntities := ecs.GetResource[ecs.DetachedEntities](w)
 	entity, ok := detachedEntities.GetDetachedEntity(entityID)
 	if !ok {
 		return false

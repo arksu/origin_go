@@ -198,7 +198,7 @@ func (ss *SnapshotSender) buildItemInstance(
 	}
 
 	// Check if this item has a nested container via index (O(1))
-	refIndex := world.InventoryRefIndex()
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](world)
 	if _, found := refIndex.Lookup(constt.InventoryGrid, invItem.ItemID, 0); found {
 		itemInstance.NestedRef = &netproto.InventoryRef{
 			Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,

@@ -307,7 +307,7 @@ func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handl
 func (s *NetworkCommandSystem) findChatRecipients(w *ecs.World, senderX, senderY float64, senderID types.EntityID) []types.EntityID {
 	recipients := make([]types.EntityID, 0, 32)
 
-	characterEntities := w.CharacterEntities()
+	characterEntities := ecs.GetResource[ecs.CharacterEntities](w)
 
 	for entityID := range characterEntities.Map {
 		handle := w.GetHandleByEntityID(entityID)
@@ -389,7 +389,7 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 	}
 
 	// O(1) lookup via InventoryRefIndex
-	refIndex := w.InventoryRefIndex()
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), types.EntityID(ref.OwnerId), ref.InventoryKey)
 	if !found || !w.Alive(handle) {
 		s.logger.Debug("OpenContainer: container not found",

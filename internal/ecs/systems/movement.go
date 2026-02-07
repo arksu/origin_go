@@ -40,7 +40,7 @@ func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger 
 }
 
 func (s *MovementSystem) Update(w *ecs.World, dt float64) {
-	movedEntities := w.MovedEntities()
+	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
 	// Use prepared query to iterate over entities with Transform and Movement
 	s.movingQuery.ForEach(func(h types.Handle) {
 		movement, ok := ecs.GetComponent[components.Movement](w, h)

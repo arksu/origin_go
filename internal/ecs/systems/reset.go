@@ -21,6 +21,6 @@ func NewResetSystem(logger *zap.Logger) *ResetSystem {
 
 func (s *ResetSystem) Update(w *ecs.World, dt float64) {
 	// Clear moved entities tracking for next frame
-	movedEntities := w.MovedEntities()
+	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
 	movedEntities.Count = 0
 }

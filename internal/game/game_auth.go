@@ -224,7 +224,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			})
 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
-			visState := w.VisibilityState()
+			visState := ecs.GetResource[ecs.VisibilityState](w)
 			visState.VisibleByObserver[h] = ecs.ObserverVisibility{
 				Known:          make(map[types.Handle]types.EntityID, 32),
 				NextUpdateTime: time.Time{}, // Zero time for immediate update
@@ -263,7 +263,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 					// Create InventoryOwner component with all inventory links (including nested)
 					inventoryLinks := make([]components.InventoryLink, 0, len(loadResult.ContainerHandles))
-					refIndex := w.InventoryRefIndex()
+					refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 					for _, containerHandle := range loadResult.ContainerHandles {
 						if !w.Alive(containerHandle) {
 							continue
@@ -292,7 +292,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		})
 		if ok {
 			// Register character entity for periodic saving
-			charEntities := shard.world.CharacterEntities()
+			charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
 			nextSaveAt := time.Now().Add(g.cfg.Game.PlayerSaveInterval)
 			charEntities.Add(playerEntityID, handle, nextSaveAt)
 
@@ -359,7 +359,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
-	detachedEntities := shard.world.DetachedEntities()
+	detachedEntities := ecs.GetResource[ecs.DetachedEntities](shard.world)
 
 	// Check if entity is detached
 	detachedEntity, isDetached := detachedEntities.GetDetachedEntity(playerEntityID)
@@ -384,7 +384,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	detachedEntities.RemoveDetachedEntity(playerEntityID)
 
 	// Re-register character entity for periodic saving
-	charEntities := shard.world.CharacterEntities()
+	charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
 	nextSaveAt := time.Now().Add(g.cfg.Game.PlayerSaveInterval)
 	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
@@ -408,7 +408,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
 
 	// Force immediate visibility update for the reattached observer
-	visState := shard.world.VisibilityState()
+	visState := ecs.GetResource[ecs.VisibilityState](shard.world)
 	if observerVis, ok := visState.VisibleByObserver[handle]; ok {
 		observerVis.NextUpdateTime = time.Time{} // Zero time for immediate update
 		visState.VisibleByObserver[handle] = observerVis

@@ -272,31 +272,28 @@ logger:     logger,
 
 ### Accessing World Resources
 
-Systems can access World resources:
+Systems access World resources via the typed generic API `ecs.GetResource[T](w)`:
 
 ```go
-func (s *YourSystem) Update(world *ecs.World, dt float64) {
-// Access visibility state
-visState := world.VisibilityState()
-
-// Access moved entities buffer
-movedEntities := world.MovedEntities()
-
-// Access character entities
-characterEntities := world.CharacterEntities()
-
-// Access detached entities
-detachedEntities := world.DetachedEntities()
+func (s *YourSystem) Update(w *ecs.World, dt float64) {
+// Access resources via typed generic API (returns *T, panics if not initialised)
+visState := ecs.GetResource[ecs.VisibilityState](w)
+movedEntities := ecs.GetResource[ecs.MovedEntities](w)
+characterEntities := ecs.GetResource[ecs.CharacterEntities](w)
+detachedEntities := ecs.GetResource[ecs.DetachedEntities](w)
+refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 
 // Get world layer
-layer := world.Layer
-
-// Publish events via world's event bus
-if world.eventBus != nil {
-world.eventBus.PublishAsync(yourEvent, eventbus.PriorityMedium)
-}
+layer := w.Layer
 }
 ```
+
+Resource API functions:
+- `ecs.InitResource[T](w, value)` — store initial value (world constructor)
+- `ecs.GetResource[T](w) *T` — get pointer, panics if missing
+- `ecs.TryGetResource[T](w) (*T, bool)` — get pointer with existence check
+- `ecs.SetResource[T](w, value)` — replace value
+- `ecs.HasResource[T](w) bool` — check existence
 
 ## System Best Practices
 

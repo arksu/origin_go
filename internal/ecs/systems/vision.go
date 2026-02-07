@@ -54,10 +54,7 @@ func NewVisionSystem(
 }
 
 func (s *VisionSystem) Update(w *ecs.World, dt float64) {
-	visState := w.VisibilityState()
-	if visState == nil {
-		return
-	}
+	visState := ecs.GetResource[ecs.VisibilityState](w)
 
 	now := time.Now()
 

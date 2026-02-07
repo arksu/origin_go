@@ -2,7 +2,6 @@ package systems
 
 import (
 	"math"
-	"origin/internal/const"
 	constt "origin/internal/const"
 
 	"origin/internal/core"
@@ -40,7 +39,7 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 	transformStorage := ecs.GetOrCreateStorage[components.Transform](world)
 	movementStorage := ecs.GetOrCreateStorage[components.Movement](world)
 
-	marginPixels := float64(marginTiles) * float64(_const.CoordPerTile)
+	marginPixels := float64(marginTiles) * float64(constt.CoordPerTile)
 
 	return &CollisionSystem{
 		BaseSystem:       ecs.NewBaseSystem("CollisionSystem", 200),
@@ -55,12 +54,12 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 		worldMinY:        worldMinY + marginPixels,
 		worldMaxY:        worldMaxY - marginPixels,
 		marginTiles:      marginTiles,
-		chunkSize:        _const.ChunkSize,
+		chunkSize:        constt.ChunkSize,
 	}
 }
 
 func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
-	movedEntities := w.MovedEntities()
+	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
 	// Iterate through moved entities from the buffer
 	for i := 0; i < movedEntities.Count; i++ {
 		h := movedEntities.Handles[i]
@@ -194,7 +193,7 @@ func (s *CollisionSystem) sweepCollision(
 	chunk.Spatial().QueryRadius(transform.X, transform.Y, queryRadius, &s.candidatesBuffer)
 
 	// Check if query rectangle intersects neighboring chunks
-	chunkWorldSize := float64(_const.ChunkWorldSize)
+	chunkWorldSize := float64(constt.ChunkWorldSize)
 
 	// Calculate query rectangle bounds
 	queryMinX := transform.X - queryRadius
@@ -423,7 +422,7 @@ func (s *CollisionSystem) checkTileCollision(
 	chunk *core.Chunk,
 	isSwimming bool,
 ) (float64, float64, bool) {
-	tileSize := float64(_const.CoordPerTile)
+	tileSize := float64(constt.CoordPerTile)
 	movementLength := math.Sqrt(dx*dx + dy*dy)
 
 	// If movement is less than one tile, check only destination
@@ -467,7 +466,7 @@ func (s *CollisionSystem) isTilePassableAt(
 	isSwimming bool,
 ) bool {
 	// Convert world coordinates to tile coordinates
-	tileSize := float64(_const.CoordPerTile)
+	tileSize := float64(constt.CoordPerTile)
 	tileX := int(math.Floor(worldX / tileSize))
 	tileY := int(math.Floor(worldY / tileSize))
 

@@ -1,7 +1,7 @@
 package systems
 
 import (
-	"origin/internal/const"
+	_const "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -25,7 +25,7 @@ func NewChunkSystem(chunkManager core.ChunkManager, logger *zap.Logger) *ChunkSy
 }
 
 func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
-	movedEntities := w.MovedEntities()
+	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
 	// Process only entities that moved this frame
 	for i := 0; i < movedEntities.Count; i++ {
 		h := movedEntities.Handles[i]

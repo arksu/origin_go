@@ -49,10 +49,7 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 	shard.ClientsMu.RLock()
 	defer shard.ClientsMu.RUnlock()
 
-	visibilityState := shard.World().VisibilityState()
-	if visibilityState == nil {
-		return nil
-	}
+	visibilityState := ecs.GetResource[ecs.VisibilityState](shard.World())
 
 	// Get the target entity's handle
 	targetHandle := shard.World().GetHandleByEntityID(event.EntityID)
