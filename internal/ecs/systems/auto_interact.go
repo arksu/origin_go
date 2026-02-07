@@ -18,18 +18,21 @@ type AutoInteractSystem struct {
 	query                 *ecs.PreparedQuery
 	inventoryExecutor     InventoryOperationExecutor
 	inventoryResultSender InventoryResultSender
+	visionSystem          *VisionSystem
 	logger                *zap.Logger
 }
 
 func NewAutoInteractSystem(
 	inventoryExecutor InventoryOperationExecutor,
 	inventoryResultSender InventoryResultSender,
+	visionSystem *VisionSystem,
 	logger *zap.Logger,
 ) *AutoInteractSystem {
 	return &AutoInteractSystem{
 		BaseSystem:            ecs.NewBaseSystem("AutoInteractSystem", 320),
 		inventoryExecutor:     inventoryExecutor,
 		inventoryResultSender: inventoryResultSender,
+		visionSystem:          visionSystem,
 		logger:                logger,
 	}
 }
@@ -175,6 +178,11 @@ func (s *AutoInteractSystem) executePickup(
 		s.logger.Debug("AutoInteract: pickup success",
 			zap.Uint64("player_id", uint64(playerID)),
 			zap.Uint64("target_entity_id", uint64(pending.TargetEntityID)))
+
+		// Force immediate vision update to eliminate client delay
+		if s.visionSystem != nil {
+			s.visionSystem.ForceUpdateForObserver(w, playerHandle)
+		}
 	}
 }
 

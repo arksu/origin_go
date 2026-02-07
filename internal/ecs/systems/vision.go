@@ -53,6 +53,31 @@ func NewVisionSystem(
 	}
 }
 
+// ForceUpdateForObserver immediately updates vision for a specific observer,
+// bypassing the normal 1-second throttle. Used for dropped/picked items.
+func (s *VisionSystem) ForceUpdateForObserver(w *ecs.World, observerHandle types.Handle) {
+	visState := ecs.GetResource[ecs.VisibilityState](w)
+
+	// Check if observer exists and is alive
+	observerVis, exists := visState.VisibleByObserver[observerHandle]
+	if !exists || !w.Alive(observerHandle) {
+		return
+	}
+
+	now := ecs.GetResource[ecs.TimeState](w).Now
+
+	// Force immediate update by setting NextUpdateTime to now
+	observerVis.NextUpdateTime = now
+
+	// Update visibility immediately
+	s.updateObserverVisibility(w, visState, observerHandle, &observerVis, now)
+
+	// Update the stored observer visibility
+	visState.Mu.Lock()
+	visState.VisibleByObserver[observerHandle] = observerVis
+	visState.Mu.Unlock()
+}
+
 func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 	visState := ecs.GetResource[ecs.VisibilityState](w)
 

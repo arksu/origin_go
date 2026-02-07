@@ -98,6 +98,9 @@ type NetworkCommandSystem struct {
 	// Admin command handling
 	adminHandler AdminCommandHandler
 
+	// Vision system for forcing vision updates after inventory operations
+	visionSystem *VisionSystem
+
 	// Reusable buffers to avoid allocations
 	playerCommands []*network.PlayerCommand
 	serverJobs     []*network.ServerJob
@@ -110,6 +113,7 @@ func NewNetworkCommandSystem(
 	chatDelivery ChatDeliveryService,
 	inventoryExecutor InventoryOperationExecutor,
 	inventoryResultSender InventoryResultSender,
+	visionSystem *VisionSystem,
 	chatLocalRadius int,
 	logger *zap.Logger,
 ) *NetworkCommandSystem {
@@ -122,6 +126,7 @@ func NewNetworkCommandSystem(
 		chatDelivery:          chatDelivery,
 		inventoryExecutor:     inventoryExecutor,
 		inventoryResultSender: inventoryResultSender,
+		visionSystem:          visionSystem,
 		chatLocalRadiusSq:     radiusSq,
 		playerCommands:        make([]*network.PlayerCommand, 0, 256),
 		serverJobs:            make([]*network.ServerJob, 0, 64),
@@ -517,6 +522,23 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 		zap.Uint64("client_id", cmd.ClientID),
 		zap.Uint64("op_id", op.OpId),
 		zap.Bool("success", result.Success))
+
+	// Force immediate vision update for successful drop/pickup operations to eliminate client delay
+	if result.Success && s.visionSystem != nil {
+		// Check if this was a drop or pickup operation
+		if op.GetDropToWorld() != nil || (len(result.UpdatedContainers) > 0 &&
+			// Check if any updated container is a dropped item (pickup operation)
+			func() bool {
+				for _, container := range result.UpdatedContainers {
+					if constt.InventoryKind(container.Kind) == constt.InventoryDroppedItem {
+						return true
+					}
+				}
+				return false
+			}()) {
+			s.visionSystem.ForceUpdateForObserver(w, playerHandle)
+		}
+	}
 }
 
 func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
