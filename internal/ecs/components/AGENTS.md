@@ -142,6 +142,7 @@ Maintain this list as you add new components:
 | 19 | InventoryOwnerComponentID     | Links entity to its inventory containers   |
 | 20 | InventoryContainerComponentID | Inventory container (grid/hand/equip/drop) |
 | 21 | DroppedItemComponentID        | Marks entity as a dropped item in world    |
+| 22 | PendingInteractionComponentID | Pending auto-interaction intent (pickup)   |
 
 ## Migration from Auto-Assignment
 

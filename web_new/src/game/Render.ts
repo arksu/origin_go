@@ -10,7 +10,7 @@ import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { config } from '@/config'
-import { MAX_FPS } from '@/constants/render'
+import { MAX_FPS, DROP_ITEM_TYPE_ID } from '@/constants/render'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
@@ -116,7 +116,8 @@ export class Render {
           )
 
           if (clickedEntity !== null) {
-            playerCommandController.sendMoveToEntity(clickedEntity, true, event.modifiers)
+            const autoInteract = clickedEntity.typeId === DROP_ITEM_TYPE_ID
+            playerCommandController.sendMoveToEntity(clickedEntity.entityId, autoInteract, event.modifiers)
           } else {
             playerCommandController.sendMoveTo(
               this.lastClickWorld.x,

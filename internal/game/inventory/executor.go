@@ -240,6 +240,34 @@ func (e *InventoryExecutor) ConvertContainersToStates(w *ecs.World, containers [
 	return states
 }
 
+// ExecutePickupFromWorld picks up a dropped item from the world into a player's inventory.
+// Wraps InventoryOperationService.ExecutePickupFromWorld with spatial cleanup and state conversion.
+func (e *InventoryExecutor) ExecutePickupFromWorld(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	droppedEntityID types.EntityID,
+	dstRef *netproto.InventoryRef,
+) systems.InventoryOpResult {
+	result := e.service.ExecutePickupFromWorld(w, playerID, playerHandle, droppedEntityID, dstRef)
+
+	opResult := systems.InventoryOpResult{
+		Success:           result.Success,
+		ErrorCode:         result.ErrorCode,
+		Message:           result.Message,
+		UpdatedContainers: make([]systems.InventoryContainerState, 0, len(result.UpdatedContainers)),
+	}
+
+	e.handleDroppedItemSpatial(w, result)
+
+	for _, container := range result.UpdatedContainers {
+		containerState := e.convertContainerToState(w, container)
+		opResult.UpdatedContainers = append(opResult.UpdatedContainers, containerState)
+	}
+
+	return opResult
+}
+
 func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *ContainerInfo) systems.InventoryContainerState {
 	state := systems.InventoryContainerState{
 		OwnerID:          info.Container.OwnerID,

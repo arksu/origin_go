@@ -29,6 +29,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer           |
 | 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character           | Saves character data before despawn       |
 | 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                  |
+| 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction | Auto-pickup dropped items on arrival      |
 | 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef   | Updates VisibilityState, publishes events |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions          |
 
@@ -213,6 +214,9 @@ CollisionSystem (200)
 ExpireDetachedSystem (250)
     ↓ (saves before despawn)
 TransformUpdateSystem (300)
+    ↓ (positions finalized)
+AutoInteractSystem (320)
+    ↓ (pickup may despawn entities)
 VisionSystem (350)
     ↓ (updates VisibilityState)
 ChunkSystem (400)

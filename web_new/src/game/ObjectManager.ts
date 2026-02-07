@@ -106,18 +106,18 @@ export class ObjectManager {
 
   /**
    * Find entity at screen coordinates.
-   * Returns entityId if found, null otherwise.
+   * Returns { entityId, typeId } if found, null otherwise.
    */
   getEntityAtScreen(
     screenX: number,
     screenY: number,
     screenToWorld: (x: number, y: number) => { x: number; y: number }
-  ): number | null {
+  ): { entityId: number; typeId: number } | null {
     const worldPos = screenToWorld(screenX, screenY)
 
     for (const [entityId, objectView] of this.objects) {
       if (objectView.containsWorldPoint(worldPos.x, worldPos.y)) {
-        return entityId
+        return { entityId, typeId: objectView.typeId }
       }
     }
 
