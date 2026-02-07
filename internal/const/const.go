@@ -71,7 +71,7 @@ const DefaultHandMouseOffset int16 = 15
 // Dropped item constants
 const (
 	DroppedItemTypeID     = 1000
-	DroppedDespawnSeconds = 300
+	DroppedDespawnSeconds = 300000
 	DroppedPickupRadius   = 5.0
 	DroppedPickupRadiusSq = DroppedPickupRadius * DroppedPickupRadius
 )

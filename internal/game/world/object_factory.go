@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/sqlc-dev/pqtype"
+
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -166,6 +168,11 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		return nil, ErrEntityNotFound
 	}
 
+	// Skip players - they are saved via character table, not objects table
+	if info.TypeID == f.getPlayerTypeID() {
+		return nil, nil
+	}
+
 	transform, ok := ecs.GetComponent[components.Transform](w, h)
 	if !ok {
 		return nil, ErrEntityNotFound
@@ -187,7 +194,33 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		ChunkY: chunkRef.CurrentChunkY,
 	}
 
+	// Serialize dropped item data
+	if info.TypeID == constt.DroppedItemTypeID {
+		if droppedItem, ok := ecs.GetComponent[components.DroppedItem](w, h); ok {
+			data := DroppedItemData{
+				HasInventory:    true,
+				ContainedItemID: uint64(droppedItem.ContainedItemID),
+				DropTime:        droppedItem.DropTime,
+				DropperID:       uint64(droppedItem.DropperID),
+			}
+			dataJSON, err := json.Marshal(data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal dropped item data: %w", err)
+			}
+			obj.Data = pqtype.NullRawMessage{RawMessage: dataJSON, Valid: true}
+		}
+	}
+
 	return obj, nil
+}
+
+// getPlayerTypeID returns the TypeID for player entities
+func (f *ObjectFactory) getPlayerTypeID() uint32 {
+	playerDef, _ := objectdefs.Global().GetByKey("player")
+	if playerDef != nil {
+		return uint32(playerDef.DefID)
+	}
+	return 0
 }
 
 // IsStatic returns whether a raw object is static based on its definition.

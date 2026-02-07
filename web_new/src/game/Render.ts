@@ -8,6 +8,7 @@ import { cameraController } from './CameraController'
 import { playerCommandController } from './PlayerCommandController'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
+import { useGameStore } from '@/stores/gameStore'
 import { config } from '@/config'
 import { MAX_FPS } from '@/constants/render'
 import { cullingController } from './culling'
@@ -96,20 +97,33 @@ export class Render {
       this.onClickCallback?.(this.lastClickScreen)
 
       if (event.button === 0) {
-        const clickedEntity = this.objectManager.getEntityAtScreen(
-          event.screenX,
-          event.screenY,
-          this.screenToWorld.bind(this)
-        )
+        const gameStore = useGameStore()
+        const hand = gameStore.handState
+        const handInv = gameStore.handInventoryState
 
-        if (clickedEntity !== null) {
-          playerCommandController.sendMoveToEntity(clickedEntity, true, event.modifiers)
-        } else {
-          playerCommandController.sendMoveTo(
-            this.lastClickWorld.x,
-            this.lastClickWorld.y,
-            event.modifiers
+        if (hand?.item && handInv?.ref && handInv.revision != null) {
+          playerCommandController.sendDropToWorld(
+            handInv.ref,
+            Number(handInv.revision),
+            hand.item.itemId!,
+            gameStore.allocOpId(),
           )
+        } else {
+          const clickedEntity = this.objectManager.getEntityAtScreen(
+            event.screenX,
+            event.screenY,
+            this.screenToWorld.bind(this)
+          )
+
+          if (clickedEntity !== null) {
+            playerCommandController.sendMoveToEntity(clickedEntity, true, event.modifiers)
+          } else {
+            playerCommandController.sendMoveTo(
+              this.lastClickWorld.x,
+              this.lastClickWorld.y,
+              event.modifiers
+            )
+          }
         }
       }
     })
