@@ -12,20 +12,29 @@ import (
 	"go.uber.org/zap"
 )
 
+// DroppedItemSpatialRegistrar adds/removes dropped item entities to/from chunk spatial hash.
+type DroppedItemSpatialRegistrar interface {
+	AddStaticToChunkSpatial(handle types.Handle, chunkX, chunkY, x, y int)
+	RemoveStaticFromChunkSpatial(handle types.Handle, chunkX, chunkY, x, y int)
+}
+
 // InventoryExecutor implements systems.InventoryOperationExecutor interface
 type InventoryExecutor struct {
-	service *InventoryOperationService
-	logger  *zap.Logger
+	service          *InventoryOperationService
+	spatialRegistrar DroppedItemSpatialRegistrar
+	logger           *zap.Logger
 }
 
 func NewInventoryExecutor(
 	logger *zap.Logger,
 	idAlloc EntityIDAllocator,
 	persister DroppedItemPersister,
+	spatialRegistrar DroppedItemSpatialRegistrar,
 ) *InventoryExecutor {
 	return &InventoryExecutor{
-		service: NewInventoryOperationService(logger, idAlloc, persister),
-		logger:  logger,
+		service:          NewInventoryOperationService(logger, idAlloc, persister),
+		spatialRegistrar: spatialRegistrar,
+		logger:           logger,
 	}
 }
 
@@ -45,6 +54,9 @@ func (e *InventoryExecutor) ExecuteOperation(
 		UpdatedContainers: make([]systems.InventoryContainerState, 0, len(result.UpdatedContainers)),
 	}
 
+	// Register/unregister dropped entity in chunk spatial
+	e.handleDroppedItemSpatial(w, result)
+
 	// Check cascade: if operation changed a nested container, update parent item resource
 	e.checkNestedCascade(w, result)
 
@@ -55,6 +67,38 @@ func (e *InventoryExecutor) ExecuteOperation(
 	}
 
 	return opResult
+}
+
+// handleDroppedItemSpatial registers/unregisters dropped item entities in chunk spatial
+// so that VisionSystem can discover them via QueryRadius.
+func (e *InventoryExecutor) handleDroppedItemSpatial(w *ecs.World, result *OperationResult) {
+	if !result.Success || e.spatialRegistrar == nil {
+		return
+	}
+
+	if result.SpawnedDroppedEntityID != nil {
+		handle := w.GetHandleByEntityID(*result.SpawnedDroppedEntityID)
+		if handle == types.InvalidHandle {
+			return
+		}
+		transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
+		chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, handle)
+		if hasTransform && hasChunkRef {
+			e.spatialRegistrar.AddStaticToChunkSpatial(handle, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY, int(transform.X), int(transform.Y))
+		}
+	}
+
+	if result.DespawnedDroppedEntityID != nil {
+		handle := w.GetHandleByEntityID(*result.DespawnedDroppedEntityID)
+		if handle == types.InvalidHandle {
+			return
+		}
+		transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
+		chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, handle)
+		if hasTransform && hasChunkRef {
+			e.spatialRegistrar.RemoveStaticFromChunkSpatial(handle, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY, int(transform.X), int(transform.Y))
+		}
+	}
 }
 
 // checkNestedCascade checks if any updated container is a nested one (owner_id = item_id).
