@@ -72,6 +72,18 @@ func HasResource[T any](w *World) bool {
 	return ok
 }
 
+// TimeState holds per-tick time data, updated once before systems run.
+// Systems read time exclusively from this resource instead of calling time.Now().
+type TimeState struct {
+	Tick       uint64
+	TickRate   int
+	TickPeriod time.Duration
+	Delta      float64       // Fixed-step dt in seconds
+	Now        time.Time     // Monotonic game time at tick start
+	UnixMs     int64         // Now.UnixMilli() — for network packets
+	Uptime     time.Duration // Time since server start
+}
+
 // MovedEntities tracks entities that moved during the current frame
 type MovedEntities struct {
 	Handles []types.Handle
@@ -134,11 +146,11 @@ type DetachedEntity struct {
 }
 
 // AddDetachedEntity adds an entity to the detached entities map
-func (d *DetachedEntities) AddDetachedEntity(entityID types.EntityID, handle types.Handle, expirationTime time.Time) {
+func (d *DetachedEntities) AddDetachedEntity(entityID types.EntityID, handle types.Handle, expirationTime time.Time, detachedAt time.Time) {
 	d.Map[entityID] = DetachedEntity{
 		Handle:         handle,
 		ExpirationTime: expirationTime,
-		DetachedAt:     time.Now(),
+		DetachedAt:     detachedAt,
 	}
 }
 

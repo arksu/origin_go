@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"origin/internal/config"
+	"origin/internal/ecs"
 	"origin/internal/eventbus"
 	"origin/internal/game/world"
 	"origin/internal/persistence"
@@ -65,7 +66,7 @@ func (sm *ShardManager) GetShards() map[int]*Shard {
 	return sm.shards
 }
 
-func (sm *ShardManager) Update(dt float64) {
+func (sm *ShardManager) Update(ts ecs.TimeState) {
 	shards := make([]*Shard, 0, len(sm.shards))
 	for _, s := range sm.shards {
 		shards = append(shards, s)
@@ -77,7 +78,7 @@ func (sm *ShardManager) Update(dt float64) {
 		s := shard
 		sm.workerPool.Submit(func() {
 			defer wg.Done()
-			s.Update(dt)
+			s.Update(ts)
 		})
 	}
 	wg.Wait()

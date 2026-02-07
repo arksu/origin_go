@@ -293,7 +293,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		if ok {
 			// Register character entity for periodic saving
 			charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
-			nextSaveAt := time.Now().Add(g.cfg.Game.PlayerSaveInterval)
+			nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 			charEntities.Add(playerEntityID, handle, nextSaveAt)
 
 			character.X = pos.X
@@ -385,7 +385,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 
 	// Re-register character entity for periodic saving
 	charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
-	nextSaveAt := time.Now().Add(g.cfg.Game.PlayerSaveInterval)
+	nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
 	detachedDuration := time.Since(detachedEntity.DetachedAt)
