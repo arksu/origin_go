@@ -40,7 +40,7 @@ func NewExpireDetachedSystem(logger *zap.Logger, characterSaver *CharacterSaver,
 }
 
 func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
-	now := time.Now()
+	now := ecs.GetResource[ecs.TimeState](w).Now
 	detachedEntities := ecs.GetResource[ecs.DetachedEntities](w)
 
 	if len(detachedEntities.Map) == 0 {

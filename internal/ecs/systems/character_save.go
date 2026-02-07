@@ -54,7 +54,7 @@ func NewCharacterSaveSystem(saver *CharacterSaver, saveInterval time.Duration, l
 }
 
 func (s *CharacterSaveSystem) Update(w *ecs.World, dt float64) {
-	now := time.Now()
+	now := ecs.GetResource[ecs.TimeState](w).Now
 	charEntities := ecs.GetResource[ecs.CharacterEntities](w)
 
 	for entityID, charEntity := range charEntities.Map {

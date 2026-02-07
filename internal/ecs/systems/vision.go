@@ -56,7 +56,7 @@ func NewVisionSystem(
 func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 	visState := ecs.GetResource[ecs.VisibilityState](w)
 
-	now := time.Now()
+	now := ecs.GetResource[ecs.TimeState](w).Now
 
 	for observerHandle, observerVis := range visState.VisibleByObserver {
 		if !w.Alive(observerHandle) {

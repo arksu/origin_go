@@ -112,15 +112,18 @@ func (s *Shard) ChunkManager() *world.ChunkManager {
 	return s.chunkManager
 }
 
-func (s *Shard) Update(dt float64) {
+func (s *Shard) Update(ts ecs.TimeState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.state != ShardStateRunning {
 		return
 	}
 
-	s.chunkManager.Update(dt)
-	s.world.Update(dt)
+	// Set TimeState resource before systems run (zero-alloc: mutate in place)
+	*ecs.GetResource[ecs.TimeState](s.world) = ts
+
+	s.chunkManager.Update(ts.Delta)
+	s.world.Update(ts.Delta)
 }
 
 func (s *Shard) Stop() {

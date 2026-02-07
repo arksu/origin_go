@@ -8,6 +8,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence"
+	"origin/internal/timeutil"
 	"origin/internal/types"
 	"strings"
 	"sync"
@@ -74,6 +75,8 @@ type Game struct {
 	inventoryLoader         *inventory.InventoryLoader
 	inventorySnapshotSender *inventory.SnapshotSender
 
+	clock       timeutil.Clock
+	startTime   time.Time
 	tickRate    int
 	tickPeriod  time.Duration
 	currentTick uint64
@@ -88,6 +91,8 @@ type Game struct {
 func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.ObjectFactory, inventoryLoader *inventory.InventoryLoader, inventorySnapshotSender *inventory.SnapshotSender, logger *zap.Logger) *Game {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	clk := timeutil.NewMonotonicClock()
+
 	g := &Game{
 		cfg:                     cfg,
 		db:                      db,
@@ -95,6 +100,8 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 		inventoryLoader:         inventoryLoader,
 		inventorySnapshotSender: inventorySnapshotSender,
 		logger:                  logger,
+		clock:                   clk,
+		startTime:               clk.GameNow(),
 		tickRate:                cfg.Game.TickRate,
 		tickPeriod:              time.Second / time.Duration(cfg.Game.TickRate),
 		ctx:                     ctx,
@@ -177,7 +184,7 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S_Ping) {
 	pong := &netproto.S2C_Pong{
 		ClientTimeMs: ping.ClientTimeMs,
-		ServerTimeMs: time.Now().UnixMilli(),
+		ServerTimeMs: g.clock.UnixMilli(),
 	}
 
 	response := &netproto.ServerMessage{
@@ -484,8 +491,9 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 				if disconnectDelay > 0 && playerHandle != types.InvalidHandle {
 					// Detached mode: keep entity in world for DisconnectDelay seconds
-					expirationTime := time.Now().Add(time.Duration(disconnectDelay) * time.Second)
-					ecs.GetResource[ecs.DetachedEntities](shard.world).AddDetachedEntity(playerEntityID, playerHandle, expirationTime)
+					gameNow := g.clock.GameNow()
+					expirationTime := gameNow.Add(time.Duration(disconnectDelay) * time.Second)
+					ecs.GetResource[ecs.DetachedEntities](shard.world).AddDetachedEntity(playerEntityID, playerHandle, expirationTime, gameNow)
 
 					// Stop movement for detached entity
 					ecs.MutateComponent[components.Movement](shard.world, playerHandle, func(m *components.Movement) bool {
@@ -564,39 +572,69 @@ func (g *Game) StartGameLoop() {
 	g.logger.Info("Game loop started", zap.Int("tick_rate_hz", g.tickRate))
 }
 
+const maxCatchUpTicks = 4
+
 func (g *Game) gameLoop() {
 	defer g.wg.Done()
 
-	ticker := time.NewTicker(g.tickPeriod)
-	defer ticker.Stop()
-
-	lastTime := time.Now()
-	maxDt := g.tickPeriod.Seconds() * 2 // Cap dt to 2x the tick period
+	lastTime := g.clock.GameNow()
+	var accum time.Duration
+	maxFrameTime := g.tickPeriod * time.Duration(maxCatchUpTicks)
 
 	for {
+		if g.getState() != GameStateRunning {
+			return
+		}
+
+		now := g.clock.GameNow()
+		frameTime := now.Sub(lastTime)
+		lastTime = now
+
+		if frameTime > maxFrameTime {
+			frameTime = maxFrameTime
+		}
+		accum += frameTime
+
+		catchUp := 0
+		for accum >= g.tickPeriod && catchUp < maxCatchUpTicks {
+			g.currentTick++
+
+			tickNow := g.clock.GameNow()
+			ts := ecs.TimeState{
+				Tick:       g.currentTick,
+				TickRate:   g.tickRate,
+				TickPeriod: g.tickPeriod,
+				Delta:      g.tickPeriod.Seconds(),
+				Now:        tickNow,
+				UnixMs:     tickNow.UnixMilli(),
+				Uptime:     tickNow.Sub(g.startTime),
+			}
+
+			g.update(ts)
+
+			accum -= g.tickPeriod
+			catchUp++
+		}
+
+		// Drop excess accumulator to prevent death spiral
+		if accum >= g.tickPeriod {
+			accum = 0
+		}
+
+		// Sleep until next tick
+		sleepTime := g.tickPeriod - accum
 		select {
 		case <-g.ctx.Done():
 			return
-		case now := <-ticker.C:
-			if g.getState() != GameStateRunning {
-				return
-			}
-			dt := now.Sub(lastTime).Seconds()
-			if dt > maxDt {
-				dt = maxDt
-			}
-			lastTime = now
-
-			g.currentTick++
-			g.update(dt)
+		case <-time.After(sleepTime):
 		}
 	}
 }
 
-func (g *Game) update(dt float64) {
+func (g *Game) update(ts ecs.TimeState) {
 	start := time.Now()
 
-	g.shardManager.Update(dt)
+	g.shardManager.Update(ts)
 
 	duration := time.Since(start)
 

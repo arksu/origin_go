@@ -94,6 +94,7 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 	InitResource(w, InventoryRefIndex{
 		index: make(map[InventoryRefKey]types.Handle, 64),
 	})
+	InitResource(w, TimeState{})
 
 	return w
 }
