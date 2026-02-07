@@ -13,6 +13,7 @@ import (
 	"origin/internal/game/inventory"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"time"
@@ -172,7 +173,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		}
 
 		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character, func(w *ecs.World, h types.Handle) {
-			playerDef, _ := g.objectFactory.Registry().GetByKey("player")
+			playerDef, _ := objectdefs.Global().GetByKey("player")
 			var playerTypeID uint32
 			var playerBehaviors []string
 			if playerDef != nil {

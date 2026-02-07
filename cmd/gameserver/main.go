@@ -62,11 +62,11 @@ func main() {
 	}
 	objectdefs.SetGlobal(objRegistry)
 
-	objectFactory := world.NewObjectFactory(objRegistry)
-
-	inventoryLoader := inventory.NewInventoryLoader(itemRegistry, logger)
+	inventoryLoader := inventory.NewInventoryLoader(logger)
 	inventorySnapshotSender := inventory.NewSnapshotSender(logger)
 
+	objectFactory := world.NewObjectFactory(inventory.NewDroppedInventoryLoaderDB(db, inventoryLoader))
+	
 	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, inventorySnapshotSender, logger)
 
 	// Setup event handlers after game creation

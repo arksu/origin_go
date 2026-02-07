@@ -6,13 +6,20 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/game/world"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
 )
+
+// droppedItemData is the JSON structure stored in object.data for dropped items.
+type droppedItemData struct {
+	HasInventory    bool   `json:"has_inventory"`
+	ContainedItemID uint64 `json:"contained_item_id"`
+	DropTime        int64  `json:"drop_time"`
+	DropperID       uint64 `json:"dropper_id"`
+}
 
 type OperationResult struct {
 	Success   bool
@@ -34,9 +41,9 @@ type EntityIDAllocator interface {
 	GetFreeID() types.EntityID
 }
 
-// DroppedItemPersister handles DB persistence for dropped item objects.
+// DroppedItemPersister handles DB persistence for dropped item objects and their inventory.
 type DroppedItemPersister interface {
-	PersistDroppedObject(entityID types.EntityID, typeID int, region, x, y, layer, chunkX, chunkY int, data json.RawMessage) error
+	PersistDroppedObject(entityID types.EntityID, typeID int, region, x, y, layer, chunkX, chunkY int, objectData json.RawMessage, inventoryData json.RawMessage) error
 	DeleteDroppedObject(region int, entityID types.EntityID) error
 }
 
@@ -582,26 +589,36 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 		}
 	}
 
-	// 7. Persist to DB
-	droppedData := world.DroppedItemData{
+	// 7. Persist to DB (object + inventory)
+	droppedData := droppedItemData{
 		HasInventory:    true,
 		ContainedItemID: uint64(itemID),
 		DropTime:        nowUnix,
 		DropperID:       uint64(playerID),
-		ItemTypeID:      srcItem.TypeID,
-		ItemResource:    resource,
-		ItemQuality:     srcItem.Quality,
-		ItemQuantity:    srcItem.Quantity,
-		ItemW:           srcItem.W,
-		ItemH:           srcItem.H,
 	}
-	dataJSON, _ := json.Marshal(droppedData)
+	objectJSON, _ := json.Marshal(droppedData)
+
+	// Serialize the dropped container for the inventory table
+	invData := InventoryDataV1{
+		Kind:    uint8(constt.InventoryDroppedItem),
+		Key:     0,
+		Version: 1,
+		Items: []InventoryItemV1{
+			{
+				ItemID:   uint64(itemID),
+				TypeID:   srcItem.TypeID,
+				Quality:  srcItem.Quality,
+				Quantity: srcItem.Quantity,
+			},
+		},
+	}
+	inventoryJSON, _ := json.Marshal(invData)
 
 	if err := s.persister.PersistDroppedObject(
 		droppedEntityID, constt.DroppedItemTypeID,
 		playerInfo.Region, dropX, dropY, playerInfo.Layer,
 		playerChunkRef.CurrentChunkX, playerChunkRef.CurrentChunkY,
-		dataJSON,
+		objectJSON, inventoryJSON,
 	); err != nil {
 		s.logger.Error("Failed to persist dropped object",
 			zap.Uint64("entity_id", uint64(droppedEntityID)),
@@ -762,7 +779,7 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 
 	// 8. Delete dropped entity from ECS and InventoryRefIndex
 	droppedInfo, _ := ecs.GetComponent[components.EntityInfo](w, droppedHandle)
-	world.DeleteDroppedObject(w, droppedEntityID, droppedHandle, s.logger)
+	deleteDroppedEntityFromECS(w, droppedEntityID, droppedHandle, s.logger)
 
 	// 9. Soft-delete from DB
 	if droppedInfo.Region > 0 {
@@ -786,5 +803,19 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 		Success:                  true,
 		UpdatedContainers:        []*ContainerInfo{dstInfo},
 		DespawnedDroppedEntityID: &droppedEntityID,
+	}
+}
+
+// deleteDroppedEntityFromECS removes a dropped item entity from ECS and InventoryRefIndex.
+func deleteDroppedEntityFromECS(w *ecs.World, entityID types.EntityID, handle types.Handle, logger *zap.Logger) {
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	containerHandle, found := refIndex.Lookup(constt.InventoryDroppedItem, entityID, 0)
+	if found {
+		refIndex.Remove(constt.InventoryDroppedItem, entityID, 0)
+		w.Despawn(containerHandle)
+	}
+	if !w.Despawn(handle) {
+		logger.Warn("deleteDroppedEntityFromECS: entity already despawned",
+			zap.Uint64("entity_id", uint64(entityID)))
 	}
 }

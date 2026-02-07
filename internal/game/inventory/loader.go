@@ -15,19 +15,13 @@ import (
 )
 
 type InventoryLoader struct {
-	itemRegistry *itemdefs.Registry
-	logger       *zap.Logger
+	logger *zap.Logger
 }
 
-func NewInventoryLoader(itemRegistry *itemdefs.Registry, logger *zap.Logger) *InventoryLoader {
+func NewInventoryLoader(logger *zap.Logger) *InventoryLoader {
 	return &InventoryLoader{
-		itemRegistry: itemRegistry,
-		logger:       logger,
+		logger: logger,
 	}
-}
-
-func (il *InventoryLoader) ItemRegistry() *itemdefs.Registry {
-	return il.itemRegistry
 }
 
 type LoadResult struct {
@@ -92,7 +86,7 @@ func (il *InventoryLoader) loadInventoryRecursive(
 	}
 
 	for _, dbItem := range dbInv.Items {
-		itemDef, ok := il.itemRegistry.GetByID(int(dbItem.TypeID))
+		itemDef, ok := itemdefs.Global().GetByID(int(dbItem.TypeID))
 		if !ok {
 			warnings = append(warnings, fmt.Sprintf("item type %d not found in registry", dbItem.TypeID))
 			continue
