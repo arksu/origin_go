@@ -192,8 +192,15 @@ export class Render {
     // Convert world coordinates to screen coordinates for camera positioning
     const screenPos = coordGame2Screen(camState.x, camState.y)
 
-    this.mapContainer.x = -screenPos.x * camState.zoom + this.app.screen.width / 2
-    this.mapContainer.y = -screenPos.y * camState.zoom + this.app.screen.height / 2
+    const rawX = -screenPos.x * camState.zoom + this.app.screen.width / 2
+    const rawY = -screenPos.y * camState.zoom + this.app.screen.height / 2
+
+    // Round to whole pixels to prevent subpixel drift:
+    // fractional container offsets cause each child sprite to round
+    // to different pixels at different camera positions, creating
+    // visible per-object "swimming".
+    this.mapContainer.x = Math.round(rawX)
+    this.mapContainer.y = Math.round(rawY)
     this.mapContainer.scale.set(camState.zoom)
 
     this.objectsContainer.x = this.mapContainer.x

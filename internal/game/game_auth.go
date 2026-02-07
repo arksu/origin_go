@@ -219,8 +219,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Resource: "player",
 			})
 			ecs.AddComponent(w, h, components.Vision{
-				Radius: 240.0,
-				Power:  100.0,
+				Radius: 1740.0,
+				Power:  700.0,
 			})
 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update

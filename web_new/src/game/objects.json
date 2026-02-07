@@ -8,7 +8,7 @@
         ],
         "layers": [
           {
-            "img": "trees/autumn_oak/01_.png",
+            "img": "obj/trees/autumn_oak/01_.png",
             "offset": [
               7,
               25
@@ -16,7 +16,7 @@
             "shadow": true
           },
           {
-            "img": "trees/autumn_oak/01.png",
+            "img": "obj/trees/autumn_oak/01.png",
             "offset": [
               7,
               3
@@ -32,7 +32,7 @@
         ],
         "layers": [
           {
-            "img": "trees/autumn_oak/02_.png",
+            "img": "obj/trees/autumn_oak/02_.png",
             "offset": [
               10,
               61
@@ -40,7 +40,7 @@
             "shadow": true
           },
           {
-            "img": "trees/autumn_oak/02.png",
+            "img": "obj/trees/autumn_oak/02.png",
             "offset": [
               4,
               9
@@ -56,7 +56,7 @@
         ],
         "layers": [
           {
-            "img": "trees/autumn_oak/03_.png",
+            "img": "obj/trees/autumn_oak/03_.png",
             "offset": [
               20,
               98
@@ -64,7 +64,7 @@
             "shadow": true
           },
           {
-            "img": "trees/autumn_oak/03.png",
+            "img": "obj/trees/autumn_oak/03.png",
             "offset": [
               5,
               8
@@ -80,7 +80,7 @@
         ],
         "layers": [
           {
-            "img": "trees/autumn_oak/04_.png",
+            "img": "obj/trees/autumn_oak/04_.png",
             "offset": [
               34,
               127
@@ -88,7 +88,7 @@
             "shadow": true
           },
           {
-            "img": "trees/autumn_oak/04.png",
+            "img": "obj/trees/autumn_oak/04.png",
             "offset": [
               8,
               0
@@ -104,7 +104,7 @@
         ],
         "layers": [
           {
-            "img": "trees/autumn_oak/05_.png",
+            "img": "obj/trees/autumn_oak/05_.png",
             "offset": [
               26,
               179
@@ -112,7 +112,7 @@
             "shadow": true
           },
           {
-            "img": "trees/autumn_oak/05.png",
+            "img": "obj/trees/autumn_oak/05.png",
             "offset": [
               0,
               3
@@ -128,7 +128,7 @@
         ],
         "layers": [
           {
-            "img": "trees/autumn_oak/06_.png",
+            "img": "obj/trees/autumn_oak/06_.png",
             "offset": [
               52,
               188
@@ -136,7 +136,7 @@
             "shadow": true
           },
           {
-            "img": "trees/autumn_oak/06.png",
+            "img": "obj/trees/autumn_oak/06.png",
             "offset": [
               0,
               0
@@ -152,7 +152,7 @@
         ],
         "layers": [
           {
-            "img": "trees/autumn_oak/stump_.png",
+            "img": "obj/trees/autumn_oak/stump_.png",
             "offset": [
               0,
               13
@@ -160,7 +160,7 @@
             "shadow": true
           },
           {
-            "img": "trees/autumn_oak/stump.png",
+            "img": "obj/trees/autumn_oak/stump.png",
             "offset": [
               0,
               0
@@ -178,7 +178,7 @@
         ],
         "layers": [
           {
-            "img": "trees/birch/1.png",
+            "img": "obj/trees/birch/1.png",
             "offset": [
               7,
               0
@@ -186,7 +186,7 @@
             "z": 0
           },
           {
-            "img": "trees/birch/1_.png",
+            "img": "obj/trees/birch/1_.png",
             "offset": [
               9,
               23
@@ -202,7 +202,7 @@
         ],
         "layers": [
           {
-            "img": "trees/birch/2.png",
+            "img": "obj/trees/birch/2.png",
             "offset": [
               1,
               6
@@ -210,7 +210,7 @@
             "z": 0
           },
           {
-            "img": "trees/birch/2_.png",
+            "img": "obj/trees/birch/2_.png",
             "offset": [
               11,
               48
@@ -226,7 +226,7 @@
         ],
         "layers": [
           {
-            "img": "trees/birch/3.png",
+            "img": "obj/trees/birch/3.png",
             "offset": [
               4,
               1
@@ -234,7 +234,7 @@
             "z": 0
           },
           {
-            "img": "trees/birch/3_.png",
+            "img": "obj/trees/birch/3_.png",
             "offset": [
               10,
               66
@@ -250,7 +250,7 @@
         ],
         "layers": [
           {
-            "img": "trees/birch/4.png",
+            "img": "obj/trees/birch/4.png",
             "offset": [
               6,
               2
@@ -258,7 +258,7 @@
             "z": 0
           },
           {
-            "img": "trees/birch/4_.png",
+            "img": "obj/trees/birch/4_.png",
             "offset": [
               7,
               84
@@ -274,7 +274,7 @@
         ],
         "layers": [
           {
-            "img": "trees/birch/5.png",
+            "img": "obj/trees/birch/5.png",
             "offset": [
               13,
               22
@@ -282,7 +282,7 @@
             "z": 0
           },
           {
-            "img": "trees/birch/5_.png",
+            "img": "obj/trees/birch/5_.png",
             "offset": [
               18,
               117
@@ -299,7 +299,7 @@
         "layers": [
           {
             "interactive": true,
-            "img": "trees/birch/6.png",
+            "img": "obj/trees/birch/6.png",
             "offset": [
               7,
               0
@@ -307,7 +307,7 @@
             "z": 0
           },
           {
-            "img": "trees/birch/6_.png",
+            "img": "obj/trees/birch/6_.png",
             "offset": [
               18,
               117
@@ -323,7 +323,7 @@
         ],
         "layers": [
           {
-            "img": "trees/birch/stump.png",
+            "img": "obj/trees/birch/stump.png",
             "offset": [
               7,
               6
@@ -331,7 +331,7 @@
             "z": 0
           },
           {
-            "img": "trees/birch/stump_.png",
+            "img": "obj/trees/birch/stump_.png",
             "offset": [
               10,
               13
@@ -349,7 +349,7 @@
         ],
         "layers": [
           {
-            "img": "trees/apple/1.png",
+            "img": "obj/trees/apple/1.png",
             "offset": [
               0,
               0
@@ -357,7 +357,7 @@
             "z": 0
           },
           {
-            "img": "trees/apple/1_.png",
+            "img": "obj/trees/apple/1_.png",
             "offset": [
               0,
               12
@@ -373,7 +373,7 @@
         ],
         "layers": [
           {
-            "img": "trees/apple/2.png",
+            "img": "obj/trees/apple/2.png",
             "offset": [
               0,
               0
@@ -381,7 +381,7 @@
             "z": 0
           },
           {
-            "img": "trees/apple/2_.png",
+            "img": "obj/trees/apple/2_.png",
             "offset": [
               4,
               35
@@ -397,7 +397,7 @@
         ],
         "layers": [
           {
-            "img": "trees/apple/3.png",
+            "img": "obj/trees/apple/3.png",
             "offset": [
               0,
               0
@@ -405,7 +405,7 @@
             "z": 0
           },
           {
-            "img": "trees/apple/3_.png",
+            "img": "obj/trees/apple/3_.png",
             "offset": [
               7,
               56
@@ -421,7 +421,7 @@
         ],
         "layers": [
           {
-            "img": "trees/apple/4.png",
+            "img": "obj/trees/apple/4.png",
             "offset": [
               0,
               0
@@ -429,7 +429,7 @@
             "z": 0
           },
           {
-            "img": "trees/apple/4_.png",
+            "img": "obj/trees/apple/4_.png",
             "offset": [
               6,
               75
@@ -445,7 +445,7 @@
         ],
         "layers": [
           {
-            "img": "trees/apple/5.png",
+            "img": "obj/trees/apple/5.png",
             "offset": [
               0,
               0
@@ -453,7 +453,7 @@
             "z": 0
           },
           {
-            "img": "trees/apple/5_.png",
+            "img": "obj/trees/apple/5_.png",
             "offset": [
               17,
               93
@@ -470,7 +470,7 @@
         "layers": [
           {
             "interactive": true,
-            "img": "trees/apple/6.png",
+            "img": "obj/trees/apple/6.png",
             "offset": [
               0,
               0
@@ -478,7 +478,7 @@
             "z": 0
           },
           {
-            "img": "trees/apple/6_.png",
+            "img": "obj/trees/apple/6_.png",
             "offset": [
               19,
               110
@@ -494,7 +494,7 @@
         ],
         "layers": [
           {
-            "img": "trees/apple/stump.png",
+            "img": "obj/trees/apple/stump.png",
             "offset": [
               0,
               0
@@ -502,7 +502,7 @@
             "z": 0
           },
           {
-            "img": "trees/apple/stump_.png",
+            "img": "obj/trees/apple/stump_.png",
             "offset": [
               1,
               6
@@ -520,7 +520,7 @@
         ],
         "layers": [
           {
-            "img": "trees/oak/1.png",
+            "img": "obj/trees/oak/1.png",
             "offset": [
               7,
               3
@@ -528,7 +528,7 @@
             "z": 0
           },
           {
-            "img": "trees/oak/1_.png",
+            "img": "obj/trees/oak/1_.png",
             "offset": [
               7,
               25
@@ -544,7 +544,7 @@
         ],
         "layers": [
           {
-            "img": "trees/oak/2.png",
+            "img": "obj/trees/oak/2.png",
             "offset": [
               9,
               4
@@ -552,7 +552,7 @@
             "z": 0
           },
           {
-            "img": "trees/oak/2_.png",
+            "img": "obj/trees/oak/2_.png",
             "offset": [
               10,
               61
@@ -568,7 +568,7 @@
         ],
         "layers": [
           {
-            "img": "trees/oak/3.png",
+            "img": "obj/trees/oak/3.png",
             "offset": [
               5,
               8
@@ -576,7 +576,7 @@
             "z": 0
           },
           {
-            "img": "trees/oak/3_.png",
+            "img": "obj/trees/oak/3_.png",
             "offset": [
               20,
               98
@@ -592,7 +592,7 @@
         ],
         "layers": [
           {
-            "img": "trees/oak/4.png",
+            "img": "obj/trees/oak/4.png",
             "offset": [
               8,
               0
@@ -600,7 +600,7 @@
             "z": 0
           },
           {
-            "img": "trees/oak/4_.png",
+            "img": "obj/trees/oak/4_.png",
             "offset": [
               34,
               127
@@ -616,7 +616,7 @@
         ],
         "layers": [
           {
-            "img": "trees/oak/5.png",
+            "img": "obj/trees/oak/5.png",
             "offset": [
               0,
               3
@@ -624,7 +624,7 @@
             "z": 0
           },
           {
-            "img": "trees/oak/5_.png",
+            "img": "obj/trees/oak/5_.png",
             "offset": [
               26,
               179
@@ -641,7 +641,7 @@
         "layers": [
           {
             "interactive": true,
-            "img": "trees/oak/6.png",
+            "img": "obj/trees/oak/6.png",
             "offset": [
               0,
               0
@@ -649,7 +649,7 @@
             "z": 0
           },
           {
-            "img": "trees/oak/6_.png",
+            "img": "obj/trees/oak/6_.png",
             "offset": [
               52,
               188
@@ -665,7 +665,7 @@
         ],
         "layers": [
           {
-            "img": "trees/oak/stump.png",
+            "img": "obj/trees/oak/stump.png",
             "offset": [
               0,
               0
@@ -673,7 +673,7 @@
             "z": 0
           },
           {
-            "img": "trees/oak/stump_.png",
+            "img": "obj/trees/oak/stump_.png",
             "offset": [
               0,
               13
@@ -691,7 +691,7 @@
         ],
         "layers": [
           {
-            "img": "trees/maple/06_.png",
+            "img": "obj/trees/maple/06_.png",
             "offset": [
               20,
               143
@@ -699,7 +699,7 @@
             "shadow": true
           },
           {
-            "img": "trees/maple/06.png",
+            "img": "obj/trees/maple/06.png",
             "offset": [
               4,
               0
@@ -715,7 +715,7 @@
         ],
         "layers": [
           {
-            "img": "trees/maple/06A_.png",
+            "img": "obj/trees/maple/06A_.png",
             "offset": [
               20,
               143
@@ -723,7 +723,7 @@
             "shadow": true
           },
           {
-            "img": "trees/maple/06A.png",
+            "img": "obj/trees/maple/06A.png",
             "offset": [
               4,
               0
@@ -739,7 +739,7 @@
         ],
         "layers": [
           {
-            "img": "trees/maple/stump_.png",
+            "img": "obj/trees/maple/stump_.png",
             "offset": [
               3,
               11
@@ -747,7 +747,7 @@
             "shadow": true
           },
           {
-            "img": "trees/maple/stump.png",
+            "img": "obj/trees/maple/stump.png",
             "offset": [
               0,
               0
@@ -765,7 +765,7 @@
         ],
         "layers": [
           {
-            "img": "trees/yew/01_.png",
+            "img": "obj/trees/yew/01_.png",
             "offset": [
               12,
               33
@@ -773,7 +773,7 @@
             "shadow": true
           },
           {
-            "img": "trees/yew/01.png",
+            "img": "obj/trees/yew/01.png",
             "offset": [
               12,
               8
@@ -789,7 +789,7 @@
         ],
         "layers": [
           {
-            "img": "trees/yew/02_.png",
+            "img": "obj/trees/yew/02_.png",
             "offset": [
               17,
               70
@@ -797,7 +797,7 @@
             "shadow": true
           },
           {
-            "img": "trees/yew/02.png",
+            "img": "obj/trees/yew/02.png",
             "offset": [
               12,
               7
@@ -813,7 +813,7 @@
         ],
         "layers": [
           {
-            "img": "trees/yew/03_.png",
+            "img": "obj/trees/yew/03_.png",
             "offset": [
               16,
               101
@@ -821,7 +821,7 @@
             "shadow": true
           },
           {
-            "img": "trees/yew/03.png",
+            "img": "obj/trees/yew/03.png",
             "offset": [
               5,
               5
@@ -837,7 +837,7 @@
         ],
         "layers": [
           {
-            "img": "trees/yew/04_.png",
+            "img": "obj/trees/yew/04_.png",
             "offset": [
               22,
               135
@@ -845,7 +845,7 @@
             "shadow": true
           },
           {
-            "img": "trees/yew/04.png",
+            "img": "obj/trees/yew/04.png",
             "offset": [
               9,
               5
@@ -861,7 +861,7 @@
         ],
         "layers": [
           {
-            "img": "trees/yew/05_.png",
+            "img": "obj/trees/yew/05_.png",
             "offset": [
               31,
               173
@@ -869,7 +869,7 @@
             "shadow": true
           },
           {
-            "img": "trees/yew/05.png",
+            "img": "obj/trees/yew/05.png",
             "offset": [
               16,
               9
@@ -885,7 +885,7 @@
         ],
         "layers": [
           {
-            "img": "trees/yew/06_.png",
+            "img": "obj/trees/yew/06_.png",
             "offset": [
               46,
               204
@@ -893,7 +893,7 @@
             "shadow": true
           },
           {
-            "img": "trees/yew/06.png",
+            "img": "obj/trees/yew/06.png",
             "offset": [
               21,
               6
@@ -909,7 +909,7 @@
         ],
         "layers": [
           {
-            "img": "trees/yew/stump_.png",
+            "img": "obj/trees/yew/stump_.png",
             "offset": [
               15,
               20
@@ -917,7 +917,7 @@
             "shadow": true
           },
           {
-            "img": "trees/yew/stump.png",
+            "img": "obj/trees/yew/stump.png",
             "offset": [
               17,
               11
@@ -935,7 +935,7 @@
         ],
         "layers": [
           {
-            "img": "trees/mberry/06_.png",
+            "img": "obj/trees/mberry/06_.png",
             "offset": [
               15,
               103
@@ -943,7 +943,7 @@
             "shadow": true
           },
           {
-            "img": "trees/mberry/06.png",
+            "img": "obj/trees/mberry/06.png",
             "offset": [
               0,
               0
@@ -961,7 +961,7 @@
         ],
         "layers": [
           {
-            "img": "trees/elm/06_.png",
+            "img": "obj/trees/elm/06_.png",
             "offset": [
               23,
               165
@@ -969,7 +969,7 @@
             "shadow": true
           },
           {
-            "img": "trees/elm/06.png",
+            "img": "obj/trees/elm/06.png",
             "offset": [
               16,
               0
@@ -985,7 +985,7 @@
         ],
         "layers": [
           {
-            "img": "trees/elm/06A_.png",
+            "img": "obj/trees/elm/06A_.png",
             "offset": [
               23,
               165
@@ -993,7 +993,7 @@
             "shadow": true
           },
           {
-            "img": "trees/elm/06A.png",
+            "img": "obj/trees/elm/06A.png",
             "offset": [
               16,
               0
@@ -1009,7 +1009,7 @@
         ],
         "layers": [
           {
-            "img": "trees/elm/stump_.png",
+            "img": "obj/trees/elm/stump_.png",
             "offset": [
               5,
               20
@@ -1017,7 +1017,7 @@
             "shadow": true
           },
           {
-            "img": "trees/elm/stump.png",
+            "img": "obj/trees/elm/stump.png",
             "offset": [
               10,
               13
@@ -1035,7 +1035,7 @@
         ],
         "layers": [
           {
-            "img": "trees/hazel/06_.png",
+            "img": "obj/trees/hazel/06_.png",
             "offset": [
               26,
               139
@@ -1043,7 +1043,7 @@
             "shadow": true
           },
           {
-            "img": "trees/hazel/06.png",
+            "img": "obj/trees/hazel/06.png",
             "offset": [
               12,
               9
@@ -1059,7 +1059,7 @@
         ],
         "layers": [
           {
-            "img": "trees/hazel/stump_.png",
+            "img": "obj/trees/hazel/stump_.png",
             "offset": [
               10,
               21
@@ -1067,7 +1067,7 @@
             "shadow": true
           },
           {
-            "img": "trees/hazel/stump.png",
+            "img": "obj/trees/hazel/stump.png",
             "offset": [
               13,
               12
@@ -1085,7 +1085,7 @@
         ],
         "layers": [
           {
-            "img": "trees/trees/log_.png",
+            "img": "obj/trees/trees/log_.png",
             "offset": [
               0,
               0
@@ -1093,7 +1093,7 @@
             "shadow": true
           },
           {
-            "img": "trees/trees/log.png",
+            "img": "obj/trees/trees/log.png",
             "offset": [
               0,
               0
@@ -1111,7 +1111,7 @@
         ],
         "layers": [
           {
-            "img": "trees/willow/06_.png",
+            "img": "obj/trees/willow/06_.png",
             "offset": [
               30,
               142
@@ -1119,7 +1119,7 @@
             "shadow": true
           },
           {
-            "img": "trees/willow/06.png",
+            "img": "obj/trees/willow/06.png",
             "offset": [
               28,
               13
@@ -1135,7 +1135,7 @@
         ],
         "layers": [
           {
-            "img": "trees/willow/stump_.png",
+            "img": "obj/trees/willow/stump_.png",
             "offset": [
               14,
               21
@@ -1143,7 +1143,7 @@
             "shadow": true
           },
           {
-            "img": "trees/willow/stump.png",
+            "img": "obj/trees/willow/stump.png",
             "offset": [
               8,
               10
@@ -1161,11 +1161,11 @@
         ],
         "layers": [
           {
-            "img": "trees/fir/1.png",
+            "img": "obj/trees/fir/1.png",
             "z": 0
           },
           {
-            "img": "trees/fir/1_.png",
+            "img": "obj/trees/fir/1_.png",
             "offset": [
               0,
               9
@@ -1181,11 +1181,11 @@
         ],
         "layers": [
           {
-            "img": "trees/fir/2.png",
+            "img": "obj/trees/fir/2.png",
             "z": 0
           },
           {
-            "img": "trees/fir/2_.png",
+            "img": "obj/trees/fir/2_.png",
             "offset": [
               3,
               31
@@ -1201,7 +1201,7 @@
         ],
         "layers": [
           {
-            "img": "trees/fir/3.png",
+            "img": "obj/trees/fir/3.png",
             "offset": [
               0,
               0
@@ -1209,7 +1209,7 @@
             "z": 0
           },
           {
-            "img": "trees/fir/3_.png",
+            "img": "obj/trees/fir/3_.png",
             "offset": [
               1,
               45
@@ -1225,7 +1225,7 @@
         ],
         "layers": [
           {
-            "img": "trees/fir/4.png",
+            "img": "obj/trees/fir/4.png",
             "offset": [
               0,
               0
@@ -1233,7 +1233,7 @@
             "z": 0
           },
           {
-            "img": "trees/fir/4_.png",
+            "img": "obj/trees/fir/4_.png",
             "offset": [
               2,
               68
@@ -1249,7 +1249,7 @@
         ],
         "layers": [
           {
-            "img": "trees/fir/5.png",
+            "img": "obj/trees/fir/5.png",
             "offset": [
               0,
               0
@@ -1257,7 +1257,7 @@
             "z": 0
           },
           {
-            "img": "trees/fir/5_.png",
+            "img": "obj/trees/fir/5_.png",
             "offset": [
               9,
               96
@@ -1274,7 +1274,7 @@
         "layers": [
           {
             "interactive": true,
-            "img": "trees/fir/6.png",
+            "img": "obj/trees/fir/6.png",
             "offset": [
               0,
               0
@@ -1282,7 +1282,7 @@
             "z": 0
           },
           {
-            "img": "trees/fir/6_.png",
+            "img": "obj/trees/fir/6_.png",
             "offset": [
               6,
               134
@@ -1298,7 +1298,7 @@
         ],
         "layers": [
           {
-            "img": "trees/fir/stump.png",
+            "img": "obj/trees/fir/stump.png",
             "offset": [
               0,
               0
@@ -1306,7 +1306,7 @@
             "z": 0
           },
           {
-            "img": "trees/fir/stump_.png",
+            "img": "obj/trees/fir/stump_.png",
             "offset": [
               2,
               9
@@ -1325,7 +1325,7 @@
         "layers": [
           {
             "interactive": true,
-            "img": "trees/pine/6.png",
+            "img": "obj/trees/pine/6.png",
             "offset": [
               9,
               12
@@ -1333,7 +1333,7 @@
             "z": 0
           },
           {
-            "img": "trees/pine/6_.png",
+            "img": "obj/trees/pine/6_.png",
             "offset": [
               33,
               281
@@ -1349,7 +1349,7 @@
         ],
         "layers": [
           {
-            "img": "trees/pine/stump.png",
+            "img": "obj/trees/pine/stump.png",
             "offset": [
               22,
               28
@@ -1357,7 +1357,7 @@
             "z": 0
           },
           {
-            "img": "trees/pine/stump_.png",
+            "img": "obj/trees/pine/stump_.png",
             "offset": [
               19,
               31
