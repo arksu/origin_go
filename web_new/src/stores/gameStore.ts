@@ -20,7 +20,7 @@ export interface EntityMovement {
 
 export interface GameObjectData {
   entityId: number
-  objectType: number
+  typeId: number
   resourcePath: string
   position: { x: number; y: number }
   size: { x: number; y: number }

@@ -21,6 +21,7 @@ import (
 	"origin/internal/game/world"
 	"origin/internal/itemdefs"
 	"origin/internal/metrics"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence"
 	"origin/internal/restapi"
 )
@@ -53,9 +54,15 @@ func main() {
 	}
 	defer db.Close()
 
-	objectFactory := world.NewObjectFactory()
-	objectFactory.RegisterBuilder(&world.TreeBuilder{})
-	objectFactory.RegisterBuilder(&world.PlayerBuilder{})
+	// Load object definitions before game loop starts
+	behaviors := objectdefs.DefaultBehaviorRegistry()
+	objRegistry, err := objectdefs.LoadFromDirectory("./data/objects", behaviors, logger)
+	if err != nil {
+		logger.Fatal("Failed to load object definitions", zap.Error(err))
+	}
+	objectdefs.SetGlobal(objRegistry)
+
+	objectFactory := world.NewObjectFactory(objRegistry)
 
 	inventoryLoader := inventory.NewInventoryLoader(itemRegistry, logger)
 	inventorySnapshotSender := inventory.NewSnapshotSender(logger)

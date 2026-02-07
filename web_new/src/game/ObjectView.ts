@@ -7,7 +7,7 @@ import { OBJECT_BOUNDS_COLOR, OBJECT_BOUNDS_WIDTH, OBJECT_BOUNDS_ALPHA } from '@
 
 export interface ObjectViewOptions {
   entityId: number
-  objectType: number
+  typeId: number
   resourcePath: string
   position: { x: number; y: number }
   size: { x: number; y: number }
@@ -19,7 +19,7 @@ export interface ObjectViewOptions {
  */
 export class ObjectView {
   readonly entityId: number
-  readonly objectType: number
+  readonly typeId: number
 
   private container: Container
   private debugText: Text | null = null
@@ -38,7 +38,7 @@ export class ObjectView {
 
   constructor(options: ObjectViewOptions) {
     this.entityId = options.entityId
-    this.objectType = options.objectType
+    this.typeId = options.typeId
     this.position = options.position
     this.size = options.size
 
@@ -114,7 +114,7 @@ export class ObjectView {
 
   private createPlaceholder(): void {
     const ph = new Graphics()
-    const color = this.objectType === 1 ? 0x0000ff : this.objectType === 6 ? 0xff0000 : 0x00ff00
+    const color = this.typeId === 1 ? 0x0000ff : this.typeId === 6 ? 0xff0000 : 0x00ff00
     const s = 10
     ph.moveTo(-s, -s).lineTo(s, s).moveTo(s, -s).lineTo(-s, s)
     ph.stroke({ color, width: 3 })
@@ -226,7 +226,7 @@ export class ObjectView {
   setDebugMode(enabled: boolean): void {
     if (enabled && !this.debugText) {
       this.debugText = new Text({
-        text: `E:${this.entityId}\nT:${this.objectType}`,
+        text: `E:${this.entityId}\nT:${this.typeId}`,
         style: {
           fontSize: 10,
           fill: 0xffffff,

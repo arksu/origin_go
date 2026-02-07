@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "source": "objects",
+  "objects": [
+    {
+      "defId": 1,
+      "key": "tree",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": { "w": 10, "h": 10, "layer": 1, "mask": 1 }
+      },
+      "resource": "tree",
+      "behavior": ["tree"]
+    },
+    {
+      "defId": 10,
+      "key": "box",
+      "static": true,
+      "hp": 1000,
+      "components": {
+        "collider": { "w": 10, "h": 10, "layer": 1, "mask": 1 },
+        "inventory": [{ "w": 8, "h": 4 }]
+      },
+      "resource": "objects/box_empty.png",
+      "appearance": [
+        {
+          "id": "full",
+          "when": { "flags": ["container.has_items"] },
+          "resource": "objects/box_full.png"
+        }
+      ],
+      "behavior": ["container"]
+    },
+    {
+      "defId": 11,
+      "key": "player",
+      "static": false,
+      "components": {
+        "collider": { "w": 9, "h": 9 }
+      },
+      "resource": "player",
+      "behavior": ["player"]
+    }
+  ]
+}

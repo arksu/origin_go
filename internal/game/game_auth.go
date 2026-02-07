@@ -172,11 +172,19 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		}
 
 		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character, func(w *ecs.World, h types.Handle) {
+			playerDef, _ := g.objectFactory.Registry().GetByKey("player")
+			var playerTypeID uint32
+			var playerBehaviors []string
+			if playerDef != nil {
+				playerTypeID = uint32(playerDef.DefID)
+				playerBehaviors = playerDef.Behavior
+			}
 			ecs.AddComponent(w, h, components.EntityInfo{
-				ObjectType: types.ObjectTypePlayer,
-				IsStatic:   false,
-				Region:     character.Region,
-				Layer:      character.Layer,
+				TypeID:    playerTypeID,
+				Behaviors: playerBehaviors,
+				IsStatic:  false,
+				Region:    character.Region,
+				Layer:     character.Layer,
 			})
 			ecs.AddComponent(w, h, components.CreateTransform(pos.X, pos.Y, int(character.Heading)))
 			ecs.AddComponent(w, h, components.ChunkRef{

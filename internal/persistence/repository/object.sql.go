@@ -51,7 +51,7 @@ func (q *Queries) DeleteObjectsByChunk(ctx context.Context, arg DeleteObjectsByC
 }
 
 const getObjectByID = `-- name: GetObjectByID :one
-SELECT id, object_type, region, x, y, layer, chunk_x, chunk_y, heading, quality, hp_current, hp_max, is_static, owner_id, data_jsonb, created_at, create_tick, last_tick, updated_at, deleted_at
+SELECT id, type_id, region, x, y, layer, chunk_x, chunk_y, heading, quality, hp, owner_id, data, created_at, create_tick, last_tick, updated_at, deleted_at
 FROM object
 WHERE id = $1
   AND deleted_at IS NULL
@@ -62,7 +62,7 @@ func (q *Queries) GetObjectByID(ctx context.Context, id int64) (Object, error) {
 	var i Object
 	err := row.Scan(
 		&i.ID,
-		&i.ObjectType,
+		&i.TypeID,
 		&i.Region,
 		&i.X,
 		&i.Y,
@@ -71,11 +71,9 @@ func (q *Queries) GetObjectByID(ctx context.Context, id int64) (Object, error) {
 		&i.ChunkY,
 		&i.Heading,
 		&i.Quality,
-		&i.HpCurrent,
-		&i.HpMax,
-		&i.IsStatic,
+		&i.Hp,
 		&i.OwnerID,
-		&i.DataJsonb,
+		&i.Data,
 		&i.CreatedAt,
 		&i.CreateTick,
 		&i.LastTick,
@@ -86,7 +84,7 @@ func (q *Queries) GetObjectByID(ctx context.Context, id int64) (Object, error) {
 }
 
 const getObjectsByChunk = `-- name: GetObjectsByChunk :many
-SELECT id, object_type, region, x, y, layer, chunk_x, chunk_y, heading, quality, hp_current, hp_max, is_static, owner_id, data_jsonb, created_at, create_tick, last_tick, updated_at, deleted_at
+SELECT id, type_id, region, x, y, layer, chunk_x, chunk_y, heading, quality, hp, owner_id, data, created_at, create_tick, last_tick, updated_at, deleted_at
 FROM object
 WHERE region = $1
   AND chunk_x = $2
@@ -118,7 +116,7 @@ func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkPa
 		var i Object
 		if err := rows.Scan(
 			&i.ID,
-			&i.ObjectType,
+			&i.TypeID,
 			&i.Region,
 			&i.X,
 			&i.Y,
@@ -127,11 +125,9 @@ func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkPa
 			&i.ChunkY,
 			&i.Heading,
 			&i.Quality,
-			&i.HpCurrent,
-			&i.HpMax,
-			&i.IsStatic,
+			&i.Hp,
 			&i.OwnerID,
-			&i.DataJsonb,
+			&i.Data,
 			&i.CreatedAt,
 			&i.CreateTick,
 			&i.LastTick,
@@ -187,17 +183,17 @@ func (q *Queries) TruncateObjects(ctx context.Context) error {
 
 const upsertObject = `-- name: UpsertObject :exec
 INSERT INTO object (
-    id, object_type, region, x, y, layer, chunk_x, chunk_y,
-    heading, quality, hp_current, hp_max, is_static, owner_id,
-    data_jsonb, create_tick, last_tick, created_at, updated_at
+    id, type_id, region, x, y, layer, chunk_x, chunk_y,
+    heading, quality, hp, owner_id,
+    data, create_tick, last_tick, created_at, updated_at
 )
 VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8,
-    $9, $10, $11, $12, $13, $14,
-    $15, $16, $17, NOW(), NOW()
+    $9, $10, $11, $12,
+    $13, $14, $15, NOW(), NOW()
 )
 ON CONFLICT (region, id) DO UPDATE SET
-    object_type = EXCLUDED.object_type,
+    type_id = EXCLUDED.type_id,
     x = EXCLUDED.x,
     y = EXCLUDED.y,
     layer = EXCLUDED.layer,
@@ -205,18 +201,16 @@ ON CONFLICT (region, id) DO UPDATE SET
     chunk_y = EXCLUDED.chunk_y,
     heading = EXCLUDED.heading,
     quality = EXCLUDED.quality,
-    hp_current = EXCLUDED.hp_current,
-    hp_max = EXCLUDED.hp_max,
-    is_static = EXCLUDED.is_static,
+    hp = EXCLUDED.hp,
     owner_id = EXCLUDED.owner_id,
-    data_jsonb = EXCLUDED.data_jsonb,
+    data = EXCLUDED.data,
     last_tick = EXCLUDED.last_tick,
     updated_at = NOW()
 `
 
 type UpsertObjectParams struct {
 	ID         int64                 `json:"id"`
-	ObjectType int                   `json:"object_type"`
+	TypeID     int                   `json:"type_id"`
 	Region     int                   `json:"region"`
 	X          int                   `json:"x"`
 	Y          int                   `json:"y"`
@@ -225,11 +219,9 @@ type UpsertObjectParams struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
-	HpCurrent  sql.NullInt32         `json:"hp_current"`
-	HpMax      sql.NullInt32         `json:"hp_max"`
-	IsStatic   sql.NullBool          `json:"is_static"`
+	Hp         sql.NullInt32         `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
-	DataJsonb  pqtype.NullRawMessage `json:"data_jsonb"`
+	Data       pqtype.NullRawMessage `json:"data"`
 	CreateTick int64                 `json:"create_tick"`
 	LastTick   int64                 `json:"last_tick"`
 }
@@ -237,7 +229,7 @@ type UpsertObjectParams struct {
 func (q *Queries) UpsertObject(ctx context.Context, arg UpsertObjectParams) error {
 	_, err := q.db.ExecContext(ctx, upsertObject,
 		arg.ID,
-		arg.ObjectType,
+		arg.TypeID,
 		arg.Region,
 		arg.X,
 		arg.Y,
@@ -246,11 +238,9 @@ func (q *Queries) UpsertObject(ctx context.Context, arg UpsertObjectParams) erro
 		arg.ChunkY,
 		arg.Heading,
 		arg.Quality,
-		arg.HpCurrent,
-		arg.HpMax,
-		arg.IsStatic,
+		arg.Hp,
 		arg.OwnerID,
-		arg.DataJsonb,
+		arg.Data,
 		arg.CreateTick,
 		arg.LastTick,
 	)

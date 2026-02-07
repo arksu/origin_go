@@ -118,12 +118,12 @@ message InventoryRef {
 
 message ItemInstance {
   uint64 item_id = 1;
-  uint32 type_id = 2;           // ID типа предмета
+  uint32 type_id = 2; // ID типа предмета
   string resource = 3;
   uint32 quality = 4;
   uint32 quantity = 5;
 
-  uint32 w = 10;            // размеры в слотах
+  uint32 w = 10; // размеры в слотах
   uint32 h = 11;
 
   // Если предмет является контейнером (seed_bag, backpack, etc.),
@@ -132,7 +132,7 @@ message ItemInstance {
 }
 
 message GridItem {
-  uint32 x = 1;              // top-left
+  uint32 x = 1; // top-left
   uint32 y = 2;
   ItemInstance item = 3;
 }
@@ -164,7 +164,7 @@ message InventoryHandState {
 
 message InventoryState {
   InventoryRef ref = 1;
-  uint64 revision = 2;            // монотонная ревизия контейнера
+  uint64 revision = 2; // монотонная ревизия контейнера
   oneof state {
     InventoryGridState grid = 10;
     InventoryEquipmentState equipment = 11;
@@ -271,8 +271,8 @@ message ChunkCoord {
 }
 message ChunkData {
   ChunkCoord coord = 1;
-  bytes tiles = 2;              // compressed 128x128 tiles (можно zlib)
-  uint32 version = 3;           // для инвалидации кэша
+  bytes tiles = 2; // compressed 128x128 tiles (можно zlib)
+  uint32 version = 3; // для инвалидации кэша
 }
 
 // ============================================================================
@@ -326,10 +326,10 @@ message C2S_MovementMode {
 // ============================================================================
 
 enum ChatChannel {
-  CHAT_CHANNEL_LOCAL = 0;   // слышат все вокруг игрока (radius на сервере)
-  CHAT_CHANNEL_GLOBAL = 1;  // системный/глобальный (всем, либо особая логика)
+  CHAT_CHANNEL_LOCAL = 0; // слышат все вокруг игрока (radius на сервере)
+  CHAT_CHANNEL_GLOBAL = 1; // системный/глобальный (всем, либо особая логика)
   CHAT_CHANNEL_PRIVATE = 2; // 1 игрок -> 1 игрок
-  CHAT_CHANNEL_PARTY = 3;   // party chat
+  CHAT_CHANNEL_PARTY = 3; // party chat
 }
 
 message C2S_ChatMessage {
@@ -354,7 +354,7 @@ message C2S_Ping {
 
 // Обёртка для всех клиентских сообщений
 message ClientMessage {
-  uint32 sequence = 1;          // sequence number для ack
+  uint32 sequence = 1; // sequence number для ack
   oneof payload {
     C2S_Auth auth = 10;
     C2S_Ping ping = 11;
@@ -429,7 +429,7 @@ message S2C_ChunkUnload {
 
 message S2C_ObjectSpawn {
   uint64 entity_id = 1;
-  int32 object_type = 2;
+  uint32 type_id = 2; // defId from object definitions
   string resource_path = 3;
   EntityPosition position = 4;
 }
@@ -473,7 +473,7 @@ message S2C_InventoryUpdate {
 }
 
 message S2C_ContainerOpened {
-  InventoryState state = 1;      // полный снапшот
+  InventoryState state = 1; // полный снапшот
 }
 
 message S2C_ContainerClosed {
@@ -504,7 +504,7 @@ message S2C_Warning {
 
 // Обёртка для всех серверных сообщений
 message ServerMessage {
-  uint32 sequence = 1;          // для ack если нужно
+  uint32 sequence = 1; // для ack если нужно
   oneof payload {
     S2C_AuthResult auth_result = 10;
     S2C_Pong pong = 11;

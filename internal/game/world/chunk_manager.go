@@ -1,11 +1,9 @@
 package world
 
 import (
-	"errors"
-)
-
-import (
 	"context"
+	"errors"
+
 	_const "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs/components"
@@ -14,14 +12,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
-	"go.uber.org/zap"
-
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
+
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
+	"go.uber.org/zap"
 )
 
 // Ensure context is used (for eventbus handler signature)
@@ -819,7 +817,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		if err != nil {
 			cm.logger.Error("failed to build object",
 				zap.Int64("object_id", raw.ID),
-				zap.Int("object_type", raw.ObjectType),
+				zap.Int("type_id", raw.TypeID),
 				zap.Error(err),
 			)
 			continue
@@ -867,12 +865,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 			continue
 		}
 
-		info, ok := ecs.GetComponent[components.EntityInfo](cm.world, h)
-		if !ok {
-			continue
-		}
-
-		obj, err := cm.objectFactory.Serialize(cm.world, h, info.ObjectType)
+		obj, err := cm.objectFactory.Serialize(cm.world, h)
 		if err != nil {
 			cm.logger.Error("failed to serialize object for deactivation",
 				zap.Error(err),

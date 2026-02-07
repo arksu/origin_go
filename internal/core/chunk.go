@@ -171,7 +171,7 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 
 // SaveToDB persists the chunk and its entities to the database
 func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
-	Serialize(world *ecs.World, h types.Handle, objectType types.ObjectType) (*repository.Object, error)
+	Serialize(world *ecs.World, h types.Handle) (*repository.Object, error)
 }, logger *zap.Logger) {
 	if db == nil {
 		return
@@ -207,10 +207,10 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				continue
 			}
 
-			obj, err := objectFactory.Serialize(world, h, info.ObjectType)
+			obj, err := objectFactory.Serialize(world, h)
 			if err != nil {
 				logger.Error("failed to serialize object",
-					zap.Any("object_type", info.ObjectType),
+					zap.Uint32("type_id", info.TypeID),
 					zap.Error(err),
 				)
 				continue
@@ -249,7 +249,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		obj.LastTick = int64(lastTick)
 		err = db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
 			ID:         obj.ID,
-			ObjectType: obj.ObjectType,
+			TypeID:     obj.TypeID,
 			Region:     obj.Region,
 			X:          obj.X,
 			Y:          obj.Y,
@@ -258,11 +258,9 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			ChunkY:     obj.ChunkY,
 			Heading:    obj.Heading,
 			Quality:    obj.Quality,
-			HpCurrent:  obj.HpCurrent,
-			HpMax:      obj.HpMax,
-			IsStatic:   obj.IsStatic,
+			Hp:         obj.Hp,
 			OwnerID:    obj.OwnerID,
-			DataJsonb:  obj.DataJsonb,
+			Data:       obj.Data,
 			CreateTick: obj.CreateTick,
 			LastTick:   obj.LastTick,
 		})
