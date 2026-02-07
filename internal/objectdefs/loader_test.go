@@ -1,0 +1,321 @@
+package objectdefs
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+)
+
+func testLogger() *zap.Logger {
+	logger, _ := zap.NewDevelopment()
+	return logger
+}
+
+func testBehaviors() *BehaviorRegistry {
+	return DefaultBehaviorRegistry()
+}
+
+func writeJSONC(t *testing.T, dir, name, content string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0644))
+}
+
+func TestLoadFromDirectory_Success(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "objects.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [
+			{
+				"defId": 10,
+				"key": "box",
+				"hp": 1000,
+				"components": {
+					"collider": { "w": 10, "h": 10 },
+					"inventory": [{ "w": 8, "h": 4 }]
+				},
+				"resource": "objects/box_empty.png",
+				"appearance": [
+					{
+						"id": "full",
+						"when": { "flags": ["container.has_items"] },
+						"resource": "objects/box_full.png"
+					}
+				],
+				"behavior": ["container"]
+			},
+			{
+				"defId": 11,
+				"key": "player",
+				"static": false,
+				"components": {
+					"collider": { "w": 9, "h": 9 }
+				},
+				"resource": "player",
+				"behavior": ["player"]
+			}
+		]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.NoError(t, err)
+	assert.Equal(t, 2, registry.Count())
+
+	box, ok := registry.GetByID(10)
+	require.True(t, ok)
+	assert.Equal(t, "box", box.Key)
+	assert.True(t, box.IsStatic)
+	assert.Equal(t, 1000, box.HP)
+	require.NotNil(t, box.Components)
+	require.NotNil(t, box.Components.Collider)
+	assert.Equal(t, 10.0, box.Components.Collider.W)
+	assert.Equal(t, 10.0, box.Components.Collider.H)
+	assert.Equal(t, uint64(1), box.Components.Collider.Layer)
+	assert.Equal(t, uint64(1), box.Components.Collider.Mask)
+	require.Len(t, box.Components.Inventory, 1)
+	assert.Equal(t, 8, box.Components.Inventory[0].W)
+	assert.Equal(t, 4, box.Components.Inventory[0].H)
+	assert.Equal(t, "grid", box.Components.Inventory[0].Kind)
+	require.Len(t, box.Appearance, 1)
+	assert.Equal(t, "full", box.Appearance[0].ID)
+	assert.Equal(t, "objects/box_full.png", box.Appearance[0].Resource)
+	require.Len(t, box.Behavior, 1)
+	assert.Equal(t, "container", box.Behavior[0])
+
+	player, ok := registry.GetByKey("player")
+	require.True(t, ok)
+	assert.Equal(t, 11, player.DefID)
+	assert.False(t, player.IsStatic)
+}
+
+func TestLoadFromDirectory_JSONCComments(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "objects.jsonc", `{
+		// This is a comment
+		"v": 1,
+		"source": "test",
+		"objects": [
+			{
+				"defId": 1,
+				"key": "tree",
+				/* block comment */
+				"components": {
+					"collider": { "w": 10, "h": 10 }
+				},
+				"resource": "tree.png",
+				"behavior": ["tree"]
+			}
+		]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.NoError(t, err)
+	assert.Equal(t, 1, registry.Count())
+}
+
+func TestLoadFromDirectory_StaticDefault(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "objects.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [
+			{
+				"defId": 1,
+				"key": "rock",
+				"components": { "collider": { "w": 5, "h": 5 } },
+				"resource": "rock.png"
+			}
+		]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.NoError(t, err)
+
+	rock, ok := registry.GetByID(1)
+	require.True(t, ok)
+	assert.True(t, rock.IsStatic, "static should default to true")
+}
+
+func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "a.jsonc", `{
+		"v": 1, "source": "a",
+		"objects": [{ "defId": 1, "key": "a", "resource": "a.png" }]
+	}`)
+	writeJSONC(t, dir, "b.jsonc", `{
+		"v": 1, "source": "b",
+		"objects": [{ "defId": 1, "key": "b", "resource": "b.png" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate defId")
+}
+
+func TestLoadFromDirectory_DuplicateKey(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "a.jsonc", `{
+		"v": 1, "source": "a",
+		"objects": [{ "defId": 1, "key": "same", "resource": "a.png" }]
+	}`)
+	writeJSONC(t, dir, "b.jsonc", `{
+		"v": 1, "source": "b",
+		"objects": [{ "defId": 2, "key": "same", "resource": "b.png" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate key")
+}
+
+func TestLoadFromDirectory_InvalidDefID(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 0, "key": "bad", "resource": "bad.png" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "defId must be > 0")
+}
+
+func TestLoadFromDirectory_MissingKey(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 1, "key": "", "resource": "x.png" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "key is required")
+}
+
+func TestLoadFromDirectory_InvalidCollider(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 1, "key": "bad", "components": { "collider": { "w": 0, "h": 5 } }, "resource": "x.png" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "components.collider.w must be > 0")
+}
+
+func TestLoadFromDirectory_InvalidInventory(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 1, "key": "bad", "components": { "inventory": [{ "w": 0, "h": 5 }] }, "resource": "x.png" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "components.inventory[0].w must be > 0")
+}
+
+func TestLoadFromDirectory_DuplicateBehavior(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behavior": ["tree", "tree"] }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate behavior")
+}
+
+func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behavior": ["nonexistent"] }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown behavior")
+}
+
+func TestLoadFromDirectory_DuplicateAppearanceID(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{
+			"defId": 1, "key": "bad", "resource": "x.png",
+			"appearance": [
+				{ "id": "a", "resource": "a.png" },
+				{ "id": "a", "resource": "b.png" }
+			]
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate appearance.id")
+}
+
+func TestLoadFromDirectory_MissingResourceNoAppearance(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 1, "key": "bad" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resource is required when appearance is empty")
+}
+
+func TestLoadFromDirectory_UnknownField(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test", "unknownField": true,
+		"objects": []
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse JSON")
+}
+
+func TestLoadFromDirectory_InvalidVersion(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 99, "source": "test", "objects": []
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported version")
+}
+
+func TestLoadFromDirectory_EmptyDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.NoError(t, err)
+	assert.Equal(t, 0, registry.Count())
+}

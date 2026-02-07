@@ -49,7 +49,7 @@ export class ObjectManager {
 
     this.needsSort = true
 
-    console.log(`[ObjectManager] Spawned object ${options.entityId}, type=${options.objectType}, total=${this.objects.size}`)
+    console.log(`[ObjectManager] Spawned object ${options.entityId}, type=${options.typeId}, total=${this.objects.size}`)
   }
 
   /**

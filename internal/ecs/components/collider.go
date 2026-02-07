@@ -2,7 +2,6 @@ package components
 
 import (
 	"origin/internal/ecs"
-	"origin/internal/types"
 )
 
 // Collider represents an entity's collision box dimensions
@@ -23,7 +22,7 @@ type PhantomCollider struct {
 	HalfWidth  float64
 	HalfHeight float64
 
-	ObjectType types.ObjectType
+	TypeID uint32 // defId from object definitions
 }
 
 const ColliderComponentID ecs.ComponentID = 14

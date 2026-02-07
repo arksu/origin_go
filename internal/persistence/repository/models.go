@@ -120,7 +120,7 @@ type Inventory struct {
 
 type Object struct {
 	ID         int64                 `json:"id"`
-	ObjectType int                   `json:"object_type"`
+	TypeID     int                   `json:"type_id"`
 	Region     int                   `json:"region"`
 	X          int                   `json:"x"`
 	Y          int                   `json:"y"`
@@ -129,11 +129,9 @@ type Object struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
-	HpCurrent  sql.NullInt32         `json:"hp_current"`
-	HpMax      sql.NullInt32         `json:"hp_max"`
-	IsStatic   sql.NullBool          `json:"is_static"`
+	Hp         sql.NullInt32         `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
-	DataJsonb  pqtype.NullRawMessage `json:"data_jsonb"`
+	Data       pqtype.NullRawMessage `json:"data"`
 	CreatedAt  sql.NullTime          `json:"created_at"`
 	CreateTick int64                 `json:"create_tick"`
 	LastTick   int64                 `json:"last_tick"`
@@ -143,7 +141,7 @@ type Object struct {
 
 type ObjectRegion1 struct {
 	ID         int64                 `json:"id"`
-	ObjectType int                   `json:"object_type"`
+	TypeID     int                   `json:"type_id"`
 	Region     int                   `json:"region"`
 	X          int                   `json:"x"`
 	Y          int                   `json:"y"`
@@ -152,11 +150,9 @@ type ObjectRegion1 struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
-	HpCurrent  sql.NullInt32         `json:"hp_current"`
-	HpMax      sql.NullInt32         `json:"hp_max"`
-	IsStatic   sql.NullBool          `json:"is_static"`
+	Hp         sql.NullInt32         `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
-	DataJsonb  pqtype.NullRawMessage `json:"data_jsonb"`
+	Data       pqtype.NullRawMessage `json:"data"`
 	CreatedAt  sql.NullTime          `json:"created_at"`
 	CreateTick int64                 `json:"create_tick"`
 	LastTick   int64                 `json:"last_tick"`
@@ -166,7 +162,7 @@ type ObjectRegion1 struct {
 
 type ObjectRegion2 struct {
 	ID         int64                 `json:"id"`
-	ObjectType int                   `json:"object_type"`
+	TypeID     int                   `json:"type_id"`
 	Region     int                   `json:"region"`
 	X          int                   `json:"x"`
 	Y          int                   `json:"y"`
@@ -175,11 +171,9 @@ type ObjectRegion2 struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    sql.NullInt16         `json:"quality"`
-	HpCurrent  sql.NullInt32         `json:"hp_current"`
-	HpMax      sql.NullInt32         `json:"hp_max"`
-	IsStatic   sql.NullBool          `json:"is_static"`
+	Hp         sql.NullInt32         `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
-	DataJsonb  pqtype.NullRawMessage `json:"data_jsonb"`
+	Data       pqtype.NullRawMessage `json:"data"`
 	CreatedAt  sql.NullTime          `json:"created_at"`
 	CreateTick int64                 `json:"create_tick"`
 	LastTick   int64                 `json:"last_tick"`

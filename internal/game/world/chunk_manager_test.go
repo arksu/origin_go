@@ -2,10 +2,10 @@ package world
 
 import (
 	"origin/internal/config"
-	"origin/internal/game"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"testing"
@@ -35,7 +35,8 @@ func newTestChunkManager() *ChunkManager {
 	cfg := newTestConfig()
 	world := ecs.NewWorldForTesting()
 	logger := zap.NewNop()
-	objectFactory := world.NewObjectFactory()
+	objRegistry := objectdefs.NewRegistry(nil)
+	objectFactory := NewObjectFactory(objRegistry)
 	eb := eventbus.New(&eventbus.Config{
 		MinWorkers: 1,
 		MaxWorkers: 2,
@@ -181,10 +182,8 @@ func TestChunkManager_ObjectFactory(t *testing.T) {
 	if factory == nil {
 		t.Fatal("ObjectFactory() returned nil")
 	}
-	// Test that factory is of correct type
-	if _, ok := factory.(*world.ObjectFactory); !ok {
-		t.Fatalf("Expected *world.ObjectFactory, got %T", factory)
-	}
+	// factory is already *ObjectFactory, just verify non-nil
+	_ = factory
 }
 
 func TestChunk_SaveToDB_HandlesInactiveChunks(t *testing.T) {
@@ -197,14 +196,14 @@ func TestChunk_SaveToDB_HandlesInactiveChunks(t *testing.T) {
 	var i int
 	for i = 0; i < 3; i++ {
 		rawObjects[i] = &repository.Object{
-			ID:         int64(i + 1),
-			ObjectType: int(int32(i + 1)),
-			Region:     0,
-			X:          i * 10,
-			Y:          i * 10,
-			Layer:      0,
-			ChunkX:     coord.X,
-			ChunkY:     coord.Y,
+			ID:     int64(i + 1),
+			TypeID: i + 1,
+			Region: 0,
+			X:      i * 10,
+			Y:      i * 10,
+			Layer:  0,
+			ChunkX: coord.X,
+			ChunkY: coord.Y,
 		}
 	}
 

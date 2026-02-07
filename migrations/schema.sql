@@ -109,7 +109,7 @@ ALTER TABLE chunk
 CREATE TABLE IF NOT EXISTS object
 (
     id          BIGINT,
-    type_id     INT    NOT NULL,
+    type_id     INT    NOT NULL, -- defId from object definitions
 
     region      INT    NOT NULL,
     x           INT    NOT NULL, -- world coordinate

@@ -74,11 +74,11 @@ export function registerMessageHandlers(): void {
     const heading = msg.position?.position?.heading || 0
     const resourcePath = msg.resourcePath || ''
 
-    console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.objectType}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
+    console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.typeId}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
 
     const objectData = {
       entityId,
-      objectType: msg.objectType || 0,
+      typeId: msg.typeId || 0,
       resourcePath,
       position: { x: posX, y: posY },
       size: {

@@ -23,17 +23,17 @@ WHERE id = $1;
 
 -- name: UpsertObject :exec
 INSERT INTO object (
-    id, object_type, region, x, y, layer, chunk_x, chunk_y,
-    heading, quality, hp_current, hp_max, is_static, owner_id,
-    data_jsonb, create_tick, last_tick, created_at, updated_at
+    id, type_id, region, x, y, layer, chunk_x, chunk_y,
+    heading, quality, hp, owner_id,
+    data, create_tick, last_tick, created_at, updated_at
 )
 VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8,
-    $9, $10, $11, $12, $13, $14,
-    $15, $16, $17, NOW(), NOW()
+    $9, $10, $11, $12,
+    $13, $14, $15, NOW(), NOW()
 )
 ON CONFLICT (region, id) DO UPDATE SET
-    object_type = EXCLUDED.object_type,
+    type_id = EXCLUDED.type_id,
     x = EXCLUDED.x,
     y = EXCLUDED.y,
     layer = EXCLUDED.layer,
@@ -41,11 +41,9 @@ ON CONFLICT (region, id) DO UPDATE SET
     chunk_y = EXCLUDED.chunk_y,
     heading = EXCLUDED.heading,
     quality = EXCLUDED.quality,
-    hp_current = EXCLUDED.hp_current,
-    hp_max = EXCLUDED.hp_max,
-    is_static = EXCLUDED.is_static,
+    hp = EXCLUDED.hp,
     owner_id = EXCLUDED.owner_id,
-    data_jsonb = EXCLUDED.data_jsonb,
+    data = EXCLUDED.data,
     last_tick = EXCLUDED.last_tick,
     updated_at = NOW();
 

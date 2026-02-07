@@ -332,7 +332,7 @@ export class Render {
     this.chunkManager.unloadChunk(x, y)
   }
 
-  spawnObject(options: { entityId: number; objectType: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {
+  spawnObject(options: { entityId: number; typeId: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {
     this.objectManager.spawnObject(options)
   }
 

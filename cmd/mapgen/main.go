@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"origin/internal/const"
+	_const "origin/internal/const"
 	"sync/atomic"
 	"time"
 
@@ -190,7 +190,7 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 
 				entities = append(entities, repository.UpsertObjectParams{
 					ID:         int64(entityID),
-					ObjectType: ObjectTypeTree,
+					TypeID:     ObjectTypeTree,
 					Region:     g.region,
 					X:          tileWorldX,
 					Y:          tileWorldY,
@@ -199,9 +199,7 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 					ChunkY:     chunkY,
 					Heading:    sql.NullInt16{Int16: int16(rng.Intn(8)), Valid: true},
 					Quality:    sql.NullInt16{},
-					HpCurrent:  sql.NullInt32{Int32: TreeHP, Valid: true},
-					HpMax:      sql.NullInt32{Int32: TreeHP, Valid: true},
-					IsStatic:   sql.NullBool{Bool: true, Valid: true},
+					Hp:         sql.NullInt32{Int32: TreeHP, Valid: true},
 					OwnerID:    sql.NullInt64{},
 					CreateTick: 0,
 					LastTick:   0,
