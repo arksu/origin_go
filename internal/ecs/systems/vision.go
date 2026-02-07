@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	visionUpdateInterval = 3 * time.Second
+	visionUpdateInterval = 1 * time.Second
 )
 
 type VisionSystem struct {

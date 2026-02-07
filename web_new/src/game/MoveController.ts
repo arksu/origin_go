@@ -82,6 +82,7 @@ export interface MoveDebugMetrics {
 
 class MoveController {
   private entities: Map<number, EntityMoveState> = new Map()
+  private lastRenderPositions: Map<number, RenderPosition> = new Map()
   private globalStreamEpoch = 0
   private tickRate = 10 // Default fallback (100ms per tick)
 
@@ -302,6 +303,7 @@ class MoveController {
       result.set(entityId, pos)
     }
 
+    this.lastRenderPositions = result
     return result
   }
 
@@ -309,15 +311,7 @@ class MoveController {
    * Get render position for a specific entity.
    */
   getRenderPosition(entityId: number): RenderPosition | null {
-    const state = this.entities.get(entityId)
-    if (!state) return null
-
-    const clientNowMs = Date.now()
-    const serverNowMs = timeSync.estimateServerNowMs(clientNowMs)
-    const interpolationDelayMs = timeSync.getInterpolationDelayMs()
-    const renderTimeMs = serverNowMs - interpolationDelayMs
-
-    return this.interpolateEntity(state, renderTimeMs, clientNowMs)
+    return this.lastRenderPositions.get(entityId) ?? null
   }
 
   private interpolateEntity(state: EntityMoveState, renderTimeMs: number, clientNowMs: number): RenderPosition {
@@ -546,6 +540,7 @@ class MoveController {
    */
   reset(): void {
     this.entities.clear()
+    this.lastRenderPositions.clear()
     this.globalStreamEpoch = 0
   }
 }

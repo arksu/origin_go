@@ -20,9 +20,8 @@ import (
 )
 
 const (
-	ObjectTypeTree = 1
-	TreeHP         = 100
-	TreeDensity    = 0.15
+	TreeHP      = 100
+	TreeDensity = 0.15
 )
 
 func main() {
@@ -190,7 +189,7 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 
 				entities = append(entities, repository.UpsertObjectParams{
 					ID:         int64(entityID),
-					TypeID:     ObjectTypeTree,
+					TypeID:     1,
 					Region:     g.region,
 					X:          tileWorldX,
 					Y:          tileWorldY,

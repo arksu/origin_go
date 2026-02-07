@@ -4,13 +4,13 @@
   "objects": [
     {
       "defId": 1,
-      "key": "tree",
+      "key": "tree_birch",
       "static": true,
       "hp": 100,
       "components": {
         "collider": { "w": 10, "h": 10, "layer": 1, "mask": 1 }
       },
-      "resource": "tree",
+      "resource": "trees/birch/6",
       "behavior": ["tree"]
     },
     {
@@ -20,7 +20,7 @@
       "hp": 1000,
       "components": {
         "collider": { "w": 10, "h": 10, "layer": 1, "mask": 1 },
-        "inventory": [{ "w": 8, "h": 4 }]
+        "inventory": [{ "w": 5, "h": 5 }]
       },
       "resource": "objects/box_empty.png",
       "appearance": [
