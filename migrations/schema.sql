@@ -109,29 +109,27 @@ ALTER TABLE chunk
 CREATE TABLE IF NOT EXISTS object
 (
     id          BIGINT,
-    object_type INT    NOT NULL,
+    type_id     INT    NOT NULL,
 
     region      INT    NOT NULL,
-    x           INT    NOT NULL,          -- world coordinate
-    y           INT    NOT NULL,          -- world coordinate
+    x           INT    NOT NULL, -- world coordinate
+    y           INT    NOT NULL, -- world coordinate
     layer       INT    NOT NULL,
-    chunk_x     INT    NOT NULL,          -- redundant data for loading by chunk
-    chunk_y     INT    NOT NULL,          -- redundant data for loading by chunk
+    chunk_x     INT    NOT NULL, -- redundant data for loading by chunk
+    chunk_y     INT    NOT NULL, -- redundant data for loading by chunk
     heading     SMALLINT CHECK (heading >= 0 AND heading < 365),
 
     quality     SMALLINT CHECK (quality >= 0),
-    hp_current  INT CHECK (hp_current >= 0),
-    hp_max      INT CHECK (hp_max > 0),
+    hp          INT CHECK (hp >= 0),
 
-    is_static   BOOLEAN     DEFAULT true, -- статичный или динамичный
-    owner_id    BIGINT,                   -- кто создал/владеет (для построек)
-    data_jsonb  JSONB,
+    owner_id    BIGINT,          -- кто создал/владеет (для построек)
+    data        JSONB,
 
     created_at  TIMESTAMPTZ DEFAULT now(),
     create_tick BIGINT NOT NULL,
     last_tick   BIGINT NOT NULL,
     updated_at  TIMESTAMPTZ DEFAULT now(),
-    deleted_at  TIMESTAMPTZ,              -- soft delete для аудита
+    deleted_at  TIMESTAMPTZ,     -- soft delete для аудита
     PRIMARY KEY (region, id)
 ) PARTITION BY LIST (region);
 CREATE TABLE object_region_1 PARTITION OF object FOR VALUES IN (1);
@@ -144,12 +142,8 @@ CREATE INDEX idx_object_chunk ON object (region, chunk_x, chunk_y, layer)
 -- для spatial queries
 CREATE INDEX idx_object_spatial ON object (region, x, y, layer)
     WHERE deleted_at IS NULL;
-CREATE INDEX idx_object_type ON object (object_type)
-    WHERE deleted_at IS NULL;
-CREATE INDEX idx_object_static ON object (is_static, region)
-    WHERE is_static = false AND deleted_at IS NULL; -- для dynamic объектов
-CREATE INDEX idx_object_data ON object USING GIN (data_jsonb)
-    WHERE data_jsonb IS NOT NULL;
+CREATE INDEX idx_object_data ON object USING GIN (data)
+    WHERE data IS NOT NULL;
 ALTER TABLE object
     ALTER COLUMN region SET STATISTICS 1000;
 ALTER TABLE object

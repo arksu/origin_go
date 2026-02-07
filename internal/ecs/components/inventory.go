@@ -54,6 +54,7 @@ type InvItem struct {
 	// item def id (proto.ItemInstance.type_id)
 	TypeID uint32
 
+	// visual client
 	Resource string
 
 	Quality  uint32
