@@ -83,7 +83,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
-	droppedItemPersister := world.NewDroppedItemPersisterDB(db)
+	droppedItemPersister := world.NewDroppedItemPersisterDB(db, logger)
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister, s.chunkManager)
 
 	// Create vision system first so it can be passed to other systems

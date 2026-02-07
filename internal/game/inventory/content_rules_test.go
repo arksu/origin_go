@@ -206,7 +206,7 @@ func TestContentRules_AllowTags_Allowed(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move seed from hand → nested seed bag
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
@@ -242,7 +242,7 @@ func TestContentRules_AllowTags_Denied(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move ore from hand → nested seed bag — should fail
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
@@ -274,7 +274,7 @@ func TestContentRules_AllowTags_MultipleTagsOnItem(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move magic seed from hand → seed bag — should succeed (has "seed" tag)
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
@@ -305,7 +305,7 @@ func TestContentRules_DenyTags(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move contraband from hand → special bag — should fail
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
@@ -337,7 +337,7 @@ func TestContentRules_DenyTags_AllowNonDenied(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move normal item from hand → special bag — should succeed
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
@@ -371,7 +371,7 @@ func TestContentRules_AllowItemKeys(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
 		Src: &netproto.InventoryRef{
@@ -404,7 +404,7 @@ func TestContentRules_AllowItemKeys_Denied(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
 		Src: &netproto.InventoryRef{
@@ -435,7 +435,7 @@ func TestContentRules_DenyItemKeys(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
 		Src: &netproto.InventoryRef{
@@ -466,7 +466,7 @@ func TestContentRules_DenyItemKeys_AllowOthers(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
 		Src: &netproto.InventoryRef{
@@ -499,7 +499,7 @@ func TestContentRules_RootContainer_NoRules(t *testing.T) {
 		Quality: 100, Quantity: 1, W: 1, H: 1,
 	})
 
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move to root backpack (ownerID=playerID) — no rules, should always succeed
 	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{

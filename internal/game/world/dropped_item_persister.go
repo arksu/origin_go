@@ -9,6 +9,7 @@ import (
 	constt "origin/internal/const"
 
 	"github.com/sqlc-dev/pqtype"
+	"go.uber.org/zap"
 
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
@@ -18,11 +19,12 @@ import (
 // DroppedItemPersisterDB implements inventory.DroppedItemPersister using Postgres.
 // It persists/deletes both the object row and the inventory row.
 type DroppedItemPersisterDB struct {
-	db *persistence.Postgres
+	db     *persistence.Postgres
+	logger *zap.Logger
 }
 
-func NewDroppedItemPersisterDB(db *persistence.Postgres) *DroppedItemPersisterDB {
-	return &DroppedItemPersisterDB{db: db}
+func NewDroppedItemPersisterDB(db *persistence.Postgres, logger *zap.Logger) *DroppedItemPersisterDB {
+	return &DroppedItemPersisterDB{db: db, logger: logger}
 }
 
 func (p *DroppedItemPersisterDB) PersistDroppedObject(
@@ -70,6 +72,10 @@ func (p *DroppedItemPersisterDB) PersistDroppedObject(
 func (p *DroppedItemPersisterDB) DeleteDroppedObject(region int, entityID types.EntityID) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	p.logger.Debug("DeleteDroppedObject",
+		zap.Int("region", region),
+		zap.Uint64("entity_id", uint64(entityID)))
 
 	// Soft-delete object row
 	if err := p.db.Queries().SoftDeleteObject(ctx, repository.SoftDeleteObjectParams{

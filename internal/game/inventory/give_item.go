@@ -65,7 +65,7 @@ func (s *InventoryOperationService) GiveItem(
 	}
 
 	// 3. Try to place into player's grid inventory
-	result := s.tryAddToGrid(w, playerID, playerHandle, &newItem)
+	result := s.tryAddToGrid(w, playerID, playerHandle, &newItem, itemDef)
 	if result != nil {
 		return result
 	}
@@ -80,6 +80,7 @@ func (s *InventoryOperationService) tryAddToGrid(
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	item *components.InvItem,
+	itemDef *itemdefs.ItemDef,
 ) *GiveItemResult {
 	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
 	if !hasOwner {
@@ -122,17 +123,33 @@ func (s *InventoryOperationService) tryAddToGrid(
 			return true
 		})
 
+		// Create nested container for container items (e.g. seed_bag)
+		nestedHandle := ensureNestedContainer(w, playerHandle, item, itemDef)
+
+		updatedOwner, _ := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
 		updatedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
 		info := &ContainerInfo{
 			Handle:    containerHandle,
 			Container: &updatedContainer,
-			Owner:     &owner,
+			Owner:     &updatedOwner,
+		}
+
+		updatedContainers := []*ContainerInfo{info}
+
+		// Include nested container in update so client receives it
+		if nestedHandle != 0 {
+			nestedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
+			updatedContainers = append(updatedContainers, &ContainerInfo{
+				Handle:    nestedHandle,
+				Container: &nestedContainer,
+				Owner:     &updatedOwner,
+			})
 		}
 
 		return &GiveItemResult{
 			Success:           true,
 			Message:           "item added to inventory",
-			UpdatedContainers: []*ContainerInfo{info},
+			UpdatedContainers: updatedContainers,
 		}
 	}
 
