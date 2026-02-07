@@ -7,45 +7,35 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/itemdefs"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 )
 
 // DroppedItemData is the JSON structure stored in object.data for dropped items.
+// Item details are stored in the inventory table (kind=DroppedItem, owner_id=object.id).
 type DroppedItemData struct {
 	HasInventory    bool   `json:"has_inventory"`
 	ContainedItemID uint64 `json:"contained_item_id"`
 	DropTime        int64  `json:"drop_time"`
 	DropperID       uint64 `json:"dropper_id"`
-	ItemTypeID      uint32 `json:"item_type_id"`
-	ItemResource    string `json:"item_resource"`
-	ItemQuality     uint32 `json:"item_quality"`
-	ItemQuantity    uint32 `json:"item_quantity"`
-	ItemW           uint8  `json:"item_w"`
-	ItemH           uint8  `json:"item_h"`
+}
+
+// DroppedInventoryLoader loads a dropped item's inventory from DB and creates the ECS container.
+type DroppedInventoryLoader interface {
+	// LoadDroppedInventory loads inventory for a dropped item from DB,
+	// creates the InventoryContainer ECS entity, and returns its handle.
+	LoadDroppedInventory(w *ecs.World, ownerID types.EntityID) (types.Handle, error)
 }
 
 // ObjectFactory builds and serializes world objects using object definitions.
 type ObjectFactory struct {
-	registry     *objectdefs.Registry
-	itemRegistry *itemdefs.Registry
+	droppedInvLoader DroppedInventoryLoader
 }
 
 // NewObjectFactory creates a factory backed by the given object definitions registry.
-func NewObjectFactory(registry *objectdefs.Registry) *ObjectFactory {
-	return &ObjectFactory{registry: registry}
-}
-
-// SetItemRegistry sets the item definitions registry for resolving dropped item resources.
-func (f *ObjectFactory) SetItemRegistry(r *itemdefs.Registry) {
-	f.itemRegistry = r
-}
-
-// Registry returns the underlying object definitions registry.
-func (f *ObjectFactory) Registry() *objectdefs.Registry {
-	return f.registry
+func NewObjectFactory(loader DroppedInventoryLoader) *ObjectFactory {
+	return &ObjectFactory{droppedInvLoader: loader}
 }
 
 // Build creates an ECS entity from a raw database object using its definition.
@@ -54,7 +44,7 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object) (types.Handl
 		return f.buildDroppedItem(w, raw)
 	}
 
-	def, ok := f.registry.GetByID(raw.TypeID)
+	def, ok := objectdefs.Global().GetByID(raw.TypeID)
 	if !ok {
 		return types.InvalidHandle, fmt.Errorf("%w: type_id=%d", ErrDefNotFound, raw.TypeID)
 	}
@@ -94,6 +84,7 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object) (types.Handl
 }
 
 // buildDroppedItem creates an ECS entity for a dropped item loaded from DB.
+// Item data is loaded from the inventory table (kind=DroppedItem, owner_id=object.id).
 func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object) (types.Handle, error) {
 	if !raw.Data.Valid {
 		return types.InvalidHandle, fmt.Errorf("dropped item %d has no data", raw.ID)
@@ -110,16 +101,26 @@ func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object) (
 		return types.InvalidHandle, fmt.Errorf("dropped item %d: expired", raw.ID)
 	}
 
-	// Resolve item resource from itemdefs if available
-	resource := data.ItemResource
-	if f.itemRegistry != nil {
-		if itemDef, ok := f.itemRegistry.GetByID(int(data.ItemTypeID)); ok {
-			resource = itemDef.ResolveResource(false)
-		}
+	// Load inventory from DB via injected loader
+	if f.droppedInvLoader == nil {
+		return types.InvalidHandle, fmt.Errorf("dropped item %d: dropped inventory loader not configured", raw.ID)
 	}
 
 	entityID := types.EntityID(raw.ID)
 	containedItemID := types.EntityID(data.ContainedItemID)
+
+	// Pre-load inventory container handle before spawning entity
+	containerHandle, err := f.droppedInvLoader.LoadDroppedInventory(w, entityID)
+	if err != nil {
+		return types.InvalidHandle, fmt.Errorf("dropped item %d: %w", raw.ID, err)
+	}
+
+	// Resolve resource from the loaded container's first item
+	resource := ""
+	container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+	if hasContainer && len(container.Items) > 0 {
+		resource = container.Items[0].Resource
+	}
 
 	h := w.Spawn(entityID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, 0))
@@ -142,28 +143,7 @@ func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object) (
 			ContainedItemID: containedItemID,
 		})
 
-		// Create inventory container with the single item
-		container := components.InventoryContainer{
-			OwnerID: entityID,
-			Kind:    constt.InventoryDroppedItem,
-			Key:     0,
-			Version: 1,
-			Items: []components.InvItem{
-				{
-					ItemID:   containedItemID,
-					TypeID:   data.ItemTypeID,
-					Resource: resource,
-					Quality:  data.ItemQuality,
-					Quantity: data.ItemQuantity,
-					W:        data.ItemW,
-					H:        data.ItemH,
-				},
-			},
-		}
-		containerHandle := w.SpawnWithoutExternalID()
-		ecs.AddComponent(w, containerHandle, container)
-
-		// Register in InventoryRefIndex
+		// Register pre-loaded container in InventoryRefIndex
 		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 		refIndex.Add(constt.InventoryDroppedItem, entityID, 0, containerHandle)
 	})
@@ -215,7 +195,7 @@ func (f *ObjectFactory) IsStatic(raw *repository.Object) bool {
 	if raw.TypeID == constt.DroppedItemTypeID {
 		return true
 	}
-	def, ok := f.registry.GetByID(raw.TypeID)
+	def, ok := objectdefs.Global().GetByID(raw.TypeID)
 	if !ok {
 		return true // safe default
 	}
