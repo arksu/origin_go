@@ -277,6 +277,17 @@ export class ObjectView {
   }
 
   containsWorldPoint(worldX: number, worldY: number): boolean {
+    // For dropped items, use a larger hit area for easier clicking
+    if (this.isDroppedItem) {
+      const hitRadius = 15 // 30x30 hit area centered on position
+      return (
+        worldX >= this.position.x - hitRadius &&
+        worldX <= this.position.x + hitRadius &&
+        worldY >= this.position.y - hitRadius &&
+        worldY <= this.position.y + hitRadius
+      )
+    }
+
     const halfSizeX = this.size.x / 2
     const halfSizeY = this.size.y / 2
     return (
@@ -308,7 +319,7 @@ export class ObjectView {
   }
 
   onClick(): void {
-    console.log(`[ObjectView] Clicked entity ${this.entityId}`)
+    console.log(`[ObjectView] Clicked entity ${this.entityId} (typeId: ${this.typeId})`)
   }
 
   setHovered(hovered: boolean): void {

@@ -34,6 +34,7 @@ type InventoryResultSender interface {
 // InventoryOperationExecutor executes inventory operations
 type InventoryOperationExecutor interface {
 	ExecuteOperation(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, op *netproto.InventoryOp) InventoryOpResult
+	ExecutePickupFromWorld(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, droppedEntityID types.EntityID, dstRef *netproto.InventoryRef) InventoryOpResult
 }
 
 // AdminCommandHandler processes admin chat commands (e.g. /give).
@@ -222,6 +223,9 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 		return
 	}
 
+	// Clear pending interaction on any new movement command
+	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+
 	// Set movement target
 	ecs.WithComponent(w, playerHandle, func(mov *components.Movement) {
 		mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
@@ -237,19 +241,59 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 		return
 	}
 
+	// Clear any previous pending interaction
+	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+
+	// Validate target entity exists
+	targetEntityID := types.EntityID(moveToEntity.EntityId)
+	targetHandle := w.GetHandleByEntityID(targetEntityID)
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		s.logger.Debug("MoveToEntity: target entity not found",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Uint64("target_entity_id", moveToEntity.EntityId))
+		return
+	}
+
+	// Get movement component, check stunned
+	mov, ok := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !ok {
+		return
+	}
+	if mov.State == constt.StateStunned {
+		return
+	}
+
+	// Get target position
+	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
+	if !hasTransform {
+		return
+	}
+
+	// Set movement target to entity handle (MovementSystem will track live position)
+	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+		m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
+	})
+
+	// If autoInteract, determine interaction type and set PendingInteraction
+	if moveToEntity.AutoInteract {
+		_, isDroppedItem := ecs.GetComponent[components.DroppedItem](w, targetHandle)
+		if isDroppedItem {
+			ecs.AddComponent(w, playerHandle, components.PendingInteraction{
+				TargetEntityID: targetEntityID,
+				TargetHandle:   targetHandle,
+				Type:           netproto.InteractionType_PICKUP,
+				Range:          constt.DroppedPickupRadius,
+			})
+		}
+	}
+
 	s.logger.Debug("MoveToEntity action",
 		zap.Uint64("client_id", cmd.ClientID),
 		zap.Uint64("target_entity_id", moveToEntity.EntityId),
 		zap.Bool("auto_interact", moveToEntity.AutoInteract))
-
-	// TODO: Implement entity targeting and pathfinding
-	// 1. Validate target entity exists and is reachable
-	// 2. Set movement target to entity position
-	// 3. If auto_interact, queue interaction when reached
 }
 
 func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	// Type assert payload
 	interact, ok := cmd.Payload.(*netproto.Interact)
 	if !ok {
 		s.logger.Error("Invalid payload type for Interact",
@@ -257,15 +301,89 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 		return
 	}
 
-	s.logger.Debug("Interact action",
-		zap.Uint64("client_id", cmd.ClientID),
-		zap.Uint64("target_entity_id", interact.EntityId),
-		zap.Int32("interaction_type", int32(interact.Type)))
+	targetEntityID := types.EntityID(interact.EntityId)
+	targetHandle := w.GetHandleByEntityID(targetEntityID)
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		s.logger.Debug("Interact: target entity not found",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Uint64("target_entity_id", interact.EntityId))
+		return
+	}
 
-	// TODO: Implement interaction system
-	// 1. Validate target entity exists and is in range
-	// 2. Check if interaction is valid for entity type
-	// 3. Execute interaction (gather, open container, use, pickup, etc.)
+	// Determine interaction type
+	interactionType := interact.Type
+	_, isDroppedItem := ecs.GetComponent[components.DroppedItem](w, targetHandle)
+
+	// AUTO resolution: if target is a dropped item, treat as PICKUP
+	if interactionType == netproto.InteractionType_AUTO && isDroppedItem {
+		interactionType = netproto.InteractionType_PICKUP
+	}
+
+	switch interactionType {
+	case netproto.InteractionType_PICKUP:
+		if !isDroppedItem {
+			s.logger.Debug("Interact: target is not a dropped item for PICKUP",
+				zap.Uint64("client_id", cmd.ClientID))
+			return
+		}
+		s.handlePickupInteract(w, playerHandle, cmd.CharacterID, targetEntityID, targetHandle)
+
+	default:
+		s.logger.Debug("Interact: unsupported interaction type",
+			zap.Uint64("client_id", cmd.ClientID),
+			zap.Int32("interaction_type", int32(interactionType)))
+	}
+}
+
+// handlePickupInteract attempts immediate pickup if in range, otherwise sets movement + PendingInteraction.
+func (s *NetworkCommandSystem) handlePickupInteract(
+	w *ecs.World,
+	playerHandle types.Handle,
+	playerID types.EntityID,
+	targetEntityID types.EntityID,
+	targetHandle types.Handle,
+) {
+	playerTransform, hasPlayerT := ecs.GetComponent[components.Transform](w, playerHandle)
+	targetTransform, hasTargetT := ecs.GetComponent[components.Transform](w, targetHandle)
+	if !hasPlayerT || !hasTargetT {
+		return
+	}
+
+	dx := playerTransform.X - targetTransform.X
+	dy := playerTransform.Y - targetTransform.Y
+	distSq := dx*dx + dy*dy
+
+	if distSq <= constt.DroppedPickupRadiusSq {
+		// In range — immediate pickup (delegate to AutoInteractSystem-style logic)
+		// Set PendingInteraction so AutoInteractSystem picks it up this tick
+		ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+		ecs.AddComponent(w, playerHandle, components.PendingInteraction{
+			TargetEntityID: targetEntityID,
+			TargetHandle:   targetHandle,
+			Type:           netproto.InteractionType_PICKUP,
+			Range:          constt.DroppedPickupRadius,
+		})
+		return
+	}
+
+	// Out of range — move toward target and set pending interaction
+	mov, hasMov := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !hasMov || mov.State == constt.StateStunned {
+		return
+	}
+
+	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+
+	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+		m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
+	})
+
+	ecs.AddComponent(w, playerHandle, components.PendingInteraction{
+		TargetEntityID: targetEntityID,
+		TargetHandle:   targetHandle,
+		Type:           netproto.InteractionType_PICKUP,
+		Range:          constt.DroppedPickupRadius,
+	})
 }
 
 func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
