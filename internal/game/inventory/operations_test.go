@@ -159,7 +159,7 @@ func TestExecuteMove_SimpleMove(t *testing.T) {
 	addItemToContainer(world, gridHandle, item)
 
 	itemdefs.SetGlobalForTesting(createTestRegistry())
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move item from grid to hand
 	moveSpec := &netproto.InventoryMoveSpec{
@@ -210,7 +210,7 @@ func TestExecuteMove_GridToGrid_SameContainer(t *testing.T) {
 	addItemToContainer(world, gridHandle, item)
 
 	itemdefs.SetGlobalForTesting(createTestRegistry())
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move item within same grid to position (2,2)
 	dstX := uint32(2)
@@ -274,7 +274,7 @@ func TestExecuteMove_Swap(t *testing.T) {
 	addItemToContainer(world, handHandle, handItem)
 
 	itemdefs.SetGlobalForTesting(createTestRegistry())
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move grid item to hand (should swap)
 	moveSpec := &netproto.InventoryMoveSpec{
@@ -340,7 +340,7 @@ func TestExecuteMove_Merge(t *testing.T) {
 	addItemToContainer(world, handHandle, handItem)
 
 	itemdefs.SetGlobalForTesting(createTestRegistry())
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Move hand item to grid (should merge)
 	moveSpec := &netproto.InventoryMoveSpec{
@@ -378,7 +378,7 @@ func TestExecuteMove_ItemNotFound(t *testing.T) {
 	setupPlayerWithInventories(world, playerID, playerHandle)
 
 	itemdefs.SetGlobalForTesting(createTestRegistry())
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Try to move non-existent item
 	moveSpec := &netproto.InventoryMoveSpec{
@@ -420,7 +420,7 @@ func TestExecuteMove_VersionMismatch(t *testing.T) {
 	addItemToContainer(world, gridHandle, item)
 
 	itemdefs.SetGlobalForTesting(createTestRegistry())
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Try to move with wrong expected version
 	moveSpec := &netproto.InventoryMoveSpec{
@@ -488,7 +488,7 @@ func TestExecuteMove_ItemNotAllowedInHand(t *testing.T) {
 	addItemToContainer(world, gridHandle, item)
 
 	itemdefs.SetGlobalForTesting(registry)
-	service := NewInventoryOperationService(zap.NewNop())
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
 
 	// Try to move grid-only item to hand
 	moveSpec := &netproto.InventoryMoveSpec{

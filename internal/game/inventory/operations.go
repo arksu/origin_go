@@ -509,10 +509,14 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	droppedEntityID := itemID
 	nowUnix := ecs.GetResource[ecs.TimeState](w).Now.Unix()
 
-	// Resolve item resource
+	// Serialize nested inventory before removing item (needed for DB persistence)
+	nestedInvData := serializeNestedForDrop(w, itemID)
+	hasNestedItems := nestedInvData != nil && len(nestedInvData.Items) > 0
+
+	// Resolve item resource (check nested items for visual)
 	resource := srcItem.Resource
 	if itemDef, ok := itemdefs.Global().GetByID(int(srcItem.TypeID)); ok {
-		resource = itemDef.ResolveResource(false)
+		resource = itemDef.ResolveResource(hasNestedItems)
 	}
 
 	dropX := int(playerTransform.X)
@@ -528,6 +532,9 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 		c.Version++
 		return true
 	})
+
+	// 5b. Detach nested container from player (keep alive in ECS + RefIndex)
+	detachNestedContainer(w, playerHandle, itemID)
 
 	// 6. Create dropped entity in ECS
 	droppedHandle := w.Spawn(droppedEntityID, func(w *ecs.World, h types.Handle) {
@@ -589,7 +596,7 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 		}
 	}
 
-	// 7. Persist to DB (object + inventory)
+	// 7. Persist to DB (object + inventory including nested)
 	droppedData := droppedItemData{
 		HasInventory:    true,
 		ContainedItemID: uint64(itemID),
@@ -599,18 +606,18 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	objectJSON, _ := json.Marshal(droppedData)
 
 	// Serialize the dropped container for the inventory table
+	droppedItem := InventoryItemV1{
+		ItemID:          uint64(itemID),
+		TypeID:          srcItem.TypeID,
+		Quality:         srcItem.Quality,
+		Quantity:        srcItem.Quantity,
+		NestedInventory: nestedInvData,
+	}
 	invData := InventoryDataV1{
 		Kind:    uint8(constt.InventoryDroppedItem),
 		Key:     0,
 		Version: 1,
-		Items: []InventoryItemV1{
-			{
-				ItemID:   uint64(itemID),
-				TypeID:   srcItem.TypeID,
-				Quality:  srcItem.Quality,
-				Quantity: srcItem.Quantity,
-			},
-		},
+		Items:   []InventoryItemV1{droppedItem},
 	}
 	inventoryJSON, _ := json.Marshal(invData)
 
@@ -777,11 +784,17 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 		return true
 	})
 
-	// 8. Delete dropped entity from ECS and InventoryRefIndex
+	// 8. Attach or create nested container for container items (e.g. seed_bag with seeds)
+	var nestedHandle types.Handle
+	if srcItemDef, ok := itemdefs.Global().GetByID(int(srcItem.TypeID)); ok {
+		nestedHandle = ensureNestedContainer(w, playerHandle, &srcItem, srcItemDef)
+	}
+
+	// 9. Delete dropped entity from ECS and InventoryRefIndex
 	droppedInfo, _ := ecs.GetComponent[components.EntityInfo](w, droppedHandle)
 	deleteDroppedEntityFromECS(w, droppedEntityID, droppedHandle, s.logger)
 
-	// 9. Soft-delete from DB
+	// 10. Soft-delete from DB
 	if droppedInfo.Region > 0 {
 		if err := s.persister.DeleteDroppedObject(droppedInfo.Region, droppedEntityID); err != nil {
 			s.logger.Error("Failed to soft-delete picked up object from DB",
@@ -790,9 +803,21 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 		}
 	}
 
-	// 10. Build result
+	// 11. Build result
+	updatedOwner, _ := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
 	updatedDst, _ := ecs.GetComponent[components.InventoryContainer](w, dstInfo.Handle)
 	dstInfo.Container = &updatedDst
+	dstInfo.Owner = &updatedOwner
+
+	updatedContainers := []*ContainerInfo{dstInfo}
+	if nestedHandle != 0 {
+		nestedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
+		updatedContainers = append(updatedContainers, &ContainerInfo{
+			Handle:    nestedHandle,
+			Container: &nestedContainer,
+			Owner:     &updatedOwner,
+		})
+	}
 
 	s.logger.Debug("Item picked up from world",
 		zap.Uint64("player_id", uint64(playerID)),
@@ -801,8 +826,119 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 
 	return &OperationResult{
 		Success:                  true,
-		UpdatedContainers:        []*ContainerInfo{dstInfo},
+		UpdatedContainers:        updatedContainers,
 		DespawnedDroppedEntityID: &droppedEntityID,
+	}
+}
+
+// ensureNestedContainer finds or creates a nested InventoryContainer for a container item
+// (e.g. seed_bag). If the container already exists in RefIndex (e.g. preserved from a drop),
+// it attaches it to the player's InventoryOwner. Otherwise creates a new empty one.
+// Returns the nested container handle, or 0 if the item is not a container type.
+func ensureNestedContainer(
+	w *ecs.World,
+	playerHandle types.Handle,
+	item *components.InvItem,
+	itemDef *itemdefs.ItemDef,
+) types.Handle {
+	if itemDef.Container == nil {
+		return 0
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+
+	// Check if nested container already exists (e.g. preserved from drop or loaded from DB)
+	if existingHandle, found := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); found {
+		// Already in RefIndex — just ensure it's linked to the player's InventoryOwner
+		addNestedOwnerLink(w, playerHandle, item.ItemID, existingHandle)
+		return existingHandle
+	}
+
+	// Create new empty nested container
+	nestedContainer := components.InventoryContainer{
+		OwnerID: item.ItemID,
+		Kind:    constt.InventoryGrid,
+		Key:     0,
+		Version: 1,
+		Width:   uint8(itemDef.Container.Size.W),
+		Height:  uint8(itemDef.Container.Size.H),
+		Items:   []components.InvItem{},
+	}
+
+	nestedHandle := w.SpawnWithoutExternalID()
+	ecs.AddComponent(w, nestedHandle, nestedContainer)
+
+	refIndex.Add(constt.InventoryGrid, item.ItemID, 0, nestedHandle)
+	addNestedOwnerLink(w, playerHandle, item.ItemID, nestedHandle)
+
+	return nestedHandle
+}
+
+// addNestedOwnerLink adds an InventoryLink for a nested container to the player's InventoryOwner,
+// but only if such a link doesn't already exist.
+func addNestedOwnerLink(w *ecs.World, playerHandle types.Handle, itemID types.EntityID, nestedHandle types.Handle) {
+	ecs.MutateComponent[components.InventoryOwner](w, playerHandle, func(o *components.InventoryOwner) bool {
+		for _, link := range o.Inventories {
+			if link.Kind == constt.InventoryGrid && link.OwnerID == itemID && link.Key == 0 {
+				return false // already linked
+			}
+		}
+		o.Inventories = append(o.Inventories, components.InventoryLink{
+			Kind:    constt.InventoryGrid,
+			Key:     0,
+			OwnerID: itemID,
+			Handle:  nestedHandle,
+		})
+		return true
+	})
+}
+
+// detachNestedContainer removes the nested container link from the player's InventoryOwner.
+// The container entity and its RefIndex entry are preserved so items are not lost.
+func detachNestedContainer(w *ecs.World, playerHandle types.Handle, itemID types.EntityID) {
+	ecs.MutateComponent[components.InventoryOwner](w, playerHandle, func(o *components.InventoryOwner) bool {
+		for i, link := range o.Inventories {
+			if link.Kind == constt.InventoryGrid && link.OwnerID == itemID && link.Key == 0 {
+				o.Inventories = append(o.Inventories[:i], o.Inventories[i+1:]...)
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// serializeNestedForDrop serializes a nested container's items into InventoryDataV1
+// for DB persistence when dropping a container item.
+func serializeNestedForDrop(w *ecs.World, itemID types.EntityID) *InventoryDataV1 {
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	nestedHandle, found := refIndex.Lookup(constt.InventoryGrid, itemID, 0)
+	if !found {
+		return nil
+	}
+	container, ok := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
+	if !ok {
+		return nil
+	}
+
+	items := make([]InventoryItemV1, 0, len(container.Items))
+	for _, invItem := range container.Items {
+		items = append(items, InventoryItemV1{
+			ItemID:   uint64(invItem.ItemID),
+			TypeID:   invItem.TypeID,
+			Quality:  invItem.Quality,
+			Quantity: invItem.Quantity,
+			X:        invItem.X,
+			Y:        invItem.Y,
+		})
+	}
+
+	return &InventoryDataV1{
+		Kind:    uint8(constt.InventoryGrid),
+		Key:     0,
+		Width:   container.Width,
+		Height:  container.Height,
+		Version: int(container.Version),
+		Items:   items,
 	}
 }
 

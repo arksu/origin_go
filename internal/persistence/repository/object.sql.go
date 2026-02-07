@@ -205,6 +205,7 @@ ON CONFLICT (region, id) DO UPDATE SET
     owner_id = EXCLUDED.owner_id,
     data = EXCLUDED.data,
     last_tick = EXCLUDED.last_tick,
+    deleted_at = NULL,
     updated_at = NOW()
 `
 
