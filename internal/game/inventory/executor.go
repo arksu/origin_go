@@ -18,9 +18,13 @@ type InventoryExecutor struct {
 	logger  *zap.Logger
 }
 
-func NewInventoryExecutor(logger *zap.Logger) *InventoryExecutor {
+func NewInventoryExecutor(
+	logger *zap.Logger,
+	idAlloc EntityIDAllocator,
+	persister DroppedItemPersister,
+) *InventoryExecutor {
 	return &InventoryExecutor{
-		service: NewInventoryOperationService(logger),
+		service: NewInventoryOperationService(logger, idAlloc, persister),
 		logger:  logger,
 	}
 }

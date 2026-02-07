@@ -47,6 +47,9 @@ type World struct {
 
 	// Delta time for current tick
 	DeltaTime float64
+
+	// Tick counter for system throttling (UpdateEveryNTicks)
+	tickCount uint64
 }
 
 // NewWorld creates a new ECS world with default capacity
@@ -104,20 +107,27 @@ type System interface {
 	Update(w *World, dt float64)
 	Priority() int // Lower priority runs first
 	Name() string
+	UpdateEveryNTicks() uint64 // 0 = every tick, N = every N ticks
 }
 
 // BaseSystem provides default implementations for System interface
 type BaseSystem struct {
-	priority int
-	name     string
+	priority          int
+	name              string
+	updateEveryNTicks uint64
 }
 
 func NewBaseSystem(name string, priority int) BaseSystem {
 	return BaseSystem{name: name, priority: priority}
 }
 
-func (s BaseSystem) Priority() int { return s.priority }
-func (s BaseSystem) Name() string  { return s.name }
+func NewBaseSystemWithInterval(name string, priority int, everyNTicks uint64) BaseSystem {
+	return BaseSystem{name: name, priority: priority, updateEveryNTicks: everyNTicks}
+}
+
+func (s BaseSystem) Priority() int             { return s.priority }
+func (s BaseSystem) Name() string              { return s.name }
+func (s BaseSystem) UpdateEveryNTicks() uint64 { return s.updateEveryNTicks }
 
 // Spawn creates a new entity with the given external EntityID
 // Returns the Handle for internal ECS operations
@@ -300,8 +310,12 @@ func (w *World) Update(dt float64) {
 		w.systemsSorted = true
 	}
 	w.DeltaTime = dt
+	w.tickCount++
 
 	for _, sys := range w.systems {
+		if n := sys.UpdateEveryNTicks(); n > 0 && w.tickCount%n != 0 {
+			continue
+		}
 		sys.Update(w, dt)
 	}
 }
