@@ -1,6 +1,8 @@
 package systems
 
 import (
+	"math"
+	"math/rand"
 	_const "origin/internal/const"
 	"time"
 
@@ -84,6 +86,14 @@ func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 
+		// If наблюдатель не двигался и не менял чанк — пересчёт можно отложить
+		if s.skipIfStationary(observerHandle, &observerVis, now) {
+			visState.Mu.Lock()
+			visState.VisibleByObserver[observerHandle] = observerVis
+			visState.Mu.Unlock()
+			continue
+		}
+
 		if now.Before(observerVis.NextUpdateTime) {
 			continue
 		}
@@ -157,8 +167,7 @@ func (s *VisionSystem) updateObserverVisibility(
 			targetStealth = stealth.Value
 		}
 
-		effectiveRange := vision.Power - targetStealth
-		if effectiveRange > 0 && distSq <= effectiveRange*effectiveRange {
+		if CalcVision(distSq, visionRadius, vision.Power, targetStealth) {
 			s.newVisibleSet[candidateHandle] = struct{}{}
 		}
 	}
@@ -227,7 +236,11 @@ func (s *VisionSystem) updateObserverVisibility(
 	}
 	//s.logger.Debug("VisionSystem updated", zap.Any("newVisibleSet", s.newVisibleSet), zap.Any("observerVis", observerVis))
 
-	observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval)
+	observerVis.LastX = observerTransform.X
+	observerVis.LastY = observerTransform.Y
+	observerVis.LastChunkX = chunkRef.CurrentChunkX
+	observerVis.LastChunkY = chunkRef.CurrentChunkY
+	observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval + jitterDuration())
 }
 
 func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.ChunkRef) {
@@ -237,9 +250,19 @@ func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.
 		return
 	}
 
-	chunk.Spatial().QueryRadius(x, y, radius, &s.candidatesBuffer)
-
 	chunkWorldSize := float64(_const.ChunkWorldSize)
+	chunkMinX := float64(chunkCoord.X) * chunkWorldSize
+	chunkMaxX := float64(chunkCoord.X+1) * chunkWorldSize
+	chunkMinY := float64(chunkCoord.Y) * chunkWorldSize
+	chunkMaxY := float64(chunkCoord.Y+1) * chunkWorldSize
+
+	// Если круг целиком внутри чанка — соседей не трогаем
+	localOnly := x-radius >= chunkMinX && x+radius <= chunkMaxX && y-radius >= chunkMinY && y+radius <= chunkMaxY
+
+	chunk.Spatial().QueryRadius(x, y, radius, &s.candidatesBuffer)
+	if localOnly {
+		return
+	}
 
 	queryMinX := x - radius
 	queryMaxX := x + radius
@@ -329,10 +352,54 @@ func CalcMaxVisionRadius(vision components.Vision) float64 {
 	return vision.Radius
 }
 
-func CalcVision(distance float64, power float64, targetStealth float64) bool {
+func CalcVision(distSq float64, maxRadius float64, power float64, targetStealth float64) bool {
 	effectiveRange := power - targetStealth
 	if effectiveRange <= 0 {
 		return false
 	}
-	return distance <= effectiveRange
+	effectiveRangeSq := effectiveRange * effectiveRange
+	if effectiveRange > maxRadius {
+		effectiveRangeSq = maxRadius * maxRadius
+	}
+	return distSq <= effectiveRangeSq
+}
+
+func jitterDuration() time.Duration {
+	if _const.VisionUpdateJitter <= 0 {
+		return 0
+	}
+	// Uniform [-jitter, +jitter]
+	rangeNs := int64(_const.VisionUpdateJitter * 2)
+	offset := rand.Int63n(rangeNs) - int64(_const.VisionUpdateJitter)
+	return time.Duration(offset)
+}
+
+// skipIfStationary: если наблюдатель не двигался и не менял чанк — пересчёт не нужен.
+// При движении NextUpdateTime сбрасывается на now, чтобы пересчитать немедленно.
+func (s *VisionSystem) skipIfStationary(observerHandle types.Handle, observerVis *ecs.ObserverVisibility, now time.Time) bool {
+	transform, ok := s.transformStorage.Get(observerHandle)
+	if !ok {
+		return false
+	}
+
+	chunkRef, ok := s.chunkRefStorage.Get(observerHandle)
+	if !ok {
+		return false
+	}
+
+	// Первичное вычисление — не пропускаем
+	if observerVis.Known == nil {
+		return false
+	}
+
+	moved := math.Abs(transform.X-observerVis.LastX) > _const.VisionPosEpsilon ||
+		math.Abs(transform.Y-observerVis.LastY) > _const.VisionPosEpsilon ||
+		observerVis.LastChunkX != chunkRef.CurrentChunkX ||
+		observerVis.LastChunkY != chunkRef.CurrentChunkY
+
+	if moved {
+		return false
+	}
+
+	return true
 }
