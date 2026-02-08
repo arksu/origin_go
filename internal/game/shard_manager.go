@@ -9,6 +9,7 @@ import (
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
+	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 	"origin/internal/persistence"
 )
@@ -18,6 +19,7 @@ type ShardManager struct {
 	db              *persistence.Postgres
 	entityIDManager *EntityIDManager
 	objectFactory   *world.ObjectFactory
+	snapshotSender  *inventory.SnapshotSender
 	logger          *zap.Logger
 
 	shards map[int]*Shard
@@ -26,7 +28,7 @@ type ShardManager struct {
 	eventBus   *eventbus.EventBus
 }
 
-func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, logger *zap.Logger) *ShardManager {
+func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, logger *zap.Logger) *ShardManager {
 	ebCfg := &eventbus.Config{
 		MinWorkers: cfg.Game.WorkerPoolSize,
 		MaxWorkers: cfg.Game.WorkerPoolSize * 4,
@@ -45,6 +47,7 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 		db:              db,
 		entityIDManager: entityIDManager,
 		objectFactory:   objectFactory,
+		snapshotSender:  snapshotSender,
 		logger:          logger,
 		shards:          make(map[int]*Shard),
 		workerPool:      NewWorkerPool(cfg.Game.WorkerPoolSize),
@@ -52,7 +55,7 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 	}
 
 	for layer := 0; layer < cfg.Game.MaxLayers; layer++ {
-		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, sm.eventBus, logger.Named("shard"))
+		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, snapshotSender, sm.eventBus, logger.Named("shard"))
 	}
 
 	return sm
