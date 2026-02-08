@@ -8,6 +8,8 @@ package repository
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/lib/pq"
 )
 
 const deleteInventory = `-- name: DeleteInventory :exec
@@ -87,6 +89,40 @@ func (q *Queries) UpdateInventory(ctx context.Context, arg UpdateInventoryParams
 		arg.Kind,
 		arg.InventoryKey,
 		arg.Version_2,
+	)
+	return err
+}
+
+const upsertInventories = `-- name: UpsertInventories :exec
+INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
+SELECT
+    unnest($1::bigint[]),
+    unnest($2::int[]),
+    unnest($3::int[]),
+    unnest($4::text[])::jsonb,
+    unnest($5::int[])
+ON CONFLICT (owner_id, kind, inventory_key)
+DO UPDATE SET
+    data = EXCLUDED.data,
+    version = EXCLUDED.version,
+    updated_at = now()
+`
+
+type UpsertInventoriesParams struct {
+	OwnerIds      []int64  `json:"owner_ids"`
+	Kinds         []int    `json:"kinds"`
+	InventoryKeys []int    `json:"inventory_keys"`
+	Datas         []string `json:"datas"`
+	Versions      []int    `json:"versions"`
+}
+
+func (q *Queries) UpsertInventories(ctx context.Context, arg UpsertInventoriesParams) error {
+	_, err := q.db.ExecContext(ctx, upsertInventories,
+		pq.Array(arg.OwnerIds),
+		pq.Array(arg.Kinds),
+		pq.Array(arg.InventoryKeys),
+		pq.Array(arg.Datas),
+		pq.Array(arg.Versions),
 	)
 	return err
 }

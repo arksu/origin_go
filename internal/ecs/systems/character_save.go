@@ -235,36 +235,42 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		return
 	}
 
-	// Save inventories for each character
-	inventoriesSaved := 0
-	inventoriesErrors := 0
+	// Batch upsert all inventories in a single query
+	totalInv := 0
 	for _, snapshot := range batch {
-		for _, inv := range snapshot.Inventories {
-			_, err := s.db.Queries().UpsertInventory(ctx, repository.UpsertInventoryParams{
-				OwnerID:      inv.CharacterID,
-				Kind:         inv.Kind,
-				InventoryKey: inv.InventoryKey,
-				Data:         inv.Data,
-				Version:      inv.Version,
-			})
-			if err != nil {
-				inventoriesErrors++
-				s.logger.Error("Failed to upsert inventory",
-					zap.Int64("character_id", inv.CharacterID),
-					zap.Int16("kind", inv.Kind),
-					zap.Int16("key", inv.InventoryKey),
-					zap.Error(err))
-			} else {
-				inventoriesSaved++
-			}
-		}
+		totalInv += len(snapshot.Inventories)
 	}
 
-	if inventoriesErrors > 0 {
-		s.logger.Debug("Batch character save completed",
-			zap.Int("batch_size", len(batch)),
-			zap.Int("inventories_saved", inventoriesSaved),
-			zap.Int("inventories_errors", inventoriesErrors))
+	if totalInv > 0 {
+		ownerIDs := make([]int64, 0, totalInv)
+		kinds := make([]int, 0, totalInv)
+		inventoryKeys := make([]int, 0, totalInv)
+		datas := make([]string, 0, totalInv)
+		versions := make([]int, 0, totalInv)
+
+		for _, snapshot := range batch {
+			for _, inv := range snapshot.Inventories {
+				ownerIDs = append(ownerIDs, inv.CharacterID)
+				kinds = append(kinds, int(inv.Kind))
+				inventoryKeys = append(inventoryKeys, int(inv.InventoryKey))
+				datas = append(datas, string(inv.Data))
+				versions = append(versions, inv.Version)
+			}
+		}
+
+		err = s.db.Queries().UpsertInventories(ctx, repository.UpsertInventoriesParams{
+			OwnerIds:      ownerIDs,
+			Kinds:         kinds,
+			InventoryKeys: inventoryKeys,
+			Datas:         datas,
+			Versions:      versions,
+		})
+		if err != nil {
+			s.logger.Error("Failed to batch upsert inventories",
+				zap.Int("batch_size", len(batch)),
+				zap.Int("inventory_count", totalInv),
+				zap.Error(err))
+		}
 	}
 }
 

@@ -4,7 +4,7 @@
   "items": [
     {
       "defId": 2001,
-      "key": "food_apple",
+      "key": "apple",
       "name": "Apple",
       "resource": "items/apple.png",
       "tags": [
