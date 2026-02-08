@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,6 +51,7 @@ type Client struct {
 	sendCh      chan []byte
 	closeCh     chan struct{}
 	closeOnce   sync.Once
+	writeBuf    *bufio.Writer
 	CharacterID types.EntityID
 	Layer       int
 	StreamEpoch atomic.Uint32
@@ -188,12 +190,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	clientID := s.nextID.Add(1)
 	client := &Client{
-		ID:      clientID,
-		conn:    conn,
-		server:  s,
-		logger:  s.logger.Named("client").With(zap.Uint64("id", clientID)),
-		sendCh:  make(chan []byte, s.gameCfg.SendChannelBuffer),
-		closeCh: make(chan struct{}),
+		ID:       clientID,
+		conn:     conn,
+		server:   s,
+		logger:   s.logger.Named("client").With(zap.Uint64("id", clientID)),
+		sendCh:   make(chan []byte, s.gameCfg.SendChannelBuffer),
+		closeCh:  make(chan struct{}),
+		writeBuf: bufio.NewWriterSize(conn, 4096),
 	}
 
 	s.clientsMu.Lock()
@@ -277,6 +280,7 @@ func (c *Client) writeLoop() {
 	defer c.Close()
 
 	for {
+		// Block until at least one message arrives (or shutdown)
 		select {
 		case <-c.closeCh:
 			return
@@ -284,7 +288,27 @@ func (c *Client) writeLoop() {
 			return
 		case msg := <-c.sendCh:
 			c.conn.SetWriteDeadline(time.Now().Add(c.server.cfg.WriteTimeout))
-			if err := wsutil.WriteServerBinary(c.conn, msg); err != nil {
+
+			// Write first message into buffered writer
+			if err := wsutil.WriteServerBinary(c.writeBuf, msg); err != nil {
+				return
+			}
+
+			// Drain all remaining pending messages (non-blocking)
+		drainLoop:
+			for {
+				select {
+				case msg = <-c.sendCh:
+					if err := wsutil.WriteServerBinary(c.writeBuf, msg); err != nil {
+						return
+					}
+				default:
+					break drainLoop
+				}
+			}
+
+			// Single flush — coalesces all buffered frames into minimal syscalls
+			if err := c.writeBuf.Flush(); err != nil {
 				return
 			}
 		}
