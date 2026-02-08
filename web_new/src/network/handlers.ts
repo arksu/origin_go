@@ -118,7 +118,6 @@ export function registerMessageHandlers(): void {
 
     const serverTimeMs = Number(msg.serverTimeMs || 0)
     const moveSeq = msg.moveSeq || 0
-    const streamEpoch = msg.streamEpoch || 0
     const isTeleport = msg.isTeleport || false
 
     const x = msg.movement.position?.x || 0
@@ -135,7 +134,6 @@ export function registerMessageHandlers(): void {
         entityId,
         serverTimeMs,
         moveSeq,
-        streamEpoch,
         isTeleport,
         position: `(${x}, ${y})`,
         velocity: `(${vx}, ${vy})`,
@@ -151,7 +149,6 @@ export function registerMessageHandlers(): void {
       entityId,
       serverTimeMs,
       moveSeq,
-      streamEpoch,
       isTeleport,
       x, y,
       vx, vy,
