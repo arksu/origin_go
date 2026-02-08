@@ -200,6 +200,39 @@ export const useGameStore = defineStore('game', () => {
         openNestedInventories.value.set(key, state)
       }
     }
+
+    validateOpenNestedInventories()
+  }
+
+  function collectNestedRefsFromGrids(): Set<string> {
+    const refs = new Set<string>()
+    for (const inv of inventories.value.values()) {
+      if (!inv.grid?.items) continue
+      for (const gridItem of inv.grid.items) {
+        if (gridItem.item?.nestedRef) {
+          refs.add(refKey(gridItem.item.nestedRef))
+        }
+      }
+    }
+    return refs
+  }
+
+  function validateOpenNestedInventories() {
+    if (openNestedInventories.value.size === 0) return
+
+    const validRefs = collectNestedRefsFromGrids()
+    const toClose: string[] = []
+
+    for (const windowKey of openNestedInventories.value.keys()) {
+      if (!validRefs.has(windowKey)) {
+        toClose.push(windowKey)
+      }
+    }
+
+    for (const key of toClose) {
+      console.log('[gameStore] Auto-closing nested inventory (item removed from grid):', key)
+      openNestedInventories.value.delete(key)
+    }
   }
 
   function removeInventory(state: proto.IInventoryState) {
