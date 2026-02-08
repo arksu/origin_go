@@ -142,7 +142,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.tick_rate", 10)
 	v.SetDefault("game.player_active_chunk_radius", 1)
 	v.SetDefault("game.player_preload_chunk_radius", 2)
-	v.SetDefault("game.player_save_interval", 10*time.Second)
+	v.SetDefault("game.player_save_interval", 30*time.Second)
 	v.SetDefault("game.region", 1)
 	v.SetDefault("game.max_layers", 3)
 	v.SetDefault("game.disconnect_delay", 3)

@@ -58,12 +58,19 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 	}
 
 	// Get observers who can see this target entity directly from ObserversByVisibleTarget
+	// Copy handles under lock to avoid concurrent map iteration and map write
 	visibilityState.Mu.RLock()
 	observers, hasObservers := visibilityState.ObserversByVisibleTarget[targetHandle]
+	var observerHandles []types.Handle
+	if hasObservers && len(observers) > 0 {
+		observerHandles = make([]types.Handle, 0, len(observers))
+		for h := range observers {
+			observerHandles = append(observerHandles, h)
+		}
+	}
 	visibilityState.Mu.RUnlock()
 
-	if !hasObservers || len(observers) == 0 {
-		// No observers can see this entity, nothing to send
+	if len(observerHandles) == 0 {
 		return nil
 	}
 
@@ -90,7 +97,7 @@ func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e ev
 	}
 
 	// Send only to observers who can see the target entity
-	for observerHandle := range observers {
+	for _, observerHandle := range observerHandles {
 		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
 		if !ok {
 			continue
