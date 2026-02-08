@@ -25,6 +25,8 @@ const (
 	PlayerVisionRadius   = 600
 	PlayerVisionPower    = 600
 	VisionUpdateInterval = 3 * time.Second
+	VisionUpdateJitter   = 50 * time.Millisecond
+	VisionPosEpsilon     = 0.01
 )
 
 const ServerTimeSavePeriodSeconds = 20
