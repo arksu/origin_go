@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"math"
 	"math/rand"
 	_const "origin/internal/const"
 	"time"
@@ -83,14 +82,6 @@ func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 	for observerHandle, observerVis := range visState.VisibleByObserver {
 		if !w.Alive(observerHandle) {
 			s.cleanupDeadObserver(w, visState, observerHandle, observerVis.Known)
-			continue
-		}
-
-		// If наблюдатель не двигался и не менял чанк — пересчёт можно отложить
-		if s.skipIfStationary(observerHandle, &observerVis, now) {
-			visState.Mu.Lock()
-			visState.VisibleByObserver[observerHandle] = observerVis
-			visState.Mu.Unlock()
 			continue
 		}
 
@@ -372,34 +363,4 @@ func jitterDuration() time.Duration {
 	rangeNs := int64(_const.VisionUpdateJitter * 2)
 	offset := rand.Int63n(rangeNs) - int64(_const.VisionUpdateJitter)
 	return time.Duration(offset)
-}
-
-// skipIfStationary: если наблюдатель не двигался и не менял чанк — пересчёт не нужен.
-// При движении NextUpdateTime сбрасывается на now, чтобы пересчитать немедленно.
-func (s *VisionSystem) skipIfStationary(observerHandle types.Handle, observerVis *ecs.ObserverVisibility, now time.Time) bool {
-	transform, ok := s.transformStorage.Get(observerHandle)
-	if !ok {
-		return false
-	}
-
-	chunkRef, ok := s.chunkRefStorage.Get(observerHandle)
-	if !ok {
-		return false
-	}
-
-	// Первичное вычисление — не пропускаем
-	if observerVis.Known == nil {
-		return false
-	}
-
-	moved := math.Abs(transform.X-observerVis.LastX) > _const.VisionPosEpsilon ||
-		math.Abs(transform.Y-observerVis.LastY) > _const.VisionPosEpsilon ||
-		observerVis.LastChunkX != chunkRef.CurrentChunkX ||
-		observerVis.LastChunkY != chunkRef.CurrentChunkY
-
-	if moved {
-		return false
-	}
-
-	return true
 }

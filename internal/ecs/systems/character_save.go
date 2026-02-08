@@ -17,8 +17,8 @@ import (
 
 const (
 	snapshotChannelSize = 1000
-	batchSize           = 50
-	batchTimeout        = 100 * time.Millisecond
+	batchSize           = 100
+	batchTimeout        = 500 * time.Millisecond
 )
 
 // InventorySnapshot represents a serialized inventory container for database storage
