@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"time"
 )
 
 // DefaultMaxHandles is the default maximum number of active entities
@@ -50,6 +51,16 @@ type World struct {
 
 	// Tick counter for system throttling (UpdateEveryNTicks)
 	tickCount uint64
+
+	// Per-system timing stats
+	systemStats []SystemTimingStat
+}
+
+// SystemTimingStat holds accumulated timing for a single system
+type SystemTimingStat struct {
+	Name        string
+	DurationSum time.Duration
+	Count       uint64
 }
 
 // NewWorld creates a new ECS world with default capacity
@@ -308,16 +319,55 @@ func (w *World) Update(dt float64) {
 			return w.systems[i].Priority() < w.systems[j].Priority()
 		})
 		w.systemsSorted = true
+		// (Re)initialize per-system stats slice
+		w.systemStats = make([]SystemTimingStat, len(w.systems))
+		for i, sys := range w.systems {
+			w.systemStats[i].Name = sys.Name()
+		}
 	}
 	w.DeltaTime = dt
 	w.tickCount++
 
-	for _, sys := range w.systems {
+	for i, sys := range w.systems {
 		if n := sys.UpdateEveryNTicks(); n > 0 && w.tickCount%n != 0 {
 			continue
 		}
+		start := time.Now()
 		sys.Update(w, dt)
+		w.systemStats[i].DurationSum += time.Since(start)
+		w.systemStats[i].Count++
 	}
+}
+
+// DrainSystemStats returns accumulated per-system timing stats and resets them.
+// Single-threaded - no lock needed (called from shard under lock).
+func (w *World) DrainSystemStats() []SystemTimingStat {
+	out := make([]SystemTimingStat, len(w.systemStats))
+	copy(out, w.systemStats)
+	for i := range w.systemStats {
+		w.systemStats[i].DurationSum = 0
+		w.systemStats[i].Count = 0
+	}
+	return out
+}
+
+// AddExternalTiming allows external components (like ChunkManager) to add timing data.
+// This creates a virtual "system" entry for non-ECS work done during the tick.
+// Single-threaded - no lock needed (called from shard under lock).
+func (w *World) AddExternalTiming(name string, duration time.Duration) {
+	for i := range w.systemStats {
+		if w.systemStats[i].Name == name {
+			w.systemStats[i].DurationSum += duration
+			w.systemStats[i].Count++
+			return
+		}
+	}
+	// If not found, append new entry
+	w.systemStats = append(w.systemStats, SystemTimingStat{
+		Name:        name,
+		DurationSum: duration,
+		Count:       1,
+	})
 }
 
 // Query creates a new query for this world

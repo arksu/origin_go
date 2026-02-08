@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -13,6 +14,16 @@ import (
 	"origin/internal/game/world"
 	"origin/internal/persistence"
 )
+
+type ShardUpdateResult struct {
+	TotalDuration  time.Duration
+	ShardDurations []ShardDuration
+}
+
+type ShardDuration struct {
+	Layer    int
+	Duration time.Duration
+}
 
 type ShardManager struct {
 	cfg             *config.Config
@@ -69,22 +80,37 @@ func (sm *ShardManager) GetShards() map[int]*Shard {
 	return sm.shards
 }
 
-func (sm *ShardManager) Update(ts ecs.TimeState) {
+func (sm *ShardManager) Update(ts ecs.TimeState) ShardUpdateResult {
 	shards := make([]*Shard, 0, len(sm.shards))
 	for _, s := range sm.shards {
 		shards = append(shards, s)
 	}
 
 	var wg sync.WaitGroup
-	for _, shard := range shards {
+	schedStart := time.Now()
+
+	shardDurations := make([]ShardDuration, len(shards))
+
+	for i, shard := range shards {
 		wg.Add(1)
 		s := shard
+		idx := i
 		sm.workerPool.Submit(func() {
 			defer wg.Done()
+			execStart := time.Now()
 			s.Update(ts)
+			shardDurations[idx] = ShardDuration{
+				Layer:    s.layer,
+				Duration: time.Since(execStart),
+			}
 		})
 	}
 	wg.Wait()
+
+	return ShardUpdateResult{
+		TotalDuration:  time.Since(schedStart),
+		ShardDurations: shardDurations,
+	}
 }
 
 func (sm *ShardManager) Stop() {

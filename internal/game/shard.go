@@ -21,6 +21,7 @@ import (
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 	"origin/internal/persistence"
+	"time"
 )
 
 type ShardState int
@@ -128,7 +129,9 @@ func (s *Shard) ChunkManager() *world.ChunkManager {
 }
 
 func (s *Shard) Update(ts ecs.TimeState) {
+	shardStart := time.Now()
 	s.mu.Lock()
+	lockWait := time.Since(shardStart)
 	defer s.mu.Unlock()
 	if s.state != ShardStateRunning {
 		return
@@ -137,8 +140,17 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	// Set TimeState resource before systems run (zero-alloc: mutate in place)
 	*ecs.GetResource[ecs.TimeState](s.world) = ts
 
-	s.chunkManager.Update(ts.Delta)
+	// Add lock wait timing
+	s.world.AddExternalTiming("ShardLockWait", lockWait)
+
+	// ChunkManager does work via systems, not in Update()
+	// Measure actual chunk work through ChunkSystem timing
+
 	s.world.Update(ts.Delta)
+
+	// Add full shard timing (including lock overhead) after world.Update
+	shardDuration := time.Since(shardStart)
+	s.world.AddExternalTiming("ShardTotal", shardDuration)
 }
 
 func (s *Shard) Stop() {
