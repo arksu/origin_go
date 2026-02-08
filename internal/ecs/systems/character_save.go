@@ -113,7 +113,7 @@ func NewCharacterSaver(db *persistence.Postgres, numWorkers int, inventorySaver 
 		inventorySaver:  inventorySaver,
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < numWorkers; i++ {
 		cs.wg.Add(1)
 		go cs.saveWorker(i)
 	}

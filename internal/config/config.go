@@ -151,7 +151,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.max_entities", 1048576)
 	v.SetDefault("game.worker_pool_size", 16)
 	v.SetDefault("game.load_workers", 48)
-	v.SetDefault("game.save_workers", 48)
+	v.SetDefault("game.save_workers", 10)
 	v.SetDefault("game.spawn_timeout", 30*time.Second)
 	v.SetDefault("game.near_spawn_radius", 20)
 	v.SetDefault("game.near_spawn_tries", 5)
