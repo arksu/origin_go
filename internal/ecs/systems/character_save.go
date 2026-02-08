@@ -258,10 +258,12 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		}
 	}
 
-	s.logger.Debug("Batch character save completed",
-		zap.Int("batch_size", len(batch)),
-		zap.Int("inventories_saved", inventoriesSaved),
-		zap.Int("inventories_errors", inventoriesErrors))
+	if inventoriesErrors > 0 {
+		s.logger.Debug("Batch character save completed",
+			zap.Int("batch_size", len(batch)),
+			zap.Int("inventories_saved", inventoriesSaved),
+			zap.Int("inventories_errors", inventoriesErrors))
+	}
 }
 
 // SaveAll saves all characters from CharacterEntities
