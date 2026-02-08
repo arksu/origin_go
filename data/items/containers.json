@@ -22,8 +22,8 @@
       },
       "container": {
         "size": {
-          "w": 5,
-          "h": 5
+          "w": 6,
+          "h": 7
         },
         "rules": {
           "allowTags": [
