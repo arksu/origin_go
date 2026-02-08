@@ -3,6 +3,7 @@ package systems
 import (
 	"math/rand"
 	_const "origin/internal/const"
+	"slices"
 	"time"
 
 	"origin/internal/core"
@@ -14,6 +15,11 @@ import (
 	"go.uber.org/zap"
 )
 
+type visibleEntry struct {
+	Handle   types.Handle
+	EntityID types.EntityID
+}
+
 type VisionSystem struct {
 	ecs.BaseSystem
 	chunkManager core.ChunkManager
@@ -21,12 +27,15 @@ type VisionSystem struct {
 	logger       *zap.Logger
 
 	candidatesBuffer []types.Handle
-	newVisibleSet    map[types.Handle]struct{}
+	newVisibleBuf    []visibleEntry
+	spawnTargets     []types.Handle
+	despawnTargets   []types.Handle
 
-	transformStorage *ecs.ComponentStorage[components.Transform]
-	visionStorage    *ecs.ComponentStorage[components.Vision]
-	stealthStorage   *ecs.ComponentStorage[components.Stealth]
-	chunkRefStorage  *ecs.ComponentStorage[components.ChunkRef]
+	transformStorage  *ecs.ComponentStorage[components.Transform]
+	visionStorage     *ecs.ComponentStorage[components.Vision]
+	stealthStorage    *ecs.ComponentStorage[components.Stealth]
+	chunkRefStorage   *ecs.ComponentStorage[components.ChunkRef]
+	entityInfoStorage *ecs.ComponentStorage[components.EntityInfo]
 }
 
 func NewVisionSystem(
@@ -36,16 +45,19 @@ func NewVisionSystem(
 	logger *zap.Logger,
 ) *VisionSystem {
 	return &VisionSystem{
-		BaseSystem:       ecs.NewBaseSystem("VisionSystem", 350),
-		chunkManager:     chunkManager,
-		eventBus:         eventBus,
-		logger:           logger,
-		candidatesBuffer: make([]types.Handle, 0, 256),
-		newVisibleSet:    make(map[types.Handle]struct{}, 128),
-		transformStorage: ecs.GetOrCreateStorage[components.Transform](world),
-		visionStorage:    ecs.GetOrCreateStorage[components.Vision](world),
-		stealthStorage:   ecs.GetOrCreateStorage[components.Stealth](world),
-		chunkRefStorage:  ecs.GetOrCreateStorage[components.ChunkRef](world),
+		BaseSystem:        ecs.NewBaseSystem("VisionSystem", 350),
+		chunkManager:      chunkManager,
+		eventBus:          eventBus,
+		logger:            logger,
+		candidatesBuffer:  make([]types.Handle, 0, 256),
+		newVisibleBuf:     make([]visibleEntry, 0, 256),
+		spawnTargets:      make([]types.Handle, 0, 64),
+		despawnTargets:    make([]types.Handle, 0, 64),
+		transformStorage:  ecs.GetOrCreateStorage[components.Transform](world),
+		visionStorage:     ecs.GetOrCreateStorage[components.Vision](world),
+		stealthStorage:    ecs.GetOrCreateStorage[components.Stealth](world),
+		chunkRefStorage:   ecs.GetOrCreateStorage[components.ChunkRef](world),
+		entityInfoStorage: ecs.GetOrCreateStorage[components.EntityInfo](world),
 	}
 }
 
@@ -67,11 +79,6 @@ func (s *VisionSystem) ForceUpdateForObserver(w *ecs.World, observerHandle types
 
 	// Update visibility immediately
 	s.updateObserverVisibility(w, visState, observerHandle, &observerVis, now)
-
-	// Update the stored observer visibility
-	visState.Mu.Lock()
-	visState.VisibleByObserver[observerHandle] = observerVis
-	visState.Mu.Unlock()
 }
 
 func (s *VisionSystem) Update(w *ecs.World, dt float64) {
@@ -90,9 +97,6 @@ func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		s.updateObserverVisibility(w, visState, observerHandle, &observerVis, now)
-		visState.Mu.Lock()
-		visState.VisibleByObserver[observerHandle] = observerVis
-		visState.Mu.Unlock()
 	}
 }
 
@@ -121,14 +125,14 @@ func (s *VisionSystem) updateObserverVisibility(
 	observerID, _ := w.GetExternalID(observerHandle)
 
 	visionRadius := CalcMaxVisionRadius(vision)
+	visionRadiusSq := visionRadius * visionRadius
 
+	// --- Spatial query ---
 	s.candidatesBuffer = s.candidatesBuffer[:0]
 	s.findCandidates(observerTransform.X, observerTransform.Y, visionRadius, chunkRef)
 
-	for k := range s.newVisibleSet {
-		delete(s.newVisibleSet, k)
-	}
-
+	// --- Filter candidates into sorted visible slice (1.1 + 1.2) ---
+	s.newVisibleBuf = s.newVisibleBuf[:0]
 	for _, candidateHandle := range s.candidatesBuffer {
 		if !w.Alive(candidateHandle) {
 			continue
@@ -136,7 +140,7 @@ func (s *VisionSystem) updateObserverVisibility(
 
 		// Always include self in visible set for proper ObserversByVisibleTarget mapping
 		if candidateHandle == observerHandle {
-			s.newVisibleSet[candidateHandle] = struct{}{}
+			s.newVisibleBuf = append(s.newVisibleBuf, visibleEntry{candidateHandle, observerID})
 			continue
 		}
 
@@ -149,7 +153,7 @@ func (s *VisionSystem) updateObserverVisibility(
 		dy := candidateTransform.Y - observerTransform.Y
 		distSq := dx*dx + dy*dy
 
-		if distSq > visionRadius*visionRadius {
+		if distSq > visionRadiusSq {
 			continue
 		}
 
@@ -159,79 +163,101 @@ func (s *VisionSystem) updateObserverVisibility(
 		}
 
 		if CalcVision(distSq, visionRadius, vision.Power, targetStealth) {
-			s.newVisibleSet[candidateHandle] = struct{}{}
+			entityID, ok := w.GetExternalID(candidateHandle)
+			if ok {
+				s.newVisibleBuf = append(s.newVisibleBuf, visibleEntry{candidateHandle, entityID})
+			}
 		}
 	}
 
+	// Sort by Handle for O(log n) binary search in despawn diff
+	slices.SortFunc(s.newVisibleBuf, func(a, b visibleEntry) int {
+		if a.Handle < b.Handle {
+			return -1
+		}
+		if a.Handle > b.Handle {
+			return 1
+		}
+		return 0
+	})
+
+	// --- Diff: spawn / despawn ---
 	oldKnown := observerVis.Known
 	if oldKnown == nil {
 		oldKnown = make(map[types.Handle]types.EntityID, 32)
 	}
 
-	for targetHandle := range s.newVisibleSet {
-		if _, wasKnown := oldKnown[targetHandle]; !wasKnown {
-			targetID, ok := w.GetExternalID(targetHandle)
-			if !ok {
-				continue
+	s.spawnTargets = s.spawnTargets[:0]
+	for _, entry := range s.newVisibleBuf {
+		if _, wasKnown := oldKnown[entry.Handle]; !wasKnown {
+			layer := 0
+			if info, ok := s.entityInfoStorage.Get(entry.Handle); ok {
+				layer = info.Layer
 			}
-
-			// Get target entity layer
-			targetEntityInfo, hasTargetEntityInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
-			layer := 0 // default layer
-			if hasTargetEntityInfo {
-				layer = targetEntityInfo.Layer
-			}
-
-			s.addToObserversByTarget(visState, targetHandle, observerHandle)
-
 			s.eventBus.PublishAsync(
-				ecs.NewEntitySpawnEvent(observerID, targetID, targetHandle, layer),
+				ecs.NewEntitySpawnEvent(observerID, entry.EntityID, entry.Handle, layer),
 				eventbus.PriorityMedium,
 			)
+			s.spawnTargets = append(s.spawnTargets, entry.Handle)
 		}
 	}
 
+	s.despawnTargets = s.despawnTargets[:0]
 	for targetHandle, targetID := range oldKnown {
-		if _, stillVisible := s.newVisibleSet[targetHandle]; !stillVisible {
-			// Use saved EntityID from Known map (works even if entity is already despawned)
-
-			// Get target entity layer
-			targetEntityInfo, hasTargetEntityInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
-			layer := 0 // default layer
-			if hasTargetEntityInfo {
-				layer = targetEntityInfo.Layer
+		if !s.isInNewVisible(targetHandle) {
+			layer := 0
+			if info, ok := s.entityInfoStorage.Get(targetHandle); ok {
+				layer = info.Layer
 			}
-
-			s.removeFromObserversByTarget(visState, targetHandle, observerHandle)
-
 			s.eventBus.PublishAsync(
 				ecs.NewEntityDespawnEvent(observerID, targetID, layer),
 				eventbus.PriorityMedium,
 			)
+			s.despawnTargets = append(s.despawnTargets, targetHandle)
 		}
 	}
 
+	// --- Rebuild Known from cached EntityIDs (1.2) ---
 	if observerVis.Known == nil {
-		observerVis.Known = make(map[types.Handle]types.EntityID, len(s.newVisibleSet))
+		observerVis.Known = make(map[types.Handle]types.EntityID, len(s.newVisibleBuf))
 	} else {
 		for k := range observerVis.Known {
 			delete(observerVis.Known, k)
 		}
 	}
-	for h := range s.newVisibleSet {
-		// Save EntityID for later despawn events
-		entityID, ok := w.GetExternalID(h)
-		if ok {
-			observerVis.Known[h] = entityID
-		}
+	for _, entry := range s.newVisibleBuf {
+		observerVis.Known[entry.Handle] = entry.EntityID
 	}
-	//s.logger.Debug("VisionSystem updated", zap.Any("newVisibleSet", s.newVisibleSet), zap.Any("observerVis", observerVis))
 
 	observerVis.LastX = observerTransform.X
 	observerVis.LastY = observerTransform.Y
 	observerVis.LastChunkX = chunkRef.CurrentChunkX
 	observerVis.LastChunkY = chunkRef.CurrentChunkY
 	observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval + jitterDuration())
+
+	// --- Batch VisibilityState mutations (1.3) ---
+	visState.Mu.Lock()
+	if visState.ObserversByVisibleTarget == nil {
+		visState.ObserversByVisibleTarget = make(map[types.Handle]map[types.Handle]struct{})
+	}
+	for _, targetHandle := range s.spawnTargets {
+		observers := visState.ObserversByVisibleTarget[targetHandle]
+		if observers == nil {
+			observers = make(map[types.Handle]struct{}, 8)
+			visState.ObserversByVisibleTarget[targetHandle] = observers
+		}
+		observers[observerHandle] = struct{}{}
+	}
+	for _, targetHandle := range s.despawnTargets {
+		if observers := visState.ObserversByVisibleTarget[targetHandle]; observers != nil {
+			delete(observers, observerHandle)
+			if len(observers) == 0 {
+				delete(visState.ObserversByVisibleTarget, targetHandle)
+			}
+		}
+	}
+	visState.VisibleByObserver[observerHandle] = *observerVis
+	visState.Mu.Unlock()
 }
 
 func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.ChunkRef) {
@@ -294,48 +320,30 @@ func (s *VisionSystem) cleanupDeadObserver(
 	observerHandle types.Handle,
 	known map[types.Handle]types.EntityID,
 ) {
+	visState.Mu.Lock()
 	for targetHandle := range known {
-		s.removeFromObserversByTarget(visState, targetHandle, observerHandle)
+		if observers := visState.ObserversByVisibleTarget[targetHandle]; observers != nil {
+			delete(observers, observerHandle)
+			if len(observers) == 0 {
+				delete(visState.ObserversByVisibleTarget, targetHandle)
+			}
+		}
 	}
 	delete(visState.VisibleByObserver, observerHandle)
+	visState.Mu.Unlock()
 }
 
-func (s *VisionSystem) addToObserversByTarget(
-	visState *ecs.VisibilityState,
-	targetHandle, observerHandle types.Handle,
-) {
-	visState.Mu.Lock()
-	defer visState.Mu.Unlock()
-
-	if visState.ObserversByVisibleTarget == nil {
-		visState.ObserversByVisibleTarget = make(map[types.Handle]map[types.Handle]struct{})
+func (s *VisionSystem) isInNewVisible(h types.Handle) bool {
+	lo, hi := 0, len(s.newVisibleBuf)
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if s.newVisibleBuf[mid].Handle < h {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
 	}
-	observers := visState.ObserversByVisibleTarget[targetHandle]
-	if observers == nil {
-		observers = make(map[types.Handle]struct{}, 8)
-		visState.ObserversByVisibleTarget[targetHandle] = observers
-	}
-	observers[observerHandle] = struct{}{}
-}
-
-func (s *VisionSystem) removeFromObserversByTarget(
-	visState *ecs.VisibilityState,
-	targetHandle, observerHandle types.Handle,
-) {
-	visState.Mu.Lock()
-	defer visState.Mu.Unlock()
-
-	if visState.ObserversByVisibleTarget == nil {
-		return
-	}
-	observers := visState.ObserversByVisibleTarget[targetHandle]
-	if observers == nil {
-		return
-	}
-	delete(observers, observerHandle)
-	if len(observers) == 0 {
-		delete(visState.ObserversByVisibleTarget, targetHandle)
-	}
+	return lo < len(s.newVisibleBuf) && s.newVisibleBuf[lo].Handle == h
 }
 
 func CalcMaxVisionRadius(vision components.Vision) float64 {
