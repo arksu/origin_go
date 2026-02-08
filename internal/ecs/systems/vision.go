@@ -30,6 +30,7 @@ type VisionSystem struct {
 	newVisibleBuf    []visibleEntry
 	spawnTargets     []types.Handle
 	despawnTargets   []types.Handle
+	queriedGens      []ecs.ChunkGen
 
 	transformStorage  *ecs.ComponentStorage[components.Transform]
 	visionStorage     *ecs.ComponentStorage[components.Vision]
@@ -53,6 +54,7 @@ func NewVisionSystem(
 		newVisibleBuf:     make([]visibleEntry, 0, 256),
 		spawnTargets:      make([]types.Handle, 0, 64),
 		despawnTargets:    make([]types.Handle, 0, 64),
+		queriedGens:       make([]ecs.ChunkGen, 0, 9),
 		transformStorage:  ecs.GetOrCreateStorage[components.Transform](world),
 		visionStorage:     ecs.GetOrCreateStorage[components.Vision](world),
 		stealthStorage:    ecs.GetOrCreateStorage[components.Stealth](world),
@@ -122,6 +124,15 @@ func (s *VisionSystem) updateObserverVisibility(
 		return
 	}
 
+	// --- Dirty-flag skip (2.1) ---
+	if s.canSkipUpdate(observerVis, observerTransform) {
+		observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval + jitterDuration())
+		visState.Mu.Lock()
+		visState.VisibleByObserver[observerHandle] = *observerVis
+		visState.Mu.Unlock()
+		return
+	}
+
 	observerID, _ := w.GetExternalID(observerHandle)
 
 	visionRadius := CalcMaxVisionRadius(vision)
@@ -129,6 +140,7 @@ func (s *VisionSystem) updateObserverVisibility(
 
 	// --- Spatial query ---
 	s.candidatesBuffer = s.candidatesBuffer[:0]
+	s.queriedGens = s.queriedGens[:0]
 	s.findCandidates(observerTransform.X, observerTransform.Y, visionRadius, chunkRef)
 
 	// --- Filter candidates into sorted visible slice (1.1 + 1.2) ---
@@ -233,6 +245,7 @@ func (s *VisionSystem) updateObserverVisibility(
 	observerVis.LastY = observerTransform.Y
 	observerVis.LastChunkX = chunkRef.CurrentChunkX
 	observerVis.LastChunkY = chunkRef.CurrentChunkY
+	observerVis.LastChunkGens = append(observerVis.LastChunkGens[:0], s.queriedGens...)
 	observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval + jitterDuration())
 
 	// --- Batch VisibilityState mutations (1.3) ---
@@ -260,6 +273,33 @@ func (s *VisionSystem) updateObserverVisibility(
 	visState.Mu.Unlock()
 }
 
+func (s *VisionSystem) canSkipUpdate(
+	observerVis *ecs.ObserverVisibility,
+	transform components.Transform,
+) bool {
+	if len(observerVis.LastChunkGens) == 0 {
+		return false
+	}
+
+	dx := transform.X - observerVis.LastX
+	dy := transform.Y - observerVis.LastY
+	if dx*dx+dy*dy > _const.VisionPosEpsilon*_const.VisionPosEpsilon {
+		return false
+	}
+
+	for _, cg := range observerVis.LastChunkGens {
+		chunk := s.chunkManager.GetChunk(cg.Coord)
+		if chunk == nil {
+			return false
+		}
+		if chunk.Spatial().Generation() != cg.Gen {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.ChunkRef) {
 	chunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
 	chunk := s.chunkManager.GetChunk(chunkCoord)
@@ -276,6 +316,7 @@ func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.
 	// Если круг целиком внутри чанка — соседей не трогаем
 	localOnly := x-radius >= chunkMinX && x+radius <= chunkMaxX && y-radius >= chunkMinY && y+radius <= chunkMaxY
 
+	s.queriedGens = append(s.queriedGens, ecs.ChunkGen{Coord: chunkCoord, Gen: chunk.Spatial().Generation()})
 	chunk.Spatial().QueryRadius(x, y, radius, &s.candidatesBuffer)
 	if localOnly {
 		return
@@ -308,6 +349,7 @@ func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.
 			neighborCoord := types.ChunkCoord{X: neighborChunkX, Y: neighborChunkY}
 			neighborChunk := s.chunkManager.GetChunk(neighborCoord)
 			if neighborChunk != nil {
+				s.queriedGens = append(s.queriedGens, ecs.ChunkGen{Coord: neighborCoord, Gen: neighborChunk.Spatial().Generation()})
 				neighborChunk.Spatial().QueryRadius(x, y, radius, &s.candidatesBuffer)
 			}
 		}
