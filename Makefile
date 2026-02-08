@@ -18,7 +18,7 @@ proto-tools:
 
 # Build the server
 build: proto sqlc
-	go build -trimpath -o gameserver ./cmd/gameserver
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -gcflags="-m -l" -a -installsuffix cgo -trimpath -o gameserver ./cmd/gameserver
 
 # Run the server
 run: proto sqlc

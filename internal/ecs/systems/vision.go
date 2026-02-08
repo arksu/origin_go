@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const numVisionWorkers = 2
+const numVisionWorkers = 3
 
 // ---------------- internal types ----------------
 
@@ -199,31 +199,37 @@ func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 	}
 	s.results = s.results[:len(s.jobs)]
 
-	mid := len(s.jobs) / 2
-	if mid == 0 {
+	if len(s.jobs) == 1 {
 		// Single observer — run inline, no goroutine overhead
-		for i, job := range s.jobs {
-			s.results[i] = s.computeObserver(w, &s.workers[0], job, now)
-		}
+		s.results[0] = s.computeObserver(w, &s.workers[0], s.jobs[0], now)
 	} else {
 		var wg sync.WaitGroup
-		wg.Add(2)
+		wg.Add(numVisionWorkers)
 
-		go func() {
-			defer wg.Done()
-			scratch := &s.workers[0]
-			for i := 0; i < mid; i++ {
-				s.results[i] = s.computeObserver(w, scratch, s.jobs[i], now)
-			}
-		}()
+		// Split jobs among workers
+		jobsPerWorker := len(s.jobs) / numVisionWorkers
+		remainder := len(s.jobs) % numVisionWorkers
 
-		go func() {
-			defer wg.Done()
-			scratch := &s.workers[1]
-			for i := mid; i < len(s.jobs); i++ {
-				s.results[i] = s.computeObserver(w, scratch, s.jobs[i], now)
+		start := 0
+		for workerIdx := 0; workerIdx < numVisionWorkers; workerIdx++ {
+			end := start + jobsPerWorker
+			if workerIdx < remainder {
+				end++ // Distribute remainder to first workers
 			}
-		}()
+			if end > len(s.jobs) {
+				end = len(s.jobs)
+			}
+
+			go func(wIdx, sIdx, eIdx int) {
+				defer wg.Done()
+				scratch := &s.workers[wIdx]
+				for i := sIdx; i < eIdx; i++ {
+					s.results[i] = s.computeObserver(w, scratch, s.jobs[i], now)
+				}
+			}(workerIdx, start, end)
+
+			start = end
+		}
 
 		wg.Wait()
 	}
