@@ -139,7 +139,6 @@ class MoveController {
     entityId: number,
     serverTimeMs: number,
     moveSeq: number,
-    streamEpoch: number,
     isTeleport: boolean,
     x: number,
     y: number,
@@ -158,13 +157,6 @@ class MoveController {
       }
       this.initEntity(entityId, x, y, heading)
       state = this.entities.get(entityId)!
-    }
-
-    // Validate stream epoch
-    if (streamEpoch !== this.globalStreamEpoch) {
-      // Epoch mismatch - ignore this packet
-      console.warn(`[MoveController] Epoch mismatch for entity ${entityId}: expected ${this.globalStreamEpoch}, got ${streamEpoch}`)
-      return
     }
 
     // Handle teleport - snap and reset buffer
@@ -454,8 +446,7 @@ class MoveController {
       dir = calcDirection(lastKf.vx, lastKf.vy)
     }
 
-    const hasVelocity = !!lastKf && (Math.abs(lastKf.vx) > 1e-6 || Math.abs(lastKf.vy) > 1e-6)
-    const finalIsMoving = isMoving && hasVelocity
+    const finalIsMoving = isMoving // Trust server's isMoving flag for animations
 
     return {
       x: state.visualX,

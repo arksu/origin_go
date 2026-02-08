@@ -27,108 +27,115 @@ func NewNetworkVisibilityDispatcher(shardManager *game.ShardManager, logger *zap
 }
 
 func (d *NetworkVisibilityDispatcher) Subscribe(eventBus *eventbus.EventBus) {
-	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMove, eventbus.PriorityMedium, d.handleObjectMove)
+	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMoveBatch, eventbus.PriorityMedium, d.handleObjectMoveBatch)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntitySpawn, eventbus.PriorityMedium, d.handleEntitySpawn)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntityDespawn, eventbus.PriorityMedium, d.handleEntityDespawn)
 	eventBus.SubscribeAsync(ecs.TopicGameplayChunkUnload, eventbus.PriorityMedium, d.handleChunkUnload)
 	eventBus.SubscribeAsync(ecs.TopicGameplayChunkLoad, eventbus.PriorityMedium, d.handleChunkLoad)
 }
 
-func (d *NetworkVisibilityDispatcher) handleObjectMove(ctx context.Context, e eventbus.Event) error {
-	event, ok := e.(*ecs.ObjectMoveEvent)
+func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context, e eventbus.Event) error {
+	batch, ok := e.(*ecs.ObjectMoveBatchEvent)
 	if !ok {
 		return nil
 	}
 
-	// Get the specific shard by layer
-	shard := d.shardManager.GetShard(event.Layer)
+	shard := d.shardManager.GetShard(batch.Layer)
 	if shard == nil {
 		return nil
 	}
 
-	shard.ClientsMu.RLock()
-	defer shard.ClientsMu.RUnlock()
-
 	visibilityState := ecs.GetResource[ecs.VisibilityState](shard.World())
 
-	// Get the target entity's handle
-	targetHandle := shard.World().GetHandleByEntityID(event.EntityID)
-	if targetHandle == types.InvalidHandle {
-		return nil
-	}
+	// Phase 1: Single lock acquisition — build per-observer → []entryIndex mapping
+	// observerEntries maps observerHandle → list of batch entry indices visible to that observer
+	observerEntries := make(map[types.Handle][]int)
 
-	// Get observers who can see this target entity directly from ObserversByVisibleTarget
-	// Copy handles under lock to avoid concurrent map iteration and map write
 	visibilityState.Mu.RLock()
-	observers, hasObservers := visibilityState.ObserversByVisibleTarget[targetHandle]
-	var observerHandles []types.Handle
-	if hasObservers && len(observers) > 0 {
-		observerHandles = make([]types.Handle, 0, len(observers))
-		for h := range observers {
-			observerHandles = append(observerHandles, h)
+	for i := range batch.Entries {
+		observers, has := visibilityState.ObserversByVisibleTarget[batch.Entries[i].Handle]
+		if !has {
+			continue
+		}
+		for observerHandle := range observers {
+			observerEntries[observerHandle] = append(observerEntries[observerHandle], i)
 		}
 	}
 	visibilityState.Mu.RUnlock()
 
-	if len(observerHandles) == 0 {
+	if len(observerEntries) == 0 {
 		return nil
 	}
 
-	// Create the movement message once (reuse for all observers)
-	movement := &netproto.EntityMovement{
-		Position: &netproto.Position{
-			X:       int32(event.X),
-			Y:       int32(event.Y),
-			Heading: uint32(event.Heading),
-		},
-		Velocity: &netproto.Vector2{
-			X: int32(event.VelocityX),
-			Y: int32(event.VelocityY),
-		},
-		MoveMode: convertMoveMode(event.MoveMode),
-		IsMoving: event.IsMoving,
-	}
+	// Phase 2: Pre-serialize each unique entity movement once (shared across observers)
+	serializedMoves := make(map[int][]byte, len(batch.Entries))
+	for i := range batch.Entries {
+		entry := &batch.Entries[i]
 
-	if event.TargetX != nil && event.TargetY != nil {
-		movement.TargetPosition = &netproto.Vector2{
-			X: int32(*event.TargetX),
-			Y: int32(*event.TargetY),
-		}
-	}
-
-	// Serialize once and reuse for all observers
-	msg := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_ObjectMove{
-			ObjectMove: &netproto.S2C_ObjectMove{
-				EntityId:     uint64(event.EntityID),
-				Movement:     movement,
-				ServerTimeMs: event.ServerTimeMs,
-				MoveSeq:      event.MoveSeq,
-				IsTeleport:   event.IsTeleport,
+		movement := &netproto.EntityMovement{
+			Position: &netproto.Position{
+				X:       int32(entry.X),
+				Y:       int32(entry.Y),
+				Heading: uint32(entry.Heading),
 			},
-		},
+			Velocity: &netproto.Vector2{
+				X: int32(entry.VelocityX),
+				Y: int32(entry.VelocityY),
+			},
+			MoveMode: convertMoveMode(entry.MoveMode),
+			IsMoving: entry.IsMoving,
+		}
+
+		if entry.TargetX != nil && entry.TargetY != nil {
+			movement.TargetPosition = &netproto.Vector2{
+				X: int32(*entry.TargetX),
+				Y: int32(*entry.TargetY),
+			}
+		}
+
+		msg := &netproto.ServerMessage{
+			Payload: &netproto.ServerMessage_ObjectMove{
+				ObjectMove: &netproto.S2C_ObjectMove{
+					EntityId:     uint64(entry.EntityID),
+					Movement:     movement,
+					ServerTimeMs: entry.ServerTimeMs,
+					MoveSeq:      entry.MoveSeq,
+					IsTeleport:   entry.IsTeleport,
+				},
+			},
+		}
+
+		data, err := proto.Marshal(msg)
+		if err != nil {
+			d.logger.Error("failed to marshal ObjectMove message",
+				zap.Error(err),
+				zap.Int64("entity_id", int64(entry.EntityID)),
+			)
+			continue
+		}
+		serializedMoves[i] = data
 	}
 
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		d.logger.Error("failed to marshal ObjectMove message",
-			zap.Error(err),
-			zap.Int64("entity_id", int64(event.EntityID)),
-		)
-		return err
-	}
-
-	// Send pre-serialized bytes to all observers
-	for _, observerHandle := range observerHandles {
+	// Phase 3: Single ClientsMu lock — send pre-serialized bytes to each observer
+	shard.ClientsMu.RLock()
+	for observerHandle, entryIndices := range observerEntries {
 		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
 		if !ok {
 			continue
 		}
 
-		if client, exists := shard.Clients[observerEntityID]; exists {
-			client.Send(data)
+		client, exists := shard.Clients[observerEntityID]
+		if !exists {
+			continue
+		}
+
+		for _, idx := range entryIndices {
+			if data, ok := serializedMoves[idx]; ok {
+				client.Send(data)
+			}
 		}
 	}
+	shard.ClientsMu.RUnlock()
 
 	return nil
 }

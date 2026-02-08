@@ -8,29 +8,29 @@ import (
 )
 
 const (
-	TopicGameplayAll              = "gameplay.*"
-	TopicGameplayCombat           = "gameplay.combat.*"
-	TopicGameplayCombatDamage     = "gameplay.combat.damage_dealt"
-	TopicGameplayCombatDeath      = "gameplay.combat.death"
-	TopicGameplayCombatHeal       = "gameplay.combat.heal"
-	TopicGameplayMovement         = "gameplay.movement.*"
-	TopicGameplayMovementMove     = "gameplay.movement.move"
-	TopicGameplayMovementTeleport = "gameplay.movement.teleport"
-	TopicGameplayPlayerEnterWorld = "gameplay.player.enter_world"
-	TopicGameplayEntity           = "gameplay.entity.*"
-	TopicGameplayEntitySpawn      = "gameplay.entity.spawn"
-	TopicGameplayEntityDespawn    = "gameplay.entity.despawn"
-	TopicGameplayEntityUpdate     = "gameplay.entity.update"
-	TopicGameplayChunk            = "gameplay.chunk.*"
-	TopicGameplayChunkLoad        = "gameplay.chunk.load"
-	TopicGameplayChunkUnload      = "gameplay.chunk.unload"
-	TopicSystemAll                = "system.*"
-	TopicSystemTick               = "system.tick"
-	TopicSystemShutdown           = "system.shutdown"
-	TopicNetworkAll               = "network.*"
-	TopicNetworkConnect           = "network.connect"
-	TopicNetworkDisconnect        = "network.disconnect"
-	TopicNetworkMessage           = "network.message"
+	TopicGameplayAll               = "gameplay.*"
+	TopicGameplayCombat            = "gameplay.combat.*"
+	TopicGameplayCombatDamage      = "gameplay.combat.damage_dealt"
+	TopicGameplayCombatDeath       = "gameplay.combat.death"
+	TopicGameplayCombatHeal        = "gameplay.combat.heal"
+	TopicGameplayMovement          = "gameplay.movement.*"
+	TopicGameplayMovementMoveBatch = "gameplay.movement.move_batch"
+	TopicGameplayMovementTeleport  = "gameplay.movement.teleport"
+	TopicGameplayPlayerEnterWorld  = "gameplay.player.enter_world"
+	TopicGameplayEntity            = "gameplay.entity.*"
+	TopicGameplayEntitySpawn       = "gameplay.entity.spawn"
+	TopicGameplayEntityDespawn     = "gameplay.entity.despawn"
+	TopicGameplayEntityUpdate      = "gameplay.entity.update"
+	TopicGameplayChunk             = "gameplay.chunk.*"
+	TopicGameplayChunkLoad         = "gameplay.chunk.load"
+	TopicGameplayChunkUnload       = "gameplay.chunk.unload"
+	TopicSystemAll                 = "system.*"
+	TopicSystemTick                = "system.tick"
+	TopicSystemShutdown            = "system.shutdown"
+	TopicNetworkAll                = "network.*"
+	TopicNetworkConnect            = "network.connect"
+	TopicNetworkDisconnect         = "network.disconnect"
+	TopicNetworkMessage            = "network.message"
 )
 
 // EntitySpawnEvent represents when an entity becomes visible to an observer
@@ -154,47 +154,37 @@ func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int, epoch uint32)
 	}
 }
 
-// ObjectMoveEvent represents an object movement event with raw data
-type ObjectMoveEvent struct {
-	topic     string
-	Timestamp time.Time
-	EntityID  types.EntityID
-	X         int
-	Y         int
-	Heading   int
-	VelocityX int
-	VelocityY int
-	MoveMode  constt.MoveMode // 0=Walk, 1=Run, 2=FastRun, 3=Swim
-	IsMoving  bool
-	TargetX   *int
-	TargetY   *int
-	Layer     int
-
-	// New fields for client-side prediction
-	ServerTimeMs int64  // server timestamp when this movement state was authored
-	MoveSeq      uint32 // monotonically increasing per entity (wrap ok)
-	IsTeleport   bool   // if true: client should snap/reset buffer
+// MoveBatchEntry holds movement data for a single entity within a batch.
+type MoveBatchEntry struct {
+	EntityID     types.EntityID
+	Handle       types.Handle
+	X            int
+	Y            int
+	Heading      int
+	VelocityX    int
+	VelocityY    int
+	MoveMode     constt.MoveMode
+	IsMoving     bool
+	TargetX      *int
+	TargetY      *int
+	ServerTimeMs int64
+	MoveSeq      uint32
+	IsTeleport   bool
 }
 
-func (e *ObjectMoveEvent) Topic() string { return e.topic }
+// ObjectMoveBatchEvent carries all movement updates for one tick in a single event.
+type ObjectMoveBatchEvent struct {
+	topic   string
+	Layer   int
+	Entries []MoveBatchEntry
+}
 
-func NewObjectMoveEvent(entityID types.EntityID, x, y, heading, velocityX, velocityY int, moveMode constt.MoveMode, isMoving bool, targetX, targetY *int, layer int, serverTimeMs int64, moveSeq uint32, isTeleport bool) *ObjectMoveEvent {
-	return &ObjectMoveEvent{
-		topic:        TopicGameplayMovementMove,
-		Timestamp:    time.Now(),
-		EntityID:     entityID,
-		X:            x,
-		Y:            y,
-		Heading:      heading,
-		VelocityX:    velocityX,
-		VelocityY:    velocityY,
-		MoveMode:     moveMode,
-		IsMoving:     isMoving,
-		TargetX:      targetX,
-		TargetY:      targetY,
-		Layer:        layer,
-		ServerTimeMs: serverTimeMs,
-		MoveSeq:      moveSeq,
-		IsTeleport:   isTeleport,
+func (e *ObjectMoveBatchEvent) Topic() string { return e.topic }
+
+func NewObjectMoveBatchEvent(layer int, entries []MoveBatchEntry) *ObjectMoveBatchEvent {
+	return &ObjectMoveBatchEvent{
+		topic:   TopicGameplayMovementMoveBatch,
+		Layer:   layer,
+		Entries: entries,
 	}
 }

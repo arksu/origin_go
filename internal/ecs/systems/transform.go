@@ -6,12 +6,10 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
-	"time"
 
 	"go.uber.org/zap"
 
 	"origin/internal/eventbus"
-	"origin/internal/network/proto"
 )
 
 type TransformUpdateSystem struct {
@@ -19,6 +17,7 @@ type TransformUpdateSystem struct {
 	chunkManager core.ChunkManager
 	eventBus     *eventbus.EventBus
 	logger       *zap.Logger
+	moveBatch    []ecs.MoveBatchEntry // reused across ticks
 }
 
 func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
@@ -32,6 +31,9 @@ func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, 
 
 func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
+	serverTimeMs := ecs.GetResource[ecs.TimeState](w).UnixMs
+	s.moveBatch = s.moveBatch[:0]
+
 	// Process entities that moved this frame (from movedEntities buffer)
 	for i := 0; i < movedEntities.Count; i++ {
 		h := movedEntities.Handles[i]
@@ -89,81 +91,66 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			t.Y = finalY
 		})
 
-		// Send to client event with current data
+		// Accumulate movement data for batch event
 		if entityID, ok := w.GetExternalID(h); ok {
-			// Get entity layer from EntityInfo component
-			entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](w, h)
-			layer := 0 // default layer
-			if hasEntityInfo {
-				layer = entityInfo.Layer
-			}
-
-			// Visibility guard: only publish move events if entity is visible to at least one observer
+			// Visibility guard: only include if entity is visible to at least one observer
 			visState := ecs.GetResource[ecs.VisibilityState](w)
 			if visState != nil {
-				// Check if any observer can see this entity
 				observers, hasObservers := visState.ObserversByVisibleTarget[h]
 				if !hasObservers || len(observers) == 0 {
-					// No observers can see this entity, skip publishing move event
-					continue
+					goto saveCollision
 				}
 			}
 
 			// Get movement component for velocity data
-			movement, hasMovement := ecs.GetComponent[components.Movement](w, h)
+			{
+				movement, hasMovement := ecs.GetComponent[components.Movement](w, h)
 
-			// Create movement data for packet
-			moveMode := constt.Walk
-			isMoving := false
-			var velocity proto.Vector2
-			var moveSeq uint32
+				moveMode := constt.Walk
+				isMoving := false
+				var velX, velY int
+				var moveSeq uint32
 
-			if hasMovement {
-				moveMode = movement.Mode
+				if hasMovement {
+					moveMode = movement.Mode
+					isMoving = movement.State == constt.StateMoving
+					velX = int(movement.VelocityX)
+					velY = int(movement.VelocityY)
+					moveSeq = movement.MoveSeq
 
-				isMoving = movement.State == constt.StateMoving
-				velocity = proto.Vector2{
-					X: int32(movement.VelocityX),
-					Y: int32(movement.VelocityY),
+					ecs.WithComponent(w, h, func(m *components.Movement) {
+						m.MoveSeq++
+					})
 				}
-				moveSeq = movement.MoveSeq
 
-				// Increment MoveSeq for next movement
-				ecs.WithComponent(w, h, func(m *components.Movement) {
-					m.MoveSeq++
+				var targetX, targetY *int
+				if hasMovement && movement.TargetType == constt.TargetPoint {
+					tx := int(movement.TargetX)
+					ty := int(movement.TargetY)
+					targetX = &tx
+					targetY = &ty
+				}
+
+				s.moveBatch = append(s.moveBatch, ecs.MoveBatchEntry{
+					EntityID:     entityID,
+					Handle:       h,
+					X:            int(finalX),
+					Y:            int(finalY),
+					Heading:      int(transform.Direction),
+					VelocityX:    velX,
+					VelocityY:    velY,
+					MoveMode:     moveMode,
+					IsMoving:     isMoving,
+					TargetX:      targetX,
+					TargetY:      targetY,
+					ServerTimeMs: serverTimeMs,
+					MoveSeq:      moveSeq,
+					IsTeleport:   false,
 				})
 			}
-
-			// Prepare target position as pointers
-			var targetX, targetY *int
-			if hasMovement && movement.TargetType == constt.TargetPoint {
-				tx := int(movement.TargetX)
-				ty := int(movement.TargetY)
-				targetX = &tx
-				targetY = &ty
-			}
-
-			// Get server time in milliseconds
-			serverTimeMs := time.Now().UnixMilli()
-
-			// Determine if this is a teleport (for now, always false - can be set by teleport system)
-			isTeleport := false
-
-			// Publish movement event with raw data
-			s.eventBus.PublishAsync(
-				ecs.NewObjectMoveEvent(
-					entityID,
-					int(finalX), int(finalY), int(transform.Direction),
-					int(velocity.X), int(velocity.Y),
-					moveMode, isMoving,
-					targetX, targetY,
-					layer,
-					serverTimeMs, moveSeq, isTeleport,
-				),
-				eventbus.PriorityMedium,
-			)
 		}
 
+	saveCollision:
 		// Save collision state for next frame (for oscillation detection)
 		ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
 			// Save current collision position for next frame
@@ -180,5 +167,13 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			cr.IsPhantom = false
 			cr.PerpendicularOscillation = false
 		})
+	}
+
+	// Publish single batch event for all movements this tick
+	if len(s.moveBatch) > 0 {
+		s.eventBus.PublishAsync(
+			ecs.NewObjectMoveBatchEvent(w.Layer, s.moveBatch),
+			eventbus.PriorityMedium,
+		)
 	}
 }
