@@ -129,6 +129,11 @@ type VisibilityState struct {
 	Mu                       sync.RWMutex // Protects visibility maps for concurrent access
 }
 
+type ChunkGen struct {
+	Coord types.ChunkCoord
+	Gen   uint64
+}
+
 type ObserverVisibility struct {
 	Known          map[types.Handle]types.EntityID // кого видит эта сущность (Handle -> EntityID)
 	NextUpdateTime time.Time
@@ -136,6 +141,7 @@ type ObserverVisibility struct {
 	LastY          float64
 	LastChunkX     int
 	LastChunkY     int
+	LastChunkGens  []ChunkGen // chunk generations at last vision update (dirty-flag skip)
 }
 
 type DetachedEntities struct {

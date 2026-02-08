@@ -2,6 +2,7 @@ package core
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"origin/internal/types"
 )
@@ -13,7 +14,12 @@ type SpatialHashGrid struct {
 	staticCells  map[int64][]types.Handle
 	dynamicCells map[int64][]types.Handle
 
-	mu sync.RWMutex
+	generation atomic.Uint64
+	mu         sync.RWMutex
+}
+
+func (g *SpatialHashGrid) Generation() uint64 {
+	return g.generation.Load()
 }
 
 func NewSpatialHashGrid(cellSize int) *SpatialHashGrid {
@@ -51,6 +57,7 @@ func (g *SpatialHashGrid) AddStatic(h types.Handle, x, y int) {
 	defer g.mu.Unlock()
 
 	g.staticCells[key] = append(g.staticCells[key], h)
+	g.generation.Add(1)
 }
 
 func (g *SpatialHashGrid) RemoveStatic(h types.Handle, x, y int) {
@@ -64,6 +71,7 @@ func (g *SpatialHashGrid) RemoveStatic(h types.Handle, x, y int) {
 		if handle == h {
 			handles[i] = handles[len(handles)-1]
 			g.staticCells[key] = handles[:len(handles)-1]
+			g.generation.Add(1)
 			return
 		}
 	}
@@ -76,6 +84,7 @@ func (g *SpatialHashGrid) AddDynamic(h types.Handle, x, y int) {
 	defer g.mu.Unlock()
 
 	g.dynamicCells[key] = append(g.dynamicCells[key], h)
+	g.generation.Add(1)
 }
 
 func (g *SpatialHashGrid) RemoveDynamic(h types.Handle, x, y int) {
@@ -89,6 +98,7 @@ func (g *SpatialHashGrid) RemoveDynamic(h types.Handle, x, y int) {
 		if handle == h {
 			handles[i] = handles[len(handles)-1]
 			g.dynamicCells[key] = handles[:len(handles)-1]
+			g.generation.Add(1)
 			return
 		}
 	}
@@ -119,6 +129,7 @@ func (g *SpatialHashGrid) UpdateDynamic(h types.Handle, oldX, oldY, newX, newY i
 	// Only add to new cell if we actually found and removed from old cell
 	if found {
 		g.dynamicCells[newKey] = append(g.dynamicCells[newKey], h)
+		g.generation.Add(1)
 	}
 }
 
@@ -129,6 +140,7 @@ func (g *SpatialHashGrid) ClearDynamic() {
 	for k := range g.dynamicCells {
 		delete(g.dynamicCells, k)
 	}
+	g.generation.Add(1)
 }
 
 func (g *SpatialHashGrid) ClearStatic() {
@@ -138,6 +150,7 @@ func (g *SpatialHashGrid) ClearStatic() {
 	for k := range g.staticCells {
 		delete(g.staticCells, k)
 	}
+	g.generation.Add(1)
 }
 
 func (g *SpatialHashGrid) QueryRadius(x, y, radius float64, result *[]types.Handle) {
