@@ -17,12 +17,17 @@ import (
 type NetworkVisibilityDispatcher struct {
 	shardManager *game.ShardManager
 	logger       *zap.Logger
+
+	// Reusable buffers for handleObjectMoveBatch (safe: single async worker per subscription)
+	observerEntries map[types.Handle][]int // observerHandle → entry indices
+	serializedMoves [][]byte               // indexed by batch entry index
 }
 
 func NewNetworkVisibilityDispatcher(shardManager *game.ShardManager, logger *zap.Logger) *NetworkVisibilityDispatcher {
 	return &NetworkVisibilityDispatcher{
-		shardManager: shardManager,
-		logger:       logger,
+		shardManager:    shardManager,
+		logger:          logger,
+		observerEntries: make(map[types.Handle][]int, 64),
 	}
 }
 
@@ -48,8 +53,10 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 	visibilityState := ecs.GetResource[ecs.VisibilityState](shard.World())
 
 	// Phase 1: Single lock acquisition — build per-observer → []entryIndex mapping
-	// observerEntries maps observerHandle → list of batch entry indices visible to that observer
-	observerEntries := make(map[types.Handle][]int)
+	// Reuse map: clear entries but keep allocated buckets
+	for k, v := range d.observerEntries {
+		d.observerEntries[k] = v[:0]
+	}
 
 	visibilityState.Mu.RLock()
 	for i := range batch.Entries {
@@ -58,17 +65,32 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 			continue
 		}
 		for observerHandle := range observers {
-			observerEntries[observerHandle] = append(observerEntries[observerHandle], i)
+			d.observerEntries[observerHandle] = append(d.observerEntries[observerHandle], i)
 		}
 	}
 	visibilityState.Mu.RUnlock()
 
-	if len(observerEntries) == 0 {
+	hasEntries := false
+	for _, v := range d.observerEntries {
+		if len(v) > 0 {
+			hasEntries = true
+			break
+		}
+	}
+	if !hasEntries {
 		return nil
 	}
 
 	// Phase 2: Pre-serialize each unique entity movement once (shared across observers)
-	serializedMoves := make(map[int][]byte, len(batch.Entries))
+	// Grow slice to match batch size, reuse capacity
+	if cap(d.serializedMoves) < len(batch.Entries) {
+		d.serializedMoves = make([][]byte, len(batch.Entries))
+	} else {
+		d.serializedMoves = d.serializedMoves[:len(batch.Entries)]
+		for i := range d.serializedMoves {
+			d.serializedMoves[i] = nil
+		}
+	}
 	for i := range batch.Entries {
 		entry := &batch.Entries[i]
 
@@ -113,12 +135,15 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 			)
 			continue
 		}
-		serializedMoves[i] = data
+		d.serializedMoves[i] = data
 	}
 
 	// Phase 3: Single ClientsMu lock — send pre-serialized bytes to each observer
 	shard.ClientsMu.RLock()
-	for observerHandle, entryIndices := range observerEntries {
+	for observerHandle, entryIndices := range d.observerEntries {
+		if len(entryIndices) == 0 {
+			continue
+		}
 		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
 		if !ok {
 			continue
@@ -130,7 +155,7 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 		}
 
 		for _, idx := range entryIndices {
-			if data, ok := serializedMoves[idx]; ok {
+			if data := d.serializedMoves[idx]; data != nil {
 				client.Send(data)
 			}
 		}
