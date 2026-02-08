@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"errors"
+	"fmt"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/network"
@@ -53,6 +54,7 @@ type tickStats struct {
 	minDuration time.Duration
 	maxDuration time.Duration
 	lastLog     time.Time
+	systemStats map[string]ecs.SystemTimingStat // per-system accumulated stats
 }
 
 type GameStats struct {
@@ -113,6 +115,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 		tickStats: tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour,
+			systemStats: make(map[string]ecs.SystemTimingStat),
 		},
 	}
 	g.state.Store(int32(GameStateStarting))
@@ -635,14 +638,58 @@ func (g *Game) gameLoop() {
 	}
 }
 
+func (g *Game) accumulateStat(name string, d time.Duration) {
+	acc := g.tickStats.systemStats[name]
+	acc.Name = name
+	acc.DurationSum += d
+	acc.Count++
+	g.tickStats.systemStats[name] = acc
+}
+
 func (g *Game) update(ts ecs.TimeState) {
 	start := time.Now()
 
-	g.shardManager.Update(ts)
+	schedResult := g.shardManager.Update(ts)
+	schedDuration := schedResult.TotalDuration
 
+	persistStart := time.Now()
 	g.serverTimeManager.MaybePersistServerTime(ts.Now)
+	persistDuration := time.Since(persistStart)
+
+	// Collect per-system stats from all shards (prefixed by shard layer)
+	collectStart := time.Now()
+	for layer, shard := range g.shardManager.GetShards() {
+		for _, st := range shard.World().DrainSystemStats() {
+			if st.Count == 0 {
+				continue
+			}
+			name := fmt.Sprintf("S%d:%s", layer, st.Name)
+			acc := g.tickStats.systemStats[name]
+			acc.Name = name
+			acc.DurationSum += st.DurationSum
+			acc.Count += st.Count
+			g.tickStats.systemStats[name] = acc
+		}
+	}
+	collectDuration := time.Since(collectStart)
 
 	duration := time.Since(start)
+
+	// Accumulate game-level timing (not through shards to avoid duplication)
+	g.accumulateStat("ShardScheduling", schedDuration)
+	g.accumulateStat("ServerTimePersist", persistDuration)
+	g.accumulateStat("StatsCollect", collectDuration)
+
+	unaccounted := duration - schedDuration - persistDuration - collectDuration
+	if unaccounted < 0 {
+		unaccounted = 0
+	}
+	g.accumulateStat("Unaccounted", unaccounted)
+
+	// Accumulate per-shard execution times
+	for _, sd := range schedResult.ShardDurations {
+		g.accumulateStat(fmt.Sprintf("Shard%d", sd.Layer), sd.Duration)
+	}
 
 	// Collect statistics
 	g.tickStats.durationSum += duration
@@ -652,18 +699,31 @@ func (g *Game) update(ts ecs.TimeState) {
 	if time.Since(g.tickStats.lastLog) >= 5*time.Second {
 		if g.tickStats.count > 0 {
 			avgDuration := g.tickStats.durationSum / time.Duration(g.tickStats.count)
-			g.logger.Info("Game tick statistics (5s)",
+
+			// Build per-system average fields
+			sysFields := make([]zap.Field, 0, len(g.tickStats.systemStats))
+			for _, st := range g.tickStats.systemStats {
+				if st.Count > 0 {
+					sysFields = append(sysFields, zap.Duration(st.Name, st.DurationSum/time.Duration(st.Count)))
+				}
+			}
+
+			fields := []zap.Field{
 				zap.Uint64("ticks", g.tickStats.count),
 				zap.Duration("avg", avgDuration),
 				zap.Duration("min", g.tickStats.minDuration),
 				zap.Duration("max", g.tickStats.maxDuration),
-			)
+			}
+			fields = append(fields, sysFields...)
+
+			g.logger.Info("Game tick statistics (5s)", fields...)
 		}
 
 		// Reset statistics
 		g.tickStats = tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour, // Initialize with large value
+			systemStats: make(map[string]ecs.SystemTimingStat),
 		}
 	}
 
