@@ -63,6 +63,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.ClearTarget()
 				})
+				movedEntities.Add(h, transform.X, transform.Y)
 				return
 			}
 			movement.TargetX = targetTransform.X
@@ -73,6 +74,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			ecs.WithComponent(w, h, func(m *components.Movement) {
 				m.ClearTarget()
 			})
+			movedEntities.Add(h, transform.X, transform.Y)
 			return
 		}
 
