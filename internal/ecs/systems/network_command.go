@@ -31,6 +31,11 @@ type InventoryResultSender interface {
 	SendContainerOpened(entityID types.EntityID, state *netproto.InventoryState)
 }
 
+// InventorySnapshotSender sends full inventory snapshots to a client (used on login/reattach)
+type InventorySnapshotSender interface {
+	SendInventorySnapshots(w *ecs.World, entityID types.EntityID, handle types.Handle)
+}
+
 // InventoryOperationExecutor executes inventory operations
 type InventoryOperationExecutor interface {
 	ExecuteOperation(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, op *netproto.InventoryOp) InventoryOpResult
@@ -92,8 +97,9 @@ type NetworkCommandSystem struct {
 	chatLocalRadiusSq float64
 
 	// Inventory operation handling
-	inventoryExecutor     InventoryOperationExecutor
-	inventoryResultSender InventoryResultSender
+	inventoryExecutor       InventoryOperationExecutor
+	inventoryResultSender   InventoryResultSender
+	inventorySnapshotSender InventorySnapshotSender
 
 	// Admin command handling
 	adminHandler AdminCommandHandler
@@ -136,6 +142,11 @@ func NewNetworkCommandSystem(
 // SetAdminHandler sets the admin command handler for processing chat commands like /give.
 func (s *NetworkCommandSystem) SetAdminHandler(handler AdminCommandHandler) {
 	s.adminHandler = handler
+}
+
+// SetInventorySnapshotSender sets the handler for sending full inventory snapshots on login/reattach.
+func (s *NetworkCommandSystem) SetInventorySnapshotSender(sender InventorySnapshotSender) {
+	s.inventorySnapshotSender = sender
 }
 
 // Update drains command queues and processes commands
@@ -726,18 +737,31 @@ func (s *NetworkCommandSystem) buildItemInstanceProto(item InventoryItemState) *
 }
 
 // processServerJob routes a server job to the appropriate handler
-// This is a skeleton - actual job handlers will be added as needed
 func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.ServerJob) {
-	// Route job by type
-	// TODO: Implement job routing to specific handlers
-	// case JobMachineOfflineTick:
-	//     s.handleMachineOfflineTick(w, job)
-	// case JobAutoDropOverflow:
-	//     s.handleAutoDropOverflow(w, job)
-	// ...
-	// }
-	_ = w
-	_ = job
+	switch job.JobType {
+	case network.JobSendInventorySnapshot:
+		s.handleInventorySnapshotJob(w, job)
+	default:
+		s.logger.Warn("Unknown server job type", zap.Uint16("job_type", job.JobType))
+	}
+}
+
+func (s *NetworkCommandSystem) handleInventorySnapshotJob(w *ecs.World, job *network.ServerJob) {
+	payload, ok := job.Payload.(*network.InventorySnapshotJobPayload)
+	if !ok {
+		s.logger.Error("Invalid payload for inventory snapshot job")
+		return
+	}
+
+	if !w.Alive(payload.Handle) {
+		s.logger.Debug("Inventory snapshot job: entity no longer alive",
+			zap.Uint64("entity_id", uint64(job.TargetID)))
+		return
+	}
+
+	if s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendInventorySnapshots(w, job.TargetID, payload.Handle)
+	}
 }
 
 // Stats returns processing statistics

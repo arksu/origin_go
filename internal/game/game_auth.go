@@ -342,8 +342,12 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 
-	// Send inventory snapshots to client
-	g.inventorySnapshotSender.SendInventorySnapshots(shard.world, c, playerEntityID, *playerHandle)
+	// Enqueue inventory snapshot job to be processed on the ECS tick thread (avoids concurrent map access)
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendInventorySnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.InventorySnapshotJobPayload{Handle: *playerHandle},
+	})
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -434,9 +438,13 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
 
-	// Send inventory snapshots to client
+	// Enqueue inventory snapshot job to be processed on the ECS tick thread (avoids concurrent map access)
 	if handle != types.InvalidHandle {
-		g.inventorySnapshotSender.SendInventorySnapshots(shard.world, c, playerEntityID, handle)
+		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+			JobType:  network.JobSendInventorySnapshot,
+			TargetID: playerEntityID,
+			Payload:  &network.InventorySnapshotJobPayload{Handle: handle},
+		})
 	}
 
 	g.logger.Info("Player reattached to existing entity",

@@ -1,7 +1,7 @@
 import { proto } from './proto/packets.js'
 import { messageDispatcher } from './MessageDispatcher'
 import { useGameStore, type EntityMovement } from '@/stores/gameStore'
-import { gameFacade, moveController } from '@/game'
+import { gameFacade, moveController, playerCommandController } from '@/game'
 import { DEBUG_MOVEMENT } from '@/constants/game'
 
 function toNumber(value: number | Long): number {
@@ -31,8 +31,9 @@ export function registerMessageHandlers(): void {
     // Set stream epoch for MoveController to validate incoming movement packets
     moveController.setStreamEpoch(streamEpoch, tickRate)
 
-    // Set player entity ID for camera following
-    gameFacade.setPlayerEntityId(toNumber(msg.entityId!))
+    // Set player ID for command controller (camera target is deferred to objectSpawn
+    // to avoid camera sitting at (0,0) before the player entity actually spawns)
+    playerCommandController.setPlayerId(toNumber(msg.entityId!))
 
     gameFacade.setWorldParams(coordPerTile, chunkSize)
   })
@@ -93,9 +94,11 @@ export function registerMessageHandlers(): void {
     // Initialize entity in MoveController for smooth movement
     moveController.initEntity(entityId, posX, posY, heading)
 
-    // If this is the player entity, set initial camera position
+    // If this is the player entity, set camera target and position together
+    // to avoid the camera being at (0,0) between playerEnterWorld and objectSpawn
     if (entityId === gameStore.playerEntityId) {
-      console.log(`[Handlers] Player spawned at game(${posX}, ${posY})`)
+      console.log(`[Handlers] Player entity spawned: entityId=${entityId}, pos=(${posX}, ${posY})`)
+      gameFacade.setPlayerEntityId(entityId)
       gameFacade.setCamera(posX, posY)
     }
   })

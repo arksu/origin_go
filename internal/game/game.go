@@ -68,12 +68,11 @@ type Game struct {
 	db     *persistence.Postgres
 	logger *zap.Logger
 
-	objectFactory           *world.ObjectFactory
-	shardManager            *ShardManager
-	entityIDManager         *EntityIDManager
-	networkServer           *network.Server
-	inventoryLoader         *inventory.InventoryLoader
-	inventorySnapshotSender *inventory.SnapshotSender
+	objectFactory   *world.ObjectFactory
+	shardManager    *ShardManager
+	entityIDManager *EntityIDManager
+	networkServer   *network.Server
+	inventoryLoader *inventory.InventoryLoader
 
 	clock       timeutil.Clock
 	startTime   time.Time
@@ -99,19 +98,18 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	clk := timeutil.NewMonotonicClockAt(startWall)
 
 	g := &Game{
-		cfg:                     cfg,
-		db:                      db,
-		objectFactory:           objectFactory,
-		inventoryLoader:         inventoryLoader,
-		inventorySnapshotSender: inventorySnapshotSender,
-		logger:                  logger,
-		clock:                   clk,
-		startTime:               clk.GameNow(),
-		tickRate:                cfg.Game.TickRate,
-		tickPeriod:              time.Second / time.Duration(cfg.Game.TickRate),
-		ctx:                     ctx,
-		cancel:                  cancel,
-		serverTimeManager:       serverTimeManager,
+		cfg:               cfg,
+		db:                db,
+		objectFactory:     objectFactory,
+		inventoryLoader:   inventoryLoader,
+		logger:            logger,
+		clock:             clk,
+		startTime:         clk.GameNow(),
+		tickRate:          cfg.Game.TickRate,
+		tickPeriod:        time.Second / time.Duration(cfg.Game.TickRate),
+		ctx:               ctx,
+		cancel:            cancel,
+		serverTimeManager: serverTimeManager,
 		tickStats: tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour,
@@ -120,7 +118,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	g.state.Store(int32(GameStateStarting))
 
 	g.entityIDManager = NewEntityIDManager(cfg, db, logger)
-	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, logger)
+	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, inventorySnapshotSender, logger)
 	g.networkServer = network.NewServer(&cfg.Network, &cfg.Game, logger)
 
 	g.setupNetworkHandlers()

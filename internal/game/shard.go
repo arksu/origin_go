@@ -43,8 +43,9 @@ type Shard struct {
 	characterSaver *systems.CharacterSaver
 
 	// Command queues for network/ECS separation
-	playerInbox *network.PlayerCommandInbox
-	serverInbox *network.ServerJobInbox
+	playerInbox    *network.PlayerCommandInbox
+	serverInbox    *network.ServerJobInbox
+	snapshotSender *inventory.SnapshotSender
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -53,7 +54,7 @@ type Shard struct {
 	mu    sync.RWMutex
 }
 
-func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
+func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
 	// Initialize command queue config from game config
 	queueConfig := network.CommandQueueConfig{
 		MaxQueueSize:                cfg.Game.CommandQueueSize,
@@ -71,6 +72,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		eventBus:        eb,
 		playerInbox:     network.NewPlayerCommandInbox(queueConfig),
 		serverInbox:     network.NewServerJobInbox(queueConfig),
+		snapshotSender:  snapshotSender,
 		Clients:         make(map[types.EntityID]*network.Client),
 		state:           ShardStateRunning,
 	}
@@ -93,6 +95,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, logger)
 	networkCmdSystem.SetAdminHandler(adminHandler)
+	networkCmdSystem.SetInventorySnapshotSender(s)
 
 	s.world.AddSystem(networkCmdSystem)
 	s.world.AddSystem(systems.NewResetSystem(logger))
@@ -447,6 +450,21 @@ func (s *Shard) SendContainerOpened(entityID types.EntityID, state *netproto.Inv
 	}
 
 	client.Send(data)
+}
+
+// SendInventorySnapshots sends full inventory snapshots to a client (called from ECS tick thread)
+func (s *Shard) SendInventorySnapshots(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	if s.snapshotSender != nil {
+		s.snapshotSender.SendInventorySnapshots(w, client, entityID, handle)
+	}
 }
 
 // BroadcastChatMessage sends a chat message to multiple entities
