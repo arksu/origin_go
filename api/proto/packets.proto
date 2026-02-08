@@ -337,7 +337,7 @@ message C2S_ChatMessage {
   ChatChannel channel = 2;
   oneof target {
     uint64 private_entity_id = 3; // обязателен если channel == CHAT_CHANNEL_PRIVATE
-  }}
+  } }
 
 // ============================================================================
 // CLIENT -> SERVER MESSAGES
@@ -449,9 +449,6 @@ message S2C_ObjectMove {
 
   // if true: client should snap/reset buffer
   bool is_teleport = 5;
-
-  // should match S2C_PlayerEnterWorld.stream_epoch
-  uint32 stream_epoch = 6;
 }
 
 message S2C_InventoryOpResult {
