@@ -46,6 +46,8 @@ type GameConfig struct {
 	ChunkLRUCapacity         int           `mapstructure:"chunk_lru_capacity"`
 	ChunkLRUTTL              int           `mapstructure:"chunk_lru_ttl"`
 	MaxEntities              int           `mapstructure:"max_entities"`
+	EventBusMinWorkers       int           `mapstructure:"event_bus_min_workers"`
+	EventBusMaxWorkers       int           `mapstructure:"event_bus_max_workers"`
 	WorkerPoolSize           int           `mapstructure:"worker_pool_size"`
 	LoadWorkers              int           `mapstructure:"load_workers"`
 	SaveWorkers              int           `mapstructure:"save_workers"`
@@ -149,6 +151,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.chunk_lru_capacity", 2000)
 	v.SetDefault("game.chunk_lru_ttl", 20)
 	v.SetDefault("game.max_entities", 1048576)
+	v.SetDefault("game.event_bus_min_workers", 4)
+	v.SetDefault("game.event_bus_max_workers", 24)
 	v.SetDefault("game.worker_pool_size", 4)
 	v.SetDefault("game.load_workers", 48)
 	v.SetDefault("game.save_workers", 10)
