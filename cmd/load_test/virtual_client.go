@@ -168,15 +168,9 @@ func (vc *VirtualClient) login(ctx context.Context) error {
 }
 
 func (vc *VirtualClient) ensureCharacter(ctx context.Context) error {
-	characters, err := vc.listCharacters(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(characters) > 0 {
-		idx := rand.Intn(len(characters))
-		vc.characterID = characters[idx].ID
-		vc.logger.Debug("Using existing character", zap.Int64("id", vc.characterID))
+	if vc.account.CharacterID > 0 {
+		vc.characterID = vc.account.CharacterID
+		vc.logger.Debug("Using pre-selected offline character", zap.Int64("id", vc.characterID))
 		return nil
 	}
 

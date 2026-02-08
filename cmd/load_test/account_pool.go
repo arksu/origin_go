@@ -16,47 +16,74 @@ import (
 )
 
 type AccountInfo struct {
-	ID       int64
-	Login    string
-	Password string
-	Token    string
+	ID          int64
+	Login       string
+	Password    string
+	Token       string
+	CharacterID int64 // pre-selected offline character (0 = no character, need to create)
 }
 
 type AccountPool struct {
 	db     *persistence.Postgres
 	logger *zap.Logger
 
-	mu       sync.Mutex
-	inUse    map[int64]bool
-	accounts []AccountInfo
+	mu        sync.Mutex
+	accounts  []AccountInfo
+	accountAt int // next account index to try
 }
 
 func NewAccountPool(db *persistence.Postgres, logger *zap.Logger) *AccountPool {
 	return &AccountPool{
 		db:     db,
 		logger: logger,
-		inUse:  make(map[int64]bool),
 	}
 }
 
 func (p *AccountPool) Init(ctx context.Context) error {
-	accounts, err := p.db.Queries().GetAllAccounts(ctx)
+	// Single query: find lt_ accounts that have at least one offline character,
+	// or have no characters at all (a new character will be created later).
+	// Accounts where ALL characters are online are excluded.
+	const query = `
+		SELECT a.id, a.login, COALESCE(c.id, 0) AS character_id
+		FROM account a
+		LEFT JOIN LATERAL (
+			SELECT c.id
+			FROM character c
+			WHERE c.account_id = a.id
+			  AND c.deleted_at IS NULL
+			  AND (c.is_online IS NULL OR c.is_online = false)
+			LIMIT 1
+		) c ON true
+		WHERE a.login LIKE 'lt_%'
+		  AND (
+		      c.id IS NOT NULL
+		      OR NOT EXISTS (
+		          SELECT 1 FROM character
+		          WHERE account_id = a.id AND deleted_at IS NULL
+		      )
+		  )
+		ORDER BY c.id DESC NULLS LAST
+	`
+
+	rows, err := p.db.Pool().Query(ctx, query)
 	if err != nil {
-		return fmt.Errorf("get all accounts: %w", err)
+		return fmt.Errorf("load available accounts: %w", err)
 	}
+	defer rows.Close()
 
-	for _, acc := range accounts {
-		// Only load accounts with "lt_" prefix (load test accounts)
-		if len(acc.Login) >= 3 && acc.Login[:3] == "lt_" {
-			p.accounts = append(p.accounts, AccountInfo{
-				ID:       acc.ID,
-				Login:    acc.Login,
-				Password: "123",
-			})
+	for rows.Next() {
+		var info AccountInfo
+		if err := rows.Scan(&info.ID, &info.Login, &info.CharacterID); err != nil {
+			return fmt.Errorf("scan account row: %w", err)
 		}
+		info.Password = "123"
+		p.accounts = append(p.accounts, info)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate account rows: %w", err)
 	}
 
-	p.logger.Info("Loaded load test accounts from database", zap.Int("count", len(p.accounts)))
+	p.logger.Info("Loaded available load test accounts", zap.Int("count", len(p.accounts)))
 	return nil
 }
 
@@ -64,31 +91,25 @@ func (p *AccountPool) Acquire(ctx context.Context) (*AccountInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for i := range p.accounts {
-		if !p.inUse[p.accounts[i].ID] {
-			p.inUse[p.accounts[i].ID] = true
-			return &p.accounts[i], nil
-		}
+	if p.accountAt < len(p.accounts) {
+		acc := &p.accounts[p.accountAt]
+		p.accountAt++
+		return acc, nil
 	}
 
+	// All pre-loaded accounts exhausted — create a new one
 	acc, err := p.createAccount(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 
 	p.accounts = append(p.accounts, *acc)
-	p.inUse[acc.ID] = true
-
+	p.accountAt++
 	return acc, nil
 }
 
 func (p *AccountPool) Release(acc *AccountInfo) {
-	if acc == nil {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	delete(p.inUse, acc.ID)
+	// No-op: the game server manages is_online state on disconnect
 }
 
 func (p *AccountPool) createAccount(ctx context.Context) (*AccountInfo, error) {
