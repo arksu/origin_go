@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"math"
 	_const "origin/internal/const"
 	"time"
 
@@ -12,10 +11,6 @@ import (
 	"origin/internal/types"
 
 	"go.uber.org/zap"
-)
-
-const (
-	visionUpdateInterval = 1 * time.Second
 )
 
 type VisionSystem struct {
@@ -152,9 +147,8 @@ func (s *VisionSystem) updateObserverVisibility(
 		dx := candidateTransform.X - observerTransform.X
 		dy := candidateTransform.Y - observerTransform.Y
 		distSq := dx*dx + dy*dy
-		distance := math.Sqrt(distSq)
 
-		if distance > visionRadius {
+		if distSq > visionRadius*visionRadius {
 			continue
 		}
 
@@ -163,7 +157,8 @@ func (s *VisionSystem) updateObserverVisibility(
 			targetStealth = stealth.Value
 		}
 
-		if CalcVision(distance, vision.Power, targetStealth) {
+		effectiveRange := vision.Power - targetStealth
+		if effectiveRange > 0 && distSq <= effectiveRange*effectiveRange {
 			s.newVisibleSet[candidateHandle] = struct{}{}
 		}
 	}
@@ -232,7 +227,7 @@ func (s *VisionSystem) updateObserverVisibility(
 	}
 	//s.logger.Debug("VisionSystem updated", zap.Any("newVisibleSet", s.newVisibleSet), zap.Any("observerVis", observerVis))
 
-	observerVis.NextUpdateTime = now.Add(visionUpdateInterval)
+	observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval)
 }
 
 func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.ChunkRef) {

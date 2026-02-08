@@ -1,5 +1,7 @@
 package _const
 
+import "time"
+
 const (
 	ChunkSize      = 128
 	CoordPerTile   = 12
@@ -17,6 +19,12 @@ const (
 const (
 	LAST_USED_ID = "last_used_id"
 	SERVER_TIME  = "server_time"
+)
+
+const (
+	PlayerVisionRadius   = 600
+	PlayerVisionPower    = 600
+	VisionUpdateInterval = 3 * time.Second
 )
 
 const ServerTimeSavePeriodSeconds = 20
