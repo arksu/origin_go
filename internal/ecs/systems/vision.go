@@ -2,10 +2,11 @@ package systems
 
 import (
 	"math/rand"
-	_const "origin/internal/const"
 	"slices"
+	"sync"
 	"time"
 
+	_const "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -15,10 +16,64 @@ import (
 	"go.uber.org/zap"
 )
 
+const numVisionWorkers = 2
+
+// ---------------- internal types ----------------
+
 type visibleEntry struct {
 	Handle   types.Handle
 	EntityID types.EntityID
 }
+
+type spawnEventData struct {
+	observerID   types.EntityID
+	targetID     types.EntityID
+	targetHandle types.Handle
+	layer        int
+}
+
+type despawnEventData struct {
+	observerID types.EntityID
+	targetID   types.EntityID
+	layer      int
+}
+
+type observerJob struct {
+	handle      types.Handle
+	observerVis ecs.ObserverVisibility // value copy; Known is a shared reference
+}
+
+type observerResult struct {
+	handle         types.Handle
+	newVis         ecs.ObserverVisibility // new state with fresh Known map
+	spawnTargets   []types.Handle
+	despawnTargets []types.Handle
+	spawns         []spawnEventData
+	despawns       []despawnEventData
+	skipOnly       bool // canSkipUpdate was true — only NextUpdateTime changed
+}
+
+type deadObserverEntry struct {
+	handle types.Handle
+	known  map[types.Handle]types.EntityID
+}
+
+// visionWorkerScratch holds per-worker scratch buffers to avoid contention.
+type visionWorkerScratch struct {
+	candidatesBuffer []types.Handle
+	newVisibleBuf    []visibleEntry
+	queriedGens      []ecs.ChunkGen
+}
+
+func newWorkerScratch() visionWorkerScratch {
+	return visionWorkerScratch{
+		candidatesBuffer: make([]types.Handle, 0, 256),
+		newVisibleBuf:    make([]visibleEntry, 0, 256),
+		queriedGens:      make([]ecs.ChunkGen, 0, 9),
+	}
+}
+
+// ---------------- VisionSystem ----------------
 
 type VisionSystem struct {
 	ecs.BaseSystem
@@ -26,11 +81,10 @@ type VisionSystem struct {
 	eventBus     *eventbus.EventBus
 	logger       *zap.Logger
 
-	candidatesBuffer []types.Handle
-	newVisibleBuf    []visibleEntry
-	spawnTargets     []types.Handle
-	despawnTargets   []types.Handle
-	queriedGens      []ecs.ChunkGen
+	workers       [numVisionWorkers]visionWorkerScratch
+	jobs          []observerJob
+	results       []observerResult
+	deadObservers []deadObserverEntry
 
 	transformStorage  *ecs.ComponentStorage[components.Transform]
 	visionStorage     *ecs.ComponentStorage[components.Vision]
@@ -45,22 +99,24 @@ func NewVisionSystem(
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
 ) *VisionSystem {
-	return &VisionSystem{
+	sys := &VisionSystem{
 		BaseSystem:        ecs.NewBaseSystem("VisionSystem", 350),
 		chunkManager:      chunkManager,
 		eventBus:          eventBus,
 		logger:            logger,
-		candidatesBuffer:  make([]types.Handle, 0, 256),
-		newVisibleBuf:     make([]visibleEntry, 0, 256),
-		spawnTargets:      make([]types.Handle, 0, 64),
-		despawnTargets:    make([]types.Handle, 0, 64),
-		queriedGens:       make([]ecs.ChunkGen, 0, 9),
+		jobs:              make([]observerJob, 0, 128),
+		results:           make([]observerResult, 0, 128),
+		deadObservers:     make([]deadObserverEntry, 0, 16),
 		transformStorage:  ecs.GetOrCreateStorage[components.Transform](world),
 		visionStorage:     ecs.GetOrCreateStorage[components.Vision](world),
 		stealthStorage:    ecs.GetOrCreateStorage[components.Stealth](world),
 		chunkRefStorage:   ecs.GetOrCreateStorage[components.ChunkRef](world),
 		entityInfoStorage: ecs.GetOrCreateStorage[components.EntityInfo](world),
 	}
+	for i := range sys.workers {
+		sys.workers[i] = newWorkerScratch()
+	}
+	return sys
 }
 
 // ForceUpdateForObserver immediately updates vision for a specific observer,
@@ -79,58 +135,201 @@ func (s *VisionSystem) ForceUpdateForObserver(w *ecs.World, observerHandle types
 	// Force immediate update by setting NextUpdateTime to now
 	observerVis.NextUpdateTime = now
 
-	// Update visibility immediately
-	s.updateObserverVisibility(w, visState, observerHandle, &observerVis, now)
+	scratch := &s.workers[0]
+	result := s.computeObserver(w, scratch, observerJob{handle: observerHandle, observerVis: observerVis}, now)
+
+	// Commit single result
+	visState.Mu.Lock()
+	s.commitResult(visState, &result)
+	visState.Mu.Unlock()
+
+	// Publish events
+	s.publishResultEvents(&result)
 }
 
 func (s *VisionSystem) Update(w *ecs.World, dt float64) {
 	visState := ecs.GetResource[ecs.VisibilityState](w)
-
 	now := ecs.GetResource[ecs.TimeState](w).Now
+
+	// ---- Step A: collect jobs & dead observers (no lock — single writer in tick) ----
+	s.jobs = s.jobs[:0]
+	s.deadObservers = s.deadObservers[:0]
 
 	for observerHandle, observerVis := range visState.VisibleByObserver {
 		if !w.Alive(observerHandle) {
-			s.cleanupDeadObserver(w, visState, observerHandle, observerVis.Known)
+			s.deadObservers = append(s.deadObservers, deadObserverEntry{
+				handle: observerHandle,
+				known:  observerVis.Known,
+			})
 			continue
 		}
-
 		if now.Before(observerVis.NextUpdateTime) {
 			continue
 		}
+		s.jobs = append(s.jobs, observerJob{
+			handle:      observerHandle,
+			observerVis: observerVis,
+		})
+	}
 
-		s.updateObserverVisibility(w, visState, observerHandle, &observerVis, now)
+	// Cleanup dead observers under lock
+	if len(s.deadObservers) > 0 {
+		visState.Mu.Lock()
+		for _, dead := range s.deadObservers {
+			for targetHandle := range dead.known {
+				if observers := visState.ObserversByVisibleTarget[targetHandle]; observers != nil {
+					delete(observers, dead.handle)
+					if len(observers) == 0 {
+						delete(visState.ObserversByVisibleTarget, targetHandle)
+					}
+				}
+			}
+			delete(visState.VisibleByObserver, dead.handle)
+		}
+		visState.Mu.Unlock()
+	}
+
+	if len(s.jobs) == 0 {
+		return
+	}
+
+	// ---- Step B: parallel compute (no locks, no shared writes) ----
+	if cap(s.results) < len(s.jobs) {
+		s.results = make([]observerResult, len(s.jobs))
+	}
+	s.results = s.results[:len(s.jobs)]
+
+	mid := len(s.jobs) / 2
+	if mid == 0 {
+		// Single observer — run inline, no goroutine overhead
+		for i, job := range s.jobs {
+			s.results[i] = s.computeObserver(w, &s.workers[0], job, now)
+		}
+	} else {
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			scratch := &s.workers[0]
+			for i := 0; i < mid; i++ {
+				s.results[i] = s.computeObserver(w, scratch, s.jobs[i], now)
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			scratch := &s.workers[1]
+			for i := mid; i < len(s.jobs); i++ {
+				s.results[i] = s.computeObserver(w, scratch, s.jobs[i], now)
+			}
+		}()
+
+		wg.Wait()
+	}
+
+	// ---- Step C: commit under lock, then publish events ----
+	visState.Mu.Lock()
+	for i := range s.results {
+		r := &s.results[i]
+		// Observer may have died during computation
+		if !w.Alive(r.handle) {
+			if r.newVis.Known != nil {
+				for targetHandle := range r.newVis.Known {
+					if observers := visState.ObserversByVisibleTarget[targetHandle]; observers != nil {
+						delete(observers, r.handle)
+						if len(observers) == 0 {
+							delete(visState.ObserversByVisibleTarget, targetHandle)
+						}
+					}
+				}
+			}
+			delete(visState.VisibleByObserver, r.handle)
+			continue
+		}
+		s.commitResult(visState, r)
+	}
+	visState.Mu.Unlock()
+
+	// Publish events without lock (batch per observer)
+	for i := range s.results {
+		s.publishResultEvents(&s.results[i])
 	}
 }
 
-func (s *VisionSystem) updateObserverVisibility(
+// commitResult applies a single observer result to visState. Caller must hold visState.Mu.
+func (s *VisionSystem) commitResult(visState *ecs.VisibilityState, r *observerResult) {
+	if visState.ObserversByVisibleTarget == nil {
+		visState.ObserversByVisibleTarget = make(map[types.Handle]map[types.Handle]struct{})
+	}
+	for _, targetHandle := range r.spawnTargets {
+		observers := visState.ObserversByVisibleTarget[targetHandle]
+		if observers == nil {
+			observers = make(map[types.Handle]struct{}, 8)
+			visState.ObserversByVisibleTarget[targetHandle] = observers
+		}
+		observers[r.handle] = struct{}{}
+	}
+	for _, targetHandle := range r.despawnTargets {
+		if observers := visState.ObserversByVisibleTarget[targetHandle]; observers != nil {
+			delete(observers, r.handle)
+			if len(observers) == 0 {
+				delete(visState.ObserversByVisibleTarget, targetHandle)
+			}
+		}
+	}
+	visState.VisibleByObserver[r.handle] = r.newVis
+}
+
+// publishResultEvents publishes spawn/despawn events for one observer result.
+func (s *VisionSystem) publishResultEvents(r *observerResult) {
+	for i := range r.spawns {
+		sp := &r.spawns[i]
+		s.eventBus.PublishAsync(
+			ecs.NewEntitySpawnEvent(sp.observerID, sp.targetID, sp.targetHandle, sp.layer),
+			eventbus.PriorityMedium,
+		)
+	}
+	for i := range r.despawns {
+		dp := &r.despawns[i]
+		s.eventBus.PublishAsync(
+			ecs.NewEntityDespawnEvent(dp.observerID, dp.targetID, dp.layer),
+			eventbus.PriorityMedium,
+		)
+	}
+}
+
+// computeObserver performs the full vision computation for one observer using
+// worker-local scratch. It reads components (read-only) and returns a result
+// that will be committed later. No locks, no shared writes.
+func (s *VisionSystem) computeObserver(
 	w *ecs.World,
-	visState *ecs.VisibilityState,
-	observerHandle types.Handle,
-	observerVis *ecs.ObserverVisibility,
+	scratch *visionWorkerScratch,
+	job observerJob,
 	now time.Time,
-) {
+) observerResult {
+	observerHandle := job.handle
+	observerVis := job.observerVis
+
 	observerTransform, ok := s.transformStorage.Get(observerHandle)
 	if !ok {
-		return
+		return observerResult{handle: observerHandle, newVis: observerVis, skipOnly: true}
 	}
 
 	vision, ok := s.visionStorage.Get(observerHandle)
 	if !ok {
-		return
+		return observerResult{handle: observerHandle, newVis: observerVis, skipOnly: true}
 	}
 
 	chunkRef, ok := s.chunkRefStorage.Get(observerHandle)
 	if !ok {
-		return
+		return observerResult{handle: observerHandle, newVis: observerVis, skipOnly: true}
 	}
 
-	// --- Dirty-flag skip (2.1) ---
-	if s.canSkipUpdate(observerVis, observerTransform) {
+	// --- Dirty-flag skip ---
+	if s.canSkipUpdate(&observerVis, observerTransform) {
 		observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval + jitterDuration())
-		visState.Mu.Lock()
-		visState.VisibleByObserver[observerHandle] = *observerVis
-		visState.Mu.Unlock()
-		return
+		return observerResult{handle: observerHandle, newVis: observerVis, skipOnly: true}
 	}
 
 	observerID, _ := w.GetExternalID(observerHandle)
@@ -138,21 +337,21 @@ func (s *VisionSystem) updateObserverVisibility(
 	visionRadius := CalcMaxVisionRadius(vision)
 	visionRadiusSq := visionRadius * visionRadius
 
-	// --- Spatial query ---
-	s.candidatesBuffer = s.candidatesBuffer[:0]
-	s.queriedGens = s.queriedGens[:0]
-	s.findCandidates(observerTransform.X, observerTransform.Y, visionRadius, chunkRef)
+	// --- Spatial query (worker-local buffers) ---
+	scratch.candidatesBuffer = scratch.candidatesBuffer[:0]
+	scratch.queriedGens = scratch.queriedGens[:0]
+	s.findCandidatesW(scratch, observerTransform.X, observerTransform.Y, visionRadius, chunkRef)
 
-	// --- Filter candidates into sorted visible slice (1.1 + 1.2) ---
-	s.newVisibleBuf = s.newVisibleBuf[:0]
-	for _, candidateHandle := range s.candidatesBuffer {
+	// --- Filter candidates into sorted visible slice ---
+	scratch.newVisibleBuf = scratch.newVisibleBuf[:0]
+	for _, candidateHandle := range scratch.candidatesBuffer {
 		if !w.Alive(candidateHandle) {
 			continue
 		}
 
 		// Always include self in visible set for proper ObserversByVisibleTarget mapping
 		if candidateHandle == observerHandle {
-			s.newVisibleBuf = append(s.newVisibleBuf, visibleEntry{candidateHandle, observerID})
+			scratch.newVisibleBuf = append(scratch.newVisibleBuf, visibleEntry{candidateHandle, observerID})
 			continue
 		}
 
@@ -177,13 +376,13 @@ func (s *VisionSystem) updateObserverVisibility(
 		if CalcVision(distSq, visionRadius, vision.Power, targetStealth) {
 			entityID, ok := w.GetExternalID(candidateHandle)
 			if ok {
-				s.newVisibleBuf = append(s.newVisibleBuf, visibleEntry{candidateHandle, entityID})
+				scratch.newVisibleBuf = append(scratch.newVisibleBuf, visibleEntry{candidateHandle, entityID})
 			}
 		}
 	}
 
 	// Sort by Handle for O(log n) binary search in despawn diff
-	slices.SortFunc(s.newVisibleBuf, func(a, b visibleEntry) int {
+	slices.SortFunc(scratch.newVisibleBuf, func(a, b visibleEntry) int {
 		if a.Handle < b.Handle {
 			return -1
 		}
@@ -199,79 +398,60 @@ func (s *VisionSystem) updateObserverVisibility(
 		oldKnown = make(map[types.Handle]types.EntityID, 32)
 	}
 
-	s.spawnTargets = s.spawnTargets[:0]
-	for _, entry := range s.newVisibleBuf {
+	var res observerResult
+	res.handle = observerHandle
+
+	for _, entry := range scratch.newVisibleBuf {
 		if _, wasKnown := oldKnown[entry.Handle]; !wasKnown {
 			layer := 0
 			if info, ok := s.entityInfoStorage.Get(entry.Handle); ok {
 				layer = info.Layer
 			}
-			s.eventBus.PublishAsync(
-				ecs.NewEntitySpawnEvent(observerID, entry.EntityID, entry.Handle, layer),
-				eventbus.PriorityMedium,
-			)
-			s.spawnTargets = append(s.spawnTargets, entry.Handle)
+			res.spawns = append(res.spawns, spawnEventData{
+				observerID:   observerID,
+				targetID:     entry.EntityID,
+				targetHandle: entry.Handle,
+				layer:        layer,
+			})
+			res.spawnTargets = append(res.spawnTargets, entry.Handle)
 		}
 	}
 
-	s.despawnTargets = s.despawnTargets[:0]
 	for targetHandle, targetID := range oldKnown {
-		if !s.isInNewVisible(targetHandle) {
+		if !isInSortedVisible(scratch.newVisibleBuf, targetHandle) {
 			layer := 0
 			if info, ok := s.entityInfoStorage.Get(targetHandle); ok {
 				layer = info.Layer
 			}
-			s.eventBus.PublishAsync(
-				ecs.NewEntityDespawnEvent(observerID, targetID, layer),
-				eventbus.PriorityMedium,
-			)
-			s.despawnTargets = append(s.despawnTargets, targetHandle)
+			res.despawns = append(res.despawns, despawnEventData{
+				observerID: observerID,
+				targetID:   targetID,
+				layer:      layer,
+			})
+			res.despawnTargets = append(res.despawnTargets, targetHandle)
 		}
 	}
 
-	// --- Rebuild Known from cached EntityIDs (1.2) ---
-	if observerVis.Known == nil {
-		observerVis.Known = make(map[types.Handle]types.EntityID, len(s.newVisibleBuf))
-	} else {
-		for k := range observerVis.Known {
-			delete(observerVis.Known, k)
-		}
-	}
-	for _, entry := range s.newVisibleBuf {
-		observerVis.Known[entry.Handle] = entry.EntityID
+	// --- Build new Known map (don't mutate old one) ---
+	newKnown := make(map[types.Handle]types.EntityID, len(scratch.newVisibleBuf))
+	for _, entry := range scratch.newVisibleBuf {
+		newKnown[entry.Handle] = entry.EntityID
 	}
 
-	observerVis.LastX = observerTransform.X
-	observerVis.LastY = observerTransform.Y
-	observerVis.LastChunkX = chunkRef.CurrentChunkX
-	observerVis.LastChunkY = chunkRef.CurrentChunkY
-	observerVis.LastChunkGens = append(observerVis.LastChunkGens[:0], s.queriedGens...)
-	observerVis.NextUpdateTime = now.Add(_const.VisionUpdateInterval + jitterDuration())
+	res.newVis = ecs.ObserverVisibility{
+		Known:          newKnown,
+		LastX:          observerTransform.X,
+		LastY:          observerTransform.Y,
+		LastChunkX:     chunkRef.CurrentChunkX,
+		LastChunkY:     chunkRef.CurrentChunkY,
+		LastChunkGens:  append([]ecs.ChunkGen(nil), scratch.queriedGens...),
+		NextUpdateTime: now.Add(_const.VisionUpdateInterval + jitterDuration()),
+	}
 
-	// --- Batch VisibilityState mutations (1.3) ---
-	visState.Mu.Lock()
-	if visState.ObserversByVisibleTarget == nil {
-		visState.ObserversByVisibleTarget = make(map[types.Handle]map[types.Handle]struct{})
-	}
-	for _, targetHandle := range s.spawnTargets {
-		observers := visState.ObserversByVisibleTarget[targetHandle]
-		if observers == nil {
-			observers = make(map[types.Handle]struct{}, 8)
-			visState.ObserversByVisibleTarget[targetHandle] = observers
-		}
-		observers[observerHandle] = struct{}{}
-	}
-	for _, targetHandle := range s.despawnTargets {
-		if observers := visState.ObserversByVisibleTarget[targetHandle]; observers != nil {
-			delete(observers, observerHandle)
-			if len(observers) == 0 {
-				delete(visState.ObserversByVisibleTarget, targetHandle)
-			}
-		}
-	}
-	visState.VisibleByObserver[observerHandle] = *observerVis
-	visState.Mu.Unlock()
+	return res
 }
+
+// ---------------- helpers ----------------
 
 func (s *VisionSystem) canSkipUpdate(
 	observerVis *ecs.ObserverVisibility,
@@ -300,7 +480,7 @@ func (s *VisionSystem) canSkipUpdate(
 	return true
 }
 
-func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.ChunkRef) {
+func (s *VisionSystem) findCandidatesW(scratch *visionWorkerScratch, x, y, radius float64, chunkRef components.ChunkRef) {
 	chunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
 	chunk := s.chunkManager.GetChunk(chunkCoord)
 	if chunk == nil {
@@ -316,8 +496,8 @@ func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.
 	// Если круг целиком внутри чанка — соседей не трогаем
 	localOnly := x-radius >= chunkMinX && x+radius <= chunkMaxX && y-radius >= chunkMinY && y+radius <= chunkMaxY
 
-	s.queriedGens = append(s.queriedGens, ecs.ChunkGen{Coord: chunkCoord, Gen: chunk.Spatial().Generation()})
-	chunk.Spatial().QueryRadius(x, y, radius, &s.candidatesBuffer)
+	scratch.queriedGens = append(scratch.queriedGens, ecs.ChunkGen{Coord: chunkCoord, Gen: chunk.Spatial().Generation()})
+	chunk.Spatial().QueryRadius(x, y, radius, &scratch.candidatesBuffer)
 	if localOnly {
 		return
 	}
@@ -349,43 +529,24 @@ func (s *VisionSystem) findCandidates(x, y, radius float64, chunkRef components.
 			neighborCoord := types.ChunkCoord{X: neighborChunkX, Y: neighborChunkY}
 			neighborChunk := s.chunkManager.GetChunk(neighborCoord)
 			if neighborChunk != nil {
-				s.queriedGens = append(s.queriedGens, ecs.ChunkGen{Coord: neighborCoord, Gen: neighborChunk.Spatial().Generation()})
-				neighborChunk.Spatial().QueryRadius(x, y, radius, &s.candidatesBuffer)
+				scratch.queriedGens = append(scratch.queriedGens, ecs.ChunkGen{Coord: neighborCoord, Gen: neighborChunk.Spatial().Generation()})
+				neighborChunk.Spatial().QueryRadius(x, y, radius, &scratch.candidatesBuffer)
 			}
 		}
 	}
 }
 
-func (s *VisionSystem) cleanupDeadObserver(
-	w *ecs.World,
-	visState *ecs.VisibilityState,
-	observerHandle types.Handle,
-	known map[types.Handle]types.EntityID,
-) {
-	visState.Mu.Lock()
-	for targetHandle := range known {
-		if observers := visState.ObserversByVisibleTarget[targetHandle]; observers != nil {
-			delete(observers, observerHandle)
-			if len(observers) == 0 {
-				delete(visState.ObserversByVisibleTarget, targetHandle)
-			}
-		}
-	}
-	delete(visState.VisibleByObserver, observerHandle)
-	visState.Mu.Unlock()
-}
-
-func (s *VisionSystem) isInNewVisible(h types.Handle) bool {
-	lo, hi := 0, len(s.newVisibleBuf)
+func isInSortedVisible(buf []visibleEntry, h types.Handle) bool {
+	lo, hi := 0, len(buf)
 	for lo < hi {
 		mid := lo + (hi-lo)/2
-		if s.newVisibleBuf[mid].Handle < h {
+		if buf[mid].Handle < h {
 			lo = mid + 1
 		} else {
 			hi = mid
 		}
 	}
-	return lo < len(s.newVisibleBuf) && s.newVisibleBuf[lo].Handle == h
+	return lo < len(buf) && buf[lo].Handle == h
 }
 
 func CalcMaxVisionRadius(vision components.Vision) float64 {
