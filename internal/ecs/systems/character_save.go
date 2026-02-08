@@ -68,7 +68,9 @@ func (s *CharacterSaveSystem) Update(w *ecs.World, dt float64) {
 
 			s.saver.Save(w, entityID, charEntity.Handle)
 
-			nextSaveAt := now.Add(s.saveInterval)
+			// Deterministic jitter based on entityID to spread saves (0-10% of interval)
+			jitter := time.Duration(entityID%100) * s.saveInterval / 100
+			nextSaveAt := now.Add(s.saveInterval + jitter)
 			charEntities.UpdateSaveTime(entityID, now, nextSaveAt)
 		}
 	}
