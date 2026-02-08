@@ -41,8 +41,8 @@ type ShardManager struct {
 
 func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, logger *zap.Logger) *ShardManager {
 	ebCfg := &eventbus.Config{
-		MinWorkers: cfg.Game.WorkerPoolSize,
-		MaxWorkers: cfg.Game.WorkerPoolSize * 4,
+		MinWorkers: cfg.Game.EventBusMinWorkers,
+		MaxWorkers: cfg.Game.EventBusMaxWorkers,
 		Logger:     logger.Named("eventbus"),
 		OnError: func(event eventbus.Event, handlerID string, err error) {
 			logger.Error("event handler error",
