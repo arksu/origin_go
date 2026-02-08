@@ -92,10 +92,10 @@ func (sm *ShardManager) Update(ts ecs.TimeState) ShardUpdateResult {
 	shardDurations := make([]ShardDuration, len(shards))
 
 	for i, shard := range shards {
-		wg.Add(1)
 		s := shard
 		idx := i
-		sm.workerPool.Submit(func() {
+		wg.Add(1)
+		if !sm.workerPool.Submit(func() {
 			defer wg.Done()
 			execStart := time.Now()
 			s.Update(ts)
@@ -103,7 +103,9 @@ func (sm *ShardManager) Update(ts ecs.TimeState) ShardUpdateResult {
 				Layer:    s.layer,
 				Duration: time.Since(execStart),
 			}
-		})
+		}) {
+			wg.Done()
+		}
 	}
 	wg.Wait()
 
@@ -130,8 +132,10 @@ func (sm *ShardManager) EventBus() *eventbus.EventBus {
 }
 
 type WorkerPool struct {
-	tasks chan func()
-	wg    sync.WaitGroup
+	tasks   chan func()
+	wg      sync.WaitGroup
+	mu      sync.RWMutex
+	stopped bool
 }
 
 func NewWorkerPool(size int) *WorkerPool {
@@ -154,11 +158,21 @@ func (wp *WorkerPool) worker() {
 	}
 }
 
-func (wp *WorkerPool) Submit(task func()) {
+func (wp *WorkerPool) Submit(task func()) bool {
+	wp.mu.RLock()
+	if wp.stopped {
+		wp.mu.RUnlock()
+		return false
+	}
 	wp.tasks <- task
+	wp.mu.RUnlock()
+	return true
 }
 
 func (wp *WorkerPool) Stop() {
+	wp.mu.Lock()
+	wp.stopped = true
+	wp.mu.Unlock()
 	close(wp.tasks)
 	wp.wg.Wait()
 }
