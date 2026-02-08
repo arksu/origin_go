@@ -30,6 +30,8 @@ type Chunk struct {
 	LastTick uint64
 	Version  uint32 // версия чанка (инкрементируется при изменении тайлов)
 
+	tilesDirty bool
+
 	isPassable  []uint64
 	isSwimmable []uint64
 
@@ -112,8 +114,43 @@ func (c *Chunk) SetTiles(tiles []byte, lastTick uint64) {
 	c.Tiles = tiles
 	c.LastTick = lastTick
 	c.Version++ // инкрементируем версию при изменении тайлов
+	c.tilesDirty = true
 	c.populateTileBitsets()
 	c.mu.Unlock()
+}
+
+func (c *Chunk) TilesDirty() bool {
+	c.mu.RLock()
+	d := c.tilesDirty
+	c.mu.RUnlock()
+	return d
+}
+
+func (c *Chunk) ClearTilesDirty() {
+	c.mu.Lock()
+	c.tilesDirty = false
+	c.mu.Unlock()
+}
+
+// IsDirty returns true if tiles have been modified or any active object is dirty.
+// For inactive/preloaded chunks with raw objects, only tilesDirty is checked
+// since raw objects are never mutated in-memory.
+func (c *Chunk) IsDirty(world *ecs.World) bool {
+	if c.TilesDirty() {
+		return true
+	}
+
+	for _, h := range c.GetHandles() {
+		if !world.Alive(h) {
+			continue
+		}
+		state, ok := ecs.GetComponent[components.ObjectInternalState](world, h)
+		if ok && state.IsDirty {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c *Chunk) populateTileBitsets() {
@@ -169,7 +206,9 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 	return c.getBit(c.isSwimmable, index)
 }
 
-// SaveToDB persists the chunk and its entities to the database
+// SaveToDB persists only changed chunk data to the database.
+// Tiles are saved only when tilesDirty is set.
+// For active chunks, only objects with ObjectInternalState.IsDirty are serialized.
 func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
 	Serialize(world *ecs.World, h types.Handle) (*repository.Object, error)
 }, logger *zap.Logger) {
@@ -183,22 +222,30 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	coord := c.Coord
 
 	c.mu.RLock()
-	tiles := make([]byte, len(c.Tiles))
-	copy(tiles, c.Tiles)
+	saveTiles := c.tilesDirty
+	var tiles []byte
+	if saveTiles {
+		tiles = make([]byte, len(c.Tiles))
+		copy(tiles, c.Tiles)
+	}
 	lastTick := c.LastTick
 	totalHandles := c.GetHandles()
 	rawObjects := c.GetRawObjects()
 	c.mu.RUnlock()
 
-	// Determine entity count and objects to save
+	// Determine dirty objects to save
 	var objectsToSave []*repository.Object
-	var entityCount int
+	var dirtyHandles []types.Handle
 
 	if len(totalHandles) > 0 {
-		// Chunk is active - serialize entities from handles
-		entityCount = len(totalHandles)
+		// Chunk is active - serialize only dirty entities
 		for _, h := range totalHandles {
 			if !world.Alive(h) {
+				continue
+			}
+
+			state, hasState := ecs.GetComponent[components.ObjectInternalState](world, h)
+			if hasState && !state.IsDirty {
 				continue
 			}
 
@@ -220,38 +267,46 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				continue
 			}
 			objectsToSave = append(objectsToSave, obj)
+			dirtyHandles = append(dirtyHandles, h)
 		}
 	} else {
-		// Chunk is inactive - use raw objects directly
-		objectsToSave = rawObjects
-		entityCount = len(rawObjects)
+		// Chunk is inactive - raw objects were already serialized at deactivation;
+		// nothing changed since then, skip.
 	}
 
-	err := db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
-		Region:      c.Region,
-		X:           coord.X,
-		Y:           coord.Y,
-		Layer:       c.Layer,
-		TilesData:   tiles,
-		LastTick:    int64(lastTick),
-		EntityCount: sql.NullInt32{Int32: int32(entityCount), Valid: true},
-	})
-	if err != nil {
-		logger.Error("failed to save chunk tiles",
-			zap.Int("chunk_x", coord.X),
-			zap.Int("chunk_y", coord.Y),
-			zap.Error(err),
-		)
+	if saveTiles {
+		entityCount := len(totalHandles)
+		if entityCount == 0 {
+			entityCount = len(rawObjects)
+		}
+		err := db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
+			Region:      c.Region,
+			X:           coord.X,
+			Y:           coord.Y,
+			Layer:       c.Layer,
+			TilesData:   tiles,
+			LastTick:    int64(lastTick),
+			EntityCount: sql.NullInt32{Int32: int32(entityCount), Valid: true},
+		})
+		if err != nil {
+			logger.Error("failed to save chunk tiles",
+				zap.Int("chunk_x", coord.X),
+				zap.Int("chunk_y", coord.Y),
+				zap.Error(err),
+			)
+		} else {
+			c.ClearTilesDirty()
+		}
 	}
 
-	// Save objects
+	// Save dirty objects
 	for _, obj := range objectsToSave {
 		if obj == nil {
 			continue
 		}
 
 		obj.LastTick = int64(lastTick)
-		err = db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
+		err := db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
 			ID:         obj.ID,
 			TypeID:     obj.TypeID,
 			Region:     obj.Region,
@@ -275,7 +330,23 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			)
 		}
 	}
-	logger.Debug("saved chunk", zap.Any("coord", c.Coord), zap.Int("count", len(objectsToSave)))
+
+	// Clear dirty flags on successfully serialized objects
+	for _, h := range dirtyHandles {
+		ecs.WithComponent(world, h, func(s *components.ObjectInternalState) {
+			s.IsDirty = false
+		})
+	}
+
+	savedTiles := 0
+	if saveTiles {
+		savedTiles = 1
+	}
+	logger.Debug("saved chunk",
+		zap.Any("coord", c.Coord),
+		zap.Int("dirty_objects", len(objectsToSave)),
+		zap.Int("tiles_saved", savedTiles),
+	)
 }
 
 // LoadFromDB loads chunk data and objects from the database
@@ -298,6 +369,7 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 	})
 	if err == nil {
 		c.SetTiles(tilesData.TilesData, uint64(tilesData.LastTick))
+		c.ClearTilesDirty()
 	}
 
 	objects, err := db.Queries().GetObjectsByChunk(ctx, repository.GetObjectsByChunkParams{

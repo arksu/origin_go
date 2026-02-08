@@ -659,8 +659,10 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 		return
 	}
 
-	// Сохраняем в БД
-	chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+	// Save to DB only if chunk has dirty state
+	if chunk.IsDirty(cm.world) {
+		chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+	}
 
 	// Удаляем из памяти с финальными проверками
 	cm.chunksMu.Lock()
@@ -826,6 +828,10 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		ecs.AddComponent(cm.world, h, components.ChunkRef{
 			CurrentChunkX: coord.X,
 			CurrentChunkY: coord.Y,
+		})
+
+		ecs.AddComponent(cm.world, h, components.ObjectInternalState{
+			IsDirty: false,
 		})
 
 		isStatic := cm.objectFactory.IsStatic(raw)
@@ -1023,6 +1029,7 @@ func (cm *ChunkManager) Stop() {
 	var wg sync.WaitGroup
 
 	// Start save workers
+	var savedCount int64
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
@@ -1031,7 +1038,10 @@ func (cm *ChunkManager) Stop() {
 				if chunk := cm.GetChunk(coord); chunk != nil {
 					state := chunk.GetState()
 					if state == types.ChunkStateActive || state == types.ChunkStatePreloaded || state == types.ChunkStateInactive {
-						chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+						if chunk.IsDirty(cm.world) {
+							chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+							atomic.AddInt64(&savedCount, 1)
+						}
 					}
 				}
 			}
@@ -1049,7 +1059,8 @@ func (cm *ChunkManager) Stop() {
 
 	cm.logger.Info("chunk manager stopped",
 		zap.Int("layer", cm.layer),
-		zap.Int("chunks_saved", len(allCoords)),
+		zap.Int("chunks_total", len(allCoords)),
+		zap.Int64("chunks_saved", savedCount),
 	)
 }
 

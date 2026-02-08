@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"origin/internal/config"
 	"origin/internal/game"
@@ -30,10 +31,32 @@ func main() {
 	//debug.SetGCPercent(40)
 	//debug.SetMemoryLimit(6 * 1024 * 1024 * 1024)
 
-	logger, err := zap.NewDevelopment()
+	// Configure logging to both console and file
+	logFile, err := os.OpenFile("./log.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}
+	defer logFile.Close()
+
+	// Create encoder config for both console and file
+	encoderConfig := zap.NewDevelopmentEncoderConfig()
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+
+	// Create cores for console and file output
+	consoleCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encoderConfig),
+		zapcore.AddSync(os.Stdout),
+		zapcore.DebugLevel,
+	)
+	fileCore := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig),
+		zapcore.AddSync(logFile),
+		zapcore.DebugLevel,
+	)
+
+	// Combine cores for multi-output logging
+	core := zapcore.NewTee(consoleCore, fileCore)
+	logger := zap.New(core, zap.AddCaller())
 	defer logger.Sync()
 
 	cfg := config.MustLoad(logger)
@@ -66,7 +89,7 @@ func main() {
 	inventorySnapshotSender := inventory.NewSnapshotSender(logger)
 
 	objectFactory := world.NewObjectFactory(inventory.NewDroppedInventoryLoaderDB(db, inventoryLoader))
-	
+
 	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, inventorySnapshotSender, logger)
 
 	// Setup event handlers after game creation
