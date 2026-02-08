@@ -143,6 +143,7 @@ Maintain this list as you add new components:
 | 20 | InventoryContainerComponentID | Inventory container (grid/hand/equip/drop) |
 | 21 | DroppedItemComponentID        | Marks entity as a dropped item in world    |
 | 22 | PendingInteractionComponentID | Pending auto-interaction intent (pickup)   |
+| 23 | ObjectInternalStateComponentID| Runtime state & dirty flag for world objects|
 
 ## Migration from Auto-Assignment
 

@@ -163,7 +163,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.world_margin_tiles", 50)
 	v.SetDefault("game.send_channel_buffer", 132000)
 	v.SetDefault("game.pprof_enabled", false)
-	v.SetDefault("game.command_queue_size", 500)
+	v.SetDefault("game.command_queue_size", 2000)
 	v.SetDefault("game.max_packets_per_second", 40)
 	v.SetDefault("game.max_commands_per_tick_per_client", 20)
 	v.SetDefault("game.chat_local_radius", 1000)
