@@ -277,13 +277,14 @@ class MoveController {
       const dx = pos.x - prevPos.x
       const dy = pos.y - prevPos.y
       const distance = Math.sqrt(dx * dx + dy * dy)
+      const finalIsMoving = pos.isMoving
 
       if (DEBUG_MOVEMENT && (distance > 0.04)) {
         console.log(`[MoveController] Entity ${entityId}:`, {
           prevPos: `(${prevPos.x.toFixed(2)}, ${prevPos.y.toFixed(2)})`,
           newPos: `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`,
           distance: distance.toFixed(2),
-          isMoving: pos.isMoving,
+          isMoving: finalIsMoving,
           isExtrapolating: state.isExtrapolating,
           keyframes: state.keyframes.length,
           renderTimeMs: renderTimeMs,
@@ -387,7 +388,7 @@ class MoveController {
       }
 
       heading = last.heading
-      isMoving = last.isMoving && timePastLast <= MAX_EXTRAPOLATION_MS
+      isMoving = last.isMoving // Trust server's isMoving flag even during extrapolation
       moveMode = last.moveMode
     } else {
       // No keyframes at all - use current visual position
