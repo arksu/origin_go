@@ -23,7 +23,7 @@ export class TerrainGenerator {
           return cmds
         }
       }
-      baseSeed = getRandomByCoord(tileX, tileY, 1000, baseSeed)
+      //baseSeed = getRandomByCoord(tileX, tileY, 1000, baseSeed)
     }
 
     return null

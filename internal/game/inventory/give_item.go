@@ -46,32 +46,64 @@ func (s *InventoryOperationService) GiveItem(
 		count = 1
 	}
 
-	// 2. Allocate a unique ID for the new item instance
 	if s.idAllocator == nil {
 		return &GiveItemResult{Success: false, Message: "id allocator not configured"}
 	}
-	itemID := s.idAllocator.GetFreeID()
 
 	resource := itemDef.ResolveResource(false)
 
-	newItem := components.InvItem{
-		ItemID:   itemID,
-		TypeID:   uint32(itemDef.DefID),
-		Resource: resource,
-		Quality:  quality,
-		Quantity: count,
-		W:        uint8(itemDef.Size.W),
-		H:        uint8(itemDef.Size.H),
+	// Create count separate items (each with Quantity=1)
+	var allUpdatedContainers []*ContainerInfo
+	var lastDroppedID *types.EntityID
+	successCount := uint32(0)
+
+	for i := uint32(0); i < count; i++ {
+		// 2. Allocate a unique ID for each item instance
+		itemID := s.idAllocator.GetFreeID()
+
+		newItem := components.InvItem{
+			ItemID:   itemID,
+			TypeID:   uint32(itemDef.DefID),
+			Resource: resource,
+			Quality:  quality,
+			Quantity: 1,
+			W:        uint8(itemDef.Size.W),
+			H:        uint8(itemDef.Size.H),
+		}
+
+		// 3. Try to place into player's grid inventory
+		result := s.tryAddToGrid(w, playerID, playerHandle, &newItem, itemDef)
+		if result != nil {
+			successCount++
+			allUpdatedContainers = append(allUpdatedContainers, result.UpdatedContainers...)
+			continue
+		}
+
+		// 4. Inventory full — drop to world at player's position
+		dropResult := s.dropNewItem(w, playerID, playerHandle, &newItem, itemDef)
+		if dropResult.Success {
+			successCount++
+			lastDroppedID = dropResult.SpawnedDroppedEntityID
+		}
 	}
 
-	// 3. Try to place into player's grid inventory
-	result := s.tryAddToGrid(w, playerID, playerHandle, &newItem, itemDef)
-	if result != nil {
-		return result
+	if successCount == 0 {
+		return &GiveItemResult{Success: false, Message: "failed to give any items"}
 	}
 
-	// 4. Inventory full — drop to world at player's position
-	return s.dropNewItem(w, playerID, playerHandle, &newItem, itemDef)
+	message := "item added to inventory"
+	if successCount < count {
+		message = "some items added, some dropped or failed"
+	} else if lastDroppedID != nil {
+		message = "inventory full, items dropped to world"
+	}
+
+	return &GiveItemResult{
+		Success:                true,
+		Message:                message,
+		UpdatedContainers:      allUpdatedContainers,
+		SpawnedDroppedEntityID: lastDroppedID,
+	}
 }
 
 // tryAddToGrid attempts to place an item into the player's first grid container with free space.

@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
+const MAX_HISTORY = 30
+
 const message = ref('')
 const inputRef = ref<HTMLInputElement>()
+const history = ref<string[]>([])
+let historyIndex = -1
+let savedInput = ''
 const emit = defineEmits<{
   send: [text: string]
 }>()
@@ -12,6 +17,12 @@ function handleSend() {
   if (text.length === 0) return
   
   emit('send', text)
+  history.value.push(text)
+  if (history.value.length > MAX_HISTORY) {
+    history.value.shift()
+  }
+  historyIndex = -1
+  savedInput = ''
   message.value = ''
 }
 
@@ -19,6 +30,28 @@ function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     handleSend()
+    return
+  }
+
+  const length = history.value.length
+  if (event.key === 'ArrowUp') {
+    if (length > 0 && historyIndex < length - 1) {
+      if (historyIndex === -1) {
+        savedInput = message.value
+      }
+      historyIndex++
+      message.value = history.value[length - historyIndex - 1]
+    }
+    event.preventDefault()
+  } else if (event.key === 'ArrowDown') {
+    if (historyIndex > 0) {
+      historyIndex--
+      message.value = history.value[length - historyIndex - 1]
+    } else if (historyIndex === 0) {
+      historyIndex = -1
+      message.value = savedInput
+    }
+    event.preventDefault()
   }
 }
 
