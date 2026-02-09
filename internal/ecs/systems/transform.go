@@ -156,9 +156,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			// Save current collision position for next frame
 			cr.PrevFinalX = cr.FinalX
 			cr.PrevFinalY = cr.FinalY
-			if cr.CollidedWith != 0 {
-				cr.PrevCollidedWith = cr.CollidedWith
-			}
+			cr.PrevCollidedWith = cr.CollidedWith
 			// Clear collision result for next frame
 			cr.HasCollision = false
 			cr.CollidedWith = 0

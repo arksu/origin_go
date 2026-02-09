@@ -207,7 +207,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 	case network.CmdOpenContainer:
 		s.handleOpenContainer(w, handle, cmd)
 	case network.CmdCloseContainer:
-		// CloseContainer is client-side only (UI close), no server action needed
+		// CloseContainer is UI-side, but still clear pending link intent.
+		s.clearLinkIntent(w, cmd.CharacterID)
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -246,6 +247,7 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 
 	// Clear pending interaction on any new movement command
 	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+	s.clearLinkIntent(w, cmd.CharacterID)
 
 	// Set movement target
 	ecs.WithComponent(w, playerHandle, func(mov *components.Movement) {
@@ -264,6 +266,7 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 
 	// Clear any previous pending interaction
 	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+	s.clearLinkIntent(w, cmd.CharacterID)
 
 	// Validate target entity exists
 	targetEntityID := types.EntityID(moveToEntity.EntityId)
@@ -305,6 +308,9 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 				Type:           netproto.InteractionType_PICKUP,
 				Range:          constt.DroppedPickupRadius,
 			})
+		} else {
+			// For non-dropped world objects autoInteract means explicit link intent.
+			s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
 		}
 	}
 
@@ -338,6 +344,8 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 	// AUTO resolution: if target is a dropped item, treat as PICKUP
 	if interactionType == netproto.InteractionType_AUTO && isDroppedItem {
 		interactionType = netproto.InteractionType_PICKUP
+	} else if interactionType == netproto.InteractionType_AUTO {
+		interactionType = netproto.InteractionType_OPEN
 	}
 
 	switch interactionType {
@@ -348,6 +356,11 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 			return
 		}
 		s.handlePickupInteract(w, playerHandle, cmd.CharacterID, targetEntityID, targetHandle)
+	case netproto.InteractionType_OPEN:
+		if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
+			return
+		}
+		s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
 
 	default:
 		s.logger.Debug("Interact: unsupported interaction type",
@@ -570,9 +583,23 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 		return
 	}
 
+	ownerID := types.EntityID(ref.OwnerId)
+
+	// World object opening starts from link intent.
+	// Actual open/close logic will be handled by OpenContainerService on link sync events.
+	if ownerID != cmd.CharacterID {
+		targetHandle := w.GetHandleByEntityID(ownerID)
+		if targetHandle != types.InvalidHandle && w.Alive(targetHandle) {
+			if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider {
+				s.setLinkIntent(w, cmd.CharacterID, ownerID, targetHandle)
+				return
+			}
+		}
+	}
+
 	// O(1) lookup via InventoryRefIndex
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), types.EntityID(ref.OwnerId), ref.InventoryKey)
+	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), ownerID, ref.InventoryKey)
 	if !found || !w.Alive(handle) {
 		s.logger.Debug("OpenContainer: container not found",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -584,8 +611,6 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 	if !hasContainer {
 		return
 	}
-
-	ownerID := types.EntityID(ref.OwnerId)
 
 	// Authorization: if owner_id != player, check that item belongs to player's inventory
 	if ownerID != cmd.CharacterID {
@@ -649,6 +674,28 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 	if s.inventoryResultSender != nil {
 		s.inventoryResultSender.SendContainerOpened(cmd.CharacterID, invState)
 	}
+}
+
+func (s *NetworkCommandSystem) setLinkIntent(
+	w *ecs.World,
+	playerID types.EntityID,
+	targetID types.EntityID,
+	targetHandle types.Handle,
+) {
+	if playerID == 0 || targetID == 0 {
+		return
+	}
+
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	createdAt := ecs.GetResource[ecs.TimeState](w).Now
+	linkState.SetIntent(playerID, targetID, targetHandle, createdAt)
+}
+
+func (s *NetworkCommandSystem) clearLinkIntent(w *ecs.World, playerID types.EntityID) {
+	if playerID == 0 {
+		return
+	}
+	ecs.GetResource[ecs.LinkState](w).ClearIntent(playerID)
 }
 
 func (s *NetworkCommandSystem) sendInventoryError(entityID types.EntityID, opID uint64, code netproto.ErrorCode, message string) {

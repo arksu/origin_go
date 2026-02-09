@@ -21,6 +21,9 @@ const (
 	TopicGameplayEntitySpawn       = "gameplay.entity.spawn"
 	TopicGameplayEntityDespawn     = "gameplay.entity.despawn"
 	TopicGameplayEntityUpdate      = "gameplay.entity.update"
+	TopicGameplayLink              = "gameplay.link.*"
+	TopicGameplayLinkCreated       = "gameplay.link.created"
+	TopicGameplayLinkBroken        = "gameplay.link.broken"
 	TopicGameplayChunk             = "gameplay.chunk.*"
 	TopicGameplayChunkLoad         = "gameplay.chunk.load"
 	TopicGameplayChunkUnload       = "gameplay.chunk.unload"
@@ -186,5 +189,57 @@ func NewObjectMoveBatchEvent(layer int, entries []MoveBatchEntry) *ObjectMoveBat
 		topic:   TopicGameplayMovementMoveBatch,
 		Layer:   layer,
 		Entries: entries,
+	}
+}
+
+type LinkBreakReason string
+
+const (
+	LinkBreakMoved   LinkBreakReason = "moved"
+	LinkBreakRelink  LinkBreakReason = "relink"
+	LinkBreakDespawn LinkBreakReason = "despawn"
+)
+
+// LinkCreatedEvent is published synchronously when player-target link is established.
+type LinkCreatedEvent struct {
+	topic     string
+	Timestamp time.Time
+	Layer     int
+	PlayerID  types.EntityID
+	TargetID  types.EntityID
+}
+
+func (e *LinkCreatedEvent) Topic() string { return e.topic }
+
+func NewLinkCreatedEvent(layer int, playerID, targetID types.EntityID) *LinkCreatedEvent {
+	return &LinkCreatedEvent{
+		topic:     TopicGameplayLinkCreated,
+		Timestamp: time.Now(),
+		Layer:     layer,
+		PlayerID:  playerID,
+		TargetID:  targetID,
+	}
+}
+
+// LinkBrokenEvent is published synchronously when player-target link is broken.
+type LinkBrokenEvent struct {
+	topic       string
+	Timestamp   time.Time
+	Layer       int
+	PlayerID    types.EntityID
+	TargetID    types.EntityID
+	BreakReason LinkBreakReason
+}
+
+func (e *LinkBrokenEvent) Topic() string { return e.topic }
+
+func NewLinkBrokenEvent(layer int, playerID, targetID types.EntityID, reason LinkBreakReason) *LinkBrokenEvent {
+	return &LinkBrokenEvent{
+		topic:       TopicGameplayLinkBroken,
+		Timestamp:   time.Now(),
+		Layer:       layer,
+		PlayerID:    playerID,
+		TargetID:    targetID,
+		BreakReason: reason,
 	}
 }
