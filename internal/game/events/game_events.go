@@ -38,6 +38,7 @@ func (d *NetworkVisibilityDispatcher) Subscribe(eventBus *eventbus.EventBus) {
 	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMoveBatch, eventbus.PriorityMedium, d.handleObjectMoveBatch)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntitySpawn, eventbus.PriorityMedium, d.handleEntitySpawn)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntityDespawn, eventbus.PriorityMedium, d.handleEntityDespawn)
+	eventBus.SubscribeAsync(ecs.TopicGameplayEntityAppearance, eventbus.PriorityMedium, d.handleEntityAppearanceChanged)
 	eventBus.SubscribeAsync(ecs.TopicGameplayChunkUnload, eventbus.PriorityMedium, d.handleChunkUnload)
 	eventBus.SubscribeAsync(ecs.TopicGameplayChunkLoad, eventbus.PriorityMedium, d.handleChunkLoad)
 }
@@ -281,6 +282,94 @@ func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e
 			return nil
 		}
 
+		client.Send(data)
+	}
+	shard.ClientsMu.RUnlock()
+
+	return nil
+}
+
+func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.Context, e eventbus.Event) error {
+	event, ok := e.(*ecs.EntityAppearanceChangedEvent)
+	if !ok {
+		return nil
+	}
+
+	shard := d.shardManager.GetShard(event.Layer)
+	if shard == nil {
+		return nil
+	}
+
+	if !shard.World().Alive(event.TargetHandle) {
+		return nil
+	}
+
+	transform, hasTransform := ecs.GetComponent[components.Transform](shard.World(), event.TargetHandle)
+	entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.World(), event.TargetHandle)
+	appearance, hasAppearance := ecs.GetComponent[components.Appearance](shard.World(), event.TargetHandle)
+	if !hasTransform || !hasEntityInfo || !hasAppearance {
+		return nil
+	}
+
+	collider, hasCollider := ecs.GetComponent[components.Collider](shard.World(), event.TargetHandle)
+	var sizeX, sizeY int32
+	if hasCollider {
+		sizeX = int32(collider.HalfWidth * 2)
+		sizeY = int32(collider.HalfHeight * 2)
+	}
+
+	msg := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ObjectSpawn{
+			ObjectSpawn: &netproto.S2C_ObjectSpawn{
+				EntityId:     uint64(event.TargetID),
+				TypeId:       entityInfo.TypeID,
+				ResourcePath: appearance.Resource,
+				Position: &netproto.EntityPosition{
+					Position: &netproto.Position{
+						X: int32(transform.X),
+						Y: int32(transform.Y),
+					},
+					Size: &netproto.Vector2{
+						X: sizeX,
+						Y: sizeY,
+					},
+				},
+			},
+		},
+	}
+
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		d.logger.Error("failed to marshal appearance-changed ObjectSpawn message",
+			zap.Error(err),
+			zap.Int64("target_id", int64(event.TargetID)),
+		)
+		return nil
+	}
+
+	visibilityState := ecs.GetResource[ecs.VisibilityState](shard.World())
+	visibilityState.Mu.RLock()
+	observers := visibilityState.ObserversByVisibleTarget[event.TargetHandle]
+	observerHandles := make([]types.Handle, 0, len(observers))
+	for observerHandle := range observers {
+		observerHandles = append(observerHandles, observerHandle)
+	}
+	visibilityState.Mu.RUnlock()
+
+	if len(observerHandles) == 0 {
+		return nil
+	}
+
+	shard.ClientsMu.RLock()
+	for _, observerHandle := range observerHandles {
+		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
+		if !ok {
+			continue
+		}
+		client, exists := shard.Clients[observerEntityID]
+		if !exists || client == nil {
+			continue
+		}
 		client.Send(data)
 	}
 	shard.ClientsMu.RUnlock()

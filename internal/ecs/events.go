@@ -21,6 +21,7 @@ const (
 	TopicGameplayEntitySpawn       = "gameplay.entity.spawn"
 	TopicGameplayEntityDespawn     = "gameplay.entity.despawn"
 	TopicGameplayEntityUpdate      = "gameplay.entity.update"
+	TopicGameplayEntityAppearance  = "gameplay.entity.appearance_changed"
 	TopicGameplayLink              = "gameplay.link.*"
 	TopicGameplayLinkCreated       = "gameplay.link.created"
 	TopicGameplayLinkBroken        = "gameplay.link.broken"
@@ -230,6 +231,28 @@ type LinkBrokenEvent struct {
 	PlayerID    types.EntityID
 	TargetID    types.EntityID
 	BreakReason LinkBreakReason
+}
+
+// EntityAppearanceChangedEvent is published when object's Appearance.Resource changes.
+// Network layer rebroadcasts this as ObjectSpawn-upsert to visible observers.
+type EntityAppearanceChangedEvent struct {
+	topic        string
+	Timestamp    time.Time
+	Layer        int
+	TargetID     types.EntityID
+	TargetHandle types.Handle
+}
+
+func (e *EntityAppearanceChangedEvent) Topic() string { return e.topic }
+
+func NewEntityAppearanceChangedEvent(layer int, targetID types.EntityID, targetHandle types.Handle) *EntityAppearanceChangedEvent {
+	return &EntityAppearanceChangedEvent{
+		topic:        TopicGameplayEntityAppearance,
+		Timestamp:    time.Now(),
+		Layer:        layer,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+	}
 }
 
 func (e *LinkBrokenEvent) Topic() string { return e.topic }

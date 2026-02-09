@@ -831,7 +831,16 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 			CurrentChunkY: coord.Y,
 		})
 
+		restoredState, stateErr := cm.objectFactory.DeserializeObjectState(raw)
+		if stateErr != nil {
+			cm.logger.Warn("failed to deserialize object state, using nil",
+				zap.Int64("object_id", raw.ID),
+				zap.Error(stateErr),
+			)
+		}
+
 		ecs.AddComponent(cm.world, h, components.ObjectInternalState{
+			State:   restoredState,
 			IsDirty: false,
 		})
 

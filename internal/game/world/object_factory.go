@@ -489,6 +489,18 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		ChunkY: chunkRef.CurrentChunkY,
 	}
 
+	// Serialize runtime object state for regular world objects.
+	// For dropped items object.data is reserved for dropped metadata (handled below).
+	if info.TypeID != constt.DroppedItemTypeID {
+		if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h); hasState && internalState.State != nil {
+			stateJSON, err := json.Marshal(internalState.State)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal object state for %d: %w", externalID.ID, err)
+			}
+			obj.Data = pqtype.NullRawMessage{RawMessage: stateJSON, Valid: true}
+		}
+	}
+
 	// Serialize dropped item data
 	if info.TypeID == constt.DroppedItemTypeID {
 		if droppedItem, ok := ecs.GetComponent[components.DroppedItem](w, h); ok {
@@ -507,6 +519,23 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 	}
 
 	return obj, nil
+}
+
+// DeserializeObjectState restores serialized runtime state for regular objects.
+// Flags are computed by behavior systems and are not persisted.
+func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, error) {
+	if raw == nil || raw.TypeID == constt.DroppedItemTypeID {
+		return nil, nil
+	}
+	if !raw.Data.Valid || len(raw.Data.RawMessage) == 0 {
+		return nil, nil
+	}
+
+	var state any
+	if err := json.Unmarshal(raw.Data.RawMessage, &state); err != nil {
+		return nil, err
+	}
+	return state, nil
 }
 
 // SerializeObjectInventories serializes root inventories owned by object entity.
