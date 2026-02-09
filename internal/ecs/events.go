@@ -16,6 +16,9 @@ const (
 	TopicGameplayMovement          = "gameplay.movement.*"
 	TopicGameplayMovementMoveBatch = "gameplay.movement.move_batch"
 	TopicGameplayMovementTeleport  = "gameplay.movement.teleport"
+	TopicGameplayLink              = "gameplay.link.*"
+	TopicGameplayLinkCreated       = "gameplay.link.created"
+	TopicGameplayLinkBroken        = "gameplay.link.broken"
 	TopicGameplayPlayerEnterWorld  = "gameplay.player.enter_world"
 	TopicGameplayEntity            = "gameplay.entity.*"
 	TopicGameplayEntitySpawn       = "gameplay.entity.spawn"
@@ -32,6 +35,68 @@ const (
 	TopicNetworkDisconnect         = "network.disconnect"
 	TopicNetworkMessage            = "network.message"
 )
+
+// LinkBreakReason describes why a link was broken.
+type LinkBreakReason uint8
+
+const (
+	LinkBreakUnknown LinkBreakReason = iota
+	LinkBreakMoved
+	LinkBreakDespawn
+	LinkBreakRelink
+)
+
+// LinkCreatedEvent represents a successful player→object link.
+type LinkCreatedEvent struct {
+	topic        string
+	Timestamp    time.Time
+	PlayerID     types.EntityID
+	PlayerHandle types.Handle
+	ObjectID     types.EntityID
+	ObjectHandle types.Handle
+	Layer        int
+}
+
+func (e *LinkCreatedEvent) Topic() string { return e.topic }
+
+func NewLinkCreatedEvent(playerID types.EntityID, playerHandle types.Handle, objectID types.EntityID, objectHandle types.Handle, layer int) *LinkCreatedEvent {
+	return &LinkCreatedEvent{
+		topic:        TopicGameplayLinkCreated,
+		Timestamp:    time.Now(),
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		ObjectID:     objectID,
+		ObjectHandle: objectHandle,
+		Layer:        layer,
+	}
+}
+
+// LinkBrokenEvent represents a broken player→object link.
+type LinkBrokenEvent struct {
+	topic        string
+	Timestamp    time.Time
+	PlayerID     types.EntityID
+	PlayerHandle types.Handle
+	ObjectID     types.EntityID
+	ObjectHandle types.Handle
+	Layer        int
+	Reason       LinkBreakReason
+}
+
+func (e *LinkBrokenEvent) Topic() string { return e.topic }
+
+func NewLinkBrokenEvent(playerID types.EntityID, playerHandle types.Handle, objectID types.EntityID, objectHandle types.Handle, layer int, reason LinkBreakReason) *LinkBrokenEvent {
+	return &LinkBrokenEvent{
+		topic:        TopicGameplayLinkBroken,
+		Timestamp:    time.Now(),
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		ObjectID:     objectID,
+		ObjectHandle: objectHandle,
+		Layer:        layer,
+		Reason:       reason,
+	}
+}
 
 // EntitySpawnEvent represents when an entity becomes visible to an observer
 type EntitySpawnEvent struct {

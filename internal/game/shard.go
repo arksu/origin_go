@@ -102,6 +102,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
+	s.world.AddSystem(systems.NewLinkSystem(s.eventBus))
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))
@@ -456,6 +457,68 @@ func (s *Shard) SendContainerOpened(entityID types.EntityID, state *netproto.Inv
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal container opened",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendContainerClosed sends a container closed event to a client.
+func (s *Shard) SendContainerClosed(entityID types.EntityID, ref *netproto.InventoryRef) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ContainerClosed{
+			ContainerClosed: &netproto.S2C_ContainerClosed{
+				Ref: ref,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal container closed",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendInventoryUpdate sends inventory updates to a client.
+func (s *Shard) SendInventoryUpdate(entityID types.EntityID, states []*netproto.InventoryState) {
+	if len(states) == 0 {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_InventoryUpdate{
+			InventoryUpdate: &netproto.S2C_InventoryUpdate{
+				Updated: states,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal inventory update",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return

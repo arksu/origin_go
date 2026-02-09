@@ -108,6 +108,14 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 	InitResource(w, InventoryRefIndex{
 		index: make(map[InventoryRefKey]types.Handle, 64),
 	})
+	InitResource(w, LinkedObjects{
+		PlayerToObject:  make(map[types.Handle]LinkEntry, 64),
+		ObjectToPlayers: make(map[types.Handle]map[types.Handle]struct{}, 64),
+	})
+	InitResource(w, OpenContainers{
+		PlayerToContainers: make(map[types.EntityID]*PlayerOpenContainers, 64),
+		ContainerToPlayers: make(map[InventoryRefKey]map[types.EntityID]struct{}, 64),
+	})
 	InitResource(w, TimeState{})
 
 	return w

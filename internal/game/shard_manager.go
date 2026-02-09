@@ -37,6 +37,8 @@ type ShardManager struct {
 
 	workerPool *WorkerPool
 	eventBus   *eventbus.EventBus
+
+	openContainerService *OpenContainerService
 }
 
 func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, logger *zap.Logger) *ShardManager {
@@ -68,6 +70,9 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 	for layer := 0; layer < cfg.Game.MaxLayers; layer++ {
 		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, snapshotSender, sm.eventBus, logger.Named("shard"))
 	}
+
+	sm.openContainerService = NewOpenContainerService(sm)
+	sm.openContainerService.Subscribe(sm.eventBus)
 
 	return sm
 }

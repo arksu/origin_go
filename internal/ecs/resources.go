@@ -247,3 +247,207 @@ func (idx *InventoryRefIndex) Lookup(kind constt.InventoryKind, ownerID types.En
 	h, ok := idx.index[InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}]
 	return h, ok
 }
+
+// LinkEntry stores a player↔object link with stable IDs for event emission.
+type LinkEntry struct {
+	PlayerHandle types.Handle
+	PlayerID     types.EntityID
+	ObjectHandle types.Handle
+	ObjectID     types.EntityID
+}
+
+// LinkedObjects tracks player↔object links for interaction mechanics.
+// Players can link to at most one object at a time.
+type LinkedObjects struct {
+	PlayerToObject  map[types.Handle]LinkEntry
+	ObjectToPlayers map[types.Handle]map[types.Handle]struct{}
+}
+
+func (lo *LinkedObjects) Link(playerHandle types.Handle, playerID types.EntityID, objectHandle types.Handle, objectID types.EntityID) bool {
+	if lo.PlayerToObject == nil {
+		lo.PlayerToObject = make(map[types.Handle]LinkEntry, 64)
+	}
+	if lo.ObjectToPlayers == nil {
+		lo.ObjectToPlayers = make(map[types.Handle]map[types.Handle]struct{}, 64)
+	}
+	if current, ok := lo.PlayerToObject[playerHandle]; ok {
+		if current.ObjectHandle == objectHandle {
+			return false
+		}
+		lo.unlinkNoEvent(playerHandle, current.ObjectHandle)
+	}
+	lo.PlayerToObject[playerHandle] = LinkEntry{
+		PlayerHandle: playerHandle,
+		PlayerID:     playerID,
+		ObjectHandle: objectHandle,
+		ObjectID:     objectID,
+	}
+	set := lo.ObjectToPlayers[objectHandle]
+	if set == nil {
+		set = make(map[types.Handle]struct{}, 4)
+		lo.ObjectToPlayers[objectHandle] = set
+	}
+	set[playerHandle] = struct{}{}
+	return true
+}
+
+func (lo *LinkedObjects) Unlink(playerHandle types.Handle) (LinkEntry, bool) {
+	entry, ok := lo.PlayerToObject[playerHandle]
+	if !ok {
+		return LinkEntry{}, false
+	}
+	lo.unlinkNoEvent(playerHandle, entry.ObjectHandle)
+	return entry, true
+}
+
+func (lo *LinkedObjects) UnlinkAllFromObject(objectHandle types.Handle) []LinkEntry {
+	set := lo.ObjectToPlayers[objectHandle]
+	if len(set) == 0 {
+		return nil
+	}
+	entries := make([]LinkEntry, 0, len(set))
+	for playerHandle := range set {
+		if entry, ok := lo.PlayerToObject[playerHandle]; ok {
+			entries = append(entries, entry)
+			delete(lo.PlayerToObject, playerHandle)
+		}
+	}
+	delete(lo.ObjectToPlayers, objectHandle)
+	return entries
+}
+
+func (lo *LinkedObjects) unlinkNoEvent(playerHandle, objectHandle types.Handle) {
+	delete(lo.PlayerToObject, playerHandle)
+	if set, ok := lo.ObjectToPlayers[objectHandle]; ok {
+		delete(set, playerHandle)
+		if len(set) == 0 {
+			delete(lo.ObjectToPlayers, objectHandle)
+		}
+	}
+}
+
+// OpenContainerEntry tracks a single opened inventory container for a player.
+type OpenContainerEntry struct {
+	Handle types.Handle
+	OwnerID types.EntityID
+	Kind   constt.InventoryKind
+	Key    uint32
+}
+
+// PlayerOpenContainers stores containers opened by a player (object containers only).
+type PlayerOpenContainers struct {
+	Containers map[InventoryRefKey]OpenContainerEntry
+}
+
+// OpenContainers tracks opened object containers per player and reverse mappings.
+type OpenContainers struct {
+	PlayerToContainers map[types.EntityID]*PlayerOpenContainers
+	ContainerToPlayers map[InventoryRefKey]map[types.EntityID]struct{}
+}
+
+func (oc *OpenContainers) ensure() {
+	if oc.PlayerToContainers == nil {
+		oc.PlayerToContainers = make(map[types.EntityID]*PlayerOpenContainers, 64)
+	}
+	if oc.ContainerToPlayers == nil {
+		oc.ContainerToPlayers = make(map[InventoryRefKey]map[types.EntityID]struct{}, 64)
+	}
+}
+
+func (oc *OpenContainers) Open(playerID types.EntityID, entry OpenContainerEntry) bool {
+	oc.ensure()
+	key := InventoryRefKey{Kind: entry.Kind, OwnerID: entry.OwnerID, Key: entry.Key}
+	player := oc.PlayerToContainers[playerID]
+	if player == nil {
+		player = &PlayerOpenContainers{
+			Containers: make(map[InventoryRefKey]OpenContainerEntry, 8),
+		}
+		oc.PlayerToContainers[playerID] = player
+	}
+	if _, exists := player.Containers[key]; exists {
+		return false
+	}
+	player.Containers[key] = entry
+
+	set := oc.ContainerToPlayers[key]
+	if set == nil {
+		set = make(map[types.EntityID]struct{}, 4)
+		oc.ContainerToPlayers[key] = set
+	}
+	set[playerID] = struct{}{}
+	return true
+}
+
+func (oc *OpenContainers) Has(playerID types.EntityID, key InventoryRefKey) bool {
+	if oc.PlayerToContainers == nil {
+		return false
+	}
+	player := oc.PlayerToContainers[playerID]
+	if player == nil {
+		return false
+	}
+	_, ok := player.Containers[key]
+	return ok
+}
+
+func (oc *OpenContainers) Close(playerID types.EntityID, key InventoryRefKey) (OpenContainerEntry, bool) {
+	if oc.PlayerToContainers == nil {
+		return OpenContainerEntry{}, false
+	}
+	player := oc.PlayerToContainers[playerID]
+	if player == nil {
+		return OpenContainerEntry{}, false
+	}
+	entry, ok := player.Containers[key]
+	if !ok {
+		return OpenContainerEntry{}, false
+	}
+	delete(player.Containers, key)
+	if len(player.Containers) == 0 {
+		delete(oc.PlayerToContainers, playerID)
+	}
+	if set, ok := oc.ContainerToPlayers[key]; ok {
+		delete(set, playerID)
+		if len(set) == 0 {
+			delete(oc.ContainerToPlayers, key)
+		}
+	}
+	return entry, true
+}
+
+func (oc *OpenContainers) CloseAll(playerID types.EntityID) []OpenContainerEntry {
+	if oc.PlayerToContainers == nil {
+		return nil
+	}
+	player := oc.PlayerToContainers[playerID]
+	if player == nil || len(player.Containers) == 0 {
+		return nil
+	}
+	entries := make([]OpenContainerEntry, 0, len(player.Containers))
+	for key, entry := range player.Containers {
+		entries = append(entries, entry)
+		if set, ok := oc.ContainerToPlayers[key]; ok {
+			delete(set, playerID)
+			if len(set) == 0 {
+				delete(oc.ContainerToPlayers, key)
+			}
+		}
+	}
+	delete(oc.PlayerToContainers, playerID)
+	return entries
+}
+
+func (oc *OpenContainers) PlayersFor(key InventoryRefKey) []types.EntityID {
+	if oc.ContainerToPlayers == nil {
+		return nil
+	}
+	set := oc.ContainerToPlayers[key]
+	if len(set) == 0 {
+		return nil
+	}
+	players := make([]types.EntityID, 0, len(set))
+	for playerID := range set {
+		players = append(players, playerID)
+	}
+	return players
+}

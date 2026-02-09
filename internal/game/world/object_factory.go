@@ -3,6 +3,7 @@ package world
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/sqlc-dev/pqtype"
 
@@ -80,6 +81,47 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object) (types.Handl
 	})
 	if h == types.InvalidHandle {
 		return types.InvalidHandle, ErrEntitySpawnFailed
+	}
+
+	if def.Components != nil && len(def.Components.Inventory) > 0 {
+		inventoryLinks := make([]components.InventoryLink, 0, len(def.Components.Inventory))
+		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+		ownerID := types.EntityID(raw.ID)
+
+		for _, inv := range def.Components.Inventory {
+			kind := parseInventoryKind(inv.Kind)
+			width := uint8(0)
+			height := uint8(0)
+			if kind == constt.InventoryGrid {
+				width = uint8(inv.W)
+				height = uint8(inv.H)
+			}
+
+			containerHandle := w.SpawnWithoutExternalID()
+			ecs.AddComponent(w, containerHandle, components.InventoryContainer{
+				OwnerID: ownerID,
+				Kind:    kind,
+				Key:     inv.Key,
+				Version: 1,
+				Width:   width,
+				Height:  height,
+				Items:   []components.InvItem{},
+			})
+
+			refIndex.Add(kind, ownerID, inv.Key, containerHandle)
+			inventoryLinks = append(inventoryLinks, components.InventoryLink{
+				Kind:    kind,
+				Key:     inv.Key,
+				OwnerID: ownerID,
+				Handle:  containerHandle,
+			})
+		}
+
+		if len(inventoryLinks) > 0 {
+			ecs.AddComponent(w, h, components.InventoryOwner{
+				Inventories: inventoryLinks,
+			})
+		}
 	}
 
 	return h, nil
@@ -221,6 +263,19 @@ func (f *ObjectFactory) getPlayerTypeID() uint32 {
 		return uint32(playerDef.DefID)
 	}
 	return 0
+}
+
+func parseInventoryKind(kind string) constt.InventoryKind {
+	switch strings.ToLower(kind) {
+	case "hand":
+		return constt.InventoryHand
+	case "equipment":
+		return constt.InventoryEquipment
+	case "dropped", "dropped_item", "droppeditem":
+		return constt.InventoryDroppedItem
+	default:
+		return constt.InventoryGrid
+	}
 }
 
 // IsStatic returns whether a raw object is static based on its definition.
