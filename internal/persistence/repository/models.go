@@ -115,6 +115,7 @@ type Inventory struct {
 	InventoryKey int16           `json:"inventory_key"`
 	Data         json.RawMessage `json:"data"`
 	UpdatedAt    sql.NullTime    `json:"updated_at"`
+	DeletedAt    sql.NullTime    `json:"deleted_at"`
 	Version      int             `json:"version"`
 }
 

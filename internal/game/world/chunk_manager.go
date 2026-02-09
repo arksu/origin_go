@@ -812,10 +812,11 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	}
 
 	rawObjects := chunk.GetRawObjects()
+	rawInventoriesByOwner := chunk.GetRawInventoriesByOwner()
 	spatial := chunk.Spatial()
 
 	for _, raw := range rawObjects {
-		h, err := cm.objectFactory.Build(cm.world, raw)
+		h, err := cm.objectFactory.Build(cm.world, raw, rawInventoriesByOwner[types.EntityID(raw.ID)])
 		if err != nil {
 			cm.logger.Error("failed to build object",
 				zap.Int64("object_id", raw.ID),
@@ -844,6 +845,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	}
 
 	chunk.ClearRawObjects()
+	chunk.ClearRawInventoriesByOwner()
 	chunk.SetState(types.ChunkStateActive)
 	cm.lruCache.Remove(coord)
 
@@ -865,6 +867,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 
 	handles := chunk.GetHandles()
 	rawObjects := make([]*repository.Object, 0, len(handles))
+	rawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory, len(handles))
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](cm.world)
 
 	for _, h := range handles {
@@ -881,6 +884,15 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		}
 		if obj != nil {
 			rawObjects = append(rawObjects, obj)
+			objectInventories, invErr := cm.objectFactory.SerializeObjectInventories(cm.world, h)
+			if invErr != nil {
+				cm.logger.Error("failed to serialize object inventories for deactivation",
+					zap.Int64("object_id", obj.ID),
+					zap.Error(invErr),
+				)
+			} else if len(objectInventories) > 0 {
+				rawInventoriesByOwner[types.EntityID(obj.ID)] = append(rawInventoriesByOwner[types.EntityID(obj.ID)], objectInventories...)
+			}
 		}
 
 		// Despawn all inventory container entities owned by this object.
@@ -888,6 +900,18 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		if extID, hasExtID := ecs.GetComponent[ecs.ExternalID](cm.world, h); hasExtID {
 			containerHandles := refIndex.RemoveAllByOwner(extID.ID)
 			for _, containerHandle := range containerHandles {
+				// Depth=1 nested containers are keyed by item_id; remove them before root despawn
+				// to avoid orphaned runtime entities across chunk lifecycle.
+				if container, ok := ecs.GetComponent[components.InventoryContainer](cm.world, containerHandle); ok {
+					for _, item := range container.Items {
+						if nestedHandle, found := refIndex.Lookup(_const.InventoryGrid, item.ItemID, 0); found {
+							refIndex.Remove(_const.InventoryGrid, item.ItemID, 0)
+							if cm.world.Alive(nestedHandle) {
+								cm.world.Despawn(nestedHandle)
+							}
+						}
+					}
+				}
 				if cm.world.Alive(containerHandle) {
 					cm.world.Despawn(containerHandle)
 				}
@@ -898,6 +922,8 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 	}
 
 	chunk.SetRawObjects(rawObjects)
+	chunk.SetRawInventoriesByOwner(rawInventoriesByOwner)
+	chunk.MarkRawDataDirty()
 	chunk.ClearHandles()
 	chunk.SetState(types.ChunkStatePreloaded)
 

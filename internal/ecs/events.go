@@ -198,6 +198,7 @@ const (
 	LinkBreakMoved   LinkBreakReason = "moved"
 	LinkBreakRelink  LinkBreakReason = "relink"
 	LinkBreakDespawn LinkBreakReason = "despawn"
+	LinkBreakClosed  LinkBreakReason = "closed"
 )
 
 // LinkCreatedEvent is published synchronously when player-target link is established.

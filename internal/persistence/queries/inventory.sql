@@ -2,7 +2,17 @@
 SELECT *
 FROM inventory
 WHERE owner_id = $1
+  AND deleted_at IS NULL
 ORDER BY kind, inventory_key;
+
+-- name: GetGridInventoriesByOwners :many
+SELECT *
+FROM inventory
+WHERE owner_id = ANY(sqlc.arg(owner_ids)::bigint[])
+  AND kind = 0
+  AND inventory_key = 0
+  AND deleted_at IS NULL
+ORDER BY owner_id, kind, inventory_key;
 
 -- name: UpsertInventory :one
 INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
@@ -11,6 +21,7 @@ ON CONFLICT (owner_id, kind, inventory_key)
 DO UPDATE SET
     data = EXCLUDED.data,
     version = EXCLUDED.version,
+    deleted_at = NULL,
     updated_at = now()
 RETURNING *;
 
@@ -26,6 +37,7 @@ ON CONFLICT (owner_id, kind, inventory_key)
 DO UPDATE SET
     data = EXCLUDED.data,
     version = EXCLUDED.version,
+    deleted_at = NULL,
     updated_at = now();
 
 -- name: UpdateInventory :exec
@@ -34,5 +46,6 @@ SET data = $2, version = $3, updated_at = now()
 WHERE owner_id = $1 AND kind = $4 AND inventory_key = $5 AND version = $6;
 
 -- name: DeleteInventory :exec
-DELETE FROM inventory
-WHERE owner_id = $1 AND kind = $2 AND inventory_key = $3;
+UPDATE inventory
+SET deleted_at = NOW()
+WHERE owner_id = $1 AND kind = $2 AND inventory_key = $3 AND deleted_at IS NULL;

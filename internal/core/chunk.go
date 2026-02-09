@@ -36,7 +36,10 @@ type Chunk struct {
 	isSwimmable []uint64
 
 	rawObjects []*repository.Object
-	spatial    *SpatialHashGrid
+	// rawInventoriesByOwner keeps preloaded/inactive object-owned inventories by owner entity id.
+	rawInventoriesByOwner map[types.EntityID][]repository.Inventory
+	rawDataDirty          bool
+	spatial               *SpatialHashGrid
 
 	mu sync.RWMutex
 }
@@ -47,14 +50,15 @@ func NewChunk(coord types.ChunkCoord, region int, layer int, chunkSize int) *Chu
 	bitsetSize := (totalTiles + 63) / 64
 
 	return &Chunk{
-		Coord:       coord,
-		Region:      region,
-		Layer:       layer,
-		State:       types.ChunkStateUnloaded,
-		Tiles:       make([]byte, totalTiles),
-		isPassable:  make([]uint64, bitsetSize),
-		isSwimmable: make([]uint64, bitsetSize),
-		spatial:     NewSpatialHashGrid(cellSize),
+		Coord:                 coord,
+		Region:                region,
+		Layer:                 layer,
+		State:                 types.ChunkStateUnloaded,
+		Tiles:                 make([]byte, totalTiles),
+		isPassable:            make([]uint64, bitsetSize),
+		isSwimmable:           make([]uint64, bitsetSize),
+		rawInventoriesByOwner: make(map[types.EntityID][]repository.Inventory, 8),
+		spatial:               NewSpatialHashGrid(cellSize),
 	}
 }
 
@@ -87,12 +91,44 @@ func (c *Chunk) GetRawObjects() []*repository.Object {
 func (c *Chunk) AddRawObject(obj *repository.Object) {
 	c.mu.Lock()
 	c.rawObjects = append(c.rawObjects, obj)
+	c.rawDataDirty = true
 	c.mu.Unlock()
 }
 
 func (c *Chunk) ClearRawObjects() {
 	c.mu.Lock()
 	c.rawObjects = nil
+	c.mu.Unlock()
+}
+
+func (c *Chunk) SetRawInventoriesByOwner(inventories map[types.EntityID][]repository.Inventory) {
+	c.mu.Lock()
+	c.rawInventoriesByOwner = inventories
+	c.mu.Unlock()
+}
+
+func (c *Chunk) GetRawInventoriesByOwner() map[types.EntityID][]repository.Inventory {
+	c.mu.RLock()
+	inventories := c.rawInventoriesByOwner
+	c.mu.RUnlock()
+	return inventories
+}
+
+func (c *Chunk) ClearRawInventoriesByOwner() {
+	c.mu.Lock()
+	c.rawInventoriesByOwner = make(map[types.EntityID][]repository.Inventory, 8)
+	c.mu.Unlock()
+}
+
+func (c *Chunk) MarkRawDataDirty() {
+	c.mu.Lock()
+	c.rawDataDirty = true
+	c.mu.Unlock()
+}
+
+func (c *Chunk) ClearRawDataDirty() {
+	c.mu.Lock()
+	c.rawDataDirty = false
 	c.mu.Unlock()
 }
 
@@ -137,6 +173,12 @@ func (c *Chunk) ClearTilesDirty() {
 // since raw objects are never mutated in-memory.
 func (c *Chunk) IsDirty(world *ecs.World) bool {
 	if c.TilesDirty() {
+		return true
+	}
+	c.mu.RLock()
+	rawDirty := c.rawDataDirty
+	c.mu.RUnlock()
+	if rawDirty {
 		return true
 	}
 
@@ -211,6 +253,7 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 // For active chunks, only objects with ObjectInternalState.IsDirty are serialized.
 func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
 	Serialize(world *ecs.World, h types.Handle) (*repository.Object, error)
+	SerializeObjectInventories(world *ecs.World, h types.Handle) ([]repository.Inventory, error)
 }, logger *zap.Logger) {
 	if db == nil {
 		return
@@ -231,10 +274,12 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	lastTick := c.LastTick
 	totalHandles := c.GetHandles()
 	rawObjects := c.GetRawObjects()
+	rawInventoriesByOwner := c.GetRawInventoriesByOwner()
 	c.mu.RUnlock()
 
 	// Determine dirty objects to save
 	var objectsToSave []*repository.Object
+	inventoriesToSave := make([]repository.Inventory, 0, 16)
 	var dirtyHandles []types.Handle
 
 	if len(totalHandles) > 0 {
@@ -267,11 +312,25 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				continue
 			}
 			objectsToSave = append(objectsToSave, obj)
+
+			inventories, invErr := objectFactory.SerializeObjectInventories(world, h)
+			if invErr != nil {
+				logger.Error("failed to serialize object inventories",
+					zap.Int64("object_id", obj.ID),
+					zap.Error(invErr),
+				)
+			} else if len(inventories) > 0 {
+				inventoriesToSave = append(inventoriesToSave, inventories...)
+			}
+
 			dirtyHandles = append(dirtyHandles, h)
 		}
 	} else {
-		// Chunk is inactive - raw objects were already serialized at deactivation;
-		// nothing changed since then, skip.
+		// Chunk is inactive/preloaded - persist cached raw objects and inventories.
+		objectsToSave = append(objectsToSave, rawObjects...)
+		for _, rows := range rawInventoriesByOwner {
+			inventoriesToSave = append(inventoriesToSave, rows...)
+		}
 	}
 
 	if saveTiles {
@@ -299,35 +358,36 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		}
 	}
 
-	// Save dirty objects
-	for _, obj := range objectsToSave {
-		if obj == nil {
-			continue
+	// Save objects batch
+	saveFailed := false
+	if len(objectsToSave) > 0 {
+		nonNilObjects := make([]*repository.Object, 0, len(objectsToSave))
+		for _, obj := range objectsToSave {
+			if obj == nil {
+				continue
+			}
+			obj.LastTick = int64(lastTick)
+			nonNilObjects = append(nonNilObjects, obj)
 		}
+		if len(nonNilObjects) > 0 {
+			if err := upsertObjectsBatch(ctx, db, nonNilObjects); err != nil {
+				logger.Error("failed to batch save objects",
+					zap.Any("coord", c.Coord),
+					zap.Error(err),
+				)
+				saveFailed = true
+			}
+		}
+	}
 
-		obj.LastTick = int64(lastTick)
-		err := db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
-			ID:         obj.ID,
-			TypeID:     obj.TypeID,
-			Region:     obj.Region,
-			X:          obj.X,
-			Y:          obj.Y,
-			Layer:      obj.Layer,
-			ChunkX:     obj.ChunkX,
-			ChunkY:     obj.ChunkY,
-			Heading:    obj.Heading,
-			Quality:    obj.Quality,
-			Hp:         obj.Hp,
-			OwnerID:    obj.OwnerID,
-			Data:       obj.Data,
-			CreateTick: obj.CreateTick,
-			LastTick:   obj.LastTick,
-		})
-		if err != nil {
-			logger.Error("failed to save object",
-				zap.Int64("object_id", obj.ID),
+	// Save inventories batch
+	if len(inventoriesToSave) > 0 {
+		if err := upsertInventoriesBatch(ctx, db, inventoriesToSave); err != nil {
+			logger.Error("failed to batch save inventories",
+				zap.Any("coord", c.Coord),
 				zap.Error(err),
 			)
+			saveFailed = true
 		}
 	}
 
@@ -337,6 +397,9 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			s.IsDirty = false
 		})
 	}
+	if !saveFailed && len(totalHandles) == 0 {
+		c.ClearRawDataDirty()
+	}
 
 	savedTiles := 0
 	if saveTiles {
@@ -345,6 +408,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	logger.Debug("saved chunk",
 		zap.Any("coord", c.Coord),
 		zap.Int("dirty_objects", len(objectsToSave)),
+		zap.Int("dirty_inventories", len(inventoriesToSave)),
 		zap.Int("tiles_saved", savedTiles),
 	)
 }
@@ -389,11 +453,97 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 	logger.Debug("loaded objects", zap.Any("coord", c.Coord), zap.Int("count", len(objects)))
 
 	rawObjects := make([]*repository.Object, len(objects))
+	ownerIDs := make([]int64, 0, len(objects))
 	for i := range objects {
 		rawObjects[i] = &objects[i]
+		ownerIDs = append(ownerIDs, objects[i].ID)
 	}
 	c.SetRawObjects(rawObjects)
 
+	rawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory, len(ownerIDs))
+	if len(ownerIDs) > 0 {
+		inventories, invErr := loadGridInventoriesByOwners(ctx, db, ownerIDs)
+		if invErr != nil {
+			logger.Error("failed to load object inventories",
+				zap.Int("chunk_x", c.Coord.X),
+				zap.Int("chunk_y", c.Coord.Y),
+				zap.Error(invErr),
+			)
+		} else {
+			for _, inv := range inventories {
+				ownerID := types.EntityID(inv.OwnerID)
+				rawInventoriesByOwner[ownerID] = append(rawInventoriesByOwner[ownerID], inv)
+			}
+		}
+	}
+	c.SetRawInventoriesByOwner(rawInventoriesByOwner)
+
 	c.SetState(types.ChunkStatePreloaded)
 	return nil
+}
+
+func upsertInventoriesBatch(ctx context.Context, db *persistence.Postgres, inventories []repository.Inventory) error {
+	if len(inventories) == 0 {
+		return nil
+	}
+
+	ownerIDs := make([]int64, 0, len(inventories))
+	kinds := make([]int, 0, len(inventories))
+	keys := make([]int, 0, len(inventories))
+	datas := make([]string, 0, len(inventories))
+	versions := make([]int, 0, len(inventories))
+
+	for _, inv := range inventories {
+		ownerIDs = append(ownerIDs, inv.OwnerID)
+		kinds = append(kinds, int(inv.Kind))
+		keys = append(keys, int(inv.InventoryKey))
+		datas = append(datas, string(inv.Data))
+		versions = append(versions, inv.Version)
+	}
+
+	return db.Queries().UpsertInventories(ctx, repository.UpsertInventoriesParams{
+		OwnerIds:      ownerIDs,
+		Kinds:         kinds,
+		InventoryKeys: keys,
+		Datas:         datas,
+		Versions:      versions,
+	})
+}
+
+func upsertObjectsBatch(ctx context.Context, db *persistence.Postgres, objects []*repository.Object) error {
+	if len(objects) == 0 {
+		return nil
+	}
+	for _, obj := range objects {
+		if obj == nil {
+			continue
+		}
+		if err := db.Queries().UpsertObject(ctx, repository.UpsertObjectParams{
+			ID:         obj.ID,
+			TypeID:     obj.TypeID,
+			Region:     obj.Region,
+			X:          obj.X,
+			Y:          obj.Y,
+			Layer:      obj.Layer,
+			ChunkX:     obj.ChunkX,
+			ChunkY:     obj.ChunkY,
+			Heading:    obj.Heading,
+			Quality:    obj.Quality,
+			Hp:         obj.Hp,
+			OwnerID:    obj.OwnerID,
+			Data:       obj.Data,
+			CreateTick: obj.CreateTick,
+			LastTick:   obj.LastTick,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadGridInventoriesByOwners(ctx context.Context, db *persistence.Postgres, ownerIDs []int64) ([]repository.Inventory, error) {
+	if len(ownerIDs) == 0 {
+		return nil, nil
+	}
+	return db.Queries().GetGridInventoriesByOwners(ctx, ownerIDs)
 }

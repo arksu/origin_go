@@ -113,6 +113,13 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		PlayersByTarget: make(map[types.EntityID]map[types.EntityID]struct{}, 64),
 		IntentByPlayer:  make(map[types.EntityID]LinkIntent, 64),
 	})
+	InitResource(w, OpenContainerState{
+		PendingAutoOpenByPlayer: make(map[types.EntityID]types.EntityID, 64),
+		OpenRootByPlayer:        make(map[types.EntityID]types.EntityID, 64),
+		PlayersByRoot:           make(map[types.EntityID]map[types.EntityID]struct{}, 64),
+		OpenRefsByPlayer:        make(map[types.EntityID]map[InventoryRefKey]struct{}, 64),
+		PlayersByRef:            make(map[InventoryRefKey]map[types.EntityID]struct{}, 64),
+	})
 	InitResource(w, TimeState{})
 
 	return w
