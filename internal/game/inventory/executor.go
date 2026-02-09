@@ -60,6 +60,10 @@ func (e *InventoryExecutor) ExecuteOperation(
 	// Check cascade: if operation changed a nested container, update parent item resource
 	e.checkNestedCascade(w, result)
 
+	// Collect nested container refs that should be closed on the client
+	e.collectClosedContainerRefs(w, result)
+	opResult.ClosedContainerRefs = result.ClosedContainerRefs
+
 	// Convert updated containers
 	for _, container := range result.UpdatedContainers {
 		containerState := e.convertContainerToState(w, container)
@@ -195,6 +199,35 @@ func (e *InventoryExecutor) checkNestedCascade(w *ecs.World, result *OperationRe
 	}
 }
 
+// collectClosedContainerRefs checks if any updated container is a hand that now holds
+// a container item. If so, the item's nested container should be closed on the client.
+func (e *InventoryExecutor) collectClosedContainerRefs(w *ecs.World, result *OperationResult) {
+	if !result.Success {
+		return
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+
+	for _, info := range result.UpdatedContainers {
+		if info.Container.Kind != constt.InventoryHand || len(info.Container.Items) == 0 {
+			continue
+		}
+		item := info.Container.Items[0]
+		itemDef, ok := itemdefs.Global().GetByID(int(item.TypeID))
+		if !ok || itemDef.Container == nil {
+			continue
+		}
+		// Item in hand is a container — check if it has a nested inventory
+		if _, found := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); found {
+			result.ClosedContainerRefs = append(result.ClosedContainerRefs, &netproto.InventoryRef{
+				Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
+				OwnerId:      uint64(item.ItemID),
+				InventoryKey: 0,
+			})
+		}
+	}
+}
+
 // findParentContainer finds the container that holds an item with the given itemID
 func (e *InventoryExecutor) findParentContainer(
 	w *ecs.World,
@@ -259,6 +292,10 @@ func (e *InventoryExecutor) ExecutePickupFromWorld(
 	}
 
 	e.handleDroppedItemSpatial(w, result)
+
+	// Collect nested container refs that should be closed on the client
+	e.collectClosedContainerRefs(w, result)
+	opResult.ClosedContainerRefs = result.ClosedContainerRefs
 
 	for _, container := range result.UpdatedContainers {
 		containerState := e.convertContainerToState(w, container)

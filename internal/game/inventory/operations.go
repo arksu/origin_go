@@ -29,6 +29,10 @@ type OperationResult struct {
 	// Updated containers (for sending to client)
 	UpdatedContainers []*ContainerInfo
 
+	// ClosedContainerRefs lists nested container refs that should be closed on the client
+	// (e.g. when a container item is picked up into the hand).
+	ClosedContainerRefs []*netproto.InventoryRef
+
 	// For drop_to_world operations
 	SpawnedDroppedEntityID *types.EntityID
 
