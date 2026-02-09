@@ -247,3 +247,111 @@ func (idx *InventoryRefIndex) Lookup(kind constt.InventoryKind, ownerID types.En
 	h, ok := idx.index[InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}]
 	return h, ok
 }
+
+// RemoveAllByOwner removes all inventory refs for the owner and returns removed handles.
+func (idx *InventoryRefIndex) RemoveAllByOwner(ownerID types.EntityID) []types.Handle {
+	if len(idx.index) == 0 {
+		return nil
+	}
+
+	removed := make([]types.Handle, 0, 2)
+	for key, handle := range idx.index {
+		if key.OwnerID != ownerID {
+			continue
+		}
+		delete(idx.index, key)
+		removed = append(removed, handle)
+	}
+	return removed
+}
+
+// PlayerLink stores the current one-to-one link between a player and a world target.
+type PlayerLink struct {
+	PlayerID     types.EntityID
+	PlayerHandle types.Handle
+	TargetID     types.EntityID
+	TargetHandle types.Handle
+
+	// Snapshot positions taken at link creation.
+	PlayerX float64
+	PlayerY float64
+	TargetX float64
+	TargetY float64
+
+	CreatedAt time.Time
+}
+
+// LinkIntent stores explicit player intent to link with a specific target.
+// Link is created only when collision confirms physical contact with this target.
+type LinkIntent struct {
+	TargetID     types.EntityID
+	TargetHandle types.Handle
+	CreatedAt    time.Time
+}
+
+// LinkState keeps active links and reverse index in ECS resource storage.
+//
+// Invariants:
+// - one player has at most one active link (LinkedByPlayer)
+// - PlayersByTarget is the reverse index for fast fanout.
+type LinkState struct {
+	LinkedByPlayer  map[types.EntityID]PlayerLink
+	PlayersByTarget map[types.EntityID]map[types.EntityID]struct{}
+	IntentByPlayer  map[types.EntityID]LinkIntent
+}
+
+func (s *LinkState) SetIntent(playerID, targetID types.EntityID, targetHandle types.Handle, createdAt time.Time) {
+	s.IntentByPlayer[playerID] = LinkIntent{
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		CreatedAt:    createdAt,
+	}
+}
+
+func (s *LinkState) ClearIntent(playerID types.EntityID) {
+	delete(s.IntentByPlayer, playerID)
+}
+
+func (s *LinkState) SetLink(link PlayerLink) {
+	// Keep reverse index consistent when relinking.
+	if prev, ok := s.LinkedByPlayer[link.PlayerID]; ok && prev.TargetID != link.TargetID {
+		if players, found := s.PlayersByTarget[prev.TargetID]; found {
+			delete(players, link.PlayerID)
+			if len(players) == 0 {
+				delete(s.PlayersByTarget, prev.TargetID)
+			}
+		}
+	}
+
+	s.LinkedByPlayer[link.PlayerID] = link
+
+	players, ok := s.PlayersByTarget[link.TargetID]
+	if !ok {
+		players = make(map[types.EntityID]struct{}, 4)
+		s.PlayersByTarget[link.TargetID] = players
+	}
+	players[link.PlayerID] = struct{}{}
+}
+
+func (s *LinkState) RemoveLink(playerID types.EntityID) (PlayerLink, bool) {
+	link, ok := s.LinkedByPlayer[playerID]
+	if !ok {
+		return PlayerLink{}, false
+	}
+
+	delete(s.LinkedByPlayer, playerID)
+
+	if players, found := s.PlayersByTarget[link.TargetID]; found {
+		delete(players, playerID)
+		if len(players) == 0 {
+			delete(s.PlayersByTarget, link.TargetID)
+		}
+	}
+
+	return link, true
+}
+
+func (s *LinkState) GetLink(playerID types.EntityID) (PlayerLink, bool) {
+	link, ok := s.LinkedByPlayer[playerID]
+	return link, ok
+}

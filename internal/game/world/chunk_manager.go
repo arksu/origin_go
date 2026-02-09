@@ -865,6 +865,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 
 	handles := chunk.GetHandles()
 	rawObjects := make([]*repository.Object, 0, len(handles))
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](cm.world)
 
 	for _, h := range handles {
 		if !cm.world.Alive(h) {
@@ -881,6 +882,18 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		if obj != nil {
 			rawObjects = append(rawObjects, obj)
 		}
+
+		// Despawn all inventory container entities owned by this object.
+		// Container entities are spawned without external IDs and are not tracked by chunk handles.
+		if extID, hasExtID := ecs.GetComponent[ecs.ExternalID](cm.world, h); hasExtID {
+			containerHandles := refIndex.RemoveAllByOwner(extID.ID)
+			for _, containerHandle := range containerHandles {
+				if cm.world.Alive(containerHandle) {
+					cm.world.Despawn(containerHandle)
+				}
+			}
+		}
+
 		cm.world.Despawn(h)
 	}
 
