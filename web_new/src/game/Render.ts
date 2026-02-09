@@ -116,7 +116,7 @@ export class Render {
           )
 
           if (clickedEntity !== null) {
-            const autoInteract = clickedEntity.typeId === DROP_ITEM_TYPE_ID
+            const autoInteract = true
             playerCommandController.sendMoveToEntity(clickedEntity.entityId, autoInteract, event.modifiers)
           } else {
             playerCommandController.sendMoveTo(

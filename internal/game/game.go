@@ -716,7 +716,7 @@ func (g *Game) update(ts ecs.TimeState) {
 			}
 			fields = append(fields, sysFields...)
 
-			g.logger.Info("Game tick statistics (5s)", fields...)
+			//g.logger.Info("Game tick statistics (5s)", fields...)
 		}
 
 		// Reset statistics

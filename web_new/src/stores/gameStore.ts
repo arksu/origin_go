@@ -75,6 +75,7 @@ export const useGameStore = defineStore('game', () => {
   const inventories = ref(new Map<string, proto.IInventoryState>())
   const playerInventoryVisible = ref(false)
   const openNestedInventories = ref(new Map<string, proto.IInventoryState>())
+  const openedRootContainerRefs = ref(new Set<string>())
   let nextOpId = 1
   const mousePos = ref({ x: 0, y: 0 })
 
@@ -130,6 +131,7 @@ export const useGameStore = defineStore('game', () => {
     console.log('[gameStore] Clearing inventories on world enter')
     inventories.value.clear()
     openNestedInventories.value.clear()  // Clear nested inventories
+    openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
   }
 
@@ -144,6 +146,7 @@ export const useGameStore = defineStore('game', () => {
     console.log('[gameStore] Clearing inventories on world leave')
     inventories.value.clear()
     openNestedInventories.value.clear()  // Clear nested inventories
+    openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
   }
 
@@ -214,6 +217,15 @@ export const useGameStore = defineStore('game', () => {
         }
       }
     }
+
+    for (const inv of openNestedInventories.value.values()) {
+      if (!inv.grid?.items) continue
+      for (const gridItem of inv.grid.items) {
+        if (gridItem.item?.nestedRef) {
+          refs.add(refKey(gridItem.item.nestedRef))
+        }
+      }
+    }
     return refs
   }
 
@@ -224,6 +236,12 @@ export const useGameStore = defineStore('game', () => {
     const toClose: string[] = []
 
     for (const windowKey of openNestedInventories.value.keys()) {
+      // Root world-object containers are opened explicitly by the server and
+      // should only close via S2C_ContainerClosed/unlink flow.
+      if (openedRootContainerRefs.value.has(windowKey)) {
+        continue
+      }
+
       if (!validRefs.has(windowKey)) {
         toClose.push(windowKey)
       }
@@ -294,13 +312,16 @@ export const useGameStore = defineStore('game', () => {
     if (!state.ref) return
     const key = refKey(state.ref)
     console.log('[gameStore] onContainerOpened:', key)
+    inventories.value.set(key, state)
     openNestedInventories.value.set(key, state)
+    openedRootContainerRefs.value.add(key)
   }
 
   function onContainerClosed(r: proto.IInventoryRef) {
     const key = refKey(r)
     console.log('[gameStore] onContainerClosed:', key)
     openNestedInventories.value.delete(key)
+    openedRootContainerRefs.value.delete(key)
   }
 
   function closeNestedInventory(windowKey: string) {
@@ -309,6 +330,7 @@ export const useGameStore = defineStore('game', () => {
 
   function closeAllNestedInventories() {
     openNestedInventories.value.clear()
+    openedRootContainerRefs.value.clear()
   }
 
   function getNestedInventoryData(windowKey: string): proto.IInventoryState | undefined {
@@ -361,6 +383,7 @@ export const useGameStore = defineStore('game', () => {
 
     // Clear nested inventories
     openNestedInventories.value.clear()
+    openedRootContainerRefs.value.clear()
 
     // Cleanup chat
     if (cleanupTimer) {

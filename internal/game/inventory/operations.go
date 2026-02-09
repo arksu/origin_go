@@ -248,6 +248,8 @@ func (s *InventoryOperationService) executeMerge(
 	sameSrcDst bool,
 	moveSpec *netproto.InventoryMoveSpec,
 ) *OperationResult {
+	srcItem := srcInfo.Container.Items[srcItemIndex]
+
 	// Update destination item quantity
 	ecs.MutateComponent[components.InventoryContainer](w, dstInfo.Handle, func(c *components.InventoryContainer) bool {
 		c.Items[placement.MergeTargetIndex].Quantity += placement.MergedQuantity
@@ -287,6 +289,10 @@ func (s *InventoryOperationService) executeMerge(
 		updatedDst, _ := ecs.GetComponent[components.InventoryContainer](w, dstInfo.Handle)
 		dstInfo.Container = &updatedDst
 		result.UpdatedContainers = append(result.UpdatedContainers, dstInfo)
+
+		if placement.RemainingInSrc == 0 {
+			appendClosedNestedRefIfPresent(w, result, srcItem.ItemID)
+		}
 	}
 
 	return result
@@ -354,6 +360,9 @@ func (s *InventoryOperationService) executeSwap(
 		updatedDst, _ := ecs.GetComponent[components.InventoryContainer](w, dstInfo.Handle)
 		dstInfo.Container = &updatedDst
 		result.UpdatedContainers = append(result.UpdatedContainers, dstInfo)
+
+		appendClosedNestedRefIfPresent(w, result, srcItem.ItemID)
+		appendClosedNestedRefIfPresent(w, result, swapItem.ItemID)
 	}
 
 	return result
@@ -422,6 +431,8 @@ func (s *InventoryOperationService) executeSimpleMove(
 		updatedDst, _ := ecs.GetComponent[components.InventoryContainer](w, dstInfo.Handle)
 		dstInfo.Container = &updatedDst
 		result.UpdatedContainers = append(result.UpdatedContainers, dstInfo)
+
+		appendClosedNestedRefIfPresent(w, result, srcItem.ItemID)
 	}
 
 	return result
@@ -944,6 +955,34 @@ func serializeNestedForDrop(w *ecs.World, itemID types.EntityID) *InventoryDataV
 		Version: int(container.Version),
 		Items:   items,
 	}
+}
+
+func appendClosedNestedRefIfPresent(w *ecs.World, result *OperationResult, itemID types.EntityID) {
+	if result == nil || itemID == 0 {
+		return
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	if _, found := refIndex.Lookup(constt.InventoryGrid, itemID, 0); !found {
+		return
+	}
+
+	for _, existing := range result.ClosedContainerRefs {
+		if existing == nil {
+			continue
+		}
+		if existing.Kind == netproto.InventoryKind_INVENTORY_KIND_GRID &&
+			existing.OwnerId == uint64(itemID) &&
+			existing.InventoryKey == 0 {
+			return
+		}
+	}
+
+	result.ClosedContainerRefs = append(result.ClosedContainerRefs, &netproto.InventoryRef{
+		Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
+		OwnerId:      uint64(itemID),
+		InventoryKey: 0,
+	})
 }
 
 // deleteDroppedEntityFromECS removes a dropped item entity from ECS and InventoryRefIndex.

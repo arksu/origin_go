@@ -203,6 +203,36 @@ func (s *LinkSystem) linkPlayerToTarget(
 		CreatedAt:    ecs.GetResource[ecs.TimeState](w).Now,
 	})
 
+	// Player must stop at contact point; otherwise continued path-following
+	// immediately breaks link on movement delta in subsequent ticks.
+	var stopMoveEntry *ecs.MoveBatchEntry
+	ecs.MutateComponent[components.Movement](w, playerHandle, func(m *components.Movement) bool {
+		stopMoveEntry = &ecs.MoveBatchEntry{
+			EntityID:     playerID,
+			Handle:       playerHandle,
+			X:            int(playerTransform.X),
+			Y:            int(playerTransform.Y),
+			Heading:      int(playerTransform.Direction),
+			VelocityX:    0,
+			VelocityY:    0,
+			MoveMode:     m.Mode,
+			IsMoving:     false,
+			ServerTimeMs: ecs.GetResource[ecs.TimeState](w).UnixMs,
+			MoveSeq:      m.MoveSeq,
+			IsTeleport:   false,
+		}
+		m.ClearTarget()
+		m.MoveSeq++
+		return true
+	})
+
+	if stopMoveEntry != nil {
+		s.eventBus.PublishAsync(
+			ecs.NewObjectMoveBatchEvent(w.Layer, []ecs.MoveBatchEntry{*stopMoveEntry}),
+			eventbus.PriorityMedium,
+		)
+	}
+
 	s.publishSync(w, ecs.NewLinkCreatedEvent(w.Layer, playerID, targetID))
 }
 

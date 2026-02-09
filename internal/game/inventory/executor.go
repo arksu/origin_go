@@ -58,7 +58,7 @@ func (e *InventoryExecutor) ExecuteOperation(
 	e.handleDroppedItemSpatial(w, result)
 
 	// Check cascade: if operation changed a nested container, update parent item resource
-	e.checkNestedCascade(w, result)
+	e.checkNestedCascade(w, playerID, result)
 
 	// Collect nested container refs that should be closed on the client
 	e.collectClosedContainerRefs(w, result)
@@ -144,7 +144,7 @@ func (e *InventoryExecutor) handleDroppedItemSpatial(w *ecs.World, result *Opera
 // checkNestedCascade checks if any updated container is a nested one (owner_id = item_id).
 // If the item's visual depends on hasNestedItems and that changed, update the parent item's resource
 // and add the parent container to UpdatedContainers.
-func (e *InventoryExecutor) checkNestedCascade(w *ecs.World, result *OperationResult) {
+func (e *InventoryExecutor) checkNestedCascade(w *ecs.World, playerID types.EntityID, result *OperationResult) {
 	if !result.Success {
 		return
 	}
@@ -153,7 +153,7 @@ func (e *InventoryExecutor) checkNestedCascade(w *ecs.World, result *OperationRe
 		nestedOwnerID := updatedInfo.Container.OwnerID
 
 		// Find which parent container holds the item with ItemID == nestedOwnerID
-		parentInfo := e.findParentContainer(w, updatedInfo.Owner, nestedOwnerID)
+		parentInfo := e.findParentContainer(w, playerID, updatedInfo.Owner, nestedOwnerID)
 		if parentInfo == nil {
 			continue
 		}
@@ -219,11 +219,7 @@ func (e *InventoryExecutor) collectClosedContainerRefs(w *ecs.World, result *Ope
 		}
 		// Item in hand is a container — check if it has a nested inventory
 		if _, found := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); found {
-			result.ClosedContainerRefs = append(result.ClosedContainerRefs, &netproto.InventoryRef{
-				Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
-				OwnerId:      uint64(item.ItemID),
-				InventoryKey: 0,
-			})
+			appendClosedNestedRefIfPresent(w, result, item.ItemID)
 		}
 	}
 }
@@ -231,31 +227,63 @@ func (e *InventoryExecutor) collectClosedContainerRefs(w *ecs.World, result *Ope
 // findParentContainer finds the container that holds an item with the given itemID
 func (e *InventoryExecutor) findParentContainer(
 	w *ecs.World,
+	playerID types.EntityID,
 	owner *components.InventoryOwner,
 	itemID types.EntityID,
 ) *ContainerInfo {
-	if owner == nil {
+	if owner != nil {
+		for _, link := range owner.Inventories {
+			// Skip nested containers themselves
+			if link.OwnerID == itemID {
+				continue
+			}
+
+			container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+			if !ok {
+				continue
+			}
+
+			for _, item := range container.Items {
+				if item.ItemID == itemID {
+					return &ContainerInfo{
+						Handle:    link.Handle,
+						Container: &container,
+						Owner:     owner,
+					}
+				}
+			}
+		}
+	}
+
+	// Nested container may be inside an opened world-object root container
+	// which is not part of player's InventoryOwner links.
+	openState, hasOpenState := ecs.TryGetResource[ecs.OpenContainerState](w)
+	if !hasOpenState {
 		return nil
 	}
 
-	for _, link := range owner.Inventories {
-		// Skip nested containers themselves
-		if link.OwnerID == itemID {
-			continue
-		}
+	rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID)
+	if !hasRoot {
+		return nil
+	}
 
-		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
-		if !ok {
-			continue
-		}
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, rootOwnerID, 0)
+	if !found || !w.Alive(rootHandle) {
+		return nil
+	}
 
-		for _, item := range container.Items {
-			if item.ItemID == itemID {
-				return &ContainerInfo{
-					Handle:    link.Handle,
-					Container: &container,
-					Owner:     owner,
-				}
+	rootContainer, ok := ecs.GetComponent[components.InventoryContainer](w, rootHandle)
+	if !ok {
+		return nil
+	}
+
+	for _, item := range rootContainer.Items {
+		if item.ItemID == itemID {
+			return &ContainerInfo{
+				Handle:    rootHandle,
+				Container: &rootContainer,
+				Owner:     owner,
 			}
 		}
 	}
