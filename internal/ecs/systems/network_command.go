@@ -29,6 +29,7 @@ type ChatDeliveryService interface {
 type InventoryResultSender interface {
 	SendInventoryOpResult(entityID types.EntityID, result *netproto.S2C_InventoryOpResult)
 	SendContainerOpened(entityID types.EntityID, state *netproto.InventoryState)
+	SendContainerClosed(entityID types.EntityID, ref *netproto.InventoryRef)
 }
 
 // InventorySnapshotSender sends full inventory snapshots to a client (used on login/reattach)
@@ -54,6 +55,10 @@ type InventoryOpResult struct {
 	ErrorCode         netproto.ErrorCode
 	Message           string
 	UpdatedContainers []InventoryContainerState
+
+	// ClosedContainerRefs lists nested container refs that should be closed on the client
+	// (e.g. when a container item is picked up into the hand).
+	ClosedContainerRefs []*netproto.InventoryRef
 }
 
 // InventoryContainerState represents the state of an inventory container for sending to client
@@ -527,6 +532,11 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 	// Send result to client
 	if s.inventoryResultSender != nil {
 		s.inventoryResultSender.SendInventoryOpResult(cmd.CharacterID, response)
+
+		// Send S2C_ContainerClosed for any nested containers that should be closed
+		for _, ref := range result.ClosedContainerRefs {
+			s.inventoryResultSender.SendContainerClosed(cmd.CharacterID, ref)
+		}
 	}
 
 	s.logger.Debug("InventoryOp completed",

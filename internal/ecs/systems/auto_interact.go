@@ -174,6 +174,11 @@ func (s *AutoInteractSystem) executePickup(
 
 	s.inventoryResultSender.SendInventoryOpResult(playerID, response)
 
+	// Send S2C_ContainerClosed for any nested containers that should be closed
+	for _, ref := range result.ClosedContainerRefs {
+		s.inventoryResultSender.SendContainerClosed(playerID, ref)
+	}
+
 	if result.Success {
 		s.logger.Debug("AutoInteract: pickup success",
 			zap.Uint64("player_id", uint64(playerID)),

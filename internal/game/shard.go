@@ -464,6 +464,35 @@ func (s *Shard) SendContainerOpened(entityID types.EntityID, state *netproto.Inv
 	client.Send(data)
 }
 
+// SendContainerClosed sends a container closed notification to a client
+func (s *Shard) SendContainerClosed(entityID types.EntityID, ref *netproto.InventoryRef) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ContainerClosed{
+			ContainerClosed: &netproto.S2C_ContainerClosed{
+				Ref: ref,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal container closed",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
 // SendInventorySnapshots sends full inventory snapshots to a client (called from ECS tick thread)
 func (s *Shard) SendInventorySnapshots(w *ecs.World, entityID types.EntityID, handle types.Handle) {
 	s.ClientsMu.RLock()
