@@ -25,8 +25,8 @@ func TestLoadAllItems(t *testing.T) {
 	assert.Contains(t, seedBag.Tags, "container")
 
 	require.NotNil(t, seedBag.Container, "seed_bag should have container definition")
-	assert.Equal(t, 5, seedBag.Container.Size.W)
-	assert.Equal(t, 5, seedBag.Container.Size.H)
+	assert.Equal(t, 6, seedBag.Container.Size.W)
+	assert.Equal(t, 7, seedBag.Container.Size.H)
 	assert.Equal(t, 1, len(seedBag.Container.Rules.AllowTags))
 	assert.Equal(t, "seed", seedBag.Container.Rules.AllowTags[0])
 }

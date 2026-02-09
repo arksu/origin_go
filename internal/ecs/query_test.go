@@ -26,11 +26,11 @@ func init() {
 
 // TestQueryForEachZeroCopy verifies ForEach doesn't allocate
 func TestQueryForEachZeroCopy(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Create entities
 	for i := 0; i < 100; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -49,11 +49,11 @@ func TestQueryForEachZeroCopy(t *testing.T) {
 
 // TestPreparedQuery verifies prepared query caching
 func TestPreparedQuery(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Create entities with Position
 	for i := 0; i < 50; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 	}
 
@@ -66,7 +66,7 @@ func TestPreparedQuery(t *testing.T) {
 
 	// Add more entities to same archetype (Position only)
 	for i := 50; i < 100; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 	}
 
@@ -78,7 +78,7 @@ func TestPreparedQuery(t *testing.T) {
 
 	// Create entities with different archetype (Position + Velocity)
 	for i := 100; i < 150; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -98,7 +98,7 @@ func TestPreparedQuery(t *testing.T) {
 
 // TestQueryHandlesInto verifies HandlesInto with caller-managed buffer
 func TestQueryHandlesInto(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type Position struct{ X, Y, Z float64 }
 	const PositionID ComponentID = 30
@@ -106,7 +106,7 @@ func TestQueryHandlesInto(t *testing.T) {
 
 	// Spawn entities
 	for i := 0; i < 100; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Position{X: float64(i)})
 	}
 
@@ -136,7 +136,7 @@ func TestQueryHandlesInto(t *testing.T) {
 
 // BenchmarkQueryHandlesInto measures HandlesInto performance
 func BenchmarkQueryHandlesInto(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type Position struct{ X, Y, Z float64 }
 	const PositionID ComponentID = 31
@@ -144,7 +144,7 @@ func BenchmarkQueryHandlesInto(b *testing.B) {
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Position{X: float64(i), Y: 0, Z: 0})
 	}
 
@@ -178,11 +178,11 @@ func BenchmarkQueryHandlesInto(b *testing.B) {
 
 // BenchmarkQueryForEach_Old simulates old implementation with copies
 func BenchmarkQueryForEach_Old(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -199,11 +199,11 @@ func BenchmarkQueryForEach_Old(b *testing.B) {
 
 // BenchmarkQueryForEach_New uses zero-copy ForEach
 func BenchmarkQueryForEach_New(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -219,11 +219,11 @@ func BenchmarkQueryForEach_New(b *testing.B) {
 
 // BenchmarkPreparedQuery uses cached archetype list
 func BenchmarkPreparedQuery(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -240,11 +240,11 @@ func BenchmarkPreparedQuery(b *testing.B) {
 
 // BenchmarkQueryWithComponentAccess simulates real system workload
 func BenchmarkQueryWithComponentAccess(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Create 10k entities
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 		AddComponent(w, h, BenchVelocity{X: 1, Y: 0, Z: 0})
 	}
@@ -269,10 +269,10 @@ func BenchmarkQueryWithComponentAccess(b *testing.B) {
 
 // BenchmarkQueryAllocation measures allocation overhead
 func BenchmarkQueryAllocation(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	for i := 0; i < 1000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, BenchPosition{X: float64(i), Y: 0, Z: 0})
 	}
 

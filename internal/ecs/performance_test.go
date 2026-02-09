@@ -26,12 +26,12 @@ func BenchmarkHandleValidation(b *testing.B) {
 
 // BenchmarkWorldAlive measures Alive() performance on hot path
 func BenchmarkWorldAlive(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Spawn entities
 	handles := make([]types.Handle, 100000)
 	for i := 0; i < 100000; i++ {
-		handles[i] = w.Spawn(types.EntityID(i))
+		handles[i] = w.Spawn(types.EntityID(i), nil)
 	}
 
 	b.Run("Alive-SingleLookup", func(b *testing.B) {
@@ -45,7 +45,7 @@ func BenchmarkWorldAlive(b *testing.B) {
 	// Test with stale handles
 	staleHandles := make([]types.Handle, 1000)
 	for i := 0; i < 1000; i++ {
-		h := w.Spawn(types.EntityID(100000 + i))
+		h := w.Spawn(types.EntityID(100000+i), nil)
 		staleHandles[i] = h
 		w.Despawn(h)
 	}
@@ -81,12 +81,12 @@ func BenchmarkHotPath(b *testing.B) {
 	const TransformID ComponentID = 30
 	RegisterComponent[Transform](TransformID)
 
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Spawn 10k entities
 	handles := make([]types.Handle, 10000)
 	for i := 0; i < 10000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Transform{X: float64(i), Y: 0, Z: 0})
 		handles[i] = h
 	}
@@ -158,10 +158,10 @@ func TestHandleValidationCorrectness(t *testing.T) {
 
 // TestWorldAliveCorrectness verifies World.Alive() behavior
 func TestWorldAliveCorrectness(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Spawn entity
-	h1 := w.Spawn(types.EntityID(1))
+	h1 := w.Spawn(types.EntityID(1), nil)
 	if !w.Alive(h1) {
 		t.Error("spawned entity should be alive")
 	}
@@ -173,7 +173,7 @@ func TestWorldAliveCorrectness(t *testing.T) {
 	}
 
 	// Spawn new entity (reuses index)
-	h2 := w.Spawn(types.EntityID(2))
+	h2 := w.Spawn(types.EntityID(2), nil)
 	if !w.Alive(h2) {
 		t.Error("new entity should be alive")
 	}

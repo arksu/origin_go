@@ -5,7 +5,6 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
-	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"testing"
@@ -35,8 +34,7 @@ func newTestChunkManager() *ChunkManager {
 	cfg := newTestConfig()
 	world := ecs.NewWorldForTesting()
 	logger := zap.NewNop()
-	objRegistry := objectdefs.NewRegistry(nil)
-	objectFactory := NewObjectFactory(objRegistry)
+	objectFactory := NewObjectFactory(nil)
 	eb := eventbus.New(&eventbus.Config{
 		MinWorkers: 1,
 		MaxWorkers: 2,
