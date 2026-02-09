@@ -93,10 +93,10 @@ func TestStaleHandleInComponentStorage(t *testing.T) {
 
 // TestStaleHandleInWorld demonstrates prevention at World level
 func TestStaleHandleInWorld(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Create entity 1
-	h1 := w.Spawn(types.EntityID(1))
+	h1 := w.Spawn(types.EntityID(1), nil)
 	if !w.Alive(h1) {
 		t.Error("newly spawned entity should be alive")
 	}
@@ -108,7 +108,7 @@ func TestStaleHandleInWorld(t *testing.T) {
 	}
 
 	// Create entity 2 - reuses same index
-	h2 := w.Spawn(types.EntityID(2))
+	h2 := w.Spawn(types.EntityID(2), nil)
 	if !w.Alive(h2) {
 		t.Error("newly spawned entity should be alive")
 	}

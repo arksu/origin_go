@@ -50,12 +50,12 @@ func TestArchetypeRemoveEntityAt(t *testing.T) {
 
 // TestWorldLocationTracking verifies entity location tracking
 func TestWorldLocationTracking(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	// Spawn entities
-	h1 := w.Spawn(types.EntityID(1))
-	h2 := w.Spawn(types.EntityID(2))
-	h3 := w.Spawn(types.EntityID(3))
+	h1 := w.Spawn(types.EntityID(1), nil)
+	h2 := w.Spawn(types.EntityID(2), nil)
+	h3 := w.Spawn(types.EntityID(3), nil)
 
 	// All should be in same archetype (ExternalID only)
 	loc1, ok1 := w.locations[h1]
@@ -88,16 +88,16 @@ func TestWorldLocationTracking(t *testing.T) {
 
 // TestComponentChangeArchetypeTransition verifies location tracking during archetype changes
 func TestComponentChangeArchetypeTransition(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type TestComp struct{ Value int }
 	const TestCompID ComponentID = 20
 	RegisterComponent[TestComp](TestCompID)
 
 	// Spawn entities with ExternalID
-	h1 := w.Spawn(types.EntityID(1))
-	_ = w.Spawn(types.EntityID(2))
-	h3 := w.Spawn(types.EntityID(3))
+	h1 := w.Spawn(types.EntityID(1), nil)
+	_ = w.Spawn(types.EntityID(2), nil)
+	h3 := w.Spawn(types.EntityID(3), nil)
 
 	loc1Before := w.locations[h1]
 
@@ -198,12 +198,12 @@ func BenchmarkWorldDespawn(b *testing.B) {
 
 	for _, size := range sizes {
 		b.Run(string(rune(size)), func(b *testing.B) {
-			w := NewWorld()
+			w := NewWorldForTesting()
 			handles := make([]types.Handle, size)
 
 			// Spawn entities
 			for i := 0; i < size; i++ {
-				handles[i] = w.Spawn(types.EntityID(i))
+				handles[i] = w.Spawn(types.EntityID(i), nil)
 			}
 
 			b.ResetTimer()
@@ -211,7 +211,7 @@ func BenchmarkWorldDespawn(b *testing.B) {
 				// Despawn and respawn middle entity
 				h := handles[size/2]
 				w.Despawn(h)
-				handles[size/2] = w.Spawn(types.EntityID(size / 2))
+				handles[size/2] = w.Spawn(types.EntityID(size/2), nil)
 			}
 		})
 	}
@@ -227,12 +227,12 @@ func BenchmarkComponentChange(b *testing.B) {
 
 	for _, size := range sizes {
 		b.Run(string(rune(size)), func(b *testing.B) {
-			w := NewWorld()
+			w := NewWorldForTesting()
 			handles := make([]types.Handle, size)
 
 			// Spawn entities
 			for i := 0; i < size; i++ {
-				handles[i] = w.Spawn(types.EntityID(i))
+				handles[i] = w.Spawn(types.EntityID(i), nil)
 			}
 
 			b.ResetTimer()

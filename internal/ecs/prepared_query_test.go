@@ -8,7 +8,7 @@ import (
 
 // TestPreparedQueryAutoRefresh verifies automatic refresh when new archetypes are created
 func TestPreparedQueryAutoRefresh(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type Transform struct{ X, Y, Z float64 }
 	type Velocity struct{ X, Y, Z float64 }
@@ -30,7 +30,7 @@ func TestPreparedQueryAutoRefresh(t *testing.T) {
 
 	// Spawn entities with Transform+Velocity
 	for i := 0; i < 10; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Transform{X: float64(i)})
 		AddComponent(w, h, Velocity{X: 1.0})
 	}
@@ -77,7 +77,7 @@ func TestPreparedQueryAutoRefresh(t *testing.T) {
 
 // TestPreparedQueryNoRefreshWhenNoNewArchetypes verifies no unnecessary refreshes
 func TestPreparedQueryNoRefreshWhenNoNewArchetypes(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type Position struct{ X, Y float64 }
 	const PositionID ComponentID = 50
@@ -85,7 +85,7 @@ func TestPreparedQueryNoRefreshWhenNoNewArchetypes(t *testing.T) {
 
 	// Spawn entities - creates archetype
 	for i := 0; i < 100; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Position{X: float64(i), Y: 0})
 	}
 
@@ -112,7 +112,7 @@ func TestPreparedQueryNoRefreshWhenNoNewArchetypes(t *testing.T) {
 
 // TestPreparedQueryWithDynamicCombinations simulates MMO scenario with dynamic component combinations
 func TestPreparedQueryWithDynamicCombinations(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type Transform struct{ X, Y, Z float64 }
 	type Health struct{ HP int }
@@ -138,7 +138,7 @@ func TestPreparedQueryWithDynamicCombinations(t *testing.T) {
 	// Spawn base entities
 	handles := make([]types.Handle, 20)
 	for i := 0; i < 20; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Transform{X: float64(i)})
 		AddComponent(w, h, Health{HP: 100})
 		handles[i] = h
@@ -194,7 +194,7 @@ func TestPreparedQueryWithDynamicCombinations(t *testing.T) {
 
 // TestPreparedQueryWithTemporaryEntities simulates temporary entities/effects
 func TestPreparedQueryWithTemporaryEntities(t *testing.T) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type Position struct{ X, Y, Z float64 }
 	type Effect struct{ Duration float64 }
@@ -213,7 +213,7 @@ func TestPreparedQueryWithTemporaryEntities(t *testing.T) {
 
 	// Spawn permanent entities
 	for i := 0; i < 10; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Position{X: float64(i)})
 	}
 
@@ -253,7 +253,7 @@ func TestPreparedQueryWithTemporaryEntities(t *testing.T) {
 
 // BenchmarkPreparedQueryAutoRefresh measures overhead of version check
 func BenchmarkPreparedQueryAutoRefresh(b *testing.B) {
-	w := NewWorld()
+	w := NewWorldForTesting()
 
 	type Transform struct{ X, Y, Z float64 }
 	const TransformID ComponentID = 45
@@ -261,7 +261,7 @@ func BenchmarkPreparedQueryAutoRefresh(b *testing.B) {
 
 	// Spawn entities
 	for i := 0; i < 1000; i++ {
-		h := w.Spawn(types.EntityID(i))
+		h := w.Spawn(types.EntityID(i), nil)
 		AddComponent(w, h, Transform{X: float64(i)})
 	}
 
@@ -281,7 +281,7 @@ func BenchmarkPreparedQueryAutoRefresh(b *testing.B) {
 	type Velocity struct{ X, Y, Z float64 }
 	const VelocityID ComponentID = 46
 	RegisterComponent[Velocity](VelocityID)
-	h := w.Spawn(types.EntityID(9999))
+	h := w.Spawn(types.EntityID(9999), nil)
 	AddComponent(w, h, Transform{X: 999})
 	AddComponent(w, h, Velocity{X: 1})
 
