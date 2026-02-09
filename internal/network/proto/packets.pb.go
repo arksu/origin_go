@@ -442,31 +442,22 @@ func (WarningCode) EnumDescriptor() ([]byte, []int) {
 type InteractionType int32
 
 const (
-	InteractionType_AUTO            InteractionType = 0 // сервер решает
-	InteractionType_GATHER          InteractionType = 1
-	InteractionType_OPEN_CONTAINER  InteractionType = 2
-	InteractionType_CLOSE_CONTAINER InteractionType = 3
-	InteractionType_USE             InteractionType = 4
-	InteractionType_PICKUP          InteractionType = 5
+	InteractionType_AUTO   InteractionType = 0 // сервер решает
+	InteractionType_OPEN   InteractionType = 2
+	InteractionType_PICKUP InteractionType = 5
 )
 
 // Enum value maps for InteractionType.
 var (
 	InteractionType_name = map[int32]string{
 		0: "AUTO",
-		1: "GATHER",
-		2: "OPEN_CONTAINER",
-		3: "CLOSE_CONTAINER",
-		4: "USE",
+		2: "OPEN",
 		5: "PICKUP",
 	}
 	InteractionType_value = map[string]int32{
-		"AUTO":            0,
-		"GATHER":          1,
-		"OPEN_CONTAINER":  2,
-		"CLOSE_CONTAINER": 3,
-		"USE":             4,
-		"PICKUP":          5,
+		"AUTO":   0,
+		"OPEN":   2,
+		"PICKUP": 5,
 	}
 )
 
@@ -4351,14 +4342,10 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	")ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED\x10\x0f\x12\x1d\n" +
 	"\x19ERROR_CODE_INTERNAL_ERROR\x10\x10*,\n" +
 	"\vWarningCode\x12\x1d\n" +
-	"\x19WARN_INPUT_QUEUE_OVERFLOW\x10\x00*e\n" +
+	"\x19WARN_INPUT_QUEUE_OVERFLOW\x10\x00*1\n" +
 	"\x0fInteractionType\x12\b\n" +
-	"\x04AUTO\x10\x00\x12\n" +
-	"\n" +
-	"\x06GATHER\x10\x01\x12\x12\n" +
-	"\x0eOPEN_CONTAINER\x10\x02\x12\x13\n" +
-	"\x0fCLOSE_CONTAINER\x10\x03\x12\a\n" +
-	"\x03USE\x10\x04\x12\n" +
+	"\x04AUTO\x10\x00\x12\b\n" +
+	"\x04OPEN\x10\x02\x12\n" +
 	"\n" +
 	"\x06PICKUP\x10\x05*p\n" +
 	"\vChatChannel\x12\x16\n" +

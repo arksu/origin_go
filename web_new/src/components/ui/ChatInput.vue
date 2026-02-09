@@ -40,13 +40,13 @@ function handleKeydown(event: KeyboardEvent) {
         savedInput = message.value
       }
       historyIndex++
-      message.value = history.value[length - historyIndex - 1]
+      message.value = history.value[length - historyIndex - 1] ?? ''
     }
     event.preventDefault()
   } else if (event.key === 'ArrowDown') {
     if (historyIndex > 0) {
       historyIndex--
-      message.value = history.value[length - historyIndex - 1]
+      message.value = history.value[length - historyIndex - 1] ?? ''
     } else if (historyIndex === 0) {
       historyIndex = -1
       message.value = savedInput
