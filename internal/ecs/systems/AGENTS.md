@@ -23,15 +23,18 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 | Priority | System Name           | Description                                                  | Dependencies                  | Notes                                     |
 |----------|-----------------------|--------------------------------------------------------------|-------------------------------|-------------------------------------------|
-| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Runs first, resets arrays                 |
-| 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character          | Batch saves character positions/stats     |
+| 0        | NetworkCommandSystem  | Drains command queues and applies player/server intents      | Network inboxes               | Runs first, single-threaded ECS mutations |
+| 10       | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Resets arrays                             |
 | 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Appends to MovedEntities buffer           |
 | 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer           |
-| 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character           | Saves character data before despawn       |
+| 250      | LinkSystem            | Creates/breaks player↔object links                           | CollisionResult, MovedEntities| Publishes link events                     |
 | 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                  |
 | 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction | Auto-pickup dropped items on arrival      |
 | 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef   | Updates VisibilityState, publishes events |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions          |
+| 500      | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character          | Batch saves character positions/stats     |
+| 900      | DropDecaySystem       | Removes expired dropped items                                | DroppedItem, InventoryRefIndex| Despawns expired drops                    |
+| 950      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character           | Saves character data before despawn       |
 
 ## System Details
 
@@ -203,16 +206,16 @@ Mu sync.RWMutex
 ## System Dependencies
 
 ```
-ResetSystem (0)
+NetworkCommandSystem (0)
+    ↓ (drains inboxes)
+ResetSystem (10)
     ↓ (clears buffers)
-CharacterSaveSystem (50)
-    ↓ (periodic saves)
 MovementSystem (100)
     ↓ (appends to MovedEntities)
-CollisionSystem (200) 
+CollisionSystem (200)
     ↓ (reads from MovedEntities)
-ExpireDetachedSystem (250)
-    ↓ (saves before despawn)
+LinkSystem (250)
+    ↓ (links based on collisions)
 TransformUpdateSystem (300)
     ↓ (positions finalized)
 AutoInteractSystem (320)
@@ -220,6 +223,12 @@ AutoInteractSystem (320)
 VisionSystem (350)
     ↓ (updates VisibilityState)
 ChunkSystem (400)
+    ↓ (chunk migration)
+CharacterSaveSystem (500)
+    ↓ (periodic saves)
+DropDecaySystem (900)
+    ↓ (despawns expired drops)
+ExpireDetachedSystem (950)
 ```
 
 ## Performance Considerations

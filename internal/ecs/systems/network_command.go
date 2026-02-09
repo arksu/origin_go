@@ -29,6 +29,8 @@ type ChatDeliveryService interface {
 type InventoryResultSender interface {
 	SendInventoryOpResult(entityID types.EntityID, result *netproto.S2C_InventoryOpResult)
 	SendContainerOpened(entityID types.EntityID, state *netproto.InventoryState)
+	SendContainerClosed(entityID types.EntityID, ref *netproto.InventoryRef)
+	SendInventoryUpdate(entityID types.EntityID, states []*netproto.InventoryState)
 }
 
 // InventorySnapshotSender sends full inventory snapshots to a client (used on login/reattach)
@@ -202,7 +204,7 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 	case network.CmdOpenContainer:
 		s.handleOpenContainer(w, handle, cmd)
 	case network.CmdCloseContainer:
-		// CloseContainer is client-side only (UI close), no server action needed
+		s.handleCloseContainer(w, handle, cmd)
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -529,6 +531,10 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 		s.inventoryResultSender.SendInventoryOpResult(cmd.CharacterID, response)
 	}
 
+	if result.Success && len(result.UpdatedContainers) > 0 {
+		s.broadcastOpenContainerUpdates(w, cmd.CharacterID, result.UpdatedContainers)
+	}
+
 	s.logger.Debug("InventoryOp completed",
 		zap.Uint64("client_id", cmd.ClientID),
 		zap.Uint64("op_id", op.OpId),
@@ -577,20 +583,13 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 
 	ownerID := types.EntityID(ref.OwnerId)
 
-	// Authorization: if owner_id != player, check that item belongs to player's inventory
+	trackOpen := false
 	if ownerID != cmd.CharacterID {
-		owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-		if !hasOwner {
-			return
-		}
-		allowed := false
-		for _, link := range owner.Inventories {
-			if link.OwnerID == ownerID {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
+		if s.isNestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
+			// ok
+		} else if s.canOpenObjectContainer(w, playerHandle, cmd.CharacterID, ownerID) {
+			trackOpen = true
+		} else {
 			s.logger.Debug("OpenContainer: access denied",
 				zap.Uint64("client_id", cmd.ClientID),
 				zap.Uint64("owner_id", ref.OwnerId))
@@ -636,8 +635,57 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 
 	invState := s.buildInventoryStateProto(containerState)
 
+	if trackOpen {
+		open := ecs.GetResource[ecs.OpenContainers](w)
+		if open != nil {
+			open.Open(cmd.CharacterID, ecs.OpenContainerEntry{
+				Handle:  handle,
+				OwnerID: container.OwnerID,
+				Kind:    container.Kind,
+				Key:     container.Key,
+			})
+		}
+	}
+
 	if s.inventoryResultSender != nil {
 		s.inventoryResultSender.SendContainerOpened(cmd.CharacterID, invState)
+	}
+}
+
+func (s *NetworkCommandSystem) handleCloseContainer(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	ref, ok := cmd.Payload.(*netproto.InventoryRef)
+	if !ok || ref == nil {
+		s.logger.Error("Invalid payload type for CloseContainer",
+			zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+
+	open := ecs.GetResource[ecs.OpenContainers](w)
+	if open == nil {
+		return
+	}
+
+	key := ecs.InventoryRefKey{
+		Kind:    constt.InventoryKind(ref.Kind),
+		OwnerID: types.EntityID(ref.OwnerId),
+		Key:     ref.InventoryKey,
+	}
+
+	if !open.Has(cmd.CharacterID, key) {
+		return
+	}
+
+	links := ecs.GetResource[ecs.LinkedObjects](w)
+	if link, ok := links.PlayerToObject[playerHandle]; ok && types.EntityID(ref.OwnerId) == link.ObjectID {
+		entries := open.CloseAll(cmd.CharacterID)
+		s.sendClosedEntries(cmd.CharacterID, entries)
+		return
+	}
+
+	if _, ok := open.Close(cmd.CharacterID, key); ok {
+		if s.inventoryResultSender != nil {
+			s.inventoryResultSender.SendContainerClosed(cmd.CharacterID, ref)
+		}
 	}
 }
 
@@ -734,6 +782,149 @@ func (s *NetworkCommandSystem) buildItemInstanceProto(item InventoryItemState) *
 	}
 
 	return instance
+}
+
+func (s *NetworkCommandSystem) isNestedContainerOwnedByPlayer(
+	w *ecs.World,
+	playerHandle types.Handle,
+	itemOwnerID types.EntityID,
+) bool {
+	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+	if !hasOwner {
+		return false
+	}
+
+	for _, link := range owner.Inventories {
+		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		if !ok {
+			continue
+		}
+		for _, item := range container.Items {
+			if item.ItemID == itemOwnerID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *NetworkCommandSystem) canOpenObjectContainer(
+	w *ecs.World,
+	playerHandle types.Handle,
+	playerID types.EntityID,
+	ownerID types.EntityID,
+) bool {
+	links := ecs.GetResource[ecs.LinkedObjects](w)
+	link, ok := links.PlayerToObject[playerHandle]
+	if !ok {
+		return false
+	}
+
+	if !s.objectHasContainerBehavior(w, link.ObjectHandle) {
+		return false
+	}
+
+	if ownerID == link.ObjectID {
+		return true
+	}
+
+	return s.itemInOpenContainers(w, playerID, ownerID)
+}
+
+func (s *NetworkCommandSystem) objectHasContainerBehavior(w *ecs.World, objectHandle types.Handle) bool {
+	info, ok := ecs.GetComponent[components.EntityInfo](w, objectHandle)
+	if !ok {
+		return false
+	}
+	for _, b := range info.Behaviors {
+		if b == "container" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *NetworkCommandSystem) itemInOpenContainers(
+	w *ecs.World,
+	playerID types.EntityID,
+	itemID types.EntityID,
+) bool {
+	open := ecs.GetResource[ecs.OpenContainers](w)
+	if open == nil || open.PlayerToContainers == nil {
+		return false
+	}
+	player := open.PlayerToContainers[playerID]
+	if player == nil {
+		return false
+	}
+	for _, entry := range player.Containers {
+		if !w.Alive(entry.Handle) {
+			continue
+		}
+		container, ok := ecs.GetComponent[components.InventoryContainer](w, entry.Handle)
+		if !ok {
+			continue
+		}
+		for _, item := range container.Items {
+			if item.ItemID == itemID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *NetworkCommandSystem) broadcastOpenContainerUpdates(
+	w *ecs.World,
+	actorID types.EntityID,
+	containers []InventoryContainerState,
+) {
+	if s.inventoryResultSender == nil {
+		return
+	}
+	open := ecs.GetResource[ecs.OpenContainers](w)
+	if open == nil {
+		return
+	}
+
+	updates := make(map[types.EntityID][]*netproto.InventoryState, 8)
+
+	for _, container := range containers {
+		key := ecs.InventoryRefKey{
+			Kind:    constt.InventoryKind(container.Kind),
+			OwnerID: container.OwnerID,
+			Key:     container.Key,
+		}
+		players := open.PlayersFor(key)
+		if len(players) == 0 {
+			continue
+		}
+		state := s.buildInventoryStateProto(container)
+		for _, playerID := range players {
+			if playerID == actorID {
+				continue
+			}
+			updates[playerID] = append(updates[playerID], state)
+		}
+	}
+
+	for playerID, states := range updates {
+		s.inventoryResultSender.SendInventoryUpdate(playerID, states)
+	}
+}
+
+func (s *NetworkCommandSystem) sendClosedEntries(playerID types.EntityID, entries []ecs.OpenContainerEntry) {
+	if s.inventoryResultSender == nil {
+		return
+	}
+	for _, entry := range entries {
+		ref := &netproto.InventoryRef{
+			Kind:         netproto.InventoryKind(entry.Kind),
+			OwnerId:      uint64(entry.OwnerID),
+			InventoryKey: entry.Key,
+		}
+		s.inventoryResultSender.SendContainerClosed(playerID, ref)
+	}
 }
 
 // processServerJob routes a server job to the appropriate handler
