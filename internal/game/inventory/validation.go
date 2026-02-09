@@ -74,10 +74,15 @@ func (v *Validator) ResolveContainer(
 	}
 
 	ownerID := types.EntityID(ref.OwnerId)
+	refKey := ecs.InventoryRefKey{
+		Kind:    constt.InventoryKind(ref.Kind),
+		OwnerID: ownerID,
+		Key:     ref.InventoryKey,
+	}
 
 	// O(1) lookup via InventoryRefIndex
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), ownerID, ref.InventoryKey)
+	handle, found := refIndex.Lookup(refKey.Kind, ownerID, ref.InventoryKey)
 	if !found || !w.Alive(handle) {
 		return nil, NewValidationError(
 			netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
@@ -95,14 +100,32 @@ func (v *Validator) ResolveContainer(
 
 	// Authorization: player can access own inventories and nested containers of own items
 	if ownerID != playerID {
-		if !v.isNestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
+		// Personal nested (item belongs to player's own inventory tree) remains valid.
+		if v.isNestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
+			goto authorized
+		}
+
+		openState, hasOpenState := ecs.TryGetResource[ecs.OpenContainerState](w)
+		if !hasOpenState || !openState.IsRefOpened(playerID, refKey) {
 			return nil, NewValidationError(
 				netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT,
 				"Cannot access other entity's inventory",
 			)
 		}
+
+		// Nested container refs must still belong to the currently opened root object.
+		if refKey.Kind == constt.InventoryGrid && refKey.Key == 0 {
+			rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID)
+			if hasRoot && ownerID != rootOwnerID && !v.isNestedContainerUnderRoot(w, rootOwnerID, ownerID) {
+				return nil, NewValidationError(
+					netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT,
+					"Nested inventory is no longer accessible",
+				)
+			}
+		}
 	}
 
+authorized:
 	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
 	if !hasOwner {
 		return nil, NewValidationError(
@@ -131,6 +154,33 @@ func (v *Validator) isNestedContainerOwnedByPlayer(w *ecs.World, playerHandle ty
 			return true
 		}
 	}
+	return false
+}
+
+func (v *Validator) isNestedContainerUnderRoot(
+	w *ecs.World,
+	rootOwnerID types.EntityID,
+	nestedOwnerID types.EntityID,
+) bool {
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, rootOwnerID, 0)
+	if !found || !w.Alive(rootHandle) {
+		return false
+	}
+
+	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](w, rootHandle)
+	if !hasContainer {
+		return false
+	}
+
+	for _, item := range rootContainer.Items {
+		if item.ItemID != nestedOwnerID {
+			continue
+		}
+		nestedHandle, nestedFound := refIndex.Lookup(constt.InventoryGrid, nestedOwnerID, 0)
+		return nestedFound && w.Alive(nestedHandle)
+	}
+
 	return false
 }
 

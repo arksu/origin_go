@@ -93,6 +93,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, logger)
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
+	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
+	networkCmdSystem.SetOpenContainerService(openContainerService)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, logger)
 	networkCmdSystem.SetAdminHandler(adminHandler)
@@ -486,6 +488,39 @@ func (s *Shard) SendContainerClosed(entityID types.EntityID, ref *netproto.Inven
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal container closed",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendInventoryUpdate sends inventory updates to a client.
+func (s *Shard) SendInventoryUpdate(entityID types.EntityID, states []*netproto.InventoryState) {
+	if len(states) == 0 {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_InventoryUpdate{
+			InventoryUpdate: &netproto.S2C_InventoryUpdate{
+				Updated: states,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal inventory update",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return

@@ -355,3 +355,143 @@ func (s *LinkState) GetLink(playerID types.EntityID) (PlayerLink, bool) {
 	link, ok := s.LinkedByPlayer[playerID]
 	return link, ok
 }
+
+// OpenContainerState tracks per-player opened world object containers and nested refs.
+//
+// Invariants:
+// - One player can have only one opened root world object at a time.
+// - Opened refs are tracked per player and reverse-indexed for fanout updates.
+type OpenContainerState struct {
+	// PendingAutoOpenByPlayer stores object IDs that must be opened
+	// immediately after successful link creation.
+	PendingAutoOpenByPlayer map[types.EntityID]types.EntityID
+
+	// OpenRootByPlayer maps player -> opened root world-object owner_id.
+	OpenRootByPlayer map[types.EntityID]types.EntityID
+
+	// PlayersByRoot maps world-object owner_id -> set(playerID).
+	PlayersByRoot map[types.EntityID]map[types.EntityID]struct{}
+
+	// OpenRefsByPlayer maps player -> set(opened inventory refs), includes root and nested.
+	OpenRefsByPlayer map[types.EntityID]map[InventoryRefKey]struct{}
+
+	// PlayersByRef maps inventory ref -> set(playerID) for update fanout.
+	PlayersByRef map[InventoryRefKey]map[types.EntityID]struct{}
+}
+
+func (s *OpenContainerState) SetPendingAutoOpen(playerID, targetID types.EntityID) {
+	s.PendingAutoOpenByPlayer[playerID] = targetID
+}
+
+func (s *OpenContainerState) ClearPendingAutoOpen(playerID types.EntityID) {
+	delete(s.PendingAutoOpenByPlayer, playerID)
+}
+
+func (s *OpenContainerState) GetPendingAutoOpen(playerID types.EntityID) (types.EntityID, bool) {
+	targetID, ok := s.PendingAutoOpenByPlayer[playerID]
+	return targetID, ok
+}
+
+func (s *OpenContainerState) SetRootOpened(playerID, rootOwnerID types.EntityID) {
+	if prevRoot, ok := s.OpenRootByPlayer[playerID]; ok && prevRoot != rootOwnerID {
+		if players, found := s.PlayersByRoot[prevRoot]; found {
+			delete(players, playerID)
+			if len(players) == 0 {
+				delete(s.PlayersByRoot, prevRoot)
+			}
+		}
+	}
+
+	s.OpenRootByPlayer[playerID] = rootOwnerID
+	players, ok := s.PlayersByRoot[rootOwnerID]
+	if !ok {
+		players = make(map[types.EntityID]struct{}, 4)
+		s.PlayersByRoot[rootOwnerID] = players
+	}
+	players[playerID] = struct{}{}
+}
+
+func (s *OpenContainerState) GetOpenedRoot(playerID types.EntityID) (types.EntityID, bool) {
+	rootID, ok := s.OpenRootByPlayer[playerID]
+	return rootID, ok
+}
+
+func (s *OpenContainerState) OpenRef(playerID types.EntityID, key InventoryRefKey) {
+	refs, ok := s.OpenRefsByPlayer[playerID]
+	if !ok {
+		refs = make(map[InventoryRefKey]struct{}, 4)
+		s.OpenRefsByPlayer[playerID] = refs
+	}
+	refs[key] = struct{}{}
+
+	players, ok := s.PlayersByRef[key]
+	if !ok {
+		players = make(map[types.EntityID]struct{}, 4)
+		s.PlayersByRef[key] = players
+	}
+	players[playerID] = struct{}{}
+}
+
+func (s *OpenContainerState) CloseRef(playerID types.EntityID, key InventoryRefKey) bool {
+	refs, ok := s.OpenRefsByPlayer[playerID]
+	if !ok {
+		return false
+	}
+	if _, found := refs[key]; !found {
+		return false
+	}
+
+	delete(refs, key)
+	if len(refs) == 0 {
+		delete(s.OpenRefsByPlayer, playerID)
+	}
+
+	if players, found := s.PlayersByRef[key]; found {
+		delete(players, playerID)
+		if len(players) == 0 {
+			delete(s.PlayersByRef, key)
+		}
+	}
+	return true
+}
+
+func (s *OpenContainerState) IsRefOpened(playerID types.EntityID, key InventoryRefKey) bool {
+	refs, ok := s.OpenRefsByPlayer[playerID]
+	if !ok {
+		return false
+	}
+	_, found := refs[key]
+	return found
+}
+
+func (s *OpenContainerState) PlayersOpenedRef(key InventoryRefKey) map[types.EntityID]struct{} {
+	return s.PlayersByRef[key]
+}
+
+// CloseAllForPlayer removes all opened refs and root state for player and returns closed refs.
+func (s *OpenContainerState) CloseAllForPlayer(playerID types.EntityID) []InventoryRefKey {
+	closed := make([]InventoryRefKey, 0, 4)
+	refs, hasRefs := s.OpenRefsByPlayer[playerID]
+	if hasRefs {
+		for key := range refs {
+			closed = append(closed, key)
+		}
+	}
+
+	for _, key := range closed {
+		s.CloseRef(playerID, key)
+	}
+
+	if rootID, ok := s.OpenRootByPlayer[playerID]; ok {
+		delete(s.OpenRootByPlayer, playerID)
+		if players, found := s.PlayersByRoot[rootID]; found {
+			delete(players, playerID)
+			if len(players) == 0 {
+				delete(s.PlayersByRoot, rootID)
+			}
+		}
+	}
+
+	delete(s.PendingAutoOpenByPlayer, playerID)
+	return closed
+}

@@ -79,10 +79,13 @@ CREATE TABLE IF NOT EXISTS inventory
     inventory_key smallint NOT NULL, -- уникальный ID контейнера (внутри одного объекта может быть несколько инвентарей)
     data          JSONB    NOT NULL, -- содержимое контейнера (inventory)
     updated_at    TIMESTAMPTZ DEFAULT now(),
+    deleted_at    TIMESTAMPTZ,
     version       integer  not null,
 
     UNIQUE (owner_id, kind, inventory_key)
 );
+CREATE INDEX idx_inventory_owner_active ON inventory (owner_id, kind, inventory_key)
+    WHERE deleted_at IS NULL;
 
 -- CHUNK ----------------------------------------------------------------
 -- when load - also load objects by grid_x, grid_y, use (grid_x, grid_y) in spatial hash grid

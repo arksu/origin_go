@@ -13,8 +13,9 @@ import (
 )
 
 const deleteInventory = `-- name: DeleteInventory :exec
-DELETE FROM inventory
-WHERE owner_id = $1 AND kind = $2 AND inventory_key = $3
+UPDATE inventory
+SET deleted_at = NOW()
+WHERE owner_id = $1 AND kind = $2 AND inventory_key = $3 AND deleted_at IS NULL
 `
 
 type DeleteInventoryParams struct {
@@ -28,10 +29,53 @@ func (q *Queries) DeleteInventory(ctx context.Context, arg DeleteInventoryParams
 	return err
 }
 
+const getGridInventoriesByOwners = `-- name: GetGridInventoriesByOwners :many
+SELECT id, owner_id, kind, inventory_key, data, updated_at, deleted_at, version
+FROM inventory
+WHERE owner_id = ANY($1::bigint[])
+  AND kind = 0
+  AND inventory_key = 0
+  AND deleted_at IS NULL
+ORDER BY owner_id, kind, inventory_key
+`
+
+func (q *Queries) GetGridInventoriesByOwners(ctx context.Context, ownerIds []int64) ([]Inventory, error) {
+	rows, err := q.db.QueryContext(ctx, getGridInventoriesByOwners, pq.Array(ownerIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Inventory
+	for rows.Next() {
+		var i Inventory
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.InventoryKey,
+			&i.Data,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInventoriesByOwner = `-- name: GetInventoriesByOwner :many
-SELECT id, owner_id, kind, inventory_key, data, updated_at, version
+SELECT id, owner_id, kind, inventory_key, data, updated_at, deleted_at, version
 FROM inventory
 WHERE owner_id = $1
+  AND deleted_at IS NULL
 ORDER BY kind, inventory_key
 `
 
@@ -51,6 +95,7 @@ func (q *Queries) GetInventoriesByOwner(ctx context.Context, ownerID int64) ([]I
 			&i.InventoryKey,
 			&i.Data,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 			&i.Version,
 		); err != nil {
 			return nil, err
@@ -105,6 +150,7 @@ ON CONFLICT (owner_id, kind, inventory_key)
 DO UPDATE SET
     data = EXCLUDED.data,
     version = EXCLUDED.version,
+    deleted_at = NULL,
     updated_at = now()
 `
 
@@ -134,8 +180,9 @@ ON CONFLICT (owner_id, kind, inventory_key)
 DO UPDATE SET
     data = EXCLUDED.data,
     version = EXCLUDED.version,
+    deleted_at = NULL,
     updated_at = now()
-RETURNING id, owner_id, kind, inventory_key, data, updated_at, version
+RETURNING id, owner_id, kind, inventory_key, data, updated_at, deleted_at, version
 `
 
 type UpsertInventoryParams struct {
@@ -162,6 +209,7 @@ func (q *Queries) UpsertInventory(ctx context.Context, arg UpsertInventoryParams
 		&i.InventoryKey,
 		&i.Data,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.Version,
 	)
 	return i, err

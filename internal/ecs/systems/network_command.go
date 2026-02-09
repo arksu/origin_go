@@ -30,6 +30,7 @@ type InventoryResultSender interface {
 	SendInventoryOpResult(entityID types.EntityID, result *netproto.S2C_InventoryOpResult)
 	SendContainerOpened(entityID types.EntityID, state *netproto.InventoryState)
 	SendContainerClosed(entityID types.EntityID, ref *netproto.InventoryRef)
+	SendInventoryUpdate(entityID types.EntityID, states []*netproto.InventoryState)
 }
 
 // InventorySnapshotSender sends full inventory snapshots to a client (used on login/reattach)
@@ -92,6 +93,20 @@ type InventoryItemState struct {
 	NestedRef *netproto.InventoryRef
 }
 
+type OpenContainerError struct {
+	Code    netproto.ErrorCode
+	Message string
+}
+
+// OpenContainerCoordinator handles world-object container open/close mechanics.
+type OpenContainerCoordinator interface {
+	SetPendingAutoOpen(w *ecs.World, playerID, targetID types.EntityID)
+	ClearPendingAutoOpen(w *ecs.World, playerID types.EntityID)
+	HandleOpenRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, ref *netproto.InventoryRef) *OpenContainerError
+	HandleCloseRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, ref *netproto.InventoryRef) *OpenContainerError
+	BroadcastInventoryUpdates(w *ecs.World, actorID types.EntityID, updated []*netproto.InventoryState)
+}
+
 type NetworkCommandSystem struct {
 	ecs.BaseSystem
 
@@ -111,6 +126,8 @@ type NetworkCommandSystem struct {
 
 	// Vision system for forcing vision updates after inventory operations
 	visionSystem *VisionSystem
+
+	openContainerService OpenContainerCoordinator
 
 	// Reusable buffers to avoid allocations
 	playerCommands []*network.PlayerCommand
@@ -152,6 +169,10 @@ func (s *NetworkCommandSystem) SetAdminHandler(handler AdminCommandHandler) {
 // SetInventorySnapshotSender sets the handler for sending full inventory snapshots on login/reattach.
 func (s *NetworkCommandSystem) SetInventorySnapshotSender(sender InventorySnapshotSender) {
 	s.inventorySnapshotSender = sender
+}
+
+func (s *NetworkCommandSystem) SetOpenContainerService(service OpenContainerCoordinator) {
+	s.openContainerService = service
 }
 
 // Update drains command queues and processes commands
@@ -207,8 +228,7 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 	case network.CmdOpenContainer:
 		s.handleOpenContainer(w, handle, cmd)
 	case network.CmdCloseContainer:
-		// CloseContainer is UI-side, but still clear pending link intent.
-		s.clearLinkIntent(w, cmd.CharacterID)
+		s.handleCloseContainer(w, handle, cmd)
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -311,6 +331,9 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 		} else {
 			// For non-dropped world objects autoInteract means explicit link intent.
 			s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
+			if s.openContainerService != nil && isContainerTargetForOpen(w, targetHandle) {
+				s.openContainerService.SetPendingAutoOpen(w, cmd.CharacterID, targetEntityID)
+			}
 		}
 	}
 
@@ -361,6 +384,9 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 			return
 		}
 		s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
+		if s.openContainerService != nil && isContainerTargetForOpen(w, targetHandle) {
+			s.openContainerService.SetPendingAutoOpen(w, cmd.CharacterID, targetEntityID)
+		}
 
 	default:
 		s.logger.Debug("Interact: unsupported interaction type",
@@ -552,6 +578,10 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 		}
 	}
 
+	if result.Success && s.openContainerService != nil && len(response.Updated) > 0 {
+		s.openContainerService.BroadcastInventoryUpdates(w, cmd.CharacterID, response.Updated)
+	}
+
 	s.logger.Debug("InventoryOp completed",
 		zap.Uint64("client_id", cmd.ClientID),
 		zap.Uint64("op_id", op.OpId),
@@ -583,96 +613,29 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 		return
 	}
 
-	ownerID := types.EntityID(ref.OwnerId)
-
-	// World object opening starts from link intent.
-	// Actual open/close logic will be handled by OpenContainerService on link sync events.
-	if ownerID != cmd.CharacterID {
-		targetHandle := w.GetHandleByEntityID(ownerID)
-		if targetHandle != types.InvalidHandle && w.Alive(targetHandle) {
-			if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider {
-				s.setLinkIntent(w, cmd.CharacterID, ownerID, targetHandle)
-				return
-			}
-		}
+	if s.openContainerService == nil {
+		s.sendInventoryError(cmd.CharacterID, 0, netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Open container service not available")
+		return
 	}
+	if openErr := s.openContainerService.HandleOpenRequest(w, cmd.CharacterID, playerHandle, ref); openErr != nil {
+		s.sendInventoryError(cmd.CharacterID, 0, openErr.Code, openErr.Message)
+	}
+}
 
-	// O(1) lookup via InventoryRefIndex
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	handle, found := refIndex.Lookup(constt.InventoryKind(ref.Kind), ownerID, ref.InventoryKey)
-	if !found || !w.Alive(handle) {
-		s.logger.Debug("OpenContainer: container not found",
-			zap.Uint64("client_id", cmd.ClientID),
-			zap.Uint64("owner_id", ref.OwnerId))
+func (s *NetworkCommandSystem) handleCloseContainer(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	ref, ok := cmd.Payload.(*netproto.InventoryRef)
+	if !ok || ref == nil {
+		s.logger.Error("Invalid payload type for CloseContainer",
+			zap.Uint64("client_id", cmd.ClientID))
 		return
 	}
 
-	container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, handle)
-	if !hasContainer {
+	if s.openContainerService == nil {
+		s.sendInventoryError(cmd.CharacterID, 0, netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Open container service not available")
 		return
 	}
-
-	// Authorization: if owner_id != player, check that item belongs to player's inventory
-	if ownerID != cmd.CharacterID {
-		owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-		if !hasOwner {
-			return
-		}
-		allowed := false
-		for _, link := range owner.Inventories {
-			if link.OwnerID == ownerID {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			s.logger.Debug("OpenContainer: access denied",
-				zap.Uint64("client_id", cmd.ClientID),
-				zap.Uint64("owner_id", ref.OwnerId))
-			return
-		}
-	}
-
-	// Build and send S2C_ContainerOpened
-	containerState := InventoryContainerState{
-		OwnerID:          container.OwnerID,
-		Kind:             uint8(container.Kind),
-		Key:              container.Key,
-		Version:          container.Version,
-		Width:            container.Width,
-		Height:           container.Height,
-		Items:            make([]InventoryItemState, 0, len(container.Items)),
-		HandMouseOffsetX: container.HandMouseOffsetX,
-		HandMouseOffsetY: container.HandMouseOffsetY,
-	}
-	for _, item := range container.Items {
-		itemState := InventoryItemState{
-			ItemID:    item.ItemID,
-			TypeID:    item.TypeID,
-			Resource:  item.Resource,
-			Quality:   item.Quality,
-			Quantity:  item.Quantity,
-			W:         item.W,
-			H:         item.H,
-			X:         item.X,
-			Y:         item.Y,
-			EquipSlot: item.EquipSlot,
-		}
-		// Check nested ref for items inside this container
-		if _, nestedFound := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); nestedFound {
-			itemState.NestedRef = &netproto.InventoryRef{
-				Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
-				OwnerId:      uint64(item.ItemID),
-				InventoryKey: 0,
-			}
-		}
-		containerState.Items = append(containerState.Items, itemState)
-	}
-
-	invState := s.buildInventoryStateProto(containerState)
-
-	if s.inventoryResultSender != nil {
-		s.inventoryResultSender.SendContainerOpened(cmd.CharacterID, invState)
+	if openErr := s.openContainerService.HandleCloseRequest(w, cmd.CharacterID, playerHandle, ref); openErr != nil {
+		s.sendInventoryError(cmd.CharacterID, 0, openErr.Code, openErr.Message)
 	}
 }
 
@@ -696,6 +659,36 @@ func (s *NetworkCommandSystem) clearLinkIntent(w *ecs.World, playerID types.Enti
 		return
 	}
 	ecs.GetResource[ecs.LinkState](w).ClearIntent(playerID)
+	if s.openContainerService != nil {
+		s.openContainerService.ClearPendingAutoOpen(w, playerID)
+	}
+}
+
+func isContainerTargetForOpen(w *ecs.World, targetHandle types.Handle) bool {
+	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+	if !hasInfo {
+		return false
+	}
+
+	hasContainerBehavior := false
+	for _, behavior := range entityInfo.Behaviors {
+		if behavior == "container" {
+			hasContainerBehavior = true
+			break
+		}
+	}
+	if !hasContainerBehavior {
+		return false
+	}
+
+	targetID, hasExternalID := w.GetExternalID(targetHandle)
+	if !hasExternalID {
+		return false
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, targetID, 0)
+	return found && w.Alive(rootHandle)
 }
 
 func (s *NetworkCommandSystem) sendInventoryError(entityID types.EntityID, opID uint64, code netproto.ErrorCode, message string) {
