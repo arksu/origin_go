@@ -252,6 +252,46 @@ func (s *OpenContainerService) BroadcastInventoryUpdates(
 	}
 }
 
+func (s *OpenContainerService) CloseRefsForOpenedPlayers(
+	w *ecs.World,
+	refs []*netproto.InventoryRef,
+) {
+	if w != s.world || len(refs) == 0 || s.sender == nil {
+		return
+	}
+
+	openState := ecs.GetResource[ecs.OpenContainerState](w)
+
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+
+		key := ecs.InventoryRefKey{
+			Kind:    constt.InventoryKind(ref.Kind),
+			OwnerID: types.EntityID(ref.OwnerId),
+			Key:     ref.InventoryKey,
+		}
+
+		players := openState.PlayersOpenedRef(key)
+		if len(players) == 0 {
+			continue
+		}
+
+		// Snapshot IDs first because CloseRef mutates reverse indexes.
+		playerIDs := make([]types.EntityID, 0, len(players))
+		for playerID := range players {
+			playerIDs = append(playerIDs, playerID)
+		}
+
+		for _, playerID := range playerIDs {
+			if openState.CloseRef(playerID, key) {
+				s.sender.SendContainerClosed(playerID, inventoryKeyToProto(key))
+			}
+		}
+	}
+}
+
 func (s *OpenContainerService) onLinkCreated(_ context.Context, event eventbus.Event) error {
 	linkEvent, ok := event.(*ecs.LinkCreatedEvent)
 	if !ok || linkEvent.Layer != s.world.Layer {

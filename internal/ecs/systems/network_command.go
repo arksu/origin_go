@@ -105,6 +105,7 @@ type OpenContainerCoordinator interface {
 	HandleOpenRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, ref *netproto.InventoryRef) *OpenContainerError
 	HandleCloseRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, ref *netproto.InventoryRef) *OpenContainerError
 	BroadcastInventoryUpdates(w *ecs.World, actorID types.EntityID, updated []*netproto.InventoryState)
+	CloseRefsForOpenedPlayers(w *ecs.World, refs []*netproto.InventoryRef)
 }
 
 type NetworkCommandSystem struct {
@@ -571,10 +572,19 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 	// Send result to client
 	if s.inventoryResultSender != nil {
 		s.inventoryResultSender.SendInventoryOpResult(cmd.CharacterID, response)
+	}
 
-		// Send S2C_ContainerClosed for any nested containers that should be closed
-		for _, ref := range result.ClosedContainerRefs {
-			s.inventoryResultSender.SendContainerClosed(cmd.CharacterID, ref)
+	if len(result.ClosedContainerRefs) > 0 {
+		if s.inventoryResultSender != nil {
+			// Always close on actor client as a hard guarantee, even if this ref was
+			// opened through a path not tracked in OpenContainerState.
+			for _, ref := range result.ClosedContainerRefs {
+				s.inventoryResultSender.SendContainerClosed(cmd.CharacterID, ref)
+			}
+		}
+
+		if s.openContainerService != nil {
+			s.openContainerService.CloseRefsForOpenedPlayers(w, result.ClosedContainerRefs)
 		}
 	}
 

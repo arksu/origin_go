@@ -39,7 +39,7 @@
           }
         ]
       },
-      "resource": "obj/box/box.png",
+      "resource": "box/normal",
       "appearance": [
         {
           "id": "full",
@@ -48,7 +48,7 @@
               "container.has_items"
             ]
           },
-          "resource": "obj/box/box_open.png"
+          "resource": "box/open"
         }
       ],
       "behavior": [

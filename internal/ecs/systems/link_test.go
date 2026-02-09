@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -14,17 +15,35 @@ import (
 )
 
 func TestLinkSystemCreatesLinkOnIntentCollision(t *testing.T) {
+	eb := newTestEventBus(t)
+	defer shutdownTestEventBus(t, eb)
+
 	w := ecs.NewWorldForTesting()
-	linkSystem := NewLinkSystem(nil, zap.NewNop())
+	linkSystem := NewLinkSystem(eb, zap.NewNop())
 
 	playerID := types.EntityID(1001)
 	targetID := types.EntityID(2001)
 
 	playerHandle := spawnPlayerForLinkTests(w, playerID, 10, 10, targetID)
 	targetHandle := spawnTargetForLinkTests(w, targetID, 12, 10)
+	ecs.AddComponent(w, playerHandle, components.Movement{
+		State:      constt.StateMoving,
+		TargetType: constt.TargetEntity,
+		TargetX:    12,
+		TargetY:    10,
+		Speed:      10,
+	})
 
 	linkState := ecs.GetResource[ecs.LinkState](w)
 	linkState.SetIntent(playerID, targetID, targetHandle, time.Now())
+
+	var moveEvents []*ecs.ObjectMoveBatchEvent
+	eb.SubscribeSync(ecs.TopicGameplayMovementMoveBatch, eventbus.PriorityMedium, func(ctx context.Context, event eventbus.Event) error {
+		if move, ok := event.(*ecs.ObjectMoveBatchEvent); ok {
+			moveEvents = append(moveEvents, move)
+		}
+		return nil
+	})
 
 	linkSystem.Update(w, 0.05)
 
@@ -46,6 +65,16 @@ func TestLinkSystemCreatesLinkOnIntentCollision(t *testing.T) {
 	}
 	if _, hasReverse := linkState.PlayersByTarget[targetID][playerID]; !hasReverse {
 		t.Fatalf("reverse index must contain linked player")
+	}
+	movement, _ := ecs.GetComponent[components.Movement](w, playerHandle)
+	if movement.State != constt.StateIdle || movement.TargetType != constt.TargetNone {
+		t.Fatalf("movement must be cleared on link creation: state=%v targetType=%v", movement.State, movement.TargetType)
+	}
+	if len(moveEvents) != 1 {
+		t.Fatalf("expected one stop-move event, got %d", len(moveEvents))
+	}
+	if len(moveEvents[0].Entries) != 1 || moveEvents[0].Entries[0].IsMoving {
+		t.Fatalf("expected stop-move entry with isMoving=false")
 	}
 }
 
