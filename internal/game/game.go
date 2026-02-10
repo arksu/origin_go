@@ -790,7 +790,8 @@ func (g *Game) Stats() GameStats {
 	totalPlayers := 0
 	for _, shard := range g.shardManager.shards {
 		shard.mu.RLock()
-		totalPlayers += shard.world.EntityCount()
+		charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
+		totalPlayers += len(charEntities.Map)
 		shard.mu.RUnlock()
 	}
 
