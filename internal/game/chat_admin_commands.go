@@ -92,6 +92,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	case "/spawn":
 		h.handleSpawn(w, playerID, parts[1:])
 		return true
+	case "/online":
+		h.handleOnline(w, playerID)
+		return true
 	default:
 		return false
 	}
@@ -326,6 +329,22 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 		zap.Uint64("new_id", uint64(newID)),
 		zap.Float64("x", targetX),
 		zap.Float64("y", targetY))
+}
+
+// handleOnline processes: /online - displays current online players count
+func (h *ChatAdminCommandHandler) handleOnline(
+	w *ecs.World,
+	playerID types.EntityID,
+) {
+	characterEntities := ecs.GetResource[ecs.CharacterEntities](w)
+
+	onlineCount := len(characterEntities.Map)
+	message := fmt.Sprintf("Online players: %d", onlineCount)
+
+	h.sendSystemMessage(playerID, message)
+	h.logger.Info("Admin /online executed",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.Int("online_count", onlineCount))
 }
 
 // findActiveChunkForPoint returns the active chunk containing the given world point,
