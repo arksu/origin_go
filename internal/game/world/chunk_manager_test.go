@@ -222,6 +222,54 @@ func TestChunkManager_CacheMetricsOnlyGetChunk(t *testing.T) {
 	}
 }
 
+func TestChunkManager_LoadWithoutInterestBecomesInactive(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 9, Y: 9}
+	if ok := cm.requestLoad(coord); !ok {
+		t.Fatal("requestLoad failed")
+	}
+
+	time.Sleep(80 * time.Millisecond)
+
+	chunk := cm.GetChunkFast(coord)
+	if chunk == nil {
+		t.Fatal("chunk was not loaded")
+	}
+	if state := chunk.GetState(); state != types.ChunkStateInactive {
+		t.Fatalf("chunk state = %v, want %v", state, types.ChunkStateInactive)
+	}
+}
+
+func TestChunkManager_LoadWithActiveInterestBecomesActive(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 10, Y: 10}
+	entityID := types.EntityID(777)
+
+	cm.interestMu.Lock()
+	interest := newChunkInterest()
+	interest.activeEntities[entityID] = struct{}{}
+	cm.chunkInterests[coord] = interest
+	cm.interestMu.Unlock()
+
+	if ok := cm.requestLoad(coord); !ok {
+		t.Fatal("requestLoad failed")
+	}
+
+	time.Sleep(80 * time.Millisecond)
+
+	chunk := cm.GetChunkFast(coord)
+	if chunk == nil {
+		t.Fatal("chunk was not loaded")
+	}
+	if state := chunk.GetState(); state != types.ChunkStateActive {
+		t.Fatalf("chunk state = %v, want %v", state, types.ChunkStateActive)
+	}
+}
+
 func TestWorldToChunkCoord(t *testing.T) {
 	tests := []struct {
 		worldX, worldY int
