@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useGameStore, type ContextMenuActionItem } from '@/stores/gameStore'
-import { playerCommandController } from '@/game'
+import { computed } from 'vue'
+import type { ContextMenuActionItem } from '@/stores/gameStore'
 
 const props = defineProps<{
   index: number
   item: ContextMenuActionItem
   total: number
-  entityId: number
+  selected?: boolean
 }>()
-
-const gameStore = useGameStore()
-const selected = ref(false)
+const emit = defineEmits<{
+  select: [actionId: string]
+}>()
 
 const styleVars = computed(() => {
   const len = Math.max(1, props.total)
@@ -44,9 +43,7 @@ const styleVars = computed(() => {
 })
 
 function onClick() {
-  selected.value = true
-  gameStore.closeContextMenu()
-  playerCommandController.sendSelectContextAction(props.entityId, props.item.actionId)
+  emit('select', props.item.actionId)
 }
 </script>
 
@@ -54,7 +51,7 @@ function onClick() {
   <div
     :style="styleVars"
     class="context-menu-button"
-    :class="{ selected }"
+    :class="{ 'is-selected': !!props.selected }"
     @click.prevent.stop="onClick"
   >
     <p>{{ item.title }}</p>
@@ -77,22 +74,22 @@ function onClick() {
   margin: 0;
 }
 
-.selected {
-  animation-duration: 0.5s !important;
-  animation-name: cm-move-leave !important;
+.is-selected {
+  filter: brightness(1.08);
+  animation: cm-selected-to-center 1s cubic-bezier(0.2, 0.85, 0.2, 1) forwards;
 }
 
-@keyframes cm-move-leave {
-  100% {
-    transform: translate(-40px, -30px);
-    opacity: 0;
-  }
-  50% {
-    transform: translate(-40px, -30px);
+@keyframes cm-selected-to-center {
+  0% {
+    transform: translate(var(--x1), var(--y1)) translate(-50%, -50%);
     opacity: 1;
   }
-  0% {
-    transform: translate(var(--x1), var(--y1));
+  82% {
+    transform: translate(-4px, -3px) translate(-50%, -50%);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) translate(-50%, -50%);
     opacity: 1;
   }
 }
