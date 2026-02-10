@@ -44,10 +44,11 @@ type InventoryOperationExecutor interface {
 	ExecutePickupFromWorld(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, droppedEntityID types.EntityID, dstRef *netproto.InventoryRef) InventoryOpResult
 }
 
-// AdminCommandHandler processes admin chat commands (e.g. /give).
+// AdminCommandHandler processes admin chat commands (e.g. /give, /spawn).
 // Returns true if the text was recognized as an admin command.
 type AdminCommandHandler interface {
 	HandleCommand(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, text string) bool
+	ExecutePendingSpawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
 }
 
 // InventoryOpResult represents the result of an inventory operation
@@ -249,6 +250,15 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 		return
 	}
 
+	// Check for pending admin spawn — intercept click as spawn target
+	if s.adminHandler != nil {
+		pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
+		if _, hasPending := pending.Get(cmd.CharacterID); hasPending {
+			s.adminHandler.ExecutePendingSpawn(w, cmd.CharacterID, playerHandle, float64(moveTo.X), float64(moveTo.Y))
+			return
+		}
+	}
+
 	// Get movement component
 	mov, ok := ecs.GetComponent[components.Movement](w, playerHandle)
 	if !ok {
@@ -283,6 +293,23 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 		s.logger.Error("Invalid payload type for MoveToEntity",
 			zap.Uint64("client_id", cmd.ClientID))
 		return
+	}
+
+	// Check for pending admin spawn — use target entity's position as spawn target
+	if s.adminHandler != nil {
+		pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
+		if _, hasPending := pending.Get(cmd.CharacterID); hasPending {
+			targetEntityID := types.EntityID(moveToEntity.EntityId)
+			targetHandle := w.GetHandleByEntityID(targetEntityID)
+			if targetHandle != types.InvalidHandle && w.Alive(targetHandle) {
+				if t, hasT := ecs.GetComponent[components.Transform](w, targetHandle); hasT {
+					s.adminHandler.ExecutePendingSpawn(w, cmd.CharacterID, playerHandle, t.X, t.Y)
+					return
+				}
+			}
+			// Target entity invalid — clear pending and let normal flow continue
+			pending.Clear(cmd.CharacterID)
+		}
 	}
 
 	// Clear any previous pending interaction

@@ -97,7 +97,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 
-	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, logger)
+	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, entityIDManager, s.chunkManager, visionSystem, s.eventBus, logger)
 	networkCmdSystem.SetAdminHandler(adminHandler)
 	networkCmdSystem.SetInventorySnapshotSender(s)
 
