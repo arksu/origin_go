@@ -9,7 +9,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gobwas/ws"
@@ -36,34 +36,47 @@ type VirtualClient struct {
 	conn     io.ReadWriteCloser
 	sequence uint32
 
-	playerEntityID uint64
-	playerX        int32
-	playerY        int32
+	playerEntityID atomic.Uint64
+	playerX        atomic.Int32
+	playerY        atomic.Int32
 
-	mu       sync.Mutex
-	entities map[uint64]*EntityState
+	// Reused protobuf objects for outgoing and fallback incoming decode.
+	authMsg    netproto.ClientMessage
+	moveMsg    netproto.ClientMessage
+	incoming   netproto.ServerMessage
+	marshalBuf []byte
+
+	decodedPackets uint32
 
 	enterWorldCh chan struct{}
 	stopCh       chan struct{}
 }
 
-type EntityState struct {
-	EntityID uint64
-	X        int32
-	Y        int32
-}
-
 func NewVirtualClient(cfg *Config, db *persistence.Postgres, pool *AccountPool, metrics *Metrics, logger *zap.Logger) *VirtualClient {
-	return &VirtualClient{
+	vc := &VirtualClient{
 		cfg:          cfg,
 		db:           db,
 		accountPool:  pool,
 		metrics:      metrics,
 		logger:       logger,
-		entities:     make(map[uint64]*EntityState),
 		enterWorldCh: make(chan struct{}),
 		stopCh:       make(chan struct{}),
 	}
+	vc.authMsg = netproto.ClientMessage{
+		Payload: &netproto.ClientMessage_Auth{
+			Auth: &netproto.C2S_Auth{},
+		},
+	}
+	vc.moveMsg = netproto.ClientMessage{
+		Payload: &netproto.ClientMessage_PlayerAction{
+			PlayerAction: &netproto.C2S_PlayerAction{
+				Action: &netproto.C2S_PlayerAction_MoveTo{
+					MoveTo: &netproto.MoveTo{},
+				},
+			},
+		},
+	}
+	return vc
 }
 
 func (vc *VirtualClient) Run(ctx context.Context) error {
@@ -314,16 +327,12 @@ func (vc *VirtualClient) apiPrefix() string {
 func (vc *VirtualClient) authenticate(ctx context.Context) error {
 	vc.metrics.RecordEnterWorldAttempt()
 
-	msg := &netproto.ClientMessage{
-		Sequence: vc.nextSequence(),
-		Payload: &netproto.ClientMessage_Auth{
-			Auth: &netproto.C2S_Auth{
-				Token: vc.authToken,
-			},
-		},
+	vc.authMsg.Sequence = vc.nextSequence()
+	if payload, ok := vc.authMsg.Payload.(*netproto.ClientMessage_Auth); ok && payload.Auth != nil {
+		payload.Auth.Token = vc.authToken
 	}
 
-	return vc.sendMessage(msg)
+	return vc.sendMessage(&vc.authMsg)
 }
 
 func (vc *VirtualClient) waitEnterWorld(ctx context.Context) error {
@@ -335,7 +344,7 @@ func (vc *VirtualClient) waitEnterWorld(ctx context.Context) error {
 		return ctx.Err()
 	case <-vc.enterWorldCh:
 		vc.metrics.RecordEnterWorldSuccess(time.Since(start))
-		vc.logger.Debug("Entered world", zap.Uint64("entity_id", vc.playerEntityID))
+		vc.logger.Debug("Entered world", zap.Uint64("entity_id", vc.playerEntityID.Load()))
 		return nil
 	case <-time.After(30 * time.Second):
 		vc.metrics.RecordEnterWorldFailure()
@@ -363,10 +372,8 @@ func (vc *VirtualClient) moveLoop(ctx context.Context) error {
 }
 
 func (vc *VirtualClient) sendMoveCommand() error {
-	vc.mu.Lock()
-	currentX := vc.playerX
-	currentY := vc.playerY
-	vc.mu.Unlock()
+	currentX := vc.playerX.Load()
+	currentY := vc.playerY.Load()
 
 	dx := int32(rand.Intn(vc.cfg.MoveRadius*2+1) - vc.cfg.MoveRadius)
 	dy := int32(rand.Intn(vc.cfg.MoveRadius*2+1) - vc.cfg.MoveRadius)
@@ -374,21 +381,15 @@ func (vc *VirtualClient) sendMoveCommand() error {
 	targetX := currentX + dx
 	targetY := currentY + dy
 
-	msg := &netproto.ClientMessage{
-		Sequence: vc.nextSequence(),
-		Payload: &netproto.ClientMessage_PlayerAction{
-			PlayerAction: &netproto.C2S_PlayerAction{
-				Action: &netproto.C2S_PlayerAction_MoveTo{
-					MoveTo: &netproto.MoveTo{
-						X: targetX,
-						Y: targetY,
-					},
-				},
-			},
-		},
+	vc.moveMsg.Sequence = vc.nextSequence()
+	if payload, ok := vc.moveMsg.Payload.(*netproto.ClientMessage_PlayerAction); ok && payload.PlayerAction != nil {
+		if act, ok := payload.PlayerAction.Action.(*netproto.C2S_PlayerAction_MoveTo); ok && act.MoveTo != nil {
+			act.MoveTo.X = targetX
+			act.MoveTo.Y = targetY
+		}
 	}
 
-	if err := vc.sendMessage(msg); err != nil {
+	if err := vc.sendMessage(&vc.moveMsg); err != nil {
 		return err
 	}
 
@@ -397,6 +398,30 @@ func (vc *VirtualClient) sendMoveCommand() error {
 }
 
 func (vc *VirtualClient) readLoop() {
+	const sampleMask uint64 = 63 // 1 out of 64 packets
+	const decodeLimit uint32 = 100
+	const recvMetricsFlushEvery int64 = 1024
+	var readSeq uint64
+	var localRecvPackets int64
+	var localRecvBytes int64
+	flushRecvMetrics := func() {
+		if localRecvPackets == 0 && localRecvBytes == 0 {
+			return
+		}
+		vc.metrics.RecordPacketReceivedN(localRecvPackets)
+		vc.metrics.RecordBytesReceivedN(localRecvBytes)
+		localRecvPackets = 0
+		localRecvBytes = 0
+	}
+	defer flushRecvMetrics()
+	controlHandler := wsutil.ControlFrameHandler(vc.conn, ws.StateClientSide)
+	rd := wsutil.Reader{
+		Source:         vc.conn,
+		State:          ws.StateClientSide,
+		CheckUTF8:      true,
+		OnIntermediate: controlHandler,
+	}
+
 	for {
 		select {
 		case <-vc.stopCh:
@@ -404,7 +429,15 @@ func (vc *VirtualClient) readLoop() {
 		default:
 		}
 
-		data, err := wsutil.ReadServerBinary(vc.conn)
+		sampled := (readSeq & sampleMask) == 0
+		readSeq++
+
+		var readStart time.Time
+		if sampled {
+			readStart = time.Now()
+		}
+
+		hdr, err := rd.NextFrame()
 		if err != nil {
 			select {
 			case <-vc.stopCh:
@@ -415,30 +448,96 @@ func (vc *VirtualClient) readLoop() {
 			}
 		}
 
-		vc.metrics.RecordPacketReceived()
-		vc.handleMessage(data)
+		if hdr.OpCode.IsControl() {
+			if err := controlHandler(hdr, &rd); err != nil {
+				vc.logger.Debug("Control frame handle error", zap.Error(err))
+				return
+			}
+			continue
+		}
+
+		if hdr.OpCode != ws.OpBinary {
+			if err := rd.Discard(); err != nil {
+				vc.logger.Debug("Discard non-binary frame error", zap.Error(err))
+				return
+			}
+			continue
+		}
+
+		if vc.decodedPackets >= decodeLimit {
+			if err := rd.Discard(); err != nil {
+				vc.logger.Debug("Discard frame error", zap.Error(err))
+				return
+			}
+			localRecvPackets++
+			if hdr.Length > 0 {
+				localRecvBytes += hdr.Length
+			}
+			if localRecvPackets >= recvMetricsFlushEvery {
+				flushRecvMetrics()
+			}
+			if sampled {
+				vc.metrics.RecordReadWait(time.Since(readStart))
+			}
+			continue
+		}
+
+		data, err := io.ReadAll(&rd)
+		if err != nil {
+			vc.logger.Debug("Read frame payload error", zap.Error(err))
+			return
+		}
+
+		localRecvPackets++
+		localRecvBytes += int64(len(data))
+		if localRecvPackets >= recvMetricsFlushEvery {
+			flushRecvMetrics()
+		}
+		if sampled {
+			vc.metrics.RecordReadWait(time.Since(readStart))
+		}
+		if vc.decodedPackets >= decodeLimit {
+			continue
+		}
+		vc.decodedPackets++
+		vc.handleMessage(data, sampled)
 	}
 }
 
-func (vc *VirtualClient) handleMessage(data []byte) {
-	msg := &netproto.ServerMessage{}
-	if err := proto.Unmarshal(data, msg); err != nil {
+func (vc *VirtualClient) handleMessage(data []byte, sampled bool) {
+	var handleStart time.Time
+	if sampled {
+		handleStart = time.Now()
+	}
+
+	var unmarshalStart time.Time
+	if sampled {
+		unmarshalStart = time.Now()
+	}
+	vc.incoming.Reset()
+	if err := proto.Unmarshal(data, &vc.incoming); err != nil {
+		if sampled {
+			vc.metrics.RecordUnmarshal(time.Since(unmarshalStart))
+		}
+		vc.metrics.RecordMsgUnmarshalErr()
 		vc.logger.Debug("Failed to unmarshal message", zap.Error(err))
 		return
 	}
+	if sampled {
+		vc.metrics.RecordUnmarshal(time.Since(unmarshalStart))
+	}
 
-	switch payload := msg.Payload.(type) {
+	switch payload := vc.incoming.Payload.(type) {
 	case *netproto.ServerMessage_AuthResult:
+		vc.metrics.RecordMsgAuthResult()
 		if !payload.AuthResult.Success {
 			vc.logger.Warn("Auth failed", zap.String("error", payload.AuthResult.ErrorMessage))
 			vc.metrics.RecordEnterWorldFailure()
 		}
 
 	case *netproto.ServerMessage_PlayerEnterWorld:
-		vc.mu.Lock()
-		vc.playerEntityID = payload.PlayerEnterWorld.EntityId
-		// TODO: Handle player position through separate position update messages
-		vc.mu.Unlock()
+		vc.metrics.RecordMsgEnterWorld()
+		vc.playerEntityID.Store(payload.PlayerEnterWorld.EntityId)
 
 		select {
 		case vc.enterWorldCh <- struct{}{}:
@@ -446,52 +545,52 @@ func (vc *VirtualClient) handleMessage(data []byte) {
 		}
 
 	case *netproto.ServerMessage_ObjectSpawn:
-		vc.mu.Lock()
-		vc.entities[payload.ObjectSpawn.EntityId] = &EntityState{
-			EntityID: payload.ObjectSpawn.EntityId,
-			X:        payload.ObjectSpawn.Position.Position.X,
-			Y:        payload.ObjectSpawn.Position.Position.Y,
+		vc.metrics.RecordMsgObjectSpawn()
+		if payload.ObjectSpawn.EntityId == vc.playerEntityID.Load() {
+			vc.playerX.Store(payload.ObjectSpawn.Position.Position.X)
+			vc.playerY.Store(payload.ObjectSpawn.Position.Position.Y)
 		}
-		if payload.ObjectSpawn.EntityId == vc.playerEntityID {
-			vc.playerX = payload.ObjectSpawn.Position.Position.X
-			vc.playerY = payload.ObjectSpawn.Position.Position.Y
-		}
-		vc.mu.Unlock()
 
 	case *netproto.ServerMessage_ObjectMove:
-		vc.mu.Lock()
-		if ent, ok := vc.entities[payload.ObjectMove.EntityId]; ok {
-			if payload.ObjectMove.Movement != nil && payload.ObjectMove.Movement.Position != nil {
-				ent.X = payload.ObjectMove.Movement.Position.X
-				ent.Y = payload.ObjectMove.Movement.Position.Y
-			}
-		}
-		if payload.ObjectMove.EntityId == vc.playerEntityID {
+		vc.metrics.RecordMsgObjectMove()
+		if payload.ObjectMove.EntityId == vc.playerEntityID.Load() {
 			vc.metrics.RecordMoveReceived()
 			if payload.ObjectMove.Movement != nil && payload.ObjectMove.Movement.Position != nil {
-				vc.playerX = payload.ObjectMove.Movement.Position.X
-				vc.playerY = payload.ObjectMove.Movement.Position.Y
+				vc.playerX.Store(payload.ObjectMove.Movement.Position.X)
+				vc.playerY.Store(payload.ObjectMove.Movement.Position.Y)
 			}
 		}
-		vc.mu.Unlock()
 
 	case *netproto.ServerMessage_Error:
+		vc.metrics.RecordMsgServerError()
 		vc.logger.Debug("Server error", zap.String("message", payload.Error.Message))
 		vc.metrics.RecordError()
+	default:
+		vc.metrics.RecordMsgOther()
+	}
+
+	if sampled {
+		vc.metrics.RecordHandle(time.Since(handleStart))
 	}
 }
 
 func (vc *VirtualClient) sendMessage(msg *netproto.ClientMessage) error {
-	data, err := proto.Marshal(msg)
+	marshalStart := time.Now()
+	data, err := proto.MarshalOptions{}.MarshalAppend(vc.marshalBuf[:0], msg)
 	if err != nil {
 		return fmt.Errorf("marshal message: %w", err)
 	}
+	vc.marshalBuf = data
+	vc.metrics.RecordSendMarshal(time.Since(marshalStart))
 
-	if err := wsutil.WriteClientBinary(vc.conn, data); err != nil {
+	writeStart := time.Now()
+	if err := wsutil.WriteClientBinary(vc.conn, vc.marshalBuf); err != nil {
 		return fmt.Errorf("write message: %w", err)
 	}
+	vc.metrics.RecordSendWrite(time.Since(writeStart))
 
 	vc.metrics.RecordPacketSent()
+	vc.metrics.RecordBytesSent(len(vc.marshalBuf))
 	return nil
 }
 

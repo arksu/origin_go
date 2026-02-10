@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -218,18 +219,116 @@ func (r *Runner) startPacketStatsLogger(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
+	prev := r.metrics.Snapshot()
+	var prevMem runtime.MemStats
+	runtime.ReadMemStats(&prevMem)
+	lastTick := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			packetsSent := r.metrics.packetsSent.Load()
-			packetsReceived := r.metrics.packetsReceived.Load()
+			now := time.Now()
+			intervalSec := now.Sub(lastTick).Seconds()
+			lastTick = now
 
-			r.logger.Info("Packet Statistics (5s interval)",
-				zap.Int64("pkt_sent", packetsSent),
-				zap.Int64("pkt_recv", packetsReceived),
+			curr := r.metrics.Snapshot()
+
+			dSent := curr.PacketsSent - prev.PacketsSent
+			dRecv := curr.PacketsReceived - prev.PacketsReceived
+			dBytesSent := curr.BytesSent - prev.BytesSent
+			dBytesRecv := curr.BytesReceived - prev.BytesReceived
+
+			dReadNs := curr.ReadWaitNs - prev.ReadWaitNs
+			dReadSamples := curr.ReadWaitSamples - prev.ReadWaitSamples
+			dUnmarshalNs := curr.UnmarshalNs - prev.UnmarshalNs
+			dUnmarshalSamples := curr.UnmarshalSamples - prev.UnmarshalSamples
+			dHandleNs := curr.HandleNs - prev.HandleNs
+			dHandleSamples := curr.HandleSamples - prev.HandleSamples
+			dMarshalNs := curr.SendMarshalNs - prev.SendMarshalNs
+			dMarshalCount := curr.SendMarshalCount - prev.SendMarshalCount
+			dWriteNs := curr.SendWriteNs - prev.SendWriteNs
+			dWriteCount := curr.SendWriteCount - prev.SendWriteCount
+
+			dAuth := curr.MsgAuthResult - prev.MsgAuthResult
+			dEnter := curr.MsgEnterWorld - prev.MsgEnterWorld
+			dSpawn := curr.MsgObjectSpawn - prev.MsgObjectSpawn
+			dMove := curr.MsgObjectMove - prev.MsgObjectMove
+			dSrvErr := curr.MsgServerError - prev.MsgServerError
+			dOther := curr.MsgOther - prev.MsgOther
+			dUnmarshalErr := curr.MsgUnmarshalErr - prev.MsgUnmarshalErr
+
+			prev = curr
+
+			readAvgUs := avgMicros(dReadNs, dReadSamples)
+			unmarshalAvgUs := avgMicros(dUnmarshalNs, dUnmarshalSamples)
+			handleAvgUs := avgMicros(dHandleNs, dHandleSamples)
+			marshalAvgUs := avgMicros(dMarshalNs, dMarshalCount)
+			writeAvgUs := avgMicros(dWriteNs, dWriteCount)
+
+			var mem runtime.MemStats
+			runtime.ReadMemStats(&mem)
+
+			dTotalAlloc := mem.TotalAlloc - prevMem.TotalAlloc
+			dMallocs := mem.Mallocs - prevMem.Mallocs
+			dFrees := mem.Frees - prevMem.Frees
+			dPauseNs := mem.PauseTotalNs - prevMem.PauseTotalNs
+			dNumGC := mem.NumGC - prevMem.NumGC
+			prevMem = mem
+
+			allocRateMBs := 0.0
+			mallocRate := 0.0
+			freeRate := 0.0
+			if intervalSec > 0 {
+				allocRateMBs = float64(dTotalAlloc) / (1024.0 * 1024.0) / intervalSec
+				mallocRate = float64(dMallocs) / intervalSec
+				freeRate = float64(dFrees) / intervalSec
+			}
+
+			gcPauseMs := float64(dPauseNs) / 1_000_000.0
+			gcPausePct := 0.0
+			if intervalSec > 0 {
+				gcPausePct = (float64(dPauseNs) / (intervalSec * float64(time.Second))) * 100.0
+			}
+
+			r.logger.Info("LoadTest Diagnostics (5s interval)",
+				zap.Int64("pkt_sent_5s", dSent),
+				zap.Int64("pkt_recv_5s", dRecv),
+				zap.Int64("bytes_sent_5s", dBytesSent),
+				zap.Int64("bytes_recv_5s", dBytesRecv),
+				zap.Float64("read_wait_avg_us_sampled", readAvgUs),
+				zap.Float64("unmarshal_avg_us_sampled", unmarshalAvgUs),
+				zap.Float64("handle_avg_us_sampled", handleAvgUs),
+				zap.Float64("send_marshal_avg_us", marshalAvgUs),
+				zap.Float64("send_write_avg_us", writeAvgUs),
+				zap.Int64("msg_auth_result_5s", dAuth),
+				zap.Int64("msg_enter_world_5s", dEnter),
+				zap.Int64("msg_object_spawn_5s", dSpawn),
+				zap.Int64("msg_object_move_5s", dMove),
+				zap.Int64("msg_error_5s", dSrvErr),
+				zap.Int64("msg_other_5s", dOther),
+				zap.Int64("msg_unmarshal_err_5s", dUnmarshalErr),
+				zap.Int("goroutines", runtime.NumGoroutine()),
+				zap.Uint32("num_gc", mem.NumGC),
+				zap.Uint32("num_gc_5s", dNumGC),
+				zap.Uint64("heap_alloc_mb", mem.Alloc/1024/1024),
+				zap.Uint64("total_alloc_mb_5s", dTotalAlloc/1024/1024),
+				zap.Float64("alloc_rate_mb_s", allocRateMBs),
+				zap.Uint64("mallocs_5s", dMallocs),
+				zap.Float64("mallocs_s", mallocRate),
+				zap.Uint64("frees_5s", dFrees),
+				zap.Float64("frees_s", freeRate),
+				zap.Float64("gc_pause_ms_5s", gcPauseMs),
+				zap.Float64("gc_pause_pct_5s", gcPausePct),
 			)
 		}
 	}
+}
+
+func avgMicros(totalNs, samples int64) float64 {
+	if samples <= 0 {
+		return 0
+	}
+	return float64(totalNs) / float64(samples) / 1000.0
 }
