@@ -33,7 +33,7 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 			}
 		]
 	}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "food.json"), []byte(foodJSON), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "food.jsonc"), []byte(foodJSON), 0644))
 
 	toolsJSON := `{
 		"v": 1,
@@ -50,7 +50,7 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 			}
 		]
 	}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "tools.json"), []byte(toolsJSON), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tools.jsonc"), []byte(toolsJSON), 0644))
 
 	registry, err := LoadFromDirectory(dir, testLogger())
 	require.NoError(t, err)
@@ -341,7 +341,7 @@ func TestLoadFromDirectory_ContainerSuccess(t *testing.T) {
 			}
 		]
 	}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "containers.json"), []byte(json), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "containers.jsonc"), []byte(json), 0644))
 
 	registry, err := LoadFromDirectory(dir, testLogger())
 	require.NoError(t, err)
