@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 
 	"go.uber.org/zap"
@@ -29,27 +30,39 @@ func (e *LoadError) Error() string {
 	return fmt.Sprintf("%s: %s", e.FilePath, e.Message)
 }
 
-// LoadFromDirectory loads all item definitions from JSON files in the specified directory.
+// stripJSONCComments removes single-line (//) and multi-line (/* */) comments
+// from JSONC input so it can be parsed by standard JSON decoder.
+var reLineComment = regexp.MustCompile(`(?m)//.*$`)
+var reBlockComment = regexp.MustCompile(`(?s)/\*.*?\*/`)
+
+func stripJSONCComments(data []byte) []byte {
+	data = reBlockComment.ReplaceAll(data, nil)
+	data = reLineComment.ReplaceAll(data, nil)
+	return data
+}
+
+// LoadFromDirectory loads all item definitions from JSONC files in the specified directory.
 func LoadFromDirectory(dir string, logger *zap.Logger) (*Registry, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory %s: %w", dir, err)
 	}
 
-	var jsonFiles []string
+	var files []string
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		if filepath.Ext(entry.Name()) == ".json" {
-			jsonFiles = append(jsonFiles, filepath.Join(dir, entry.Name()))
+		ext := filepath.Ext(entry.Name())
+		if ext == ".json" || ext == ".jsonc" {
+			files = append(files, filepath.Join(dir, entry.Name()))
 		}
 	}
 
-	sort.Strings(jsonFiles)
+	sort.Strings(files)
 
-	if len(jsonFiles) == 0 {
-		logger.Warn("No JSON files found in data directory", zap.String("dir", dir))
+	if len(files) == 0 {
+		logger.Warn("No JSON/JSONC files found in data directory", zap.String("dir", dir))
 		return NewRegistry(nil), nil
 	}
 
@@ -57,7 +70,7 @@ func LoadFromDirectory(dir string, logger *zap.Logger) (*Registry, error) {
 	seenDefIDs := make(map[int]string)
 	seenKeys := make(map[string]string)
 
-	for _, filePath := range jsonFiles {
+	for _, filePath := range files {
 		items, err := loadFile(filePath)
 		if err != nil {
 			return nil, err
@@ -92,7 +105,7 @@ func LoadFromDirectory(dir string, logger *zap.Logger) (*Registry, error) {
 	}
 
 	logger.Info("Item definitions loaded",
-		zap.Int("files", len(jsonFiles)),
+		zap.Int("files", len(files)),
 		zap.Int("items", len(allItems)),
 	)
 
@@ -107,6 +120,8 @@ func loadFile(filePath string) ([]ItemDef, error) {
 			Message:  fmt.Sprintf("failed to read file: %v", err),
 		}
 	}
+
+	data = stripJSONCComments(data)
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
