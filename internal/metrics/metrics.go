@@ -69,23 +69,23 @@ func NewCollector(g *game.Game) *Collector {
 			[]string{"layer"}, nil,
 		),
 		chunkLoadRequests: prometheus.NewDesc(
-			"game_chunk_load_requests_total",
-			"Total number of chunk load requests",
+			"game_chunk_load_request_attempts_total",
+			"Total number of chunk load request attempts",
 			[]string{"layer"}, nil,
 		),
 		chunkSaveRequests: prometheus.NewDesc(
-			"game_chunk_save_requests_total",
-			"Total number of chunk save requests",
+			"game_chunk_save_request_attempts_total",
+			"Total number of chunk save request attempts",
 			[]string{"layer"}, nil,
 		),
 		chunkCacheHits: prometheus.NewDesc(
-			"game_chunk_cache_hits_total",
-			"Total number of chunk cache hits",
+			"game_chunk_external_lookup_hits_total",
+			"Total number of external gameplay chunk lookup hits",
 			[]string{"layer"}, nil,
 		),
 		chunkCacheMisses: prometheus.NewDesc(
-			"game_chunk_cache_misses_total",
-			"Total number of chunk cache misses",
+			"game_chunk_external_lookup_misses_total",
+			"Total number of external gameplay chunk lookup misses",
 			[]string{"layer"}, nil,
 		),
 	}

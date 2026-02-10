@@ -131,6 +131,97 @@ func TestChunkManager_Stats(t *testing.T) {
 	}
 }
 
+func TestChunkManager_Stats_GroundTruthStateCounts(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	activeCoord := types.ChunkCoord{X: 1, Y: 1}
+	preloadedCoord := types.ChunkCoord{X: 2, Y: 2}
+	inactiveCoord := types.ChunkCoord{X: 3, Y: 3}
+	unloadedCoord := types.ChunkCoord{X: 4, Y: 4}
+
+	activeChunk := core.NewChunk(activeCoord, 0, 0, 128)
+	activeChunk.SetState(types.ChunkStateActive)
+	preloadedChunk := core.NewChunk(preloadedCoord, 0, 0, 128)
+	preloadedChunk.SetState(types.ChunkStatePreloaded)
+	inactiveChunk := core.NewChunk(inactiveCoord, 0, 0, 128)
+	inactiveChunk.SetState(types.ChunkStateInactive)
+	unloadedChunk := core.NewChunk(unloadedCoord, 0, 0, 128)
+	unloadedChunk.SetState(types.ChunkStateUnloaded)
+
+	cm.chunksMu.Lock()
+	cm.chunks[activeCoord] = activeChunk
+	cm.chunks[preloadedCoord] = preloadedChunk
+	cm.chunks[inactiveCoord] = inactiveChunk
+	cm.chunks[unloadedCoord] = unloadedChunk
+	cm.chunksMu.Unlock()
+
+	stats := cm.Stats()
+	if stats.ActiveCount != 1 {
+		t.Errorf("stats.ActiveCount = %d, want 1", stats.ActiveCount)
+	}
+	if stats.PreloadedCount != 1 {
+		t.Errorf("stats.PreloadedCount = %d, want 1", stats.PreloadedCount)
+	}
+	if stats.InactiveCount != 1 {
+		t.Errorf("stats.InactiveCount = %d, want 1", stats.InactiveCount)
+	}
+}
+
+func TestChunkManager_RequestMetricsCountAttempts(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	before := cm.Stats()
+	_ = cm.requestLoad(types.ChunkCoord{X: 5, Y: 5})
+	_ = cm.requestLoad(types.ChunkCoord{X: 6, Y: 6})
+	afterLoad := cm.Stats()
+	if delta := afterLoad.LoadRequests - before.LoadRequests; delta != 2 {
+		t.Errorf("LoadRequests delta = %d, want 2", delta)
+	}
+
+	saveCoord := types.ChunkCoord{X: 7, Y: 7}
+	saveChunk := core.NewChunk(saveCoord, 0, 0, 128)
+	saveChunk.SetState(types.ChunkStateInactive)
+	cm.onEvict(saveCoord, saveChunk)
+	afterSave := cm.Stats()
+	if delta := afterSave.SaveRequests - afterLoad.SaveRequests; delta != 1 {
+		t.Errorf("SaveRequests delta = %d, want 1", delta)
+	}
+}
+
+func TestChunkManager_CacheMetricsOnlyGetChunk(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 8, Y: 8}
+	chunk := core.NewChunk(coord, 0, 0, 128)
+	chunk.SetState(types.ChunkStatePreloaded)
+
+	cm.chunksMu.Lock()
+	cm.chunks[coord] = chunk
+	cm.chunksMu.Unlock()
+
+	before := cm.Stats()
+
+	if got := cm.GetChunkFast(coord); got == nil {
+		t.Fatal("GetChunkFast returned nil for existing chunk")
+	}
+	mid := cm.Stats()
+	if mid.CacheHits != before.CacheHits || mid.CacheMisses != before.CacheMisses {
+		t.Fatalf("GetChunkFast must not change cache metrics: before hits/misses=%d/%d after=%d/%d",
+			before.CacheHits, before.CacheMisses, mid.CacheHits, mid.CacheMisses)
+	}
+
+	if got := cm.GetChunk(coord); got == nil {
+		t.Fatal("GetChunk returned nil for existing chunk")
+	}
+	after := cm.Stats()
+	if delta := after.CacheHits - mid.CacheHits; delta != 1 {
+		t.Errorf("CacheHits delta = %d, want 1", delta)
+	}
+}
+
 func TestWorldToChunkCoord(t *testing.T) {
 	tests := []struct {
 		worldX, worldY int

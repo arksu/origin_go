@@ -238,7 +238,7 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uin
 			if cm.isWithinWorldBounds(coord) {
 				if _, isActive := aoi.ActiveChunks[coord]; isActive {
 					// Get chunk data to include tiles in the event
-					chunk := cm.GetChunk(coord)
+					chunk := cm.GetChunkFast(coord)
 					var tiles []byte
 					var version uint32
 					if chunk != nil {
@@ -433,7 +433,7 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 
 		for _, coord := range toActivate {
 			// Get chunk data to include tiles in the event
-			chunk := cm.GetChunk(coord)
+			chunk := cm.GetChunkFast(coord)
 			var tiles []byte
 			var version uint32
 			if chunk != nil {
@@ -486,7 +486,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 	deactivatedChunks := make([]types.ChunkCoord, 0)
 
 	for coord, snapshot := range interestsSnapshot {
-		chunk := cm.GetChunk(coord)
+		chunk := cm.GetChunkFast(coord)
 
 		if snapshot.activeCount > 0 {
 			// Should be Active
@@ -530,8 +530,6 @@ func (cm *ChunkManager) recalculateChunkStates() {
 				case types.ChunkStateInactive:
 					chunk.SetState(types.ChunkStatePreloaded)
 					cm.lruCache.Remove(coord)
-					atomic.AddInt64(&cm.stats.InactiveCount, -1)
-					atomic.AddInt64(&cm.stats.PreloadedCount, 1)
 				}
 			}
 		} else {
@@ -543,14 +541,11 @@ func (cm *ChunkManager) recalculateChunkStates() {
 					if err := cm.deactivateChunkInternal(chunk); err == nil {
 						chunk.SetState(types.ChunkStateInactive)
 						cm.lruCache.Add(coord, chunk)
-						atomic.AddInt64(&cm.stats.InactiveCount, 1)
 						deactivatedChunks = append(deactivatedChunks, coord)
 					}
 				case types.ChunkStatePreloaded:
 					chunk.SetState(types.ChunkStateInactive)
 					cm.lruCache.Add(coord, chunk)
-					atomic.AddInt64(&cm.stats.PreloadedCount, -1)
-					atomic.AddInt64(&cm.stats.InactiveCount, 1)
 				}
 			}
 
@@ -602,15 +597,12 @@ func (cm *ChunkManager) saveWorker() {
 		case <-cm.stopCh:
 			return
 		case req := <-cm.saveQueue:
-			atomic.AddInt64(&cm.stats.SaveRequests, 1)
 			cm.safeSaveAndRemove(req.coord, req.chunk)
 		}
 	}
 }
 
 func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
-	atomic.AddInt64(&cm.stats.LoadRequests, 1)
-
 	cm.chunksMu.Lock()
 	chunk, exists := cm.chunks[coord]
 	if !exists {
@@ -637,8 +629,6 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 		return
 	}
 
-	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
-
 	cm.completeFuture(coord)
 }
 
@@ -661,6 +651,8 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	if isInterested {
 		return
 	}
+
+	atomic.AddInt64(&cm.stats.SaveRequests, 1)
 
 	select {
 	case cm.saveQueue <- saveRequest{coord: coord, chunk: chunk}:
@@ -758,6 +750,8 @@ func (cm *ChunkManager) GetChunkFast(coord types.ChunkCoord) *core.Chunk {
 }
 
 func (cm *ChunkManager) requestLoad(coord types.ChunkCoord) bool {
+	atomic.AddInt64(&cm.stats.LoadRequests, 1)
+
 	select {
 	case cm.loadQueue <- loadRequest{coord: coord}:
 		return true
@@ -812,7 +806,7 @@ func (cm *ChunkManager) cleanupFuture(coord types.ChunkCoord) {
 
 	// Avoid lock inversion between chunksMu and loadFuturesMu:
 	// check chunk state outside the futures lock, then confirm-and-delete.
-	chunk := cm.GetChunk(coord)
+	chunk := cm.GetChunkFast(coord)
 	if chunk != nil && chunk.GetState() != types.ChunkStateUnloaded {
 		return
 	}
@@ -825,7 +819,7 @@ func (cm *ChunkManager) cleanupFuture(coord types.ChunkCoord) {
 }
 
 func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord types.ChunkCoord) error {
-	chunk := cm.GetChunk(coord)
+	chunk := cm.GetChunkFast(coord)
 	if chunk != nil {
 		state := chunk.GetState()
 		if state == types.ChunkStatePreloaded || state == types.ChunkStateActive {
@@ -911,9 +905,6 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	chunk.ClearRawInventoriesByOwner()
 	chunk.SetState(types.ChunkStateActive)
 	cm.lruCache.Remove(coord)
-
-	atomic.AddInt64(&cm.stats.ActiveCount, 1)
-	atomic.AddInt64(&cm.stats.PreloadedCount, -1)
 
 	cm.activeChunksMu.Lock()
 	cm.activeChunks[coord] = struct{}{}
@@ -1010,9 +1001,6 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 	chunk.ClearHandles()
 	chunk.SetState(types.ChunkStatePreloaded)
 
-	atomic.AddInt64(&cm.stats.ActiveCount, -1)
-	atomic.AddInt64(&cm.stats.PreloadedCount, 1)
-
 	return nil
 }
 
@@ -1028,7 +1016,7 @@ func (cm *ChunkManager) PreloadChunksAround(center types.ChunkCoord) {
 				continue
 			}
 
-			chunk := cm.GetChunk(coord)
+			chunk := cm.GetChunkFast(coord)
 			if chunk == nil || chunk.GetState() == types.ChunkStateUnloaded {
 				_ = cm.requestLoad(coord)
 			}
@@ -1047,7 +1035,7 @@ func (cm *ChunkManager) ActiveChunks() []*core.Chunk {
 
 	chunks := make([]*core.Chunk, 0, len(coords))
 	for _, coord := range coords {
-		if chunk := cm.GetChunk(coord); chunk != nil {
+		if chunk := cm.GetChunkFast(coord); chunk != nil {
 			chunks = append(chunks, chunk)
 		}
 	}
@@ -1081,7 +1069,7 @@ func (cm *ChunkManager) GetEntityActiveChunks(entityID types.EntityID) []*core.C
 
 	chunks := make([]*core.Chunk, 0, len(activeCoords))
 	for _, coord := range activeCoords {
-		if chunk := cm.GetChunk(coord); chunk != nil && chunk.GetState() == types.ChunkStateActive {
+		if chunk := cm.GetChunkFast(coord); chunk != nil && chunk.GetState() == types.ChunkStateActive {
 			chunks = append(chunks, chunk)
 		}
 	}
@@ -1100,7 +1088,7 @@ func (cm *ChunkManager) GetEntityChunk(entityID types.EntityID) (*core.Chunk, bo
 	cm.aoiMu.RUnlock()
 
 	// Verify the entity actually exists in an active chunk
-	chunk := cm.GetChunk(centerChunk)
+	chunk := cm.GetChunkFast(centerChunk)
 	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
 		return nil, false
 	}
@@ -1109,10 +1097,30 @@ func (cm *ChunkManager) GetEntityChunk(entityID types.EntityID) (*core.Chunk, bo
 }
 
 func (cm *ChunkManager) Stats() ChunkStats {
+	var activeCount int64
+	var preloadedCount int64
+	var inactiveCount int64
+
+	cm.chunksMu.RLock()
+	for _, chunk := range cm.chunks {
+		if chunk == nil {
+			continue
+		}
+		switch chunk.GetState() {
+		case types.ChunkStateActive:
+			activeCount++
+		case types.ChunkStatePreloaded:
+			preloadedCount++
+		case types.ChunkStateInactive:
+			inactiveCount++
+		}
+	}
+	cm.chunksMu.RUnlock()
+
 	return ChunkStats{
-		ActiveCount:    atomic.LoadInt64(&cm.stats.ActiveCount),
-		PreloadedCount: atomic.LoadInt64(&cm.stats.PreloadedCount),
-		InactiveCount:  atomic.LoadInt64(&cm.stats.InactiveCount),
+		ActiveCount:    activeCount,
+		PreloadedCount: preloadedCount,
+		InactiveCount:  inactiveCount,
 		LoadRequests:   atomic.LoadInt64(&cm.stats.LoadRequests),
 		SaveRequests:   atomic.LoadInt64(&cm.stats.SaveRequests),
 		CacheHits:      atomic.LoadInt64(&cm.stats.CacheHits),
@@ -1157,7 +1165,7 @@ func (cm *ChunkManager) Stop() {
 		go func() {
 			defer wg.Done()
 			for coord := range workCh {
-				if chunk := cm.GetChunk(coord); chunk != nil {
+				if chunk := cm.GetChunkFast(coord); chunk != nil {
 					state := chunk.GetState()
 					if state == types.ChunkStateActive || state == types.ChunkStatePreloaded || state == types.ChunkStateInactive {
 						if chunk.IsDirty(cm.world) {
@@ -1194,7 +1202,7 @@ func (cm *ChunkManager) ObjectFactory() *ObjectFactory {
 // Used by inventory executor to register runtime-spawned dropped items.
 func (cm *ChunkManager) AddStaticToChunkSpatial(handle types.Handle, chunkX, chunkY, x, y int) {
 	coord := types.ChunkCoord{X: chunkX, Y: chunkY}
-	chunk := cm.GetChunk(coord)
+	chunk := cm.GetChunkFast(coord)
 	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
 		return
 	}
@@ -1205,7 +1213,7 @@ func (cm *ChunkManager) AddStaticToChunkSpatial(handle types.Handle, chunkX, chu
 // Used by inventory executor to unregister dropped items on pickup.
 func (cm *ChunkManager) RemoveStaticFromChunkSpatial(handle types.Handle, chunkX, chunkY, x, y int) {
 	coord := types.ChunkCoord{X: chunkX, Y: chunkY}
-	chunk := cm.GetChunk(coord)
+	chunk := cm.GetChunkFast(coord)
 	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
 		return
 	}
