@@ -744,6 +744,19 @@ func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *core.Chunk {
 	return chunk
 }
 
+// GetChunkFast returns chunk pointer without cache hit/miss stats updates.
+// Intended for hot paths where atomics would dominate profile noise.
+func (cm *ChunkManager) GetChunkFast(coord types.ChunkCoord) *core.Chunk {
+	if !cm.isWithinWorldBounds(coord) {
+		return nil
+	}
+
+	cm.chunksMu.RLock()
+	chunk := cm.chunks[coord]
+	cm.chunksMu.RUnlock()
+	return chunk
+}
+
 func (cm *ChunkManager) requestLoad(coord types.ChunkCoord) bool {
 	select {
 	case cm.loadQueue <- loadRequest{coord: coord}:
