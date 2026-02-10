@@ -1,8 +1,6 @@
 package inventory
 
 import (
-	"encoding/json"
-
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -221,89 +219,30 @@ func (s *InventoryOperationService) dropNewItem(
 	dropX := int(playerTransform.X)
 	dropY := int(playerTransform.Y)
 
-	droppedHandle := w.Spawn(droppedEntityID, func(w *ecs.World, h types.Handle) {
-		ecs.AddComponent(w, h, components.CreateTransform(dropX, dropY, 0))
+	dropParams := SpawnDroppedEntityParams{
+		DroppedEntityID: droppedEntityID,
+		ItemID:          item.ItemID,
+		TypeID:          item.TypeID,
+		Resource:        resource,
+		Quality:         item.Quality,
+		Quantity:        item.Quantity,
+		W:               item.W,
+		H:               item.H,
+		DropX:           dropX,
+		DropY:           dropY,
+		Region:          playerInfo.Region,
+		Layer:           playerInfo.Layer,
+		ChunkX:          playerChunkRef.CurrentChunkX,
+		ChunkY:          playerChunkRef.CurrentChunkY,
+		DropperID:       playerID,
+		NowUnix:         nowUnix,
+	}
 
-		ecs.AddComponent(w, h, components.EntityInfo{
-			TypeID:   constt.DroppedItemTypeID,
-			IsStatic: true,
-			Region:   playerInfo.Region,
-			Layer:    playerInfo.Layer,
-		})
-
-		ecs.AddComponent(w, h, components.ChunkRef{
-			CurrentChunkX: playerChunkRef.CurrentChunkX,
-			CurrentChunkY: playerChunkRef.CurrentChunkY,
-		})
-
-		ecs.AddComponent(w, h, components.Appearance{
-			Resource: resource,
-		})
-
-		ecs.AddComponent(w, h, components.DroppedItem{
-			DropTime:        nowUnix,
-			DropperID:       playerID,
-			ContainedItemID: item.ItemID,
-		})
-
-		container := components.InventoryContainer{
-			OwnerID: droppedEntityID,
-			Kind:    constt.InventoryDroppedItem,
-			Key:     0,
-			Version: 1,
-			Items: []components.InvItem{
-				{
-					ItemID:   item.ItemID,
-					TypeID:   item.TypeID,
-					Resource: resource,
-					Quality:  item.Quality,
-					Quantity: item.Quantity,
-					W:        item.W,
-					H:        item.H,
-				},
-			},
-		}
-		containerHandle := w.SpawnWithoutExternalID()
-		ecs.AddComponent(w, containerHandle, container)
-
-		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-		refIndex.Add(constt.InventoryDroppedItem, droppedEntityID, 0, containerHandle)
-	})
-
-	if droppedHandle == types.InvalidHandle {
+	if _, ok := SpawnDroppedEntity(w, dropParams); !ok {
 		return &GiveItemResult{Success: false, Message: "failed to spawn dropped entity"}
 	}
 
-	// Persist to DB
-	droppedData := droppedItemData{
-		HasInventory:    true,
-		ContainedItemID: uint64(item.ItemID),
-		DropTime:        nowUnix,
-		DropperID:       uint64(playerID),
-	}
-	objectJSON, _ := json.Marshal(droppedData)
-
-	invData := InventoryDataV1{
-		Kind:    uint8(constt.InventoryDroppedItem),
-		Key:     0,
-		Version: 1,
-		Items: []InventoryItemV1{
-			{
-				ItemID:   uint64(item.ItemID),
-				TypeID:   item.TypeID,
-				Quality:  item.Quality,
-				Quantity: item.Quantity,
-			},
-		},
-	}
-	inventoryJSON, _ := json.Marshal(invData)
-
-	if err := s.persister.PersistDroppedObject(
-		droppedEntityID, constt.DroppedItemTypeID,
-		playerInfo.Region, dropX, dropY, playerInfo.Layer,
-		playerChunkRef.CurrentChunkX, playerChunkRef.CurrentChunkY,
-		objectJSON, inventoryJSON,
-	); err != nil {
+	if err := PersistDroppedEntity(s.persister, dropParams, nil); err != nil {
 		s.logger.Error("Failed to persist dropped object from GiveItem",
 			zap.Uint64("entity_id", uint64(droppedEntityID)),
 			zap.Error(err))

@@ -153,26 +153,5 @@ func (il *InventoryLoader) ParseInventoriesFromDB(dbInventories []repository.Inv
 }
 
 func (il *InventoryLoader) parseEquipSlot(slot string) netproto.EquipSlot {
-	switch slot {
-	case "head":
-		return netproto.EquipSlot_EQUIP_SLOT_HEAD
-	case "chest":
-		return netproto.EquipSlot_EQUIP_SLOT_CHEST
-	case "legs":
-		return netproto.EquipSlot_EQUIP_SLOT_LEGS
-	case "feet":
-		return netproto.EquipSlot_EQUIP_SLOT_FEET
-	case "hands":
-		return netproto.EquipSlot_EQUIP_SLOT_HANDS
-	case "back":
-		return netproto.EquipSlot_EQUIP_SLOT_BACK
-	case "neck":
-		return netproto.EquipSlot_EQUIP_SLOT_NECK
-	case "ring1":
-		return netproto.EquipSlot_EQUIP_SLOT_RING_1
-	case "ring2":
-		return netproto.EquipSlot_EQUIP_SLOT_RING_2
-	default:
-		return netproto.EquipSlot_EQUIP_SLOT_NONE
-	}
+	return StringToEquipSlot(slot)
 }

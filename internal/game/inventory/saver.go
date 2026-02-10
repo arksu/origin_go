@@ -156,26 +156,5 @@ func (is *InventorySaver) serializeNestedInventory(
 }
 
 func (is *InventorySaver) convertEquipSlot(slot netproto.EquipSlot) string {
-	switch slot {
-	case netproto.EquipSlot_EQUIP_SLOT_HEAD:
-		return "head"
-	case netproto.EquipSlot_EQUIP_SLOT_CHEST:
-		return "chest"
-	case netproto.EquipSlot_EQUIP_SLOT_LEGS:
-		return "legs"
-	case netproto.EquipSlot_EQUIP_SLOT_FEET:
-		return "feet"
-	case netproto.EquipSlot_EQUIP_SLOT_HANDS:
-		return "hands"
-	case netproto.EquipSlot_EQUIP_SLOT_BACK:
-		return "back"
-	case netproto.EquipSlot_EQUIP_SLOT_NECK:
-		return "neck"
-	case netproto.EquipSlot_EQUIP_SLOT_RING_1:
-		return "ring1"
-	case netproto.EquipSlot_EQUIP_SLOT_RING_2:
-		return "ring2"
-	default:
-		return ""
-	}
+	return EquipSlotToString(slot)
 }

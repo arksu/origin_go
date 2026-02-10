@@ -147,9 +147,10 @@ func RecomputeObjectBehaviorsNow(w *ecs.World, eventBus *eventbus.EventBus, logg
 }
 
 type objectBehaviorRunner struct {
-	eventBus  *eventbus.EventBus
-	logger    *zap.Logger
-	behaviors map[string]RuntimeBehavior
+	eventBus     *eventbus.EventBus
+	logger       *zap.Logger
+	behaviors    map[string]RuntimeBehavior
+	nextFlagsSet map[string]struct{}
 }
 
 func newObjectBehaviorRunner(eventBus *eventbus.EventBus, logger *zap.Logger) *objectBehaviorRunner {
@@ -163,6 +164,7 @@ func newObjectBehaviorRunner(eventBus *eventbus.EventBus, logger *zap.Logger) *o
 		behaviors: map[string]RuntimeBehavior{
 			"container": containerBehavior{},
 		},
+		nextFlagsSet: make(map[string]struct{}, 8),
 	}
 }
 
@@ -187,7 +189,9 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		return
 	}
 
-	nextFlagsSet := make(map[string]struct{}, 8)
+	for k := range r.nextFlagsSet {
+		delete(r.nextFlagsSet, k)
+	}
 	nextState := currentState.State
 	hasNextState := false
 
@@ -211,7 +215,7 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 			if flag == "" {
 				continue
 			}
-			nextFlagsSet[flag] = struct{}{}
+			r.nextFlagsSet[flag] = struct{}{}
 		}
 		if result.HasState {
 			nextState = result.State
@@ -219,12 +223,16 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		}
 	}
 
-	nextFlags := setToSortedSlice(nextFlagsSet)
+	nextFlags := setToSortedSlice(r.nextFlagsSet)
 	flagsChanged := !equalStringSlices(currentState.Flags, nextFlags)
 
 	stateChanged := false
 	if hasNextState {
-		stateChanged = !reflect.DeepEqual(currentState.State, nextState)
+		if currentState.State == nil && nextState == nil {
+			stateChanged = false
+		} else {
+			stateChanged = !reflect.DeepEqual(currentState.State, nextState)
+		}
 	}
 
 	nextResource := objectdefs.ResolveAppearanceResource(def, nextFlags)

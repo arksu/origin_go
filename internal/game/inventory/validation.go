@@ -1,6 +1,8 @@
 package inventory
 
 import (
+	"strconv"
+
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -309,8 +311,8 @@ func (v *Validator) findItemTypeIDInOwner(
 	return 0
 }
 
-// findItemTypeIDInWorld searches all inventory containers for an item with itemID.
-// This covers nested inventories hosted outside player's InventoryOwner (e.g. world objects, equipment, stations).
+// findItemTypeIDInWorld searches for an item with itemID in world-object containers.
+// Uses targeted lookup via InventoryRefIndex instead of full-world scan.
 func (v *Validator) findItemTypeIDInWorld(
 	w *ecs.World,
 	itemID types.EntityID,
@@ -319,25 +321,63 @@ func (v *Validator) findItemTypeIDInWorld(
 		return 0
 	}
 
-	query := ecs.NewQuery(w).With(components.InventoryContainerComponentID)
-	var foundTypeID uint32
-	query.ForEach(func(h types.Handle) {
-		if foundTypeID != 0 {
-			return
-		}
-		container, ok := ecs.GetComponent[components.InventoryContainer](w, h)
-		if !ok {
-			return
-		}
-		for _, item := range container.Items {
-			if item.ItemID == itemID {
-				foundTypeID = item.TypeID
-				return
+	// The nested container is registered as (Grid, itemID, 0) in RefIndex.
+	// Its parent is a root container whose items contain this itemID.
+	// Check all root grid containers that might hold this item by looking up
+	// the container directly — the nested container's OwnerID == itemID,
+	// so we need to find which container has an item with ItemID == itemID.
+
+	// Strategy: look up the nested container handle from RefIndex.
+	// Its OwnerID is the parent item's ID. The parent container's OwnerID
+	// is the world-object entity ID. Check the root container (Grid, objectID, 0).
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	nestedHandle, found := refIndex.Lookup(constt.InventoryGrid, itemID, 0)
+	if !found || !w.Alive(nestedHandle) {
+		return 0
+	}
+
+	nestedContainer, ok := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
+	if !ok {
+		return 0
+	}
+
+	// The nested container's OwnerID == itemID (the parent item).
+	// We need to find the root container that holds this item.
+	// The root container's OwnerID is the world-object entity.
+	// We don't know the world-object ID directly, but we can check
+	// all containers that reference this nested container's owner.
+	// Since nestedContainer.OwnerID == itemID, the parent is a container
+	// whose items include an item with ItemID == itemID.
+	// The most likely parent is the root container of the same world-object.
+	// We can't derive the world-object ID from nestedContainer alone,
+	// so fall back to checking the OpenContainerState for any player
+	// that has this ref opened.
+	openState, hasOpenState := ecs.TryGetResource[ecs.OpenContainerState](w)
+	if hasOpenState {
+		refKey := ecs.InventoryRefKey{Kind: constt.InventoryGrid, OwnerID: nestedContainer.OwnerID, Key: 0}
+		players := openState.PlayersOpenedRef(refKey)
+		for playerID := range players {
+			rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID)
+			if !hasRoot {
+				continue
+			}
+			rootHandle, rootFound := refIndex.Lookup(constt.InventoryGrid, rootOwnerID, 0)
+			if !rootFound || !w.Alive(rootHandle) {
+				continue
+			}
+			rootContainer, hasRoot := ecs.GetComponent[components.InventoryContainer](w, rootHandle)
+			if !hasRoot {
+				continue
+			}
+			for _, item := range rootContainer.Items {
+				if item.ItemID == itemID {
+					return item.TypeID
+				}
 			}
 		}
-	})
+	}
 
-	return foundTypeID
+	return 0
 }
 
 // checkContentRules validates an item definition against container content rules.
@@ -414,42 +454,16 @@ func (v *Validator) isEquipSlotAllowed(itemDef *itemdefs.ItemDef, slot netproto.
 }
 
 func equipSlotToString(slot netproto.EquipSlot) string {
-	switch slot {
-	case netproto.EquipSlot_EQUIP_SLOT_HEAD:
-		return "head"
-	case netproto.EquipSlot_EQUIP_SLOT_CHEST:
-		return "chest"
-	case netproto.EquipSlot_EQUIP_SLOT_LEGS:
-		return "legs"
-	case netproto.EquipSlot_EQUIP_SLOT_FEET:
-		return "feet"
-	case netproto.EquipSlot_EQUIP_SLOT_HANDS:
-		return "hands"
-	case netproto.EquipSlot_EQUIP_SLOT_LEFT_HAND:
-		return "left_hand"
-	case netproto.EquipSlot_EQUIP_SLOT_RIGHT_HAND:
-		return "right_hand"
-	case netproto.EquipSlot_EQUIP_SLOT_BACK:
-		return "back"
-	case netproto.EquipSlot_EQUIP_SLOT_NECK:
-		return "neck"
-	case netproto.EquipSlot_EQUIP_SLOT_RING_1:
-		return "ring1"
-	case netproto.EquipSlot_EQUIP_SLOT_RING_2:
-		return "ring2"
-	default:
-		return ""
-	}
+	return EquipSlotToString(slot)
 }
 
 func makeContainerKey(ref *netproto.InventoryRef) string {
 	if ref == nil {
 		return ""
 	}
-	// Create a unique key for the container based on owner, kind, and key
-	return string(rune(ref.OwnerId)) + "_" + string(rune(ref.Kind)) + "_" + string(rune(ref.InventoryKey))
+	return strconv.FormatUint(ref.OwnerId, 36) + "_" + strconv.FormatUint(uint64(ref.Kind), 36) + "_" + strconv.FormatUint(uint64(ref.InventoryKey), 36)
 }
 
 func MakeContainerKeyFromInfo(ownerID types.EntityID, kind constt.InventoryKind, key uint32) string {
-	return string(rune(ownerID)) + "_" + string(rune(kind)) + "_" + string(rune(key))
+	return strconv.FormatUint(uint64(ownerID), 36) + "_" + strconv.FormatUint(uint64(kind), 36) + "_" + strconv.FormatUint(uint64(key), 36)
 }
