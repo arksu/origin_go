@@ -83,6 +83,7 @@ messageDispatcher.on('objectMove', (msg) => { /* ... */ })
 - `objectSpawn`, `objectDespawn`, `objectMove`
 - `inventoryUpdate`, `inventoryOpResult`
 - `containerOpened`, `containerClosed`
+- `contextMenu`, `miniAlert`
 - `error`, `warning`
 
 **Debug Features**:
@@ -148,6 +149,8 @@ registerMessageHandlers()
 | `objectSpawn` | Spawn entity in store + facade, init in MoveController |
 | `objectDespawn` | Remove entity from store + facade + MoveController |
 | `objectMove` | Feed to MoveController, update store position |
+| `contextMenu` | Open context menu state in `gameStore` |
+| `miniAlert` | Push center-screen transient alert in `gameStore` |
 
 ## Protocol
 

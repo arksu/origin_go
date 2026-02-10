@@ -87,6 +87,8 @@ export class MessageDispatcher {
     if (message.containerOpened) return 'containerOpened'
     if (message.containerClosed) return 'containerClosed'
     if (message.chat) return 'chat'
+    if (message.contextMenu) return 'contextMenu'
+    if (message.miniAlert) return 'miniAlert'
     if (message.error) return 'error'
     if (message.warning) return 'warning'
     return null

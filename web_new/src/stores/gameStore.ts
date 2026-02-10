@@ -48,6 +48,34 @@ export interface ChatMessage {
   channel: proto.ChatChannel
 }
 
+export interface ContextMenuActionItem {
+  actionId: string
+  title: string
+}
+
+export interface ContextMenuState {
+  entityId: number
+  actions: ContextMenuActionItem[]
+  anchorX: number
+  anchorY: number
+}
+
+export interface MiniAlertInput {
+  reasonCode: string
+  severity: proto.AlertSeverity
+  ttlMs: number
+}
+
+export interface MiniAlertItem {
+  id: string
+  debounceKey: string
+  reasonCode: string
+  message: string
+  severity: proto.AlertSeverity
+  createdAt: number
+  expiresAt: number
+}
+
 export const useGameStore = defineStore('game', () => {
   // Session
   const wsToken = ref('')
@@ -78,6 +106,10 @@ export const useGameStore = defineStore('game', () => {
   const openedRootContainerRefs = ref(new Set<string>())
   let nextOpId = 1
   const mousePos = ref({ x: 0, y: 0 })
+  const contextMenu = ref<ContextMenuState | null>(null)
+  const miniAlerts = ref<MiniAlertItem[]>([])
+  const miniAlertDebounceUntil = new Map<string, number>()
+  let miniAlertTimer: ReturnType<typeof setInterval> | null = null
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
@@ -133,6 +165,13 @@ export const useGameStore = defineStore('game', () => {
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
+    contextMenu.value = null
+    miniAlerts.value = []
+    miniAlertDebounceUntil.clear()
+    if (miniAlertTimer) {
+      clearInterval(miniAlertTimer)
+      miniAlertTimer = null
+    }
   }
 
   function setPlayerLeaveWorld() {
@@ -148,6 +187,13 @@ export const useGameStore = defineStore('game', () => {
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
+    contextMenu.value = null
+    miniAlerts.value = []
+    miniAlertDebounceUntil.clear()
+    if (miniAlertTimer) {
+      clearInterval(miniAlertTimer)
+      miniAlertTimer = null
+    }
   }
 
   function updatePlayerPosition(position: Position) {
@@ -297,6 +343,110 @@ export const useGameStore = defineStore('game', () => {
     mousePos.value.y = y
   }
 
+  function openContextMenu(entityId: number, actions: ContextMenuActionItem[]) {
+    if (!actions.length) {
+      contextMenu.value = null
+      return
+    }
+
+    contextMenu.value = {
+      entityId,
+      actions,
+      anchorX: mousePos.value.x,
+      anchorY: mousePos.value.y,
+    }
+  }
+
+  function closeContextMenu() {
+    contextMenu.value = null
+  }
+
+  function formatReasonCode(reasonCode: string): string {
+    const normalized = reasonCode.trim().toLowerCase()
+    if (!normalized) return 'unknown'
+    const words = normalized.split('_').filter(Boolean)
+    if (!words.length) return normalized
+    return words
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+
+  function alertTtlMs(severity: proto.AlertSeverity, ttlMs: number): number {
+    if (ttlMs > 0) return ttlMs
+    switch (severity) {
+      case proto.AlertSeverity.ALERT_SEVERITY_ERROR:
+        return 2500
+      case proto.AlertSeverity.ALERT_SEVERITY_WARNING:
+        return 2000
+      default:
+        return 1500
+    }
+  }
+
+  function startMiniAlertCleanupTimer() {
+    if (miniAlertTimer) return
+    miniAlertTimer = setInterval(() => {
+      const now = Date.now()
+      miniAlerts.value = miniAlerts.value.filter((alert) => alert.expiresAt > now)
+      if (miniAlerts.value.length === 0 && miniAlertTimer) {
+        clearInterval(miniAlertTimer)
+        miniAlertTimer = null
+      }
+    }, 150)
+  }
+
+  function pushMiniAlert(input: MiniAlertInput) {
+    const reasonCode = input.reasonCode.trim()
+    if (!reasonCode) return
+
+    const now = Date.now()
+    const playerPart = playerEntityId.value ?? 0
+    const debounceKey = `${playerPart}:${reasonCode}`
+    const existingIndex = miniAlerts.value.findIndex((alert) => alert.debounceKey === debounceKey)
+    const ttlMs = alertTtlMs(input.severity, input.ttlMs)
+
+    if (existingIndex !== -1) {
+      // Coalesce identical alerts: refresh the existing one instead of stacking.
+      const existing = miniAlerts.value[existingIndex]!
+      miniAlerts.value[existingIndex] = {
+        id: existing.id,
+        debounceKey: existing.debounceKey,
+        severity: input.severity,
+        reasonCode,
+        message: formatReasonCode(reasonCode),
+        createdAt: now,
+        expiresAt: now + ttlMs,
+      }
+      miniAlertDebounceUntil.set(debounceKey, now + 250)
+      startMiniAlertCleanupTimer()
+      return
+    }
+
+    const debounceUntil = miniAlertDebounceUntil.get(debounceKey) ?? 0
+    if (debounceUntil > now) {
+      return
+    }
+    miniAlertDebounceUntil.set(debounceKey, now + 250)
+
+    // Keep UI readable on mobile/desktop.
+    // Product rule: max 3 alerts at once.
+    if (miniAlerts.value.length >= 3) {
+      miniAlerts.value.sort((a, b) => a.createdAt - b.createdAt)
+      miniAlerts.value.shift()
+    }
+
+    miniAlerts.value.push({
+      id: `${now}-${Math.random().toString(16).slice(2)}`,
+      debounceKey,
+      reasonCode,
+      message: formatReasonCode(reasonCode),
+      severity: input.severity,
+      createdAt: now,
+      expiresAt: now + ttlMs,
+    })
+    startMiniAlertCleanupTimer()
+  }
+
   function togglePlayerInventory() {
     console.log('[gameStore] togglePlayerInventory called, current:', playerInventoryVisible.value)
     playerInventoryVisible.value = !playerInventoryVisible.value
@@ -384,11 +534,18 @@ export const useGameStore = defineStore('game', () => {
     // Clear nested inventories
     openNestedInventories.value.clear()
     openedRootContainerRefs.value.clear()
+    contextMenu.value = null
+    miniAlerts.value = []
+    miniAlertDebounceUntil.clear()
 
     // Cleanup chat
     if (cleanupTimer) {
       clearInterval(cleanupTimer)
       cleanupTimer = null
+    }
+    if (miniAlertTimer) {
+      clearInterval(miniAlertTimer)
+      miniAlertTimer = null
     }
     chatMessages.value = []
   }
@@ -410,6 +567,8 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible,
     openNestedInventories,
     mousePos,
+    contextMenu,
+    miniAlerts,
 
     // Computed
     isConnected,
@@ -444,6 +603,9 @@ export const useGameStore = defineStore('game', () => {
     getPlayerHandRef,
     allocOpId,
     updateMousePos,
+    openContextMenu,
+    closeContextMenu,
+    pushMiniAlert,
     reset,
   }
 })

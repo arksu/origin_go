@@ -7,6 +7,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -101,12 +102,14 @@ type OpenContainerError struct {
 
 // OpenContainerCoordinator handles world-object container open/close mechanics.
 type OpenContainerCoordinator interface {
-	SetPendingAutoOpen(w *ecs.World, playerID, targetID types.EntityID)
-	ClearPendingAutoOpen(w *ecs.World, playerID types.EntityID)
 	HandleOpenRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, ref *netproto.InventoryRef) *OpenContainerError
 	HandleCloseRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, ref *netproto.InventoryRef) *OpenContainerError
 	BroadcastInventoryUpdates(w *ecs.World, actorID types.EntityID, updated []*netproto.InventoryState)
 	CloseRefsForOpenedPlayers(w *ecs.World, refs []*netproto.InventoryRef)
+}
+
+type ContextMenuSender interface {
+	SendContextMenu(entityID types.EntityID, menu *netproto.S2C_ContextMenu)
 }
 
 type NetworkCommandSystem struct {
@@ -130,10 +133,15 @@ type NetworkCommandSystem struct {
 	visionSystem *VisionSystem
 
 	openContainerService OpenContainerCoordinator
+	contextActionService ContextActionResolver
+	contextMenuSender    ContextMenuSender
+	contextPendingTTL    time.Duration
 
 	// Reusable buffers to avoid allocations
-	playerCommands []*network.PlayerCommand
-	serverJobs     []*network.ServerJob
+	playerCommands       []*network.PlayerCommand
+	serverJobs           []*network.ServerJob
+	pendingContextQuery  *ecs.PreparedQuery
+	pendingContextRemove []types.Handle
 }
 
 // NewNetworkCommandSystem creates a new network command system
@@ -158,8 +166,10 @@ func NewNetworkCommandSystem(
 		inventoryResultSender: inventoryResultSender,
 		visionSystem:          visionSystem,
 		chatLocalRadiusSq:     radiusSq,
+		contextPendingTTL:     15 * time.Second,
 		playerCommands:        make([]*network.PlayerCommand, 0, 256),
 		serverJobs:            make([]*network.ServerJob, 0, 64),
+		pendingContextRemove:  make([]types.Handle, 0, 64),
 	}
 }
 
@@ -177,9 +187,26 @@ func (s *NetworkCommandSystem) SetOpenContainerService(service OpenContainerCoor
 	s.openContainerService = service
 }
 
+func (s *NetworkCommandSystem) SetContextActionService(service ContextActionResolver) {
+	s.contextActionService = service
+}
+
+func (s *NetworkCommandSystem) SetContextMenuSender(sender ContextMenuSender) {
+	s.contextMenuSender = sender
+}
+
+func (s *NetworkCommandSystem) SetContextPendingTTL(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	s.contextPendingTTL = ttl
+}
+
 // Update drains command queues and processes commands
 // Called at the start of each ECS tick under shard lock
 func (s *NetworkCommandSystem) Update(w *ecs.World, dt float64) {
+	s.cleanupPendingContextActions(w)
+
 	// Drain player commands
 	s.playerCommands = s.playerCommands[:0]
 	if commands := s.playerInbox.Drain(); commands != nil {
@@ -223,6 +250,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleMoveToEntity(w, handle, cmd)
 	case network.CmdInteract:
 		s.handleInteract(w, handle, cmd)
+	case network.CmdSelectContextAction:
+		s.handleSelectContextAction(w, handle, cmd)
 	case network.CmdChat:
 		s.handleChat(w, handle, cmd)
 	case network.CmdInventoryOp:
@@ -277,8 +306,7 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 	}
 
 	// Clear pending interaction on any new movement command
-	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
-	s.clearLinkIntent(w, cmd.CharacterID)
+	s.clearPendingInteractionIntents(w, playerHandle, cmd.CharacterID)
 
 	// Set movement target
 	ecs.WithComponent(w, playerHandle, func(mov *components.Movement) {
@@ -313,8 +341,7 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 	}
 
 	// Clear any previous pending interaction
-	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
-	s.clearLinkIntent(w, cmd.CharacterID)
+	s.clearPendingInteractionIntents(w, playerHandle, cmd.CharacterID)
 
 	// Validate target entity exists
 	targetEntityID := types.EntityID(moveToEntity.EntityId)
@@ -353,9 +380,6 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 	if moveToEntity.AutoInteract && !isDroppedItem && (isCollidingWithTarget || isLinkedToTarget) {
 		s.stopMovementAndEmit(w, playerHandle)
 		s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
-		if s.openContainerService != nil && isContainerTargetForOpen(w, targetHandle) {
-			s.openContainerService.SetPendingAutoOpen(w, cmd.CharacterID, targetEntityID)
-		}
 		return
 	}
 
@@ -376,9 +400,6 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 		} else {
 			// For non-dropped world objects autoInteract means explicit link intent.
 			s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
-			if s.openContainerService != nil && isContainerTargetForOpen(w, targetHandle) {
-				s.openContainerService.SetPendingAutoOpen(w, cmd.CharacterID, targetEntityID)
-			}
 		}
 	}
 
@@ -424,39 +445,147 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 		return
 	}
 
-	// Determine interaction type
-	interactionType := interact.Type
 	_, isDroppedItem := ecs.GetComponent[components.DroppedItem](w, targetHandle)
-
-	// AUTO resolution: if target is a dropped item, treat as PICKUP
-	if interactionType == netproto.InteractionType_AUTO && isDroppedItem {
-		interactionType = netproto.InteractionType_PICKUP
-	} else if interactionType == netproto.InteractionType_AUTO {
-		interactionType = netproto.InteractionType_OPEN
-	}
-
-	switch interactionType {
-	case netproto.InteractionType_PICKUP:
-		if !isDroppedItem {
-			s.logger.Debug("Interact: target is not a dropped item for PICKUP",
-				zap.Uint64("client_id", cmd.ClientID))
-			return
-		}
+	if isDroppedItem {
 		s.handlePickupInteract(w, playerHandle, cmd.CharacterID, targetEntityID, targetHandle)
-	case netproto.InteractionType_OPEN:
-		if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
+		return
+	}
+
+	if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
+		return
+	}
+	if s.contextActionService == nil {
+		return
+	}
+
+	actions := s.computeContextActions(w, cmd.CharacterID, playerHandle, targetEntityID, targetHandle)
+	switch len(actions) {
+	case 0:
+		// Product rule: no actions => full ignore.
+		return
+	case 1:
+		// Fast path: exactly one action is auto-selected.
+		s.startPendingContextAction(w, playerHandle, cmd.CharacterID, targetEntityID, targetHandle, actions[0].ActionID)
+	default:
+		if s.contextMenuSender == nil {
 			return
 		}
-		s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
-		if s.openContainerService != nil && isContainerTargetForOpen(w, targetHandle) {
-			s.openContainerService.SetPendingAutoOpen(w, cmd.CharacterID, targetEntityID)
+		menu := &netproto.S2C_ContextMenu{
+			EntityId: uint64(targetEntityID),
+			Actions:  make([]*netproto.ContextMenuAction, 0, len(actions)),
 		}
-
-	default:
-		s.logger.Debug("Interact: unsupported interaction type",
-			zap.Uint64("client_id", cmd.ClientID),
-			zap.Int32("interaction_type", int32(interactionType)))
+		for _, action := range actions {
+			menu.Actions = append(menu.Actions, &netproto.ContextMenuAction{
+				ActionId: action.ActionID,
+				Title:    action.Title,
+			})
+		}
+		s.contextMenuSender.SendContextMenu(cmd.CharacterID, menu)
 	}
+}
+
+func (s *NetworkCommandSystem) handleSelectContextAction(
+	w *ecs.World,
+	playerHandle types.Handle,
+	cmd *network.PlayerCommand,
+) {
+	selectAction, ok := cmd.Payload.(*netproto.SelectContextAction)
+	if !ok {
+		s.logger.Error("Invalid payload type for SelectContextAction",
+			zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	if selectAction.ActionId == "" {
+		return
+	}
+	if s.contextActionService == nil {
+		return
+	}
+
+	targetEntityID := types.EntityID(selectAction.EntityId)
+	targetHandle := w.GetHandleByEntityID(targetEntityID)
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		return
+	}
+	if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
+		return
+	}
+
+	actions := s.computeContextActions(w, cmd.CharacterID, playerHandle, targetEntityID, targetHandle)
+	if !containsContextAction(actions, selectAction.ActionId) {
+		return
+	}
+
+	s.startPendingContextAction(
+		w,
+		playerHandle,
+		cmd.CharacterID,
+		targetEntityID,
+		targetHandle,
+		selectAction.ActionId,
+	)
+}
+
+func containsContextAction(actions []ContextAction, actionID string) bool {
+	for _, action := range actions {
+		if action.ActionID == actionID {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *NetworkCommandSystem) startPendingContextAction(
+	w *ecs.World,
+	playerHandle types.Handle,
+	playerID types.EntityID,
+	targetEntityID types.EntityID,
+	targetHandle types.Handle,
+	actionID string,
+) {
+	if actionID == "" {
+		return
+	}
+
+	if link, hasLink := ecs.GetResource[ecs.LinkState](w).GetLink(playerID); hasLink && link.TargetID == targetEntityID {
+		// Already linked: execute immediately without creating pending state.
+		s.contextActionService.ExecuteAction(w, playerID, playerHandle, targetEntityID, targetHandle, actionID)
+		return
+	}
+
+	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
+	if !hasTransform {
+		return
+	}
+
+	mov, hasMov := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !hasMov || mov.State == constt.StateStunned {
+		return
+	}
+
+	s.clearPendingInteractionIntents(w, playerHandle, playerID)
+	s.setLinkIntent(w, playerID, targetEntityID, targetHandle)
+
+	if lastCollidedEntityForHandle(w, playerHandle) == targetEntityID {
+		s.stopMovementAndEmit(w, playerHandle)
+	} else {
+		ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+			m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
+		})
+	}
+
+	ttlMs := s.contextPendingTTL.Milliseconds()
+	if ttlMs <= 0 {
+		ttlMs = 15000
+	}
+	// Pending action exists only until link is created (or timeout/cancel path removes it).
+	expireAt := ecs.GetResource[ecs.TimeState](w).UnixMs + ttlMs
+	ecs.AddComponent(w, playerHandle, components.PendingContextAction{
+		TargetEntityID: targetEntityID,
+		TargetHandle:   targetHandle,
+		ActionID:       actionID,
+		ExpireAtUnixMs: expireAt,
+	})
 }
 
 // handlePickupInteract attempts immediate pickup if in range, otherwise sets movement + PendingInteraction.
@@ -481,6 +610,7 @@ func (s *NetworkCommandSystem) handlePickupInteract(
 		// In range — immediate pickup (delegate to AutoInteractSystem-style logic)
 		// Set PendingInteraction so AutoInteractSystem picks it up this tick
 		ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+		ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
 		ecs.AddComponent(w, playerHandle, components.PendingInteraction{
 			TargetEntityID: targetEntityID,
 			TargetHandle:   targetHandle,
@@ -497,6 +627,7 @@ func (s *NetworkCommandSystem) handlePickupInteract(
 	}
 
 	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
 
 	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
 		m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
@@ -732,8 +863,86 @@ func (s *NetworkCommandSystem) clearLinkIntent(w *ecs.World, playerID types.Enti
 		return
 	}
 	ecs.GetResource[ecs.LinkState](w).ClearIntent(playerID)
-	if s.openContainerService != nil {
-		s.openContainerService.ClearPendingAutoOpen(w, playerID)
+}
+
+func (s *NetworkCommandSystem) clearPendingInteractionIntents(
+	w *ecs.World,
+	playerHandle types.Handle,
+	playerID types.EntityID,
+) {
+	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
+	s.clearLinkIntent(w, playerID)
+}
+
+func (s *NetworkCommandSystem) computeContextActions(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	targetEntityID types.EntityID,
+	targetHandle types.Handle,
+) []ContextAction {
+	if s.contextActionService == nil {
+		return nil
+	}
+	return s.contextActionService.ComputeActions(w, playerID, playerHandle, targetEntityID, targetHandle)
+}
+
+func (s *NetworkCommandSystem) cleanupPendingContextActions(w *ecs.World) {
+	if s.pendingContextQuery == nil {
+		s.pendingContextQuery = ecs.NewPreparedQuery(
+			w,
+			(1 << components.PendingContextActionComponentID),
+			0,
+		)
+	}
+
+	nowUnixMs := ecs.GetResource[ecs.TimeState](w).UnixMs
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	s.pendingContextRemove = s.pendingContextRemove[:0]
+
+	s.pendingContextQuery.ForEach(func(h types.Handle) {
+		pending, ok := ecs.GetComponent[components.PendingContextAction](w, h)
+		if !ok {
+			return
+		}
+		playerID, hasExternalID := w.GetExternalID(h)
+		if !hasExternalID {
+			s.pendingContextRemove = append(s.pendingContextRemove, h)
+			return
+		}
+
+		// Timeout path: pending action exceeded configured TTL.
+		if pending.ExpireAtUnixMs > 0 && nowUnixMs >= pending.ExpireAtUnixMs {
+			s.pendingContextRemove = append(s.pendingContextRemove, h)
+			return
+		}
+
+		if pending.TargetHandle == types.InvalidHandle || !w.Alive(pending.TargetHandle) {
+			s.pendingContextRemove = append(s.pendingContextRemove, h)
+			return
+		}
+
+		targetHandle := w.GetHandleByEntityID(pending.TargetEntityID)
+		if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+			s.pendingContextRemove = append(s.pendingContextRemove, h)
+			return
+		}
+
+		// If linked to target, execution is handled by LinkCreated subscriber.
+		if link, hasLink := linkState.GetLink(playerID); hasLink && link.TargetID == pending.TargetEntityID {
+			return
+		}
+
+		mov, hasMov := ecs.GetComponent[components.Movement](w, h)
+		if !hasMov || mov.State != constt.StateMoving {
+			// Cancel path: stopped movement without reaching link state.
+			s.pendingContextRemove = append(s.pendingContextRemove, h)
+		}
+	})
+
+	for _, handle := range s.pendingContextRemove {
+		ecs.RemoveComponent[components.PendingContextAction](w, handle)
 	}
 }
 
@@ -749,33 +958,6 @@ func lastCollidedEntityForHandle(w *ecs.World, playerHandle types.Handle) types.
 		return cr.CollidedWith
 	}
 	return 0
-}
-
-func isContainerTargetForOpen(w *ecs.World, targetHandle types.Handle) bool {
-	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
-	if !hasInfo {
-		return false
-	}
-
-	hasContainerBehavior := false
-	for _, behavior := range entityInfo.Behaviors {
-		if behavior == "container" {
-			hasContainerBehavior = true
-			break
-		}
-	}
-	if !hasContainerBehavior {
-		return false
-	}
-
-	targetID, hasExternalID := w.GetExternalID(targetHandle)
-	if !hasExternalID {
-		return false
-	}
-
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, targetID, 0)
-	return found && w.Alive(rootHandle)
 }
 
 func (s *NetworkCommandSystem) sendInventoryError(entityID types.EntityID, opID uint64, code netproto.ErrorCode, message string) {

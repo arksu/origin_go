@@ -270,21 +270,14 @@ class MoveController {
     const renderTimeMs = serverNowMs - interpolationDelayMs
 
     for (const [entityId, state] of this.entities) {
-      const prevPos = { x: state.visualX, y: state.visualY }
       const pos = this.interpolateEntity(state, renderTimeMs, clientNowMs)
 
-      // Log movement details for debugging
-      const dx = pos.x - prevPos.x
-      const dy = pos.y - prevPos.y
-      const distance = Math.sqrt(dx * dx + dy * dy)
-      const finalIsMoving = pos.isMoving
-
-      // if (DEBUG_MOVEMENT && (distance > 0.04)) {
+      // if (DEBUG_MOVEMENT && (_distance > 0.04)) {
       //   console.log(`[MoveController] Entity ${entityId}:`, {
       //     prevPos: `(${prevPos.x.toFixed(2)}, ${prevPos.y.toFixed(2)})`,
       //     newPos: `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`,
-      //     distance: distance.toFixed(2),
-      //     isMoving: finalIsMoving,
+      //     distance: _distance.toFixed(2),
+      //     isMoving: _finalIsMoving,
       //     isExtrapolating: state.isExtrapolating,
       //     keyframes: state.keyframes.length,
       //     renderTimeMs: renderTimeMs,

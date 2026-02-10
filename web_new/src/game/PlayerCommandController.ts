@@ -88,6 +88,22 @@ export class PlayerCommandController {
       }),
     })
   }
+
+  sendSelectContextAction(entityId: number, actionId: string): void {
+    if (!actionId) {
+      return
+    }
+
+    gameConnection.send({
+      playerAction: proto.C2S_PlayerAction.create({
+        selectContextAction: proto.SelectContextAction.create({
+          entityId,
+          actionId,
+        }),
+      }),
+    })
+  }
+
   sendDropToWorld(
     handRef: proto.IInventoryRef,
     handRevision: number,

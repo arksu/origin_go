@@ -50,6 +50,13 @@ Server → Network → gameStore → gameFacade → PIXI Render
          Vue Components (read-only for display)
 ```
 
+### 4. Interaction UX Rules
+
+- RMB on object is the entry point for context interactions.
+- Context menu data comes from server (`S2C_ContextMenu`), client only renders and sends selection.
+- Mini alerts are center-screen transient UI from server reason codes (`S2C_MiniAlert`).
+- Keep anti-spam logic in store/UI (`debounce`, `coalesce`, max visible items), not in Pixi layer.
+
 ## Stack
 
 | Category | Technology | Version |

@@ -9,9 +9,11 @@ import ChatContainer from '@/components/ui/ChatContainer.vue'
 import InventoryWindow from '@/components/ui/InventoryWindow.vue'
 import NestedInventoryWindow from '@/components/ui/NestedInventoryWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
+import ContextMenu from '@/components/ui/ContextMenu.vue'
 import { sendChatMessage } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
+import { proto } from '@/network/proto/packets.js'
 
 const router = useRouter()
 const gameStore = useGameStore()
@@ -55,6 +57,7 @@ const openNestedInventoryWindows = computed(() => {
   })
   return openWindows
 })
+const miniAlerts = computed(() => gameStore.miniAlerts)
 
 async function initCanvas() {
   if (!gameCanvas.value || canvasInitialized.value) return
@@ -137,6 +140,17 @@ function handleNestedInventoryClose(windowKey: string) {
   gameStore.closeNestedInventory(windowKey)
 }
 
+function alertTypeForSeverity(severity: proto.AlertSeverity): 'error' | 'warning' | 'info' {
+  switch (severity) {
+    case proto.AlertSeverity.ALERT_SEVERITY_ERROR:
+      return 'error'
+    case proto.AlertSeverity.ALERT_SEVERITY_WARNING:
+      return 'warning'
+    default:
+      return 'info'
+  }
+}
+
 // Setup hotkeys
 const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
   ...config,
@@ -148,6 +162,7 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
       case 'Escape':
         chatContainerRef.value?.unfocusChat()
         gameStore.setPlayerInventoryVisible(false)
+        gameStore.closeContextMenu()
         break
       case '/':
         if (config.modifiers?.includes('shift')) {
@@ -201,6 +216,17 @@ useHotkeys(hotkeys)
       <div class="game-ui">
         <AppButton variant="secondary" size="sm" @click="handleBack">Exit</AppButton>
       </div>
+      <div v-if="miniAlerts.length > 0" class="game-mini-alerts">
+        <AppAlert
+          v-for="alert in miniAlerts"
+          :key="alert.id"
+          :type="alertTypeForSeverity(alert.severity)"
+          class="game-mini-alert"
+        >
+          {{ alert.message }}
+        </AppAlert>
+      </div>
+      <ContextMenu />
       <div class="game-chat">
         <ChatContainer ref="chatContainerRef" @send="handleChatSend" />
       </div>
@@ -293,6 +319,23 @@ useHotkeys(hotkeys)
   width: calc(100% - 70px);
   max-width: 340px;
   z-index: 100;
+}
+
+.game-mini-alerts {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 180;
+  pointer-events: none;
+  width: min(90vw, 420px);
+}
+
+.game-mini-alert {
+  text-align: center;
 }
 
 .game-inventory {

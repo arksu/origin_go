@@ -1,0 +1,5 @@
+- Follow KISS (Keep It Simple, Stupid): Prefer simple, readable solutions over clever complexity
+- Follow DRY (Don't Repeat Yourself): Extract repeated logic into reusable functions/classes/modules
+- Write self-documenting code: Use clear variable/function names that explain intent
+- Fail fast: Validate inputs early and throw meaningful errors
+- Single Responsibility: Each function/class should do one thing well

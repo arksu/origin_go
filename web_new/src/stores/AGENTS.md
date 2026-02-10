@@ -77,6 +77,12 @@ if (authStore.isAuthenticated) { /* proceed */ }
 | `chunks` | `Map<string, ChunkData>` | Loaded chunk data by key `"x,y"` |
 | `entities` | `Map<number, GameObjectData>` | All game objects by entity ID |
 
+#### Interaction UI State
+| State | Type | Description |
+|-------|------|-------------|
+| `contextMenu` | `ContextMenuState \| null` | Server-provided context actions for selected entity |
+| `miniAlerts` | `MiniAlertItem[]` | Center-screen transient alerts with severity and TTL |
+
 ### Types
 
 ```typescript
@@ -133,6 +139,11 @@ interface ChunkData {
 - `spawnEntity(data)` — On `S2C_ObjectSpawn`
 - `despawnEntity(entityId)` — On `S2C_ObjectDespawn`
 - `updateEntityMovement(entityId, movement)` — On `S2C_ObjectMove`
+
+#### Interaction UI
+- `openContextMenu(entityId, actions)` — On `S2C_ContextMenu`
+- `closeContextMenu()` — Explicit close on click/hotkey
+- `pushMiniAlert(input)` — On `S2C_MiniAlert` with debounce/coalesce/max-visible rules
 
 #### Reset
 - `reset()` — Full cleanup (logout, disconnect, leave world)

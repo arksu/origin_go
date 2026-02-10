@@ -243,6 +243,47 @@ export function registerMessageHandlers(): void {
     )
   })
 
+  messageDispatcher.on('contextMenu', (msg: proto.IS2C_ContextMenu) => {
+    console.log('[Handlers] contextMenu RAW:', {
+      entityId: msg.entityId,
+      actions: msg.actions,
+      actionsCount: msg.actions?.length || 0,
+    })
+
+    if (!msg.entityId || !msg.actions || msg.actions.length === 0) {
+      console.log('[Handlers] contextMenu ignored: empty payload')
+      return
+    }
+
+    const normalizedActions = msg.actions.map((a) => ({
+        actionId: a.actionId || '',
+        title: a.title || a.actionId || '',
+      })).filter((a) => a.actionId !== '')
+
+    console.log('[Handlers] contextMenu NORMALIZED:', {
+      entityId: toNumber(msg.entityId),
+      actions: normalizedActions,
+      actionsCount: normalizedActions.length,
+    })
+
+    gameStore.openContextMenu(
+      toNumber(msg.entityId),
+      normalizedActions,
+    )
+  })
+
+  messageDispatcher.on('miniAlert', (msg: proto.IS2C_MiniAlert) => {
+    const reasonCode = (msg.reasonCode || '').trim()
+    if (!reasonCode) {
+      return
+    }
+    gameStore.pushMiniAlert({
+      reasonCode,
+      severity: msg.severity ?? proto.AlertSeverity.ALERT_SEVERITY_INFO,
+      ttlMs: msg.ttlMs ? Number(msg.ttlMs) : 0,
+    })
+  })
+
   messageDispatcher.on('error', (msg: proto.IS2C_Error) => {
     console.error('[Game] Server error:', msg.code, msg.message)
   })

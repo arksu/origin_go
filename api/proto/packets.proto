@@ -294,6 +294,11 @@ message Interact {
   InteractionType type = 2; // optional, сервер сам определит если не указан
 }
 
+message SelectContextAction {
+  uint64 entity_id = 1;
+  string action_id = 2;
+}
+
 enum InteractionType {
   AUTO = 0; // сервер решает
   OPEN = 2;
@@ -305,6 +310,7 @@ message C2S_PlayerAction {
     MoveTo move_to = 1;
     MoveToEntity move_to_entity = 2;
     Interact interact = 3;
+    SelectContextAction select_context_action = 4;
     //    Attack attack = 4;
     //    UseSkill use_skill = 5;
     //    StopAction stop = 6;
@@ -474,6 +480,28 @@ message S2C_ContainerClosed {
   InventoryRef ref = 1;
 }
 
+message ContextMenuAction {
+  string action_id = 1;
+  string title = 2;
+}
+
+message S2C_ContextMenu {
+  uint64 entity_id = 1;
+  repeated ContextMenuAction actions = 2;
+}
+
+enum AlertSeverity {
+  ALERT_SEVERITY_INFO = 0;
+  ALERT_SEVERITY_WARNING = 1;
+  ALERT_SEVERITY_ERROR = 2;
+}
+
+message S2C_MiniAlert {
+  AlertSeverity severity = 1;
+  string reason_code = 2;
+  uint32 ttl_ms = 3;
+}
+
 message S2C_ChatMessage {
   ChatChannel channel = 1;
 
@@ -521,6 +549,8 @@ message ServerMessage {
     S2C_ContainerClosed container_closed = 22;
 
     S2C_ChatMessage chat = 23;
+    S2C_ContextMenu context_menu = 44;
+    S2C_MiniAlert mini_alert = 45;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
