@@ -118,7 +118,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	inventorySaver := inventory.NewInventorySaver(logger)
 	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, inventorySaver, logger)
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
-	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired))
+	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
 	s.world.AddSystem(systems.NewDropDecaySystem(droppedItemPersister, logger))
 
 	return s
@@ -362,9 +362,11 @@ func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 	s.chunkManager.UnregisterEntity(entityID)
 }
 
-// onDetachedEntityExpired is called when a detached entity's TTL expires
-// It handles cleanup of spatial index and AOI before the entity is despawned
+// onDetachedEntityExpired is called when a detached entity's TTL expires.
+// It handles per-entity spatial cleanup before despawn.
 func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
+	_ = entityID
+
 	// Remove from chunk spatial index
 	if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](s.world, handle); hasChunkRef {
 		if transform, hasTransform := ecs.GetComponent[components.Transform](s.world, handle); hasTransform {
@@ -377,9 +379,11 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 			}
 		}
 	}
+}
 
-	// Unregister from AOI
-	s.chunkManager.UnregisterEntity(entityID)
+// onDetachedEntitiesExpired handles AOI cleanup in one batch after detached despawns.
+func (s *Shard) onDetachedEntitiesExpired(entityIDs []types.EntityID) {
+	s.chunkManager.UnregisterEntities(entityIDs)
 }
 
 // SendChatMessage sends a chat message to a single entity

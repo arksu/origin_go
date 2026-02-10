@@ -254,17 +254,71 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uin
 
 // UnregisterEntity removes an entity from AOI tracking
 func (cm *ChunkManager) UnregisterEntity(entityID types.EntityID) {
-	cm.aoiMu.Lock()
-	aoi, exists := cm.entityAOIs[entityID]
-	if !exists {
-		cm.aoiMu.Unlock()
+	cm.UnregisterEntities([]types.EntityID{entityID})
+}
+
+// UnregisterEntities removes multiple entities from AOI tracking and
+// recalculates chunk states once for the whole batch.
+func (cm *ChunkManager) UnregisterEntities(entityIDs []types.EntityID) {
+	if len(entityIDs) == 0 {
 		return
 	}
-	delete(cm.entityAOIs, entityID)
-	cm.aoiMu.Unlock()
 
-	cm.removeEntityInterests(entityID, aoi)
+	startedAt := time.Now()
+	aois := make([]*EntityAOI, 0, len(entityIDs))
+	removeAOITotal := time.Duration(0)
+	removeInterestsTotal := time.Duration(0)
+
+	removeAOIStartedAt := time.Now()
+	cm.aoiMu.Lock()
+	for _, entityID := range entityIDs {
+		aoi, exists := cm.entityAOIs[entityID]
+		if !exists {
+			continue
+		}
+		delete(cm.entityAOIs, entityID)
+		aois = append(aois, aoi)
+	}
+	cm.aoiMu.Unlock()
+	removeAOITotal = time.Since(removeAOIStartedAt)
+
+	if len(aois) == 0 {
+		return
+	}
+
+	removeInterestsStartedAt := time.Now()
+	cm.interestMu.Lock()
+	for _, aoi := range aois {
+		entityID := aoi.EntityID
+		for coord := range aoi.ActiveChunks {
+			if interest, exists := cm.chunkInterests[coord]; exists {
+				delete(interest.activeEntities, entityID)
+			}
+		}
+		for coord := range aoi.PreloadChunks {
+			if interest, exists := cm.chunkInterests[coord]; exists {
+				delete(interest.preloadEntities, entityID)
+			}
+		}
+	}
+	cm.interestMu.Unlock()
+	removeInterestsTotal = time.Since(removeInterestsStartedAt)
+
+	recalcStartedAt := time.Now()
 	cm.recalculateChunkStates()
+	recalcTotal := time.Since(recalcStartedAt)
+	total := time.Since(startedAt)
+
+	if total > 10*time.Millisecond {
+		cm.logger.Info("batch unregister entities timings",
+			zap.Int("requested_entities", len(entityIDs)),
+			zap.Int("found_entities", len(aois)),
+			zap.Duration("remove_aoi_total", removeAOITotal),
+			zap.Duration("remove_interests_total", removeInterestsTotal),
+			zap.Duration("recalculate_total", recalcTotal),
+			zap.Duration("total", total),
+		)
+	}
 }
 
 // UpdateEntityPosition updates AOI for an entity when it moves to a new chunk
@@ -882,6 +936,9 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		return nil
 	}
 
+	// Preserve dirty state from active runtime objects/tiles before despawn.
+	wasDirty := chunk.IsDirty(cm.world)
+
 	handles := chunk.GetHandles()
 	rawObjects := make([]*repository.Object, 0, len(handles))
 	rawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory, len(handles))
@@ -940,7 +997,11 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 
 	chunk.SetRawObjects(rawObjects)
 	chunk.SetRawInventoriesByOwner(rawInventoriesByOwner)
-	chunk.MarkRawDataDirty()
+	if wasDirty {
+		chunk.MarkRawDataDirty()
+	} else {
+		chunk.ClearRawDataDirty()
+	}
 	chunk.ClearHandles()
 	chunk.SetState(types.ChunkStatePreloaded)
 
