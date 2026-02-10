@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { proto } from '@/network/proto/packets.js'
 import { useGameStore } from '@/stores/gameStore'
-import { sendOpenContainer } from '@/network'
+import { sendCloseContainer, sendOpenContainer } from '@/network'
 import { useInventoryOps } from '@/composables/useInventoryOps'
 import GameWindow from './GameWindow.vue'
 import ItemSlot from './ItemSlot.vue'
@@ -24,7 +24,19 @@ const { pickUpItem, placeItem, placeOrSwapItem, findInventoryState } = useInvent
 const gridState = computed(() => props.inventoryState.grid)
 const inventoryRef = computed(() => props.inventoryState.ref)
 
+const isPlayerRootInventoryRef = (ref: proto.IInventoryRef): boolean => {
+  const playerID = gameStore.playerEntityId ?? 0
+  return (
+    (ref.kind ?? 0) === proto.InventoryKind.INVENTORY_KIND_GRID &&
+    Number(ref.ownerId ?? 0) === playerID &&
+    (ref.inventoryKey ?? 0) === 0
+  )
+}
+
 const onClose = () => {
+  if (inventoryRef.value && !isPlayerRootInventoryRef(inventoryRef.value)) {
+    sendCloseContainer(inventoryRef.value)
+  }
   gameStore.closeNestedInventory(props.windowKey)
   emit('close')
 }
@@ -57,6 +69,9 @@ const onItemRightClick = (item: { x: number; y: number; instance: proto.IItemIns
     
     if (gameStore.openNestedInventories.has(windowKey)) {
       console.log('Closing deeper nested inventory:', windowKey)
+      if (!isPlayerRootInventoryRef(ref)) {
+        sendCloseContainer(ref)
+      }
       gameStore.closeNestedInventory(windowKey)
     } else {
       console.log('Requesting open deeper container:', ref)

@@ -519,3 +519,71 @@ func TestContentRules_RootContainer_NoRules(t *testing.T) {
 	// backpack already has the bag at (0,0), now should also have ore at (3,3)
 	assert.Len(t, backpack.Items, 2)
 }
+
+func TestContentRules_AppliedForNestedInWorldContainer(t *testing.T) {
+	world, playerID, playerHandle := setupTestWorld(t)
+	itemdefs.SetGlobalForTesting(createContentRulesRegistry())
+
+	// Player containers: hand + backpack for source item.
+	backpackHandle := createGridContainer(world, playerID, 0, 10, 10)
+	handHandle := createHandContainer(world, playerID, 0)
+	ecs.AddComponent(world, playerHandle, components.InventoryOwner{
+		Inventories: []components.InventoryLink{
+			{Kind: constt.InventoryGrid, Key: 0, OwnerID: playerID, Handle: backpackHandle},
+			{Kind: constt.InventoryHand, Key: 0, OwnerID: playerID, Handle: handHandle},
+		},
+	})
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](world)
+	refIndex.Add(constt.InventoryGrid, playerID, 0, backpackHandle)
+	refIndex.Add(constt.InventoryHand, playerID, 0, handHandle)
+
+	// World root container holds seed_bag item.
+	objectOwnerID := types.EntityID(9000001)
+	bagItemID := types.EntityID(5000)
+	worldRootHandle := createGridContainer(world, objectOwnerID, 0, 8, 8)
+	addItemToContainer(world, worldRootHandle, components.InvItem{
+		ItemID:   bagItemID,
+		TypeID:   100, // seed_bag (AllowTags: ["seed"])
+		Resource: "seed_bag.png",
+		Quality:  100,
+		Quantity: 1,
+		W:        2,
+		H:        2,
+		X:        0,
+		Y:        0,
+	})
+	refIndex.Add(constt.InventoryGrid, objectOwnerID, 0, worldRootHandle)
+
+	// Nested bag container under world root.
+	nestedHandle := createGridContainer(world, bagItemID, 0, 4, 4)
+	refIndex.Add(constt.InventoryGrid, bagItemID, 0, nestedHandle)
+
+	// Simulate opened object flow for authorization to world nested.
+	openState := ecs.GetResource[ecs.OpenContainerState](world)
+	openState.SetRootOpened(playerID, objectOwnerID)
+	openState.OpenRef(playerID, ecs.InventoryRefKey{Kind: constt.InventoryGrid, OwnerID: objectOwnerID, Key: 0})
+	openState.OpenRef(playerID, ecs.InventoryRefKey{Kind: constt.InventoryGrid, OwnerID: bagItemID, Key: 0})
+
+	// Put forbidden item (ore tag) in hand.
+	oreID := types.EntityID(6001)
+	addItemToContainer(world, handHandle, components.InvItem{
+		ItemID: oreID, TypeID: 102, Resource: "iron_ore.png",
+		Quality: 100, Quantity: 1, W: 1, H: 1,
+	})
+
+	service := NewInventoryOperationService(zap.NewNop(), nil, nil)
+	result := service.ExecuteMove(world, playerID, playerHandle, 1, &netproto.InventoryMoveSpec{
+		Src: &netproto.InventoryRef{
+			Kind: netproto.InventoryKind_INVENTORY_KIND_HAND, OwnerId: uint64(playerID),
+		},
+		Dst: &netproto.InventoryRef{
+			Kind: netproto.InventoryKind_INVENTORY_KIND_GRID, OwnerId: uint64(bagItemID),
+		},
+		ItemId: uint64(oreID),
+		DstPos: &netproto.GridPos{X: 0, Y: 0},
+	}, nil)
+
+	assert.False(t, result.Success, "Content rules must apply when nested container is in world object")
+	assert.Equal(t, netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, result.ErrorCode)
+}

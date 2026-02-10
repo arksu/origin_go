@@ -137,7 +137,7 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 		CharacterID: int64(entityID),
 		X:           int(transform.X),
 		Y:           int(transform.Y),
-		Heading:     int16(math.Mod(transform.Direction*180/math.Pi+360, 360)),
+		Heading:     normalizeCharacterHeading(transform.Direction),
 		Stamina:     100, // TODO
 		SHP:         100, // TODO
 		HHP:         100, // TODO
@@ -151,6 +151,21 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 			zap.Int64("character_id", snapshot.CharacterID),
 			zap.Int("channel_size", snapshotChannelSize))
 	}
+}
+
+func normalizeCharacterHeading(direction float64) int16 {
+	// Runtime keeps radians; DB stores integer degrees [0..359].
+	if math.IsNaN(direction) || math.IsInf(direction, 0) {
+		return 0
+	}
+
+	degrees := direction * 180 / math.Pi
+	normalized := math.Mod(degrees, 360)
+	if normalized < 0 {
+		normalized += 360
+	}
+
+	return int16(math.Floor(normalized))
 }
 
 func (s *CharacterSaver) saveWorker(workerID int) {

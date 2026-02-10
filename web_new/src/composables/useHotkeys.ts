@@ -64,11 +64,11 @@ export function useHotkeys(hotkeys: HotkeyConfig[]) {
     // Find matching hotkey
     const matchingHotkey = hotkeys.find(config => {
       const matches = matchesHotkey(event, config)
-      console.log('[useHotkeys] Checking config:', {
-        configKey: config.key,
-        configModifiers: config.modifiers,
-        matches
-      })
+      // console.log('[useHotkeys] Checking config:', {
+      //   configKey: config.key,
+      //   configModifiers: config.modifiers,
+      //   matches
+      // })
       return matches
     })
 

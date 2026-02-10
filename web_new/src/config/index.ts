@@ -1,6 +1,11 @@
+const defaultWsUrl =
+  typeof window !== 'undefined'
+    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
+    : 'ws://localhost:8080/ws'
+
 export const config = {
   API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api',
-  WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws',
+  WS_URL: import.meta.env.VITE_WS_URL || defaultWsUrl,
   DEBUG: import.meta.env.VITE_DEBUG === 'true' || import.meta.env.DEV,
   BUILD_INFO: {
     version: __APP_VERSION__,

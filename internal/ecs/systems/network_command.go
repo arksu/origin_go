@@ -314,6 +314,24 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 		return
 	}
 
+	_, isDroppedItem := ecs.GetComponent[components.DroppedItem](w, targetHandle)
+	isCollidingWithTarget := lastCollidedEntityForHandle(w, playerHandle) == targetEntityID
+	isLinkedToTarget := false
+	if link, hasLink := ecs.GetResource[ecs.LinkState](w).GetLink(cmd.CharacterID); hasLink && link.TargetID == targetEntityID {
+		isLinkedToTarget = true
+	}
+
+	// If the player is already in contact (or already linked) with the same world object,
+	// re-click should not restart path-following. Keep interaction intent only.
+	if moveToEntity.AutoInteract && !isDroppedItem && (isCollidingWithTarget || isLinkedToTarget) {
+		s.stopMovementAndEmit(w, playerHandle)
+		s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
+		if s.openContainerService != nil && isContainerTargetForOpen(w, targetHandle) {
+			s.openContainerService.SetPendingAutoOpen(w, cmd.CharacterID, targetEntityID)
+		}
+		return
+	}
+
 	// Set movement target to entity handle (MovementSystem will track live position)
 	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
 		m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
@@ -321,7 +339,6 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 
 	// If autoInteract, determine interaction type and set PendingInteraction
 	if moveToEntity.AutoInteract {
-		_, isDroppedItem := ecs.GetComponent[components.DroppedItem](w, targetHandle)
 		if isDroppedItem {
 			ecs.AddComponent(w, playerHandle, components.PendingInteraction{
 				TargetEntityID: targetEntityID,
@@ -342,6 +359,25 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 		zap.Uint64("client_id", cmd.ClientID),
 		zap.Uint64("target_entity_id", moveToEntity.EntityId),
 		zap.Bool("auto_interact", moveToEntity.AutoInteract))
+}
+
+func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle types.Handle) {
+	movement, hasMovement := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !hasMovement || movement.State != constt.StateMoving {
+		return
+	}
+
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	if !hasTransform {
+		return
+	}
+
+	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+		m.ClearTarget()
+	})
+
+	// Force a movement batch entry with IsMoving=false in this tick.
+	ecs.GetResource[ecs.MovedEntities](w).Add(playerHandle, transform.X, transform.Y)
 }
 
 func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
@@ -672,6 +708,20 @@ func (s *NetworkCommandSystem) clearLinkIntent(w *ecs.World, playerID types.Enti
 	if s.openContainerService != nil {
 		s.openContainerService.ClearPendingAutoOpen(w, playerID)
 	}
+}
+
+func lastCollidedEntityForHandle(w *ecs.World, playerHandle types.Handle) types.EntityID {
+	cr, ok := ecs.GetComponent[components.CollisionResult](w, playerHandle)
+	if !ok {
+		return 0
+	}
+	if cr.PrevCollidedWith != 0 {
+		return cr.PrevCollidedWith
+	}
+	if cr.HasCollision && cr.CollidedWith != 0 {
+		return cr.CollidedWith
+	}
+	return 0
 }
 
 func isContainerTargetForOpen(w *ecs.World, targetHandle types.Handle) bool {

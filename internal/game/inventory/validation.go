@@ -148,10 +148,27 @@ func (v *Validator) isNestedContainerOwnedByPlayer(w *ecs.World, playerHandle ty
 		return false
 	}
 
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	for _, link := range owner.Inventories {
-		// Skip nested containers themselves (they have OwnerID = itemID)
-		if link.OwnerID != types.EntityID(0) && link.OwnerID == itemOwnerID {
-			return true
+		// Skip the nested container itself; we need a parent container holding this item.
+		if link.Kind == constt.InventoryGrid && link.Key == 0 && link.OwnerID == itemOwnerID {
+			continue
+		}
+		if !w.Alive(link.Handle) {
+			continue
+		}
+
+		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		if !ok {
+			continue
+		}
+
+		for _, item := range container.Items {
+			if item.ItemID != itemOwnerID {
+				continue
+			}
+			nestedHandle, nestedFound := refIndex.Lookup(constt.InventoryGrid, itemOwnerID, 0)
+			return nestedFound && w.Alive(nestedHandle)
 		}
 	}
 	return false
@@ -249,8 +266,12 @@ func (v *Validator) validateContainerRules(
 ) *ValidationError {
 	containerOwnerID := dstInfo.Container.OwnerID
 
-	// Find the parent item's TypeID by searching through the owner's inventories
-	parentTypeID := v.findItemTypeID(w, dstInfo.Owner, containerOwnerID)
+	// Nested container owner_id == parent item_id. Resolve parent item globally so
+	// rules work regardless of where nested inventory is located (player, object, equip, etc.).
+	parentTypeID := v.findItemTypeIDInOwner(w, dstInfo.Owner, containerOwnerID)
+	if parentTypeID == 0 {
+		parentTypeID = v.findItemTypeIDInWorld(w, containerOwnerID)
+	}
 	if parentTypeID == 0 {
 		return nil // Root container (backpack) — no content rules
 	}
@@ -264,9 +285,9 @@ func (v *Validator) validateContainerRules(
 	return v.checkContentRules(rules, itemDef)
 }
 
-// findItemTypeID searches through the owner's inventories for an item with the given ItemID
+// findItemTypeIDInOwner searches through owner's inventories for an item with the given ItemID
 // and returns its TypeID. Returns 0 if not found.
-func (v *Validator) findItemTypeID(
+func (v *Validator) findItemTypeIDInOwner(
 	w *ecs.World,
 	owner *components.InventoryOwner,
 	itemID types.EntityID,
@@ -286,6 +307,37 @@ func (v *Validator) findItemTypeID(
 		}
 	}
 	return 0
+}
+
+// findItemTypeIDInWorld searches all inventory containers for an item with itemID.
+// This covers nested inventories hosted outside player's InventoryOwner (e.g. world objects, equipment, stations).
+func (v *Validator) findItemTypeIDInWorld(
+	w *ecs.World,
+	itemID types.EntityID,
+) uint32 {
+	if itemID == 0 {
+		return 0
+	}
+
+	query := ecs.NewQuery(w).With(components.InventoryContainerComponentID)
+	var foundTypeID uint32
+	query.ForEach(func(h types.Handle) {
+		if foundTypeID != 0 {
+			return
+		}
+		container, ok := ecs.GetComponent[components.InventoryContainer](w, h)
+		if !ok {
+			return
+		}
+		for _, item := range container.Items {
+			if item.ItemID == itemID {
+				foundTypeID = item.TypeID
+				return
+			}
+		}
+	})
+
+	return foundTypeID
 }
 
 // checkContentRules validates an item definition against container content rules.
