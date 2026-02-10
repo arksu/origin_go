@@ -1,4 +1,4 @@
-.PHONY: proto build run map-gen-build map-gen load-test-build load-test clean
+.PHONY: proto build run map-gen-build map-gen load-test-build load-test clean test
 
 # generate sqlc files
 sqlc:
@@ -49,3 +49,7 @@ clean:
 # Install dependencies
 deps:
 	go mod tidy
+
+# Run all Go tests
+test: proto sqlc
+	go test ./...
