@@ -1,5 +1,7 @@
 const defaultWsUrl =
-  typeof window !== 'undefined'
+  import.meta.env.DEV
+    ? 'ws://localhost:8080/ws'
+    : typeof window !== 'undefined'
     ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
     : 'ws://localhost:8080/ws'
 

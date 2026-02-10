@@ -120,6 +120,11 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		OpenRefsByPlayer:        make(map[types.EntityID]map[InventoryRefKey]struct{}, 64),
 		PlayersByRef:            make(map[InventoryRefKey]map[types.EntityID]struct{}, 64),
 	})
+	InitResource(w, ObjectBehaviorDirtyQueue{
+		pending: make([]types.Handle, 0, 256),
+		inQueue: make(map[types.Handle]struct{}, 256),
+		head:    0,
+	})
 	InitResource(w, TimeState{})
 
 	return w

@@ -64,6 +64,9 @@ func (e *InventoryExecutor) ExecuteOperation(
 	e.collectClosedContainerRefs(w, result)
 	opResult.ClosedContainerRefs = result.ClosedContainerRefs
 
+	// Mark changed world-object roots for deferred behavior recompute.
+	e.markBehaviorDirtyForUpdatedRoots(w, result)
+
 	// Convert updated containers
 	for _, container := range result.UpdatedContainers {
 		containerState := e.convertContainerToState(w, container)
@@ -325,12 +328,40 @@ func (e *InventoryExecutor) ExecutePickupFromWorld(
 	e.collectClosedContainerRefs(w, result)
 	opResult.ClosedContainerRefs = result.ClosedContainerRefs
 
+	e.markBehaviorDirtyForUpdatedRoots(w, result)
+
 	for _, container := range result.UpdatedContainers {
 		containerState := e.convertContainerToState(w, container)
 		opResult.UpdatedContainers = append(opResult.UpdatedContainers, containerState)
 	}
 
 	return opResult
+}
+
+func (e *InventoryExecutor) markBehaviorDirtyForUpdatedRoots(w *ecs.World, result *OperationResult) {
+	if !result.Success {
+		return
+	}
+
+	for _, info := range result.UpdatedContainers {
+		if info == nil || info.Container == nil {
+			continue
+		}
+
+		container := info.Container
+		if container.Kind != constt.InventoryGrid || container.Key != 0 {
+			continue
+		}
+
+		handle := w.GetHandleByEntityID(container.OwnerID)
+		if handle == types.InvalidHandle || !w.Alive(handle) {
+			continue
+		}
+		if _, hasObjectState := ecs.GetComponent[components.ObjectInternalState](w, handle); !hasObjectState {
+			continue
+		}
+		ecs.MarkObjectBehaviorDirty(w, handle)
+	}
 }
 
 func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *ContainerInfo) systems.InventoryContainerState {

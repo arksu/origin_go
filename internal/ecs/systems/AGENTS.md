@@ -31,6 +31,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                  |
 | 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction | Auto-pickup dropped items on arrival      |
 | 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef   | Updates VisibilityState, publishes events |
+| 360      | ObjectBehaviorSystem  | Recomputes object behavior flags/state/appearance            | ObjectBehaviorDirtyQueue      | Dirty-queue driven, budget-limited        |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions          |
 
 ## System Details
@@ -219,8 +220,28 @@ AutoInteractSystem (320)
     ↓ (pickup may despawn entities)
 VisionSystem (350)
     ↓ (updates VisibilityState)
+ObjectBehaviorSystem (360)
+    ↓ (applies behavior flags/resource only for dirty objects)
 ChunkSystem (400)
 ```
+
+## ObjectBehaviorSystem (Priority: 360)
+
+**Purpose**: Applies runtime object behaviors (e.g. `container`) and updates:
+- `ObjectInternalState.Flags`
+- `ObjectInternalState.State`
+- `Appearance.Resource` (with appearance-changed event)
+
+**Execution Model (important)**:
+- No full-world scan in normal operation.
+- Processes only handles from `ecs.ObjectBehaviorDirtyQueue`.
+- Per-tick budget is controlled by config: `game.object_behavior_budget_per_tick` (default `512`).
+- Debug-only fallback sweep can be enabled (dev environment) to catch missed dirty marks.
+
+**Dirty Marking Contract**:
+- Systems that mutate behavior-relevant data must call `ecs.MarkObjectBehaviorDirty(...)`.
+- Current primary producer is inventory flow for object root containers.
+- Chunk activation forces initial behavior recompute for all behavior-bearing objects (no lazy init).
 
 ## Performance Considerations
 

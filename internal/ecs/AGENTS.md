@@ -385,3 +385,16 @@ The ECS agent architecture provides:
 - **Testability**: Easy unit and integration testing
 
 By following these patterns and best practices, you can build efficient, scalable game systems that handle thousands of entities with predictable sub-millisecond tick times.
+
+## Runtime Behavior Recompute
+
+For object runtime behaviors (flags/state/appearance), avoid full-world polling every tick.
+
+- Use resource `ObjectBehaviorDirtyQueue` as the primary invalidation channel.
+- Mark dirty explicitly from mutation points:
+  - `ecs.MarkObjectBehaviorDirty(world, handle)`
+  - `ecs.MarkObjectBehaviorDirtyByEntityID(world, entityID)`
+- `ObjectBehaviorSystem` consumes this queue with a per-tick budget (`game.object_behavior_budget_per_tick`).
+- Debug fallback sweep is allowed only in non-production env for safety checks.
+
+This pattern is mandatory for behavior-heavy worlds (e.g. thousands of containers/trees).
