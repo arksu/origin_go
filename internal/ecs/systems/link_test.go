@@ -38,14 +38,26 @@ func TestLinkSystemCreatesLinkOnIntentCollision(t *testing.T) {
 	linkState.SetIntent(playerID, targetID, targetHandle, time.Now())
 
 	var moveEvents []*ecs.ObjectMoveBatchEvent
-	eb.SubscribeSync(ecs.TopicGameplayMovementMoveBatch, eventbus.PriorityMedium, func(ctx context.Context, event eventbus.Event) error {
+	moveEventReceived := make(chan struct{}, 1)
+	eb.SubscribeAsync(ecs.TopicGameplayMovementMoveBatch, eventbus.PriorityMedium, func(ctx context.Context, event eventbus.Event) error {
 		if move, ok := event.(*ecs.ObjectMoveBatchEvent); ok {
 			moveEvents = append(moveEvents, move)
+			select {
+			case moveEventReceived <- struct{}{}:
+			default:
+			}
 		}
 		return nil
 	})
 
 	linkSystem.Update(w, 0.05)
+
+	// Wait for async event to be processed
+	select {
+	case <-moveEventReceived:
+	case <-time.After(100 * time.Millisecond):
+		// Continue anyway - the event might not be published if no movement was stopped
+	}
 
 	link, ok := linkState.GetLink(playerID)
 	if !ok {
