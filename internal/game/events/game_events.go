@@ -95,7 +95,7 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 			Position: &netproto.Position{
 				X:       int32(entry.X),
 				Y:       int32(entry.Y),
-				Heading: uint32(entry.Heading),
+				Heading: float32(entry.Heading),
 			},
 			Velocity: &netproto.Vector2{
 				X: int32(entry.VelocityX),
@@ -135,13 +135,22 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 		serializedMoves[i] = data
 	}
 
+	observerEntityIDs := make(map[types.Handle]types.EntityID, len(observerEntries))
+	shard.WithWorldRead(func(w *ecs.World) {
+		for observerHandle := range observerEntries {
+			if observerEntityID, ok := w.GetExternalID(observerHandle); ok {
+				observerEntityIDs[observerHandle] = observerEntityID
+			}
+		}
+	})
+
 	// Phase 3: Single ClientsMu lock — send pre-serialized bytes to each observer
 	shard.ClientsMu.RLock()
 	for observerHandle, entryIndices := range observerEntries {
 		if len(entryIndices) == 0 {
 			continue
 		}
-		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
+		observerEntityID, ok := observerEntityIDs[observerHandle]
 		if !ok {
 			continue
 		}
@@ -175,72 +184,65 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 		return nil
 	}
 
-	shard.ClientsMu.RLock()
-	// Find the client that is the observer
-	if client, exists := shard.Clients[event.ObserverID]; exists {
-		// Get the target entity's components
-		transform, hasTransform := ecs.GetComponent[components.Transform](shard.World(), event.TargetHandle)
-		if !hasTransform {
-			shard.ClientsMu.RUnlock()
-			return nil
+	var (
+		hasTransform  bool
+		hasEntityInfo bool
+		transform     components.Transform
+		entityInfo    components.EntityInfo
+		sizeX         int32
+		sizeY         int32
+		resourcePath  = "unknown"
+	)
+	shard.WithWorldRead(func(w *ecs.World) {
+		transform, hasTransform = ecs.GetComponent[components.Transform](w, event.TargetHandle)
+		entityInfo, hasEntityInfo = ecs.GetComponent[components.EntityInfo](w, event.TargetHandle)
+		if !hasTransform || !hasEntityInfo {
+			return
 		}
-
-		entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.World(), event.TargetHandle)
-		if !hasEntityInfo {
-			shard.ClientsMu.RUnlock()
-			return nil
-		}
-
-		// Get collider component for size information
-		collider, hasCollider := ecs.GetComponent[components.Collider](shard.World(), event.TargetHandle)
-
-		// Calculate size - use collider if available, otherwise zero size
-		var sizeX, sizeY int32
-		if hasCollider {
+		if collider, hasCollider := ecs.GetComponent[components.Collider](w, event.TargetHandle); hasCollider {
 			sizeX = int32(collider.HalfWidth * 2)  // Convert from half-width to full width
 			sizeY = int32(collider.HalfHeight * 2) // Convert from half-height to full height
 		}
-
-		// Get appearance component for resource path
-		var resourcePath string
-		appearance, hasAppearance := ecs.GetComponent[components.Appearance](shard.World(), event.TargetHandle)
-		if hasAppearance && appearance.Resource != "" {
+		if appearance, hasAppearance := ecs.GetComponent[components.Appearance](w, event.TargetHandle); hasAppearance && appearance.Resource != "" {
 			resourcePath = appearance.Resource
-		} else {
-			resourcePath = "unknown" // Fallback to unknown resource
 		}
+	})
+	if !hasTransform || !hasEntityInfo {
+		return nil
+	}
 
-		msg := &netproto.ServerMessage{
-			Payload: &netproto.ServerMessage_ObjectSpawn{
-				ObjectSpawn: &netproto.S2C_ObjectSpawn{
-					EntityId:     uint64(event.TargetID),
-					TypeId:       entityInfo.TypeID,
-					ResourcePath: resourcePath,
-					Position: &netproto.EntityPosition{
-						Position: &netproto.Position{
-							X: int32(transform.X),
-							Y: int32(transform.Y),
-						},
-						Size: &netproto.Vector2{
-							X: sizeX,
-							Y: sizeY,
-						},
+	msg := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ObjectSpawn{
+			ObjectSpawn: &netproto.S2C_ObjectSpawn{
+				EntityId:     uint64(event.TargetID),
+				TypeId:       entityInfo.TypeID,
+				ResourcePath: resourcePath,
+				Position: &netproto.EntityPosition{
+					Position: &netproto.Position{
+						X: int32(transform.X),
+						Y: int32(transform.Y),
+					},
+					Size: &netproto.Vector2{
+						X: sizeX,
+						Y: sizeY,
 					},
 				},
 			},
-		}
+		},
+	}
 
-		data, err := proto.Marshal(msg)
-		if err != nil {
-			d.logger.Error("failed to marshal ObjectSpawn message",
-				zap.Error(err),
-				zap.Int64("observer_id", int64(event.ObserverID)),
-				zap.Int64("target_id", int64(event.TargetID)),
-			)
-			shard.ClientsMu.RUnlock()
-			return nil
-		}
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		d.logger.Error("failed to marshal ObjectSpawn message",
+			zap.Error(err),
+			zap.Int64("observer_id", int64(event.ObserverID)),
+			zap.Int64("target_id", int64(event.TargetID)),
+		)
+		return nil
+	}
 
+	shard.ClientsMu.RLock()
+	if client, exists := shard.Clients[event.ObserverID]; exists {
 		client.Send(data)
 	}
 	shard.ClientsMu.RUnlock()
@@ -300,22 +302,54 @@ func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.
 		return nil
 	}
 
-	if !shard.World().Alive(event.TargetHandle) {
-		return nil
-	}
+	var (
+		hasTarget       bool
+		transform       components.Transform
+		entityInfo      components.EntityInfo
+		appearance      components.Appearance
+		sizeX           int32
+		sizeY           int32
+		observerHandles []types.Handle
+		observerIDs     []types.EntityID
+	)
+	shard.WithWorldRead(func(w *ecs.World) {
+		if !w.Alive(event.TargetHandle) {
+			return
+		}
+		var hasTransform, hasEntityInfo, hasAppearance bool
+		transform, hasTransform = ecs.GetComponent[components.Transform](w, event.TargetHandle)
+		entityInfo, hasEntityInfo = ecs.GetComponent[components.EntityInfo](w, event.TargetHandle)
+		appearance, hasAppearance = ecs.GetComponent[components.Appearance](w, event.TargetHandle)
+		if !hasTransform || !hasEntityInfo || !hasAppearance {
+			return
+		}
+		if collider, hasCollider := ecs.GetComponent[components.Collider](w, event.TargetHandle); hasCollider {
+			sizeX = int32(collider.HalfWidth * 2)
+			sizeY = int32(collider.HalfHeight * 2)
+		}
+		hasTarget = true
 
-	transform, hasTransform := ecs.GetComponent[components.Transform](shard.World(), event.TargetHandle)
-	entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.World(), event.TargetHandle)
-	appearance, hasAppearance := ecs.GetComponent[components.Appearance](shard.World(), event.TargetHandle)
-	if !hasTransform || !hasEntityInfo || !hasAppearance {
-		return nil
-	}
+		visibilityState := ecs.GetResource[ecs.VisibilityState](w)
+		visibilityState.Mu.RLock()
+		observers := visibilityState.ObserversByVisibleTarget[event.TargetHandle]
+		observerHandles = make([]types.Handle, 0, len(observers))
+		for observerHandle := range observers {
+			observerHandles = append(observerHandles, observerHandle)
+		}
+		visibilityState.Mu.RUnlock()
 
-	collider, hasCollider := ecs.GetComponent[components.Collider](shard.World(), event.TargetHandle)
-	var sizeX, sizeY int32
-	if hasCollider {
-		sizeX = int32(collider.HalfWidth * 2)
-		sizeY = int32(collider.HalfHeight * 2)
+		if len(observerHandles) == 0 {
+			return
+		}
+		observerIDs = make([]types.EntityID, 0, len(observerHandles))
+		for _, observerHandle := range observerHandles {
+			if observerEntityID, ok := w.GetExternalID(observerHandle); ok {
+				observerIDs = append(observerIDs, observerEntityID)
+			}
+		}
+	})
+	if !hasTarget {
+		return nil
 	}
 
 	msg := &netproto.ServerMessage{
@@ -347,25 +381,12 @@ func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.
 		return nil
 	}
 
-	visibilityState := ecs.GetResource[ecs.VisibilityState](shard.World())
-	visibilityState.Mu.RLock()
-	observers := visibilityState.ObserversByVisibleTarget[event.TargetHandle]
-	observerHandles := make([]types.Handle, 0, len(observers))
-	for observerHandle := range observers {
-		observerHandles = append(observerHandles, observerHandle)
-	}
-	visibilityState.Mu.RUnlock()
-
-	if len(observerHandles) == 0 {
+	if len(observerIDs) == 0 {
 		return nil
 	}
 
 	shard.ClientsMu.RLock()
-	for _, observerHandle := range observerHandles {
-		observerEntityID, ok := shard.World().GetExternalID(observerHandle)
-		if !ok {
-			continue
-		}
+	for _, observerEntityID := range observerIDs {
 		client, exists := shard.Clients[observerEntityID]
 		if !exists || client == nil {
 			continue

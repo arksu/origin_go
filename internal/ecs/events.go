@@ -164,7 +164,7 @@ type MoveBatchEntry struct {
 	Handle       types.Handle
 	X            int
 	Y            int
-	Heading      int
+	Heading      float64
 	VelocityX    int
 	VelocityY    int
 	MoveMode     constt.MoveMode

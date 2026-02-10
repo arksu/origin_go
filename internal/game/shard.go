@@ -132,6 +132,14 @@ func (s *Shard) World() *ecs.World {
 	return s.world
 }
 
+// WithWorldRead executes fn while holding shard read lock.
+// Use this for safe ECS world reads from async goroutines.
+func (s *Shard) WithWorldRead(fn func(w *ecs.World)) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	fn(s.world)
+}
+
 func (s *Shard) ChunkManager() *world.ChunkManager {
 	return s.chunkManager
 }

@@ -136,7 +136,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 					Handle:       h,
 					X:            int(finalX),
 					Y:            int(finalY),
-					Heading:      int(transform.Direction),
+					Heading:      transform.Direction,
 					VelocityX:    velX,
 					VelocityY:    velY,
 					MoveMode:     moveMode,

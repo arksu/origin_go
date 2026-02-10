@@ -241,6 +241,23 @@ func (f *ObjectFactory) isContainerDefinition(def *objectdefs.ObjectDef) bool {
 	return false
 }
 
+// HasPersistentInventories returns true for object types that can own persistent
+// inventories in ECS/DB (dropped items or defs with components.inventory).
+// Behaviors are used as a conservative fallback for legacy defs.
+func (f *ObjectFactory) HasPersistentInventories(typeID uint32, behaviors []string) bool {
+	if typeID == constt.DroppedItemTypeID {
+		return true
+	}
+
+	if def, ok := objectdefs.Global().GetByID(int(typeID)); ok {
+		if def.Components != nil && len(def.Components.Inventory) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
 type objectInventoryDataV1 struct {
 	Kind    uint8                 `json:"kind"`
 	Key     uint32                `json:"key"`

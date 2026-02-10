@@ -254,6 +254,7 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
 	Serialize(world *ecs.World, h types.Handle) (*repository.Object, error)
 	SerializeObjectInventories(world *ecs.World, h types.Handle) ([]repository.Inventory, error)
+	HasPersistentInventories(typeID uint32, behaviors []string) bool
 }, logger *zap.Logger) {
 	if db == nil {
 		return
@@ -313,14 +314,16 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			}
 			objectsToSave = append(objectsToSave, obj)
 
-			inventories, invErr := objectFactory.SerializeObjectInventories(world, h)
-			if invErr != nil {
-				logger.Error("failed to serialize object inventories",
-					zap.Int64("object_id", obj.ID),
-					zap.Error(invErr),
-				)
-			} else if len(inventories) > 0 {
-				inventoriesToSave = append(inventoriesToSave, inventories...)
+			if objectFactory.HasPersistentInventories(info.TypeID, info.Behaviors) {
+				inventories, invErr := objectFactory.SerializeObjectInventories(world, h)
+				if invErr != nil {
+					logger.Error("failed to serialize object inventories",
+						zap.Int64("object_id", obj.ID),
+						zap.Error(invErr),
+					)
+				} else if len(inventories) > 0 {
+					inventoriesToSave = append(inventoriesToSave, inventories...)
+				}
 			}
 
 			dirtyHandles = append(dirtyHandles, h)

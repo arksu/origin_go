@@ -279,19 +279,19 @@ class MoveController {
       const distance = Math.sqrt(dx * dx + dy * dy)
       const finalIsMoving = pos.isMoving
 
-      if (DEBUG_MOVEMENT && (distance > 0.04)) {
-        console.log(`[MoveController] Entity ${entityId}:`, {
-          prevPos: `(${prevPos.x.toFixed(2)}, ${prevPos.y.toFixed(2)})`,
-          newPos: `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`,
-          distance: distance.toFixed(2),
-          isMoving: finalIsMoving,
-          isExtrapolating: state.isExtrapolating,
-          keyframes: state.keyframes.length,
-          renderTimeMs: renderTimeMs,
-          lastKeyframe: state.keyframes.length > 0 ? state.keyframes[state.keyframes.length - 1]?.tServerMs : 'none',
-          moveSeq: state.lastMoveSeq,
-        })
-      }
+      // if (DEBUG_MOVEMENT && (distance > 0.04)) {
+      //   console.log(`[MoveController] Entity ${entityId}:`, {
+      //     prevPos: `(${prevPos.x.toFixed(2)}, ${prevPos.y.toFixed(2)})`,
+      //     newPos: `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)})`,
+      //     distance: distance.toFixed(2),
+      //     isMoving: finalIsMoving,
+      //     isExtrapolating: state.isExtrapolating,
+      //     keyframes: state.keyframes.length,
+      //     renderTimeMs: renderTimeMs,
+      //     lastKeyframe: state.keyframes.length > 0 ? state.keyframes[state.keyframes.length - 1]?.tServerMs : 'none',
+      //     moveSeq: state.lastMoveSeq,
+      //   })
+      // }
 
       result.set(entityId, pos)
     }
@@ -318,7 +318,7 @@ class MoveController {
         heading: state.visualHeading,
         isMoving: false,
         moveMode: 0,
-        direction: 4,
+        direction: calcDirectionFromHeading(state.visualHeading),
       }
     }
 
@@ -398,7 +398,7 @@ class MoveController {
         heading: state.visualHeading,
         isMoving: false,
         moveMode: 0,
-        direction: 4,
+        direction: calcDirectionFromHeading(state.visualHeading),
       }
     }
 
@@ -440,11 +440,13 @@ class MoveController {
       keyframes.shift()
     }
 
-    // Calculate 8-direction index from velocity of the latest relevant keyframe
-    let dir = 4 // default south
+    // Calculate 8-direction index from velocity, falling back to heading
+    let dir: number
     const lastKf = keyframes[keyframes.length - 1]
     if (lastKf && (lastKf.vx !== 0 || lastKf.vy !== 0)) {
       dir = calcDirection(lastKf.vx, lastKf.vy)
+    } else {
+      dir = calcDirectionFromHeading(heading)
     }
 
     const finalIsMoving = isMoving // Trust server's isMoving flag for animations
@@ -551,6 +553,23 @@ function calcDirection(vx: number, vy: number): number {
 
   if (angle < 0) {
     angle += 2 * Math.PI
+  }
+
+  return Math.floor((angle + Math.PI / 8) / (Math.PI / 4)) % 8
+}
+
+/**
+ * Calculate 8-direction index from heading angle (radians).
+ * Uses the same angle→direction mapping as calcDirection.
+ */
+function calcDirectionFromHeading(heading: number): number {
+  let angle = heading + Math.PI / 2
+
+  if (angle < 0) {
+    angle += 2 * Math.PI
+  }
+  if (angle >= 2 * Math.PI) {
+    angle -= 2 * Math.PI
   }
 
   return Math.floor((angle + Math.PI / 8) / (Math.PI / 4)) % 8

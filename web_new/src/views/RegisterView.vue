@@ -66,9 +66,9 @@ async function handleSubmit() {
         }
       }
     } else if (ApiException.isNetwork(e)) {
-      error.value = 'Нет соединения с сервером'
+      error.value = 'No connection to server'
     } else {
-      error.value = 'Произошла ошибка. Попробуйте позже.'
+      error.value = 'An error occurred. Please try again later.'
     }
   } finally {
     loading.value = false

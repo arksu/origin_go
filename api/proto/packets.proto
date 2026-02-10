@@ -12,7 +12,7 @@ option go_package = "origin/internal/network/proto";
 message Position {
   int32 x = 1;
   int32 y = 2;
-  uint32 heading = 3;
+  float heading = 3;
 }
 
 // Вектор направления/скорости

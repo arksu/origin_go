@@ -10,7 +10,6 @@ import (
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -101,8 +100,6 @@ type CharacterSaver struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	inventorySaver  InventorySaverInterface
-	enqueuedCount   uint64
-	droppedCount    uint64
 }
 
 func NewCharacterSaver(db *persistence.Postgres, numWorkers int, inventorySaver InventorySaverInterface, logger *zap.Logger) *CharacterSaver {
@@ -171,21 +168,11 @@ func (s *CharacterSaver) buildSnapshot(
 func (s *CharacterSaver) enqueueSnapshot(snapshot CharacterSnapshot) {
 	select {
 	case s.snapshotChannel <- snapshot:
-		atomic.AddUint64(&s.enqueuedCount, 1)
 	default:
-		atomic.AddUint64(&s.droppedCount, 1)
 		s.logger.Warn("Character save channel full, dropping snapshot",
 			zap.Int64("character_id", snapshot.CharacterID),
 			zap.Int("channel_size", snapshotChannelSize))
 	}
-}
-
-func (s *CharacterSaver) QueueLen() int {
-	return len(s.snapshotChannel)
-}
-
-func (s *CharacterSaver) SnapshotStats() (enqueued uint64, dropped uint64) {
-	return atomic.LoadUint64(&s.enqueuedCount), atomic.LoadUint64(&s.droppedCount)
 }
 
 func normalizeCharacterHeading(direction float64) int16 {

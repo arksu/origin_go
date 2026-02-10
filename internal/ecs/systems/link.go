@@ -212,7 +212,7 @@ func (s *LinkSystem) linkPlayerToTarget(
 			Handle:       playerHandle,
 			X:            int(playerTransform.X),
 			Y:            int(playerTransform.Y),
-			Heading:      int(playerTransform.Direction),
+			Heading:      playerTransform.Direction,
 			VelocityX:    0,
 			VelocityY:    0,
 			MoveMode:     m.Mode,

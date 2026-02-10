@@ -180,18 +180,18 @@ useHotkeys(hotkeys)
     <div v-if="isConnecting" class="game-connecting">
       <AppSpinner size="lg" />
       <p class="game-connecting__text">
-        {{ connectionState === 'authenticating' ? 'Авторизация...' : 'Подключение...' }}
+        {{ connectionState === 'authenticating' ? 'Authenticating...' : 'Connecting...' }}
       </p>
     </div>
 
     <!-- Error state -->
     <div v-else-if="hasError" class="game-error">
       <AppAlert type="error">
-        {{ connectionError?.message || 'Ошибка подключения' }}
+        {{ connectionError?.message || 'Connection error' }}
       </AppAlert>
       <div class="game-error__actions">
-        <AppButton @click="handleRetry">Повторить</AppButton>
-        <AppButton variant="secondary" @click="handleBack">Назад</AppButton>
+        <AppButton @click="handleRetry">Retry</AppButton>
+        <AppButton variant="secondary" @click="handleBack">Back</AppButton>
       </div>
     </div>
 
@@ -199,7 +199,7 @@ useHotkeys(hotkeys)
     <div v-else-if="isConnected" class="game-canvas-wrapper">
       <canvas ref="gameCanvas" class="game-canvas"></canvas>
       <div class="game-ui">
-        <AppButton variant="secondary" size="sm" @click="handleBack">Выйти</AppButton>
+        <AppButton variant="secondary" size="sm" @click="handleBack">Exit</AppButton>
       </div>
       <div class="game-chat">
         <ChatContainer ref="chatContainerRef" @send="handleChatSend" />
@@ -224,8 +224,8 @@ useHotkeys(hotkeys)
 
     <!-- Disconnected state -->
     <div v-else class="game-disconnected">
-      <p>Отключено от сервера</p>
-      <AppButton @click="handleBack">Назад к персонажам</AppButton>
+      <p>Disconnected from server</p>
+      <AppButton @click="handleBack">Back to characters</AppButton>
     </div>
   </div>
 </template>
