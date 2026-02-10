@@ -243,6 +243,35 @@ ChunkSystem (400)
 - Current primary producer is inventory flow for object root containers.
 - Chunk activation forces initial behavior recompute for all behavior-bearing objects (no lazy init).
 
+## Context Interaction Flow (RMB)
+
+Context interactions are now behavior-driven and server-authoritative:
+
+1. Client sends `Interact(entity_id)` on RMB.
+2. `NetworkCommandSystem` computes actions via `ContextActionResolver` using behavior order from object `def`.
+3. Branching:
+   - `0` actions: silent ignore.
+   - `1` action: auto-select and start pending execution.
+   - `2+` actions: send `S2C_ContextMenu`.
+4. Execution is triggered only by `LinkCreated` (not direct distance checks in command handler).
+
+### Pending Action Rules
+
+- Pending state is `components.PendingContextAction`.
+- Cleanup paths:
+  - timeout (`game.interaction_pending_timeout`, default `15s`)
+  - movement stop without link
+  - target/player despawn
+  - new movement command (`MoveTo`/`MoveToEntity`)
+  - `LinkBroken`
+
+### Duplicate Action IDs
+
+- Duplicate `action_id` between behaviors uses **first wins**.
+- Runtime observability:
+  - `WARN` log
+  - metric `context_action_duplicate_total{entity_def,action_id,winner_behavior,loser_behavior}`
+
 ## Performance Considerations
 
 ### Hot Path Optimizations

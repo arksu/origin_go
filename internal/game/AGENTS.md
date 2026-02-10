@@ -96,6 +96,15 @@ internal/game/
   - `game_events.go`: Network visibility dispatcher for entity events
 - **Key Types**: `NetworkVisibilityDispatcher`
 
+### Context Actions (`context_action_service.go`)
+- **Purpose**: Aggregate and execute context menu actions from object behaviors.
+- **Key Responsibilities**:
+  - Compute action list on RMB (`Interact`)
+  - Resolve duplicate action IDs with first-wins policy
+  - Execute selected action only after `LinkCreated`
+  - Emit `S2C_MiniAlert` for explicit execution failures
+- **Key Types**: `ContextActionService`
+
 ## Data Flow
 
 ### Player Connection Flow
@@ -151,6 +160,7 @@ Key configuration parameters:
 - `Game.DisconnectDelay`: Player detach time
 - `Game.WorkerPoolSize`: Event bus worker pool size
 - `Game.ObjectBehaviorBudgetPerTick`: max dirty object behavior recomputes per tick (default `512`)
+- `Game.InteractionPendingTimeout`: pending context action lifetime before cleanup (default `15s`)
 
 ## Object Behavior Runtime Notes
 

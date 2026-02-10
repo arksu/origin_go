@@ -95,7 +95,11 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
+	contextActionService := NewContextActionService(s.world, s.eventBus, openContainerService, s, logger)
 	networkCmdSystem.SetOpenContainerService(openContainerService)
+	networkCmdSystem.SetContextActionService(contextActionService)
+	networkCmdSystem.SetContextMenuSender(s)
+	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, entityIDManager, s.chunkManager, visionSystem, s.eventBus, logger)
 	networkCmdSystem.SetAdminHandler(adminHandler)
@@ -505,6 +509,66 @@ func (s *Shard) SendContainerClosed(entityID types.EntityID, ref *netproto.Inven
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal container closed",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendContextMenu sends context actions for a target entity to a client.
+func (s *Shard) SendContextMenu(entityID types.EntityID, menu *netproto.S2C_ContextMenu) {
+	if menu == nil {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ContextMenu{
+			ContextMenu: menu,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal context menu",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendMiniAlert sends a short center-screen alert to a client.
+func (s *Shard) SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniAlert) {
+	if alert == nil {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_MiniAlert{
+			MiniAlert: alert,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal mini alert",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return

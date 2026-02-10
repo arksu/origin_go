@@ -10,7 +10,7 @@ import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { config } from '@/config'
-import { MAX_FPS, DROP_ITEM_TYPE_ID } from '@/constants/render'
+import { MAX_FPS } from '@/constants/render'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
@@ -96,8 +96,24 @@ export class Render {
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
       this.onClickCallback?.(this.lastClickScreen)
 
+      const gameStore = useGameStore()
+
+      if (event.button === 2) {
+        // RMB is the single entry point for context interactions.
+        const clickedEntity = this.objectManager.getEntityAtScreen(
+          event.screenX,
+          event.screenY,
+          this.screenToWorld.bind(this)
+        )
+        if (clickedEntity !== null) {
+          gameStore.closeContextMenu()
+          playerCommandController.sendInteract(clickedEntity.entityId)
+        }
+        return
+      }
+
       if (event.button === 0) {
-        const gameStore = useGameStore()
+        gameStore.closeContextMenu()
         const hand = gameStore.handState
         const handInv = gameStore.handInventoryState
 

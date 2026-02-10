@@ -74,7 +74,8 @@ type GameConfig struct {
 	ChatMaxLen        int `mapstructure:"chat_max_len"`         // Max chat message length (default: 256)
 	ChatMinIntervalMs int `mapstructure:"chat_min_interval_ms"` // Min interval between messages in ms (default: 400)
 
-	ObjectBehaviorBudgetPerTick int `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
+	InteractionPendingTimeout   time.Duration `mapstructure:"interaction_pending_timeout"`     // Pending context action timeout (default: 15s)
+	ObjectBehaviorBudgetPerTick int           `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
 }
 
 type EntityIDConfig struct {
@@ -186,6 +187,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.chat_local_radius", 1000)
 	v.SetDefault("game.chat_max_len", 256)
 	v.SetDefault("game.chat_min_interval_ms", 400)
+	v.SetDefault("game.interaction_pending_timeout", 15*time.Second)
 	v.SetDefault("game.object_behavior_budget_per_tick", 512)
 
 	// EntityID defaults

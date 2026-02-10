@@ -241,6 +241,9 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 	case *netproto.C2S_PlayerAction_Interact:
 		cmdType = network.CmdInteract
 		payload = act.Interact
+	case *netproto.C2S_PlayerAction_SelectContextAction:
+		cmdType = network.CmdSelectContextAction
+		payload = act.SelectContextAction
 	default:
 		g.logger.Warn("Unknown player action type",
 			zap.Uint64("client_id", c.ID),

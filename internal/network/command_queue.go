@@ -16,6 +16,7 @@ const (
 	CmdMoveTo CommandType = iota + 1
 	CmdMoveToEntity
 	CmdInteract
+	CmdSelectContextAction
 	CmdChat
 	CmdInventoryOp
 	CmdOpenContainer

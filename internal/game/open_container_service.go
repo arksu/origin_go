@@ -47,27 +47,12 @@ func NewOpenContainerService(
 	}
 
 	if eventBus != nil {
-		eventBus.SubscribeSync(ecs.TopicGameplayLinkCreated, eventbus.PriorityHigh, s.onLinkCreated)
 		eventBus.SubscribeSync(ecs.TopicGameplayLinkBroken, eventbus.PriorityHigh, s.onLinkBroken)
 	}
 	return s
 }
 
 var _ systems.OpenContainerCoordinator = (*OpenContainerService)(nil)
-
-func (s *OpenContainerService) SetPendingAutoOpen(w *ecs.World, playerID, targetID types.EntityID) {
-	if w != s.world || playerID == 0 || targetID == 0 {
-		return
-	}
-	ecs.GetResource[ecs.OpenContainerState](w).SetPendingAutoOpen(playerID, targetID)
-}
-
-func (s *OpenContainerService) ClearPendingAutoOpen(w *ecs.World, playerID types.EntityID) {
-	if w != s.world || playerID == 0 {
-		return
-	}
-	ecs.GetResource[ecs.OpenContainerState](w).ClearPendingAutoOpen(playerID)
-}
 
 func (s *OpenContainerService) HandleOpenRequest(
 	w *ecs.World,
@@ -343,30 +328,6 @@ func (s *OpenContainerService) CloseRefsForOpenedPlayers(
 			}
 		}
 	}
-}
-
-func (s *OpenContainerService) onLinkCreated(_ context.Context, event eventbus.Event) error {
-	linkEvent, ok := event.(*ecs.LinkCreatedEvent)
-	if !ok || linkEvent.Layer != s.world.Layer {
-		return nil
-	}
-
-	openState := ecs.GetResource[ecs.OpenContainerState](s.world)
-	pendingTargetID, pending := openState.GetPendingAutoOpen(linkEvent.PlayerID)
-	if !pending || pendingTargetID != linkEvent.TargetID {
-		return nil
-	}
-	openState.ClearPendingAutoOpen(linkEvent.PlayerID)
-
-	if openErr := s.openRootForPlayer(s.world, linkEvent.PlayerID, linkEvent.TargetID); openErr != nil {
-		s.logger.Debug("auto-open on link failed",
-			zap.Uint64("player_id", uint64(linkEvent.PlayerID)),
-			zap.Uint64("target_id", uint64(linkEvent.TargetID)),
-			zap.String("reason", openErr.Message),
-		)
-	}
-
-	return nil
 }
 
 func (s *OpenContainerService) onLinkBroken(_ context.Context, event eventbus.Event) error {

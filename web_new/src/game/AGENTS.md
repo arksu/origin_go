@@ -116,6 +116,14 @@ See `MoveController.ts` AGENTS.md for details.
 - Converts input to `C2S_PlayerAction` messages
 - `MoveTo(x, y)` for ground clicks
 - `MoveToEntity(entityId)` for object clicks
+- `Interact(entityId)` for RMB context requests
+- `SelectContextAction(entityId, actionId)` after menu selection
+
+### Context Interaction (RMB)
+
+- `Render.ts` maps RMB click on object to `sendInteract(entityId)`.
+- Context menu UI is Vue-side (`GameView.vue`) and store-driven (`gameStore.contextMenu`).
+- Render layer never decides available actions; it only emits input intent.
 
 ### Terrain System
 
