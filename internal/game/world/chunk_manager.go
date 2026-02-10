@@ -631,24 +631,13 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 
 	cm.interestMu.RLock()
 	interest, hasInterest := cm.chunkInterests[coord]
-	hasActiveInterest := hasInterest && interest.hasActive()
-	hasPreloadInterest := hasInterest && interest.hasPreload()
+	hasAnyInterest := hasInterest && !interest.isEmpty()
 	cm.interestMu.RUnlock()
 
 	// Reconcile loaded chunk state with the latest interests.
-	// A load request can outlive AOI changes; without this, stale loads may remain preloaded forever.
-	switch {
-	case hasActiveInterest:
-		if err := cm.activateChunkInternal(coord, chunk); err != nil {
-			cm.logger.Warn("failed to activate loaded chunk",
-				zap.Int("chunk_x", coord.X),
-				zap.Int("chunk_y", coord.Y),
-				zap.Error(err),
-			)
-		}
-	case hasPreloadInterest:
-		// Desired state is preloaded; nothing to do.
-	default:
+	// Do not activate here: load workers run off the shard tick thread and must not mutate ECS world state.
+	// If a load request outlives AOI changes, move stale chunk to Inactive so it can be evicted.
+	if !hasAnyInterest {
 		chunk.SetState(types.ChunkStateInactive)
 		cm.lruCache.Add(coord, chunk)
 	}
