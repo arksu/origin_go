@@ -1,8 +1,10 @@
 package world
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 
 	"github.com/sqlc-dev/pqtype"
 
@@ -57,7 +59,11 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 	}
 
 	h := w.Spawn(types.EntityID(raw.ID), func(w *ecs.World, h types.Handle) {
-		ecs.AddComponent(w, h, components.CreateTransform(raw.X, raw.Y, int(raw.Heading.Int16)))
+		ecs.AddComponent(w, h, components.Transform{
+			X:         float64(raw.X),
+			Y:         float64(raw.Y),
+			Direction: headingDegreesToRadians(raw.Heading),
+		})
 
 		ecs.AddComponent(w, h, components.EntityInfo{
 			TypeID:    uint32(def.DefID),
@@ -347,6 +353,29 @@ func maxInt(a, b int) int {
 	return b
 }
 
+func headingDegreesToRadians(heading sql.NullInt16) float64 {
+	if !heading.Valid {
+		return 0
+	}
+	degrees := math.Mod(float64(heading.Int16), 360)
+	if degrees < 0 {
+		degrees += 360
+	}
+	return degrees * math.Pi / 180
+}
+
+func radiansToHeadingDegrees(direction float64) int16 {
+	if math.IsNaN(direction) || math.IsInf(direction, 0) {
+		return 0
+	}
+	degrees := direction * 180 / math.Pi
+	normalized := math.Mod(degrees, 360)
+	if normalized < 0 {
+		normalized += 360
+	}
+	return int16(math.Floor(normalized))
+}
+
 func (f *ObjectFactory) spawnContainerTreeFromData(
 	w *ecs.World,
 	ownerID types.EntityID,
@@ -487,6 +516,10 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		Layer:  info.Layer,
 		ChunkX: chunkRef.CurrentChunkX,
 		ChunkY: chunkRef.CurrentChunkY,
+		Heading: sql.NullInt16{
+			Int16: radiansToHeadingDegrees(transform.Direction),
+			Valid: true,
+		},
 	}
 
 	// Serialize runtime object state for regular world objects.

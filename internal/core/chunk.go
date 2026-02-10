@@ -407,8 +407,8 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	}
 	logger.Debug("saved chunk",
 		zap.Any("coord", c.Coord),
-		zap.Int("dirty_objects", len(objectsToSave)),
-		zap.Int("dirty_inventories", len(inventoriesToSave)),
+		zap.Int("saved_objects", len(objectsToSave)),
+		zap.Int("saved_inventories", len(inventoriesToSave)),
 		zap.Int("tiles_saved", savedTiles),
 	)
 }

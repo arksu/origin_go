@@ -217,7 +217,7 @@ func (s *InventoryOperationService) ExecuteMove(
 
 	if placementResult.MergedQuantity > 0 {
 		// Merge operation
-		return s.executeMerge(w, srcInfo, dstInfo, srcItemIndex, placementResult, sameSrcDst, moveSpec)
+		return s.executeMerge(w, srcInfo, dstInfo, playerHandle, srcItemIndex, placementResult, sameSrcDst, moveSpec)
 	}
 
 	if placementResult.SwapItem != nil {
@@ -233,16 +233,17 @@ func (s *InventoryOperationService) ExecuteMove(
 				Message:   "Cannot swap items - destination item doesn't fit in source",
 			}
 		}
-		return s.executeSwap(w, srcInfo, dstInfo, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst, moveSpec)
+		return s.executeSwap(w, srcInfo, dstInfo, playerHandle, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst, moveSpec)
 	}
 
 	// Simple move
-	return s.executeSimpleMove(w, srcInfo, dstInfo, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst, moveSpec)
+	return s.executeSimpleMove(w, srcInfo, dstInfo, playerHandle, srcItemIndex, placementResult, dstEquipSlot, sameSrcDst, moveSpec)
 }
 
 func (s *InventoryOperationService) executeMerge(
 	w *ecs.World,
 	srcInfo, dstInfo *ContainerInfo,
+	playerHandle types.Handle,
 	srcItemIndex int,
 	placement *PlacementResult,
 	sameSrcDst bool,
@@ -291,6 +292,7 @@ func (s *InventoryOperationService) executeMerge(
 		result.UpdatedContainers = append(result.UpdatedContainers, dstInfo)
 
 		if placement.RemainingInSrc == 0 {
+			reconcileNestedContainerOwnerLink(w, srcInfo.Owner, playerHandle, srcItem.ItemID, dstInfo.Handle)
 			appendClosedNestedRefIfPresent(w, result, srcItem.ItemID)
 		}
 	}
@@ -301,6 +303,7 @@ func (s *InventoryOperationService) executeMerge(
 func (s *InventoryOperationService) executeSwap(
 	w *ecs.World,
 	srcInfo, dstInfo *ContainerInfo,
+	playerHandle types.Handle,
 	srcItemIndex int,
 	placement *PlacementResult,
 	dstEquipSlot netproto.EquipSlot,
@@ -361,6 +364,8 @@ func (s *InventoryOperationService) executeSwap(
 		dstInfo.Container = &updatedDst
 		result.UpdatedContainers = append(result.UpdatedContainers, dstInfo)
 
+		reconcileNestedContainerOwnerLink(w, srcInfo.Owner, playerHandle, srcItem.ItemID, dstInfo.Handle)
+		reconcileNestedContainerOwnerLink(w, srcInfo.Owner, playerHandle, swapItem.ItemID, srcInfo.Handle)
 		appendClosedNestedRefIfPresent(w, result, srcItem.ItemID)
 		appendClosedNestedRefIfPresent(w, result, swapItem.ItemID)
 	}
@@ -371,6 +376,7 @@ func (s *InventoryOperationService) executeSwap(
 func (s *InventoryOperationService) executeSimpleMove(
 	w *ecs.World,
 	srcInfo, dstInfo *ContainerInfo,
+	playerHandle types.Handle,
 	srcItemIndex int,
 	placement *PlacementResult,
 	dstEquipSlot netproto.EquipSlot,
@@ -432,6 +438,7 @@ func (s *InventoryOperationService) executeSimpleMove(
 		dstInfo.Container = &updatedDst
 		result.UpdatedContainers = append(result.UpdatedContainers, dstInfo)
 
+		reconcileNestedContainerOwnerLink(w, srcInfo.Owner, playerHandle, srcItem.ItemID, dstInfo.Handle)
 		appendClosedNestedRefIfPresent(w, result, srcItem.ItemID)
 	}
 
@@ -983,6 +990,42 @@ func appendClosedNestedRefIfPresent(w *ecs.World, result *OperationResult, itemI
 		OwnerId:      uint64(itemID),
 		InventoryKey: 0,
 	})
+}
+
+func reconcileNestedContainerOwnerLink(
+	w *ecs.World,
+	owner *components.InventoryOwner,
+	playerHandle types.Handle,
+	itemID types.EntityID,
+	dstContainerHandle types.Handle,
+) {
+	if itemID == 0 || playerHandle == types.InvalidHandle {
+		return
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	nestedHandle, found := refIndex.Lookup(constt.InventoryGrid, itemID, 0)
+	if !found || !w.Alive(nestedHandle) {
+		return
+	}
+
+	if containerHandleBelongsToOwner(owner, dstContainerHandle) {
+		addNestedOwnerLink(w, playerHandle, itemID, nestedHandle)
+		return
+	}
+	detachNestedContainer(w, playerHandle, itemID)
+}
+
+func containerHandleBelongsToOwner(owner *components.InventoryOwner, handle types.Handle) bool {
+	if owner == nil || handle == types.InvalidHandle {
+		return false
+	}
+	for _, link := range owner.Inventories {
+		if link.Handle == handle {
+			return true
+		}
+	}
+	return false
 }
 
 // deleteDroppedEntityFromECS removes a dropped item entity from ECS and InventoryRefIndex.

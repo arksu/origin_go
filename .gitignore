@@ -7,6 +7,7 @@
 *.dll
 *.so
 *.dylib
+*.DS_Store
 gameserver
 mapgen
 load_test
@@ -32,8 +33,11 @@ profile.cov
 go.work
 go.work.sum
 
+log.txt
+
 # env file
 .env
 
+build
 web_new/node_modules
 web_new/src/network/proto/*

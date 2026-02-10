@@ -92,8 +92,25 @@ func (s *OpenContainerService) HandleOpenRequest(
 	kind := constt.InventoryKind(ref.Kind)
 	key := ref.InventoryKey
 
+	openState := ecs.GetResource[ecs.OpenContainerState](w)
+
+	// Nested under currently opened world-object root must be treated as
+	// world-object open flow (tracked in OpenContainerState), even if a stale
+	// player-owned link still exists for this nested owner_id.
+	if kind == constt.InventoryGrid && key == 0 {
+		if rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID); hasRoot &&
+			ownerID != playerID &&
+			s.nestedBelongsToRoot(w, rootOwnerID, ownerID) {
+			return s.openAnyRefForPlayer(w, playerID, kind, ownerID, key, true)
+		}
+	}
+
 	// Keep legacy behavior for any player-owned inventory refs (root + nested item containers).
 	if s.isPlayerOwnedRef(w, playerHandle, kind, ownerID, key) {
+		return s.openAnyRefForPlayer(w, playerID, kind, ownerID, key, false)
+	}
+	// Fallback for personal nested refs when InventoryOwner link is not yet synchronized.
+	if kind == constt.InventoryGrid && key == 0 && s.isNestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
 		return s.openAnyRefForPlayer(w, playerID, kind, ownerID, key, false)
 	}
 
@@ -111,7 +128,6 @@ func (s *OpenContainerService) HandleOpenRequest(
 	}
 
 	// Nested open: only inside currently opened root world object.
-	openState := ecs.GetResource[ecs.OpenContainerState](w)
 	rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID)
 	if !hasRoot {
 		return &systems.OpenContainerError{
@@ -152,6 +168,43 @@ func (s *OpenContainerService) isPlayerOwnedRef(
 		}
 		return w.Alive(link.Handle)
 	}
+	return false
+}
+
+func (s *OpenContainerService) isNestedContainerOwnedByPlayer(
+	w *ecs.World,
+	playerHandle types.Handle,
+	nestedOwnerID types.EntityID,
+) bool {
+	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+	if !hasOwner {
+		return false
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	for _, link := range owner.Inventories {
+		// Skip the nested container itself; we need parent containers that hold the item.
+		if link.Kind == constt.InventoryGrid && link.Key == 0 && link.OwnerID == nestedOwnerID {
+			continue
+		}
+		if !w.Alive(link.Handle) {
+			continue
+		}
+
+		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		if !ok {
+			continue
+		}
+
+		for _, item := range container.Items {
+			if item.ItemID != nestedOwnerID {
+				continue
+			}
+			nestedHandle, found := refIndex.Lookup(constt.InventoryGrid, nestedOwnerID, 0)
+			return found && w.Alive(nestedHandle)
+		}
+	}
+
 	return false
 }
 
@@ -334,6 +387,11 @@ func (s *OpenContainerService) breakLinkForRootClose(w *ecs.World, playerID type
 	linkState.ClearIntent(playerID)
 
 	link, removed := linkState.RemoveLink(playerID)
+	closed := ecs.GetResource[ecs.OpenContainerState](w).CloseAllForPlayer(playerID)
+	for _, key := range closed {
+		s.sender.SendContainerClosed(playerID, inventoryKeyToProto(key))
+	}
+
 	if removed && s.eventBus != nil {
 		if err := s.eventBus.PublishSync(ecs.NewLinkBrokenEvent(w.Layer, playerID, link.TargetID, ecs.LinkBreakClosed)); err != nil {
 			s.logger.Warn("failed to publish LinkBroken(closed)",
@@ -341,12 +399,6 @@ func (s *OpenContainerService) breakLinkForRootClose(w *ecs.World, playerID type
 				zap.Uint64("player_id", uint64(playerID)),
 			)
 		}
-		return
-	}
-
-	closed := ecs.GetResource[ecs.OpenContainerState](w).CloseAllForPlayer(playerID)
-	for _, key := range closed {
-		s.sender.SendContainerClosed(playerID, inventoryKeyToProto(key))
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	_const "origin/internal/const"
 	"origin/internal/ecs"
@@ -187,7 +188,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Region:    character.Region,
 				Layer:     character.Layer,
 			})
-			ecs.AddComponent(w, h, components.CreateTransform(pos.X, pos.Y, int(character.Heading)))
+			ecs.AddComponent(w, h, components.Transform{
+				X:         float64(pos.X),
+				Y:         float64(pos.Y),
+				Direction: headingDegreesToRadians(character.Heading),
+			})
 			ecs.AddComponent(w, h, components.ChunkRef{
 				CurrentChunkX: pos.X / _const.ChunkWorldSize,
 				CurrentChunkY: pos.Y / _const.ChunkWorldSize,
@@ -356,6 +361,14 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		zap.Any("posX", character.X),
 		zap.Any("posY", character.Y),
 	)
+}
+
+func headingDegreesToRadians(heading int16) float64 {
+	degrees := math.Mod(float64(heading), 360)
+	if degrees < 0 {
+		degrees += 360
+	}
+	return degrees * math.Pi / 180
 }
 
 // tryReattachPlayer attempts to reattach a client to an existing detached entity

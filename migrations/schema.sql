@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS character
     x                INT          NOT NULL,                      -- world coordinate
     y                INT          NOT NULL,                      -- world coordinate
     layer            INT          NOT NULL,                      -- ground layer
-    heading          SMALLINT     NOT NULL CHECK (heading >= 0 AND heading < 8),
+    heading          SMALLINT     NOT NULL CHECK (heading >= 0 AND heading < 360),
 
     stamina          INT          NOT NULL CHECK (stamina >= 0), -- current stamina
     shp              INT          NOT NULL CHECK (shp >= 0),     -- soft health points
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS object
     layer       INT    NOT NULL,
     chunk_x     INT    NOT NULL, -- redundant data for loading by chunk
     chunk_y     INT    NOT NULL, -- redundant data for loading by chunk
-    heading     SMALLINT CHECK (heading >= 0 AND heading < 365),
+    heading     SMALLINT CHECK (heading >= 0 AND heading < 360),
 
     quality     SMALLINT CHECK (quality >= 0),
     hp          INT CHECK (hp >= 0),

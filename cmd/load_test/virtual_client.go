@@ -127,7 +127,7 @@ func (vc *VirtualClient) login(ctx context.Context) error {
 	vc.metrics.RecordLoginAttempt()
 	start := time.Now()
 
-	url := fmt.Sprintf("http://%s:%d/accounts/login", vc.cfg.ServerHost, vc.cfg.ServerPort)
+	url := fmt.Sprintf("%s://%s:%d%s/accounts/login", vc.httpScheme(), vc.cfg.ServerHost, vc.cfg.ServerPort, vc.apiPrefix())
 	body, _ := json.Marshal(map[string]string{
 		"login":    vc.account.Login,
 		"password": vc.account.Password,
@@ -183,7 +183,7 @@ type CharacterItem struct {
 }
 
 func (vc *VirtualClient) listCharacters(ctx context.Context) ([]CharacterItem, error) {
-	url := fmt.Sprintf("http://%s:%d/characters", vc.cfg.ServerHost, vc.cfg.ServerPort)
+	url := fmt.Sprintf("%s://%s:%d%s/characters", vc.httpScheme(), vc.cfg.ServerHost, vc.cfg.ServerPort, vc.apiPrefix())
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -213,7 +213,7 @@ func (vc *VirtualClient) listCharacters(ctx context.Context) ([]CharacterItem, e
 
 func (vc *VirtualClient) createCharacter(ctx context.Context) error {
 	name := generateRandomLogin(8)
-	url := fmt.Sprintf("http://%s:%d/characters", vc.cfg.ServerHost, vc.cfg.ServerPort)
+	url := fmt.Sprintf("%s://%s:%d%s/characters", vc.httpScheme(), vc.cfg.ServerHost, vc.cfg.ServerPort, vc.apiPrefix())
 
 	body, _ := json.Marshal(map[string]string{"name": name})
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
@@ -247,7 +247,7 @@ func (vc *VirtualClient) createCharacter(ctx context.Context) error {
 }
 
 func (vc *VirtualClient) enterCharacter(ctx context.Context) error {
-	url := fmt.Sprintf("http://%s:%d/characters/%d/enter", vc.cfg.ServerHost, vc.cfg.ServerPort, vc.characterID)
+	url := fmt.Sprintf("%s://%s:%d%s/characters/%d/enter", vc.httpScheme(), vc.cfg.ServerHost, vc.cfg.ServerPort, vc.apiPrefix(), vc.characterID)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
@@ -278,7 +278,11 @@ func (vc *VirtualClient) enterCharacter(ctx context.Context) error {
 }
 
 func (vc *VirtualClient) connect(ctx context.Context) error {
-	url := fmt.Sprintf("ws://%s:%d/ws", vc.cfg.ServerHost, vc.cfg.ServerPort)
+	scheme := "ws"
+	if vc.cfg.ServerPort == 443 {
+		scheme = "wss"
+	}
+	url := fmt.Sprintf("%s://%s:%d/ws", scheme, vc.cfg.ServerHost, vc.cfg.ServerPort)
 
 	conn, _, _, err := ws.Dial(ctx, url)
 	if err != nil {
@@ -291,6 +295,20 @@ func (vc *VirtualClient) connect(ctx context.Context) error {
 	go vc.readLoop()
 
 	return nil
+}
+
+func (vc *VirtualClient) httpScheme() string {
+	if vc.cfg.ServerPort == 443 {
+		return "https"
+	}
+	return "http"
+}
+
+func (vc *VirtualClient) apiPrefix() string {
+	if vc.cfg.ServerPort == 443 {
+		return "/api"
+	}
+	return ""
 }
 
 func (vc *VirtualClient) authenticate(ctx context.Context) error {
