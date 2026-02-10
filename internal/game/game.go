@@ -191,7 +191,7 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S_Ping) {
 	pong := &netproto.S2C_Pong{
 		ClientTimeMs: ping.ClientTimeMs,
-		ServerTimeMs: time.Now().UnixMilli(),
+		ServerTimeMs: g.clock.UnixMilli(),
 	}
 
 	response := &netproto.ServerMessage{
@@ -584,7 +584,7 @@ const maxCatchUpTicks = 4
 func (g *Game) gameLoop() {
 	defer g.wg.Done()
 
-	lastTime := g.clock.GameNow()
+	lastWallTime := g.clock.WallNow()
 	var accum time.Duration
 	maxFrameTime := g.tickPeriod * time.Duration(maxCatchUpTicks)
 
@@ -593,9 +593,12 @@ func (g *Game) gameLoop() {
 			return
 		}
 
-		now := g.clock.GameNow()
-		frameTime := now.Sub(lastTime)
-		lastTime = now
+		nowWall := g.clock.WallNow()
+		frameTime := nowWall.Sub(lastWallTime)
+		lastWallTime = nowWall
+		if frameTime < 0 {
+			frameTime = 0
+		}
 
 		if frameTime > maxFrameTime {
 			frameTime = maxFrameTime
@@ -605,6 +608,7 @@ func (g *Game) gameLoop() {
 		catchUp := 0
 		for accum >= g.tickPeriod && catchUp < maxCatchUpTicks {
 			g.currentTick++
+			g.clock.Advance(g.tickPeriod)
 
 			tickNow := g.clock.GameNow()
 			ts := ecs.TimeState{
@@ -716,7 +720,7 @@ func (g *Game) update(ts ecs.TimeState) {
 			}
 			fields = append(fields, sysFields...)
 
-			//g.logger.Info("Game tick statistics (5s)", fields...)
+			g.logger.Info("Game tick statistics (5s)", fields...)
 		}
 
 		// Reset statistics

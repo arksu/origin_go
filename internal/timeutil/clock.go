@@ -6,10 +6,10 @@ import (
 )
 
 // Clock provides a unified time source for the game server.
-// GameNow returns monotonic game time (stable, no NTP jumps).
+// GameNow returns simulation game time.
 // WallNow returns real system time (for auth, tokens, DB).
 type Clock interface {
-	// GameNow returns monotonic game time: startWall + time.Since(startMono).
+	// GameNow returns simulation game time.
 	// Use for all game simulation, network server_time_ms, and expiration timers.
 	GameNow() time.Time
 
@@ -19,27 +19,29 @@ type Clock interface {
 
 	// UnixMilli returns GameNow().UnixMilli() for network packets.
 	UnixMilli() int64
+
+	// Advance moves simulation time forward.
+	Advance(d time.Duration)
 }
 
-// MonotonicClock is the production Clock implementation.
-// It captures wall and monotonic baselines at creation and derives
-// GameNow as startWall + elapsed(monotonic), so it never jumps on NTP adjustments.
+// MonotonicClock is the production simulation clock implementation.
+// Game time is advanced explicitly by ticks, independent from wall-clock speed.
 type MonotonicClock struct {
-	startWall time.Time
-	startMono time.Time
+	mu      sync.RWMutex
+	gameNow time.Time
 }
 
 // NewMonotonicClockAt creates a production clock anchored to a specific wall time.
-// The monotonic baseline is captured at creation to avoid NTP jumps.
 func NewMonotonicClockAt(startWall time.Time) *MonotonicClock {
 	return &MonotonicClock{
-		startWall: startWall,
-		startMono: time.Now(),
+		gameNow: startWall,
 	}
 }
 
 func (c *MonotonicClock) GameNow() time.Time {
-	return c.startWall.Add(time.Since(c.startMono))
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.gameNow
 }
 
 func (c *MonotonicClock) WallNow() time.Time {
@@ -48,6 +50,15 @@ func (c *MonotonicClock) WallNow() time.Time {
 
 func (c *MonotonicClock) UnixMilli() int64 {
 	return c.GameNow().UnixMilli()
+}
+
+func (c *MonotonicClock) Advance(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.gameNow = c.gameNow.Add(d)
 }
 
 // ManualClock is a test Clock where time is advanced explicitly.
@@ -79,6 +90,9 @@ func (c *ManualClock) UnixMilli() int64 {
 
 // Advance moves the manual clock forward by d.
 func (c *ManualClock) Advance(d time.Duration) {
+	if d <= 0 {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.now = c.now.Add(d)
