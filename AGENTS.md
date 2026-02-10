@@ -3,3 +3,14 @@
 - Write self-documenting code: Use clear variable/function names that explain intent
 - Fail fast: Validate inputs early and throw meaningful errors
 - Single Responsibility: Each function/class should do one thing well
+
+- Comment WHY, not WHAT (code shows what, comments explain reasoning)
+- Handle errors explicitly; avoid silent failures
+- Use meaningful variable names (no 'x', 'tmp', 'data' without context)
+- Keep configuration separate from code
+- Validate and sanitize all user inputs
+- Avoid premature optimization
+- Use appropriate data structures (dict for lookups, set for uniqueness)
+- Consider time/space complexity for large datasets
+- Cache expensive computations when appropriate
+- Use lazy evaluation for large collections
