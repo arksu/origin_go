@@ -36,6 +36,7 @@ type DatabaseConfig struct {
 }
 
 type GameConfig struct {
+	Env                      string        `mapstructure:"env"`
 	TickRate                 int           `mapstructure:"tick_rate"`
 	PlayerActiveChunkRadius  int           `mapstructure:"player_active_chunk_radius"`
 	PlayerPreloadChunkRadius int           `mapstructure:"player_preload_chunk_radius"`
@@ -72,6 +73,8 @@ type GameConfig struct {
 	ChatLocalRadius   int `mapstructure:"chat_local_radius"`    // Radius for local chat (default: 1000)
 	ChatMaxLen        int `mapstructure:"chat_max_len"`         // Max chat message length (default: 256)
 	ChatMinIntervalMs int `mapstructure:"chat_min_interval_ms"` // Min interval between messages in ms (default: 400)
+
+	ObjectBehaviorBudgetPerTick int `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
 }
 
 type EntityIDConfig struct {
@@ -112,6 +115,15 @@ func Load(logger *zap.Logger) (*Config, error) {
 		return nil, err
 	}
 
+	cfg.Game.Env = strings.ToLower(strings.TrimSpace(cfg.Game.Env))
+	switch cfg.Game.Env {
+	case "dev", "stage", "prod":
+	default:
+		logger.Fatal("Invalid game.env value (allowed: dev|stage|prod)",
+			zap.String("game.env", cfg.Game.Env),
+		)
+	}
+
 	// Validate critical game config values
 	if cfg.Game.WorldWidthChunks <= 0 || cfg.Game.WorldHeightChunks <= 0 {
 		logger.Fatal("Invalid world dimensions: world_width_chunks and world_height_chunks must be > 0",
@@ -141,6 +153,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("database.max_conn_idle_time", 5*time.Minute)
 
 	// Game defaults
+	v.SetDefault("game.env", "dev")
 	v.SetDefault("game.tick_rate", 10)
 	v.SetDefault("game.player_active_chunk_radius", 1)
 	v.SetDefault("game.player_preload_chunk_radius", 2)
@@ -173,6 +186,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.chat_local_radius", 1000)
 	v.SetDefault("game.chat_max_len", 256)
 	v.SetDefault("game.chat_min_interval_ms", 400)
+	v.SetDefault("game.object_behavior_budget_per_tick", 512)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)

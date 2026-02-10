@@ -10,6 +10,7 @@ import (
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
+	"strings"
 	"sync"
 
 	"go.uber.org/zap"
@@ -108,7 +109,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))
-	s.world.AddSystem(systems.NewObjectBehaviorSystem(s.eventBus, logger))
+	s.world.AddSystem(systems.NewObjectBehaviorSystem(s.eventBus, logger, systems.ObjectBehaviorConfig{
+		BudgetPerTick:       cfg.Game.ObjectBehaviorBudgetPerTick,
+		EnableDebugFallback: strings.EqualFold(cfg.Game.Env, "dev"),
+	}))
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
 
 	inventorySaver := inventory.NewInventorySaver(logger)

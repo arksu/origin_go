@@ -16,6 +16,13 @@ Key design goals:
 - **Content rules** - Restrict what items can be placed in nested containers
 - **Zero-allocation hot paths** - Efficient snapshot building and validation
 
+## Integration Contracts (Important)
+
+- When inventory updates modify world-object root containers (`Kind=Grid`, `Key=0`, owner is object entity),
+  inventory flow must mark object behavior dirty (`ecs.MarkObjectBehaviorDirty`) so runtime appearance/flags are recomputed by `ObjectBehaviorSystem`.
+- Content rules for nested containers are global by parent item, not player-only:
+  validation must work identically whether nested inventory is in player inventory, world container, equipment, or future station containers.
+
 ## Package Structure
 
 ```

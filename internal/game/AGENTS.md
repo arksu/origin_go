@@ -144,11 +144,19 @@ internal/game/
 
 Key configuration parameters:
 - `Game.TickRate`: Game loop frequency
+- `Game.Env`: `dev|stage|prod` runtime mode
 - `Game.MaxEntities`: Maximum entities per shard
 - `Game.ChunkLRUTTL`: Chunk cache TTL
 - `Game.CommandQueueSize`: Command queue limits
 - `Game.DisconnectDelay`: Player detach time
 - `Game.WorkerPoolSize`: Event bus worker pool size
+- `Game.ObjectBehaviorBudgetPerTick`: max dirty object behavior recomputes per tick (default `512`)
+
+## Object Behavior Runtime Notes
+
+- `ObjectBehaviorSystem` is dirty-queue driven (no global per-tick scan in normal mode).
+- Chunk activation (`world/chunk_manager.go`) forces initial behavior recompute for all loaded objects with behaviors (lazy init is not allowed).
+- Inventory mutations that affect object-root containers must mark object behavior dirty, so appearance/flags stay in sync.
 
 ## Error Handling
 

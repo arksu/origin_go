@@ -30,7 +30,10 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 	}))
 
 	w := ecs.NewWorldForTesting()
-	sys := NewObjectBehaviorSystem(nil, nil)
+	sys := NewObjectBehaviorSystem(nil, nil, ObjectBehaviorConfig{
+		BudgetPerTick:       512,
+		EnableDebugFallback: false,
+	})
 
 	objectID := types.EntityID(500)
 	objectHandle := w.Spawn(objectID, func(w *ecs.World, h types.Handle) {
@@ -61,6 +64,7 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 		},
 	})
 	ecs.GetResource[ecs.InventoryRefIndex](w).Add(constt.InventoryGrid, objectID, 0, containerHandle)
+	ecs.MarkObjectBehaviorDirty(w, objectHandle)
 
 	sys.Update(w, 0.05)
 
@@ -89,6 +93,7 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 	ecs.WithComponent(w, containerHandle, func(c *components.InventoryContainer) {
 		c.Items = nil
 	})
+	ecs.MarkObjectBehaviorDirty(w, objectHandle)
 	sys.Update(w, 0.05)
 	state, _ = ecs.GetComponent[components.ObjectInternalState](w, objectHandle)
 	if !state.IsDirty {

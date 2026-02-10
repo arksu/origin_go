@@ -14,6 +14,7 @@ import (
 
 	"origin/internal/config"
 	"origin/internal/ecs"
+	ecssystems "origin/internal/ecs/systems"
 	"origin/internal/eventbus"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
@@ -814,6 +815,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	rawObjects := chunk.GetRawObjects()
 	rawInventoriesByOwner := chunk.GetRawInventoriesByOwner()
 	spatial := chunk.Spatial()
+	behaviorHandles := make([]types.Handle, 0, len(rawObjects))
 
 	for _, raw := range rawObjects {
 		h, err := cm.objectFactory.Build(cm.world, raw, rawInventoriesByOwner[types.EntityID(raw.ID)])
@@ -845,6 +847,9 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		})
 
 		isStatic := cm.objectFactory.IsStatic(raw)
+		if info, hasInfo := ecs.GetComponent[components.EntityInfo](cm.world, h); hasInfo && len(info.Behaviors) > 0 {
+			behaviorHandles = append(behaviorHandles, h)
+		}
 
 		if isStatic {
 			spatial.AddStatic(h, raw.X, raw.Y)
@@ -852,6 +857,9 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 			spatial.AddDynamic(h, raw.X, raw.Y)
 		}
 	}
+
+	// Force initial behavior computation on activation (no lazy defer).
+	ecssystems.RecomputeObjectBehaviorsNow(cm.world, cm.eventBus, cm.logger, behaviorHandles)
 
 	chunk.ClearRawObjects()
 	chunk.ClearRawInventoriesByOwner()
