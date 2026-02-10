@@ -242,7 +242,7 @@ func TestChunkManager_LoadWithoutInterestBecomesInactive(t *testing.T) {
 	}
 }
 
-func TestChunkManager_LoadWithActiveInterestBecomesActive(t *testing.T) {
+func TestChunkManager_LoadWithActiveInterestStaysPreloaded(t *testing.T) {
 	cm := newTestChunkManager()
 	defer cm.Stop()
 
@@ -265,8 +265,8 @@ func TestChunkManager_LoadWithActiveInterestBecomesActive(t *testing.T) {
 	if chunk == nil {
 		t.Fatal("chunk was not loaded")
 	}
-	if state := chunk.GetState(); state != types.ChunkStateActive {
-		t.Fatalf("chunk state = %v, want %v", state, types.ChunkStateActive)
+	if state := chunk.GetState(); state != types.ChunkStatePreloaded {
+		t.Fatalf("chunk state = %v, want %v", state, types.ChunkStatePreloaded)
 	}
 }
 
