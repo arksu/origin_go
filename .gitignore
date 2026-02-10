@@ -16,6 +16,8 @@ load_test
 .vscode/
 .aiassistant/
 .idea/
+.codex/
+etc/
 
 # Test binary, built with `go test -c`
 *.test
