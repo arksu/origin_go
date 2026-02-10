@@ -545,7 +545,7 @@ type Position struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	X             int32                  `protobuf:"varint,1,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int32                  `protobuf:"varint,2,opt,name=y,proto3" json:"y,omitempty"`
-	Heading       uint32                 `protobuf:"varint,3,opt,name=heading,proto3" json:"heading,omitempty"`
+	Heading       float32                `protobuf:"fixed32,3,opt,name=heading,proto3" json:"heading,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -594,7 +594,7 @@ func (x *Position) GetY() int32 {
 	return 0
 }
 
-func (x *Position) GetHeading() uint32 {
+func (x *Position) GetHeading() float32 {
 	if x != nil {
 		return x.Heading
 	}
@@ -4052,7 +4052,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\bPosition\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x05R\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\x05R\x01y\x12\x18\n" +
-	"\aheading\x18\x03 \x01(\rR\aheading\"%\n" +
+	"\aheading\x18\x03 \x01(\x02R\aheading\"%\n" +
 	"\aVector2\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x05R\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\x05R\x01y\"Z\n" +

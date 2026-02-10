@@ -43,9 +43,9 @@ async function loadCharacters() {
       return
     }
     if (ApiException.isNetwork(e)) {
-      error.value = 'Нет соединения с сервером'
+      error.value = 'No connection to server'
     } else {
-      error.value = 'Не удалось загрузить персонажей'
+      error.value = 'Failed to load characters'
     }
   } finally {
     loading.value = false
@@ -67,9 +67,9 @@ async function handleCreate() {
     if (ApiException.isValidation(e)) {
       createError.value = e.message
     } else if (ApiException.isNetwork(e)) {
-      createError.value = 'Нет соединения с сервером'
+      createError.value = 'No connection to server'
     } else {
-      createError.value = 'Не удалось создать персонажа'
+      createError.value = 'Failed to create character'
     }
   } finally {
     creating.value = false
@@ -79,7 +79,7 @@ async function handleCreate() {
 async function handleDelete(id: number) {
   if (deletingId.value !== null) return
 
-  if (!confirm('Удалить персонажа?')) return
+  if (!confirm('Delete character?')) return
 
   deletingId.value = id
 
@@ -88,9 +88,9 @@ async function handleDelete(id: number) {
     await loadCharacters()
   } catch (e) {
     if (ApiException.isNetwork(e)) {
-      error.value = 'Нет соединения с сервером'
+      error.value = 'No connection to server'
     } else {
-      error.value = 'Не удалось удалить персонажа'
+      error.value = 'Failed to delete character'
     }
   } finally {
     deletingId.value = null
@@ -109,9 +109,9 @@ async function handleEnter(id: number) {
     router.push('/game')
   } catch (e) {
     if (ApiException.isNetwork(e)) {
-      error.value = 'Нет соединения с сервером'
+      error.value = 'No connection to server'
     } else {
-      error.value = 'Не удалось войти в игру'
+      error.value = 'Failed to enter game'
     }
   } finally {
     enteringId.value = null

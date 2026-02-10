@@ -63,7 +63,6 @@ func NewExpireDetachedSystem(
 }
 
 func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
-	batchStartedAt := time.Now()
 	now := ecs.GetResource[ecs.TimeState](w).Now
 	detachedEntities := ecs.GetResource[ecs.DetachedEntities](w)
 
@@ -91,13 +90,6 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 
 	var maxDetachedDuration time.Duration
 	var minDetachedDuration time.Duration
-	var saveTotal time.Duration
-	var onExpireTotal time.Duration
-	var despawnTotal time.Duration
-	var removeCharTotal time.Duration
-	var maxSave time.Duration
-	var maxOnExpire time.Duration
-	var maxDespawn time.Duration
 	if limit > 0 {
 		minDetachedDuration = time.Duration(1<<63 - 1)
 	}
@@ -121,39 +113,19 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 
 		// Save character data before despawn
 		if s.characterSaver != nil {
-			saveStartedAt := time.Now()
 			s.characterSaver.SaveDetached(w, entityID, handle)
-			d := time.Since(saveStartedAt)
-			saveTotal += d
-			if d > maxSave {
-				maxSave = d
-			}
 		}
 
 		// Call cleanup callback before despawn (for spatial index, AOI, etc.)
 		if s.onExpire != nil {
-			onExpireStartedAt := time.Now()
 			s.onExpire(entityID, handle)
-			d := time.Since(onExpireStartedAt)
-			onExpireTotal += d
-			if d > maxOnExpire {
-				maxOnExpire = d
-			}
 		}
 
 		// Despawn the entity
-		despawnStartedAt := time.Now()
 		w.Despawn(handle)
-		d := time.Since(despawnStartedAt)
-		despawnTotal += d
-		if d > maxDespawn {
-			maxDespawn = d
-		}
 
 		// Remove from CharacterEntities (stop periodic saves while detached)
-		removeStartedAt := time.Now()
 		ecs.GetResource[ecs.CharacterEntities](w).Remove(entityID)
-		removeCharTotal += time.Since(removeStartedAt)
 
 		// Remove from detachedEntities map
 		detachedEntities.RemoveDetachedEntity(entityID)
@@ -166,7 +138,6 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 	}
 
 	// Batch post-cleanup hook (e.g. AOI unregister + chunk-state recalc).
-	onExpireBatchTotal := time.Duration(0)
 	flushedUnregister := 0
 	if s.onExpireBatch != nil && len(s.pendingUnregister) > 0 {
 		flushChunkSize := s.unregisterFlushChunkSize
@@ -190,9 +161,7 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 				n = len(s.pendingUnregister)
 			}
 
-			onExpireBatchStartedAt := time.Now()
 			s.onExpireBatch(s.pendingUnregister[:n])
-			onExpireBatchTotal += time.Since(onExpireBatchStartedAt)
 			flushedUnregister += n
 
 			copy(s.pendingUnregister, s.pendingUnregister[n:])
@@ -201,46 +170,14 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 	}
 
 	if len(expiredIDs) > 0 {
-		avgOrZero := func(total time.Duration, n int) time.Duration {
-			if n <= 0 {
-				return 0
-			}
-			return time.Duration(int64(total) / int64(n))
-		}
-
-		fields := []zap.Field{
+		s.logger.Info("Detached entities expired batch processed",
 			zap.Int("processed", len(expiredIDs)),
 			zap.Int("remaining", len(detachedEntities.Map)),
 			zap.Duration("min_detached_duration", minDetachedDuration),
 			zap.Duration("max_detached_duration", maxDetachedDuration),
 			zap.Int("layer", w.Layer),
-			zap.Duration("batch_duration", time.Since(batchStartedAt)),
-			zap.Duration("save_total", saveTotal),
-			zap.Duration("save_avg", avgOrZero(saveTotal, len(expiredIDs))),
-			zap.Duration("save_max", maxSave),
-			zap.Duration("on_expire_total", onExpireTotal),
-			zap.Duration("on_expire_avg", avgOrZero(onExpireTotal, len(expiredIDs))),
-			zap.Duration("on_expire_max", maxOnExpire),
-			zap.Duration("despawn_total", despawnTotal),
-			zap.Duration("despawn_avg", avgOrZero(despawnTotal, len(expiredIDs))),
-			zap.Duration("despawn_max", maxDespawn),
-			zap.Duration("remove_char_total", removeCharTotal),
-			zap.Duration("remove_char_avg", avgOrZero(removeCharTotal, len(expiredIDs))),
-			zap.Duration("on_expire_batch_total", onExpireBatchTotal),
 			zap.Int("pending_unregister", len(s.pendingUnregister)),
 			zap.Int("flushed_unregister", flushedUnregister),
-		}
-		if s.characterSaver != nil {
-			enqueued, dropped := s.characterSaver.SnapshotStats()
-			fields = append(fields,
-				zap.Int("save_queue_len", s.characterSaver.QueueLen()),
-				zap.Uint64("save_enqueued_total", enqueued),
-				zap.Uint64("save_dropped_total", dropped),
-			)
-		}
-
-		s.logger.Info("Detached entities expired batch processed",
-			fields...,
 		)
 	}
 }

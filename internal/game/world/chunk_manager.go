@@ -264,12 +264,8 @@ func (cm *ChunkManager) UnregisterEntities(entityIDs []types.EntityID) {
 		return
 	}
 
-	startedAt := time.Now()
 	aois := make([]*EntityAOI, 0, len(entityIDs))
-	removeAOITotal := time.Duration(0)
-	removeInterestsTotal := time.Duration(0)
 
-	removeAOIStartedAt := time.Now()
 	cm.aoiMu.Lock()
 	for _, entityID := range entityIDs {
 		aoi, exists := cm.entityAOIs[entityID]
@@ -280,13 +276,11 @@ func (cm *ChunkManager) UnregisterEntities(entityIDs []types.EntityID) {
 		aois = append(aois, aoi)
 	}
 	cm.aoiMu.Unlock()
-	removeAOITotal = time.Since(removeAOIStartedAt)
 
 	if len(aois) == 0 {
 		return
 	}
 
-	removeInterestsStartedAt := time.Now()
 	cm.interestMu.Lock()
 	for _, aoi := range aois {
 		entityID := aoi.EntityID
@@ -302,23 +296,8 @@ func (cm *ChunkManager) UnregisterEntities(entityIDs []types.EntityID) {
 		}
 	}
 	cm.interestMu.Unlock()
-	removeInterestsTotal = time.Since(removeInterestsStartedAt)
 
-	recalcStartedAt := time.Now()
 	cm.recalculateChunkStates()
-	recalcTotal := time.Since(recalcStartedAt)
-	total := time.Since(startedAt)
-
-	if total > 10*time.Millisecond {
-		cm.logger.Info("batch unregister entities timings",
-			zap.Int("requested_entities", len(entityIDs)),
-			zap.Int("found_entities", len(aois)),
-			zap.Duration("remove_aoi_total", removeAOITotal),
-			zap.Duration("remove_interests_total", removeInterestsTotal),
-			zap.Duration("recalculate_total", recalcTotal),
-			zap.Duration("total", total),
-		)
-	}
 }
 
 // UpdateEntityPosition updates AOI for an entity when it moves to a new chunk
@@ -949,6 +928,12 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 			continue
 		}
 
+		entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](cm.world, h)
+		hasPersistentInventories := false
+		if hasEntityInfo {
+			hasPersistentInventories = cm.objectFactory.HasPersistentInventories(entityInfo.TypeID, entityInfo.Behaviors)
+		}
+
 		obj, err := cm.objectFactory.Serialize(cm.world, h)
 		if err != nil {
 			cm.logger.Error("failed to serialize object for deactivation",
@@ -958,20 +943,27 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		}
 		if obj != nil {
 			rawObjects = append(rawObjects, obj)
-			objectInventories, invErr := cm.objectFactory.SerializeObjectInventories(cm.world, h)
-			if invErr != nil {
-				cm.logger.Error("failed to serialize object inventories for deactivation",
-					zap.Int64("object_id", obj.ID),
-					zap.Error(invErr),
-				)
-			} else if len(objectInventories) > 0 {
-				rawInventoriesByOwner[types.EntityID(obj.ID)] = append(rawInventoriesByOwner[types.EntityID(obj.ID)], objectInventories...)
+			if hasPersistentInventories {
+				objectInventories, invErr := cm.objectFactory.SerializeObjectInventories(cm.world, h)
+				if invErr != nil {
+					cm.logger.Error("failed to serialize object inventories for deactivation",
+						zap.Int64("object_id", obj.ID),
+						zap.Error(invErr),
+					)
+				} else if len(objectInventories) > 0 {
+					rawInventoriesByOwner[types.EntityID(obj.ID)] = append(rawInventoriesByOwner[types.EntityID(obj.ID)], objectInventories...)
+				}
 			}
 		}
 
 		// Despawn all inventory container entities owned by this object.
 		// Container entities are spawned without external IDs and are not tracked by chunk handles.
-		if extID, hasExtID := ecs.GetComponent[ecs.ExternalID](cm.world, h); hasExtID {
+		if hasPersistentInventories {
+			extID, hasExtID := ecs.GetComponent[ecs.ExternalID](cm.world, h)
+			if !hasExtID {
+				cm.world.Despawn(h)
+				continue
+			}
 			containerHandles := refIndex.RemoveAllByOwner(extID.ID)
 			for _, containerHandle := range containerHandles {
 				// Depth=1 nested containers are keyed by item_id; remove them before root despawn
