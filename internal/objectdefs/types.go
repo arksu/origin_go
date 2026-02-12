@@ -15,11 +15,11 @@ type ObjectDef struct {
 	Behaviors                 map[string]json.RawMessage `json:"behaviors,omitempty"`
 
 	// resolved at load time
-	IsStatic                        bool                `json:"-"`
+	IsStatic                       bool                `json:"-"`
 	ContextMenuEvenForOneItemValue bool                `json:"-"`
-	BehaviorOrder                   []string            `json:"-"`
-	BehaviorPriorities              map[string]int      `json:"-"`
-	TreeConfig                      *TreeBehaviorConfig `json:"-"`
+	BehaviorOrder                  []string            `json:"-"`
+	BehaviorPriorities             map[string]int      `json:"-"`
+	TreeConfig                     *TreeBehaviorConfig `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.
@@ -62,6 +62,8 @@ type TreeBehaviorConfig struct {
 	Priority               int    `json:"priority,omitempty"`
 	ChopPointsTotal        int    `json:"chopPointsTotal"`
 	ChopCycleDurationTicks int    `json:"chopCycleDurationTicks"`
+	ActionSound            string `json:"action_sound,omitempty"`
+	FinishSound            string `json:"finish_sound,omitempty"`
 	LogsSpawnDefKey        string `json:"logsSpawnDefKey"`
 	LogsSpawnCount         int    `json:"logsSpawnCount"`
 	LogsSpawnInitialOffset int    `json:"logsSpawnInitialOffset"`

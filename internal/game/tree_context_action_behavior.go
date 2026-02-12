@@ -109,6 +109,8 @@ func (b treeContextActionBehavior) Execute(
 	ecs.AddComponent(w, playerHandle, components.ActiveCyclicAction{
 		BehaviorKey:        "tree",
 		ActionID:           contextActionChop,
+		FinishSoundKey:     strings.TrimSpace(targetDef.TreeConfig.ActionSound),
+		CompleteSoundKey:   strings.TrimSpace(targetDef.TreeConfig.FinishSound),
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           targetID,
 		TargetHandle:       targetHandle,

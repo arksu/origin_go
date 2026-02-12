@@ -26,7 +26,9 @@
           "logsSpawnCount": 3,
           "logsSpawnInitialOffset": 16,
           "logsSpawnStepOffset": 20,
-          "transformToDefKey": "stump_birch"
+          "transformToDefKey": "stump_birch",
+          "action_sound": "chop",
+          "finish_sound": "tree_fall"
         }
       }
     },

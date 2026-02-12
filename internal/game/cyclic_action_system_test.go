@@ -6,8 +6,19 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
+
+type testCyclicActionProgressSender struct {
+	messages []*netproto.S2C_CyclicActionProgress
+	entityID types.EntityID
+}
+
+func (s *testCyclicActionProgressSender) SendCyclicActionProgress(entityID types.EntityID, progress *netproto.S2C_CyclicActionProgress) {
+	s.entityID = entityID
+	s.messages = append(s.messages, progress)
+}
 
 func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 	world := ecs.NewWorldForTesting()
@@ -56,5 +67,34 @@ func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 	}
 	if movement.State != constt.StateIdle {
 		t.Fatalf("expected movement state idle after cancel, got %d", movement.State)
+	}
+}
+
+func TestCyclicActionSystem_SendProgress_IncludesSoundOnCycleEnd(t *testing.T) {
+	progressSender := &testCyclicActionProgressSender{}
+	system := NewCyclicActionSystem(nil, progressSender, nil)
+
+	const (
+		playerID = types.EntityID(5001)
+		targetID = types.EntityID(6002)
+	)
+
+	action := components.ActiveCyclicAction{
+		ActionID:           contextActionChop,
+		TargetID:           targetID,
+		CycleIndex:         2,
+		CycleElapsedTicks:  20,
+		CycleDurationTicks: 20,
+		FinishSoundKey:     "chop",
+	}
+	system.sendProgress(playerID, action)
+
+	if len(progressSender.messages) != 1 {
+		t.Fatalf("expected one progress message, got %d", len(progressSender.messages))
+	}
+
+	message := progressSender.messages[0]
+	if message.SoundKey == nil || *message.SoundKey != "chop" {
+		t.Fatalf("expected progress sound_key=chop, got %v", message.SoundKey)
 	}
 }
