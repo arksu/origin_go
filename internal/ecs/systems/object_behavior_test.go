@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"encoding/json"
 	"testing"
 
 	constt "origin/internal/const"
@@ -25,7 +26,10 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 					Resource: "obj/box/box_open.png",
 				},
 			},
-			Behavior: []string{"container"},
+			Behaviors: map[string]json.RawMessage{
+				"container": json.RawMessage("{}"),
+			},
+			BehaviorOrder: []string{"container"},
 		},
 	}))
 

@@ -38,6 +38,9 @@ type ContextActionService struct {
 	logger    *zap.Logger
 	openSvc   systems.OpenContainerCoordinator
 	alerts    miniAlertSender
+	eventBus  *eventbus.EventBus
+	chunks    chunkProvider
+	idAlloc   entityIDAllocator
 	behaviors map[string]contextActionBehavior
 }
 
@@ -66,6 +69,8 @@ func NewContextActionService(
 	eventBus *eventbus.EventBus,
 	openSvc systems.OpenContainerCoordinator,
 	alerts miniAlertSender,
+	chunks chunkProvider,
+	idAlloc entityIDAllocator,
 	logger *zap.Logger,
 ) *ContextActionService {
 	if logger == nil {
@@ -73,12 +78,21 @@ func NewContextActionService(
 	}
 
 	s := &ContextActionService{
-		world:   world,
-		logger:  logger,
-		openSvc: openSvc,
-		alerts:  alerts,
+		world:    world,
+		logger:   logger,
+		openSvc:  openSvc,
+		alerts:   alerts,
+		eventBus: eventBus,
+		chunks:   chunks,
+		idAlloc:  idAlloc,
 		behaviors: map[string]contextActionBehavior{
 			"container": containerContextActionBehavior{},
+			"tree": treeContextActionBehavior{
+				eventBus:    eventBus,
+				chunks:      chunks,
+				idAllocator: idAlloc,
+				logger:      logger,
+			},
 		},
 	}
 
@@ -252,7 +266,59 @@ func (s *ContextActionService) onLinkBroken(_ context.Context, event eventbus.Ev
 		return nil
 	}
 	ecs.RemoveComponent[components.PendingContextAction](s.world, playerHandle)
+	s.cancelActiveCyclicAction(playerHandle)
 	return nil
+}
+
+func (s *ContextActionService) handleCyclicCycleComplete(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	action components.ActiveCyclicAction,
+) cyclicActionDecision {
+	if action.BehaviorKey == "" {
+		return cyclicActionDecisionCanceled
+	}
+
+	rawBehavior, found := s.behaviors[action.BehaviorKey]
+	if !found {
+		return cyclicActionDecisionCanceled
+	}
+
+	cyclicBehavior, ok := rawBehavior.(cyclicActionBehavior)
+	if !ok {
+		return cyclicActionDecisionCanceled
+	}
+
+	targetHandle := action.TargetHandle
+	if targetHandle == types.InvalidHandle {
+		targetHandle = w.GetHandleByEntityID(action.TargetID)
+	}
+
+	return cyclicBehavior.OnCycleComplete(cyclicActionCycleContext{
+		World:        w,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     action.TargetID,
+		TargetHandle: targetHandle,
+		Action:       action,
+	})
+}
+
+func (s *ContextActionService) cancelActiveCyclicAction(playerHandle types.Handle) {
+	if playerHandle == types.InvalidHandle || !s.world.Alive(playerHandle) {
+		return
+	}
+	if _, has := ecs.GetComponent[components.ActiveCyclicAction](s.world, playerHandle); !has {
+		return
+	}
+	ecs.RemoveComponent[components.ActiveCyclicAction](s.world, playerHandle)
+	ecs.MutateComponent[components.Movement](s.world, playerHandle, func(m *components.Movement) bool {
+		if m.State == constt.StateInteracting {
+			m.State = constt.StateIdle
+		}
+		return true
+	})
 }
 
 func (s *ContextActionService) sendMiniAlert(playerID types.EntityID, severity netproto.AlertSeverity, reasonCode string) {
@@ -308,10 +374,6 @@ func (containerContextActionBehavior) Actions(
 		{
 			ActionID: contextActionOpen,
 			Title:    "Open",
-		},
-		{
-			ActionID: "open2",
-			Title:    "Open2",
 		},
 	}
 }

@@ -33,9 +33,9 @@
           "resource": "box/open"
         }
       ],
-      "behavior": [
-        "container"
-      ]
+      "behaviors": {
+        "container": {}
+      }
     },
     {
       "defId": 11,
@@ -48,9 +48,9 @@
         }
       },
       "resource": "player",
-      "behavior": [
-        "player"
-      ]
+      "behaviors": {
+        "player": {}
+      }
     }
   ]
 }

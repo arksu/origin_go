@@ -95,7 +95,15 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
-	contextActionService := NewContextActionService(s.world, s.eventBus, openContainerService, s, logger)
+	contextActionService := NewContextActionService(
+		s.world,
+		s.eventBus,
+		openContainerService,
+		s,
+		s.chunkManager,
+		s.entityIDManager,
+		logger,
+	)
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 	networkCmdSystem.SetContextActionService(contextActionService)
 	networkCmdSystem.SetContextMenuSender(s)
@@ -111,6 +119,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
+	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))
 	s.world.AddSystem(systems.NewObjectBehaviorSystem(s.eventBus, logger, systems.ObjectBehaviorConfig{
@@ -569,6 +578,35 @@ func (s *Shard) SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniA
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal mini alert",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+func (s *Shard) SendCyclicActionProgress(entityID types.EntityID, progress *netproto.S2C_CyclicActionProgress) {
+	if progress == nil {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_CyclicActionProgress{
+			CyclicActionProgress: progress,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal cyclic action progress",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return
