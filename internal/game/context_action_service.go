@@ -33,11 +33,16 @@ type miniAlertSender interface {
 	SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniAlert)
 }
 
+type cyclicActionFinishSender interface {
+	SendCyclicActionFinished(entityID types.EntityID, finished *netproto.S2C_CyclicActionFinished)
+}
+
 type ContextActionService struct {
 	world     *ecs.World
 	logger    *zap.Logger
 	openSvc   systems.OpenContainerCoordinator
 	alerts    miniAlertSender
+	cyclicOut cyclicActionFinishSender
 	eventBus  *eventbus.EventBus
 	chunks    chunkProvider
 	idAlloc   entityIDAllocator
@@ -69,6 +74,7 @@ func NewContextActionService(
 	eventBus *eventbus.EventBus,
 	openSvc systems.OpenContainerCoordinator,
 	alerts miniAlertSender,
+	cyclicOut cyclicActionFinishSender,
 	chunks chunkProvider,
 	idAlloc entityIDAllocator,
 	logger *zap.Logger,
@@ -82,6 +88,7 @@ func NewContextActionService(
 		logger:   logger,
 		openSvc:  openSvc,
 		alerts:   alerts,
+		cyclicOut: cyclicOut,
 		eventBus: eventBus,
 		chunks:   chunks,
 		idAlloc:  idAlloc,
@@ -266,7 +273,7 @@ func (s *ContextActionService) onLinkBroken(_ context.Context, event eventbus.Ev
 		return nil
 	}
 	ecs.RemoveComponent[components.PendingContextAction](s.world, playerHandle)
-	s.cancelActiveCyclicAction(playerHandle)
+	s.cancelActiveCyclicAction(linkEvent.PlayerID, playerHandle, "link_broken")
 	return nil
 }
 
@@ -305,13 +312,38 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	})
 }
 
-func (s *ContextActionService) cancelActiveCyclicAction(playerHandle types.Handle) {
+func (s *ContextActionService) completeActiveCyclicAction(playerID types.EntityID, playerHandle types.Handle) {
+	s.finishActiveCyclicAction(
+		playerID,
+		playerHandle,
+		netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_COMPLETED,
+		"",
+	)
+}
+
+func (s *ContextActionService) cancelActiveCyclicAction(playerID types.EntityID, playerHandle types.Handle, reasonCode string) {
+	s.finishActiveCyclicAction(
+		playerID,
+		playerHandle,
+		netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_CANCELED,
+		reasonCode,
+	)
+}
+
+func (s *ContextActionService) finishActiveCyclicAction(
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	result netproto.CyclicActionFinishResult,
+	reasonCode string,
+) {
 	if playerHandle == types.InvalidHandle || !s.world.Alive(playerHandle) {
 		return
 	}
-	if _, has := ecs.GetComponent[components.ActiveCyclicAction](s.world, playerHandle); !has {
+	activeAction, has := ecs.GetComponent[components.ActiveCyclicAction](s.world, playerHandle)
+	if !has {
 		return
 	}
+	s.sendCyclicActionFinished(playerID, activeAction, result, reasonCode)
 	ecs.RemoveComponent[components.ActiveCyclicAction](s.world, playerHandle)
 	ecs.MutateComponent[components.Movement](s.world, playerHandle, func(m *components.Movement) bool {
 		if m.State == constt.StateInteracting {
@@ -319,6 +351,28 @@ func (s *ContextActionService) cancelActiveCyclicAction(playerHandle types.Handl
 		}
 		return true
 	})
+}
+
+func (s *ContextActionService) sendCyclicActionFinished(
+	playerID types.EntityID,
+	action components.ActiveCyclicAction,
+	result netproto.CyclicActionFinishResult,
+	reasonCode string,
+) {
+	if s.cyclicOut == nil || playerID == 0 {
+		return
+	}
+
+	finished := &netproto.S2C_CyclicActionFinished{
+		ActionId:       action.ActionID,
+		TargetEntityId: uint64(action.TargetID),
+		CycleIndex:     action.CycleIndex,
+		Result:         result,
+	}
+	if result == netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_CANCELED && reasonCode != "" {
+		finished.ReasonCode = &reasonCode
+	}
+	s.cyclicOut.SendCyclicActionFinished(playerID, finished)
 }
 
 func (s *ContextActionService) sendMiniAlert(playerID types.EntityID, severity netproto.AlertSeverity, reasonCode string) {

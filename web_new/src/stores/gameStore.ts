@@ -76,6 +76,11 @@ export interface MiniAlertItem {
   expiresAt: number
 }
 
+export interface ActionProgress {
+  total: number
+  current: number
+}
+
 export const useGameStore = defineStore('game', () => {
   // Session
   const wsToken = ref('')
@@ -110,10 +115,18 @@ export const useGameStore = defineStore('game', () => {
   const miniAlerts = ref<MiniAlertItem[]>([])
   const miniAlertDebounceUntil = new Map<string, number>()
   let miniAlertTimer: ReturnType<typeof setInterval> | null = null
+  const actionProgress = ref<ActionProgress>({
+    total: 0,
+    current: 0,
+  })
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
   const isInGame = computed(() => isConnected.value && playerEntityId.value !== null)
+  const actionFrame = computed(() => {
+    if (actionProgress.value.total <= 0) return 0
+    return Math.round((actionProgress.value.current / actionProgress.value.total) * 21)
+  })
 
   const handState = computed((): proto.IInventoryHandState | null => {
     if (!playerEntityId.value) return null
@@ -172,6 +185,7 @@ export const useGameStore = defineStore('game', () => {
       clearInterval(miniAlertTimer)
       miniAlertTimer = null
     }
+    clearActionProgress()
   }
 
   function setPlayerLeaveWorld() {
@@ -194,6 +208,7 @@ export const useGameStore = defineStore('game', () => {
       clearInterval(miniAlertTimer)
       miniAlertTimer = null
     }
+    clearActionProgress()
   }
 
   function updatePlayerPosition(position: Position) {
@@ -359,6 +374,16 @@ export const useGameStore = defineStore('game', () => {
 
   function closeContextMenu() {
     contextMenu.value = null
+  }
+
+  function setActionProgress(totalTicks: number, elapsedTicks: number) {
+    actionProgress.value.total = totalTicks
+    actionProgress.value.current = elapsedTicks
+  }
+
+  function clearActionProgress() {
+    actionProgress.value.total = 0
+    actionProgress.value.current = 0
   }
 
   function formatReasonCode(reasonCode: string): string {
@@ -537,6 +562,7 @@ export const useGameStore = defineStore('game', () => {
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
+    clearActionProgress()
 
     // Cleanup chat
     if (cleanupTimer) {
@@ -569,10 +595,12 @@ export const useGameStore = defineStore('game', () => {
     mousePos,
     contextMenu,
     miniAlerts,
+    actionProgress,
 
     // Computed
     isConnected,
     isInGame,
+    actionFrame,
     handState,
     handInventoryState,
 
@@ -606,6 +634,8 @@ export const useGameStore = defineStore('game', () => {
     openContextMenu,
     closeContextMenu,
     pushMiniAlert,
+    setActionProgress,
+    clearActionProgress,
     reset,
   }
 })

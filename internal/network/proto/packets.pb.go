@@ -589,6 +589,55 @@ func (AlertSeverity) EnumDescriptor() ([]byte, []int) {
 	return file_api_proto_packets_proto_rawDescGZIP(), []int{9}
 }
 
+type CyclicActionFinishResult int32
+
+const (
+	CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_UNSPECIFIED CyclicActionFinishResult = 0
+	CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_COMPLETED   CyclicActionFinishResult = 1
+	CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_CANCELED    CyclicActionFinishResult = 2
+)
+
+// Enum value maps for CyclicActionFinishResult.
+var (
+	CyclicActionFinishResult_name = map[int32]string{
+		0: "CYCLIC_ACTION_FINISH_RESULT_UNSPECIFIED",
+		1: "CYCLIC_ACTION_FINISH_RESULT_COMPLETED",
+		2: "CYCLIC_ACTION_FINISH_RESULT_CANCELED",
+	}
+	CyclicActionFinishResult_value = map[string]int32{
+		"CYCLIC_ACTION_FINISH_RESULT_UNSPECIFIED": 0,
+		"CYCLIC_ACTION_FINISH_RESULT_COMPLETED":   1,
+		"CYCLIC_ACTION_FINISH_RESULT_CANCELED":    2,
+	}
+)
+
+func (x CyclicActionFinishResult) Enum() *CyclicActionFinishResult {
+	p := new(CyclicActionFinishResult)
+	*p = x
+	return p
+}
+
+func (x CyclicActionFinishResult) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CyclicActionFinishResult) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_proto_packets_proto_enumTypes[10].Descriptor()
+}
+
+func (CyclicActionFinishResult) Type() protoreflect.EnumType {
+	return &file_api_proto_packets_proto_enumTypes[10]
+}
+
+func (x CyclicActionFinishResult) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CyclicActionFinishResult.Descriptor instead.
+func (CyclicActionFinishResult) EnumDescriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{10}
+}
+
 // Позиция в мире
 type Position struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3879,6 +3928,82 @@ func (x *S2C_CyclicActionProgress) GetTotalTicks() uint32 {
 	return 0
 }
 
+type S2C_CyclicActionFinished struct {
+	state          protoimpl.MessageState   `protogen:"open.v1"`
+	ActionId       string                   `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	TargetEntityId uint64                   `protobuf:"varint,2,opt,name=target_entity_id,json=targetEntityId,proto3" json:"target_entity_id,omitempty"`
+	CycleIndex     uint32                   `protobuf:"varint,3,opt,name=cycle_index,json=cycleIndex,proto3" json:"cycle_index,omitempty"`
+	Result         CyclicActionFinishResult `protobuf:"varint,4,opt,name=result,proto3,enum=proto.CyclicActionFinishResult" json:"result,omitempty"`
+	ReasonCode     *string                  `protobuf:"bytes,5,opt,name=reason_code,json=reasonCode,proto3,oneof" json:"reason_code,omitempty"` // set only for canceled result
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *S2C_CyclicActionFinished) Reset() {
+	*x = S2C_CyclicActionFinished{}
+	mi := &file_api_proto_packets_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *S2C_CyclicActionFinished) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*S2C_CyclicActionFinished) ProtoMessage() {}
+
+func (x *S2C_CyclicActionFinished) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_packets_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use S2C_CyclicActionFinished.ProtoReflect.Descriptor instead.
+func (*S2C_CyclicActionFinished) Descriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *S2C_CyclicActionFinished) GetActionId() string {
+	if x != nil {
+		return x.ActionId
+	}
+	return ""
+}
+
+func (x *S2C_CyclicActionFinished) GetTargetEntityId() uint64 {
+	if x != nil {
+		return x.TargetEntityId
+	}
+	return 0
+}
+
+func (x *S2C_CyclicActionFinished) GetCycleIndex() uint32 {
+	if x != nil {
+		return x.CycleIndex
+	}
+	return 0
+}
+
+func (x *S2C_CyclicActionFinished) GetResult() CyclicActionFinishResult {
+	if x != nil {
+		return x.Result
+	}
+	return CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_UNSPECIFIED
+}
+
+func (x *S2C_CyclicActionFinished) GetReasonCode() string {
+	if x != nil && x.ReasonCode != nil {
+		return *x.ReasonCode
+	}
+	return ""
+}
+
 type S2C_ChatMessage struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Channel      ChatChannel            `protobuf:"varint,1,opt,name=channel,proto3,enum=proto.ChatChannel" json:"channel,omitempty"`
@@ -3893,7 +4018,7 @@ type S2C_ChatMessage struct {
 
 func (x *S2C_ChatMessage) Reset() {
 	*x = S2C_ChatMessage{}
-	mi := &file_api_proto_packets_proto_msgTypes[52]
+	mi := &file_api_proto_packets_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3905,7 +4030,7 @@ func (x *S2C_ChatMessage) String() string {
 func (*S2C_ChatMessage) ProtoMessage() {}
 
 func (x *S2C_ChatMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[52]
+	mi := &file_api_proto_packets_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3918,7 +4043,7 @@ func (x *S2C_ChatMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ChatMessage.ProtoReflect.Descriptor instead.
 func (*S2C_ChatMessage) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{52}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *S2C_ChatMessage) GetChannel() ChatChannel {
@@ -3966,7 +4091,7 @@ type S2C_Error struct {
 
 func (x *S2C_Error) Reset() {
 	*x = S2C_Error{}
-	mi := &file_api_proto_packets_proto_msgTypes[53]
+	mi := &file_api_proto_packets_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3978,7 +4103,7 @@ func (x *S2C_Error) String() string {
 func (*S2C_Error) ProtoMessage() {}
 
 func (x *S2C_Error) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[53]
+	mi := &file_api_proto_packets_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3991,7 +4116,7 @@ func (x *S2C_Error) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_Error.ProtoReflect.Descriptor instead.
 func (*S2C_Error) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{53}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *S2C_Error) GetCode() ErrorCode {
@@ -4018,7 +4143,7 @@ type S2C_Warning struct {
 
 func (x *S2C_Warning) Reset() {
 	*x = S2C_Warning{}
-	mi := &file_api_proto_packets_proto_msgTypes[54]
+	mi := &file_api_proto_packets_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4030,7 +4155,7 @@ func (x *S2C_Warning) String() string {
 func (*S2C_Warning) ProtoMessage() {}
 
 func (x *S2C_Warning) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[54]
+	mi := &file_api_proto_packets_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4043,7 +4168,7 @@ func (x *S2C_Warning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_Warning.ProtoReflect.Descriptor instead.
 func (*S2C_Warning) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{54}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *S2C_Warning) GetCode() WarningCode {
@@ -4083,6 +4208,7 @@ type ServerMessage struct {
 	//	*ServerMessage_ContextMenu
 	//	*ServerMessage_MiniAlert
 	//	*ServerMessage_CyclicActionProgress
+	//	*ServerMessage_CyclicActionFinished
 	//	*ServerMessage_Error
 	//	*ServerMessage_Warning
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
@@ -4092,7 +4218,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_api_proto_packets_proto_msgTypes[55]
+	mi := &file_api_proto_packets_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4104,7 +4230,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[55]
+	mi := &file_api_proto_packets_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4117,7 +4243,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{55}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ServerMessage) GetSequence() uint32 {
@@ -4287,6 +4413,15 @@ func (x *ServerMessage) GetCyclicActionProgress() *S2C_CyclicActionProgress {
 	return nil
 }
 
+func (x *ServerMessage) GetCyclicActionFinished() *S2C_CyclicActionFinished {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_CyclicActionFinished); ok {
+			return x.CyclicActionFinished
+		}
+	}
+	return nil
+}
+
 func (x *ServerMessage) GetError() *S2C_Error {
 	if x != nil {
 		if x, ok := x.Payload.(*ServerMessage_Error); ok {
@@ -4377,6 +4512,10 @@ type ServerMessage_CyclicActionProgress struct {
 	CyclicActionProgress *S2C_CyclicActionProgress `protobuf:"bytes,46,opt,name=cyclic_action_progress,json=cyclicActionProgress,proto3,oneof"`
 }
 
+type ServerMessage_CyclicActionFinished struct {
+	CyclicActionFinished *S2C_CyclicActionFinished `protobuf:"bytes,47,opt,name=cyclic_action_finished,json=cyclicActionFinished,proto3,oneof"`
+}
+
 type ServerMessage_Error struct {
 	// S2C_EntityUpdate entity_update = 15;
 	// S2C_PlayerStateUpdate player_state = 16;
@@ -4444,6 +4583,8 @@ func (*ServerMessage_ContextMenu) isServerMessage_Payload() {}
 func (*ServerMessage_MiniAlert) isServerMessage_Payload() {}
 
 func (*ServerMessage_CyclicActionProgress) isServerMessage_Payload() {}
+
+func (*ServerMessage_CyclicActionFinished) isServerMessage_Payload() {}
 
 func (*ServerMessage_Error) isServerMessage_Payload() {}
 
@@ -4678,7 +4819,16 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"cycleIndex\x12#\n" +
 	"\relapsed_ticks\x18\x04 \x01(\rR\felapsedTicks\x12\x1f\n" +
 	"\vtotal_ticks\x18\x05 \x01(\rR\n" +
-	"totalTicks\"\xce\x01\n" +
+	"totalTicks\"\xf1\x01\n" +
+	"\x18S2C_CyclicActionFinished\x12\x1b\n" +
+	"\taction_id\x18\x01 \x01(\tR\bactionId\x12(\n" +
+	"\x10target_entity_id\x18\x02 \x01(\x04R\x0etargetEntityId\x12\x1f\n" +
+	"\vcycle_index\x18\x03 \x01(\rR\n" +
+	"cycleIndex\x127\n" +
+	"\x06result\x18\x04 \x01(\x0e2\x1f.proto.CyclicActionFinishResultR\x06result\x12$\n" +
+	"\vreason_code\x18\x05 \x01(\tH\x00R\n" +
+	"reasonCode\x88\x01\x01B\x0e\n" +
+	"\f_reason_code\"\xce\x01\n" +
 	"\x0fS2C_ChatMessage\x12,\n" +
 	"\achannel\x18\x01 \x01(\x0e2\x12.proto.ChatChannelR\achannel\x12$\n" +
 	"\x0efrom_entity_id\x18\x02 \x01(\x04R\ffromEntityId\x12\x1b\n" +
@@ -4692,7 +4842,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"O\n" +
 	"\vS2C_Warning\x12&\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x12.proto.WarningCodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xdf\t\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xb8\n" +
+	"\n" +
 	"\rServerMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\rR\bsequence\x128\n" +
 	"\vauth_result\x18\n" +
@@ -4716,7 +4867,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\fcontext_menu\x18, \x01(\v2\x16.proto.S2C_ContextMenuH\x00R\vcontextMenu\x125\n" +
 	"\n" +
 	"mini_alert\x18- \x01(\v2\x14.proto.S2C_MiniAlertH\x00R\tminiAlert\x12W\n" +
-	"\x16cyclic_action_progress\x18. \x01(\v2\x1f.proto.S2C_CyclicActionProgressH\x00R\x14cyclicActionProgress\x12(\n" +
+	"\x16cyclic_action_progress\x18. \x01(\v2\x1f.proto.S2C_CyclicActionProgressH\x00R\x14cyclicActionProgress\x12W\n" +
+	"\x16cyclic_action_finished\x18/ \x01(\v2\x1f.proto.S2C_CyclicActionFinishedH\x00R\x14cyclicActionFinished\x12(\n" +
 	"\x05error\x18* \x01(\v2\x10.proto.S2C_ErrorH\x00R\x05error\x12.\n" +
 	"\awarning\x18+ \x01(\v2\x12.proto.S2C_WarningH\x00R\awarningB\t\n" +
 	"\apayload*a\n" +
@@ -4788,7 +4940,11 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rAlertSeverity\x12\x17\n" +
 	"\x13ALERT_SEVERITY_INFO\x10\x00\x12\x1a\n" +
 	"\x16ALERT_SEVERITY_WARNING\x10\x01\x12\x18\n" +
-	"\x14ALERT_SEVERITY_ERROR\x10\x02B\x1fZ\x1dorigin/internal/network/protob\x06proto3"
+	"\x14ALERT_SEVERITY_ERROR\x10\x02*\x9c\x01\n" +
+	"\x18CyclicActionFinishResult\x12+\n" +
+	"'CYCLIC_ACTION_FINISH_RESULT_UNSPECIFIED\x10\x00\x12)\n" +
+	"%CYCLIC_ACTION_FINISH_RESULT_COMPLETED\x10\x01\x12(\n" +
+	"$CYCLIC_ACTION_FINISH_RESULT_CANCELED\x10\x02B\x1fZ\x1dorigin/internal/network/protob\x06proto3"
 
 var (
 	file_api_proto_packets_proto_rawDescOnce sync.Once
@@ -4802,8 +4958,8 @@ func file_api_proto_packets_proto_rawDescGZIP() []byte {
 	return file_api_proto_packets_proto_rawDescData
 }
 
-var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
+var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
+var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_api_proto_packets_proto_goTypes = []any{
 	(MovementMode)(0),                // 0: proto.MovementMode
 	(EquipSlot)(0),                   // 1: proto.EquipSlot
@@ -4815,149 +4971,153 @@ var file_api_proto_packets_proto_goTypes = []any{
 	(InteractionType)(0),             // 7: proto.InteractionType
 	(ChatChannel)(0),                 // 8: proto.ChatChannel
 	(AlertSeverity)(0),               // 9: proto.AlertSeverity
-	(*Position)(nil),                 // 10: proto.Position
-	(*Vector2)(nil),                  // 11: proto.Vector2
-	(*AABB)(nil),                     // 12: proto.AABB
-	(*Timestamp)(nil),                // 13: proto.Timestamp
-	(*InventoryRef)(nil),             // 14: proto.InventoryRef
-	(*ItemInstance)(nil),             // 15: proto.ItemInstance
-	(*GridItem)(nil),                 // 16: proto.GridItem
-	(*InventoryGridState)(nil),       // 17: proto.InventoryGridState
-	(*EquipmentItem)(nil),            // 18: proto.EquipmentItem
-	(*InventoryEquipmentState)(nil),  // 19: proto.InventoryEquipmentState
-	(*InventoryHandState)(nil),       // 20: proto.InventoryHandState
-	(*InventoryState)(nil),           // 21: proto.InventoryState
-	(*InventoryExpected)(nil),        // 22: proto.InventoryExpected
-	(*GridPos)(nil),                  // 23: proto.GridPos
-	(*HandPos)(nil),                  // 24: proto.HandPos
-	(*InventoryMoveSpec)(nil),        // 25: proto.InventoryMoveSpec
-	(*InventoryOp)(nil),              // 26: proto.InventoryOp
-	(*C2S_InventoryOp)(nil),          // 27: proto.C2S_InventoryOp
-	(*C2S_OpenContainer)(nil),        // 28: proto.C2S_OpenContainer
-	(*C2S_CloseContainer)(nil),       // 29: proto.C2S_CloseContainer
-	(*EntityMovement)(nil),           // 30: proto.EntityMovement
-	(*EntityPosition)(nil),           // 31: proto.EntityPosition
-	(*EntityAppearance)(nil),         // 32: proto.EntityAppearance
-	(*ChunkCoord)(nil),               // 33: proto.ChunkCoord
-	(*ChunkData)(nil),                // 34: proto.ChunkData
-	(*MoveTo)(nil),                   // 35: proto.MoveTo
-	(*MoveToEntity)(nil),             // 36: proto.MoveToEntity
-	(*Interact)(nil),                 // 37: proto.Interact
-	(*SelectContextAction)(nil),      // 38: proto.SelectContextAction
-	(*C2S_PlayerAction)(nil),         // 39: proto.C2S_PlayerAction
-	(*C2S_MovementMode)(nil),         // 40: proto.C2S_MovementMode
-	(*C2S_ChatMessage)(nil),          // 41: proto.C2S_ChatMessage
-	(*C2S_Auth)(nil),                 // 42: proto.C2S_Auth
-	(*C2S_Ping)(nil),                 // 43: proto.C2S_Ping
-	(*ClientMessage)(nil),            // 44: proto.ClientMessage
-	(*S2C_AuthResult)(nil),           // 45: proto.S2C_AuthResult
-	(*S2C_Pong)(nil),                 // 46: proto.S2C_Pong
-	(*S2C_PlayerEnterWorld)(nil),     // 47: proto.S2C_PlayerEnterWorld
-	(*S2C_PlayerLeaveWorld)(nil),     // 48: proto.S2C_PlayerLeaveWorld
-	(*S2C_ChunkLoad)(nil),            // 49: proto.S2C_ChunkLoad
-	(*S2C_ChunkUnload)(nil),          // 50: proto.S2C_ChunkUnload
-	(*S2C_ObjectSpawn)(nil),          // 51: proto.S2C_ObjectSpawn
-	(*S2C_ObjectDespawn)(nil),        // 52: proto.S2C_ObjectDespawn
-	(*S2C_ObjectMove)(nil),           // 53: proto.S2C_ObjectMove
-	(*S2C_InventoryOpResult)(nil),    // 54: proto.S2C_InventoryOpResult
-	(*S2C_InventoryUpdate)(nil),      // 55: proto.S2C_InventoryUpdate
-	(*S2C_ContainerOpened)(nil),      // 56: proto.S2C_ContainerOpened
-	(*S2C_ContainerClosed)(nil),      // 57: proto.S2C_ContainerClosed
-	(*ContextMenuAction)(nil),        // 58: proto.ContextMenuAction
-	(*S2C_ContextMenu)(nil),          // 59: proto.S2C_ContextMenu
-	(*S2C_MiniAlert)(nil),            // 60: proto.S2C_MiniAlert
-	(*S2C_CyclicActionProgress)(nil), // 61: proto.S2C_CyclicActionProgress
-	(*S2C_ChatMessage)(nil),          // 62: proto.S2C_ChatMessage
-	(*S2C_Error)(nil),                // 63: proto.S2C_Error
-	(*S2C_Warning)(nil),              // 64: proto.S2C_Warning
-	(*ServerMessage)(nil),            // 65: proto.ServerMessage
+	(CyclicActionFinishResult)(0),    // 10: proto.CyclicActionFinishResult
+	(*Position)(nil),                 // 11: proto.Position
+	(*Vector2)(nil),                  // 12: proto.Vector2
+	(*AABB)(nil),                     // 13: proto.AABB
+	(*Timestamp)(nil),                // 14: proto.Timestamp
+	(*InventoryRef)(nil),             // 15: proto.InventoryRef
+	(*ItemInstance)(nil),             // 16: proto.ItemInstance
+	(*GridItem)(nil),                 // 17: proto.GridItem
+	(*InventoryGridState)(nil),       // 18: proto.InventoryGridState
+	(*EquipmentItem)(nil),            // 19: proto.EquipmentItem
+	(*InventoryEquipmentState)(nil),  // 20: proto.InventoryEquipmentState
+	(*InventoryHandState)(nil),       // 21: proto.InventoryHandState
+	(*InventoryState)(nil),           // 22: proto.InventoryState
+	(*InventoryExpected)(nil),        // 23: proto.InventoryExpected
+	(*GridPos)(nil),                  // 24: proto.GridPos
+	(*HandPos)(nil),                  // 25: proto.HandPos
+	(*InventoryMoveSpec)(nil),        // 26: proto.InventoryMoveSpec
+	(*InventoryOp)(nil),              // 27: proto.InventoryOp
+	(*C2S_InventoryOp)(nil),          // 28: proto.C2S_InventoryOp
+	(*C2S_OpenContainer)(nil),        // 29: proto.C2S_OpenContainer
+	(*C2S_CloseContainer)(nil),       // 30: proto.C2S_CloseContainer
+	(*EntityMovement)(nil),           // 31: proto.EntityMovement
+	(*EntityPosition)(nil),           // 32: proto.EntityPosition
+	(*EntityAppearance)(nil),         // 33: proto.EntityAppearance
+	(*ChunkCoord)(nil),               // 34: proto.ChunkCoord
+	(*ChunkData)(nil),                // 35: proto.ChunkData
+	(*MoveTo)(nil),                   // 36: proto.MoveTo
+	(*MoveToEntity)(nil),             // 37: proto.MoveToEntity
+	(*Interact)(nil),                 // 38: proto.Interact
+	(*SelectContextAction)(nil),      // 39: proto.SelectContextAction
+	(*C2S_PlayerAction)(nil),         // 40: proto.C2S_PlayerAction
+	(*C2S_MovementMode)(nil),         // 41: proto.C2S_MovementMode
+	(*C2S_ChatMessage)(nil),          // 42: proto.C2S_ChatMessage
+	(*C2S_Auth)(nil),                 // 43: proto.C2S_Auth
+	(*C2S_Ping)(nil),                 // 44: proto.C2S_Ping
+	(*ClientMessage)(nil),            // 45: proto.ClientMessage
+	(*S2C_AuthResult)(nil),           // 46: proto.S2C_AuthResult
+	(*S2C_Pong)(nil),                 // 47: proto.S2C_Pong
+	(*S2C_PlayerEnterWorld)(nil),     // 48: proto.S2C_PlayerEnterWorld
+	(*S2C_PlayerLeaveWorld)(nil),     // 49: proto.S2C_PlayerLeaveWorld
+	(*S2C_ChunkLoad)(nil),            // 50: proto.S2C_ChunkLoad
+	(*S2C_ChunkUnload)(nil),          // 51: proto.S2C_ChunkUnload
+	(*S2C_ObjectSpawn)(nil),          // 52: proto.S2C_ObjectSpawn
+	(*S2C_ObjectDespawn)(nil),        // 53: proto.S2C_ObjectDespawn
+	(*S2C_ObjectMove)(nil),           // 54: proto.S2C_ObjectMove
+	(*S2C_InventoryOpResult)(nil),    // 55: proto.S2C_InventoryOpResult
+	(*S2C_InventoryUpdate)(nil),      // 56: proto.S2C_InventoryUpdate
+	(*S2C_ContainerOpened)(nil),      // 57: proto.S2C_ContainerOpened
+	(*S2C_ContainerClosed)(nil),      // 58: proto.S2C_ContainerClosed
+	(*ContextMenuAction)(nil),        // 59: proto.ContextMenuAction
+	(*S2C_ContextMenu)(nil),          // 60: proto.S2C_ContextMenu
+	(*S2C_MiniAlert)(nil),            // 61: proto.S2C_MiniAlert
+	(*S2C_CyclicActionProgress)(nil), // 62: proto.S2C_CyclicActionProgress
+	(*S2C_CyclicActionFinished)(nil), // 63: proto.S2C_CyclicActionFinished
+	(*S2C_ChatMessage)(nil),          // 64: proto.S2C_ChatMessage
+	(*S2C_Error)(nil),                // 65: proto.S2C_Error
+	(*S2C_Warning)(nil),              // 66: proto.S2C_Warning
+	(*ServerMessage)(nil),            // 67: proto.ServerMessage
 }
 var file_api_proto_packets_proto_depIdxs = []int32{
 	4,  // 0: proto.InventoryRef.kind:type_name -> proto.InventoryKind
-	14, // 1: proto.ItemInstance.nested_ref:type_name -> proto.InventoryRef
-	15, // 2: proto.GridItem.item:type_name -> proto.ItemInstance
-	16, // 3: proto.InventoryGridState.items:type_name -> proto.GridItem
+	15, // 1: proto.ItemInstance.nested_ref:type_name -> proto.InventoryRef
+	16, // 2: proto.GridItem.item:type_name -> proto.ItemInstance
+	17, // 3: proto.InventoryGridState.items:type_name -> proto.GridItem
 	1,  // 4: proto.EquipmentItem.slot:type_name -> proto.EquipSlot
-	15, // 5: proto.EquipmentItem.item:type_name -> proto.ItemInstance
-	18, // 6: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
-	15, // 7: proto.InventoryHandState.item:type_name -> proto.ItemInstance
-	24, // 8: proto.InventoryHandState.hand_pos:type_name -> proto.HandPos
-	14, // 9: proto.InventoryState.ref:type_name -> proto.InventoryRef
-	17, // 10: proto.InventoryState.grid:type_name -> proto.InventoryGridState
-	19, // 11: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
-	20, // 12: proto.InventoryState.hand:type_name -> proto.InventoryHandState
-	14, // 13: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
-	14, // 14: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
-	14, // 15: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
-	23, // 16: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
+	16, // 5: proto.EquipmentItem.item:type_name -> proto.ItemInstance
+	19, // 6: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
+	16, // 7: proto.InventoryHandState.item:type_name -> proto.ItemInstance
+	25, // 8: proto.InventoryHandState.hand_pos:type_name -> proto.HandPos
+	15, // 9: proto.InventoryState.ref:type_name -> proto.InventoryRef
+	18, // 10: proto.InventoryState.grid:type_name -> proto.InventoryGridState
+	20, // 11: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
+	21, // 12: proto.InventoryState.hand:type_name -> proto.InventoryHandState
+	15, // 13: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
+	15, // 14: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
+	15, // 15: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
+	24, // 16: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
 	1,  // 17: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
-	24, // 18: proto.InventoryMoveSpec.hand_pos:type_name -> proto.HandPos
-	22, // 19: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
-	25, // 20: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
-	25, // 21: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
-	26, // 22: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
-	14, // 23: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
-	14, // 24: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
-	10, // 25: proto.EntityMovement.position:type_name -> proto.Position
-	11, // 26: proto.EntityMovement.velocity:type_name -> proto.Vector2
+	25, // 18: proto.InventoryMoveSpec.hand_pos:type_name -> proto.HandPos
+	23, // 19: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
+	26, // 20: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
+	26, // 21: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
+	27, // 22: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
+	15, // 23: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
+	15, // 24: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
+	11, // 25: proto.EntityMovement.position:type_name -> proto.Position
+	12, // 26: proto.EntityMovement.velocity:type_name -> proto.Vector2
 	0,  // 27: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
-	11, // 28: proto.EntityMovement.target_position:type_name -> proto.Vector2
-	10, // 29: proto.EntityPosition.position:type_name -> proto.Position
-	11, // 30: proto.EntityPosition.size:type_name -> proto.Vector2
-	33, // 31: proto.ChunkData.coord:type_name -> proto.ChunkCoord
+	12, // 28: proto.EntityMovement.target_position:type_name -> proto.Vector2
+	11, // 29: proto.EntityPosition.position:type_name -> proto.Position
+	12, // 30: proto.EntityPosition.size:type_name -> proto.Vector2
+	34, // 31: proto.ChunkData.coord:type_name -> proto.ChunkCoord
 	7,  // 32: proto.Interact.type:type_name -> proto.InteractionType
-	35, // 33: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
-	36, // 34: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
-	37, // 35: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
-	38, // 36: proto.C2S_PlayerAction.select_context_action:type_name -> proto.SelectContextAction
+	36, // 33: proto.C2S_PlayerAction.move_to:type_name -> proto.MoveTo
+	37, // 34: proto.C2S_PlayerAction.move_to_entity:type_name -> proto.MoveToEntity
+	38, // 35: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
+	39, // 36: proto.C2S_PlayerAction.select_context_action:type_name -> proto.SelectContextAction
 	0,  // 37: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
 	8,  // 38: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
-	42, // 39: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
-	43, // 40: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
-	39, // 41: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
-	40, // 42: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
-	27, // 43: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
-	41, // 44: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
-	28, // 45: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
-	29, // 46: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
-	34, // 47: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
-	33, // 48: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
-	31, // 49: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
-	30, // 50: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
+	43, // 39: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
+	44, // 40: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
+	40, // 41: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
+	41, // 42: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
+	28, // 43: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
+	42, // 44: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
+	29, // 45: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
+	30, // 46: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
+	35, // 47: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
+	34, // 48: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
+	32, // 49: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
+	31, // 50: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
 	5,  // 51: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
-	21, // 52: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
-	21, // 53: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
-	21, // 54: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
-	14, // 55: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
-	58, // 56: proto.S2C_ContextMenu.actions:type_name -> proto.ContextMenuAction
+	22, // 52: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
+	22, // 53: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
+	22, // 54: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
+	15, // 55: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
+	59, // 56: proto.S2C_ContextMenu.actions:type_name -> proto.ContextMenuAction
 	9,  // 57: proto.S2C_MiniAlert.severity:type_name -> proto.AlertSeverity
-	8,  // 58: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
-	5,  // 59: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	6,  // 60: proto.S2C_Warning.code:type_name -> proto.WarningCode
-	45, // 61: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	46, // 62: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	49, // 63: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
-	50, // 64: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
-	47, // 65: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	48, // 66: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	51, // 67: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	52, // 68: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	53, // 69: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	54, // 70: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
-	55, // 71: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
-	56, // 72: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
-	57, // 73: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
-	62, // 74: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
-	59, // 75: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
-	60, // 76: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
-	61, // 77: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
-	63, // 78: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	64, // 79: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
-	80, // [80:80] is the sub-list for method output_type
-	80, // [80:80] is the sub-list for method input_type
-	80, // [80:80] is the sub-list for extension type_name
-	80, // [80:80] is the sub-list for extension extendee
-	0,  // [0:80] is the sub-list for field type_name
+	10, // 58: proto.S2C_CyclicActionFinished.result:type_name -> proto.CyclicActionFinishResult
+	8,  // 59: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
+	5,  // 60: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	6,  // 61: proto.S2C_Warning.code:type_name -> proto.WarningCode
+	46, // 62: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	47, // 63: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	50, // 64: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	51, // 65: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	48, // 66: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	49, // 67: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	52, // 68: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	53, // 69: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	54, // 70: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	55, // 71: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
+	56, // 72: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
+	57, // 73: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
+	58, // 74: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
+	64, // 75: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
+	60, // 76: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
+	61, // 77: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
+	62, // 78: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
+	63, // 79: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
+	65, // 80: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	66, // 81: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
+	82, // [82:82] is the sub-list for method output_type
+	82, // [82:82] is the sub-list for method input_type
+	82, // [82:82] is the sub-list for extension type_name
+	82, // [82:82] is the sub-list for extension extendee
+	0,  // [0:82] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -4998,7 +5158,8 @@ func file_api_proto_packets_proto_init() {
 	}
 	file_api_proto_packets_proto_msgTypes[44].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[52].OneofWrappers = []any{}
-	file_api_proto_packets_proto_msgTypes[55].OneofWrappers = []any{
+	file_api_proto_packets_proto_msgTypes[53].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[56].OneofWrappers = []any{
 		(*ServerMessage_AuthResult)(nil),
 		(*ServerMessage_Pong)(nil),
 		(*ServerMessage_ChunkLoad)(nil),
@@ -5016,6 +5177,7 @@ func file_api_proto_packets_proto_init() {
 		(*ServerMessage_ContextMenu)(nil),
 		(*ServerMessage_MiniAlert)(nil),
 		(*ServerMessage_CyclicActionProgress)(nil),
+		(*ServerMessage_CyclicActionFinished)(nil),
 		(*ServerMessage_Error)(nil),
 		(*ServerMessage_Warning)(nil),
 	}
@@ -5024,8 +5186,8 @@ func file_api_proto_packets_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_packets_proto_rawDesc), len(file_api_proto_packets_proto_rawDesc)),
-			NumEnums:      10,
-			NumMessages:   56,
+			NumEnums:      11,
+			NumMessages:   57,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

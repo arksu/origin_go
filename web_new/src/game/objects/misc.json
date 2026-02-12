@@ -1,0 +1,168 @@
+{
+  "log": {
+    "offset": [
+      37,
+      34
+    ],
+    "layers": [
+      {
+        "interactive": true,
+        "img": "obj/log/log.png",
+        "offset": [
+          0,
+          0
+        ],
+        "z": 0
+      },
+      {
+        "img": "obj/log/log_.png",
+        "offset": [
+          0,
+          0
+        ],
+        "shadow": true
+      }
+    ]
+  },
+  "boulder": {
+    "offset": [
+      68,
+      98
+    ],
+    "layers": [
+      {
+        "interactive": true,
+        "img": "obj/boulder/boulder.png"
+      }
+    ]
+  },
+  "claim": {
+    "claim": {
+      "offset": [
+        9,
+        51
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/claim/claim.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/claim/claim_.png",
+          "offset": [
+            0,
+            43
+          ],
+          "shadow": true
+        }
+      ]
+    }
+  },
+  "zpot": {
+    "zpot": {
+      "offset": [
+        23,
+        33
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/zpot/zpot.png",
+          "offset": [
+            11,
+            10
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/zpot/zpot_.png",
+          "offset": [
+            14,
+            28
+          ],
+          "shadow": true
+        }
+      ]
+    }
+  },
+  "runestone": {
+    "runestone": {
+      "offset": [
+        15,
+        36
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/runestone/runestone.png",
+          "offset": [
+            7,
+            7
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/runestone/runestone_.png",
+          "offset": [
+            6,
+            32
+          ],
+          "shadow": true
+        }
+      ]
+    }
+  },
+  "player": {
+    "offset": [
+      0,
+      0
+    ],
+    "layers": [
+      {
+        "spine": {
+          "file": "spine/character/spine",
+          "scale": 0.16,
+          "skin": "boy",
+          "dirs": {
+            "walk": [
+              "ne-walk",
+              "e-walk",
+              "se-walk",
+              "s-walk",
+              "sw-walk",
+              "w-walk",
+              "nw-walk",
+              "n-walk"
+            ],
+            "idle": [
+              "ne-idle",
+              "e-idle",
+              "se-idle",
+              "s-idle",
+              "sw-idle",
+              "w-idle",
+              "nw-idle",
+              "n-idle"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "unknown": {
+    "offset": [
+      10,
+      20
+    ],
+    "layers": [
+      {
+        "img": "question.png"
+      }
+    ]
+  }
+}

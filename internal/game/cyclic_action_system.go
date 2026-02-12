@@ -80,13 +80,13 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 		playerID := playerExternalID.ID
 
 		if action.CycleDurationTicks == 0 {
-			s.contextActions.cancelActiveCyclicAction(playerHandle)
+			s.contextActions.cancelActiveCyclicAction(playerID, playerHandle, "invalid_action_state")
 			continue
 		}
 
 		if action.TargetKind == components.CyclicActionTargetObject {
 			if !isLinkedToTarget(linkState, playerID, action.TargetID) {
-				s.contextActions.cancelActiveCyclicAction(playerHandle)
+				s.contextActions.cancelActiveCyclicAction(playerID, playerHandle, "link_broken")
 				continue
 			}
 		}
@@ -118,9 +118,13 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 				active.StartedTick = nowTick
 			})
 		case cyclicActionDecisionComplete, cyclicActionDecisionCanceled:
-			s.contextActions.cancelActiveCyclicAction(playerHandle)
+			if decision == cyclicActionDecisionComplete {
+				s.contextActions.completeActiveCyclicAction(playerID, playerHandle)
+				continue
+			}
+			s.contextActions.cancelActiveCyclicAction(playerID, playerHandle, "")
 		default:
-			s.contextActions.cancelActiveCyclicAction(playerHandle)
+			s.contextActions.cancelActiveCyclicAction(playerID, playerHandle, "invalid_action_state")
 		}
 	}
 }

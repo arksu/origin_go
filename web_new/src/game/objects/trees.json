@@ -1,0 +1,1371 @@
+{
+  "trees": {
+    "autumn_oak": {
+      "1": {
+        "offset": [
+          15,
+          26
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/autumn_oak/01_.png",
+            "offset": [
+              7,
+              25
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/autumn_oak/01.png",
+            "offset": [
+              7,
+              3
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          29,
+          64
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/autumn_oak/02_.png",
+            "offset": [
+              10,
+              61
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/autumn_oak/02.png",
+            "offset": [
+              4,
+              9
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          54,
+          108
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/autumn_oak/03_.png",
+            "offset": [
+              20,
+              98
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/autumn_oak/03.png",
+            "offset": [
+              5,
+              8
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          82,
+          141
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/autumn_oak/04_.png",
+            "offset": [
+              34,
+              127
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/autumn_oak/04.png",
+            "offset": [
+              8,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          104,
+          195
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/autumn_oak/05_.png",
+            "offset": [
+              26,
+              179
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/autumn_oak/05.png",
+            "offset": [
+              0,
+              3
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          137,
+          200
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/autumn_oak/06_.png",
+            "offset": [
+              52,
+              188
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/autumn_oak/06.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          45,
+          18
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/autumn_oak/stump_.png",
+            "offset": [
+              0,
+              13
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/autumn_oak/stump.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "birch": {
+      "1": {
+        "offset": [
+          16,
+          26
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/birch/1.png",
+            "offset": [
+              7,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/birch/1_.png",
+            "offset": [
+              9,
+              23
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          22,
+          49
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/birch/2.png",
+            "offset": [
+              1,
+              6
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/birch/2_.png",
+            "offset": [
+              11,
+              48
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          31,
+          66
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/birch/3.png",
+            "offset": [
+              4,
+              1
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/birch/3_.png",
+            "offset": [
+              10,
+              66
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          36,
+          88
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/birch/4.png",
+            "offset": [
+              6,
+              2
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/birch/4_.png",
+            "offset": [
+              7,
+              84
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          59,
+          124
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/birch/5.png",
+            "offset": [
+              13,
+              22
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/birch/5_.png",
+            "offset": [
+              18,
+              117
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          59,
+          124
+        ],
+        "layers": [
+          {
+            "interactive": true,
+            "img": "obj/trees/birch/6.png",
+            "offset": [
+              7,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/birch/6_.png",
+            "offset": [
+              18,
+              117
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          34,
+          16
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/birch/stump.png",
+            "offset": [
+              7,
+              6
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/birch/stump_.png",
+            "offset": [
+              10,
+              13
+            ],
+            "shadow": true
+          }
+        ]
+      }
+    },
+    "apple": {
+      "1": {
+        "offset": [
+          5,
+          14
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/apple/1.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/apple/1_.png",
+            "offset": [
+              0,
+              12
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          13,
+          38
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/apple/2.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/apple/2_.png",
+            "offset": [
+              4,
+              35
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          23,
+          63
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/apple/3.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/apple/3_.png",
+            "offset": [
+              7,
+              56
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          29,
+          80
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/apple/4.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/apple/4_.png",
+            "offset": [
+              6,
+              75
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          49,
+          103
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/apple/5.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/apple/5_.png",
+            "offset": [
+              17,
+              93
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          62,
+          127
+        ],
+        "layers": [
+          {
+            "interactive": true,
+            "img": "obj/trees/apple/6.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/apple/6_.png",
+            "offset": [
+              19,
+              110
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          26,
+          15
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/apple/stump.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/apple/stump_.png",
+            "offset": [
+              1,
+              6
+            ],
+            "shadow": true
+          }
+        ]
+      }
+    },
+    "oak": {
+      "1": {
+        "offset": [
+          15,
+          26
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/oak/1.png",
+            "offset": [
+              7,
+              3
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/oak/1_.png",
+            "offset": [
+              7,
+              25
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          29,
+          64
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/oak/2.png",
+            "offset": [
+              9,
+              4
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/oak/2_.png",
+            "offset": [
+              10,
+              61
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          54,
+          108
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/oak/3.png",
+            "offset": [
+              5,
+              8
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/oak/3_.png",
+            "offset": [
+              20,
+              98
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          82,
+          141
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/oak/4.png",
+            "offset": [
+              8,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/oak/4_.png",
+            "offset": [
+              34,
+              127
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          104,
+          195
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/oak/5.png",
+            "offset": [
+              0,
+              3
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/oak/5_.png",
+            "offset": [
+              26,
+              179
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          137,
+          200
+        ],
+        "layers": [
+          {
+            "interactive": true,
+            "img": "obj/trees/oak/6.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/oak/6_.png",
+            "offset": [
+              52,
+              188
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          45,
+          18
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/oak/stump.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/oak/stump_.png",
+            "offset": [
+              0,
+              13
+            ],
+            "shadow": true
+          }
+        ]
+      }
+    },
+    "maple": {
+      "6": {
+        "offset": [
+          82,
+          160
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/maple/06_.png",
+            "offset": [
+              20,
+              143
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/maple/06.png",
+            "offset": [
+              4,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "06A": {
+        "offset": [
+          82,
+          160
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/maple/06A_.png",
+            "offset": [
+              20,
+              143
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/maple/06A.png",
+            "offset": [
+              4,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          40,
+          20
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/maple/stump_.png",
+            "offset": [
+              3,
+              11
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/maple/stump.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "yew": {
+      "1": {
+        "offset": [
+          19,
+          35
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/yew/01_.png",
+            "offset": [
+              12,
+              33
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/yew/01.png",
+            "offset": [
+              12,
+              8
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          33,
+          75
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/yew/02_.png",
+            "offset": [
+              17,
+              70
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/yew/02.png",
+            "offset": [
+              12,
+              7
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          47,
+          105
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/yew/03_.png",
+            "offset": [
+              16,
+              101
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/yew/03.png",
+            "offset": [
+              5,
+              5
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          61,
+          139
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/yew/04_.png",
+            "offset": [
+              22,
+              135
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/yew/04.png",
+            "offset": [
+              9,
+              5
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          86,
+          183
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/yew/05_.png",
+            "offset": [
+              31,
+              173
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/yew/05.png",
+            "offset": [
+              16,
+              9
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          115,
+          214
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/yew/06_.png",
+            "offset": [
+              46,
+              204
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/yew/06.png",
+            "offset": [
+              21,
+              6
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          39,
+          22
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/yew/stump_.png",
+            "offset": [
+              15,
+              20
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/yew/stump.png",
+            "offset": [
+              17,
+              11
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "mberry": {
+      "6": {
+        "offset": [
+          67,
+          114
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/mberry/06_.png",
+            "offset": [
+              15,
+              103
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/mberry/06.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "elm": {
+      "6": {
+        "offset": [
+          84,
+          177
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/elm/06_.png",
+            "offset": [
+              23,
+              165
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/elm/06.png",
+            "offset": [
+              16,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "06A": {
+        "offset": [
+          84,
+          177
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/elm/06A_.png",
+            "offset": [
+              23,
+              165
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/elm/06A.png",
+            "offset": [
+              16,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          38,
+          21
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/elm/stump_.png",
+            "offset": [
+              5,
+              20
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/elm/stump.png",
+            "offset": [
+              10,
+              13
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "hazel": {
+      "6": {
+        "offset": [
+          86,
+          153
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/hazel/06_.png",
+            "offset": [
+              26,
+              139
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/hazel/06.png",
+            "offset": [
+              12,
+              9
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          35,
+          19
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/hazel/stump_.png",
+            "offset": [
+              10,
+              21
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/hazel/stump.png",
+            "offset": [
+              13,
+              12
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "log": {
+      "log": {
+        "offset": [
+          23,
+          20
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/trees/log_.png",
+            "offset": [
+              0,
+              0
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/trees/log.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "willow": {
+      "6": {
+        "offset": [
+          133,
+          179
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/willow/06_.png",
+            "offset": [
+              30,
+              142
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/willow/06.png",
+            "offset": [
+              28,
+              13
+            ],
+            "z": 0
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          46,
+          23
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/willow/stump_.png",
+            "offset": [
+              14,
+              21
+            ],
+            "shadow": true
+          },
+          {
+            "img": "obj/trees/willow/stump.png",
+            "offset": [
+              8,
+              10
+            ],
+            "z": 0
+          }
+        ]
+      }
+    },
+    "fir": {
+      "1": {
+        "offset": [
+          3,
+          11
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/fir/1.png",
+            "z": 0
+          },
+          {
+            "img": "obj/trees/fir/1_.png",
+            "offset": [
+              0,
+              9
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          11,
+          33
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/fir/2.png",
+            "z": 0
+          },
+          {
+            "img": "obj/trees/fir/2_.png",
+            "offset": [
+              3,
+              31
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          16,
+          47
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/fir/3.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/fir/3_.png",
+            "offset": [
+              1,
+              45
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          22,
+          76
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/fir/4.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/fir/4_.png",
+            "offset": [
+              2,
+              68
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          33,
+          109
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/fir/5.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/fir/5_.png",
+            "offset": [
+              9,
+              96
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          45,
+          150
+        ],
+        "layers": [
+          {
+            "interactive": true,
+            "img": "obj/trees/fir/6.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/fir/6_.png",
+            "offset": [
+              6,
+              134
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          28,
+          20
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/fir/stump.png",
+            "offset": [
+              0,
+              0
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/fir/stump_.png",
+            "offset": [
+              2,
+              9
+            ],
+            "shadow": true
+          }
+        ]
+      }
+    },
+    "pine": {
+      "6": {
+        "offset": [
+          92,
+          291
+        ],
+        "layers": [
+          {
+            "interactive": true,
+            "img": "obj/trees/pine/6.png",
+            "offset": [
+              9,
+              12
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/pine/6_.png",
+            "offset": [
+              33,
+              281
+            ],
+            "shadow": true
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          54,
+          34
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/pine/stump.png",
+            "offset": [
+              22,
+              28
+            ],
+            "z": 0
+          },
+          {
+            "img": "obj/trees/pine/stump_.png",
+            "offset": [
+              19,
+              31
+            ],
+            "shadow": true
+          }
+        ]
+      }
+    }
+  }
+}

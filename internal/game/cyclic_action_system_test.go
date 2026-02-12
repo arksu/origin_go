@@ -11,7 +11,7 @@ import (
 
 func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 	world := ecs.NewWorldForTesting()
-	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil)
+	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil)
 	system := NewCyclicActionSystem(contextActionService, nil, nil)
 
 	playerID := types.EntityID(1001)

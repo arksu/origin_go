@@ -1,6 +1,6 @@
 import { Assets, Texture, Sprite } from 'pixi.js'
 import { Spine } from '@esotericsoftware/spine-pixi-v8'
-import objects from './objects.json'
+import objects from './objects'
 
 // --- Types matching objects.json structure ---
 

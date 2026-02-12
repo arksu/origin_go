@@ -510,6 +510,20 @@ message S2C_CyclicActionProgress {
   uint32 total_ticks = 5;
 }
 
+enum CyclicActionFinishResult {
+  CYCLIC_ACTION_FINISH_RESULT_UNSPECIFIED = 0;
+  CYCLIC_ACTION_FINISH_RESULT_COMPLETED = 1;
+  CYCLIC_ACTION_FINISH_RESULT_CANCELED = 2;
+}
+
+message S2C_CyclicActionFinished {
+  string action_id = 1;
+  uint64 target_entity_id = 2;
+  uint32 cycle_index = 3;
+  CyclicActionFinishResult result = 4;
+  optional string reason_code = 5; // set only for canceled result
+}
+
 message S2C_ChatMessage {
   ChatChannel channel = 1;
 
@@ -560,6 +574,7 @@ message ServerMessage {
     S2C_ContextMenu context_menu = 44;
     S2C_MiniAlert mini_alert = 45;
     S2C_CyclicActionProgress cyclic_action_progress = 46;
+    S2C_CyclicActionFinished cyclic_action_finished = 47;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
