@@ -284,6 +284,20 @@ export function registerMessageHandlers(): void {
     })
   })
 
+  messageDispatcher.on('cyclicActionProgress', (msg: proto.IS2C_CyclicActionProgress) => {
+    const totalTicks = Number(msg.totalTicks || 0)
+    const elapsedTicks = Number(msg.elapsedTicks || 0)
+    if (totalTicks <= 0) {
+      gameStore.clearActionProgress()
+      return
+    }
+    gameStore.setActionProgress(totalTicks, elapsedTicks)
+  })
+
+  messageDispatcher.on('cyclicActionFinished', () => {
+    gameStore.clearActionProgress()
+  })
+
   messageDispatcher.on('error', (msg: proto.IS2C_Error) => {
     console.error('[Game] Server error:', msg.code, msg.message)
   })

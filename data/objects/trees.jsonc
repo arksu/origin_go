@@ -15,7 +15,7 @@
           "mask": 1
         }
       },
-      "resource": "trees/birch/tree",
+      "resource": "trees/birch/6",
       "behaviors": {
         "tree": {
           "priority": 20,

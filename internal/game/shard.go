@@ -100,6 +100,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		s.eventBus,
 		openContainerService,
 		s,
+		s,
 		s.chunkManager,
 		s.entityIDManager,
 		logger,
@@ -607,6 +608,35 @@ func (s *Shard) SendCyclicActionProgress(entityID types.EntityID, progress *netp
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal cyclic action progress",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+func (s *Shard) SendCyclicActionFinished(entityID types.EntityID, finished *netproto.S2C_CyclicActionFinished) {
+	if finished == nil {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_CyclicActionFinished{
+			CyclicActionFinished: finished,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal cyclic action finished",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return

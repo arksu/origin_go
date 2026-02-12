@@ -1,0 +1,270 @@
+{
+  "box": {
+    "normal": {
+      "offset": [
+        20,
+        33
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/box/box.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        }
+      ]
+    },
+    "open": {
+      "offset": [
+        26,
+        47
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/box/box_open.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        }
+      ]
+    }
+  },
+  "crate": {
+    "empty": {
+      "offset": [
+        32,
+        28
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/crate/crate_empty.png",
+          "offset": [
+            12,
+            9
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/crate/crate_empty_.png",
+          "offset": [
+            19,
+            10
+          ],
+          "shadow": true
+        }
+      ]
+    },
+    "filled": {
+      "offset": [
+        32,
+        28
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/crate/crate_filled.png",
+          "offset": [
+            12,
+            9
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/crate/crate_filled_.png",
+          "offset": [
+            19,
+            10
+          ],
+          "shadow": true
+        }
+      ]
+    }
+  },
+  "big_box": {
+    "empty": {
+      "offset": [
+        40,
+        37
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/big_box/bbox_empty.png",
+          "offset": [
+            13,
+            15
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/big_box/bbox_shadow.png",
+          "offset": [
+            12,
+            30
+          ],
+          "shadow": true
+        }
+      ]
+    },
+    "filled": {
+      "offset": [
+        40,
+        37
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/big_box/bbox_filled.png",
+          "offset": [
+            13,
+            15
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/big_box/bbox_.png",
+          "offset": [
+            12,
+            30
+          ],
+          "shadow": true
+        }
+      ]
+    }
+  },
+  "tub": {
+    "empty": {
+      "offset": [
+        14,
+        11
+      ],
+      "layers": [
+        {
+          "img": "obj/tub/ttub_.png",
+          "offset": [
+            0,
+            0
+          ],
+          "shadow": true
+        },
+        {
+          "img": "obj/tub/ttub.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        }
+      ]
+    },
+    "water": {
+      "offset": [
+        14,
+        11
+      ],
+      "layers": [
+        {
+          "img": "obj/tub/ttuba_.png",
+          "offset": [
+            0,
+            0
+          ],
+          "shadow": true
+        },
+        {
+          "img": "obj/tub/ttuba.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        }
+      ]
+    },
+    "tanning": {
+      "offset": [
+        14,
+        11
+      ],
+      "layers": [
+        {
+          "img": "obj/tub/ttubw_.png",
+          "offset": [
+            0,
+            0
+          ],
+          "shadow": true
+        },
+        {
+          "img": "obj/tub/ttubw.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        }
+      ]
+    }
+  },
+  "barrel": {
+    "barrel": {
+      "offset": [
+        18,
+        26
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/barrel/barrel.png",
+          "offset": [
+            7,
+            0
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/barrel/barrel_.png",
+          "offset": [
+            6,
+            19
+          ],
+          "shadow": true
+        }
+      ]
+    }
+  },
+  "urn": {
+    "urn": {
+      "offset": [
+        7,
+        33
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/urn/urn.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/urn/urn_.png",
+          "offset": [
+            0,
+            32
+          ],
+          "shadow": true
+        }
+      ]
+    }
+  }
+}
