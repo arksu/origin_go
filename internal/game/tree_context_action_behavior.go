@@ -8,6 +8,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
+	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -142,22 +143,22 @@ func (b treeContextActionBehavior) OnCycleComplete(ctx cyclicActionCycleContext)
 	remaining := 0
 	transitionToStump := false
 	ecs.WithComponent(w, ctx.TargetHandle, func(state *components.ObjectInternalState) {
-		treeState, has := components.GetBehaviorState[components.TreeBehaviorState](*state, "tree")
-		if !has || treeState == nil {
-			treeState = &components.TreeBehaviorState{ChopPoints: treeConfig.ChopPointsTotal}
-			components.SetBehaviorState(state, "tree", treeState)
+		currentChopPoints := treeConfig.ChopPointsTotal
+		if treeState, has := components.GetBehaviorState[components.TreeBehaviorState](*state, "tree"); has && treeState != nil {
+			currentChopPoints = treeState.ChopPoints
 		}
 
-		if treeState.ChopPoints <= 0 {
+		if currentChopPoints <= 0 {
 			remaining = 0
 			return
 		}
 
-		treeState.ChopPoints--
-		state.IsDirty = true
-		remaining = treeState.ChopPoints
+		currentChopPoints--
+		remaining = currentChopPoints
+		components.SetBehaviorState(state, "tree", &components.TreeBehaviorState{
+			ChopPoints: currentChopPoints,
+		})
 		if remaining == 0 {
-			components.DeleteBehaviorState(state, "tree")
 			transitionToStump = true
 		}
 	})
@@ -211,75 +212,44 @@ func (b treeContextActionBehavior) spawnLogs(
 		return
 	}
 
-	dx := playerTransform.X - treeTransform.X
-	dy := playerTransform.Y - treeTransform.Y
-	// Fall in direction opposite to player.
-	oppX := -dx
-	oppY := -dy
-
-	useXAxis := math.Abs(dx) >= math.Abs(dy) // tie => X
-	dirX := 0.0
-	dirY := 0.0
-	if useXAxis {
-		dirX = 1.0
-		if oppX < 0 {
-			dirX = -1.0
-		}
-	} else {
-		dirY = 1.0
-		if oppY < 0 {
-			dirY = -1.0
-		}
-	}
+	dirX, dirY := resolveLogFallAxisDirection(treeTransform.X, treeTransform.Y, playerTransform.X, playerTransform.Y)
 
 	for index := 0; index < treeCfg.LogsSpawnCount; index++ {
-		distance := float64(treeCfg.LogsSpawnInitialOffset + index*treeCfg.LogsSpawnStepOffset)
-		logX := treeTransform.X + dirX*distance
-		logY := treeTransform.Y + dirY*distance
+		logX, logY := logSpawnPosition(
+			treeTransform.X,
+			treeTransform.Y,
+			dirX,
+			dirY,
+			treeCfg.LogsSpawnInitialOffset,
+			treeCfg.LogsSpawnStepOffset,
+			index,
+		)
 
-		chunkX := int(logX) / constt.ChunkWorldSize
-		chunkY := int(logY) / constt.ChunkWorldSize
+		chunkX := worldCoordToChunkIndex(logX)
+		chunkY := worldCoordToChunkIndex(logY)
 		chunk := b.chunks.GetChunkFast(types.ChunkCoord{X: chunkX, Y: chunkY})
 		if chunk == nil {
 			continue
 		}
 
 		logID := b.idAllocator.GetFreeID()
-		h := w.Spawn(logID, func(w *ecs.World, h types.Handle) {
-			ecs.AddComponent(w, h, components.Transform{
-				X: logX,
-				Y: logY,
-			})
-			ecs.AddComponent(w, h, components.EntityInfo{
-				TypeID:    uint32(logDef.DefID),
-				Behaviors: append([]string(nil), logDef.BehaviorOrder...),
-				IsStatic:  logDef.IsStatic,
-				Region:    treeInfo.Region,
-				Layer:     treeInfo.Layer,
-			})
-			ecs.AddComponent(w, h, components.Appearance{
-				Resource: logDef.Resource,
-			})
-			if logDef.Components != nil && logDef.Components.Collider != nil {
-				c := logDef.Components.Collider
-				ecs.AddComponent(w, h, components.Collider{
-					HalfWidth:  c.W / 2.0,
-					HalfHeight: c.H / 2.0,
-					Layer:      c.Layer,
-					Mask:       c.Mask,
-				})
-			}
-			ecs.AddComponent(w, h, components.ChunkRef{
-				CurrentChunkX: chunkX,
-				CurrentChunkY: chunkY,
-				PrevChunkX:    chunkX,
-				PrevChunkY:    chunkY,
-			})
-			ecs.AddComponent(w, h, components.ObjectInternalState{IsDirty: true})
+		h := gameworld.SpawnEntityFromDef(w, logDef, gameworld.DefSpawnParams{
+			EntityID: logID,
+			X:        logX,
+			Y:        logY,
+			Region:   treeInfo.Region,
+			Layer:    treeInfo.Layer,
 		})
 		if h == types.InvalidHandle {
 			continue
 		}
+		ecs.AddComponent(w, h, components.ChunkRef{
+			CurrentChunkX: chunkX,
+			CurrentChunkY: chunkY,
+			PrevChunkX:    chunkX,
+			PrevChunkY:    chunkY,
+		})
+		ecs.AddComponent(w, h, components.ObjectInternalState{IsDirty: true})
 
 		if logDef.IsStatic {
 			chunk.Spatial().AddStatic(h, int(logX), int(logY))
@@ -291,6 +261,37 @@ func (b treeContextActionBehavior) spawnLogs(
 			ecs.MarkObjectBehaviorDirty(w, h)
 		}
 	}
+}
+
+func worldCoordToChunkIndex(coord float64) int {
+	return int(math.Floor(coord / float64(constt.ChunkWorldSize)))
+}
+
+func resolveLogFallAxisDirection(treeX, treeY, playerX, playerY float64) (float64, float64) {
+	dx := playerX - treeX
+	dy := playerY - treeY
+	oppositeX := -dx
+	oppositeY := -dy
+
+	if math.Abs(dx) >= math.Abs(dy) { // tie => X
+		if oppositeX < 0 {
+			return -1, 0
+		}
+		return 1, 0
+	}
+
+	if oppositeY < 0 {
+		return 0, -1
+	}
+	return 0, 1
+}
+
+func logSpawnPosition(
+	treeX, treeY, dirX, dirY float64,
+	initialOffset, stepOffset, index int,
+) (float64, float64) {
+	distance := float64(initialOffset + index*stepOffset)
+	return treeX + dirX*distance, treeY + dirY*distance
 }
 
 func (b treeContextActionBehavior) transformTargetToStump(
@@ -309,7 +310,7 @@ func (b treeContextActionBehavior) transformTargetToStump(
 
 	ecs.WithComponent(w, targetHandle, func(info *components.EntityInfo) {
 		info.TypeID = uint32(stumpDef.DefID)
-		info.Behaviors = append(info.Behaviors[:0], stumpDef.BehaviorOrder...)
+		info.Behaviors = stumpDef.CopyBehaviorOrder()
 		info.IsStatic = stumpDef.IsStatic
 	})
 	ecs.WithComponent(w, targetHandle, func(appearance *components.Appearance) {
@@ -321,21 +322,16 @@ func (b treeContextActionBehavior) transformTargetToStump(
 	})
 
 	if stumpDef.Components != nil && stumpDef.Components.Collider != nil {
-		c := stumpDef.Components.Collider
+		collider := objectdefs.BuildColliderComponent(stumpDef.Components.Collider)
 		if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider {
-			ecs.WithComponent(w, targetHandle, func(collider *components.Collider) {
-				collider.HalfWidth = c.W / 2.0
-				collider.HalfHeight = c.H / 2.0
-				collider.Layer = c.Layer
-				collider.Mask = c.Mask
+			ecs.WithComponent(w, targetHandle, func(existing *components.Collider) {
+				existing.HalfWidth = collider.HalfWidth
+				existing.HalfHeight = collider.HalfHeight
+				existing.Layer = collider.Layer
+				existing.Mask = collider.Mask
 			})
 		} else {
-			ecs.AddComponent(w, targetHandle, components.Collider{
-				HalfWidth:  c.W / 2.0,
-				HalfHeight: c.H / 2.0,
-				Layer:      c.Layer,
-				Mask:       c.Mask,
-			})
+			ecs.AddComponent(w, targetHandle, collider)
 		}
 	} else {
 		ecs.RemoveComponent[components.Collider](w, targetHandle)
