@@ -23,7 +23,7 @@ func (s *testCyclicActionFinishSender) SendCyclicActionFinished(entityID types.E
 func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil)
+	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil)
 
 	const (
 		playerID = types.EntityID(1001)
@@ -72,7 +72,7 @@ func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.
 func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil)
+	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil)
 
 	const (
 		playerID = types.EntityID(3003)

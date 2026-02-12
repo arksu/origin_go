@@ -7,6 +7,7 @@
       "key": "box",
       "static": true,
       "hp": 1000,
+      "contextMenuEvenForOneItem": false,
       "components": {
         "collider": {
           "w": 8,

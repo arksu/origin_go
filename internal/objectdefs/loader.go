@@ -163,6 +163,11 @@ func applyDefaults(obj *ObjectDef) {
 	} else {
 		obj.IsStatic = *obj.Static
 	}
+	if obj.ContextMenuEvenForOneItem == nil {
+		obj.ContextMenuEvenForOneItemValue = true
+	} else {
+		obj.ContextMenuEvenForOneItemValue = *obj.ContextMenuEvenForOneItem
+	}
 
 	if obj.Components != nil {
 		if obj.Components.Collider != nil {

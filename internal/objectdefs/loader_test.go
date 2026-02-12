@@ -91,6 +91,7 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 	require.Len(t, box.BehaviorOrder, 1)
 	assert.Equal(t, "container", box.BehaviorOrder[0])
 	assert.Equal(t, 100, box.PriorityForBehavior("container"))
+	assert.True(t, box.ContextMenuEvenForOneItemValue)
 
 	player, ok := registry.GetByKey("player")
 	require.True(t, ok)
@@ -148,6 +149,31 @@ func TestLoadFromDirectory_StaticDefault(t *testing.T) {
 	rock, ok := registry.GetByID(1)
 	require.True(t, ok)
 	assert.True(t, rock.IsStatic, "static should default to true")
+}
+
+func TestLoadFromDirectory_ContextMenuEvenForOneItemFalse(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "objects.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [
+			{
+				"defId": 1,
+				"key": "stump",
+				"contextMenuEvenForOneItem": false,
+				"components": { "collider": { "w": 5, "h": 5 } },
+				"resource": "stump.png"
+			}
+		]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.NoError(t, err)
+
+	stump, ok := registry.GetByID(1)
+	require.True(t, ok)
+	assert.False(t, stump.ContextMenuEvenForOneItemValue)
 }
 
 func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {

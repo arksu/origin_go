@@ -84,7 +84,7 @@ func (m *ServerTimeManager) MaybePersistServerTime(now time.Time) {
 		if err := m.SaveServerTime(ctx, t); err != nil {
 			m.logger.Error("Failed to persist SERVER_TIME (periodic)", zap.Int64("server_time_sec", t.Unix()), zap.Error(err))
 		} else {
-			m.logger.Info("Persisted SERVER_TIME (periodic)", zap.Int64("server_time_sec", t.Unix()))
+			//m.logger.Info("Persisted SERVER_TIME (periodic)", zap.Int64("server_time_sec", t.Unix()))
 		}
 	}(now)
 }

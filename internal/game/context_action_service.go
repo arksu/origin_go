@@ -37,12 +37,17 @@ type cyclicActionFinishSender interface {
 	SendCyclicActionFinished(entityID types.EntityID, finished *netproto.S2C_CyclicActionFinished)
 }
 
+type visionUpdateForcer interface {
+	ForceUpdateForObserver(w *ecs.World, observerHandle types.Handle)
+}
+
 type ContextActionService struct {
 	world     *ecs.World
 	logger    *zap.Logger
 	openSvc   systems.OpenContainerCoordinator
 	alerts    miniAlertSender
 	cyclicOut cyclicActionFinishSender
+	vision    visionUpdateForcer
 	eventBus  *eventbus.EventBus
 	chunks    chunkProvider
 	idAlloc   entityIDAllocator
@@ -75,6 +80,7 @@ func NewContextActionService(
 	openSvc systems.OpenContainerCoordinator,
 	alerts miniAlertSender,
 	cyclicOut cyclicActionFinishSender,
+	vision visionUpdateForcer,
 	chunks chunkProvider,
 	idAlloc entityIDAllocator,
 	logger *zap.Logger,
@@ -89,18 +95,20 @@ func NewContextActionService(
 		openSvc:  openSvc,
 		alerts:   alerts,
 		cyclicOut: cyclicOut,
+		vision:   vision,
 		eventBus: eventBus,
 		chunks:   chunks,
 		idAlloc:  idAlloc,
 		behaviors: map[string]contextActionBehavior{
 			"container": containerContextActionBehavior{},
-			"tree": treeContextActionBehavior{
-				eventBus:    eventBus,
-				chunks:      chunks,
-				idAllocator: idAlloc,
-				logger:      logger,
+				"tree": treeContextActionBehavior{
+					eventBus:    eventBus,
+					chunks:      chunks,
+					idAllocator: idAlloc,
+					visionForcer: vision,
+					logger:      logger,
+				},
 			},
-		},
 	}
 
 	if eventBus != nil {
