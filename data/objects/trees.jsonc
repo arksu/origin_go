@@ -21,7 +21,7 @@
           "priority": 20,
           "chopPointsTotal": 6,
           "chopCycleDurationTicks": 20,
-          "logsSpawnDefKey": "log_birch",
+          "logsSpawnDefKey": "log",
           "logsSpawnCount": 3,
           "logsSpawnInitialOffset": 12,
           "logsSpawnStepOffset": 10,
@@ -46,7 +46,7 @@
     },
     {
       "defId": 3,
-      "key": "log_birch",
+      "key": "log",
       "static": true,
       "hp": 1,
       "resource": "log"
