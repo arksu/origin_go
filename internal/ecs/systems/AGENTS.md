@@ -121,13 +121,14 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 **Behavior**:
 
 - Iterates over entities with Vision components (observers)
-- Uses time-based updates (3-second intervals) to throttle visibility calculations
+- Uses time-based updates (`const.VisionUpdateInterval`) to throttle visibility calculations
 - Performs spatial queries using neighboring chunks and `QueryRadius`
 - Calculates visibility based on distance, vision power, and target stealth
 - Maintains `VisibilityState` with `VisibleByObserver` and `ObserversByVisibleTarget` maps
 - Stores EntityID in Known maps for reliable despawn events
 - Publishes `ObjectSpawn` and `ObjectDespawn` events for visibility changes
 - Automatically registers new Vision entities during entity spawning
+- Supports `ForceUpdateForObserver(...)` for immediate recompute after critical interactions (pickup/chop spawn/transform)
 
 **Visibility State Management**:
 
@@ -251,9 +252,16 @@ Context interactions are now behavior-driven and server-authoritative:
 2. `NetworkCommandSystem` computes actions via `ContextActionResolver` using behavior order from object `def`.
 3. Branching:
    - `0` actions: silent ignore.
-   - `1` action: auto-select and start pending execution.
+   - `1` action: either auto-select/start pending execution OR open `S2C_ContextMenu` when object def has `contextMenuEvenForOneItem=true`.
    - `2+` actions: send `S2C_ContextMenu`.
 4. Execution is triggered only by `LinkCreated` (not direct distance checks in command handler).
+
+### Cyclic Action UI Events
+
+- During active cycle server sends `S2C_CyclicActionProgress`.
+- On terminal state server sends `S2C_CyclicActionFinished`:
+  - `COMPLETED` (no `reason_code`)
+  - `CANCELED` (optional `reason_code`)
 
 ### Pending Action Rules
 

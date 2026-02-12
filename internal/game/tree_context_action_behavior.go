@@ -2,6 +2,7 @@ package game
 
 import (
 	"math"
+	"strings"
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
@@ -19,11 +20,11 @@ import (
 const contextActionChop = "chop"
 
 type treeContextActionBehavior struct {
-	eventBus    *eventbus.EventBus
-	chunks      chunkProvider
-	idAllocator entityIDAllocator
+	eventBus     *eventbus.EventBus
+	chunks       chunkProvider
+	idAllocator  entityIDAllocator
 	visionForcer visionUpdateForcer
-	logger      *zap.Logger
+	logger       *zap.Logger
 }
 
 func (b treeContextActionBehavior) Actions(
@@ -222,13 +223,13 @@ func (b treeContextActionBehavior) spawnLogs(
 		return
 	}
 
-	logDef, ok := objectdefs.Global().GetByKey(treeCfg.LogsSpawnDefKey)
+	dirX, dirY := resolveLogFallAxisDirection(treeTransform.X, treeTransform.Y, playerTransform.X, playerTransform.Y)
+	logDefKey := resolveAxisLogDefKey(treeCfg.LogsSpawnDefKey, dirX, dirY)
+	logDef, ok := objectdefs.Global().GetByKey(logDefKey)
 	if !ok {
-		b.logger.Warn("tree chop: log def not found", zap.String("def_key", treeCfg.LogsSpawnDefKey))
+		b.logger.Warn("tree chop: log def not found", zap.String("def_key", logDefKey))
 		return
 	}
-
-	dirX, dirY := resolveLogFallAxisDirection(treeTransform.X, treeTransform.Y, playerTransform.X, playerTransform.Y)
 
 	for index := 0; index < treeCfg.LogsSpawnCount; index++ {
 		logX, logY := logSpawnPosition(
@@ -308,6 +309,23 @@ func logSpawnPosition(
 ) (float64, float64) {
 	distance := float64(initialOffset + index*stepOffset)
 	return treeX + dirX*distance, treeY + dirY*distance
+}
+
+func resolveAxisLogDefKey(baseDefKey string, dirX, dirY float64) string {
+	if baseDefKey == "" {
+		return baseDefKey
+	}
+	axisX := math.Abs(dirX) >= math.Abs(dirY)
+	if axisX {
+		if strings.HasSuffix(baseDefKey, "_y") {
+			return strings.TrimSuffix(baseDefKey, "_y") + "_x"
+		}
+		return baseDefKey + "_x"
+	}
+	if strings.HasSuffix(baseDefKey, "_x") {
+		return strings.TrimSuffix(baseDefKey, "_x") + "_y"
+	}
+	return baseDefKey
 }
 
 func (b treeContextActionBehavior) transformTargetToStump(

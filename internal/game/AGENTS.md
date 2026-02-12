@@ -101,8 +101,11 @@ internal/game/
 - **Key Responsibilities**:
   - Compute action list on RMB (`Interact`)
   - Resolve duplicate action IDs with first-wins policy
+  - Respect object-def option `contextMenuEvenForOneItem` for single-action RMB behavior
   - Execute selected action only after `LinkCreated`
   - Emit `S2C_MiniAlert` for explicit execution failures
+  - Manage cyclic action terminal events (`S2C_CyclicActionFinished`)
+  - Force immediate vision updates after tree chop result (stump + spawned logs)
 - **Key Types**: `ContextActionService`
 
 ## Data Flow

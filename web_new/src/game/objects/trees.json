@@ -1,5 +1,55 @@
 {
   "trees": {
+    "log_y": {
+      "offset": [
+        37,
+        34
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/trees/log/log_y.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/trees/log/log_y_.png",
+          "offset": [
+            0,
+            0
+          ],
+          "shadow": true
+        }
+      ]
+    },
+    "log_x": {
+      "offset": [
+        37,
+        34
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/trees/log/log_x.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        },
+        {
+          "img": "obj/trees/log/log_x_.png",
+          "offset": [
+            5,
+            0
+          ],
+          "shadow": true
+        }
+      ]
+    },
     "autumn_oak": {
       "1": {
         "offset": [
@@ -1071,32 +1121,6 @@
             "offset": [
               13,
               12
-            ],
-            "z": 0
-          }
-        ]
-      }
-    },
-    "log": {
-      "log": {
-        "offset": [
-          23,
-          20
-        ],
-        "layers": [
-          {
-            "img": "obj/trees/trees/log_.png",
-            "offset": [
-              0,
-              0
-            ],
-            "shadow": true
-          },
-          {
-            "img": "obj/trees/trees/log.png",
-            "offset": [
-              0,
-              0
             ],
             "z": 0
           }
