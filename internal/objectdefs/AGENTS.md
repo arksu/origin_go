@@ -37,14 +37,15 @@ ObjectFactory.Build()   # Create entities from definitions
 
 ```go
 type ObjectDef struct {
-    DefID      int          // Unique numeric ID (1, 10, 11, ...)
-    Key        string       // Unique string key ("tree", "box", "player")
-    Static     bool         // Is this object static (immovable)?
-    HP         int          // Hit points (0 if not damageable)
-    Components Components   // Component definitions
-    Resource   string       // Default resource path
-    Appearance []Appearance // Appearance variations
-    Behavior   []string     // Behavior keys ("tree", "container", "player")
+    DefID                     int
+    Key                       string
+    Static                    *bool // default true -> resolved into IsStatic
+    ContextMenuEvenForOneItem *bool // default true -> resolved runtime value
+    HP                        int
+    Components                *Components
+    Resource                  string
+    Appearance                []Appearance
+    Behaviors                 map[string]json.RawMessage
 }
 ```
 
@@ -63,7 +64,8 @@ type ObjectDef struct {
 4. **Inventory**: Width and height must be > 0 (if present)
 5. **Resource**: Required if no appearance defined
 6. **Appearance IDs**: Must be unique within the def (if present)
-7. **Behaviors**: No duplicates, must exist in BehaviorRegistry
+7. **Behaviors**: Keys must exist in BehaviorRegistry; each behavior config is validated strictly
+8. **ContextMenuEvenForOneItem**: Optional; defaults to `true`
 
 ## Usage
 
@@ -82,13 +84,13 @@ objectdefs.SetGlobal(registry)
 
 ```go
 // By defId
-def := registry.Get(1)
+def, ok := registry.GetByID(1)
 
 // By key
 def, ok := registry.GetByKey("tree")
 
 // Global access (convenience)
-def := objectdefs.G().Get(1)
+def, ok := objectdefs.Global().GetByID(1)
 ```
 
 ### Creating Entities from Definitions
@@ -102,18 +104,30 @@ handle := factory.Build(world, rawObject)  // rawObject from DB
 
 ```jsonc
 {
-  "version": 1,
+  "v": 1,
   "objects": [
     {
       "defId": 1,
       "key": "tree",
-      "static": true,  // default: true
+      "static": true,
+      "contextMenuEvenForOneItem": true,
       "hp": 100,
       "components": {
-        "collider": { "width": 10, "height": 10, "layer": 1, "mask": 1 }
+        "collider": { "w": 10, "h": 10, "layer": 1, "mask": 1 }
       },
-      "resource": "tree",
-      "behavior": ["tree"]
+      "resource": "trees/birch/6",
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "chopPointsTotal": 6,
+          "chopCycleDurationTicks": 20,
+          "logsSpawnDefKey": "log_y",
+          "logsSpawnCount": 3,
+          "logsSpawnInitialOffset": 12,
+          "logsSpawnStepOffset": 10,
+          "transformToDefKey": "stump_birch"
+        }
+      }
     }
   ]
 }

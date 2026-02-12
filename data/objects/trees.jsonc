@@ -22,10 +22,10 @@
           "priority": 20,
           "chopPointsTotal": 6,
           "chopCycleDurationTicks": 20,
-          "logsSpawnDefKey": "log",
+          "logsSpawnDefKey": "log_y",
           "logsSpawnCount": 3,
-          "logsSpawnInitialOffset": 12,
-          "logsSpawnStepOffset": 10,
+          "logsSpawnInitialOffset": 16,
+          "logsSpawnStepOffset": 20,
           "transformToDefKey": "stump_birch"
         }
       }
@@ -47,10 +47,17 @@
     },
     {
       "defId": 3,
-      "key": "log",
+      "key": "log_y",
       "static": true,
       "hp": 1,
-      "resource": "log"
+      "resource": "trees/log_y"
+    },
+    {
+      "defId": 4,
+      "key": "log_x",
+      "static": true,
+      "hp": 1,
+      "resource": "trees/log_x"
     }
   ]
 }

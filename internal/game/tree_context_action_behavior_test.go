@@ -84,6 +84,32 @@ func TestLogSpawnPosition_UsesInitialAndStepOffsets(t *testing.T) {
 	}
 }
 
+func TestResolveAxisLogDefKey(t *testing.T) {
+	testCases := []struct {
+		name     string
+		baseKey  string
+		dirX     float64
+		dirY     float64
+		expected string
+	}{
+		{name: "x axis from y key", baseKey: "log_y", dirX: 1, dirY: 0, expected: "log_x"},
+		{name: "y axis keeps y key", baseKey: "log_y", dirX: 0, dirY: 1, expected: "log_y"},
+		{name: "x axis from base key", baseKey: "log", dirX: -1, dirY: 0, expected: "log_x"},
+		{name: "y axis from x key", baseKey: "log_x", dirX: 0, dirY: -1, expected: "log_y"},
+		{name: "empty key", baseKey: "", dirX: 1, dirY: 0, expected: ""},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := resolveAxisLogDefKey(testCase.baseKey, testCase.dirX, testCase.dirY)
+			if got != testCase.expected {
+				t.Fatalf("resolveAxisLogDefKey(%q, %f, %f): got %q, want %q",
+					testCase.baseKey, testCase.dirX, testCase.dirY, got, testCase.expected)
+			}
+		})
+	}
+}
+
 type testVisionForcer struct {
 	forced []types.Handle
 }
