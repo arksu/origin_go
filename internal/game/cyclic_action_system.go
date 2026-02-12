@@ -134,13 +134,18 @@ func (s *CyclicActionSystem) sendProgress(playerID types.EntityID, action compon
 		return
 	}
 
-	s.progressSender.SendCyclicActionProgress(playerID, &netproto.S2C_CyclicActionProgress{
+	progress := &netproto.S2C_CyclicActionProgress{
 		ActionId:       action.ActionID,
 		TargetEntityId: uint64(action.TargetID),
 		CycleIndex:     action.CycleIndex,
 		ElapsedTicks:   action.CycleElapsedTicks,
 		TotalTicks:     action.CycleDurationTicks,
-	})
+	}
+	if action.CycleElapsedTicks >= action.CycleDurationTicks && action.FinishSoundKey != "" {
+		soundKey := action.FinishSoundKey
+		progress.SoundKey = &soundKey
+	}
+	s.progressSender.SendCyclicActionProgress(playerID, progress)
 }
 
 func isLinkedToTarget(linkState *ecs.LinkState, playerID, targetID types.EntityID) bool {

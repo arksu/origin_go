@@ -1,7 +1,7 @@
 import { proto } from './proto/packets.js'
 import { messageDispatcher } from './MessageDispatcher'
 import { useGameStore, type EntityMovement } from '@/stores/gameStore'
-import { gameFacade, moveController, playerCommandController } from '@/game'
+import { gameFacade, moveController, playerCommandController, soundManager } from '@/game'
 import { DEBUG_MOVEMENT } from '@/constants/game'
 
 function toNumber(value: number | Long): number {
@@ -292,10 +292,36 @@ export function registerMessageHandlers(): void {
       return
     }
     gameStore.setActionProgress(totalTicks, elapsedTicks)
+    const soundKey = (msg.soundKey || '').trim()
+    if (soundKey) {
+      console.log('[Handlers] cyclicActionProgress -> play sound', {
+        soundKey,
+        elapsedTicks,
+        totalTicks,
+      })
+      soundManager.play(soundKey)
+    }
   })
 
-  messageDispatcher.on('cyclicActionFinished', () => {
+  messageDispatcher.on('cyclicActionFinished', (msg: proto.IS2C_CyclicActionFinished) => {
+    console.log('[Handlers] cyclicActionFinished:', {
+      actionId: msg.actionId,
+      targetEntityId: msg.targetEntityId,
+      cycleIndex: msg.cycleIndex,
+      result: msg.result,
+      reasonCode: msg.reasonCode,
+      soundKey: msg.soundKey,
+    })
     gameStore.clearActionProgress()
+    if (msg.result !== proto.CyclicActionFinishResult.CYCLIC_ACTION_FINISH_RESULT_COMPLETED) {
+      return
+    }
+    const soundKey = (msg.soundKey || '').trim()
+    if (!soundKey) {
+      return
+    }
+    console.log('[Handlers] cyclicActionFinished -> play sound', { soundKey })
+    soundManager.play(soundKey)
   })
 
   messageDispatcher.on('error', (msg: proto.IS2C_Error) => {

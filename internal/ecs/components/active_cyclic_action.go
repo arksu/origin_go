@@ -13,8 +13,10 @@ const (
 )
 
 type ActiveCyclicAction struct {
-	BehaviorKey string
-	ActionID    string
+	BehaviorKey      string
+	ActionID         string
+	FinishSoundKey   string
+	CompleteSoundKey string
 
 	TargetKind   CyclicActionTargetKind
 	TargetID     types.EntityID

@@ -1,0 +1,19 @@
+{
+  "chop": {
+    "files": [
+      "sound/chop/chop_01.mp3",
+      "sound/chop/chop_03.mp3",
+      "sound/chop/chop_04.mp3",
+      "sound/chop/chop_05.mp3",
+      "sound/chop/chop_06.mp3",
+      "sound/chop/chop_07.mp3"
+    ],
+    "volume": 0.9
+  },
+  "tree_fall": {
+    "files": [
+      "sound/tree_fall/tree_fall_01.mp3"
+    ],
+    "volume": 0.95
+  }
+}

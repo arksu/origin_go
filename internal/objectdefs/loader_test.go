@@ -275,6 +275,42 @@ func TestLoadFromDirectory_InvalidTreeBehaviorConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid tree config")
 }
 
+func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "tree",
+			"resource": "x.png",
+			"behaviors": {
+				"tree": {
+					"chopPointsTotal": 6,
+					"chopCycleDurationTicks": 20,
+					"action_sound": "chop",
+					"finish_sound": "tree_fall",
+					"logsSpawnDefKey": "log_y",
+					"logsSpawnCount": 3,
+					"logsSpawnInitialOffset": 16,
+					"logsSpawnStepOffset": 20,
+					"transformToDefKey": "stump_birch"
+				}
+			}
+		}]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.NoError(t, err)
+
+	def, ok := registry.GetByID(1)
+	require.True(t, ok)
+	require.NotNil(t, def.TreeConfig)
+	assert.Equal(t, "chop", def.TreeConfig.ActionSound)
+	assert.Equal(t, "tree_fall", def.TreeConfig.FinishSound)
+}
+
 func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {
 	dir := t.TempDir()
 

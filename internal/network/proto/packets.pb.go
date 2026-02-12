@@ -3859,6 +3859,7 @@ type S2C_CyclicActionProgress struct {
 	CycleIndex     uint32                 `protobuf:"varint,3,opt,name=cycle_index,json=cycleIndex,proto3" json:"cycle_index,omitempty"`
 	ElapsedTicks   uint32                 `protobuf:"varint,4,opt,name=elapsed_ticks,json=elapsedTicks,proto3" json:"elapsed_ticks,omitempty"`
 	TotalTicks     uint32                 `protobuf:"varint,5,opt,name=total_ticks,json=totalTicks,proto3" json:"total_ticks,omitempty"`
+	SoundKey       *string                `protobuf:"bytes,6,opt,name=sound_key,json=soundKey,proto3,oneof" json:"sound_key,omitempty"` // set when cycle reaches completion and sound is configured
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3928,6 +3929,13 @@ func (x *S2C_CyclicActionProgress) GetTotalTicks() uint32 {
 	return 0
 }
 
+func (x *S2C_CyclicActionProgress) GetSoundKey() string {
+	if x != nil && x.SoundKey != nil {
+		return *x.SoundKey
+	}
+	return ""
+}
+
 type S2C_CyclicActionFinished struct {
 	state          protoimpl.MessageState   `protogen:"open.v1"`
 	ActionId       string                   `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
@@ -3935,6 +3943,7 @@ type S2C_CyclicActionFinished struct {
 	CycleIndex     uint32                   `protobuf:"varint,3,opt,name=cycle_index,json=cycleIndex,proto3" json:"cycle_index,omitempty"`
 	Result         CyclicActionFinishResult `protobuf:"varint,4,opt,name=result,proto3,enum=proto.CyclicActionFinishResult" json:"result,omitempty"`
 	ReasonCode     *string                  `protobuf:"bytes,5,opt,name=reason_code,json=reasonCode,proto3,oneof" json:"reason_code,omitempty"` // set only for canceled result
+	SoundKey       *string                  `protobuf:"bytes,6,opt,name=sound_key,json=soundKey,proto3,oneof" json:"sound_key,omitempty"`       // set only for completed result when sound is configured
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -4000,6 +4009,13 @@ func (x *S2C_CyclicActionFinished) GetResult() CyclicActionFinishResult {
 func (x *S2C_CyclicActionFinished) GetReasonCode() string {
 	if x != nil && x.ReasonCode != nil {
 		return *x.ReasonCode
+	}
+	return ""
+}
+
+func (x *S2C_CyclicActionFinished) GetSoundKey() string {
+	if x != nil && x.SoundKey != nil {
+		return *x.SoundKey
 	}
 	return ""
 }
@@ -4811,7 +4827,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\bseverity\x18\x01 \x01(\x0e2\x14.proto.AlertSeverityR\bseverity\x12\x1f\n" +
 	"\vreason_code\x18\x02 \x01(\tR\n" +
 	"reasonCode\x12\x15\n" +
-	"\x06ttl_ms\x18\x03 \x01(\rR\x05ttlMs\"\xc8\x01\n" +
+	"\x06ttl_ms\x18\x03 \x01(\rR\x05ttlMs\"\xf8\x01\n" +
 	"\x18S2C_CyclicActionProgress\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12(\n" +
 	"\x10target_entity_id\x18\x02 \x01(\x04R\x0etargetEntityId\x12\x1f\n" +
@@ -4819,7 +4835,10 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"cycleIndex\x12#\n" +
 	"\relapsed_ticks\x18\x04 \x01(\rR\felapsedTicks\x12\x1f\n" +
 	"\vtotal_ticks\x18\x05 \x01(\rR\n" +
-	"totalTicks\"\xf1\x01\n" +
+	"totalTicks\x12 \n" +
+	"\tsound_key\x18\x06 \x01(\tH\x00R\bsoundKey\x88\x01\x01B\f\n" +
+	"\n" +
+	"_sound_key\"\xa1\x02\n" +
 	"\x18S2C_CyclicActionFinished\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12(\n" +
 	"\x10target_entity_id\x18\x02 \x01(\x04R\x0etargetEntityId\x12\x1f\n" +
@@ -4827,8 +4846,11 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"cycleIndex\x127\n" +
 	"\x06result\x18\x04 \x01(\x0e2\x1f.proto.CyclicActionFinishResultR\x06result\x12$\n" +
 	"\vreason_code\x18\x05 \x01(\tH\x00R\n" +
-	"reasonCode\x88\x01\x01B\x0e\n" +
-	"\f_reason_code\"\xce\x01\n" +
+	"reasonCode\x88\x01\x01\x12 \n" +
+	"\tsound_key\x18\x06 \x01(\tH\x01R\bsoundKey\x88\x01\x01B\x0e\n" +
+	"\f_reason_codeB\f\n" +
+	"\n" +
+	"_sound_key\"\xce\x01\n" +
 	"\x0fS2C_ChatMessage\x12,\n" +
 	"\achannel\x18\x01 \x01(\x0e2\x12.proto.ChatChannelR\achannel\x12$\n" +
 	"\x0efrom_entity_id\x18\x02 \x01(\x04R\ffromEntityId\x12\x1b\n" +
@@ -5157,6 +5179,7 @@ func file_api_proto_packets_proto_init() {
 		(*ClientMessage_CloseContainer)(nil),
 	}
 	file_api_proto_packets_proto_msgTypes[44].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[51].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[52].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[53].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[56].OneofWrappers = []any{

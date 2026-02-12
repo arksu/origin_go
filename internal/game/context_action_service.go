@@ -90,25 +90,25 @@ func NewContextActionService(
 	}
 
 	s := &ContextActionService{
-		world:    world,
-		logger:   logger,
-		openSvc:  openSvc,
-		alerts:   alerts,
+		world:     world,
+		logger:    logger,
+		openSvc:   openSvc,
+		alerts:    alerts,
 		cyclicOut: cyclicOut,
-		vision:   vision,
-		eventBus: eventBus,
-		chunks:   chunks,
-		idAlloc:  idAlloc,
+		vision:    vision,
+		eventBus:  eventBus,
+		chunks:    chunks,
+		idAlloc:   idAlloc,
 		behaviors: map[string]contextActionBehavior{
 			"container": containerContextActionBehavior{},
-				"tree": treeContextActionBehavior{
-					eventBus:    eventBus,
-					chunks:      chunks,
-					idAllocator: idAlloc,
-					visionForcer: vision,
-					logger:      logger,
-				},
+			"tree": treeContextActionBehavior{
+				eventBus:     eventBus,
+				chunks:       chunks,
+				idAllocator:  idAlloc,
+				visionForcer: vision,
+				logger:       logger,
 			},
+		},
 	}
 
 	if eventBus != nil {
@@ -379,6 +379,10 @@ func (s *ContextActionService) sendCyclicActionFinished(
 	}
 	if result == netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_CANCELED && reasonCode != "" {
 		finished.ReasonCode = &reasonCode
+	}
+	if result == netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_COMPLETED && action.CompleteSoundKey != "" {
+		soundKey := action.CompleteSoundKey
+		finished.SoundKey = &soundKey
 	}
 	s.cyclicOut.SendCyclicActionFinished(playerID, finished)
 }

@@ -33,10 +33,12 @@ func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
-			ActionID:    contextActionChop,
-			TargetID:    targetID,
-			CycleIndex:  3,
-			BehaviorKey: "tree",
+			ActionID:         contextActionChop,
+			TargetID:         targetID,
+			CycleIndex:       3,
+			BehaviorKey:      "tree",
+			FinishSoundKey:   "chop",
+			CompleteSoundKey: "tree_fall",
 		})
 	})
 
@@ -67,6 +69,9 @@ func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.
 	if message.ReasonCode == nil || *message.ReasonCode != "link_broken" {
 		t.Fatalf("expected canceled reason_code=link_broken, got %v", message.ReasonCode)
 	}
+	if message.SoundKey != nil {
+		t.Fatalf("expected no sound_key for canceled result, got %v", *message.SoundKey)
+	}
 }
 
 func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testing.T) {
@@ -82,10 +87,12 @@ func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testi
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
-			ActionID:    contextActionChop,
-			TargetID:    targetID,
-			CycleIndex:  6,
-			BehaviorKey: "tree",
+			ActionID:         contextActionChop,
+			TargetID:         targetID,
+			CycleIndex:       6,
+			BehaviorKey:      "tree",
+			FinishSoundKey:   "chop",
+			CompleteSoundKey: "tree_fall",
 		})
 	})
 
@@ -104,5 +111,8 @@ func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testi
 	}
 	if message.ReasonCode != nil {
 		t.Fatalf("expected no reason_code for completed result, got %v", *message.ReasonCode)
+	}
+	if message.SoundKey == nil || *message.SoundKey != "tree_fall" {
+		t.Fatalf("expected sound_key=tree_fall for completed result, got %v", message.SoundKey)
 	}
 }
