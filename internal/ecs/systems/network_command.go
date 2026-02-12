@@ -6,6 +6,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
+	"origin/internal/objectdefs"
 	"origin/internal/types"
 	"time"
 
@@ -464,23 +465,14 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 		// Product rule: no actions => full ignore.
 		return
 	case 1:
+		if s.shouldOpenContextMenuForSingleAction(w, targetHandle) {
+			s.sendContextMenu(cmd.CharacterID, targetEntityID, actions)
+			return
+		}
 		// Fast path: exactly one action is auto-selected.
 		s.startPendingContextAction(w, playerHandle, cmd.CharacterID, targetEntityID, targetHandle, actions[0].ActionID)
 	default:
-		if s.contextMenuSender == nil {
-			return
-		}
-		menu := &netproto.S2C_ContextMenu{
-			EntityId: uint64(targetEntityID),
-			Actions:  make([]*netproto.ContextMenuAction, 0, len(actions)),
-		}
-		for _, action := range actions {
-			menu.Actions = append(menu.Actions, &netproto.ContextMenuAction{
-				ActionId: action.ActionID,
-				Title:    action.Title,
-			})
-		}
-		s.contextMenuSender.SendContextMenu(cmd.CharacterID, menu)
+		s.sendContextMenu(cmd.CharacterID, targetEntityID, actions)
 	}
 }
 
@@ -886,6 +878,49 @@ func (s *NetworkCommandSystem) computeContextActions(
 		return nil
 	}
 	return s.contextActionService.ComputeActions(w, playerID, playerHandle, targetEntityID, targetHandle)
+}
+
+func (s *NetworkCommandSystem) shouldOpenContextMenuForSingleAction(
+	w *ecs.World,
+	targetHandle types.Handle,
+) bool {
+	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+	if !hasInfo {
+		return true
+	}
+
+	registry := objectdefs.Global()
+	if registry == nil {
+		return true
+	}
+
+	def, found := registry.GetByID(int(entityInfo.TypeID))
+	if !found {
+		return true
+	}
+	return def.ContextMenuEvenForOneItemValue
+}
+
+func (s *NetworkCommandSystem) sendContextMenu(
+	playerID types.EntityID,
+	targetEntityID types.EntityID,
+	actions []ContextAction,
+) {
+	if s.contextMenuSender == nil || len(actions) == 0 {
+		return
+	}
+
+	menu := &netproto.S2C_ContextMenu{
+		EntityId: uint64(targetEntityID),
+		Actions:  make([]*netproto.ContextMenuAction, 0, len(actions)),
+	}
+	for _, action := range actions {
+		menu.Actions = append(menu.Actions, &netproto.ContextMenuAction{
+			ActionId: action.ActionID,
+			Title:    action.Title,
+		})
+	}
+	s.contextMenuSender.SendContextMenu(playerID, menu)
 }
 
 func (s *NetworkCommandSystem) cleanupPendingContextActions(w *ecs.World) {

@@ -2,7 +2,10 @@ package game
 
 import (
 	constt "origin/internal/const"
+	"origin/internal/ecs"
+	"origin/internal/types"
 	"testing"
+	"time"
 )
 
 func TestWorldCoordToChunkIndex(t *testing.T) {
@@ -78,5 +81,45 @@ func TestLogSpawnPosition_UsesInitialAndStepOffsets(t *testing.T) {
 	}
 	if x2 != 132 || y2 != 200 {
 		t.Fatalf("index2: got (%f,%f), want (132,200)", x2, y2)
+	}
+}
+
+type testVisionForcer struct {
+	forced []types.Handle
+}
+
+func (f *testVisionForcer) ForceUpdateForObserver(_ *ecs.World, observerHandle types.Handle) {
+	f.forced = append(f.forced, observerHandle)
+}
+
+func TestTreeContextActionBehavior_ForceVisionUpdatesForAllAliveCharacters(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	forcer := &testVisionForcer{}
+	behavior := treeContextActionBehavior{visionForcer: forcer}
+
+	playerA := world.Spawn(types.EntityID(1001), nil)
+	playerB := world.Spawn(types.EntityID(1002), nil)
+	playerDead := world.Spawn(types.EntityID(1003), nil)
+	world.Despawn(playerDead)
+
+	characters := ecs.GetResource[ecs.CharacterEntities](world)
+	characters.Add(types.EntityID(1001), playerA, time.Time{})
+	characters.Add(types.EntityID(1002), playerB, time.Time{})
+	characters.Add(types.EntityID(1003), playerDead, time.Time{})
+
+	behavior.forceVisionUpdates(world)
+
+	if len(forcer.forced) != 2 {
+		t.Fatalf("expected 2 forced updates, got %d", len(forcer.forced))
+	}
+	forced := map[types.Handle]bool{
+		forcer.forced[0]: true,
+		forcer.forced[1]: true,
+	}
+	if !forced[playerA] || !forced[playerB] {
+		t.Fatalf("expected forced updates for alive players only, got %+v", forcer.forced)
+	}
+	if forced[playerDead] {
+		t.Fatalf("did not expect forced update for dead player")
 	}
 }

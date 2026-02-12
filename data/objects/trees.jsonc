@@ -7,6 +7,7 @@
       "key": "tree_birch",
       "static": true,
       "hp": 100,
+      "contextMenuEvenForOneItem": true,
       "components": {
         "collider": {
           "w": 10,

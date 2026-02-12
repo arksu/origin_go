@@ -101,6 +101,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		openContainerService,
 		s,
 		s,
+		visionSystem,
 		s.chunkManager,
 		s.entityIDManager,
 		logger,

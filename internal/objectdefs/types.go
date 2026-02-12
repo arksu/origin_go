@@ -4,20 +4,22 @@ import "encoding/json"
 
 // ObjectDef represents a single object definition.
 type ObjectDef struct {
-	DefID      int                        `json:"defId"`
-	Key        string                     `json:"key"`
-	Static     *bool                      `json:"static,omitempty"`
-	HP         int                        `json:"hp,omitempty"`
-	Components *Components                `json:"components,omitempty"`
-	Resource   string                     `json:"resource,omitempty"`
-	Appearance []Appearance               `json:"appearance,omitempty"`
-	Behaviors  map[string]json.RawMessage `json:"behaviors,omitempty"`
+	DefID                     int                        `json:"defId"`
+	Key                       string                     `json:"key"`
+	Static                    *bool                      `json:"static,omitempty"`
+	ContextMenuEvenForOneItem *bool                      `json:"contextMenuEvenForOneItem,omitempty"`
+	HP                        int                        `json:"hp,omitempty"`
+	Components                *Components                `json:"components,omitempty"`
+	Resource                  string                     `json:"resource,omitempty"`
+	Appearance                []Appearance               `json:"appearance,omitempty"`
+	Behaviors                 map[string]json.RawMessage `json:"behaviors,omitempty"`
 
 	// resolved at load time
-	IsStatic           bool                `json:"-"`
-	BehaviorOrder      []string            `json:"-"`
-	BehaviorPriorities map[string]int      `json:"-"`
-	TreeConfig         *TreeBehaviorConfig `json:"-"`
+	IsStatic                        bool                `json:"-"`
+	ContextMenuEvenForOneItemValue bool                `json:"-"`
+	BehaviorOrder                   []string            `json:"-"`
+	BehaviorPriorities              map[string]int      `json:"-"`
+	TreeConfig                      *TreeBehaviorConfig `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.

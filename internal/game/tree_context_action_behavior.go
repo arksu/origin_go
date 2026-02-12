@@ -22,6 +22,7 @@ type treeContextActionBehavior struct {
 	eventBus    *eventbus.EventBus
 	chunks      chunkProvider
 	idAllocator entityIDAllocator
+	visionForcer visionUpdateForcer
 	logger      *zap.Logger
 }
 
@@ -192,7 +193,22 @@ func (b treeContextActionBehavior) OnCycleComplete(ctx cyclicActionCycleContext)
 		targetChunkRef,
 		treeConfig,
 	)
+	b.forceVisionUpdates(w)
 	return cyclicActionDecisionComplete
+}
+
+func (b treeContextActionBehavior) forceVisionUpdates(w *ecs.World) {
+	if b.visionForcer == nil || w == nil {
+		return
+	}
+
+	characters := ecs.GetResource[ecs.CharacterEntities](w)
+	for _, character := range characters.Map {
+		if character.Handle == types.InvalidHandle || !w.Alive(character.Handle) {
+			continue
+		}
+		b.visionForcer.ForceUpdateForObserver(w, character.Handle)
+	}
 }
 
 func (b treeContextActionBehavior) spawnLogs(
