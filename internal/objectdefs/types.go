@@ -92,3 +92,13 @@ func (d *ObjectDef) PriorityForBehavior(key string) int {
 	}
 	return priority
 }
+
+func (d *ObjectDef) CopyBehaviorOrder() []string {
+	if d == nil || len(d.BehaviorOrder) == 0 {
+		return nil
+	}
+
+	behaviors := make([]string, len(d.BehaviorOrder))
+	copy(behaviors, d.BehaviorOrder)
+	return behaviors
+}

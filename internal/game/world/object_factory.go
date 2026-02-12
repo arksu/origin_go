@@ -58,49 +58,26 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 		return types.InvalidHandle, fmt.Errorf("%w: type_id=%d", ErrDefNotFound, raw.TypeID)
 	}
 
-	h := w.Spawn(types.EntityID(raw.ID), func(w *ecs.World, h types.Handle) {
-		ecs.AddComponent(w, h, components.Transform{
-			X:         float64(raw.X),
-			Y:         float64(raw.Y),
-			Direction: headingDegreesToRadians(raw.Heading),
-		})
-
-		ecs.AddComponent(w, h, components.EntityInfo{
-			TypeID:    uint32(def.DefID),
-			Behaviors: append([]string(nil), def.BehaviorOrder...),
-			IsStatic:  def.IsStatic,
-			Region:    raw.Region,
-			Layer:     raw.Layer,
-		})
-
-		// Collider from definition
-		if def.Components != nil && def.Components.Collider != nil {
-			c := def.Components.Collider
-			ecs.AddComponent(w, h, components.Collider{
-				HalfWidth:  c.W / 2.0,
-				HalfHeight: c.H / 2.0,
-				Layer:      c.Layer,
-				Mask:       c.Mask,
-			})
-		}
-
-		// Appearance: base resource from definition
-		ecs.AddComponent(w, h, components.Appearance{
-			Resource: def.Resource,
-		})
-
-		// Container object inventory is instantiated only when:
-		// - behavior includes "container"
-		// - definition has components.inventory
-		if f.isContainerDefinition(def) {
-			links := f.spawnObjectInventories(w, types.EntityID(raw.ID), def, inventories)
-			ecs.AddComponent(w, h, components.InventoryOwner{
-				Inventories: links,
-			})
-		}
+	h := SpawnEntityFromDef(w, def, DefSpawnParams{
+		EntityID:  types.EntityID(raw.ID),
+		X:         float64(raw.X),
+		Y:         float64(raw.Y),
+		Direction: headingDegreesToRadians(raw.Heading),
+		Region:    raw.Region,
+		Layer:     raw.Layer,
 	})
 	if h == types.InvalidHandle {
 		return types.InvalidHandle, ErrEntitySpawnFailed
+	}
+
+	// Container object inventory is instantiated only when:
+	// - behavior includes "container"
+	// - definition has components.inventory
+	if f.isContainerDefinition(def) {
+		links := f.spawnObjectInventories(w, types.EntityID(raw.ID), def, inventories)
+		ecs.AddComponent(w, h, components.InventoryOwner{
+			Inventories: links,
+		})
 	}
 
 	return h, nil
@@ -636,10 +613,6 @@ func serializePersistentObjectState(internalState components.ObjectInternalState
 		switch state := rawState.(type) {
 		case json.RawMessage:
 			payload = append([]byte(nil), state...)
-		case *components.TreeBehaviorState:
-			payload, err = json.Marshal(state)
-		case components.TreeBehaviorState:
-			payload, err = json.Marshal(state)
 		default:
 			payload, err = json.Marshal(state)
 		}

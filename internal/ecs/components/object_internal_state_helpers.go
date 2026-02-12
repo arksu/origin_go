@@ -2,7 +2,7 @@ package components
 
 func EnsureRuntimeObjectState(internalState *ObjectInternalState) *RuntimeObjectState {
 	if internalState == nil {
-		return &RuntimeObjectState{Behaviors: make(map[string]any)}
+		panic("object internal state must not be nil")
 	}
 
 	if state, ok := internalState.State.(*RuntimeObjectState); ok && state != nil {
@@ -39,18 +39,7 @@ func GetBehaviorState[T any](internalState ObjectInternalState, behaviorKey stri
 	}
 
 	typed, castOK := value.(*T)
-	if castOK {
-		return typed, true
-	}
-
-	typedValue, castValueOK := value.(T)
-	if castValueOK {
-		cloned := typedValue
-		state.Behaviors[behaviorKey] = &cloned
-		return &cloned, true
-	}
-
-	return nil, false
+	return typed, castOK
 }
 
 func SetBehaviorState(internalState *ObjectInternalState, behaviorKey string, value any) bool {

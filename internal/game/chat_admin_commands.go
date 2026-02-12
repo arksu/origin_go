@@ -12,6 +12,7 @@ import (
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
 	"origin/internal/game/inventory"
+	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -243,49 +244,26 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 
 	hp := def.HP
 
-	handle := w.Spawn(newID, func(w *ecs.World, h types.Handle) {
-		ecs.AddComponent(w, h, components.Transform{
-			X: targetX,
-			Y: targetY,
-		})
-
-		ecs.AddComponent(w, h, components.EntityInfo{
-			TypeID:    uint32(def.DefID),
-			Behaviors: append([]string(nil), def.BehaviorOrder...),
-			IsStatic:  def.IsStatic,
-			Region:    region,
-			Layer:     layer,
-		})
-
-		ecs.AddComponent(w, h, components.Appearance{
-			Resource: def.Resource,
-		})
-
-		if def.Components != nil && def.Components.Collider != nil {
-			c := def.Components.Collider
-			ecs.AddComponent(w, h, components.Collider{
-				HalfWidth:  c.W / 2.0,
-				HalfHeight: c.H / 2.0,
-				Layer:      c.Layer,
-				Mask:       c.Mask,
-			})
-		}
-
-		ecs.AddComponent(w, h, components.ChunkRef{
-			CurrentChunkX: chunkX,
-			CurrentChunkY: chunkY,
-			PrevChunkX:    chunkX,
-			PrevChunkY:    chunkY,
-		})
-
-		ecs.AddComponent(w, h, components.ObjectInternalState{
-			IsDirty: true,
-		})
+	handle := gameworld.SpawnEntityFromDef(w, def, gameworld.DefSpawnParams{
+		EntityID: newID,
+		X:        targetX,
+		Y:        targetY,
+		Region:   region,
+		Layer:    layer,
 	})
 	if handle == types.InvalidHandle {
 		h.sendSystemMessage(playerID, "failed to spawn entity")
 		return
 	}
+	ecs.AddComponent(w, handle, components.ChunkRef{
+		CurrentChunkX: chunkX,
+		CurrentChunkY: chunkY,
+		PrevChunkX:    chunkX,
+		PrevChunkY:    chunkY,
+	})
+	ecs.AddComponent(w, handle, components.ObjectInternalState{
+		IsDirty: true,
+	})
 
 	// Add to chunk spatial
 	if def.IsStatic {
