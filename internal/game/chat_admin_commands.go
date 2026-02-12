@@ -251,7 +251,7 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 
 		ecs.AddComponent(w, h, components.EntityInfo{
 			TypeID:    uint32(def.DefID),
-			Behaviors: def.Behavior,
+			Behaviors: append([]string(nil), def.BehaviorOrder...),
 			IsStatic:  def.IsStatic,
 			Region:    region,
 			Layer:     layer,
@@ -374,12 +374,7 @@ func (h *ChatAdminCommandHandler) isContainerDef(def *objectdefs.ObjectDef) bool
 	if def == nil || def.Components == nil || len(def.Components.Inventory) == 0 {
 		return false
 	}
-	for _, b := range def.Behavior {
-		if b == "container" {
-			return true
-		}
-	}
-	return false
+	return def.HasBehavior("container")
 }
 
 func (h *ChatAdminCommandHandler) spawnObjectInventories(

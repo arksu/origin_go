@@ -67,7 +67,7 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 
 		ecs.AddComponent(w, h, components.EntityInfo{
 			TypeID:    uint32(def.DefID),
-			Behaviors: def.Behavior,
+			Behaviors: append([]string(nil), def.BehaviorOrder...),
 			IsStatic:  def.IsStatic,
 			Region:    raw.Region,
 			Layer:     raw.Layer,
@@ -233,12 +233,7 @@ func (f *ObjectFactory) isContainerDefinition(def *objectdefs.ObjectDef) bool {
 	if def == nil || def.Components == nil || len(def.Components.Inventory) == 0 {
 		return false
 	}
-	for _, behavior := range def.Behavior {
-		if behavior == "container" {
-			return true
-		}
-	}
-	return false
+	return def.HasBehavior("container")
 }
 
 // HasPersistentInventories returns true for object types that can own persistent
@@ -542,12 +537,16 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 	// Serialize runtime object state for regular world objects.
 	// For dropped items object.data is reserved for dropped metadata (handled below).
 	if info.TypeID != constt.DroppedItemTypeID {
-		if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h); hasState && internalState.State != nil {
-			stateJSON, err := json.Marshal(internalState.State)
+		if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h); hasState {
+			stateJSON, hasPayload, err := serializePersistentObjectState(internalState)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal object state for %d: %w", externalID.ID, err)
 			}
-			obj.Data = pqtype.NullRawMessage{RawMessage: stateJSON, Valid: true}
+			if hasPayload {
+				obj.Data = pqtype.NullRawMessage{RawMessage: stateJSON, Valid: true}
+			} else {
+				obj.Data = pqtype.NullRawMessage{}
+			}
 		}
 	}
 
@@ -572,7 +571,6 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 }
 
 // DeserializeObjectState restores serialized runtime state for regular objects.
-// Flags are computed by behavior systems and are not persisted.
 func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, error) {
 	if raw == nil || raw.TypeID == constt.DroppedItemTypeID {
 		return nil, nil
@@ -581,11 +579,85 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 		return nil, nil
 	}
 
-	var state any
-	if err := json.Unmarshal(raw.Data.RawMessage, &state); err != nil {
+	var envelope components.ObjectStateEnvelope
+	if err := json.Unmarshal(raw.Data.RawMessage, &envelope); err != nil {
 		return nil, err
 	}
-	return state, nil
+	if envelope.Version != 1 {
+		return nil, fmt.Errorf("unsupported object state version %d", envelope.Version)
+	}
+
+	if len(envelope.Behaviors) == 0 {
+		return nil, nil
+	}
+
+	runtimeState := &components.RuntimeObjectState{
+		Behaviors: make(map[string]any, len(envelope.Behaviors)),
+	}
+
+	for behaviorKey, rawBehaviorState := range envelope.Behaviors {
+		switch behaviorKey {
+		case "tree":
+			var treeState components.TreeBehaviorState
+			if err := json.Unmarshal(rawBehaviorState, &treeState); err != nil {
+				return nil, fmt.Errorf("failed to decode tree state: %w", err)
+			}
+			runtimeState.Behaviors[behaviorKey] = &treeState
+		default:
+			cloned := append([]byte(nil), rawBehaviorState...)
+			runtimeState.Behaviors[behaviorKey] = json.RawMessage(cloned)
+		}
+	}
+
+	return runtimeState, nil
+}
+
+func serializePersistentObjectState(internalState components.ObjectInternalState) ([]byte, bool, error) {
+	runtimeState, ok := components.GetRuntimeObjectState(internalState)
+	if !ok || len(runtimeState.Behaviors) == 0 {
+		return nil, false, nil
+	}
+
+	envelope := components.ObjectStateEnvelope{
+		Version:   1,
+		Behaviors: make(map[string]json.RawMessage, len(runtimeState.Behaviors)),
+	}
+
+	for behaviorKey, rawState := range runtimeState.Behaviors {
+		if behaviorKey == "" || rawState == nil {
+			continue
+		}
+
+		var (
+			payload []byte
+			err     error
+		)
+
+		switch state := rawState.(type) {
+		case json.RawMessage:
+			payload = append([]byte(nil), state...)
+		case *components.TreeBehaviorState:
+			payload, err = json.Marshal(state)
+		case components.TreeBehaviorState:
+			payload, err = json.Marshal(state)
+		default:
+			payload, err = json.Marshal(state)
+		}
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to marshal behavior %s state: %w", behaviorKey, err)
+		}
+		envelope.Behaviors[behaviorKey] = payload
+	}
+
+	if len(envelope.Behaviors) == 0 {
+		return nil, false, nil
+	}
+
+	stateJSON, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, false, err
+	}
+	return stateJSON, true, nil
 }
 
 // SerializeObjectInventories serializes root inventories owned by object entity.

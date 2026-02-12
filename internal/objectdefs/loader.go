@@ -12,6 +12,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultBehaviorPriority = 100
+
+type behaviorPriorityOnly struct {
+	Priority int `json:"priority,omitempty"`
+}
+
 // LoadError represents an error during object definition loading.
 type LoadError struct {
 	FilePath string
@@ -173,6 +179,12 @@ func applyDefaults(obj *ObjectDef) {
 			}
 		}
 	}
+
+	if len(obj.Behaviors) == 0 {
+		obj.BehaviorOrder = nil
+		obj.BehaviorPriorities = nil
+		obj.TreeConfig = nil
+	}
 }
 
 func validateObject(obj *ObjectDef, filePath string, behaviors *BehaviorRegistry) error {
@@ -235,22 +247,16 @@ func validateObject(obj *ObjectDef, filePath string, behaviors *BehaviorRegistry
 		}
 	}
 
-	// Validate behavior: no duplicates, all registered
-	if len(obj.Behavior) > 0 {
-		seen := make(map[string]struct{}, len(obj.Behavior))
-		for _, b := range obj.Behavior {
-			if _, dup := seen[b]; dup {
-				return &LoadError{
-					FilePath: filePath,
-					DefID:    obj.DefID,
-					Key:      obj.Key,
-					Message:  fmt.Sprintf("duplicate behavior %q", b),
-				}
-			}
-			seen[b] = struct{}{}
+	// Validate behaviors map and resolve runtime order/config.
+	if len(obj.Behaviors) > 0 {
+		keys := make([]string, 0, len(obj.Behaviors))
+		for key := range obj.Behaviors {
+			keys = append(keys, key)
 		}
+		sort.Strings(keys)
+
 		if behaviors != nil {
-			if err := behaviors.Validate(obj.Behavior); err != nil {
+			if err := behaviors.Validate(keys); err != nil {
 				return &LoadError{
 					FilePath: filePath,
 					DefID:    obj.DefID,
@@ -259,6 +265,116 @@ func validateObject(obj *ObjectDef, filePath string, behaviors *BehaviorRegistry
 				}
 			}
 		}
+
+		obj.BehaviorPriorities = make(map[string]int, len(keys))
+		obj.BehaviorOrder = append(obj.BehaviorOrder[:0], keys...)
+
+		for _, behaviorKey := range keys {
+			raw := obj.Behaviors[behaviorKey]
+			if len(raw) == 0 {
+				raw = []byte("{}")
+			}
+
+			switch behaviorKey {
+			case "tree":
+				var cfg TreeBehaviorConfig
+				if err := decodeStrictJSON(raw, &cfg); err != nil {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  fmt.Sprintf("invalid tree config: %v", err),
+					}
+				}
+				if cfg.Priority <= 0 {
+					cfg.Priority = defaultBehaviorPriority
+				}
+				if cfg.ChopPointsTotal <= 0 {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  "tree.chopPointsTotal must be > 0",
+					}
+				}
+				if cfg.ChopCycleDurationTicks <= 0 {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  "tree.chopCycleDurationTicks must be > 0",
+					}
+				}
+				if cfg.LogsSpawnDefKey == "" {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  "tree.logsSpawnDefKey is required",
+					}
+				}
+				if cfg.LogsSpawnCount <= 0 {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  "tree.logsSpawnCount must be > 0",
+					}
+				}
+				if cfg.LogsSpawnInitialOffset < 0 {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  "tree.logsSpawnInitialOffset must be >= 0",
+					}
+				}
+				if cfg.LogsSpawnStepOffset <= 0 {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  "tree.logsSpawnStepOffset must be > 0",
+					}
+				}
+				if cfg.TransformToDefKey == "" {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  "tree.transformToDefKey is required",
+					}
+				}
+
+				obj.TreeConfig = &cfg
+				obj.BehaviorPriorities[behaviorKey] = cfg.Priority
+			default:
+				var cfg behaviorPriorityOnly
+				if err := decodeStrictJSON(raw, &cfg); err != nil {
+					return &LoadError{
+						FilePath: filePath,
+						DefID:    obj.DefID,
+						Key:      obj.Key,
+						Message:  fmt.Sprintf("invalid %s config: %v", behaviorKey, err),
+					}
+				}
+				if cfg.Priority <= 0 {
+					cfg.Priority = defaultBehaviorPriority
+				}
+				obj.BehaviorPriorities[behaviorKey] = cfg.Priority
+			}
+		}
+
+		sort.SliceStable(obj.BehaviorOrder, func(i, j int) bool {
+			leftKey := obj.BehaviorOrder[i]
+			rightKey := obj.BehaviorOrder[j]
+			leftPriority := obj.BehaviorPriorities[leftKey]
+			rightPriority := obj.BehaviorPriorities[rightKey]
+			if leftPriority == rightPriority {
+				return leftKey < rightKey
+			}
+			return leftPriority < rightPriority
+		})
 	}
 
 	// Validate appearance: unique IDs, no duplicates
@@ -303,5 +419,17 @@ func validateObject(obj *ObjectDef, filePath string, behaviors *BehaviorRegistry
 		}
 	}
 
+	return nil
+}
+
+func decodeStrictJSON(raw []byte, dst any) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	if dec.More() {
+		return fmt.Errorf("unexpected trailing JSON data")
+	}
 	return nil
 }

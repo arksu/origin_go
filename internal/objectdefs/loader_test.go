@@ -47,7 +47,9 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 						"resource": "objects/box_full.png"
 					}
 				],
-				"behavior": ["container"]
+				"behaviors": {
+					"container": {}
+				}
 			},
 			{
 				"defId": 11,
@@ -57,7 +59,9 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 					"collider": { "w": 9, "h": 9 }
 				},
 				"resource": "player",
-				"behavior": ["player"]
+				"behaviors": {
+					"player": {}
+				}
 			}
 		]
 	}`)
@@ -84,8 +88,9 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 	require.Len(t, box.Appearance, 1)
 	assert.Equal(t, "full", box.Appearance[0].ID)
 	assert.Equal(t, "objects/box_full.png", box.Appearance[0].Resource)
-	require.Len(t, box.Behavior, 1)
-	assert.Equal(t, "container", box.Behavior[0])
+	require.Len(t, box.BehaviorOrder, 1)
+	assert.Equal(t, "container", box.BehaviorOrder[0])
+	assert.Equal(t, 100, box.PriorityForBehavior("container"))
 
 	player, ok := registry.GetByKey("player")
 	require.True(t, ok)
@@ -109,7 +114,9 @@ func TestLoadFromDirectory_JSONCComments(t *testing.T) {
 					"collider": { "w": 10, "h": 10 }
 				},
 				"resource": "tree.png",
-				"behavior": ["tree"]
+				"behaviors": {
+					"player": {}
+				}
 			}
 		]
 	}`)
@@ -229,17 +236,17 @@ func TestLoadFromDirectory_InvalidInventory(t *testing.T) {
 	assert.Contains(t, err.Error(), "components.inventory[0].w must be > 0")
 }
 
-func TestLoadFromDirectory_DuplicateBehavior(t *testing.T) {
+func TestLoadFromDirectory_InvalidTreeBehaviorConfig(t *testing.T) {
 	dir := t.TempDir()
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behavior": ["tree", "tree"] }]
+		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behaviors": { "tree": { "unknown": 1 } } }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate behavior")
+	assert.Contains(t, err.Error(), "invalid tree config")
 }
 
 func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {
@@ -247,7 +254,7 @@ func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behavior": ["nonexistent"] }]
+		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behaviors": { "nonexistent": {} } }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
@@ -318,4 +325,31 @@ func TestLoadFromDirectory_EmptyDirectory(t *testing.T) {
 	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
 	require.NoError(t, err)
 	assert.Equal(t, 0, registry.Count())
+}
+
+func TestLoadFromDirectory_BehaviorOrderByPriority(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "ordered",
+			"resource": "ordered.png",
+			"behaviors": {
+				"player": { "priority": 200 },
+				"container": { "priority": 50 }
+			}
+		}]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	require.NoError(t, err)
+
+	def, ok := registry.GetByID(1)
+	require.True(t, ok)
+	require.Equal(t, []string{"container", "player"}, def.BehaviorOrder)
+	assert.Equal(t, 50, def.PriorityForBehavior("container"))
+	assert.Equal(t, 200, def.PriorityForBehavior("player"))
 }

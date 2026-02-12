@@ -179,7 +179,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			var playerBehaviors []string
 			if playerDef != nil {
 				playerTypeID = uint32(playerDef.DefID)
-				playerBehaviors = playerDef.Behavior
+				playerBehaviors = append([]string(nil), playerDef.BehaviorOrder...)
 			}
 			ecs.AddComponent(w, h, components.EntityInfo{
 				TypeID:    playerTypeID,

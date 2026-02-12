@@ -22,9 +22,9 @@ const (
 )
 
 type BehaviorResult struct {
-	Flags    []string
 	State    any
 	HasState bool
+	Flags    []string
 }
 
 type BehaviorContext struct {
@@ -147,10 +147,9 @@ func RecomputeObjectBehaviorsNow(w *ecs.World, eventBus *eventbus.EventBus, logg
 }
 
 type objectBehaviorRunner struct {
-	eventBus     *eventbus.EventBus
-	logger       *zap.Logger
-	behaviors    map[string]RuntimeBehavior
-	nextFlagsSet map[string]struct{}
+	eventBus  *eventbus.EventBus
+	logger    *zap.Logger
+	behaviors map[string]RuntimeBehavior
 }
 
 func newObjectBehaviorRunner(eventBus *eventbus.EventBus, logger *zap.Logger) *objectBehaviorRunner {
@@ -164,7 +163,6 @@ func newObjectBehaviorRunner(eventBus *eventbus.EventBus, logger *zap.Logger) *o
 		behaviors: map[string]RuntimeBehavior{
 			"container": containerBehavior{},
 		},
-		nextFlagsSet: make(map[string]struct{}, 8),
 	}
 }
 
@@ -189,9 +187,6 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		return
 	}
 
-	for k := range r.nextFlagsSet {
-		delete(r.nextFlagsSet, k)
-	}
 	nextState := currentState.State
 	hasNextState := false
 
@@ -202,8 +197,9 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		EntityInfo: entityInfo,
 		Def:        def,
 		PrevState:  currentState.State,
-		PrevFlags:  currentState.Flags,
+		PrevFlags:  append([]string(nil), currentState.Flags...),
 	}
+	nextFlags := make([]string, 0, len(entityInfo.Behaviors))
 
 	for _, behaviorKey := range entityInfo.Behaviors {
 		behavior, found := r.behaviors[behaviorKey]
@@ -211,20 +207,15 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 			continue
 		}
 		result := behavior.Apply(ctx)
-		for _, flag := range result.Flags {
-			if flag == "" {
-				continue
-			}
-			r.nextFlagsSet[flag] = struct{}{}
-		}
 		if result.HasState {
 			nextState = result.State
 			hasNextState = true
 		}
+		if len(result.Flags) > 0 {
+			nextFlags = append(nextFlags, result.Flags...)
+		}
 	}
-
-	nextFlags := setToSortedSlice(r.nextFlagsSet)
-	flagsChanged := !equalStringSlices(currentState.Flags, nextFlags)
+	nextFlags = uniqueSortedStrings(nextFlags)
 
 	stateChanged := false
 	if hasNextState {
@@ -234,6 +225,7 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 			stateChanged = !reflect.DeepEqual(currentState.State, nextState)
 		}
 	}
+	flagsChanged := !reflect.DeepEqual(currentState.Flags, nextFlags)
 
 	nextResource := objectdefs.ResolveAppearanceResource(def, nextFlags)
 	if nextResource == "" {
@@ -241,16 +233,16 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 	}
 	appearanceChanged := nextResource != currentAppearance.Resource
 
-	if !flagsChanged && !stateChanged && !appearanceChanged {
+	if !stateChanged && !flagsChanged && !appearanceChanged {
 		return
 	}
 
 	ecs.WithComponent(w, h, func(state *components.ObjectInternalState) {
-		if flagsChanged {
-			state.Flags = nextFlags
-		}
 		if hasNextState && stateChanged {
 			state.State = nextState
+		}
+		if flagsChanged {
+			state.Flags = append(state.Flags[:0], nextFlags...)
 		}
 		state.IsDirty = true
 	})
@@ -273,30 +265,6 @@ func (r *objectBehaviorRunner) publishAppearanceChanged(w *ecs.World, targetID t
 	)
 }
 
-func setToSortedSlice(set map[string]struct{}) []string {
-	if len(set) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(set))
-	for key := range set {
-		result = append(result, key)
-	}
-	sort.Strings(result)
-	return result
-}
-
-func equalStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 type containerBehavior struct{}
 
 func (containerBehavior) Key() string { return "container" }
@@ -316,4 +284,28 @@ func (containerBehavior) Apply(ctx *BehaviorContext) BehaviorResult {
 	return BehaviorResult{
 		Flags: []string{"container.has_items"},
 	}
+}
+
+func uniqueSortedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	unique := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		unique[value] = struct{}{}
+	}
+	if len(unique) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(unique))
+	for value := range unique {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }

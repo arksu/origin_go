@@ -1,23 +1,28 @@
 package objectdefs
 
+import "encoding/json"
+
 // ObjectDef represents a single object definition.
 type ObjectDef struct {
-	DefID      int           `json:"defId"`
-	Key        string        `json:"key"`
-	Static     *bool         `json:"static,omitempty"`
-	HP         int           `json:"hp,omitempty"`
-	Components *Components   `json:"components,omitempty"`
-	Resource   string        `json:"resource,omitempty"`
-	Appearance []Appearance  `json:"appearance,omitempty"`
-	Behavior   []string      `json:"behavior,omitempty"`
+	DefID      int                        `json:"defId"`
+	Key        string                     `json:"key"`
+	Static     *bool                      `json:"static,omitempty"`
+	HP         int                        `json:"hp,omitempty"`
+	Components *Components                `json:"components,omitempty"`
+	Resource   string                     `json:"resource,omitempty"`
+	Appearance []Appearance               `json:"appearance,omitempty"`
+	Behaviors  map[string]json.RawMessage `json:"behaviors,omitempty"`
 
 	// resolved at load time
-	IsStatic bool `json:"-"`
+	IsStatic           bool                `json:"-"`
+	BehaviorOrder      []string            `json:"-"`
+	BehaviorPriorities map[string]int      `json:"-"`
+	TreeConfig         *TreeBehaviorConfig `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.
 type Components struct {
-	Collider  *ColliderDef  `json:"collider,omitempty"`
+	Collider  *ColliderDef   `json:"collider,omitempty"`
 	Inventory []InventoryDef `json:"inventory,omitempty"`
 }
 
@@ -49,9 +54,41 @@ type AppearanceWhen struct {
 	Flags []string `json:"flags,omitempty"`
 }
 
+// TreeBehaviorConfig contains numeric/tree-specific config only.
+// Behavior logic itself is implemented in code.
+type TreeBehaviorConfig struct {
+	Priority               int    `json:"priority,omitempty"`
+	ChopPointsTotal        int    `json:"chopPointsTotal"`
+	ChopCycleDurationTicks int    `json:"chopCycleDurationTicks"`
+	LogsSpawnDefKey        string `json:"logsSpawnDefKey"`
+	LogsSpawnCount         int    `json:"logsSpawnCount"`
+	LogsSpawnInitialOffset int    `json:"logsSpawnInitialOffset"`
+	LogsSpawnStepOffset    int    `json:"logsSpawnStepOffset"`
+	TransformToDefKey      string `json:"transformToDefKey"`
+}
+
 // ObjectsFile represents a JSONC file containing object definitions.
 type ObjectsFile struct {
 	Version int         `json:"v"`
 	Source  string      `json:"source"`
 	Objects []ObjectDef `json:"objects"`
+}
+
+func (d *ObjectDef) HasBehavior(key string) bool {
+	if d == nil || len(d.Behaviors) == 0 || key == "" {
+		return false
+	}
+	_, ok := d.Behaviors[key]
+	return ok
+}
+
+func (d *ObjectDef) PriorityForBehavior(key string) int {
+	if d == nil || len(d.BehaviorPriorities) == 0 {
+		return 100
+	}
+	priority, ok := d.BehaviorPriorities[key]
+	if !ok {
+		return 100
+	}
+	return priority
 }
