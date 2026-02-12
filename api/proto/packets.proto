@@ -508,7 +508,6 @@ message S2C_CyclicActionProgress {
   uint32 cycle_index = 3;
   uint32 elapsed_ticks = 4;
   uint32 total_ticks = 5;
-  optional string sound_key = 6; // set when cycle reaches completion and sound is configured
 }
 
 enum CyclicActionFinishResult {
@@ -523,7 +522,13 @@ message S2C_CyclicActionFinished {
   uint32 cycle_index = 3;
   CyclicActionFinishResult result = 4;
   optional string reason_code = 5; // set only for canceled result
-  optional string sound_key = 6;   // set only for completed result when sound is configured
+}
+
+message S2C_Sound {
+  string sound_key = 1;
+  double x = 2;
+  double y = 3;
+  double max_hear_distance = 4;
 }
 
 message S2C_ChatMessage {
@@ -577,6 +582,7 @@ message ServerMessage {
     S2C_MiniAlert mini_alert = 45;
     S2C_CyclicActionProgress cyclic_action_progress = 46;
     S2C_CyclicActionFinished cyclic_action_finished = 47;
+    S2C_Sound sound = 48;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
