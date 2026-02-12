@@ -70,7 +70,7 @@ func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 	}
 }
 
-func TestCyclicActionSystem_SendProgress_IncludesSoundOnCycleEnd(t *testing.T) {
+func TestCyclicActionSystem_SendProgress_NoSoundKey(t *testing.T) {
 	progressSender := &testCyclicActionProgressSender{}
 	system := NewCyclicActionSystem(nil, progressSender, nil)
 
@@ -94,7 +94,64 @@ func TestCyclicActionSystem_SendProgress_IncludesSoundOnCycleEnd(t *testing.T) {
 	}
 
 	message := progressSender.messages[0]
-	if message.SoundKey == nil || *message.SoundKey != "chop" {
-		t.Fatalf("expected progress sound_key=chop, got %v", message.SoundKey)
+	if message.ActionId != contextActionChop || message.CycleIndex != 2 {
+		t.Fatalf("unexpected progress payload: %+v", message)
+	}
+}
+
+func TestCyclicActionSystem_EmitsCycleSoundToVisibleObservers(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	soundSender := &testSoundEventSender{}
+	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil)
+	contextActionService.SetSoundEventSender(soundSender)
+	system := NewCyclicActionSystem(contextActionService, nil, nil)
+
+	const (
+		playerID   = types.EntityID(7001)
+		targetID   = types.EntityID(8002)
+		observerID = types.EntityID(9003)
+	)
+
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 300, Y: 400})
+	})
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
+		ecs.AddComponent(w, h, components.ActiveCyclicAction{
+			BehaviorKey:        "missing_behavior",
+			ActionID:           contextActionChop,
+			TargetKind:         components.CyclicActionTargetObject,
+			TargetID:           targetID,
+			TargetHandle:       targetHandle,
+			CycleDurationTicks: 1,
+			CycleIndex:         1,
+			FinishSoundKey:     "chop",
+		})
+	})
+	observerHandle := world.Spawn(observerID, nil)
+
+	visibilityState := ecs.GetResource[ecs.VisibilityState](world)
+	visibilityState.ObserversByVisibleTarget[targetHandle] = map[types.Handle]struct{}{
+		playerHandle:   {},
+		observerHandle: {},
+	}
+
+	linkState := ecs.GetResource[ecs.LinkState](world)
+	linkState.SetLink(ecs.PlayerLink{
+		PlayerID: playerID,
+		TargetID: targetID,
+	})
+
+	system.Update(world, 0.05)
+
+	if len(soundSender.messages[playerID]) != 1 {
+		t.Fatalf("expected cycle sound for player observer, got %d", len(soundSender.messages[playerID]))
+	}
+	if len(soundSender.messages[observerID]) != 1 {
+		t.Fatalf("expected cycle sound for secondary observer, got %d", len(soundSender.messages[observerID]))
+	}
+	sound := soundSender.messages[playerID][0]
+	if sound.SoundKey != "chop" || sound.X != 300 || sound.Y != 400 {
+		t.Fatalf("unexpected cycle sound payload: %+v", sound)
 	}
 }

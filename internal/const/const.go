@@ -22,11 +22,12 @@ const (
 )
 
 const (
-	PlayerVisionRadius   = 600
-	PlayerVisionPower    = 600
-	VisionUpdateInterval = 3 * time.Second
-	VisionUpdateJitter   = 50 * time.Millisecond
-	VisionPosEpsilon     = 0.01
+	PlayerVisionRadius     = 600
+	PlayerVisionPower      = 600
+	VisionUpdateInterval   = 3 * time.Second
+	VisionUpdateJitter     = 50 * time.Millisecond
+	VisionPosEpsilon       = 0.01
+	DefaultMaxHearDistance = 200.0
 )
 
 const ServerTimeSavePeriodSeconds = 20

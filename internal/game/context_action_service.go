@@ -42,16 +42,17 @@ type visionUpdateForcer interface {
 }
 
 type ContextActionService struct {
-	world     *ecs.World
-	logger    *zap.Logger
-	openSvc   systems.OpenContainerCoordinator
-	alerts    miniAlertSender
-	cyclicOut cyclicActionFinishSender
-	vision    visionUpdateForcer
-	eventBus  *eventbus.EventBus
-	chunks    chunkProvider
-	idAlloc   entityIDAllocator
-	behaviors map[string]contextActionBehavior
+	world       *ecs.World
+	logger      *zap.Logger
+	openSvc     systems.OpenContainerCoordinator
+	alerts      miniAlertSender
+	cyclicOut   cyclicActionFinishSender
+	vision      visionUpdateForcer
+	soundEvents *SoundEventService
+	eventBus    *eventbus.EventBus
+	chunks      chunkProvider
+	idAlloc     entityIDAllocator
+	behaviors   map[string]contextActionBehavior
 }
 
 type contextActionBehavior interface {
@@ -90,15 +91,16 @@ func NewContextActionService(
 	}
 
 	s := &ContextActionService{
-		world:     world,
-		logger:    logger,
-		openSvc:   openSvc,
-		alerts:    alerts,
-		cyclicOut: cyclicOut,
-		vision:    vision,
-		eventBus:  eventBus,
-		chunks:    chunks,
-		idAlloc:   idAlloc,
+		world:       world,
+		logger:      logger,
+		openSvc:     openSvc,
+		alerts:      alerts,
+		cyclicOut:   cyclicOut,
+		vision:      vision,
+		soundEvents: NewSoundEventService(nil, logger),
+		eventBus:    eventBus,
+		chunks:      chunks,
+		idAlloc:     idAlloc,
 		behaviors: map[string]contextActionBehavior{
 			"container": containerContextActionBehavior{},
 			"tree": treeContextActionBehavior{
@@ -117,6 +119,13 @@ func NewContextActionService(
 	}
 
 	return s
+}
+
+func (s *ContextActionService) SetSoundEventSender(sender soundEventSender) {
+	if s == nil || s.soundEvents == nil {
+		return
+	}
+	s.soundEvents.SetSender(sender)
 }
 
 var _ systems.ContextActionResolver = (*ContextActionService)(nil)
@@ -351,6 +360,9 @@ func (s *ContextActionService) finishActiveCyclicAction(
 	if !has {
 		return
 	}
+	if result == netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_COMPLETED {
+		s.emitTargetSound(activeAction.CompleteSoundKey, activeAction.TargetHandle, activeAction.TargetID)
+	}
 	s.sendCyclicActionFinished(playerID, activeAction, result, reasonCode)
 	ecs.RemoveComponent[components.ActiveCyclicAction](s.world, playerHandle)
 	ecs.MutateComponent[components.Movement](s.world, playerHandle, func(m *components.Movement) bool {
@@ -380,11 +392,34 @@ func (s *ContextActionService) sendCyclicActionFinished(
 	if result == netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_CANCELED && reasonCode != "" {
 		finished.ReasonCode = &reasonCode
 	}
-	if result == netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_COMPLETED && action.CompleteSoundKey != "" {
-		soundKey := action.CompleteSoundKey
-		finished.SoundKey = &soundKey
-	}
 	s.cyclicOut.SendCyclicActionFinished(playerID, finished)
+}
+
+func (s *ContextActionService) emitCycleSound(action components.ActiveCyclicAction) {
+	if action.TargetKind != components.CyclicActionTargetObject {
+		return
+	}
+	s.emitTargetSound(action.FinishSoundKey, action.TargetHandle, action.TargetID)
+}
+
+func (s *ContextActionService) emitTargetSound(
+	soundKey string,
+	targetHandle types.Handle,
+	targetID types.EntityID,
+) {
+	if s == nil || s.world == nil || s.soundEvents == nil {
+		return
+	}
+
+	resolvedTargetHandle := targetHandle
+	if resolvedTargetHandle == types.InvalidHandle || !s.world.Alive(resolvedTargetHandle) {
+		resolvedTargetHandle = s.world.GetHandleByEntityID(targetID)
+	}
+	if resolvedTargetHandle == types.InvalidHandle || !s.world.Alive(resolvedTargetHandle) {
+		return
+	}
+
+	s.soundEvents.EmitForVisibleTarget(s.world, resolvedTargetHandle, soundKey)
 }
 
 func (s *ContextActionService) sendMiniAlert(playerID types.EntityID, severity netproto.AlertSeverity, reasonCode string) {

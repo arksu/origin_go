@@ -108,6 +108,7 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 		ecs.WithComponent(w, playerHandle, func(active *components.ActiveCyclicAction) {
 			active.CycleElapsedTicks = action.CycleDurationTicks
 		})
+		s.contextActions.emitCycleSound(action)
 
 		decision := s.contextActions.handleCyclicCycleComplete(w, playerID, playerHandle, action)
 		switch decision {
@@ -140,10 +141,6 @@ func (s *CyclicActionSystem) sendProgress(playerID types.EntityID, action compon
 		CycleIndex:     action.CycleIndex,
 		ElapsedTicks:   action.CycleElapsedTicks,
 		TotalTicks:     action.CycleDurationTicks,
-	}
-	if action.CycleElapsedTicks >= action.CycleDurationTicks && action.FinishSoundKey != "" {
-		soundKey := action.FinishSoundKey
-		progress.SoundKey = &soundKey
 	}
 	s.progressSender.SendCyclicActionProgress(playerID, progress)
 }

@@ -20,6 +20,17 @@ func (s *testCyclicActionFinishSender) SendCyclicActionFinished(entityID types.E
 	s.messages = append(s.messages, finished)
 }
 
+type testSoundEventSender struct {
+	messages map[types.EntityID][]*netproto.S2C_Sound
+}
+
+func (s *testSoundEventSender) SendSound(entityID types.EntityID, sound *netproto.S2C_Sound) {
+	if s.messages == nil {
+		s.messages = make(map[types.EntityID][]*netproto.S2C_Sound)
+	}
+	s.messages[entityID] = append(s.messages[entityID], sound)
+}
+
 func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
@@ -69,9 +80,6 @@ func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.
 	if message.ReasonCode == nil || *message.ReasonCode != "link_broken" {
 		t.Fatalf("expected canceled reason_code=link_broken, got %v", message.ReasonCode)
 	}
-	if message.SoundKey != nil {
-		t.Fatalf("expected no sound_key for canceled result, got %v", *message.SoundKey)
-	}
 }
 
 func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testing.T) {
@@ -112,7 +120,54 @@ func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testi
 	if message.ReasonCode != nil {
 		t.Fatalf("expected no reason_code for completed result, got %v", *message.ReasonCode)
 	}
-	if message.SoundKey == nil || *message.SoundKey != "tree_fall" {
-		t.Fatalf("expected sound_key=tree_fall for completed result, got %v", message.SoundKey)
+}
+
+func TestContextActionService_CompleteActiveCyclicAction_EmitsCompleteSoundToVisibleObservers(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	sender := &testCyclicActionFinishSender{}
+	soundSender := &testSoundEventSender{}
+	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil)
+	service.SetSoundEventSender(soundSender)
+
+	const (
+		playerID   = types.EntityID(7001)
+		targetID   = types.EntityID(8002)
+		observerID = types.EntityID(9003)
+	)
+
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 100, Y: 200})
+	})
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
+		ecs.AddComponent(w, h, components.ActiveCyclicAction{
+			ActionID:         contextActionChop,
+			TargetID:         targetID,
+			TargetHandle:     targetHandle,
+			TargetKind:       components.CyclicActionTargetObject,
+			CycleIndex:       6,
+			BehaviorKey:      "tree",
+			CompleteSoundKey: "tree_fall",
+		})
+	})
+	observerHandle := world.Spawn(observerID, nil)
+
+	visibilityState := ecs.GetResource[ecs.VisibilityState](world)
+	visibilityState.ObserversByVisibleTarget[targetHandle] = map[types.Handle]struct{}{
+		playerHandle:   {},
+		observerHandle: {},
+	}
+
+	service.completeActiveCyclicAction(playerID, playerHandle)
+
+	if len(soundSender.messages[playerID]) != 1 {
+		t.Fatalf("expected complete sound for player observer, got %d", len(soundSender.messages[playerID]))
+	}
+	if len(soundSender.messages[observerID]) != 1 {
+		t.Fatalf("expected complete sound for secondary observer, got %d", len(soundSender.messages[observerID]))
+	}
+	sound := soundSender.messages[playerID][0]
+	if sound.SoundKey != "tree_fall" || sound.X != 100 || sound.Y != 200 {
+		t.Fatalf("unexpected sound payload: %+v", sound)
 	}
 }

@@ -3,11 +3,20 @@ import { messageDispatcher } from './MessageDispatcher'
 import { useGameStore, type EntityMovement } from '@/stores/gameStore'
 import { gameFacade, moveController, playerCommandController, soundManager } from '@/game'
 import { DEBUG_MOVEMENT } from '@/constants/game'
+import { distanceAttenuation, SoundAttenuationModel } from '@/game/soundAttenuation'
 
 function toNumber(value: number | Long): number {
   if (typeof value === 'number') return value
   return value.toNumber()
 }
+
+function distance2D(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx
+  const dy = ay - by
+  return Math.sqrt((dx * dx) + (dy * dy))
+}
+
+const SOUND_ATTENUATION_MODEL = SoundAttenuationModel.Smoothstep
 
 export function registerMessageHandlers(): void {
   const gameStore = useGameStore()
@@ -256,9 +265,9 @@ export function registerMessageHandlers(): void {
     }
 
     const normalizedActions = msg.actions.map((a) => ({
-        actionId: a.actionId || '',
-        title: a.title || a.actionId || '',
-      })).filter((a) => a.actionId !== '')
+      actionId: a.actionId || '',
+      title: a.title || a.actionId || '',
+    })).filter((a) => a.actionId !== '')
 
     console.log('[Handlers] contextMenu NORMALIZED:', {
       entityId: toNumber(msg.entityId),
@@ -292,15 +301,6 @@ export function registerMessageHandlers(): void {
       return
     }
     gameStore.setActionProgress(totalTicks, elapsedTicks)
-    const soundKey = (msg.soundKey || '').trim()
-    if (soundKey) {
-      console.log('[Handlers] cyclicActionProgress -> play sound', {
-        soundKey,
-        elapsedTicks,
-        totalTicks,
-      })
-      soundManager.play(soundKey)
-    }
   })
 
   messageDispatcher.on('cyclicActionFinished', (msg: proto.IS2C_CyclicActionFinished) => {
@@ -310,18 +310,35 @@ export function registerMessageHandlers(): void {
       cycleIndex: msg.cycleIndex,
       result: msg.result,
       reasonCode: msg.reasonCode,
-      soundKey: msg.soundKey,
     })
     gameStore.clearActionProgress()
-    if (msg.result !== proto.CyclicActionFinishResult.CYCLIC_ACTION_FINISH_RESULT_COMPLETED) {
-      return
-    }
+  })
+
+  messageDispatcher.on('sound', (msg: proto.IS2C_Sound) => {
     const soundKey = (msg.soundKey || '').trim()
     if (!soundKey) {
       return
     }
-    console.log('[Handlers] cyclicActionFinished -> play sound', { soundKey })
-    soundManager.play(soundKey)
+
+    const maxHearDistance = Number(msg.maxHearDistance || 0)
+    const sourceX = Number(msg.x || 0)
+    const sourceY = Number(msg.y || 0)
+    const playerPosition = gameStore.playerPosition
+    const distance = distance2D(playerPosition.x, playerPosition.y, sourceX, sourceY)
+    const attenuation = distanceAttenuation(distance, maxHearDistance, SOUND_ATTENUATION_MODEL)
+    if (attenuation <= 0) {
+      return
+    }
+
+    console.log('[Handlers] sound -> play', {
+      soundKey,
+      sourceX,
+      sourceY,
+      maxHearDistance,
+      distance,
+      attenuation,
+    })
+    soundManager.play(soundKey, attenuation)
   })
 
   messageDispatcher.on('error', (msg: proto.IS2C_Error) => {

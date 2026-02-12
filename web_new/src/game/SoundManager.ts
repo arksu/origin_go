@@ -14,7 +14,7 @@ export class SoundManager {
   private readonly howlBySoundAndFile = new Map<string, Howl>()
   private readonly roundRobinStateBySoundKey = new Map<string, RoundRobinState>()
 
-  play(soundKey: string): void {
+  play(soundKey: string, distanceVolumeMultiplier = 1): void {
     const normalizedKey = soundKey.trim()
     if (!normalizedKey) return
 
@@ -49,12 +49,18 @@ export class SoundManager {
     if (!selectedFile) return
 
     const howl = this.getHowl(normalizedKey, selectedFile)
-    const volume = clamp01(audioSettings.masterVolume * audioSettings.sfxVolume * this.defVolume(soundDef))
+    const volume = clamp01(
+      audioSettings.masterVolume *
+      audioSettings.sfxVolume *
+      this.defVolume(soundDef) *
+      clamp01(distanceVolumeMultiplier),
+    )
     console.log('[SoundManager] play resolved', {
       soundKey: normalizedKey,
       selectedFile,
       selectedIndex: selected.fileIndex,
       selectedRound: selected.round,
+      distanceVolumeMultiplier,
       volume,
       enabled: audioSettings.enabled,
       masterVolume: audioSettings.masterVolume,
