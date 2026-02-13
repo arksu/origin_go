@@ -15,7 +15,7 @@ const (
 type ActiveCyclicAction struct {
 	BehaviorKey      string
 	ActionID         string
-	FinishSoundKey   string
+	CycleSoundKey    string
 	CompleteSoundKey string
 
 	TargetKind   CyclicActionTargetKind
