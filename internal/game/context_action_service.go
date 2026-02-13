@@ -399,7 +399,7 @@ func (s *ContextActionService) emitCycleSound(action components.ActiveCyclicActi
 	if action.TargetKind != components.CyclicActionTargetObject {
 		return
 	}
-	s.emitTargetSound(action.FinishSoundKey, action.TargetHandle, action.TargetID)
+	s.emitTargetSound(action.CycleSoundKey, action.TargetHandle, action.TargetID)
 }
 
 func (s *ContextActionService) emitTargetSound(
