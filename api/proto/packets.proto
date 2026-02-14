@@ -165,6 +165,7 @@ message InventoryHandState {
 message InventoryState {
   InventoryRef ref = 1;
   uint64 revision = 2; // монотонная ревизия контейнера
+  string title = 3; // caption for GRID windows; must be non-empty for GRID states
   oneof state {
     InventoryGridState grid = 10;
     InventoryEquipmentState equipment = 11;

@@ -168,6 +168,7 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 			{
 				"defId": 10,
 				"key": "box",
+				"name": "Box",
 				"hp": 1000,
 				"components": {
 					"collider": { "w": 10, "h": 10 },
@@ -188,6 +189,7 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 			{
 				"defId": 11,
 				"key": "player",
+				"name": "Player",
 				"static": false,
 				"components": {
 					"collider": { "w": 9, "h": 9 }
@@ -244,6 +246,7 @@ func TestLoadFromDirectory_JSONCComments(t *testing.T) {
 			{
 				"defId": 1,
 				"key": "tree",
+				"name": "Tree",
 				/* block comment */
 				"components": {
 					"collider": { "w": 10, "h": 10 }
@@ -271,6 +274,7 @@ func TestLoadFromDirectory_StaticDefault(t *testing.T) {
 			{
 				"defId": 1,
 				"key": "rock",
+				"name": "Rock",
 				"components": { "collider": { "w": 5, "h": 5 } },
 				"resource": "rock.png"
 			}
@@ -295,6 +299,7 @@ func TestLoadFromDirectory_ContextMenuEvenForOneItemFalse(t *testing.T) {
 			{
 				"defId": 1,
 				"key": "stump",
+				"name": "Stump",
 				"contextMenuEvenForOneItem": false,
 				"components": { "collider": { "w": 5, "h": 5 } },
 				"resource": "stump.png"
@@ -315,11 +320,11 @@ func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {
 
 	writeJSONC(t, dir, "a.jsonc", `{
 		"v": 1, "source": "a",
-		"objects": [{ "defId": 1, "key": "a", "resource": "a.png" }]
+		"objects": [{ "defId": 1, "key": "a", "name": "A", "resource": "a.png" }]
 	}`)
 	writeJSONC(t, dir, "b.jsonc", `{
 		"v": 1, "source": "b",
-		"objects": [{ "defId": 1, "key": "b", "resource": "b.png" }]
+		"objects": [{ "defId": 1, "key": "b", "name": "B", "resource": "b.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -332,11 +337,11 @@ func TestLoadFromDirectory_DuplicateKey(t *testing.T) {
 
 	writeJSONC(t, dir, "a.jsonc", `{
 		"v": 1, "source": "a",
-		"objects": [{ "defId": 1, "key": "same", "resource": "a.png" }]
+		"objects": [{ "defId": 1, "key": "same", "name": "Same A", "resource": "a.png" }]
 	}`)
 	writeJSONC(t, dir, "b.jsonc", `{
 		"v": 1, "source": "b",
-		"objects": [{ "defId": 2, "key": "same", "resource": "b.png" }]
+		"objects": [{ "defId": 2, "key": "same", "name": "Same B", "resource": "b.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -349,7 +354,7 @@ func TestLoadFromDirectory_InvalidDefID(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 0, "key": "bad", "resource": "bad.png" }]
+		"objects": [{ "defId": 0, "key": "bad", "name": "Bad", "resource": "bad.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -362,7 +367,7 @@ func TestLoadFromDirectory_MissingKey(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "", "resource": "x.png" }]
+		"objects": [{ "defId": 1, "key": "", "name": "Missing Key", "resource": "x.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -370,12 +375,25 @@ func TestLoadFromDirectory_MissingKey(t *testing.T) {
 	assert.Contains(t, err.Error(), "key is required")
 }
 
+func TestLoadFromDirectory_MissingName(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1, "source": "test",
+		"objects": [{ "defId": 1, "key": "bad", "name": "", "resource": "x.png" }]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name is required")
+}
+
 func TestLoadFromDirectory_InvalidCollider(t *testing.T) {
 	dir := t.TempDir()
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "components": { "collider": { "w": 0, "h": 5 } }, "resource": "x.png" }]
+		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "components": { "collider": { "w": 0, "h": 5 } }, "resource": "x.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -388,7 +406,7 @@ func TestLoadFromDirectory_InvalidInventory(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "components": { "inventory": [{ "w": 0, "h": 5 }] }, "resource": "x.png" }]
+		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "components": { "inventory": [{ "w": 0, "h": 5 }] }, "resource": "x.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -401,7 +419,7 @@ func TestLoadFromDirectory_InvalidTreeBehaviorConfig(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behaviors": { "tree": { "unknown": 1 } } }]
+		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "resource": "x.png", "behaviors": { "tree": { "unknown": 1 } } }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -418,6 +436,7 @@ func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
 		"objects": [{
 			"defId": 1,
 			"key": "tree",
+			"name": "Tree",
 			"resource": "x.png",
 			"behaviors": {
 				"tree": {
@@ -450,7 +469,7 @@ func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behaviors": { "nonexistent": {} } }]
+		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "resource": "x.png", "behaviors": { "nonexistent": {} } }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -464,7 +483,7 @@ func TestLoadFromDirectory_DuplicateAppearanceID(t *testing.T) {
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
 		"objects": [{
-			"defId": 1, "key": "bad", "resource": "x.png",
+			"defId": 1, "key": "bad", "name": "Bad", "resource": "x.png",
 			"appearance": [
 				{ "id": "a", "resource": "a.png" },
 				{ "id": "a", "resource": "b.png" }
@@ -482,7 +501,7 @@ func TestLoadFromDirectory_MissingResourceNoAppearance(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad" }]
+		"objects": [{ "defId": 1, "key": "bad", "name": "Bad" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -532,6 +551,7 @@ func TestLoadFromDirectory_BehaviorOrderByPriority(t *testing.T) {
 		"objects": [{
 			"defId": 1,
 			"key": "ordered",
+			"name": "Ordered",
 			"resource": "ordered.png",
 			"behaviors": {
 				"player": { "priority": 200 },

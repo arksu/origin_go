@@ -106,6 +106,7 @@ func (ss *SnapshotSender) buildInventoryState(
 
 	switch container.Kind {
 	case constt.InventoryGrid:
+		invState.Title = MustResolveGridInventoryTitle(world, container.OwnerID)
 		invState.State = &netproto.InventoryState_Grid{
 			Grid: ss.buildGridState(world, container),
 		}

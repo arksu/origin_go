@@ -81,6 +81,14 @@ const onItemRightClick = (item: { x: number; y: number; instance: proto.IItemIns
 const getWindowId = () => {
   return inventoryRef.value?.ownerId ? Number(inventoryRef.value.ownerId) : 0
 }
+
+const windowTitle = computed(() => {
+  const title = (props.inventory.title || '').trim()
+  if (!title) {
+    throw new Error('InventoryWindow: missing title in InventoryState')
+  }
+  return title
+})
 </script>
 
 <template>
@@ -89,7 +97,7 @@ const getWindowId = () => {
     :id="getWindowId()"
     :inner-height="gridState.height! * 31"
     :inner-width="gridState.width! * 31"
-    title="Inventory"
+    :title="windowTitle"
     @close="onClose"
   >
     <div v-for="y in gridState.height" :key="y">

@@ -1,8 +1,10 @@
 package systems
 
 import (
+	"fmt"
 	constt "origin/internal/const"
 	netproto "origin/internal/network/proto"
+	"strings"
 )
 
 // BuildInventoryStateProto converts an InventoryContainerState to a proto InventoryState.
@@ -21,6 +23,11 @@ func BuildInventoryStateProto(container InventoryContainerState) *netproto.Inven
 
 	switch constt.InventoryKind(container.Kind) {
 	case constt.InventoryGrid:
+		title := strings.TrimSpace(container.Title)
+		if title == "" {
+			panic(fmt.Sprintf("build inventory state: empty grid title (ownerID=%d key=%d)", container.OwnerID, container.Key))
+		}
+		invState.Title = title
 		gridItems := make([]*netproto.GridItem, 0, len(container.Items))
 		for _, item := range container.Items {
 			gridItems = append(gridItems, &netproto.GridItem{

@@ -177,6 +177,21 @@ func TestLoadFromDirectory_MissingKey(t *testing.T) {
 	assert.Contains(t, err.Error(), "key is required")
 }
 
+func TestLoadFromDirectory_MissingName(t *testing.T) {
+	dir := t.TempDir()
+
+	json := `{
+		"v": 1,
+		"source": "test",
+		"items": [{ "defId": 1001, "key": "test", "name": "", "tags": [], "size": { "w": 1, "h": 1 }, "allowed": { "hand": true, "grid": true, "equipmentSlots": [] } }]
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.json"), []byte(json), 0644))
+
+	_, err := LoadFromDirectory(dir, testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name is required")
+}
+
 func TestLoadFromDirectory_InvalidSize(t *testing.T) {
 	dir := t.TempDir()
 
