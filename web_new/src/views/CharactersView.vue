@@ -25,6 +25,8 @@ const showCreateForm = ref(false)
 const newCharacterName = ref('')
 const creating = ref(false)
 const createError = ref('')
+const showDeleteDialog = ref(false)
+const pendingDeleteCharacter = ref<Character | null>(null)
 
 const enteringId = ref<number | null>(null)
 const deletingId = ref<number | null>(null)
@@ -76,15 +78,41 @@ async function handleCreate() {
   }
 }
 
+function openCreateDialog() {
+  if (showDeleteDialog.value || creating.value) return
+  createError.value = ''
+  showCreateForm.value = true
+}
+
+function closeCreateDialog() {
+  if (creating.value) return
+  showCreateForm.value = false
+  newCharacterName.value = ''
+  createError.value = ''
+}
+
 async function handleDelete(id: number) {
+  const character = characters.value.find((char) => char.id === id) || null
+  if (!character || deletingId.value !== null) return
+  pendingDeleteCharacter.value = character
+  showDeleteDialog.value = true
+}
+
+function cancelDeleteDialog() {
   if (deletingId.value !== null) return
+  showDeleteDialog.value = false
+  pendingDeleteCharacter.value = null
+}
 
-  if (!confirm('Delete character?')) return
+async function confirmDelete() {
+  if (!pendingDeleteCharacter.value || deletingId.value !== null) return
 
-  deletingId.value = id
+  deletingId.value = pendingDeleteCharacter.value.id
 
   try {
-    await deleteCharacter(id)
+    await deleteCharacter(pendingDeleteCharacter.value.id)
+    showDeleteDialog.value = false
+    pendingDeleteCharacter.value = null
     await loadCharacters()
   } catch (e) {
     if (ApiException.isNetwork(e)) {
@@ -98,7 +126,7 @@ async function handleDelete(id: number) {
 }
 
 async function handleEnter(id: number) {
-  if (enteringId.value !== null) return
+  if (enteringId.value !== null || showDeleteDialog.value || showCreateForm.value) return
 
   enteringId.value = id
   error.value = ''
@@ -161,13 +189,14 @@ onMounted(() => {
               }"
               @click="handleEnter(char.id)"
             >
-              {{ char.name }} [id {{ char.id }}]
+              <span v-if="enteringId === char.id">Entering {{ char.name }}...</span>
+              <span v-else>{{ char.name }}</span>
             </div>
 
             <div
               class="row delete-char"
               :class="{ bg_selecting: enteringId === char.id }"
-              @click="handleDelete(char.id)"
+              @click.stop="handleDelete(char.id)"
             >
               <span v-if="deletingId === char.id">&#8987;</span>
               <span v-else>&#128465;</span>
@@ -180,20 +209,21 @@ onMounted(() => {
             :key="'new-' + i"
             class="window-container"
           >
-            <div
-              class="row new_char"
-              @click="showCreateForm = true"
-            >
-              Create New
+              <div
+                class="row new_char"
+                @click="openCreateDialog"
+              >
+                Create New
+              </div>
             </div>
-          </div>
+        </template>
 
-          <!-- Create form overlay -->
-          <div v-if="showCreateForm" class="create-overlay">
+        <div v-if="showCreateForm" class="dialog-backdrop" @click.self="closeCreateDialog">
+          <div class="create-dialog" role="dialog" aria-modal="true" aria-label="Create character">
+            <h3 class="create-dialog__title">Create character</h3>
             <AppAlert v-if="createError" type="error" class="panel-alert">
               {{ createError }}
             </AppAlert>
-
             <form @submit.prevent="handleCreate">
               <AppInput
                 v-model="newCharacterName"
@@ -201,29 +231,47 @@ onMounted(() => {
                 :disabled="creating"
                 autofocus
               />
-
-              <div class="create-actions">
+              <div class="dialog-actions">
                 <AppButton
                   variant="secondary"
                   :disabled="creating"
-                  @click="showCreateForm = false; newCharacterName = ''; createError = ''"
+                  @click="closeCreateDialog"
                 >
-                  back
+                  Cancel
                 </AppButton>
                 <AppButton
                   type="submit"
                   :loading="creating"
                   :disabled="!newCharacterName.trim()"
                 >
-                  create
+                  Create
                 </AppButton>
               </div>
             </form>
           </div>
-        </template>
+        </div>
+
+        <div v-if="showDeleteDialog" class="dialog-backdrop" @click.self="cancelDeleteDialog">
+          <div class="delete-dialog" role="dialog" aria-modal="true" aria-label="Delete character">
+            <h3 class="delete-dialog__title">Delete character</h3>
+            <p class="delete-dialog__text">
+              This permanently deletes
+              <strong>{{ pendingDeleteCharacter?.name || 'this character' }}</strong>.
+              This action cannot be undone.
+            </p>
+            <div class="dialog-actions">
+              <AppButton variant="secondary" :disabled="deletingId !== null" @click="cancelDeleteDialog">
+                Cancel
+              </AppButton>
+              <AppButton variant="danger" :loading="deletingId !== null" @click="confirmDelete">
+                Delete
+              </AppButton>
+            </div>
+          </div>
+        </div>
 
         <AppButton class="logout-btn" @click="handleLogout">
-          logout
+          Logout
         </AppButton>
       </div>
     </div>
@@ -354,23 +402,66 @@ onMounted(() => {
   animation: moving-back 12s linear infinite;
 }
 
-.create-overlay {
-  margin-top: 15px;
-  padding: 15px;
-  background: rgba(12, 70, 80, 0.5);
-  border-radius: 10px;
-}
-
-.create-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  margin-top: 10px;
-}
-
 .logout-btn {
   margin-top: 15px;
   width: 100%;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.delete-dialog {
+  width: min(92vw, 430px);
+  border-radius: 10px;
+  padding: 18px;
+  background: rgba(13, 65, 76, 0.96);
+  border: 1px solid rgba(126, 208, 252, 0.32);
+  box-shadow: 0 20px 35px rgba(0, 0, 0, 0.5);
+
+  &__title {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+
+  &__text {
+    font-size: 15px;
+    color: #d5eeed;
+    margin-bottom: 14px;
+    line-height: 1.45;
+  }
+
+}
+
+.create-dialog {
+  width: min(92vw, 430px);
+  border-radius: 10px;
+  padding: 18px;
+  background: rgba(13, 65, 76, 0.96);
+  border: 1px solid rgba(126, 208, 252, 0.32);
+  box-shadow: 0 20px 35px rgba(0, 0, 0, 0.5);
+
+  &__title {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+
+  :deep(.app-button) {
+    width: 48%;
+  }
 }
 
 @keyframes moving-back {

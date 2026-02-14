@@ -12,7 +12,7 @@ function classifyError(error: AxiosError): ApiException {
   if (!error.response) {
     return new ApiException(
       ApiErrorType.NETWORK,
-      'Нет соединения с сервером',
+      'No connection to server',
       0,
     )
   }
@@ -20,7 +20,7 @@ function classifyError(error: AxiosError): ApiException {
   const status = error.response.status
   const data = error.response.data as { error?: string; message?: string; details?: Record<string, string[]> } | undefined
 
-  const message = data?.message || data?.error || 'Неизвестная ошибка'
+  const message = data?.message || data?.error || 'Unknown error'
   const details = data?.details
 
   if (status === 400 || status === 422) {
@@ -36,7 +36,7 @@ function classifyError(error: AxiosError): ApiException {
   }
 
   if (status >= 500) {
-    return new ApiException(ApiErrorType.SERVER, 'Ошибка сервера', status)
+    return new ApiException(ApiErrorType.SERVER, 'Server error', status)
   }
 
   return new ApiException(ApiErrorType.UNKNOWN, message, status)

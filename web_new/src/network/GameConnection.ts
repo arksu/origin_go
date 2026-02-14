@@ -53,15 +53,7 @@ export class GameConnection {
 
   disconnect(): void {
     this.stopPing()
-
-    if (this.ws) {
-      this.ws.onopen = null
-      this.ws.onmessage = null
-      this.ws.onclose = null
-      this.ws.onerror = null
-      this.ws.close()
-      this.ws = null
-    }
+    this.closeSocket()
 
     this.setState('disconnected')
   }
@@ -137,7 +129,9 @@ export class GameConnection {
         code: 'AUTH_FAILED',
         message: result.errorMessage || 'Authentication failed',
       })
-      this.disconnect()
+      // Close socket without overriding the error state in UI.
+      this.stopPing()
+      this.closeSocket()
     }
   }
 
@@ -192,6 +186,18 @@ export class GameConnection {
   private setState(state: ConnectionState, error?: ConnectionError): void {
     this.state = state
     this.stateChangeHandler?.(state, error)
+  }
+
+  private closeSocket(): void {
+    if (!this.ws) {
+      return
+    }
+    this.ws.onopen = null
+    this.ws.onmessage = null
+    this.ws.onclose = null
+    this.ws.onerror = null
+    this.ws.close()
+    this.ws = null
   }
 }
 

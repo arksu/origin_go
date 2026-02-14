@@ -31,6 +31,7 @@ func TestHandleOnline(t *testing.T) {
 		nil, // inventoryExecutor
 		nil, // inventoryResultSender
 		mockChat,
+		nil, // alertSender
 		nil, // entityIDAllocator
 		nil, // chunkProvider
 		nil, // visionForcer
@@ -91,6 +92,55 @@ func testTime() time.Time {
 	return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 }
 
+func TestHandleErrorWarn(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+
+	mockAlert := &mockAdminAlertSender{}
+	handler := NewChatAdminCommandHandler(
+		nil, // inventoryExecutor
+		nil, // inventoryResultSender
+		nil, // chatDelivery
+		mockAlert,
+		nil, // entityIDAllocator
+		nil, // chunkProvider
+		nil, // visionForcer
+		nil, // behaviorRegistry
+		eventBus,
+		logger,
+	)
+
+	playerID := types.EntityID(42)
+	handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/error test error message")
+	if !handled {
+		t.Fatal("expected /error to be recognized")
+	}
+	if mockAlert.lastErrorEntityID != playerID {
+		t.Fatalf("expected error for player %d, got %d", playerID, mockAlert.lastErrorEntityID)
+	}
+	if mockAlert.lastErrorCode != netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR {
+		t.Fatalf("unexpected error code: %v", mockAlert.lastErrorCode)
+	}
+	if mockAlert.lastErrorMessage != "test error message" {
+		t.Fatalf("unexpected error message: %q", mockAlert.lastErrorMessage)
+	}
+
+	handled = handler.HandleCommand(world, playerID, types.InvalidHandle, "/warn test warning message")
+	if !handled {
+		t.Fatal("expected /warn to be recognized")
+	}
+	if mockAlert.lastWarningEntityID != playerID {
+		t.Fatalf("expected warning for player %d, got %d", playerID, mockAlert.lastWarningEntityID)
+	}
+	if mockAlert.lastWarningCode != netproto.WarningCode_WARN_INPUT_QUEUE_OVERFLOW {
+		t.Fatalf("unexpected warning code: %v", mockAlert.lastWarningCode)
+	}
+	if mockAlert.lastWarningMessage != "test warning message" {
+		t.Fatalf("unexpected warning message: %q", mockAlert.lastWarningMessage)
+	}
+}
+
 // mockChatDeliveryService implements ChatDeliveryService for testing
 type mockChatDeliveryService struct {
 	messages map[types.EntityID]string
@@ -102,4 +152,25 @@ func (m *mockChatDeliveryService) SendChatMessage(entityID types.EntityID, chann
 
 func (m *mockChatDeliveryService) BroadcastChatMessage(entityIDs []types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string) {
 	// Not used in this test
+}
+
+type mockAdminAlertSender struct {
+	lastErrorEntityID   types.EntityID
+	lastErrorCode       netproto.ErrorCode
+	lastErrorMessage    string
+	lastWarningEntityID types.EntityID
+	lastWarningCode     netproto.WarningCode
+	lastWarningMessage  string
+}
+
+func (m *mockAdminAlertSender) SendError(entityID types.EntityID, errorCode netproto.ErrorCode, message string) {
+	m.lastErrorEntityID = entityID
+	m.lastErrorCode = errorCode
+	m.lastErrorMessage = message
+}
+
+func (m *mockAdminAlertSender) SendWarning(entityID types.EntityID, warningCode netproto.WarningCode, message string) {
+	m.lastWarningEntityID = entityID
+	m.lastWarningCode = warningCode
+	m.lastWarningMessage = message
 }

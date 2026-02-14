@@ -115,7 +115,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
-	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
+	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
 	networkCmdSystem.SetAdminHandler(adminHandler)
 	networkCmdSystem.SetInventorySnapshotSender(s)
 
@@ -726,6 +726,28 @@ func (s *Shard) SendInventorySnapshots(w *ecs.World, entityID types.EntityID, ha
 	if s.snapshotSender != nil {
 		s.snapshotSender.SendInventorySnapshots(w, client, entityID, handle)
 	}
+}
+
+// SendError sends S2C_Error to a single entity.
+func (s *Shard) SendError(entityID types.EntityID, errorCode netproto.ErrorCode, message string) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+	client.SendError(errorCode, message)
+}
+
+// SendWarning sends S2C_Warning to a single entity.
+func (s *Shard) SendWarning(entityID types.EntityID, warningCode netproto.WarningCode, message string) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+	client.SendWarning(warningCode, message)
 }
 
 // BroadcastChatMessage sends a chat message to multiple entities

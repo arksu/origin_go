@@ -67,6 +67,8 @@ async function handleSubmit() {
       }
     } else if (ApiException.isNetwork(e)) {
       error.value = 'No connection to server'
+    } else if (e instanceof ApiException) {
+      error.value = e.message || 'Registration failed'
     } else {
       error.value = 'An error occurred. Please try again later.'
     }
