@@ -3,6 +3,22 @@
   "source": "objects",
   "objects": [
     {
+      "defId": 11,
+      "key": "player",
+      "name": "Player",
+      "static": false,
+      "components": {
+        "collider": {
+          "w": 9,
+          "h": 9
+        }
+      },
+      "resource": "player",
+      "behaviors": {
+        "player": {}
+      }
+    },
+    {
       "defId": 10,
       "key": "box",
       "name": "Box",
@@ -40,19 +56,40 @@
       }
     },
     {
-      "defId": 11,
-      "key": "player",
-      "name": "Player",
-      "static": false,
+      "defId": 12,
+      "key": "crate",
+      "name": "Crate",
+      "static": true,
+      "hp": 1000,
+      "contextMenuEvenForOneItem": false,
       "components": {
         "collider": {
-          "w": 9,
-          "h": 9
-        }
+          "w": 8,
+          "h": 8,
+          "layer": 1,
+          "mask": 1
+        },
+        "inventory": [
+          {
+            "w": 5,
+            "h": 5
+          }
+        ]
       },
-      "resource": "player",
+      "resource": "crate/empty",
+      "appearance": [
+        {
+          "id": "full",
+          "when": {
+            "flags": [
+              "container.has_items"
+            ]
+          },
+          "resource": "crate/filled"
+        }
+      ],
       "behaviors": {
-        "player": {}
+        "container": {}
       }
     }
   ]
