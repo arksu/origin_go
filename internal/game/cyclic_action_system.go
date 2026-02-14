@@ -112,14 +112,14 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 
 		decision := s.contextActions.handleCyclicCycleComplete(w, playerID, playerHandle, action)
 		switch decision {
-		case cyclicActionDecisionContinue:
+		case types.BehaviorCycleDecisionContinue:
 			ecs.WithComponent(w, playerHandle, func(active *components.ActiveCyclicAction) {
 				active.CycleElapsedTicks = 0
 				active.CycleIndex++
 				active.StartedTick = nowTick
 			})
-		case cyclicActionDecisionComplete, cyclicActionDecisionCanceled:
-			if decision == cyclicActionDecisionComplete {
+		case types.BehaviorCycleDecisionComplete, types.BehaviorCycleDecisionCanceled:
+			if decision == types.BehaviorCycleDecisionComplete {
 				s.contextActions.completeActiveCyclicAction(playerID, playerHandle)
 				continue
 			}

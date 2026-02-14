@@ -17,6 +17,7 @@ import (
 
 	"origin/internal/config"
 	"origin/internal/game"
+	"origin/internal/game/behaviors"
 	"origin/internal/game/events"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
@@ -78,8 +79,11 @@ func main() {
 	defer db.Close()
 
 	// Load object definitions before game loop starts
-	behaviors := objectdefs.DefaultBehaviorRegistry()
-	objRegistry, err := objectdefs.LoadFromDirectory("./data/objects", behaviors, logger)
+	behaviorRegistry, err := behaviors.DefaultRegistry()
+	if err != nil {
+		logger.Fatal("Failed to initialize behavior registry", zap.Error(err))
+	}
+	objRegistry, err := objectdefs.LoadFromDirectory("./data/objects", behaviorRegistry, logger)
 	if err != nil {
 		logger.Fatal("Failed to load object definitions", zap.Error(err))
 	}

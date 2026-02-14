@@ -24,6 +24,8 @@ type testSoundEventSender struct {
 	messages map[types.EntityID][]*netproto.S2C_Sound
 }
 
+const testActionChop = "chop"
+
 func (s *testSoundEventSender) SendSound(entityID types.EntityID, sound *netproto.S2C_Sound) {
 	if s.messages == nil {
 		s.messages = make(map[types.EntityID][]*netproto.S2C_Sound)
@@ -34,7 +36,7 @@ func (s *testSoundEventSender) SendSound(entityID types.EntityID, sound *netprot
 func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil)
+	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil, nil)
 
 	const (
 		playerID = types.EntityID(1001)
@@ -44,11 +46,11 @@ func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
-			ActionID:         contextActionChop,
+			ActionID:         testActionChop,
 			TargetID:         targetID,
 			CycleIndex:       3,
 			BehaviorKey:      "tree",
-			FinishSoundKey:   "chop",
+			CycleSoundKey:    "chop",
 			CompleteSoundKey: "tree_fall",
 		})
 	})
@@ -85,7 +87,7 @@ func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.
 func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil)
+	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil, nil)
 
 	const (
 		playerID = types.EntityID(3003)
@@ -95,11 +97,11 @@ func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testi
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
-			ActionID:         contextActionChop,
+			ActionID:         testActionChop,
 			TargetID:         targetID,
 			CycleIndex:       6,
 			BehaviorKey:      "tree",
-			FinishSoundKey:   "chop",
+			CycleSoundKey:    "chop",
 			CompleteSoundKey: "tree_fall",
 		})
 	})
@@ -126,7 +128,7 @@ func TestContextActionService_CompleteActiveCyclicAction_EmitsCompleteSoundToVis
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
 	soundSender := &testSoundEventSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil)
+	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, nil, nil)
 	service.SetSoundEventSender(soundSender)
 
 	const (
@@ -141,7 +143,7 @@ func TestContextActionService_CompleteActiveCyclicAction_EmitsCompleteSoundToVis
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
-			ActionID:         contextActionChop,
+			ActionID:         testActionChop,
 			TargetID:         targetID,
 			TargetHandle:     targetHandle,
 			TargetKind:       components.CyclicActionTargetObject,

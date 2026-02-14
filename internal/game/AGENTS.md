@@ -24,8 +24,13 @@ internal/game/
 ├── world/                # World and object management
 │   ├── chunk_manager.go  # Chunk loading/unloading and spatial management
 │   ├── chunk_manager_test.go
-│   ├── object_builder.go # Object building logic
-│   └── object_factory.go # Object factory pattern
+│   ├── def_spawner.go    # Spawn helpers from object definitions
+│   └── object_factory.go # Object factory + persistence mapping
+├── behaviors/            # Unified object behavior implementations/registry
+│   ├── registry.go
+│   ├── container_behavior.go
+│   ├── tree_behavior.go
+│   └── player_behavior.go
 ├── events/               # Game event handling
 │   └── game_events.go    # Network visibility and event dispatching
 └── systems/              # Future game systems
@@ -86,9 +91,17 @@ internal/game/
 - **Purpose**: World geometry, chunks, and object management
 - **Components**:
   - `chunk_manager.go`: Chunk loading/unloading, spatial indexing
-  - `object_factory.go`: Object creation using factory pattern
-  - `object_builder.go`: Specific object building logic
-- **Key Types**: `ChunkManager`, `ObjectFactory`, `ObjectBuilder`
+  - `def_spawner.go`: Spawn helpers from definitions with behavior lifecycle init
+  - `object_factory.go`: Object creation/serialization and inventory integration
+- **Key Types**: `ChunkManager`, `ObjectFactory`
+
+### Behaviors (`behaviors/`)
+- **Purpose**: Unified object behavior runtime for actions/runtime/cyclic/lifecycle hooks
+- **Components**:
+  - `registry.go`: single behavior registry + fail-fast contract checks
+  - `container_behavior.go`: container runtime flags + `open` action
+  - `tree_behavior.go`: `chop` action + cyclic flow + transform/spawn helpers
+  - `player_behavior.go`: player behavior key
 
 ### Events (`events/`)
 - **Purpose**: Game event handling and network visibility
@@ -97,15 +110,16 @@ internal/game/
 - **Key Types**: `NetworkVisibilityDispatcher`
 
 ### Context Actions (`context_action_service.go`)
-- **Purpose**: Aggregate and execute context menu actions from object behaviors.
+- **Purpose**: Aggregate and execute context menu actions via unified behavior registry.
 - **Key Responsibilities**:
   - Compute action list on RMB (`Interact`)
   - Resolve duplicate action IDs with first-wins policy
   - Respect object-def option `contextMenuEvenForOneItem` for single-action RMB behavior
   - Execute selected action only after `LinkCreated`
+  - Execute validation phase (`EXECUTE`) before calling behavior executor
   - Emit `S2C_MiniAlert` for explicit execution failures
   - Manage cyclic action terminal events (`S2C_CyclicActionFinished`)
-  - Force immediate vision updates after tree chop result (stump + spawned logs)
+  - Delegate cyclic cycle completion to behavior cyclic capability
 - **Key Types**: `ContextActionService`
 
 ## Data Flow
@@ -135,7 +149,7 @@ internal/game/
 
 ### Factory Pattern
 - `world/object_factory.go`: Creates different object types
-- `world/object_builder.go`: Implements specific building logic
+- `world/def_spawner.go`: Shared spawn path with lifecycle behavior init
 
 ### Command Queue Pattern
 - Separate network and ECS processing
@@ -168,7 +182,11 @@ Key configuration parameters:
 ## Object Behavior Runtime Notes
 
 - `ObjectBehaviorSystem` is dirty-queue driven (no global per-tick scan in normal mode).
-- Chunk activation (`world/chunk_manager.go`) forces initial behavior recompute for all loaded objects with behaviors (lazy init is not allowed).
+- Unified behavior contracts are defined in `internal/types/behavior.go`.
+- Unified behavior registry is `internal/game/behaviors.DefaultRegistry()`.
+- Fail-fast checks run at registry build time (missing execute/cyclic capabilities for declared actions are startup errors).
+- Lifecycle init hooks run for `spawn`, `restore`, and `transform` object flows.
+- Chunk activation (`world/chunk_manager.go`) runs behavior lifecycle init (`restore`) and then forces behavior recompute for all loaded objects with behaviors.
 - Inventory mutations that affect object-root containers must mark object behavior dirty, so appearance/flags stay in sync.
 
 ## Error Handling

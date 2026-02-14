@@ -6,10 +6,7 @@ import (
 )
 
 // ContextAction describes one selectable action for an entity context menu.
-type ContextAction struct {
-	ActionID string
-	Title    string
-}
+type ContextAction = types.ContextAction
 
 // ContextActionResolver computes available actions for target entity state/behaviors.
 type ContextActionResolver interface {

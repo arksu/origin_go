@@ -1,11 +1,12 @@
-package game
+package behaviors
 
 import (
+	"testing"
+	"time"
+
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/types"
-	"testing"
-	"time"
 )
 
 func TestWorldCoordToChunkIndex(t *testing.T) {
@@ -95,6 +96,7 @@ func TestResolveAxisLogDefKey(t *testing.T) {
 		{name: "x axis from y key", baseKey: "log_y", dirX: 1, dirY: 0, expected: "log_x"},
 		{name: "y axis keeps y key", baseKey: "log_y", dirX: 0, dirY: 1, expected: "log_y"},
 		{name: "x axis from base key", baseKey: "log", dirX: -1, dirY: 0, expected: "log_x"},
+		{name: "y axis from base key", baseKey: "log", dirX: 0, dirY: 1, expected: "log_y"},
 		{name: "y axis from x key", baseKey: "log_x", dirX: 0, dirY: -1, expected: "log_y"},
 		{name: "empty key", baseKey: "", dirX: 1, dirY: 0, expected: ""},
 	}
@@ -118,10 +120,9 @@ func (f *testVisionForcer) ForceUpdateForObserver(_ *ecs.World, observerHandle t
 	f.forced = append(f.forced, observerHandle)
 }
 
-func TestTreeContextActionBehavior_ForceVisionUpdatesForAllAliveCharacters(t *testing.T) {
+func TestForceVisionUpdatesForAllAliveCharacters(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	forcer := &testVisionForcer{}
-	behavior := treeContextActionBehavior{visionForcer: forcer}
 
 	playerA := world.Spawn(types.EntityID(1001), nil)
 	playerB := world.Spawn(types.EntityID(1002), nil)
@@ -133,7 +134,7 @@ func TestTreeContextActionBehavior_ForceVisionUpdatesForAllAliveCharacters(t *te
 	characters.Add(types.EntityID(1002), playerB, time.Time{})
 	characters.Add(types.EntityID(1003), playerDead, time.Time{})
 
-	behavior.forceVisionUpdates(world)
+	forceVisionUpdates(world, forcer)
 
 	if len(forcer.forced) != 2 {
 		t.Fatalf("expected 2 forced updates, got %d", len(forcer.forced))

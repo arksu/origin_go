@@ -22,7 +22,7 @@ func (s *testCyclicActionProgressSender) SendCyclicActionProgress(entityID types
 
 func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 	world := ecs.NewWorldForTesting()
-	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil)
+	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	system := NewCyclicActionSystem(contextActionService, nil, nil)
 
 	playerID := types.EntityID(1001)
@@ -31,7 +31,7 @@ func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
 			BehaviorKey:        "tree",
-			ActionID:           contextActionChop,
+			ActionID:           testActionChop,
 			TargetKind:         components.CyclicActionTargetObject,
 			TargetID:           targetID,
 			CycleDurationTicks: 20,
@@ -80,12 +80,12 @@ func TestCyclicActionSystem_SendProgress_NoSoundKey(t *testing.T) {
 	)
 
 	action := components.ActiveCyclicAction{
-		ActionID:           contextActionChop,
+		ActionID:           testActionChop,
 		TargetID:           targetID,
 		CycleIndex:         2,
 		CycleElapsedTicks:  20,
 		CycleDurationTicks: 20,
-		FinishSoundKey:     "chop",
+		CycleSoundKey:      "chop",
 	}
 	system.sendProgress(playerID, action)
 
@@ -94,7 +94,7 @@ func TestCyclicActionSystem_SendProgress_NoSoundKey(t *testing.T) {
 	}
 
 	message := progressSender.messages[0]
-	if message.ActionId != contextActionChop || message.CycleIndex != 2 {
+	if message.ActionId != testActionChop || message.CycleIndex != 2 {
 		t.Fatalf("unexpected progress payload: %+v", message)
 	}
 }
@@ -102,7 +102,7 @@ func TestCyclicActionSystem_SendProgress_NoSoundKey(t *testing.T) {
 func TestCyclicActionSystem_EmitsCycleSoundToVisibleObservers(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	soundSender := &testSoundEventSender{}
-	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil)
+	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	contextActionService.SetSoundEventSender(soundSender)
 	system := NewCyclicActionSystem(contextActionService, nil, nil)
 
@@ -119,13 +119,13 @@ func TestCyclicActionSystem_EmitsCycleSoundToVisibleObservers(t *testing.T) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
 			BehaviorKey:        "missing_behavior",
-			ActionID:           contextActionChop,
+			ActionID:           testActionChop,
 			TargetKind:         components.CyclicActionTargetObject,
 			TargetID:           targetID,
 			TargetHandle:       targetHandle,
 			CycleDurationTicks: 1,
 			CycleIndex:         1,
-			FinishSoundKey:     "chop",
+			CycleSoundKey:      "chop",
 		})
 	})
 	observerHandle := world.Spawn(observerID, nil)

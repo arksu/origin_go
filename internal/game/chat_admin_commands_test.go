@@ -34,6 +34,7 @@ func TestHandleOnline(t *testing.T) {
 		nil, // entityIDAllocator
 		nil, // chunkProvider
 		nil, // visionForcer
+		nil, // behaviorRegistry
 		eventBus,
 		logger,
 	)

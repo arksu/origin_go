@@ -228,10 +228,16 @@ ChunkSystem (400)
 
 ## ObjectBehaviorSystem (Priority: 360)
 
-**Purpose**: Applies runtime object behaviors (e.g. `container`) and updates:
+**Purpose**: Applies runtime behavior capability from unified behavior registry and updates:
 - `ObjectInternalState.Flags`
 - `ObjectInternalState.State`
 - `Appearance.Resource` (with appearance-changed event)
+
+**Registry/Contract**:
+- Behavior contracts are defined in `internal/types/behavior.go`.
+- Runtime implementations live in `internal/game/behaviors`.
+- System wiring receives unified `types.BehaviorRegistry` through `ObjectBehaviorConfig.BehaviorRegistry`.
+- Registry is fail-fast validated on startup (invalid action/cyclic capabilities do not boot).
 
 **Execution Model (important)**:
 - No full-world scan in normal operation.
@@ -242,7 +248,7 @@ ChunkSystem (400)
 **Dirty Marking Contract**:
 - Systems that mutate behavior-relevant data must call `ecs.MarkObjectBehaviorDirty(...)`.
 - Current primary producer is inventory flow for object root containers.
-- Chunk activation forces initial behavior recompute for all behavior-bearing objects (no lazy init).
+- Chunk activation runs behavior lifecycle init for restored objects and then forces behavior recompute for all behavior-bearing objects (no lazy init).
 
 ## Context Interaction Flow (RMB)
 

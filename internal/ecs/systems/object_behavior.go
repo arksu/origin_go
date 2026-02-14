@@ -5,7 +5,6 @@ import (
 	"sort"
 	"time"
 
-	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -20,27 +19,6 @@ const (
 	ObjectBehaviorSystemPriority = 360
 	debugFallbackInterval        = 5 * time.Second
 )
-
-type BehaviorResult struct {
-	State    any
-	HasState bool
-	Flags    []string
-}
-
-type BehaviorContext struct {
-	World      *ecs.World
-	Handle     types.Handle
-	EntityID   types.EntityID
-	EntityInfo components.EntityInfo
-	Def        *objectdefs.ObjectDef
-	PrevState  any
-	PrevFlags  []string
-}
-
-type RuntimeBehavior interface {
-	Key() string
-	Apply(ctx *BehaviorContext) BehaviorResult
-}
 
 type ObjectBehaviorSystem struct {
 	ecs.BaseSystem
@@ -58,6 +36,7 @@ type ObjectBehaviorSystem struct {
 type ObjectBehaviorConfig struct {
 	BudgetPerTick       int
 	EnableDebugFallback bool
+	BehaviorRegistry    types.BehaviorRegistry
 }
 
 func NewObjectBehaviorSystem(eventBus *eventbus.EventBus, logger *zap.Logger, cfg ObjectBehaviorConfig) *ObjectBehaviorSystem {
@@ -72,7 +51,7 @@ func NewObjectBehaviorSystem(eventBus *eventbus.EventBus, logger *zap.Logger, cf
 	return &ObjectBehaviorSystem{
 		BaseSystem:          ecs.NewBaseSystem("ObjectBehaviorSystem", ObjectBehaviorSystemPriority),
 		logger:              logger,
-		runner:              newObjectBehaviorRunner(eventBus, logger),
+		runner:              newObjectBehaviorRunner(eventBus, logger, cfg.BehaviorRegistry),
 		budgetPerTick:       cfg.BudgetPerTick,
 		enableDebugFallback: cfg.EnableDebugFallback,
 		processBatch:        make([]types.Handle, 0, cfg.BudgetPerTick),
@@ -135,34 +114,42 @@ func (s *ObjectBehaviorSystem) runDebugFallback(w *ecs.World) {
 	}
 }
 
-func RecomputeObjectBehaviorsNow(w *ecs.World, eventBus *eventbus.EventBus, logger *zap.Logger, handles []types.Handle) {
+func RecomputeObjectBehaviorsNow(
+	w *ecs.World,
+	eventBus *eventbus.EventBus,
+	logger *zap.Logger,
+	behaviorRegistry types.BehaviorRegistry,
+	handles []types.Handle,
+) {
 	if len(handles) == 0 {
 		return
 	}
 
-	runner := newObjectBehaviorRunner(eventBus, logger)
+	runner := newObjectBehaviorRunner(eventBus, logger, behaviorRegistry)
 	for _, h := range handles {
 		runner.processHandle(w, h)
 	}
 }
 
 type objectBehaviorRunner struct {
-	eventBus  *eventbus.EventBus
-	logger    *zap.Logger
-	behaviors map[string]RuntimeBehavior
+	eventBus         *eventbus.EventBus
+	logger           *zap.Logger
+	behaviorRegistry types.BehaviorRegistry
 }
 
-func newObjectBehaviorRunner(eventBus *eventbus.EventBus, logger *zap.Logger) *objectBehaviorRunner {
+func newObjectBehaviorRunner(
+	eventBus *eventbus.EventBus,
+	logger *zap.Logger,
+	behaviorRegistry types.BehaviorRegistry,
+) *objectBehaviorRunner {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 
 	return &objectBehaviorRunner{
-		eventBus: eventBus,
-		logger:   logger,
-		behaviors: map[string]RuntimeBehavior{
-			"container": containerBehavior{},
-		},
+		eventBus:         eventBus,
+		logger:           logger,
+		behaviorRegistry: behaviorRegistry,
 	}
 }
 
@@ -190,23 +177,30 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 	nextState := currentState.State
 	hasNextState := false
 
-	ctx := &BehaviorContext{
+	ctx := &types.BehaviorRuntimeContext{
 		World:      w,
 		Handle:     h,
 		EntityID:   entityIDComp.ID,
-		EntityInfo: entityInfo,
-		Def:        def,
+		EntityType: entityInfo.TypeID,
 		PrevState:  currentState.State,
 		PrevFlags:  append([]string(nil), currentState.Flags...),
 	}
 	nextFlags := make([]string, 0, len(entityInfo.Behaviors))
 
+	if r.behaviorRegistry == nil {
+		return
+	}
+
 	for _, behaviorKey := range entityInfo.Behaviors {
-		behavior, found := r.behaviors[behaviorKey]
+		behavior, found := r.behaviorRegistry.GetBehavior(behaviorKey)
 		if !found {
 			continue
 		}
-		result := behavior.Apply(ctx)
+		runtimeBehavior, ok := behavior.(types.RuntimeBehavior)
+		if !ok {
+			continue
+		}
+		result := runtimeBehavior.ApplyRuntime(ctx)
 		if result.HasState {
 			nextState = result.State
 			hasNextState = true
@@ -263,27 +257,6 @@ func (r *objectBehaviorRunner) publishAppearanceChanged(w *ecs.World, targetID t
 		ecs.NewEntityAppearanceChangedEvent(w.Layer, targetID, targetHandle),
 		eventbus.PriorityMedium,
 	)
-}
-
-type containerBehavior struct{}
-
-func (containerBehavior) Key() string { return "container" }
-
-func (containerBehavior) Apply(ctx *BehaviorContext) BehaviorResult {
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](ctx.World)
-	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, ctx.EntityID, 0)
-	if !found || !ctx.World.Alive(rootHandle) {
-		return BehaviorResult{}
-	}
-
-	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](ctx.World, rootHandle)
-	if !hasContainer || len(rootContainer.Items) == 0 {
-		return BehaviorResult{}
-	}
-
-	return BehaviorResult{
-		Flags: []string{"container.has_items"},
-	}
 }
 
 func uniqueSortedStrings(values []string) []string {
