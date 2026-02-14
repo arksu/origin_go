@@ -8,6 +8,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
 
@@ -36,7 +37,7 @@ type ObjectBehaviorSystem struct {
 type ObjectBehaviorConfig struct {
 	BudgetPerTick       int
 	EnableDebugFallback bool
-	BehaviorRegistry    types.BehaviorRegistry
+	BehaviorRegistry    contracts.BehaviorRegistry
 }
 
 func NewObjectBehaviorSystem(eventBus *eventbus.EventBus, logger *zap.Logger, cfg ObjectBehaviorConfig) *ObjectBehaviorSystem {
@@ -118,7 +119,7 @@ func RecomputeObjectBehaviorsNow(
 	w *ecs.World,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
-	behaviorRegistry types.BehaviorRegistry,
+	behaviorRegistry contracts.BehaviorRegistry,
 	handles []types.Handle,
 ) {
 	if len(handles) == 0 {
@@ -134,13 +135,13 @@ func RecomputeObjectBehaviorsNow(
 type objectBehaviorRunner struct {
 	eventBus         *eventbus.EventBus
 	logger           *zap.Logger
-	behaviorRegistry types.BehaviorRegistry
+	behaviorRegistry contracts.BehaviorRegistry
 }
 
 func newObjectBehaviorRunner(
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
-	behaviorRegistry types.BehaviorRegistry,
+	behaviorRegistry contracts.BehaviorRegistry,
 ) *objectBehaviorRunner {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -174,15 +175,16 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		return
 	}
 
-	nextState := currentState.State
+	prevRuntimeState, _ := components.GetRuntimeObjectState(currentState)
+	nextState := prevRuntimeState
 	hasNextState := false
 
-	ctx := &types.BehaviorRuntimeContext{
+	ctx := &contracts.BehaviorRuntimeContext{
 		World:      w,
 		Handle:     h,
 		EntityID:   entityIDComp.ID,
 		EntityType: entityInfo.TypeID,
-		PrevState:  currentState.State,
+		PrevState:  prevRuntimeState,
 		PrevFlags:  append([]string(nil), currentState.Flags...),
 	}
 	nextFlags := make([]string, 0, len(entityInfo.Behaviors))
@@ -196,7 +198,7 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		if !found {
 			continue
 		}
-		runtimeBehavior, ok := behavior.(types.RuntimeBehavior)
+		runtimeBehavior, ok := behavior.(contracts.RuntimeBehavior)
 		if !ok {
 			continue
 		}
@@ -213,10 +215,10 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 
 	stateChanged := false
 	if hasNextState {
-		if currentState.State == nil && nextState == nil {
+		if prevRuntimeState == nil && nextState == nil {
 			stateChanged = false
 		} else {
-			stateChanged = !reflect.DeepEqual(currentState.State, nextState)
+			stateChanged = !reflect.DeepEqual(prevRuntimeState, nextState)
 		}
 	}
 	flagsChanged := !reflect.DeepEqual(currentState.Flags, nextFlags)

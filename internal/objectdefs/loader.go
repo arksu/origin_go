@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"origin/internal/types"
+	"origin/internal/game/behaviors/contracts"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -43,7 +43,7 @@ func stripJSONCComments(data []byte) []byte {
 }
 
 // LoadFromDirectory loads all object definitions from JSONC files in the specified directory.
-func LoadFromDirectory(dir string, behaviors types.BehaviorRegistry, logger *zap.Logger) (*Registry, error) {
+func LoadFromDirectory(dir string, behaviors contracts.BehaviorRegistry, logger *zap.Logger) (*Registry, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory %s: %w", dir, err)
@@ -113,7 +113,7 @@ func LoadFromDirectory(dir string, behaviors types.BehaviorRegistry, logger *zap
 	return NewRegistry(allObjects), nil
 }
 
-func loadFile(filePath string, behaviors types.BehaviorRegistry) ([]ObjectDef, error) {
+func loadFile(filePath string, behaviors contracts.BehaviorRegistry) ([]ObjectDef, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, &LoadError{
@@ -187,7 +187,7 @@ func applyDefaults(obj *ObjectDef) {
 	}
 }
 
-func validateObject(obj *ObjectDef, filePath string, behaviors types.BehaviorRegistry) error {
+func validateObject(obj *ObjectDef, filePath string, behaviors contracts.BehaviorRegistry) error {
 	if obj.DefID <= 0 {
 		return &LoadError{
 			FilePath: filePath,
@@ -292,7 +292,7 @@ func validateObject(obj *ObjectDef, filePath string, behaviors types.BehaviorReg
 				}
 			}
 
-			defConfigValidator, ok := behavior.(types.BehaviorDefConfigValidator)
+			defConfigValidator, ok := behavior.(contracts.BehaviorDefConfigValidator)
 			if !ok {
 				return &LoadError{
 					FilePath: filePath,
@@ -302,7 +302,7 @@ func validateObject(obj *ObjectDef, filePath string, behaviors types.BehaviorReg
 				}
 			}
 
-			priority, err := defConfigValidator.ValidateAndApplyDefConfig(&types.BehaviorDefConfigContext{
+			priority, err := defConfigValidator.ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{
 				BehaviorKey: behaviorKey,
 				RawConfig:   raw,
 				Def:         obj,

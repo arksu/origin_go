@@ -3,6 +3,7 @@ package world
 import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
@@ -14,9 +15,9 @@ type DefSpawnParams struct {
 	Direction        float64
 	Region           int
 	Layer            int
-	InitReason       types.ObjectBehaviorInitReason
+	InitReason       contracts.ObjectBehaviorInitReason
 	PreviousTypeID   uint32
-	BehaviorRegistry types.BehaviorRegistry
+	BehaviorRegistry contracts.BehaviorRegistry
 }
 
 func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawnParams) types.Handle {
@@ -60,13 +61,17 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 	if !hasInfo || len(info.Behaviors) == 0 {
 		return handle
 	}
-	_ = params.BehaviorRegistry.InitObjectBehaviors(&types.BehaviorObjectInitContext{
+	if initErr := params.BehaviorRegistry.InitObjectBehaviors(&contracts.BehaviorObjectInitContext{
 		World:        w,
 		Handle:       handle,
 		EntityID:     params.EntityID,
 		EntityType:   info.TypeID,
 		Reason:       params.InitReason,
 		PreviousType: params.PreviousTypeID,
-	}, info.Behaviors)
+	}, info.Behaviors); initErr != nil {
+		// Fail fast: do not leave partially initialized behavior objects alive.
+		w.Despawn(handle)
+		return types.InvalidHandle
+	}
 	return handle
 }

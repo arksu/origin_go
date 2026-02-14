@@ -6,19 +6,19 @@ import (
 	"strings"
 	"sync"
 
-	"origin/internal/types"
+	"origin/internal/game/behaviors/contracts"
 )
 
 // Registry is a single runtime registry for object behavior contracts/execution.
 type Registry struct {
-	byKey map[string]types.Behavior
+	byKey map[string]contracts.Behavior
 	keys  []string
 }
 
 // NewRegistry creates a behavior registry and validates contracts in fail-fast mode.
-func NewRegistry(behaviors ...types.Behavior) (*Registry, error) {
+func NewRegistry(behaviors ...contracts.Behavior) (*Registry, error) {
 	registry := &Registry{
-		byKey: make(map[string]types.Behavior, len(behaviors)),
+		byKey: make(map[string]contracts.Behavior, len(behaviors)),
 	}
 
 	for _, behavior := range behaviors {
@@ -46,7 +46,7 @@ func NewRegistry(behaviors ...types.Behavior) (*Registry, error) {
 	return registry, nil
 }
 
-func (r *Registry) GetBehavior(key string) (types.Behavior, bool) {
+func (r *Registry) GetBehavior(key string) (contracts.Behavior, bool) {
 	if r == nil {
 		return nil, false
 	}
@@ -84,7 +84,7 @@ func (r *Registry) ValidateBehaviorKeys(keys []string) error {
 }
 
 // InitObjectBehaviors runs lifecycle init hook for behavior keys in object order.
-func (r *Registry) InitObjectBehaviors(ctx *types.BehaviorObjectInitContext, behaviorKeys []string) error {
+func (r *Registry) InitObjectBehaviors(ctx *contracts.BehaviorObjectInitContext, behaviorKeys []string) error {
 	if r == nil || len(behaviorKeys) == 0 || ctx == nil {
 		return nil
 	}
@@ -93,7 +93,7 @@ func (r *Registry) InitObjectBehaviors(ctx *types.BehaviorObjectInitContext, beh
 		if !found {
 			continue
 		}
-		initializer, ok := behavior.(types.ObjectLifecycleInitializer)
+		initializer, ok := behavior.(contracts.ObjectLifecycleInitializer)
 		if !ok {
 			continue
 		}
@@ -104,13 +104,13 @@ func (r *Registry) InitObjectBehaviors(ctx *types.BehaviorObjectInitContext, beh
 	return nil
 }
 
-func validateBehaviorContract(behavior types.Behavior) error {
-	_, hasDefConfigValidator := behavior.(types.BehaviorDefConfigValidator)
-	_, hasProvider := behavior.(types.ContextActionProvider)
-	_, hasValidator := behavior.(types.ContextActionValidator)
-	executor, hasExecutor := behavior.(types.ContextActionExecutor)
-	declarer, hasDeclarer := behavior.(types.BehaviorActionDeclarer)
-	_, hasCycle := behavior.(types.CyclicActionHandler)
+func validateBehaviorContract(behavior contracts.Behavior) error {
+	_, hasDefConfigValidator := behavior.(contracts.BehaviorDefConfigValidator)
+	_, hasProvider := behavior.(contracts.ContextActionProvider)
+	_, hasValidator := behavior.(contracts.ContextActionValidator)
+	executor, hasExecutor := behavior.(contracts.ContextActionExecutor)
+	declarer, hasDeclarer := behavior.(contracts.BehaviorActionDeclarer)
+	_, hasCycle := behavior.(contracts.CyclicActionHandler)
 
 	if !hasDefConfigValidator {
 		return fmt.Errorf("missing def config validator capability")
@@ -128,7 +128,7 @@ func validateBehaviorContract(behavior types.Behavior) error {
 	}
 
 	specs := declarer.DeclaredActions()
-	if err := types.ValidateActionSpecs(specs); err != nil {
+	if err := contracts.ValidateActionSpecs(specs); err != nil {
 		return err
 	}
 

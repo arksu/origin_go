@@ -7,7 +7,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/ecs/systems"
+	"origin/internal/game/behaviors/contracts"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
@@ -18,52 +18,50 @@ type containerBehavior struct{}
 
 func (containerBehavior) Key() string { return "container" }
 
-func (containerBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContext) (int, error) {
+func (containerBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
 	if ctx == nil {
 		return 0, fmt.Errorf("container def config context is nil")
 	}
 	return parsePriorityOnlyConfig(ctx.RawConfig, "container")
 }
 
-func (containerBehavior) DeclaredActions() []types.BehaviorActionSpec {
-	return []types.BehaviorActionSpec{
+func (containerBehavior) DeclaredActions() []contracts.BehaviorActionSpec {
+	return []contracts.BehaviorActionSpec{
 		{
 			ActionID: actionOpen,
 		},
 	}
 }
 
-func (containerBehavior) ApplyRuntime(ctx *types.BehaviorRuntimeContext) types.BehaviorRuntimeResult {
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
-		return types.BehaviorRuntimeResult{}
+func (containerBehavior) ApplyRuntime(ctx *contracts.BehaviorRuntimeContext) contracts.BehaviorRuntimeResult {
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorRuntimeResult{}
 	}
 
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](world)
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](ctx.World)
 	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, ctx.EntityID, 0)
-	if !found || !world.Alive(rootHandle) {
-		return types.BehaviorRuntimeResult{}
+	if !found || !ctx.World.Alive(rootHandle) {
+		return contracts.BehaviorRuntimeResult{}
 	}
 
-	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](world, rootHandle)
+	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](ctx.World, rootHandle)
 	if !hasContainer || len(rootContainer.Items) == 0 {
-		return types.BehaviorRuntimeResult{}
+		return contracts.BehaviorRuntimeResult{}
 	}
 
-	return types.BehaviorRuntimeResult{
+	return contracts.BehaviorRuntimeResult{
 		Flags: []string{"container.has_items"},
 	}
 }
 
-func (containerBehavior) ProvideActions(ctx *types.BehaviorActionListContext) []types.ContextAction {
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
+func (containerBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []contracts.ContextAction {
+	if ctx == nil || ctx.World == nil {
 		return nil
 	}
-	if !hasContainerRoot(world, ctx.TargetID) {
+	if !hasContainerRoot(ctx.World, ctx.TargetID) {
 		return nil
 	}
-	return []types.ContextAction{
+	return []contracts.ContextAction{
 		{
 			ActionID: actionOpen,
 			Title:    "Open",
@@ -71,33 +69,31 @@ func (containerBehavior) ProvideActions(ctx *types.BehaviorActionListContext) []
 	}
 }
 
-func (containerBehavior) ValidateAction(ctx *types.BehaviorActionValidateContext) types.BehaviorResult {
+func (containerBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext) contracts.BehaviorResult {
 	if ctx.ActionID != actionOpen {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
-		return types.BehaviorResult{OK: false}
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorResult{OK: false}
 	}
-	if !hasContainerRoot(world, ctx.TargetID) {
-		return types.BehaviorResult{OK: false}
+	if !hasContainerRoot(ctx.World, ctx.TargetID) {
+		return contracts.BehaviorResult{OK: false}
 	}
-	return types.BehaviorResult{OK: true}
+	return contracts.BehaviorResult{OK: true}
 }
 
-func (containerBehavior) ExecuteAction(ctx *types.BehaviorActionExecuteContext) types.BehaviorResult {
+func (containerBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
 	if ctx.ActionID != actionOpen {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
 
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
-		return types.BehaviorResult{OK: false}
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorResult{OK: false}
 	}
 
-	openSvc := resolveOpenCoordinator(ctx.Extra)
-	if openSvc == nil {
-		return types.BehaviorResult{OK: false}
+	deps := resolveExecutionDeps(ctx.Deps)
+	if deps.OpenContainer == nil {
+		return contracts.BehaviorResult{OK: false}
 	}
 
 	ref := &netproto.InventoryRef{
@@ -106,23 +102,17 @@ func (containerBehavior) ExecuteAction(ctx *types.BehaviorActionExecuteContext) 
 		InventoryKey: 0,
 	}
 
-	openErr := openSvc.HandleOpenRequest(world, ctx.PlayerID, ctx.PlayerHandle, ref)
+	openErr := deps.OpenContainer(ctx.World, ctx.PlayerID, ctx.PlayerHandle, ref)
 	if openErr != nil {
-		return types.BehaviorResult{
+		return contracts.BehaviorResult{
 			OK:          false,
 			UserVisible: true,
 			ReasonCode:  reasonFromErrorCode(openErr.Code),
-			Severity:    types.BehaviorAlertSeverityError,
+			Severity:    contracts.BehaviorAlertSeverityError,
 		}
 	}
 
-	return types.BehaviorResult{OK: true}
-}
-
-func resolveOpenCoordinator(extra any) systems.OpenContainerCoordinator {
-	deps := resolveActionExecutionDeps(extra)
-	openSvc, _ := deps.OpenService.(systems.OpenContainerCoordinator)
-	return openSvc
+	return contracts.BehaviorResult{OK: true}
 }
 
 func hasContainerRoot(world *ecs.World, targetID types.EntityID) bool {

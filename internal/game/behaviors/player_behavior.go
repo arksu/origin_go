@@ -3,14 +3,14 @@ package behaviors
 import (
 	"fmt"
 
-	"origin/internal/types"
+	"origin/internal/game/behaviors/contracts"
 )
 
 type playerBehavior struct{}
 
 func (playerBehavior) Key() string { return "player" }
 
-func (playerBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContext) (int, error) {
+func (playerBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
 	if ctx == nil {
 		return 0, fmt.Errorf("player def config context is nil")
 	}

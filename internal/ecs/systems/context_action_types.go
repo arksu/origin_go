@@ -2,11 +2,12 @@ package systems
 
 import (
 	"origin/internal/ecs"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/types"
 )
 
 // ContextAction describes one selectable action for an entity context menu.
-type ContextAction = types.ContextAction
+type ContextAction = contracts.ContextAction
 
 // ContextActionResolver computes available actions for target entity state/behaviors.
 type ContextActionResolver interface {

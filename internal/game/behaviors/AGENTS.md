@@ -12,7 +12,8 @@ This package owns:
 
 ## Contracts
 
-- Shared behavior interfaces and context/result types are defined in `/Users/park/projects/origin_go/internal/types/behavior.go`.
+- Shared behavior interfaces and typed context/result types are defined in `/Users/park/projects/origin_go/internal/game/behaviors/contracts/behavior.go`.
+- Contexts are fail-fast and strongly typed (`*ecs.World`, typed deps, typed cyclic action payload); avoid `any` in behavior call boundaries.
 - Runtime systems must use the unified registry (`DefaultRegistry()` / `MustDefaultRegistry()`), not local behavior maps.
 - Behavior keys in object defs are validated via this same runtime registry (single source of truth).
 

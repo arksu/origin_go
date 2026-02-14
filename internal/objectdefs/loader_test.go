@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"origin/internal/types"
+	"origin/internal/game/behaviors/contracts"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,10 +21,10 @@ func testLogger() *zap.Logger {
 }
 
 type testBehaviorRegistry struct {
-	byKey map[string]types.Behavior
+	byKey map[string]contracts.Behavior
 }
 
-func (r *testBehaviorRegistry) GetBehavior(key string) (types.Behavior, bool) {
+func (r *testBehaviorRegistry) GetBehavior(key string) (contracts.Behavior, bool) {
 	if r == nil {
 		return nil, false
 	}
@@ -60,7 +60,7 @@ func (r *testBehaviorRegistry) ValidateBehaviorKeys(keys []string) error {
 	return nil
 }
 
-func (r *testBehaviorRegistry) InitObjectBehaviors(_ *types.BehaviorObjectInitContext, _ []string) error {
+func (r *testBehaviorRegistry) InitObjectBehaviors(_ *contracts.BehaviorObjectInitContext, _ []string) error {
 	return nil
 }
 
@@ -70,7 +70,7 @@ type testPriorityOnlyBehavior struct {
 
 func (b testPriorityOnlyBehavior) Key() string { return b.key }
 
-func (b testPriorityOnlyBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContext) (int, error) {
+func (b testPriorityOnlyBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
 	if ctx == nil {
 		return 100, nil
 	}
@@ -90,17 +90,15 @@ type testTreeBehavior struct{}
 
 func (testTreeBehavior) Key() string { return "tree" }
 
-func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContext) (int, error) {
+func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
 	if ctx == nil {
 		return 100, nil
 	}
-
-	targetDef, ok := ctx.Def.(*ObjectDef)
-	if !ok || targetDef == nil {
-		return 0, fmt.Errorf("tree config target def must be *ObjectDef")
+	if ctx.Def == nil {
+		return 0, fmt.Errorf("tree config target def is nil")
 	}
 
-	var cfg TreeBehaviorConfig
+	var cfg contracts.TreeBehaviorConfig
 	if err := decodeStrictJSONForTest(ctx.RawConfig, &cfg); err != nil {
 		return 0, fmt.Errorf("invalid tree config: %w", err)
 	}
@@ -129,7 +127,7 @@ func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigCo
 		return 0, fmt.Errorf("tree.transformToDefKey is required")
 	}
 
-	targetDef.TreeConfig = &cfg
+	ctx.Def.SetTreeBehaviorConfig(cfg)
 	return cfg.Priority, nil
 }
 
@@ -145,9 +143,9 @@ func decodeStrictJSONForTest(raw []byte, dst any) error {
 	return nil
 }
 
-func testBehaviors(_ *testing.T) types.BehaviorRegistry {
+func testBehaviors(_ *testing.T) contracts.BehaviorRegistry {
 	return &testBehaviorRegistry{
-		byKey: map[string]types.Behavior{
+		byKey: map[string]contracts.Behavior{
 			"tree":      testTreeBehavior{},
 			"container": testPriorityOnlyBehavior{key: "container"},
 			"player":    testPriorityOnlyBehavior{key: "player"},

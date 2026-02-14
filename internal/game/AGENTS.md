@@ -182,7 +182,7 @@ Key configuration parameters:
 ## Object Behavior Runtime Notes
 
 - `ObjectBehaviorSystem` is dirty-queue driven (no global per-tick scan in normal mode).
-- Unified behavior contracts are defined in `internal/types/behavior.go`.
+- Unified behavior contracts are defined in `internal/game/behaviors/contracts/behavior.go`.
 - Unified behavior registry is `internal/game/behaviors.DefaultRegistry()`.
 - Fail-fast checks run at registry build time (missing execute/cyclic capabilities for declared actions are startup errors).
 - Lifecycle init hooks run for `spawn`, `restore`, and `transform` object flows.

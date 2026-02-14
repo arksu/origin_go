@@ -9,7 +9,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
-	"origin/internal/game/behaviors"
+	"origin/internal/game/behaviors/contracts"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -40,8 +40,8 @@ type ContextActionService struct {
 	alerts           miniAlertSender
 	cyclicOut        cyclicActionFinishSender
 	soundEvents      *SoundEventService
-	behaviorRegistry types.BehaviorRegistry
-	actionDeps       behaviors.ActionExecutionDeps
+	behaviorRegistry contracts.BehaviorRegistry
+	actionDeps       contracts.ExecutionDeps
 }
 
 func NewContextActionService(
@@ -50,17 +50,17 @@ func NewContextActionService(
 	openSvc systems.OpenContainerCoordinator,
 	alerts miniAlertSender,
 	cyclicOut cyclicActionFinishSender,
-	vision behaviors.VisionUpdateForcer,
-	chunks behaviors.TreeChunkProvider,
-	idAlloc behaviors.EntityIDAllocator,
-	behaviorRegistry types.BehaviorRegistry,
+	vision contracts.VisionUpdateForcer,
+	chunks contracts.TreeChunkProvider,
+	idAlloc contracts.EntityIDAllocator,
+	behaviorRegistry contracts.BehaviorRegistry,
 	logger *zap.Logger,
 ) *ContextActionService {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	if behaviorRegistry == nil {
-		behaviorRegistry = behaviors.MustDefaultRegistry()
+		panic("context action service requires non-nil behavior registry")
 	}
 
 	s := &ContextActionService{
@@ -70,8 +70,25 @@ func NewContextActionService(
 		cyclicOut:        cyclicOut,
 		soundEvents:      NewSoundEventService(nil, logger),
 		behaviorRegistry: behaviorRegistry,
-		actionDeps: behaviors.ActionExecutionDeps{
-			OpenService:      openSvc,
+		actionDeps: contracts.ExecutionDeps{
+			OpenContainer: func(
+				w *ecs.World,
+				playerID types.EntityID,
+				playerHandle types.Handle,
+				ref *netproto.InventoryRef,
+			) *contracts.OpenContainerError {
+				if openSvc == nil {
+					return nil
+				}
+				openErr := openSvc.HandleOpenRequest(w, playerID, playerHandle, ref)
+				if openErr == nil {
+					return nil
+				}
+				return &contracts.OpenContainerError{
+					Code:    openErr.Code,
+					Message: openErr.Message,
+				}
+			},
 			EventBus:         eventBus,
 			Chunks:           chunks,
 			IDAllocator:      idAlloc,
@@ -125,18 +142,18 @@ func (s *ContextActionService) ComputeActions(
 		if !found {
 			continue
 		}
-		provider, ok := behavior.(types.ContextActionProvider)
+		provider, ok := behavior.(contracts.ContextActionProvider)
 		if !ok {
 			continue
 		}
 
-		behaviorActions := provider.ProvideActions(&types.BehaviorActionListContext{
+		behaviorActions := provider.ProvideActions(&contracts.BehaviorActionListContext{
 			World:        w,
 			PlayerID:     playerID,
 			PlayerHandle: playerHandle,
 			TargetID:     targetID,
 			TargetHandle: targetHandle,
-			Extra:        &s.actionDeps,
+			Deps:         &s.actionDeps,
 		})
 		for _, action := range behaviorActions {
 			if action.ActionID == "" {
@@ -177,16 +194,16 @@ func (s *ContextActionService) ExecuteAction(
 		return false
 	}
 
-	if validator, hasValidator := behavior.(types.ContextActionValidator); hasValidator {
-		validation := validator.ValidateAction(&types.BehaviorActionValidateContext{
+	if validator, hasValidator := behavior.(contracts.ContextActionValidator); hasValidator {
+		validation := validator.ValidateAction(&contracts.BehaviorActionValidateContext{
 			World:        w,
 			PlayerID:     playerID,
 			PlayerHandle: playerHandle,
 			TargetID:     targetID,
 			TargetHandle: targetHandle,
 			ActionID:     actionID,
-			Phase:        types.BehaviorValidationPhaseExecute,
-			Extra:        &s.actionDeps,
+			Phase:        contracts.BehaviorValidationPhaseExecute,
+			Deps:         &s.actionDeps,
 		})
 		if !validation.OK {
 			if validation.UserVisible {
@@ -196,19 +213,19 @@ func (s *ContextActionService) ExecuteAction(
 		}
 	}
 
-	executor, ok := behavior.(types.ContextActionExecutor)
+	executor, ok := behavior.(contracts.ContextActionExecutor)
 	if !ok {
 		return false
 	}
 
-	result := executor.ExecuteAction(&types.BehaviorActionExecuteContext{
+	result := executor.ExecuteAction(&contracts.BehaviorActionExecuteContext{
 		World:        w,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
 		TargetID:     targetID,
 		TargetHandle: targetHandle,
 		ActionID:     actionID,
-		Extra:        &s.actionDeps,
+		Deps:         &s.actionDeps,
 	})
 	if result.OK || !result.UserVisible {
 		return true
@@ -233,7 +250,7 @@ func (s *ContextActionService) resolveBehaviorForAction(
 	targetID types.EntityID,
 	targetHandle types.Handle,
 	actionID string,
-) (types.Behavior, bool) {
+) (contracts.Behavior, bool) {
 	if actionID == "" || s.behaviorRegistry == nil {
 		return nil, false
 	}
@@ -243,17 +260,17 @@ func (s *ContextActionService) resolveBehaviorForAction(
 		if !found {
 			continue
 		}
-		provider, ok := behavior.(types.ContextActionProvider)
+		provider, ok := behavior.(contracts.ContextActionProvider)
 		if !ok {
 			continue
 		}
-		for _, action := range provider.ProvideActions(&types.BehaviorActionListContext{
+		for _, action := range provider.ProvideActions(&contracts.BehaviorActionListContext{
 			World:        w,
 			PlayerID:     playerID,
 			PlayerHandle: playerHandle,
 			TargetID:     targetID,
 			TargetHandle: targetHandle,
-			Extra:        &s.actionDeps,
+			Deps:         &s.actionDeps,
 		}) {
 			if action.ActionID == actionID {
 				return behavior, true
@@ -323,19 +340,19 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
-) types.BehaviorCycleDecision {
+) contracts.BehaviorCycleDecision {
 	if action.BehaviorKey == "" || s.behaviorRegistry == nil {
-		return types.BehaviorCycleDecisionCanceled
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 
 	behavior, found := s.behaviorRegistry.GetBehavior(action.BehaviorKey)
 	if !found {
-		return types.BehaviorCycleDecisionCanceled
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	cyclicHandler, ok := behavior.(types.CyclicActionHandler)
+	cyclicHandler, ok := behavior.(contracts.CyclicActionHandler)
 	if !ok {
-		return types.BehaviorCycleDecisionCanceled
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 
 	targetHandle := action.TargetHandle
@@ -343,7 +360,7 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 		targetHandle = w.GetHandleByEntityID(action.TargetID)
 	}
 
-	return cyclicHandler.OnCycleComplete(&types.BehaviorCycleContext{
+	return cyclicHandler.OnCycleComplete(&contracts.BehaviorCycleContext{
 		World:        w,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
@@ -351,7 +368,7 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 		TargetHandle: targetHandle,
 		ActionID:     action.ActionID,
 		Action:       action,
-		Extra:        &s.actionDeps,
+		Deps:         &s.actionDeps,
 	})
 }
 
@@ -472,11 +489,11 @@ func ttlBySeverity(severity netproto.AlertSeverity) uint32 {
 	}
 }
 
-func mapBehaviorSeverity(severity types.BehaviorAlertSeverity) netproto.AlertSeverity {
+func mapBehaviorSeverity(severity contracts.BehaviorAlertSeverity) netproto.AlertSeverity {
 	switch severity {
-	case types.BehaviorAlertSeverityError:
+	case contracts.BehaviorAlertSeverityError:
 		return netproto.AlertSeverity_ALERT_SEVERITY_ERROR
-	case types.BehaviorAlertSeverityWarning:
+	case contracts.BehaviorAlertSeverityWarning:
 		return netproto.AlertSeverity_ALERT_SEVERITY_WARNING
 	default:
 		return netproto.AlertSeverity_ALERT_SEVERITY_INFO

@@ -16,6 +16,7 @@ import (
 	"origin/internal/ecs"
 	ecssystems "origin/internal/ecs/systems"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 
@@ -102,7 +103,7 @@ type ChunkManager struct {
 	layer            int
 	region           int
 	objectFactory    *ObjectFactory
-	behaviorRegistry types.BehaviorRegistry
+	behaviorRegistry contracts.BehaviorRegistry
 	logger           *zap.Logger
 
 	chunks   map[types.ChunkCoord]*core.Chunk
@@ -149,7 +150,7 @@ func NewChunkManager(
 	layer int,
 	region int,
 	objectFactory *ObjectFactory,
-	behaviorRegistry types.BehaviorRegistry,
+	behaviorRegistry contracts.BehaviorRegistry,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
 ) *ChunkManager {
@@ -905,12 +906,12 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		isStatic := cm.objectFactory.IsStatic(raw)
 		if info, hasInfo := ecs.GetComponent[components.EntityInfo](cm.world, h); hasInfo && len(info.Behaviors) > 0 {
 			if cm.behaviorRegistry != nil {
-				if initErr := cm.behaviorRegistry.InitObjectBehaviors(&types.BehaviorObjectInitContext{
+				if initErr := cm.behaviorRegistry.InitObjectBehaviors(&contracts.BehaviorObjectInitContext{
 					World:      cm.world,
 					Handle:     h,
 					EntityID:   types.EntityID(raw.ID),
 					EntityType: info.TypeID,
-					Reason:     types.ObjectBehaviorInitReasonRestore,
+					Reason:     contracts.ObjectBehaviorInitReasonRestore,
 				}, info.Behaviors); initErr != nil {
 					cm.logger.Warn("failed to init restored object behaviors",
 						zap.Int64("object_id", raw.ID),

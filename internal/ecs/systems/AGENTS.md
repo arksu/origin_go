@@ -234,9 +234,9 @@ ChunkSystem (400)
 - `Appearance.Resource` (with appearance-changed event)
 
 **Registry/Contract**:
-- Behavior contracts are defined in `internal/types/behavior.go`.
+- Behavior contracts are defined in `internal/game/behaviors/contracts/behavior.go`.
 - Runtime implementations live in `internal/game/behaviors`.
-- System wiring receives unified `types.BehaviorRegistry` through `ObjectBehaviorConfig.BehaviorRegistry`.
+- System wiring receives unified `contracts.BehaviorRegistry` through `ObjectBehaviorConfig.BehaviorRegistry`.
 - Registry is fail-fast validated on startup (invalid action/cyclic capabilities do not boot).
 
 **Execution Model (important)**:
