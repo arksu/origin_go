@@ -45,6 +45,7 @@ type ChatAdminCommandHandler struct {
 	inventoryExecutor     *inventory.InventoryExecutor
 	inventoryResultSender systems.InventoryResultSender
 	chatDelivery          systems.ChatDeliveryService
+	alertSender           AdminAlertSender
 	entityIDAllocator     inventory.EntityIDAllocator
 	chunkProvider         AdminSpawnChunkProvider
 	visionForcer          AdminVisionForcer
@@ -53,10 +54,17 @@ type ChatAdminCommandHandler struct {
 	logger                *zap.Logger
 }
 
+// AdminAlertSender sends direct error/warning packets to a single player.
+type AdminAlertSender interface {
+	SendError(entityID types.EntityID, errorCode netproto.ErrorCode, message string)
+	SendWarning(entityID types.EntityID, warningCode netproto.WarningCode, message string)
+}
+
 func NewChatAdminCommandHandler(
 	inventoryExecutor *inventory.InventoryExecutor,
 	inventoryResultSender systems.InventoryResultSender,
 	chatDelivery systems.ChatDeliveryService,
+	alertSender AdminAlertSender,
 	entityIDAllocator inventory.EntityIDAllocator,
 	chunkProvider AdminSpawnChunkProvider,
 	visionForcer AdminVisionForcer,
@@ -68,6 +76,7 @@ func NewChatAdminCommandHandler(
 		inventoryExecutor:     inventoryExecutor,
 		inventoryResultSender: inventoryResultSender,
 		chatDelivery:          chatDelivery,
+		alertSender:           alertSender,
 		entityIDAllocator:     entityIDAllocator,
 		chunkProvider:         chunkProvider,
 		visionForcer:          visionForcer,
@@ -99,6 +108,12 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 		return true
 	case "/online":
 		h.handleOnline(w, playerID)
+		return true
+	case "/error":
+		h.handleError(playerID, parts[1:])
+		return true
+	case "/warn":
+		h.handleWarn(playerID, parts[1:])
 		return true
 	default:
 		return false
@@ -325,6 +340,42 @@ func (h *ChatAdminCommandHandler) handleOnline(
 	h.logger.Info("Admin /online executed",
 		zap.Uint64("player_id", uint64(playerID)),
 		zap.Int("online_count", onlineCount))
+}
+
+// handleError processes: /error <text>
+func (h *ChatAdminCommandHandler) handleError(playerID types.EntityID, args []string) {
+	if len(args) == 0 {
+		h.sendSystemMessage(playerID, "usage: /error <text>")
+		return
+	}
+	if h.alertSender == nil {
+		h.sendSystemMessage(playerID, "error sender unavailable")
+		return
+	}
+
+	message := strings.Join(args, " ")
+	h.alertSender.SendError(playerID, netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, message)
+	h.logger.Info("Admin /error executed",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.String("message", message))
+}
+
+// handleWarn processes: /warn <text>
+func (h *ChatAdminCommandHandler) handleWarn(playerID types.EntityID, args []string) {
+	if len(args) == 0 {
+		h.sendSystemMessage(playerID, "usage: /warn <text>")
+		return
+	}
+	if h.alertSender == nil {
+		h.sendSystemMessage(playerID, "warning sender unavailable")
+		return
+	}
+
+	message := strings.Join(args, " ")
+	h.alertSender.SendWarning(playerID, netproto.WarningCode_WARN_INPUT_QUEUE_OVERFLOW, message)
+	h.logger.Info("Admin /warn executed",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.String("message", message))
 }
 
 // findActiveChunkForPoint returns the active chunk containing the given world point,

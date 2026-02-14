@@ -343,9 +343,25 @@ export function registerMessageHandlers(): void {
 
   messageDispatcher.on('error', (msg: proto.IS2C_Error) => {
     console.error('[Game] Server error:', msg.code, msg.message)
+    const code = String(msg.code ?? '').trim()
+    const message = (msg.message || '').trim()
+    gameStore.pushMiniAlert({
+      reasonCode: code || message || 'SERVER_ERROR',
+      message: message || undefined,
+      severity: proto.AlertSeverity.ALERT_SEVERITY_ERROR,
+      ttlMs: 0,
+    })
   })
 
   messageDispatcher.on('warning', (msg: proto.IS2C_Warning) => {
     console.warn('[Game] Server warning:', msg.code, msg.message)
+    const code = String(msg.code ?? '').trim()
+    const message = (msg.message || '').trim()
+    gameStore.pushMiniAlert({
+      reasonCode: code || message || 'SERVER_WARNING',
+      message: message || undefined,
+      severity: proto.AlertSeverity.ALERT_SEVERITY_WARNING,
+      ttlMs: 0,
+    })
   })
 }

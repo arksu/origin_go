@@ -62,6 +62,7 @@ export interface ContextMenuState {
 
 export interface MiniAlertInput {
   reasonCode: string
+  message?: string
   severity: proto.AlertSeverity
   ttlMs: number
 }
@@ -425,6 +426,7 @@ export const useGameStore = defineStore('game', () => {
     if (!reasonCode) return
 
     const now = Date.now()
+    const message = input.message?.trim() || formatReasonCode(reasonCode)
     const playerPart = playerEntityId.value ?? 0
     const debounceKey = `${playerPart}:${reasonCode}`
     const existingIndex = miniAlerts.value.findIndex((alert) => alert.debounceKey === debounceKey)
@@ -438,7 +440,7 @@ export const useGameStore = defineStore('game', () => {
         debounceKey: existing.debounceKey,
         severity: input.severity,
         reasonCode,
-        message: formatReasonCode(reasonCode),
+        message,
         createdAt: now,
         expiresAt: now + ttlMs,
       }
@@ -464,7 +466,7 @@ export const useGameStore = defineStore('game', () => {
       id: `${now}-${Math.random().toString(16).slice(2)}`,
       debounceKey,
       reasonCode,
-      message: formatReasonCode(reasonCode),
+      message,
       severity: input.severity,
       createdAt: now,
       expiresAt: now + ttlMs,
