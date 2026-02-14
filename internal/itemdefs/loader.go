@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -165,6 +166,14 @@ func validateItem(item *ItemDef, filePath string) error {
 			FilePath: filePath,
 			DefID:    item.DefID,
 			Message:  "key is required",
+		}
+	}
+	if strings.TrimSpace(item.Name) == "" {
+		return &LoadError{
+			FilePath: filePath,
+			DefID:    item.DefID,
+			Key:      item.Key,
+			Message:  "name is required",
 		}
 	}
 

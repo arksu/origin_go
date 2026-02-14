@@ -71,6 +71,7 @@ type InventoryContainerState struct {
 	Kind    uint8
 	Key     uint32
 	Version uint64
+	Title   string
 	Width   uint8
 	Height  uint8
 	Items   []InventoryItemState

@@ -8,6 +8,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
+	"origin/internal/game/inventory"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -500,6 +501,7 @@ func buildInventoryStateFromContainer(w *ecs.World, container components.Invento
 
 	switch container.Kind {
 	case constt.InventoryGrid:
+		invState.Title = inventory.MustResolveGridInventoryTitle(w, container.OwnerID)
 		gridItems := make([]*netproto.GridItem, 0, len(container.Items))
 		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 		for _, item := range container.Items {

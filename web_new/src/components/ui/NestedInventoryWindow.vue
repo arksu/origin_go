@@ -86,10 +86,13 @@ const getWindowId = () => {
   return inventoryRef.value?.ownerId ? Number(inventoryRef.value.ownerId) : 0
 }
 
-const getWindowTitle = () => {
-  const ownerId = inventoryRef.value?.ownerId ? Number(inventoryRef.value.ownerId) : 0
-  return `Container ${ownerId}`
-}
+const windowTitle = computed(() => {
+  const title = (props.inventoryState.title || '').trim()
+  if (!title) {
+    throw new Error('NestedInventoryWindow: missing title in InventoryState')
+  }
+  return title
+})
 </script>
 
 <template>
@@ -98,7 +101,7 @@ const getWindowTitle = () => {
     :id="getWindowId()"
     :inner-height="gridState.height! * 31"
     :inner-width="gridState.width! * 31"
-    :title="getWindowTitle()"
+    :title="windowTitle"
     @close="onClose"
   >
     <div v-for="y in gridState.height" :key="y">

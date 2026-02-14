@@ -1305,6 +1305,7 @@ type InventoryState struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Ref      *InventoryRef          `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 	Revision uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"` // монотонная ревизия контейнера
+	Title    string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`        // caption for GRID windows; must be non-empty for GRID states
 	// Types that are valid to be assigned to State:
 	//
 	//	*InventoryState_Grid
@@ -1357,6 +1358,13 @@ func (x *InventoryState) GetRevision() uint64 {
 		return x.Revision
 	}
 	return 0
+}
+
+func (x *InventoryState) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
 }
 
 func (x *InventoryState) GetState() isInventoryState_State {
@@ -4724,10 +4732,11 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x05items\x18\x01 \x03(\v2\x14.proto.EquipmentItemR\x05items\"h\n" +
 	"\x12InventoryHandState\x12'\n" +
 	"\x04item\x18\x01 \x01(\v2\x13.proto.ItemInstanceR\x04item\x12)\n" +
-	"\bhand_pos\x18\x02 \x01(\v2\x0e.proto.HandPosR\ahandPos\"\xfe\x01\n" +
+	"\bhand_pos\x18\x02 \x01(\v2\x0e.proto.HandPosR\ahandPos\"\x94\x02\n" +
 	"\x0eInventoryState\x12%\n" +
 	"\x03ref\x18\x01 \x01(\v2\x13.proto.InventoryRefR\x03ref\x12\x1a\n" +
-	"\brevision\x18\x02 \x01(\x04R\brevision\x12/\n" +
+	"\brevision\x18\x02 \x01(\x04R\brevision\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12/\n" +
 	"\x04grid\x18\n" +
 	" \x01(\v2\x19.proto.InventoryGridStateH\x00R\x04grid\x12>\n" +
 	"\tequipment\x18\v \x01(\v2\x1e.proto.InventoryEquipmentStateH\x00R\tequipment\x12/\n" +

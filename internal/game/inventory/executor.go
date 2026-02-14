@@ -376,6 +376,9 @@ func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *Containe
 		HandMouseOffsetX: info.Container.HandMouseOffsetX,
 		HandMouseOffsetY: info.Container.HandMouseOffsetY,
 	}
+	if info.Container.Kind == constt.InventoryGrid {
+		state.Title = MustResolveGridInventoryTitle(w, info.Container.OwnerID)
+	}
 
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	for _, item := range info.Container.Items {
