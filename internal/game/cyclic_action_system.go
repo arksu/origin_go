@@ -3,6 +3,7 @@ package game
 import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -112,14 +113,14 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 
 		decision := s.contextActions.handleCyclicCycleComplete(w, playerID, playerHandle, action)
 		switch decision {
-		case types.BehaviorCycleDecisionContinue:
+		case contracts.BehaviorCycleDecisionContinue:
 			ecs.WithComponent(w, playerHandle, func(active *components.ActiveCyclicAction) {
 				active.CycleElapsedTicks = 0
 				active.CycleIndex++
 				active.StartedTick = nowTick
 			})
-		case types.BehaviorCycleDecisionComplete, types.BehaviorCycleDecisionCanceled:
-			if decision == types.BehaviorCycleDecisionComplete {
+		case contracts.BehaviorCycleDecisionComplete, contracts.BehaviorCycleDecisionCanceled:
+			if decision == contracts.BehaviorCycleDecisionComplete {
 				s.contextActions.completeActiveCyclicAction(playerID, playerHandle)
 				continue
 			}

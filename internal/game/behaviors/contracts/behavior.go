@@ -1,6 +1,17 @@
-package types
+package contracts
 
-import "fmt"
+import (
+	"fmt"
+
+	"origin/internal/core"
+	"origin/internal/ecs"
+	"origin/internal/ecs/components"
+	"origin/internal/eventbus"
+	netproto "origin/internal/network/proto"
+	"origin/internal/types"
+
+	"go.uber.org/zap"
+)
 
 // ContextAction describes one selectable object action for context menu.
 type ContextAction struct {
@@ -13,11 +24,30 @@ type Behavior interface {
 	Key() string
 }
 
+// TreeBehaviorConfig contains tree-specific validated behavior config data.
+type TreeBehaviorConfig struct {
+	Priority               int    `json:"priority,omitempty"`
+	ChopPointsTotal        int    `json:"chopPointsTotal"`
+	ChopCycleDurationTicks int    `json:"chopCycleDurationTicks"`
+	ActionSound            string `json:"action_sound,omitempty"`
+	FinishSound            string `json:"finish_sound,omitempty"`
+	LogsSpawnDefKey        string `json:"logsSpawnDefKey"`
+	LogsSpawnCount         int    `json:"logsSpawnCount"`
+	LogsSpawnInitialOffset int    `json:"logsSpawnInitialOffset"`
+	LogsSpawnStepOffset    int    `json:"logsSpawnStepOffset"`
+	TransformToDefKey      string `json:"transformToDefKey"`
+}
+
+// BehaviorDefConfigTarget receives validated behavior config mutations.
+type BehaviorDefConfigTarget interface {
+	SetTreeBehaviorConfig(cfg TreeBehaviorConfig)
+}
+
 // BehaviorDefConfigContext is object-definition behavior config input.
 type BehaviorDefConfigContext struct {
 	BehaviorKey string
 	RawConfig   []byte
-	Def         any
+	Def         BehaviorDefConfigTarget
 }
 
 // BehaviorDefConfigValidator validates behavior config in object definitions,
@@ -40,18 +70,18 @@ type BehaviorActionDeclarer interface {
 
 // BehaviorRuntimeResult is a runtime recompute output for object state/flags.
 type BehaviorRuntimeResult struct {
-	State    any
+	State    *components.RuntimeObjectState
 	HasState bool
 	Flags    []string
 }
 
 // BehaviorRuntimeContext contains runtime recompute data.
 type BehaviorRuntimeContext struct {
-	World      any
-	Handle     Handle
-	EntityID   EntityID
+	World      *ecs.World
+	Handle     types.Handle
+	EntityID   types.EntityID
 	EntityType uint32
-	PrevState  any
+	PrevState  *components.RuntimeObjectState
 	PrevFlags  []string
 }
 
@@ -60,14 +90,54 @@ type RuntimeBehavior interface {
 	ApplyRuntime(ctx *BehaviorRuntimeContext) BehaviorRuntimeResult
 }
 
+// OpenContainerError is a behavior-layer container open failure payload.
+type OpenContainerError struct {
+	Code    netproto.ErrorCode
+	Message string
+}
+
+// OpenContainerFn opens a container for the given player and ref.
+type OpenContainerFn func(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	ref *netproto.InventoryRef,
+) *OpenContainerError
+
+// TreeChunkProvider resolves chunks for tree behavior spawn/transform flow.
+type TreeChunkProvider interface {
+	GetChunkFast(coord types.ChunkCoord) *core.Chunk
+}
+
+// EntityIDAllocator allocates new entity IDs.
+type EntityIDAllocator interface {
+	GetFreeID() types.EntityID
+}
+
+// VisionUpdateForcer forces observer vision refresh.
+type VisionUpdateForcer interface {
+	ForceUpdateForObserver(w *ecs.World, observerHandle types.Handle)
+}
+
+// ExecutionDeps contains shared dependencies for context action execution.
+type ExecutionDeps struct {
+	OpenContainer    OpenContainerFn
+	EventBus         *eventbus.EventBus
+	Chunks           TreeChunkProvider
+	IDAllocator      EntityIDAllocator
+	VisionForcer     VisionUpdateForcer
+	BehaviorRegistry BehaviorRegistry
+	Logger           *zap.Logger
+}
+
 // BehaviorActionListContext is used to compute context actions.
 type BehaviorActionListContext struct {
-	World        any
-	PlayerID     EntityID
-	PlayerHandle Handle
-	TargetID     EntityID
-	TargetHandle Handle
-	Extra        any
+	World        *ecs.World
+	PlayerID     types.EntityID
+	PlayerHandle types.Handle
+	TargetID     types.EntityID
+	TargetHandle types.Handle
+	Deps         *ExecutionDeps
 }
 
 // ContextActionProvider provides context menu actions.
@@ -103,14 +173,14 @@ type BehaviorResult struct {
 
 // BehaviorActionValidateContext is used before action execution.
 type BehaviorActionValidateContext struct {
-	World        any
-	PlayerID     EntityID
-	PlayerHandle Handle
-	TargetID     EntityID
-	TargetHandle Handle
+	World        *ecs.World
+	PlayerID     types.EntityID
+	PlayerHandle types.Handle
+	TargetID     types.EntityID
+	TargetHandle types.Handle
 	ActionID     string
 	Phase        BehaviorValidationPhase
-	Extra        any
+	Deps         *ExecutionDeps
 }
 
 // ContextActionValidator validates one action id for preview/execute phase.
@@ -120,13 +190,13 @@ type ContextActionValidator interface {
 
 // BehaviorActionExecuteContext is used to execute one action id.
 type BehaviorActionExecuteContext struct {
-	World        any
-	PlayerID     EntityID
-	PlayerHandle Handle
-	TargetID     EntityID
-	TargetHandle Handle
+	World        *ecs.World
+	PlayerID     types.EntityID
+	PlayerHandle types.Handle
+	TargetID     types.EntityID
+	TargetHandle types.Handle
 	ActionID     string
-	Extra        any
+	Deps         *ExecutionDeps
 }
 
 // ContextActionExecutor executes one context action.
@@ -145,14 +215,14 @@ const (
 
 // BehaviorCycleContext contains cyclic action cycle completion data.
 type BehaviorCycleContext struct {
-	World        any
-	PlayerID     EntityID
-	PlayerHandle Handle
-	TargetID     EntityID
-	TargetHandle Handle
+	World        *ecs.World
+	PlayerID     types.EntityID
+	PlayerHandle types.Handle
+	TargetID     types.EntityID
+	TargetHandle types.Handle
 	ActionID     string
-	Action       any
-	Extra        any
+	Action       components.ActiveCyclicAction
+	Deps         *ExecutionDeps
 }
 
 // CyclicActionHandler handles cyclic cycle completion for behavior.
@@ -171,13 +241,12 @@ const (
 
 // BehaviorObjectInitContext contains data for behavior state initialization.
 type BehaviorObjectInitContext struct {
-	World        any
-	Handle       Handle
-	EntityID     EntityID
+	World        *ecs.World
+	Handle       types.Handle
+	EntityID     types.EntityID
 	EntityType   uint32
 	Reason       ObjectBehaviorInitReason
 	PreviousType uint32
-	Extra        any
 }
 
 // ObjectLifecycleInitializer initializes behavior state for object lifecycle.

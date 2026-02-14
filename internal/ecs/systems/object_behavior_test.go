@@ -8,15 +8,16 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
 
 type testRuntimeBehaviorRegistry struct {
-	byKey map[string]types.Behavior
+	byKey map[string]contracts.Behavior
 }
 
-func (r *testRuntimeBehaviorRegistry) GetBehavior(key string) (types.Behavior, bool) {
+func (r *testRuntimeBehaviorRegistry) GetBehavior(key string) (contracts.Behavior, bool) {
 	behavior, ok := r.byKey[key]
 	return behavior, ok
 }
@@ -43,7 +44,7 @@ func (r *testRuntimeBehaviorRegistry) ValidateBehaviorKeys(keys []string) error 
 	return nil
 }
 
-func (r *testRuntimeBehaviorRegistry) InitObjectBehaviors(_ *types.BehaviorObjectInitContext, _ []string) error {
+func (r *testRuntimeBehaviorRegistry) InitObjectBehaviors(_ *contracts.BehaviorObjectInitContext, _ []string) error {
 	return nil
 }
 
@@ -51,21 +52,20 @@ type testContainerRuntimeBehavior struct{}
 
 func (testContainerRuntimeBehavior) Key() string { return "container" }
 
-func (testContainerRuntimeBehavior) ApplyRuntime(ctx *types.BehaviorRuntimeContext) types.BehaviorRuntimeResult {
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
-		return types.BehaviorRuntimeResult{}
+func (testContainerRuntimeBehavior) ApplyRuntime(ctx *contracts.BehaviorRuntimeContext) contracts.BehaviorRuntimeResult {
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorRuntimeResult{}
 	}
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](world)
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](ctx.World)
 	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, ctx.EntityID, 0)
-	if !found || !world.Alive(rootHandle) {
-		return types.BehaviorRuntimeResult{}
+	if !found || !ctx.World.Alive(rootHandle) {
+		return contracts.BehaviorRuntimeResult{}
 	}
-	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](world, rootHandle)
+	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](ctx.World, rootHandle)
 	if !hasContainer || len(rootContainer.Items) == 0 {
-		return types.BehaviorRuntimeResult{}
+		return contracts.BehaviorRuntimeResult{}
 	}
-	return types.BehaviorRuntimeResult{
+	return contracts.BehaviorRuntimeResult{
 		Flags: []string{"container.has_items"},
 	}
 }
@@ -94,7 +94,7 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 
 	w := ecs.NewWorldForTesting()
 	behaviorRegistry := &testRuntimeBehaviorRegistry{
-		byKey: map[string]types.Behavior{
+		byKey: map[string]contracts.Behavior{
 			"container": testContainerRuntimeBehavior{},
 		},
 	}

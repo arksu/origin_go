@@ -3,59 +3,59 @@ package behaviors
 import (
 	"testing"
 
-	"origin/internal/types"
+	"origin/internal/game/behaviors/contracts"
 )
 
 type testBehaviorProviderNoExecutor struct{}
 
 func (testBehaviorProviderNoExecutor) Key() string { return "invalid_provider_only" }
-func (testBehaviorProviderNoExecutor) ValidateAndApplyDefConfig(*types.BehaviorDefConfigContext) (int, error) {
+func (testBehaviorProviderNoExecutor) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
 }
-func (testBehaviorProviderNoExecutor) DeclaredActions() []types.BehaviorActionSpec {
-	return []types.BehaviorActionSpec{{ActionID: "x"}}
+func (testBehaviorProviderNoExecutor) DeclaredActions() []contracts.BehaviorActionSpec {
+	return []contracts.BehaviorActionSpec{{ActionID: "x"}}
 }
-func (testBehaviorProviderNoExecutor) ProvideActions(*types.BehaviorActionListContext) []types.ContextAction {
-	return []types.ContextAction{{ActionID: "x", Title: "X"}}
+func (testBehaviorProviderNoExecutor) ProvideActions(*contracts.BehaviorActionListContext) []contracts.ContextAction {
+	return []contracts.ContextAction{{ActionID: "x", Title: "X"}}
 }
 
 type testBehaviorDeclaredNoExecutor struct{}
 
 func (testBehaviorDeclaredNoExecutor) Key() string { return "invalid_declared_only" }
-func (testBehaviorDeclaredNoExecutor) ValidateAndApplyDefConfig(*types.BehaviorDefConfigContext) (int, error) {
+func (testBehaviorDeclaredNoExecutor) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
 }
-func (testBehaviorDeclaredNoExecutor) DeclaredActions() []types.BehaviorActionSpec {
-	return []types.BehaviorActionSpec{{ActionID: "x"}}
+func (testBehaviorDeclaredNoExecutor) DeclaredActions() []contracts.BehaviorActionSpec {
+	return []contracts.BehaviorActionSpec{{ActionID: "x"}}
 }
 
 type testBehaviorCyclicDeclaredNoHandler struct{}
 
 func (testBehaviorCyclicDeclaredNoHandler) Key() string { return "invalid_cyclic_declared" }
-func (testBehaviorCyclicDeclaredNoHandler) ValidateAndApplyDefConfig(*types.BehaviorDefConfigContext) (int, error) {
+func (testBehaviorCyclicDeclaredNoHandler) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
 }
-func (testBehaviorCyclicDeclaredNoHandler) DeclaredActions() []types.BehaviorActionSpec {
-	return []types.BehaviorActionSpec{{ActionID: "x", StartsCyclic: true}}
+func (testBehaviorCyclicDeclaredNoHandler) DeclaredActions() []contracts.BehaviorActionSpec {
+	return []contracts.BehaviorActionSpec{{ActionID: "x", StartsCyclic: true}}
 }
-func (testBehaviorCyclicDeclaredNoHandler) ExecuteAction(*types.BehaviorActionExecuteContext) types.BehaviorResult {
-	return types.BehaviorResult{OK: true}
+func (testBehaviorCyclicDeclaredNoHandler) ExecuteAction(*contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
+	return contracts.BehaviorResult{OK: true}
 }
 
 type testBehaviorValidActionAndCycle struct{}
 
 func (testBehaviorValidActionAndCycle) Key() string { return "valid_action_cyclic" }
-func (testBehaviorValidActionAndCycle) ValidateAndApplyDefConfig(*types.BehaviorDefConfigContext) (int, error) {
+func (testBehaviorValidActionAndCycle) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
 }
-func (testBehaviorValidActionAndCycle) DeclaredActions() []types.BehaviorActionSpec {
-	return []types.BehaviorActionSpec{{ActionID: "x", StartsCyclic: true}}
+func (testBehaviorValidActionAndCycle) DeclaredActions() []contracts.BehaviorActionSpec {
+	return []contracts.BehaviorActionSpec{{ActionID: "x", StartsCyclic: true}}
 }
-func (testBehaviorValidActionAndCycle) ExecuteAction(*types.BehaviorActionExecuteContext) types.BehaviorResult {
-	return types.BehaviorResult{OK: true}
+func (testBehaviorValidActionAndCycle) ExecuteAction(*contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
+	return contracts.BehaviorResult{OK: true}
 }
-func (testBehaviorValidActionAndCycle) OnCycleComplete(*types.BehaviorCycleContext) types.BehaviorCycleDecision {
-	return types.BehaviorCycleDecisionComplete
+func (testBehaviorValidActionAndCycle) OnCycleComplete(*contracts.BehaviorCycleContext) contracts.BehaviorCycleDecision {
+	return contracts.BehaviorCycleDecisionComplete
 }
 
 func TestNewRegistry_FailFast_WhenProviderMissingExecutor(t *testing.T) {

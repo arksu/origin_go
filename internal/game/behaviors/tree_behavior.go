@@ -9,6 +9,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -22,17 +23,12 @@ type treeBehavior struct{}
 
 func (treeBehavior) Key() string { return "tree" }
 
-func (treeBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContext) (int, error) {
+func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
 	if ctx == nil {
 		return 0, fmt.Errorf("tree def config context is nil")
 	}
 
-	def, ok := ctx.Def.(*objectdefs.ObjectDef)
-	if !ok || def == nil {
-		return 0, fmt.Errorf("tree config target def must be *objectdefs.ObjectDef")
-	}
-
-	var cfg objectdefs.TreeBehaviorConfig
+	var cfg contracts.TreeBehaviorConfig
 	if err := decodeStrictJSON(ctx.RawConfig, &cfg); err != nil {
 		return 0, fmt.Errorf("invalid tree config: %w", err)
 	}
@@ -61,12 +57,15 @@ func (treeBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContex
 		return 0, fmt.Errorf("tree.transformToDefKey is required")
 	}
 
-	def.TreeConfig = &cfg
+	if ctx.Def == nil {
+		return 0, fmt.Errorf("tree config target def is nil")
+	}
+	ctx.Def.SetTreeBehaviorConfig(cfg)
 	return cfg.Priority, nil
 }
 
-func (treeBehavior) DeclaredActions() []types.BehaviorActionSpec {
-	return []types.BehaviorActionSpec{
+func (treeBehavior) DeclaredActions() []contracts.BehaviorActionSpec {
+	return []contracts.BehaviorActionSpec{
 		{
 			ActionID:     actionChop,
 			StartsCyclic: true,
@@ -74,15 +73,14 @@ func (treeBehavior) DeclaredActions() []types.BehaviorActionSpec {
 	}
 }
 
-func (treeBehavior) InitObject(ctx *types.BehaviorObjectInitContext) error {
+func (treeBehavior) InitObject(ctx *contracts.BehaviorObjectInitContext) error {
 	if ctx == nil {
 		return nil
 	}
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
+	if ctx.World == nil {
 		return nil
 	}
-	if ctx.Handle == types.InvalidHandle || !world.Alive(ctx.Handle) {
+	if ctx.Handle == types.InvalidHandle || !ctx.World.Alive(ctx.Handle) {
 		return nil
 	}
 
@@ -90,16 +88,15 @@ func (treeBehavior) InitObject(ctx *types.BehaviorObjectInitContext) error {
 	return nil
 }
 
-func (treeBehavior) ProvideActions(ctx *types.BehaviorActionListContext) []types.ContextAction {
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
+func (treeBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []contracts.ContextAction {
+	if ctx == nil || ctx.World == nil {
 		return nil
 	}
-	if ctx.TargetHandle == types.InvalidHandle || !world.Alive(ctx.TargetHandle) {
+	if ctx.TargetHandle == types.InvalidHandle || !ctx.World.Alive(ctx.TargetHandle) {
 		return nil
 	}
 
-	info, hasInfo := ecs.GetComponent[components.EntityInfo](world, ctx.TargetHandle)
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](ctx.World, ctx.TargetHandle)
 	if !hasInfo {
 		return nil
 	}
@@ -108,7 +105,7 @@ func (treeBehavior) ProvideActions(ctx *types.BehaviorActionListContext) []types
 		return nil
 	}
 
-	return []types.ContextAction{
+	return []contracts.ContextAction{
 		{
 			ActionID: actionChop,
 			Title:    "Chop",
@@ -116,75 +113,65 @@ func (treeBehavior) ProvideActions(ctx *types.BehaviorActionListContext) []types
 	}
 }
 
-func (treeBehavior) ValidateAction(ctx *types.BehaviorActionValidateContext) types.BehaviorResult {
+func (treeBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext) contracts.BehaviorResult {
 	if ctx.ActionID != actionChop {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
-		return types.BehaviorResult{OK: false}
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorResult{OK: false}
 	}
-	if ctx.PlayerHandle == types.InvalidHandle || !world.Alive(ctx.PlayerHandle) {
-		return types.BehaviorResult{OK: false}
+	if ctx.PlayerHandle == types.InvalidHandle || !ctx.World.Alive(ctx.PlayerHandle) {
+		return contracts.BehaviorResult{OK: false}
 	}
-	if ctx.TargetHandle == types.InvalidHandle || !world.Alive(ctx.TargetHandle) {
-		return types.BehaviorResult{OK: false}
+	if ctx.TargetHandle == types.InvalidHandle || !ctx.World.Alive(ctx.TargetHandle) {
+		return contracts.BehaviorResult{OK: false}
 	}
-	targetInfo, hasInfo := ecs.GetComponent[components.EntityInfo](world, ctx.TargetHandle)
+	targetInfo, hasInfo := ecs.GetComponent[components.EntityInfo](ctx.World, ctx.TargetHandle)
 	if !hasInfo {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
 	targetDef, found := objectdefs.Global().GetByID(int(targetInfo.TypeID))
 	if !found || targetDef.TreeConfig == nil {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
-	if ctx.Phase == types.BehaviorValidationPhaseExecute {
-		if _, exists := ecs.GetComponent[components.ActiveCyclicAction](world, ctx.PlayerHandle); exists {
-			return types.BehaviorResult{
+	if ctx.Phase == contracts.BehaviorValidationPhaseExecute {
+		if _, exists := ecs.GetComponent[components.ActiveCyclicAction](ctx.World, ctx.PlayerHandle); exists {
+			return contracts.BehaviorResult{
 				OK:          false,
 				UserVisible: true,
 				ReasonCode:  "action_already_active",
-				Severity:    types.BehaviorAlertSeverityWarning,
+				Severity:    contracts.BehaviorAlertSeverityWarning,
 			}
 		}
 	}
-	return types.BehaviorResult{OK: true}
+	return contracts.BehaviorResult{OK: true}
 }
 
-func (treeBehavior) ExecuteAction(ctx *types.BehaviorActionExecuteContext) types.BehaviorResult {
+func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
 	if ctx.ActionID != actionChop {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil {
-		return types.BehaviorResult{OK: false}
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorResult{OK: false}
 	}
-	if ctx.PlayerHandle == types.InvalidHandle || !world.Alive(ctx.PlayerHandle) {
-		return types.BehaviorResult{OK: false}
+	if ctx.PlayerHandle == types.InvalidHandle || !ctx.World.Alive(ctx.PlayerHandle) {
+		return contracts.BehaviorResult{OK: false}
 	}
-	if ctx.TargetHandle == types.InvalidHandle || !world.Alive(ctx.TargetHandle) {
-		return types.BehaviorResult{OK: false}
-	}
-	if _, exists := ecs.GetComponent[components.ActiveCyclicAction](world, ctx.PlayerHandle); exists {
-		return types.BehaviorResult{
-			OK:          false,
-			UserVisible: true,
-			ReasonCode:  "action_already_active",
-			Severity:    types.BehaviorAlertSeverityWarning,
-		}
+	if ctx.TargetHandle == types.InvalidHandle || !ctx.World.Alive(ctx.TargetHandle) {
+		return contracts.BehaviorResult{OK: false}
 	}
 
-	targetInfo, hasInfo := ecs.GetComponent[components.EntityInfo](world, ctx.TargetHandle)
+	targetInfo, hasInfo := ecs.GetComponent[components.EntityInfo](ctx.World, ctx.TargetHandle)
 	if !hasInfo {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
 	targetDef, found := objectdefs.Global().GetByID(int(targetInfo.TypeID))
 	if !found || targetDef.TreeConfig == nil {
-		return types.BehaviorResult{OK: false}
+		return contracts.BehaviorResult{OK: false}
 	}
 
 	// Init chop points on first chop.
-	ecs.WithComponent(world, ctx.TargetHandle, func(state *components.ObjectInternalState) {
+	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
 		treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, "tree")
 		if hasTree && treeState != nil && treeState.ChopPoints > 0 {
 			return
@@ -194,8 +181,8 @@ func (treeBehavior) ExecuteAction(ctx *types.BehaviorActionExecuteContext) types
 		})
 	})
 
-	nowTick := ecs.GetResource[ecs.TimeState](world).Tick
-	ecs.AddComponent(world, ctx.PlayerHandle, components.ActiveCyclicAction{
+	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
+	ecs.AddComponent(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
 		BehaviorKey:        "tree",
 		ActionID:           actionChop,
 		CycleSoundKey:      strings.TrimSpace(targetDef.TreeConfig.ActionSound),
@@ -209,33 +196,32 @@ func (treeBehavior) ExecuteAction(ctx *types.BehaviorActionExecuteContext) types
 		StartedTick:        nowTick,
 	})
 
-	ecs.MutateComponent[components.Movement](world, ctx.PlayerHandle, func(m *components.Movement) bool {
+	ecs.MutateComponent[components.Movement](ctx.World, ctx.PlayerHandle, func(m *components.Movement) bool {
 		m.State = constt.StateInteracting
 		return true
 	})
-	return types.BehaviorResult{OK: true}
+	return contracts.BehaviorResult{OK: true}
 }
 
-func (treeBehavior) OnCycleComplete(ctx *types.BehaviorCycleContext) types.BehaviorCycleDecision {
-	world, ok := ctx.World.(*ecs.World)
-	if !ok || world == nil || ctx.TargetHandle == types.InvalidHandle || !world.Alive(ctx.TargetHandle) {
-		return types.BehaviorCycleDecisionCanceled
+func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contracts.BehaviorCycleDecision {
+	if ctx == nil || ctx.World == nil || ctx.TargetHandle == types.InvalidHandle || !ctx.World.Alive(ctx.TargetHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	deps := resolveActionExecutionDeps(ctx.Extra)
-	targetInfo, hasTargetInfo := ecs.GetComponent[components.EntityInfo](world, ctx.TargetHandle)
+	deps := resolveExecutionDeps(ctx.Deps)
+	targetInfo, hasTargetInfo := ecs.GetComponent[components.EntityInfo](ctx.World, ctx.TargetHandle)
 	if !hasTargetInfo {
-		return types.BehaviorCycleDecisionCanceled
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 	targetDef, found := objectdefs.Global().GetByID(int(targetInfo.TypeID))
 	if !found || targetDef.TreeConfig == nil {
-		return types.BehaviorCycleDecisionCanceled
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 	treeConfig := targetDef.TreeConfig
 
 	remaining := 0
 	transitionToStump := false
-	ecs.WithComponent(world, ctx.TargetHandle, func(state *components.ObjectInternalState) {
+	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
 		currentChopPoints := treeConfig.ChopPointsTotal
 		if treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, "tree"); hasTree && treeState != nil {
 			currentChopPoints = treeState.ChopPoints
@@ -258,21 +244,21 @@ func (treeBehavior) OnCycleComplete(ctx *types.BehaviorCycleContext) types.Behav
 
 	if !transitionToStump {
 		if remaining > 0 {
-			return types.BehaviorCycleDecisionContinue
+			return contracts.BehaviorCycleDecisionContinue
 		}
-		return types.BehaviorCycleDecisionCanceled
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](world, ctx.PlayerHandle)
-	targetTransform, hasTargetTransform := ecs.GetComponent[components.Transform](world, ctx.TargetHandle)
-	targetChunkRef, hasTargetChunkRef := ecs.GetComponent[components.ChunkRef](world, ctx.TargetHandle)
+	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](ctx.World, ctx.PlayerHandle)
+	targetTransform, hasTargetTransform := ecs.GetComponent[components.Transform](ctx.World, ctx.TargetHandle)
+	targetChunkRef, hasTargetChunkRef := ecs.GetComponent[components.ChunkRef](ctx.World, ctx.TargetHandle)
 	if !hasPlayerTransform || !hasTargetTransform || !hasTargetChunkRef {
-		return types.BehaviorCycleDecisionCanceled
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	spawnLogs(world, targetTransform, playerTransform, targetInfo, treeConfig, deps)
+	spawnLogs(ctx.World, targetTransform, playerTransform, targetInfo, treeConfig, deps)
 	transformTargetToStump(
-		world,
+		ctx.World,
 		ctx.TargetID,
 		ctx.TargetHandle,
 		targetInfo,
@@ -280,11 +266,11 @@ func (treeBehavior) OnCycleComplete(ctx *types.BehaviorCycleContext) types.Behav
 		treeConfig,
 		deps,
 	)
-	forceVisionUpdates(world, deps.VisionForcer)
-	return types.BehaviorCycleDecisionComplete
+	forceVisionUpdates(ctx.World, deps.VisionForcer)
+	return contracts.BehaviorCycleDecisionComplete
 }
 
-func forceVisionUpdates(world *ecs.World, visionForcer VisionUpdateForcer) {
+func forceVisionUpdates(world *ecs.World, visionForcer contracts.VisionUpdateForcer) {
 	if visionForcer == nil || world == nil {
 		return
 	}
@@ -304,7 +290,7 @@ func spawnLogs(
 	playerTransform components.Transform,
 	treeInfo components.EntityInfo,
 	treeCfg *objectdefs.TreeBehaviorConfig,
-	deps ActionExecutionDeps,
+	deps contracts.ExecutionDeps,
 ) {
 	if deps.IDAllocator == nil || deps.Chunks == nil || treeCfg == nil {
 		return
@@ -344,7 +330,7 @@ func spawnLogs(
 			Y:                logY,
 			Region:           treeInfo.Region,
 			Layer:            treeInfo.Layer,
-			InitReason:       types.ObjectBehaviorInitReasonSpawn,
+			InitReason:       contracts.ObjectBehaviorInitReasonSpawn,
 			BehaviorRegistry: deps.BehaviorRegistry,
 		})
 		if handle == types.InvalidHandle {
@@ -428,7 +414,7 @@ func transformTargetToStump(
 	targetInfo components.EntityInfo,
 	targetChunkRef components.ChunkRef,
 	treeCfg *objectdefs.TreeBehaviorConfig,
-	deps ActionExecutionDeps,
+	deps contracts.ExecutionDeps,
 ) {
 	logger := resolveLogger(deps.Logger)
 	stumpDef, ok := objectdefs.Global().GetByKey(treeCfg.TransformToDefKey)
@@ -476,14 +462,19 @@ func transformTargetToStump(
 	if deps.BehaviorRegistry != nil {
 		currentInfo, hasInfo := ecs.GetComponent[components.EntityInfo](world, targetHandle)
 		if hasInfo {
-			_ = deps.BehaviorRegistry.InitObjectBehaviors(&types.BehaviorObjectInitContext{
+			if initErr := deps.BehaviorRegistry.InitObjectBehaviors(&contracts.BehaviorObjectInitContext{
 				World:        world,
 				Handle:       targetHandle,
 				EntityID:     targetID,
 				EntityType:   currentInfo.TypeID,
 				PreviousType: previousTypeID,
-				Reason:       types.ObjectBehaviorInitReasonTransform,
-			}, currentInfo.Behaviors)
+				Reason:       contracts.ObjectBehaviorInitReasonTransform,
+			}, currentInfo.Behaviors); initErr != nil {
+				logger.Error("tree chop: failed to init transformed object behaviors",
+					zap.Uint64("target_id", uint64(targetID)),
+					zap.Error(initErr),
+				)
+			}
 		}
 	}
 

@@ -11,6 +11,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
 	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
@@ -47,7 +48,7 @@ type ChatAdminCommandHandler struct {
 	entityIDAllocator     inventory.EntityIDAllocator
 	chunkProvider         AdminSpawnChunkProvider
 	visionForcer          AdminVisionForcer
-	behaviorRegistry      types.BehaviorRegistry
+	behaviorRegistry      contracts.BehaviorRegistry
 	eventBus              *eventbus.EventBus
 	logger                *zap.Logger
 }
@@ -59,7 +60,7 @@ func NewChatAdminCommandHandler(
 	entityIDAllocator inventory.EntityIDAllocator,
 	chunkProvider AdminSpawnChunkProvider,
 	visionForcer AdminVisionForcer,
-	behaviorRegistry types.BehaviorRegistry,
+	behaviorRegistry contracts.BehaviorRegistry,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
 ) *ChatAdminCommandHandler {
@@ -253,7 +254,7 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 		Y:                targetY,
 		Region:           region,
 		Layer:            layer,
-		InitReason:       types.ObjectBehaviorInitReasonSpawn,
+		InitReason:       contracts.ObjectBehaviorInitReasonSpawn,
 		BehaviorRegistry: h.behaviorRegistry,
 	})
 	if handle == types.InvalidHandle {

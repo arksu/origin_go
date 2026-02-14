@@ -63,7 +63,7 @@ type ObjectDef struct {
 4. **Inventory**: Width and height must be > 0 (if present)
 5. **Resource**: Required if no appearance defined
 6. **Appearance IDs**: Must be unique within the def (if present)
-7. **Behaviors**: Keys must exist in unified runtime behavior registry (`types.BehaviorRegistry`); each behavior config is validated strictly
+7. **Behaviors**: Keys must exist in unified runtime behavior registry (`contracts.BehaviorRegistry` from `internal/game/behaviors/contracts`); each behavior config is validated strictly
 8. **ContextMenuEvenForOneItem**: Optional; defaults to `true`
 
 ## Usage
