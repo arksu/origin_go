@@ -33,6 +33,23 @@
           "z": 0
         }
       ]
+    },
+    "empty": {
+      "offset": [
+        26,
+        47
+      ],
+      "layers": [
+        {
+          "interactive": true,
+          "img": "obj/box/box_empty.png",
+          "offset": [
+            0,
+            0
+          ],
+          "z": 0
+        }
+      ]
     }
   },
   "crate": {

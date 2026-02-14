@@ -3,6 +3,20 @@
   "source": "objects",
   "objects": [
     {
+      "defId": 3,
+      "key": "log_y",
+      "static": true,
+      "hp": 1,
+      "resource": "trees/log_y"
+    },
+    {
+      "defId": 4,
+      "key": "log_x",
+      "static": true,
+      "hp": 1,
+      "resource": "trees/log_x"
+    },
+    {
       "defId": 1,
       "key": "tree_birch",
       "static": true,
@@ -22,8 +36,8 @@
           "priority": 20,
           "chopPointsTotal": 6,
           "chopCycleDurationTicks": 20,
-          "logsSpawnDefKey": "log_y",
-          "logsSpawnCount": 3,
+          "logsSpawnDefKey": "log",
+          "logsSpawnCount": 2,
           "logsSpawnInitialOffset": 16,
           "logsSpawnStepOffset": 20,
           "transformToDefKey": "stump_birch",
@@ -46,20 +60,6 @@
         }
       },
       "resource": "trees/birch/stump"
-    },
-    {
-      "defId": 3,
-      "key": "log_y",
-      "static": true,
-      "hp": 1,
-      "resource": "trees/log_y"
-    },
-    {
-      "defId": 4,
-      "key": "log_x",
-      "static": true,
-      "hp": 1,
-      "resource": "trees/log_x"
     }
   ]
 }
