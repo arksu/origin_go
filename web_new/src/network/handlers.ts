@@ -345,6 +345,9 @@ export function registerMessageHandlers(): void {
     console.error('[Game] Server error:', msg.code, msg.message)
     const code = String(msg.code ?? '').trim()
     const message = (msg.message || '').trim()
+    if (message) {
+      gameStore.setLastServerErrorMessage(message)
+    }
     gameStore.pushMiniAlert({
       reasonCode: code || message || 'SERVER_ERROR',
       message: message || undefined,

@@ -5,6 +5,7 @@
     {
       "defId": 3,
       "key": "log_y",
+      "name": "Log",
       "static": true,
       "hp": 1,
       "resource": "trees/log_y"
@@ -12,6 +13,7 @@
     {
       "defId": 4,
       "key": "log_x",
+      "name": "Log",
       "static": true,
       "hp": 1,
       "resource": "trees/log_x"
@@ -19,6 +21,7 @@
     {
       "defId": 1,
       "key": "tree_birch",
+      "name": "Birch Tree",
       "static": true,
       "hp": 100,
       "contextMenuEvenForOneItem": true,
@@ -49,6 +52,7 @@
     {
       "defId": 2,
       "key": "stump_birch",
+      "name": "Birch Stump",
       "static": true,
       "hp": 100,
       "components": {

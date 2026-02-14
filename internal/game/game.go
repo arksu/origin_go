@@ -487,6 +487,21 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				// Remove client from command queue to clean up rate limiting state
 				shard.PlayerInbox().RemoveClient(c.ID)
 
+				// If another client is already bound to this character, this is a stale disconnect
+				// event from an old socket. Ignore it to avoid detaching/despawning an active player.
+				shard.ClientsMu.RLock()
+				activeClient, hasClient := shard.Clients[playerEntityID]
+				shard.ClientsMu.RUnlock()
+				if hasClient && activeClient != c {
+					g.logger.Info("Ignoring stale disconnect for character with active replacement session",
+						zap.Uint64("client_id", c.ID),
+						zap.Int64("character_id", int64(c.CharacterID)),
+						zap.Uint64("active_client_id", activeClient.ID),
+						zap.Int("layer", c.Layer),
+					)
+					return
+				}
+
 				// Reset client state and remove from shard's client map
 				c.InWorld.Store(false)
 				c.StreamEpoch.Store(0)
@@ -705,7 +720,7 @@ func (g *Game) update(ts ecs.TimeState) {
 	// Log every 5 seconds
 	if time.Since(g.tickStats.lastLog) >= 5*time.Second {
 		if g.tickStats.count > 0 {
-			//avgDuration := g.tickStats.durationSum / time.Duration(g.tickStats.count)
+			avgDuration := g.tickStats.durationSum / time.Duration(g.tickStats.count)
 
 			// Build per-system average fields
 			sysFields := make([]zap.Field, 0, len(g.tickStats.systemStats))
@@ -715,15 +730,15 @@ func (g *Game) update(ts ecs.TimeState) {
 				}
 			}
 
-			//fields := []zap.Field{
-			//	zap.Uint64("ticks", g.tickStats.count),
-			//	zap.Duration("avg", avgDuration),
-			//	zap.Duration("min", g.tickStats.minDuration),
-			//	zap.Duration("max", g.tickStats.maxDuration),
-			//}
-			//fields = append(fields, sysFields...)
+			fields := []zap.Field{
+				zap.Uint64("ticks", g.tickStats.count),
+				zap.Duration("avg", avgDuration),
+				zap.Duration("min", g.tickStats.minDuration),
+				zap.Duration("max", g.tickStats.maxDuration),
+			}
+			fields = append(fields, sysFields...)
 
-			//g.logger.Info("Game tick statistics (5s)", fields...)
+			g.logger.Info("Game tick statistics (5s)", fields...)
 		}
 
 		// Reset statistics

@@ -6,6 +6,7 @@ import "encoding/json"
 type ObjectDef struct {
 	DefID                     int                        `json:"defId"`
 	Key                       string                     `json:"key"`
+	Name                      string                     `json:"name,omitempty"`
 	Static                    *bool                      `json:"static,omitempty"`
 	ContextMenuEvenForOneItem *bool                      `json:"contextMenuEvenForOneItem,omitempty"`
 	HP                        int                        `json:"hp,omitempty"`

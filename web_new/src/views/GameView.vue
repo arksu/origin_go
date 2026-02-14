@@ -25,6 +25,7 @@ const canvasInitialized = ref(false)
 let gameFacade: any = null
 let connectToGame: any = null
 let disconnectFromGame: any = null
+const navigatingAway = ref(false)
 
 const connectionState = computed(() => gameStore.connectionState)
 const connectionError = computed(() => gameStore.connectionError)
@@ -82,6 +83,18 @@ watch(isConnected, async (connected) => {
   }
 })
 
+watch(connectionState, (state) => {
+  if (navigatingAway.value) return
+  if (state !== 'error' && state !== 'disconnected') return
+
+  const disconnectReason =
+    gameStore.lastServerErrorMessage ||
+    connectionError.value?.message ||
+    'Disconnected from server'
+  navigatingAway.value = true
+  router.replace({ path: '/characters', query: { disconnectReason } })
+})
+
 function onMouseMove(e: MouseEvent) {
   gameStore.updateMousePos(e.clientX, e.clientY)
 }
@@ -103,6 +116,7 @@ onMounted(async () => {
   connectToGame = networkModule.connectToGame
   disconnectFromGame = networkModule.disconnectFromGame
 
+  gameStore.clearLastServerErrorMessage()
   connectToGame(gameStore.wsToken)
 })
 
@@ -120,6 +134,7 @@ onUnmounted(() => {
 })
 
 function handleBack() {
+  navigatingAway.value = true
   router.push('/characters')
 }
 

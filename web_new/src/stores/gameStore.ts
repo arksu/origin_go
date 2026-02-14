@@ -90,6 +90,7 @@ export const useGameStore = defineStore('game', () => {
   // Connection
   const connectionState = ref<ConnectionState>('disconnected')
   const connectionError = ref<ConnectionError | null>(null)
+  const lastServerErrorMessage = ref('')
 
   // Player
   const playerEntityId = ref<number | null>(null)
@@ -161,6 +162,14 @@ export const useGameStore = defineStore('game', () => {
     connectionError.value = error ?? null
   }
 
+  function setLastServerErrorMessage(message: string) {
+    lastServerErrorMessage.value = message.trim()
+  }
+
+  function clearLastServerErrorMessage() {
+    lastServerErrorMessage.value = ''
+  }
+
   // Player actions
   function setPlayerEnterWorld(
     entityId: number,
@@ -182,6 +191,7 @@ export const useGameStore = defineStore('game', () => {
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
+    clearLastServerErrorMessage()
     if (miniAlertTimer) {
       clearInterval(miniAlertTimer)
       miniAlertTimer = null
@@ -564,6 +574,7 @@ export const useGameStore = defineStore('game', () => {
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
+    clearLastServerErrorMessage()
     clearActionProgress()
 
     // Cleanup chat
@@ -584,6 +595,7 @@ export const useGameStore = defineStore('game', () => {
     characterId,
     connectionState,
     connectionError,
+    lastServerErrorMessage,
     playerEntityId,
     playerName,
     playerPosition,
@@ -610,6 +622,8 @@ export const useGameStore = defineStore('game', () => {
     setGameSession,
     clearGameSession,
     setConnectionState,
+    setLastServerErrorMessage,
+    clearLastServerErrorMessage,
     setPlayerEnterWorld,
     setPlayerLeaveWorld,
     updatePlayerPosition,

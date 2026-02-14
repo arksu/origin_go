@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useGameStore } from '@/stores/gameStore'
 import { listCharacters, createCharacter, deleteCharacter, enterCharacter } from '@/api/characters'
@@ -14,12 +14,14 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 const MAX_CHARACTERS = 5
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const gameStore = useGameStore()
 
 const characters = ref<Character[]>([])
 const loading = ref(true)
 const error = ref('')
+const disconnectReasonMessage = ref('')
 
 const showCreateForm = ref(false)
 const newCharacterName = ref('')
@@ -30,16 +32,22 @@ const pendingDeleteCharacter = ref<Character | null>(null)
 
 const enteringId = ref<number | null>(null)
 const deletingId = ref<number | null>(null)
+const listUnavailable = ref(false)
 
 const emptySlots = computed(() => Math.max(0, MAX_CHARACTERS - characters.value.length))
+const uiErrorMessage = computed(() => error.value || disconnectReasonMessage.value)
 
 async function loadCharacters() {
   loading.value = true
+  listUnavailable.value = false
   error.value = ''
+  disconnectReasonMessage.value = ''
+  createError.value = ''
 
   try {
     characters.value = await listCharacters()
   } catch (e) {
+    listUnavailable.value = true
     if (ApiException.isAuth(e)) {
       router.push('/login')
       return
@@ -58,6 +66,8 @@ async function handleCreate() {
   if (!newCharacterName.value.trim() || creating.value) return
 
   creating.value = true
+  error.value = ''
+  disconnectReasonMessage.value = ''
   createError.value = ''
 
   try {
@@ -79,7 +89,7 @@ async function handleCreate() {
 }
 
 function openCreateDialog() {
-  if (showDeleteDialog.value || creating.value) return
+  if (showDeleteDialog.value || creating.value || listUnavailable.value) return
   createError.value = ''
   showCreateForm.value = true
 }
@@ -92,6 +102,7 @@ function closeCreateDialog() {
 }
 
 async function handleDelete(id: number) {
+  if (listUnavailable.value) return
   const character = characters.value.find((char) => char.id === id) || null
   if (!character || deletingId.value !== null) return
   pendingDeleteCharacter.value = character
@@ -108,6 +119,8 @@ async function confirmDelete() {
   if (!pendingDeleteCharacter.value || deletingId.value !== null) return
 
   deletingId.value = pendingDeleteCharacter.value.id
+  error.value = ''
+  disconnectReasonMessage.value = ''
 
   try {
     await deleteCharacter(pendingDeleteCharacter.value.id)
@@ -126,10 +139,11 @@ async function confirmDelete() {
 }
 
 async function handleEnter(id: number) {
-  if (enteringId.value !== null || showDeleteDialog.value || showCreateForm.value) return
+  if (listUnavailable.value || enteringId.value !== null || showDeleteDialog.value || showCreateForm.value) return
 
   enteringId.value = id
   error.value = ''
+  disconnectReasonMessage.value = ''
 
   try {
     const response = await enterCharacter(id)
@@ -152,6 +166,13 @@ function handleLogout() {
 }
 
 onMounted(() => {
+  const disconnectReason = route.query.disconnectReason
+  if (typeof disconnectReason === 'string' && disconnectReason.trim()) {
+    disconnectReasonMessage.value = disconnectReason.trim()
+    const nextQuery = { ...route.query }
+    delete nextQuery.disconnectReason
+    router.replace({ query: nextQuery })
+  }
   loadCharacters()
 })
 </script>
@@ -166,8 +187,8 @@ onMounted(() => {
       <div class="login-panel">
         Characters<br>
 
-        <AppAlert v-if="error" type="error" class="panel-alert">
-          {{ error }}
+        <AppAlert v-if="uiErrorMessage" type="error" class="panel-alert">
+          {{ uiErrorMessage }}
         </AppAlert>
 
         <div v-if="loading" class="loading-area">
@@ -175,6 +196,12 @@ onMounted(() => {
         </div>
 
         <template v-else>
+          <div v-if="listUnavailable" class="list-unavailable">
+            <p class="list-unavailable__text">Character list is unavailable.</p>
+            <AppButton @click="loadCharacters">Retry</AppButton>
+          </div>
+
+          <template v-else>
           <!-- Existing characters -->
           <div
             v-for="char in characters"
@@ -214,8 +241,9 @@ onMounted(() => {
                 @click="openCreateDialog"
               >
                 Create New
-              </div>
             </div>
+          </div>
+          </template>
         </template>
 
         <div v-if="showCreateForm" class="dialog-backdrop" @click.self="closeCreateDialog">
@@ -326,6 +354,19 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   padding: 2rem;
+}
+
+.list-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+
+  &__text {
+    font-size: 16px;
+    color: #d5eeed;
+  }
 }
 
 .window-container {
