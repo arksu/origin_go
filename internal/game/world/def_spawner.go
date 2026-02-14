@@ -8,12 +8,15 @@ import (
 )
 
 type DefSpawnParams struct {
-	EntityID  types.EntityID
-	X         float64
-	Y         float64
-	Direction float64
-	Region    int
-	Layer     int
+	EntityID         types.EntityID
+	X                float64
+	Y                float64
+	Direction        float64
+	Region           int
+	Layer            int
+	InitReason       types.ObjectBehaviorInitReason
+	PreviousTypeID   uint32
+	BehaviorRegistry types.BehaviorRegistry
 }
 
 func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawnParams) types.Handle {
@@ -21,7 +24,7 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 		return types.InvalidHandle
 	}
 
-	return w.Spawn(params.EntityID, func(w *ecs.World, h types.Handle) {
+	handle := w.Spawn(params.EntityID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Transform{
 			X:         params.X,
 			Y:         params.Y,
@@ -40,8 +43,30 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 			ecs.AddComponent(w, h, objectdefs.BuildColliderComponent(def.Components.Collider))
 		}
 
-		ecs.AddComponent(w, h, components.Appearance{
-			Resource: def.Resource,
+		resource := objectdefs.ResolveAppearanceResource(def, nil)
+		if resource == "" {
+			resource = def.Resource
+		}
+		ecs.AddComponent(w, h, components.Appearance{Resource: resource})
+		ecs.AddComponent(w, h, components.ObjectInternalState{
+			IsDirty: true,
 		})
 	})
+	if handle == types.InvalidHandle || params.InitReason == "" || params.BehaviorRegistry == nil {
+		return handle
+	}
+
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, handle)
+	if !hasInfo || len(info.Behaviors) == 0 {
+		return handle
+	}
+	_ = params.BehaviorRegistry.InitObjectBehaviors(&types.BehaviorObjectInitContext{
+		World:        w,
+		Handle:       handle,
+		EntityID:     params.EntityID,
+		EntityType:   info.TypeID,
+		Reason:       params.InitReason,
+		PreviousType: params.PreviousTypeID,
+	}, info.Behaviors)
+	return handle
 }

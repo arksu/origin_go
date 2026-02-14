@@ -19,6 +19,7 @@ import (
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 	"origin/internal/persistence"
@@ -79,7 +80,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		state:           ShardStateRunning,
 	}
 
-	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, eb, logger)
+	behaviorRegistry := behaviors.MustDefaultRegistry()
+	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
 	worldMinX := float64(cfg.Game.WorldMinXChunks * chunkSize)
@@ -104,6 +106,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		visionSystem,
 		s.chunkManager,
 		s.entityIDManager,
+		behaviorRegistry,
 		logger,
 	)
 	contextActionService.SetSoundEventSender(s)
@@ -112,7 +115,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
-	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, entityIDManager, s.chunkManager, visionSystem, s.eventBus, logger)
+	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
 	networkCmdSystem.SetAdminHandler(adminHandler)
 	networkCmdSystem.SetInventorySnapshotSender(s)
 
@@ -128,6 +131,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewObjectBehaviorSystem(s.eventBus, logger, systems.ObjectBehaviorConfig{
 		BudgetPerTick:       cfg.Game.ObjectBehaviorBudgetPerTick,
 		EnableDebugFallback: strings.EqualFold(cfg.Game.Env, "dev"),
+		BehaviorRegistry:    behaviorRegistry,
 	}))
 	s.world.AddSystem(systems.NewChunkSystem(s.chunkManager, logger))
 

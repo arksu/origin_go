@@ -41,7 +41,7 @@ func newTestChunkManager() *ChunkManager {
 		Logger:     logger,
 	})
 
-	return NewChunkManager(cfg, nil, world, nil, 0, 1, objectFactory, eb, logger)
+	return NewChunkManager(cfg, nil, world, nil, 0, 1, objectFactory, nil, eb, logger)
 }
 
 func TestChunkState_String(t *testing.T) {

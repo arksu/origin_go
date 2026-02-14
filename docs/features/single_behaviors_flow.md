@@ -110,3 +110,24 @@
 5. Duplicate actions не ломают flow (`first wins`) и попадают в WARN + метрику.
 6. Ошибки/отказы отображаются центровыми mini-alert с заданными severity/TTL/debounce/maxN.
 7. `open` работает через новый общий pipeline, без отдельной legacy execution-ветки.
+
+## 12. Current Implementation (as of this refactor)
+
+1. Единый контракт behavior находится в `internal/types/behavior.go`.
+2. Все реализации поведений вынесены в `internal/game/behaviors`:
+    - `container` (runtime flags + context actions),
+    - `tree` (context actions + cyclic + object transform/spawn helpers),
+    - `player` (base behavior key).
+3. Единый runtime-реестр находится в `internal/game/behaviors/registry.go` и используется как:
+    - источник исполнения behavior,
+    - источник валидации behavior-ключей при `objectdefs.LoadFromDirectory(...)`.
+4. `Fail Fast` включен на уровне реестра:
+    - action-capable behavior обязан декларировать action specs,
+    - behavior с `Provide/Validate` обязан реализовывать `Execute`,
+    - action с `StartsCyclic=true` требует cyclic capability.
+5. Lifecycle init hooks поддерживаются и вызываются в трех сценариях:
+    - `spawn` (создание новых объектов),
+    - `restore` (активация чанка + восстановление из persistence),
+    - `transform` (смена типа объекта, например tree -> stump).
+6. Legacy behavior split удален:
+    - больше нет раздельных `contextActionBehavior` / `RuntimeBehavior` / `cyclicActionBehavior` сервисных контрактов в runtime-системах.

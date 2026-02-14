@@ -2,6 +2,7 @@ package systems
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	constt "origin/internal/const"
@@ -10,6 +11,64 @@ import (
 	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
+
+type testRuntimeBehaviorRegistry struct {
+	byKey map[string]types.Behavior
+}
+
+func (r *testRuntimeBehaviorRegistry) GetBehavior(key string) (types.Behavior, bool) {
+	behavior, ok := r.byKey[key]
+	return behavior, ok
+}
+
+func (r *testRuntimeBehaviorRegistry) Keys() []string {
+	keys := make([]string, 0, len(r.byKey))
+	for key := range r.byKey {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func (r *testRuntimeBehaviorRegistry) IsRegisteredBehaviorKey(key string) bool {
+	_, ok := r.byKey[key]
+	return ok
+}
+
+func (r *testRuntimeBehaviorRegistry) ValidateBehaviorKeys(keys []string) error {
+	for _, key := range keys {
+		if !r.IsRegisteredBehaviorKey(key) {
+			return fmt.Errorf("unknown behavior %q", key)
+		}
+	}
+	return nil
+}
+
+func (r *testRuntimeBehaviorRegistry) InitObjectBehaviors(_ *types.BehaviorObjectInitContext, _ []string) error {
+	return nil
+}
+
+type testContainerRuntimeBehavior struct{}
+
+func (testContainerRuntimeBehavior) Key() string { return "container" }
+
+func (testContainerRuntimeBehavior) ApplyRuntime(ctx *types.BehaviorRuntimeContext) types.BehaviorRuntimeResult {
+	world, ok := ctx.World.(*ecs.World)
+	if !ok || world == nil {
+		return types.BehaviorRuntimeResult{}
+	}
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](world)
+	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, ctx.EntityID, 0)
+	if !found || !world.Alive(rootHandle) {
+		return types.BehaviorRuntimeResult{}
+	}
+	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](world, rootHandle)
+	if !hasContainer || len(rootContainer.Items) == 0 {
+		return types.BehaviorRuntimeResult{}
+	}
+	return types.BehaviorRuntimeResult{
+		Flags: []string{"container.has_items"},
+	}
+}
 
 func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
@@ -34,9 +93,15 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 	}))
 
 	w := ecs.NewWorldForTesting()
+	behaviorRegistry := &testRuntimeBehaviorRegistry{
+		byKey: map[string]types.Behavior{
+			"container": testContainerRuntimeBehavior{},
+		},
+	}
 	sys := NewObjectBehaviorSystem(nil, nil, ObjectBehaviorConfig{
 		BudgetPerTick:       512,
 		EnableDebugFallback: false,
+		BehaviorRegistry:    behaviorRegistry,
 	})
 
 	objectID := types.EntityID(500)

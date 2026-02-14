@@ -95,14 +95,15 @@ var (
 )
 
 type ChunkManager struct {
-	cfg           *config.Config
-	db            *persistence.Postgres
-	world         *ecs.World
-	shard         interface{}
-	layer         int
-	region        int
-	objectFactory *ObjectFactory
-	logger        *zap.Logger
+	cfg              *config.Config
+	db               *persistence.Postgres
+	world            *ecs.World
+	shard            interface{}
+	layer            int
+	region           int
+	objectFactory    *ObjectFactory
+	behaviorRegistry types.BehaviorRegistry
+	logger           *zap.Logger
 
 	chunks   map[types.ChunkCoord]*core.Chunk
 	chunksMu sync.RWMutex
@@ -148,29 +149,31 @@ func NewChunkManager(
 	layer int,
 	region int,
 	objectFactory *ObjectFactory,
+	behaviorRegistry types.BehaviorRegistry,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
 ) *ChunkManager {
 	ttl := time.Duration(cfg.Game.ChunkLRUTTL) * time.Second
 
 	cm := &ChunkManager{
-		cfg:            cfg,
-		db:             db,
-		world:          world,
-		shard:          shard,
-		layer:          layer,
-		region:         region,
-		objectFactory:  objectFactory,
-		logger:         logger.Named("chunk_manager"),
-		chunks:         make(map[types.ChunkCoord]*core.Chunk),
-		loadQueue:      make(chan loadRequest, 512),
-		saveQueue:      make(chan saveRequest, 512),
-		stopCh:         make(chan struct{}),
-		entityAOIs:     make(map[types.EntityID]*EntityAOI),
-		chunkInterests: make(map[types.ChunkCoord]*ChunkInterest),
-		activeChunks:   make(map[types.ChunkCoord]struct{}),
-		loadFutures:    make(map[types.ChunkCoord]*loadFuture),
-		eventBus:       eventBus,
+		cfg:              cfg,
+		db:               db,
+		world:            world,
+		shard:            shard,
+		layer:            layer,
+		region:           region,
+		objectFactory:    objectFactory,
+		behaviorRegistry: behaviorRegistry,
+		logger:           logger.Named("chunk_manager"),
+		chunks:           make(map[types.ChunkCoord]*core.Chunk),
+		loadQueue:        make(chan loadRequest, 512),
+		saveQueue:        make(chan saveRequest, 512),
+		stopCh:           make(chan struct{}),
+		entityAOIs:       make(map[types.EntityID]*EntityAOI),
+		chunkInterests:   make(map[types.ChunkCoord]*ChunkInterest),
+		activeChunks:     make(map[types.ChunkCoord]struct{}),
+		loadFutures:      make(map[types.ChunkCoord]*loadFuture),
+		eventBus:         eventBus,
 	}
 
 	cm.lruCache = lru.NewLRU(
@@ -901,6 +904,20 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 
 		isStatic := cm.objectFactory.IsStatic(raw)
 		if info, hasInfo := ecs.GetComponent[components.EntityInfo](cm.world, h); hasInfo && len(info.Behaviors) > 0 {
+			if cm.behaviorRegistry != nil {
+				if initErr := cm.behaviorRegistry.InitObjectBehaviors(&types.BehaviorObjectInitContext{
+					World:      cm.world,
+					Handle:     h,
+					EntityID:   types.EntityID(raw.ID),
+					EntityType: info.TypeID,
+					Reason:     types.ObjectBehaviorInitReasonRestore,
+				}, info.Behaviors); initErr != nil {
+					cm.logger.Warn("failed to init restored object behaviors",
+						zap.Int64("object_id", raw.ID),
+						zap.Error(initErr),
+					)
+				}
+			}
 			behaviorHandles = append(behaviorHandles, h)
 		}
 
@@ -912,7 +929,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	}
 
 	// Force initial behavior computation on activation (no lazy defer).
-	ecssystems.RecomputeObjectBehaviorsNow(cm.world, cm.eventBus, cm.logger, behaviorHandles)
+	ecssystems.RecomputeObjectBehaviorsNow(cm.world, cm.eventBus, cm.logger, cm.behaviorRegistry, behaviorHandles)
 
 	chunk.ClearRawObjects()
 	chunk.ClearRawInventoriesByOwner()

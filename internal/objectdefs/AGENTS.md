@@ -11,7 +11,6 @@ objectdefs/
 ├── types.go      # Definition structs (ObjectDef, Components, etc.)
 ├── loader.go     # JSONC loading and validation
 ├── registry.go   # Thread-safe in-memory registry
-├── behavior.go   # BehaviorRegistry for validating behavior keys
 └── AGENTS.md     # This file
 ```
 
@@ -64,7 +63,7 @@ type ObjectDef struct {
 4. **Inventory**: Width and height must be > 0 (if present)
 5. **Resource**: Required if no appearance defined
 6. **Appearance IDs**: Must be unique within the def (if present)
-7. **Behaviors**: Keys must exist in BehaviorRegistry; each behavior config is validated strictly
+7. **Behaviors**: Keys must exist in unified runtime behavior registry (`types.BehaviorRegistry`); each behavior config is validated strictly
 8. **ContextMenuEvenForOneItem**: Optional; defaults to `true`
 
 ## Usage
@@ -72,8 +71,11 @@ type ObjectDef struct {
 ### Loading Definitions
 
 ```go
-behaviors := objectdefs.DefaultBehaviorRegistry()
-registry, err := objectdefs.LoadFromDirectory("./data/objects", behaviors, logger)
+behaviorRegistry, err := behaviors.DefaultRegistry()
+if err != nil {
+    log.Fatal(err)
+}
+registry, err := objectdefs.LoadFromDirectory("./data/objects", behaviorRegistry, logger)
 if err != nil {
     log.Fatal(err)
 }
@@ -133,19 +135,12 @@ handle := factory.Build(world, rawObject)  // rawObject from DB
 }
 ```
 
-## Default Behaviors
+## Built-in Behaviors
 
-The `DefaultBehaviorRegistry()` registers:
+The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) registers:
 - `tree` — Tree behavior (chopping, wood resource)
 - `container` — Container behavior (storage)
 - `player` — Player behavior (character control)
-
-Register additional behaviors:
-
-```go
-behaviors := objectdefs.DefaultBehaviorRegistry()
-behaviors.Register("custom", func() { ... })
-```
 
 ## Integration Points
 

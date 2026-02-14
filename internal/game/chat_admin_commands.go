@@ -47,6 +47,7 @@ type ChatAdminCommandHandler struct {
 	entityIDAllocator     inventory.EntityIDAllocator
 	chunkProvider         AdminSpawnChunkProvider
 	visionForcer          AdminVisionForcer
+	behaviorRegistry      types.BehaviorRegistry
 	eventBus              *eventbus.EventBus
 	logger                *zap.Logger
 }
@@ -58,6 +59,7 @@ func NewChatAdminCommandHandler(
 	entityIDAllocator inventory.EntityIDAllocator,
 	chunkProvider AdminSpawnChunkProvider,
 	visionForcer AdminVisionForcer,
+	behaviorRegistry types.BehaviorRegistry,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
 ) *ChatAdminCommandHandler {
@@ -68,6 +70,7 @@ func NewChatAdminCommandHandler(
 		entityIDAllocator:     entityIDAllocator,
 		chunkProvider:         chunkProvider,
 		visionForcer:          visionForcer,
+		behaviorRegistry:      behaviorRegistry,
 		eventBus:              eventBus,
 		logger:                logger,
 	}
@@ -245,11 +248,13 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 	hp := def.HP
 
 	handle := gameworld.SpawnEntityFromDef(w, def, gameworld.DefSpawnParams{
-		EntityID: newID,
-		X:        targetX,
-		Y:        targetY,
-		Region:   region,
-		Layer:    layer,
+		EntityID:         newID,
+		X:                targetX,
+		Y:                targetY,
+		Region:           region,
+		Layer:            layer,
+		InitReason:       types.ObjectBehaviorInitReasonSpawn,
+		BehaviorRegistry: h.behaviorRegistry,
 	})
 	if handle == types.InvalidHandle {
 		h.sendSystemMessage(playerID, "failed to spawn entity")
@@ -261,10 +266,6 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 		PrevChunkX:    chunkX,
 		PrevChunkY:    chunkY,
 	})
-	ecs.AddComponent(w, handle, components.ObjectInternalState{
-		IsDirty: true,
-	})
-
 	// Add to chunk spatial
 	if def.IsStatic {
 		h.chunkProvider.AddStaticToChunkSpatial(handle, chunkX, chunkY, int(targetX), int(targetY))

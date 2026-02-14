@@ -1,9 +1,14 @@
 package objectdefs
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"origin/internal/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +20,139 @@ func testLogger() *zap.Logger {
 	return logger
 }
 
-func testBehaviors() *BehaviorRegistry {
-	return DefaultBehaviorRegistry()
+type testBehaviorRegistry struct {
+	byKey map[string]types.Behavior
+}
+
+func (r *testBehaviorRegistry) GetBehavior(key string) (types.Behavior, bool) {
+	if r == nil {
+		return nil, false
+	}
+	behavior, ok := r.byKey[key]
+	return behavior, ok
+}
+
+func (r *testBehaviorRegistry) Keys() []string {
+	if r == nil || len(r.byKey) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(r.byKey))
+	for key := range r.byKey {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func (r *testBehaviorRegistry) IsRegisteredBehaviorKey(key string) bool {
+	if r == nil {
+		return false
+	}
+	_, ok := r.byKey[key]
+	return ok
+}
+
+func (r *testBehaviorRegistry) ValidateBehaviorKeys(keys []string) error {
+	for _, key := range keys {
+		if !r.IsRegisteredBehaviorKey(key) {
+			return fmt.Errorf("unknown behavior %q", key)
+		}
+	}
+	return nil
+}
+
+func (r *testBehaviorRegistry) InitObjectBehaviors(_ *types.BehaviorObjectInitContext, _ []string) error {
+	return nil
+}
+
+type testPriorityOnlyBehavior struct {
+	key string
+}
+
+func (b testPriorityOnlyBehavior) Key() string { return b.key }
+
+func (b testPriorityOnlyBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContext) (int, error) {
+	if ctx == nil {
+		return 100, nil
+	}
+	var cfg struct {
+		Priority int `json:"priority,omitempty"`
+	}
+	if err := decodeStrictJSONForTest(ctx.RawConfig, &cfg); err != nil {
+		return 0, fmt.Errorf("invalid %s config: %w", b.key, err)
+	}
+	if cfg.Priority <= 0 {
+		cfg.Priority = 100
+	}
+	return cfg.Priority, nil
+}
+
+type testTreeBehavior struct{}
+
+func (testTreeBehavior) Key() string { return "tree" }
+
+func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *types.BehaviorDefConfigContext) (int, error) {
+	if ctx == nil {
+		return 100, nil
+	}
+
+	targetDef, ok := ctx.Def.(*ObjectDef)
+	if !ok || targetDef == nil {
+		return 0, fmt.Errorf("tree config target def must be *ObjectDef")
+	}
+
+	var cfg TreeBehaviorConfig
+	if err := decodeStrictJSONForTest(ctx.RawConfig, &cfg); err != nil {
+		return 0, fmt.Errorf("invalid tree config: %w", err)
+	}
+	if cfg.Priority <= 0 {
+		cfg.Priority = 100
+	}
+	if cfg.ChopPointsTotal <= 0 {
+		return 0, fmt.Errorf("tree.chopPointsTotal must be > 0")
+	}
+	if cfg.ChopCycleDurationTicks <= 0 {
+		return 0, fmt.Errorf("tree.chopCycleDurationTicks must be > 0")
+	}
+	if cfg.LogsSpawnDefKey == "" {
+		return 0, fmt.Errorf("tree.logsSpawnDefKey is required")
+	}
+	if cfg.LogsSpawnCount <= 0 {
+		return 0, fmt.Errorf("tree.logsSpawnCount must be > 0")
+	}
+	if cfg.LogsSpawnInitialOffset < 0 {
+		return 0, fmt.Errorf("tree.logsSpawnInitialOffset must be >= 0")
+	}
+	if cfg.LogsSpawnStepOffset <= 0 {
+		return 0, fmt.Errorf("tree.logsSpawnStepOffset must be > 0")
+	}
+	if cfg.TransformToDefKey == "" {
+		return 0, fmt.Errorf("tree.transformToDefKey is required")
+	}
+
+	targetDef.TreeConfig = &cfg
+	return cfg.Priority, nil
+}
+
+func decodeStrictJSONForTest(raw []byte, dst any) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	if dec.More() {
+		return fmt.Errorf("unexpected trailing JSON data")
+	}
+	return nil
+}
+
+func testBehaviors(_ *testing.T) types.BehaviorRegistry {
+	return &testBehaviorRegistry{
+		byKey: map[string]types.Behavior{
+			"tree":      testTreeBehavior{},
+			"container": testPriorityOnlyBehavior{key: "container"},
+			"player":    testPriorityOnlyBehavior{key: "player"},
+		},
+	}
 }
 
 func writeJSONC(t *testing.T, dir, name, content string) {
@@ -66,7 +202,7 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 		]
 	}`)
 
-	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.NoError(t, err)
 	assert.Equal(t, 2, registry.Count())
 
@@ -122,7 +258,7 @@ func TestLoadFromDirectory_JSONCComments(t *testing.T) {
 		]
 	}`)
 
-	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.NoError(t, err)
 	assert.Equal(t, 1, registry.Count())
 }
@@ -143,7 +279,7 @@ func TestLoadFromDirectory_StaticDefault(t *testing.T) {
 		]
 	}`)
 
-	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.NoError(t, err)
 
 	rock, ok := registry.GetByID(1)
@@ -168,7 +304,7 @@ func TestLoadFromDirectory_ContextMenuEvenForOneItemFalse(t *testing.T) {
 		]
 	}`)
 
-	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.NoError(t, err)
 
 	stump, ok := registry.GetByID(1)
@@ -188,7 +324,7 @@ func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {
 		"objects": [{ "defId": 1, "key": "b", "resource": "b.png" }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate defId")
 }
@@ -205,7 +341,7 @@ func TestLoadFromDirectory_DuplicateKey(t *testing.T) {
 		"objects": [{ "defId": 2, "key": "same", "resource": "b.png" }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate key")
 }
@@ -218,7 +354,7 @@ func TestLoadFromDirectory_InvalidDefID(t *testing.T) {
 		"objects": [{ "defId": 0, "key": "bad", "resource": "bad.png" }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "defId must be > 0")
 }
@@ -231,7 +367,7 @@ func TestLoadFromDirectory_MissingKey(t *testing.T) {
 		"objects": [{ "defId": 1, "key": "", "resource": "x.png" }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "key is required")
 }
@@ -244,7 +380,7 @@ func TestLoadFromDirectory_InvalidCollider(t *testing.T) {
 		"objects": [{ "defId": 1, "key": "bad", "components": { "collider": { "w": 0, "h": 5 } }, "resource": "x.png" }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "components.collider.w must be > 0")
 }
@@ -257,7 +393,7 @@ func TestLoadFromDirectory_InvalidInventory(t *testing.T) {
 		"objects": [{ "defId": 1, "key": "bad", "components": { "inventory": [{ "w": 0, "h": 5 }] }, "resource": "x.png" }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "components.inventory[0].w must be > 0")
 }
@@ -270,7 +406,7 @@ func TestLoadFromDirectory_InvalidTreeBehaviorConfig(t *testing.T) {
 		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behaviors": { "tree": { "unknown": 1 } } }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid tree config")
 }
@@ -301,7 +437,7 @@ func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
 		}]
 	}`)
 
-	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.NoError(t, err)
 
 	def, ok := registry.GetByID(1)
@@ -319,7 +455,7 @@ func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {
 		"objects": [{ "defId": 1, "key": "bad", "resource": "x.png", "behaviors": { "nonexistent": {} } }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown behavior")
 }
@@ -338,7 +474,7 @@ func TestLoadFromDirectory_DuplicateAppearanceID(t *testing.T) {
 		}]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate appearance.id")
 }
@@ -351,7 +487,7 @@ func TestLoadFromDirectory_MissingResourceNoAppearance(t *testing.T) {
 		"objects": [{ "defId": 1, "key": "bad" }]
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resource is required when appearance is empty")
 }
@@ -364,7 +500,7 @@ func TestLoadFromDirectory_UnknownField(t *testing.T) {
 		"objects": []
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse JSON")
 }
@@ -376,7 +512,7 @@ func TestLoadFromDirectory_InvalidVersion(t *testing.T) {
 		"v": 99, "source": "test", "objects": []
 	}`)
 
-	_, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported version")
 }
@@ -384,7 +520,7 @@ func TestLoadFromDirectory_InvalidVersion(t *testing.T) {
 func TestLoadFromDirectory_EmptyDirectory(t *testing.T) {
 	dir := t.TempDir()
 
-	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.NoError(t, err)
 	assert.Equal(t, 0, registry.Count())
 }
@@ -406,7 +542,7 @@ func TestLoadFromDirectory_BehaviorOrderByPriority(t *testing.T) {
 		}]
 	}`)
 
-	registry, err := LoadFromDirectory(dir, testBehaviors(), testLogger())
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.NoError(t, err)
 
 	def, ok := registry.GetByID(1)

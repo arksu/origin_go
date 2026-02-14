@@ -65,6 +65,9 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 		Direction: headingDegreesToRadians(raw.Heading),
 		Region:    raw.Region,
 		Layer:     raw.Layer,
+		// Restored state is applied in chunk activation after deserialization.
+		// Init hook runs there to avoid clobbering persisted behavior state.
+		InitReason: "",
 	})
 	if h == types.InvalidHandle {
 		return types.InvalidHandle, ErrEntitySpawnFailed
