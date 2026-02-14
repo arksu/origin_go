@@ -45,12 +45,26 @@ func (containerBehavior) ApplyRuntime(ctx *contracts.BehaviorRuntimeContext) con
 	}
 
 	rootContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](ctx.World, rootHandle)
-	if !hasContainer || len(rootContainer.Items) == 0 {
+	if !hasContainer {
+		return contracts.BehaviorRuntimeResult{}
+	}
+
+	flags := make([]string, 0, 2)
+	if len(rootContainer.Items) > 0 {
+		flags = append(flags, "container.has_items")
+	}
+
+	openState := ecs.GetResource[ecs.OpenContainerState](ctx.World)
+	if players := openState.PlayersByRoot[ctx.EntityID]; len(players) > 0 {
+		flags = append(flags, "container.open")
+	}
+
+	if len(flags) == 0 {
 		return contracts.BehaviorRuntimeResult{}
 	}
 
 	return contracts.BehaviorRuntimeResult{
-		Flags: []string{"container.has_items"},
+		Flags: flags,
 	}
 }
 

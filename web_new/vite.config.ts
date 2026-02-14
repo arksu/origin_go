@@ -40,19 +40,18 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'pixi': ['pixi.js'],
-          'game-system': [
-            '@/game',
-            '@/network'
-          ],
-          'vendor': [
-            'vue',
-            'vue-router',
-            'pinia',
-            'axios',
-            'protobufjs'
-          ]
+        manualChunks(id) {
+          if (id.includes('node_modules/pixi.js')) return 'pixi'
+
+          if (id.includes('/src/network/proto/')) return 'network-proto'
+          if (id.includes('/src/network/handlers/')) return 'network-handlers'
+          if (id.includes('/src/network/')) return 'network-core'
+
+          if (id.includes('/src/game/terrain/')) return 'game-terrain'
+          if (id.includes('/src/game/objects/')) return 'game-objects'
+          if (id.includes('/src/game/')) return 'game-core'
+
+          if (id.includes('node_modules')) return 'vendor'
         }
       }
     }

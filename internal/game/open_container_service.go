@@ -238,6 +238,7 @@ func (s *OpenContainerService) HandleCloseRequest(
 
 	if openState.CloseRef(playerID, key) {
 		s.sender.SendContainerClosed(playerID, inventoryKeyToProto(key))
+		s.markRootObjectBehaviorDirtyForRef(w, key)
 	}
 	return nil
 }
@@ -326,6 +327,7 @@ func (s *OpenContainerService) CloseRefsForOpenedPlayers(
 		for _, playerID := range playerIDs {
 			if openState.CloseRef(playerID, key) {
 				s.sender.SendContainerClosed(playerID, inventoryKeyToProto(key))
+				s.markRootObjectBehaviorDirtyForRef(w, key)
 			}
 		}
 	}
@@ -337,9 +339,14 @@ func (s *OpenContainerService) onLinkBroken(_ context.Context, event eventbus.Ev
 		return nil
 	}
 
-	closed := ecs.GetResource[ecs.OpenContainerState](s.world).CloseAllForPlayer(linkEvent.PlayerID)
+	openState := ecs.GetResource[ecs.OpenContainerState](s.world)
+	rootOwnerID, hasRoot := openState.GetOpenedRoot(linkEvent.PlayerID)
+	closed := openState.CloseAllForPlayer(linkEvent.PlayerID)
 	for _, key := range closed {
 		s.sender.SendContainerClosed(linkEvent.PlayerID, inventoryKeyToProto(key))
+	}
+	if hasRoot {
+		s.markRootObjectBehaviorDirty(s.world, rootOwnerID)
 	}
 	return nil
 }
@@ -349,9 +356,14 @@ func (s *OpenContainerService) breakLinkForRootClose(w *ecs.World, playerID type
 	linkState.ClearIntent(playerID)
 
 	link, removed := linkState.RemoveLink(playerID)
-	closed := ecs.GetResource[ecs.OpenContainerState](w).CloseAllForPlayer(playerID)
+	openState := ecs.GetResource[ecs.OpenContainerState](w)
+	rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID)
+	closed := openState.CloseAllForPlayer(playerID)
 	for _, key := range closed {
 		s.sender.SendContainerClosed(playerID, inventoryKeyToProto(key))
+	}
+	if hasRoot {
+		s.markRootObjectBehaviorDirty(w, rootOwnerID)
 	}
 
 	if removed && s.eventBus != nil {
@@ -382,6 +394,7 @@ func (s *OpenContainerService) openRootForPlayer(
 		for _, key := range closed {
 			s.sender.SendContainerClosed(playerID, inventoryKeyToProto(key))
 		}
+		s.markRootObjectBehaviorDirty(w, currentRoot)
 	}
 
 	if err := s.openAnyRefForPlayer(w, playerID, constt.InventoryGrid, rootOwnerID, 0, true); err != nil {
@@ -389,6 +402,7 @@ func (s *OpenContainerService) openRootForPlayer(
 	}
 
 	openState.SetRootOpened(playerID, rootOwnerID)
+	s.markRootObjectBehaviorDirty(w, rootOwnerID)
 	return nil
 }
 
@@ -477,6 +491,28 @@ func (s *OpenContainerService) nestedBelongsToRoot(w *ecs.World, rootOwnerID, ne
 		return nestedFound && w.Alive(nestedHandle)
 	}
 	return false
+}
+
+func (s *OpenContainerService) markRootObjectBehaviorDirtyForRef(w *ecs.World, key ecs.InventoryRefKey) {
+	if key.Kind != constt.InventoryGrid || key.Key != 0 {
+		return
+	}
+	s.markRootObjectBehaviorDirty(w, key.OwnerID)
+}
+
+func (s *OpenContainerService) markRootObjectBehaviorDirty(w *ecs.World, rootOwnerID types.EntityID) {
+	if rootOwnerID == 0 {
+		return
+	}
+
+	handle := w.GetHandleByEntityID(rootOwnerID)
+	if handle == types.InvalidHandle || !w.Alive(handle) {
+		return
+	}
+	if _, hasObjectState := ecs.GetComponent[components.ObjectInternalState](w, handle); !hasObjectState {
+		return
+	}
+	ecs.MarkObjectBehaviorDirty(w, handle)
 }
 
 func inventoryKeyToProto(key ecs.InventoryRefKey) *netproto.InventoryRef {

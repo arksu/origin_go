@@ -39,8 +39,17 @@
           }
         ]
       },
-      "resource": "box/normal",
+      "resource": "box/empty",
       "appearance": [
+        {
+          "id": "open",
+          "when": {
+            "flags": [
+              "container.open"
+            ]
+          },
+          "resource": "box/open"
+        },
         {
           "id": "full",
           "when": {
@@ -48,7 +57,7 @@
               "container.has_items"
             ]
           },
-          "resource": "box/open"
+          "resource": "box/normal"
         }
       ],
       "behaviors": {
