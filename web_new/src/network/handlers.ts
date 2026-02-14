@@ -36,6 +36,7 @@ export function registerMessageHandlers(): void {
       chunkSize,
       streamEpoch,
     )
+    gameStore.markPlayerEnterWorldBootstrap()
 
     // Set stream epoch for MoveController to validate incoming movement packets
     moveController.setStreamEpoch(streamEpoch, tickRate)
@@ -64,6 +65,7 @@ export function registerMessageHandlers(): void {
       const version = msg.chunk.version || 0
       gameStore.loadChunk(x, y, tiles, version)
       gameFacade.loadChunk(x, y, tiles, version)
+      gameStore.markBootstrapFirstChunkLoaded()
     }
   })
 
@@ -109,6 +111,7 @@ export function registerMessageHandlers(): void {
       console.log(`[Handlers] Player entity spawned: entityId=${entityId}, pos=(${posX}, ${posY})`)
       gameFacade.setPlayerEntityId(entityId)
       gameFacade.setCamera(posX, posY)
+      gameStore.markBootstrapPlayerSpawned()
     }
   })
 

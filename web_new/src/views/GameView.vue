@@ -26,6 +26,11 @@ let gameFacade: any = null
 let connectToGame: any = null
 let disconnectFromGame: any = null
 const navigatingAway = ref(false)
+const showLoadingOverlay = ref(false)
+const loadingOverlayFading = ref(false)
+const showLoadingSlowHint = ref(false)
+let overlayHideTimer: ReturnType<typeof setTimeout> | null = null
+let loadingSlowHintTimer: ReturnType<typeof setTimeout> | null = null
 
 const connectionState = computed(() => gameStore.connectionState)
 const connectionError = computed(() => gameStore.connectionError)
@@ -34,6 +39,7 @@ const isConnecting = computed(() =>
 )
 const isConnected = computed(() => connectionState.value === 'connected')
 const hasError = computed(() => connectionState.value === 'error')
+const worldBootstrapState = computed(() => gameStore.worldBootstrapState)
 const playerInventory = computed(() => {
   const inv = gameStore.getPlayerInventory()
   console.log('[GameView] playerInventory computed:', inv)
@@ -83,6 +89,53 @@ watch(isConnected, async (connected) => {
   }
 })
 
+watch([isConnected, worldBootstrapState], ([connected, bootstrap]) => {
+  if (!connected) {
+    if (overlayHideTimer) {
+      clearTimeout(overlayHideTimer)
+      overlayHideTimer = null
+    }
+    if (loadingSlowHintTimer) {
+      clearTimeout(loadingSlowHintTimer)
+      loadingSlowHintTimer = null
+    }
+    showLoadingOverlay.value = false
+    loadingOverlayFading.value = false
+    showLoadingSlowHint.value = false
+    return
+  }
+
+  if (bootstrap !== 'ready') {
+    if (overlayHideTimer) {
+      clearTimeout(overlayHideTimer)
+      overlayHideTimer = null
+    }
+    showLoadingOverlay.value = true
+    loadingOverlayFading.value = false
+    showLoadingSlowHint.value = false
+    if (loadingSlowHintTimer) {
+      clearTimeout(loadingSlowHintTimer)
+    }
+    loadingSlowHintTimer = setTimeout(() => {
+      showLoadingSlowHint.value = true
+    }, 4000)
+    return
+  }
+
+  if (loadingSlowHintTimer) {
+    clearTimeout(loadingSlowHintTimer)
+    loadingSlowHintTimer = null
+  }
+  showLoadingSlowHint.value = false
+  if (!showLoadingOverlay.value) return
+  loadingOverlayFading.value = true
+  overlayHideTimer = setTimeout(() => {
+    showLoadingOverlay.value = false
+    loadingOverlayFading.value = false
+    overlayHideTimer = null
+  }, 250)
+})
+
 watch(connectionState, (state) => {
   if (navigatingAway.value) return
   if (state !== 'error' && state !== 'disconnected') return
@@ -117,6 +170,7 @@ onMounted(async () => {
   disconnectFromGame = networkModule.disconnectFromGame
 
   gameStore.clearLastServerErrorMessage()
+  gameStore.startWorldBootstrap()
   connectToGame(gameStore.wsToken)
 })
 
@@ -130,6 +184,14 @@ onUnmounted(() => {
   if (disconnectFromGame) {
     disconnectFromGame()
   }
+  if (overlayHideTimer) {
+    clearTimeout(overlayHideTimer)
+    overlayHideTimer = null
+  }
+  if (loadingSlowHintTimer) {
+    clearTimeout(loadingSlowHintTimer)
+    loadingSlowHintTimer = null
+  }
   gameStore.reset()
 })
 
@@ -140,6 +202,7 @@ function handleBack() {
 
 function handleRetry() {
   if (gameStore.wsToken) {
+    gameStore.startWorldBootstrap()
     connectToGame(gameStore.wsToken)
   }
 }
@@ -229,6 +292,16 @@ useHotkeys(hotkeys)
     <!-- Connected state -->
     <div v-else-if="isConnected" class="game-canvas-wrapper">
       <canvas ref="gameCanvas" class="game-canvas"></canvas>
+      <div
+        v-if="showLoadingOverlay"
+        class="game-loading-overlay"
+        :class="{ 'is-fading': loadingOverlayFading }"
+      >
+        <img src="/assets/img/origin_logo3.webp" alt="Origin logo" class="game-loading-overlay__logo">
+        <AppSpinner size="lg" />
+        <p class="game-loading-overlay__title">Loading world...</p>
+        <p v-if="showLoadingSlowHint" class="game-loading-overlay__hint">Still loading, please wait...</p>
+      </div>
       <div class="game-ui">
         <AppButton variant="secondary" size="sm" @click="handleBack">Exit</AppButton>
       </div>
@@ -288,10 +361,17 @@ useHotkeys(hotkeys)
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  padding: 30px;
+  border-radius: 18px;
+  background: rgba(16, 96, 109, 0.65);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
 
   &__text {
-    color: #a0a0a0;
+    color: #d5eeed;
     font-size: 1.125rem;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -320,6 +400,43 @@ useHotkeys(hotkeys)
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.game-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(12, 20, 25, 0.68);
+  backdrop-filter: blur(2px);
+  transition: opacity 0.25s ease;
+  opacity: 1;
+  pointer-events: all;
+
+  &.is-fading {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &__logo {
+    width: min(380px, 68vw);
+    filter: drop-shadow(2px 11px 8px rgba(0, 0, 0, 0.8));
+  }
+
+  &__title {
+    color: #d5eeed;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+  }
+
+  &__hint {
+    color: #b8cdd6;
+    font-size: 15px;
+  }
 }
 
 .game-ui {

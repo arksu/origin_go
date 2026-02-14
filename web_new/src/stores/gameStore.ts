@@ -82,6 +82,13 @@ export interface ActionProgress {
   current: number
 }
 
+export type WorldBootstrapState =
+  | 'idle'
+  | 'waiting_enter_world'
+  | 'waiting_first_chunk'
+  | 'waiting_player_spawn'
+  | 'ready'
+
 export const useGameStore = defineStore('game', () => {
   // Session
   const wsToken = ref('')
@@ -91,6 +98,7 @@ export const useGameStore = defineStore('game', () => {
   const connectionState = ref<ConnectionState>('disconnected')
   const connectionError = ref<ConnectionError | null>(null)
   const lastServerErrorMessage = ref('')
+  const worldBootstrapState = ref<WorldBootstrapState>('idle')
 
   // Player
   const playerEntityId = ref<number | null>(null)
@@ -121,6 +129,8 @@ export const useGameStore = defineStore('game', () => {
     total: 0,
     current: 0,
   })
+  const hasBootstrapFirstChunk = ref(false)
+  const hasBootstrapPlayerSpawn = ref(false)
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
@@ -162,6 +172,51 @@ export const useGameStore = defineStore('game', () => {
     connectionError.value = error ?? null
   }
 
+  function syncWorldBootstrapState() {
+    if (worldBootstrapState.value === 'idle' || worldBootstrapState.value === 'waiting_enter_world') {
+      return
+    }
+    if (hasBootstrapFirstChunk.value && hasBootstrapPlayerSpawn.value) {
+      worldBootstrapState.value = 'ready'
+      return
+    }
+    if (hasBootstrapFirstChunk.value) {
+      worldBootstrapState.value = 'waiting_player_spawn'
+      return
+    }
+    worldBootstrapState.value = 'waiting_first_chunk'
+  }
+
+  function startWorldBootstrap() {
+    hasBootstrapFirstChunk.value = false
+    hasBootstrapPlayerSpawn.value = false
+    worldBootstrapState.value = 'waiting_enter_world'
+  }
+
+  function markPlayerEnterWorldBootstrap() {
+    hasBootstrapFirstChunk.value = false
+    hasBootstrapPlayerSpawn.value = false
+    worldBootstrapState.value = 'waiting_first_chunk'
+  }
+
+  function markBootstrapFirstChunkLoaded() {
+    if (worldBootstrapState.value === 'idle') return
+    hasBootstrapFirstChunk.value = true
+    syncWorldBootstrapState()
+  }
+
+  function markBootstrapPlayerSpawned() {
+    if (worldBootstrapState.value === 'idle') return
+    hasBootstrapPlayerSpawn.value = true
+    syncWorldBootstrapState()
+  }
+
+  function resetWorldBootstrap() {
+    hasBootstrapFirstChunk.value = false
+    hasBootstrapPlayerSpawn.value = false
+    worldBootstrapState.value = 'idle'
+  }
+
   function setLastServerErrorMessage(message: string) {
     lastServerErrorMessage.value = message.trim()
   }
@@ -192,6 +247,7 @@ export const useGameStore = defineStore('game', () => {
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
     clearLastServerErrorMessage()
+    resetWorldBootstrap()
     if (miniAlertTimer) {
       clearInterval(miniAlertTimer)
       miniAlertTimer = null
@@ -215,6 +271,7 @@ export const useGameStore = defineStore('game', () => {
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
+    resetWorldBootstrap()
     if (miniAlertTimer) {
       clearInterval(miniAlertTimer)
       miniAlertTimer = null
@@ -575,6 +632,7 @@ export const useGameStore = defineStore('game', () => {
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
     clearLastServerErrorMessage()
+    resetWorldBootstrap()
     clearActionProgress()
 
     // Cleanup chat
@@ -596,6 +654,7 @@ export const useGameStore = defineStore('game', () => {
     connectionState,
     connectionError,
     lastServerErrorMessage,
+    worldBootstrapState,
     playerEntityId,
     playerName,
     playerPosition,
@@ -622,6 +681,11 @@ export const useGameStore = defineStore('game', () => {
     setGameSession,
     clearGameSession,
     setConnectionState,
+    startWorldBootstrap,
+    markPlayerEnterWorldBootstrap,
+    markBootstrapFirstChunkLoaded,
+    markBootstrapPlayerSpawned,
+    resetWorldBootstrap,
     setLastServerErrorMessage,
     clearLastServerErrorMessage,
     setPlayerEnterWorld,
