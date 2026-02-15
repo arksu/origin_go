@@ -396,11 +396,13 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		}
 	}
 
-	// Clear dirty flags on successfully serialized objects
-	for _, h := range dirtyHandles {
-		ecs.WithComponent(world, h, func(s *components.ObjectInternalState) {
-			s.IsDirty = false
-		})
+	// Clear dirty flags only after successful save; otherwise keep for retry.
+	if !saveFailed {
+		for _, h := range dirtyHandles {
+			ecs.WithComponent(world, h, func(s *components.ObjectInternalState) {
+				s.IsDirty = false
+			})
+		}
 	}
 	if !saveFailed && len(totalHandles) == 0 {
 		c.ClearRawDataDirty()
