@@ -37,7 +37,8 @@ const StopDistance float64 = 0.2
 type MoveMode uint8
 
 const (
-	Walk MoveMode = iota
+	Crawl MoveMode = iota
+	Walk
 	Run
 	FastRun
 	Swim

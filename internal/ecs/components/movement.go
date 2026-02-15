@@ -79,6 +79,8 @@ func (m *Movement) SetTargetHandle(handle types.Handle, x, y int) {
 
 func (m *Movement) GetCurrentSpeed() float64 {
 	switch m.Mode {
+	case constt.Crawl:
+		return m.Speed * 0.5
 	case constt.Walk:
 		return m.Speed
 	case constt.Run:

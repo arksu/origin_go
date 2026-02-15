@@ -146,7 +146,7 @@ interface ChunkData {
 - `openContextMenu(entityId, actions)` — On `S2C_ContextMenu`
 - `closeContextMenu()` — Explicit close on click/hotkey
 - `pushMiniAlert(input)` — On `S2C_MiniAlert` with debounce/coalesce/max-visible rules
-- `setCharacterAttributesSnapshot(entries)` — On `S2C_CharacterAttributes`, normalize to 9 values
+- `setCharacterProfileSnapshot(entries)` — On `S2C_CharacterProfile`, normalize attributes to 9 values
 - `toggleCharacterSheet()` / `setCharacterSheetVisible(visible)` — Character Sheet window controls
 
 ### Character Sheet Rules

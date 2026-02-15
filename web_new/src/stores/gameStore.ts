@@ -569,7 +569,7 @@ export const useGameStore = defineStore('game', () => {
     characterSheetVisible.value = visible
   }
 
-  function setCharacterAttributesSnapshot(entries: proto.ICharacterAttributeEntry[] | null | undefined) {
+  function setCharacterProfileSnapshot(entries: proto.ICharacterAttributeEntry[] | null | undefined) {
     const defaults = defaultCharacterAttributes()
     if (!entries || entries.length === 0) {
       characterAttributes.value = defaults
@@ -750,7 +750,7 @@ export const useGameStore = defineStore('game', () => {
     setPlayerInventoryVisible,
     toggleCharacterSheet,
     setCharacterSheetVisible,
-    setCharacterAttributesSnapshot,
+    setCharacterProfileSnapshot,
     onContainerOpened,
     onContainerClosed,
     closeNestedInventory,

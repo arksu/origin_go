@@ -55,7 +55,7 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('characterProfile', (msg: proto.IS2C_CharacterProfile) => {
-    gameStore.setCharacterAttributesSnapshot(msg.attributes || [])
+    gameStore.setCharacterProfileSnapshot(msg.attributes || [])
   })
 
   messageDispatcher.on('chunkLoad', (msg: proto.IS2C_ChunkLoad) => {

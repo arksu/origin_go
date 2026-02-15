@@ -92,7 +92,7 @@ export class MessageDispatcher {
     if (message.cyclicActionProgress) return 'cyclicActionProgress'
     if (message.cyclicActionFinished) return 'cyclicActionFinished'
     if (message.sound) return 'sound'
-    if (message.characterAttributes) return 'characterAttributes'
+    if (message.characterProfile) return 'characterProfile'
     if (message.error) return 'error'
     if (message.warning) return 'warning'
     return null
