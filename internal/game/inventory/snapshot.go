@@ -4,6 +4,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/itemdefs"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -196,6 +197,11 @@ func (ss *SnapshotSender) buildItemInstance(
 		Quantity: invItem.Quantity,
 		W:        uint32(invItem.W),
 		H:        uint32(invItem.H),
+	}
+
+	// Set name from item definition
+	if def, ok := itemdefs.Global().GetByID(int(invItem.TypeID)); ok {
+		itemInstance.Name = def.Name
 	}
 
 	// Check if this item has a nested container via index (O(1))

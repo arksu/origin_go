@@ -9,6 +9,7 @@ import (
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
 	"origin/internal/game/inventory"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -550,6 +551,10 @@ func buildInventoryStateFromContainer(w *ecs.World, container components.Invento
 				W:        uint32(item.W),
 				H:        uint32(item.H),
 			}
+			// Set name from item definition
+			if def, ok := itemdefs.Global().GetByID(int(item.TypeID)); ok {
+				itemProto.Name = def.Name
+			}
 			if _, hasNested := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); hasNested {
 				itemProto.NestedRef = &netproto.InventoryRef{
 					Kind:         netproto.InventoryKind_INVENTORY_KIND_GRID,
@@ -583,6 +588,10 @@ func buildInventoryStateFromContainer(w *ecs.World, container components.Invento
 				W:        uint32(item.W),
 				H:        uint32(item.H),
 			}
+			// Set name from item definition
+			if def, ok := itemdefs.Global().GetByID(int(item.TypeID)); ok {
+				handState.Item.Name = def.Name
+			}
 			handState.HandPos = &netproto.HandPos{
 				MouseOffsetX: int32(container.HandMouseOffsetX),
 				MouseOffsetY: int32(container.HandMouseOffsetY),
@@ -604,6 +613,10 @@ func buildInventoryStateFromContainer(w *ecs.World, container components.Invento
 					H:        uint32(item.H),
 				},
 			})
+			// Set name from item definition
+			if def, ok := itemdefs.Global().GetByID(int(item.TypeID)); ok {
+				items[len(items)-1].Item.Name = def.Name
+			}
 		}
 		invState.State = &netproto.InventoryState_Equipment{
 			Equipment: &netproto.InventoryEquipmentState{Items: items},

@@ -3,6 +3,7 @@ package systems
 import (
 	"fmt"
 	constt "origin/internal/const"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"strings"
 )
@@ -86,6 +87,12 @@ func BuildItemInstanceProto(item InventoryItemState) *netproto.ItemInstance {
 		W:        uint32(item.W),
 		H:        uint32(item.H),
 	}
+
+	// Set name from item definition
+	if def, ok := itemdefs.Global().GetByID(int(item.TypeID)); ok {
+		instance.Name = def.Name
+	}
+
 	if item.NestedRef != nil {
 		instance.NestedRef = item.NestedRef
 	}
