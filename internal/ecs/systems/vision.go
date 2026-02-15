@@ -114,9 +114,10 @@ func newWorkerScratch() visionWorkerScratch {
 
 type VisionSystem struct {
 	ecs.BaseSystem
-	chunkManager core.ChunkManager
-	eventBus     *eventbus.EventBus
-	logger       *zap.Logger
+	chunkManager      core.ChunkManager
+	eventBus          *eventbus.EventBus
+	logger            *zap.Logger
+	enableVisionStats bool
 
 	workers       [numVisionWorkers]visionWorkerScratch
 	jobs          []observerJob
@@ -137,6 +138,7 @@ func NewVisionSystem(
 	world *ecs.World,
 	chunkManager core.ChunkManager,
 	eventBus *eventbus.EventBus,
+	enableVisionStats bool,
 	logger *zap.Logger,
 ) *VisionSystem {
 	sys := &VisionSystem{
@@ -144,6 +146,7 @@ func NewVisionSystem(
 		chunkManager:      chunkManager,
 		eventBus:          eventBus,
 		logger:            logger,
+		enableVisionStats: enableVisionStats,
 		jobs:              make([]observerJob, 0, 128),
 		results:           make([]observerResult, 0, 128),
 		deadObservers:     make([]deadObserverEntry, 0, 16),
@@ -726,57 +729,61 @@ func (s *VisionSystem) accumulateForceMetrics(
 }
 
 func (s *VisionSystem) maybeLogMetrics() {
-	//now := time.Now()
-	//m := &s.metrics
-	//if m.windowStart.IsZero() {
-	//	m.windowStart = now
-	//}
-	//if now.Sub(m.windowStart) < visionMetricsLogInterval {
-	//	return
-	//}
-	//
-	//var duePerUpdate float64
-	//var candidatesPerDue float64
-	//var visiblePerDue float64
-	//var chunksPerDue float64
-	//var skipDirtyRate float64
-	//if m.updates > 0 {
-	//	duePerUpdate = float64(m.observersDue) / float64(m.updates)
-	//}
-	//if m.observersDue > 0 {
-	//	candidatesPerDue = float64(m.candidatesTotal) / float64(m.observersDue)
-	//	visiblePerDue = float64(m.visibleTotal) / float64(m.observersDue)
-	//	chunksPerDue = float64(m.chunksQueriedTotal) / float64(m.observersDue)
-	//	skipDirtyRate = float64(m.observersSkipDirty) / float64(m.observersDue)
-	//}
-	//
-	//s.logger.Info("Vision metrics (5s)",
-	//	zap.Uint64("updates", m.updates),
-	//	zap.Uint64("observers_total", m.observersTotal),
-	//	zap.Uint64("observers_due", m.observersDue),
-	//	zap.Uint64("observers_skipped_dirty", m.observersSkipDirty),
-	//	zap.Uint64("force_updates", m.forceUpdates),
-	//	zap.Uint64("chunks_queried_total", m.chunksQueriedTotal),
-	//	zap.Uint64("query_radius_calls", m.queryRadiusCalls),
-	//	zap.Uint64("candidates_total", m.candidatesTotal),
-	//	zap.Uint64("visible_total", m.visibleTotal),
-	//	zap.Uint64("spawn_events", m.spawnEvents),
-	//	zap.Uint64("despawn_events", m.despawnEvents),
-	//	zap.Float64("due_per_update", duePerUpdate),
-	//	zap.Float64("chunks_per_due", chunksPerDue),
-	//	zap.Float64("candidates_per_due", candidatesPerDue),
-	//	zap.Float64("visible_per_due", visiblePerDue),
-	//	zap.Float64("skip_dirty_rate", skipDirtyRate),
-	//	zap.Duration("collect", m.collectDur),
-	//	zap.Duration("compute", m.computeDur),
-	//	zap.Duration("commit", m.commitDur),
-	//	zap.Duration("publish", m.publishDur),
-	//	zap.Duration("find_candidates", m.findCandidatesDur),
-	//	zap.Duration("filter", m.filterDur),
-	//	zap.Duration("diff", m.diffDur),
-	//)
-	//
-	//s.metrics = visionMetricsWindow{windowStart: now}
+	if !s.enableVisionStats {
+		return
+	}
+
+	now := time.Now()
+	m := &s.metrics
+	if m.windowStart.IsZero() {
+		m.windowStart = now
+	}
+	if now.Sub(m.windowStart) < visionMetricsLogInterval {
+		return
+	}
+
+	var duePerUpdate float64
+	var candidatesPerDue float64
+	var visiblePerDue float64
+	var chunksPerDue float64
+	var skipDirtyRate float64
+	if m.updates > 0 {
+		duePerUpdate = float64(m.observersDue) / float64(m.updates)
+	}
+	if m.observersDue > 0 {
+		candidatesPerDue = float64(m.candidatesTotal) / float64(m.observersDue)
+		visiblePerDue = float64(m.visibleTotal) / float64(m.observersDue)
+		chunksPerDue = float64(m.chunksQueriedTotal) / float64(m.observersDue)
+		skipDirtyRate = float64(m.observersSkipDirty) / float64(m.observersDue)
+	}
+
+	s.logger.Info("Vision metrics (5s)",
+		zap.Uint64("updates", m.updates),
+		zap.Uint64("observers_total", m.observersTotal),
+		zap.Uint64("observers_due", m.observersDue),
+		zap.Uint64("observers_skipped_dirty", m.observersSkipDirty),
+		zap.Uint64("force_updates", m.forceUpdates),
+		zap.Uint64("chunks_queried_total", m.chunksQueriedTotal),
+		zap.Uint64("query_radius_calls", m.queryRadiusCalls),
+		zap.Uint64("candidates_total", m.candidatesTotal),
+		zap.Uint64("visible_total", m.visibleTotal),
+		zap.Uint64("spawn_events", m.spawnEvents),
+		zap.Uint64("despawn_events", m.despawnEvents),
+		zap.Float64("due_per_update", duePerUpdate),
+		zap.Float64("chunks_per_due", chunksPerDue),
+		zap.Float64("candidates_per_due", candidatesPerDue),
+		zap.Float64("visible_per_due", visiblePerDue),
+		zap.Float64("skip_dirty_rate", skipDirtyRate),
+		zap.Duration("collect", m.collectDur),
+		zap.Duration("compute", m.computeDur),
+		zap.Duration("commit", m.commitDur),
+		zap.Duration("publish", m.publishDur),
+		zap.Duration("find_candidates", m.findCandidatesDur),
+		zap.Duration("filter", m.filterDur),
+		zap.Duration("diff", m.diffDur),
+	)
+
+	s.metrics = visionMetricsWindow{windowStart: now}
 }
 
 func CalcMaxVisionRadius(vision components.Vision) float64 {

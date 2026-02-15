@@ -4,7 +4,9 @@ import (
 	"origin/internal/config"
 	"origin/internal/core"
 	"origin/internal/ecs"
+	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"testing"
@@ -357,5 +359,58 @@ func TestChunk_SaveToDB_HandlesInactiveChunks(t *testing.T) {
 	handles := chunk.GetHandles()
 	if len(handles) != 0 {
 		t.Errorf("Expected 0 handles for inactive chunk, got %d", len(handles))
+	}
+}
+
+func TestChunkManager_DeactivateChunkInternal_TracksOnlyDirtyRawObjects(t *testing.T) {
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry(nil))
+
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 11, Y: 11}
+	chunk := core.NewChunk(coord, 0, 0, 128)
+	chunk.SetState(types.ChunkStateActive)
+
+	dirtyEntityID := types.EntityID(1001)
+	dirtyHandle := cm.world.Spawn(dirtyEntityID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: 200, Region: 1, Layer: 0, IsStatic: true})
+		ecs.AddComponent(w, h, components.Transform{X: 10, Y: 10})
+		ecs.AddComponent(w, h, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
+		ecs.AddComponent(w, h, components.ObjectInternalState{IsDirty: true})
+	})
+	chunk.Spatial().AddStatic(dirtyHandle, 10, 10)
+
+	cleanEntityID := types.EntityID(1002)
+	cleanHandle := cm.world.Spawn(cleanEntityID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: 201, Region: 1, Layer: 0, IsStatic: true})
+		ecs.AddComponent(w, h, components.Transform{X: 11, Y: 10})
+		ecs.AddComponent(w, h, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
+		ecs.AddComponent(w, h, components.ObjectInternalState{IsDirty: false})
+	})
+	chunk.Spatial().AddStatic(cleanHandle, 11, 10)
+
+	if err := cm.deactivateChunkInternal(chunk); err != nil {
+		t.Fatalf("deactivateChunkInternal failed: %v", err)
+	}
+
+	if state := chunk.GetState(); state != types.ChunkStatePreloaded {
+		t.Fatalf("chunk state = %v, want %v", state, types.ChunkStatePreloaded)
+	}
+
+	rawObjects := chunk.GetRawObjects()
+	if len(rawObjects) != 2 {
+		t.Fatalf("expected full raw snapshot with 2 objects, got %d", len(rawObjects))
+	}
+
+	dirtyIDs := chunk.GetRawDirtyObjectIDs()
+	if len(dirtyIDs) != 1 {
+		t.Fatalf("expected 1 dirty raw object id, got %d", len(dirtyIDs))
+	}
+	if _, ok := dirtyIDs[dirtyEntityID]; !ok {
+		t.Fatalf("expected dirty id set to include %d", dirtyEntityID)
+	}
+	if _, ok := dirtyIDs[cleanEntityID]; ok {
+		t.Fatalf("clean object id %d must not be marked dirty", cleanEntityID)
 	}
 }

@@ -26,12 +26,13 @@ type ShardDuration struct {
 }
 
 type ShardManager struct {
-	cfg             *config.Config
-	db              *persistence.Postgres
-	entityIDManager *EntityIDManager
-	objectFactory   *world.ObjectFactory
-	snapshotSender  *inventory.SnapshotSender
-	logger          *zap.Logger
+	cfg               *config.Config
+	db                *persistence.Postgres
+	entityIDManager   *EntityIDManager
+	objectFactory     *world.ObjectFactory
+	snapshotSender    *inventory.SnapshotSender
+	logger            *zap.Logger
+	enableVisionStats bool
 
 	shards map[int]*Shard
 
@@ -39,7 +40,7 @@ type ShardManager struct {
 	eventBus   *eventbus.EventBus
 }
 
-func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, logger *zap.Logger) *ShardManager {
+func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, enableVisionStats bool, logger *zap.Logger) *ShardManager {
 	ebCfg := &eventbus.Config{
 		MinWorkers: cfg.Game.EventBusMinWorkers,
 		MaxWorkers: cfg.Game.EventBusMaxWorkers,
@@ -54,19 +55,20 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 	}
 
 	sm := &ShardManager{
-		cfg:             cfg,
-		db:              db,
-		entityIDManager: entityIDManager,
-		objectFactory:   objectFactory,
-		snapshotSender:  snapshotSender,
-		logger:          logger,
-		shards:          make(map[int]*Shard),
-		workerPool:      NewWorkerPool(cfg.Game.WorkerPoolSize),
-		eventBus:        eventbus.New(ebCfg),
+		cfg:               cfg,
+		db:                db,
+		entityIDManager:   entityIDManager,
+		objectFactory:     objectFactory,
+		snapshotSender:    snapshotSender,
+		logger:            logger,
+		enableVisionStats: enableVisionStats,
+		shards:            make(map[int]*Shard),
+		workerPool:        NewWorkerPool(cfg.Game.WorkerPoolSize),
+		eventBus:          eventbus.New(ebCfg),
 	}
 
 	for layer := 0; layer < cfg.Game.MaxLayers; layer++ {
-		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, snapshotSender, sm.eventBus, logger.Named("shard"))
+		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, snapshotSender, sm.eventBus, enableVisionStats, logger.Named("shard"))
 	}
 
 	return sm
