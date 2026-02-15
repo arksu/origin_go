@@ -52,6 +52,13 @@ export const DEFAULT_HOTKEYS: HotkeyConfig[] = [
     }
   },
   {
+    key: 'c',
+    description: 'Toggle character sheet',
+    action: () => {
+      console.log('[Hotkeys] Character sheet toggle - not implemented yet')
+    }
+  },
+  {
     key: '`',
     description: 'Toggle debug overlay',
     action: () => {

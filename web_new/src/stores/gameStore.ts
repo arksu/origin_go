@@ -82,6 +82,13 @@ export interface ActionProgress {
   current: number
 }
 
+export interface CharacterAttributeViewItem {
+  key: proto.CharacterAttributeKey
+  label: string
+  value: number
+  icon: string
+}
+
 export type WorldBootstrapState =
   | 'idle'
   | 'waiting_enter_world'
@@ -129,6 +136,8 @@ export const useGameStore = defineStore('game', () => {
     total: 0,
     current: 0,
   })
+  const characterSheetVisible = ref(false)
+  const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const hasBootstrapFirstChunk = ref(false)
   const hasBootstrapPlayerSpawn = ref(false)
 
@@ -243,6 +252,8 @@ export const useGameStore = defineStore('game', () => {
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
+    characterSheetVisible.value = false
+    characterAttributes.value = defaultCharacterAttributes()
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -268,6 +279,8 @@ export const useGameStore = defineStore('game', () => {
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
+    characterSheetVisible.value = false
+    characterAttributes.value = defaultCharacterAttributes()
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -548,6 +561,34 @@ export const useGameStore = defineStore('game', () => {
     console.log('[gameStore] Player inventory data:', getPlayerInventory())
   }
 
+  function toggleCharacterSheet() {
+    characterSheetVisible.value = !characterSheetVisible.value
+  }
+
+  function setCharacterSheetVisible(visible: boolean) {
+    characterSheetVisible.value = visible
+  }
+
+  function setCharacterAttributesSnapshot(entries: proto.ICharacterAttributeEntry[] | null | undefined) {
+    const defaults = defaultCharacterAttributes()
+    if (!entries || entries.length === 0) {
+      characterAttributes.value = defaults
+      return
+    }
+
+    const byKey = new Map<proto.CharacterAttributeKey, number>()
+    for (const entry of entries) {
+      const key = entry.key ?? proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_UNSPECIFIED
+      const rawValue = entry.value ?? 0
+      byKey.set(key, Number.isFinite(rawValue) && rawValue >= 1 ? rawValue : 1)
+    }
+
+    characterAttributes.value = defaults.map((item) => ({
+      ...item,
+      value: byKey.get(item.key) ?? 1,
+    }))
+  }
+
   function setPlayerInventoryVisible(visible: boolean) {
     playerInventoryVisible.value = visible
   }
@@ -628,6 +669,8 @@ export const useGameStore = defineStore('game', () => {
     // Clear nested inventories
     openNestedInventories.value.clear()
     openedRootContainerRefs.value.clear()
+    characterSheetVisible.value = false
+    characterAttributes.value = defaultCharacterAttributes()
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -664,6 +707,8 @@ export const useGameStore = defineStore('game', () => {
     chatMessages,
     inventories,
     playerInventoryVisible,
+    characterSheetVisible,
+    characterAttributes,
     openNestedInventories,
     mousePos,
     contextMenu,
@@ -703,6 +748,9 @@ export const useGameStore = defineStore('game', () => {
     getPlayerInventory,
     togglePlayerInventory,
     setPlayerInventoryVisible,
+    toggleCharacterSheet,
+    setCharacterSheetVisible,
+    setCharacterAttributesSnapshot,
     onContainerOpened,
     onContainerClosed,
     closeNestedInventory,
@@ -719,3 +767,17 @@ export const useGameStore = defineStore('game', () => {
     reset,
   }
 })
+
+function defaultCharacterAttributes(): CharacterAttributeViewItem[] {
+  return [
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_STR, label: 'Strength', value: 1, icon: '⚒' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_AGI, label: 'Agility', value: 1, icon: '⚡' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_INT, label: 'Intelligence', value: 1, icon: '✦' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_CON, label: 'Constitution', value: 1, icon: '❤' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_PER, label: 'Perception', value: 1, icon: '◉' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_CHA, label: 'Charisma', value: 1, icon: '☯' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_DEX, label: 'Dexterity', value: 1, icon: '⚙' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_PSY, label: 'Psyche', value: 1, icon: '☁' },
+    { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_WIL, label: 'Will', value: 1, icon: '♜' },
+  ]
+}

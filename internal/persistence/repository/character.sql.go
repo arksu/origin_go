@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 
 	"github.com/lib/pq"
 )
@@ -24,17 +25,18 @@ func (q *Queries) ClearAuthToken(ctx context.Context, id int64) error {
 }
 
 const createCharacter = `-- name: CreateCharacter :one
-INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp)
-VALUES ($1, $2, $3, 1, $4, $5, 0, 0, 100, 100, 100)
-RETURNING id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, attributes)
+VALUES ($1, $2, $3, 1, $4, $5, 0, 0, 100, 100, 100, $6::jsonb)
+RETURNING id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, attributes, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 `
 
 type CreateCharacterParams struct {
-	ID        int64  `json:"id"`
-	AccountID int64  `json:"account_id"`
-	Name      string `json:"name"`
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
+	ID         int64           `json:"id"`
+	AccountID  int64           `json:"account_id"`
+	Name       string          `json:"name"`
+	X          int             `json:"x"`
+	Y          int             `json:"y"`
+	Attributes json.RawMessage `json:"attributes"`
 }
 
 func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams) (Character, error) {
@@ -44,6 +46,7 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 		arg.Name,
 		arg.X,
 		arg.Y,
+		arg.Attributes,
 	)
 	var i Character
 	err := row.Scan(
@@ -58,6 +61,7 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
+		&i.Attributes,
 		&i.ExpNature,
 		&i.ExpIndustry,
 		&i.ExpCombat,
@@ -94,7 +98,7 @@ func (q *Queries) DeleteCharacter(ctx context.Context, arg DeleteCharacterParams
 }
 
 const getCharacter = `-- name: GetCharacter :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, attributes, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 FROM character
 WHERE id = $1
   AND deleted_at IS NULL
@@ -115,6 +119,7 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
+		&i.Attributes,
 		&i.ExpNature,
 		&i.ExpIndustry,
 		&i.ExpCombat,
@@ -133,7 +138,7 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 }
 
 const getCharacterByTokenForUpdate = `-- name: GetCharacterByTokenForUpdate :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, attributes, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 from character
 where auth_token = $1
 FOR UPDATE
@@ -154,6 +159,7 @@ func (q *Queries) GetCharacterByTokenForUpdate(ctx context.Context, authToken sq
 		&i.Stamina,
 		&i.Shp,
 		&i.Hhp,
+		&i.Attributes,
 		&i.ExpNature,
 		&i.ExpIndustry,
 		&i.ExpCombat,
@@ -172,7 +178,7 @@ func (q *Queries) GetCharacterByTokenForUpdate(ctx context.Context, authToken sq
 }
 
 const getCharactersByAccountID = `-- name: GetCharactersByAccountID :many
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, attributes, exp_nature, exp_industry, exp_combat, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 FROM character
 WHERE account_id = $1
   AND deleted_at IS NULL
@@ -200,6 +206,7 @@ func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64)
 			&i.Stamina,
 			&i.Shp,
 			&i.Hhp,
+			&i.Attributes,
 			&i.ExpNature,
 			&i.ExpIndustry,
 			&i.ExpCombat,
@@ -291,6 +298,24 @@ func (q *Queries) SetCharacterOnline(ctx context.Context, id int64) error {
 	return err
 }
 
+const updateCharacterAttributes = `-- name: UpdateCharacterAttributes :exec
+UPDATE character
+SET attributes = $1::jsonb,
+    updated_at = now()
+WHERE id = $2
+  AND deleted_at IS NULL
+`
+
+type UpdateCharacterAttributesParams struct {
+	Attributes json.RawMessage `json:"attributes"`
+	ID         int64           `json:"id"`
+}
+
+func (q *Queries) UpdateCharacterAttributes(ctx context.Context, arg UpdateCharacterAttributesParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterAttributes, arg.Attributes, arg.ID)
+	return err
+}
+
 const updateCharacterPosition = `-- name: UpdateCharacterPosition :exec
 UPDATE character
 SET x = $2, y = $3
@@ -317,6 +342,7 @@ SET
     stamina = v.stamina,
     shp = v.shp,
     hhp = v.hhp,
+    attributes = v.attributes,
     last_save_at = now(),
     updated_at = now()
 FROM (
@@ -327,19 +353,21 @@ FROM (
              unnest($4::float8[]) as heading,
              unnest($5::int[]) as stamina,
              unnest($6::int[]) as shp,
-             unnest($7::int[]) as hhp
+             unnest($7::int[]) as hhp,
+             unnest($8::text[])::jsonb as attributes
      ) AS v
 WHERE character.id = v.id
 `
 
 type UpdateCharactersParams struct {
-	Ids      []int     `json:"ids"`
-	Xs       []float64 `json:"xs"`
-	Ys       []float64 `json:"ys"`
-	Headings []float64 `json:"headings"`
-	Staminas []int     `json:"staminas"`
-	Shps     []int     `json:"shps"`
-	Hhps     []int     `json:"hhps"`
+	Ids        []int     `json:"ids"`
+	Xs         []float64 `json:"xs"`
+	Ys         []float64 `json:"ys"`
+	Headings   []float64 `json:"headings"`
+	Staminas   []int     `json:"staminas"`
+	Shps       []int     `json:"shps"`
+	Hhps       []int     `json:"hhps"`
+	Attributes []string  `json:"attributes"`
 }
 
 func (q *Queries) UpdateCharacters(ctx context.Context, arg UpdateCharactersParams) error {
@@ -351,6 +379,7 @@ func (q *Queries) UpdateCharacters(ctx context.Context, arg UpdateCharactersPara
 		pq.Array(arg.Staminas),
 		pq.Array(arg.Shps),
 		pq.Array(arg.Hhps),
+		pq.Array(arg.Attributes),
 	)
 	return err
 }

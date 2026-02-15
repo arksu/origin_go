@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"fmt"
+	"origin/internal/characterattrs"
 	_const "origin/internal/const"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -733,6 +734,76 @@ func (s *Shard) SendInventorySnapshots(w *ecs.World, entityID types.EntityID, ha
 
 	if s.snapshotSender != nil {
 		s.snapshotSender.SendInventorySnapshots(w, client, entityID, handle)
+	}
+}
+
+// SendCharacterAttributesSnapshot sends full character attributes after player enter world.
+func (s *Shard) SendCharacterAttributesSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	values := characterattrs.Default()
+	if attributes, hasAttributes := ecs.GetComponent[components.CharacterAttributes](w, handle); hasAttributes {
+		values = characterattrs.Normalize(attributes.Values)
+	} else {
+		s.logger.Warn("Character has no CharacterAttributes component",
+			zap.Int64("entity_id", int64(entityID)))
+	}
+
+	entries := make([]*netproto.CharacterAttributeEntry, 0, len(characterattrs.RequiredNames()))
+	for _, name := range characterattrs.RequiredNames() {
+		entries = append(entries, &netproto.CharacterAttributeEntry{
+			Key:   characterAttributeNameToProtoKey(name),
+			Value: int32(characterattrs.Get(values, name)),
+		})
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_CharacterAttributes{
+			CharacterAttributes: &netproto.S2C_CharacterAttributes{
+				Attributes: entries,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal character attributes snapshot",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+func characterAttributeNameToProtoKey(name characterattrs.Name) netproto.CharacterAttributeKey {
+	switch name {
+	case characterattrs.INT:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_INT
+	case characterattrs.STR:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_STR
+	case characterattrs.PER:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_PER
+	case characterattrs.PSY:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_PSY
+	case characterattrs.AGI:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_AGI
+	case characterattrs.CON:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_CON
+	case characterattrs.CHA:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_CHA
+	case characterattrs.DEX:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_DEX
+	case characterattrs.WIL:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_WIL
+	default:
+		return netproto.CharacterAttributeKey_CHARACTER_ATTRIBUTE_KEY_UNSPECIFIED
 	}
 }
 

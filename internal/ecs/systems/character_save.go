@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"origin/internal/characterattrs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/persistence"
@@ -88,6 +89,7 @@ type CharacterSnapshot struct {
 	Stamina     int16
 	SHP         int16
 	HHP         int16
+	Attributes  string
 	Inventories []InventorySnapshot
 }
 
@@ -131,8 +133,9 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 		return
 	}
 
+	attributesRaw := s.serializeCharacterAttributes(w, entityID, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, inventories))
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, inventories))
 }
 
 // SaveDetached enqueues a lightweight snapshot for detached-entity expiration path.
@@ -145,12 +148,14 @@ func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, han
 		return
 	}
 
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, nil))
+	attributesRaw := s.serializeCharacterAttributes(w, entityID, handle)
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, nil))
 }
 
 func (s *CharacterSaver) buildSnapshot(
 	entityID types.EntityID,
 	transform components.Transform,
+	attributesRaw string,
 	inventories []InventorySnapshot,
 ) CharacterSnapshot {
 	return CharacterSnapshot{
@@ -161,8 +166,36 @@ func (s *CharacterSaver) buildSnapshot(
 		Stamina:     100, // TODO
 		SHP:         100, // TODO
 		HHP:         100, // TODO
+		Attributes:  attributesRaw,
 		Inventories: inventories,
 	}
+}
+
+func (s *CharacterSaver) serializeCharacterAttributes(w *ecs.World, entityID types.EntityID, handle types.Handle) string {
+	values := characterattrs.Default()
+	if attributes, hasAttributes := ecs.GetComponent[components.CharacterAttributes](w, handle); hasAttributes {
+		values = characterattrs.Normalize(attributes.Values)
+	} else {
+		s.logger.Warn("Character entity missing CharacterAttributes component, using defaults",
+			zap.Uint64("entity_id", uint64(entityID)))
+	}
+
+	raw, err := characterattrs.Marshal(values)
+	if err != nil {
+		s.logger.Error("Failed to marshal character attributes, using defaults",
+			zap.Uint64("entity_id", uint64(entityID)),
+			zap.Error(err))
+		defaultRaw, defaultErr := characterattrs.Marshal(characterattrs.Default())
+		if defaultErr != nil {
+			s.logger.Error("Failed to marshal default character attributes",
+				zap.Uint64("entity_id", uint64(entityID)),
+				zap.Error(defaultErr))
+			return "{}"
+		}
+		return string(defaultRaw)
+	}
+
+	return string(raw)
 }
 
 func (s *CharacterSaver) enqueueSnapshot(snapshot CharacterSnapshot) {
@@ -242,6 +275,7 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 	staminas := make([]int, len(batch))
 	shps := make([]int, len(batch))
 	hhps := make([]int, len(batch))
+	attributes := make([]string, len(batch))
 
 	for i, snapshot := range batch {
 		ids[i] = int(snapshot.CharacterID)
@@ -251,16 +285,18 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		staminas[i] = int(snapshot.Stamina)
 		shps[i] = int(snapshot.SHP)
 		hhps[i] = int(snapshot.HHP)
+		attributes[i] = snapshot.Attributes
 	}
 
 	params := repository.UpdateCharactersParams{
-		Ids:      ids,
-		Xs:       xs,
-		Ys:       ys,
-		Headings: headings,
-		Staminas: staminas,
-		Shps:     shps,
-		Hhps:     hhps,
+		Ids:        ids,
+		Xs:         xs,
+		Ys:         ys,
+		Headings:   headings,
+		Staminas:   staminas,
+		Shps:       shps,
+		Hhps:       hhps,
+		Attributes: attributes,
 	}
 
 	err := s.db.Queries().UpdateCharacters(ctx, params)
