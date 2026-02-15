@@ -934,6 +934,8 @@ type ItemInstance struct {
 	Resource string                 `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
 	Quality  uint32                 `protobuf:"varint,4,opt,name=quality,proto3" json:"quality,omitempty"`
 	Quantity uint32                 `protobuf:"varint,5,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Name     string                 `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+	HintExt  *string                `protobuf:"bytes,7,opt,name=hint_ext,json=hintExt,proto3,oneof" json:"hint_ext,omitempty"`
 	W        uint32                 `protobuf:"varint,10,opt,name=w,proto3" json:"w,omitempty"` // размеры в слотах
 	H        uint32                 `protobuf:"varint,11,opt,name=h,proto3" json:"h,omitempty"`
 	// Если предмет является контейнером (seed_bag, backpack, etc.),
@@ -1006,6 +1008,20 @@ func (x *ItemInstance) GetQuantity() uint32 {
 		return x.Quantity
 	}
 	return 0
+}
+
+func (x *ItemInstance) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ItemInstance) GetHintExt() string {
+	if x != nil && x.HintExt != nil {
+		return *x.HintExt
+	}
+	return ""
 }
 
 func (x *ItemInstance) GetW() uint32 {
@@ -4704,18 +4720,21 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\fInventoryRef\x12(\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x14.proto.InventoryKindR\x04kind\x12\x19\n" +
 	"\bowner_id\x18\x02 \x01(\x04R\aownerId\x12#\n" +
-	"\rinventory_key\x18\x03 \x01(\rR\finventoryKey\"\xf6\x01\n" +
+	"\rinventory_key\x18\x03 \x01(\rR\finventoryKey\"\xb7\x02\n" +
 	"\fItemInstance\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\x04R\x06itemId\x12\x17\n" +
 	"\atype_id\x18\x02 \x01(\rR\x06typeId\x12\x1a\n" +
 	"\bresource\x18\x03 \x01(\tR\bresource\x12\x18\n" +
 	"\aquality\x18\x04 \x01(\rR\aquality\x12\x1a\n" +
-	"\bquantity\x18\x05 \x01(\rR\bquantity\x12\f\n" +
+	"\bquantity\x18\x05 \x01(\rR\bquantity\x12\x12\n" +
+	"\x04name\x18\x06 \x01(\tR\x04name\x12\x1e\n" +
+	"\bhint_ext\x18\a \x01(\tH\x00R\ahintExt\x88\x01\x01\x12\f\n" +
 	"\x01w\x18\n" +
 	" \x01(\rR\x01w\x12\f\n" +
 	"\x01h\x18\v \x01(\rR\x01h\x127\n" +
 	"\n" +
-	"nested_ref\x18\f \x01(\v2\x13.proto.InventoryRefH\x00R\tnestedRef\x88\x01\x01B\r\n" +
+	"nested_ref\x18\f \x01(\v2\x13.proto.InventoryRefH\x01R\tnestedRef\x88\x01\x01B\v\n" +
+	"\t_hint_extB\r\n" +
 	"\v_nested_ref\"O\n" +
 	"\bGridItem\x12\f\n" +
 	"\x01x\x18\x01 \x01(\rR\x01x\x12\f\n" +
