@@ -10,6 +10,7 @@ function getGitCommitHash() {
         return 'unknown';
     }
 }
+const buildId = process.env.BUILD_ID || new Date().toISOString().replace(/[-:TZ.]/g, '');
 export default defineConfig({
     plugins: [vue()],
     resolve: {
@@ -39,23 +40,23 @@ export default defineConfig({
         chunkSizeWarningLimit: 600,
         rollupOptions: {
             output: {
+                entryFileNames: `assets/[name]-${buildId}-[hash].js`,
+                chunkFileNames: `assets/[name]-${buildId}-[hash].js`,
+                assetFileNames: `assets/[name]-${buildId}-[hash][extname]`,
                 manualChunks(id) {
-                    if (id.includes('node_modules/pixi.js'))
-                        return 'pixi';
-                    if (id.includes('/src/network/proto/'))
-                        return 'network-proto';
-                    if (id.includes('/src/network/handlers/'))
-                        return 'network-handlers';
-                    if (id.includes('/src/network/'))
-                        return 'network-core';
-                    if (id.includes('/src/game/terrain/'))
-                        return 'game-terrain';
-                    if (id.includes('/src/game/objects/'))
-                        return 'game-objects';
-                    if (id.includes('/src/game/'))
-                        return 'game-core';
-                    if (id.includes('node_modules'))
-                        return 'vendor';
+                    if (!id.includes('node_modules'))
+                        return;
+                    if (id.includes('/node_modules/pixi.js/'))
+                        return 'vendor-pixi';
+                    if (id.includes('/node_modules/@esotericsoftware/'))
+                        return 'vendor-spine';
+                    if (id.includes('/node_modules/vue/') || id.includes('/node_modules/pinia/'))
+                        return 'vendor-vue';
+                    if (id.includes('/node_modules/protobufjs/') || id.includes('/node_modules/@protobufjs/'))
+                        return 'vendor-proto';
+                    if (id.includes('/node_modules/dayjs/') || id.includes('/node_modules/lodash'))
+                        return 'vendor-utils';
+                    return 'vendor';
                 }
             }
         }

@@ -147,7 +147,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, inventorySaver, logger)
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
-	s.world.AddSystem(systems.NewDropDecaySystem(droppedItemPersister, logger))
+	s.world.AddSystem(systems.NewDropDecaySystem(droppedItemPersister, s.chunkManager, logger))
 
 	return s
 }
