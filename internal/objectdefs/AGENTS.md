@@ -151,6 +151,22 @@ The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) regis
 | `persistence` | DB stores `type_id` referencing defId |
 | `game/events` | Network spawn uses `EntityInfo.TypeID` → proto `type_id` |
 
+## Behavior Config Contract
+
+- Canonical behavior config location is `ObjectDef.Behaviors` (`map[string]json.RawMessage`), keyed by string behavior key (e.g. `"tree"`).
+- Behavior config payloads are validated by runtime behavior implementations (`ValidateAndApplyDefConfig`), not by ad-hoc loader code.
+- Keep object def focused on numeric/static tuning values; behavior algorithms stay in code.
+- `BehaviorOrder` is derived from validated behavior priorities; use `CopyBehaviorOrder()` where a defensive copy is needed.
+- `contextMenuEvenForOneItem` defaults to `true` when omitted.
+
+## Tree Behavior Def Fields
+
+Tree config is numeric-only and includes:
+- chop loop: `chopPointsTotal`, `chopCycleDurationTicks`
+- sound keys: `action_sound`, `finish_sound`
+- chop outcome: `logsSpawnDefKey`, `logsSpawnCount`, `logsSpawnInitialOffset`, `logsSpawnStepOffset`, `transformToDefKey`
+- growth runtime: `growthStageMax`, `growthStartStage`, `growthStageDurationsTicks`, `allowedChopStages`
+
 ## Error Handling
 
 `LoadFromDirectory` returns detailed errors with file context:

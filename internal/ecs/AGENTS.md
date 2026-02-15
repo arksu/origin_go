@@ -398,3 +398,16 @@ For object runtime behaviors (flags/state/appearance), avoid full-world polling 
 - Debug fallback sweep is allowed only in non-production env for safety checks.
 
 This pattern is mandatory for behavior-heavy worlds (e.g. thousands of containers/trees).
+
+## Scheduled Behavior Ticks
+
+For long-lived behavior state updates (tree growth, machines, etc.), use the scheduler resources instead of scanning all entities.
+
+- `BehaviorTickSchedule` is the authoritative queue (`entity_id + behavior_key -> due_tick`) with heap-backed due ordering.
+- `ScheduleBehaviorTick(...)` replaces existing due tick for the same key; stale heap entries are ignored by sequence check.
+- `CancelBehaviorTick(...)` and `CancelBehaviorTicksByEntityID(...)` must be used on terminal states/despawn.
+- `World.Despawn(...)` already calls `CancelBehaviorTicksByEntityID(...)`; keep this invariant intact.
+- `BehaviorTickPolicy` controls:
+  - global processing budget per tick,
+  - per-object restore catch-up cap.
+- Always read current game tick from `TimeState.Tick`; do not call wall clock directly inside ECS behavior systems.

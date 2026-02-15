@@ -91,6 +91,10 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 				continue
 			}
 		}
+		if !s.contextActions.isActiveCyclicActionStillValid(w, playerID, playerHandle, action) {
+			s.contextActions.cancelActiveCyclicAction(playerID, playerHandle, "action_invalidated")
+			continue
+		}
 
 		action.CycleElapsedTicks++
 		if action.CycleElapsedTicks > action.CycleDurationTicks {

@@ -106,14 +106,19 @@ func (r *Registry) InitObjectBehaviors(ctx *contracts.BehaviorObjectInitContext,
 
 func validateBehaviorContract(behavior contracts.Behavior) error {
 	_, hasDefConfigValidator := behavior.(contracts.BehaviorDefConfigValidator)
+	_, hasRuntime := behavior.(contracts.RuntimeBehavior)
 	_, hasProvider := behavior.(contracts.ContextActionProvider)
 	_, hasValidator := behavior.(contracts.ContextActionValidator)
 	executor, hasExecutor := behavior.(contracts.ContextActionExecutor)
 	declarer, hasDeclarer := behavior.(contracts.BehaviorActionDeclarer)
 	_, hasCycle := behavior.(contracts.CyclicActionHandler)
+	_, hasScheduledTick := behavior.(contracts.ScheduledTickBehavior)
 
 	if !hasDefConfigValidator {
 		return fmt.Errorf("missing def config validator capability")
+	}
+	if hasScheduledTick && !hasRuntime {
+		return fmt.Errorf("scheduled tick capability requires runtime capability")
 	}
 
 	if (hasProvider || hasValidator) && !hasExecutor {

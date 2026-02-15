@@ -21,18 +21,19 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 ## System Registry
 
-| Priority | System Name           | Description                                                  | Dependencies                  | Notes                                     |
-|----------|-----------------------|--------------------------------------------------------------|-------------------------------|-------------------------------------------|
-| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer          | Runs first, resets arrays                 |
-| 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character          | Batch saves character positions/stats     |
-| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement           | Appends to MovedEntities buffer           |
-| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef | Reads from MovedEntities buffer           |
-| 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character           | Saves character data before despawn       |
-| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult    | Processes moved entities                  |
-| 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction | Auto-pickup dropped items on arrival      |
-| 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef   | Updates VisibilityState, publishes events |
-| 360      | ObjectBehaviorSystem  | Recomputes object behavior flags/state/appearance            | ObjectBehaviorDirtyQueue      | Dirty-queue driven, budget-limited        |
-| 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                      | Handles entity chunk transitions          |
+| Priority | System Name           | Description                                                  | Dependencies                    | Notes                                            |
+|----------|-----------------------|--------------------------------------------------------------|---------------------------------|--------------------------------------------------|
+| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer            | Runs first, resets arrays                        |
+| 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character            | Batch saves character positions/stats            |
+| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement             | Appends to MovedEntities buffer                  |
+| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef   | Reads from MovedEntities buffer                  |
+| 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character             | Saves character data before despawn              |
+| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult      | Processes moved entities                         |
+| 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction   | Auto-pickup dropped items on arrival             |
+| 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef     | Updates VisibilityState, publishes events        |
+| 355      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState | Dispatches to behavior scheduled-tick capability |
+| 360      | ObjectBehaviorSystem  | Recomputes object behavior flags/state/appearance            | ObjectBehaviorDirtyQueue        | Dirty-queue driven, budget-limited               |
+| 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                        | Handles entity chunk transitions                 |
 
 ## System Details
 
@@ -220,6 +221,8 @@ TransformUpdateSystem (300)
 AutoInteractSystem (320)
     ↓ (pickup may despawn entities)
 VisionSystem (350)
+    ↓ (dispatches due scheduled behavior ticks)
+BehaviorTickSystem (355)
     ↓ (updates VisibilityState)
 ObjectBehaviorSystem (360)
     ↓ (applies behavior flags/resource only for dirty objects)
@@ -229,26 +232,48 @@ ChunkSystem (400)
 ## ObjectBehaviorSystem (Priority: 360)
 
 **Purpose**: Applies runtime behavior capability from unified behavior registry and updates:
+
 - `ObjectInternalState.Flags`
 - `ObjectInternalState.State`
 - `Appearance.Resource` (with appearance-changed event)
 
 **Registry/Contract**:
+
 - Behavior contracts are defined in `internal/game/behaviors/contracts/behavior.go`.
 - Runtime implementations live in `internal/game/behaviors`.
 - System wiring receives unified `contracts.BehaviorRegistry` through `ObjectBehaviorConfig.BehaviorRegistry`.
 - Registry is fail-fast validated on startup (invalid action/cyclic capabilities do not boot).
 
 **Execution Model (important)**:
+
 - No full-world scan in normal operation.
 - Processes only handles from `ecs.ObjectBehaviorDirtyQueue`.
 - Per-tick budget is controlled by config: `game.object_behavior_budget_per_tick` (default `512`).
 - Debug-only fallback sweep can be enabled (dev environment) to catch missed dirty marks.
 
 **Dirty Marking Contract**:
+
 - Systems that mutate behavior-relevant data must call `ecs.MarkObjectBehaviorDirty(...)`.
 - Current primary producer is inventory flow for object root containers.
 - Chunk activation runs behavior lifecycle init for restored objects and then forces behavior recompute for all behavior-bearing objects (no lazy init).
+
+## BehaviorTickSystem (Priority: 355)
+
+**Purpose**: Executes due entries from `BehaviorTickSchedule` and delegates to behavior `OnScheduledTick`.
+
+**Execution Model**:
+
+- Reads current tick from `TimeState.Tick`.
+- Pops due keys up to the global per-tick budget.
+- Resolves handle + behavior at execution time (despawned/missing entries are skipped).
+- Calls scheduled-tick behavior capability.
+- Marks object dirty only when `BehaviorTickResult.StateChanged=true`.
+
+**Safety/Performance**:
+
+- Replaces world-wide polling for "live" behavior objects.
+- Works with scheduler lazy dedupe (stale heap entries are ignored).
+- Depends on `World.Despawn(...)` cancel-all cleanup for entity tick keys.
 
 ## Context Interaction Flow (RMB)
 
@@ -257,34 +282,34 @@ Context interactions are now behavior-driven and server-authoritative:
 1. Client sends `Interact(entity_id)` on RMB.
 2. `NetworkCommandSystem` computes actions via `ContextActionResolver` using behavior order from object `def`.
 3. Branching:
-   - `0` actions: silent ignore.
-   - `1` action: either auto-select/start pending execution OR open `S2C_ContextMenu` when object def has `contextMenuEvenForOneItem=true`.
-   - `2+` actions: send `S2C_ContextMenu`.
+    - `0` actions: silent ignore.
+    - `1` action: either auto-select/start pending execution OR open `S2C_ContextMenu` when object def has `contextMenuEvenForOneItem=true`.
+    - `2+` actions: send `S2C_ContextMenu`.
 4. Execution is triggered only by `LinkCreated` (not direct distance checks in command handler).
 
 ### Cyclic Action UI Events
 
 - During active cycle server sends `S2C_CyclicActionProgress`.
 - On terminal state server sends `S2C_CyclicActionFinished`:
-  - `COMPLETED` (no `reason_code`)
-  - `CANCELED` (optional `reason_code`)
+    - `COMPLETED` (no `reason_code`)
+    - `CANCELED` (optional `reason_code`)
 
 ### Pending Action Rules
 
 - Pending state is `components.PendingContextAction`.
 - Cleanup paths:
-  - timeout (`game.interaction_pending_timeout`, default `15s`)
-  - movement stop without link
-  - target/player despawn
-  - new movement command (`MoveTo`/`MoveToEntity`)
-  - `LinkBroken`
+    - timeout (`game.interaction_pending_timeout`, default `15s`)
+    - movement stop without link
+    - target/player despawn
+    - new movement command (`MoveTo`/`MoveToEntity`)
+    - `LinkBroken`
 
 ### Duplicate Action IDs
 
 - Duplicate `action_id` between behaviors uses **first wins**.
 - Runtime observability:
-  - `WARN` log
-  - metric `context_action_duplicate_total{entity_def,action_id,winner_behavior,loser_behavior}`
+    - `WARN` log
+    - metric `context_action_duplicate_total{entity_def,action_id,winner_behavior,loser_behavior}`
 
 ## Performance Considerations
 
@@ -357,6 +382,7 @@ layer := w.Layer
 ```
 
 Resource API functions:
+
 - `ecs.InitResource[T](w, value)` — store initial value (world constructor)
 - `ecs.GetResource[T](w) *T` — get pointer, panics if missing
 - `ecs.TryGetResource[T](w) (*T, bool)` — get pointer with existence check

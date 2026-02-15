@@ -79,6 +79,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		Clients:         make(map[types.EntityID]*network.Client),
 		state:           ShardStateRunning,
 	}
+	ecs.SetResource(s.world, ecs.BehaviorTickPolicy{
+		GlobalBudgetPerTick: cfg.Game.BehaviorTickGlobalBudget,
+		CatchUpLimitTicks:   uint64(cfg.Game.BehaviorTickCatchupLimit),
+	})
 
 	behaviorRegistry := behaviors.MustDefaultRegistry()
 	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
@@ -128,6 +132,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))
+	s.world.AddSystem(systems.NewBehaviorTickSystem(logger, systems.BehaviorTickSystemConfig{
+		BudgetPerTick:    cfg.Game.BehaviorTickGlobalBudget,
+		BehaviorRegistry: behaviorRegistry,
+	}))
 	s.world.AddSystem(systems.NewObjectBehaviorSystem(s.eventBus, logger, systems.ObjectBehaviorConfig{
 		BudgetPerTick:       cfg.Game.ObjectBehaviorBudgetPerTick,
 		EnableDebugFallback: strings.EqualFold(cfg.Game.Env, "dev"),

@@ -76,6 +76,8 @@ type GameConfig struct {
 
 	InteractionPendingTimeout   time.Duration `mapstructure:"interaction_pending_timeout"`     // Pending context action timeout (default: 15s)
 	ObjectBehaviorBudgetPerTick int           `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
+	BehaviorTickGlobalBudget    int           `mapstructure:"behavior_tick_global_budget_per_tick"`
+	BehaviorTickCatchupLimit    int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
 }
 
 type EntityIDConfig struct {
@@ -130,6 +132,16 @@ func Load(logger *zap.Logger) (*Config, error) {
 		logger.Fatal("Invalid world dimensions: world_width_chunks and world_height_chunks must be > 0",
 			zap.Int("world_width_chunks", cfg.Game.WorldWidthChunks),
 			zap.Int("world_height_chunks", cfg.Game.WorldHeightChunks),
+		)
+	}
+	if cfg.Game.BehaviorTickGlobalBudget <= 0 {
+		logger.Fatal("Invalid behavior tick budget: game.behavior_tick_global_budget_per_tick must be > 0",
+			zap.Int("behavior_tick_global_budget_per_tick", cfg.Game.BehaviorTickGlobalBudget),
+		)
+	}
+	if cfg.Game.BehaviorTickCatchupLimit <= 0 {
+		logger.Fatal("Invalid behavior tick catch-up limit: game.behavior_tick_catchup_limit_ticks must be > 0",
+			zap.Int("behavior_tick_catchup_limit_ticks", cfg.Game.BehaviorTickCatchupLimit),
 		)
 	}
 
@@ -189,6 +201,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.chat_min_interval_ms", 400)
 	v.SetDefault("game.interaction_pending_timeout", 15*time.Second)
 	v.SetDefault("game.object_behavior_budget_per_tick", 512)
+	v.SetDefault("game.behavior_tick_global_budget_per_tick", 200)
+	v.SetDefault("game.behavior_tick_catchup_limit_ticks", 2000)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)

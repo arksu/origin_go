@@ -25,7 +25,9 @@ type RuntimeObjectState struct {
 }
 
 type TreeBehaviorState struct {
-	ChopPoints int `json:"chop_points"`
+	ChopPoints     int    `json:"chop_points,omitempty"`
+	Stage          int    `json:"stage,omitempty"`
+	NextGrowthTick uint64 `json:"next_growth_tick,omitempty"`
 }
 
 const ObjectInternalStateComponentID ecs.ComponentID = 23

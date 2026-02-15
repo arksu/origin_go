@@ -24,6 +24,7 @@ Behaviors can implement only the capabilities they need:
 - runtime (`ApplyRuntime`),
 - context actions (`ProvideActions`, `ValidateAction`, `ExecuteAction`),
 - cyclic (`OnCycleComplete`),
+- scheduled tick (`OnScheduledTick`),
 - lifecycle init (`InitObject`).
 
 ## Fail Fast Rules
@@ -32,6 +33,7 @@ Registry creation validates behavior contracts and fails startup when:
 - action provider/validator exists without execute capability,
 - action capability exists without declared action specs,
 - declared cyclic action (`StartsCyclic=true`) has no cyclic handler,
+- scheduled tick capability exists without runtime capability,
 - behavior keys/action declarations are invalid.
 
 ## Lifecycle Init
@@ -42,6 +44,13 @@ Lifecycle init hooks are expected to support:
 - `transform`.
 
 Implementations must be idempotent and avoid clobbering valid restored runtime state.
+
+## Tree Behavior Runtime Contract
+
+- Tree growth is scheduler-driven: behavior stores `stage` and `next_growth_tick`, scheduler drives updates.
+- Runtime flags must expose current growth stage as `tree.stageN`.
+- Chop availability is stage-gated via def config (`allowedChopStages`).
+- On terminal stage, tree behavior must cancel its scheduled tick.
 
 ## Implementation Notes
 

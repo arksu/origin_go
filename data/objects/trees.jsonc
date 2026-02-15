@@ -33,7 +33,15 @@
           "mask": 1
         }
       },
-      "resource": "trees/birch/6",
+      "resource": "trees/birch/1",
+      "appearance": [
+        { "id": "stage1", "when": { "flags": ["tree.stage1"] }, "resource": "trees/birch/1" },
+        { "id": "stage2", "when": { "flags": ["tree.stage2"] }, "resource": "trees/birch/2" },
+        { "id": "stage3", "when": { "flags": ["tree.stage3"] }, "resource": "trees/birch/3" },
+        { "id": "stage4", "when": { "flags": ["tree.stage4"] }, "resource": "trees/birch/4" },
+        { "id": "stage5", "when": { "flags": ["tree.stage5"] }, "resource": "trees/birch/5" },
+        { "id": "stage6", "when": { "flags": ["tree.stage6"] }, "resource": "trees/birch/6" }
+      ],
       "behaviors": {
         "tree": {
           "priority": 20,
@@ -45,7 +53,11 @@
           "logsSpawnStepOffset": 20,
           "transformToDefKey": "stump_birch",
           "action_sound": "chop",
-          "finish_sound": "tree_fall"
+          "finish_sound": "tree_fall",
+          "growthStageMax": 6,
+          "growthStartStage": 1,
+          "growthStageDurationsTicks": [60, 60, 60, 60, 60],
+          "allowedChopStages": [6]
         }
       }
     },

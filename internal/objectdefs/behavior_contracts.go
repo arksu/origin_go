@@ -18,5 +18,9 @@ func (d *ObjectDef) SetTreeBehaviorConfig(cfg contracts.TreeBehaviorConfig) {
 		LogsSpawnInitialOffset: cfg.LogsSpawnInitialOffset,
 		LogsSpawnStepOffset:    cfg.LogsSpawnStepOffset,
 		TransformToDefKey:      cfg.TransformToDefKey,
+		GrowthStageMax:         cfg.GrowthStageMax,
+		GrowthStartStage:       cfg.GrowthStartStage,
+		GrowthStageDurations:   append([]int(nil), cfg.GrowthStageDurations...),
+		AllowedChopStages:      append([]int(nil), cfg.AllowedChopStages...),
 	}
 }

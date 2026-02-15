@@ -31,7 +31,7 @@ func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateInteracting})
 		ecs.AddComponent(w, h, components.ActiveCyclicAction{
-			BehaviorKey:        "tree",
+			BehaviorKey:        "missing_behavior",
 			ActionID:           testActionChop,
 			TargetKind:         components.CyclicActionTargetObject,
 			TargetID:           targetID,

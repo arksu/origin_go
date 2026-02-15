@@ -127,23 +127,23 @@ func TakeDamage(world *ecs.World, h ecs.Handle, damage int32) bool {
 
 Maintain this list as you add new components:
 
-| ID | Component                     | Description                                |
-|----|-------------------------------|--------------------------------------------|
-| 0  | ExternalID                    | Maps Handle to global EntityID (mandatory) |
-| 10 | TransformComponentID          | Entity world position                      |
-| 11 | ChunkRefComponentID           | Reference to current chunk                 |
-| 12 | MovementComponentID           | Entity movement velocity                   |
-| 13 | EntityInfoComponentID         | Base Entity info (isStatic, region, layer) |
-| 14 | ColliderComponentID           | Collider for collision system              |
-| 15 | CollisionResultComponentID    | Result of collision calculations           |
-| 16 | VisionComponentID             | Entity vision radius and power             |
-| 17 | StealthComponentID            | Entity stealth value                       |
-| 18 | AppearanceComponentID         | Entity visual appearance (name)            |
-| 19 | InventoryOwnerComponentID     | Links entity to its inventory containers   |
-| 20 | InventoryContainerComponentID | Inventory container (grid/hand/equip/drop) |
-| 21 | DroppedItemComponentID        | Marks entity as a dropped item in world    |
-| 22 | PendingInteractionComponentID | Pending auto-interaction intent (pickup)   |
-| 23 | ObjectInternalStateComponentID| Runtime state & dirty flag for world objects|
+| ID | Component                      | Description                                  |
+|----|--------------------------------|----------------------------------------------|
+| 0  | ExternalID                     | Maps Handle to global EntityID (mandatory)   |
+| 10 | TransformComponentID           | Entity world position                        |
+| 11 | ChunkRefComponentID            | Reference to current chunk                   |
+| 12 | MovementComponentID            | Entity movement velocity                     |
+| 13 | EntityInfoComponentID          | Base Entity info (isStatic, region, layer)   |
+| 14 | ColliderComponentID            | Collider for collision system                |
+| 15 | CollisionResultComponentID     | Result of collision calculations             |
+| 16 | VisionComponentID              | Entity vision radius and power               |
+| 17 | StealthComponentID             | Entity stealth value                         |
+| 18 | AppearanceComponentID          | Entity visual appearance (name)              |
+| 19 | InventoryOwnerComponentID      | Links entity to its inventory containers     |
+| 20 | InventoryContainerComponentID  | Inventory container (grid/hand/equip/drop)   |
+| 21 | DroppedItemComponentID         | Marks entity as a dropped item in world      |
+| 22 | PendingInteractionComponentID  | Pending auto-interaction intent (pickup)     |
+| 23 | ObjectInternalStateComponentID | Runtime state & dirty flag for world objects |
 
 ## Migration from Auto-Assignment
 
@@ -160,3 +160,18 @@ If you have existing code using auto-assigned IDs:
 - `"component ID X already registered for type Y"` - ID conflict, choose different ID
 - `"component type X already registered with ID Y"` - Type already registered
 - `"component type X not registered"` - Missing `RegisterComponent` call
+
+## Object Runtime State Helpers
+
+`ObjectInternalState` is the canonical runtime state container for non-player world objects.
+
+- `State` must be a `*RuntimeObjectState` with sparse `Behaviors` map (string behavior key -> typed pointer state).
+- Behavior state keys are canonical string keys from object defs (`"tree"`, `"container"`, ...).
+- Mutations must go through helper functions:
+    - `EnsureRuntimeObjectState(...)`
+    - `GetBehaviorState[T](...)`
+    - `SetBehaviorState(...)`
+    - `DeleteBehaviorState(...)`
+- `EnsureRuntimeObjectState(nil)` is fail-fast (`panic`), by design.
+- `SetBehaviorState` / `DeleteBehaviorState` must set `ObjectInternalState.IsDirty = true` implicitly.
+- Persistent storage rule: empty behavior state is written as `NULL` in DB; not as empty JSON envelope.

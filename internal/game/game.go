@@ -84,8 +84,6 @@ type Game struct {
 	state       atomic.Int32 // GameState
 	tickStats   tickStats
 
-	serverTimeManager *timeutil.ServerTimeManager
-
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -95,23 +93,27 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	ctx, cancel := context.WithCancel(context.Background())
 
 	serverTimeManager := timeutil.NewServerTimeManager(db, logger)
-	startWall := serverTimeManager.LoadServerTime()
-
-	clk := timeutil.NewMonotonicClockAt(startWall)
+	bootstrap, bootstrapErr := serverTimeManager.LoadOrInitBootstrap(time.Now(), cfg.Game.TickRate)
+	if bootstrapErr != nil {
+		logger.Fatal("Failed to initialize server time bootstrap", zap.Error(bootstrapErr))
+	}
+	tickPeriod := time.Second / time.Duration(cfg.Game.TickRate)
+	clockStart := bootstrap.ServerStartTime.Add(time.Duration(bootstrap.InitialTick) * tickPeriod)
+	clk := timeutil.NewMonotonicClockAt(clockStart)
 
 	g := &Game{
-		cfg:               cfg,
-		db:                db,
-		objectFactory:     objectFactory,
-		inventoryLoader:   inventoryLoader,
-		logger:            logger,
-		clock:             clk,
-		startTime:         clk.GameNow(),
-		tickRate:          cfg.Game.TickRate,
-		tickPeriod:        time.Second / time.Duration(cfg.Game.TickRate),
-		ctx:               ctx,
-		cancel:            cancel,
-		serverTimeManager: serverTimeManager,
+		cfg:             cfg,
+		db:              db,
+		objectFactory:   objectFactory,
+		inventoryLoader: inventoryLoader,
+		logger:          logger,
+		clock:           clk,
+		startTime:       clk.GameNow(),
+		tickRate:        cfg.Game.TickRate,
+		tickPeriod:      tickPeriod,
+		currentTick:     bootstrap.InitialTick,
+		ctx:             ctx,
+		cancel:          cancel,
 		tickStats: tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour,
@@ -674,10 +676,6 @@ func (g *Game) update(ts ecs.TimeState) {
 	schedResult := g.shardManager.Update(ts)
 	schedDuration := schedResult.TotalDuration
 
-	persistStart := time.Now()
-	g.serverTimeManager.MaybePersistServerTime(ts.Now)
-	persistDuration := time.Since(persistStart)
-
 	// Collect per-system stats from all shards (prefixed by shard layer)
 	collectStart := time.Now()
 	for layer, shard := range g.shardManager.GetShards() {
@@ -699,10 +697,9 @@ func (g *Game) update(ts ecs.TimeState) {
 
 	// Accumulate game-level timing (not through shards to avoid duplication)
 	g.accumulateStat("ShardScheduling", schedDuration)
-	g.accumulateStat("ServerTimePersist", persistDuration)
 	g.accumulateStat("StatsCollect", collectDuration)
 
-	unaccounted := duration - schedDuration - persistDuration - collectDuration
+	unaccounted := duration - schedDuration - collectDuration
 	if unaccounted < 0 {
 		unaccounted = 0
 	}
@@ -761,9 +758,6 @@ func (g *Game) update(ts ecs.TimeState) {
 func (g *Game) Stop() {
 	g.logger.Info("Stopping game...")
 	g.setState(GameStateStopping)
-
-	// Save current server time before shutdown
-	g.serverTimeManager.SaveCurrentTime(g.clock)
 
 	g.resetOnlinePlayers()
 	g.cancel()

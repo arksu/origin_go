@@ -126,6 +126,39 @@ func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConf
 	if cfg.TransformToDefKey == "" {
 		return 0, fmt.Errorf("tree.transformToDefKey is required")
 	}
+	if cfg.GrowthStageMax < 1 {
+		return 0, fmt.Errorf("tree.growthStageMax must be >= 1")
+	}
+	if cfg.GrowthStartStage <= 0 {
+		cfg.GrowthStartStage = 1
+	}
+	if cfg.GrowthStartStage > cfg.GrowthStageMax {
+		return 0, fmt.Errorf("tree.growthStartStage must be in range 1..growthStageMax")
+	}
+	if cfg.GrowthStageDurations == nil {
+		return 0, fmt.Errorf("tree.growthStageDurationsTicks is required")
+	}
+	if len(cfg.GrowthStageDurations) != cfg.GrowthStageMax-1 {
+		return 0, fmt.Errorf("tree.growthStageDurationsTicks length must be growthStageMax-1")
+	}
+	for idx, duration := range cfg.GrowthStageDurations {
+		if duration <= 0 {
+			return 0, fmt.Errorf("tree.growthStageDurationsTicks[%d] must be > 0", idx)
+		}
+	}
+	if cfg.AllowedChopStages == nil {
+		return 0, fmt.Errorf("tree.allowedChopStages is required")
+	}
+	seenStages := make(map[int]struct{}, len(cfg.AllowedChopStages))
+	for _, stage := range cfg.AllowedChopStages {
+		if stage < 1 || stage > cfg.GrowthStageMax {
+			return 0, fmt.Errorf("tree.allowedChopStages values must be in range 1..growthStageMax")
+		}
+		if _, exists := seenStages[stage]; exists {
+			return 0, fmt.Errorf("tree.allowedChopStages contains duplicate stage %d", stage)
+		}
+		seenStages[stage] = struct{}{}
+	}
 
 	ctx.Def.SetTreeBehaviorConfig(cfg)
 	return cfg.Priority, nil
@@ -448,7 +481,11 @@ func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
 					"logsSpawnCount": 3,
 					"logsSpawnInitialOffset": 16,
 					"logsSpawnStepOffset": 20,
-					"transformToDefKey": "stump_birch"
+					"transformToDefKey": "stump_birch",
+					"growthStageMax": 4,
+					"growthStartStage": 1,
+					"growthStageDurationsTicks": [600, 900, 1200],
+					"allowedChopStages": [4]
 				}
 			}
 		}]

@@ -70,6 +70,10 @@ type TreeBehaviorConfig struct {
 	LogsSpawnInitialOffset int    `json:"logsSpawnInitialOffset"`
 	LogsSpawnStepOffset    int    `json:"logsSpawnStepOffset"`
 	TransformToDefKey      string `json:"transformToDefKey"`
+	GrowthStageMax         int    `json:"growthStageMax"`
+	GrowthStartStage       int    `json:"growthStartStage,omitempty"`
+	GrowthStageDurations   []int  `json:"growthStageDurationsTicks"`
+	AllowedChopStages      []int  `json:"allowedChopStages"`
 }
 
 // ObjectsFile represents a JSONC file containing object definitions.
