@@ -39,6 +39,9 @@ type Chunk struct {
 	rawObjects []*repository.Object
 	// rawInventoriesByOwner keeps preloaded/inactive object-owned inventories by owner entity id.
 	rawInventoriesByOwner map[types.EntityID][]repository.Inventory
+	// rawDirtyObjectIDs tracks object IDs changed while chunk was active and then deactivated.
+	// It allows delta persistence for inactive chunks without rewriting all raw objects.
+	rawDirtyObjectIDs map[types.EntityID]struct{}
 	rawDataDirty          bool
 	spatial               *SpatialHashGrid
 
@@ -59,6 +62,7 @@ func NewChunk(coord types.ChunkCoord, region int, layer int, chunkSize int) *Chu
 		isPassable:            make([]uint64, bitsetSize),
 		isSwimmable:           make([]uint64, bitsetSize),
 		rawInventoriesByOwner: make(map[types.EntityID][]repository.Inventory, 8),
+		rawDirtyObjectIDs:     make(map[types.EntityID]struct{}, 8),
 		spatial:               NewSpatialHashGrid(cellSize),
 	}
 }
@@ -79,6 +83,7 @@ func (c *Chunk) GetState() types.ChunkState {
 func (c *Chunk) SetRawObjects(objects []*repository.Object) {
 	c.mu.Lock()
 	c.rawObjects = objects
+	c.rawDirtyObjectIDs = make(map[types.EntityID]struct{}, 8)
 	c.mu.Unlock()
 }
 
@@ -92,6 +97,9 @@ func (c *Chunk) GetRawObjects() []*repository.Object {
 func (c *Chunk) AddRawObject(obj *repository.Object) {
 	c.mu.Lock()
 	c.rawObjects = append(c.rawObjects, obj)
+	if obj != nil {
+		c.rawDirtyObjectIDs[types.EntityID(obj.ID)] = struct{}{}
+	}
 	c.rawDataDirty = true
 	c.mu.Unlock()
 }
@@ -99,6 +107,7 @@ func (c *Chunk) AddRawObject(obj *repository.Object) {
 func (c *Chunk) ClearRawObjects() {
 	c.mu.Lock()
 	c.rawObjects = nil
+	c.rawDirtyObjectIDs = make(map[types.EntityID]struct{}, 8)
 	c.mu.Unlock()
 }
 
@@ -118,6 +127,31 @@ func (c *Chunk) GetRawInventoriesByOwner() map[types.EntityID][]repository.Inven
 func (c *Chunk) ClearRawInventoriesByOwner() {
 	c.mu.Lock()
 	c.rawInventoriesByOwner = make(map[types.EntityID][]repository.Inventory, 8)
+	c.mu.Unlock()
+}
+
+func (c *Chunk) SetRawDirtyObjectIDs(ids map[types.EntityID]struct{}) {
+	c.mu.Lock()
+	c.rawDirtyObjectIDs = make(map[types.EntityID]struct{}, len(ids))
+	for id := range ids {
+		c.rawDirtyObjectIDs[id] = struct{}{}
+	}
+	c.mu.Unlock()
+}
+
+func (c *Chunk) GetRawDirtyObjectIDs() map[types.EntityID]struct{} {
+	c.mu.RLock()
+	ids := make(map[types.EntityID]struct{}, len(c.rawDirtyObjectIDs))
+	for id := range c.rawDirtyObjectIDs {
+		ids[id] = struct{}{}
+	}
+	c.mu.RUnlock()
+	return ids
+}
+
+func (c *Chunk) ClearRawDirtyObjectIDs() {
+	c.mu.Lock()
+	c.rawDirtyObjectIDs = make(map[types.EntityID]struct{}, 8)
 	c.mu.Unlock()
 }
 
@@ -277,6 +311,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	totalHandles := c.GetHandles()
 	rawObjects := c.GetRawObjects()
 	rawInventoriesByOwner := c.GetRawInventoriesByOwner()
+	rawDirtyObjectIDs := c.GetRawDirtyObjectIDs()
 	c.mu.RUnlock()
 
 	// Determine dirty objects to save
@@ -330,10 +365,22 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			dirtyHandles = append(dirtyHandles, h)
 		}
 	} else {
-		// Chunk is inactive/preloaded - persist cached raw objects and inventories.
-		objectsToSave = append(objectsToSave, rawObjects...)
-		for _, rows := range rawInventoriesByOwner {
-			inventoriesToSave = append(inventoriesToSave, rows...)
+		// Chunk is inactive/preloaded - persist only dirty raw objects/inventories.
+		if len(rawDirtyObjectIDs) > 0 {
+			for _, rawObj := range rawObjects {
+				if rawObj == nil {
+					continue
+				}
+				if _, dirty := rawDirtyObjectIDs[types.EntityID(rawObj.ID)]; dirty {
+					objectsToSave = append(objectsToSave, rawObj)
+				}
+			}
+			for ownerID, rows := range rawInventoriesByOwner {
+				if _, dirty := rawDirtyObjectIDs[ownerID]; !dirty {
+					continue
+				}
+				inventoriesToSave = append(inventoriesToSave, rows...)
+			}
 		}
 	}
 
@@ -406,6 +453,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	}
 	if !saveFailed && len(totalHandles) == 0 {
 		c.ClearRawDataDirty()
+		c.ClearRawDirtyObjectIDs()
 	}
 
 	savedTiles := 0

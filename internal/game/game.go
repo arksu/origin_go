@@ -76,20 +76,22 @@ type Game struct {
 	networkServer   *network.Server
 	inventoryLoader *inventory.InventoryLoader
 
-	clock       timeutil.Clock
-	startTime   time.Time
-	tickRate    int
-	tickPeriod  time.Duration
-	currentTick uint64
-	state       atomic.Int32 // GameState
-	tickStats   tickStats
+	clock             timeutil.Clock
+	startTime         time.Time
+	tickRate          int
+	tickPeriod        time.Duration
+	currentTick       uint64
+	state             atomic.Int32 // GameState
+	tickStats         tickStats
+	enableStats       bool
+	enableVisionStats bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
-func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.ObjectFactory, inventoryLoader *inventory.InventoryLoader, inventorySnapshotSender *inventory.SnapshotSender, logger *zap.Logger) *Game {
+func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.ObjectFactory, inventoryLoader *inventory.InventoryLoader, inventorySnapshotSender *inventory.SnapshotSender, enableStats bool, enableVisionStats bool, logger *zap.Logger) *Game {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	serverTimeManager := timeutil.NewServerTimeManager(db, logger)
@@ -102,18 +104,20 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	clk := timeutil.NewMonotonicClockAt(clockStart)
 
 	g := &Game{
-		cfg:             cfg,
-		db:              db,
-		objectFactory:   objectFactory,
-		inventoryLoader: inventoryLoader,
-		logger:          logger,
-		clock:           clk,
-		startTime:       clk.GameNow(),
-		tickRate:        cfg.Game.TickRate,
-		tickPeriod:      tickPeriod,
-		currentTick:     bootstrap.InitialTick,
-		ctx:             ctx,
-		cancel:          cancel,
+		cfg:               cfg,
+		db:                db,
+		objectFactory:     objectFactory,
+		inventoryLoader:   inventoryLoader,
+		logger:            logger,
+		clock:             clk,
+		startTime:         clk.GameNow(),
+		tickRate:          cfg.Game.TickRate,
+		tickPeriod:        tickPeriod,
+		currentTick:       bootstrap.InitialTick,
+		ctx:               ctx,
+		cancel:            cancel,
+		enableStats:       enableStats,
+		enableVisionStats: enableVisionStats,
 		tickStats: tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour,
@@ -123,7 +127,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	g.state.Store(int32(GameStateStarting))
 
 	g.entityIDManager = NewEntityIDManager(cfg, db, logger)
-	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, inventorySnapshotSender, logger)
+	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, inventorySnapshotSender, enableVisionStats, logger)
 	g.networkServer = network.NewServer(&cfg.Network, &cfg.Game, logger)
 
 	g.setupNetworkHandlers()
@@ -714,9 +718,9 @@ func (g *Game) update(ts ecs.TimeState) {
 	g.tickStats.durationSum += duration
 	g.tickStats.count++
 
-	// Log every 5 seconds
+	// Log every 5 seconds if stats are enabled
 	if time.Since(g.tickStats.lastLog) >= 5*time.Second {
-		if g.tickStats.count > 0 {
+		if g.tickStats.count > 0 && g.enableStats {
 			avgDuration := g.tickStats.durationSum / time.Duration(g.tickStats.count)
 
 			// Build per-system average fields

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
@@ -29,6 +30,13 @@ import (
 )
 
 func main() {
+	// Parse command line flags
+	var enableStats bool
+	var enableVisionStats bool
+	flag.BoolVar(&enableStats, "stats", false, "Enable game tick statistics logging")
+	flag.BoolVar(&enableVisionStats, "vision-stats", false, "Enable vision system metrics logging")
+	flag.Parse()
+
 	//debug.SetGCPercent(40)
 	//debug.SetMemoryLimit(6 * 1024 * 1024 * 1024)
 
@@ -94,7 +102,7 @@ func main() {
 
 	objectFactory := world.NewObjectFactory(inventory.NewDroppedInventoryLoaderDB(db, inventoryLoader))
 
-	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, inventorySnapshotSender, logger)
+	g := game.NewGame(cfg, db, objectFactory, inventoryLoader, inventorySnapshotSender, enableStats, enableVisionStats, logger)
 
 	// Setup event handlers after game creation
 	dispatcher := events.NewNetworkVisibilityDispatcher(g.ShardManager(), logger.Named("visibility-dispatcher"))

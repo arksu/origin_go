@@ -970,6 +970,7 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 	handles := chunk.GetHandles()
 	rawObjects := make([]*repository.Object, 0, len(handles))
 	rawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory, len(handles))
+	rawDirtyObjectIDs := make(map[types.EntityID]struct{}, len(handles))
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](cm.world)
 
 	for _, h := range handles {
@@ -978,6 +979,8 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		}
 
 		entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](cm.world, h)
+		internalState, hasInternalState := ecs.GetComponent[components.ObjectInternalState](cm.world, h)
+		objectDirty := hasInternalState && internalState.IsDirty
 		hasPersistentInventories := false
 		if hasEntityInfo {
 			hasPersistentInventories = cm.objectFactory.HasPersistentInventories(entityInfo.TypeID, entityInfo.Behaviors)
@@ -992,6 +995,9 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		}
 		if obj != nil {
 			rawObjects = append(rawObjects, obj)
+			if objectDirty {
+				rawDirtyObjectIDs[types.EntityID(obj.ID)] = struct{}{}
+			}
 			if hasPersistentInventories {
 				objectInventories, invErr := cm.objectFactory.SerializeObjectInventories(cm.world, h)
 				if invErr != nil {
@@ -1037,10 +1043,12 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 
 	chunk.SetRawObjects(rawObjects)
 	chunk.SetRawInventoriesByOwner(rawInventoriesByOwner)
+	chunk.SetRawDirtyObjectIDs(rawDirtyObjectIDs)
 	if wasDirty {
 		chunk.MarkRawDataDirty()
 	} else {
 		chunk.ClearRawDataDirty()
+		chunk.ClearRawDirtyObjectIDs()
 	}
 	chunk.ClearHandles()
 	chunk.SetState(types.ChunkStatePreloaded)

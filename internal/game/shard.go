@@ -57,7 +57,7 @@ type Shard struct {
 	mu    sync.RWMutex
 }
 
-func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, eb *eventbus.EventBus, logger *zap.Logger) *Shard {
+func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, eb *eventbus.EventBus, enableVisionStats bool, logger *zap.Logger) *Shard {
 	// Initialize command queue config from game config
 	queueConfig := network.CommandQueueConfig{
 		MaxQueueSize:                cfg.Game.CommandQueueSize,
@@ -97,7 +97,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister, s.chunkManager)
 
 	// Create vision system first so it can be passed to other systems
-	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, logger)
+	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, enableVisionStats, logger)
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
