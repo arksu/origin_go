@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS character
     shp              INT          NOT NULL CHECK (shp >= 0),     -- soft health points
     hhp              INT          NOT NULL CHECK (hhp >= 0),     -- hard health points
 
+    attributes            JSONB        NOT NULL,
+
     -- Опыт (денормализация для быстрого доступа)
     exp_nature       BIGINT                DEFAULT 0,
     exp_industry     BIGINT                DEFAULT 0,

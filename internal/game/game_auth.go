@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"origin/internal/characterattrs"
 	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -54,6 +55,21 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 		if character.IsOnline.Valid && character.IsOnline.Bool {
 			return fmt.Errorf("character already online")
 		}
+
+		normalizedAttributes, changed := characterattrs.FromRaw(character.Attributes)
+		rawAttributes, err := characterattrs.Marshal(normalizedAttributes)
+		if err != nil {
+			return fmt.Errorf("marshal character attributes: %w", err)
+		}
+		if changed {
+			if err := q.UpdateCharacterAttributes(g.ctx, repository.UpdateCharacterAttributesParams{
+				ID:         character.ID,
+				Attributes: rawAttributes,
+			}); err != nil {
+				return fmt.Errorf("update character attributes: %w", err)
+			}
+		}
+		character.Attributes = rawAttributes
 
 		// Update character: set is_online=true where is_online=false
 		if err := q.SetCharacterOnline(g.ctx, character.ID); err != nil {
@@ -151,6 +167,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	}
 
 	// Normal spawn flow
+	normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
 	candidates := g.generateSpawnCandidates(character.X, character.Y)
 	spawned := false
 	var playerHandle *types.Handle
@@ -227,6 +244,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(w, h, components.Vision{
 				Radius: _const.PlayerVisionRadius,
 				Power:  _const.PlayerVisionPower,
+			})
+			ecs.AddComponent(w, h, components.CharacterAttributes{
+				Values: characterattrs.Clone(normalizedAttributes),
 			})
 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
@@ -353,6 +373,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		TargetID: playerEntityID,
 		Payload:  &network.InventorySnapshotJobPayload{Handle: *playerHandle},
 	})
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendCharacterAttributesSnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.CharacterAttributesSnapshotJobPayload{Handle: *playerHandle},
+	})
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -406,6 +431,13 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
+	if _, hasAttributes := ecs.GetComponent[components.CharacterAttributes](shard.world, handle); !hasAttributes {
+		normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
+		ecs.AddComponent(shard.world, handle, components.CharacterAttributes{
+			Values: normalizedAttributes,
+		})
+	}
+
 	detachedDuration := time.Since(detachedEntity.DetachedAt)
 
 	// Add client to shard's client map
@@ -457,6 +489,11 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 			JobType:  network.JobSendInventorySnapshot,
 			TargetID: playerEntityID,
 			Payload:  &network.InventorySnapshotJobPayload{Handle: handle},
+		})
+		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+			JobType:  network.JobSendCharacterAttributesSnapshot,
+			TargetID: playerEntityID,
+			Payload:  &network.CharacterAttributesSnapshotJobPayload{Handle: handle},
 		})
 	}
 

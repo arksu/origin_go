@@ -54,6 +54,10 @@ export function registerMessageHandlers(): void {
     moveController.clear()
   })
 
+  messageDispatcher.on('characterAttributes', (msg: proto.IS2C_CharacterAttributes) => {
+    gameStore.setCharacterAttributesSnapshot(msg.attributes || [])
+  })
+
   messageDispatcher.on('chunkLoad', (msg: proto.IS2C_ChunkLoad) => {
     if (msg.chunk) {
       const x = msg.chunk.coord?.x || 0

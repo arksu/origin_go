@@ -105,6 +105,19 @@ enum WarningCode {
   WARN_INPUT_QUEUE_OVERFLOW = 0;
 }
 
+enum CharacterAttributeKey {
+  CHARACTER_ATTRIBUTE_KEY_UNSPECIFIED = 0;
+  CHARACTER_ATTRIBUTE_KEY_INT = 1;
+  CHARACTER_ATTRIBUTE_KEY_STR = 2;
+  CHARACTER_ATTRIBUTE_KEY_PER = 3;
+  CHARACTER_ATTRIBUTE_KEY_PSY = 4;
+  CHARACTER_ATTRIBUTE_KEY_AGI = 5;
+  CHARACTER_ATTRIBUTE_KEY_CON = 6;
+  CHARACTER_ATTRIBUTE_KEY_CHA = 7;
+  CHARACTER_ATTRIBUTE_KEY_DEX = 8;
+  CHARACTER_ATTRIBUTE_KEY_WIL = 9;
+}
+
 // ============================================================================
 // ITEM & INVENTORY
 // ============================================================================
@@ -420,6 +433,15 @@ message S2C_PlayerEnterWorld {
   uint32 stream_epoch = 9; // для защиты от гонок состояний
 }
 
+message CharacterAttributeEntry {
+  CharacterAttributeKey key = 1;
+  int32 value = 2;
+}
+
+message S2C_CharacterAttributes {
+  repeated CharacterAttributeEntry attributes = 1;
+}
+
 // on teleport, layer change - show loading screen on client, remove all chunks, entities
 message S2C_PlayerLeaveWorld {
   uint64 entity_id = 1;
@@ -586,6 +608,7 @@ message ServerMessage {
     S2C_CyclicActionProgress cyclic_action_progress = 46;
     S2C_CyclicActionFinished cyclic_action_finished = 47;
     S2C_Sound sound = 48;
+    S2C_CharacterAttributes character_attributes = 49;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

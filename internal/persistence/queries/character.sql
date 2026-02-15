@@ -28,8 +28,8 @@ SET x = $2, y = $3
 WHERE id = $1;
 
 -- name: CreateCharacter :one
-INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp)
-VALUES ($1, $2, $3, 1, $4, $5, 0, 0, 100, 100, 100)
+INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, shp, hhp, attributes)
+VALUES ($1, $2, $3, 1, $4, $5, 0, 0, 100, 100, 100, sqlc.arg(attributes)::jsonb)
 RETURNING *;
 
 -- name: DeleteCharacter :exec
@@ -60,6 +60,13 @@ WHERE id = $1
   AND is_online = true
   AND deleted_at IS NULL;
 
+-- name: UpdateCharacterAttributes :exec
+UPDATE character
+SET attributes = sqlc.arg(attributes)::jsonb,
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND deleted_at IS NULL;
+
 -- name: ResetOnlinePlayers :exec
 UPDATE character
 SET is_online = false
@@ -76,6 +83,7 @@ SET
     stamina = v.stamina,
     shp = v.shp,
     hhp = v.hhp,
+    attributes = v.attributes,
     last_save_at = now(),
     updated_at = now()
 FROM (
@@ -86,6 +94,7 @@ FROM (
              unnest(sqlc.arg(headings)::float8[]) as heading,
              unnest(sqlc.arg(staminas)::int[]) as stamina,
              unnest(sqlc.arg(shps)::int[]) as shp,
-             unnest(sqlc.arg(hhps)::int[]) as hhp
+             unnest(sqlc.arg(hhps)::int[]) as hhp,
+             unnest(sqlc.arg(attributes)::text[])::jsonb as attributes
      ) AS v
 WHERE character.id = v.id;

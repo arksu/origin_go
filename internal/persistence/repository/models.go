@@ -38,30 +38,31 @@ type BuildSite struct {
 }
 
 type Character struct {
-	ID             int64          `json:"id"`
-	AccountID      int64          `json:"account_id"`
-	Name           string         `json:"name"`
-	Region         int            `json:"region"`
-	X              int            `json:"x"`
-	Y              int            `json:"y"`
-	Layer          int            `json:"layer"`
-	Heading        int16          `json:"heading"`
-	Stamina        int            `json:"stamina"`
-	Shp            int            `json:"shp"`
-	Hhp            int            `json:"hhp"`
-	ExpNature      sql.NullInt64  `json:"exp_nature"`
-	ExpIndustry    sql.NullInt64  `json:"exp_industry"`
-	ExpCombat      sql.NullInt64  `json:"exp_combat"`
-	OnlineTime     int64          `json:"online_time"`
-	AuthToken      sql.NullString `json:"auth_token"`
-	TokenExpiresAt sql.NullTime   `json:"token_expires_at"`
-	IsOnline       sql.NullBool   `json:"is_online"`
-	DisconnectAt   sql.NullTime   `json:"disconnect_at"`
-	IsGhost        sql.NullBool   `json:"is_ghost"`
-	LastSaveAt     sql.NullTime   `json:"last_save_at"`
-	DeletedAt      sql.NullTime   `json:"deleted_at"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      sql.NullTime   `json:"updated_at"`
+	ID             int64           `json:"id"`
+	AccountID      int64           `json:"account_id"`
+	Name           string          `json:"name"`
+	Region         int             `json:"region"`
+	X              int             `json:"x"`
+	Y              int             `json:"y"`
+	Layer          int             `json:"layer"`
+	Heading        int16           `json:"heading"`
+	Stamina        int             `json:"stamina"`
+	Shp            int             `json:"shp"`
+	Hhp            int             `json:"hhp"`
+	Attributes     json.RawMessage `json:"attributes"`
+	ExpNature      sql.NullInt64   `json:"exp_nature"`
+	ExpIndustry    sql.NullInt64   `json:"exp_industry"`
+	ExpCombat      sql.NullInt64   `json:"exp_combat"`
+	OnlineTime     int64           `json:"online_time"`
+	AuthToken      sql.NullString  `json:"auth_token"`
+	TokenExpiresAt sql.NullTime    `json:"token_expires_at"`
+	IsOnline       sql.NullBool    `json:"is_online"`
+	DisconnectAt   sql.NullTime    `json:"disconnect_at"`
+	IsGhost        sql.NullBool    `json:"is_ghost"`
+	LastSaveAt     sql.NullTime    `json:"last_save_at"`
+	DeletedAt      sql.NullTime    `json:"deleted_at"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      sql.NullTime    `json:"updated_at"`
 }
 
 type Chat struct {

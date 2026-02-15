@@ -9,6 +9,7 @@ import (
 	"errors"
 	mathrand "math/rand"
 	"net/http"
+	"origin/internal/characterattrs"
 	"origin/internal/const"
 	"strconv"
 	"strings"
@@ -252,13 +253,20 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	// Generate random position
 	x := mathrand.Intn(maxX-minX+1) + minX
 	y := mathrand.Intn(maxY-minY+1) + minY
+	defaultAttributes, err := characterattrs.Marshal(characterattrs.Default())
+	if err != nil {
+		h.logger.Error("failed to marshal default character attributes", zap.Error(err))
+		h.jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
 	_, err = h.db.Queries().CreateCharacter(r.Context(), repository.CreateCharacterParams{
-		ID:        int64(id),
-		AccountID: accountID,
-		Name:      req.Name,
-		X:         x,
-		Y:         y,
+		ID:         int64(id),
+		AccountID:  accountID,
+		Name:       req.Name,
+		X:          x,
+		Y:          y,
+		Attributes: defaultAttributes,
 	})
 	if err != nil {
 		h.logger.Error("failed to create character", zap.Error(err))

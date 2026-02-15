@@ -43,6 +43,7 @@ type ChatCommandPayload struct {
 // Server job type constants
 const (
 	JobSendInventorySnapshot uint16 = iota + 1
+	JobSendCharacterAttributesSnapshot
 )
 
 // ServerJob represents an internal job to be processed by ECS
@@ -56,6 +57,11 @@ type ServerJob struct {
 
 // InventorySnapshotJobPayload is the payload for JobSendInventorySnapshot
 type InventorySnapshotJobPayload struct {
+	Handle types.Handle
+}
+
+// CharacterAttributesSnapshotJobPayload is the payload for JobSendCharacterAttributesSnapshot
+type CharacterAttributesSnapshotJobPayload struct {
 	Handle types.Handle
 }
 
