@@ -54,7 +54,7 @@ export function registerMessageHandlers(): void {
     moveController.clear()
   })
 
-  messageDispatcher.on('characterAttributes', (msg: proto.IS2C_CharacterAttributes) => {
+  messageDispatcher.on('characterProfile', (msg: proto.IS2C_CharacterProfile) => {
     gameStore.setCharacterAttributesSnapshot(msg.attributes || [])
   })
 

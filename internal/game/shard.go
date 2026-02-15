@@ -765,8 +765,8 @@ func (s *Shard) SendCharacterProfileSnapshot(w *ecs.World, entityID types.Entity
 	}
 
 	response := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_CharacterAttributes{
-			CharacterAttributes: &netproto.S2C_CharacterAttributes{
+		Payload: &netproto.ServerMessage_CharacterProfile{
+			CharacterProfile: &netproto.S2C_CharacterProfile{
 				Attributes: entries,
 			},
 		},
