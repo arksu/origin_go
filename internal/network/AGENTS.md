@@ -152,6 +152,12 @@ processJob(job)
 }
 ```
 
+**Current login/bootstrap jobs**:
+- `JobSendInventorySnapshot`
+- `JobSendCharacterAttributesSnapshot`
+
+These jobs are consumed by `NetworkCommandSystem` on ECS tick thread, not directly from network goroutines.
+
 ### 3. NetworkCommandSystem
 
 ECS system that bridges network and game logic.

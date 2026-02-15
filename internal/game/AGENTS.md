@@ -53,8 +53,9 @@ internal/game/
 - **Key Responsibilities**:
   - Authentication token validation
   - Character loading and validation
+  - Character attributes normalization and fail-safe self-heal on auth load
   - World spawning and initial setup
-  - Inventory snapshot sending
+  - Post-enter-world snapshots sending (inventory + character attributes)
   - Player reattachment after disconnect
 - **Key Functions**: `handleAuth()`, `spawnAndLogin()`, `reattachPlayer()`
 
@@ -127,10 +128,11 @@ internal/game/
 ### Player Connection Flow
 1. Client connects → `game.go:handleConnect()`
 2. Client sends auth → `game_auth.go:handleAuth()`
-3. Load character data → `inventory/loader.go:LoadPlayerInventories()`
-4. Spawn in world → `game_auth.go:spawnAndLogin()`
-5. Send inventory snapshots → `inventory/snapshot.go:SendInventorySnapshots()`
-6. Setup event handlers → `events/game_events.go`
+3. Load character + normalize attributes (self-heal DB when needed) → `game_auth.go:handleAuth()`
+4. Spawn in world and attach runtime attributes component → `game_auth.go:spawnAndLogin()`
+5. Send `S2C_PlayerEnterWorld` → `game_auth.go:sendPlayerEnterWorld()`
+6. Send inventory and character-attributes snapshots via server jobs → `network_command.go`
+7. Setup event handlers → `events/game_events.go`
 
 ### Game Loop Flow
 1. `game.go:gameLoop()` runs at configured tick rate
