@@ -737,8 +737,9 @@ func (s *Shard) SendInventorySnapshots(w *ecs.World, entityID types.EntityID, ha
 	}
 }
 
-// SendCharacterAttributesSnapshot sends full character attributes after player enter world.
-func (s *Shard) SendCharacterAttributesSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+// SendCharacterProfileSnapshot sends player-profile data after player enter world.
+// Current payload includes attributes snapshot (`S2C_CharacterAttributes`).
+func (s *Shard) SendCharacterProfileSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
 	s.ClientsMu.RLock()
 	client, ok := s.Clients[entityID]
 	s.ClientsMu.RUnlock()
@@ -748,10 +749,10 @@ func (s *Shard) SendCharacterAttributesSnapshot(w *ecs.World, entityID types.Ent
 	}
 
 	values := characterattrs.Default()
-	if attributes, hasAttributes := ecs.GetComponent[components.CharacterAttributes](w, handle); hasAttributes {
-		values = characterattrs.Normalize(attributes.Values)
+	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
+		values = characterattrs.Normalize(profile.Attributes)
 	} else {
-		s.logger.Warn("Character has no CharacterAttributes component",
+		s.logger.Warn("Character has no CharacterProfile component",
 			zap.Int64("entity_id", int64(entityID)))
 	}
 

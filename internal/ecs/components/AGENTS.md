@@ -146,7 +146,7 @@ Maintain this list as you add new components:
 | 23 | ObjectInternalStateComponentID  | Runtime state & dirty flag for world objects     |
 | 24 | PendingContextActionComponentID | Pending context-menu action until link created   |
 | 25 | ActiveCyclicActionComponentID   | Runtime state for active cyclic action UI/sync   |
-| 26 | CharacterAttributesComponentID  | Runtime character attributes (9 mandatory stats) |
+| 26 | CharacterProfileComponentID     | Runtime player-only profile (attributes, experience, etc.) |
 
 ## Migration from Auto-Assignment
 

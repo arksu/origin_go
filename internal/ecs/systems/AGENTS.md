@@ -317,7 +317,7 @@ Context interactions are now behavior-driven and server-authoritative:
 `NetworkCommandSystem` also processes internal server jobs used by login/reattach bootstrap:
 
 - `JobSendInventorySnapshot` → sends full inventory snapshot.
-- `JobSendCharacterAttributesSnapshot` → sends full character attributes snapshot (`S2C_CharacterAttributes`, always 9 attrs).
+- `JobSendCharacterProfileSnapshot` → sends character-profile snapshot (currently `S2C_CharacterAttributes`, always 9 attrs).
 
 Both jobs run on ECS tick thread to avoid concurrent world/component access from network goroutines.
 

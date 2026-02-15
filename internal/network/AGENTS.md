@@ -154,7 +154,7 @@ processJob(job)
 
 **Current login/bootstrap jobs**:
 - `JobSendInventorySnapshot`
-- `JobSendCharacterAttributesSnapshot`
+- `JobSendCharacterProfileSnapshot` (currently delivers `S2C_CharacterAttributes`)
 
 These jobs are consumed by `NetworkCommandSystem` on ECS tick thread, not directly from network goroutines.
 
