@@ -356,7 +356,8 @@ message C2S_ChatMessage {
   ChatChannel channel = 2;
   oneof target {
     uint64 private_entity_id = 3; // обязателен если channel == CHAT_CHANNEL_PRIVATE
-  }}
+  }
+}
 
 // ============================================================================
 // CLIENT -> SERVER MESSAGES
@@ -438,7 +439,7 @@ message CharacterAttributeEntry {
   int32 value = 2;
 }
 
-message S2C_CharacterAttributes {
+message S2C_CharacterProfile {
   repeated CharacterAttributeEntry attributes = 1;
 }
 
@@ -608,7 +609,7 @@ message ServerMessage {
     S2C_CyclicActionProgress cyclic_action_progress = 46;
     S2C_CyclicActionFinished cyclic_action_finished = 47;
     S2C_Sound sound = 48;
-    S2C_CharacterAttributes character_attributes = 49;
+    S2C_CharacterProfile character_profile = 49;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

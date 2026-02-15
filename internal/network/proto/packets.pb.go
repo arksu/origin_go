@@ -3284,27 +3284,27 @@ func (x *CharacterAttributeEntry) GetValue() int32 {
 	return 0
 }
 
-type S2C_CharacterAttributes struct {
+type S2C_CharacterProfile struct {
 	state         protoimpl.MessageState     `protogen:"open.v1"`
 	Attributes    []*CharacterAttributeEntry `protobuf:"bytes,1,rep,name=attributes,proto3" json:"attributes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *S2C_CharacterAttributes) Reset() {
-	*x = S2C_CharacterAttributes{}
+func (x *S2C_CharacterProfile) Reset() {
+	*x = S2C_CharacterProfile{}
 	mi := &file_api_proto_packets_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *S2C_CharacterAttributes) String() string {
+func (x *S2C_CharacterProfile) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*S2C_CharacterAttributes) ProtoMessage() {}
+func (*S2C_CharacterProfile) ProtoMessage() {}
 
-func (x *S2C_CharacterAttributes) ProtoReflect() protoreflect.Message {
+func (x *S2C_CharacterProfile) ProtoReflect() protoreflect.Message {
 	mi := &file_api_proto_packets_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3316,12 +3316,12 @@ func (x *S2C_CharacterAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use S2C_CharacterAttributes.ProtoReflect.Descriptor instead.
-func (*S2C_CharacterAttributes) Descriptor() ([]byte, []int) {
+// Deprecated: Use S2C_CharacterProfile.ProtoReflect.Descriptor instead.
+func (*S2C_CharacterProfile) Descriptor() ([]byte, []int) {
 	return file_api_proto_packets_proto_rawDescGZIP(), []int{39}
 }
 
-func (x *S2C_CharacterAttributes) GetAttributes() []*CharacterAttributeEntry {
+func (x *S2C_CharacterProfile) GetAttributes() []*CharacterAttributeEntry {
 	if x != nil {
 		return x.Attributes
 	}
@@ -4468,7 +4468,7 @@ type ServerMessage struct {
 	//	*ServerMessage_CyclicActionProgress
 	//	*ServerMessage_CyclicActionFinished
 	//	*ServerMessage_Sound
-	//	*ServerMessage_CharacterAttributes
+	//	*ServerMessage_CharacterProfile
 	//	*ServerMessage_Error
 	//	*ServerMessage_Warning
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
@@ -4691,10 +4691,10 @@ func (x *ServerMessage) GetSound() *S2C_Sound {
 	return nil
 }
 
-func (x *ServerMessage) GetCharacterAttributes() *S2C_CharacterAttributes {
+func (x *ServerMessage) GetCharacterProfile() *S2C_CharacterProfile {
 	if x != nil {
-		if x, ok := x.Payload.(*ServerMessage_CharacterAttributes); ok {
-			return x.CharacterAttributes
+		if x, ok := x.Payload.(*ServerMessage_CharacterProfile); ok {
+			return x.CharacterProfile
 		}
 	}
 	return nil
@@ -4798,8 +4798,8 @@ type ServerMessage_Sound struct {
 	Sound *S2C_Sound `protobuf:"bytes,48,opt,name=sound,proto3,oneof"`
 }
 
-type ServerMessage_CharacterAttributes struct {
-	CharacterAttributes *S2C_CharacterAttributes `protobuf:"bytes,49,opt,name=character_attributes,json=characterAttributes,proto3,oneof"`
+type ServerMessage_CharacterProfile struct {
+	CharacterProfile *S2C_CharacterProfile `protobuf:"bytes,49,opt,name=character_profile,json=characterProfile,proto3,oneof"`
 }
 
 type ServerMessage_Error struct {
@@ -4874,7 +4874,7 @@ func (*ServerMessage_CyclicActionFinished) isServerMessage_Payload() {}
 
 func (*ServerMessage_Sound) isServerMessage_Payload() {}
 
-func (*ServerMessage_CharacterAttributes) isServerMessage_Payload() {}
+func (*ServerMessage_CharacterProfile) isServerMessage_Payload() {}
 
 func (*ServerMessage_Error) isServerMessage_Payload() {}
 
@@ -5060,8 +5060,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\fstream_epoch\x18\t \x01(\rR\vstreamEpoch\"_\n" +
 	"\x17CharacterAttributeEntry\x12.\n" +
 	"\x03key\x18\x01 \x01(\x0e2\x1c.proto.CharacterAttributeKeyR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value\"Y\n" +
-	"\x17S2C_CharacterAttributes\x12>\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value\"V\n" +
+	"\x14S2C_CharacterProfile\x12>\n" +
 	"\n" +
 	"attributes\x18\x01 \x03(\v2\x1e.proto.CharacterAttributeEntryR\n" +
 	"attributes\"3\n" +
@@ -5148,7 +5148,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"O\n" +
 	"\vS2C_Warning\x12&\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x12.proto.WarningCodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xb7\v\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xae\v\n" +
 	"\rServerMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\rR\bsequence\x128\n" +
 	"\vauth_result\x18\n" +
@@ -5174,8 +5174,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"mini_alert\x18- \x01(\v2\x14.proto.S2C_MiniAlertH\x00R\tminiAlert\x12W\n" +
 	"\x16cyclic_action_progress\x18. \x01(\v2\x1f.proto.S2C_CyclicActionProgressH\x00R\x14cyclicActionProgress\x12W\n" +
 	"\x16cyclic_action_finished\x18/ \x01(\v2\x1f.proto.S2C_CyclicActionFinishedH\x00R\x14cyclicActionFinished\x12(\n" +
-	"\x05sound\x180 \x01(\v2\x10.proto.S2C_SoundH\x00R\x05sound\x12S\n" +
-	"\x14character_attributes\x181 \x01(\v2\x1e.proto.S2C_CharacterAttributesH\x00R\x13characterAttributes\x12(\n" +
+	"\x05sound\x180 \x01(\v2\x10.proto.S2C_SoundH\x00R\x05sound\x12J\n" +
+	"\x11character_profile\x181 \x01(\v2\x1b.proto.S2C_CharacterProfileH\x00R\x10characterProfile\x12(\n" +
 	"\x05error\x18* \x01(\v2\x10.proto.S2C_ErrorH\x00R\x05error\x12.\n" +
 	"\awarning\x18+ \x01(\v2\x12.proto.S2C_WarningH\x00R\awarningB\t\n" +
 	"\apayload*a\n" +
@@ -5330,7 +5330,7 @@ var file_api_proto_packets_proto_goTypes = []any{
 	(*S2C_Pong)(nil),                 // 48: proto.S2C_Pong
 	(*S2C_PlayerEnterWorld)(nil),     // 49: proto.S2C_PlayerEnterWorld
 	(*CharacterAttributeEntry)(nil),  // 50: proto.CharacterAttributeEntry
-	(*S2C_CharacterAttributes)(nil),  // 51: proto.S2C_CharacterAttributes
+	(*S2C_CharacterProfile)(nil),     // 51: proto.S2C_CharacterProfile
 	(*S2C_PlayerLeaveWorld)(nil),     // 52: proto.S2C_PlayerLeaveWorld
 	(*S2C_ChunkLoad)(nil),            // 53: proto.S2C_ChunkLoad
 	(*S2C_ChunkUnload)(nil),          // 54: proto.S2C_ChunkUnload
@@ -5401,7 +5401,7 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	30, // 45: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
 	31, // 46: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
 	7,  // 47: proto.CharacterAttributeEntry.key:type_name -> proto.CharacterAttributeKey
-	50, // 48: proto.S2C_CharacterAttributes.attributes:type_name -> proto.CharacterAttributeEntry
+	50, // 48: proto.S2C_CharacterProfile.attributes:type_name -> proto.CharacterAttributeEntry
 	36, // 49: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
 	35, // 50: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
 	33, // 51: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
@@ -5436,7 +5436,7 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	65, // 80: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
 	66, // 81: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
 	67, // 82: proto.ServerMessage.sound:type_name -> proto.S2C_Sound
-	51, // 83: proto.ServerMessage.character_attributes:type_name -> proto.S2C_CharacterAttributes
+	51, // 83: proto.ServerMessage.character_profile:type_name -> proto.S2C_CharacterProfile
 	69, // 84: proto.ServerMessage.error:type_name -> proto.S2C_Error
 	70, // 85: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
 	86, // [86:86] is the sub-list for method output_type
@@ -5505,7 +5505,7 @@ func file_api_proto_packets_proto_init() {
 		(*ServerMessage_CyclicActionProgress)(nil),
 		(*ServerMessage_CyclicActionFinished)(nil),
 		(*ServerMessage_Sound)(nil),
-		(*ServerMessage_CharacterAttributes)(nil),
+		(*ServerMessage_CharacterProfile)(nil),
 		(*ServerMessage_Error)(nil),
 		(*ServerMessage_Warning)(nil),
 	}
