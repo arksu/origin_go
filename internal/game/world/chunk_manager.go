@@ -873,6 +873,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	rawInventoriesByOwner := chunk.GetRawInventoriesByOwner()
 	spatial := chunk.Spatial()
 	behaviorHandles := make([]types.Handle, 0, len(rawObjects))
+	preRecomputeDirty := make(map[types.Handle]bool, len(rawObjects))
 
 	for _, raw := range rawObjects {
 		h, err := cm.objectFactory.Build(cm.world, raw, rawInventoriesByOwner[types.EntityID(raw.ID)])
@@ -919,6 +920,9 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 					)
 				}
 			}
+			if state, hasState := ecs.GetComponent[components.ObjectInternalState](cm.world, h); hasState {
+				preRecomputeDirty[h] = state.IsDirty
+			}
 			behaviorHandles = append(behaviorHandles, h)
 		}
 
@@ -931,6 +935,16 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 
 	// Force initial behavior computation on activation (no lazy defer).
 	ecssystems.RecomputeObjectBehaviorsNow(cm.world, cm.eventBus, cm.logger, cm.behaviorRegistry, behaviorHandles)
+	// Recompute updates runtime flags/appearance and must not implicitly make restored objects persistent-dirty.
+	for _, h := range behaviorHandles {
+		dirtyBeforeRecompute, tracked := preRecomputeDirty[h]
+		if !tracked {
+			continue
+		}
+		ecs.WithComponent(cm.world, h, func(state *components.ObjectInternalState) {
+			state.IsDirty = dirtyBeforeRecompute
+		})
+	}
 
 	chunk.ClearRawObjects()
 	chunk.ClearRawInventoriesByOwner()
