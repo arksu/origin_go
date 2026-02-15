@@ -245,8 +245,13 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 				Radius: _const.PlayerVisionRadius,
 				Power:  _const.PlayerVisionPower,
 			})
-			ecs.AddComponent(w, h, components.CharacterAttributes{
-				Values: characterattrs.Clone(normalizedAttributes),
+			ecs.AddComponent(w, h, components.CharacterProfile{
+				Attributes: characterattrs.Clone(normalizedAttributes),
+				Experience: components.CharacterExperience{
+					Nature:   nullableInt64(character.ExpNature),
+					Industry: nullableInt64(character.ExpIndustry),
+					Combat:   nullableInt64(character.ExpCombat),
+				},
 			})
 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
@@ -374,9 +379,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		Payload:  &network.InventorySnapshotJobPayload{Handle: *playerHandle},
 	})
 	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendCharacterAttributesSnapshot,
+		JobType:  network.JobSendCharacterProfileSnapshot,
 		TargetID: playerEntityID,
-		Payload:  &network.CharacterAttributesSnapshotJobPayload{Handle: *playerHandle},
+		Payload:  &network.CharacterProfileSnapshotJobPayload{Handle: *playerHandle},
 	})
 
 	g.logger.Info("Player spawned",
@@ -394,6 +399,13 @@ func headingDegreesToRadians(heading int16) float64 {
 		degrees += 360
 	}
 	return degrees * math.Pi / 180
+}
+
+func nullableInt64(value sql.NullInt64) int64 {
+	if !value.Valid {
+		return 0
+	}
+	return value.Int64
 }
 
 // tryReattachPlayer attempts to reattach a client to an existing detached entity
@@ -431,10 +443,15 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
-	if _, hasAttributes := ecs.GetComponent[components.CharacterAttributes](shard.world, handle); !hasAttributes {
+	if _, hasAttributes := ecs.GetComponent[components.CharacterProfile](shard.world, handle); !hasAttributes {
 		normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
-		ecs.AddComponent(shard.world, handle, components.CharacterAttributes{
-			Values: normalizedAttributes,
+		ecs.AddComponent(shard.world, handle, components.CharacterProfile{
+			Attributes: normalizedAttributes,
+			Experience: components.CharacterExperience{
+				Nature:   nullableInt64(character.ExpNature),
+				Industry: nullableInt64(character.ExpIndustry),
+				Combat:   nullableInt64(character.ExpCombat),
+			},
 		})
 	}
 
@@ -491,9 +508,9 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 			Payload:  &network.InventorySnapshotJobPayload{Handle: handle},
 		})
 		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-			JobType:  network.JobSendCharacterAttributesSnapshot,
+			JobType:  network.JobSendCharacterProfileSnapshot,
 			TargetID: playerEntityID,
-			Payload:  &network.CharacterAttributesSnapshotJobPayload{Handle: handle},
+			Payload:  &network.CharacterProfileSnapshotJobPayload{Handle: handle},
 		})
 	}
 

@@ -173,10 +173,10 @@ func (s *CharacterSaver) buildSnapshot(
 
 func (s *CharacterSaver) serializeCharacterAttributes(w *ecs.World, entityID types.EntityID, handle types.Handle) string {
 	values := characterattrs.Default()
-	if attributes, hasAttributes := ecs.GetComponent[components.CharacterAttributes](w, handle); hasAttributes {
-		values = characterattrs.Normalize(attributes.Values)
+	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
+		values = characterattrs.Normalize(profile.Attributes)
 	} else {
-		s.logger.Warn("Character entity missing CharacterAttributes component, using defaults",
+		s.logger.Warn("Character entity missing CharacterProfile component, using defaults",
 			zap.Uint64("entity_id", uint64(entityID)))
 	}
 

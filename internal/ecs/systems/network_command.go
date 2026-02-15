@@ -38,7 +38,7 @@ type InventoryResultSender interface {
 // InventorySnapshotSender sends full inventory snapshots to a client (used on login/reattach)
 type InventorySnapshotSender interface {
 	SendInventorySnapshots(w *ecs.World, entityID types.EntityID, handle types.Handle)
-	SendCharacterAttributesSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
+	SendCharacterProfileSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 }
 
 // InventoryOperationExecutor executes inventory operations
@@ -1019,8 +1019,8 @@ func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.Serve
 	switch job.JobType {
 	case network.JobSendInventorySnapshot:
 		s.handleInventorySnapshotJob(w, job)
-	case network.JobSendCharacterAttributesSnapshot:
-		s.handleCharacterAttributesSnapshotJob(w, job)
+	case network.JobSendCharacterProfileSnapshot:
+		s.handleCharacterProfileSnapshotJob(w, job)
 	default:
 		s.logger.Warn("Unknown server job type", zap.Uint16("job_type", job.JobType))
 	}
@@ -1044,21 +1044,21 @@ func (s *NetworkCommandSystem) handleInventorySnapshotJob(w *ecs.World, job *net
 	}
 }
 
-func (s *NetworkCommandSystem) handleCharacterAttributesSnapshotJob(w *ecs.World, job *network.ServerJob) {
-	payload, ok := job.Payload.(*network.CharacterAttributesSnapshotJobPayload)
+func (s *NetworkCommandSystem) handleCharacterProfileSnapshotJob(w *ecs.World, job *network.ServerJob) {
+	payload, ok := job.Payload.(*network.CharacterProfileSnapshotJobPayload)
 	if !ok {
-		s.logger.Error("Invalid payload for character attributes snapshot job")
+		s.logger.Error("Invalid payload for character profile snapshot job")
 		return
 	}
 
 	if !w.Alive(payload.Handle) {
-		s.logger.Debug("Character attributes snapshot job: entity no longer alive",
+		s.logger.Debug("Character profile snapshot job: entity no longer alive",
 			zap.Uint64("entity_id", uint64(job.TargetID)))
 		return
 	}
 
 	if s.inventorySnapshotSender != nil {
-		s.inventorySnapshotSender.SendCharacterAttributesSnapshot(w, job.TargetID, payload.Handle)
+		s.inventorySnapshotSender.SendCharacterProfileSnapshot(w, job.TargetID, payload.Handle)
 	}
 }
 
