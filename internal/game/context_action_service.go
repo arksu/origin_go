@@ -372,6 +372,52 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	})
 }
 
+func (s *ContextActionService) isActiveCyclicActionStillValid(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	action components.ActiveCyclicAction,
+) bool {
+	if w == nil || s.behaviorRegistry == nil || action.BehaviorKey == "" || action.ActionID == "" {
+		return false
+	}
+
+	behavior, found := s.behaviorRegistry.GetBehavior(action.BehaviorKey)
+	if !found || behavior == nil {
+		return true
+	}
+
+	validator, hasValidator := behavior.(contracts.ContextActionValidator)
+	if !hasValidator {
+		return true
+	}
+
+	targetID := action.TargetID
+	targetHandle := action.TargetHandle
+	if action.TargetKind == components.CyclicActionTargetSelf {
+		targetID = playerID
+		targetHandle = playerHandle
+	} else if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		targetHandle = w.GetHandleByEntityID(targetID)
+	}
+
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		return false
+	}
+
+	result := validator.ValidateAction(&contracts.BehaviorActionValidateContext{
+		World:        w,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		ActionID:     action.ActionID,
+		Phase:        contracts.BehaviorValidationPhasePreview,
+		Deps:         &s.actionDeps,
+	})
+	return result.OK
+}
+
 func (s *ContextActionService) completeActiveCyclicAction(playerID types.EntityID, playerHandle types.Handle) {
 	s.finishActiveCyclicAction(
 		playerID,

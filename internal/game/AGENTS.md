@@ -177,17 +177,29 @@ Key configuration parameters:
 - `Game.DisconnectDelay`: Player detach time
 - `Game.WorkerPoolSize`: Event bus worker pool size
 - `Game.ObjectBehaviorBudgetPerTick`: max dirty object behavior recomputes per tick (default `512`)
+- `Game.BehaviorTickGlobalBudget`: max scheduled behavior ticks processed per tick (default `200`)
+- `Game.BehaviorTickCatchupLimit`: max restore catch-up transitions per object (default `2000`)
 - `Game.InteractionPendingTimeout`: pending context action lifetime before cleanup (default `15s`)
 
 ## Object Behavior Runtime Notes
 
 - `ObjectBehaviorSystem` is dirty-queue driven (no global per-tick scan in normal mode).
+- `BehaviorTickSystem` is scheduler-driven and runs before `ObjectBehaviorSystem`.
 - Unified behavior contracts are defined in `internal/game/behaviors/contracts/behavior.go`.
 - Unified behavior registry is `internal/game/behaviors.DefaultRegistry()`.
 - Fail-fast checks run at registry build time (missing execute/cyclic capabilities for declared actions are startup errors).
 - Lifecycle init hooks run for `spawn`, `restore`, and `transform` object flows.
 - Chunk activation (`world/chunk_manager.go`) runs behavior lifecycle init (`restore`) and then forces behavior recompute for all loaded objects with behaviors.
 - Inventory mutations that affect object-root containers must mark object behavior dirty, so appearance/flags stay in sync.
+
+## Server Time Bootstrap Notes
+
+- Game tick origin is derived from persisted globals:
+  - `SERVER_START_TIME` (Unix seconds),
+  - `SERVER_TICK_RATE`.
+- Bootstrap is initialized once; if persisted values are invalid/missing/mismatched, startup must fail fast.
+- Runtime tick is computed from monotonic clock anchored to `server_start_time + initial_tick * tick_period`.
+- Legacy periodic server-time persistence is intentionally removed.
 
 ## Error Handling
 

@@ -125,6 +125,15 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		inQueue: make(map[types.Handle]struct{}, 256),
 		head:    0,
 	})
+	InitResource(w, BehaviorTickSchedule{
+		queue:    make(behaviorTickMinHeap, 0, 256),
+		latest:   make(map[BehaviorTickKey]behaviorTickState, 256),
+		byEntity: make(map[types.EntityID]map[string]struct{}, 128),
+	})
+	InitResource(w, BehaviorTickPolicy{
+		GlobalBudgetPerTick: 200,
+		CatchUpLimitTicks:   2000,
+	})
 	InitResource(w, PendingAdminSpawn{
 		Entries: make(map[types.EntityID]AdminSpawnEntry, 4),
 	})
@@ -227,6 +236,7 @@ func (w *World) Despawn(h types.Handle) bool {
 		w.entityIDMu.Lock()
 		delete(w.entityIDToHandle, targetID)
 		w.entityIDMu.Unlock()
+		CancelBehaviorTicksByEntityID(w, targetID)
 	}
 
 	if loc, ok := w.locations[h]; ok {

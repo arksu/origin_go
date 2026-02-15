@@ -17,8 +17,9 @@ const (
 
 // keys for global_var
 const (
-	LAST_USED_ID = "last_used_id"
-	SERVER_TIME  = "server_time"
+	LAST_USED_ID      = "last_used_id"
+	SERVER_START_TIME = "server_start_time"
+	SERVER_TICK_RATE  = "server_tick_rate"
 )
 
 const (
@@ -29,8 +30,6 @@ const (
 	VisionPosEpsilon       = 0.01
 	DefaultMaxHearDistance = 200.0
 )
-
-const ServerTimeSavePeriodSeconds = 20
 
 const StopDistance float64 = 0.2
 

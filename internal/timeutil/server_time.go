@@ -4,110 +4,140 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
 
 	constt "origin/internal/const"
 	"origin/internal/persistence"
+	"origin/internal/persistence/repository"
 )
 
-// ServerTimeManager handles loading and persisting server time to/from database.
-// It provides a stable start time for the monotonic clock across server restarts.
 type ServerTimeManager struct {
-	db                *persistence.Postgres
-	logger            *zap.Logger
-	lastSaveTime      time.Time
-	savePeriodSeconds int64
+	db     *persistence.Postgres
+	logger *zap.Logger
 }
 
-// NewServerTimeManager creates a new server time manager.
 func NewServerTimeManager(db *persistence.Postgres, logger *zap.Logger) *ServerTimeManager {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &ServerTimeManager{
-		db:                db,
-		logger:            logger,
-		savePeriodSeconds: constt.ServerTimeSavePeriodSeconds,
+		db:     db,
+		logger: logger,
 	}
 }
 
-// LoadServerTime loads the server time from database.
-// Returns the loaded time if found and valid, otherwise returns the current time.
-func (m *ServerTimeManager) LoadServerTime() time.Time {
+type ServerTimeBootstrap struct {
+	ServerStartTime time.Time
+	InitialTick     uint64
+}
+
+func (m *ServerTimeManager) LoadOrInitBootstrap(now time.Time, tickRate int) (ServerTimeBootstrap, error) {
+	if tickRate <= 0 {
+		return ServerTimeBootstrap{}, fmt.Errorf("tick rate must be > 0")
+	}
 	if m.db == nil {
-		return time.Now()
+		return ServerTimeBootstrap{
+			ServerStartTime: now,
+			InitialTick:     0,
+		}, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	gv, err := m.db.Queries().GetGlobalVar(ctx, constt.SERVER_TIME)
+	startValue, startFound, err := m.loadLongGlobalVar(ctx, constt.SERVER_START_TIME)
+	if err != nil {
+		return ServerTimeBootstrap{}, err
+	}
+	storedTickRate, tickRateFound, err := m.loadLongGlobalVar(ctx, constt.SERVER_TICK_RATE)
+	if err != nil {
+		return ServerTimeBootstrap{}, err
+	}
+
 	switch {
-	case err == nil && gv.ValueLong.Valid && gv.ValueLong.Int64 > 0:
-		loadedTime := time.Unix(gv.ValueLong.Int64, 0)
-		m.logger.Info("Loaded SERVER_TIME from DB",
-			zap.Int64("server_time_sec", gv.ValueLong.Int64),
-			zap.Time("server_time", loadedTime),
-		)
-		return loadedTime
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		m.logger.Warn("Failed to load SERVER_TIME from DB, using current time",
-			zap.Error(err),
-		)
-	default:
-		m.logger.Info("SERVER_TIME not found in DB, using current time")
-	}
-
-	return time.Now()
-}
-
-// MaybePersistServerTime saves the server time to database if enough time has passed since last save.
-// This is called periodically during game loop to keep the server time persisted.
-func (m *ServerTimeManager) MaybePersistServerTime(now time.Time) {
-	if m.db == nil {
-		return
-	}
-	if m.lastSaveTime.IsZero() {
-		m.lastSaveTime = now
-		return
-	}
-
-	if now.Sub(m.lastSaveTime) < time.Duration(m.savePeriodSeconds)*time.Second {
-		return
-	}
-
-	m.lastSaveTime = now
-
-	go func(t time.Time) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := m.SaveServerTime(ctx, t); err != nil {
-			m.logger.Error("Failed to persist SERVER_TIME (periodic)", zap.Int64("server_time_sec", t.Unix()), zap.Error(err))
-		} else {
-			//m.logger.Info("Persisted SERVER_TIME (periodic)", zap.Int64("server_time_sec", t.Unix()))
+	case !startFound && !tickRateFound:
+		if err := m.db.WithTx(ctx, func(queries *repository.Queries) error {
+			if err := queries.UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
+				Name:      constt.SERVER_START_TIME,
+				ValueLong: sql.NullInt64{Int64: now.Unix(), Valid: true},
+			}); err != nil {
+				return fmt.Errorf("persist %s: %w", constt.SERVER_START_TIME, err)
+			}
+			if err := queries.UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
+				Name:      constt.SERVER_TICK_RATE,
+				ValueLong: sql.NullInt64{Int64: int64(tickRate), Valid: true},
+			}); err != nil {
+				return fmt.Errorf("persist %s: %w", constt.SERVER_TICK_RATE, err)
+			}
+			return nil
+		}); err != nil {
+			return ServerTimeBootstrap{}, err
 		}
-	}(now)
-}
-
-// SaveServerTime saves the given server time to database immediately.
-// This is called during server shutdown to ensure the current time is persisted.
-func (m *ServerTimeManager) SaveServerTime(ctx context.Context, t time.Time) error {
-	if m.db == nil {
-		return nil
+		m.logger.Info("Initialized server time bootstrap",
+			zap.Int64("server_start_time_sec", now.Unix()),
+			zap.Int("tick_rate", tickRate),
+		)
+		return ServerTimeBootstrap{
+			ServerStartTime: time.Unix(now.Unix(), 0),
+			InitialTick:     0,
+		}, nil
+	case startFound != tickRateFound:
+		return ServerTimeBootstrap{}, fmt.Errorf("invalid bootstrap globals: %s and %s must both exist",
+			constt.SERVER_START_TIME, constt.SERVER_TICK_RATE)
 	}
-	return m.db.SetGlobalVarLong(ctx, constt.SERVER_TIME, t.Unix())
+
+	if storedTickRate <= 0 {
+		return ServerTimeBootstrap{}, fmt.Errorf("invalid %s=%d", constt.SERVER_TICK_RATE, storedTickRate)
+	}
+	if int(storedTickRate) != tickRate {
+		return ServerTimeBootstrap{}, fmt.Errorf("tick rate mismatch: config=%d persisted=%d", tickRate, storedTickRate)
+	}
+	if startValue <= 0 {
+		return ServerTimeBootstrap{}, fmt.Errorf("invalid %s=%d", constt.SERVER_START_TIME, startValue)
+	}
+
+	serverStartTime := time.Unix(startValue, 0)
+	if serverStartTime.After(now) {
+		return ServerTimeBootstrap{}, fmt.Errorf("%s is in the future: %s", constt.SERVER_START_TIME, serverStartTime.UTC().Format(time.RFC3339))
+	}
+
+	tickPeriod := time.Second / time.Duration(tickRate)
+	elapsed := now.Sub(serverStartTime)
+	initialTick := uint64(elapsed / tickPeriod)
+	clockNow := serverStartTime.Add(time.Duration(initialTick) * tickPeriod)
+
+	m.logger.Info("Loaded server time bootstrap",
+		zap.Int64("server_start_time_sec", startValue),
+		zap.Int64("elapsed_seconds", int64(elapsed.Seconds())),
+		zap.Int("tick_rate", tickRate),
+		zap.Uint64("initial_tick", initialTick),
+		zap.Time("clock_now", clockNow),
+	)
+
+	return ServerTimeBootstrap{
+		ServerStartTime: serverStartTime,
+		InitialTick:     initialTick,
+	}, nil
 }
 
-// SaveCurrentTime saves the current server time to database with logging.
-// This is a convenience method for shutdown that handles context and logging.
-func (m *ServerTimeManager) SaveCurrentTime(clock Clock) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (m *ServerTimeManager) loadLongGlobalVar(ctx context.Context, key string) (int64, bool, error) {
+	if m.db == nil {
+		return 0, false, nil
+	}
 
-	serverTime := clock.GameNow()
-	if err := m.SaveServerTime(ctx, serverTime); err != nil {
-		m.logger.Error("Failed to persist SERVER_TIME", zap.Int64("server_time_sec", serverTime.Unix()), zap.Error(err))
-	} else {
-		m.logger.Info("Persisted SERVER_TIME", zap.Int64("server_time_sec", serverTime.Unix()))
+	row, err := m.db.Queries().GetGlobalVar(ctx, key)
+	switch {
+	case err == nil:
+		if !row.ValueLong.Valid {
+			return 0, false, nil
+		}
+		return row.ValueLong.Int64, true, nil
+	case errors.Is(err, sql.ErrNoRows):
+		return 0, false, nil
+	default:
+		return 0, false, fmt.Errorf("load %s: %w", key, err)
 	}
 }

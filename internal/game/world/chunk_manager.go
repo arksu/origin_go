@@ -1018,7 +1018,6 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 				}
 			}
 		}
-
 		cm.world.Despawn(h)
 	}
 

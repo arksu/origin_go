@@ -36,6 +36,10 @@ type TreeBehaviorConfig struct {
 	LogsSpawnInitialOffset int    `json:"logsSpawnInitialOffset"`
 	LogsSpawnStepOffset    int    `json:"logsSpawnStepOffset"`
 	TransformToDefKey      string `json:"transformToDefKey"`
+	GrowthStageMax         int    `json:"growthStageMax"`
+	GrowthStartStage       int    `json:"growthStartStage,omitempty"`
+	GrowthStageDurations   []int  `json:"growthStageDurationsTicks"`
+	AllowedChopStages      []int  `json:"allowedChopStages"`
 }
 
 // BehaviorDefConfigTarget receives validated behavior config mutations.
@@ -169,6 +173,27 @@ type BehaviorResult struct {
 	UserVisible bool
 	ReasonCode  string
 	Severity    BehaviorAlertSeverity
+}
+
+// BehaviorTickContext contains scheduled behavior tick execution data.
+type BehaviorTickContext struct {
+	World        *ecs.World
+	Handle       types.Handle
+	EntityID     types.EntityID
+	EntityType   uint32
+	BehaviorKey  string
+	CurrentTick  uint64
+	CurrentState *components.RuntimeObjectState
+}
+
+// BehaviorTickResult is a scheduled behavior tick result.
+type BehaviorTickResult struct {
+	StateChanged bool
+}
+
+// ScheduledTickBehavior handles due ticks from the unified behavior tick scheduler.
+type ScheduledTickBehavior interface {
+	OnScheduledTick(ctx *BehaviorTickContext) (BehaviorTickResult, error)
 }
 
 // BehaviorActionValidateContext is used before action execution.

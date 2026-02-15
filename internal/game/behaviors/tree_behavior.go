@@ -17,11 +17,15 @@ import (
 	"go.uber.org/zap"
 )
 
-const actionChop = "chop"
+const (
+	actionChop          = "chop"
+	treeBehaviorKey     = "tree"
+	treeStageFlagPrefix = "tree.stage"
+)
 
 type treeBehavior struct{}
 
-func (treeBehavior) Key() string { return "tree" }
+func (treeBehavior) Key() string { return treeBehaviorKey }
 
 func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
 	if ctx == nil {
@@ -56,6 +60,39 @@ func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigCo
 	if cfg.TransformToDefKey == "" {
 		return 0, fmt.Errorf("tree.transformToDefKey is required")
 	}
+	if cfg.GrowthStageMax < 1 {
+		return 0, fmt.Errorf("tree.growthStageMax must be >= 1")
+	}
+	if cfg.GrowthStartStage <= 0 {
+		cfg.GrowthStartStage = 1
+	}
+	if cfg.GrowthStartStage > cfg.GrowthStageMax {
+		return 0, fmt.Errorf("tree.growthStartStage must be in range 1..growthStageMax")
+	}
+	if cfg.GrowthStageDurations == nil {
+		return 0, fmt.Errorf("tree.growthStageDurationsTicks is required")
+	}
+	if len(cfg.GrowthStageDurations) != cfg.GrowthStageMax-1 {
+		return 0, fmt.Errorf("tree.growthStageDurationsTicks length must be growthStageMax-1")
+	}
+	for idx, duration := range cfg.GrowthStageDurations {
+		if duration <= 0 {
+			return 0, fmt.Errorf("tree.growthStageDurationsTicks[%d] must be > 0", idx)
+		}
+	}
+	if cfg.AllowedChopStages == nil {
+		return 0, fmt.Errorf("tree.allowedChopStages is required")
+	}
+	seenStages := make(map[int]struct{}, len(cfg.AllowedChopStages))
+	for _, stage := range cfg.AllowedChopStages {
+		if stage < 1 || stage > cfg.GrowthStageMax {
+			return 0, fmt.Errorf("tree.allowedChopStages values must be in range 1..growthStageMax")
+		}
+		if _, exists := seenStages[stage]; exists {
+			return 0, fmt.Errorf("tree.allowedChopStages contains duplicate stage %d", stage)
+		}
+		seenStages[stage] = struct{}{}
+	}
 
 	if ctx.Def == nil {
 		return 0, fmt.Errorf("tree config target def is nil")
@@ -84,8 +121,110 @@ func (treeBehavior) InitObject(ctx *contracts.BehaviorObjectInitContext) error {
 		return nil
 	}
 
-	// Keep existing behavior state untouched. Hook exists for explicit lifecycle wiring.
+	def, found := objectdefs.Global().GetByID(int(ctx.EntityType))
+	if !found || def.TreeConfig == nil {
+		return nil
+	}
+	treeConfig := def.TreeConfig
+	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
+
+	switch ctx.Reason {
+	case contracts.ObjectBehaviorInitReasonSpawn:
+		initializeSpawnTreeState(ctx.World, ctx.Handle, ctx.EntityID, treeConfig, nowTick)
+	case contracts.ObjectBehaviorInitReasonRestore:
+		initializeRestoredTreeState(ctx.World, ctx.Handle, ctx.EntityID, treeConfig, nowTick)
+	}
+
 	return nil
+}
+
+func (treeBehavior) ApplyRuntime(ctx *contracts.BehaviorRuntimeContext) contracts.BehaviorRuntimeResult {
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorRuntimeResult{}
+	}
+
+	def, found := objectdefs.Global().GetByID(int(ctx.EntityType))
+	if !found || def.TreeConfig == nil {
+		return contracts.BehaviorRuntimeResult{}
+	}
+	stage := stageFromRuntimeState(ctx.PrevState, def.TreeConfig, stageMissingPolicyFinal)
+	return contracts.BehaviorRuntimeResult{
+		Flags: []string{treeStageFlag(stage)},
+	}
+}
+
+func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error) {
+	if ctx == nil || ctx.World == nil {
+		return contracts.BehaviorTickResult{}, nil
+	}
+	if ctx.Handle == types.InvalidHandle || !ctx.World.Alive(ctx.Handle) {
+		return contracts.BehaviorTickResult{}, nil
+	}
+
+	def, found := objectdefs.Global().GetByID(int(ctx.EntityType))
+	if !found || def.TreeConfig == nil {
+		return contracts.BehaviorTickResult{}, nil
+	}
+	treeConfig := def.TreeConfig
+	stageChanged := false
+
+	ecs.WithComponent(ctx.World, ctx.Handle, func(state *components.ObjectInternalState) {
+		treeState, hasTreeState := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
+		if !hasTreeState || treeState == nil {
+			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
+			return
+		}
+
+		currentStage := normalizeStage(treeState.Stage, treeConfig, stageMissingPolicyStart)
+		currentNextTick := treeState.NextGrowthTick
+		if currentStage >= treeConfig.GrowthStageMax {
+			if currentNextTick != 0 {
+				components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+					ChopPoints: treeState.ChopPoints,
+					Stage:      treeConfig.GrowthStageMax,
+				})
+			}
+			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
+			return
+		}
+
+		if currentNextTick == 0 {
+			currentNextTick = ctx.CurrentTick + stageTransitionDuration(treeConfig, currentStage)
+			components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+				ChopPoints:     treeState.ChopPoints,
+				Stage:          currentStage,
+				NextGrowthTick: currentNextTick,
+			})
+			ecs.ScheduleBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey, currentNextTick)
+			return
+		}
+		if ctx.CurrentTick < currentNextTick {
+			ecs.ScheduleBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey, currentNextTick)
+			return
+		}
+
+		nextStage, nextTick, changed := applyGrowthCatchup(treeConfig, currentStage, currentNextTick, ctx.CurrentTick, 0)
+		if !changed {
+			ecs.ScheduleBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey, currentNextTick)
+			return
+		}
+
+		stageChanged = nextStage != currentStage
+		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+			ChopPoints:     treeState.ChopPoints,
+			Stage:          nextStage,
+			NextGrowthTick: nextTick,
+		})
+		if nextStage >= treeConfig.GrowthStageMax {
+			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
+			return
+		}
+		ecs.ScheduleBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey, nextTick)
+	})
+
+	return contracts.BehaviorTickResult{
+		StateChanged: stageChanged,
+	}, nil
 }
 
 func (treeBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []contracts.ContextAction {
@@ -102,6 +241,10 @@ func (treeBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []c
 	}
 	def, found := objectdefs.Global().GetByID(int(info.TypeID))
 	if !found || def.TreeConfig == nil {
+		return nil
+	}
+	stage := currentTreeStage(ctx.World, ctx.TargetHandle, def.TreeConfig, stageMissingPolicyFinal)
+	if !isChopAllowedAtStage(def.TreeConfig, stage) {
 		return nil
 	}
 
@@ -132,6 +275,10 @@ func (treeBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext)
 	}
 	targetDef, found := objectdefs.Global().GetByID(int(targetInfo.TypeID))
 	if !found || targetDef.TreeConfig == nil {
+		return contracts.BehaviorResult{OK: false}
+	}
+	stage := currentTreeStage(ctx.World, ctx.TargetHandle, targetDef.TreeConfig, stageMissingPolicyFinal)
+	if !isChopAllowedAtStage(targetDef.TreeConfig, stage) {
 		return contracts.BehaviorResult{OK: false}
 	}
 	if ctx.Phase == contracts.BehaviorValidationPhaseExecute {
@@ -169,21 +316,35 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 	if !found || targetDef.TreeConfig == nil {
 		return contracts.BehaviorResult{OK: false}
 	}
+	if !isChopAllowedAtStage(
+		targetDef.TreeConfig,
+		currentTreeStage(ctx.World, ctx.TargetHandle, targetDef.TreeConfig, stageMissingPolicyFinal),
+	) {
+		return contracts.BehaviorResult{OK: false}
+	}
 
 	// Init chop points on first chop.
 	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
-		treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, "tree")
+		stage := targetDef.TreeConfig.GrowthStageMax
+		nextGrowthTick := uint64(0)
+		treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
+		if hasTree && treeState != nil {
+			stage = normalizeStage(treeState.Stage, targetDef.TreeConfig, stageMissingPolicyStart)
+			nextGrowthTick = treeState.NextGrowthTick
+		}
 		if hasTree && treeState != nil && treeState.ChopPoints > 0 {
 			return
 		}
-		components.SetBehaviorState(state, "tree", &components.TreeBehaviorState{
-			ChopPoints: targetDef.TreeConfig.ChopPointsTotal,
+		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+			ChopPoints:     targetDef.TreeConfig.ChopPointsTotal,
+			Stage:          stage,
+			NextGrowthTick: nextGrowthTick,
 		})
 	})
 
 	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
 	ecs.AddComponent(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
-		BehaviorKey:        "tree",
+		BehaviorKey:        treeBehaviorKey,
 		ActionID:           actionChop,
 		CycleSoundKey:      strings.TrimSpace(targetDef.TreeConfig.ActionSound),
 		CompleteSoundKey:   strings.TrimSpace(targetDef.TreeConfig.FinishSound),
@@ -222,9 +383,17 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	remaining := 0
 	transitionToStump := false
 	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
+		currentStage := currentTreeStageFromInternalState(*state, treeConfig, stageMissingPolicyFinal)
+		if !isChopAllowedAtStage(treeConfig, currentStage) {
+			remaining = 0
+			return
+		}
+
 		currentChopPoints := treeConfig.ChopPointsTotal
-		if treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, "tree"); hasTree && treeState != nil {
+		nextGrowthTick := uint64(0)
+		if treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey); hasTree && treeState != nil {
 			currentChopPoints = treeState.ChopPoints
+			nextGrowthTick = treeState.NextGrowthTick
 		}
 
 		if currentChopPoints <= 0 {
@@ -234,8 +403,10 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 
 		currentChopPoints--
 		remaining = currentChopPoints
-		components.SetBehaviorState(state, "tree", &components.TreeBehaviorState{
-			ChopPoints: currentChopPoints,
+		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+			ChopPoints:     currentChopPoints,
+			Stage:          currentStage,
+			NextGrowthTick: nextGrowthTick,
 		})
 		if remaining == 0 {
 			transitionToStump = true
@@ -282,6 +453,265 @@ func forceVisionUpdates(world *ecs.World, visionForcer contracts.VisionUpdateFor
 		}
 		visionForcer.ForceUpdateForObserver(world, character.Handle)
 	}
+}
+
+type treeStageMissingPolicy uint8
+
+const (
+	stageMissingPolicyStart treeStageMissingPolicy = iota + 1
+	stageMissingPolicyFinal
+)
+
+func initializeSpawnTreeState(
+	world *ecs.World,
+	handle types.Handle,
+	entityID types.EntityID,
+	treeConfig *objectdefs.TreeBehaviorConfig,
+	nowTick uint64,
+) {
+	if world == nil || treeConfig == nil {
+		return
+	}
+
+	startStage := normalizeStage(0, treeConfig, stageMissingPolicyStart)
+	nextGrowthTick := uint64(0)
+	if startStage < treeConfig.GrowthStageMax {
+		nextGrowthTick = nowTick + stageTransitionDuration(treeConfig, startStage)
+		ecs.ScheduleBehaviorTick(world, entityID, treeBehaviorKey, nextGrowthTick)
+	} else {
+		ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
+	}
+
+	ecs.WithComponent(world, handle, func(state *components.ObjectInternalState) {
+		chopPoints := 0
+		if existing, has := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey); has && existing != nil {
+			chopPoints = existing.ChopPoints
+		}
+		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+			ChopPoints:     chopPoints,
+			Stage:          startStage,
+			NextGrowthTick: nextGrowthTick,
+		})
+	})
+}
+
+func initializeRestoredTreeState(
+	world *ecs.World,
+	handle types.Handle,
+	entityID types.EntityID,
+	treeConfig *objectdefs.TreeBehaviorConfig,
+	nowTick uint64,
+) {
+	if world == nil || treeConfig == nil {
+		return
+	}
+
+	catchupLimit := uint64(2000)
+	if policy, ok := ecs.TryGetResource[ecs.BehaviorTickPolicy](world); ok && policy != nil {
+		if policy.CatchUpLimitTicks > 0 {
+			catchupLimit = policy.CatchUpLimitTicks
+		}
+	}
+
+	ecs.WithComponent(world, handle, func(state *components.ObjectInternalState) {
+		treeState, hasTreeState := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
+		if !hasTreeState || treeState == nil {
+			ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
+			return
+		}
+
+		currentStage := normalizeStage(treeState.Stage, treeConfig, stageMissingPolicyFinal)
+		nextGrowthTick := treeState.NextGrowthTick
+		stateChanged := currentStage != treeState.Stage
+
+		if currentStage >= treeConfig.GrowthStageMax {
+			nextGrowthTick = 0
+			ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
+		} else {
+			if nextGrowthTick == 0 {
+				nextGrowthTick = nowTick + stageTransitionDuration(treeConfig, currentStage)
+				stateChanged = true
+			}
+
+			nextStage, caughtUpNextTick, caughtUp := applyGrowthCatchup(
+				treeConfig,
+				currentStage,
+				nextGrowthTick,
+				nowTick,
+				catchupLimit,
+			)
+			if caughtUp {
+				currentStage = nextStage
+				nextGrowthTick = caughtUpNextTick
+				stateChanged = true
+			}
+
+			if currentStage >= treeConfig.GrowthStageMax {
+				nextGrowthTick = 0
+				ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
+			} else {
+				ecs.ScheduleBehaviorTick(world, entityID, treeBehaviorKey, nextGrowthTick)
+			}
+		}
+
+		if !stateChanged {
+			return
+		}
+		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+			ChopPoints:     treeState.ChopPoints,
+			Stage:          currentStage,
+			NextGrowthTick: nextGrowthTick,
+		})
+	})
+}
+
+func currentTreeStage(
+	world *ecs.World,
+	targetHandle types.Handle,
+	treeConfig *objectdefs.TreeBehaviorConfig,
+	missingPolicy treeStageMissingPolicy,
+) int {
+	if world == nil || targetHandle == types.InvalidHandle || !world.Alive(targetHandle) || treeConfig == nil {
+		return 1
+	}
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](world, targetHandle)
+	if !hasState {
+		return normalizeStage(0, treeConfig, missingPolicy)
+	}
+	return currentTreeStageFromInternalState(internalState, treeConfig, missingPolicy)
+}
+
+func currentTreeStageFromInternalState(
+	internalState components.ObjectInternalState,
+	treeConfig *objectdefs.TreeBehaviorConfig,
+	missingPolicy treeStageMissingPolicy,
+) int {
+	if treeConfig == nil {
+		return 1
+	}
+	treeState, hasState := components.GetBehaviorState[components.TreeBehaviorState](internalState, treeBehaviorKey)
+	if !hasState || treeState == nil {
+		return normalizeStage(0, treeConfig, missingPolicy)
+	}
+	return normalizeStage(treeState.Stage, treeConfig, missingPolicy)
+}
+
+func stageFromRuntimeState(
+	runtimeState *components.RuntimeObjectState,
+	treeConfig *objectdefs.TreeBehaviorConfig,
+	missingPolicy treeStageMissingPolicy,
+) int {
+	if treeConfig == nil || runtimeState == nil || runtimeState.Behaviors == nil {
+		return normalizeStage(0, treeConfig, missingPolicy)
+	}
+	rawState, has := runtimeState.Behaviors[treeBehaviorKey]
+	if !has || rawState == nil {
+		return normalizeStage(0, treeConfig, missingPolicy)
+	}
+	if typedState, ok := rawState.(*components.TreeBehaviorState); ok && typedState != nil {
+		return normalizeStage(typedState.Stage, treeConfig, missingPolicy)
+	}
+	if typedState, ok := rawState.(components.TreeBehaviorState); ok {
+		return normalizeStage(typedState.Stage, treeConfig, missingPolicy)
+	}
+	return normalizeStage(0, treeConfig, missingPolicy)
+}
+
+func normalizeStage(
+	stage int,
+	treeConfig *objectdefs.TreeBehaviorConfig,
+	missingPolicy treeStageMissingPolicy,
+) int {
+	if treeConfig == nil || treeConfig.GrowthStageMax < 1 {
+		return 1
+	}
+	if stage > 0 {
+		if stage > treeConfig.GrowthStageMax {
+			return treeConfig.GrowthStageMax
+		}
+		return stage
+	}
+	if missingPolicy == stageMissingPolicyFinal {
+		return treeConfig.GrowthStageMax
+	}
+	if treeConfig.GrowthStartStage >= 1 && treeConfig.GrowthStartStage <= treeConfig.GrowthStageMax {
+		return treeConfig.GrowthStartStage
+	}
+	return 1
+}
+
+func stageTransitionDuration(treeConfig *objectdefs.TreeBehaviorConfig, stage int) uint64 {
+	if treeConfig == nil || stage < 1 || stage >= treeConfig.GrowthStageMax {
+		return 0
+	}
+	stageIndex := stage - 1
+	if stageIndex < 0 || stageIndex >= len(treeConfig.GrowthStageDurations) {
+		return 0
+	}
+	durationTicks := treeConfig.GrowthStageDurations[stageIndex]
+	if durationTicks <= 0 {
+		return 0
+	}
+	return uint64(durationTicks)
+}
+
+func applyGrowthCatchup(
+	treeConfig *objectdefs.TreeBehaviorConfig,
+	currentStage int,
+	nextGrowthTick uint64,
+	nowTick uint64,
+	catchupLimit uint64,
+) (int, uint64, bool) {
+	if treeConfig == nil || currentStage >= treeConfig.GrowthStageMax || nextGrowthTick == 0 {
+		return currentStage, nextGrowthTick, false
+	}
+
+	effectiveNowTick := nowTick
+	if nowTick > nextGrowthTick && catchupLimit > 0 {
+		limitedNowTick := nextGrowthTick + catchupLimit
+		if limitedNowTick < effectiveNowTick {
+			effectiveNowTick = limitedNowTick
+		}
+	}
+
+	stage := currentStage
+	nextTick := nextGrowthTick
+	changed := false
+
+	for stage < treeConfig.GrowthStageMax && nextTick > 0 && nextTick <= effectiveNowTick {
+		stage++
+		changed = true
+		if stage >= treeConfig.GrowthStageMax {
+			nextTick = 0
+			break
+		}
+
+		transitionDuration := stageTransitionDuration(treeConfig, stage)
+		if transitionDuration == 0 {
+			nextTick = 0
+			stage = treeConfig.GrowthStageMax
+			break
+		}
+		nextTick += transitionDuration
+	}
+
+	return stage, nextTick, changed
+}
+
+func isChopAllowedAtStage(treeConfig *objectdefs.TreeBehaviorConfig, stage int) bool {
+	if treeConfig == nil || stage <= 0 || len(treeConfig.AllowedChopStages) == 0 {
+		return false
+	}
+	for _, allowedStage := range treeConfig.AllowedChopStages {
+		if allowedStage == stage {
+			return true
+		}
+	}
+	return false
+}
+
+func treeStageFlag(stage int) string {
+	return fmt.Sprintf("%s%d", treeStageFlagPrefix, stage)
 }
 
 func spawnLogs(
@@ -454,10 +884,11 @@ func transformTargetToStump(
 	}
 
 	ecs.WithComponent(world, targetHandle, func(state *components.ObjectInternalState) {
-		components.DeleteBehaviorState(state, "tree")
+		components.DeleteBehaviorState(state, treeBehaviorKey)
 		state.Flags = nil
 		state.IsDirty = true
 	})
+	ecs.CancelBehaviorTicksByEntityID(world, targetID)
 
 	if deps.BehaviorRegistry != nil {
 		currentInfo, hasInfo := ecs.GetComponent[components.EntityInfo](world, targetHandle)

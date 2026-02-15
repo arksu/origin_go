@@ -6,6 +6,7 @@ import (
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
+	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
 
@@ -148,5 +149,40 @@ func TestForceVisionUpdatesForAllAliveCharacters(t *testing.T) {
 	}
 	if forced[playerDead] {
 		t.Fatalf("did not expect forced update for dead player")
+	}
+}
+
+func TestApplyGrowthCatchup_RespectsCatchupLimit(t *testing.T) {
+	cfg := &objectdefs.TreeBehaviorConfig{
+		GrowthStageMax:       4,
+		GrowthStageDurations: []int{100, 100, 100},
+	}
+
+	stage, nextTick, changed := applyGrowthCatchup(cfg, 1, 100, 500, 150)
+	if !changed {
+		t.Fatalf("expected catch-up to change stage")
+	}
+	if stage != 3 {
+		t.Fatalf("expected stage 3, got %d", stage)
+	}
+	if nextTick != 300 {
+		t.Fatalf("expected next tick 300, got %d", nextTick)
+	}
+}
+
+func TestIsChopAllowedAtStage(t *testing.T) {
+	cfg := &objectdefs.TreeBehaviorConfig{
+		GrowthStageMax:    4,
+		AllowedChopStages: []int{3, 4},
+	}
+
+	if isChopAllowedAtStage(cfg, 2) {
+		t.Fatalf("stage 2 should not allow chop")
+	}
+	if !isChopAllowedAtStage(cfg, 3) {
+		t.Fatalf("stage 3 should allow chop")
+	}
+	if !isChopAllowedAtStage(cfg, 4) {
+		t.Fatalf("stage 4 should allow chop")
 	}
 }
