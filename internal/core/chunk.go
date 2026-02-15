@@ -370,7 +370,8 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			if obj == nil {
 				continue
 			}
-			obj.LastTick = int64(lastTick)
+			timeState := ecs.GetResource[ecs.TimeState](world)
+			obj.LastTick = int64(timeState.Tick)
 			nonNilObjects = append(nonNilObjects, obj)
 		}
 		if len(nonNilObjects) > 0 {
