@@ -82,6 +82,8 @@ if (authStore.isAuthenticated) { /* proceed */ }
 |-------|------|-------------|
 | `contextMenu` | `ContextMenuState \| null` | Server-provided context actions for selected entity |
 | `miniAlerts` | `MiniAlertItem[]` | Center-screen transient alerts with severity and TTL |
+| `characterSheetVisible` | `boolean` | Visibility flag for Character Sheet window |
+| `characterAttributes` | `CharacterAttributeViewItem[]` | Full snapshot of 9 character attributes for UI |
 
 ### Types
 
@@ -144,6 +146,14 @@ interface ChunkData {
 - `openContextMenu(entityId, actions)` — On `S2C_ContextMenu`
 - `closeContextMenu()` — Explicit close on click/hotkey
 - `pushMiniAlert(input)` — On `S2C_MiniAlert` with debounce/coalesce/max-visible rules
+- `setCharacterAttributesSnapshot(entries)` — On `S2C_CharacterAttributes`, normalize to 9 values
+- `toggleCharacterSheet()` / `setCharacterSheetVisible(visible)` — Character Sheet window controls
+
+### Character Sheet Rules
+
+- Store keeps attributes as presentation-ready list (`label`, `icon`, `value`).
+- Snapshot processing is full-replace (no partial merge).
+- Fail-safe for UI: missing/invalid/<1 values become `1`.
 
 #### Reset
 - `reset()` — Full cleanup (logout, disconnect, leave world)

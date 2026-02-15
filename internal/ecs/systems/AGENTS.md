@@ -21,19 +21,20 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 ## System Registry
 
-| Priority | System Name           | Description                                                  | Dependencies                    | Notes                                            |
-|----------|-----------------------|--------------------------------------------------------------|---------------------------------|--------------------------------------------------|
-| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer            | Runs first, resets arrays                        |
-| 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character            | Batch saves character positions/stats            |
-| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement             | Appends to MovedEntities buffer                  |
-| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef   | Reads from MovedEntities buffer                  |
-| 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character             | Saves character data before despawn              |
-| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult      | Processes moved entities                         |
-| 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction   | Auto-pickup dropped items on arrival             |
-| 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef     | Updates VisibilityState, publishes events        |
-| 355      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState | Dispatches to behavior scheduled-tick capability |
-| 360      | ObjectBehaviorSystem  | Recomputes object behavior flags/state/appearance            | ObjectBehaviorDirtyQueue        | Dirty-queue driven, budget-limited               |
-| 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                        | Handles entity chunk transitions                 |
+| Priority | System Name           | Description                                                  | Dependencies                       | Notes                                            |
+|----------|-----------------------|--------------------------------------------------------------|------------------------------------|--------------------------------------------------|
+| 0        | NetworkCommandSystem  | Drains player/server inboxes and routes network commands     | PlayerCommandInbox, ServerJobInbox | Also handles login snapshot jobs                 |
+| 0        | ResetSystem           | Clears temporary data structures at frame start              | MovedEntities buffer               | Runs first, resets arrays                        |
+| 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character               | Batch saves character positions/stats            |
+| 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement                | Appends to MovedEntities buffer                  |
+| 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef      | Reads from MovedEntities buffer                  |
+| 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character                | Saves character data before despawn              |
+| 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult         | Processes moved entities                         |
+| 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction      | Auto-pickup dropped items on arrival             |
+| 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef        | Updates VisibilityState, publishes events        |
+| 355      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState    | Dispatches to behavior scheduled-tick capability |
+| 360      | ObjectBehaviorSystem  | Recomputes object behavior flags/state/appearance            | ObjectBehaviorDirtyQueue           | Dirty-queue driven, budget-limited               |
+| 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                           | Handles entity chunk transitions                 |
 
 ## System Details
 
@@ -310,6 +311,15 @@ Context interactions are now behavior-driven and server-authoritative:
 - Runtime observability:
     - `WARN` log
     - metric `context_action_duplicate_total{entity_def,action_id,winner_behavior,loser_behavior}`
+
+## Login Snapshot Jobs
+
+`NetworkCommandSystem` also processes internal server jobs used by login/reattach bootstrap:
+
+- `JobSendInventorySnapshot` → sends full inventory snapshot.
+- `JobSendCharacterAttributesSnapshot` → sends full character attributes snapshot (`S2C_CharacterAttributes`, always 9 attrs).
+
+Both jobs run on ECS tick thread to avoid concurrent world/component access from network goroutines.
 
 ## Performance Considerations
 

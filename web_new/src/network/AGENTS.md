@@ -82,6 +82,7 @@ messageDispatcher.on('objectMove', (msg) => { /* ... */ })
 - `playerEnterWorld`, `playerLeaveWorld`
 - `objectSpawn`, `objectDespawn`, `objectMove`
 - `inventoryUpdate`, `inventoryOpResult`
+- `characterAttributes`
 - `containerOpened`, `containerClosed`
 - `contextMenu`, `miniAlert`
 - `error`, `warning`
@@ -149,8 +150,15 @@ registerMessageHandlers()
 | `objectSpawn` | Spawn entity in store + facade, init in MoveController |
 | `objectDespawn` | Remove entity from store + facade + MoveController |
 | `objectMove` | Feed to MoveController, update store position |
+| `characterAttributes` | Store full character attributes snapshot for Character Sheet UI |
 | `contextMenu` | Open context menu state in `gameStore` |
 | `miniAlert` | Push center-screen transient alert in `gameStore` |
+
+### Character Attributes Contract
+
+- Server sends `S2C_CharacterAttributes` after `S2C_PlayerEnterWorld`.
+- Payload is always a **full snapshot** of 9 required attributes.
+- Client should treat missing/invalid values as fail-safe `1` at store boundary.
 
 ## Protocol
 
