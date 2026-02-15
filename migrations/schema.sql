@@ -26,34 +26,35 @@ CREATE TABLE IF NOT EXISTS character
     account_id       BIGINT       NOT NULL REFERENCES account (id) ON DELETE CASCADE,
     name             VARCHAR(128) NOT NULL,
 
-    region           INT          NOT NULL,                      -- region id (continent)
-    x                INT          NOT NULL,                      -- world coordinate
-    y                INT          NOT NULL,                      -- world coordinate
-    layer            INT          NOT NULL,                      -- ground layer
+    region           INT          NOT NULL,                       -- region id (continent)
+    x                INT          NOT NULL,                       -- world coordinate
+    y                INT          NOT NULL,                       -- world coordinate
+    layer            INT          NOT NULL,                       -- ground layer
     heading          SMALLINT     NOT NULL CHECK (heading >= 0 AND heading < 360),
 
-    stamina          INT          NOT NULL CHECK (stamina >= 0), -- current stamina
-    shp              INT          NOT NULL CHECK (shp >= 0),     -- soft health points
-    hhp              INT          NOT NULL CHECK (hhp >= 0),     -- hard health points
+    stamina          NUMERIC      NOT NULL CHECK (stamina >= 0),  -- current stamina
+    energy           NUMERIC      not null check ( energy >= 0 ), -- current energy
+    shp              INT          NOT NULL CHECK (shp >= 0),      -- soft health points
+    hhp              INT          NOT NULL CHECK (hhp >= 0),      -- hard health points
 
-    attributes            JSONB        NOT NULL,
+    attributes       JSONB        NOT NULL,
 
     -- Опыт (денормализация для быстрого доступа)
     exp_nature       BIGINT                DEFAULT 0,
     exp_industry     BIGINT                DEFAULT 0,
     exp_combat       BIGINT                DEFAULT 0,
 
-    online_time      BIGINT       NOT NULL DEFAULT 0,            -- time in seconds spent in game
-    auth_token       VARCHAR(64),                                -- token used in C2SAuth packet
+    online_time      BIGINT       NOT NULL DEFAULT 0,             -- time in seconds spent in game
+    auth_token       VARCHAR(64),                                 -- token used in C2SAuth packet
     token_expires_at TIMESTAMPTZ,
     is_online        BOOLEAN               DEFAULT false,
 
     -- Для disconnect логики
-    disconnect_at    TIMESTAMPTZ,                                -- когда отключился
-    is_ghost         BOOLEAN               DEFAULT false,        -- персонаж остался в мире после disconnect
+    disconnect_at    TIMESTAMPTZ,                                 -- когда отключился
+    is_ghost         BOOLEAN               DEFAULT false,         -- персонаж остался в мире после disconnect
 
     last_save_at     TIMESTAMPTZ,
-    deleted_at       TIMESTAMPTZ,                                -- when delete set now()
+    deleted_at       TIMESTAMPTZ,                                 -- when delete set now()
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ           DEFAULT now()
 );

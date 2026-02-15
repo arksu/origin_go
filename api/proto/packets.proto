@@ -39,10 +39,11 @@ message Timestamp {
 // ============================================================================
 
 enum MovementMode {
-  MOVE_MODE_WALK = 0;
-  MOVE_MODE_RUN = 1;
-  MOVE_MODE_FAST_RUN = 2;
-  MOVE_MODE_SWIM = 3;
+  MOVE_MODE_CRAWL = 0;
+  MOVE_MODE_WALK = 1;
+  MOVE_MODE_RUN = 2;
+  MOVE_MODE_FAST_RUN = 3;
+  MOVE_MODE_SWIM = 4;
 }
 
 enum EquipSlot {
