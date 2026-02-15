@@ -122,6 +122,8 @@ message ItemInstance {
   string resource = 3;
   uint32 quality = 4;
   uint32 quantity = 5;
+  string name = 6;
+  optional string hint_ext = 7;
 
   uint32 w = 10; // размеры в слотах
   uint32 h = 11;
@@ -341,7 +343,7 @@ message C2S_ChatMessage {
   ChatChannel channel = 2;
   oneof target {
     uint64 private_entity_id = 3; // обязателен если channel == CHAT_CHANNEL_PRIVATE
-  } }
+  }}
 
 // ============================================================================
 // CLIENT -> SERVER MESSAGES
