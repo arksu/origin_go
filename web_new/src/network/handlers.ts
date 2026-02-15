@@ -219,6 +219,18 @@ export function registerMessageHandlers(): void {
         error: msg.error,
         message: msg.message,
       })
+
+      const message = (msg.message || '').trim()
+      const errorCode = Number(msg.error || 0)
+      const errorName = proto.ErrorCode[errorCode] || 'INVENTORY_OP_FAILED'
+      const reasonCode = errorName === 'ERROR_CODE_NONE' ? 'INVENTORY_OP_FAILED' : errorName
+
+      gameStore.pushMiniAlert({
+        reasonCode,
+        message: message || undefined,
+        severity: proto.AlertSeverity.ALERT_SEVERITY_ERROR,
+        ttlMs: 0,
+      })
     } else {
       console.log('[Handlers] inventoryOpResult OK:', { msg: msg })
     }
