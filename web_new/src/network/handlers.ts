@@ -58,6 +58,10 @@ export function registerMessageHandlers(): void {
     gameStore.setCharacterProfileSnapshot(msg.attributes || [])
   })
 
+  messageDispatcher.on('playerStats', (msg: proto.IS2C_PlayerStats) => {
+    gameStore.setPlayerStats(msg)
+  })
+
   messageDispatcher.on('chunkLoad', (msg: proto.IS2C_ChunkLoad) => {
     if (msg.chunk) {
       const x = msg.chunk.coord?.x || 0
