@@ -2,7 +2,9 @@ package systems
 
 import (
 	"math"
+	"origin/internal/characterattrs"
 	constt "origin/internal/const"
+	"origin/internal/entitystats"
 	"origin/internal/types"
 
 	"origin/internal/core"
@@ -55,6 +57,36 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 		transform, ok := ecs.GetComponent[components.Transform](w, h)
 		if !ok {
 			return
+		}
+
+		if stats, hasStats := ecs.GetComponent[components.EntityStats](w, h); hasStats {
+			attributes := characterattrs.Default()
+			if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, h); hasProfile {
+				attributes = characterattrs.Normalize(profile.Attributes)
+			}
+			maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+			clampedStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
+			if clampedStamina != stats.Stamina {
+				ecs.WithComponent(w, h, func(entityStats *components.EntityStats) {
+					entityStats.Stamina = clampedStamina
+				})
+				ecs.MarkPlayerStatsDirtyByHandle(w, h, ecs.ResolvePlayerStatsTTLms(w))
+				stats.Stamina = clampedStamina
+			}
+
+			allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, stats.Stamina, maxStamina)
+			ecs.WithComponent(w, h, func(m *components.Movement) {
+				m.Mode = allowedMode
+			})
+			if !canMove {
+				ecs.WithComponent(w, h, func(m *components.Movement) {
+					m.Mode = constt.Crawl
+					m.ClearTarget()
+				})
+				movedEntities.Add(h, transform.X, transform.Y)
+				return
+			}
+			movement.Mode = allowedMode
 		}
 
 		if movement.TargetType == constt.TargetEntity {

@@ -93,6 +93,7 @@ func NewContextActionService(
 			Chunks:           chunks,
 			IDAllocator:      idAlloc,
 			VisionForcer:     vision,
+			Alerts:           alerts,
 			BehaviorRegistry: behaviorRegistry,
 			Logger:           logger,
 		},

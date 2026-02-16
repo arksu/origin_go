@@ -26,20 +26,21 @@ type Behavior interface {
 
 // TreeBehaviorConfig contains tree-specific validated behavior config data.
 type TreeBehaviorConfig struct {
-	Priority               int    `json:"priority,omitempty"`
-	ChopPointsTotal        int    `json:"chopPointsTotal"`
-	ChopCycleDurationTicks int    `json:"chopCycleDurationTicks"`
-	ActionSound            string `json:"action_sound,omitempty"`
-	FinishSound            string `json:"finish_sound,omitempty"`
-	LogsSpawnDefKey        string `json:"logsSpawnDefKey"`
-	LogsSpawnCount         int    `json:"logsSpawnCount"`
-	LogsSpawnInitialOffset int    `json:"logsSpawnInitialOffset"`
-	LogsSpawnStepOffset    int    `json:"logsSpawnStepOffset"`
-	TransformToDefKey      string `json:"transformToDefKey"`
-	GrowthStageMax         int    `json:"growthStageMax"`
-	GrowthStartStage       int    `json:"growthStartStage,omitempty"`
-	GrowthStageDurations   []int  `json:"growthStageDurationsTicks"`
-	AllowedChopStages      []int  `json:"allowedChopStages"`
+	Priority               int     `json:"priority,omitempty"`
+	ChopPointsTotal        int     `json:"chopPointsTotal"`
+	ChopCycleDurationTicks int     `json:"chopCycleDurationTicks"`
+	ChopStaminaCost        float64 `json:"chopStaminaCost"`
+	ActionSound            string  `json:"action_sound,omitempty"`
+	FinishSound            string  `json:"finish_sound,omitempty"`
+	LogsSpawnDefKey        string  `json:"logsSpawnDefKey"`
+	LogsSpawnCount         int     `json:"logsSpawnCount"`
+	LogsSpawnInitialOffset int     `json:"logsSpawnInitialOffset"`
+	LogsSpawnStepOffset    int     `json:"logsSpawnStepOffset"`
+	TransformToDefKey      string  `json:"transformToDefKey"`
+	GrowthStageMax         int     `json:"growthStageMax"`
+	GrowthStartStage       int     `json:"growthStartStage,omitempty"`
+	GrowthStageDurations   []int   `json:"growthStageDurationsTicks"`
+	AllowedChopStages      []int   `json:"allowedChopStages"`
 }
 
 // BehaviorDefConfigTarget receives validated behavior config mutations.
@@ -123,6 +124,10 @@ type VisionUpdateForcer interface {
 	ForceUpdateForObserver(w *ecs.World, observerHandle types.Handle)
 }
 
+type MiniAlertSender interface {
+	SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniAlert)
+}
+
 // ExecutionDeps contains shared dependencies for context action execution.
 type ExecutionDeps struct {
 	OpenContainer    OpenContainerFn
@@ -130,6 +135,7 @@ type ExecutionDeps struct {
 	Chunks           TreeChunkProvider
 	IDAllocator      EntityIDAllocator
 	VisionForcer     VisionUpdateForcer
+	Alerts           MiniAlertSender
 	BehaviorRegistry BehaviorRegistry
 	Logger           *zap.Logger
 }

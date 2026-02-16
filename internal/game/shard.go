@@ -81,6 +81,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		Clients:         make(map[types.EntityID]*network.Client),
 		state:           ShardStateRunning,
 	}
+	ecs.SetResource(s.world, ecs.EntityStatsRuntimeConfig{
+		PlayerStatsTTLms: uint32(cfg.Game.PlayerStatsTTLms),
+	})
 	ecs.SetResource(s.world, ecs.BehaviorTickPolicy{
 		GlobalBudgetPerTick: cfg.Game.BehaviorTickGlobalBudget,
 		CatchUpLimitTicks:   uint64(cfg.Game.BehaviorTickCatchupLimit),

@@ -4,8 +4,11 @@ import (
 	"testing"
 	"time"
 
+	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
+	"origin/internal/ecs/components"
+	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
@@ -184,5 +187,97 @@ func TestIsChopAllowedAtStage(t *testing.T) {
 	}
 	if !isChopAllowedAtStage(cfg, 4) {
 		t.Fatalf("stage 4 should allow chop")
+	}
+}
+
+type testMiniAlertSender struct {
+	alerts []*netproto.S2C_MiniAlert
+}
+
+func (s *testMiniAlertSender) SendMiniAlert(_ types.EntityID, alert *netproto.S2C_MiniAlert) {
+	s.alerts = append(s.alerts, alert)
+}
+
+func TestSendLowStaminaMiniAlert(t *testing.T) {
+	sender := &testMiniAlertSender{}
+	sendLowStaminaMiniAlert(types.EntityID(100), sender)
+
+	if len(sender.alerts) != 1 {
+		t.Fatalf("expected one alert, got %d", len(sender.alerts))
+	}
+	alert := sender.alerts[0]
+	if alert.ReasonCode != "LOW_STAMINA" {
+		t.Fatalf("expected LOW_STAMINA reason, got %q", alert.ReasonCode)
+	}
+	if alert.TtlMs != 2000 {
+		t.Fatalf("expected ttl 2000, got %d", alert.TtlMs)
+	}
+}
+
+func TestConsumePlayerStaminaForTreeCycle_FailsBelowFloor(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(3001)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{
+			Mode:  constt.Walk,
+			State: constt.StateInteracting,
+			Speed: constt.PlayerSpeed,
+		})
+		ecs.AddComponent(w, h, components.CharacterProfile{
+			Attributes: characterattrs.Default(),
+		})
+		ecs.AddComponent(w, h, components.EntityStats{
+			Stamina: 105,
+			Energy:  1000,
+		})
+	})
+
+	if consumePlayerStaminaForTreeCycle(world, playerHandle, 10) {
+		t.Fatalf("expected consume to fail below long-action floor")
+	}
+
+	stats, ok := ecs.GetComponent[components.EntityStats](world, playerHandle)
+	if !ok {
+		t.Fatalf("missing stats component")
+	}
+	if stats.Stamina != 105 {
+		t.Fatalf("expected stamina unchanged after failed consume, got %.3f", stats.Stamina)
+	}
+	if ecs.GetResource[ecs.EntityStatsUpdateState](world).PendingPlayerPushCount() != 0 {
+		t.Fatalf("expected no player stats push schedule on failed consume")
+	}
+}
+
+func TestConsumePlayerStaminaForTreeCycle_SuccessMarksDirty(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(3002)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{
+			Mode:  constt.Walk,
+			State: constt.StateInteracting,
+			Speed: constt.PlayerSpeed,
+		})
+		ecs.AddComponent(w, h, components.CharacterProfile{
+			Attributes: characterattrs.Default(),
+		})
+		ecs.AddComponent(w, h, components.EntityStats{
+			Stamina: 150,
+			Energy:  1000,
+		})
+	})
+
+	if !consumePlayerStaminaForTreeCycle(world, playerHandle, 10) {
+		t.Fatalf("expected consume to succeed")
+	}
+
+	stats, ok := ecs.GetComponent[components.EntityStats](world, playerHandle)
+	if !ok {
+		t.Fatalf("missing stats component")
+	}
+	if stats.Stamina != 140 {
+		t.Fatalf("expected stamina 140 after consume, got %.3f", stats.Stamina)
+	}
+	if ecs.GetResource[ecs.EntityStatsUpdateState](world).PendingPlayerPushCount() != 1 {
+		t.Fatalf("expected one player stats push schedule after successful consume")
 	}
 }

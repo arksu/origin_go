@@ -18,6 +18,9 @@ This directory defines runtime/server configuration schema and defaults.
 - `game.object_behavior_budget_per_tick`: max dirty behavior objects processed per tick (default `512`).
 - `game.behavior_tick_global_budget_per_tick`: max scheduled behavior ticks processed per server tick (default `200`).
 - `game.behavior_tick_catchup_limit_ticks`: max restore catch-up steps per object during behavior init (default `2000`).
+- `game.player_stats_ttl_ms`: coalescing window for `S2C_PlayerStats` push scheduling (default `1000`, must be `> 0`).
+  - Used by `EntityStatsUpdateState` to delay next due push after last send.
+  - Does not force periodic packets: send happens only when stats are marked dirty and rounded network snapshot changed.
 
 ## Server Time Bootstrap Contract
 

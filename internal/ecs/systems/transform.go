@@ -1,10 +1,13 @@
 package systems
 
 import (
+	"math"
+	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/entitystats"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -68,6 +71,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 		// Get chunk for spatial hash update
 		chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, h)
+		s.applyMovementStaminaTick(w, h, transform.X, transform.Y, finalX, finalY)
 		if hasChunkRef {
 			chunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
 			chunk := s.chunkManager.GetChunk(chunkCoord)
@@ -174,4 +178,112 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			eventbus.PriorityMedium,
 		)
 	}
+}
+
+func (s *TransformUpdateSystem) applyMovementStaminaTick(
+	w *ecs.World,
+	handle types.Handle,
+	fromX float64,
+	fromY float64,
+	toX float64,
+	toY float64,
+) {
+	movement, hasMovement := ecs.GetComponent[components.Movement](w, handle)
+	if !hasMovement {
+		return
+	}
+	stats, hasStats := ecs.GetComponent[components.EntityStats](w, handle)
+	if !hasStats {
+		return
+	}
+
+	attributes := characterattrs.Default()
+	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
+		attributes = characterattrs.Normalize(profile.Attributes)
+	}
+	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
+	statsChanged := currentStamina != stats.Stamina
+
+	dx := toX - fromX
+	dy := toY - fromY
+	moved := dx*dx+dy*dy > 0.000001
+	if moved {
+		tile := s.resolveMovementTileContext(fromX, fromY)
+		cost := entitystats.ResolveMovementStaminaCostPerTick(movement.Mode, attributes, tile)
+		if cost > 0 {
+			nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
+			if nextStamina != currentStamina {
+				currentStamina = nextStamina
+				statsChanged = true
+			}
+		}
+	}
+
+	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina)
+	modeChanged := movement.Mode != allowedMode
+	forceStopped := false
+	if !canMove && movement.State == constt.StateMoving {
+		forceStopped = true
+	}
+
+	if statsChanged {
+		ecs.WithComponent(w, handle, func(entityStats *components.EntityStats) {
+			entityStats.Stamina = currentStamina
+		})
+		ecs.MarkPlayerStatsDirtyByHandle(w, handle, ecs.ResolvePlayerStatsTTLms(w))
+	}
+
+	if modeChanged || !canMove {
+		ecs.WithComponent(w, handle, func(m *components.Movement) {
+			m.Mode = allowedMode
+			if !canMove {
+				if m.Mode != constt.Crawl {
+					m.Mode = constt.Crawl
+				}
+				if m.State == constt.StateMoving {
+					m.ClearTarget()
+				}
+			}
+		})
+	}
+
+	if forceStopped && !moved {
+		ecs.GetResource[ecs.MovedEntities](w).Add(handle, toX, toY)
+	}
+}
+
+func (s *TransformUpdateSystem) resolveMovementTileContext(worldX float64, worldY float64) entitystats.MovementTileContext {
+	tileSize := float64(constt.CoordPerTile)
+	tileX := int(math.Floor(worldX / tileSize))
+	tileY := int(math.Floor(worldY / tileSize))
+
+	chunkSize := constt.ChunkSize
+	chunkX := floorDiv(tileX, chunkSize)
+	chunkY := floorDiv(tileY, chunkSize)
+	localTileX := tileX - chunkX*chunkSize
+	localTileY := tileY - chunkY*chunkSize
+
+	chunk := s.chunkManager.GetChunk(types.ChunkCoord{X: chunkX, Y: chunkY})
+	if chunk == nil {
+		return entitystats.MovementTileContext{HasTile: false}
+	}
+	tileID, ok := chunk.TileID(localTileX, localTileY, chunkSize)
+	if !ok {
+		return entitystats.MovementTileContext{HasTile: false}
+	}
+	return entitystats.MovementTileContext{
+		TileID:  tileID,
+		HasTile: true,
+	}
+}
+
+func floorDiv(value int, divisor int) int {
+	if divisor <= 0 {
+		return 0
+	}
+	if value >= 0 {
+		return value / divisor
+	}
+	return -((-value + divisor - 1) / divisor)
 }
