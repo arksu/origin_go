@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useGameStore } from '@/stores/gameStore'
@@ -29,6 +29,7 @@ const creating = ref(false)
 const createError = ref('')
 const showDeleteDialog = ref(false)
 const pendingDeleteCharacter = ref<Character | null>(null)
+const createNameInputRef = ref<InstanceType<typeof AppInput> | null>(null)
 
 const enteringId = ref<number | null>(null)
 const deletingId = ref<number | null>(null)
@@ -100,6 +101,14 @@ function closeCreateDialog() {
   newCharacterName.value = ''
   createError.value = ''
 }
+
+watch(showCreateForm, (isOpen) => {
+  if (!isOpen) return
+  nextTick(() => {
+    newCharacterName.value = ''
+    createNameInputRef.value?.focus()
+  })
+})
 
 async function handleDelete(id: number) {
   if (listUnavailable.value) return
@@ -254,10 +263,10 @@ onMounted(() => {
             </AppAlert>
             <form @submit.prevent="handleCreate">
               <AppInput
+                ref="createNameInputRef"
                 v-model="newCharacterName"
                 placeholder="Name"
                 :disabled="creating"
-                autofocus
               />
               <div class="dialog-actions">
                 <AppButton

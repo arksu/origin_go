@@ -17,6 +17,22 @@
       "behaviors": {
         "player": {}
       }
+    },
+    {
+      "defId": 13,
+      "key": "boulder",
+      "name": "Boulder",
+      "static": true,
+      "components": {
+        "collider": {
+          "w": 20,
+          "h": 20
+        }
+      },
+      "resource": "boulder",
+      "behaviors": {
+        "player": {}
+      }
     }
   ]
 }
