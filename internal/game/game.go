@@ -525,6 +525,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 					gameNow := g.clock.GameNow()
 					expirationTime := gameNow.Add(time.Duration(disconnectDelay) * time.Second)
 					ecs.GetResource[ecs.DetachedEntities](shard.world).AddDetachedEntity(playerEntityID, playerHandle, expirationTime, gameNow)
+					ecs.ForgetPlayerStatsState(shard.world, playerEntityID)
 
 					// Stop movement for detached entity
 					ecs.MutateComponent[components.Movement](shard.world, playerHandle, func(m *components.Movement) bool {
