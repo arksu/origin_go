@@ -60,20 +60,21 @@ type AppearanceWhen struct {
 // TreeBehaviorConfig contains numeric/tree-specific config only.
 // Behavior logic itself is implemented in code.
 type TreeBehaviorConfig struct {
-	Priority               int    `json:"priority,omitempty"`
-	ChopPointsTotal        int    `json:"chopPointsTotal"`
-	ChopCycleDurationTicks int    `json:"chopCycleDurationTicks"`
-	ActionSound            string `json:"action_sound,omitempty"`
-	FinishSound            string `json:"finish_sound,omitempty"`
-	LogsSpawnDefKey        string `json:"logsSpawnDefKey"`
-	LogsSpawnCount         int    `json:"logsSpawnCount"`
-	LogsSpawnInitialOffset int    `json:"logsSpawnInitialOffset"`
-	LogsSpawnStepOffset    int    `json:"logsSpawnStepOffset"`
-	TransformToDefKey      string `json:"transformToDefKey"`
-	GrowthStageMax         int    `json:"growthStageMax"`
-	GrowthStartStage       int    `json:"growthStartStage,omitempty"`
-	GrowthStageDurations   []int  `json:"growthStageDurationsTicks"`
-	AllowedChopStages      []int  `json:"allowedChopStages"`
+	Priority               int     `json:"priority,omitempty"`
+	ChopPointsTotal        int     `json:"chopPointsTotal"`
+	ChopCycleDurationTicks int     `json:"chopCycleDurationTicks"`
+	ChopStaminaCost        float64 `json:"chopStaminaCost"`
+	ActionSound            string  `json:"action_sound,omitempty"`
+	FinishSound            string  `json:"finish_sound,omitempty"`
+	LogsSpawnDefKey        string  `json:"logsSpawnDefKey"`
+	LogsSpawnCount         int     `json:"logsSpawnCount"`
+	LogsSpawnInitialOffset int     `json:"logsSpawnInitialOffset"`
+	LogsSpawnStepOffset    int     `json:"logsSpawnStepOffset"`
+	TransformToDefKey      string  `json:"transformToDefKey"`
+	GrowthStageMax         int     `json:"growthStageMax"`
+	GrowthStartStage       int     `json:"growthStartStage,omitempty"`
+	GrowthStageDurations   []int   `json:"growthStageDurationsTicks"`
+	AllowedChopStages      []int   `json:"allowedChopStages"`
 }
 
 // ObjectsFile represents a JSONC file containing object definitions.

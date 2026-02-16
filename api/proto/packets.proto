@@ -338,7 +338,7 @@ message C2S_PlayerAction {
 
 // Движение - отдельный поток для responsive controls
 message C2S_MovementMode {
-  MovementMode mode = 1; // WALK, RUN, FAST_RUN, SWIM
+  MovementMode mode = 1; // CRAWL, WALK, RUN, FAST_RUN, SWIM
 }
 
 // ============================================================================
@@ -442,6 +442,11 @@ message CharacterAttributeEntry {
 
 message S2C_CharacterProfile {
   repeated CharacterAttributeEntry attributes = 1;
+}
+
+message S2C_PlayerStats {
+  uint32 stamina = 1;
+  uint32 energy = 2;
 }
 
 // on teleport, layer change - show loading screen on client, remove all chunks, entities
@@ -611,6 +616,7 @@ message ServerMessage {
     S2C_CyclicActionFinished cyclic_action_finished = 47;
     S2C_Sound sound = 48;
     S2C_CharacterProfile character_profile = 49;
+    S2C_PlayerStats player_stats = 50;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
