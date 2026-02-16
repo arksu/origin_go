@@ -7,6 +7,7 @@ import (
 	_const "origin/internal/const"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/entitystats"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
@@ -146,6 +147,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	inventorySaver := inventory.NewInventorySaver(logger)
 	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, inventorySaver, logger)
+	s.world.AddSystem(systems.NewPlayerStatsPushSystem(s))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
 	s.world.AddSystem(systems.NewDropDecaySystem(droppedItemPersister, s.chunkManager, logger))
@@ -781,6 +783,66 @@ func (s *Shard) SendCharacterProfileSnapshot(w *ecs.World, entityID types.Entity
 	}
 
 	client.Send(data)
+}
+
+// SendPlayerStatsSnapshot sends the initial player stats snapshot after enter-world/reattach.
+func (s *Shard) SendPlayerStatsSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+	s.sendPlayerStats(w, entityID, handle, true)
+}
+
+// SendPlayerStatsDeltaIfChanged sends player stats only when rounded network values changed.
+func (s *Shard) SendPlayerStatsDeltaIfChanged(w *ecs.World, entityID types.EntityID, handle types.Handle) bool {
+	return s.sendPlayerStats(w, entityID, handle, false)
+}
+
+func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle types.Handle, force bool) bool {
+	if w == nil || entityID == 0 || handle == types.InvalidHandle || !w.Alive(handle) {
+		return false
+	}
+
+	stats, hasStats := ecs.GetComponent[components.EntityStats](w, handle)
+	if !hasStats {
+		return false
+	}
+
+	snapshot := ecs.PlayerStatsNetSnapshot{
+		Stamina: entitystats.RoundToUint32(stats.Stamina),
+		Energy:  entitystats.RoundToUint32(stats.Energy),
+	}
+
+	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
+	if !updateState.ShouldSendPlayerStats(entityID, snapshot, force) {
+		return false
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		ecs.ForgetPlayerStatsState(w, entityID)
+		return false
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_PlayerStats{
+			PlayerStats: &netproto.S2C_PlayerStats{
+				Stamina: snapshot.Stamina,
+				Energy:  snapshot.Energy,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal player stats snapshot",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return false
+	}
+
+	client.Send(data)
+	updateState.MarkPlayerStatsSent(entityID, snapshot, ecs.GetResource[ecs.TimeState](w).UnixMs)
+	return true
 }
 
 func characterAttributeNameToProtoKey(name characterattrs.Name) netproto.CharacterAttributeKey {

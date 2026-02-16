@@ -136,3 +136,34 @@ func TestEntityStatsUpdateState_ForgetOnDespawn(t *testing.T) {
 		t.Fatalf("expected no due push after despawn, got %+v", duePush)
 	}
 }
+
+func TestEntityStatsUpdateState_PlayerStatsNetDiff(t *testing.T) {
+	state := &EntityStatsUpdateState{}
+	entityID := types.EntityID(700)
+	first := PlayerStatsNetSnapshot{Stamina: 100, Energy: 1000}
+
+	if !state.ShouldSendPlayerStats(entityID, first, false) {
+		t.Fatalf("expected first snapshot to be sent")
+	}
+	if !state.MarkPlayerStatsSent(entityID, first, 1000) {
+		t.Fatalf("expected MarkPlayerStatsSent to succeed")
+	}
+
+	if state.ShouldSendPlayerStats(entityID, first, false) {
+		t.Fatalf("expected unchanged snapshot to be skipped")
+	}
+
+	staminaChanged := PlayerStatsNetSnapshot{Stamina: 101, Energy: 1000}
+	if !state.ShouldSendPlayerStats(entityID, staminaChanged, false) {
+		t.Fatalf("expected changed stamina snapshot to be sent")
+	}
+
+	energyChanged := PlayerStatsNetSnapshot{Stamina: 101, Energy: 999}
+	if !state.ShouldSendPlayerStats(entityID, energyChanged, false) {
+		t.Fatalf("expected changed energy snapshot to be sent")
+	}
+
+	if !state.ShouldSendPlayerStats(entityID, first, true) {
+		t.Fatalf("expected force=true to always send")
+	}
+}
