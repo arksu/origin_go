@@ -57,8 +57,10 @@ type playerStatsPushState struct {
 }
 
 type PlayerStatsNetSnapshot struct {
-	Stamina uint32
-	Energy  uint32
+	Stamina    uint32
+	Energy     uint32
+	StaminaMax uint32
+	EnergyMax  uint32
 }
 
 type playerStatsPushHeapItem struct {
@@ -273,7 +275,10 @@ func (s *EntityStatsUpdateState) ShouldSendPlayerStats(entityID types.EntityID, 
 	if !exists {
 		return true
 	}
-	return last.Stamina != next.Stamina || last.Energy != next.Energy
+	return last.Stamina != next.Stamina ||
+		last.Energy != next.Energy ||
+		last.StaminaMax != next.StaminaMax ||
+		last.EnergyMax != next.EnergyMax
 }
 
 func (s *EntityStatsUpdateState) MarkPlayerStatsSent(entityID types.EntityID, snapshot PlayerStatsNetSnapshot, nowUnixMs int64) bool {

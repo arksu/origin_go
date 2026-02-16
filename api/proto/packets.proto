@@ -447,6 +447,8 @@ message S2C_CharacterProfile {
 message S2C_PlayerStats {
   uint32 stamina = 1;
   uint32 energy = 2;
+  uint32 stamina_max = 3;
+  uint32 energy_max = 4;
 }
 
 // on teleport, layer change - show loading screen on client, remove all chunks, entities
