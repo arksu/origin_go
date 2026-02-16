@@ -82,6 +82,16 @@ export interface ActionProgress {
   current: number
 }
 
+export interface PlayerResourceStat {
+  current: number
+  max: number
+}
+
+export interface PlayerStatsState {
+  stamina: PlayerResourceStat
+  energy: PlayerResourceStat
+}
+
 export interface CharacterAttributeViewItem {
   key: proto.CharacterAttributeKey
   label: string
@@ -138,6 +148,7 @@ export const useGameStore = defineStore('game', () => {
   })
   const characterSheetVisible = ref(false)
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
+  const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
   const hasBootstrapFirstChunk = ref(false)
   const hasBootstrapPlayerSpawn = ref(false)
 
@@ -254,6 +265,7 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible.value = false
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
+    playerStats.value = defaultPlayerStats()
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -281,6 +293,7 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible.value = false
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
+    playerStats.value = defaultPlayerStats()
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -589,6 +602,27 @@ export const useGameStore = defineStore('game', () => {
     }))
   }
 
+  function setPlayerStats(snapshot: proto.IS2C_PlayerStats | null | undefined) {
+    if (!snapshot) {
+      playerStats.value = defaultPlayerStats()
+      return
+    }
+
+    const staminaMax = sanitizeMaxStat(snapshot.staminaMax)
+    const energyMax = sanitizeMaxStat(snapshot.energyMax)
+
+    playerStats.value = {
+      stamina: {
+        current: clampStatCurrent(snapshot.stamina, staminaMax),
+        max: staminaMax,
+      },
+      energy: {
+        current: clampStatCurrent(snapshot.energy, energyMax),
+        max: energyMax,
+      },
+    }
+  }
+
   function setPlayerInventoryVisible(visible: boolean) {
     playerInventoryVisible.value = visible
   }
@@ -671,6 +705,7 @@ export const useGameStore = defineStore('game', () => {
     openedRootContainerRefs.value.clear()
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
+    playerStats.value = defaultPlayerStats()
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -709,6 +744,7 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible,
     characterSheetVisible,
     characterAttributes,
+    playerStats,
     openNestedInventories,
     mousePos,
     contextMenu,
@@ -751,6 +787,7 @@ export const useGameStore = defineStore('game', () => {
     toggleCharacterSheet,
     setCharacterSheetVisible,
     setCharacterProfileSnapshot,
+    setPlayerStats,
     onContainerOpened,
     onContainerClosed,
     closeNestedInventory,
@@ -780,4 +817,25 @@ function defaultCharacterAttributes(): CharacterAttributeViewItem[] {
     { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_PSY, label: 'Psyche', value: 1, icon: '☁' },
     { key: proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_WIL, label: 'Will', value: 1, icon: '♜' },
   ]
+}
+
+function defaultPlayerStats(): PlayerStatsState {
+  return {
+    stamina: { current: 0, max: 0 },
+    energy: { current: 0, max: 0 },
+  }
+}
+
+function sanitizeMaxStat(raw: number | null | undefined): number {
+  const value = Number(raw ?? 0)
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Math.floor(value)
+}
+
+function clampStatCurrent(rawCurrent: number | null | undefined, max: number): number {
+  const value = Number(rawCurrent ?? 0)
+  if (!Number.isFinite(value) || value <= 0) return 0
+  const normalized = Math.floor(value)
+  if (max <= 0) return normalized
+  return Math.min(normalized, max)
 }

@@ -12,6 +12,7 @@ import CharacterSheetWindow from '@/components/ui/CharacterSheetWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
+import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import { sendChatMessage } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
@@ -326,6 +327,9 @@ useHotkeys(hotkeys)
         </AppAlert>
       </div>
       <ActionHourGlass />
+      <div class="game-player-stats">
+        <PlayerStatsBars />
+      </div>
       <ContextMenu />
       <div class="game-chat">
         <ChatContainer ref="chatContainerRef" @send="handleChatSend" />
@@ -484,6 +488,13 @@ useHotkeys(hotkeys)
 
 .game-mini-alert {
   text-align: center;
+}
+
+.game-player-stats {
+  position: absolute;
+  top: 8px;
+  left: 100px;
+  z-index: 120;
 }
 
 .game-inventory {
