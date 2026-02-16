@@ -46,7 +46,8 @@ type Character struct {
 	Y              int             `json:"y"`
 	Layer          int             `json:"layer"`
 	Heading        int16           `json:"heading"`
-	Stamina        int             `json:"stamina"`
+	Stamina        float64         `json:"stamina"`
+	Energy         float64         `json:"energy"`
 	Shp            int             `json:"shp"`
 	Hhp            int             `json:"hhp"`
 	Attributes     json.RawMessage `json:"attributes"`

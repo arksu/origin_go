@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	mathrand "math/rand"
 	"net/http"
 	"origin/internal/characterattrs"
@@ -19,6 +20,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"origin/internal/config"
+	"origin/internal/entitystats"
 	"origin/internal/game"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
@@ -259,6 +261,9 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		h.jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	initialStamina := entitystats.MaxStaminaFromCon(characterattrs.DefaultValue)
+	initialStaminaDBValue := math.Round(initialStamina)
+	initialEnergyDBValue := math.Round(entitystats.DefaultEnergy)
 
 	_, err = h.db.Queries().CreateCharacter(r.Context(), repository.CreateCharacterParams{
 		ID:         int64(id),
@@ -266,6 +271,8 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		Name:       req.Name,
 		X:          x,
 		Y:          y,
+		Stamina:    initialStaminaDBValue,
+		Energy:     initialEnergyDBValue,
 		Attributes: defaultAttributes,
 	})
 	if err != nil {

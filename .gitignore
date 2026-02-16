@@ -8,6 +8,7 @@
 *.so
 *.dylib
 *.DS_Store
+.gocache/
 gameserver
 mapgen
 load_test

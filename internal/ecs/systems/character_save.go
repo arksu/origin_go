@@ -86,7 +86,8 @@ type CharacterSnapshot struct {
 	X           int
 	Y           int
 	Heading     int16
-	Stamina     int16
+	Stamina     float64
+	Energy      float64
 	SHP         int16
 	HHP         int16
 	Attributes  string
@@ -134,8 +135,12 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 	}
 
 	attributesRaw := s.serializeCharacterAttributes(w, entityID, handle)
+	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
+	if !hasStats {
+		return
+	}
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, inventories))
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, staminaValue, energyValue, inventories))
 }
 
 // SaveDetached enqueues a lightweight snapshot for detached-entity expiration path.
@@ -149,13 +154,19 @@ func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, han
 	}
 
 	attributesRaw := s.serializeCharacterAttributes(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, nil))
+	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
+	if !hasStats {
+		return
+	}
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, staminaValue, energyValue, nil))
 }
 
 func (s *CharacterSaver) buildSnapshot(
 	entityID types.EntityID,
 	transform components.Transform,
 	attributesRaw string,
+	staminaValue float64,
+	energyValue float64,
 	inventories []InventorySnapshot,
 ) CharacterSnapshot {
 	return CharacterSnapshot{
@@ -163,12 +174,31 @@ func (s *CharacterSaver) buildSnapshot(
 		X:           int(transform.X),
 		Y:           int(transform.Y),
 		Heading:     normalizeCharacterHeading(transform.Direction),
-		Stamina:     100, // TODO
+		Stamina:     staminaValue,
+		Energy:      energyValue,
 		SHP:         100, // TODO
 		HHP:         100, // TODO
 		Attributes:  attributesRaw,
 		Inventories: inventories,
 	}
+}
+
+func (s *CharacterSaver) resolveStatsSnapshotValues(w *ecs.World, entityID types.EntityID, handle types.Handle) (float64, float64, bool) {
+	if stats, hasStats := ecs.GetComponent[components.EntityStats](w, handle); hasStats {
+		stamina := stats.Stamina
+		if stamina < 0 {
+			stamina = 0
+		}
+		energy := stats.Energy
+		if energy < 0 {
+			energy = 0
+		}
+		return stamina, energy, true
+	}
+
+	s.logger.Warn("Character entity missing EntityStats component, skip character save snapshot",
+		zap.Uint64("entity_id", uint64(entityID)))
+	return 0, 0, false
 }
 
 func (s *CharacterSaver) serializeCharacterAttributes(w *ecs.World, entityID types.EntityID, handle types.Handle) string {
@@ -272,7 +302,8 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 	xs := make([]float64, len(batch))
 	ys := make([]float64, len(batch))
 	headings := make([]float64, len(batch))
-	staminas := make([]int, len(batch))
+	staminas := make([]float64, len(batch))
+	energies := make([]float64, len(batch))
 	shps := make([]int, len(batch))
 	hhps := make([]int, len(batch))
 	attributes := make([]string, len(batch))
@@ -282,7 +313,8 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		xs[i] = float64(snapshot.X)
 		ys[i] = float64(snapshot.Y)
 		headings[i] = float64(snapshot.Heading)
-		staminas[i] = int(snapshot.Stamina)
+		staminas[i] = snapshot.Stamina
+		energies[i] = snapshot.Energy
 		shps[i] = int(snapshot.SHP)
 		hhps[i] = int(snapshot.HHP)
 		attributes[i] = snapshot.Attributes
@@ -294,6 +326,7 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		Ys:         ys,
 		Headings:   headings,
 		Staminas:   staminas,
+		Energies:   energies,
 		Shps:       shps,
 		Hhps:       hhps,
 		Attributes: attributes,
