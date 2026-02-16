@@ -17,6 +17,7 @@ import (
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
+	"origin/internal/stamina"
 	"origin/internal/types"
 	"time"
 
@@ -253,6 +254,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 					Combat:   nullableInt64(character.ExpCombat),
 				},
 			})
+			ecs.AddComponent(w, h, buildInitialEntityStats(normalizedAttributes))
 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
 			visState := ecs.GetResource[ecs.VisibilityState](w)
@@ -408,6 +410,14 @@ func nullableInt64(value sql.NullInt64) int64 {
 	return value.Int64
 }
 
+func buildInitialEntityStats(attributes characterattrs.Values) components.EntityStats {
+	maxStamina := stamina.MaxStaminaFromAttributes(attributes)
+	return components.EntityStats{
+		Stamina: stamina.ClampStamina(maxStamina, maxStamina),
+		Energy:  stamina.DefaultEnergy,
+	}
+}
+
 // tryReattachPlayer attempts to reattach a client to an existing detached entity
 // Returns true if reattach was successful, false if normal spawn should proceed
 func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID types.EntityID, character repository.Character) bool {
@@ -443,8 +453,10 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
-	if _, hasAttributes := ecs.GetComponent[components.CharacterProfile](shard.world, handle); !hasAttributes {
-		normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
+	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](shard.world, handle)
+	var normalizedAttributes characterattrs.Values
+	if !hasProfile {
+		normalizedAttributes, _ = characterattrs.FromRaw(character.Attributes)
 		ecs.AddComponent(shard.world, handle, components.CharacterProfile{
 			Attributes: normalizedAttributes,
 			Experience: components.CharacterExperience{
@@ -453,6 +465,11 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 				Combat:   nullableInt64(character.ExpCombat),
 			},
 		})
+	} else {
+		normalizedAttributes = characterattrs.Normalize(profile.Attributes)
+	}
+	if _, hasStats := ecs.GetComponent[components.EntityStats](shard.world, handle); !hasStats {
+		ecs.AddComponent(shard.world, handle, buildInitialEntityStats(normalizedAttributes))
 	}
 
 	detachedDuration := time.Since(detachedEntity.DetachedAt)
