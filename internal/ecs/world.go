@@ -130,6 +130,13 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		latest:   make(map[BehaviorTickKey]behaviorTickState, 256),
 		byEntity: make(map[types.EntityID]map[string]struct{}, 128),
 	})
+	InitResource(w, EntityStatsUpdateState{
+		regenQueue:     make(entityStatsRegenMinHeap, 0, 128),
+		regenLatest:    make(map[types.Handle]entityStatsRegenState, 128),
+		pushQueue:      make(playerStatsPushMinHeap, 0, 128),
+		pushLatest:     make(map[types.EntityID]playerStatsPushState, 256),
+		lastSentUnixMs: make(map[types.EntityID]int64, 256),
+	})
 	InitResource(w, BehaviorTickPolicy{
 		GlobalBudgetPerTick: 200,
 		CatchUpLimitTicks:   2000,
@@ -238,6 +245,7 @@ func (w *World) Despawn(h types.Handle) bool {
 		w.entityIDMu.Unlock()
 		CancelBehaviorTicksByEntityID(w, targetID)
 	}
+	ForgetEntityStatsState(w, targetID, h)
 
 	if loc, ok := w.locations[h]; ok {
 		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != types.InvalidHandle {

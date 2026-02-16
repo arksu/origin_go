@@ -78,6 +78,7 @@ type GameConfig struct {
 	ObjectBehaviorBudgetPerTick int           `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
 	BehaviorTickGlobalBudget    int           `mapstructure:"behavior_tick_global_budget_per_tick"`
 	BehaviorTickCatchupLimit    int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
+	PlayerStatsTTLms            int           `mapstructure:"player_stats_ttl_ms"`
 }
 
 type EntityIDConfig struct {
@@ -144,6 +145,11 @@ func Load(logger *zap.Logger) (*Config, error) {
 			zap.Int("behavior_tick_catchup_limit_ticks", cfg.Game.BehaviorTickCatchupLimit),
 		)
 	}
+	if cfg.Game.PlayerStatsTTLms <= 0 {
+		logger.Fatal("Invalid player stats ttl: game.player_stats_ttl_ms must be > 0",
+			zap.Int("player_stats_ttl_ms", cfg.Game.PlayerStatsTTLms),
+		)
+	}
 
 	return &cfg, nil
 }
@@ -203,6 +209,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.object_behavior_budget_per_tick", 512)
 	v.SetDefault("game.behavior_tick_global_budget_per_tick", 200)
 	v.SetDefault("game.behavior_tick_catchup_limit_ticks", 2000)
+	v.SetDefault("game.player_stats_ttl_ms", 1000)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)
