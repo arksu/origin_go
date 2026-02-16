@@ -5,12 +5,15 @@ import (
 	"math"
 	"strings"
 
+	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
+	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
 
@@ -44,6 +47,9 @@ func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigCo
 	}
 	if cfg.ChopCycleDurationTicks <= 0 {
 		return 0, fmt.Errorf("tree.chopCycleDurationTicks must be > 0")
+	}
+	if cfg.ChopStaminaCost <= 0 {
+		return 0, fmt.Errorf("tree.chopStaminaCost must be > 0")
 	}
 	if cfg.LogsSpawnDefKey == "" {
 		return 0, fmt.Errorf("tree.logsSpawnDefKey is required")
@@ -379,6 +385,10 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 	treeConfig := targetDef.TreeConfig
+	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, treeConfig.ChopStaminaCost) {
+		sendLowStaminaMiniAlert(ctx.PlayerID, deps.Alerts)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
 
 	remaining := 0
 	transitionToStump := false
@@ -439,6 +449,83 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	)
 	forceVisionUpdates(ctx.World, deps.VisionForcer)
 	return contracts.BehaviorCycleDecisionComplete
+}
+
+func consumePlayerStaminaForTreeCycle(
+	world *ecs.World,
+	playerHandle types.Handle,
+	cost float64,
+) bool {
+	if world == nil || playerHandle == types.InvalidHandle || !world.Alive(playerHandle) {
+		return false
+	}
+
+	stats, hasStats := ecs.GetComponent[components.EntityStats](world, playerHandle)
+	if !hasStats {
+		return true
+	}
+
+	attributes := characterattrs.Default()
+	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle); hasProfile {
+		attributes = characterattrs.Normalize(profile.Attributes)
+	}
+	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
+	statsChanged := currentStamina != stats.Stamina
+
+	if !entitystats.CanConsumeLongActionStamina(currentStamina, maxStamina, cost) {
+		if statsChanged {
+			ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
+				entityStats.Stamina = currentStamina
+			})
+			ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
+		}
+		return false
+	}
+
+	nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
+	statsChanged = statsChanged || nextStamina != stats.Stamina
+	if statsChanged {
+		ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
+			entityStats.Stamina = nextStamina
+		})
+	}
+
+	ecs.MutateComponent[components.Movement](world, playerHandle, func(m *components.Movement) bool {
+		mode, canMove := entitystats.ResolveAllowedMoveMode(m.Mode, nextStamina, maxStamina)
+		changed := false
+		if mode != m.Mode {
+			m.Mode = mode
+			changed = true
+		}
+		if !canMove {
+			if m.Mode != constt.Crawl {
+				m.Mode = constt.Crawl
+				changed = true
+			}
+			if m.State == constt.StateMoving {
+				m.ClearTarget()
+				changed = true
+			}
+		}
+		return changed
+	})
+
+	if statsChanged {
+		ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
+	}
+	return true
+}
+
+func sendLowStaminaMiniAlert(playerID types.EntityID, alerts contracts.MiniAlertSender) {
+	if alerts == nil || playerID == 0 {
+		return
+	}
+	alerts.SendMiniAlert(playerID, &netproto.S2C_MiniAlert{
+		Severity:   netproto.AlertSeverity_ALERT_SEVERITY_WARNING,
+		ReasonCode: "LOW_STAMINA",
+		TtlMs:      2000,
+	})
 }
 
 func forceVisionUpdates(world *ecs.World, visionForcer contracts.VisionUpdateForcer) {

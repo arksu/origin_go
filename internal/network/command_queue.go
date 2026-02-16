@@ -15,6 +15,7 @@ type CommandType uint16
 const (
 	CmdMoveTo CommandType = iota + 1
 	CmdMoveToEntity
+	CmdSetMovementMode
 	CmdInteract
 	CmdSelectContextAction
 	CmdChat

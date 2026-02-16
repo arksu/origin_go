@@ -181,6 +181,8 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleAuth(c, msg.Sequence, payload.Auth)
 	case *netproto.ClientMessage_PlayerAction:
 		g.handlePlayerAction(c, msg.Sequence, payload.PlayerAction)
+	case *netproto.ClientMessage_MovementMode:
+		g.handleMovementMode(c, msg.Sequence, payload.MovementMode)
 	case *netproto.ClientMessage_Chat:
 		g.handleChatMessage(c, msg.Sequence, payload.Chat)
 	case *netproto.ClientMessage_InventoryOp:
@@ -286,6 +288,59 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 			// Ignore silently - already processed
 		default:
 			g.logger.Error("Failed to enqueue command",
+				zap.Uint64("client_id", c.ID),
+				zap.Error(err))
+		}
+	}
+}
+
+func (g *Game) handleMovementMode(c *network.Client, sequence uint32, movementMode *netproto.C2S_MovementMode) {
+	if c.CharacterID == 0 {
+		g.logger.Warn("Movement mode update from unauthenticated client", zap.Uint64("client_id", c.ID))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if movementMode == nil {
+		return
+	}
+
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		g.logger.Error("Shard not found for movement mode update",
+			zap.Uint64("client_id", c.ID),
+			zap.Int("layer", c.Layer))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdSetMovementMode,
+		Payload:     movementMode,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	}
+
+	if err := shard.PlayerInbox().Enqueue(cmd); err != nil {
+		var overflowError network.OverflowError
+		var rateLimitError network.RateLimitError
+		var duplicateCommandError network.DuplicateCommandError
+		switch {
+		case errors.As(err, &overflowError):
+			g.logger.Warn("Movement mode queue overflow",
+				zap.Uint64("client_id", c.ID))
+			c.SendWarning(netproto.WarningCode_WARN_INPUT_QUEUE_OVERFLOW, "Command queue overflow")
+		case errors.As(err, &rateLimitError):
+			g.logger.Warn("Movement mode rate limit exceeded",
+				zap.Uint64("client_id", c.ID))
+			c.SendError(netproto.ErrorCode_ERROR_PACKET_PER_SECOND_LIMIT_THRESHOLDED, "Rate limit exceeded")
+			c.Close()
+		case errors.As(err, &duplicateCommandError):
+			// Ignore silently - already processed
+		default:
+			g.logger.Error("Failed to enqueue movement mode command",
 				zap.Uint64("client_id", c.ID),
 				zap.Error(err))
 		}

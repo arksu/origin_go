@@ -42,8 +42,8 @@ type Chunk struct {
 	// rawDirtyObjectIDs tracks object IDs changed while chunk was active and then deactivated.
 	// It allows delta persistence for inactive chunks without rewriting all raw objects.
 	rawDirtyObjectIDs map[types.EntityID]struct{}
-	rawDataDirty          bool
-	spatial               *SpatialHashGrid
+	rawDataDirty      bool
+	spatial           *SpatialHashGrid
 
 	mu sync.RWMutex
 }
@@ -281,6 +281,21 @@ func (c *Chunk) IsTileSwimmable(localTileX, localTileY, chunkSize int) bool {
 		return false
 	}
 	return c.getBit(c.isSwimmable, index)
+}
+
+func (c *Chunk) TileID(localTileX, localTileY, chunkSize int) (byte, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if localTileX < 0 || localTileX >= chunkSize || localTileY < 0 || localTileY >= chunkSize {
+		return 0, false
+	}
+
+	index := localTileY*chunkSize + localTileX
+	if index < 0 || index >= len(c.Tiles) {
+		return 0, false
+	}
+	return c.Tiles[index], true
 }
 
 // SaveToDB persists only changed chunk data to the database.

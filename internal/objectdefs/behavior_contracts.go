@@ -11,6 +11,7 @@ func (d *ObjectDef) SetTreeBehaviorConfig(cfg contracts.TreeBehaviorConfig) {
 		Priority:               cfg.Priority,
 		ChopPointsTotal:        cfg.ChopPointsTotal,
 		ChopCycleDurationTicks: cfg.ChopCycleDurationTicks,
+		ChopStaminaCost:        cfg.ChopStaminaCost,
 		ActionSound:            cfg.ActionSound,
 		FinishSound:            cfg.FinishSound,
 		LogsSpawnDefKey:        cfg.LogsSpawnDefKey,

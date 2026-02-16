@@ -521,6 +521,8 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 
 func convertMoveMode(mode constt.MoveMode) netproto.MovementMode {
 	switch mode {
+	case constt.Crawl: // Crawl
+		return netproto.MovementMode_MOVE_MODE_CRAWL
 	case constt.Walk: // Walk
 		return netproto.MovementMode_MOVE_MODE_WALK
 	case constt.Run: // Run

@@ -1,9 +1,11 @@
 package systems
 
 import (
+	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/entitystats"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
@@ -252,6 +254,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleMoveTo(w, handle, cmd)
 	case network.CmdMoveToEntity:
 		s.handleMoveToEntity(w, handle, cmd)
+	case network.CmdSetMovementMode:
+		s.handleSetMovementMode(w, handle, cmd)
 	case network.CmdInteract:
 		s.handleInteract(w, handle, cmd)
 	case network.CmdSelectContextAction:
@@ -306,6 +310,9 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 		s.logger.Debug("Cannot move while stunned",
 			zap.Uint64("client_id", cmd.ClientID),
 			zap.Uint64("entity_id", uint64(cmd.CharacterID)))
+		return
+	}
+	if !s.enforceMovementModeByStamina(w, playerHandle) {
 		return
 	}
 
@@ -365,6 +372,9 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 	if mov.State == constt.StateStunned {
 		return
 	}
+	if !s.enforceMovementModeByStamina(w, playerHandle) {
+		return
+	}
 
 	// Get target position
 	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
@@ -411,6 +421,81 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 		zap.Uint64("client_id", cmd.ClientID),
 		zap.Uint64("target_entity_id", moveToEntity.EntityId),
 		zap.Bool("auto_interact", moveToEntity.AutoInteract))
+}
+
+func (s *NetworkCommandSystem) handleSetMovementMode(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	payload, ok := cmd.Payload.(*netproto.C2S_MovementMode)
+	if !ok || payload == nil {
+		return
+	}
+
+	desiredMode := protoToMoveMode(payload.Mode)
+	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+		m.Mode = desiredMode
+	})
+	_ = s.enforceMovementModeByStamina(w, playerHandle)
+}
+
+func protoToMoveMode(mode netproto.MovementMode) constt.MoveMode {
+	switch mode {
+	case netproto.MovementMode_MOVE_MODE_CRAWL:
+		return constt.Crawl
+	case netproto.MovementMode_MOVE_MODE_WALK:
+		return constt.Walk
+	case netproto.MovementMode_MOVE_MODE_RUN:
+		return constt.Run
+	case netproto.MovementMode_MOVE_MODE_FAST_RUN:
+		return constt.FastRun
+	case netproto.MovementMode_MOVE_MODE_SWIM:
+		return constt.Swim
+	default:
+		return constt.Walk
+	}
+}
+
+func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, playerHandle types.Handle) bool {
+	if playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return false
+	}
+
+	movement, hasMovement := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !hasMovement {
+		return false
+	}
+
+	stats, hasStats := ecs.GetComponent[components.EntityStats](w, playerHandle)
+	if !hasStats {
+		return true
+	}
+
+	attributes := characterattrs.Default()
+	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, playerHandle); hasProfile {
+		attributes = characterattrs.Normalize(profile.Attributes)
+	}
+	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
+	ttlMs := ecs.ResolvePlayerStatsTTLms(w)
+	statsChanged := currentStamina != stats.Stamina
+	if statsChanged {
+		ecs.WithComponent(w, playerHandle, func(entityStats *components.EntityStats) {
+			entityStats.Stamina = currentStamina
+		})
+		ecs.MarkPlayerStatsDirtyByHandle(w, playerHandle, ttlMs)
+	}
+
+	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina)
+	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+		m.Mode = allowedMode
+	})
+	if canMove {
+		return true
+	}
+
+	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+		m.Mode = constt.Crawl
+	})
+	s.stopMovementAndEmit(w, playerHandle)
+	return false
 }
 
 func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle types.Handle) {

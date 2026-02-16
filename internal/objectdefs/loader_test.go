@@ -111,6 +111,9 @@ func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConf
 	if cfg.ChopCycleDurationTicks <= 0 {
 		return 0, fmt.Errorf("tree.chopCycleDurationTicks must be > 0")
 	}
+	if cfg.ChopStaminaCost <= 0 {
+		return 0, fmt.Errorf("tree.chopStaminaCost must be > 0")
+	}
 	if cfg.LogsSpawnDefKey == "" {
 		return 0, fmt.Errorf("tree.logsSpawnDefKey is required")
 	}
@@ -475,6 +478,7 @@ func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
 				"tree": {
 					"chopPointsTotal": 6,
 					"chopCycleDurationTicks": 20,
+					"chopStaminaCost": 12,
 					"action_sound": "chop",
 					"finish_sound": "tree_fall",
 					"logsSpawnDefKey": "log_y",
