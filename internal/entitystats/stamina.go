@@ -1,4 +1,4 @@
-package stamina
+package entitystats
 
 import (
 	"math"

@@ -11,13 +11,13 @@ import (
 	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/inventory"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
-	"origin/internal/stamina"
 	"origin/internal/types"
 	"time"
 
@@ -254,7 +254,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 					Combat:   nullableInt64(character.ExpCombat),
 				},
 			})
-			ecs.AddComponent(w, h, buildInitialEntityStats(normalizedAttributes))
+			ecs.AddComponent(w, h, buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes))
 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
 			visState := ecs.GetResource[ecs.VisibilityState](w)
@@ -410,11 +410,20 @@ func nullableInt64(value sql.NullInt64) int64 {
 	return value.Int64
 }
 
-func buildInitialEntityStats(attributes characterattrs.Values) components.EntityStats {
-	maxStamina := stamina.MaxStaminaFromAttributes(attributes)
+func buildInitialEntityStats(
+	rawStamina float64,
+	rawEnergy float64,
+	attributes characterattrs.Values,
+) components.EntityStats {
+	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+	initialStamina := entitystats.ClampStamina(rawStamina, maxStamina)
+	initialEnergy := rawEnergy
+	if initialEnergy < 0 {
+		initialEnergy = 0
+	}
 	return components.EntityStats{
-		Stamina: stamina.ClampStamina(maxStamina, maxStamina),
-		Energy:  stamina.DefaultEnergy,
+		Stamina: initialStamina,
+		Energy:  initialEnergy,
 	}
 }
 
@@ -469,7 +478,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		normalizedAttributes = characterattrs.Normalize(profile.Attributes)
 	}
 	if _, hasStats := ecs.GetComponent[components.EntityStats](shard.world, handle); !hasStats {
-		ecs.AddComponent(shard.world, handle, buildInitialEntityStats(normalizedAttributes))
+		ecs.AddComponent(shard.world, handle, buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes))
 	}
 
 	detachedDuration := time.Since(detachedEntity.DetachedAt)
