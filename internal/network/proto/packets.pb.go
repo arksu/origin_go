@@ -3335,6 +3335,8 @@ type S2C_PlayerStats struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Stamina       uint32                 `protobuf:"varint,1,opt,name=stamina,proto3" json:"stamina,omitempty"`
 	Energy        uint32                 `protobuf:"varint,2,opt,name=energy,proto3" json:"energy,omitempty"`
+	StaminaMax    uint32                 `protobuf:"varint,3,opt,name=stamina_max,json=staminaMax,proto3" json:"stamina_max,omitempty"`
+	EnergyMax     uint32                 `protobuf:"varint,4,opt,name=energy_max,json=energyMax,proto3" json:"energy_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3379,6 +3381,20 @@ func (x *S2C_PlayerStats) GetStamina() uint32 {
 func (x *S2C_PlayerStats) GetEnergy() uint32 {
 	if x != nil {
 		return x.Energy
+	}
+	return 0
+}
+
+func (x *S2C_PlayerStats) GetStaminaMax() uint32 {
+	if x != nil {
+		return x.StaminaMax
+	}
+	return 0
+}
+
+func (x *S2C_PlayerStats) GetEnergyMax() uint32 {
+	if x != nil {
+		return x.EnergyMax
 	}
 	return 0
 }
@@ -5135,10 +5151,14 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x14S2C_CharacterProfile\x12>\n" +
 	"\n" +
 	"attributes\x18\x01 \x03(\v2\x1e.proto.CharacterAttributeEntryR\n" +
-	"attributes\"C\n" +
+	"attributes\"\x83\x01\n" +
 	"\x0fS2C_PlayerStats\x12\x18\n" +
 	"\astamina\x18\x01 \x01(\rR\astamina\x12\x16\n" +
-	"\x06energy\x18\x02 \x01(\rR\x06energy\"3\n" +
+	"\x06energy\x18\x02 \x01(\rR\x06energy\x12\x1f\n" +
+	"\vstamina_max\x18\x03 \x01(\rR\n" +
+	"staminaMax\x12\x1d\n" +
+	"\n" +
+	"energy_max\x18\x04 \x01(\rR\tenergyMax\"3\n" +
 	"\x14S2C_PlayerLeaveWorld\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"7\n" +
 	"\rS2C_ChunkLoad\x12&\n" +

@@ -809,6 +809,12 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 		Stamina: entitystats.RoundToUint32(stats.Stamina),
 		Energy:  entitystats.RoundToUint32(stats.Energy),
 	}
+	attributes := characterattrs.Default()
+	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
+		attributes = characterattrs.Normalize(profile.Attributes)
+	}
+	snapshot.StaminaMax = entitystats.RoundToUint32(entitystats.MaxStaminaFromAttributes(attributes))
+	snapshot.EnergyMax = entitystats.RoundToUint32(entitystats.DefaultEnergy)
 
 	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
 	if !updateState.ShouldSendPlayerStats(entityID, snapshot, force) {
@@ -826,8 +832,10 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 	response := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_PlayerStats{
 			PlayerStats: &netproto.S2C_PlayerStats{
-				Stamina: snapshot.Stamina,
-				Energy:  snapshot.Energy,
+				Stamina:    snapshot.Stamina,
+				Energy:     snapshot.Energy,
+				StaminaMax: snapshot.StaminaMax,
+				EnergyMax:  snapshot.EnergyMax,
 			},
 		},
 	}
