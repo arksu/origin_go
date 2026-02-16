@@ -3,11 +3,7 @@ package entitystats
 import (
 	"math"
 	"origin/internal/characterattrs"
-)
-
-const (
-	DefaultEnergy = 1000.0
-	scalePerCon   = 1000.0
+	constt "origin/internal/const"
 )
 
 func MaxStaminaFromCon(con int) float64 {
@@ -15,7 +11,7 @@ func MaxStaminaFromCon(con int) float64 {
 		con = characterattrs.DefaultValue
 	}
 
-	return math.Sqrt(float64(con)) * scalePerCon
+	return math.Sqrt(float64(con)) * constt.StaminaScalePerCon
 }
 
 func MaxStaminaFromAttributes(values characterattrs.Values) float64 {

@@ -472,14 +472,21 @@ func consumePlayerStaminaForTreeCycle(
 	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
 	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 	statsChanged := currentStamina != stats.Stamina
+	currentEnergy := stats.Energy
+	if currentEnergy < 0 {
+		currentEnergy = 0
+		statsChanged = true
+	}
 
 	if !entitystats.CanConsumeLongActionStamina(currentStamina, maxStamina, cost) {
 		if statsChanged {
 			ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
 				entityStats.Stamina = currentStamina
+				entityStats.Energy = currentEnergy
 			})
 			ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
 		}
+		ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, currentStamina, currentEnergy, maxStamina)
 		return false
 	}
 
@@ -488,6 +495,7 @@ func consumePlayerStaminaForTreeCycle(
 	if statsChanged {
 		ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
 			entityStats.Stamina = nextStamina
+			entityStats.Energy = currentEnergy
 		})
 	}
 
@@ -514,6 +522,7 @@ func consumePlayerStaminaForTreeCycle(
 	if statsChanged {
 		ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
 	}
+	ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, nextStamina, currentEnergy, maxStamina)
 	return true
 }
 

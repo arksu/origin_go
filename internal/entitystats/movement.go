@@ -6,19 +6,6 @@ import (
 	constt "origin/internal/const"
 )
 
-const (
-	MovementStaminaCostStayPerTick    = 0.0
-	MovementStaminaCostCrawlPerTick   = 0.0
-	MovementStaminaCostWalkPerTick    = 0.002
-	MovementStaminaCostRunPerTick     = 0.02
-	MovementStaminaCostFastRunPerTick = 0.5
-	staminaNoMoveThresholdPercent     = 0.05
-	staminaCrawlOnlyThresholdPercent  = 0.10
-	staminaNoRunThresholdPercent      = 0.25
-	staminaNoFastRunThresholdPercent  = 0.50
-	longActionFloorPercent            = 0.10
-)
-
 type MovementTileContext struct {
 	TileID  byte
 	HasTile bool
@@ -44,17 +31,17 @@ func ResolveMovementStaminaCostPerTick(
 	var base float64
 	switch mode {
 	case constt.Crawl:
-		base = MovementStaminaCostCrawlPerTick
+		base = constt.MovementStaminaCostCrawlPerTick
 	case constt.Walk:
-		base = MovementStaminaCostWalkPerTick
+		base = constt.MovementStaminaCostWalkPerTick
 	case constt.Run:
-		base = MovementStaminaCostRunPerTick
+		base = constt.MovementStaminaCostRunPerTick
 	case constt.FastRun:
-		base = MovementStaminaCostFastRunPerTick
+		base = constt.MovementStaminaCostFastRunPerTick
 	case constt.Swim:
 		base = SwimStaminaCostPerTick(characterattrs.Get(attributes, characterattrs.CON))
 	default:
-		base = MovementStaminaCostStayPerTick
+		base = constt.MovementStaminaCostStayPerTick
 	}
 	if base <= 0 {
 		return 0
@@ -81,19 +68,19 @@ func ResolveAllowedMoveMode(mode constt.MoveMode, stamina float64, maxStamina fl
 		stamina = 0
 	}
 
-	if stamina < maxStamina*staminaNoMoveThresholdPercent {
+	if stamina < maxStamina*constt.StaminaNoMoveThresholdPercent {
 		return constt.Crawl, false
 	}
-	if stamina < maxStamina*staminaCrawlOnlyThresholdPercent {
+	if stamina < maxStamina*constt.StaminaCrawlOnlyThresholdPercent {
 		return constt.Crawl, true
 	}
-	if stamina < maxStamina*staminaNoRunThresholdPercent {
+	if stamina < maxStamina*constt.StaminaNoRunThresholdPercent {
 		if mode == constt.Run || mode == constt.FastRun {
 			return constt.Walk, true
 		}
 		return mode, true
 	}
-	if stamina < maxStamina*staminaNoFastRunThresholdPercent && mode == constt.FastRun {
+	if stamina < maxStamina*constt.StaminaNoFastRunThresholdPercent && mode == constt.FastRun {
 		return constt.Run, true
 	}
 	return mode, true
@@ -103,7 +90,7 @@ func LongActionStaminaFloor(maxStamina float64) float64 {
 	if maxStamina <= 0 {
 		return 0
 	}
-	return maxStamina * longActionFloorPercent
+	return maxStamina * constt.LongActionStaminaFloorPercent
 }
 
 func CanConsumeLongActionStamina(stamina float64, maxStamina float64, cost float64) bool {

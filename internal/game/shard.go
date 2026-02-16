@@ -82,7 +82,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		state:           ShardStateRunning,
 	}
 	ecs.SetResource(s.world, ecs.EntityStatsRuntimeConfig{
-		PlayerStatsTTLms: uint32(cfg.Game.PlayerStatsTTLms),
+		PlayerStatsTTLms:          uint32(cfg.Game.PlayerStatsTTLms),
+		StaminaRegenIntervalTicks: uint64(cfg.Game.StaminaRegenIntervalTicks),
 	})
 	ecs.SetResource(s.world, ecs.BehaviorTickPolicy{
 		GlobalBudgetPerTick: cfg.Game.BehaviorTickGlobalBudget,
@@ -150,6 +151,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	inventorySaver := inventory.NewInventorySaver(logger)
 	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, inventorySaver, logger)
+	s.world.AddSystem(systems.NewEntityStatsRegenSystem())
 	s.world.AddSystem(systems.NewPlayerStatsPushSystem(s))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
@@ -817,7 +819,7 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 		attributes = characterattrs.Normalize(profile.Attributes)
 	}
 	snapshot.StaminaMax = entitystats.RoundToUint32(entitystats.MaxStaminaFromAttributes(attributes))
-	snapshot.EnergyMax = entitystats.RoundToUint32(entitystats.DefaultEnergy)
+	snapshot.EnergyMax = entitystats.RoundToUint32(_const.DefaultEnergy)
 
 	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
 	if !updateState.ShouldSendPlayerStats(entityID, snapshot, force) {

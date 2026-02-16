@@ -46,15 +46,15 @@ export function useHotkeys(hotkeys: HotkeyConfig[]) {
     const isInputElement = event.target instanceof HTMLInputElement ||
       event.target instanceof HTMLTextAreaElement
 
-    console.log('[useHotkeys] Key pressed:', {
-      key: event.key,
-      keyLowercase: event.key.toLowerCase(),
-      isInputElement,
-      ctrlKey: event.ctrlKey,
-      shiftKey: event.shiftKey,
-      altKey: event.altKey,
-      target: event.target
-    })
+    // console.log('[useHotkeys] Key pressed:', {
+    //   key: event.key,
+    //   keyLowercase: event.key.toLowerCase(),
+    //   isInputElement,
+    //   ctrlKey: event.ctrlKey,
+    //   shiftKey: event.shiftKey,
+    //   altKey: event.altKey,
+    //   target: event.target
+    // })
 
     if (isInputElement && event.key !== 'Enter') {
       console.log('[useHotkeys] Ignoring key in input element')

@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	_const "origin/internal/const"
 	"strings"
 	"time"
 
@@ -79,6 +80,7 @@ type GameConfig struct {
 	BehaviorTickGlobalBudget    int           `mapstructure:"behavior_tick_global_budget_per_tick"`
 	BehaviorTickCatchupLimit    int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
 	PlayerStatsTTLms            int           `mapstructure:"player_stats_ttl_ms"`
+	StaminaRegenIntervalTicks   int           `mapstructure:"stamina_regen_interval_ticks"`
 }
 
 type EntityIDConfig struct {
@@ -150,6 +152,11 @@ func Load(logger *zap.Logger) (*Config, error) {
 			zap.Int("player_stats_ttl_ms", cfg.Game.PlayerStatsTTLms),
 		)
 	}
+	if cfg.Game.StaminaRegenIntervalTicks <= 0 {
+		logger.Fatal("Invalid stamina regen interval: game.stamina_regen_interval_ticks must be > 0",
+			zap.Int("stamina_regen_interval_ticks", cfg.Game.StaminaRegenIntervalTicks),
+		)
+	}
 
 	return &cfg, nil
 }
@@ -210,6 +217,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.behavior_tick_global_budget_per_tick", 200)
 	v.SetDefault("game.behavior_tick_catchup_limit_ticks", 2000)
 	v.SetDefault("game.player_stats_ttl_ms", 1000)
+	v.SetDefault("game.stamina_regen_interval_ticks", _const.DefaultStaminaRegenIntervalTicks)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)

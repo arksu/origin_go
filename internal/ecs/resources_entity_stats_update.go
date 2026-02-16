@@ -365,3 +365,36 @@ func ForgetEntityStatsState(w *World, entityID types.EntityID, handle types.Hand
 	state := GetResource[EntityStatsUpdateState](w)
 	return state.ForgetEntity(entityID, handle)
 }
+
+func UpdateEntityStatsRegenSchedule(
+	w *World,
+	handle types.Handle,
+	stamina float64,
+	energy float64,
+	maxStamina float64,
+) bool {
+	if w == nil || handle == types.InvalidHandle {
+		return false
+	}
+
+	if maxStamina < 0 {
+		maxStamina = 0
+	}
+	if stamina < 0 {
+		stamina = 0
+	}
+	if stamina > maxStamina {
+		stamina = maxStamina
+	}
+	if energy < 0 {
+		energy = 0
+	}
+
+	state := GetResource[EntityStatsUpdateState](w)
+	if energy > 0 && stamina < maxStamina {
+		nowTick := GetResource[TimeState](w).Tick
+		dueTick := nowTick + ResolveStaminaRegenIntervalTicks(w)
+		return state.ScheduleRegen(handle, dueTick)
+	}
+	return state.CancelRegen(handle)
+}

@@ -204,6 +204,11 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
 	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 	statsChanged := currentStamina != stats.Stamina
+	currentEnergy := stats.Energy
+	if currentEnergy < 0 {
+		currentEnergy = 0
+		statsChanged = true
+	}
 
 	dx := toX - fromX
 	dy := toY - fromY
@@ -230,6 +235,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	if statsChanged {
 		ecs.WithComponent(w, handle, func(entityStats *components.EntityStats) {
 			entityStats.Stamina = currentStamina
+			entityStats.Energy = currentEnergy
 		})
 		ecs.MarkPlayerStatsDirtyByHandle(w, handle, ecs.ResolvePlayerStatsTTLms(w))
 	}
@@ -251,6 +257,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	if forceStopped && !moved {
 		ecs.GetResource[ecs.MovedEntities](w).Add(handle, toX, toY)
 	}
+	ecs.UpdateEntityStatsRegenSchedule(w, handle, currentStamina, currentEnergy, maxStamina)
 }
 
 func (s *TransformUpdateSystem) resolveMovementTileContext(worldX float64, worldY float64) entitystats.MovementTileContext {

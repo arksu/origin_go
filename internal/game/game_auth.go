@@ -254,7 +254,15 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 					Combat:   nullableInt64(character.ExpCombat),
 				},
 			})
-			ecs.AddComponent(w, h, buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes))
+			initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
+			ecs.AddComponent(w, h, initialStats)
+			ecs.UpdateEntityStatsRegenSchedule(
+				w,
+				h,
+				initialStats.Stamina,
+				initialStats.Energy,
+				entitystats.MaxStaminaFromAttributes(normalizedAttributes),
+			)
 
 			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
 			visState := ecs.GetResource[ecs.VisibilityState](w)
@@ -483,7 +491,17 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		normalizedAttributes = characterattrs.Normalize(profile.Attributes)
 	}
 	if _, hasStats := ecs.GetComponent[components.EntityStats](shard.world, handle); !hasStats {
-		ecs.AddComponent(shard.world, handle, buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes))
+		initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
+		ecs.AddComponent(shard.world, handle, initialStats)
+	}
+	if stats, hasStats := ecs.GetComponent[components.EntityStats](shard.world, handle); hasStats {
+		ecs.UpdateEntityStatsRegenSchedule(
+			shard.world,
+			handle,
+			stats.Stamina,
+			stats.Energy,
+			entitystats.MaxStaminaFromAttributes(normalizedAttributes),
+		)
 	}
 
 	detachedDuration := time.Since(detachedEntity.DetachedAt)

@@ -263,7 +263,7 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	}
 	initialStamina := entitystats.MaxStaminaFromCon(characterattrs.DefaultValue)
 	initialStaminaDBValue := math.Round(initialStamina)
-	initialEnergyDBValue := math.Round(entitystats.DefaultEnergy)
+	initialEnergyDBValue := math.Round(_const.DefaultEnergy)
 
 	_, err = h.db.Queries().CreateCharacter(r.Context(), repository.CreateCharacterParams{
 		ID:         int64(id),
