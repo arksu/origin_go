@@ -39,6 +39,7 @@ type InventoryResultSender interface {
 type InventorySnapshotSender interface {
 	SendInventorySnapshots(w *ecs.World, entityID types.EntityID, handle types.Handle)
 	SendCharacterProfileSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
+	SendPlayerStatsSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 }
 
 // InventoryOperationExecutor executes inventory operations
@@ -1021,6 +1022,8 @@ func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.Serve
 		s.handleInventorySnapshotJob(w, job)
 	case network.JobSendCharacterProfileSnapshot:
 		s.handleCharacterProfileSnapshotJob(w, job)
+	case network.JobSendPlayerStatsSnapshot:
+		s.handlePlayerStatsSnapshotJob(w, job)
 	default:
 		s.logger.Warn("Unknown server job type", zap.Uint16("job_type", job.JobType))
 	}
@@ -1059,6 +1062,24 @@ func (s *NetworkCommandSystem) handleCharacterProfileSnapshotJob(w *ecs.World, j
 
 	if s.inventorySnapshotSender != nil {
 		s.inventorySnapshotSender.SendCharacterProfileSnapshot(w, job.TargetID, payload.Handle)
+	}
+}
+
+func (s *NetworkCommandSystem) handlePlayerStatsSnapshotJob(w *ecs.World, job *network.ServerJob) {
+	payload, ok := job.Payload.(*network.PlayerStatsSnapshotJobPayload)
+	if !ok {
+		s.logger.Error("Invalid payload for player stats snapshot job")
+		return
+	}
+
+	if !w.Alive(payload.Handle) {
+		s.logger.Debug("Player stats snapshot job: entity no longer alive",
+			zap.Uint64("entity_id", uint64(job.TargetID)))
+		return
+	}
+
+	if s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendPlayerStatsSnapshot(w, job.TargetID, payload.Handle)
 	}
 }
 

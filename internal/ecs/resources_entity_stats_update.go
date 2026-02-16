@@ -56,6 +56,11 @@ type playerStatsPushState struct {
 	Seq       uint64
 }
 
+type PlayerStatsNetSnapshot struct {
+	Stamina uint32
+	Energy  uint32
+}
+
 type playerStatsPushHeapItem struct {
 	EntityID  types.EntityID
 	DueUnixMs int64
@@ -108,6 +113,7 @@ type EntityStatsUpdateState struct {
 	pushSeq    uint64
 
 	lastSentUnixMs map[types.EntityID]int64
+	lastSentNet    map[types.EntityID]PlayerStatsNetSnapshot
 }
 
 func (s *EntityStatsUpdateState) ScheduleRegen(handle types.Handle, dueTick uint64) bool {
@@ -248,6 +254,43 @@ func (s *EntityStatsUpdateState) MarkPlayerSent(entityID types.EntityID, nowUnix
 	return true
 }
 
+func (s *EntityStatsUpdateState) GetLastSentPlayerStats(entityID types.EntityID) (PlayerStatsNetSnapshot, bool) {
+	if entityID == 0 || len(s.lastSentNet) == 0 {
+		return PlayerStatsNetSnapshot{}, false
+	}
+	snapshot, exists := s.lastSentNet[entityID]
+	return snapshot, exists
+}
+
+func (s *EntityStatsUpdateState) ShouldSendPlayerStats(entityID types.EntityID, next PlayerStatsNetSnapshot, force bool) bool {
+	if entityID == 0 {
+		return false
+	}
+	if force {
+		return true
+	}
+	last, exists := s.GetLastSentPlayerStats(entityID)
+	if !exists {
+		return true
+	}
+	return last.Stamina != next.Stamina || last.Energy != next.Energy
+}
+
+func (s *EntityStatsUpdateState) MarkPlayerStatsSent(entityID types.EntityID, snapshot PlayerStatsNetSnapshot, nowUnixMs int64) bool {
+	if entityID == 0 {
+		return false
+	}
+	if s.lastSentUnixMs == nil {
+		s.lastSentUnixMs = make(map[types.EntityID]int64, 256)
+	}
+	if s.lastSentNet == nil {
+		s.lastSentNet = make(map[types.EntityID]PlayerStatsNetSnapshot, 256)
+	}
+	s.lastSentUnixMs[entityID] = nowUnixMs
+	s.lastSentNet[entityID] = snapshot
+	return true
+}
+
 func (s *EntityStatsUpdateState) ForgetPlayer(entityID types.EntityID) bool {
 	if entityID == 0 {
 		return false
@@ -262,6 +305,12 @@ func (s *EntityStatsUpdateState) ForgetPlayer(entityID types.EntityID) bool {
 	if len(s.lastSentUnixMs) > 0 {
 		if _, exists := s.lastSentUnixMs[entityID]; exists {
 			delete(s.lastSentUnixMs, entityID)
+			removed = true
+		}
+	}
+	if len(s.lastSentNet) > 0 {
+		if _, exists := s.lastSentNet[entityID]; exists {
+			delete(s.lastSentNet, entityID)
 			removed = true
 		}
 	}
@@ -283,6 +332,17 @@ func MarkPlayerStatsDirty(w *World, entityID types.EntityID, ttlMs uint32) bool 
 	state := GetResource[EntityStatsUpdateState](w)
 	nowUnixMs := GetResource[TimeState](w).UnixMs
 	return state.MarkPlayerDirty(entityID, nowUnixMs, ttlMs)
+}
+
+func MarkPlayerStatsDirtyByHandle(w *World, handle types.Handle, ttlMs uint32) bool {
+	if w == nil || handle == types.InvalidHandle || !w.Alive(handle) {
+		return false
+	}
+	entityID, ok := w.GetExternalID(handle)
+	if !ok || entityID == 0 {
+		return false
+	}
+	return MarkPlayerStatsDirty(w, entityID, ttlMs)
 }
 
 func ForgetPlayerStatsState(w *World, entityID types.EntityID) bool {

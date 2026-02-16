@@ -44,6 +44,7 @@ type ChatCommandPayload struct {
 const (
 	JobSendInventorySnapshot uint16 = iota + 1
 	JobSendCharacterProfileSnapshot
+	JobSendPlayerStatsSnapshot
 )
 
 // ServerJob represents an internal job to be processed by ECS
@@ -63,6 +64,11 @@ type InventorySnapshotJobPayload struct {
 // CharacterProfileSnapshotJobPayload is the payload for JobSendCharacterProfileSnapshot.
 // It currently transports attributes only, but represents player-profile snapshot flow.
 type CharacterProfileSnapshotJobPayload struct {
+	Handle types.Handle
+}
+
+// PlayerStatsSnapshotJobPayload is the payload for JobSendPlayerStatsSnapshot.
+type PlayerStatsSnapshotJobPayload struct {
 	Handle types.Handle
 }
 
