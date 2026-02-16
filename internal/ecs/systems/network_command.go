@@ -476,11 +476,18 @@ func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, player
 	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 	ttlMs := ecs.ResolvePlayerStatsTTLms(w)
 	statsChanged := currentStamina != stats.Stamina
+	currentEnergy := stats.Energy
+	if currentEnergy < 0 {
+		currentEnergy = 0
+		statsChanged = true
+	}
 	if statsChanged {
 		ecs.WithComponent(w, playerHandle, func(entityStats *components.EntityStats) {
 			entityStats.Stamina = currentStamina
+			entityStats.Energy = currentEnergy
 		})
 		ecs.MarkPlayerStatsDirtyByHandle(w, playerHandle, ttlMs)
+		ecs.UpdateEntityStatsRegenSchedule(w, playerHandle, currentStamina, currentEnergy, maxStamina)
 	}
 
 	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina)

@@ -172,3 +172,40 @@ func TestEntityStatsUpdateState_PlayerStatsNetDiff(t *testing.T) {
 		t.Fatalf("expected force=true to always send")
 	}
 }
+
+func TestUpdateEntityStatsRegenSchedule(t *testing.T) {
+	world := NewWorldForTesting()
+	entityID := types.EntityID(99)
+	handle := world.Spawn(entityID, nil)
+	state := GetResource[EntityStatsUpdateState](world)
+	timeState := GetResource[TimeState](world)
+	timeState.Tick = 100
+
+	if !UpdateEntityStatsRegenSchedule(world, handle, 100, 10, 200) {
+		t.Fatalf("expected regen schedule to be created")
+	}
+	if state.PendingRegenCount() != 1 {
+		t.Fatalf("expected one pending regen, got %d", state.PendingRegenCount())
+	}
+
+	due := state.PopDueRegen(599, nil)
+	if len(due) != 0 {
+		t.Fatalf("expected no due regen before interval boundary, got %+v", due)
+	}
+
+	due = state.PopDueRegen(600, nil)
+	if len(due) != 1 || due[0] != handle {
+		t.Fatalf("unexpected due regen at interval boundary: %+v", due)
+	}
+
+	// Re-schedule first, then verify cancel path.
+	if !UpdateEntityStatsRegenSchedule(world, handle, 50, 1, 100) {
+		t.Fatalf("expected regen re-schedule to succeed")
+	}
+	if !UpdateEntityStatsRegenSchedule(world, handle, 100, 1, 100) {
+		t.Fatalf("expected regen cancel to report state change")
+	}
+	if state.PendingRegenCount() != 0 {
+		t.Fatalf("expected no pending regen after cancel, got %d", state.PendingRegenCount())
+	}
+}

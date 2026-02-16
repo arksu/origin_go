@@ -71,6 +71,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 					entityStats.Stamina = clampedStamina
 				})
 				ecs.MarkPlayerStatsDirtyByHandle(w, h, ecs.ResolvePlayerStatsTTLms(w))
+				ecs.UpdateEntityStatsRegenSchedule(w, h, clampedStamina, stats.Energy, maxStamina)
 				stats.Stamina = clampedStamina
 			}
 

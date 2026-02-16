@@ -139,7 +139,8 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		lastSentNet:    make(map[types.EntityID]PlayerStatsNetSnapshot, 256),
 	})
 	InitResource(w, EntityStatsRuntimeConfig{
-		PlayerStatsTTLms: defaultPlayerStatsTTLms,
+		PlayerStatsTTLms:          defaultPlayerStatsTTLms,
+		StaminaRegenIntervalTicks: defaultStaminaRegenIntervalTicks,
 	})
 	InitResource(w, BehaviorTickPolicy{
 		GlobalBudgetPerTick: 200,

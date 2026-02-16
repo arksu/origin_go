@@ -86,3 +86,24 @@ const (
 	DroppedPickupRadius   = 5.0
 	DroppedPickupRadiusSq = DroppedPickupRadius * DroppedPickupRadius
 )
+
+// Entity stats (stamina/energy) constants.
+const (
+	DefaultEnergy                    = 1000.0
+	StaminaScalePerCon               = 1000.0
+	RegenEnergySpendPerTick          = 1.0
+	StaminaPerEnergyUnit             = 5.0
+	DefaultStaminaRegenIntervalTicks = 50
+
+	MovementStaminaCostStayPerTick    = 0.0
+	MovementStaminaCostCrawlPerTick   = 0.0
+	MovementStaminaCostWalkPerTick    = 0.002
+	MovementStaminaCostRunPerTick     = 0.02
+	MovementStaminaCostFastRunPerTick = 0.5
+
+	StaminaNoMoveThresholdPercent    = 0.05
+	StaminaCrawlOnlyThresholdPercent = 0.10
+	StaminaNoRunThresholdPercent     = 0.25
+	StaminaNoFastRunThresholdPercent = 0.50
+	LongActionStaminaFloorPercent    = 0.10
+)

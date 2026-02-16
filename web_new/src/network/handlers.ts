@@ -59,6 +59,12 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('playerStats', (msg: proto.IS2C_PlayerStats) => {
+    console.log('[Handlers] playerStats:', {
+      stamina: msg.stamina,
+      staminaMax: msg.staminaMax,
+      energy: msg.energy,
+      energyMax: msg.energyMax,
+    })
     gameStore.setPlayerStats(msg)
   })
 
