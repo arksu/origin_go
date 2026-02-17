@@ -68,4 +68,12 @@ export function sendCloseContainer(ref: proto.IInventoryRef): void {
   })
 }
 
+export function sendMovementMode(mode: proto.MovementMode): void {
+  gameConnection.send({
+    movementMode: proto.C2S_MovementMode.create({
+      mode,
+    }),
+  })
+}
+
 export { gameConnection, messageDispatcher }

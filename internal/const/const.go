@@ -93,7 +93,7 @@ const (
 	StaminaScalePerCon               = 1000.0
 	RegenEnergySpendPerTick          = 1.0
 	StaminaPerEnergyUnit             = 5.0
-	DefaultStaminaRegenIntervalTicks = 500
+	DefaultStaminaRegenIntervalTicks = 50
 
 	MovementStaminaCostStayPerTick    = 0.0
 	MovementStaminaCostCrawlPerTick   = 0.0
