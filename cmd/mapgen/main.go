@@ -14,14 +14,16 @@ import (
 	"go.uber.org/zap"
 
 	"origin/internal/config"
+	"origin/internal/game/behaviors"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 )
 
 const (
-	TreeHP      = 100
-	TreeDensity = 0.10
+	TreeDensity    = 0.05
+	BoulderDensity = 0.0012
 )
 
 func main() {
@@ -37,6 +39,16 @@ func main() {
 	flag.Parse()
 
 	cfg := config.MustLoad(logger)
+
+	behaviorRegistry, err := behaviors.DefaultRegistry()
+	if err != nil {
+		logger.Fatal("failed to initialize behavior registry", zap.Error(err))
+	}
+
+	objRegistry, err := objectdefs.LoadFromDirectory("./data/objects", behaviorRegistry, logger)
+	if err != nil {
+		logger.Fatal("failed to load object definitions", zap.Error(err))
+	}
 
 	if *seed == 0 {
 		*seed = time.Now().UnixNano()
@@ -60,6 +72,7 @@ func main() {
 		region:       cfg.Game.Region,
 		perlin:       NewPerlinNoise(*seed),
 		seed:         *seed,
+		objectDefs:   objRegistry,
 	}
 
 	logger.Info("starting map generation",
@@ -86,6 +99,7 @@ type MapGenerator struct {
 	region       int
 	perlin       *PerlinNoise
 	seed         int64
+	objectDefs   *objectdefs.Registry
 	lastEntityID atomic.Uint64
 	generated    atomic.Int32
 }
@@ -182,14 +196,14 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 			tile := g.getTileType(worldX, worldY)
 			tiles[ty*g.chunkSize+tx] = tile
 
-			if (tile == types.TileForestPine || tile == types.TileForestLeaf) && rng.Float64() < TreeDensity {
+			if treeDef := g.treeDefForTile(tile); treeDef != nil && rng.Float64() < TreeDensity {
 				entityID := g.lastEntityID.Add(1)
 				tileWorldX := int(worldOffsetX) + tx*g.coordPerTile + rng.Intn(g.coordPerTile)
 				tileWorldY := int(worldOffsetY) + ty*g.coordPerTile + rng.Intn(g.coordPerTile)
 
 				entities = append(entities, repository.UpsertObjectParams{
 					ID:         int64(entityID),
-					TypeID:     1,
+					TypeID:     treeDef.DefID,
 					Region:     g.region,
 					X:          tileWorldX,
 					Y:          tileWorldY,
@@ -198,7 +212,28 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 					ChunkY:     chunkY,
 					Heading:    sql.NullInt16{Int16: int16(rng.Intn(8)), Valid: true},
 					Quality:    sql.NullInt16{},
-					Hp:         sql.NullInt32{Int32: TreeHP, Valid: true},
+					Hp:         sql.NullInt32{Int32: int32(treeDef.HP), Valid: true},
+					OwnerID:    sql.NullInt64{},
+					CreateTick: 0,
+					LastTick:   0,
+				})
+			} else if boulderDef := g.boulderDefForTile(tile); boulderDef != nil && rng.Float64() < BoulderDensity {
+				entityID := g.lastEntityID.Add(1)
+				tileWorldX := int(worldOffsetX) + tx*g.coordPerTile + rng.Intn(g.coordPerTile)
+				tileWorldY := int(worldOffsetY) + ty*g.coordPerTile + rng.Intn(g.coordPerTile)
+
+				entities = append(entities, repository.UpsertObjectParams{
+					ID:         int64(entityID),
+					TypeID:     boulderDef.DefID,
+					Region:     g.region,
+					X:          tileWorldX,
+					Y:          tileWorldY,
+					Layer:      0,
+					ChunkX:     chunkX,
+					ChunkY:     chunkY,
+					Heading:    sql.NullInt16{Int16: int16(rng.Intn(8)), Valid: true},
+					Quality:    sql.NullInt16{},
+					Hp:         sql.NullInt32{Int32: int32(boulderDef.HP), Valid: true},
 					OwnerID:    sql.NullInt64{},
 					CreateTick: 0,
 					LastTick:   0,
@@ -225,6 +260,27 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 		}
 	}
 
+	return nil
+}
+
+func (g *MapGenerator) boulderDefForTile(tile byte) *objectdefs.ObjectDef {
+	switch tile {
+	case types.TileGrass, types.TileSand:
+		def, _ := g.objectDefs.GetByKey("boulder")
+		return def
+	}
+	return nil
+}
+
+func (g *MapGenerator) treeDefForTile(tile byte) *objectdefs.ObjectDef {
+	switch tile {
+	case types.TileForestPine:
+		def, _ := g.objectDefs.GetByKey("tree_birch")
+		return def
+	case types.TileForestLeaf:
+		def, _ := g.objectDefs.GetByKey("tree_birch")
+		return def
+	}
 	return nil
 }
 

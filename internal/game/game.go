@@ -972,6 +972,14 @@ func (g *Game) persistServerTimeSnapshot(reason string) {
 			zap.Int64("runtime_seconds_total", snapshot.RuntimeSecondsTotal),
 			zap.Error(err),
 		)
+		return
+	}
+
+	if reason == "shutdown" {
+		g.logger.Info("Persisted server time state on shutdown",
+			zap.Uint64("tick_total", snapshot.InitialTick),
+			zap.Int64("runtime_seconds_total", snapshot.RuntimeSecondsTotal),
+		)
 	}
 }
 
