@@ -1,6 +1,7 @@
 package ecs
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/eventbus"
 	"origin/internal/types"
 	"reflect"
@@ -137,6 +138,11 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		pushLatest:     make(map[types.EntityID]playerStatsPushState, 256),
 		lastSentUnixMs: make(map[types.EntityID]int64, 256),
 		lastSentNet:    make(map[types.EntityID]PlayerStatsNetSnapshot, 256),
+		movementMode: movementModeState{
+			pendingQueue: make([]types.EntityID, 0, 256),
+			pendingSet:   make(map[types.EntityID]struct{}, 256),
+			lastSent:     make(map[types.EntityID]constt.MoveMode, 256),
+		},
 	})
 	InitResource(w, EntityStatsRuntimeConfig{
 		PlayerStatsTTLms:          defaultPlayerStatsTTLms,

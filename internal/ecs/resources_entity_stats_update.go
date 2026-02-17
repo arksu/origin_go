@@ -3,6 +3,7 @@ package ecs
 import (
 	"container/heap"
 
+	constt "origin/internal/const"
 	"origin/internal/types"
 )
 
@@ -63,6 +64,12 @@ type PlayerStatsNetSnapshot struct {
 	EnergyMax  uint32
 }
 
+type movementModeState struct {
+	pendingQueue []types.EntityID
+	pendingSet   map[types.EntityID]struct{}
+	lastSent     map[types.EntityID]constt.MoveMode
+}
+
 type playerStatsPushHeapItem struct {
 	EntityID  types.EntityID
 	DueUnixMs int64
@@ -116,6 +123,7 @@ type EntityStatsUpdateState struct {
 
 	lastSentUnixMs map[types.EntityID]int64
 	lastSentNet    map[types.EntityID]PlayerStatsNetSnapshot
+	movementMode   movementModeState
 }
 
 func (s *EntityStatsUpdateState) ScheduleRegen(handle types.Handle, dueTick uint64) bool {
@@ -325,6 +333,18 @@ func (s *EntityStatsUpdateState) ForgetPlayer(entityID types.EntityID) bool {
 			removed = true
 		}
 	}
+	if len(s.movementMode.pendingSet) > 0 {
+		if _, exists := s.movementMode.pendingSet[entityID]; exists {
+			delete(s.movementMode.pendingSet, entityID)
+			removed = true
+		}
+	}
+	if len(s.movementMode.lastSent) > 0 {
+		if _, exists := s.movementMode.lastSent[entityID]; exists {
+			delete(s.movementMode.lastSent, entityID)
+			removed = true
+		}
+	}
 	return removed
 }
 
@@ -403,4 +423,81 @@ func UpdateEntityStatsRegenSchedule(
 		return state.ScheduleRegen(handle, dueTick)
 	}
 	return state.CancelRegen(handle)
+}
+
+func (s *EntityStatsUpdateState) MarkMovementModeDirty(entityID types.EntityID) bool {
+	if entityID == 0 {
+		return false
+	}
+	if s.movementMode.pendingSet == nil {
+		s.movementMode.pendingSet = make(map[types.EntityID]struct{}, 256)
+	}
+	if _, exists := s.movementMode.pendingSet[entityID]; exists {
+		return true
+	}
+	s.movementMode.pendingSet[entityID] = struct{}{}
+	s.movementMode.pendingQueue = append(s.movementMode.pendingQueue, entityID)
+	return true
+}
+
+func (s *EntityStatsUpdateState) PopDueMovementModePush(dst []types.EntityID) []types.EntityID {
+	if len(s.movementMode.pendingQueue) == 0 {
+		return dst
+	}
+	for _, entityID := range s.movementMode.pendingQueue {
+		if _, exists := s.movementMode.pendingSet[entityID]; !exists {
+			continue
+		}
+		delete(s.movementMode.pendingSet, entityID)
+		dst = append(dst, entityID)
+	}
+	s.movementMode.pendingQueue = s.movementMode.pendingQueue[:0]
+	return dst
+}
+
+func (s *EntityStatsUpdateState) ShouldSendMovementMode(entityID types.EntityID, next constt.MoveMode, force bool) bool {
+	if entityID == 0 {
+		return false
+	}
+	if force {
+		return true
+	}
+	if len(s.movementMode.lastSent) == 0 {
+		return true
+	}
+	last, exists := s.movementMode.lastSent[entityID]
+	if !exists {
+		return true
+	}
+	return last != next
+}
+
+func (s *EntityStatsUpdateState) MarkMovementModeSent(entityID types.EntityID, mode constt.MoveMode) bool {
+	if entityID == 0 {
+		return false
+	}
+	if s.movementMode.lastSent == nil {
+		s.movementMode.lastSent = make(map[types.EntityID]constt.MoveMode, 256)
+	}
+	s.movementMode.lastSent[entityID] = mode
+	return true
+}
+
+func MarkMovementModeDirty(w *World, entityID types.EntityID) bool {
+	if w == nil || entityID == 0 {
+		return false
+	}
+	state := GetResource[EntityStatsUpdateState](w)
+	return state.MarkMovementModeDirty(entityID)
+}
+
+func MarkMovementModeDirtyByHandle(w *World, handle types.Handle) bool {
+	if w == nil || handle == types.InvalidHandle || !w.Alive(handle) {
+		return false
+	}
+	entityID, ok := w.GetExternalID(handle)
+	if !ok || entityID == 0 {
+		return false
+	}
+	return MarkMovementModeDirty(w, entityID)
 }
