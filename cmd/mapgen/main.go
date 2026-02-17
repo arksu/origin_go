@@ -21,7 +21,7 @@ import (
 
 const (
 	TreeHP      = 100
-	TreeDensity = 0.15
+	TreeDensity = 0.10
 )
 
 func main() {

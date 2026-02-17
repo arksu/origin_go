@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"go.uber.org/zap"
@@ -30,97 +31,108 @@ func NewServerTimeManager(db *persistence.Postgres, logger *zap.Logger) *ServerT
 }
 
 type ServerTimeBootstrap struct {
-	ServerStartTime time.Time
-	InitialTick     uint64
+	InitialTick         uint64
+	RuntimeSecondsTotal int64
 }
 
-func (m *ServerTimeManager) LoadOrInitBootstrap(now time.Time, tickRate int) (ServerTimeBootstrap, error) {
-	if tickRate <= 0 {
-		return ServerTimeBootstrap{}, fmt.Errorf("tick rate must be > 0")
-	}
+func (m *ServerTimeManager) LoadOrInitBootstrap() (ServerTimeBootstrap, error) {
 	if m.db == nil {
 		return ServerTimeBootstrap{
-			ServerStartTime: now,
-			InitialTick:     0,
+			InitialTick:         0,
+			RuntimeSecondsTotal: 0,
 		}, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	startValue, startFound, err := m.loadLongGlobalVar(ctx, constt.SERVER_START_TIME)
+	tickValue, tickFound, err := m.loadLongGlobalVar(ctx, constt.SERVER_TICK_TOTAL)
 	if err != nil {
 		return ServerTimeBootstrap{}, err
 	}
-	storedTickRate, tickRateFound, err := m.loadLongGlobalVar(ctx, constt.SERVER_TICK_RATE)
+	runtimeValue, runtimeFound, err := m.loadLongGlobalVar(ctx, constt.SERVER_RUNTIME_SECONDS_TOTAL)
 	if err != nil {
 		return ServerTimeBootstrap{}, err
 	}
 
-	switch {
-	case !startFound && !tickRateFound:
-		if err := m.db.WithTx(ctx, func(queries *repository.Queries) error {
-			if err := queries.UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
-				Name:      constt.SERVER_START_TIME,
-				ValueLong: sql.NullInt64{Int64: now.Unix(), Valid: true},
-			}); err != nil {
-				return fmt.Errorf("persist %s: %w", constt.SERVER_START_TIME, err)
-			}
-			if err := queries.UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
-				Name:      constt.SERVER_TICK_RATE,
-				ValueLong: sql.NullInt64{Int64: int64(tickRate), Valid: true},
-			}); err != nil {
-				return fmt.Errorf("persist %s: %w", constt.SERVER_TICK_RATE, err)
-			}
-			return nil
-		}); err != nil {
-			return ServerTimeBootstrap{}, err
-		}
-		m.logger.Info("Initialized server time bootstrap",
-			zap.Int64("server_start_time_sec", now.Unix()),
-			zap.Int("tick_rate", tickRate),
+	if tickFound && tickValue < 0 {
+		return ServerTimeBootstrap{}, fmt.Errorf("invalid %s=%d", constt.SERVER_TICK_TOTAL, tickValue)
+	}
+	if runtimeFound && runtimeValue < 0 {
+		return ServerTimeBootstrap{}, fmt.Errorf("invalid %s=%d", constt.SERVER_RUNTIME_SECONDS_TOTAL, runtimeValue)
+	}
+
+	bootstrap := ServerTimeBootstrap{
+		InitialTick:         0,
+		RuntimeSecondsTotal: 0,
+	}
+	if tickFound {
+		bootstrap.InitialTick = uint64(tickValue)
+	}
+	if runtimeFound {
+		bootstrap.RuntimeSecondsTotal = runtimeValue
+	}
+
+	if tickFound && runtimeFound {
+		m.logger.Info("Loaded server time bootstrap",
+			zap.Uint64("initial_tick", bootstrap.InitialTick),
+			zap.Int64("runtime_seconds_total", bootstrap.RuntimeSecondsTotal),
 		)
-		return ServerTimeBootstrap{
-			ServerStartTime: time.Unix(now.Unix(), 0),
-			InitialTick:     0,
-		}, nil
-	case startFound != tickRateFound:
-		return ServerTimeBootstrap{}, fmt.Errorf("invalid bootstrap globals: %s and %s must both exist",
-			constt.SERVER_START_TIME, constt.SERVER_TICK_RATE)
+		return bootstrap, nil
 	}
 
-	if storedTickRate <= 0 {
-		return ServerTimeBootstrap{}, fmt.Errorf("invalid %s=%d", constt.SERVER_TICK_RATE, storedTickRate)
-	}
-	if int(storedTickRate) != tickRate {
-		return ServerTimeBootstrap{}, fmt.Errorf("tick rate mismatch: config=%d persisted=%d", tickRate, storedTickRate)
-	}
-	if startValue <= 0 {
-		return ServerTimeBootstrap{}, fmt.Errorf("invalid %s=%d", constt.SERVER_START_TIME, startValue)
+	if err := m.persistState(ctx, bootstrap); err != nil {
+		return ServerTimeBootstrap{}, err
 	}
 
-	serverStartTime := time.Unix(startValue, 0)
-	if serverStartTime.After(now) {
-		return ServerTimeBootstrap{}, fmt.Errorf("%s is in the future: %s", constt.SERVER_START_TIME, serverStartTime.UTC().Format(time.RFC3339))
+	if !tickFound && !runtimeFound {
+		m.logger.Info("Initialized server time globals",
+			zap.Uint64("initial_tick", bootstrap.InitialTick),
+			zap.Int64("runtime_seconds_total", bootstrap.RuntimeSecondsTotal),
+		)
+	} else {
+		m.logger.Info("Recovered missing server time globals",
+			zap.Bool("tick_found", tickFound),
+			zap.Bool("runtime_found", runtimeFound),
+			zap.Uint64("initial_tick", bootstrap.InitialTick),
+			zap.Int64("runtime_seconds_total", bootstrap.RuntimeSecondsTotal),
+		)
 	}
 
-	tickPeriod := time.Second / time.Duration(tickRate)
-	elapsed := now.Sub(serverStartTime)
-	initialTick := uint64(elapsed / tickPeriod)
-	clockNow := serverStartTime.Add(time.Duration(initialTick) * tickPeriod)
+	return bootstrap, nil
+}
 
-	m.logger.Info("Loaded server time bootstrap",
-		zap.Int64("server_start_time_sec", startValue),
-		zap.Int64("elapsed_seconds", int64(elapsed.Seconds())),
-		zap.Int("tick_rate", tickRate),
-		zap.Uint64("initial_tick", initialTick),
-		zap.Time("clock_now", clockNow),
-	)
+func (m *ServerTimeManager) PersistState(ctx context.Context, state ServerTimeBootstrap) error {
+	if state.RuntimeSecondsTotal < 0 {
+		return fmt.Errorf("invalid runtime seconds total=%d", state.RuntimeSecondsTotal)
+	}
+	if state.InitialTick > uint64(math.MaxInt64) {
+		return fmt.Errorf("initial tick overflow for int64: %d", state.InitialTick)
+	}
 
-	return ServerTimeBootstrap{
-		ServerStartTime: serverStartTime,
-		InitialTick:     initialTick,
-	}, nil
+	if m.db == nil {
+		return nil
+	}
+
+	return m.persistState(ctx, state)
+}
+
+func (m *ServerTimeManager) persistState(ctx context.Context, state ServerTimeBootstrap) error {
+	return m.db.WithTx(ctx, func(queries *repository.Queries) error {
+		if err := queries.UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
+			Name:      constt.SERVER_TICK_TOTAL,
+			ValueLong: sql.NullInt64{Int64: int64(state.InitialTick), Valid: true},
+		}); err != nil {
+			return fmt.Errorf("persist %s: %w", constt.SERVER_TICK_TOTAL, err)
+		}
+		if err := queries.UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
+			Name:      constt.SERVER_RUNTIME_SECONDS_TOTAL,
+			ValueLong: sql.NullInt64{Int64: state.RuntimeSecondsTotal, Valid: true},
+		}); err != nil {
+			return fmt.Errorf("persist %s: %w", constt.SERVER_RUNTIME_SECONDS_TOTAL, err)
+		}
+		return nil
+	})
 }
 
 func (m *ServerTimeManager) loadLongGlobalVar(ctx context.Context, key string) (int64, bool, error) {

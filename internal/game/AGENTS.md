@@ -197,11 +197,15 @@ Key configuration parameters:
 ## Server Time Bootstrap Notes
 
 - Game tick origin is derived from persisted globals:
-  - `SERVER_START_TIME` (Unix seconds),
-  - `SERVER_TICK_RATE`.
-- Bootstrap is initialized once; if persisted values are invalid/missing/mismatched, startup must fail fast.
-- Runtime tick is computed from monotonic clock anchored to `server_start_time + initial_tick * tick_period`.
-- Legacy periodic server-time persistence is intentionally removed.
+  - `SERVER_TICK_TOTAL`,
+  - `SERVER_RUNTIME_SECONDS_TOTAL`.
+- On bootstrap:
+  - missing key is recovered as `0` and persisted atomically with the pair,
+  - negative persisted values are invalid and must fail fast.
+- Tick-rate mismatch is intentional and must not fail startup.
+- Runtime seconds are accumulated from wall elapsed time and advance only while server process runs.
+- `server_time_ms` in network packets uses wall unix milliseconds.
+- Server time state is persisted periodically (every 20s) in a dedicated goroutine and once on shutdown.
 
 ## Error Handling
 

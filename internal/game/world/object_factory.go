@@ -99,8 +99,8 @@ func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object) (
 	}
 
 	// Check if already expired
-	nowUnix := ecs.GetResource[ecs.TimeState](w).Now.Unix()
-	if data.DropTime+constt.DroppedDespawnSeconds <= nowUnix {
+	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
+	if data.DropTime+constt.DroppedDespawnSeconds <= nowRuntimeSeconds {
 		return types.InvalidHandle, fmt.Errorf("dropped item %d: expired", raw.ID)
 	}
 
