@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"origin/internal/characterattrs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/entitystats"
@@ -40,11 +39,7 @@ func (s *EntityStatsRegenSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 
-		attributes := characterattrs.Default()
-		if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
-			attributes = characterattrs.Normalize(profile.Attributes)
-		}
-		maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+		maxStamina := entitystats.MaxStaminaFromCon(resolveConForHandle(w, handle))
 		nextStamina, nextEnergy, changed := entitystats.RegenerateStamina(stats.Stamina, stats.Energy, maxStamina)
 		if changed {
 			ecs.WithComponent(w, handle, func(entityStats *components.EntityStats) {

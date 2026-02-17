@@ -2,7 +2,6 @@ package systems
 
 import (
 	"math"
-	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
@@ -197,11 +196,8 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		return
 	}
 
-	attributes := characterattrs.Default()
-	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
-		attributes = characterattrs.Normalize(profile.Attributes)
-	}
-	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+	con := resolveConForHandle(w, handle)
+	maxStamina := entitystats.MaxStaminaFromCon(con)
 	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 	statsChanged := currentStamina != stats.Stamina
 	currentEnergy := stats.Energy
@@ -214,8 +210,11 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	dy := toY - fromY
 	moved := dx*dx+dy*dy > 0.000001
 	if moved {
-		tile := s.resolveMovementTileContext(fromX, fromY)
-		cost := entitystats.ResolveMovementStaminaCostPerTick(movement.Mode, attributes, tile)
+		tile := entitystats.MovementTileContext{}
+		if entitystats.MovementCostNeedsTileContext() {
+			tile = s.resolveMovementTileContext(fromX, fromY)
+		}
+		cost := entitystats.ResolveMovementStaminaCostPerTick(movement.Mode, con, tile)
 		if cost > 0 {
 			nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
 			if nextStamina != currentStamina {
@@ -257,7 +256,9 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	if forceStopped && !moved {
 		ecs.GetResource[ecs.MovedEntities](w).Add(handle, toX, toY)
 	}
-	ecs.UpdateEntityStatsRegenSchedule(w, handle, currentStamina, currentEnergy, maxStamina)
+	if statsChanged {
+		ecs.UpdateEntityStatsRegenSchedule(w, handle, currentStamina, currentEnergy, maxStamina)
+	}
 }
 
 func (s *TransformUpdateSystem) resolveMovementTileContext(worldX float64, worldY float64) entitystats.MovementTileContext {

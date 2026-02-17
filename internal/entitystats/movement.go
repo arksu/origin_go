@@ -18,9 +18,13 @@ func ResolveTileStaminaModifier(tile MovementTileContext) float64 {
 	return 1.0
 }
 
+func MovementCostNeedsTileContext() bool {
+	return false
+}
+
 func ResolveMovementStaminaCostPerTick(
 	mode constt.MoveMode,
-	attributes characterattrs.Values,
+	con int,
 	tile MovementTileContext,
 ) float64 {
 	tileModifier := ResolveTileStaminaModifier(tile)
@@ -39,7 +43,7 @@ func ResolveMovementStaminaCostPerTick(
 	case constt.FastRun:
 		base = constt.MovementStaminaCostFastRunPerTick
 	case constt.Swim:
-		base = SwimStaminaCostPerTick(characterattrs.Get(attributes, characterattrs.CON))
+		base = SwimStaminaCostPerTick(con)
 	default:
 		base = constt.MovementStaminaCostStayPerTick
 	}

@@ -4,7 +4,6 @@ import (
 	"math"
 	"testing"
 
-	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 )
 
@@ -33,15 +32,12 @@ func TestResolveAllowedMoveMode(t *testing.T) {
 }
 
 func TestResolveMovementStaminaCostPerTick_Swim(t *testing.T) {
-	attrs := characterattrs.Default()
-	attrs[characterattrs.CON] = 10
-	cost := ResolveMovementStaminaCostPerTick(constt.Swim, attrs, MovementTileContext{})
+	cost := ResolveMovementStaminaCostPerTick(constt.Swim, 10, MovementTileContext{})
 	if math.Abs(cost-1.0) > 1e-9 {
 		t.Fatalf("expected swim cost 1.0 for CON=10, got %.8f", cost)
 	}
 
-	attrs[characterattrs.CON] = 40
-	cost = ResolveMovementStaminaCostPerTick(constt.Swim, attrs, MovementTileContext{})
+	cost = ResolveMovementStaminaCostPerTick(constt.Swim, 40, MovementTileContext{})
 	if math.Abs(cost-0.5) > 1e-9 {
 		t.Fatalf("expected swim cost 0.5 for CON=40, got %.8f", cost)
 	}

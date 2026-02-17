@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -468,11 +467,7 @@ func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, player
 		return true
 	}
 
-	attributes := characterattrs.Default()
-	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, playerHandle); hasProfile {
-		attributes = characterattrs.Normalize(profile.Attributes)
-	}
-	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+	maxStamina := entitystats.MaxStaminaFromCon(resolveConForHandle(w, playerHandle))
 	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 	ttlMs := ecs.ResolvePlayerStatsTTLms(w)
 	statsChanged := currentStamina != stats.Stamina
