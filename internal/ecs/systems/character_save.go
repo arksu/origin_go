@@ -43,6 +43,7 @@ type CharacterSaveSystem struct {
 	saver        *CharacterSaver
 	saveInterval time.Duration
 	logger       *zap.Logger
+	dueEntityIDs []types.EntityID
 }
 
 func NewCharacterSaveSystem(saver *CharacterSaver, saveInterval time.Duration, logger *zap.Logger) *CharacterSaveSystem {
@@ -51,29 +52,34 @@ func NewCharacterSaveSystem(saver *CharacterSaver, saveInterval time.Duration, l
 		saver:        saver,
 		saveInterval: saveInterval,
 		logger:       logger,
+		dueEntityIDs: make([]types.EntityID, 0, 256),
 	}
 }
 
 func (s *CharacterSaveSystem) Update(w *ecs.World, dt float64) {
 	now := ecs.GetResource[ecs.TimeState](w).Now
 	charEntities := ecs.GetResource[ecs.CharacterEntities](w)
+	s.dueEntityIDs = charEntities.PopDue(now, s.dueEntityIDs[:0])
 
-	for entityID, charEntity := range charEntities.Map {
-		if now.After(charEntity.NextSaveAt) {
-			if !w.Alive(charEntity.Handle) {
-				charEntities.Remove(entityID)
-				s.logger.Warn("Character entity no longer alive, removed from save tracking",
-					zap.Uint64("entity_id", uint64(entityID)))
-				continue
-			}
-
-			s.saver.Save(w, entityID, charEntity.Handle)
-
-			// Deterministic jitter based on entityID to spread saves (0-10% of interval)
-			jitter := time.Duration(entityID%100) * s.saveInterval / 100
-			nextSaveAt := now.Add(s.saveInterval + jitter)
-			charEntities.UpdateSaveTime(entityID, now, nextSaveAt)
+	for _, entityID := range s.dueEntityIDs {
+		charEntity, exists := charEntities.Map[entityID]
+		if !exists {
+			continue
 		}
+
+		if !w.Alive(charEntity.Handle) {
+			charEntities.Remove(entityID)
+			s.logger.Warn("Character entity no longer alive, removed from save tracking",
+				zap.Uint64("entity_id", uint64(entityID)))
+			continue
+		}
+
+		s.saver.Save(w, entityID, charEntity.Handle)
+
+		// Deterministic jitter based on entityID to spread saves (0-10% of interval)
+		jitter := time.Duration(entityID%100) * s.saveInterval / 100
+		nextSaveAt := now.Add(s.saveInterval + jitter)
+		charEntities.UpdateSaveTime(entityID, now, nextSaveAt)
 	}
 }
 
