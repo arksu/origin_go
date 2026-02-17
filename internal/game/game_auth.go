@@ -398,6 +398,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		TargetID: playerEntityID,
 		Payload:  &network.PlayerStatsSnapshotJobPayload{Handle: *playerHandle},
 	})
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendMovementModeSnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.MovementModeSnapshotJobPayload{Handle: *playerHandle},
+	})
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -565,6 +570,11 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 			JobType:  network.JobSendPlayerStatsSnapshot,
 			TargetID: playerEntityID,
 			Payload:  &network.PlayerStatsSnapshotJobPayload{Handle: handle},
+		})
+		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+			JobType:  network.JobSendMovementModeSnapshot,
+			TargetID: playerEntityID,
+			Payload:  &network.MovementModeSnapshotJobPayload{Handle: handle},
 		})
 	}
 

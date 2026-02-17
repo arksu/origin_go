@@ -75,12 +75,14 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.Mode = allowedMode
 				})
+				ecs.MarkMovementModeDirtyByHandle(w, h)
 			}
 			if !canMove {
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.Mode = constt.Crawl
 					m.ClearTarget()
 				})
+				ecs.MarkMovementModeDirtyByHandle(w, h)
 				movedEntities.Add(h, transform.X, transform.Y)
 				return
 			}

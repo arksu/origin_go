@@ -46,6 +46,7 @@ const (
 	JobSendInventorySnapshot uint16 = iota + 1
 	JobSendCharacterProfileSnapshot
 	JobSendPlayerStatsSnapshot
+	JobSendMovementModeSnapshot
 )
 
 // ServerJob represents an internal job to be processed by ECS
@@ -70,6 +71,11 @@ type CharacterProfileSnapshotJobPayload struct {
 
 // PlayerStatsSnapshotJobPayload is the payload for JobSendPlayerStatsSnapshot.
 type PlayerStatsSnapshotJobPayload struct {
+	Handle types.Handle
+}
+
+// MovementModeSnapshotJobPayload is the payload for JobSendMovementModeSnapshot.
+type MovementModeSnapshotJobPayload struct {
 	Handle types.Handle
 }
 

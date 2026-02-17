@@ -800,6 +800,16 @@ func (s *Shard) SendPlayerStatsDeltaIfChanged(w *ecs.World, entityID types.Entit
 	return s.sendPlayerStats(w, entityID, handle, false)
 }
 
+// SendMovementModeSnapshot sends the initial movement mode snapshot after enter-world/reattach.
+func (s *Shard) SendMovementModeSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+	s.sendMovementMode(w, entityID, handle, true)
+}
+
+// SendMovementModeDeltaIfChanged sends movement mode only when it differs from last sent.
+func (s *Shard) SendMovementModeDeltaIfChanged(w *ecs.World, entityID types.EntityID, handle types.Handle) bool {
+	return s.sendMovementMode(w, entityID, handle, false)
+}
+
 func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle types.Handle, force bool) bool {
 	if w == nil || entityID == 0 || handle == types.InvalidHandle || !w.Alive(handle) {
 		return false
@@ -856,6 +866,68 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 	client.Send(data)
 	updateState.MarkPlayerStatsSent(entityID, snapshot, ecs.GetResource[ecs.TimeState](w).UnixMs)
 	return true
+}
+
+func (s *Shard) sendMovementMode(w *ecs.World, entityID types.EntityID, handle types.Handle, force bool) bool {
+	if w == nil || entityID == 0 || handle == types.InvalidHandle || !w.Alive(handle) {
+		return false
+	}
+
+	movement, hasMovement := ecs.GetComponent[components.Movement](w, handle)
+	if !hasMovement {
+		return false
+	}
+
+	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
+	if !updateState.ShouldSendMovementMode(entityID, movement.Mode, force) {
+		return false
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		ecs.ForgetPlayerStatsState(w, entityID)
+		return false
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_MovementMode{
+			MovementMode: &netproto.S2C_MovementMode{
+				EntityId:     uint64(entityID),
+				MovementMode: moveModeToProto(movement.Mode),
+			},
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal movement mode snapshot",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return false
+	}
+
+	client.Send(data)
+	updateState.MarkMovementModeSent(entityID, movement.Mode)
+	return true
+}
+
+func moveModeToProto(mode _const.MoveMode) netproto.MovementMode {
+	switch mode {
+	case _const.Crawl:
+		return netproto.MovementMode_MOVE_MODE_CRAWL
+	case _const.Walk:
+		return netproto.MovementMode_MOVE_MODE_WALK
+	case _const.Run:
+		return netproto.MovementMode_MOVE_MODE_RUN
+	case _const.FastRun:
+		return netproto.MovementMode_MOVE_MODE_FAST_RUN
+	case _const.Swim:
+		return netproto.MovementMode_MOVE_MODE_SWIM
+	default:
+		return netproto.MovementMode_MOVE_MODE_WALK
+	}
 }
 
 func characterAttributeNameToProtoKey(name characterattrs.Name) netproto.CharacterAttributeKey {

@@ -339,9 +339,13 @@ export const useGameStore = defineStore('game', () => {
     if (entity) {
       entity.movement = movement
     }
-    if (entityId === playerEntityId.value) {
-      playerMoveMode.value = movement.moveMode
+  }
+
+  function setPlayerMoveMode(entityId: number, moveMode: number) {
+    if (entityId !== playerEntityId.value) {
+      return
     }
+    playerMoveMode.value = moveMode
   }
 
   // Inventory actions
@@ -785,6 +789,7 @@ export const useGameStore = defineStore('game', () => {
     spawnEntity,
     despawnEntity,
     updateEntityMovement,
+    setPlayerMoveMode,
     addChatMessage,
     cleanupExpiredMessages,
     updateInventory,

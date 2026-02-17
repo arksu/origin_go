@@ -251,6 +251,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 				}
 			}
 		})
+		ecs.MarkMovementModeDirtyByHandle(w, handle)
 	}
 
 	if forceStopped && !moved {

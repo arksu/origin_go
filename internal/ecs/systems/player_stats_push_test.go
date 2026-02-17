@@ -13,12 +13,19 @@ type playerStatsPushCall struct {
 }
 
 type playerStatsPushSenderMock struct {
-	calls []playerStatsPushCall
+	statsCalls []playerStatsPushCall
+	modeCalls  []playerStatsPushCall
 }
 
 func (m *playerStatsPushSenderMock) SendPlayerStatsDeltaIfChanged(w *ecs.World, entityID types.EntityID, handle types.Handle) bool {
 	_ = w
-	m.calls = append(m.calls, playerStatsPushCall{entityID: entityID, handle: handle})
+	m.statsCalls = append(m.statsCalls, playerStatsPushCall{entityID: entityID, handle: handle})
+	return true
+}
+
+func (m *playerStatsPushSenderMock) SendMovementModeDeltaIfChanged(w *ecs.World, entityID types.EntityID, handle types.Handle) bool {
+	_ = w
+	m.modeCalls = append(m.modeCalls, playerStatsPushCall{entityID: entityID, handle: handle})
 	return true
 }
 
@@ -36,11 +43,11 @@ func TestPlayerStatsPushSystem_DispatchesDueEntries(t *testing.T) {
 	system := NewPlayerStatsPushSystem(sender)
 	system.Update(world, 0)
 
-	if len(sender.calls) != 1 {
-		t.Fatalf("expected one push call, got %d", len(sender.calls))
+	if len(sender.statsCalls) != 1 {
+		t.Fatalf("expected one push call, got %d", len(sender.statsCalls))
 	}
-	if sender.calls[0].entityID != entityID || sender.calls[0].handle != handle {
-		t.Fatalf("unexpected push call payload: %+v", sender.calls[0])
+	if sender.statsCalls[0].entityID != entityID || sender.statsCalls[0].handle != handle {
+		t.Fatalf("unexpected push call payload: %+v", sender.statsCalls[0])
 	}
 }
 
@@ -62,14 +69,14 @@ func TestPlayerStatsPushSystem_RespectsDueTime(t *testing.T) {
 
 	ecs.SetResource(world, ecs.TimeState{UnixMs: 1500})
 	system.Update(world, 0)
-	if len(sender.calls) != 0 {
-		t.Fatalf("expected no push before due time, got %d", len(sender.calls))
+	if len(sender.statsCalls) != 0 {
+		t.Fatalf("expected no push before due time, got %d", len(sender.statsCalls))
 	}
 
 	ecs.SetResource(world, ecs.TimeState{UnixMs: 2000})
 	system.Update(world, 0)
-	if len(sender.calls) != 1 {
-		t.Fatalf("expected one push at due time, got %d", len(sender.calls))
+	if len(sender.statsCalls) != 1 {
+		t.Fatalf("expected one push at due time, got %d", len(sender.statsCalls))
 	}
 }
 
@@ -86,8 +93,8 @@ func TestPlayerStatsPushSystem_DropsInvalidEntitySilently(t *testing.T) {
 	system := NewPlayerStatsPushSystem(sender)
 	system.Update(world, 0)
 
-	if len(sender.calls) != 0 {
-		t.Fatalf("expected no push calls for invalid entity, got %d", len(sender.calls))
+	if len(sender.statsCalls) != 0 {
+		t.Fatalf("expected no push calls for invalid entity, got %d", len(sender.statsCalls))
 	}
 	if state.PendingPlayerPushCount() != 0 {
 		t.Fatalf("expected no pending pushes after invalid entity drop, got %d", state.PendingPlayerPushCount())
@@ -103,7 +110,31 @@ func TestPlayerStatsPushSystem_DoesNotSendWithoutDirty(t *testing.T) {
 	system.Update(world, 0)
 	system.Update(world, 0)
 
-	if len(sender.calls) != 0 {
-		t.Fatalf("expected zero calls without dirty entries, got %d", len(sender.calls))
+	if len(sender.statsCalls) != 0 {
+		t.Fatalf("expected zero calls without dirty entries, got %d", len(sender.statsCalls))
+	}
+	if len(sender.modeCalls) != 0 {
+		t.Fatalf("expected zero mode calls without dirty entries, got %d", len(sender.modeCalls))
+	}
+}
+
+func TestPlayerStatsPushSystem_DispatchesMovementModeDirty(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	entityID := types.EntityID(104)
+	handle := world.Spawn(entityID, nil)
+	state := ecs.GetResource[ecs.EntityStatsUpdateState](world)
+	if !state.MarkMovementModeDirty(entityID) {
+		t.Fatalf("expected MarkMovementModeDirty to succeed")
+	}
+
+	sender := &playerStatsPushSenderMock{}
+	system := NewPlayerStatsPushSystem(sender)
+	system.Update(world, 0)
+
+	if len(sender.modeCalls) != 1 {
+		t.Fatalf("expected one mode push call, got %d", len(sender.modeCalls))
+	}
+	if sender.modeCalls[0].entityID != entityID || sender.modeCalls[0].handle != handle {
+		t.Fatalf("unexpected mode push call payload: %+v", sender.modeCalls[0])
 	}
 }

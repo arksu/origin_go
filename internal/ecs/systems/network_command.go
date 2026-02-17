@@ -41,6 +41,7 @@ type InventorySnapshotSender interface {
 	SendInventorySnapshots(w *ecs.World, entityID types.EntityID, handle types.Handle)
 	SendCharacterProfileSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 	SendPlayerStatsSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
+	SendMovementModeSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 }
 
 // InventoryOperationExecutor executes inventory operations
@@ -433,24 +434,7 @@ func (s *NetworkCommandSystem) handleSetMovementMode(w *ecs.World, playerHandle 
 		m.Mode = desiredMode
 	})
 	_ = s.enforceMovementModeByStamina(w, playerHandle)
-
-	// Force one movement snapshot for idle player so client receives
-	// authoritative mode confirmation immediately after mode click.
-	transform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
-	if !hasTransform {
-		return
-	}
-	ecs.MutateComponent[components.Movement](w, playerHandle, func(m *components.Movement) bool {
-		if m.State == constt.StateMoving {
-			return false
-		}
-		m.TargetType = constt.TargetPoint
-		m.TargetX = transform.X
-		m.TargetY = transform.Y
-		m.TargetHandle = types.InvalidHandle
-		m.State = constt.StateMoving
-		return true
-	})
+	ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
 }
 
 func protoToMoveMode(mode netproto.MovementMode) constt.MoveMode {
@@ -504,9 +488,13 @@ func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, player
 	}
 
 	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina)
+	modeChanged := movement.Mode != allowedMode
 	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
 		m.Mode = allowedMode
 	})
+	if modeChanged {
+		ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
+	}
 	if canMove {
 		return true
 	}
@@ -514,6 +502,7 @@ func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, player
 	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
 		m.Mode = constt.Crawl
 	})
+	ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
 	s.stopMovementAndEmit(w, playerHandle)
 	return false
 }
@@ -1129,6 +1118,8 @@ func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.Serve
 		s.handleCharacterProfileSnapshotJob(w, job)
 	case network.JobSendPlayerStatsSnapshot:
 		s.handlePlayerStatsSnapshotJob(w, job)
+	case network.JobSendMovementModeSnapshot:
+		s.handleMovementModeSnapshotJob(w, job)
 	default:
 		s.logger.Warn("Unknown server job type", zap.Uint16("job_type", job.JobType))
 	}
@@ -1185,6 +1176,25 @@ func (s *NetworkCommandSystem) handlePlayerStatsSnapshotJob(w *ecs.World, job *n
 
 	if s.inventorySnapshotSender != nil {
 		s.inventorySnapshotSender.SendPlayerStatsSnapshot(w, job.TargetID, payload.Handle)
+	}
+}
+
+func (s *NetworkCommandSystem) handleMovementModeSnapshotJob(w *ecs.World, job *network.ServerJob) {
+	payload, ok := job.Payload.(*network.MovementModeSnapshotJobPayload)
+	if !ok {
+		s.logger.Error("Invalid payload for movement mode snapshot job")
+		return
+	}
+
+	if !w.Alive(payload.Handle) {
+		s.logger.Debug("Movement mode snapshot job: entity no longer alive",
+			zap.Uint64("entity_id", uint64(job.TargetID)))
+		return
+	}
+
+	_ = s.enforceMovementModeByStamina(w, payload.Handle)
+	if s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendMovementModeSnapshot(w, job.TargetID, payload.Handle)
 	}
 }
 

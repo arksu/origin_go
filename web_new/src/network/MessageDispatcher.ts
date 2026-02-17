@@ -82,6 +82,7 @@ export class MessageDispatcher {
     if (message.objectSpawn) return 'objectSpawn'
     if (message.objectDespawn) return 'objectDespawn'
     if (message.objectMove) return 'objectMove'
+    if (message.movementMode) return 'movementMode'
     if (message.inventoryOpResult) return 'inventoryOpResult'
     if (message.inventoryUpdate) return 'inventoryUpdate'
     if (message.containerOpened) return 'containerOpened'

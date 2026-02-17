@@ -68,6 +68,12 @@ export function registerMessageHandlers(): void {
     gameStore.setPlayerStats(msg)
   })
 
+  messageDispatcher.on('movementMode', (msg: proto.IS2C_MovementMode) => {
+    const entityId = toNumber(msg.entityId!)
+    const movementMode = msg.movementMode || 0
+    gameStore.setPlayerMoveMode(entityId, movementMode)
+  })
+
   messageDispatcher.on('chunkLoad', (msg: proto.IS2C_ChunkLoad) => {
     if (msg.chunk) {
       const x = msg.chunk.coord?.x || 0
