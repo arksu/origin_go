@@ -433,6 +433,24 @@ func (s *NetworkCommandSystem) handleSetMovementMode(w *ecs.World, playerHandle 
 		m.Mode = desiredMode
 	})
 	_ = s.enforceMovementModeByStamina(w, playerHandle)
+
+	// Force one movement snapshot for idle player so client receives
+	// authoritative mode confirmation immediately after mode click.
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	if !hasTransform {
+		return
+	}
+	ecs.MutateComponent[components.Movement](w, playerHandle, func(m *components.Movement) bool {
+		if m.State == constt.StateMoving {
+			return false
+		}
+		m.TargetType = constt.TargetPoint
+		m.TargetX = transform.X
+		m.TargetY = transform.Y
+		m.TargetHandle = types.InvalidHandle
+		m.State = constt.StateMoving
+		return true
+	})
 }
 
 func protoToMoveMode(mode netproto.MovementMode) constt.MoveMode {

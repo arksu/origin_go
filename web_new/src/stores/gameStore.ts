@@ -149,6 +149,7 @@ export const useGameStore = defineStore('game', () => {
   const characterSheetVisible = ref(false)
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
+  const playerMoveMode = ref<number | null>(null)
   const hasBootstrapFirstChunk = ref(false)
   const hasBootstrapPlayerSpawn = ref(false)
 
@@ -266,6 +267,7 @@ export const useGameStore = defineStore('game', () => {
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
     playerStats.value = defaultPlayerStats()
+    playerMoveMode.value = null
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -294,6 +296,7 @@ export const useGameStore = defineStore('game', () => {
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
     playerStats.value = defaultPlayerStats()
+    playerMoveMode.value = null
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -335,6 +338,9 @@ export const useGameStore = defineStore('game', () => {
     const entity = entities.value.get(entityId)
     if (entity) {
       entity.movement = movement
+    }
+    if (entityId === playerEntityId.value) {
+      playerMoveMode.value = movement.moveMode
     }
   }
 
@@ -706,6 +712,7 @@ export const useGameStore = defineStore('game', () => {
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
     playerStats.value = defaultPlayerStats()
+    playerMoveMode.value = null
     contextMenu.value = null
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
@@ -745,6 +752,7 @@ export const useGameStore = defineStore('game', () => {
     characterSheetVisible,
     characterAttributes,
     playerStats,
+    playerMoveMode,
     openNestedInventories,
     mousePos,
     contextMenu,

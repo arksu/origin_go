@@ -13,6 +13,7 @@ import HandOverlay from '@/components/ui/HandOverlay.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
+import MovementModePanel from '@/components/ui/MovementModePanel.vue'
 import { sendChatMessage } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
@@ -330,6 +331,9 @@ useHotkeys(hotkeys)
       <div class="game-player-stats">
         <PlayerStatsBars />
       </div>
+      <div class="game-movement-modes">
+        <MovementModePanel />
+      </div>
       <ContextMenu />
       <div class="game-chat">
         <ChatContainer ref="chatContainerRef" @send="handleChatSend" />
@@ -493,6 +497,13 @@ useHotkeys(hotkeys)
 .game-player-stats {
   position: absolute;
   top: 8px;
+  left: 100px;
+  z-index: 120;
+}
+
+.game-movement-modes {
+  position: absolute;
+  top: 62px;
   left: 100px;
   z-index: 120;
 }
