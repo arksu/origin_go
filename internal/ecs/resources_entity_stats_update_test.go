@@ -180,6 +180,11 @@ func TestUpdateEntityStatsRegenSchedule(t *testing.T) {
 	state := GetResource[EntityStatsUpdateState](world)
 	timeState := GetResource[TimeState](world)
 	timeState.Tick = 100
+	regenIntervalTicks := uint64(50)
+	SetResource(world, EntityStatsRuntimeConfig{
+		PlayerStatsTTLms:          ResolvePlayerStatsTTLms(world),
+		StaminaRegenIntervalTicks: regenIntervalTicks,
+	})
 
 	if !UpdateEntityStatsRegenSchedule(world, handle, 100, 10, 200) {
 		t.Fatalf("expected regen schedule to be created")
@@ -188,12 +193,12 @@ func TestUpdateEntityStatsRegenSchedule(t *testing.T) {
 		t.Fatalf("expected one pending regen, got %d", state.PendingRegenCount())
 	}
 
-	due := state.PopDueRegen(599, nil)
+	due := state.PopDueRegen(timeState.Tick+regenIntervalTicks-1, nil)
 	if len(due) != 0 {
 		t.Fatalf("expected no due regen before interval boundary, got %+v", due)
 	}
 
-	due = state.PopDueRegen(600, nil)
+	due = state.PopDueRegen(timeState.Tick+regenIntervalTicks, nil)
 	if len(due) != 1 || due[0] != handle {
 		t.Fatalf("unexpected due regen at interval boundary: %+v", due)
 	}
