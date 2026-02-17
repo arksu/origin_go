@@ -465,11 +465,11 @@ func consumePlayerStaminaForTreeCycle(
 		return true
 	}
 
-	attributes := characterattrs.Default()
+	con := characterattrs.DefaultValue
 	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle); hasProfile {
-		attributes = characterattrs.Normalize(profile.Attributes)
+		con = characterattrs.Get(profile.Attributes, characterattrs.CON)
 	}
-	maxStamina := entitystats.MaxStaminaFromAttributes(attributes)
+	maxStamina := entitystats.MaxStaminaFromCon(con)
 	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 	statsChanged := currentStamina != stats.Stamina
 	currentEnergy := stats.Energy

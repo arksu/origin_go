@@ -125,6 +125,9 @@ func (s *EntityStatsUpdateState) ScheduleRegen(handle types.Handle, dueTick uint
 	if s.regenLatest == nil {
 		s.regenLatest = make(map[types.Handle]entityStatsRegenState, 128)
 	}
+	if current, exists := s.regenLatest[handle]; exists && current.DueTick == dueTick {
+		return true
+	}
 
 	s.regenSeq++
 	s.regenLatest[handle] = entityStatsRegenState{
@@ -204,6 +207,9 @@ func (s *EntityStatsUpdateState) MarkPlayerDirty(entityID types.EntityID, nowUni
 	}
 
 	dueUnixMs := s.NextAllowedSendUnixMs(entityID, nowUnixMs, ttlMs)
+	if current, exists := s.pushLatest[entityID]; exists && current.DueUnixMs == dueUnixMs {
+		return true
+	}
 	s.pushSeq++
 	s.pushLatest[entityID] = playerStatsPushState{
 		DueUnixMs: dueUnixMs,
