@@ -5,14 +5,19 @@
 ## Server Bootstrap Contract
 
 - Bootstrap source of truth is pair:
-  - `SERVER_START_TIME` (Unix seconds),
-  - `SERVER_TICK_RATE`.
+  - `SERVER_TICK_TOTAL`,
+  - `SERVER_RUNTIME_SECONDS_TOTAL`.
 - On first boot, persist both values in a single transaction.
-- On next boots, require both values to exist and be valid; fail fast on mismatch/incomplete pair.
-- Effective game tick is computed from elapsed time since `SERVER_START_TIME` using persisted/configured tick rate.
+- On next boots:
+  - missing key is recovered as `0` and persisted atomically with the pair,
+  - negative values are invalid and must fail fast.
+- Tick-rate mismatch is not validated against persisted state.
 
 ## Runtime Rules
 
 - Use monotonic game clock (`Clock`) for runtime tick progression.
-- Do not reintroduce periodic persistence of "current tick/server time" global vars.
+- Runtime seconds advance only while server process runs.
+- Keep periodic persistence of runtime/tick state in a dedicated goroutine (20s interval).
+- Persist `SERVER_TICK_TOTAL` and `SERVER_RUNTIME_SECONDS_TOTAL` atomically in one transaction.
+- Do final persist on shutdown; persist errors are logged only.
 - Keep bootstrap errors explicit and actionable for operations.

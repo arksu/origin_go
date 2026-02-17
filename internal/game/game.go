@@ -70,11 +70,17 @@ type Game struct {
 	db     *persistence.Postgres
 	logger *zap.Logger
 
-	objectFactory   *world.ObjectFactory
-	shardManager    *ShardManager
-	entityIDManager *EntityIDManager
-	networkServer   *network.Server
-	inventoryLoader *inventory.InventoryLoader
+	objectFactory       *world.ObjectFactory
+	shardManager        *ShardManager
+	entityIDManager     *EntityIDManager
+	networkServer       *network.Server
+	inventoryLoader     *inventory.InventoryLoader
+	serverTimeManager   *timeutil.ServerTimeManager
+	timePersistStopCh   chan struct{}
+	timePersistDoneCh   chan struct{}
+	timeStateMu         sync.RWMutex
+	runtimeSecondsTotal int64
+	runtimeRemainder    time.Duration
 
 	clock             timeutil.Clock
 	startTime         time.Time
@@ -95,29 +101,34 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	ctx, cancel := context.WithCancel(context.Background())
 
 	serverTimeManager := timeutil.NewServerTimeManager(db, logger)
-	bootstrap, bootstrapErr := serverTimeManager.LoadOrInitBootstrap(time.Now(), cfg.Game.TickRate)
+	bootstrap, bootstrapErr := serverTimeManager.LoadOrInitBootstrap()
 	if bootstrapErr != nil {
 		logger.Fatal("Failed to initialize server time bootstrap", zap.Error(bootstrapErr))
 	}
 	tickPeriod := time.Second / time.Duration(cfg.Game.TickRate)
-	clockStart := bootstrap.ServerStartTime.Add(time.Duration(bootstrap.InitialTick) * tickPeriod)
+	clockStart := time.Unix(0, 0)
 	clk := timeutil.NewMonotonicClockAt(clockStart)
+	if bootstrap.RuntimeSecondsTotal > 0 {
+		clk.Advance(time.Duration(bootstrap.RuntimeSecondsTotal) * time.Second)
+	}
 
 	g := &Game{
-		cfg:               cfg,
-		db:                db,
-		objectFactory:     objectFactory,
-		inventoryLoader:   inventoryLoader,
-		logger:            logger,
-		clock:             clk,
-		startTime:         clk.GameNow(),
-		tickRate:          cfg.Game.TickRate,
-		tickPeriod:        tickPeriod,
-		currentTick:       bootstrap.InitialTick,
-		ctx:               ctx,
-		cancel:            cancel,
-		enableStats:       enableStats,
-		enableVisionStats: enableVisionStats,
+		cfg:                 cfg,
+		db:                  db,
+		objectFactory:       objectFactory,
+		inventoryLoader:     inventoryLoader,
+		logger:              logger,
+		serverTimeManager:   serverTimeManager,
+		clock:               clk,
+		startTime:           clk.GameNow(),
+		tickRate:            cfg.Game.TickRate,
+		tickPeriod:          tickPeriod,
+		currentTick:         bootstrap.InitialTick,
+		runtimeSecondsTotal: bootstrap.RuntimeSecondsTotal,
+		ctx:                 ctx,
+		cancel:              cancel,
+		enableStats:         enableStats,
+		enableVisionStats:   enableVisionStats,
 		tickStats: tickStats{
 			lastLog:     time.Now(),
 			minDuration: time.Hour,
@@ -199,7 +210,7 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S_Ping) {
 	pong := &netproto.S2C_Pong{
 		ClientTimeMs: ping.ClientTimeMs,
-		ServerTimeMs: g.clock.UnixMilli(),
+		ServerTimeMs: g.clock.WallNow().UnixMilli(),
 	}
 
 	response := &netproto.ServerMessage{
@@ -653,6 +664,7 @@ func (g *Game) resetOnlinePlayers() {
 
 func (g *Game) StartGameLoop() {
 	g.setState(GameStateRunning)
+	g.startPeriodicServerTimePersist()
 	g.wg.Add(1)
 	go g.gameLoop()
 
@@ -660,6 +672,7 @@ func (g *Game) StartGameLoop() {
 }
 
 const maxCatchUpTicks = 4
+const serverTimePersistInterval = 20 * time.Second
 
 func (g *Game) gameLoop() {
 	defer g.wg.Done()
@@ -680,25 +693,43 @@ func (g *Game) gameLoop() {
 			frameTime = 0
 		}
 
-		if frameTime > maxFrameTime {
-			frameTime = maxFrameTime
+		// Runtime time is based on real elapsed wall time, independent from tick catch-up limits.
+		g.clock.Advance(frameTime)
+		runtimeNow := g.clock.GameNow()
+		g.timeStateMu.Lock()
+		g.runtimeRemainder += frameTime
+		if g.runtimeRemainder >= time.Second {
+			addedRuntimeSeconds := int64(g.runtimeRemainder / time.Second)
+			g.runtimeRemainder -= time.Duration(addedRuntimeSeconds) * time.Second
+			g.runtimeSecondsTotal += addedRuntimeSeconds
 		}
-		accum += frameTime
+		g.timeStateMu.Unlock()
+
+		frameTimeForTicks := frameTime
+		if frameTimeForTicks > maxFrameTime {
+			frameTimeForTicks = maxFrameTime
+		}
+		accum += frameTimeForTicks
+		wallUnixMs := nowWall.UnixMilli()
 
 		catchUp := 0
 		for accum >= g.tickPeriod && catchUp < maxCatchUpTicks {
+			g.timeStateMu.Lock()
 			g.currentTick++
-			g.clock.Advance(g.tickPeriod)
+			currentTick := g.currentTick
+			currentRuntimeSeconds := g.runtimeSecondsTotal
+			g.timeStateMu.Unlock()
 
-			tickNow := g.clock.GameNow()
 			ts := ecs.TimeState{
-				Tick:       g.currentTick,
-				TickRate:   g.tickRate,
-				TickPeriod: g.tickPeriod,
-				Delta:      g.tickPeriod.Seconds(),
-				Now:        tickNow,
-				UnixMs:     tickNow.UnixMilli(),
-				Uptime:     tickNow.Sub(g.startTime),
+				Tick:                currentTick,
+				TickRate:            g.tickRate,
+				TickPeriod:          g.tickPeriod,
+				Delta:               g.tickPeriod.Seconds(),
+				Now:                 runtimeNow,
+				UnixMs:              wallUnixMs,
+				WallNow:             nowWall,
+				RuntimeSecondsTotal: currentRuntimeSeconds,
+				Uptime:              runtimeNow.Sub(g.startTime),
 			}
 
 			g.update(ts)
@@ -821,6 +852,7 @@ func (g *Game) Stop() {
 
 	g.resetOnlinePlayers()
 	g.cancel()
+	g.stopPeriodicServerTimePersist()
 
 	g.logger.Info("Stopping networkServer")
 	g.networkServer.Stop()
@@ -831,6 +863,7 @@ func (g *Game) Stop() {
 
 	// Wait for all goroutines to finish
 	g.wg.Wait()
+	g.persistServerTimeSnapshot("shutdown")
 
 	g.setState(GameStateStopped)
 	g.logger.Info("Game stopped")
@@ -849,6 +882,8 @@ func (g *Game) NetworkServer() *network.Server {
 }
 
 func (g *Game) CurrentTick() uint64 {
+	g.timeStateMu.RLock()
+	defer g.timeStateMu.RUnlock()
 	return g.currentTick
 }
 
@@ -875,8 +910,76 @@ func (g *Game) Stats() GameStats {
 	return GameStats{
 		ConnectedClients: connectedClients,
 		TotalPlayers:     totalPlayers,
-		CurrentTick:      g.currentTick,
+		CurrentTick:      g.CurrentTick(),
 		TickRate:         g.tickRate,
 		AvgTickDuration:  avgTickDuration,
+	}
+}
+
+func (g *Game) startPeriodicServerTimePersist() {
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
+
+	g.timePersistStopCh = stopCh
+	g.timePersistDoneCh = doneCh
+
+	go func() {
+		defer close(doneCh)
+
+		ticker := time.NewTicker(serverTimePersistInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				g.persistServerTimeSnapshot("periodic")
+			case <-stopCh:
+				return
+			case <-g.ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (g *Game) stopPeriodicServerTimePersist() {
+	stopCh := g.timePersistStopCh
+	doneCh := g.timePersistDoneCh
+	g.timePersistStopCh = nil
+	g.timePersistDoneCh = nil
+
+	if stopCh != nil {
+		close(stopCh)
+	}
+	if doneCh != nil {
+		<-doneCh
+	}
+}
+
+func (g *Game) persistServerTimeSnapshot(reason string) {
+	if g.serverTimeManager == nil {
+		return
+	}
+
+	snapshot := g.serverTimeSnapshot()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := g.serverTimeManager.PersistState(ctx, snapshot); err != nil {
+		g.logger.Error("Failed to persist server time state",
+			zap.String("reason", reason),
+			zap.Uint64("tick_total", snapshot.InitialTick),
+			zap.Int64("runtime_seconds_total", snapshot.RuntimeSecondsTotal),
+			zap.Error(err),
+		)
+	}
+}
+
+func (g *Game) serverTimeSnapshot() timeutil.ServerTimeBootstrap {
+	g.timeStateMu.RLock()
+	defer g.timeStateMu.RUnlock()
+	return timeutil.ServerTimeBootstrap{
+		InitialTick:         g.currentTick,
+		RuntimeSecondsTotal: g.runtimeSecondsTotal,
 	}
 }

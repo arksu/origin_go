@@ -17,9 +17,9 @@ const (
 
 // keys for global_var
 const (
-	LAST_USED_ID      = "last_used_id"
-	SERVER_START_TIME = "server_start_time"
-	SERVER_TICK_RATE  = "server_tick_rate"
+	LAST_USED_ID                 = "last_used_id"
+	SERVER_TICK_TOTAL            = "server_tick_total"
+	SERVER_RUNTIME_SECONDS_TOTAL = "server_runtime_seconds_total"
 )
 
 const (

@@ -46,7 +46,7 @@ func (s *DropDecaySystem) Update(w *ecs.World, dt float64) {
 		s.query = w.Query().With(components.DroppedItemComponentID).Prepare()
 	}
 
-	nowUnix := ecs.GetResource[ecs.TimeState](w).Now.Unix()
+	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 
 	type expiredEntry struct {
 		entityID types.EntityID
@@ -66,7 +66,7 @@ func (s *DropDecaySystem) Update(w *ecs.World, dt float64) {
 			return
 		}
 
-		if dropped.DropTime+constt.DroppedDespawnSeconds <= nowUnix {
+		if dropped.DropTime+constt.DroppedDespawnSeconds <= nowRuntimeSeconds {
 			extID, hasExt := ecs.GetComponent[ecs.ExternalID](w, h)
 			if !hasExt {
 				return

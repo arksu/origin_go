@@ -214,7 +214,7 @@ func (s *InventoryOperationService) dropNewItem(
 	}
 
 	droppedEntityID := item.ItemID
-	nowUnix := ecs.GetResource[ecs.TimeState](w).Now.Unix()
+	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 	resource := itemDef.ResolveResource(false)
 	dropX := int(playerTransform.X)
 	dropY := int(playerTransform.Y)
@@ -235,7 +235,7 @@ func (s *InventoryOperationService) dropNewItem(
 		ChunkX:          playerChunkRef.CurrentChunkX,
 		ChunkY:          playerChunkRef.CurrentChunkY,
 		DropperID:       playerID,
-		NowUnix:         nowUnix,
+		NowUnix:         nowRuntimeSeconds,
 	}
 
 	if _, ok := SpawnDroppedEntity(w, dropParams); !ok {

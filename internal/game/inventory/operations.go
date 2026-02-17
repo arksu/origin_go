@@ -529,7 +529,7 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 
 	// 4. Use item ID as the dropped entity ID (object.id == item.id == inventory.owner_id)
 	droppedEntityID := itemID
-	nowUnix := ecs.GetResource[ecs.TimeState](w).Now.Unix()
+	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 
 	// Serialize nested inventory before removing item (needed for DB persistence)
 	nestedInvData := serializeNestedForDrop(w, itemID)
@@ -575,7 +575,7 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 		ChunkX:          playerChunkRef.CurrentChunkX,
 		ChunkY:          playerChunkRef.CurrentChunkY,
 		DropperID:       playerID,
-		NowUnix:         nowUnix,
+		NowUnix:         nowRuntimeSeconds,
 	}
 
 	if _, ok := SpawnDroppedEntity(w, dropParams); !ok {

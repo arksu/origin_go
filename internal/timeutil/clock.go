@@ -10,14 +10,14 @@ import (
 // WallNow returns real system time (for auth, tokens, DB).
 type Clock interface {
 	// GameNow returns simulation game time.
-	// Use for all game simulation, network server_time_ms, and expiration timers.
+	// Use for all game simulation and expiration timers.
 	GameNow() time.Time
 
 	// WallNow returns real system wall-clock time.
-	// Use only for auth/token expiry and database timestamps.
+	// Use for auth/token expiry, DB timestamps, and network server_time_ms.
 	WallNow() time.Time
 
-	// UnixMilli returns GameNow().UnixMilli() for network packets.
+	// UnixMilli returns WallNow().UnixMilli() for network packets.
 	UnixMilli() int64
 
 	// Advance moves simulation time forward.
@@ -49,7 +49,7 @@ func (c *MonotonicClock) WallNow() time.Time {
 }
 
 func (c *MonotonicClock) UnixMilli() int64 {
-	return c.GameNow().UnixMilli()
+	return c.WallNow().UnixMilli()
 }
 
 func (c *MonotonicClock) Advance(d time.Duration) {
@@ -85,7 +85,7 @@ func (c *ManualClock) WallNow() time.Time {
 }
 
 func (c *ManualClock) UnixMilli() int64 {
-	return c.GameNow().UnixMilli()
+	return c.WallNow().UnixMilli()
 }
 
 // Advance moves the manual clock forward by d.

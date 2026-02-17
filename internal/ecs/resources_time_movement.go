@@ -10,13 +10,15 @@ import (
 // TimeState holds per-tick time data, updated once before systems run.
 // Systems read time exclusively from this resource instead of calling time.Now().
 type TimeState struct {
-	Tick       uint64
-	TickRate   int
-	TickPeriod time.Duration
-	Delta      float64       // Fixed-step dt in seconds
-	Now        time.Time     // Monotonic game time at tick start
-	UnixMs     int64         // Now.UnixMilli() — for network packets
-	Uptime     time.Duration // Time since server start
+	Tick                uint64
+	TickRate            int
+	TickPeriod          time.Duration
+	Delta               float64       // Fixed-step dt in seconds
+	Now                 time.Time     // Runtime game time (advances only while server process runs)
+	UnixMs              int64         // Wall Unix milliseconds for network packets
+	WallNow             time.Time     // Wall-clock time at tick start
+	RuntimeSecondsTotal int64         // Runtime total in whole seconds
+	Uptime              time.Duration // Time since this server process started
 }
 
 type BehaviorTickPolicy struct {
