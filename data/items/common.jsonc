@@ -34,6 +34,17 @@
         "w": 1,
         "h": 1
       }
+    },
+    {
+      "defId": 3007,
+      "key": "birch_catkin",
+      "name": "Birch Catkin",
+      "resource": "items/birch_catkin.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
     }
   ]
 }

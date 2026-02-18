@@ -89,6 +89,12 @@
                   "name": "Take Branch",
                   "itemDefKey": "branch",
                   "count": 4
+                },
+                {
+                  "id": "pick_catkin",
+                  "name": "Pick Catkin",
+                  "itemDefKey": "birch_catkin",
+                  "count": 1
                 }
               ]
             },
@@ -105,6 +111,12 @@
                   "name": "Take Branch",
                   "itemDefKey": "branch",
                   "count": 7
+                },
+                {
+                  "id": "pick_catkin",
+                  "name": "Pick Catkin",
+                  "itemDefKey": "birch_catkin",
+                  "count": 3
                 },
                 {
                   "id": "take_bark",
@@ -127,6 +139,12 @@
                   "name": "Take Branch",
                   "itemDefKey": "branch",
                   "count": 7
+                },
+                {
+                  "id": "pick_catkin",
+                  "name": "Pick Catkin",
+                  "itemDefKey": "birch_catkin",
+                  "count": 5
                 },
                 {
                   "id": "take_bark",
