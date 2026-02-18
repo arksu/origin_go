@@ -8,9 +8,23 @@ interface Props {
   frameColor: string
   barBackColor: string
   bar1Color: string
+  layers?: StatLayer[]
 }
 
 const props = defineProps<Props>()
+
+interface StatLayer {
+  min: number
+  max: number
+  color: string
+}
+
+interface LayerFill {
+  key: string
+  width: string
+  color: string
+  zIndex: number
+}
 
 const maxValue = computed(() => {
   const normalized = Number(props.max)
@@ -28,6 +42,39 @@ const currentValue = computed(() => {
 const percent = computed(() => {
   if (maxValue.value <= 0) return 0
   return Math.max(0, Math.min(100, (currentValue.value / maxValue.value) * 100))
+})
+
+const normalizedLayers = computed<StatLayer[]>(() => {
+  if (!props.layers || props.layers.length === 0) return []
+
+  return props.layers
+    .map((layer) => {
+      const min = Number(layer.min)
+      const max = Number(layer.max)
+      return {
+        min: Number.isFinite(min) ? Math.floor(min) : 0,
+        max: Number.isFinite(max) ? Math.floor(max) : 0,
+        color: layer.color,
+      }
+    })
+    .filter((layer) => layer.max > layer.min)
+})
+
+const layerFills = computed<LayerFill[]>(() => {
+  if (normalizedLayers.value.length === 0) return []
+
+  return normalizedLayers.value.map((layer, index) => {
+    const span = layer.max - layer.min
+    const progress = span <= 0 ? 0 : (currentValue.value - layer.min) / span
+    const clampedPercent = Math.max(0, Math.min(100, progress * 100))
+
+    return {
+      key: `${layer.min}-${layer.max}-${index}`,
+      width: `${clampedPercent}%`,
+      color: layer.color,
+      zIndex: index + 1,
+    }
+  })
 })
 
 const tooltipText = computed(() => `${props.label}: ${currentValue.value}/${maxValue.value}`)
@@ -93,7 +140,19 @@ onUnmounted(() => {
     @mousemove="handleMouseMove"
   >
     <div class="stat-bar-back" :style="{ backgroundColor: barBackColor }"></div>
-    <div class="stat-bar-fill" :style="{ width: `${percent}%`, backgroundColor: bar1Color }"></div>
+    <template v-if="layerFills.length > 0">
+      <div
+        v-for="layer in layerFills"
+        :key="layer.key"
+        class="stat-bar-fill"
+        :style="{ width: layer.width, backgroundColor: layer.color, zIndex: layer.zIndex }"
+      ></div>
+    </template>
+    <div
+      v-else
+      class="stat-bar-fill"
+      :style="{ width: `${percent}%`, backgroundColor: bar1Color }"
+    ></div>
   </div>
 </template>
 

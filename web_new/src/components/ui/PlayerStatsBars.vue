@@ -5,6 +5,13 @@ import StatBar from '@/components/ui/StatBar.vue'
 
 const gameStore = useGameStore()
 const playerStats = computed(() => gameStore.playerStats)
+const energyLayers = [
+  { min: 0, max: 499, color: '#600000' }, // Starving
+  { min: 500, max: 799, color: '#ff4000' }, // Very Hungry
+  { min: 800, max: 899, color: '#ffc000' }, // Hungry
+  { min: 900, max: 1000, color: '#00ff00' }, // Full
+  { min: 1001, max: 1100, color: '#e27c21' }, // Overstuffed
+]
 </script>
 
 <template>
@@ -25,6 +32,7 @@ const playerStats = computed(() => gameStore.playerStats)
       frame-color="#e3bc56ba"
       bar-back-color="#1b1505"
       bar1-color="#e9b93d"
+      :layers="energyLayers"
     />
   </div>
 </template>
