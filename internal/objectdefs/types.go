@@ -65,12 +65,20 @@ type TreeBehaviorConfig struct {
 }
 
 type TreeStageConfig struct {
-	ChopPointsTotal   int      `json:"chopPointsTotal"`
-	StageDuration     int      `json:"stageDurationTicks"`
-	AllowChop         bool     `json:"allowChop"`
-	SpawnChopObject   []string `json:"spawnChopObject,omitempty"`
-	SpawnChopItem     []string `json:"spawnChopItem,omitempty"`
-	TransformToDefKey string   `json:"transformToDefKey,omitempty"`
+	ChopPointsTotal   int              `json:"chopPointsTotal"`
+	StageDuration     int              `json:"stageDurationTicks"`
+	AllowChop         bool             `json:"allowChop"`
+	SpawnChopObject   []string         `json:"spawnChopObject,omitempty"`
+	SpawnChopItem     []string         `json:"spawnChopItem,omitempty"`
+	Take              []TreeTakeConfig `json:"take,omitempty"`
+	TransformToDefKey string           `json:"transformToDefKey,omitempty"`
+}
+
+type TreeTakeConfig struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	ItemDefKey string `json:"itemDefKey"`
+	Count      int    `json:"count"`
 }
 
 // ObjectsFile represents a JSONC file containing object definitions.

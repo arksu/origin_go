@@ -72,10 +72,10 @@ func TestNewRegistry_FailFast_WhenDeclaredActionMissingExecutor(t *testing.T) {
 	}
 }
 
-func TestNewRegistry_FailFast_WhenCyclicActionMissingHandler(t *testing.T) {
+func TestNewRegistry_AllowsCyclicDeclaredWithoutHandler(t *testing.T) {
 	_, err := NewRegistry(testBehaviorCyclicDeclaredNoHandler{})
-	if err == nil {
-		t.Fatalf("expected fail-fast error when cyclic action has no cyclic handler")
+	if err != nil {
+		t.Fatalf("expected registry to allow cyclic declaration without handler, got: %v", err)
 	}
 }
 

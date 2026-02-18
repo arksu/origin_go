@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/itemdefs"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -125,6 +127,17 @@ func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConf
 				return 0, fmt.Errorf("tree.stages[%d].spawnChopItem[%d] must not be empty", idx, itemIdx)
 			}
 		}
+		seenTakeIDs := make(map[string]int, len(stage.Take))
+		for takeIdx, take := range stage.Take {
+			if err := validateTakeConfigForTest(idx, takeIdx, take); err != nil {
+				return 0, err
+			}
+			takeID := strings.TrimSpace(take.ID)
+			if first, exists := seenTakeIDs[takeID]; exists {
+				return 0, fmt.Errorf("tree.stages[%d].take[%d].id duplicate %q (first at index %d)", idx, takeIdx, takeID, first)
+			}
+			seenTakeIDs[takeID] = takeIdx
+		}
 	}
 
 	ctx.Def.SetTreeBehaviorConfig(cfg)
@@ -139,6 +152,31 @@ func decodeStrictJSONForTest(raw []byte, dst any) error {
 	}
 	if dec.More() {
 		return fmt.Errorf("unexpected trailing JSON data")
+	}
+	return nil
+}
+
+func validateTakeConfigForTest(stageIndex int, takeIndex int, cfg contracts.TreeTakeConfig) error {
+	takeID := strings.TrimSpace(cfg.ID)
+	if takeID == "" {
+		return fmt.Errorf("tree.stages[%d].take[%d].id must not be empty", stageIndex, takeIndex)
+	}
+	if strings.TrimSpace(cfg.Name) == "" {
+		return fmt.Errorf("tree.stages[%d].take[%d].name must not be empty", stageIndex, takeIndex)
+	}
+	itemKey := strings.TrimSpace(cfg.ItemDefKey)
+	if itemKey == "" {
+		return fmt.Errorf("tree.stages[%d].take[%d].itemDefKey must not be empty", stageIndex, takeIndex)
+	}
+	if cfg.Count <= 0 {
+		return fmt.Errorf("tree.stages[%d].take[%d].count must be > 0", stageIndex, takeIndex)
+	}
+	registry := itemdefs.Global()
+	if registry == nil {
+		return fmt.Errorf("tree.stages[%d].take[%d].itemDefKey validation requires loaded item defs", stageIndex, takeIndex)
+	}
+	if _, ok := registry.GetByKey(itemKey); !ok {
+		return fmt.Errorf("tree.stages[%d].take[%d].itemDefKey unknown item key %q", stageIndex, takeIndex, itemKey)
 	}
 	return nil
 }
@@ -513,6 +551,141 @@ func TestLoadFromDirectory_TreeBehaviorRejectsInvalidStageDuration(t *testing.T)
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stageDurationTicks must be > 0 for non-final stage")
+}
+
+func TestLoadFromDirectory_TreeBehaviorTakeRequiresAllFields(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "tree_bad_take_pair",
+			"name": "Tree",
+			"resource": "x.png",
+			"behaviors": {
+				"tree": {
+					"stages": [
+						{
+							"chopPointsTotal": 1,
+							"stageDurationTicks": 60,
+							"allowChop": true,
+							"spawnChopObject": [],
+							"spawnChopItem": [],
+							"take": [
+								{
+									"id": "take_branch",
+									"itemDefKey": "branch",
+									"count": 1
+								}
+							]
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take[0].name must not be empty")
+}
+
+func TestLoadFromDirectory_TreeBehaviorTakeUnknownItemFails(t *testing.T) {
+	dir := t.TempDir()
+	previousRegistry := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 1, Key: "known", Name: "Known", Size: itemdefs.Size{W: 1, H: 1}},
+	}))
+	defer itemdefs.SetGlobalForTesting(previousRegistry)
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "tree_bad_take_key",
+			"name": "Tree",
+			"resource": "x.png",
+			"behaviors": {
+				"tree": {
+					"stages": [
+						{
+							"chopPointsTotal": 1,
+							"stageDurationTicks": 60,
+							"allowChop": true,
+							"spawnChopObject": [],
+							"spawnChopItem": [],
+							"take": [
+								{
+									"id": "take_branch",
+									"name": "Take Branch",
+									"itemDefKey": "unknown_item",
+									"count": 1
+								}
+							]
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take[0].itemDefKey unknown item key")
+}
+
+func TestLoadFromDirectory_TreeBehaviorTakeDuplicateIDFails(t *testing.T) {
+	dir := t.TempDir()
+	previousRegistry := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 1, Key: "branch", Name: "Branch", Size: itemdefs.Size{W: 1, H: 1}},
+	}))
+	defer itemdefs.SetGlobalForTesting(previousRegistry)
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "tree_bad_take_duplicate",
+			"name": "Tree",
+			"resource": "x.png",
+			"behaviors": {
+				"tree": {
+					"stages": [
+						{
+							"chopPointsTotal": 1,
+							"stageDurationTicks": 60,
+							"allowChop": true,
+							"spawnChopObject": [],
+							"spawnChopItem": [],
+							"take": [
+								{
+									"id": "take_branch",
+									"name": "Take Branch",
+									"itemDefKey": "branch",
+									"count": 1
+								},
+								{
+									"id": "take_branch",
+									"name": "Take Branch Again",
+									"itemDefKey": "branch",
+									"count": 1
+								}
+							]
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take[1].id duplicate")
 }
 
 func TestLoadFromDirectory_TreeBehaviorStages(t *testing.T) {

@@ -23,6 +23,17 @@
         "w": 2,
         "h": 1
       }
+    },
+    {
+      "defId": 3006,
+      "key": "bark",
+      "name": "Bark",
+      "resource": "items/bark.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
     }
   ]
 }

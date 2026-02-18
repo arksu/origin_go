@@ -18,10 +18,16 @@ type DroppedItemSpatialRegistrar interface {
 	RemoveStaticFromChunkSpatial(handle types.Handle, chunkX, chunkY, x, y int)
 }
 
+// VisionUpdateForcer allows immediate visibility refresh for a specific observer.
+type VisionUpdateForcer interface {
+	ForceUpdateForObserver(w *ecs.World, observerHandle types.Handle)
+}
+
 // InventoryExecutor implements systems.InventoryOperationExecutor interface
 type InventoryExecutor struct {
 	service          *InventoryOperationService
 	spatialRegistrar DroppedItemSpatialRegistrar
+	visionForcer     VisionUpdateForcer
 	logger           *zap.Logger
 }
 
@@ -30,10 +36,12 @@ func NewInventoryExecutor(
 	idAlloc EntityIDAllocator,
 	persister DroppedItemPersister,
 	spatialRegistrar DroppedItemSpatialRegistrar,
+	visionForcer VisionUpdateForcer,
 ) *InventoryExecutor {
 	return &InventoryExecutor{
 		service:          NewInventoryOperationService(logger, idAlloc, persister),
 		spatialRegistrar: spatialRegistrar,
+		visionForcer:     visionForcer,
 		logger:           logger,
 	}
 }
@@ -91,6 +99,9 @@ func (e *InventoryExecutor) GiveItem(
 	// Register dropped entity in chunk spatial if item was dropped
 	if result.Success && result.SpawnedDroppedEntityID != nil {
 		e.registerDroppedSpatial(w, *result.SpawnedDroppedEntityID)
+		if e.visionForcer != nil {
+			e.visionForcer.ForceUpdateForObserver(w, playerHandle)
+		}
 	}
 
 	return result
