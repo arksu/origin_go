@@ -45,20 +45,52 @@
       "behaviors": {
         "tree": {
           "priority": 20,
-          "chopPointsTotal": 6,
-          "chopCycleDurationTicks": 20,
-          "chopStaminaCost": 17,
-          "logsSpawnDefKey": "log",
-          "logsSpawnCount": 2,
-          "logsSpawnInitialOffset": 16,
-          "logsSpawnStepOffset": 20,
-          "transformToDefKey": "stump_birch",
-          "action_sound": "chop",
-          "finish_sound": "tree_fall",
-          "growthStageMax": 6,
-          "growthStartStage": 1,
-          "growthStageDurationsTicks": [60, 60, 60, 60, 60],
-          "allowedChopStages": [6]
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": ["branch", "branch", "branch", "branch", "branch"]
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": ["block_of_wood", "block_of_wood"]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": ["block_of_wood", "block_of_wood", "block_of_wood", "block_of_wood"]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": ["log"],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_birch"
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": ["log", "log"],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_birch"
+            }
+          ]
         }
       }
     },

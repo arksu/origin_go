@@ -273,6 +273,7 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 		EntityID:         newID,
 		X:                targetX,
 		Y:                targetY,
+		Quality:          entry.Quality,
 		Region:           region,
 		Layer:            layer,
 		InitReason:       contracts.ObjectBehaviorInitReasonSpawn,

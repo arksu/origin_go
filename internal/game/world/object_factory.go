@@ -63,6 +63,7 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 		X:         float64(raw.X),
 		Y:         float64(raw.Y),
 		Direction: headingDegreesToRadians(raw.Heading),
+		Quality:   qualityFromNullInt16(raw.Quality),
 		Region:    raw.Region,
 		Layer:     raw.Layer,
 		// Restored state is applied in chunk activation after deserialization.
@@ -169,9 +170,11 @@ func (f *ObjectFactory) spawnDroppedItemEntity(
 ) (types.Handle, error) {
 	// Resolve resource from the loaded container's first item
 	resource := ""
+	droppedQuality := uint32(0)
 	container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
 	if hasContainer && len(container.Items) > 0 {
 		resource = container.Items[0].Resource
+		droppedQuality = container.Items[0].Quality
 	}
 
 	entityID := types.EntityID(raw.ID)
@@ -183,6 +186,7 @@ func (f *ObjectFactory) spawnDroppedItemEntity(
 		ecs.AddComponent(w, h, components.EntityInfo{
 			TypeID:   constt.DroppedItemTypeID,
 			IsStatic: true,
+			Quality:  droppedQuality,
 			Region:   raw.Region,
 			Layer:    raw.Layer,
 		})
@@ -368,6 +372,20 @@ func radiansToHeadingDegrees(direction float64) int16 {
 	return int16(math.Floor(normalized))
 }
 
+func qualityFromNullInt16(value sql.NullInt16) uint32 {
+	if !value.Valid || value.Int16 < 0 {
+		return 0
+	}
+	return uint32(value.Int16)
+}
+
+func clampQualityToInt16(value uint32) int16 {
+	if value > math.MaxInt16 {
+		return math.MaxInt16
+	}
+	return int16(value)
+}
+
 func (f *ObjectFactory) spawnContainerTreeFromData(
 	w *ecs.World,
 	ownerID types.EntityID,
@@ -508,6 +526,10 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		Layer:  info.Layer,
 		ChunkX: chunkRef.CurrentChunkX,
 		ChunkY: chunkRef.CurrentChunkY,
+		Quality: sql.NullInt16{
+			Int16: clampQualityToInt16(info.Quality),
+			Valid: true,
+		},
 		Heading: sql.NullInt16{
 			Int16: radiansToHeadingDegrees(transform.Direction),
 			Valid: true,

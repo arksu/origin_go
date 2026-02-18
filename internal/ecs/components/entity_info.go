@@ -9,6 +9,7 @@ type EntityInfo struct {
 	TypeID    uint32   // defId from object definitions
 	Behaviors []string // behavior keys from object definitions
 	IsStatic  bool     // resolved from definition at spawn time, never changes
+	Quality   uint32
 	Region    int
 	Layer     int
 }

@@ -105,62 +105,26 @@ func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConf
 	if cfg.Priority <= 0 {
 		cfg.Priority = 100
 	}
-	if cfg.ChopPointsTotal <= 0 {
-		return 0, fmt.Errorf("tree.chopPointsTotal must be > 0")
+	if len(cfg.Stages) == 0 {
+		return 0, fmt.Errorf("tree.stages is required")
 	}
-	if cfg.ChopCycleDurationTicks <= 0 {
-		return 0, fmt.Errorf("tree.chopCycleDurationTicks must be > 0")
-	}
-	if cfg.ChopStaminaCost <= 0 {
-		return 0, fmt.Errorf("tree.chopStaminaCost must be > 0")
-	}
-	if cfg.LogsSpawnDefKey == "" {
-		return 0, fmt.Errorf("tree.logsSpawnDefKey is required")
-	}
-	if cfg.LogsSpawnCount <= 0 {
-		return 0, fmt.Errorf("tree.logsSpawnCount must be > 0")
-	}
-	if cfg.LogsSpawnInitialOffset < 0 {
-		return 0, fmt.Errorf("tree.logsSpawnInitialOffset must be >= 0")
-	}
-	if cfg.LogsSpawnStepOffset <= 0 {
-		return 0, fmt.Errorf("tree.logsSpawnStepOffset must be > 0")
-	}
-	if cfg.TransformToDefKey == "" {
-		return 0, fmt.Errorf("tree.transformToDefKey is required")
-	}
-	if cfg.GrowthStageMax < 1 {
-		return 0, fmt.Errorf("tree.growthStageMax must be >= 1")
-	}
-	if cfg.GrowthStartStage <= 0 {
-		cfg.GrowthStartStage = 1
-	}
-	if cfg.GrowthStartStage > cfg.GrowthStageMax {
-		return 0, fmt.Errorf("tree.growthStartStage must be in range 1..growthStageMax")
-	}
-	if cfg.GrowthStageDurations == nil {
-		return 0, fmt.Errorf("tree.growthStageDurationsTicks is required")
-	}
-	if len(cfg.GrowthStageDurations) != cfg.GrowthStageMax-1 {
-		return 0, fmt.Errorf("tree.growthStageDurationsTicks length must be growthStageMax-1")
-	}
-	for idx, duration := range cfg.GrowthStageDurations {
-		if duration <= 0 {
-			return 0, fmt.Errorf("tree.growthStageDurationsTicks[%d] must be > 0", idx)
+	for idx, stage := range cfg.Stages {
+		if stage.ChopPointsTotal <= 0 {
+			return 0, fmt.Errorf("tree.stages[%d].chopPointsTotal must be > 0", idx)
 		}
-	}
-	if cfg.AllowedChopStages == nil {
-		return 0, fmt.Errorf("tree.allowedChopStages is required")
-	}
-	seenStages := make(map[int]struct{}, len(cfg.AllowedChopStages))
-	for _, stage := range cfg.AllowedChopStages {
-		if stage < 1 || stage > cfg.GrowthStageMax {
-			return 0, fmt.Errorf("tree.allowedChopStages values must be in range 1..growthStageMax")
+		if idx < len(cfg.Stages)-1 && stage.StageDuration <= 0 {
+			return 0, fmt.Errorf("tree.stages[%d].stageDurationTicks must be > 0 for non-final stage", idx)
 		}
-		if _, exists := seenStages[stage]; exists {
-			return 0, fmt.Errorf("tree.allowedChopStages contains duplicate stage %d", stage)
+		for objectIdx, objectKey := range stage.SpawnChopObject {
+			if objectKey == "" {
+				return 0, fmt.Errorf("tree.stages[%d].spawnChopObject[%d] must not be empty", idx, objectIdx)
+			}
 		}
-		seenStages[stage] = struct{}{}
+		for itemIdx, itemKey := range stage.SpawnChopItem {
+			if itemKey == "" {
+				return 0, fmt.Errorf("tree.stages[%d].spawnChopItem[%d] must not be empty", idx, itemIdx)
+			}
+		}
 	}
 
 	ctx.Def.SetTreeBehaviorConfig(cfg)
@@ -463,7 +427,95 @@ func TestLoadFromDirectory_InvalidTreeBehaviorConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid tree config")
 }
 
-func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
+func TestLoadFromDirectory_TreeBehaviorRejectsLegacyFlatConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "legacy_tree",
+			"name": "Legacy Tree",
+			"resource": "x.png",
+			"behaviors": {
+				"tree": {
+					"chopPointsTotal": 6,
+					"chopCycleDurationTicks": 20
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid tree config")
+}
+
+func TestLoadFromDirectory_TreeBehaviorRequiresStages(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "tree_no_stages",
+			"name": "Tree",
+			"resource": "x.png",
+			"behaviors": {
+				"tree": {
+					"stages": []
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tree.stages is required")
+}
+
+func TestLoadFromDirectory_TreeBehaviorRejectsInvalidStageDuration(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "tree_bad_duration",
+			"name": "Tree",
+			"resource": "x.png",
+			"behaviors": {
+				"tree": {
+					"stages": [
+						{
+							"chopPointsTotal": 1,
+							"stageDurationTicks": 0,
+							"allowChop": true,
+							"spawnChopObject": [],
+							"spawnChopItem": []
+						},
+						{
+							"chopPointsTotal": 1,
+							"stageDurationTicks": 60,
+							"allowChop": true,
+							"spawnChopObject": [],
+							"spawnChopItem": []
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stageDurationTicks must be > 0 for non-final stage")
+}
+
+func TestLoadFromDirectory_TreeBehaviorStages(t *testing.T) {
 	dir := t.TempDir()
 
 	writeJSONC(t, dir, "test.jsonc", `{
@@ -476,20 +528,23 @@ func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
 			"resource": "x.png",
 			"behaviors": {
 				"tree": {
-					"chopPointsTotal": 6,
-					"chopCycleDurationTicks": 20,
-					"chopStaminaCost": 12,
-					"action_sound": "chop",
-					"finish_sound": "tree_fall",
-					"logsSpawnDefKey": "log_y",
-					"logsSpawnCount": 3,
-					"logsSpawnInitialOffset": 16,
-					"logsSpawnStepOffset": 20,
-					"transformToDefKey": "stump_birch",
-					"growthStageMax": 4,
-					"growthStartStage": 1,
-					"growthStageDurationsTicks": [600, 900, 1200],
-					"allowedChopStages": [4]
+					"stages": [
+						{
+							"chopPointsTotal": 2,
+							"stageDurationTicks": 60,
+							"allowChop": false,
+							"spawnChopObject": [],
+							"spawnChopItem": []
+						},
+						{
+							"chopPointsTotal": 4,
+							"stageDurationTicks": 120,
+							"allowChop": true,
+							"spawnChopObject": ["log"],
+							"spawnChopItem": ["branch", "branch"],
+							"transformToDefKey": "stump_birch"
+						}
+					]
 				}
 			}
 		}]
@@ -501,8 +556,11 @@ func TestLoadFromDirectory_TreeBehaviorActionSound(t *testing.T) {
 	def, ok := registry.GetByID(1)
 	require.True(t, ok)
 	require.NotNil(t, def.TreeConfig)
-	assert.Equal(t, "chop", def.TreeConfig.ActionSound)
-	assert.Equal(t, "tree_fall", def.TreeConfig.FinishSound)
+	require.Len(t, def.TreeConfig.Stages, 2)
+	assert.Equal(t, 2, def.TreeConfig.Stages[0].ChopPointsTotal)
+	assert.Equal(t, 120, def.TreeConfig.Stages[1].StageDuration)
+	assert.True(t, def.TreeConfig.Stages[1].AllowChop)
+	assert.Equal(t, "stump_birch", def.TreeConfig.Stages[1].TransformToDefKey)
 }
 
 func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {

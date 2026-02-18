@@ -2,6 +2,8 @@ import { proto } from '@/network/proto/packets.js'
 import { useGameStore } from '@/stores/gameStore'
 import { sendInventoryOp } from '@/network'
 
+const INVENTORY_SLOT_SIZE_PX = 32
+
 /**
  * Builds expected revisions for optimistic concurrency.
  * Includes src and dst containers (deduped if same).
@@ -31,6 +33,23 @@ function buildExpected(
 
 export function useInventoryOps() {
   const gameStore = useGameStore()
+
+  function getPlacePositionFromSlotClick(dstX: number, dstY: number): { x: number; y: number } {
+    const handPos = gameStore.handState?.handPos
+    if (!handPos) {
+      return { x: dstX, y: dstY }
+    }
+
+    const offsetX = Math.max(0, Math.floor(Number(handPos.mouseOffsetX ?? 0)))
+    const offsetY = Math.max(0, Math.floor(Number(handPos.mouseOffsetY ?? 0)))
+    const slotShiftX = Math.floor(offsetX / INVENTORY_SLOT_SIZE_PX)
+    const slotShiftY = Math.floor(offsetY / INVENTORY_SLOT_SIZE_PX)
+
+    return {
+      x: dstX - slotShiftX,
+      y: dstY - slotShiftY,
+    }
+  }
 
   /**
    * Pick up item from a grid container into the hand.
@@ -160,5 +179,6 @@ export function useInventoryOps() {
     placeItem,
     placeOrSwapItem,
     findInventoryState,
+    getPlacePositionFromSlotClick,
   }
 }
