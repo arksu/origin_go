@@ -325,6 +325,29 @@ func TestChunkManager_ObjectFactory(t *testing.T) {
 	_ = factory
 }
 
+func TestChunkManager_GetEntityEpoch(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	entityID := types.EntityID(42)
+	cm.RegisterEntity(entityID, 0, 0, false)
+
+	if got := cm.GetEntityEpoch(entityID); got != 0 {
+		t.Fatalf("initial epoch = %d, want 0", got)
+	}
+
+	const epoch uint32 = 7
+	cm.EnableChunkLoadEvents(entityID, epoch)
+
+	if got := cm.GetEntityEpoch(entityID); got != epoch {
+		t.Fatalf("epoch after EnableChunkLoadEvents = %d, want %d", got, epoch)
+	}
+
+	if got := cm.GetEntityEpoch(types.EntityID(9999)); got != 0 {
+		t.Fatalf("unknown entity epoch = %d, want 0", got)
+	}
+}
+
 func TestChunk_SaveToDB_HandlesInactiveChunks(t *testing.T) {
 	// This test verifies that SaveToDB correctly handles chunks with raw objects (inactive state)
 	coord := types.ChunkCoord{X: 1, Y: 1}

@@ -62,6 +62,10 @@ export class GameFacade {
     this.render?.updateDebugStats(objectsCount, chunksLoaded)
   }
 
+  resetWorld(): void {
+    this.render?.resetWorld()
+  }
+
   setWorldParams(coordPerTile: number, chunkSize: number): void {
     this.render?.setWorldParams(coordPerTile, chunkSize)
   }

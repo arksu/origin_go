@@ -412,6 +412,18 @@ export class Render {
     this.debugOverlay.update(info)
   }
 
+  /**
+   * Reset world state without tearing down PIXI app.
+   * This keeps canvas/input alive between reconnect attempts.
+   */
+  resetWorld(): void {
+    this.objectManager.clear()
+    this.chunkManager.clear()
+    terrainManager.resetWorld()
+    cullingController.clear()
+    cameraController.setTargetEntity(null)
+  }
+
   destroy(): void {
     this.app.ticker.stop()
 
