@@ -23,7 +23,7 @@ func (s *testCyclicActionProgressSender) SendCyclicActionProgress(entityID types
 
 func TestCyclicActionSystem_CancelsWhenLinkMissing(t *testing.T) {
 	world := ecs.NewWorldForTesting()
-	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
+	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
 	system := NewCyclicActionSystem(contextActionService, nil, nil)
 
 	playerID := types.EntityID(1001)
@@ -103,7 +103,7 @@ func TestCyclicActionSystem_SendProgress_NoSoundKey(t *testing.T) {
 func TestCyclicActionSystem_EmitsCycleSoundToVisibleObservers(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	soundSender := &testSoundEventSender{}
-	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
+	contextActionService := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
 	contextActionService.SetSoundEventSender(soundSender)
 	system := NewCyclicActionSystem(contextActionService, nil, nil)
 

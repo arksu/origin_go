@@ -1,8 +1,6 @@
 package contracts
 
 import (
-	"fmt"
-
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -31,12 +29,20 @@ type TreeBehaviorConfig struct {
 }
 
 type TreeStageConfig struct {
-	ChopPointsTotal   int      `json:"chopPointsTotal"`
-	StageDuration     int      `json:"stageDurationTicks"`
-	AllowChop         bool     `json:"allowChop"`
-	SpawnChopObject   []string `json:"spawnChopObject,omitempty"`
-	SpawnChopItem     []string `json:"spawnChopItem,omitempty"`
-	TransformToDefKey string   `json:"transformToDefKey,omitempty"`
+	ChopPointsTotal   int              `json:"chopPointsTotal"`
+	StageDuration     int              `json:"stageDurationTicks"`
+	AllowChop         bool             `json:"allowChop"`
+	SpawnChopObject   []string         `json:"spawnChopObject,omitempty"`
+	SpawnChopItem     []string         `json:"spawnChopItem,omitempty"`
+	Take              []TreeTakeConfig `json:"take,omitempty"`
+	TransformToDefKey string           `json:"transformToDefKey,omitempty"`
+}
+
+type TreeTakeConfig struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	ItemDefKey string `json:"itemDefKey"`
+	Count      int    `json:"count"`
 }
 
 // BehaviorDefConfigTarget receives validated behavior config mutations.
@@ -124,9 +130,25 @@ type MiniAlertSender interface {
 	SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniAlert)
 }
 
+type GiveItemOutcome struct {
+	Success    bool
+	AnyDropped bool
+	Message    string
+}
+
+type GiveItemFn func(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	itemKey string,
+	count uint32,
+	quality uint32,
+) GiveItemOutcome
+
 // ExecutionDeps contains shared dependencies for context action execution.
 type ExecutionDeps struct {
 	OpenContainer    OpenContainerFn
+	GiveItem         GiveItemFn
 	EventBus         *eventbus.EventBus
 	Chunks           TreeChunkProvider
 	IDAllocator      EntityIDAllocator
@@ -288,23 +310,4 @@ type BehaviorRegistry interface {
 	IsRegisteredBehaviorKey(key string) bool
 	ValidateBehaviorKeys(keys []string) error
 	InitObjectBehaviors(ctx *BehaviorObjectInitContext, behaviorKeys []string) error
-}
-
-// ValidateActionSpecs validates declared behavior actions.
-func ValidateActionSpecs(specs []BehaviorActionSpec) error {
-	if len(specs) == 0 {
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(specs))
-	for _, spec := range specs {
-		if spec.ActionID == "" {
-			return fmt.Errorf("declared action id must not be empty")
-		}
-		if _, exists := seen[spec.ActionID]; exists {
-			return fmt.Errorf("duplicate declared action id %q", spec.ActionID)
-		}
-		seen[spec.ActionID] = struct{}{}
-	}
-	return nil
 }

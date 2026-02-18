@@ -1,6 +1,9 @@
 package inventory
 
 import (
+	"math"
+	"math/rand"
+
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -9,6 +12,8 @@ import (
 
 	"go.uber.org/zap"
 )
+
+const giveDropJitterCoords = 6
 
 // GiveItemResult represents the outcome of a GiveItem operation.
 // Used by admin commands, crafting, machines, and other mechanics that create items.
@@ -186,7 +191,7 @@ func (s *InventoryOperationService) tryAddToGrid(
 	return nil // no free space in any grid
 }
 
-// dropNewItem spawns a dropped item entity at the player's position.
+// dropNewItem spawns a dropped item entity near the player.
 func (s *InventoryOperationService) dropNewItem(
 	w *ecs.World,
 	playerID types.EntityID,
@@ -208,16 +213,15 @@ func (s *InventoryOperationService) dropNewItem(
 		return &GiveItemResult{Success: false, Message: "player has no entity info"}
 	}
 
-	playerChunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, playerHandle)
-	if !hasChunkRef {
-		return &GiveItemResult{Success: false, Message: "player has no chunk ref"}
-	}
-
 	droppedEntityID := item.ItemID
 	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 	resource := itemDef.ResolveResource(false)
-	dropX := int(playerTransform.X)
-	dropY := int(playerTransform.Y)
+	centerX := int(math.Round(playerTransform.X))
+	centerY := int(math.Round(playerTransform.Y))
+	dropX := jitterDropCoordinate(centerX, giveDropJitterCoords)
+	dropY := jitterDropCoordinate(centerY, giveDropJitterCoords)
+	chunkX := worldCoordToChunkIndex(dropX)
+	chunkY := worldCoordToChunkIndex(dropY)
 
 	dropParams := SpawnDroppedEntityParams{
 		DroppedEntityID: droppedEntityID,
@@ -232,8 +236,8 @@ func (s *InventoryOperationService) dropNewItem(
 		DropY:           dropY,
 		Region:          playerInfo.Region,
 		Layer:           playerInfo.Layer,
-		ChunkX:          playerChunkRef.CurrentChunkX,
-		ChunkY:          playerChunkRef.CurrentChunkY,
+		ChunkX:          chunkX,
+		ChunkY:          chunkY,
 		DropperID:       playerID,
 		NowUnix:         nowRuntimeSeconds,
 	}
@@ -253,4 +257,15 @@ func (s *InventoryOperationService) dropNewItem(
 		Message:                "inventory full, item dropped to world",
 		SpawnedDroppedEntityID: &droppedEntityID,
 	}
+}
+
+func jitterDropCoordinate(center int, jitter int) int {
+	if jitter <= 0 {
+		return center
+	}
+	return center + rand.Intn(jitter*2+1) - jitter
+}
+
+func worldCoordToChunkIndex(worldCoord int) int {
+	return int(math.Floor(float64(worldCoord) / float64(constt.ChunkWorldSize)))
 }

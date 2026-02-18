@@ -3,7 +3,6 @@ package behaviors
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"strings"
 
 	"origin/internal/characterattrs"
@@ -13,7 +12,6 @@ import (
 	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
-	"origin/internal/game/inventory"
 	gameworld "origin/internal/game/world"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
@@ -30,9 +28,10 @@ const (
 
 	treeChopCycleDurationTicks = 20
 	treeChopStaminaCost        = 17.0
+	takeCycleDurationTicks     = 10
+	takeCycleStaminaCost       = 10
 	treeLogsSpawnInitialOffset = 16
 	treeLogsSpawnStepOffset    = 20
-	treeSpawnJitterWorldCoords = 6.0
 	treeSpawnQuality           = 10
 	treeActionSound            = "chop"
 	treeFinishSound            = "tree_fall"
@@ -74,6 +73,17 @@ func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigCo
 				return 0, fmt.Errorf("tree.stages[%d].spawnChopItem[%d] must not be empty", idx, itemIdx)
 			}
 		}
+		seenTakeIDs := make(map[string]int, len(stage.Take))
+		for takeIdx, takeCfg := range stage.Take {
+			if err := validateTreeTakeConfig(idx, takeIdx, takeCfg); err != nil {
+				return 0, err
+			}
+			takeID := strings.TrimSpace(takeCfg.ID)
+			if firstIndex, exists := seenTakeIDs[takeID]; exists {
+				return 0, fmt.Errorf("tree.stages[%d].take[%d].id duplicate %q (first at index %d)", idx, takeIdx, takeID, firstIndex)
+			}
+			seenTakeIDs[takeID] = takeIdx
+		}
 	}
 
 	if ctx.Def == nil {
@@ -90,6 +100,31 @@ func (treeBehavior) DeclaredActions() []contracts.BehaviorActionSpec {
 			StartsCyclic: true,
 		},
 	}
+}
+
+func validateTreeTakeConfig(stageIndex int, takeIndex int, takeCfg contracts.TreeTakeConfig) error {
+	takeID := strings.TrimSpace(takeCfg.ID)
+	if takeID == "" {
+		return fmt.Errorf("tree.stages[%d].take[%d].id must not be empty", stageIndex, takeIndex)
+	}
+	if strings.TrimSpace(takeCfg.Name) == "" {
+		return fmt.Errorf("tree.stages[%d].take[%d].name must not be empty", stageIndex, takeIndex)
+	}
+	if takeCfg.Count <= 0 {
+		return fmt.Errorf("tree.stages[%d].take[%d].count must be > 0", stageIndex, takeIndex)
+	}
+	itemKey := strings.TrimSpace(takeCfg.ItemDefKey)
+	if itemKey == "" {
+		return fmt.Errorf("tree.stages[%d].take[%d].itemDefKey must not be empty", stageIndex, takeIndex)
+	}
+	itemRegistry := itemdefs.Global()
+	if itemRegistry == nil {
+		return fmt.Errorf("tree.stages[%d].take[%d].itemDefKey validation requires loaded item defs", stageIndex, takeIndex)
+	}
+	if _, ok := itemRegistry.GetByKey(itemKey); !ok {
+		return fmt.Errorf("tree.stages[%d].take[%d].itemDefKey unknown item key %q", stageIndex, takeIndex, itemKey)
+	}
+	return nil
 }
 
 func (treeBehavior) InitObject(ctx *contracts.BehaviorObjectInitContext) error {
@@ -164,6 +199,7 @@ func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contrac
 			if currentNextTick != 0 {
 				components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
 					ChopPoints: treeState.ChopPoints,
+					Taken:      cloneTakenCounts(treeState.Taken),
 					Stage:      maxStage,
 				})
 			}
@@ -175,6 +211,7 @@ func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contrac
 			currentNextTick = ctx.CurrentTick + stageTransitionDuration(treeConfig, currentStage)
 			components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
 				ChopPoints:     treeState.ChopPoints,
+				Taken:          cloneTakenCounts(treeState.Taken),
 				Stage:          currentStage,
 				NextGrowthTick: currentNextTick,
 			})
@@ -193,8 +230,13 @@ func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contrac
 		}
 
 		stageChanged = nextStage != currentStage
+		taken := cloneTakenCounts(treeState.Taken)
+		if stageChanged {
+			taken = nil
+		}
 		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
 			ChopPoints:     treeState.ChopPoints,
+			Taken:          taken,
 			Stage:          nextStage,
 			NextGrowthTick: nextTick,
 		})
@@ -227,23 +269,46 @@ func (treeBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []c
 		return nil
 	}
 	stage := currentTreeStage(ctx.World, ctx.TargetHandle, def.TreeConfig, stageMissingPolicyFinal)
-	if !isChopAllowedAtStage(def.TreeConfig, stage) {
+	stageCfg := stageConfigFor(def.TreeConfig, stage)
+	if stageCfg == nil {
 		return nil
 	}
-
-	return []contracts.ContextAction{
-		{
+	actions := make([]contracts.ContextAction, 0, 1+len(stageCfg.Take))
+	if isChopAllowedAtStage(def.TreeConfig, stage) {
+		actions = append(actions, contracts.ContextAction{
 			ActionID: actionChop,
 			Title:    "Chop",
-		},
+		})
 	}
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](ctx.World, ctx.TargetHandle)
+	var taken map[string]int
+	if hasState {
+		if treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](internalState, treeBehaviorKey); hasTree && treeState != nil {
+			taken = treeState.Taken
+		}
+	}
+	for _, takeCfg := range stageCfg.Take {
+		takeID := strings.TrimSpace(takeCfg.ID)
+		if takeID == "" {
+			continue
+		}
+		if takenCountForAction(taken, takeID) >= takeCfg.Count {
+			continue
+		}
+		actions = append(actions, contracts.ContextAction{
+			ActionID: takeID,
+			Title:    strings.TrimSpace(takeCfg.Name),
+		})
+	}
+	return actions
 }
 
 func (treeBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext) contracts.BehaviorResult {
-	if ctx.ActionID != actionChop {
+	if ctx == nil || ctx.World == nil {
 		return contracts.BehaviorResult{OK: false}
 	}
-	if ctx == nil || ctx.World == nil {
+	actionID := strings.TrimSpace(ctx.ActionID)
+	if actionID == "" {
 		return contracts.BehaviorResult{OK: false}
 	}
 	if ctx.PlayerHandle == types.InvalidHandle || !ctx.World.Alive(ctx.PlayerHandle) {
@@ -261,8 +326,23 @@ func (treeBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext)
 		return contracts.BehaviorResult{OK: false}
 	}
 	stage := currentTreeStage(ctx.World, ctx.TargetHandle, targetDef.TreeConfig, stageMissingPolicyFinal)
-	if !isChopAllowedAtStage(targetDef.TreeConfig, stage) {
+	stageCfg := stageConfigFor(targetDef.TreeConfig, stage)
+	if stageCfg == nil {
 		return contracts.BehaviorResult{OK: false}
+	}
+	if actionID == actionChop {
+		if !isChopAllowedAtStage(targetDef.TreeConfig, stage) {
+			return contracts.BehaviorResult{OK: false}
+		}
+	} else {
+		takeCfg := findTakeConfigByActionID(stageCfg, actionID)
+		if takeCfg == nil {
+			return contracts.BehaviorResult{OK: false}
+		}
+		taken := takeCountFromState(ctx.World, ctx.TargetHandle, actionID)
+		if taken >= takeCfg.Count {
+			return contracts.BehaviorResult{OK: false}
+		}
 	}
 	if ctx.Phase == contracts.BehaviorValidationPhaseExecute {
 		if _, exists := ecs.GetComponent[components.ActiveCyclicAction](ctx.World, ctx.PlayerHandle); exists {
@@ -278,10 +358,11 @@ func (treeBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext)
 }
 
 func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
-	if ctx.ActionID != actionChop {
+	if ctx == nil || ctx.World == nil {
 		return contracts.BehaviorResult{OK: false}
 	}
-	if ctx == nil || ctx.World == nil {
+	actionID := strings.TrimSpace(ctx.ActionID)
+	if actionID == "" {
 		return contracts.BehaviorResult{OK: false}
 	}
 	if ctx.PlayerHandle == types.InvalidHandle || !ctx.World.Alive(ctx.PlayerHandle) {
@@ -299,46 +380,73 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 	if !found || targetDef.TreeConfig == nil {
 		return contracts.BehaviorResult{OK: false}
 	}
-	if !isChopAllowedAtStage(
-		targetDef.TreeConfig,
-		currentTreeStage(ctx.World, ctx.TargetHandle, targetDef.TreeConfig, stageMissingPolicyFinal),
-	) {
+	stage := currentTreeStage(ctx.World, ctx.TargetHandle, targetDef.TreeConfig, stageMissingPolicyFinal)
+	stageCfg := stageConfigFor(targetDef.TreeConfig, stage)
+	if stageCfg == nil {
 		return contracts.BehaviorResult{OK: false}
+	}
+	if actionID == actionChop && !isChopAllowedAtStage(targetDef.TreeConfig, stage) {
+		return contracts.BehaviorResult{OK: false}
+	}
+	if actionID != actionChop {
+		takeCfg := findTakeConfigByActionID(stageCfg, actionID)
+		if takeCfg == nil {
+			return contracts.BehaviorResult{OK: false}
+		}
+		taken := takeCountFromState(ctx.World, ctx.TargetHandle, actionID)
+		if taken >= takeCfg.Count {
+			return contracts.BehaviorResult{OK: false}
+		}
 	}
 
 	// Init chop points on first chop.
 	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
 		stage := growthStageMax(targetDef.TreeConfig)
 		nextGrowthTick := uint64(0)
+		var taken map[string]int
 		treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
 		if hasTree && treeState != nil {
 			stage = normalizeStage(treeState.Stage, targetDef.TreeConfig, stageMissingPolicyStart)
 			nextGrowthTick = treeState.NextGrowthTick
+			taken = cloneTakenCounts(treeState.Taken)
 		}
-		if hasTree && treeState != nil && treeState.ChopPoints > 0 {
+		if actionID == actionChop && hasTree && treeState != nil && treeState.ChopPoints > 0 {
 			return
 		}
 		stageCfg := stageConfigFor(targetDef.TreeConfig, stage)
 		if stageCfg == nil {
 			return
 		}
+		chopPoints := stageCfg.ChopPointsTotal
+		if hasTree && treeState != nil && treeState.ChopPoints > 0 {
+			chopPoints = treeState.ChopPoints
+		}
 		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     stageCfg.ChopPointsTotal,
+			ChopPoints:     chopPoints,
+			Taken:          taken,
 			Stage:          stage,
 			NextGrowthTick: nextGrowthTick,
 		})
 	})
 
 	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
+	cycleDuration := uint32(treeChopCycleDurationTicks)
+	cycleSoundKey := strings.TrimSpace(treeActionSound)
+	completeSoundKey := strings.TrimSpace(treeFinishSound)
+	if actionID != actionChop {
+		cycleDuration = uint32(takeCycleDurationTicks)
+		cycleSoundKey = ""
+		completeSoundKey = ""
+	}
 	ecs.AddComponent(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
 		BehaviorKey:        treeBehaviorKey,
-		ActionID:           actionChop,
-		CycleSoundKey:      strings.TrimSpace(treeActionSound),
-		CompleteSoundKey:   strings.TrimSpace(treeFinishSound),
+		ActionID:           actionID,
+		CycleSoundKey:      cycleSoundKey,
+		CompleteSoundKey:   completeSoundKey,
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           ctx.TargetID,
 		TargetHandle:       ctx.TargetHandle,
-		CycleDurationTicks: uint32(treeChopCycleDurationTicks),
+		CycleDurationTicks: cycleDuration,
 		CycleElapsedTicks:  0,
 		CycleIndex:         1,
 		StartedTick:        nowTick,
@@ -366,6 +474,9 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 	treeConfig := targetDef.TreeConfig
+	if ctx.ActionID != actionChop {
+		return onTakeCycleComplete(ctx, deps, treeConfig)
+	}
 	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, treeChopStaminaCost) {
 		sendLowStaminaMiniAlert(ctx.PlayerID, deps.Alerts)
 		return contracts.BehaviorCycleDecisionCanceled
@@ -388,9 +499,11 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 
 		currentChopPoints := stageCfg.ChopPointsTotal
 		nextGrowthTick := uint64(0)
+		var taken map[string]int
 		if treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey); hasTree && treeState != nil {
 			currentChopPoints = treeState.ChopPoints
 			nextGrowthTick = treeState.NextGrowthTick
+			taken = cloneTakenCounts(treeState.Taken)
 		}
 
 		if currentChopPoints <= 0 {
@@ -402,6 +515,7 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		remaining = currentChopPoints
 		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
 			ChopPoints:     currentChopPoints,
+			Taken:          taken,
 			Stage:          currentStage,
 			NextGrowthTick: nextGrowthTick,
 		})
@@ -438,10 +552,8 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	)
 	spawnStageItems(
 		ctx.World,
-		targetTransform,
-		playerTransform,
-		targetInfo,
 		ctx.PlayerID,
+		ctx.PlayerHandle,
 		completedStage.SpawnChopItem,
 		deps,
 	)
@@ -468,6 +580,146 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	}
 	forceVisionUpdates(ctx.World, deps.VisionForcer)
 	return contracts.BehaviorCycleDecisionComplete
+}
+
+func onTakeCycleComplete(
+	ctx *contracts.BehaviorCycleContext,
+	deps contracts.ExecutionDeps,
+	treeConfig *objectdefs.TreeBehaviorConfig,
+) contracts.BehaviorCycleDecision {
+	if ctx == nil || ctx.World == nil || treeConfig == nil {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, takeCycleStaminaCost) {
+		sendLowStaminaMiniAlert(ctx.PlayerID, deps.Alerts)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+	if deps.GiveItem == nil {
+		sendTakeFailedMiniAlert(ctx.PlayerID, deps.Alerts, "TREE_TAKE_UNAVAILABLE")
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	stage := currentTreeStage(ctx.World, ctx.TargetHandle, treeConfig, stageMissingPolicyFinal)
+	stageCfg := stageConfigFor(treeConfig, stage)
+	if stageCfg == nil {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+	actionID := strings.TrimSpace(ctx.ActionID)
+	takeCfg := findTakeConfigByActionID(stageCfg, actionID)
+	if takeCfg == nil {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	taken := 0
+	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
+		treeState, hasState := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
+		if hasState && treeState != nil {
+			taken = takenCountForAction(treeState.Taken, actionID)
+		}
+	})
+	itemKey := strings.TrimSpace(takeCfg.ItemDefKey)
+	if itemKey == "" || takeCfg.Count <= 0 {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+	if taken >= takeCfg.Count {
+		return contracts.BehaviorCycleDecisionComplete
+	}
+
+	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, treeSpawnQuality)
+	if !outcome.Success {
+		sendTakeFailedMiniAlert(ctx.PlayerID, deps.Alerts, "TREE_TAKE_GIVE_FAILED")
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	newTaken := 0
+	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
+		treeState, hasTreeState := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
+		if !hasTreeState || treeState == nil {
+			return
+		}
+		stage := normalizeStage(treeState.Stage, treeConfig, stageMissingPolicyFinal)
+		nextTick := treeState.NextGrowthTick
+		chopPoints := treeState.ChopPoints
+		takenMap := cloneTakenCounts(treeState.Taken)
+		takenMap, newTaken = incrementTakenCount(takenMap, actionID)
+		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+			ChopPoints:     chopPoints,
+			Taken:          takenMap,
+			Stage:          stage,
+			NextGrowthTick: nextTick,
+		})
+	})
+	if newTaken >= takeCfg.Count {
+		return contracts.BehaviorCycleDecisionComplete
+	}
+	return contracts.BehaviorCycleDecisionContinue
+}
+
+func findTakeConfigByActionID(stageCfg *objectdefs.TreeStageConfig, actionID string) *objectdefs.TreeTakeConfig {
+	if stageCfg == nil {
+		return nil
+	}
+	for index := range stageCfg.Take {
+		if strings.TrimSpace(stageCfg.Take[index].ID) == actionID {
+			return &stageCfg.Take[index]
+		}
+	}
+	return nil
+}
+
+func takeCountFromState(world *ecs.World, targetHandle types.Handle, actionID string) int {
+	if world == nil || targetHandle == types.InvalidHandle || !world.Alive(targetHandle) {
+		return 0
+	}
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](world, targetHandle)
+	if !hasState {
+		return 0
+	}
+	treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](internalState, treeBehaviorKey)
+	if !hasTree || treeState == nil {
+		return 0
+	}
+	return takenCountForAction(treeState.Taken, actionID)
+}
+
+func takenCountForAction(taken map[string]int, actionID string) int {
+	if len(taken) == 0 || actionID == "" {
+		return 0
+	}
+	value, ok := taken[actionID]
+	if !ok || value < 0 {
+		return 0
+	}
+	return value
+}
+
+func incrementTakenCount(taken map[string]int, actionID string) (map[string]int, int) {
+	if strings.TrimSpace(actionID) == "" {
+		return taken, 0
+	}
+	if taken == nil {
+		taken = make(map[string]int)
+	}
+	next := takenCountForAction(taken, actionID) + 1
+	taken[actionID] = next
+	return taken, next
+}
+
+func cloneTakenCounts(source map[string]int) map[string]int {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]int, len(source))
+	for key, value := range source {
+		if key == "" || value <= 0 {
+			continue
+		}
+		cloned[key] = value
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return cloned
 }
 
 func consumePlayerStaminaForTreeCycle(
@@ -559,6 +811,17 @@ func sendLowStaminaMiniAlert(playerID types.EntityID, alerts contracts.MiniAlert
 	})
 }
 
+func sendTakeFailedMiniAlert(playerID types.EntityID, alerts contracts.MiniAlertSender, reasonCode string) {
+	if alerts == nil || playerID == 0 {
+		return
+	}
+	alerts.SendMiniAlert(playerID, &netproto.S2C_MiniAlert{
+		Severity:   netproto.AlertSeverity_ALERT_SEVERITY_WARNING,
+		ReasonCode: reasonCode,
+		TtlMs:      2000,
+	})
+}
+
 func forceVisionUpdates(world *ecs.World, visionForcer contracts.VisionUpdateForcer) {
 	if visionForcer == nil || world == nil {
 		return
@@ -602,11 +865,14 @@ func initializeSpawnTreeState(
 
 	ecs.WithComponent(world, handle, func(state *components.ObjectInternalState) {
 		chopPoints := 0
+		var taken map[string]int
 		if existing, has := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey); has && existing != nil {
 			chopPoints = existing.ChopPoints
+			taken = cloneTakenCounts(existing.Taken)
 		}
 		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
 			ChopPoints:     chopPoints,
+			Taken:          taken,
 			Stage:          startStage,
 			NextGrowthTick: nextGrowthTick,
 		})
@@ -676,8 +942,13 @@ func initializeRestoredTreeState(
 		if !stateChanged {
 			return
 		}
+		taken := cloneTakenCounts(treeState.Taken)
+		if currentStage != treeState.Stage {
+			taken = nil
+		}
 		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
 			ChopPoints:     treeState.ChopPoints,
+			Taken:          taken,
 			Stage:          currentStage,
 			NextGrowthTick: nextGrowthTick,
 		})
@@ -914,70 +1185,27 @@ func spawnStageObjects(
 
 func spawnStageItems(
 	world *ecs.World,
-	treeTransform components.Transform,
-	playerTransform components.Transform,
-	treeInfo components.EntityInfo,
 	playerID types.EntityID,
+	playerHandle types.Handle,
 	itemKeys []string,
 	deps contracts.ExecutionDeps,
 ) {
-	if world == nil || deps.IDAllocator == nil || deps.Chunks == nil || len(itemKeys) == 0 {
+	if world == nil || len(itemKeys) == 0 || deps.GiveItem == nil {
 		return
 	}
-	itemRegistry := itemdefs.Global()
-	if itemRegistry == nil {
-		return
-	}
-
-	nowUnix := ecs.GetResource[ecs.TimeState](world).RuntimeSecondsTotal
 	logger := resolveLogger(deps.Logger)
 	for _, rawItemKey := range itemKeys {
 		itemKey := strings.TrimSpace(rawItemKey)
-		itemDef, ok := itemRegistry.GetByKey(itemKey)
-		if !ok {
-			logger.Warn("tree chop: spawned item def not found", zap.String("item_key", itemKey))
+		if itemKey == "" {
 			continue
 		}
-
-		dropXFloat, dropYFloat := jitterSpawnPosition(treeTransform.X, treeTransform.Y, treeSpawnJitterWorldCoords)
-		dropX := int(math.Round(dropXFloat))
-		dropY := int(math.Round(dropYFloat))
-		chunkX := worldCoordToChunkIndex(dropXFloat)
-		chunkY := worldCoordToChunkIndex(dropYFloat)
-		chunk := deps.Chunks.GetChunkFast(types.ChunkCoord{X: chunkX, Y: chunkY})
-		if chunk == nil {
-			continue
+		outcome := deps.GiveItem(world, playerID, playerHandle, itemKey, 1, treeSpawnQuality)
+		if !outcome.Success {
+			logger.Warn("tree chop: failed to give stage item",
+				zap.String("item_key", itemKey),
+				zap.String("reason", outcome.Message),
+			)
 		}
-
-		itemID := deps.IDAllocator.GetFreeID()
-		droppedID := deps.IDAllocator.GetFreeID()
-		resource := itemDef.ResolveResource(false)
-		if resource == "" {
-			resource = itemDef.Resource
-		}
-		spawned, ok := inventory.SpawnDroppedEntity(world, inventory.SpawnDroppedEntityParams{
-			DroppedEntityID: droppedID,
-			ItemID:          itemID,
-			TypeID:          uint32(itemDef.DefID),
-			Resource:        resource,
-			Quality:         treeSpawnQuality,
-			Quantity:        1,
-			W:               uint8(itemDef.Size.W),
-			H:               uint8(itemDef.Size.H),
-			DropX:           dropX,
-			DropY:           dropY,
-			Region:          treeInfo.Region,
-			Layer:           treeInfo.Layer,
-			ChunkX:          chunkX,
-			ChunkY:          chunkY,
-			DropperID:       playerID,
-			NowUnix:         nowUnix,
-		})
-		if !ok {
-			continue
-		}
-		chunk.Spatial().AddStatic(spawned.DroppedHandle, dropX, dropY)
-		chunk.MarkRawDataDirty()
 	}
 }
 
@@ -1010,15 +1238,6 @@ func logSpawnPosition(
 ) (float64, float64) {
 	distance := float64(initialOffset + index*stepOffset)
 	return treeX + dirX*distance, treeY + dirY*distance
-}
-
-func jitterSpawnPosition(centerX, centerY, jitterRadius float64) (float64, float64) {
-	if jitterRadius <= 0 {
-		return centerX, centerY
-	}
-	jitterX := (rand.Float64()*2 - 1) * jitterRadius
-	jitterY := (rand.Float64()*2 - 1) * jitterRadius
-	return centerX + jitterX, centerY + jitterY
 }
 
 func resolveAxisLogDefKey(baseDefKey string, dirX, dirY float64) string {

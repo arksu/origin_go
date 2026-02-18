@@ -37,7 +37,7 @@ func (s *testSoundEventSender) SendSound(entityID types.EntityID, sound *netprot
 func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
+	service := NewContextActionService(world, nil, nil, nil, nil, sender, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
 
 	const (
 		playerID = types.EntityID(1001)
@@ -88,7 +88,7 @@ func TestContextActionService_CancelActiveCyclicAction_SendsCanceled(t *testing.
 func TestContextActionService_CompleteActiveCyclicAction_SendsCompleted(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
+	service := NewContextActionService(world, nil, nil, nil, nil, sender, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
 
 	const (
 		playerID = types.EntityID(3003)
@@ -129,7 +129,7 @@ func TestContextActionService_CompleteActiveCyclicAction_EmitsCompleteSoundToVis
 	world := ecs.NewWorldForTesting()
 	sender := &testCyclicActionFinishSender{}
 	soundSender := &testSoundEventSender{}
-	service := NewContextActionService(world, nil, nil, nil, sender, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
+	service := NewContextActionService(world, nil, nil, nil, nil, sender, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
 	service.SetSoundEventSender(soundSender)
 
 	const (

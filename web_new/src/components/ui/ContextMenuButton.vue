@@ -68,10 +68,13 @@ function onClick() {
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
+  white-space: nowrap;
+  width: max-content;
 }
 
 .context-menu-button p {
   margin: 0;
+  white-space: inherit;
 }
 
 .is-selected {

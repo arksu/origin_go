@@ -22,6 +22,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 	"origin/internal/persistence"
@@ -100,10 +101,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
 	droppedItemPersister := world.NewDroppedItemPersisterDB(db, logger)
-	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister, s.chunkManager)
-
 	// Create vision system first so it can be passed to other systems
 	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, enableVisionStats, logger)
+	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister, s.chunkManager, visionSystem)
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
@@ -111,6 +111,41 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		s.world,
 		s.eventBus,
 		openContainerService,
+		func(
+			w *ecs.World,
+			playerID types.EntityID,
+			playerHandle types.Handle,
+			itemKey string,
+			count uint32,
+			quality uint32,
+		) contracts.GiveItemOutcome {
+			if inventoryExecutor == nil {
+				return contracts.GiveItemOutcome{Success: false, Message: "inventory executor unavailable"}
+			}
+			result := inventoryExecutor.GiveItem(w, playerID, playerHandle, itemKey, count, quality)
+			if result == nil {
+				return contracts.GiveItemOutcome{Success: false, Message: "nil give result"}
+			}
+			if result.Success && len(result.UpdatedContainers) > 0 {
+				states := inventoryExecutor.ConvertContainersToStates(w, result.UpdatedContainers)
+				updated := make([]*netproto.InventoryState, 0, len(states))
+				for _, state := range states {
+					updated = append(updated, systems.BuildInventoryStateProto(state))
+				}
+				if len(updated) > 0 {
+					s.SendInventoryOpResult(playerID, &netproto.S2C_InventoryOpResult{
+						OpId:    0,
+						Success: true,
+						Updated: updated,
+					})
+				}
+			}
+			return contracts.GiveItemOutcome{
+				Success:    result.Success,
+				AnyDropped: result.SpawnedDroppedEntityID != nil,
+				Message:    result.Message,
+			}
+		},
 		s,
 		s,
 		visionSystem,

@@ -110,8 +110,7 @@ func validateBehaviorContract(behavior contracts.Behavior) error {
 	_, hasProvider := behavior.(contracts.ContextActionProvider)
 	_, hasValidator := behavior.(contracts.ContextActionValidator)
 	executor, hasExecutor := behavior.(contracts.ContextActionExecutor)
-	declarer, hasDeclarer := behavior.(contracts.BehaviorActionDeclarer)
-	_, hasCycle := behavior.(contracts.CyclicActionHandler)
+	_, hasDeclarer := behavior.(contracts.BehaviorActionDeclarer)
 	_, hasScheduledTick := behavior.(contracts.ScheduledTickBehavior)
 
 	if !hasDefConfigValidator {
@@ -132,20 +131,9 @@ func validateBehaviorContract(behavior contracts.Behavior) error {
 		return nil
 	}
 
-	specs := declarer.DeclaredActions()
-	if err := contracts.ValidateActionSpecs(specs); err != nil {
-		return err
-	}
-
 	if executor == nil {
 		// Defensive check for interface/value mismatch.
 		return fmt.Errorf("action declarer requires execute capability")
-	}
-
-	for _, spec := range specs {
-		if spec.StartsCyclic && !hasCycle {
-			return fmt.Errorf("action %q starts cyclic flow but cyclic handler is missing", spec.ActionID)
-		}
 	}
 	return nil
 }

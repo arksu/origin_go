@@ -48,6 +48,7 @@ func NewContextActionService(
 	world *ecs.World,
 	eventBus *eventbus.EventBus,
 	openSvc systems.OpenContainerCoordinator,
+	giveItem contracts.GiveItemFn,
 	alerts miniAlertSender,
 	cyclicOut cyclicActionFinishSender,
 	vision contracts.VisionUpdateForcer,
@@ -89,6 +90,7 @@ func NewContextActionService(
 					Message: openErr.Message,
 				}
 			},
+			GiveItem:         giveItem,
 			EventBus:         eventBus,
 			Chunks:           chunks,
 			IDAllocator:      idAlloc,
