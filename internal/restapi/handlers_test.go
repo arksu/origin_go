@@ -2,64 +2,77 @@ package restapi
 
 import (
 	"math/rand"
-	"origin/internal/const"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	_const "origin/internal/const"
 	"origin/internal/config"
 )
 
 func TestGenerateRandomPosition(t *testing.T) {
-	// Create test config
+	// Create test config with non-zero world origin to verify min chunk offsets are applied.
 	gameConfig := &config.GameConfig{
+		WorldMinXChunks:   5,
+		WorldMinYChunks:   7,
 		WorldWidthChunks:  10,
-		WorldHeightChunks: 10,
+		WorldHeightChunks: 8,
+		WorldMarginTiles:  50,
 	}
 
-	// Test the position generation logic (same as in handleCreateCharacter)
-	marginTiles := 50
-	worldWidthTiles := gameConfig.WorldWidthChunks * _const.ChunkSize
-	worldHeightTiles := gameConfig.WorldHeightChunks * _const.ChunkSize
+	chunkWorldSize := _const.ChunkWorldSize
+	marginWorldUnits := gameConfig.WorldMarginTiles * _const.CoordPerTile
 
-	// Calculate valid spawn area
-	minX := marginTiles
-	maxX := worldWidthTiles - marginTiles
-	minY := marginTiles
-	maxY := worldHeightTiles - marginTiles
+	minX := gameConfig.WorldMinXChunks*chunkWorldSize + marginWorldUnits
+	maxX := (gameConfig.WorldMinXChunks+gameConfig.WorldWidthChunks)*chunkWorldSize - marginWorldUnits
+	minY := gameConfig.WorldMinYChunks*chunkWorldSize + marginWorldUnits
+	maxY := (gameConfig.WorldMinYChunks+gameConfig.WorldHeightChunks)*chunkWorldSize - marginWorldUnits
 
-	// Verify bounds are calculated correctly
-	assert.Equal(t, 50, minX)
-	assert.Equal(t, 1280-50, maxX) // 10 chunks * 128 tiles - 50 margin
-	assert.Equal(t, 50, minY)
-	assert.Equal(t, 1280-50, maxY) // 10 chunks * 128 tiles - 50 margin
+	// Verify bounds are calculated in world units and include world origin offset.
+	assert.Equal(t, 5*1536+600, minX)
+	assert.Equal(t, (5+10)*1536-600, maxX)
+	assert.Equal(t, 7*1536+600, minY)
+	assert.Equal(t, (7+8)*1536-600, maxY)
 
 	// Test that random positions are within bounds
 	for i := 0; i < 1000; i++ {
-		x := rand.Intn(maxX-minX+1) + minX
-		y := rand.Intn(maxY-minY+1) + minY
+		x, y, err := generateRandomCharacterPosition(gameConfig)
+		require.NoError(t, err)
 
 		assert.GreaterOrEqual(t, x, minX, "X coordinate should be >= min")
-		assert.LessOrEqual(t, x, maxX, "X coordinate should be <= max")
+		assert.Less(t, x, maxX, "X coordinate should be < max")
 		assert.GreaterOrEqual(t, y, minY, "Y coordinate should be >= min")
-		assert.LessOrEqual(t, y, maxY, "Y coordinate should be <= max")
+		assert.Less(t, y, maxY, "Y coordinate should be < max")
 	}
 
 	// Test that the range calculation is correct
-	rangeX := maxX - minX + 1
-	rangeY := maxY - minY + 1
-	assert.Equal(t, 1181, rangeX) // 1230 - 50 + 1
-	assert.Equal(t, 1181, rangeY) // 1230 - 50 + 1
+	rangeX := maxX - minX
+	rangeY := maxY - minY
+	assert.Equal(t, 14160, rangeX) // 10 chunks * 1536 - 2 * 600
+	assert.Equal(t, 11088, rangeY) // 8 chunks * 1536 - 2 * 600
 
-	// Test that random positions can generate values at the bounds
-	// (We can't test exact values since it's random, but we can test the range)
+	// Test that old and new random formulas for [min, max) are equivalent.
 	for i := 0; i < 100; i++ {
-		x := rand.Intn(rangeX) + minX
-		y := rand.Intn(rangeY) + minY
+		x := rand.Intn(maxX-minX) + minX
+		y := rand.Intn(maxY-minY) + minY
 
 		assert.GreaterOrEqual(t, x, minX)
-		assert.LessOrEqual(t, x, maxX)
+		assert.Less(t, x, maxX)
 		assert.GreaterOrEqual(t, y, minY)
-		assert.LessOrEqual(t, y, maxY)
+		assert.Less(t, y, maxY)
 	}
+}
+
+func TestGenerateRandomPositionInvalidRange(t *testing.T) {
+	gameConfig := &config.GameConfig{
+		WorldMinXChunks:   0,
+		WorldMinYChunks:   0,
+		WorldWidthChunks:  1,
+		WorldHeightChunks: 1,
+		WorldMarginTiles:  _const.ChunkSize, // Margin consumes whole chunk on each side.
+	}
+
+	_, _, err := generateRandomCharacterPosition(gameConfig)
+	require.Error(t, err)
 }
