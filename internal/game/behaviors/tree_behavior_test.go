@@ -157,8 +157,12 @@ func TestForceVisionUpdatesForAllAliveCharacters(t *testing.T) {
 
 func TestApplyGrowthCatchup_RespectsCatchupLimit(t *testing.T) {
 	cfg := &objectdefs.TreeBehaviorConfig{
-		GrowthStageMax:       4,
-		GrowthStageDurations: []int{100, 100, 100},
+		Stages: []objectdefs.TreeStageConfig{
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: false},
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: false},
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: true},
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: true},
+		},
 	}
 
 	stage, nextTick, changed := applyGrowthCatchup(cfg, 1, 100, 500, 150)
@@ -175,8 +179,12 @@ func TestApplyGrowthCatchup_RespectsCatchupLimit(t *testing.T) {
 
 func TestIsChopAllowedAtStage(t *testing.T) {
 	cfg := &objectdefs.TreeBehaviorConfig{
-		GrowthStageMax:    4,
-		AllowedChopStages: []int{3, 4},
+		Stages: []objectdefs.TreeStageConfig{
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: false},
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: false},
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: true},
+			{ChopPointsTotal: 1, StageDuration: 100, AllowChop: true},
+		},
 	}
 
 	if isChopAllowedAtStage(cfg, 2) {

@@ -7,21 +7,19 @@ func (d *ObjectDef) SetTreeBehaviorConfig(cfg contracts.TreeBehaviorConfig) {
 	if d == nil {
 		return
 	}
+	stages := make([]TreeStageConfig, 0, len(cfg.Stages))
+	for _, stage := range cfg.Stages {
+		stages = append(stages, TreeStageConfig{
+			ChopPointsTotal:   stage.ChopPointsTotal,
+			StageDuration:     stage.StageDuration,
+			AllowChop:         stage.AllowChop,
+			SpawnChopObject:   append([]string(nil), stage.SpawnChopObject...),
+			SpawnChopItem:     append([]string(nil), stage.SpawnChopItem...),
+			TransformToDefKey: stage.TransformToDefKey,
+		})
+	}
 	d.TreeConfig = &TreeBehaviorConfig{
-		Priority:               cfg.Priority,
-		ChopPointsTotal:        cfg.ChopPointsTotal,
-		ChopCycleDurationTicks: cfg.ChopCycleDurationTicks,
-		ChopStaminaCost:        cfg.ChopStaminaCost,
-		ActionSound:            cfg.ActionSound,
-		FinishSound:            cfg.FinishSound,
-		LogsSpawnDefKey:        cfg.LogsSpawnDefKey,
-		LogsSpawnCount:         cfg.LogsSpawnCount,
-		LogsSpawnInitialOffset: cfg.LogsSpawnInitialOffset,
-		LogsSpawnStepOffset:    cfg.LogsSpawnStepOffset,
-		TransformToDefKey:      cfg.TransformToDefKey,
-		GrowthStageMax:         cfg.GrowthStageMax,
-		GrowthStartStage:       cfg.GrowthStartStage,
-		GrowthStageDurations:   append([]int(nil), cfg.GrowthStageDurations...),
-		AllowedChopStages:      append([]int(nil), cfg.AllowedChopStages...),
+		Priority: cfg.Priority,
+		Stages:   stages,
 	}
 }

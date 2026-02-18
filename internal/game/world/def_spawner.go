@@ -13,6 +13,7 @@ type DefSpawnParams struct {
 	X                float64
 	Y                float64
 	Direction        float64
+	Quality          uint32
 	Region           int
 	Layer            int
 	InitReason       contracts.ObjectBehaviorInitReason
@@ -36,6 +37,7 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 			TypeID:    uint32(def.DefID),
 			Behaviors: def.CopyBehaviorOrder(),
 			IsStatic:  def.IsStatic,
+			Quality:   params.Quality,
 			Region:    params.Region,
 			Layer:     params.Layer,
 		})

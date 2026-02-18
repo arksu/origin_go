@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "source": "common",
+  "items": [
+    {
+      "defId": 3004,
+      "key": "branch",
+      "name": "Branch",
+      "resource": "items/branch.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 3005,
+      "key": "block_of_wood",
+      "name": "Block of Wood",
+      "resource": "items/block_of_wood.png",
+      "tags": [],
+      "size": {
+        "w": 2,
+        "h": 1
+      }
+    }
+  ]
+}

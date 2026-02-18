@@ -19,7 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const gameStore = useGameStore()
-const { pickUpItem, placeItem, placeOrSwapItem, findInventoryState } = useInventoryOps()
+const { pickUpItem, placeItem, placeOrSwapItem, findInventoryState, getPlacePositionFromSlotClick } = useInventoryOps()
 
 const gridState = computed(() => props.inventoryState.grid)
 const inventoryRef = computed(() => props.inventoryState.ref)
@@ -45,7 +45,8 @@ const onSlotClick = (x: number, y: number, _ox: number, _oy: number) => {
   if (!inventoryRef.value) return
   const hand = gameStore.handState
   if (hand?.item) {
-    placeItem(inventoryRef.value, findInventoryState(inventoryRef.value), x, y)
+    const placePos = getPlacePositionFromSlotClick(x, y)
+    placeItem(inventoryRef.value, findInventoryState(inventoryRef.value), placePos.x, placePos.y)
   }
 }
 

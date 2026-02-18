@@ -28,8 +28,8 @@ type SpawnDroppedEntityParams struct {
 
 // SpawnDroppedEntityResult holds the output of a successful spawn.
 type SpawnDroppedEntityResult struct {
-	DroppedHandle    types.Handle
-	ContainerHandle  types.Handle
+	DroppedHandle   types.Handle
+	ContainerHandle types.Handle
 }
 
 // SpawnDroppedEntity creates a dropped item ECS entity with all required components
@@ -44,6 +44,7 @@ func SpawnDroppedEntity(w *ecs.World, p SpawnDroppedEntityParams) (SpawnDroppedE
 		ecs.AddComponent(w, h, components.EntityInfo{
 			TypeID:   constt.DroppedItemTypeID,
 			IsStatic: true,
+			Quality:  p.Quality,
 			Region:   p.Region,
 			Layer:    p.Layer,
 		})

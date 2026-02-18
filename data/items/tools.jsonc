@@ -14,17 +14,6 @@
         "w": 1,
         "h": 2
       }
-    },
-    {
-      "defId": 3004,
-      "key": "branch",
-      "name": "Branch",
-      "resource": "items/branch.png",
-      "tags": [],
-      "size": {
-        "w": 1,
-        "h": 1
-      }
     }
   ]
 }

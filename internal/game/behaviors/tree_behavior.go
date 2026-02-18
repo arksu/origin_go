@@ -3,6 +3,7 @@ package behaviors
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 
 	"origin/internal/characterattrs"
@@ -12,7 +13,9 @@ import (
 	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/game/inventory"
 	gameworld "origin/internal/game/world"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -24,6 +27,15 @@ const (
 	actionChop          = "chop"
 	treeBehaviorKey     = "tree"
 	treeStageFlagPrefix = "tree.stage"
+
+	treeChopCycleDurationTicks = 20
+	treeChopStaminaCost        = 17.0
+	treeLogsSpawnInitialOffset = 16
+	treeLogsSpawnStepOffset    = 20
+	treeSpawnJitterWorldCoords = 6.0
+	treeSpawnQuality           = 10
+	treeActionSound            = "chop"
+	treeFinishSound            = "tree_fall"
 )
 
 type treeBehavior struct{}
@@ -42,62 +54,26 @@ func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigCo
 	if cfg.Priority <= 0 {
 		cfg.Priority = defaultBehaviorPriority
 	}
-	if cfg.ChopPointsTotal <= 0 {
-		return 0, fmt.Errorf("tree.chopPointsTotal must be > 0")
+	if len(cfg.Stages) == 0 {
+		return 0, fmt.Errorf("tree.stages is required")
 	}
-	if cfg.ChopCycleDurationTicks <= 0 {
-		return 0, fmt.Errorf("tree.chopCycleDurationTicks must be > 0")
-	}
-	if cfg.ChopStaminaCost <= 0 {
-		return 0, fmt.Errorf("tree.chopStaminaCost must be > 0")
-	}
-	if cfg.LogsSpawnDefKey == "" {
-		return 0, fmt.Errorf("tree.logsSpawnDefKey is required")
-	}
-	if cfg.LogsSpawnCount <= 0 {
-		return 0, fmt.Errorf("tree.logsSpawnCount must be > 0")
-	}
-	if cfg.LogsSpawnInitialOffset < 0 {
-		return 0, fmt.Errorf("tree.logsSpawnInitialOffset must be >= 0")
-	}
-	if cfg.LogsSpawnStepOffset <= 0 {
-		return 0, fmt.Errorf("tree.logsSpawnStepOffset must be > 0")
-	}
-	if cfg.TransformToDefKey == "" {
-		return 0, fmt.Errorf("tree.transformToDefKey is required")
-	}
-	if cfg.GrowthStageMax < 1 {
-		return 0, fmt.Errorf("tree.growthStageMax must be >= 1")
-	}
-	if cfg.GrowthStartStage <= 0 {
-		cfg.GrowthStartStage = 1
-	}
-	if cfg.GrowthStartStage > cfg.GrowthStageMax {
-		return 0, fmt.Errorf("tree.growthStartStage must be in range 1..growthStageMax")
-	}
-	if cfg.GrowthStageDurations == nil {
-		return 0, fmt.Errorf("tree.growthStageDurationsTicks is required")
-	}
-	if len(cfg.GrowthStageDurations) != cfg.GrowthStageMax-1 {
-		return 0, fmt.Errorf("tree.growthStageDurationsTicks length must be growthStageMax-1")
-	}
-	for idx, duration := range cfg.GrowthStageDurations {
-		if duration <= 0 {
-			return 0, fmt.Errorf("tree.growthStageDurationsTicks[%d] must be > 0", idx)
+	for idx, stage := range cfg.Stages {
+		if stage.ChopPointsTotal <= 0 {
+			return 0, fmt.Errorf("tree.stages[%d].chopPointsTotal must be > 0", idx)
 		}
-	}
-	if cfg.AllowedChopStages == nil {
-		return 0, fmt.Errorf("tree.allowedChopStages is required")
-	}
-	seenStages := make(map[int]struct{}, len(cfg.AllowedChopStages))
-	for _, stage := range cfg.AllowedChopStages {
-		if stage < 1 || stage > cfg.GrowthStageMax {
-			return 0, fmt.Errorf("tree.allowedChopStages values must be in range 1..growthStageMax")
+		if idx < len(cfg.Stages)-1 && stage.StageDuration <= 0 {
+			return 0, fmt.Errorf("tree.stages[%d].stageDurationTicks must be > 0 for non-final stage", idx)
 		}
-		if _, exists := seenStages[stage]; exists {
-			return 0, fmt.Errorf("tree.allowedChopStages contains duplicate stage %d", stage)
+		for itemIdx, objectKey := range stage.SpawnChopObject {
+			if strings.TrimSpace(objectKey) == "" {
+				return 0, fmt.Errorf("tree.stages[%d].spawnChopObject[%d] must not be empty", idx, itemIdx)
+			}
 		}
-		seenStages[stage] = struct{}{}
+		for itemIdx, itemKey := range stage.SpawnChopItem {
+			if strings.TrimSpace(itemKey) == "" {
+				return 0, fmt.Errorf("tree.stages[%d].spawnChopItem[%d] must not be empty", idx, itemIdx)
+			}
+		}
 	}
 
 	if ctx.Def == nil {
@@ -183,11 +159,12 @@ func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contrac
 
 		currentStage := normalizeStage(treeState.Stage, treeConfig, stageMissingPolicyStart)
 		currentNextTick := treeState.NextGrowthTick
-		if currentStage >= treeConfig.GrowthStageMax {
+		maxStage := growthStageMax(treeConfig)
+		if currentStage >= maxStage {
 			if currentNextTick != 0 {
 				components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
 					ChopPoints: treeState.ChopPoints,
-					Stage:      treeConfig.GrowthStageMax,
+					Stage:      maxStage,
 				})
 			}
 			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
@@ -221,7 +198,7 @@ func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contrac
 			Stage:          nextStage,
 			NextGrowthTick: nextTick,
 		})
-		if nextStage >= treeConfig.GrowthStageMax {
+		if nextStage >= maxStage {
 			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
 			return
 		}
@@ -331,7 +308,7 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 
 	// Init chop points on first chop.
 	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
-		stage := targetDef.TreeConfig.GrowthStageMax
+		stage := growthStageMax(targetDef.TreeConfig)
 		nextGrowthTick := uint64(0)
 		treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
 		if hasTree && treeState != nil {
@@ -341,8 +318,12 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 		if hasTree && treeState != nil && treeState.ChopPoints > 0 {
 			return
 		}
+		stageCfg := stageConfigFor(targetDef.TreeConfig, stage)
+		if stageCfg == nil {
+			return
+		}
 		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     targetDef.TreeConfig.ChopPointsTotal,
+			ChopPoints:     stageCfg.ChopPointsTotal,
 			Stage:          stage,
 			NextGrowthTick: nextGrowthTick,
 		})
@@ -352,12 +333,12 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 	ecs.AddComponent(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
 		BehaviorKey:        treeBehaviorKey,
 		ActionID:           actionChop,
-		CycleSoundKey:      strings.TrimSpace(targetDef.TreeConfig.ActionSound),
-		CompleteSoundKey:   strings.TrimSpace(targetDef.TreeConfig.FinishSound),
+		CycleSoundKey:      strings.TrimSpace(treeActionSound),
+		CompleteSoundKey:   strings.TrimSpace(treeFinishSound),
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           ctx.TargetID,
 		TargetHandle:       ctx.TargetHandle,
-		CycleDurationTicks: uint32(targetDef.TreeConfig.ChopCycleDurationTicks),
+		CycleDurationTicks: uint32(treeChopCycleDurationTicks),
 		CycleElapsedTicks:  0,
 		CycleIndex:         1,
 		StartedTick:        nowTick,
@@ -385,21 +366,27 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 	treeConfig := targetDef.TreeConfig
-	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, treeConfig.ChopStaminaCost) {
+	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, treeChopStaminaCost) {
 		sendLowStaminaMiniAlert(ctx.PlayerID, deps.Alerts)
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
 	remaining := 0
-	transitionToStump := false
+	completed := false
+	var completedStage *objectdefs.TreeStageConfig
 	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
 		currentStage := currentTreeStageFromInternalState(*state, treeConfig, stageMissingPolicyFinal)
 		if !isChopAllowedAtStage(treeConfig, currentStage) {
 			remaining = 0
 			return
 		}
+		stageCfg := stageConfigFor(treeConfig, currentStage)
+		if stageCfg == nil {
+			remaining = 0
+			return
+		}
 
-		currentChopPoints := treeConfig.ChopPointsTotal
+		currentChopPoints := stageCfg.ChopPointsTotal
 		nextGrowthTick := uint64(0)
 		if treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey); hasTree && treeState != nil {
 			currentChopPoints = treeState.ChopPoints
@@ -419,11 +406,12 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 			NextGrowthTick: nextGrowthTick,
 		})
 		if remaining == 0 {
-			transitionToStump = true
+			completed = true
+			completedStage = stageCfg
 		}
 	})
 
-	if !transitionToStump {
+	if !completed {
 		if remaining > 0 {
 			return contracts.BehaviorCycleDecisionContinue
 		}
@@ -436,17 +424,48 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	if !hasPlayerTransform || !hasTargetTransform || !hasTargetChunkRef {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
+	if completedStage == nil {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
 
-	spawnLogs(ctx.World, targetTransform, playerTransform, targetInfo, treeConfig, deps)
-	transformTargetToStump(
+	spawnStageObjects(
 		ctx.World,
-		ctx.TargetID,
-		ctx.TargetHandle,
+		targetTransform,
+		playerTransform,
 		targetInfo,
-		targetChunkRef,
-		treeConfig,
+		completedStage.SpawnChopObject,
 		deps,
 	)
+	spawnStageItems(
+		ctx.World,
+		targetTransform,
+		playerTransform,
+		targetInfo,
+		ctx.PlayerID,
+		completedStage.SpawnChopItem,
+		deps,
+	)
+	if strings.TrimSpace(completedStage.TransformToDefKey) != "" {
+		transformTargetToDef(
+			ctx.World,
+			ctx.TargetID,
+			ctx.TargetHandle,
+			targetInfo,
+			targetChunkRef,
+			completedStage.TransformToDefKey,
+			deps,
+		)
+	} else {
+		deleteTreeTarget(
+			ctx.World,
+			ctx.TargetID,
+			ctx.TargetHandle,
+			targetInfo,
+			targetChunkRef,
+			targetTransform,
+			deps,
+		)
+	}
 	forceVisionUpdates(ctx.World, deps.VisionForcer)
 	return contracts.BehaviorCycleDecisionComplete
 }
@@ -574,7 +593,7 @@ func initializeSpawnTreeState(
 
 	startStage := normalizeStage(0, treeConfig, stageMissingPolicyStart)
 	nextGrowthTick := uint64(0)
-	if startStage < treeConfig.GrowthStageMax {
+	if startStage < growthStageMax(treeConfig) {
 		nextGrowthTick = nowTick + stageTransitionDuration(treeConfig, startStage)
 		ecs.ScheduleBehaviorTick(world, entityID, treeBehaviorKey, nextGrowthTick)
 	} else {
@@ -623,7 +642,8 @@ func initializeRestoredTreeState(
 		nextGrowthTick := treeState.NextGrowthTick
 		stateChanged := currentStage != treeState.Stage
 
-		if currentStage >= treeConfig.GrowthStageMax {
+		maxStage := growthStageMax(treeConfig)
+		if currentStage >= maxStage {
 			nextGrowthTick = 0
 			ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
 		} else {
@@ -645,7 +665,7 @@ func initializeRestoredTreeState(
 				stateChanged = true
 			}
 
-			if currentStage >= treeConfig.GrowthStageMax {
+			if currentStage >= maxStage {
 				nextGrowthTick = 0
 				ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
 			} else {
@@ -721,33 +741,32 @@ func normalizeStage(
 	treeConfig *objectdefs.TreeBehaviorConfig,
 	missingPolicy treeStageMissingPolicy,
 ) int {
-	if treeConfig == nil || treeConfig.GrowthStageMax < 1 {
+	maxStage := growthStageMax(treeConfig)
+	if maxStage < 1 {
 		return 1
 	}
 	if stage > 0 {
-		if stage > treeConfig.GrowthStageMax {
-			return treeConfig.GrowthStageMax
+		if stage > maxStage {
+			return maxStage
 		}
 		return stage
 	}
 	if missingPolicy == stageMissingPolicyFinal {
-		return treeConfig.GrowthStageMax
-	}
-	if treeConfig.GrowthStartStage >= 1 && treeConfig.GrowthStartStage <= treeConfig.GrowthStageMax {
-		return treeConfig.GrowthStartStage
+		return maxStage
 	}
 	return 1
 }
 
 func stageTransitionDuration(treeConfig *objectdefs.TreeBehaviorConfig, stage int) uint64 {
-	if treeConfig == nil || stage < 1 || stage >= treeConfig.GrowthStageMax {
+	maxStage := growthStageMax(treeConfig)
+	if treeConfig == nil || stage < 1 || stage >= maxStage {
 		return 0
 	}
-	stageIndex := stage - 1
-	if stageIndex < 0 || stageIndex >= len(treeConfig.GrowthStageDurations) {
+	stageCfg := stageConfigFor(treeConfig, stage)
+	if stageCfg == nil {
 		return 0
 	}
-	durationTicks := treeConfig.GrowthStageDurations[stageIndex]
+	durationTicks := stageCfg.StageDuration
 	if durationTicks <= 0 {
 		return 0
 	}
@@ -761,7 +780,8 @@ func applyGrowthCatchup(
 	nowTick uint64,
 	catchupLimit uint64,
 ) (int, uint64, bool) {
-	if treeConfig == nil || currentStage >= treeConfig.GrowthStageMax || nextGrowthTick == 0 {
+	maxStage := growthStageMax(treeConfig)
+	if treeConfig == nil || currentStage >= maxStage || nextGrowthTick == 0 {
 		return currentStage, nextGrowthTick, false
 	}
 
@@ -777,10 +797,10 @@ func applyGrowthCatchup(
 	nextTick := nextGrowthTick
 	changed := false
 
-	for stage < treeConfig.GrowthStageMax && nextTick > 0 && nextTick <= effectiveNowTick {
+	for stage < maxStage && nextTick > 0 && nextTick <= effectiveNowTick {
 		stage++
 		changed = true
-		if stage >= treeConfig.GrowthStageMax {
+		if stage >= maxStage {
 			nextTick = 0
 			break
 		}
@@ -788,7 +808,7 @@ func applyGrowthCatchup(
 		transitionDuration := stageTransitionDuration(treeConfig, stage)
 		if transitionDuration == 0 {
 			nextTick = 0
-			stage = treeConfig.GrowthStageMax
+			stage = maxStage
 			break
 		}
 		nextTick += transitionDuration
@@ -798,50 +818,56 @@ func applyGrowthCatchup(
 }
 
 func isChopAllowedAtStage(treeConfig *objectdefs.TreeBehaviorConfig, stage int) bool {
-	if treeConfig == nil || stage <= 0 || len(treeConfig.AllowedChopStages) == 0 {
-		return false
-	}
-	for _, allowedStage := range treeConfig.AllowedChopStages {
-		if allowedStage == stage {
-			return true
-		}
-	}
-	return false
+	stageCfg := stageConfigFor(treeConfig, stage)
+	return stageCfg != nil && stageCfg.AllowChop
 }
 
 func treeStageFlag(stage int) string {
 	return fmt.Sprintf("%s%d", treeStageFlagPrefix, stage)
 }
 
-func spawnLogs(
+func growthStageMax(treeConfig *objectdefs.TreeBehaviorConfig) int {
+	if treeConfig == nil || len(treeConfig.Stages) == 0 {
+		return 1
+	}
+	return len(treeConfig.Stages)
+}
+
+func stageConfigFor(treeConfig *objectdefs.TreeBehaviorConfig, stage int) *objectdefs.TreeStageConfig {
+	if treeConfig == nil || stage < 1 || stage > len(treeConfig.Stages) {
+		return nil
+	}
+	return &treeConfig.Stages[stage-1]
+}
+
+func spawnStageObjects(
 	world *ecs.World,
 	treeTransform components.Transform,
 	playerTransform components.Transform,
 	treeInfo components.EntityInfo,
-	treeCfg *objectdefs.TreeBehaviorConfig,
+	objectKeys []string,
 	deps contracts.ExecutionDeps,
 ) {
-	if deps.IDAllocator == nil || deps.Chunks == nil || treeCfg == nil {
+	if deps.IDAllocator == nil || deps.Chunks == nil || len(objectKeys) == 0 {
 		return
 	}
 
 	logger := resolveLogger(deps.Logger)
 	dirX, dirY := resolveLogFallAxisDirection(treeTransform.X, treeTransform.Y, playerTransform.X, playerTransform.Y)
-	logDefKey := resolveAxisLogDefKey(treeCfg.LogsSpawnDefKey, dirX, dirY)
-	logDef, ok := objectdefs.Global().GetByKey(logDefKey)
-	if !ok {
-		logger.Warn("tree chop: log def not found", zap.String("def_key", logDefKey))
-		return
-	}
-
-	for index := 0; index < treeCfg.LogsSpawnCount; index++ {
+	for index, rawObjectKey := range objectKeys {
+		objectKey := resolveAxisLogDefKey(strings.TrimSpace(rawObjectKey), dirX, dirY)
+		logDef, ok := objectdefs.Global().GetByKey(objectKey)
+		if !ok {
+			logger.Warn("tree chop: spawned object def not found", zap.String("def_key", objectKey))
+			continue
+		}
 		logX, logY := logSpawnPosition(
 			treeTransform.X,
 			treeTransform.Y,
 			dirX,
 			dirY,
-			treeCfg.LogsSpawnInitialOffset,
-			treeCfg.LogsSpawnStepOffset,
+			treeLogsSpawnInitialOffset,
+			treeLogsSpawnStepOffset,
 			index,
 		)
 
@@ -857,6 +883,7 @@ func spawnLogs(
 			EntityID:         logID,
 			X:                logX,
 			Y:                logY,
+			Quality:          treeSpawnQuality,
 			Region:           treeInfo.Region,
 			Layer:            treeInfo.Layer,
 			InitReason:       contracts.ObjectBehaviorInitReasonSpawn,
@@ -882,6 +909,75 @@ func spawnLogs(
 		if len(logDef.BehaviorOrder) > 0 {
 			ecs.MarkObjectBehaviorDirty(world, handle)
 		}
+	}
+}
+
+func spawnStageItems(
+	world *ecs.World,
+	treeTransform components.Transform,
+	playerTransform components.Transform,
+	treeInfo components.EntityInfo,
+	playerID types.EntityID,
+	itemKeys []string,
+	deps contracts.ExecutionDeps,
+) {
+	if world == nil || deps.IDAllocator == nil || deps.Chunks == nil || len(itemKeys) == 0 {
+		return
+	}
+	itemRegistry := itemdefs.Global()
+	if itemRegistry == nil {
+		return
+	}
+
+	nowUnix := ecs.GetResource[ecs.TimeState](world).RuntimeSecondsTotal
+	logger := resolveLogger(deps.Logger)
+	for _, rawItemKey := range itemKeys {
+		itemKey := strings.TrimSpace(rawItemKey)
+		itemDef, ok := itemRegistry.GetByKey(itemKey)
+		if !ok {
+			logger.Warn("tree chop: spawned item def not found", zap.String("item_key", itemKey))
+			continue
+		}
+
+		dropXFloat, dropYFloat := jitterSpawnPosition(treeTransform.X, treeTransform.Y, treeSpawnJitterWorldCoords)
+		dropX := int(math.Round(dropXFloat))
+		dropY := int(math.Round(dropYFloat))
+		chunkX := worldCoordToChunkIndex(dropXFloat)
+		chunkY := worldCoordToChunkIndex(dropYFloat)
+		chunk := deps.Chunks.GetChunkFast(types.ChunkCoord{X: chunkX, Y: chunkY})
+		if chunk == nil {
+			continue
+		}
+
+		itemID := deps.IDAllocator.GetFreeID()
+		droppedID := deps.IDAllocator.GetFreeID()
+		resource := itemDef.ResolveResource(false)
+		if resource == "" {
+			resource = itemDef.Resource
+		}
+		spawned, ok := inventory.SpawnDroppedEntity(world, inventory.SpawnDroppedEntityParams{
+			DroppedEntityID: droppedID,
+			ItemID:          itemID,
+			TypeID:          uint32(itemDef.DefID),
+			Resource:        resource,
+			Quality:         treeSpawnQuality,
+			Quantity:        1,
+			W:               uint8(itemDef.Size.W),
+			H:               uint8(itemDef.Size.H),
+			DropX:           dropX,
+			DropY:           dropY,
+			Region:          treeInfo.Region,
+			Layer:           treeInfo.Layer,
+			ChunkX:          chunkX,
+			ChunkY:          chunkY,
+			DropperID:       playerID,
+			NowUnix:         nowUnix,
+		})
+		if !ok {
+			continue
+		}
+		chunk.Spatial().AddStatic(spawned.DroppedHandle, dropX, dropY)
+		chunk.MarkRawDataDirty()
 	}
 }
 
@@ -916,6 +1012,15 @@ func logSpawnPosition(
 	return treeX + dirX*distance, treeY + dirY*distance
 }
 
+func jitterSpawnPosition(centerX, centerY, jitterRadius float64) (float64, float64) {
+	if jitterRadius <= 0 {
+		return centerX, centerY
+	}
+	jitterX := (rand.Float64()*2 - 1) * jitterRadius
+	jitterY := (rand.Float64()*2 - 1) * jitterRadius
+	return centerX + jitterX, centerY + jitterY
+}
+
 func resolveAxisLogDefKey(baseDefKey string, dirX, dirY float64) string {
 	if baseDefKey == "" {
 		return baseDefKey
@@ -936,19 +1041,19 @@ func resolveAxisLogDefKey(baseDefKey string, dirX, dirY float64) string {
 	return baseDefKey + "_y"
 }
 
-func transformTargetToStump(
+func transformTargetToDef(
 	world *ecs.World,
 	targetID types.EntityID,
 	targetHandle types.Handle,
 	targetInfo components.EntityInfo,
 	targetChunkRef components.ChunkRef,
-	treeCfg *objectdefs.TreeBehaviorConfig,
+	transformDefKey string,
 	deps contracts.ExecutionDeps,
 ) {
 	logger := resolveLogger(deps.Logger)
-	stumpDef, ok := objectdefs.Global().GetByKey(treeCfg.TransformToDefKey)
+	stumpDef, ok := objectdefs.Global().GetByKey(transformDefKey)
 	if !ok {
-		logger.Warn("tree chop: stump def not found", zap.String("def_key", treeCfg.TransformToDefKey))
+		logger.Warn("tree chop: stump def not found", zap.String("def_key", transformDefKey))
 		return
 	}
 
@@ -1025,6 +1130,45 @@ func transformTargetToStump(
 		)
 	}
 	ecs.MarkObjectBehaviorDirty(world, targetHandle)
+}
+
+func deleteTreeTarget(
+	world *ecs.World,
+	targetID types.EntityID,
+	targetHandle types.Handle,
+	targetInfo components.EntityInfo,
+	targetChunkRef components.ChunkRef,
+	targetTransform components.Transform,
+	deps contracts.ExecutionDeps,
+) {
+	if world == nil || targetHandle == types.InvalidHandle || !world.Alive(targetHandle) {
+		return
+	}
+
+	if deps.Chunks != nil {
+		chunk := deps.Chunks.GetChunkFast(types.ChunkCoord{
+			X: targetChunkRef.CurrentChunkX,
+			Y: targetChunkRef.CurrentChunkY,
+		})
+		if chunk != nil {
+			if targetInfo.IsStatic {
+				chunk.Spatial().RemoveStatic(targetHandle, int(targetTransform.X), int(targetTransform.Y))
+			} else {
+				chunk.Spatial().RemoveDynamic(targetHandle, int(targetTransform.X), int(targetTransform.Y))
+			}
+			chunk.MarkRawDataDirty()
+		}
+	}
+
+	ecs.CancelBehaviorTicksByEntityID(world, targetID)
+	world.Despawn(targetHandle)
+
+	if deps.EventBus != nil {
+		deps.EventBus.PublishAsync(
+			ecs.NewEntityAppearanceChangedEvent(targetInfo.Layer, targetID, targetHandle),
+			eventbus.PriorityMedium,
+		)
+	}
 }
 
 func resolveLogger(logger *zap.Logger) *zap.Logger {
