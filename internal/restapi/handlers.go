@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	mathrand "math/rand"
 	"net/http"
@@ -241,20 +242,13 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 
 	id := h.entityIDManager.GetFreeID()
 
-	// Generate random position within world bounds with margin from borders
-	marginTiles := 50
-	worldWidthTiles := h.gameConfig.WorldWidthChunks * _const.ChunkSize
-	worldHeightTiles := h.gameConfig.WorldHeightChunks * _const.ChunkSize
+	x, y, err := generateRandomCharacterPosition(h.gameConfig)
+	if err != nil {
+		h.logger.Error("failed to generate character spawn position", zap.Error(err))
+		h.jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
-	// Calculate valid spawn area
-	minX := marginTiles
-	maxX := worldWidthTiles - marginTiles
-	minY := marginTiles
-	maxY := worldHeightTiles - marginTiles
-
-	// Generate random position
-	x := mathrand.Intn(maxX-minX+1) + minX
-	y := mathrand.Intn(maxY-minY+1) + minY
 	defaultAttributes, err := characterattrs.Marshal(characterattrs.Default())
 	if err != nil {
 		h.logger.Error("failed to marshal default character attributes", zap.Error(err))
@@ -282,6 +276,32 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+func generateRandomCharacterPosition(gameConfig *config.GameConfig) (int, int, error) {
+	if gameConfig == nil {
+		return 0, 0, errors.New("game config is nil")
+	}
+
+	chunkWorldSize := _const.ChunkWorldSize
+	marginWorldUnits := gameConfig.WorldMarginTiles * _const.CoordPerTile
+
+	minX := gameConfig.WorldMinXChunks*chunkWorldSize + marginWorldUnits
+	maxX := (gameConfig.WorldMinXChunks+gameConfig.WorldWidthChunks)*chunkWorldSize - marginWorldUnits
+	minY := gameConfig.WorldMinYChunks*chunkWorldSize + marginWorldUnits
+	maxY := (gameConfig.WorldMinYChunks+gameConfig.WorldHeightChunks)*chunkWorldSize - marginWorldUnits
+
+	if maxX <= minX || maxY <= minY {
+		return 0, 0, fmt.Errorf(
+			"invalid world spawn range: min=(%d,%d) max=(%d,%d), world_min_chunks=(%d,%d), world_size_chunks=(%d,%d), margin_tiles=%d",
+			minX, minY, maxX, maxY,
+			gameConfig.WorldMinXChunks, gameConfig.WorldMinYChunks,
+			gameConfig.WorldWidthChunks, gameConfig.WorldHeightChunks,
+			gameConfig.WorldMarginTiles,
+		)
+	}
+
+	return minX + mathrand.Intn(maxX-minX), minY + mathrand.Intn(maxY-minY), nil
 }
 
 func (h *Handler) handleDeleteCharacter(w http.ResponseWriter, r *http.Request) {
