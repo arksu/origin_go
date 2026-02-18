@@ -51,6 +51,7 @@ export function registerMessageHandlers(): void {
   messageDispatcher.on('playerLeaveWorld', () => {
     gameStore.setPlayerLeaveWorld()
     gameFacade.setPlayerEntityId(null)
+    gameFacade.resetWorld()
     moveController.clear()
   })
 
@@ -106,7 +107,7 @@ export function registerMessageHandlers(): void {
     const heading = msg.position?.position?.heading || 0
     const resourcePath = msg.resourcePath || ''
 
-    console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.typeId}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
+    // console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.typeId}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
 
     const objectData = {
       entityId,
@@ -137,7 +138,7 @@ export function registerMessageHandlers(): void {
 
   messageDispatcher.on('objectDespawn', (msg: proto.IS2C_ObjectDespawn) => {
     const entityId = toNumber(msg.entityId!)
-    console.log(`[Handlers] objectDespawn: entityId=${entityId}`)
+    // console.log(`[Handlers] objectDespawn: entityId=${entityId}`)
     gameStore.despawnEntity(entityId)
     gameFacade.despawnObject(entityId)
     moveController.removeEntity(entityId)

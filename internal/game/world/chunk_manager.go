@@ -54,6 +54,7 @@ type EntityAOI struct {
 	ActiveChunks        map[types.ChunkCoord]struct{}
 	PreloadChunks       map[types.ChunkCoord]struct{}
 	SendChunkLoadEvents bool
+	StreamEpoch         uint32
 }
 
 func newEntityAOI(entityID types.EntityID, center types.ChunkCoord, sendChunkLoadEvents bool) *EntityAOI {
@@ -214,8 +215,14 @@ func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY i
 
 // GetEntityEpoch returns the current stream epoch for an entity
 func (cm *ChunkManager) GetEntityEpoch(entityID types.EntityID) uint32 {
-	// TODO: Implement proper epoch retrieval without direct shard access
-	return 0
+	cm.aoiMu.RLock()
+	defer cm.aoiMu.RUnlock()
+
+	aoi, exists := cm.entityAOIs[entityID]
+	if !exists {
+		return 0
+	}
+	return aoi.StreamEpoch
 }
 
 // EnableChunkLoadEvents enables chunk load events for an entity
@@ -230,6 +237,7 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uin
 
 	// Enable chunk events and trigger initial load events
 	aoi.SendChunkLoadEvents = true
+	aoi.StreamEpoch = epoch
 
 	// Get current active chunks and send load events for them
 	center := aoi.CenterChunk

@@ -115,6 +115,12 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	case "/warn":
 		h.handleWarn(playerID, parts[1:])
 		return true
+	case "/stamina":
+		h.handleStamina(w, playerID, playerHandle, parts[1:])
+		return true
+	case "/energy":
+		h.handleEnergy(w, playerID, playerHandle, parts[1:])
+		return true
 	default:
 		return false
 	}
@@ -376,6 +382,72 @@ func (h *ChatAdminCommandHandler) handleWarn(playerID types.EntityID, args []str
 	h.logger.Info("Admin /warn executed",
 		zap.Uint64("player_id", uint64(playerID)),
 		zap.String("message", message))
+}
+
+// handleStamina processes: /stamina <value>
+func (h *ChatAdminCommandHandler) handleStamina(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	args []string,
+) {
+	if len(args) == 0 {
+		h.sendSystemMessage(playerID, "usage: /stamina <value>")
+		return
+	}
+
+	value, err := strconv.ParseFloat(args[0], 64)
+	if err != nil {
+		h.sendSystemMessage(playerID, "invalid stamina value: "+args[0])
+		return
+	}
+
+	// Set stamina
+	ecs.MutateComponent[components.EntityStats](w, playerHandle, func(stats *components.EntityStats) bool {
+		stats.Stamina = value
+		return true
+	})
+
+	// Mark for immediate client update
+	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+
+	h.sendSystemMessage(playerID, fmt.Sprintf("stamina set to %.2f", value))
+	h.logger.Info("Admin /stamina executed",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.Float64("stamina", value))
+}
+
+// handleEnergy processes: /energy <value>
+func (h *ChatAdminCommandHandler) handleEnergy(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	args []string,
+) {
+	if len(args) == 0 {
+		h.sendSystemMessage(playerID, "usage: /energy <value>")
+		return
+	}
+
+	value, err := strconv.ParseFloat(args[0], 64)
+	if err != nil {
+		h.sendSystemMessage(playerID, "invalid energy value: "+args[0])
+		return
+	}
+
+	// Set energy
+	ecs.MutateComponent[components.EntityStats](w, playerHandle, func(stats *components.EntityStats) bool {
+		stats.Energy = value
+		return true
+	})
+
+	// Mark for immediate client update
+	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+
+	h.sendSystemMessage(playerID, fmt.Sprintf("energy set to %.2f", value))
+	h.logger.Info("Admin /energy executed",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.Float64("energy", value))
 }
 
 // findActiveChunkForPoint returns the active chunk containing the given world point,

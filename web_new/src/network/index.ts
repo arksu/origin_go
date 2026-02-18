@@ -2,6 +2,7 @@ import { gameConnection } from './GameConnection'
 import { messageDispatcher } from './MessageDispatcher'
 import { registerMessageHandlers } from './handlers'
 import { useGameStore } from '@/stores/gameStore'
+import { gameFacade, moveController } from '@/game'
 import { proto } from './proto/packets.js'
 
 let initialized = false
@@ -26,6 +27,8 @@ export function initNetwork(): void {
 
     if (state === 'disconnected' || state === 'error') {
       gameStore.setPlayerLeaveWorld()
+      gameFacade.resetWorld()
+      moveController.clear()
     }
   })
 }
