@@ -197,24 +197,21 @@ func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contrac
 		maxStage := growthStageMax(treeConfig)
 		if currentStage >= maxStage {
 			if currentNextTick != 0 {
-				components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-					ChopPoints: treeState.ChopPoints,
-					Taken:      cloneTakenCounts(treeState.Taken),
-					Stage:      maxStage,
-				})
+				setTreeBehaviorState(state, treeState.ChopPoints, cloneTakenCounts(treeState.Taken), maxStage, 0)
 			}
 			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
 			return
 		}
 
 		if currentNextTick == 0 {
-			currentNextTick = ctx.CurrentTick + stageTransitionDuration(treeConfig, currentStage)
-			components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-				ChopPoints:     treeState.ChopPoints,
-				Taken:          cloneTakenCounts(treeState.Taken),
-				Stage:          currentStage,
-				NextGrowthTick: currentNextTick,
-			})
+			transitionDuration := stageTransitionDuration(treeConfig, currentStage)
+			if transitionDuration == 0 {
+				setTreeBehaviorState(state, treeState.ChopPoints, cloneTakenCounts(treeState.Taken), currentStage, 0)
+				ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
+				return
+			}
+			currentNextTick = ctx.CurrentTick + transitionDuration
+			setTreeBehaviorState(state, treeState.ChopPoints, cloneTakenCounts(treeState.Taken), currentStage, currentNextTick)
 			ecs.ScheduleBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey, currentNextTick)
 			return
 		}
@@ -234,13 +231,12 @@ func (treeBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contrac
 		if stageChanged {
 			taken = nil
 		}
-		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     treeState.ChopPoints,
-			Taken:          taken,
-			Stage:          nextStage,
-			NextGrowthTick: nextTick,
-		})
+		setTreeBehaviorState(state, treeState.ChopPoints, taken, nextStage, nextTick)
 		if nextStage >= maxStage {
+			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
+			return
+		}
+		if nextTick == 0 {
 			ecs.CancelBehaviorTick(ctx.World, ctx.EntityID, treeBehaviorKey)
 			return
 		}
@@ -401,32 +397,27 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 
 	// Init chop points on first chop.
 	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
-		stage := growthStageMax(targetDef.TreeConfig)
+		stage := currentTreeStageFromInternalState(*state, targetDef.TreeConfig, stageMissingPolicyFinal)
 		nextGrowthTick := uint64(0)
 		var taken map[string]int
+		chopPoints := 0
 		treeState, hasTree := components.GetBehaviorState[components.TreeBehaviorState](*state, treeBehaviorKey)
 		if hasTree && treeState != nil {
-			stage = normalizeStage(treeState.Stage, targetDef.TreeConfig, stageMissingPolicyStart)
 			nextGrowthTick = treeState.NextGrowthTick
 			taken = cloneTakenCounts(treeState.Taken)
+			chopPoints = treeState.ChopPoints
 		}
-		if actionID == actionChop && hasTree && treeState != nil && treeState.ChopPoints > 0 {
+		if actionID == actionChop && chopPoints > 0 {
 			return
 		}
 		stageCfg := stageConfigFor(targetDef.TreeConfig, stage)
 		if stageCfg == nil {
 			return
 		}
-		chopPoints := stageCfg.ChopPointsTotal
-		if hasTree && treeState != nil && treeState.ChopPoints > 0 {
-			chopPoints = treeState.ChopPoints
+		if chopPoints <= 0 {
+			chopPoints = stageCfg.ChopPointsTotal
 		}
-		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     chopPoints,
-			Taken:          taken,
-			Stage:          stage,
-			NextGrowthTick: nextGrowthTick,
-		})
+		setTreeBehaviorState(state, chopPoints, taken, stage, nextGrowthTick)
 	})
 
 	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
@@ -478,7 +469,7 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		return onTakeCycleComplete(ctx, deps, treeConfig)
 	}
 	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, treeChopStaminaCost) {
-		sendLowStaminaMiniAlert(ctx.PlayerID, deps.Alerts)
+		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "LOW_STAMINA")
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
@@ -513,12 +504,7 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 
 		currentChopPoints--
 		remaining = currentChopPoints
-		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     currentChopPoints,
-			Taken:          taken,
-			Stage:          currentStage,
-			NextGrowthTick: nextGrowthTick,
-		})
+		setTreeBehaviorState(state, currentChopPoints, taken, currentStage, nextGrowthTick)
 		if remaining == 0 {
 			completed = true
 			completedStage = stageCfg
@@ -590,12 +576,12 @@ func onTakeCycleComplete(
 	if ctx == nil || ctx.World == nil || treeConfig == nil {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
-	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, takeCycleStaminaCost) {
-		sendLowStaminaMiniAlert(ctx.PlayerID, deps.Alerts)
+	if deps.GiveItem == nil {
+		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "TREE_TAKE_UNAVAILABLE")
 		return contracts.BehaviorCycleDecisionCanceled
 	}
-	if deps.GiveItem == nil {
-		sendTakeFailedMiniAlert(ctx.PlayerID, deps.Alerts, "TREE_TAKE_UNAVAILABLE")
+	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, takeCycleStaminaCost) {
+		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "LOW_STAMINA")
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
@@ -627,7 +613,7 @@ func onTakeCycleComplete(
 
 	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, treeSpawnQuality)
 	if !outcome.Success {
-		sendTakeFailedMiniAlert(ctx.PlayerID, deps.Alerts, "TREE_TAKE_GIVE_FAILED")
+		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "TREE_TAKE_GIVE_FAILED")
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
@@ -642,12 +628,7 @@ func onTakeCycleComplete(
 		chopPoints := treeState.ChopPoints
 		takenMap := cloneTakenCounts(treeState.Taken)
 		takenMap, newTaken = incrementTakenCount(takenMap, actionID)
-		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     chopPoints,
-			Taken:          takenMap,
-			Stage:          stage,
-			NextGrowthTick: nextTick,
-		})
+		setTreeBehaviorState(state, chopPoints, takenMap, stage, nextTick)
 	})
 	if newTaken >= takeCfg.Count {
 		return contracts.BehaviorCycleDecisionComplete
@@ -720,6 +701,24 @@ func cloneTakenCounts(source map[string]int) map[string]int {
 		return nil
 	}
 	return cloned
+}
+
+func setTreeBehaviorState(
+	state *components.ObjectInternalState,
+	chopPoints int,
+	taken map[string]int,
+	stage int,
+	nextGrowthTick uint64,
+) {
+	if state == nil {
+		return
+	}
+	components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+		ChopPoints:     chopPoints,
+		Taken:          taken,
+		Stage:          stage,
+		NextGrowthTick: nextGrowthTick,
+	})
 }
 
 func consumePlayerStaminaForTreeCycle(
@@ -800,18 +799,7 @@ func consumePlayerStaminaForTreeCycle(
 	return true
 }
 
-func sendLowStaminaMiniAlert(playerID types.EntityID, alerts contracts.MiniAlertSender) {
-	if alerts == nil || playerID == 0 {
-		return
-	}
-	alerts.SendMiniAlert(playerID, &netproto.S2C_MiniAlert{
-		Severity:   netproto.AlertSeverity_ALERT_SEVERITY_WARNING,
-		ReasonCode: "LOW_STAMINA",
-		TtlMs:      2000,
-	})
-}
-
-func sendTakeFailedMiniAlert(playerID types.EntityID, alerts contracts.MiniAlertSender, reasonCode string) {
+func sendWarningMiniAlert(playerID types.EntityID, alerts contracts.MiniAlertSender, reasonCode string) {
 	if alerts == nil || playerID == 0 {
 		return
 	}
@@ -870,12 +858,7 @@ func initializeSpawnTreeState(
 			chopPoints = existing.ChopPoints
 			taken = cloneTakenCounts(existing.Taken)
 		}
-		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     chopPoints,
-			Taken:          taken,
-			Stage:          startStage,
-			NextGrowthTick: nextGrowthTick,
-		})
+		setTreeBehaviorState(state, chopPoints, taken, startStage, nextGrowthTick)
 	})
 }
 
@@ -934,6 +917,8 @@ func initializeRestoredTreeState(
 			if currentStage >= maxStage {
 				nextGrowthTick = 0
 				ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
+			} else if nextGrowthTick == 0 {
+				ecs.CancelBehaviorTick(world, entityID, treeBehaviorKey)
 			} else {
 				ecs.ScheduleBehaviorTick(world, entityID, treeBehaviorKey, nextGrowthTick)
 			}
@@ -946,12 +931,7 @@ func initializeRestoredTreeState(
 		if currentStage != treeState.Stage {
 			taken = nil
 		}
-		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
-			ChopPoints:     treeState.ChopPoints,
-			Taken:          taken,
-			Stage:          currentStage,
-			NextGrowthTick: nextGrowthTick,
-		})
+		setTreeBehaviorState(state, treeState.ChopPoints, taken, currentStage, nextGrowthTick)
 	})
 }
 
@@ -998,6 +978,7 @@ func stageFromRuntimeState(
 	if !has || rawState == nil {
 		return normalizeStage(0, treeConfig, missingPolicy)
 	}
+	// Canonical runtime state is pointer-based. Value fallback is kept for defensive compatibility.
 	if typedState, ok := rawState.(*components.TreeBehaviorState); ok && typedState != nil {
 		return normalizeStage(typedState.Stage, treeConfig, missingPolicy)
 	}
@@ -1029,8 +1010,11 @@ func normalizeStage(
 }
 
 func stageTransitionDuration(treeConfig *objectdefs.TreeBehaviorConfig, stage int) uint64 {
+	if treeConfig == nil {
+		return 0
+	}
 	maxStage := growthStageMax(treeConfig)
-	if treeConfig == nil || stage < 1 || stage >= maxStage {
+	if stage < 1 || stage >= maxStage {
 		return 0
 	}
 	stageCfg := stageConfigFor(treeConfig, stage)
@@ -1051,8 +1035,11 @@ func applyGrowthCatchup(
 	nowTick uint64,
 	catchupLimit uint64,
 ) (int, uint64, bool) {
+	if treeConfig == nil {
+		return currentStage, nextGrowthTick, false
+	}
 	maxStage := growthStageMax(treeConfig)
-	if treeConfig == nil || currentStage >= maxStage || nextGrowthTick == 0 {
+	if currentStage >= maxStage || nextGrowthTick == 0 {
 		return currentStage, nextGrowthTick, false
 	}
 
@@ -1079,7 +1066,6 @@ func applyGrowthCatchup(
 		transitionDuration := stageTransitionDuration(treeConfig, stage)
 		if transitionDuration == 0 {
 			nextTick = 0
-			stage = maxStage
 			break
 		}
 		nextTick += transitionDuration
