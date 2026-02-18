@@ -90,6 +90,7 @@ const (
 // Entity stats (stamina/energy) constants.
 const (
 	DefaultEnergy                    = 1000.0
+	EnergyMax                        = 1100.0
 	StaminaScalePerCon               = 1000.0
 	RegenEnergySpendPerTick          = 1.0
 	StaminaPerEnergyUnit             = 5.0

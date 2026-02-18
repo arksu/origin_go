@@ -829,7 +829,7 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 		attributes = characterattrs.Normalize(profile.Attributes)
 	}
 	snapshot.StaminaMax = entitystats.RoundToUint32(entitystats.MaxStaminaFromAttributes(attributes))
-	snapshot.EnergyMax = entitystats.RoundToUint32(_const.DefaultEnergy)
+	snapshot.EnergyMax = entitystats.RoundToUint32(_const.EnergyMax)
 
 	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
 	if !updateState.ShouldSendPlayerStats(entityID, snapshot, force) {
