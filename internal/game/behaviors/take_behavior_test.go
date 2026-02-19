@@ -251,10 +251,11 @@ func TestTakeBehavior_OnCycleCompleteContinueAndExhaust(t *testing.T) {
 	})
 	targetID := types.EntityID(81051)
 	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
-		ecs.AddComponent(w, h, components.EntityInfo{TypeID: takeDefID})
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: takeDefID, Quality: 88})
 		ecs.AddComponent(w, h, components.ObjectInternalState{})
 	})
 
+	passedQualities := make([]uint32, 0, 2)
 	decision1 := takeBehavior{}.OnCycleComplete(&contracts.BehaviorCycleContext{
 		World:        world,
 		PlayerID:     playerID,
@@ -263,7 +264,8 @@ func TestTakeBehavior_OnCycleCompleteContinueAndExhaust(t *testing.T) {
 		TargetHandle: targetHandle,
 		ActionID:     "chip_stone",
 		Deps: &contracts.ExecutionDeps{
-			GiveItem: func(_ *ecs.World, _ types.EntityID, _ types.Handle, _ string, _ uint32, _ uint32) contracts.GiveItemOutcome {
+			GiveItem: func(_ *ecs.World, _ types.EntityID, _ types.Handle, _ string, _ uint32, quality uint32) contracts.GiveItemOutcome {
+				passedQualities = append(passedQualities, quality)
 				return contracts.GiveItemOutcome{Success: true}
 			},
 		},
@@ -280,13 +282,17 @@ func TestTakeBehavior_OnCycleCompleteContinueAndExhaust(t *testing.T) {
 		TargetHandle: targetHandle,
 		ActionID:     "chip_stone",
 		Deps: &contracts.ExecutionDeps{
-			GiveItem: func(_ *ecs.World, _ types.EntityID, _ types.Handle, _ string, _ uint32, _ uint32) contracts.GiveItemOutcome {
+			GiveItem: func(_ *ecs.World, _ types.EntityID, _ types.Handle, _ string, _ uint32, quality uint32) contracts.GiveItemOutcome {
+				passedQualities = append(passedQualities, quality)
 				return contracts.GiveItemOutcome{Success: true}
 			},
 		},
 	})
 	if decision2 != contracts.BehaviorCycleDecisionComplete {
 		t.Fatalf("expected complete on exhausted take count, got %v", decision2)
+	}
+	if len(passedQualities) != 2 || passedQualities[0] != 88 || passedQualities[1] != 88 {
+		t.Fatalf("expected parent quality 88 for each GiveItem call, got %+v", passedQualities)
 	}
 }
 

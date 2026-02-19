@@ -6,6 +6,7 @@ import (
 
 	"origin/internal/characterattrs"
 	constt "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
@@ -119,6 +120,23 @@ func TestResolveAxisLogDefKey(t *testing.T) {
 
 type testVisionForcer struct {
 	forced []types.Handle
+}
+
+type testChunkProvider struct {
+	chunk *core.Chunk
+}
+
+func (p *testChunkProvider) GetChunkFast(_ types.ChunkCoord) *core.Chunk {
+	return p.chunk
+}
+
+type testIDAllocator struct {
+	next types.EntityID
+}
+
+func (a *testIDAllocator) GetFreeID() types.EntityID {
+	a.next++
+	return a.next
 }
 
 func (f *testVisionForcer) ForceUpdateForObserver(_ *ecs.World, observerHandle types.Handle) {
@@ -260,6 +278,73 @@ func TestSendWarningMiniAlert(t *testing.T) {
 	}
 }
 
+func TestSpawnStageItems_UsesParentQuality(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	gotQuality := uint32(0)
+	spawnStageItems(
+		world,
+		types.EntityID(1),
+		types.InvalidHandle,
+		66,
+		[]string{"branch"},
+		contracts.ExecutionDeps{
+			GiveItem: func(_ *ecs.World, _ types.EntityID, _ types.Handle, _ string, _ uint32, quality uint32) contracts.GiveItemOutcome {
+				gotQuality = quality
+				return contracts.GiveItemOutcome{Success: true}
+			},
+		},
+	)
+	if gotQuality != 66 {
+		t.Fatalf("expected parent quality 66, got %d", gotQuality)
+	}
+}
+
+func TestSpawnStageObjects_UsesParentQuality(t *testing.T) {
+	previousRegistry := objectdefs.Global()
+	t.Cleanup(func() {
+		objectdefs.SetGlobalForTesting(previousRegistry)
+	})
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
+		{
+			DefID:     9901,
+			Key:       "log_y",
+			Name:      "Log",
+			Resource:  "log",
+			IsStatic:  true,
+			Behaviors: nil,
+		},
+	}))
+
+	world := ecs.NewWorldForTesting()
+	chunk := core.NewChunk(types.ChunkCoord{X: 0, Y: 0}, 1, 0, constt.ChunkSize)
+	provider := &testChunkProvider{chunk: chunk}
+	alloc := &testIDAllocator{next: 5000}
+
+	spawnStageObjects(
+		world,
+		components.Transform{X: 0, Y: 0},
+		components.Transform{X: 0, Y: -10},
+		components.EntityInfo{Region: 1, Layer: 0, Quality: 77},
+		[]string{"log_y"},
+		contracts.ExecutionDeps{
+			Chunks:      provider,
+			IDAllocator: alloc,
+		},
+	)
+
+	spawnedHandle := world.GetHandleByEntityID(5001)
+	if spawnedHandle == types.InvalidHandle || !world.Alive(spawnedHandle) {
+		t.Fatalf("expected spawned log entity")
+	}
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](world, spawnedHandle)
+	if !hasInfo {
+		t.Fatalf("spawned entity missing EntityInfo")
+	}
+	if info.Quality != 77 {
+		t.Fatalf("expected spawned object quality 77, got %d", info.Quality)
+	}
+}
+
 func TestOnTakeCycleComplete_DoesNotConsumeStaminaWhenGiveUnavailable(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	playerID := types.EntityID(9101)
@@ -307,7 +392,7 @@ func TestOnTakeCycleComplete_DoesNotConsumeStaminaWhenGiveUnavailable(t *testing
 		TargetID:     targetID,
 		TargetHandle: targetHandle,
 		ActionID:     "take_branch",
-	}, contracts.ExecutionDeps{}, cfg)
+	}, contracts.ExecutionDeps{}, cfg, 55)
 	if decision != contracts.BehaviorCycleDecisionCanceled {
 		t.Fatalf("expected canceled decision, got %v", decision)
 	}
@@ -362,6 +447,7 @@ func TestOnTakeCycleComplete_CompletesWhenItemPlacedInHand(t *testing.T) {
 		},
 	}
 
+	passedQuality := uint32(0)
 	decision := onTakeCycleComplete(&contracts.BehaviorCycleContext{
 		World:        world,
 		PlayerID:     playerID,
@@ -376,17 +462,21 @@ func TestOnTakeCycleComplete_CompletesWhenItemPlacedInHand(t *testing.T) {
 			_ types.Handle,
 			_ string,
 			_ uint32,
-			_ uint32,
+			quality uint32,
 		) contracts.GiveItemOutcome {
+			passedQuality = quality
 			return contracts.GiveItemOutcome{
 				Success:      true,
 				PlacedInHand: true,
 			}
 		},
-	}, cfg)
+	}, cfg, 73)
 
 	if decision != contracts.BehaviorCycleDecisionComplete {
 		t.Fatalf("expected complete decision when item is placed in hand, got %v", decision)
+	}
+	if passedQuality != 73 {
+		t.Fatalf("expected parent quality 73, got %d", passedQuality)
 	}
 
 	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](world, targetHandle)

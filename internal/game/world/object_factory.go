@@ -57,13 +57,16 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 	if !ok {
 		return types.InvalidHandle, fmt.Errorf("%w: type_id=%d", ErrDefNotFound, raw.TypeID)
 	}
+	if raw.Quality < 0 {
+		return types.InvalidHandle, fmt.Errorf("object %d has invalid quality %d", raw.ID, raw.Quality)
+	}
 
 	h := SpawnEntityFromDef(w, def, DefSpawnParams{
 		EntityID:  types.EntityID(raw.ID),
 		X:         float64(raw.X),
 		Y:         float64(raw.Y),
 		Direction: headingDegreesToRadians(raw.Heading),
-		Quality:   qualityFromNullInt16(raw.Quality),
+		Quality:   uint32(raw.Quality),
 		Region:    raw.Region,
 		Layer:     raw.Layer,
 		// Restored state is applied in chunk activation after deserialization.
@@ -372,13 +375,6 @@ func radiansToHeadingDegrees(direction float64) int16 {
 	return int16(math.Floor(normalized))
 }
 
-func qualityFromNullInt16(value sql.NullInt16) uint32 {
-	if !value.Valid || value.Int16 < 0 {
-		return 0
-	}
-	return uint32(value.Int16)
-}
-
 func clampQualityToInt16(value uint32) int16 {
 	if value > math.MaxInt16 {
 		return math.MaxInt16
@@ -526,10 +522,7 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		Layer:  info.Layer,
 		ChunkX: chunkRef.CurrentChunkX,
 		ChunkY: chunkRef.CurrentChunkY,
-		Quality: sql.NullInt16{
-			Int16: clampQualityToInt16(info.Quality),
-			Valid: true,
-		},
+		Quality: clampQualityToInt16(info.Quality),
 		Heading: sql.NullInt16{
 			Int16: radiansToHeadingDegrees(transform.Direction),
 			Valid: true,

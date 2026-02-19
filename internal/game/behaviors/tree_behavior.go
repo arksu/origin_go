@@ -32,7 +32,6 @@ const (
 	takeCycleStaminaCost       = 10
 	treeLogsSpawnInitialOffset = 16
 	treeLogsSpawnStepOffset    = 20
-	treeSpawnQuality           = 10
 	treeActionSound            = "chop"
 	treeFinishSound            = "tree_fall"
 )
@@ -457,7 +456,7 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	}
 	treeConfig := targetDef.TreeConfig
 	if ctx.ActionID != actionChop {
-		return onTakeCycleComplete(ctx, deps, treeConfig)
+		return onTakeCycleComplete(ctx, deps, treeConfig, targetInfo.Quality)
 	}
 	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, treeChopStaminaCost) {
 		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "LOW_STAMINA")
@@ -531,6 +530,7 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		ctx.World,
 		ctx.PlayerID,
 		ctx.PlayerHandle,
+		targetInfo.Quality,
 		completedStage.SpawnChopItem,
 		deps,
 	)
@@ -563,6 +563,7 @@ func onTakeCycleComplete(
 	ctx *contracts.BehaviorCycleContext,
 	deps contracts.ExecutionDeps,
 	treeConfig *objectdefs.TreeBehaviorConfig,
+	parentQuality uint32,
 ) contracts.BehaviorCycleDecision {
 	if ctx == nil || ctx.World == nil || treeConfig == nil {
 		return contracts.BehaviorCycleDecisionCanceled
@@ -602,7 +603,7 @@ func onTakeCycleComplete(
 		return contracts.BehaviorCycleDecisionComplete
 	}
 
-	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, treeSpawnQuality)
+	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, parentQuality)
 	if !outcome.Success {
 		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "TREE_TAKE_GIVE_FAILED")
 		return contracts.BehaviorCycleDecisionCanceled
@@ -1134,7 +1135,7 @@ func spawnStageObjects(
 			EntityID:         logID,
 			X:                logX,
 			Y:                logY,
-			Quality:          treeSpawnQuality,
+			Quality:          treeInfo.Quality,
 			Region:           treeInfo.Region,
 			Layer:            treeInfo.Layer,
 			InitReason:       contracts.ObjectBehaviorInitReasonSpawn,
@@ -1167,6 +1168,7 @@ func spawnStageItems(
 	world *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
+	parentQuality uint32,
 	itemKeys []string,
 	deps contracts.ExecutionDeps,
 ) {
@@ -1179,7 +1181,7 @@ func spawnStageItems(
 		if itemKey == "" {
 			continue
 		}
-		outcome := deps.GiveItem(world, playerID, playerHandle, itemKey, 1, treeSpawnQuality)
+		outcome := deps.GiveItem(world, playerID, playerHandle, itemKey, 1, parentQuality)
 		if !outcome.Success {
 			logger.Warn("tree chop: failed to give stage item",
 				zap.String("item_key", itemKey),
