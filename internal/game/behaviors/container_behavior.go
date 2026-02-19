@@ -25,14 +25,6 @@ func (containerBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefCon
 	return parsePriorityOnlyConfig(ctx.RawConfig, "container")
 }
 
-func (containerBehavior) DeclaredActions() []contracts.BehaviorActionSpec {
-	return []contracts.BehaviorActionSpec{
-		{
-			ActionID: actionOpen,
-		},
-	}
-}
-
 func (containerBehavior) ApplyRuntime(ctx *contracts.BehaviorRuntimeContext) contracts.BehaviorRuntimeResult {
 	if ctx == nil || ctx.World == nil {
 		return contracts.BehaviorRuntimeResult{}

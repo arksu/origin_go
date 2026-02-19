@@ -29,13 +29,13 @@ type TreeBehaviorConfig struct {
 }
 
 type TreeStageConfig struct {
-	ChopPointsTotal   int              `json:"chopPointsTotal"`
-	StageDuration     int              `json:"stageDurationTicks"`
-	AllowChop         bool             `json:"allowChop"`
-	SpawnChopObject   []string         `json:"spawnChopObject,omitempty"`
-	SpawnChopItem     []string         `json:"spawnChopItem,omitempty"`
-	Take              []TakeConfig     `json:"take,omitempty"`
-	TransformToDefKey string           `json:"transformToDefKey,omitempty"`
+	ChopPointsTotal   int          `json:"chopPointsTotal"`
+	StageDuration     int          `json:"stageDurationTicks"`
+	AllowChop         bool         `json:"allowChop"`
+	SpawnChopObject   []string     `json:"spawnChopObject,omitempty"`
+	SpawnChopItem     []string     `json:"spawnChopItem,omitempty"`
+	Take              []TakeConfig `json:"take,omitempty"`
+	TransformToDefKey string       `json:"transformToDefKey,omitempty"`
 }
 
 type TakeConfig struct {
@@ -74,11 +74,6 @@ type BehaviorDefConfigValidator interface {
 type BehaviorActionSpec struct {
 	ActionID     string
 	StartsCyclic bool
-}
-
-// BehaviorActionDeclarer returns static action contracts for fail-fast checks.
-type BehaviorActionDeclarer interface {
-	DeclaredActions() []BehaviorActionSpec
 }
 
 // BehaviorRuntimeResult is a runtime recompute output for object state/flags.

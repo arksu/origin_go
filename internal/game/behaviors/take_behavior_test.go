@@ -219,7 +219,7 @@ func TestTakeBehavior_ExecuteActionStartsCyclicAction(t *testing.T) {
 	if action.BehaviorKey != takeBehaviorKey || action.ActionID != "chip_stone" {
 		t.Fatalf("unexpected action payload: %+v", action)
 	}
-	if action.CycleDurationTicks != uint32(objectTakeCycleDurationTicks) {
+	if action.CycleDurationTicks != uint32(takeCycleDurationTicks) {
 		t.Fatalf("unexpected cycle duration: %d", action.CycleDurationTicks)
 	}
 }
@@ -382,4 +382,3 @@ func TestTakeBehavior_OnCycleCompleteGiveUnavailableCancels(t *testing.T) {
 		t.Fatalf("expected canceled when give dependency is missing, got %v", decision)
 	}
 }
-

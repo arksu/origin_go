@@ -93,15 +93,6 @@ func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigCo
 	return cfg.Priority, nil
 }
 
-func (treeBehavior) DeclaredActions() []contracts.BehaviorActionSpec {
-	return []contracts.BehaviorActionSpec{
-		{
-			ActionID:     actionChop,
-			StartsCyclic: true,
-		},
-	}
-}
-
 func validateTakeConfig(stageIndex int, takeIndex int, takeCfg contracts.TakeConfig) error {
 	takeID := strings.TrimSpace(takeCfg.ID)
 	if takeID == "" {

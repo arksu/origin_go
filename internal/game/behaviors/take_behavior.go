@@ -14,11 +14,7 @@ import (
 )
 
 const (
-	takeBehaviorKey        = "take"
-	actionTakeDeclared     = "take"
-	objectTakeCycleDurationTicks = 10
-	objectTakeCycleStaminaCost   = 10
-	takeSpawnQuality       = 10
+	takeBehaviorKey = "take"
 )
 
 type takeBehavior struct{}
@@ -58,15 +54,6 @@ func (takeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigCo
 	}
 	ctx.Def.SetTakeBehaviorConfig(cfg)
 	return cfg.Priority, nil
-}
-
-func (takeBehavior) DeclaredActions() []contracts.BehaviorActionSpec {
-	return []contracts.BehaviorActionSpec{
-		{
-			ActionID:     actionTakeDeclared,
-			StartsCyclic: true,
-		},
-	}
 }
 
 func validateTakeBehaviorItemConfig(index int, item contracts.TakeConfig) error {
@@ -203,7 +190,7 @@ func (takeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           ctx.TargetID,
 		TargetHandle:       ctx.TargetHandle,
-		CycleDurationTicks: uint32(objectTakeCycleDurationTicks),
+		CycleDurationTicks: uint32(takeCycleDurationTicks),
 		CycleElapsedTicks:  0,
 		CycleIndex:         1,
 		StartedTick:        nowTick,
@@ -226,10 +213,6 @@ func (takeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "TAKE_UNAVAILABLE")
 		return contracts.BehaviorCycleDecisionCanceled
 	}
-	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, objectTakeCycleStaminaCost) {
-		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "LOW_STAMINA")
-		return contracts.BehaviorCycleDecisionCanceled
-	}
 
 	actionID := strings.TrimSpace(ctx.ActionID)
 	if actionID == "" {
@@ -244,13 +227,14 @@ func (takeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	if item == nil {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
-	if item.Count <= 0 {
-		return contracts.BehaviorCycleDecisionCanceled
-	}
 
 	taken := takenCountForAction(takeCountsFromState(ctx.World, ctx.TargetHandle), actionID)
 	if taken >= item.Count {
 		return contracts.BehaviorCycleDecisionComplete
+	}
+	if !consumePlayerStaminaForTreeCycle(ctx.World, ctx.PlayerHandle, takeCycleStaminaCost) {
+		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "LOW_STAMINA")
+		return contracts.BehaviorCycleDecisionCanceled
 	}
 
 	itemKey := strings.TrimSpace(item.ItemDefKey)
@@ -258,7 +242,7 @@ func (takeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, takeSpawnQuality)
+	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, treeSpawnQuality)
 	if !outcome.Success {
 		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "TAKE_GIVE_FAILED")
 		return contracts.BehaviorCycleDecisionCanceled
