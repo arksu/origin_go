@@ -1,6 +1,7 @@
 import { Assets, Texture, Sprite } from 'pixi.js'
 import { Spine } from '@esotericsoftware/spine-pixi-v8'
 import objects from './objects'
+import { clearAlphaMaskCache } from './PixelHitTest'
 
 // --- Types matching objects.json structure ---
 
@@ -177,6 +178,7 @@ export class ResourceLoader {
 
   static clearCache(): void {
     this.textureCache.clear()
+    clearAlphaMaskCache()
   }
 
   static getCacheStats(): { cached: number; loading: number } {
