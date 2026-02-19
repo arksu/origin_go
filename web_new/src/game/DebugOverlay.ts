@@ -1,5 +1,6 @@
 import { Text, Container, TextStyle } from 'pixi.js'
 import { DEBUG_SHOW_OBJECT_BOUNDS } from '@/constants/game'
+import { config } from '@/config'
 import type { DebugInfo } from './types'
 
 // Global reference to ObjectManager for bounds control
@@ -12,11 +13,12 @@ export function setObjectManager(manager: any): void {
 export class DebugOverlay {
   private container: Container
   private text: Text
-  private visible: boolean = true
+  private visible: boolean = config.DEBUG
 
   constructor() {
     this.container = new Container()
     this.container.zIndex = 1000
+    this.container.visible = this.visible
 
     const style = new TextStyle({
       fontFamily: 'monospace',

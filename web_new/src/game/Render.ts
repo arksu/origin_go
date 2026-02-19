@@ -33,7 +33,6 @@ export class Render {
   private onClickCallback: ((screen: ScreenPoint) => void) | null = null
 
   private canvas: HTMLCanvasElement | null = null
-  private keyDownHandler: ((e: KeyboardEvent) => void) | null = null
   private lastPointerScreen: ScreenPoint | null = null
   private lastHoverCheckScreen: ScreenPoint | null = null
   private lastHoverCamX = Number.NaN
@@ -87,7 +86,6 @@ export class Render {
     this.debugOverlay.setVisible(config.DEBUG)
 
     this.setupInputController()
-    this.setupKeyboardEvents()
 
     this.app.ticker.add(this.update.bind(this))
   }
@@ -165,16 +163,6 @@ export class Render {
     this.inputController.onPointerMove((screenX, screenY) => {
       this.lastPointerScreen = { x: screenX, y: screenY }
     })
-  }
-
-  private setupKeyboardEvents(): void {
-    this.keyDownHandler = (e: KeyboardEvent) => {
-      if (e.key === '`') {
-        this.debugOverlay.toggle()
-      }
-    }
-
-    window.addEventListener('keydown', this.keyDownHandler)
   }
 
   private update(): void {
@@ -479,10 +467,6 @@ export class Render {
 
     this.inputController.destroy()
 
-    if (this.keyDownHandler) {
-      window.removeEventListener('keydown', this.keyDownHandler)
-    }
-
     this.chunkManager.destroy()
     this.objectManager.destroy()
     this.debugOverlay.destroy()
@@ -491,7 +475,6 @@ export class Render {
     clearAlphaMaskCache()
 
     this.canvas = null
-    this.keyDownHandler = null
     this.onClickCallback = null
     this.lastPointerScreen = null
     this.lastHoverCheckScreen = null
