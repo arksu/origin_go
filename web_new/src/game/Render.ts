@@ -34,6 +34,11 @@ export class Render {
 
   private canvas: HTMLCanvasElement | null = null
   private keyDownHandler: ((e: KeyboardEvent) => void) | null = null
+  private lastPointerScreen: ScreenPoint | null = null
+  private lastHoverCheckScreen: ScreenPoint | null = null
+  private lastHoverCamX = Number.NaN
+  private lastHoverCamY = Number.NaN
+  private lastHoverZoom = Number.NaN
 
   constructor() {
     this.app = new Application()
@@ -156,6 +161,10 @@ export class Render {
     this.inputController.onWheel((event) => {
       cameraController.adjustZoom(event.deltaY > 0 ? 1 : -1)
     })
+
+    this.inputController.onPointerMove((screenX, screenY) => {
+      this.lastPointerScreen = { x: screenX, y: screenY }
+    })
   }
 
   private setupKeyboardEvents(): void {
@@ -174,8 +183,54 @@ export class Render {
     this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
+    this.updateHoverHighlight()
 
     this.updateDebugOverlay()
+  }
+
+  private updateHoverHighlight(): void {
+    if (!this.lastPointerScreen) {
+      this.objectManager.clearHover()
+      return
+    }
+
+    if (
+      this.lastPointerScreen.x < 0 ||
+      this.lastPointerScreen.y < 0 ||
+      this.lastPointerScreen.x > this.app.screen.width ||
+      this.lastPointerScreen.y > this.app.screen.height
+    ) {
+      this.objectManager.clearHover()
+      this.lastHoverCheckScreen = null
+      return
+    }
+
+    const camState = cameraController.getState()
+    const camChanged = (
+      this.lastHoverCamX !== camState.x ||
+      this.lastHoverCamY !== camState.y ||
+      this.lastHoverZoom !== camState.zoom
+    )
+    const pointerChanged = (
+      !this.lastHoverCheckScreen ||
+      this.lastHoverCheckScreen.x !== this.lastPointerScreen.x ||
+      this.lastHoverCheckScreen.y !== this.lastPointerScreen.y
+    )
+
+    if (!camChanged && !pointerChanged) {
+      return
+    }
+
+    this.objectManager.updateHover(
+      this.lastPointerScreen.x,
+      this.lastPointerScreen.y,
+      this.screenToWorld.bind(this)
+    )
+
+    this.lastHoverCheckScreen = { x: this.lastPointerScreen.x, y: this.lastPointerScreen.y }
+    this.lastHoverCamX = camState.x
+    this.lastHoverCamY = camState.y
+    this.lastHoverZoom = camState.zoom
   }
 
   private updateChunkBuilds(): void {
@@ -412,6 +467,10 @@ export class Render {
     terrainManager.resetWorld()
     cullingController.clear()
     cameraController.setTargetEntity(null)
+    this.lastHoverCheckScreen = null
+    this.lastHoverCamX = Number.NaN
+    this.lastHoverCamY = Number.NaN
+    this.lastHoverZoom = Number.NaN
     clearAlphaMaskCache()
   }
 
@@ -434,5 +493,10 @@ export class Render {
     this.canvas = null
     this.keyDownHandler = null
     this.onClickCallback = null
+    this.lastPointerScreen = null
+    this.lastHoverCheckScreen = null
+    this.lastHoverCamX = Number.NaN
+    this.lastHoverCamY = Number.NaN
+    this.lastHoverZoom = Number.NaN
   }
 }

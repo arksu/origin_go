@@ -12,6 +12,7 @@ export class ObjectManager {
   private objects: Map<number, ObjectView> = new Map()
   private needsSort = false
   private boundsVisible: boolean = false
+  private hoveredEntityId: number | null = null
 
   /**
    * Set the shared parent container (objectsContainer) where object views
@@ -68,6 +69,9 @@ export class ObjectManager {
     this.parentContainer?.removeChild(objectView.getContainer())
     objectView.destroy()
     this.objects.delete(entityId)
+    if (this.hoveredEntityId === entityId) {
+      this.hoveredEntityId = null
+    }
 
     // console.log(`[ObjectManager] Despawned object ${entityId}, remaining=${this.objects.size}`)
   }
@@ -109,6 +113,54 @@ export class ObjectManager {
    * Returns { entityId, typeId } if found, null otherwise.
    */
   getEntityAtScreen(
+    screenX: number,
+    screenY: number,
+    screenToWorld: (x: number, y: number) => { x: number; y: number }
+  ): { entityId: number; typeId: number } | null {
+    return this.pickEntityAtScreen(screenX, screenY, screenToWorld)
+  }
+
+  getHoverEntityAtScreen(
+    screenX: number,
+    screenY: number,
+    screenToWorld: (x: number, y: number) => { x: number; y: number }
+  ): { entityId: number; typeId: number } | null {
+    return this.pickEntityAtScreen(screenX, screenY, screenToWorld)
+  }
+
+  updateHover(
+    screenX: number,
+    screenY: number,
+    screenToWorld: (x: number, y: number) => { x: number; y: number }
+  ): void {
+    const hovered = this.getHoverEntityAtScreen(screenX, screenY, screenToWorld)
+    const nextHoveredId = hovered?.entityId ?? null
+    if (nextHoveredId === this.hoveredEntityId) {
+      if (nextHoveredId !== null) {
+        this.objects.get(nextHoveredId)?.setHovered(true)
+      }
+      return
+    }
+
+    if (this.hoveredEntityId !== null) {
+      this.objects.get(this.hoveredEntityId)?.setHovered(false)
+    }
+
+    this.hoveredEntityId = nextHoveredId
+
+    if (this.hoveredEntityId !== null) {
+      this.objects.get(this.hoveredEntityId)?.setHovered(true)
+    }
+  }
+
+  clearHover(): void {
+    if (this.hoveredEntityId !== null) {
+      this.objects.get(this.hoveredEntityId)?.setHovered(false)
+    }
+    this.hoveredEntityId = null
+  }
+
+  private pickEntityAtScreen(
     screenX: number,
     screenY: number,
     screenToWorld: (x: number, y: number) => { x: number; y: number }
@@ -202,6 +254,8 @@ export class ObjectManager {
    * Clear all objects.
    */
   clear(): void {
+    this.clearHover()
+
     // Unregister all objects from culling
     for (const entityId of this.objects.keys()) {
       cullingController.unregisterObject(entityId)

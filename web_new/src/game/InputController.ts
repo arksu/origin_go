@@ -42,6 +42,7 @@ type DragStartHandler = (button: number) => void
 type DragMoveHandler = (event: PointerDragEvent) => void
 type DragEndHandler = (button: number) => void
 type WheelHandler = (event: WheelEvent) => void
+type PointerMoveHandler = (screenX: number, screenY: number) => void
 
 export class InputController {
   private canvas: HTMLCanvasElement | null = null
@@ -57,6 +58,7 @@ export class InputController {
   private onDragMoveHandler: DragMoveHandler | null = null
   private onDragEndHandler: DragEndHandler | null = null
   private onWheelHandler: WheelHandler | null = null
+  private onPointerMoveHandler: PointerMoveHandler | null = null
 
   private boundPointerDown: (e: globalThis.PointerEvent) => void
   private boundPointerMove: (e: globalThis.PointerEvent) => void
@@ -135,6 +137,10 @@ export class InputController {
     this.onWheelHandler = handler
   }
 
+  onPointerMove(handler: PointerMoveHandler): void {
+    this.onPointerMoveHandler = handler
+  }
+
   getModifiers(): number {
     return this.modifiers
   }
@@ -150,6 +156,8 @@ export class InputController {
   }
 
   private handlePointerMove(e: globalThis.PointerEvent): void {
+    this.onPointerMoveHandler?.(e.clientX, e.clientY)
+
     if (this.pointerDownPos === null) return
 
     const dx = e.clientX - this.pointerDownPos.x

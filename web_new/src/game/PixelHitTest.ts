@@ -9,6 +9,8 @@ type AlphaMaskEntry = {
   bytes: number
 }
 
+export type SpriteAlphaMask = Readonly<AlphaMaskEntry>
+
 type AlphaMaskStats = {
   entries: number
   bytes: number
@@ -217,6 +219,14 @@ function getMask(texture: Texture): AlphaMaskEntry | null {
   cacheBytes += built.bytes
   evictIfNeeded()
   return built
+}
+
+export function getSpriteAlphaMask(sprite: Sprite): SpriteAlphaMask | null {
+  const texture = sprite.texture
+  if (!texture || texture === Texture.EMPTY) {
+    return null
+  }
+  return getMask(texture)
 }
 
 export function hitTestSpritePixel(
