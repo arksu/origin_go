@@ -34,20 +34,26 @@ type TreeStageConfig struct {
 	AllowChop         bool             `json:"allowChop"`
 	SpawnChopObject   []string         `json:"spawnChopObject,omitempty"`
 	SpawnChopItem     []string         `json:"spawnChopItem,omitempty"`
-	Take              []TreeTakeConfig `json:"take,omitempty"`
+	Take              []TakeConfig     `json:"take,omitempty"`
 	TransformToDefKey string           `json:"transformToDefKey,omitempty"`
 }
 
-type TreeTakeConfig struct {
+type TakeConfig struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	ItemDefKey string `json:"itemDefKey"`
 	Count      int    `json:"count"`
 }
 
+type TakeBehaviorConfig struct {
+	Priority int          `json:"priority,omitempty"`
+	Items    []TakeConfig `json:"items"`
+}
+
 // BehaviorDefConfigTarget receives validated behavior config mutations.
 type BehaviorDefConfigTarget interface {
 	SetTreeBehaviorConfig(cfg TreeBehaviorConfig)
+	SetTakeBehaviorConfig(cfg TakeBehaviorConfig)
 }
 
 // BehaviorDefConfigContext is object-definition behavior config input.

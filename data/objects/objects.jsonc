@@ -31,7 +31,16 @@
       },
       "resource": "boulder",
       "behaviors": {
-        "player": {}
+        "take": {
+          "items": [
+            {
+              "id": "chip_stone",
+              "name": "Chip Stone",
+              "itemDefKey": "stone",
+              "count": 75
+            }
+          ]
+        }
       }
     }
   ]

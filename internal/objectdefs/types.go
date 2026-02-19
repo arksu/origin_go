@@ -21,6 +21,7 @@ type ObjectDef struct {
 	BehaviorOrder                  []string            `json:"-"`
 	BehaviorPriorities             map[string]int      `json:"-"`
 	TreeConfig                     *TreeBehaviorConfig `json:"-"`
+	TakeConfig                     *TakeBehaviorConfig `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.
@@ -70,15 +71,20 @@ type TreeStageConfig struct {
 	AllowChop         bool             `json:"allowChop"`
 	SpawnChopObject   []string         `json:"spawnChopObject,omitempty"`
 	SpawnChopItem     []string         `json:"spawnChopItem,omitempty"`
-	Take              []TreeTakeConfig `json:"take,omitempty"`
+	Take              []TakeConfig     `json:"take,omitempty"`
 	TransformToDefKey string           `json:"transformToDefKey,omitempty"`
 }
 
-type TreeTakeConfig struct {
+type TakeConfig struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	ItemDefKey string `json:"itemDefKey"`
 	Count      int    `json:"count"`
+}
+
+type TakeBehaviorConfig struct {
+	Priority int          `json:"priority,omitempty"`
+	Items    []TakeConfig `json:"items"`
 }
 
 // ObjectsFile represents a JSONC file containing object definitions.

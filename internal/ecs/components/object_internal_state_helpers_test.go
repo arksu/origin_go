@@ -82,3 +82,41 @@ func TestTreeBehaviorState_UnmarshalJSONDynamicTakenKeys(t *testing.T) {
 		t.Fatalf("expected take_bark=1, got %d", state.Taken["take_bark"])
 	}
 }
+
+func TestTakeBehaviorState_MarshalJSONWithDynamicTakenKeys(t *testing.T) {
+	state := TakeBehaviorState{
+		Taken: map[string]int{
+			"chip_stone": 3,
+			"chip_flint": 1,
+		},
+	}
+
+	payload, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if decoded["chip_stone_taken"] != float64(3) {
+		t.Fatalf("expected chip_stone_taken=3, got %#v", decoded["chip_stone_taken"])
+	}
+	if decoded["chip_flint_taken"] != float64(1) {
+		t.Fatalf("expected chip_flint_taken=1, got %#v", decoded["chip_flint_taken"])
+	}
+}
+
+func TestTakeBehaviorState_UnmarshalJSONDynamicTakenKeys(t *testing.T) {
+	var state TakeBehaviorState
+	if err := json.Unmarshal([]byte(`{"chip_stone_taken":5,"chip_flint_taken":2}`), &state); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if state.Taken["chip_stone"] != 5 {
+		t.Fatalf("expected chip_stone=5, got %d", state.Taken["chip_stone"])
+	}
+	if state.Taken["chip_flint"] != 2 {
+		t.Fatalf("expected chip_flint=2, got %d", state.Taken["chip_flint"])
+	}
+}

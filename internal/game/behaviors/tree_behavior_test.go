@@ -293,7 +293,7 @@ func TestOnTakeCycleComplete_DoesNotConsumeStaminaWhenGiveUnavailable(t *testing
 				ChopPointsTotal: 1,
 				StageDuration:   60,
 				AllowChop:       true,
-				Take: []objectdefs.TreeTakeConfig{
+				Take: []objectdefs.TakeConfig{
 					{ID: "take_branch", Name: "Take Branch", ItemDefKey: "branch", Count: 1},
 				},
 			},
@@ -355,7 +355,7 @@ func TestOnTakeCycleComplete_CompletesWhenItemPlacedInHand(t *testing.T) {
 				ChopPointsTotal: 1,
 				StageDuration:   60,
 				AllowChop:       true,
-				Take: []objectdefs.TreeTakeConfig{
+				Take: []objectdefs.TakeConfig{
 					{ID: "take_branch", Name: "Take Branch", ItemDefKey: "branch", Count: 2},
 				},
 			},

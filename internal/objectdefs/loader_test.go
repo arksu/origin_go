@@ -144,6 +144,45 @@ func (testTreeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConf
 	return cfg.Priority, nil
 }
 
+type testTakeBehavior struct{}
+
+func (testTakeBehavior) Key() string { return "take" }
+
+func (testTakeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
+	if ctx == nil {
+		return 100, nil
+	}
+	if ctx.Def == nil {
+		return 0, fmt.Errorf("take config target def is nil")
+	}
+
+	var cfg contracts.TakeBehaviorConfig
+	if err := decodeStrictJSONForTest(ctx.RawConfig, &cfg); err != nil {
+		return 0, fmt.Errorf("invalid take config: %w", err)
+	}
+	if cfg.Priority <= 0 {
+		cfg.Priority = 100
+	}
+	if len(cfg.Items) == 0 {
+		return 0, fmt.Errorf("take.items is required")
+	}
+
+	seenIDs := make(map[string]int, len(cfg.Items))
+	for itemIndex, item := range cfg.Items {
+		if err := validateTakeBehaviorItemConfigForTest(itemIndex, item); err != nil {
+			return 0, err
+		}
+		itemID := strings.TrimSpace(item.ID)
+		if firstIndex, exists := seenIDs[itemID]; exists {
+			return 0, fmt.Errorf("take.items[%d].id duplicate %q (first at index %d)", itemIndex, itemID, firstIndex)
+		}
+		seenIDs[itemID] = itemIndex
+	}
+
+	ctx.Def.SetTakeBehaviorConfig(cfg)
+	return cfg.Priority, nil
+}
+
 func decodeStrictJSONForTest(raw []byte, dst any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -156,7 +195,7 @@ func decodeStrictJSONForTest(raw []byte, dst any) error {
 	return nil
 }
 
-func validateTakeConfigForTest(stageIndex int, takeIndex int, cfg contracts.TreeTakeConfig) error {
+func validateTakeConfigForTest(stageIndex int, takeIndex int, cfg contracts.TakeConfig) error {
 	takeID := strings.TrimSpace(cfg.ID)
 	if takeID == "" {
 		return fmt.Errorf("tree.stages[%d].take[%d].id must not be empty", stageIndex, takeIndex)
@@ -181,10 +220,36 @@ func validateTakeConfigForTest(stageIndex int, takeIndex int, cfg contracts.Tree
 	return nil
 }
 
+func validateTakeBehaviorItemConfigForTest(itemIndex int, item contracts.TakeConfig) error {
+	itemID := strings.TrimSpace(item.ID)
+	if itemID == "" {
+		return fmt.Errorf("take.items[%d].id must not be empty", itemIndex)
+	}
+	if strings.TrimSpace(item.Name) == "" {
+		return fmt.Errorf("take.items[%d].name must not be empty", itemIndex)
+	}
+	itemKey := strings.TrimSpace(item.ItemDefKey)
+	if itemKey == "" {
+		return fmt.Errorf("take.items[%d].itemDefKey must not be empty", itemIndex)
+	}
+	if item.Count <= 0 {
+		return fmt.Errorf("take.items[%d].count must be > 0", itemIndex)
+	}
+	registry := itemdefs.Global()
+	if registry == nil {
+		return fmt.Errorf("take.items[%d].itemDefKey validation requires loaded item defs", itemIndex)
+	}
+	if _, ok := registry.GetByKey(itemKey); !ok {
+		return fmt.Errorf("take.items[%d].itemDefKey unknown item key %q", itemIndex, itemKey)
+	}
+	return nil
+}
+
 func testBehaviors(_ *testing.T) contracts.BehaviorRegistry {
 	return &testBehaviorRegistry{
 		byKey: map[string]contracts.Behavior{
 			"tree":      testTreeBehavior{},
+			"take":      testTakeBehavior{},
 			"container": testPriorityOnlyBehavior{key: "container"},
 			"player":    testPriorityOnlyBehavior{key: "player"},
 		},
@@ -686,6 +751,216 @@ func TestLoadFromDirectory_TreeBehaviorTakeDuplicateIDFails(t *testing.T) {
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "take[1].id duplicate")
+}
+
+func TestLoadFromDirectory_TakeBehaviorItemsSuccess(t *testing.T) {
+	dir := t.TempDir()
+	previousRegistry := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 1, Key: "stone", Name: "Stone", Size: itemdefs.Size{W: 1, H: 1}},
+	}))
+	defer itemdefs.SetGlobalForTesting(previousRegistry)
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "boulder",
+			"name": "Boulder",
+			"resource": "x.png",
+			"behaviors": {
+				"take": {
+					"items": [
+						{
+							"id": "chip_stone",
+							"name": "Chip Stone",
+							"itemDefKey": "stone",
+							"count": 5
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.NoError(t, err)
+	def, ok := registry.GetByID(1)
+	require.True(t, ok)
+	require.NotNil(t, def.TakeConfig)
+	require.Len(t, def.TakeConfig.Items, 1)
+	assert.Equal(t, "chip_stone", def.TakeConfig.Items[0].ID)
+}
+
+func TestLoadFromDirectory_TakeBehaviorItemsRequired(t *testing.T) {
+	dir := t.TempDir()
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "boulder_bad_take",
+			"name": "Boulder",
+			"resource": "x.png",
+			"behaviors": {
+				"take": {}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take.items is required")
+}
+
+func TestLoadFromDirectory_TakeBehaviorDuplicateIDFails(t *testing.T) {
+	dir := t.TempDir()
+	previousRegistry := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 1, Key: "stone", Name: "Stone", Size: itemdefs.Size{W: 1, H: 1}},
+	}))
+	defer itemdefs.SetGlobalForTesting(previousRegistry)
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "boulder_bad_take_duplicate",
+			"name": "Boulder",
+			"resource": "x.png",
+			"behaviors": {
+				"take": {
+					"items": [
+						{
+							"id": "chip_stone",
+							"name": "Chip Stone",
+							"itemDefKey": "stone",
+							"count": 1
+						},
+						{
+							"id": "chip_stone",
+							"name": "Chip Stone Again",
+							"itemDefKey": "stone",
+							"count": 1
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take.items[1].id duplicate")
+}
+
+func TestLoadFromDirectory_TakeBehaviorMissingNameFails(t *testing.T) {
+	dir := t.TempDir()
+	previousRegistry := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 1, Key: "stone", Name: "Stone", Size: itemdefs.Size{W: 1, H: 1}},
+	}))
+	defer itemdefs.SetGlobalForTesting(previousRegistry)
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "boulder_bad_take_name",
+			"name": "Boulder",
+			"resource": "x.png",
+			"behaviors": {
+				"take": {
+					"items": [
+						{
+							"id": "chip_stone",
+							"itemDefKey": "stone",
+							"count": 1
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take.items[0].name must not be empty")
+}
+
+func TestLoadFromDirectory_TakeBehaviorCountMustBePositive(t *testing.T) {
+	dir := t.TempDir()
+	previousRegistry := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 1, Key: "stone", Name: "Stone", Size: itemdefs.Size{W: 1, H: 1}},
+	}))
+	defer itemdefs.SetGlobalForTesting(previousRegistry)
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "boulder_bad_take_count",
+			"name": "Boulder",
+			"resource": "x.png",
+			"behaviors": {
+				"take": {
+					"items": [
+						{
+							"id": "chip_stone",
+							"name": "Chip Stone",
+							"itemDefKey": "stone",
+							"count": 0
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take.items[0].count must be > 0")
+}
+
+func TestLoadFromDirectory_TakeBehaviorUnknownItemFails(t *testing.T) {
+	dir := t.TempDir()
+	previousRegistry := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 1, Key: "known", Name: "Known", Size: itemdefs.Size{W: 1, H: 1}},
+	}))
+	defer itemdefs.SetGlobalForTesting(previousRegistry)
+
+	writeJSONC(t, dir, "test.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "boulder_bad_take_item",
+			"name": "Boulder",
+			"resource": "x.png",
+			"behaviors": {
+				"take": {
+					"items": [
+						{
+							"id": "chip_stone",
+							"name": "Chip Stone",
+							"itemDefKey": "unknown_item",
+							"count": 1
+						}
+					]
+				}
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "take.items[0].itemDefKey unknown item key")
 }
 
 func TestLoadFromDirectory_TreeBehaviorStages(t *testing.T) {

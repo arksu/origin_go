@@ -75,7 +75,7 @@ func (treeBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigCo
 		}
 		seenTakeIDs := make(map[string]int, len(stage.Take))
 		for takeIdx, takeCfg := range stage.Take {
-			if err := validateTreeTakeConfig(idx, takeIdx, takeCfg); err != nil {
+			if err := validateTakeConfig(idx, takeIdx, takeCfg); err != nil {
 				return 0, err
 			}
 			takeID := strings.TrimSpace(takeCfg.ID)
@@ -102,7 +102,7 @@ func (treeBehavior) DeclaredActions() []contracts.BehaviorActionSpec {
 	}
 }
 
-func validateTreeTakeConfig(stageIndex int, takeIndex int, takeCfg contracts.TreeTakeConfig) error {
+func validateTakeConfig(stageIndex int, takeIndex int, takeCfg contracts.TakeConfig) error {
 	takeID := strings.TrimSpace(takeCfg.ID)
 	if takeID == "" {
 		return fmt.Errorf("tree.stages[%d].take[%d].id must not be empty", stageIndex, takeIndex)
@@ -639,7 +639,7 @@ func onTakeCycleComplete(
 	return contracts.BehaviorCycleDecisionContinue
 }
 
-func findTakeConfigByActionID(stageCfg *objectdefs.TreeStageConfig, actionID string) *objectdefs.TreeTakeConfig {
+func findTakeConfigByActionID(stageCfg *objectdefs.TreeStageConfig, actionID string) *objectdefs.TakeConfig {
 	if stageCfg == nil {
 		return nil
 	}

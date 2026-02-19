@@ -605,6 +605,12 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 				return nil, fmt.Errorf("failed to decode tree state: %w", err)
 			}
 			runtimeState.Behaviors[behaviorKey] = &treeState
+		case "take":
+			var takeState components.TakeBehaviorState
+			if err := json.Unmarshal(rawBehaviorState, &takeState); err != nil {
+				return nil, fmt.Errorf("failed to decode take state: %w", err)
+			}
+			runtimeState.Behaviors[behaviorKey] = &takeState
 		default:
 			cloned := append([]byte(nil), rawBehaviorState...)
 			runtimeState.Behaviors[behaviorKey] = json.RawMessage(cloned)
