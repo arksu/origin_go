@@ -298,6 +298,45 @@ export class ObjectView {
     )
   }
 
+  containsScreenPoint(
+    screenX: number,
+    screenY: number,
+    screenToWorld: (x: number, y: number) => { x: number; y: number }
+  ): boolean {
+    for (const sprite of this.sprites) {
+      if (!sprite.visible || !sprite.renderable) continue
+      const bounds = sprite.getBounds()
+      if (
+        screenX >= bounds.minX &&
+        screenX <= bounds.maxX &&
+        screenY >= bounds.minY &&
+        screenY <= bounds.maxY
+      ) {
+        return true
+      }
+    }
+
+    if (this.placeholder && this.placeholder.visible) {
+      const bounds = this.placeholder.getBounds()
+      if (
+        screenX >= bounds.minX &&
+        screenX <= bounds.maxX &&
+        screenY >= bounds.minY &&
+        screenY <= bounds.maxY
+      ) {
+        return true
+      }
+    }
+
+    // Keep legacy fallback only when there are no sprite layers to test.
+    if (this.sprites.length === 0) {
+      const worldPos = screenToWorld(screenX, screenY)
+      return this.containsWorldPoint(worldPos.x, worldPos.y)
+    }
+
+    return false
+  }
+
   setDebugMode(enabled: boolean): void {
     if (enabled && !this.debugText) {
       this.debugText = new Text({
