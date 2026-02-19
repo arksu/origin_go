@@ -247,8 +247,12 @@ func (takeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 	if itemKey == "" {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
+	parentQuality, hasQuality := resolveTargetObjectQuality(ctx.World, ctx.TargetHandle)
+	if !hasQuality {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
 
-	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, treeSpawnQuality)
+	outcome := deps.GiveItem(ctx.World, ctx.PlayerID, ctx.PlayerHandle, itemKey, 1, parentQuality)
 	if !outcome.Success {
 		sendWarningMiniAlert(ctx.PlayerID, deps.Alerts, "TAKE_GIVE_FAILED")
 		return contracts.BehaviorCycleDecisionCanceled
