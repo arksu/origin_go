@@ -13,7 +13,9 @@ import {
   DROP_ITEM_GROUND_BIAS,
   DROP_ITEM_MIN_SCALE,
   DROP_ITEM_MAX_SCALE,
+  RMB_PIXEL_ALPHA_THRESHOLD,
 } from '@/constants/render'
+import { hitTestSpritePixel } from './PixelHitTest'
 
 export interface ObjectViewOptions {
   entityId: number
@@ -41,11 +43,15 @@ export class ObjectView {
 
   private resDef: ResourceDef | undefined
   private sprites: Sprite[] = []
+  private interactiveSprites: Sprite[] = []
+  private interactiveSpritesSorted: Sprite[] = []
+  private interactiveOrderDirty = true
   private spineAnimations: Array<Spine | undefined> = []
   private layerIndexMap: Map<number, number> = new Map() // layerIdx -> spineAnimations index
   private lastDir = 4 // default south
   private isDestroyed = false
   private isDroppedItem = false
+  private hasSpineLayers = false
 
   constructor(options: ObjectViewOptions) {
     this.entityId = options.entityId
@@ -109,6 +115,7 @@ export class ObjectView {
       spr.y = tileH * DROP_ITEM_GROUND_BIAS
 
       this.setInteractive(spr)
+      this.registerInteractiveSprite(spr)
       this.sprites.push(spr)
       this.container.addChild(spr)
     })
@@ -153,6 +160,7 @@ export class ObjectView {
       }
       if (layer.interactive) {
         this.setInteractive(spr)
+        this.registerInteractiveSprite(spr)
       }
       this.sprites.push(spr)
       this.container.addChild(spr)
@@ -160,6 +168,7 @@ export class ObjectView {
   }
 
   private addSpineLayer(layer: LayerDef, spineIdx: number): void {
+    this.hasSpineLayers = true
     ResourceLoader.loadSpine(layer, this.resDef!).then((spineAnim) => {
       if (this.isDestroyed) {
         spineAnim.destroy()
@@ -298,43 +307,67 @@ export class ObjectView {
     )
   }
 
-  containsScreenPoint(
+  hitTestRmbScreenPoint(
     screenX: number,
     screenY: number,
     screenToWorld: (x: number, y: number) => { x: number; y: number }
   ): boolean {
-    for (const sprite of this.sprites) {
+    const sortedSprites = this.getInteractiveSpritesForHitTest()
+    for (const sprite of sortedSprites) {
       if (!sprite.visible || !sprite.renderable) continue
-      const bounds = sprite.getBounds()
-      if (
-        screenX >= bounds.minX &&
-        screenX <= bounds.maxX &&
-        screenY >= bounds.minY &&
-        screenY <= bounds.maxY
-      ) {
+      if (hitTestSpritePixel(sprite, screenX, screenY, RMB_PIXEL_ALPHA_THRESHOLD)) {
         return true
       }
     }
 
-    if (this.placeholder && this.placeholder.visible) {
-      const bounds = this.placeholder.getBounds()
-      if (
-        screenX >= bounds.minX &&
-        screenX <= bounds.maxX &&
-        screenY >= bounds.minY &&
-        screenY <= bounds.maxY
-      ) {
-        return true
-      }
+    if (this.hitPlaceholderBounds(screenX, screenY)) {
+      return true
     }
 
-    // Keep legacy fallback only when there are no sprite layers to test.
-    if (this.sprites.length === 0) {
+    // Spine is dynamic; keep bounds fallback for now.
+    if (this.hasSpineLayers) {
       const worldPos = screenToWorld(screenX, screenY)
       return this.containsWorldPoint(worldPos.x, worldPos.y)
     }
 
     return false
+  }
+
+  private hitPlaceholderBounds(screenX: number, screenY: number): boolean {
+    if (!this.placeholder || !this.placeholder.visible) return false
+
+    const bounds = this.placeholder.getBounds()
+    return (
+      screenX >= bounds.minX &&
+      screenX <= bounds.maxX &&
+      screenY >= bounds.minY &&
+      screenY <= bounds.maxY
+    )
+  }
+
+  private getInteractiveSpritesForHitTest(): Sprite[] {
+    if (!this.interactiveOrderDirty) {
+      return this.interactiveSpritesSorted
+    }
+
+    this.interactiveSpritesSorted = this.interactiveSprites
+      .slice()
+      .sort((left, right) => {
+        if (left.zIndex !== right.zIndex) {
+          return right.zIndex - left.zIndex
+        }
+
+        // If zIndex is equal, prefer later children (rendered on top).
+        return this.container.getChildIndex(right) - this.container.getChildIndex(left)
+      })
+
+    this.interactiveOrderDirty = false
+    return this.interactiveSpritesSorted
+  }
+
+  private registerInteractiveSprite(sprite: Sprite): void {
+    this.interactiveSprites.push(sprite)
+    this.interactiveOrderDirty = true
   }
 
   setDebugMode(enabled: boolean): void {

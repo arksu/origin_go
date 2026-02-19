@@ -13,3 +13,7 @@ export const DROP_ITEM_MAX_SCALE = 1.0
 export const OBJECT_BOUNDS_COLOR = 0xff8800  // Orange color for object bounds
 export const OBJECT_BOUNDS_WIDTH = 2         // Line width for object bounds in pixels
 export const OBJECT_BOUNDS_ALPHA = 0.5       // Transparency for object bounds (0.0-1.0)
+
+// RMB pixel-perfect picking
+export const RMB_PIXEL_ALPHA_THRESHOLD = 1
+export const RMB_ALPHA_MASK_CACHE_MAX_BYTES = 64 * 1024 * 1024

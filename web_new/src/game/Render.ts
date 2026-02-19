@@ -15,6 +15,7 @@ import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
 import type { DebugInfo, ScreenPoint } from './types'
+import { clearAlphaMaskCache } from './PixelHitTest'
 
 export class Render {
   private app: Application
@@ -411,6 +412,7 @@ export class Render {
     terrainManager.resetWorld()
     cullingController.clear()
     cameraController.setTargetEntity(null)
+    clearAlphaMaskCache()
   }
 
   destroy(): void {
@@ -427,6 +429,7 @@ export class Render {
     this.debugOverlay.destroy()
     cameraController.reset()
     this.app.destroy(true, { children: true, texture: true })
+    clearAlphaMaskCache()
 
     this.canvas = null
     this.keyDownHandler = null

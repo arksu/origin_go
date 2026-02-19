@@ -113,22 +113,35 @@ export class ObjectManager {
     screenY: number,
     screenToWorld: (x: number, y: number) => { x: number; y: number }
   ): { entityId: number; typeId: number } | null {
-    let selectedEntity: { entityId: number; typeId: number } | null = null
-    let highestZIndex = Number.NEGATIVE_INFINITY
+    const visibleIds = cullingController.getVisibleObjectIds()
 
-    for (const [entityId, objectView] of this.objects) {
-      if (!objectView.containsScreenPoint(screenX, screenY, screenToWorld)) {
-        continue
+    const candidates: Array<{ entityId: number; objectView: ObjectView }> = []
+
+    if (visibleIds.length > 0) {
+      for (const entityId of visibleIds) {
+        const objectView = this.objects.get(entityId)
+        if (!objectView) continue
+        candidates.push({ entityId, objectView })
       }
-
-      const zIndex = objectView.getContainer().zIndex
-      if (zIndex >= highestZIndex) {
-        highestZIndex = zIndex
-        selectedEntity = { entityId, typeId: objectView.typeId }
+    } else {
+      for (const [entityId, objectView] of this.objects) {
+        candidates.push({ entityId, objectView })
       }
     }
 
-    return selectedEntity
+    candidates.sort((left, right) => {
+      const zDiff = right.objectView.getContainer().zIndex - left.objectView.getContainer().zIndex
+      if (zDiff !== 0) return zDiff
+      return right.entityId - left.entityId
+    })
+
+    for (const candidate of candidates) {
+      if (candidate.objectView.hitTestRmbScreenPoint(screenX, screenY, screenToWorld)) {
+        return { entityId: candidate.entityId, typeId: candidate.objectView.typeId }
+      }
+    }
+
+    return null
   }
 
   /**
