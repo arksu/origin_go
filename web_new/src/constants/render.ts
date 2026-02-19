@@ -17,3 +17,8 @@ export const OBJECT_BOUNDS_ALPHA = 0.5       // Transparency for object bounds (
 // RMB pixel-perfect picking
 export const RMB_PIXEL_ALPHA_THRESHOLD = 1
 export const RMB_ALPHA_MASK_CACHE_MAX_BYTES = 64 * 1024 * 1024
+
+// Hover border highlight
+export const HOVER_BORDER_COLOR = 0xffeb3b
+export const HOVER_BORDER_WIDTH = 1
+export const HOVER_BORDER_ALPHA = 1

@@ -14,8 +14,11 @@ import {
   DROP_ITEM_MIN_SCALE,
   DROP_ITEM_MAX_SCALE,
   RMB_PIXEL_ALPHA_THRESHOLD,
+  HOVER_BORDER_COLOR,
+  HOVER_BORDER_WIDTH,
+  HOVER_BORDER_ALPHA,
 } from '@/constants/render'
-import { hitTestSpritePixel } from './PixelHitTest'
+import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
 
 export interface ObjectViewOptions {
   entityId: number
@@ -36,6 +39,7 @@ export class ObjectView {
   private container: Container
   private debugText: Text | null = null
   private boundsGraphics: Graphics | null = null
+  private hoverGraphics: Graphics | null = null
   private placeholder: Graphics | null = null
 
   private position: { x: number; y: number }
@@ -52,6 +56,9 @@ export class ObjectView {
   private isDestroyed = false
   private isDroppedItem = false
   private hasSpineLayers = false
+  private isHovered = false
+  private hoverBorderDirty = true
+  private hoverBorderSignature = ''
 
   constructor(options: ObjectViewOptions) {
     this.entityId = options.entityId
@@ -368,6 +375,28 @@ export class ObjectView {
   private registerInteractiveSprite(sprite: Sprite): void {
     this.interactiveSprites.push(sprite)
     this.interactiveOrderDirty = true
+    this.hoverBorderDirty = true
+    if (this.isHovered && this.hoverGraphics) {
+      this.rebuildHoverBorder()
+    }
+  }
+
+  private computeHoverSignature(): string {
+    const parts: string[] = []
+    for (const sprite of this.getInteractiveSpritesForHitTest()) {
+      const texture = sprite.texture
+      const frame = texture.frame
+      parts.push([
+        texture.uid,
+        frame.x,
+        frame.y,
+        frame.width,
+        frame.height,
+        sprite.visible ? 1 : 0,
+        sprite.renderable ? 1 : 0,
+      ].join(':'))
+    }
+    return parts.join('|')
   }
 
   setDebugMode(enabled: boolean): void {
@@ -395,9 +424,185 @@ export class ObjectView {
   }
 
   setHovered(hovered: boolean): void {
-    const tint = hovered ? 0xcccccc : 0xffffff
-    for (const spr of this.sprites) {
-      spr.tint = tint
+    if (this.isHovered === hovered) {
+      if (hovered) {
+        const signature = this.computeHoverSignature()
+        if (signature !== this.hoverBorderSignature) {
+          this.hoverBorderDirty = true
+        }
+      }
+      if (hovered && this.hoverBorderDirty) {
+        this.ensureHoverGraphics()
+        this.rebuildHoverBorder()
+      }
+      return
+    }
+
+    this.isHovered = hovered
+
+    if (!hovered) {
+      if (this.hoverGraphics) {
+        this.hoverGraphics.visible = false
+      }
+      return
+    }
+
+    this.ensureHoverGraphics()
+    this.rebuildHoverBorder()
+  }
+
+  private ensureHoverGraphics(): void {
+    if (this.hoverGraphics) {
+      this.hoverGraphics.visible = true
+      return
+    }
+
+    this.hoverGraphics = new Graphics()
+    this.hoverGraphics.zIndex = 9999
+    this.hoverGraphics.eventMode = 'none'
+    this.container.addChild(this.hoverGraphics)
+  }
+
+  private rebuildHoverBorder(): void {
+    if (!this.hoverGraphics) return
+
+    this.hoverGraphics.clear()
+
+    const drewSpriteOutline = this.drawInteractiveSpriteHoverOutline(this.hoverGraphics)
+    if (!drewSpriteOutline) {
+      this.hoverGraphics.setStrokeStyle({
+        width: HOVER_BORDER_WIDTH,
+        color: HOVER_BORDER_COLOR,
+        alpha: HOVER_BORDER_ALPHA,
+      })
+      this.drawFallbackHoverOutline(this.hoverGraphics)
+      this.hoverGraphics.stroke()
+    } else {
+      this.hoverGraphics.fill({ color: HOVER_BORDER_COLOR, alpha: HOVER_BORDER_ALPHA })
+    }
+    this.hoverGraphics.visible = true
+    this.hoverBorderDirty = false
+    this.hoverBorderSignature = this.computeHoverSignature()
+  }
+
+  private drawInteractiveSpriteHoverOutline(graphics: Graphics): boolean {
+    const occupied = new Set<string>()
+    const sprites = this.getInteractiveSpritesForHitTest()
+
+    for (const sprite of sprites) {
+      if (!sprite.visible || !sprite.renderable) continue
+
+      const mask = getSpriteAlphaMask(sprite)
+      if (!mask) continue
+
+      const orig = sprite.texture.orig
+      const localTransform = sprite.localTransform
+
+      for (let py = 0; py < mask.height; py++) {
+        for (let px = 0; px < mask.width; px++) {
+          const bitIndex = py * mask.width + px
+          const byte = mask.bits[bitIndex >> 3] ?? 0
+          const isOpaque = (byte & (1 << (bitIndex & 7))) !== 0
+          if (!isOpaque) continue
+
+          const localOrigX = (px + 0.5) / mask.resolution - sprite.anchor.x * orig.width
+          const localOrigY = (py + 0.5) / mask.resolution - sprite.anchor.y * orig.height
+
+          const ox = Math.round(localTransform.a * localOrigX + localTransform.c * localOrigY + localTransform.tx)
+          const oy = Math.round(localTransform.b * localOrigX + localTransform.d * localOrigY + localTransform.ty)
+
+          occupied.add(`${ox},${oy}`)
+        }
+      }
+    }
+
+    if (occupied.size === 0) {
+      return false
+    }
+
+    const boundaryByY = new Map<number, number[]>()
+
+    for (const key of occupied) {
+      const comma = key.indexOf(',')
+      const x = Number(key.slice(0, comma))
+      const y = Number(key.slice(comma + 1))
+
+      const top = occupied.has(`${x},${y - 1}`)
+      const right = occupied.has(`${x + 1},${y}`)
+      const bottom = occupied.has(`${x},${y + 1}`)
+      const left = occupied.has(`${x - 1},${y}`)
+      if (top && right && bottom && left) continue
+
+      const row = boundaryByY.get(y)
+      if (row) {
+        row.push(x)
+      } else {
+        boundaryByY.set(y, [x])
+      }
+    }
+
+    for (const [y, row] of boundaryByY) {
+      if (row.length === 0) continue
+      row.sort((a, b) => a - b)
+      const first = row[0]
+      if (first == null) continue
+      let start = first
+      let prev = first
+
+      for (let i = 1; i < row.length; i++) {
+        const value = row[i]
+        if (value == null) continue
+        if (value === prev + 1) {
+          prev = value
+          continue
+        }
+
+        graphics.rect(start, y, prev - start + 1, 1)
+        start = value
+        prev = value
+      }
+
+      graphics.rect(start, y, prev - start + 1, 1)
+    }
+
+    return true
+  }
+
+  private drawFallbackHoverOutline(graphics: Graphics): void {
+    if (this.placeholder) {
+      const bounds = this.placeholder.getBounds()
+      const localTopLeft = this.container.toLocal({ x: bounds.minX, y: bounds.minY })
+      const localBottomRight = this.container.toLocal({ x: bounds.maxX, y: bounds.maxY })
+      graphics.rect(
+        localTopLeft.x,
+        localTopLeft.y,
+        localBottomRight.x - localTopLeft.x,
+        localBottomRight.y - localTopLeft.y,
+      )
+      return
+    }
+
+    if (this.size.x > 0 && this.size.y > 0) {
+      const halfWidthX = this.size.x / 2
+      const halfHeightY = this.size.y / 2
+      const corners = [
+        { x: this.position.x - halfWidthX, y: this.position.y - halfHeightY },
+        { x: this.position.x + halfWidthX, y: this.position.y - halfHeightY },
+        { x: this.position.x + halfWidthX, y: this.position.y + halfHeightY },
+        { x: this.position.x - halfWidthX, y: this.position.y + halfHeightY },
+      ]
+      const screenCorners = corners.map(c => coordGame2Screen(c.x, c.y))
+      const containerScreenPos = coordGame2Screen(this.position.x, this.position.y)
+      const localCorners = screenCorners.map(s => ({
+        x: s.x - containerScreenPos.x,
+        y: s.y - containerScreenPos.y,
+      }))
+
+      graphics.moveTo(localCorners[0]?.x || 0, localCorners[0]?.y || 0)
+      graphics.lineTo(localCorners[1]?.x || 0, localCorners[1]?.y || 0)
+      graphics.lineTo(localCorners[2]?.x || 0, localCorners[2]?.y || 0)
+      graphics.lineTo(localCorners[3]?.x || 0, localCorners[3]?.y || 0)
+      graphics.lineTo(localCorners[0]?.x || 0, localCorners[0]?.y || 0)
     }
   }
 
@@ -470,6 +675,10 @@ export class ObjectView {
     }
     for (const spine of this.spineAnimations) {
       spine?.destroy()
+    }
+    if (this.hoverGraphics) {
+      this.hoverGraphics.destroy()
+      this.hoverGraphics = null
     }
     if (this.placeholder) {
       this.placeholder.destroy()
