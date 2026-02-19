@@ -15,6 +15,7 @@ import (
 
 	"origin/internal/config"
 	"origin/internal/game/behaviors"
+	"origin/internal/itemdefs"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
@@ -39,6 +40,12 @@ func main() {
 	flag.Parse()
 
 	cfg := config.MustLoad(logger)
+
+	itemRegistry, err := itemdefs.LoadFromDirectory("./data/items", logger)
+	if err != nil {
+		logger.Fatal("failed to load item definitions", zap.Error(err))
+	}
+	itemdefs.SetGlobal(itemRegistry)
 
 	behaviorRegistry, err := behaviors.DefaultRegistry()
 	if err != nil {
