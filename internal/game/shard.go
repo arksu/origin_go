@@ -141,9 +141,11 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 				}
 			}
 			return contracts.GiveItemOutcome{
-				Success:    result.Success,
-				AnyDropped: result.SpawnedDroppedEntityID != nil,
-				Message:    result.Message,
+				Success:      result.Success,
+				AnyDropped:   false,
+				PlacedInHand: result.PlacedInHand,
+				GrantedCount: result.GrantedCount,
+				Message:      result.Message,
 			}
 		},
 		s,

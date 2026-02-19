@@ -131,9 +131,11 @@ type MiniAlertSender interface {
 }
 
 type GiveItemOutcome struct {
-	Success    bool
-	AnyDropped bool
-	Message    string
+	Success      bool
+	AnyDropped   bool
+	PlacedInHand bool
+	GrantedCount uint32
+	Message      string
 }
 
 type GiveItemFn func(

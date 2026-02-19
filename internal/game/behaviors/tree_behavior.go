@@ -630,6 +630,9 @@ func onTakeCycleComplete(
 		takenMap, newTaken = incrementTakenCount(takenMap, actionID)
 		setTreeBehaviorState(state, chopPoints, takenMap, stage, nextTick)
 	})
+	if outcome.PlacedInHand {
+		return contracts.BehaviorCycleDecisionComplete
+	}
 	if newTaken >= takeCfg.Count {
 		return contracts.BehaviorCycleDecisionComplete
 	}

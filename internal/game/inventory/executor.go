@@ -84,7 +84,7 @@ func (e *InventoryExecutor) ExecuteOperation(
 	return opResult
 }
 
-// GiveItem creates a new item and adds it to the player's inventory (or drops it).
+// GiveItem creates a new item and adds it to the player's inventory.
 // Returns updated container states for client sync.
 func (e *InventoryExecutor) GiveItem(
 	w *ecs.World,
@@ -102,6 +102,9 @@ func (e *InventoryExecutor) GiveItem(
 		if e.visionForcer != nil {
 			e.visionForcer.ForceUpdateForObserver(w, playerHandle)
 		}
+	}
+	if result.Success {
+		result.UpdatedContainers = e.applyNestedCascade(w, playerID, result.UpdatedContainers)
 	}
 
 	return result
@@ -162,8 +165,18 @@ func (e *InventoryExecutor) checkNestedCascade(w *ecs.World, playerID types.Enti
 	if !result.Success {
 		return
 	}
+	result.UpdatedContainers = e.applyNestedCascade(w, playerID, result.UpdatedContainers)
+}
 
-	for _, updatedInfo := range result.UpdatedContainers {
+func (e *InventoryExecutor) applyNestedCascade(
+	w *ecs.World,
+	playerID types.EntityID,
+	updatedContainers []*ContainerInfo,
+) []*ContainerInfo {
+	for _, updatedInfo := range updatedContainers {
+		if updatedInfo == nil || updatedInfo.Container == nil {
+			continue
+		}
 		nestedOwnerID := updatedInfo.Container.OwnerID
 
 		// Find which parent container holds the item with ItemID == nestedOwnerID
@@ -198,19 +211,23 @@ func (e *InventoryExecutor) checkNestedCascade(w *ecs.World, playerID types.Enti
 		if parentDirty {
 			updatedParent, _ := ecs.GetComponent[components.InventoryContainer](w, parentInfo.Handle)
 			parentInfo.Container = &updatedParent
-			// Add parent to updated list if not already there
-			alreadyIncluded := false
-			for _, existing := range result.UpdatedContainers {
-				if existing.Handle == parentInfo.Handle {
-					alreadyIncluded = true
+			// Ensure updated list always keeps the newest parent revision.
+			existingIndex := -1
+			for idx, existing := range updatedContainers {
+				if existing != nil && existing.Handle == parentInfo.Handle {
+					existingIndex = idx
 					break
 				}
 			}
-			if !alreadyIncluded {
-				result.UpdatedContainers = append(result.UpdatedContainers, parentInfo)
+			if existingIndex >= 0 {
+				updatedContainers[existingIndex] = parentInfo
+			} else {
+				updatedContainers = append(updatedContainers, parentInfo)
 			}
 		}
 	}
+
+	return updatedContainers
 }
 
 // collectClosedContainerRefs checks if any updated container is a hand that now holds
