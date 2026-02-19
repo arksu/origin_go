@@ -228,7 +228,13 @@ func (takeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	taken := takenCountForAction(takeCountsFromState(ctx.World, ctx.TargetHandle), actionID)
+	taken := 0
+	ecs.WithComponent(ctx.World, ctx.TargetHandle, func(state *components.ObjectInternalState) {
+		takeState, hasTakeState := components.GetBehaviorState[components.TakeBehaviorState](*state, takeBehaviorKey)
+		if hasTakeState && takeState != nil {
+			taken = takenCountForAction(takeState.Taken, actionID)
+		}
+	})
 	if taken >= item.Count {
 		return contracts.BehaviorCycleDecisionComplete
 	}
