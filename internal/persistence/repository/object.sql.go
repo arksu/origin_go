@@ -219,7 +219,7 @@ type UpsertObjectParams struct {
 	ChunkX     int                   `json:"chunk_x"`
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
-	Quality    sql.NullInt16         `json:"quality"`
+	Quality    int16                 `json:"quality"`
 	Hp         sql.NullInt32         `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
 	Data       pqtype.NullRawMessage `json:"data"`

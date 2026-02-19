@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS object
     chunk_y     INT    NOT NULL, -- redundant data for loading by chunk
     heading     SMALLINT CHECK (heading >= 0 AND heading < 360),
 
-    quality     SMALLINT CHECK (quality >= 0),
+    quality     SMALLINT CHECK (quality >= 0) not null default 10,
     hp          INT CHECK (hp >= 0),
 
     owner_id    BIGINT,          -- кто создал/владеет (для построек)
