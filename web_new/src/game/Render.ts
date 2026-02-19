@@ -125,22 +125,11 @@ export class Render {
             gameStore.allocOpId(),
           )
         } else {
-          const clickedEntity = this.objectManager.getEntityAtScreen(
-            event.screenX,
-            event.screenY,
-            this.screenToWorld.bind(this)
+          playerCommandController.sendMoveTo(
+            this.lastClickWorld.x,
+            this.lastClickWorld.y,
+            event.modifiers
           )
-
-          if (clickedEntity !== null) {
-            const autoInteract = true
-            playerCommandController.sendMoveToEntity(clickedEntity.entityId, autoInteract, event.modifiers)
-          } else {
-            playerCommandController.sendMoveTo(
-              this.lastClickWorld.x,
-              this.lastClickWorld.y,
-              event.modifiers
-            )
-          }
         }
       }
     })

@@ -113,15 +113,22 @@ export class ObjectManager {
     screenY: number,
     screenToWorld: (x: number, y: number) => { x: number; y: number }
   ): { entityId: number; typeId: number } | null {
-    const worldPos = screenToWorld(screenX, screenY)
+    let selectedEntity: { entityId: number; typeId: number } | null = null
+    let highestZIndex = Number.NEGATIVE_INFINITY
 
     for (const [entityId, objectView] of this.objects) {
-      if (objectView.containsWorldPoint(worldPos.x, worldPos.y)) {
-        return { entityId, typeId: objectView.typeId }
+      if (!objectView.containsScreenPoint(screenX, screenY, screenToWorld)) {
+        continue
+      }
+
+      const zIndex = objectView.getContainer().zIndex
+      if (zIndex >= highestZIndex) {
+        highestZIndex = zIndex
+        selectedEntity = { entityId, typeId: objectView.typeId }
       }
     }
 
-    return null
+    return selectedEntity
   }
 
   /**
