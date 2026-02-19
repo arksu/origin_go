@@ -185,6 +185,7 @@ func applyDefaults(obj *ObjectDef) {
 		obj.BehaviorOrder = nil
 		obj.BehaviorPriorities = nil
 		obj.TreeConfig = nil
+		obj.TakeConfig = nil
 	}
 }
 

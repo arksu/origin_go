@@ -45,6 +45,17 @@
         "w": 1,
         "h": 1
       }
+    },
+    {
+      "defId": 3008,
+      "key": "stone",
+      "name": "Stone",
+      "resource": "items/stone.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
     }
   ]
 }
