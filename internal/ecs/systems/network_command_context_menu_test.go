@@ -2,6 +2,7 @@ package systems
 
 import (
 	"testing"
+	"time"
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
@@ -157,5 +158,87 @@ func TestNetworkCommandSystem_InteractSingleAction_OpensMenuWhenDefEnablesSingle
 	}
 	if _, hasPending := ecs.GetComponent[components.PendingContextAction](world, playerHandle); hasPending {
 		t.Fatalf("did not expect pending context action when menu is opened")
+	}
+}
+
+func TestNetworkCommandSystem_CleanupPendingContextActions_ClearsMatchingLinkIntent(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+
+	const (
+		playerID = types.EntityID(5001)
+		targetID = types.EntityID(5002)
+	)
+
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 0, Y: 0})
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
+		ecs.AddComponent(w, h, components.PendingContextAction{
+			TargetEntityID: targetID,
+			ActionID:       "chop",
+		})
+	})
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 10, Y: 10})
+	})
+	if playerHandle == types.InvalidHandle || targetHandle == types.InvalidHandle {
+		t.Fatalf("expected valid handles")
+	}
+
+	linkState := ecs.GetResource[ecs.LinkState](world)
+	linkState.SetIntent(playerID, targetID, targetHandle, time.Now())
+
+	system.cleanupPendingContextActions(world)
+
+	if _, hasPending := ecs.GetComponent[components.PendingContextAction](world, playerHandle); hasPending {
+		t.Fatalf("expected pending context action to be removed")
+	}
+	if _, hasIntent := linkState.IntentByPlayer[playerID]; hasIntent {
+		t.Fatalf("expected matching link intent to be cleared with pending action")
+	}
+}
+
+func TestNetworkCommandSystem_CleanupPendingContextActions_PreservesOtherLinkIntent(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+
+	const (
+		playerID   = types.EntityID(6001)
+		pendingID  = types.EntityID(6002)
+		retargetID = types.EntityID(6003)
+	)
+
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 0, Y: 0})
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
+		ecs.AddComponent(w, h, components.PendingContextAction{
+			TargetEntityID: pendingID,
+			ActionID:       "chop",
+		})
+	})
+	world.Spawn(pendingID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 10, Y: 10})
+	})
+	retargetHandle := world.Spawn(retargetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 12, Y: 10})
+	})
+	if playerHandle == types.InvalidHandle || retargetHandle == types.InvalidHandle {
+		t.Fatalf("expected valid handles")
+	}
+
+	linkState := ecs.GetResource[ecs.LinkState](world)
+	linkState.SetIntent(playerID, retargetID, retargetHandle, time.Now())
+
+	system.cleanupPendingContextActions(world)
+
+	if _, hasPending := ecs.GetComponent[components.PendingContextAction](world, playerHandle); hasPending {
+		t.Fatalf("expected pending context action to be removed")
+	}
+	intent, hasIntent := linkState.IntentByPlayer[playerID]
+	if !hasIntent {
+		t.Fatalf("expected retarget link intent to be preserved")
+	}
+	if intent.TargetID != retargetID {
+		t.Fatalf("expected intent target %d, got %d", retargetID, intent.TargetID)
 	}
 }

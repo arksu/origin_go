@@ -1,5 +1,5 @@
 import { Point, Sprite, Texture, groupD8 } from 'pixi.js'
-import { RMB_ALPHA_MASK_CACHE_MAX_BYTES } from '@/constants/render'
+import { RMB_ALPHA_MASK_CACHE_MAX_BYTES, RMB_ALPHA_MASK_PADDING_PX } from '@/constants/render'
 
 type AlphaMaskEntry = {
   width: number
@@ -96,6 +96,33 @@ function getBit(bits: Uint8Array, bitIndex: number): boolean {
   return (((bits[byteIndex] ?? 0) & (1 << (bitIndex & 7))) !== 0)
 }
 
+function dilateBitMask(bits: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+  if (radius <= 0) return bits
+
+  const expanded = new Uint8Array(bits.length)
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x
+      if (!getBit(bits, index)) continue
+
+      const minY = Math.max(0, y - radius)
+      const maxY = Math.min(height - 1, y + radius)
+      const minX = Math.max(0, x - radius)
+      const maxX = Math.min(width - 1, x + radius)
+
+      for (let ny = minY; ny <= maxY; ny++) {
+        const rowOffset = ny * width
+        for (let nx = minX; nx <= maxX; nx++) {
+          setBit(expanded, rowOffset + nx)
+        }
+      }
+    }
+  }
+
+  return expanded
+}
+
 function evictIfNeeded(): void {
   while (cacheBytes > RMB_ALPHA_MASK_CACHE_MAX_BYTES && alphaMaskCache.size > 0) {
     const oldestKey = alphaMaskCache.keys().next().value as string | undefined
@@ -185,12 +212,14 @@ function buildAlphaMask(texture: Texture): AlphaMaskEntry | null {
     }
   }
 
+  const dilatedBits = dilateBitMask(bits, width, height, RMB_ALPHA_MASK_PADDING_PX)
+
   return {
     width,
     height,
     resolution,
-    bits,
-    bytes: bits.byteLength,
+    bits: dilatedBits,
+    bytes: dilatedBits.byteLength,
   }
 }
 
