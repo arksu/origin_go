@@ -142,6 +142,94 @@ func TestLinkSystemBreaksOnMovementWithMovedReason(t *testing.T) {
 	}
 }
 
+func TestLinkSystemBreakKeepsRetargetIntentOnMovement(t *testing.T) {
+	eb := newTestEventBus(t)
+	defer shutdownTestEventBus(t, eb)
+
+	w := ecs.NewWorldForTesting()
+	linkSystem := NewLinkSystem(eb, zap.NewNop())
+
+	playerID := types.EntityID(1111)
+	targetAID := types.EntityID(2222)
+	targetBID := types.EntityID(3333)
+
+	playerHandle := spawnPlayerForLinkTests(w, playerID, 10, 10, targetAID)
+	targetAHandle := spawnTargetForLinkTests(w, targetAID, 12, 10)
+	targetBHandle := spawnTargetForLinkTests(w, targetBID, 14, 10)
+
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	linkState.SetLink(ecs.PlayerLink{
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetAID,
+		TargetHandle: targetAHandle,
+		PlayerX:      10,
+		PlayerY:      10,
+		TargetX:      12,
+		TargetY:      10,
+		CreatedAt:    time.Now(),
+	})
+	linkState.SetIntent(playerID, targetBID, targetBHandle, time.Now())
+
+	ecs.WithComponent(w, playerHandle, func(t *components.Transform) {
+		t.X = 11
+		t.Y = 10
+	})
+
+	linkSystem.Update(w, 0.05)
+
+	if _, hasLink := linkState.GetLink(playerID); hasLink {
+		t.Fatalf("expected link to be broken after movement")
+	}
+
+	intent, hasIntent := linkState.IntentByPlayer[playerID]
+	if !hasIntent {
+		t.Fatalf("expected retarget intent to stay after old link break")
+	}
+	if intent.TargetID != targetBID {
+		t.Fatalf("expected intent target %d, got %d", targetBID, intent.TargetID)
+	}
+}
+
+func TestLinkSystemBreakClearsIntentForSameTargetOnMovement(t *testing.T) {
+	eb := newTestEventBus(t)
+	defer shutdownTestEventBus(t, eb)
+
+	w := ecs.NewWorldForTesting()
+	linkSystem := NewLinkSystem(eb, zap.NewNop())
+
+	playerID := types.EntityID(4444)
+	targetID := types.EntityID(5555)
+
+	playerHandle := spawnPlayerForLinkTests(w, playerID, 10, 10, targetID)
+	targetHandle := spawnTargetForLinkTests(w, targetID, 12, 10)
+
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	linkState.SetLink(ecs.PlayerLink{
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		PlayerX:      10,
+		PlayerY:      10,
+		TargetX:      12,
+		TargetY:      10,
+		CreatedAt:    time.Now(),
+	})
+	linkState.SetIntent(playerID, targetID, targetHandle, time.Now())
+
+	ecs.WithComponent(w, playerHandle, func(t *components.Transform) {
+		t.X = 11
+		t.Y = 10
+	})
+
+	linkSystem.Update(w, 0.05)
+
+	if _, hasIntent := linkState.IntentByPlayer[playerID]; hasIntent {
+		t.Fatalf("expected same-target intent to be cleared after link break")
+	}
+}
+
 func TestLinkSystemBreaksOldLinkOnRelink(t *testing.T) {
 	eb := newTestEventBus(t)
 	defer shutdownTestEventBus(t, eb)

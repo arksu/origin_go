@@ -243,7 +243,10 @@ func (s *LinkSystem) breakLink(w *ecs.World, linkState *ecs.LinkState, playerID 
 		return
 	}
 
-	linkState.ClearIntent(playerID)
+	// Keep a newer retarget intent alive when old link is breaking.
+	if intent, hasIntent := linkState.IntentByPlayer[playerID]; !hasIntent || intent.TargetID == link.TargetID {
+		linkState.ClearIntent(playerID)
+	}
 	s.publishSync(w, ecs.NewLinkBrokenEvent(w.Layer, playerID, link.TargetID, reason))
 }
 

@@ -1074,6 +1074,14 @@ func (s *NetworkCommandSystem) cleanupPendingContextActions(w *ecs.World) {
 	})
 
 	for _, handle := range s.pendingContextRemove {
+		// Keep intent lifecycle aligned with pending context action lifecycle.
+		if pending, ok := ecs.GetComponent[components.PendingContextAction](w, handle); ok {
+			if playerID, hasExternalID := w.GetExternalID(handle); hasExternalID {
+				if intent, hasIntent := linkState.IntentByPlayer[playerID]; hasIntent && intent.TargetID == pending.TargetEntityID {
+					linkState.ClearIntent(playerID)
+				}
+			}
+		}
 		ecs.RemoveComponent[components.PendingContextAction](w, handle)
 	}
 }

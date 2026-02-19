@@ -333,7 +333,11 @@ func (s *ContextActionService) onLinkBroken(_ context.Context, event eventbus.Ev
 	if playerHandle == types.InvalidHandle || !s.world.Alive(playerHandle) {
 		return nil
 	}
-	ecs.RemoveComponent[components.PendingContextAction](s.world, playerHandle)
+	// Preserve pending action when player is retargeting to a different object.
+	if pending, hasPending := ecs.GetComponent[components.PendingContextAction](s.world, playerHandle); hasPending &&
+		pending.TargetEntityID == linkEvent.TargetID {
+		ecs.RemoveComponent[components.PendingContextAction](s.world, playerHandle)
+	}
 	s.cancelActiveCyclicAction(linkEvent.PlayerID, playerHandle, "link_broken")
 	return nil
 }
