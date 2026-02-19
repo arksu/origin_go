@@ -546,12 +546,13 @@ func (h *ChatAdminCommandHandler) sendInventoryUpdate(
 		updated = append(updated, buildInventoryStateFromContainerState(st))
 	}
 
-	response := &netproto.S2C_InventoryOpResult{
-		OpId:    0,
-		Success: true,
-		Updated: updated,
+	if len(updated) == 0 {
+		return
 	}
-	h.inventoryResultSender.SendInventoryOpResult(playerID, response)
+
+	// Admin commands are server-initiated and not tied to a client op-id.
+	// Send plain inventory update so client revisions are refreshed deterministically.
+	h.inventoryResultSender.SendInventoryUpdate(playerID, updated)
 }
 
 // sendSystemMessage sends a server-originated chat message to the player.

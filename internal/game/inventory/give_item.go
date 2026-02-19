@@ -1,35 +1,44 @@
 package inventory
 
 import (
-	"math"
-	"math/rand"
+	"fmt"
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/itemdefs"
 	"origin/internal/types"
-
-	"go.uber.org/zap"
 )
 
-const giveDropJitterCoords = 6
+type givePlacementPolicy uint8
+
+const (
+	givePlacementRootNestedHand givePlacementPolicy = iota + 1
+	givePlacementNestedRootHand
+)
+
+const defaultGivePlacementPolicy = givePlacementRootNestedHand
 
 // GiveItemResult represents the outcome of a GiveItem operation.
 // Used by admin commands, crafting, machines, and other mechanics that create items.
 type GiveItemResult struct {
 	Success bool
 	Message string
+	// GrantedCount is how many items were actually placed.
+	GrantedCount uint32
+	// PlacedInHand reports whether the final successful placement used hand fallback.
+	PlacedInHand bool
 
 	// UpdatedContainers holds containers modified during the operation (for client sync).
 	UpdatedContainers []*ContainerInfo
 
-	// SpawnedDroppedEntityID is set when the item was dropped to world (inventory full).
+	// SpawnedDroppedEntityID is kept for backward compatibility with callers.
+	// GiveItem no longer drops to world, so this field is always nil.
 	SpawnedDroppedEntityID *types.EntityID
 }
 
-// GiveItem creates a new item and places it into the player's grid inventory.
-// If the inventory is full, the item is spawned as a dropped item at the player's position.
+// GiveItem creates new items and places them using the universal placement policy:
+// root player grids -> eligible nested grids -> hand fallback. It never drops to world.
 // This is the primary entry point for programmatic item creation (admin commands, crafting, loot, etc.).
 func (s *InventoryOperationService) GiveItem(
 	w *ecs.World,
@@ -48,24 +57,24 @@ func (s *InventoryOperationService) GiveItem(
 	if count == 0 {
 		count = 1
 	}
+	requestedCount := count
 
 	if s.idAllocator == nil {
 		return &GiveItemResult{Success: false, Message: "id allocator not configured"}
 	}
 
 	resource := itemDef.ResolveResource(false)
-
-	// Create count separate items (each with Quantity=1)
 	var allUpdatedContainers []*ContainerInfo
-	var lastDroppedID *types.EntityID
-	successCount := uint32(0)
+	grantedCount := uint32(0)
+	placedInHand := false
 
 	for i := uint32(0); i < count; i++ {
-		// 2. Allocate a unique ID for each item instance
-		itemID := s.idAllocator.GetFreeID()
+		owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+		if !hasOwner {
+			break
+		}
 
 		newItem := components.InvItem{
-			ItemID:   itemID,
 			TypeID:   uint32(itemDef.DefID),
 			Resource: resource,
 			Quality:  quality,
@@ -74,198 +83,227 @@ func (s *InventoryOperationService) GiveItem(
 			H:        uint8(itemDef.Size.H),
 		}
 
-		// 3. Try to place into player's grid inventory
-		result := s.tryAddToGrid(w, playerID, playerHandle, &newItem, itemDef)
-		if result != nil {
-			successCount++
-			allUpdatedContainers = append(allUpdatedContainers, result.UpdatedContainers...)
+		updated := s.tryAddToEligibleGrid(w, playerID, playerHandle, &owner, &newItem, itemDef)
+		if len(updated) > 0 {
+			grantedCount++
+			allUpdatedContainers = mergeUpdatedContainerInfos(allUpdatedContainers, updated)
 			continue
 		}
 
-		// 4. Inventory full — drop to world at player's position
-		dropResult := s.dropNewItem(w, playerID, playerHandle, &newItem, itemDef)
-		if dropResult.Success {
-			successCount++
-			lastDroppedID = dropResult.SpawnedDroppedEntityID
+		updated = s.tryAddToHand(w, playerID, playerHandle, &owner, &newItem, itemDef)
+		if len(updated) > 0 {
+			grantedCount++
+			placedInHand = true
+			allUpdatedContainers = mergeUpdatedContainerInfos(allUpdatedContainers, updated)
+			break
+		}
+
+		break
+	}
+
+	if grantedCount == 0 {
+		return &GiveItemResult{
+			Success:      false,
+			Message:      fmt.Sprintf("granted 0/%d items: no free space", requestedCount),
+			GrantedCount: 0,
 		}
 	}
 
-	if successCount == 0 {
-		return &GiveItemResult{Success: false, Message: "failed to give any items"}
-	}
-
-	message := "item added to inventory"
-	if successCount < count {
-		message = "some items added, some dropped or failed"
-	} else if lastDroppedID != nil {
-		message = "inventory full, items dropped to world"
+	message := fmt.Sprintf("granted %d/%d items", grantedCount, requestedCount)
+	if placedInHand {
+		message = fmt.Sprintf("%s; last item placed in hand", message)
+	} else if grantedCount < requestedCount {
+		message = fmt.Sprintf("%s; no more free space", message)
 	}
 
 	return &GiveItemResult{
-		Success:                true,
-		Message:                message,
-		UpdatedContainers:      allUpdatedContainers,
-		SpawnedDroppedEntityID: lastDroppedID,
+		Success:           true,
+		Message:           message,
+		GrantedCount:      grantedCount,
+		PlacedInHand:      placedInHand,
+		UpdatedContainers: allUpdatedContainers,
 	}
 }
 
-// tryAddToGrid attempts to place an item into the player's first grid container with free space.
-func (s *InventoryOperationService) tryAddToGrid(
+func (s *InventoryOperationService) tryAddToEligibleGrid(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
+	owner *components.InventoryOwner,
 	item *components.InvItem,
 	itemDef *itemdefs.ItemDef,
-) *GiveItemResult {
-	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-	if !hasOwner {
-		return nil // no owner — will fall through to drop
+) []*ContainerInfo {
+	if owner == nil {
+		return nil
 	}
-
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-
-	for _, link := range owner.Inventories {
-		if link.Kind != constt.InventoryGrid {
+	gridLinks := orderedGridLinks(owner.Inventories, playerID, defaultGivePlacementPolicy)
+	for _, link := range gridLinks {
+		if !w.Alive(link.Handle) {
 			continue
 		}
-		// Only consider player-owned grids (not nested containers)
-		if link.OwnerID != playerID {
-			continue
-		}
-
-		containerHandle, found := refIndex.Lookup(constt.InventoryGrid, link.OwnerID, link.Key)
-		if !found || !w.Alive(containerHandle) {
-			continue
-		}
-
-		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
 		if !hasContainer {
 			continue
 		}
-
-		found2, x, y := s.placementService.FindFreeSpace(&container, item.W, item.H)
-		if !found2 {
+		if !s.canPlaceInContainer(w, item, owner, link.Handle, &container) {
 			continue
 		}
-
-		// Place item
-		item.X = x
-		item.Y = y
-
-		ecs.MutateComponent[components.InventoryContainer](w, containerHandle, func(c *components.InventoryContainer) bool {
-			c.Items = append(c.Items, *item)
-			c.Version++
-			return true
-		})
-
-		// Create nested container for container items (e.g. seed_bag)
-		nestedHandle := ensureNestedContainer(w, playerHandle, item, itemDef)
-
-		updatedOwner, _ := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-		updatedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
-		info := &ContainerInfo{
-			Handle:    containerHandle,
-			Container: &updatedContainer,
-			Owner:     &updatedOwner,
+		found, x, y := s.placementService.FindFreeSpace(&container, item.W, item.H)
+		if !found {
+			continue
 		}
-
-		updatedContainers := []*ContainerInfo{info}
-
-		// Include nested container in update so client receives it
-		if nestedHandle != 0 {
-			nestedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
-			updatedContainers = append(updatedContainers, &ContainerInfo{
-				Handle:    nestedHandle,
-				Container: &nestedContainer,
-				Owner:     &updatedOwner,
-			})
-		}
-
-		return &GiveItemResult{
-			Success:           true,
-			Message:           "item added to inventory",
-			UpdatedContainers: updatedContainers,
-		}
+		return s.placeNewItemInContainer(w, playerHandle, link.Handle, item, itemDef, x, y)
 	}
-
-	return nil // no free space in any grid
+	return nil
 }
 
-// dropNewItem spawns a dropped item entity near the player.
-func (s *InventoryOperationService) dropNewItem(
+func (s *InventoryOperationService) tryAddToHand(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
+	owner *components.InventoryOwner,
 	item *components.InvItem,
 	itemDef *itemdefs.ItemDef,
-) *GiveItemResult {
-	if s.persister == nil {
-		return &GiveItemResult{Success: false, Message: "drop persister not configured"}
+) []*ContainerInfo {
+	if owner == nil {
+		return nil
 	}
 
-	playerTransform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
-	if !hasTransform {
-		return &GiveItemResult{Success: false, Message: "player has no transform"}
+	for _, link := range owner.Inventories {
+		if link.Kind != constt.InventoryHand || link.OwnerID != playerID {
+			continue
+		}
+		if !w.Alive(link.Handle) {
+			continue
+		}
+		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		if !hasContainer {
+			continue
+		}
+		if len(container.Items) > 0 {
+			continue
+		}
+		if !s.canPlaceInContainer(w, item, owner, link.Handle, &container) {
+			continue
+		}
+		return s.placeNewItemInContainer(w, playerHandle, link.Handle, item, itemDef, 0, 0)
+	}
+	return nil
+}
+
+func (s *InventoryOperationService) canPlaceInContainer(
+	w *ecs.World,
+	item *components.InvItem,
+	owner *components.InventoryOwner,
+	handle types.Handle,
+	container *components.InventoryContainer,
+) bool {
+	if owner == nil || container == nil {
+		return false
+	}
+	dstInfo := &ContainerInfo{
+		Handle:    handle,
+		Container: container,
+		Owner:     owner,
+	}
+	return s.validator.ValidateItemAllowedInContainer(w, item, dstInfo, 0) == nil
+}
+
+func (s *InventoryOperationService) placeNewItemInContainer(
+	w *ecs.World,
+	playerHandle types.Handle,
+	containerHandle types.Handle,
+	item *components.InvItem,
+	itemDef *itemdefs.ItemDef,
+	x, y uint8,
+) []*ContainerInfo {
+	if item == nil || s.idAllocator == nil {
+		return nil
+	}
+	item.ItemID = s.idAllocator.GetFreeID()
+	item.X = x
+	item.Y = y
+
+	ecs.MutateComponent[components.InventoryContainer](w, containerHandle, func(c *components.InventoryContainer) bool {
+		c.Items = append(c.Items, *item)
+		c.Version++
+		return true
+	})
+
+	nestedHandle := ensureNestedContainer(w, playerHandle, item, itemDef)
+	updatedOwner, _ := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+	updatedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+
+	updatedContainers := []*ContainerInfo{
+		{
+			Handle:    containerHandle,
+			Container: &updatedContainer,
+			Owner:     &updatedOwner,
+		},
+	}
+	if nestedHandle != 0 {
+		nestedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
+		updatedContainers = append(updatedContainers, &ContainerInfo{
+			Handle:    nestedHandle,
+			Container: &nestedContainer,
+			Owner:     &updatedOwner,
+		})
 	}
 
-	playerInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, playerHandle)
-	if !hasInfo {
-		return &GiveItemResult{Success: false, Message: "player has no entity info"}
+	return updatedContainers
+}
+
+func orderedGridLinks(
+	links []components.InventoryLink,
+	playerID types.EntityID,
+	policy givePlacementPolicy,
+) []components.InventoryLink {
+	root := make([]components.InventoryLink, 0, len(links))
+	nested := make([]components.InventoryLink, 0, len(links))
+	for _, link := range links {
+		if link.Kind != constt.InventoryGrid {
+			continue
+		}
+		if link.OwnerID == playerID {
+			root = append(root, link)
+			continue
+		}
+		nested = append(nested, link)
 	}
 
-	droppedEntityID := item.ItemID
-	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
-	resource := itemDef.ResolveResource(false)
-	centerX := int(math.Round(playerTransform.X))
-	centerY := int(math.Round(playerTransform.Y))
-	dropX := jitterDropCoordinate(centerX, giveDropJitterCoords)
-	dropY := jitterDropCoordinate(centerY, giveDropJitterCoords)
-	chunkX := worldCoordToChunkIndex(dropX)
-	chunkY := worldCoordToChunkIndex(dropY)
-
-	dropParams := SpawnDroppedEntityParams{
-		DroppedEntityID: droppedEntityID,
-		ItemID:          item.ItemID,
-		TypeID:          item.TypeID,
-		Resource:        resource,
-		Quality:         item.Quality,
-		Quantity:        item.Quantity,
-		W:               item.W,
-		H:               item.H,
-		DropX:           dropX,
-		DropY:           dropY,
-		Region:          playerInfo.Region,
-		Layer:           playerInfo.Layer,
-		ChunkX:          chunkX,
-		ChunkY:          chunkY,
-		DropperID:       playerID,
-		NowUnix:         nowRuntimeSeconds,
-	}
-
-	if _, ok := SpawnDroppedEntity(w, dropParams); !ok {
-		return &GiveItemResult{Success: false, Message: "failed to spawn dropped entity"}
-	}
-
-	if err := PersistDroppedEntity(s.persister, dropParams, nil); err != nil {
-		s.logger.Error("Failed to persist dropped object from GiveItem",
-			zap.Uint64("entity_id", uint64(droppedEntityID)),
-			zap.Error(err))
-	}
-
-	return &GiveItemResult{
-		Success:                true,
-		Message:                "inventory full, item dropped to world",
-		SpawnedDroppedEntityID: &droppedEntityID,
+	switch policy {
+	case givePlacementNestedRootHand:
+		return append(nested, root...)
+	default:
+		return append(root, nested...)
 	}
 }
 
-func jitterDropCoordinate(center int, jitter int) int {
-	if jitter <= 0 {
-		return center
+func mergeUpdatedContainerInfos(
+	existing []*ContainerInfo,
+	updated []*ContainerInfo,
+) []*ContainerInfo {
+	if len(updated) == 0 {
+		return existing
 	}
-	return center + rand.Intn(jitter*2+1) - jitter
-}
+	indexByHandle := make(map[types.Handle]int, len(existing)+len(updated))
+	for idx, info := range existing {
+		if info == nil {
+			continue
+		}
+		indexByHandle[info.Handle] = idx
+	}
 
-func worldCoordToChunkIndex(worldCoord int) int {
-	return int(math.Floor(float64(worldCoord) / float64(constt.ChunkWorldSize)))
+	for _, info := range updated {
+		if info == nil {
+			continue
+		}
+		if idx, exists := indexByHandle[info.Handle]; exists {
+			existing[idx] = info
+			continue
+		}
+		indexByHandle[info.Handle] = len(existing)
+		existing = append(existing, info)
+	}
+	return existing
 }

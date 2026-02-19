@@ -321,6 +321,87 @@ func TestOnTakeCycleComplete_DoesNotConsumeStaminaWhenGiveUnavailable(t *testing
 	}
 }
 
+func TestOnTakeCycleComplete_CompletesWhenItemPlacedInHand(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(9201)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{
+			Mode:  constt.Walk,
+			State: constt.StateInteracting,
+			Speed: constt.PlayerSpeed,
+		})
+		ecs.AddComponent(w, h, components.CharacterProfile{
+			Attributes: characterattrs.Default(),
+		})
+		ecs.AddComponent(w, h, components.EntityStats{
+			Stamina: 150,
+			Energy:  1000,
+		})
+	})
+
+	targetID := types.EntityID(9202)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.ObjectInternalState{})
+	})
+	ecs.WithComponent(world, targetHandle, func(state *components.ObjectInternalState) {
+		components.SetBehaviorState(state, treeBehaviorKey, &components.TreeBehaviorState{
+			Stage: 1,
+		})
+	})
+
+	cfg := &objectdefs.TreeBehaviorConfig{
+		Stages: []objectdefs.TreeStageConfig{
+			{
+				ChopPointsTotal: 1,
+				StageDuration:   60,
+				AllowChop:       true,
+				Take: []objectdefs.TreeTakeConfig{
+					{ID: "take_branch", Name: "Take Branch", ItemDefKey: "branch", Count: 2},
+				},
+			},
+		},
+	}
+
+	decision := onTakeCycleComplete(&contracts.BehaviorCycleContext{
+		World:        world,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		ActionID:     "take_branch",
+	}, contracts.ExecutionDeps{
+		GiveItem: func(
+			_ *ecs.World,
+			_ types.EntityID,
+			_ types.Handle,
+			_ string,
+			_ uint32,
+			_ uint32,
+		) contracts.GiveItemOutcome {
+			return contracts.GiveItemOutcome{
+				Success:      true,
+				PlacedInHand: true,
+			}
+		},
+	}, cfg)
+
+	if decision != contracts.BehaviorCycleDecisionComplete {
+		t.Fatalf("expected complete decision when item is placed in hand, got %v", decision)
+	}
+
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](world, targetHandle)
+	if !hasState {
+		t.Fatalf("missing target internal state")
+	}
+	treeState, hasTreeState := components.GetBehaviorState[components.TreeBehaviorState](internalState, treeBehaviorKey)
+	if !hasTreeState || treeState == nil {
+		t.Fatalf("missing tree behavior state")
+	}
+	if treeState.Taken["take_branch"] != 1 {
+		t.Fatalf("expected taken count to increment to 1, got %d", treeState.Taken["take_branch"])
+	}
+}
+
 func TestOnScheduledTick_CancelsWhenCatchupReturnsZeroNextTickNonFinal(t *testing.T) {
 	previousRegistry := objectdefs.Global()
 	t.Cleanup(func() {
