@@ -109,8 +109,7 @@ func validateBehaviorContract(behavior contracts.Behavior) error {
 	_, hasRuntime := behavior.(contracts.RuntimeBehavior)
 	_, hasProvider := behavior.(contracts.ContextActionProvider)
 	_, hasValidator := behavior.(contracts.ContextActionValidator)
-	executor, hasExecutor := behavior.(contracts.ContextActionExecutor)
-	_, hasDeclarer := behavior.(contracts.BehaviorActionDeclarer)
+	_, hasExecutor := behavior.(contracts.ContextActionExecutor)
 	_, hasScheduledTick := behavior.(contracts.ScheduledTickBehavior)
 
 	if !hasDefConfigValidator {
@@ -123,18 +122,7 @@ func validateBehaviorContract(behavior contracts.Behavior) error {
 	if (hasProvider || hasValidator) && !hasExecutor {
 		return fmt.Errorf("action provider/validator requires execute capability")
 	}
-	if (hasProvider || hasValidator || hasExecutor) && !hasDeclarer {
-		return fmt.Errorf("action capability requires declared action specs")
-	}
 
-	if !hasDeclarer {
-		return nil
-	}
-
-	if executor == nil {
-		// Defensive check for interface/value mismatch.
-		return fmt.Errorf("action declarer requires execute capability")
-	}
 	return nil
 }
 

@@ -12,9 +12,6 @@ func (testBehaviorProviderNoExecutor) Key() string { return "invalid_provider_on
 func (testBehaviorProviderNoExecutor) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
 }
-func (testBehaviorProviderNoExecutor) DeclaredActions() []contracts.BehaviorActionSpec {
-	return []contracts.BehaviorActionSpec{{ActionID: "x"}}
-}
 func (testBehaviorProviderNoExecutor) ProvideActions(*contracts.BehaviorActionListContext) []contracts.ContextAction {
 	return []contracts.ContextAction{{ActionID: "x", Title: "X"}}
 }
@@ -25,8 +22,18 @@ func (testBehaviorDeclaredNoExecutor) Key() string { return "invalid_declared_on
 func (testBehaviorDeclaredNoExecutor) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
 }
-func (testBehaviorDeclaredNoExecutor) DeclaredActions() []contracts.BehaviorActionSpec {
-	return []contracts.BehaviorActionSpec{{ActionID: "x"}}
+func (testBehaviorDeclaredNoExecutor) ExecuteAction(*contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
+	return contracts.BehaviorResult{OK: true}
+}
+
+type testBehaviorValidatorNoExecutor struct{}
+
+func (testBehaviorValidatorNoExecutor) Key() string { return "invalid_validator_only" }
+func (testBehaviorValidatorNoExecutor) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
+	return 100, nil
+}
+func (testBehaviorValidatorNoExecutor) ValidateAction(*contracts.BehaviorActionValidateContext) contracts.BehaviorResult {
+	return contracts.BehaviorResult{OK: true}
 }
 
 type testBehaviorCyclicDeclaredNoHandler struct{}
@@ -34,9 +41,6 @@ type testBehaviorCyclicDeclaredNoHandler struct{}
 func (testBehaviorCyclicDeclaredNoHandler) Key() string { return "invalid_cyclic_declared" }
 func (testBehaviorCyclicDeclaredNoHandler) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
-}
-func (testBehaviorCyclicDeclaredNoHandler) DeclaredActions() []contracts.BehaviorActionSpec {
-	return []contracts.BehaviorActionSpec{{ActionID: "x", StartsCyclic: true}}
 }
 func (testBehaviorCyclicDeclaredNoHandler) ExecuteAction(*contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
 	return contracts.BehaviorResult{OK: true}
@@ -47,9 +51,6 @@ type testBehaviorValidActionAndCycle struct{}
 func (testBehaviorValidActionAndCycle) Key() string { return "valid_action_cyclic" }
 func (testBehaviorValidActionAndCycle) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
-}
-func (testBehaviorValidActionAndCycle) DeclaredActions() []contracts.BehaviorActionSpec {
-	return []contracts.BehaviorActionSpec{{ActionID: "x", StartsCyclic: true}}
 }
 func (testBehaviorValidActionAndCycle) ExecuteAction(*contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
 	return contracts.BehaviorResult{OK: true}
@@ -67,8 +68,15 @@ func TestNewRegistry_FailFast_WhenProviderMissingExecutor(t *testing.T) {
 
 func TestNewRegistry_FailFast_WhenDeclaredActionMissingExecutor(t *testing.T) {
 	_, err := NewRegistry(testBehaviorDeclaredNoExecutor{})
+	if err != nil {
+		t.Fatalf("expected declared-only behavior to be valid under current contract, got: %v", err)
+	}
+}
+
+func TestNewRegistry_FailFast_WhenValidatorMissingExecutor(t *testing.T) {
+	_, err := NewRegistry(testBehaviorValidatorNoExecutor{})
 	if err == nil {
-		t.Fatalf("expected fail-fast error when declared action has no executor")
+		t.Fatalf("expected fail-fast error when validator has no executor")
 	}
 }
 

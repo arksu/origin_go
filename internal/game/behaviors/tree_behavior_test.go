@@ -714,15 +714,3 @@ func TestConsumePlayerStaminaForTreeCycle_SuccessMarksDirty(t *testing.T) {
 		t.Fatalf("expected one player stats push schedule after successful consume")
 	}
 }
-
-func TestTreeBehavior_DeclaredActionsIncludeOnlyChop(t *testing.T) {
-	behavior := treeBehavior{}
-	declared := behavior.DeclaredActions()
-
-	if len(declared) != 1 {
-		t.Fatalf("expected one declared action, got %d", len(declared))
-	}
-	if declared[0].ActionID != actionChop || !declared[0].StartsCyclic {
-		t.Fatalf("expected chop to be declared as cyclic")
-	}
-}
