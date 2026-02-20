@@ -8,7 +8,7 @@
       "name": "Stone Axe",
       "resource": "items/stone_axe.png",
       "tags": [
-        "tool"
+        "axe"
       ],
       "size": {
         "w": 1,

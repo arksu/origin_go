@@ -25,6 +25,7 @@ const (
 	actionChop          = "chop"
 	treeBehaviorKey     = "tree"
 	treeStageFlagPrefix = "tree.stage"
+	chopRequiredTag     = "axe"
 
 	treeChopCycleDurationTicks = 20
 	treeChopStaminaCost        = 17.0
@@ -260,7 +261,8 @@ func (treeBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []c
 		return nil
 	}
 	actions := make([]contracts.ContextAction, 0, 1+len(stageCfg.Take))
-	if isChopAllowedAtStage(def.TreeConfig, stage) {
+	if isChopAllowedAtStage(def.TreeConfig, stage) &&
+		playerHasEquippedTag(ctx.World, ctx.PlayerID, chopRequiredTag) {
 		actions = append(actions, contracts.ContextAction{
 			ActionID: actionChop,
 			Title:    "Chop",
@@ -318,6 +320,9 @@ func (treeBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext)
 	}
 	if actionID == actionChop {
 		if !isChopAllowedAtStage(targetDef.TreeConfig, stage) {
+			return contracts.BehaviorResult{OK: false}
+		}
+		if !playerHasEquippedTag(ctx.World, ctx.PlayerID, chopRequiredTag) {
 			return contracts.BehaviorResult{OK: false}
 		}
 	} else {
@@ -1072,6 +1077,50 @@ func applyGrowthCatchup(
 func isChopAllowedAtStage(treeConfig *objectdefs.TreeBehaviorConfig, stage int) bool {
 	stageCfg := stageConfigFor(treeConfig, stage)
 	return stageCfg != nil && stageCfg.AllowChop
+}
+
+func playerHasEquippedTag(world *ecs.World, playerID types.EntityID, requiredTag string) bool {
+	if world == nil || playerID == 0 {
+		return false
+	}
+	requiredTag = strings.TrimSpace(requiredTag)
+	if requiredTag == "" {
+		return false
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](world)
+	equipmentHandle, found := refIndex.Lookup(constt.InventoryEquipment, playerID, 0)
+	if !found || equipmentHandle == types.InvalidHandle || !world.Alive(equipmentHandle) {
+		return false
+	}
+	container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, equipmentHandle)
+	if !hasContainer || container.Kind != constt.InventoryEquipment {
+		return false
+	}
+
+	itemRegistry := itemdefs.Global()
+	if itemRegistry == nil {
+		return false
+	}
+	for _, item := range container.Items {
+		itemDef, ok := itemRegistry.GetByID(int(item.TypeID))
+		if !ok {
+			continue
+		}
+		if hasItemTag(itemDef.Tags, requiredTag) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasItemTag(tags []string, requiredTag string) bool {
+	for _, tag := range tags {
+		if tag == requiredTag {
+			return true
+		}
+	}
+	return false
 }
 
 func treeStageFlag(stage int) string {
