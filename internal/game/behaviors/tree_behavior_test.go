@@ -10,6 +10,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -251,6 +252,210 @@ func TestIsChopAllowedAtStage(t *testing.T) {
 	}
 	if !isChopAllowedAtStage(cfg, 4) {
 		t.Fatalf("stage 4 should allow chop")
+	}
+}
+
+func setupTreeActionTestRegistries(t *testing.T, treeDefID int, includeTake bool) {
+	t.Helper()
+
+	previousObjectRegistry := objectdefs.Global()
+	previousItemRegistry := itemdefs.Global()
+	t.Cleanup(func() {
+		objectdefs.SetGlobalForTesting(previousObjectRegistry)
+		itemdefs.SetGlobalForTesting(previousItemRegistry)
+	})
+
+	stage := objectdefs.TreeStageConfig{
+		ChopPointsTotal: 3,
+		StageDuration:   60,
+		AllowChop:       true,
+	}
+	if includeTake {
+		stage.Take = []objectdefs.TakeConfig{
+			{ID: "take_branch", Name: "Take Branch", ItemDefKey: "branch", Count: 1},
+		}
+	}
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
+		{
+			DefID: treeDefID,
+			Key:   "tree_test_actions",
+			TreeConfig: &objectdefs.TreeBehaviorConfig{
+				Stages: []objectdefs.TreeStageConfig{stage},
+			},
+		},
+	}))
+
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 9101, Key: "stone_axe", Name: "Stone Axe", Tags: []string{"axe"}},
+		{DefID: 9102, Key: "branch", Name: "Branch", Tags: []string{"wood"}},
+	}))
+}
+
+func spawnEquipmentContainer(
+	world *ecs.World,
+	playerID types.EntityID,
+	items []components.InvItem,
+) types.Handle {
+	handle := world.SpawnWithoutExternalID()
+	ecs.AddComponent(world, handle, components.InventoryContainer{
+		OwnerID: playerID,
+		Kind:    constt.InventoryEquipment,
+		Key:     0,
+		Items:   items,
+	})
+	ecs.GetResource[ecs.InventoryRefIndex](world).Add(constt.InventoryEquipment, playerID, 0, handle)
+	return handle
+}
+
+func containsAction(actions []contracts.ContextAction, actionID string) bool {
+	for _, action := range actions {
+		if action.ActionID == actionID {
+			return true
+		}
+	}
+	return false
+}
+
+func TestProvideActions_ChopHiddenWithoutEquippedAxe(t *testing.T) {
+	const treeDefID = 8101
+	setupTreeActionTestRegistries(t, treeDefID, false)
+
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(81001)
+	playerHandle := world.Spawn(playerID, nil)
+	spawnEquipmentContainer(world, playerID, []components.InvItem{
+		{ItemID: 1, TypeID: 9102, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_HEAD},
+	})
+	targetID := types.EntityID(81002)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: uint32(treeDefID)})
+		ecs.AddComponent(w, h, components.ObjectInternalState{})
+	})
+
+	actions := treeBehavior{}.ProvideActions(&contracts.BehaviorActionListContext{
+		World:        world,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+	})
+	if containsAction(actions, actionChop) {
+		t.Fatalf("expected chop action to be hidden without equipped axe")
+	}
+}
+
+func TestProvideActions_ChopShownWithEquippedAxeInAnySlot(t *testing.T) {
+	const treeDefID = 8102
+	setupTreeActionTestRegistries(t, treeDefID, false)
+
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(82001)
+	playerHandle := world.Spawn(playerID, nil)
+	spawnEquipmentContainer(world, playerID, []components.InvItem{
+		{ItemID: 1, TypeID: 9101, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_HEAD},
+	})
+	targetID := types.EntityID(82002)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: uint32(treeDefID)})
+		ecs.AddComponent(w, h, components.ObjectInternalState{})
+	})
+
+	actions := treeBehavior{}.ProvideActions(&contracts.BehaviorActionListContext{
+		World:        world,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+	})
+	if !containsAction(actions, actionChop) {
+		t.Fatalf("expected chop action to be shown with equipped axe")
+	}
+}
+
+func TestValidateAction_ChopFailsWithoutEquippedAxe(t *testing.T) {
+	const treeDefID = 8103
+	setupTreeActionTestRegistries(t, treeDefID, false)
+
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(83001)
+	playerHandle := world.Spawn(playerID, nil)
+	spawnEquipmentContainer(world, playerID, []components.InvItem{
+		{ItemID: 1, TypeID: 9102, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_BACK},
+	})
+	targetID := types.EntityID(83002)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: uint32(treeDefID)})
+		ecs.AddComponent(w, h, components.ObjectInternalState{})
+	})
+
+	result := treeBehavior{}.ValidateAction(&contracts.BehaviorActionValidateContext{
+		World:        world,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		ActionID:     actionChop,
+		Phase:        contracts.BehaviorValidationPhasePreview,
+	})
+	if result.OK {
+		t.Fatalf("expected chop validation to fail without equipped axe")
+	}
+}
+
+func TestValidateAction_ChopPassesWithEquippedAxe(t *testing.T) {
+	const treeDefID = 8104
+	setupTreeActionTestRegistries(t, treeDefID, false)
+
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(84001)
+	playerHandle := world.Spawn(playerID, nil)
+	spawnEquipmentContainer(world, playerID, []components.InvItem{
+		{ItemID: 1, TypeID: 9101, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_BACK},
+	})
+	targetID := types.EntityID(84002)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: uint32(treeDefID)})
+		ecs.AddComponent(w, h, components.ObjectInternalState{})
+	})
+
+	result := treeBehavior{}.ValidateAction(&contracts.BehaviorActionValidateContext{
+		World:        world,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		ActionID:     actionChop,
+		Phase:        contracts.BehaviorValidationPhasePreview,
+	})
+	if !result.OK {
+		t.Fatalf("expected chop validation to pass with equipped axe")
+	}
+}
+
+func TestValidateAction_TakeIgnoresAxeRequirement(t *testing.T) {
+	const treeDefID = 8105
+	setupTreeActionTestRegistries(t, treeDefID, true)
+
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(85001)
+	playerHandle := world.Spawn(playerID, nil)
+	targetID := types.EntityID(85002)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: uint32(treeDefID)})
+		ecs.AddComponent(w, h, components.ObjectInternalState{})
+	})
+
+	result := treeBehavior{}.ValidateAction(&contracts.BehaviorActionValidateContext{
+		World:        world,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		ActionID:     "take_branch",
+		Phase:        contracts.BehaviorValidationPhasePreview,
+	})
+	if !result.OK {
+		t.Fatalf("expected take action to remain valid without equipped axe")
 	}
 }
 
