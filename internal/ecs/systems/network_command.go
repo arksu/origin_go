@@ -487,7 +487,7 @@ func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, player
 		ecs.UpdateEntityStatsRegenSchedule(w, playerHandle, currentStamina, currentEnergy, maxStamina)
 	}
 
-	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina)
+	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina, currentEnergy)
 	modeChanged := movement.Mode != allowedMode
 	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
 		m.Mode = allowedMode

@@ -70,7 +70,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				stats.Stamina = clampedStamina
 			}
 
-			allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, stats.Stamina, maxStamina)
+			allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, stats.Stamina, maxStamina, stats.Energy)
 			if movement.Mode != allowedMode {
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.Mode = allowedMode
