@@ -446,8 +446,10 @@ func parseEquipSlot(slot string) netproto.EquipSlot {
 		return netproto.EquipSlot_EQUIP_SLOT_LEGS
 	case "feet":
 		return netproto.EquipSlot_EQUIP_SLOT_FEET
-	case "hands":
-		return netproto.EquipSlot_EQUIP_SLOT_HANDS
+	case "left_hand":
+		return netproto.EquipSlot_EQUIP_SLOT_LEFT_HAND
+	case "right_hand":
+		return netproto.EquipSlot_EQUIP_SLOT_RIGHT_HAND
 	case "back":
 		return netproto.EquipSlot_EQUIP_SLOT_BACK
 	case "neck":
@@ -471,8 +473,10 @@ func equipSlotToString(slot netproto.EquipSlot) string {
 		return "legs"
 	case netproto.EquipSlot_EQUIP_SLOT_FEET:
 		return "feet"
-	case netproto.EquipSlot_EQUIP_SLOT_HANDS:
-		return "hands"
+	case netproto.EquipSlot_EQUIP_SLOT_LEFT_HAND:
+		return "left_hand"
+	case netproto.EquipSlot_EQUIP_SLOT_RIGHT_HAND:
+		return "right_hand"
 	case netproto.EquipSlot_EQUIP_SLOT_BACK:
 		return "back"
 	case netproto.EquipSlot_EQUIP_SLOT_NECK:
