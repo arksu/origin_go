@@ -167,6 +167,78 @@ export function useInventoryOps() {
   }
 
   /**
+   * Place item from hand into an equipment container slot.
+   * @param dstRef - destination equipment container ref
+   * @param dstState - destination container inventory state (for revision)
+   * @param slot - target equipment slot
+   */
+  function placeItemToEquipmentSlot(
+    dstRef: proto.IInventoryRef,
+    dstState: proto.IInventoryState | undefined,
+    slot: proto.EquipSlot,
+  ) {
+    const handRef = gameStore.getPlayerHandRef()
+    if (!handRef) return
+
+    const hand = gameStore.handState
+    if (!hand?.item) return
+
+    const handState = gameStore.handInventoryState
+    const itemId = Number(hand.item.itemId ?? 0)
+
+    const op: proto.IInventoryOp = {
+      opId: gameStore.allocOpId(),
+      expected: buildExpected(handState, dstState),
+      move: {
+        src: handRef,
+        dst: dstRef,
+        itemId,
+        dstEquipSlot: slot,
+        allowSwapOrMerge: false,
+      },
+    }
+
+    console.log('[InventoryOps] placeItemToEquipmentSlot:', op)
+    sendInventoryOp(op)
+  }
+
+  /**
+   * Place item from hand onto an equipment slot (swap allowed).
+   * @param dstRef - destination equipment container ref
+   * @param dstState - destination container inventory state (for revision)
+   * @param slot - target equipment slot
+   */
+  function placeOrSwapItemInEquipmentSlot(
+    dstRef: proto.IInventoryRef,
+    dstState: proto.IInventoryState | undefined,
+    slot: proto.EquipSlot,
+  ) {
+    const handRef = gameStore.getPlayerHandRef()
+    if (!handRef) return
+
+    const hand = gameStore.handState
+    if (!hand?.item) return
+
+    const handState = gameStore.handInventoryState
+    const itemId = Number(hand.item.itemId ?? 0)
+
+    const op: proto.IInventoryOp = {
+      opId: gameStore.allocOpId(),
+      expected: buildExpected(handState, dstState),
+      move: {
+        src: handRef,
+        dst: dstRef,
+        itemId,
+        dstEquipSlot: slot,
+        allowSwapOrMerge: true,
+      },
+    }
+
+    console.log('[InventoryOps] placeOrSwapItemInEquipmentSlot:', op)
+    sendInventoryOp(op)
+  }
+
+  /**
    * Find the InventoryState for a given ref from the store.
    */
   function findInventoryState(ref: proto.IInventoryRef): proto.IInventoryState | undefined {
@@ -178,6 +250,8 @@ export function useInventoryOps() {
     pickUpItem,
     placeItem,
     placeOrSwapItem,
+    placeItemToEquipmentSlot,
+    placeOrSwapItemInEquipmentSlot,
     findInventoryState,
     getPlacePositionFromSlotClick,
   }

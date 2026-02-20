@@ -59,6 +59,13 @@ export const DEFAULT_HOTKEYS: HotkeyConfig[] = [
     }
   },
   {
+    key: 'e',
+    description: 'Toggle equipment',
+    action: () => {
+      console.log('[Hotkeys] Equipment toggle - not implemented yet')
+    }
+  },
+  {
     key: '`',
     description: 'Toggle debug overlay',
     action: () => {

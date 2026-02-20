@@ -84,7 +84,6 @@ const (
 	EquipSlot_EQUIP_SLOT_CHEST      EquipSlot = 2
 	EquipSlot_EQUIP_SLOT_LEGS       EquipSlot = 3
 	EquipSlot_EQUIP_SLOT_FEET       EquipSlot = 4
-	EquipSlot_EQUIP_SLOT_HANDS      EquipSlot = 5
 	EquipSlot_EQUIP_SLOT_LEFT_HAND  EquipSlot = 6
 	EquipSlot_EQUIP_SLOT_RIGHT_HAND EquipSlot = 7
 	EquipSlot_EQUIP_SLOT_BACK       EquipSlot = 8
@@ -101,7 +100,6 @@ var (
 		2:  "EQUIP_SLOT_CHEST",
 		3:  "EQUIP_SLOT_LEGS",
 		4:  "EQUIP_SLOT_FEET",
-		5:  "EQUIP_SLOT_HANDS",
 		6:  "EQUIP_SLOT_LEFT_HAND",
 		7:  "EQUIP_SLOT_RIGHT_HAND",
 		8:  "EQUIP_SLOT_BACK",
@@ -115,7 +113,6 @@ var (
 		"EQUIP_SLOT_CHEST":      2,
 		"EQUIP_SLOT_LEGS":       3,
 		"EQUIP_SLOT_FEET":       4,
-		"EQUIP_SLOT_HANDS":      5,
 		"EQUIP_SLOT_LEFT_HAND":  6,
 		"EQUIP_SLOT_RIGHT_HAND": 7,
 		"EQUIP_SLOT_BACK":       8,
@@ -5351,14 +5348,13 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x0eMOVE_MODE_WALK\x10\x01\x12\x11\n" +
 	"\rMOVE_MODE_RUN\x10\x02\x12\x16\n" +
 	"\x12MOVE_MODE_FAST_RUN\x10\x03\x12\x12\n" +
-	"\x0eMOVE_MODE_SWIM\x10\x04*\x98\x02\n" +
+	"\x0eMOVE_MODE_SWIM\x10\x04*\x82\x02\n" +
 	"\tEquipSlot\x12\x13\n" +
 	"\x0fEQUIP_SLOT_NONE\x10\x00\x12\x13\n" +
 	"\x0fEQUIP_SLOT_HEAD\x10\x01\x12\x14\n" +
 	"\x10EQUIP_SLOT_CHEST\x10\x02\x12\x13\n" +
 	"\x0fEQUIP_SLOT_LEGS\x10\x03\x12\x13\n" +
-	"\x0fEQUIP_SLOT_FEET\x10\x04\x12\x14\n" +
-	"\x10EQUIP_SLOT_HANDS\x10\x05\x12\x18\n" +
+	"\x0fEQUIP_SLOT_FEET\x10\x04\x12\x18\n" +
 	"\x14EQUIP_SLOT_LEFT_HAND\x10\x06\x12\x19\n" +
 	"\x15EQUIP_SLOT_RIGHT_HAND\x10\a\x12\x13\n" +
 	"\x0fEQUIP_SLOT_BACK\x10\b\x12\x13\n" +

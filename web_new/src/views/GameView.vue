@@ -7,6 +7,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import ChatContainer from '@/components/ui/ChatContainer.vue'
 import InventoryWindow from '@/components/ui/InventoryWindow.vue'
+import EquipmentWindow from '@/components/ui/EquipmentWindow.vue'
 import NestedInventoryWindow from '@/components/ui/NestedInventoryWindow.vue'
 import CharacterSheetWindow from '@/components/ui/CharacterSheetWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
@@ -70,6 +71,12 @@ const openNestedInventoryWindows = computed(() => {
 })
 const miniAlerts = computed(() => gameStore.miniAlerts)
 const showCharacterSheet = computed(() => gameStore.characterSheetVisible)
+const playerEquipment = computed(() => gameStore.getPlayerEquipment())
+const showEquipment = computed(() => {
+  const visible = gameStore.playerEquipmentVisible
+  const hasEquipment = !!playerEquipment.value?.equipment
+  return visible && hasEquipment
+})
 
 async function initCanvas() {
   if (!gameCanvas.value || canvasInitialized.value) return
@@ -227,6 +234,10 @@ function handleCharacterSheetClose() {
   gameStore.setCharacterSheetVisible(false)
 }
 
+function handleEquipmentClose() {
+  gameStore.setPlayerEquipmentVisible(false)
+}
+
 function alertTypeForSeverity(severity: proto.AlertSeverity): 'error' | 'warning' | 'info' {
   switch (severity) {
     case proto.AlertSeverity.ALERT_SEVERITY_ERROR:
@@ -249,6 +260,7 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
       case 'Escape':
         chatContainerRef.value?.unfocusChat()
         gameStore.setPlayerInventoryVisible(false)
+        gameStore.setPlayerEquipmentVisible(false)
         gameStore.setCharacterSheetVisible(false)
         gameStore.closeContextMenu()
         break
@@ -270,6 +282,9 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         break
       case 'c':
         gameStore.toggleCharacterSheet()
+        break
+      case 'e':
+        gameStore.togglePlayerEquipment()
         break
       default:
         config.action()
@@ -340,6 +355,10 @@ useHotkeys(hotkeys)
       </div>
       <div v-if="showInventory" class="game-inventory">
         <InventoryWindow :inventory="playerInventory!" @close="handleInventoryClose" />
+      </div>
+
+      <div v-if="showEquipment" class="game-equipment">
+        <EquipmentWindow :inventory="playerEquipment!" @close="handleEquipmentClose" />
       </div>
 
       <div v-if="showCharacterSheet" class="game-character-sheet">
@@ -536,6 +555,16 @@ useHotkeys(hotkeys)
   height: 100%;
   pointer-events: none;
   z-index: 250;
+}
+
+.game-equipment {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 225;
 }
 
 .game-disconnected {

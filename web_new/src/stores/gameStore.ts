@@ -134,6 +134,7 @@ export const useGameStore = defineStore('game', () => {
   // Inventory
   const inventories = ref(new Map<string, proto.IInventoryState>())
   const playerInventoryVisible = ref(false)
+  const playerEquipmentVisible = ref(false)
   const openNestedInventories = ref(new Map<string, proto.IInventoryState>())
   const openedRootContainerRefs = ref(new Set<string>())
   let nextOpId = 1
@@ -264,6 +265,7 @@ export const useGameStore = defineStore('game', () => {
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
+    playerEquipmentVisible.value = false
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
     playerStats.value = defaultPlayerStats()
@@ -293,6 +295,7 @@ export const useGameStore = defineStore('game', () => {
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
     playerInventoryVisible.value = false
+    playerEquipmentVisible.value = false
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
     playerStats.value = defaultPlayerStats()
@@ -444,6 +447,27 @@ export const useGameStore = defineStore('game', () => {
     return undefined
   }
 
+  function getPlayerEquipment(): proto.IInventoryState | undefined {
+    if (!playerEntityId.value) return undefined
+
+    // key format: kind_ownerId_inventoryKey
+    // INVENTORY_KIND_EQUIPMENT=2
+    const equipmentKey = `2_${playerEntityId.value}_0`
+    const equipmentInv = inventories.value.get(equipmentKey)
+    if (equipmentInv && equipmentInv.equipment) {
+      return equipmentInv
+    }
+
+    // Fallback: search all inventories for one with equipment belonging to player.
+    for (const [, inv] of inventories.value.entries()) {
+      if (inv.equipment && inv.ref && Number(inv.ref.ownerId) === playerEntityId.value) {
+        return inv
+      }
+    }
+
+    return undefined
+  }
+
   function getPlayerHandRef(): proto.IInventoryRef | null {
     if (!playerEntityId.value) return null
     return {
@@ -584,6 +608,10 @@ export const useGameStore = defineStore('game', () => {
     console.log('[gameStore] Player inventory data:', getPlayerInventory())
   }
 
+  function togglePlayerEquipment() {
+    playerEquipmentVisible.value = !playerEquipmentVisible.value
+  }
+
   function toggleCharacterSheet() {
     characterSheetVisible.value = !characterSheetVisible.value
   }
@@ -635,6 +663,10 @@ export const useGameStore = defineStore('game', () => {
 
   function setPlayerInventoryVisible(visible: boolean) {
     playerInventoryVisible.value = visible
+  }
+
+  function setPlayerEquipmentVisible(visible: boolean) {
+    playerEquipmentVisible.value = visible
   }
 
   function onContainerOpened(state: proto.IInventoryState) {
@@ -713,6 +745,7 @@ export const useGameStore = defineStore('game', () => {
     // Clear nested inventories
     openNestedInventories.value.clear()
     openedRootContainerRefs.value.clear()
+    playerEquipmentVisible.value = false
     characterSheetVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
     playerStats.value = defaultPlayerStats()
@@ -753,6 +786,7 @@ export const useGameStore = defineStore('game', () => {
     chatMessages,
     inventories,
     playerInventoryVisible,
+    playerEquipmentVisible,
     characterSheetVisible,
     characterAttributes,
     playerStats,
@@ -795,8 +829,11 @@ export const useGameStore = defineStore('game', () => {
     updateInventory,
     removeInventory,
     getPlayerInventory,
+    getPlayerEquipment,
     togglePlayerInventory,
+    togglePlayerEquipment,
     setPlayerInventoryVisible,
+    setPlayerEquipmentVisible,
     toggleCharacterSheet,
     setCharacterSheetVisible,
     setCharacterProfileSnapshot,

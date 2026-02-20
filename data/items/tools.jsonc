@@ -4,7 +4,7 @@
   "items": [
     {
       "defId": 1002,
-      "key": "tool_stone_axe",
+      "key": "stone_axe",
       "name": "Stone Axe",
       "resource": "items/stone_axe.png",
       "tags": [
@@ -12,7 +12,13 @@
       ],
       "size": {
         "w": 1,
-        "h": 2
+        "h": 1
+      },
+      "allowed": {
+        "equipmentSlots": [
+          "right_hand",
+          "left_hand"
+        ]
       }
     }
   ]
