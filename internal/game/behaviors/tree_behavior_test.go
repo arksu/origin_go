@@ -291,6 +291,19 @@ func setupTreeActionTestRegistries(t *testing.T, treeDefID int, includeTake bool
 	}))
 }
 
+func setupAxeItemRegistryForTest(t *testing.T) {
+	t.Helper()
+
+	previousItemRegistry := itemdefs.Global()
+	t.Cleanup(func() {
+		itemdefs.SetGlobalForTesting(previousItemRegistry)
+	})
+
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
+		{DefID: 9101, Key: "stone_axe", Name: "Stone Axe", Tags: []string{"axe"}},
+	}))
+}
+
 func spawnEquipmentContainer(
 	world *ecs.World,
 	playerID types.EntityID,
@@ -429,6 +442,38 @@ func TestValidateAction_ChopPassesWithEquippedAxe(t *testing.T) {
 	})
 	if !result.OK {
 		t.Fatalf("expected chop validation to pass with equipped axe")
+	}
+}
+
+func TestExecuteAction_ChopFailsWithoutEquippedAxe(t *testing.T) {
+	const treeDefID = 8106
+	setupTreeActionTestRegistries(t, treeDefID, false)
+
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(86001)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{
+			Mode:  constt.Walk,
+			State: constt.StateIdle,
+			Speed: constt.PlayerSpeed,
+		})
+	})
+	targetID := types.EntityID(86002)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: uint32(treeDefID)})
+		ecs.AddComponent(w, h, components.ObjectInternalState{})
+	})
+
+	result := treeBehavior{}.ExecuteAction(&contracts.BehaviorActionExecuteContext{
+		World:        world,
+		PlayerID:     playerID,
+		PlayerHandle: playerHandle,
+		TargetID:     targetID,
+		TargetHandle: targetHandle,
+		ActionID:     actionChop,
+	})
+	if result.OK {
+		t.Fatalf("expected execute failure without equipped axe")
 	}
 }
 
@@ -833,6 +878,7 @@ func TestExecuteAction_ChopKeepsExistingChopPoints(t *testing.T) {
 	}))
 
 	world := ecs.NewWorldForTesting()
+	setupAxeItemRegistryForTest(t)
 	playerID := types.EntityID(7201)
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{
@@ -840,6 +886,9 @@ func TestExecuteAction_ChopKeepsExistingChopPoints(t *testing.T) {
 			State: constt.StateIdle,
 			Speed: constt.PlayerSpeed,
 		})
+	})
+	spawnEquipmentContainer(world, playerID, []components.InvItem{
+		{ItemID: 1, TypeID: 9101, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_LEFT_HAND},
 	})
 	targetID := types.EntityID(7202)
 	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
@@ -900,6 +949,7 @@ func TestExecuteAction_InitializesMissingStateAtFinalStage(t *testing.T) {
 	}))
 
 	world := ecs.NewWorldForTesting()
+	setupAxeItemRegistryForTest(t)
 	playerID := types.EntityID(7401)
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{
@@ -907,6 +957,9 @@ func TestExecuteAction_InitializesMissingStateAtFinalStage(t *testing.T) {
 			State: constt.StateIdle,
 			Speed: constt.PlayerSpeed,
 		})
+	})
+	spawnEquipmentContainer(world, playerID, []components.InvItem{
+		{ItemID: 1, TypeID: 9101, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_LEFT_HAND},
 	})
 	targetID := types.EntityID(7402)
 	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {

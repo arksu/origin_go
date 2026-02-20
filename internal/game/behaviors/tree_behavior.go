@@ -376,8 +376,13 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 	if stageCfg == nil {
 		return contracts.BehaviorResult{OK: false}
 	}
-	if actionID == actionChop && !isChopAllowedAtStage(targetDef.TreeConfig, stage) {
-		return contracts.BehaviorResult{OK: false}
+	if actionID == actionChop {
+		if !isChopAllowedAtStage(targetDef.TreeConfig, stage) {
+			return contracts.BehaviorResult{OK: false}
+		}
+		if !playerHasEquippedTag(ctx.World, ctx.PlayerID, chopRequiredTag) {
+			return contracts.BehaviorResult{OK: false}
+		}
 	}
 	if actionID != actionChop {
 		takeCfg := findTakeConfigByActionID(stageCfg, actionID)
