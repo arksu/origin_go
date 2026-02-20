@@ -224,7 +224,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		}
 	}
 
-	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina)
+	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina, currentEnergy)
 	modeChanged := movement.Mode != allowedMode
 	forceStopped := false
 	if !canMove && movement.State == constt.StateMoving {

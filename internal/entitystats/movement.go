@@ -60,7 +60,7 @@ func SwimStaminaCostPerTick(con int) float64 {
 	return 1.0 / math.Sqrt(float64(con)/10.0)
 }
 
-func ResolveAllowedMoveMode(mode constt.MoveMode, stamina float64, maxStamina float64) (constt.MoveMode, bool) {
+func ResolveAllowedMoveMode(mode constt.MoveMode, stamina float64, maxStamina float64, energy float64) (constt.MoveMode, bool) {
 	if mode > constt.Swim {
 		mode = constt.Walk
 	}
@@ -74,6 +74,9 @@ func ResolveAllowedMoveMode(mode constt.MoveMode, stamina float64, maxStamina fl
 
 	if stamina < maxStamina*constt.StaminaNoMoveThresholdPercent {
 		return constt.Crawl, false
+	}
+	if energy > constt.DefaultEnergy {
+		return constt.Crawl, true
 	}
 	if stamina < maxStamina*constt.StaminaCrawlOnlyThresholdPercent {
 		return constt.Crawl, true

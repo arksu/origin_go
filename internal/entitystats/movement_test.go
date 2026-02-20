@@ -10,24 +10,38 @@ import (
 func TestResolveAllowedMoveMode(t *testing.T) {
 	max := 100.0
 
-	mode, canMove := ResolveAllowedMoveMode(constt.FastRun, 49, max)
+	mode, canMove := ResolveAllowedMoveMode(constt.FastRun, 49, max, 1000)
 	if !canMove || mode != constt.Run {
 		t.Fatalf("expected fast run downgrade to run at 49%%, got mode=%v canMove=%v", mode, canMove)
 	}
 
-	mode, canMove = ResolveAllowedMoveMode(constt.Run, 24, max)
+	mode, canMove = ResolveAllowedMoveMode(constt.Run, 24, max, 1000)
 	if !canMove || mode != constt.Walk {
 		t.Fatalf("expected run downgrade to walk at 24%%, got mode=%v canMove=%v", mode, canMove)
 	}
 
-	mode, canMove = ResolveAllowedMoveMode(constt.Swim, 9, max)
+	mode, canMove = ResolveAllowedMoveMode(constt.Swim, 9, max, 1000)
 	if !canMove || mode != constt.Crawl {
 		t.Fatalf("expected crawl-only below 10%%, got mode=%v canMove=%v", mode, canMove)
 	}
 
-	mode, canMove = ResolveAllowedMoveMode(constt.Walk, 4, max)
+	mode, canMove = ResolveAllowedMoveMode(constt.Walk, 4, max, 1000)
 	if canMove || mode != constt.Crawl {
 		t.Fatalf("expected no movement below 5%%, got mode=%v canMove=%v", mode, canMove)
+	}
+}
+
+func TestResolveAllowedMoveMode_OverstuffedForcesCrawl(t *testing.T) {
+	max := 100.0
+
+	mode, canMove := ResolveAllowedMoveMode(constt.FastRun, 90, max, 1001)
+	if !canMove || mode != constt.Crawl {
+		t.Fatalf("expected overstuffed entity to be forced to crawl, got mode=%v canMove=%v", mode, canMove)
+	}
+
+	mode, canMove = ResolveAllowedMoveMode(constt.Run, 90, max, 1000)
+	if !canMove || mode != constt.Run {
+		t.Fatalf("expected threshold energy to keep allowed mode, got mode=%v canMove=%v", mode, canMove)
 	}
 }
 

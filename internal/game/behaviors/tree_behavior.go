@@ -775,7 +775,7 @@ func consumePlayerStaminaForTreeCycle(
 	}
 
 	modeMutated := ecs.MutateComponent[components.Movement](world, playerHandle, func(m *components.Movement) bool {
-		mode, canMove := entitystats.ResolveAllowedMoveMode(m.Mode, nextStamina, maxStamina)
+		mode, canMove := entitystats.ResolveAllowedMoveMode(m.Mode, nextStamina, maxStamina, currentEnergy)
 		changed := false
 		if mode != m.Mode {
 			m.Mode = mode
