@@ -56,6 +56,7 @@ func createGiveItemRegistry() *itemdefs.Registry {
 			Tags:     []string{"seed"},
 			Size:     itemdefs.Size{W: 1, H: 1},
 			Resource: "wheat_seed_mini.png",
+			DiscoveryLP: 77,
 			Allowed:  itemdefs.Allowed{Hand: boolPtr(true), Grid: boolPtr(true)},
 		},
 		{
@@ -318,6 +319,9 @@ func TestGiveItem_AddsDiscoveryKeyOnceOnSuccessfulGive(t *testing.T) {
 	world, playerID, playerHandle, _, _, _, _ := setupGiveItemWorld(t)
 	ecs.AddComponent(world, playerHandle, components.CharacterProfile{
 		Discovery: []string{"existing_key"},
+		Experience: components.CharacterExperience{
+			LP: 10,
+		},
 	})
 	service := NewInventoryOperationService(zap.NewNop(), &sequentialIDAllocator{next: 14000}, nil)
 
@@ -331,6 +335,7 @@ func TestGiveItem_AddsDiscoveryKeyOnceOnSuccessfulGive(t *testing.T) {
 	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle)
 	require.True(t, hasProfile)
 	assert.Equal(t, []string{"existing_key", "wheat_seed_mini"}, profile.Discovery)
+	assert.Equal(t, 87, profile.Experience.LP, "discovery LP should be granted only once for a new key")
 }
 
 func TestGiveItem_DoesNotAddDiscoveryOnFailedGive(t *testing.T) {
@@ -339,7 +344,11 @@ func TestGiveItem_DoesNotAddDiscoveryOnFailedGive(t *testing.T) {
 	itemdefs.SetGlobalForTesting(createGiveItemRegistry())
 
 	world, playerID, playerHandle, rootHandle, _, handHandle, _ := setupGiveItemWorld(t)
-	ecs.AddComponent(world, playerHandle, components.CharacterProfile{})
+	ecs.AddComponent(world, playerHandle, components.CharacterProfile{
+		Experience: components.CharacterExperience{
+			LP: 10,
+		},
+	})
 	addItemToContainer(world, rootHandle, components.InvItem{
 		ItemID:   types.EntityID(15001),
 		TypeID:   202,
@@ -369,4 +378,5 @@ func TestGiveItem_DoesNotAddDiscoveryOnFailedGive(t *testing.T) {
 	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle)
 	require.True(t, hasProfile)
 	assert.Empty(t, profile.Discovery)
+	assert.Equal(t, 10, profile.Experience.LP, "failed give must not grant discovery LP")
 }
