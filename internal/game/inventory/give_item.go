@@ -115,7 +115,7 @@ func (s *InventoryOperationService) GiveItem(
 	} else if grantedCount < requestedCount {
 		message = fmt.Sprintf("%s; no more free space", message)
 	}
-	s.recordDiscoveryOnGive(w, playerHandle, itemDef.Key)
+	s.recordDiscoveryOnGive(w, playerHandle, itemDef)
 
 	return &GiveItemResult{
 		Success:           true,
@@ -129,19 +129,20 @@ func (s *InventoryOperationService) GiveItem(
 func (s *InventoryOperationService) recordDiscoveryOnGive(
 	w *ecs.World,
 	playerHandle types.Handle,
-	itemKey string,
+	itemDef *itemdefs.ItemDef,
 ) {
-	if w == nil || playerHandle == types.InvalidHandle || itemKey == "" {
+	if w == nil || playerHandle == types.InvalidHandle || itemDef == nil || itemDef.Key == "" {
 		return
 	}
 	ecs.MutateComponent[components.CharacterProfile](w, playerHandle, func(profile *components.CharacterProfile) bool {
 		for _, existingKey := range profile.Discovery {
-			if existingKey == itemKey {
+			if existingKey == itemDef.Key {
 				return false
 			}
 		}
 
-		profile.Discovery = components.NormalizeStringSet(append(profile.Discovery, itemKey))
+		profile.Discovery = components.NormalizeStringSet(append(profile.Discovery, itemDef.Key))
+		profile.Experience.LP += itemDef.DiscoveryLP
 		return true
 	})
 }
