@@ -91,6 +91,8 @@ type Game struct {
 	tickStats         tickStats
 	enableStats       bool
 	enableVisionStats bool
+	teleportMu        sync.Mutex
+	teleportInFlight  map[types.EntityID]struct{}
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -134,6 +136,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 			minDuration: time.Hour,
 			systemStats: make(map[string]ecs.SystemTimingStat),
 		},
+		teleportInFlight: make(map[types.EntityID]struct{}),
 	}
 	g.state.Store(int32(GameStateStarting))
 
@@ -142,6 +145,9 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	g.networkServer = network.NewServer(&cfg.Network, &cfg.Game, logger)
 
 	g.setupNetworkHandlers()
+	for _, shard := range g.shardManager.GetShards() {
+		shard.SetAdminTeleportExecutor(g)
+	}
 
 	g.resetOnlinePlayers()
 

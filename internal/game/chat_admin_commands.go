@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,7 @@ type ChatAdminCommandHandler struct {
 	entityIDAllocator     inventory.EntityIDAllocator
 	chunkProvider         AdminSpawnChunkProvider
 	visionForcer          AdminVisionForcer
+	teleportExecutor      AdminTeleportExecutor
 	behaviorRegistry      contracts.BehaviorRegistry
 	eventBus              *eventbus.EventBus
 	logger                *zap.Logger
@@ -60,6 +62,11 @@ type AdminAlertSender interface {
 	SendWarning(entityID types.EntityID, warningCode netproto.WarningCode, message string)
 }
 
+// AdminTeleportExecutor handles full player teleport transfer flow.
+type AdminTeleportExecutor interface {
+	RequestAdminTeleport(playerID types.EntityID, sourceLayer int, targetX, targetY int, targetLayer *int) error
+}
+
 func NewChatAdminCommandHandler(
 	inventoryExecutor *inventory.InventoryExecutor,
 	inventoryResultSender systems.InventoryResultSender,
@@ -68,6 +75,7 @@ func NewChatAdminCommandHandler(
 	entityIDAllocator inventory.EntityIDAllocator,
 	chunkProvider AdminSpawnChunkProvider,
 	visionForcer AdminVisionForcer,
+	teleportExecutor AdminTeleportExecutor,
 	behaviorRegistry contracts.BehaviorRegistry,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
@@ -80,10 +88,15 @@ func NewChatAdminCommandHandler(
 		entityIDAllocator:     entityIDAllocator,
 		chunkProvider:         chunkProvider,
 		visionForcer:          visionForcer,
+		teleportExecutor:      teleportExecutor,
 		behaviorRegistry:      behaviorRegistry,
 		eventBus:              eventBus,
 		logger:                logger,
 	}
+}
+
+func (h *ChatAdminCommandHandler) SetTeleportExecutor(executor AdminTeleportExecutor) {
+	h.teleportExecutor = executor
 }
 
 // HandleCommand parses and executes an admin command.
@@ -105,6 +118,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 		return true
 	case "/spawn":
 		h.handleSpawn(w, playerID, parts[1:])
+		return true
+	case "/tp":
+		h.handleTeleport(w, playerID, parts[1:])
 		return true
 	case "/online":
 		h.handleOnline(w, playerID)
@@ -214,6 +230,9 @@ func (h *ChatAdminCommandHandler) handleSpawn(
 		return
 	}
 
+	// /spawn and /tp click mode are mutually exclusive.
+	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+
 	pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
 	pending.Set(playerID, ecs.AdminSpawnEntry{
 		ObjectKey: objectKey,
@@ -226,6 +245,72 @@ func (h *ChatAdminCommandHandler) handleSpawn(
 		zap.Uint64("player_id", uint64(playerID)),
 		zap.String("object_key", objectKey),
 		zap.Uint32("quality", quality))
+}
+
+// handleTeleport processes:
+//
+//	/tp
+//	/tp <x> <y>
+//	/tp <x> <y> <layer>
+func (h *ChatAdminCommandHandler) handleTeleport(
+	w *ecs.World,
+	playerID types.EntityID,
+	args []string,
+) {
+	if h.teleportExecutor == nil {
+		h.sendSystemMessage(playerID, "teleport service unavailable")
+		return
+	}
+
+	switch len(args) {
+	case 0:
+		// /tp click mode (current layer only)
+		ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
+		ecs.GetResource[ecs.PendingAdminTeleport](w).Set(playerID, ecs.AdminTeleportEntry{})
+		h.sendSystemMessage(playerID, "Click on the map where you want to teleport.")
+		h.logger.Info("Admin /tp pending click", zap.Uint64("player_id", uint64(playerID)))
+		return
+	case 2, 3:
+		x, err := strconv.Atoi(args[0])
+		if err != nil {
+			h.sendSystemMessage(playerID, "invalid x: "+args[0])
+			return
+		}
+		y, err := strconv.Atoi(args[1])
+		if err != nil {
+			h.sendSystemMessage(playerID, "invalid y: "+args[1])
+			return
+		}
+
+		var targetLayer *int
+		if len(args) == 3 {
+			layer, layerErr := strconv.Atoi(args[2])
+			if layerErr != nil {
+				h.sendSystemMessage(playerID, "invalid layer: "+args[2])
+				return
+			}
+			targetLayer = &layer
+		}
+
+		// Any explicit /tp clears deferred states to avoid ambiguous click actions.
+		ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
+		ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+
+		if err := h.teleportExecutor.RequestAdminTeleport(playerID, w.Layer, x, y, targetLayer); err != nil {
+			h.sendSystemMessage(playerID, "teleport failed: "+err.Error())
+			return
+		}
+
+		if targetLayer != nil {
+			h.sendSystemMessage(playerID, fmt.Sprintf("Teleport requested to (%d, %d) layer %d.", x, y, *targetLayer))
+		} else {
+			h.sendSystemMessage(playerID, fmt.Sprintf("Teleport requested to (%d, %d).", x, y))
+		}
+		return
+	default:
+		h.sendSystemMessage(playerID, "usage: /tp | /tp <x> <y> [layer]")
+		return
+	}
 }
 
 // ExecutePendingSpawn is called by NetworkCommandSystem when a player with a pending
@@ -331,6 +416,38 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 		zap.Uint64("new_id", uint64(newID)),
 		zap.Float64("x", targetX),
 		zap.Float64("y", targetY))
+}
+
+// ExecutePendingTeleport is called by NetworkCommandSystem when a player with a pending
+// /tp click command clicks on map or entity.
+func (h *ChatAdminCommandHandler) ExecutePendingTeleport(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	targetX, targetY float64,
+) {
+	_ = playerHandle
+	pending := ecs.GetResource[ecs.PendingAdminTeleport](w)
+	entry, ok := pending.Get(playerID)
+	if !ok {
+		return
+	}
+	pending.Clear(playerID)
+
+	if h.teleportExecutor == nil {
+		h.sendSystemMessage(playerID, "teleport service unavailable")
+		return
+	}
+
+	targetXI := int(math.Round(targetX))
+	targetYI := int(math.Round(targetY))
+
+	if err := h.teleportExecutor.RequestAdminTeleport(playerID, w.Layer, targetXI, targetYI, entry.TargetLayer); err != nil {
+		h.sendSystemMessage(playerID, "teleport failed: "+err.Error())
+		return
+	}
+
+	h.sendSystemMessage(playerID, fmt.Sprintf("Teleport requested to (%d, %d).", targetXI, targetYI))
 }
 
 // handleOnline processes: /online - displays current online players count

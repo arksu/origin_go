@@ -35,6 +35,7 @@ func TestHandleOnline(t *testing.T) {
 		nil, // entityIDAllocator
 		nil, // chunkProvider
 		nil, // visionForcer
+		nil, // teleportExecutor
 		nil, // behaviorRegistry
 		eventBus,
 		logger,
@@ -106,6 +107,7 @@ func TestHandleErrorWarn(t *testing.T) {
 		nil, // entityIDAllocator
 		nil, // chunkProvider
 		nil, // visionForcer
+		nil, // teleportExecutor
 		nil, // behaviorRegistry
 		eventBus,
 		logger,
@@ -141,6 +143,77 @@ func TestHandleErrorWarn(t *testing.T) {
 	}
 }
 
+func TestHandleTeleportPendingClick(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	mockTeleport := &mockAdminTeleportExecutor{}
+
+	handler := NewChatAdminCommandHandler(
+		nil,
+		nil,
+		mockChat,
+		nil,
+		nil,
+		nil,
+		nil,
+		mockTeleport,
+		nil,
+		eventBus,
+		logger,
+	)
+
+	playerID := types.EntityID(77)
+	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/tp"); !handled {
+		t.Fatal("expected /tp to be recognized")
+	}
+
+	pending := ecs.GetResource[ecs.PendingAdminTeleport](world)
+	if _, ok := pending.Get(playerID); !ok {
+		t.Fatal("expected pending teleport after /tp")
+	}
+}
+
+func TestHandleTeleportImmediate(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	mockTeleport := &mockAdminTeleportExecutor{}
+
+	handler := NewChatAdminCommandHandler(
+		nil,
+		nil,
+		mockChat,
+		nil,
+		nil,
+		nil,
+		nil,
+		mockTeleport,
+		nil,
+		eventBus,
+		logger,
+	)
+
+	playerID := types.EntityID(78)
+	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/tp 100 200 2"); !handled {
+		t.Fatal("expected /tp with coords to be recognized")
+	}
+	if mockTeleport.calls != 1 {
+		t.Fatalf("expected 1 teleport call, got %d", mockTeleport.calls)
+	}
+	if mockTeleport.lastPlayerID != playerID {
+		t.Fatalf("unexpected player id: %d", mockTeleport.lastPlayerID)
+	}
+	if mockTeleport.lastX != 100 || mockTeleport.lastY != 200 {
+		t.Fatalf("unexpected coords: (%d,%d)", mockTeleport.lastX, mockTeleport.lastY)
+	}
+	if mockTeleport.lastTargetLayer == nil || *mockTeleport.lastTargetLayer != 2 {
+		t.Fatalf("expected target layer 2, got %+v", mockTeleport.lastTargetLayer)
+	}
+}
+
 // mockChatDeliveryService implements ChatDeliveryService for testing
 type mockChatDeliveryService struct {
 	messages map[types.EntityID]string
@@ -173,4 +246,28 @@ func (m *mockAdminAlertSender) SendWarning(entityID types.EntityID, warningCode 
 	m.lastWarningEntityID = entityID
 	m.lastWarningCode = warningCode
 	m.lastWarningMessage = message
+}
+
+type mockAdminTeleportExecutor struct {
+	calls           int
+	lastPlayerID    types.EntityID
+	lastSourceLayer int
+	lastX           int
+	lastY           int
+	lastTargetLayer *int
+}
+
+func (m *mockAdminTeleportExecutor) RequestAdminTeleport(
+	playerID types.EntityID,
+	sourceLayer int,
+	targetX, targetY int,
+	targetLayer *int,
+) error {
+	m.calls++
+	m.lastPlayerID = playerID
+	m.lastSourceLayer = sourceLayer
+	m.lastX = targetX
+	m.lastY = targetY
+	m.lastTargetLayer = targetLayer
+	return nil
 }

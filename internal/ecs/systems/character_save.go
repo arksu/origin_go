@@ -152,6 +152,69 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories))
 }
 
+// SaveSync persists character snapshot immediately in caller goroutine.
+// Used by admin teleport before despawn to keep DB state consistent for immediate respawn.
+func (s *CharacterSaver) SaveSync(w *ecs.World, entityID types.EntityID, handle types.Handle) error {
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
+	if !hasTransform {
+		return nil
+	}
+
+	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
+	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
+	if !hasStats {
+		return nil
+	}
+	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
+	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	params := repository.UpdateCharactersParams{
+		Ids:        []int{int(snapshot.CharacterID)},
+		Xs:         []float64{float64(snapshot.X)},
+		Ys:         []float64{float64(snapshot.Y)},
+		Headings:   []float64{float64(snapshot.Heading)},
+		Staminas:   []float64{snapshot.Stamina},
+		Energies:   []float64{snapshot.Energy},
+		Shps:       []int{int(snapshot.SHP)},
+		Hhps:       []int{int(snapshot.HHP)},
+		Attributes: []string{snapshot.Attributes},
+		Exps:       []string{snapshot.Exp},
+		Skills:     []string{snapshot.Skills},
+		Discovery:  []string{snapshot.Discovery},
+	}
+	if err := s.db.Queries().UpdateCharacters(ctx, params); err != nil {
+		return err
+	}
+
+	if len(snapshot.Inventories) == 0 {
+		return nil
+	}
+
+	ownerIDs := make([]int64, 0, len(snapshot.Inventories))
+	kinds := make([]int, 0, len(snapshot.Inventories))
+	inventoryKeys := make([]int, 0, len(snapshot.Inventories))
+	datas := make([]string, 0, len(snapshot.Inventories))
+	versions := make([]int, 0, len(snapshot.Inventories))
+	for _, inv := range snapshot.Inventories {
+		ownerIDs = append(ownerIDs, inv.CharacterID)
+		kinds = append(kinds, int(inv.Kind))
+		inventoryKeys = append(inventoryKeys, int(inv.InventoryKey))
+		datas = append(datas, string(inv.Data))
+		versions = append(versions, inv.Version)
+	}
+
+	return s.db.Queries().UpsertInventories(ctx, repository.UpsertInventoriesParams{
+		OwnerIds:      ownerIDs,
+		Kinds:         kinds,
+		InventoryKeys: inventoryKeys,
+		Datas:         datas,
+		Versions:      versions,
+	})
+}
+
 // SaveDetached enqueues a snapshot for detached-entity expiration path.
 // We still persist inventories here to avoid losing recent in-memory changes on detach expiry.
 func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, handle types.Handle) {

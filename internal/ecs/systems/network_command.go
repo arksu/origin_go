@@ -55,6 +55,7 @@ type InventoryOperationExecutor interface {
 type AdminCommandHandler interface {
 	HandleCommand(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, text string) bool
 	ExecutePendingSpawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
+	ExecutePendingTeleport(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
 }
 
 // InventoryOpResult represents the result of an inventory operation
@@ -289,6 +290,12 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 
 	// Check for pending admin spawn — intercept click as spawn target
 	if s.adminHandler != nil {
+		pendingTeleport := ecs.GetResource[ecs.PendingAdminTeleport](w)
+		if _, hasPendingTeleport := pendingTeleport.Get(cmd.CharacterID); hasPendingTeleport {
+			s.adminHandler.ExecutePendingTeleport(w, cmd.CharacterID, playerHandle, float64(moveTo.X), float64(moveTo.Y))
+			return
+		}
+
 		pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
 		if _, hasPending := pending.Get(cmd.CharacterID); hasPending {
 			s.adminHandler.ExecutePendingSpawn(w, cmd.CharacterID, playerHandle, float64(moveTo.X), float64(moveTo.Y))
@@ -336,6 +343,20 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 
 	// Check for pending admin spawn — use target entity's position as spawn target
 	if s.adminHandler != nil {
+		pendingTeleport := ecs.GetResource[ecs.PendingAdminTeleport](w)
+		if _, hasPendingTeleport := pendingTeleport.Get(cmd.CharacterID); hasPendingTeleport {
+			targetEntityID := types.EntityID(moveToEntity.EntityId)
+			targetHandle := w.GetHandleByEntityID(targetEntityID)
+			if targetHandle != types.InvalidHandle && w.Alive(targetHandle) {
+				if t, hasT := ecs.GetComponent[components.Transform](w, targetHandle); hasT {
+					s.adminHandler.ExecutePendingTeleport(w, cmd.CharacterID, playerHandle, t.X, t.Y)
+					return
+				}
+			}
+			// Target entity invalid — clear pending and let normal flow continue
+			pendingTeleport.Clear(cmd.CharacterID)
+		}
+
 		pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
 		if _, hasPending := pending.Get(cmd.CharacterID); hasPending {
 			targetEntityID := types.EntityID(moveToEntity.EntityId)
