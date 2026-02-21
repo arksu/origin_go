@@ -7,6 +7,7 @@ import (
 
 // CharacterExperience stores character-only progression values.
 type CharacterExperience struct {
+	LP       int
 	Nature   int64
 	Industry int64
 	Combat   int64
@@ -17,6 +18,8 @@ type CharacterExperience struct {
 type CharacterProfile struct {
 	Attributes characterattrs.Values
 	Experience CharacterExperience
+	Skills     []string
+	Discovery  []string
 }
 
 const CharacterProfileComponentID ecs.ComponentID = 26

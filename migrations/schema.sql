@@ -38,11 +38,10 @@ CREATE TABLE IF NOT EXISTS character
     hhp              INT          NOT NULL CHECK (hhp >= 0),      -- hard health points
 
     attributes       JSONB        NOT NULL,
-
-    -- Опыт (денормализация для быстрого доступа)
-    exp_nature       BIGINT                DEFAULT 0,
-    exp_industry     BIGINT                DEFAULT 0,
-    exp_combat       BIGINT                DEFAULT 0,
+    -- experience
+    exp              JSONB        not null, -- {"lp":number, "nature": number, "industry": number, "combat": number}
+    skills           JSONB        not null, -- Set[string]
+    discovery        JSONB        not null, -- Set[string]
 
     online_time      BIGINT       NOT NULL DEFAULT 0,             -- time in seconds spent in game
     auth_token       VARCHAR(64),                                 -- token used in C2SAuth packet
@@ -115,27 +114,27 @@ ALTER TABLE chunk
 CREATE TABLE IF NOT EXISTS object
 (
     id          BIGINT,
-    type_id     INT    NOT NULL, -- defId from object definitions
+    type_id     INT                           NOT NULL, -- defId from object definitions
 
-    region      INT    NOT NULL,
-    x           INT    NOT NULL, -- world coordinate
-    y           INT    NOT NULL, -- world coordinate
-    layer       INT    NOT NULL,
-    chunk_x     INT    NOT NULL, -- redundant data for loading by chunk
-    chunk_y     INT    NOT NULL, -- redundant data for loading by chunk
+    region      INT                           NOT NULL,
+    x           INT                           NOT NULL, -- world coordinate
+    y           INT                           NOT NULL, -- world coordinate
+    layer       INT                           NOT NULL,
+    chunk_x     INT                           NOT NULL, -- redundant data for loading by chunk
+    chunk_y     INT                           NOT NULL, -- redundant data for loading by chunk
     heading     SMALLINT CHECK (heading >= 0 AND heading < 360),
 
     quality     SMALLINT CHECK (quality >= 0) not null default 10,
     hp          INT CHECK (hp >= 0),
 
-    owner_id    BIGINT,          -- кто создал/владеет (для построек)
+    owner_id    BIGINT,                                 -- кто создал/владеет (для построек)
     data        JSONB,
 
-    created_at  TIMESTAMPTZ DEFAULT now(),
-    create_tick BIGINT NOT NULL,
-    last_tick   BIGINT NOT NULL,
-    updated_at  TIMESTAMPTZ DEFAULT now(),
-    deleted_at  TIMESTAMPTZ,     -- soft delete для аудита
+    created_at  TIMESTAMPTZ                            DEFAULT now(),
+    create_tick BIGINT                        NOT NULL,
+    last_tick   BIGINT                        NOT NULL,
+    updated_at  TIMESTAMPTZ                            DEFAULT now(),
+    deleted_at  TIMESTAMPTZ,                            -- soft delete для аудита
     PRIMARY KEY (region, id)
 ) PARTITION BY LIST (region);
 CREATE TABLE object_region_1 PARTITION OF object FOR VALUES IN (1);

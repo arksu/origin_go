@@ -21,6 +21,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"origin/internal/config"
+	"origin/internal/ecs/components"
 	"origin/internal/entitystats"
 	"origin/internal/game"
 	"origin/internal/persistence"
@@ -255,6 +256,24 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		h.jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	defaultExperience, err := components.MarshalCharacterExperience(components.CharacterExperience{})
+	if err != nil {
+		h.logger.Error("failed to marshal default character experience", zap.Error(err))
+		h.jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	defaultSkills, err := components.MarshalStringSet(nil)
+	if err != nil {
+		h.logger.Error("failed to marshal default character skills", zap.Error(err))
+		h.jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	defaultDiscovery, err := components.MarshalStringSet(nil)
+	if err != nil {
+		h.logger.Error("failed to marshal default character discovery", zap.Error(err))
+		h.jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	initialStamina := entitystats.MaxStaminaFromCon(characterattrs.DefaultValue)
 	initialStaminaDBValue := math.Round(initialStamina)
 	initialEnergyDBValue := math.Round(_const.DefaultEnergy)
@@ -268,6 +287,9 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		Stamina:    initialStaminaDBValue,
 		Energy:     initialEnergyDBValue,
 		Attributes: defaultAttributes,
+		Exp:        defaultExperience,
+		Skills:     defaultSkills,
+		Discovery:  defaultDiscovery,
 	})
 	if err != nil {
 		h.logger.Error("failed to create character", zap.Error(err))

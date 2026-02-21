@@ -51,9 +51,9 @@ type Character struct {
 	Shp            int             `json:"shp"`
 	Hhp            int             `json:"hhp"`
 	Attributes     json.RawMessage `json:"attributes"`
-	ExpNature      sql.NullInt64   `json:"exp_nature"`
-	ExpIndustry    sql.NullInt64   `json:"exp_industry"`
-	ExpCombat      sql.NullInt64   `json:"exp_combat"`
+	Exp            json.RawMessage `json:"exp"`
+	Skills         json.RawMessage `json:"skills"`
+	Discovery      json.RawMessage `json:"discovery"`
 	OnlineTime     int64           `json:"online_time"`
 	AuthToken      sql.NullString  `json:"auth_token"`
 	TokenExpiresAt sql.NullTime    `json:"token_expires_at"`

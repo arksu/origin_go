@@ -97,6 +97,9 @@ type CharacterSnapshot struct {
 	SHP         int16
 	HHP         int16
 	Attributes  string
+	Exp         string
+	Skills      string
+	Discovery   string
 	Inventories []InventorySnapshot
 }
 
@@ -140,13 +143,13 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 		return
 	}
 
-	attributesRaw := s.serializeCharacterAttributes(w, entityID, handle)
+	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
 	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
 	if !hasStats {
 		return
 	}
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, staminaValue, energyValue, inventories))
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories))
 }
 
 // SaveDetached enqueues a lightweight snapshot for detached-entity expiration path.
@@ -159,18 +162,21 @@ func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, han
 		return
 	}
 
-	attributesRaw := s.serializeCharacterAttributes(w, entityID, handle)
+	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
 	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
 	if !hasStats {
 		return
 	}
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, staminaValue, energyValue, nil))
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, nil))
 }
 
 func (s *CharacterSaver) buildSnapshot(
 	entityID types.EntityID,
 	transform components.Transform,
 	attributesRaw string,
+	experienceRaw string,
+	skillsRaw string,
+	discoveryRaw string,
 	staminaValue float64,
 	energyValue float64,
 	inventories []InventorySnapshot,
@@ -185,6 +191,9 @@ func (s *CharacterSaver) buildSnapshot(
 		SHP:         100, // TODO
 		HHP:         100, // TODO
 		Attributes:  attributesRaw,
+		Exp:         experienceRaw,
+		Skills:      skillsRaw,
+		Discovery:   discoveryRaw,
 		Inventories: inventories,
 	}
 }
@@ -207,16 +216,22 @@ func (s *CharacterSaver) resolveStatsSnapshotValues(w *ecs.World, entityID types
 	return 0, 0, false
 }
 
-func (s *CharacterSaver) serializeCharacterAttributes(w *ecs.World, entityID types.EntityID, handle types.Handle) string {
+func (s *CharacterSaver) serializeCharacterProfile(w *ecs.World, entityID types.EntityID, handle types.Handle) (string, string, string, string) {
 	values := characterattrs.Default()
+	experience := components.CharacterExperience{}
+	skills := []string{}
+	discovery := []string{}
 	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
 		values = characterattrs.Normalize(profile.Attributes)
+		experience = profile.Experience
+		skills = profile.Skills
+		discovery = profile.Discovery
 	} else {
 		s.logger.Warn("Character entity missing CharacterProfile component, using defaults",
 			zap.Uint64("entity_id", uint64(entityID)))
 	}
 
-	raw, err := characterattrs.Marshal(values)
+	attributesRaw, err := characterattrs.Marshal(values)
 	if err != nil {
 		s.logger.Error("Failed to marshal character attributes, using defaults",
 			zap.Uint64("entity_id", uint64(entityID)),
@@ -226,12 +241,37 @@ func (s *CharacterSaver) serializeCharacterAttributes(w *ecs.World, entityID typ
 			s.logger.Error("Failed to marshal default character attributes",
 				zap.Uint64("entity_id", uint64(entityID)),
 				zap.Error(defaultErr))
-			return "{}"
+			attributesRaw = []byte("{}")
+		} else {
+			attributesRaw = defaultRaw
 		}
-		return string(defaultRaw)
 	}
 
-	return string(raw)
+	experienceRaw, err := components.MarshalCharacterExperience(experience)
+	if err != nil {
+		s.logger.Error("Failed to marshal character experience, using defaults",
+			zap.Uint64("entity_id", uint64(entityID)),
+			zap.Error(err))
+		experienceRaw = []byte(`{"lp":0,"nature":0,"industry":0,"combat":0}`)
+	}
+
+	skillsRaw, err := components.MarshalStringSet(skills)
+	if err != nil {
+		s.logger.Error("Failed to marshal character skills, using defaults",
+			zap.Uint64("entity_id", uint64(entityID)),
+			zap.Error(err))
+		skillsRaw = []byte("[]")
+	}
+
+	discoveryRaw, err := components.MarshalStringSet(discovery)
+	if err != nil {
+		s.logger.Error("Failed to marshal character discovery, using defaults",
+			zap.Uint64("entity_id", uint64(entityID)),
+			zap.Error(err))
+		discoveryRaw = []byte("[]")
+	}
+
+	return string(attributesRaw), string(experienceRaw), string(skillsRaw), string(discoveryRaw)
 }
 
 func (s *CharacterSaver) enqueueSnapshot(snapshot CharacterSnapshot) {
@@ -313,6 +353,9 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 	shps := make([]int, len(batch))
 	hhps := make([]int, len(batch))
 	attributes := make([]string, len(batch))
+	exps := make([]string, len(batch))
+	skills := make([]string, len(batch))
+	discovery := make([]string, len(batch))
 
 	for i, snapshot := range batch {
 		ids[i] = int(snapshot.CharacterID)
@@ -324,6 +367,9 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		shps[i] = int(snapshot.SHP)
 		hhps[i] = int(snapshot.HHP)
 		attributes[i] = snapshot.Attributes
+		exps[i] = snapshot.Exp
+		skills[i] = snapshot.Skills
+		discovery[i] = snapshot.Discovery
 	}
 
 	params := repository.UpdateCharactersParams{
@@ -336,6 +382,9 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		Shps:       shps,
 		Hhps:       hhps,
 		Attributes: attributes,
+		Exps:       exps,
+		Skills:     skills,
+		Discovery:  discovery,
 	}
 
 	err := s.db.Queries().UpdateCharacters(ctx, params)

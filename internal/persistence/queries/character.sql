@@ -28,8 +28,10 @@ SET x = $2, y = $3
 WHERE id = $1;
 
 -- name: CreateCharacter :one
-INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes)
-VALUES ($1, $2, $3, 1, $4, $5, 0, 0, sqlc.arg(stamina), sqlc.arg(energy), 100, 100, sqlc.arg(attributes)::jsonb)
+INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes, exp, skills,
+                       discovery)
+VALUES ($1, $2, $3, 1, $4, $5, 0, 0, sqlc.arg(stamina), sqlc.arg(energy), 100, 100, sqlc.arg(attributes)::jsonb,
+        sqlc.arg(exp)::jsonb, sqlc.arg(skills)::jsonb, sqlc.arg(discovery)::jsonb)
 RETURNING *;
 
 -- name: DeleteCharacter :exec
@@ -85,6 +87,9 @@ SET
     shp = v.shp,
     hhp = v.hhp,
     attributes = v.attributes,
+    exp = v.exp,
+    skills = v.skills,
+    discovery = v.discovery,
     last_save_at = now(),
     updated_at = now()
 FROM (
@@ -97,6 +102,9 @@ FROM (
              unnest(sqlc.arg(energies)::float8[]) as energy,
              unnest(sqlc.arg(shps)::int[]) as shp,
              unnest(sqlc.arg(hhps)::int[]) as hhp,
-             unnest(sqlc.arg(attributes)::text[])::jsonb as attributes
+             unnest(sqlc.arg(attributes)::text[])::jsonb as attributes,
+             unnest(sqlc.arg(exps)::text[])::jsonb as exp,
+             unnest(sqlc.arg(skills)::text[])::jsonb as skills,
+             unnest(sqlc.arg(discovery)::text[])::jsonb as discovery
      ) AS v
 WHERE character.id = v.id;

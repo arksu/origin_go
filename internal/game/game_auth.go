@@ -169,6 +169,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 
 	// Normal spawn flow
 	normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
+	profileExperience, profileSkills, profileDiscovery := loadCharacterProfileData(character, g.logger)
 	candidates := g.generateSpawnCandidates(character.X, character.Y)
 	spawned := false
 	var playerHandle *types.Handle
@@ -249,10 +250,13 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			ecs.AddComponent(w, h, components.CharacterProfile{
 				Attributes: characterattrs.Clone(normalizedAttributes),
 				Experience: components.CharacterExperience{
-					Nature:   nullableInt64(character.ExpNature),
-					Industry: nullableInt64(character.ExpIndustry),
-					Combat:   nullableInt64(character.ExpCombat),
+					LP:       profileExperience.LP,
+					Nature:   profileExperience.Nature,
+					Industry: profileExperience.Industry,
+					Combat:   profileExperience.Combat,
 				},
+				Skills:    append([]string(nil), profileSkills...),
+				Discovery: append([]string(nil), profileDiscovery...),
 			})
 			initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 			ecs.AddComponent(w, h, initialStats)
@@ -421,11 +425,32 @@ func headingDegreesToRadians(heading int16) float64 {
 	return degrees * math.Pi / 180
 }
 
-func nullableInt64(value sql.NullInt64) int64 {
-	if !value.Valid {
-		return 0
+func loadCharacterProfileData(character repository.Character, logger *zap.Logger) (components.CharacterExperience, []string, []string) {
+	experience, err := components.UnmarshalCharacterExperience(character.Exp)
+	if err != nil {
+		logger.Warn("Failed to parse character experience, using defaults",
+			zap.Int64("character_id", character.ID),
+			zap.Error(err))
+		experience = components.CharacterExperience{}
 	}
-	return value.Int64
+
+	skills, err := components.UnmarshalStringSet(character.Skills)
+	if err != nil {
+		logger.Warn("Failed to parse character skills, using defaults",
+			zap.Int64("character_id", character.ID),
+			zap.Error(err))
+		skills = []string{}
+	}
+
+	discovery, err := components.UnmarshalStringSet(character.Discovery)
+	if err != nil {
+		logger.Warn("Failed to parse character discovery, using defaults",
+			zap.Int64("character_id", character.ID),
+			zap.Error(err))
+		discovery = []string{}
+	}
+
+	return experience, skills, discovery
 }
 
 func buildInitialEntityStats(
@@ -483,14 +508,18 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](shard.world, handle)
 	var normalizedAttributes characterattrs.Values
 	if !hasProfile {
+		profileExperience, profileSkills, profileDiscovery := loadCharacterProfileData(character, g.logger)
 		normalizedAttributes, _ = characterattrs.FromRaw(character.Attributes)
 		ecs.AddComponent(shard.world, handle, components.CharacterProfile{
 			Attributes: normalizedAttributes,
 			Experience: components.CharacterExperience{
-				Nature:   nullableInt64(character.ExpNature),
-				Industry: nullableInt64(character.ExpIndustry),
-				Combat:   nullableInt64(character.ExpCombat),
+				LP:       profileExperience.LP,
+				Nature:   profileExperience.Nature,
+				Industry: profileExperience.Industry,
+				Combat:   profileExperience.Combat,
 			},
+			Skills:    profileSkills,
+			Discovery: profileDiscovery,
 		})
 	} else {
 		normalizedAttributes = characterattrs.Normalize(profile.Attributes)
