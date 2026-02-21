@@ -14,6 +14,7 @@ import { MAX_FPS } from '@/constants/render'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
+import { fxManager } from './fx/FxManager'
 import type { DebugInfo, ScreenPoint } from './types'
 import { clearAlphaMaskCache } from './PixelHitTest'
 
@@ -413,6 +414,21 @@ export class Render {
 
   updateObjectPosition(entityId: number, x: number, y: number): void {
     this.objectManager.updateObjectPosition(entityId, x, y)
+  }
+
+  playLpGainAnimation(entityId: number): void {
+    const objectView = this.objectManager.getObject(entityId)
+    if (!objectView) return
+
+    const pos = objectView.getPosition()
+    const screenPos = coordGame2Screen(pos.x, pos.y)
+
+    fxManager.playLpGainAnimation({
+      container: this.objectsContainer,
+      x: screenPos.x,
+      y: screenPos.y - 60, // Above the character
+      durationMs: 1500,
+    })
   }
 
   onPointerClick(callback: (screen: ScreenPoint) => void): void {
