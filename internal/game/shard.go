@@ -141,6 +141,13 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 					})
 				}
 			}
+			if result.Success && result.DiscoveryLPGained > 0 {
+				lp := result.DiscoveryLPGained
+				s.SendExpGained(playerID, &netproto.S2C_ExpGained{
+					EntityId: uint64(playerID),
+					Lp:       &lp,
+				})
+			}
 			return contracts.GiveItemOutcome{
 				Success:      result.Success,
 				AnyDropped:   false,
@@ -784,6 +791,37 @@ func (s *Shard) SendInventoryUpdate(entityID types.EntityID, states []*netproto.
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal inventory update",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendExpGained sends experience gain delta to a client.
+func (s *Shard) SendExpGained(entityID types.EntityID, gained *netproto.S2C_ExpGained) {
+	if gained == nil {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_ExpGained{
+			ExpGained: gained,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal exp gained",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return

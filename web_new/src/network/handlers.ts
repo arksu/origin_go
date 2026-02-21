@@ -69,6 +69,14 @@ export function registerMessageHandlers(): void {
     gameStore.setPlayerStats(msg)
   })
 
+  messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
+    const targetEntityId = toNumber(msg.entityId || 0)
+    if (gameStore.playerEntityId == null || targetEntityId !== gameStore.playerEntityId) {
+      return
+    }
+    gameStore.applyExpGained(msg)
+  })
+
   messageDispatcher.on('movementMode', (msg: proto.IS2C_MovementMode) => {
     const entityId = toNumber(msg.entityId!)
     const movementMode = msg.movementMode || 0

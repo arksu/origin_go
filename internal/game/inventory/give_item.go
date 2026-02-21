@@ -35,6 +35,9 @@ type GiveItemResult struct {
 	// SpawnedDroppedEntityID is kept for backward compatibility with callers.
 	// GiveItem no longer drops to world, so this field is always nil.
 	SpawnedDroppedEntityID *types.EntityID
+
+	// DiscoveryLPGained reports LP awarded for first-time discovery during this give call.
+	DiscoveryLPGained int64
 }
 
 // GiveItem creates new items and places them using the universal placement policy:
@@ -115,7 +118,7 @@ func (s *InventoryOperationService) GiveItem(
 	} else if grantedCount < requestedCount {
 		message = fmt.Sprintf("%s; no more free space", message)
 	}
-	s.recordDiscoveryOnGive(w, playerHandle, itemDef)
+	discoveryLPGained := s.recordDiscoveryOnGive(w, playerHandle, itemDef)
 
 	return &GiveItemResult{
 		Success:           true,
@@ -123,6 +126,7 @@ func (s *InventoryOperationService) GiveItem(
 		GrantedCount:      grantedCount,
 		PlacedInHand:      placedInHand,
 		UpdatedContainers: allUpdatedContainers,
+		DiscoveryLPGained: discoveryLPGained,
 	}
 }
 
@@ -130,10 +134,11 @@ func (s *InventoryOperationService) recordDiscoveryOnGive(
 	w *ecs.World,
 	playerHandle types.Handle,
 	itemDef *itemdefs.ItemDef,
-) {
+) int64 {
 	if w == nil || playerHandle == types.InvalidHandle || itemDef == nil || itemDef.Key == "" {
-		return
+		return 0
 	}
+	grantedLP := int64(0)
 	ecs.MutateComponent[components.CharacterProfile](w, playerHandle, func(profile *components.CharacterProfile) bool {
 		for _, existingKey := range profile.Discovery {
 			if existingKey == itemDef.Key {
@@ -143,8 +148,10 @@ func (s *InventoryOperationService) recordDiscoveryOnGive(
 
 		profile.Discovery = components.NormalizeStringSet(append(profile.Discovery, itemDef.Key))
 		profile.Experience.LP += itemDef.DiscoveryLP
+		grantedLP = itemDef.DiscoveryLP
 		return true
 	})
+	return grantedLP
 }
 
 func (s *InventoryOperationService) tryAddToEligibleGrid(

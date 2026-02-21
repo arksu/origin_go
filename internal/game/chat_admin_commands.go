@@ -188,6 +188,17 @@ func (h *ChatAdminCommandHandler) handleGive(
 	if len(result.UpdatedContainers) > 0 {
 		h.sendInventoryUpdate(w, playerID, result)
 	}
+	if result.DiscoveryLPGained > 0 {
+		if expSender, ok := h.alertSender.(interface {
+			SendExpGained(entityID types.EntityID, gained *netproto.S2C_ExpGained)
+		}); ok {
+			lp := result.DiscoveryLPGained
+			expSender.SendExpGained(playerID, &netproto.S2C_ExpGained{
+				EntityId: uint64(playerID),
+				Lp:       &lp,
+			})
+		}
+	}
 
 	h.sendSystemMessage(playerID, fmt.Sprintf("gave %s x%d q%d — %s", itemKey, count, quality, result.Message))
 
