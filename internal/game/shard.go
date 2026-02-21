@@ -808,7 +808,7 @@ func (s *Shard) SendInventorySnapshots(w *ecs.World, entityID types.EntityID, ha
 }
 
 // SendCharacterProfileSnapshot sends player-profile data after player enter world.
-// Current payload includes attributes snapshot (`S2C_CharacterAttributes`).
+// Payload includes full profile snapshot (`S2C_CharacterProfile`).
 func (s *Shard) SendCharacterProfileSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
 	s.ClientsMu.RLock()
 	client, ok := s.Clients[entityID]
@@ -819,8 +819,10 @@ func (s *Shard) SendCharacterProfileSnapshot(w *ecs.World, entityID types.Entity
 	}
 
 	values := characterattrs.Default()
+	exp := components.CharacterExperience{}
 	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, handle); hasProfile {
 		values = characterattrs.Normalize(profile.Attributes)
+		exp = profile.Experience
 	} else {
 		s.logger.Warn("Character has no CharacterProfile component",
 			zap.Int64("entity_id", int64(entityID)))
@@ -838,13 +840,19 @@ func (s *Shard) SendCharacterProfileSnapshot(w *ecs.World, entityID types.Entity
 		Payload: &netproto.ServerMessage_CharacterProfile{
 			CharacterProfile: &netproto.S2C_CharacterProfile{
 				Attributes: entries,
+				Exp: &netproto.CharacterExperience{
+					Lp:       exp.LP,
+					Nature:   exp.Nature,
+					Industry: exp.Industry,
+					Combat:   exp.Combat,
+				},
 			},
 		},
 	}
 
 	data, err := proto.Marshal(response)
 	if err != nil {
-		s.logger.Error("Failed to marshal character attributes snapshot",
+		s.logger.Error("Failed to marshal character profile snapshot",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return
