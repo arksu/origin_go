@@ -70,6 +70,47 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 1001, pickaxe.DefID)
 	assert.Nil(t, pickaxe.Stack)
+	assert.Equal(t, 50, pickaxe.DiscoveryLP)
+}
+
+func TestLoadFromDirectory_DiscoveryLPOverride(t *testing.T) {
+	dir := t.TempDir()
+
+	json := `{
+		"v": 1,
+		"source": "test",
+		"items": [
+			{
+				"defId": 1001,
+				"key": "default_lp_item",
+				"name": "Default LP Item",
+				"tags": [],
+				"size": { "w": 1, "h": 1 },
+				"allowed": { "hand": true, "grid": true, "equipmentSlots": [] }
+			},
+			{
+				"defId": 1002,
+				"key": "custom_lp_item",
+				"name": "Custom LP Item",
+				"tags": [],
+				"size": { "w": 1, "h": 1 },
+				"allowed": { "hand": true, "grid": true, "equipmentSlots": [] },
+				"discoveryLP": 77
+			}
+		]
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.json"), []byte(json), 0644))
+
+	registry, err := LoadFromDirectory(dir, testLogger())
+	require.NoError(t, err)
+
+	defaultLP, ok := registry.GetByKey("default_lp_item")
+	require.True(t, ok)
+	assert.Equal(t, 50, defaultLP.DiscoveryLP)
+
+	customLP, ok := registry.GetByKey("custom_lp_item")
+	require.True(t, ok)
+	assert.Equal(t, 77, customLP.DiscoveryLP)
 }
 
 func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {

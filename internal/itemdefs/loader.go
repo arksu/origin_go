@@ -256,4 +256,7 @@ func applyDefaults(item *ItemDef) {
 	if item.Resource == "" {
 		item.Resource = item.Key
 	}
+	if item.DiscoveryLP == 0 {
+		item.DiscoveryLP = 50
+	}
 }
