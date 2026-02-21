@@ -4534,6 +4534,58 @@ func (x *S2C_ExpGained) GetCombat() int64 {
 	return 0
 }
 
+type S2C_Fx struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FxKey         string                 `protobuf:"bytes,1,opt,name=fx_key,json=fxKey,proto3" json:"fx_key,omitempty"`
+	Position      *Vector2               `protobuf:"bytes,2,opt,name=position,proto3" json:"position,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *S2C_Fx) Reset() {
+	*x = S2C_Fx{}
+	mi := &file_api_proto_packets_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *S2C_Fx) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*S2C_Fx) ProtoMessage() {}
+
+func (x *S2C_Fx) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_packets_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use S2C_Fx.ProtoReflect.Descriptor instead.
+func (*S2C_Fx) Descriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *S2C_Fx) GetFxKey() string {
+	if x != nil {
+		return x.FxKey
+	}
+	return ""
+}
+
+func (x *S2C_Fx) GetPosition() *Vector2 {
+	if x != nil {
+		return x.Position
+	}
+	return nil
+}
+
 type S2C_ChatMessage struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Channel      ChatChannel            `protobuf:"varint,1,opt,name=channel,proto3,enum=proto.ChatChannel" json:"channel,omitempty"`
@@ -4548,7 +4600,7 @@ type S2C_ChatMessage struct {
 
 func (x *S2C_ChatMessage) Reset() {
 	*x = S2C_ChatMessage{}
-	mi := &file_api_proto_packets_proto_msgTypes[60]
+	mi := &file_api_proto_packets_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4560,7 +4612,7 @@ func (x *S2C_ChatMessage) String() string {
 func (*S2C_ChatMessage) ProtoMessage() {}
 
 func (x *S2C_ChatMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[60]
+	mi := &file_api_proto_packets_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4573,7 +4625,7 @@ func (x *S2C_ChatMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_ChatMessage.ProtoReflect.Descriptor instead.
 func (*S2C_ChatMessage) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{60}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *S2C_ChatMessage) GetChannel() ChatChannel {
@@ -4621,7 +4673,7 @@ type S2C_Error struct {
 
 func (x *S2C_Error) Reset() {
 	*x = S2C_Error{}
-	mi := &file_api_proto_packets_proto_msgTypes[61]
+	mi := &file_api_proto_packets_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4633,7 +4685,7 @@ func (x *S2C_Error) String() string {
 func (*S2C_Error) ProtoMessage() {}
 
 func (x *S2C_Error) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[61]
+	mi := &file_api_proto_packets_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4646,7 +4698,7 @@ func (x *S2C_Error) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_Error.ProtoReflect.Descriptor instead.
 func (*S2C_Error) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{61}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *S2C_Error) GetCode() ErrorCode {
@@ -4673,7 +4725,7 @@ type S2C_Warning struct {
 
 func (x *S2C_Warning) Reset() {
 	*x = S2C_Warning{}
-	mi := &file_api_proto_packets_proto_msgTypes[62]
+	mi := &file_api_proto_packets_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4685,7 +4737,7 @@ func (x *S2C_Warning) String() string {
 func (*S2C_Warning) ProtoMessage() {}
 
 func (x *S2C_Warning) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[62]
+	mi := &file_api_proto_packets_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4698,7 +4750,7 @@ func (x *S2C_Warning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use S2C_Warning.ProtoReflect.Descriptor instead.
 func (*S2C_Warning) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{62}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *S2C_Warning) GetCode() WarningCode {
@@ -4744,6 +4796,7 @@ type ServerMessage struct {
 	//	*ServerMessage_CharacterProfile
 	//	*ServerMessage_PlayerStats
 	//	*ServerMessage_ExpGained
+	//	*ServerMessage_Fx
 	//	*ServerMessage_Error
 	//	*ServerMessage_Warning
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
@@ -4753,7 +4806,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_api_proto_packets_proto_msgTypes[63]
+	mi := &file_api_proto_packets_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4765,7 +4818,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_packets_proto_msgTypes[63]
+	mi := &file_api_proto_packets_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4778,7 +4831,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{63}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ServerMessage) GetSequence() uint32 {
@@ -5002,6 +5055,15 @@ func (x *ServerMessage) GetExpGained() *S2C_ExpGained {
 	return nil
 }
 
+func (x *ServerMessage) GetFx() *S2C_Fx {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_Fx); ok {
+			return x.Fx
+		}
+	}
+	return nil
+}
+
 func (x *ServerMessage) GetError() *S2C_Error {
 	if x != nil {
 		if x, ok := x.Payload.(*ServerMessage_Error); ok {
@@ -5116,6 +5178,10 @@ type ServerMessage_ExpGained struct {
 	ExpGained *S2C_ExpGained `protobuf:"bytes,32,opt,name=exp_gained,json=expGained,proto3,oneof"`
 }
 
+type ServerMessage_Fx struct {
+	Fx *S2C_Fx `protobuf:"bytes,33,opt,name=fx,proto3,oneof"`
+}
+
 type ServerMessage_Error struct {
 	// S2C_EntityUpdate entity_update = 15;
 	// S2C_PlayerStateUpdate player_state = 16;
@@ -5195,6 +5261,8 @@ func (*ServerMessage_CharacterProfile) isServerMessage_Payload() {}
 func (*ServerMessage_PlayerStats) isServerMessage_Payload() {}
 
 func (*ServerMessage_ExpGained) isServerMessage_Payload() {}
+
+func (*ServerMessage_Fx) isServerMessage_Payload() {}
 
 func (*ServerMessage_Error) isServerMessage_Payload() {}
 
@@ -5480,7 +5548,10 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x03_lpB\t\n" +
 	"\a_natureB\v\n" +
 	"\t_industryB\t\n" +
-	"\a_combat\"\xce\x01\n" +
+	"\a_combat\"K\n" +
+	"\x06S2C_Fx\x12\x15\n" +
+	"\x06fx_key\x18\x01 \x01(\tR\x05fxKey\x12*\n" +
+	"\bposition\x18\x02 \x01(\v2\x0e.proto.Vector2R\bposition\"\xce\x01\n" +
 	"\x0fS2C_ChatMessage\x12,\n" +
 	"\achannel\x18\x01 \x01(\x0e2\x12.proto.ChatChannelR\achannel\x12$\n" +
 	"\x0efrom_entity_id\x18\x02 \x01(\x04R\ffromEntityId\x12\x1b\n" +
@@ -5494,7 +5565,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"O\n" +
 	"\vS2C_Warning\x12&\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x12.proto.WarningCodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xe2\f\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x83\r\n" +
 	"\rServerMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\rR\bsequence\x128\n" +
 	"\vauth_result\x18\n" +
@@ -5525,7 +5596,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x11character_profile\x18\x1e \x01(\v2\x1b.proto.S2C_CharacterProfileH\x00R\x10characterProfile\x12;\n" +
 	"\fplayer_stats\x18\x1f \x01(\v2\x16.proto.S2C_PlayerStatsH\x00R\vplayerStats\x125\n" +
 	"\n" +
-	"exp_gained\x18  \x01(\v2\x14.proto.S2C_ExpGainedH\x00R\texpGained\x12(\n" +
+	"exp_gained\x18  \x01(\v2\x14.proto.S2C_ExpGainedH\x00R\texpGained\x12\x1f\n" +
+	"\x02fx\x18! \x01(\v2\r.proto.S2C_FxH\x00R\x02fx\x12(\n" +
 	"\x05error\x18* \x01(\v2\x10.proto.S2C_ErrorH\x00R\x05error\x12.\n" +
 	"\awarning\x18+ \x01(\v2\x12.proto.S2C_WarningH\x00R\awarningB\t\n" +
 	"\apayload*v\n" +
@@ -5627,7 +5699,7 @@ func file_api_proto_packets_proto_rawDescGZIP() []byte {
 }
 
 var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 64)
+var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
 var file_api_proto_packets_proto_goTypes = []any{
 	(MovementMode)(0),                // 0: proto.MovementMode
 	(EquipSlot)(0),                   // 1: proto.EquipSlot
@@ -5701,10 +5773,11 @@ var file_api_proto_packets_proto_goTypes = []any{
 	(*S2C_CyclicActionFinished)(nil), // 69: proto.S2C_CyclicActionFinished
 	(*S2C_Sound)(nil),                // 70: proto.S2C_Sound
 	(*S2C_ExpGained)(nil),            // 71: proto.S2C_ExpGained
-	(*S2C_ChatMessage)(nil),          // 72: proto.S2C_ChatMessage
-	(*S2C_Error)(nil),                // 73: proto.S2C_Error
-	(*S2C_Warning)(nil),              // 74: proto.S2C_Warning
-	(*ServerMessage)(nil),            // 75: proto.ServerMessage
+	(*S2C_Fx)(nil),                   // 72: proto.S2C_Fx
+	(*S2C_ChatMessage)(nil),          // 73: proto.S2C_ChatMessage
+	(*S2C_Error)(nil),                // 74: proto.S2C_Error
+	(*S2C_Warning)(nil),              // 75: proto.S2C_Warning
+	(*ServerMessage)(nil),            // 76: proto.ServerMessage
 }
 var file_api_proto_packets_proto_depIdxs = []int32{
 	4,  // 0: proto.InventoryRef.kind:type_name -> proto.InventoryKind
@@ -5770,39 +5843,41 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	65, // 60: proto.S2C_ContextMenu.actions:type_name -> proto.ContextMenuAction
 	10, // 61: proto.S2C_MiniAlert.severity:type_name -> proto.AlertSeverity
 	11, // 62: proto.S2C_CyclicActionFinished.result:type_name -> proto.CyclicActionFinishResult
-	9,  // 63: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
-	5,  // 64: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	6,  // 65: proto.S2C_Warning.code:type_name -> proto.WarningCode
-	47, // 66: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	48, // 67: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	55, // 68: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
-	56, // 69: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
-	49, // 70: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	54, // 71: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	57, // 72: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	58, // 73: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	59, // 74: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	60, // 75: proto.ServerMessage.movement_mode:type_name -> proto.S2C_MovementMode
-	61, // 76: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
-	62, // 77: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
-	63, // 78: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
-	64, // 79: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
-	72, // 80: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
-	66, // 81: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
-	67, // 82: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
-	68, // 83: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
-	69, // 84: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
-	70, // 85: proto.ServerMessage.sound:type_name -> proto.S2C_Sound
-	52, // 86: proto.ServerMessage.character_profile:type_name -> proto.S2C_CharacterProfile
-	53, // 87: proto.ServerMessage.player_stats:type_name -> proto.S2C_PlayerStats
-	71, // 88: proto.ServerMessage.exp_gained:type_name -> proto.S2C_ExpGained
-	73, // 89: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	74, // 90: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
-	91, // [91:91] is the sub-list for method output_type
-	91, // [91:91] is the sub-list for method input_type
-	91, // [91:91] is the sub-list for extension type_name
-	91, // [91:91] is the sub-list for extension extendee
-	0,  // [0:91] is the sub-list for field type_name
+	13, // 63: proto.S2C_Fx.position:type_name -> proto.Vector2
+	9,  // 64: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
+	5,  // 65: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	6,  // 66: proto.S2C_Warning.code:type_name -> proto.WarningCode
+	47, // 67: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	48, // 68: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	55, // 69: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	56, // 70: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	49, // 71: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	54, // 72: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	57, // 73: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	58, // 74: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	59, // 75: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	60, // 76: proto.ServerMessage.movement_mode:type_name -> proto.S2C_MovementMode
+	61, // 77: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
+	62, // 78: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
+	63, // 79: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
+	64, // 80: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
+	73, // 81: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
+	66, // 82: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
+	67, // 83: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
+	68, // 84: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
+	69, // 85: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
+	70, // 86: proto.ServerMessage.sound:type_name -> proto.S2C_Sound
+	52, // 87: proto.ServerMessage.character_profile:type_name -> proto.S2C_CharacterProfile
+	53, // 88: proto.ServerMessage.player_stats:type_name -> proto.S2C_PlayerStats
+	71, // 89: proto.ServerMessage.exp_gained:type_name -> proto.S2C_ExpGained
+	72, // 90: proto.ServerMessage.fx:type_name -> proto.S2C_Fx
+	74, // 91: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	75, // 92: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
+	93, // [93:93] is the sub-list for method output_type
+	93, // [93:93] is the sub-list for method input_type
+	93, // [93:93] is the sub-list for extension type_name
+	93, // [93:93] is the sub-list for extension extendee
+	0,  // [0:93] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -5844,8 +5919,8 @@ func file_api_proto_packets_proto_init() {
 	file_api_proto_packets_proto_msgTypes[49].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[57].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[59].OneofWrappers = []any{}
-	file_api_proto_packets_proto_msgTypes[60].OneofWrappers = []any{}
-	file_api_proto_packets_proto_msgTypes[63].OneofWrappers = []any{
+	file_api_proto_packets_proto_msgTypes[61].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[64].OneofWrappers = []any{
 		(*ServerMessage_AuthResult)(nil),
 		(*ServerMessage_Pong)(nil),
 		(*ServerMessage_ChunkLoad)(nil),
@@ -5869,6 +5944,7 @@ func file_api_proto_packets_proto_init() {
 		(*ServerMessage_CharacterProfile)(nil),
 		(*ServerMessage_PlayerStats)(nil),
 		(*ServerMessage_ExpGained)(nil),
+		(*ServerMessage_Fx)(nil),
 		(*ServerMessage_Error)(nil),
 		(*ServerMessage_Warning)(nil),
 	}
@@ -5878,7 +5954,7 @@ func file_api_proto_packets_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_packets_proto_rawDesc), len(file_api_proto_packets_proto_rawDesc)),
 			NumEnums:      12,
-			NumMessages:   64,
+			NumMessages:   65,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

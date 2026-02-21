@@ -147,6 +147,30 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 					EntityId: uint64(playerID),
 					Lp:       &lp,
 				})
+
+				// Send Fx and Sound for LP gain
+				fxKey := "exp_gain"
+
+				var posX, posY float64
+				ecs.WithComponent(w, playerHandle, func(t *components.Transform) {
+					posX = t.X
+					posY = t.Y
+				})
+
+				s.SendFx(playerID, &netproto.S2C_Fx{
+					FxKey: fxKey,
+					Position: &netproto.Vector2{
+						X: int32(posX),
+						Y: int32(posY),
+					},
+				})
+
+				s.SendSound(playerID, &netproto.S2C_Sound{
+					SoundKey:        fxKey,
+					X:               posX,
+					Y:               posY,
+					MaxHearDistance: 80.0,
+				})
 			}
 			return contracts.GiveItemOutcome{
 				Success:      result.Success,
@@ -791,6 +815,37 @@ func (s *Shard) SendInventoryUpdate(entityID types.EntityID, states []*netproto.
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal inventory update",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+
+	client.Send(data)
+}
+
+// SendFx sends a visual effect trigger to a client.
+func (s *Shard) SendFx(entityID types.EntityID, fx *netproto.S2C_Fx) {
+	if fx == nil {
+		return
+	}
+
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_Fx{
+			Fx: fx,
+		},
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal fx",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return

@@ -416,18 +416,19 @@ export class Render {
     this.objectManager.updateObjectPosition(entityId, x, y)
   }
 
-  playLpGainAnimation(entityId: number): void {
+  playFx(entityId: number, fxKey: string): void {
     const objectView = this.objectManager.getObject(entityId)
     if (!objectView) return
 
     const pos = objectView.getPosition()
     const screenPos = coordGame2Screen(pos.x, pos.y)
 
-    fxManager.playLpGainAnimation({
+    fxManager.playFx({
       container: this.objectsContainer,
       x: screenPos.x,
       y: screenPos.y - 60, // Above the character
       durationMs: 1500,
+      fxKey: fxKey,
     })
   }
 

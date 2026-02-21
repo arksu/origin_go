@@ -93,6 +93,7 @@ export class MessageDispatcher {
     if (message.cyclicActionProgress) return 'cyclicActionProgress'
     if (message.cyclicActionFinished) return 'cyclicActionFinished'
     if (message.sound) return 'sound'
+    if (message.fx) return 'fx'
     if (message.characterProfile) return 'characterProfile'
     if (message.playerStats) return 'playerStats'
     if (message.expGained) return 'expGained'
