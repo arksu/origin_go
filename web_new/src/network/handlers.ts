@@ -56,7 +56,7 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('characterProfile', (msg: proto.IS2C_CharacterProfile) => {
-    gameStore.setCharacterProfileSnapshot(msg.attributes || [])
+    gameStore.setCharacterProfileSnapshot(msg)
   })
 
   messageDispatcher.on('playerStats', (msg: proto.IS2C_PlayerStats) => {

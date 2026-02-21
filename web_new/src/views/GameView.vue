@@ -10,6 +10,7 @@ import InventoryWindow from '@/components/ui/InventoryWindow.vue'
 import EquipmentWindow from '@/components/ui/EquipmentWindow.vue'
 import NestedInventoryWindow from '@/components/ui/NestedInventoryWindow.vue'
 import CharacterSheetWindow from '@/components/ui/CharacterSheetWindow.vue'
+import PlayerStatsWindow from '@/components/ui/PlayerStatsWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
@@ -71,6 +72,7 @@ const openNestedInventoryWindows = computed(() => {
 })
 const miniAlerts = computed(() => gameStore.miniAlerts)
 const showCharacterSheet = computed(() => gameStore.characterSheetVisible)
+const showPlayerStatsWindow = computed(() => gameStore.playerStatsWindowVisible)
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -234,6 +236,10 @@ function handleCharacterSheetClose() {
   gameStore.setCharacterSheetVisible(false)
 }
 
+function handlePlayerStatsClose() {
+  gameStore.setPlayerStatsWindowVisible(false)
+}
+
 function handleEquipmentClose() {
   gameStore.setPlayerEquipmentVisible(false)
 }
@@ -262,6 +268,7 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         gameStore.setPlayerInventoryVisible(false)
         gameStore.setPlayerEquipmentVisible(false)
         gameStore.setCharacterSheetVisible(false)
+        gameStore.setPlayerStatsWindowVisible(false)
         gameStore.closeContextMenu()
         break
       case '/':
@@ -285,6 +292,9 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         break
       case 'e':
         gameStore.togglePlayerEquipment()
+        break
+      case 'p':
+        gameStore.togglePlayerStatsWindow()
         break
       default:
         config.action()
@@ -363,6 +373,10 @@ useHotkeys(hotkeys)
 
       <div v-if="showCharacterSheet" class="game-character-sheet">
         <CharacterSheetWindow @close="handleCharacterSheetClose" />
+      </div>
+
+      <div v-if="showPlayerStatsWindow" class="game-player-stats-window">
+        <PlayerStatsWindow @close="handlePlayerStatsClose" />
       </div>
       
       <!-- Nested inventory windows -->
@@ -555,6 +569,16 @@ useHotkeys(hotkeys)
   height: 100%;
   pointer-events: none;
   z-index: 250;
+}
+
+.game-player-stats-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 255;
 }
 
 .game-equipment {

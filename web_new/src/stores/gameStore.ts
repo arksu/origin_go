@@ -99,6 +99,13 @@ export interface CharacterAttributeViewItem {
   icon: string
 }
 
+export interface CharacterExperienceState {
+  lp: number
+  nature: number
+  industry: number
+  combat: number
+}
+
 export type WorldBootstrapState =
   | 'idle'
   | 'waiting_enter_world'
@@ -148,7 +155,9 @@ export const useGameStore = defineStore('game', () => {
     current: 0,
   })
   const characterSheetVisible = ref(false)
+  const playerStatsWindowVisible = ref(false)
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
+  const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
   const playerMoveMode = ref<number | null>(null)
   const hasBootstrapFirstChunk = ref(false)
@@ -267,7 +276,9 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible.value = false
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
+    playerStatsWindowVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
+    characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
     playerMoveMode.value = null
     contextMenu.value = null
@@ -297,7 +308,9 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible.value = false
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
+    playerStatsWindowVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
+    characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
     playerMoveMode.value = null
     contextMenu.value = null
@@ -620,24 +633,45 @@ export const useGameStore = defineStore('game', () => {
     characterSheetVisible.value = visible
   }
 
-  function setCharacterProfileSnapshot(entries: proto.ICharacterAttributeEntry[] | null | undefined) {
+  function togglePlayerStatsWindow() {
+    playerStatsWindowVisible.value = !playerStatsWindowVisible.value
+  }
+
+  function setPlayerStatsWindowVisible(visible: boolean) {
+    playerStatsWindowVisible.value = visible
+  }
+
+  function setCharacterProfileSnapshot(snapshot: proto.IS2C_CharacterProfile | null | undefined) {
+    const entries = snapshot?.attributes
     const defaults = defaultCharacterAttributes()
     if (!entries || entries.length === 0) {
       characterAttributes.value = defaults
+    } else {
+      const byKey = new Map<proto.CharacterAttributeKey, number>()
+      for (const entry of entries) {
+        const key = entry.key ?? proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_UNSPECIFIED
+        const rawValue = entry.value ?? 0
+        byKey.set(key, Number.isFinite(rawValue) && rawValue >= 1 ? rawValue : 1)
+      }
+
+      characterAttributes.value = defaults.map((item) => ({
+        ...item,
+        value: byKey.get(item.key) ?? 1,
+      }))
+    }
+
+    const exp = snapshot?.exp
+    if (!exp) {
+      characterExperience.value = defaultCharacterExperience()
       return
     }
 
-    const byKey = new Map<proto.CharacterAttributeKey, number>()
-    for (const entry of entries) {
-      const key = entry.key ?? proto.CharacterAttributeKey.CHARACTER_ATTRIBUTE_KEY_UNSPECIFIED
-      const rawValue = entry.value ?? 0
-      byKey.set(key, Number.isFinite(rawValue) && rawValue >= 1 ? rawValue : 1)
+    characterExperience.value = {
+      lp: sanitizeNonNegativeInt64(exp.lp),
+      nature: sanitizeNonNegativeInt64(exp.nature),
+      industry: sanitizeNonNegativeInt64(exp.industry),
+      combat: sanitizeNonNegativeInt64(exp.combat),
     }
-
-    characterAttributes.value = defaults.map((item) => ({
-      ...item,
-      value: byKey.get(item.key) ?? 1,
-    }))
   }
 
   function setPlayerStats(snapshot: proto.IS2C_PlayerStats | null | undefined) {
@@ -747,7 +781,9 @@ export const useGameStore = defineStore('game', () => {
     openedRootContainerRefs.value.clear()
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
+    playerStatsWindowVisible.value = false
     characterAttributes.value = defaultCharacterAttributes()
+    characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
     playerMoveMode.value = null
     contextMenu.value = null
@@ -788,7 +824,9 @@ export const useGameStore = defineStore('game', () => {
     playerInventoryVisible,
     playerEquipmentVisible,
     characterSheetVisible,
+    playerStatsWindowVisible,
     characterAttributes,
+    characterExperience,
     playerStats,
     playerMoveMode,
     openNestedInventories,
@@ -836,6 +874,8 @@ export const useGameStore = defineStore('game', () => {
     setPlayerEquipmentVisible,
     toggleCharacterSheet,
     setCharacterSheetVisible,
+    togglePlayerStatsWindow,
+    setPlayerStatsWindowVisible,
     setCharacterProfileSnapshot,
     setPlayerStats,
     onContainerOpened,
@@ -876,10 +916,35 @@ function defaultPlayerStats(): PlayerStatsState {
   }
 }
 
+function defaultCharacterExperience(): CharacterExperienceState {
+  return {
+    lp: 0,
+    nature: 0,
+    industry: 0,
+    combat: 0,
+  }
+}
+
 function sanitizeMaxStat(raw: number | null | undefined): number {
   const value = Number(raw ?? 0)
   if (!Number.isFinite(value) || value <= 0) return 0
   return Math.floor(value)
+}
+
+function sanitizeNonNegativeInt64(raw: number | Long | null | undefined): number {
+  if (raw == null) return 0
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw) || raw <= 0) return 0
+    return Math.floor(raw)
+  }
+
+  if (typeof raw.toNumber === 'function') {
+    const value = raw.toNumber()
+    if (!Number.isFinite(value) || value <= 0) return 0
+    return Math.floor(value)
+  }
+
+  return 0
 }
 
 function clampStatCurrent(rawCurrent: number | null | undefined, max: number): number {

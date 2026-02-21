@@ -66,6 +66,13 @@ export const DEFAULT_HOTKEYS: HotkeyConfig[] = [
     }
   },
   {
+    key: 'p',
+    description: 'Toggle player stats',
+    action: () => {
+      console.log('[Hotkeys] Player stats toggle - not implemented yet')
+    }
+  },
+  {
     key: '`',
     description: 'Toggle debug overlay',
     action: () => {
