@@ -10,7 +10,7 @@ type ItemDef struct {
 	Stack       *Stack   `json:"stack"`
 	Allowed     Allowed  `json:"allowed"`
 	Resource    string   `json:"resource,omitempty"`
-	DiscoveryLP int      `json:"discoveryLP,omitempty"`
+	DiscoveryLP int64    `json:"discoveryLP,omitempty"`
 	Visual      *Visual  `json:"visual,omitempty"`
 
 	// Container describes nested inventory capabilities for this item (e.g. seed bag).

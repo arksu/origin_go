@@ -7,7 +7,7 @@ import (
 )
 
 type characterExperiencePayload struct {
-	LP       int   `json:"lp"`
+	LP       int64 `json:"lp"`
 	Nature   int64 `json:"nature"`
 	Industry int64 `json:"industry"`
 	Combat   int64 `json:"combat"`

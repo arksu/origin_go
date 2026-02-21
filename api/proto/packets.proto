@@ -440,10 +440,10 @@ message CharacterAttributeEntry {
 }
 
 message CharacterExperience {
-  uint32 lp = 2;
-  uint32 nature = 3;
-  uint32 industry = 4;
-  uint32 combat = 5;
+  int64 lp = 2;
+  int64 nature = 3;
+  int64 industry = 4;
+  int64 combat = 5;
 }
 
 message S2C_CharacterProfile {
@@ -579,10 +579,10 @@ message S2C_Sound {
 
 message S2C_ExpGained {
   uint64 entity_id = 1;
-  optional uint32 lp = 2;
-  optional uint32 nature = 3;
-  optional uint32 industry = 4;
-  optional uint32 combat = 5;
+  optional int64 lp = 2;
+  optional int64 nature = 3;
+  optional int64 industry = 4;
+  optional int64 combat = 5;
 }
 
 message S2C_ChatMessage {

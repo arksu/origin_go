@@ -7,7 +7,7 @@ import (
 
 // CharacterExperience stores character-only progression values.
 type CharacterExperience struct {
-	LP       int
+	LP       int64
 	Nature   int64
 	Industry int64
 	Combat   int64
