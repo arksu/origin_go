@@ -69,6 +69,20 @@ export function registerMessageHandlers(): void {
     gameStore.setPlayerStats(msg)
   })
 
+  messageDispatcher.on('fx', (msg: proto.IS2C_Fx) => {
+    const targetEntityId = gameStore.playerEntityId
+    if (targetEntityId == null) return
+
+    console.log('[Handlers] S2C_Fx received:', {
+      fxKey: msg.fxKey,
+      position: msg.position ? { x: msg.position.x, y: msg.position.y } : null
+    })
+
+    if (msg.fxKey) {
+      gameFacade.playFx(targetEntityId, msg.fxKey)
+    }
+  })
+
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
     console.log('[Handlers] S2C_ExpGained received:', {
       entityId: toNumber(msg.entityId || 0),
@@ -81,11 +95,6 @@ export function registerMessageHandlers(): void {
     const targetEntityId = toNumber(msg.entityId || 0)
     if (gameStore.playerEntityId == null || targetEntityId !== gameStore.playerEntityId) {
       return
-    }
-
-    const lpGained = toNumber(msg.lp || 0)
-    if (lpGained > 0) {
-      gameFacade.playLpGainAnimation(targetEntityId)
     }
 
     gameStore.applyExpGained(msg)
@@ -373,6 +382,13 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('sound', (msg: proto.IS2C_Sound) => {
+    console.log('[Handlers] S2C_Sound received:', {
+      soundKey: msg.soundKey,
+      maxHearDistance: msg.maxHearDistance,
+      x: msg.x,
+      y: msg.y
+    })
+
     const soundKey = (msg.soundKey || '').trim()
     if (!soundKey) {
       return

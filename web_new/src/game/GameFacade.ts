@@ -97,8 +97,8 @@ export class GameFacade {
     this.render?.updateObjectPosition(entityId, x, y)
   }
 
-  playLpGainAnimation(entityId: number): void {
-    this.render?.playLpGainAnimation(entityId)
+  playFx(x: number, y: number, fxKey: string): void {
+    this.render?.playFx(x, y, fxKey)
   }
 
   toggleDebugOverlay(): void {

@@ -1,12 +1,12 @@
 import { Container, Sprite, Ticker } from 'pixi.js'
 import { ResourceLoader } from '../ResourceLoader'
-import { soundManager } from '../index'
 
 export interface FloatingAnimationOptions {
   container: Container
   x: number
   y: number
   durationMs: number
+  fxKey: string
   onComplete?: () => void
 }
 
@@ -42,7 +42,15 @@ export class FxManager {
     }
   }
 
-  async playLpGainAnimation(options: FloatingAnimationOptions): Promise<void> {
+  async playFx(options: FloatingAnimationOptions): Promise<void> {
+    if (options.fxKey === 'exp_gain') {
+      return this.playExpGainAnimation(options)
+    }
+
+    console.warn(`[FxManager] Unknown fxKey: ${options.fxKey}`)
+  }
+
+  private async playExpGainAnimation(options: Omit<FloatingAnimationOptions, 'fxKey'>): Promise<void> {
     const stickTex = await ResourceLoader.loadTexture('fx/stick.svg')
     const sparkTex = await ResourceLoader.loadTexture('fx/spark.svg')
 
@@ -122,9 +130,6 @@ export class FxManager {
             spark.visible = true
             stick1.alpha = 0.5
             stick2.alpha = 0.5
-
-            // Play the spark sound
-            soundManager.play('exp_gain')
           }
 
           spark.alpha = 1 - sparkProgress
