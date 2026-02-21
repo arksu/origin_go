@@ -52,6 +52,7 @@ type Shard struct {
 	playerInbox    *network.PlayerCommandInbox
 	serverInbox    *network.ServerJobInbox
 	snapshotSender *inventory.SnapshotSender
+	adminHandler   *ChatAdminCommandHandler
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -162,7 +163,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
-	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
+	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, nil, behaviorRegistry, s.eventBus, logger)
+	s.adminHandler = adminHandler
 	networkCmdSystem.SetAdminHandler(adminHandler)
 	networkCmdSystem.SetInventorySnapshotSender(s)
 
@@ -199,6 +201,14 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 func (s *Shard) Layer() int {
 	return s.layer
+}
+
+func (s *Shard) SetAdminTeleportExecutor(executor AdminTeleportExecutor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.adminHandler != nil {
+		s.adminHandler.SetTeleportExecutor(executor)
+	}
 }
 
 func (s *Shard) World() *ecs.World {
@@ -365,6 +375,20 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 }
 
 func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Character, setupFunc func(*ecs.World, types.Handle)) (bool, types.Handle) {
+	return s.TrySpawnPlayerWithPolicy(worldX, worldY, character, setupFunc, SpawnCollisionPolicy{})
+}
+
+type SpawnCollisionPolicy struct {
+	IgnoreObjectCollision bool
+}
+
+func (s *Shard) TrySpawnPlayerWithPolicy(
+	worldX,
+	worldY int,
+	character repository.Character,
+	setupFunc func(*ecs.World, types.Handle),
+	policy SpawnCollisionPolicy,
+) (bool, types.Handle) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -395,40 +419,42 @@ func (s *Shard) TrySpawnPlayer(worldX, worldY int, character repository.Characte
 		}
 	}
 
-	var collisionObjectsFromSpatial []types.Handle
-	for _, chunk := range chunks {
-		spatial := chunk.Spatial()
-		spatial.QueryAABB(minX, minY, maxX, maxY, &collisionObjectsFromSpatial)
-	}
-
-	for _, h := range collisionObjectsFromSpatial {
-		if !s.world.Alive(h) {
-			continue
+	if !policy.IgnoreObjectCollision {
+		var collisionObjectsFromSpatial []types.Handle
+		for _, chunk := range chunks {
+			spatial := chunk.Spatial()
+			spatial.QueryAABB(minX, minY, maxX, maxY, &collisionObjectsFromSpatial)
 		}
 
-		transform, hasTransform := ecs.GetComponent[components.Transform](s.world, h)
-		if !hasTransform {
-			continue
-		}
+		for _, h := range collisionObjectsFromSpatial {
+			if !s.world.Alive(h) {
+				continue
+			}
 
-		collider, hasCollider := ecs.GetComponent[components.Collider](s.world, h)
-		if !hasCollider {
-			continue
-		}
+			transform, hasTransform := ecs.GetComponent[components.Transform](s.world, h)
+			if !hasTransform {
+				continue
+			}
 
-		// Check if collision layers/masks overlap
-		if _const.PlayerLayer&collider.Mask == 0 && collider.Layer&_const.PlayerMask == 0 {
-			// No collision layer overlap, skip this object
-			continue
-		}
+			collider, hasCollider := ecs.GetComponent[components.Collider](s.world, h)
+			if !hasCollider {
+				continue
+			}
 
-		objMinX := int(transform.X - collider.HalfWidth)
-		objMinY := int(transform.Y - collider.HalfHeight)
-		objMaxX := int(transform.X + collider.HalfWidth)
-		objMaxY := int(transform.Y + collider.HalfHeight)
+			// Check if collision layers/masks overlap
+			if _const.PlayerLayer&collider.Mask == 0 && collider.Layer&_const.PlayerMask == 0 {
+				// No collision layer overlap, skip this object
+				continue
+			}
 
-		if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
-			return false, types.InvalidHandle
+			objMinX := int(transform.X - collider.HalfWidth)
+			objMinY := int(transform.Y - collider.HalfHeight)
+			objMaxX := int(transform.X + collider.HalfWidth)
+			objMaxY := int(transform.Y + collider.HalfHeight)
+
+			if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
+				return false, types.InvalidHandle
+			}
 		}
 	}
 

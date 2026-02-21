@@ -453,6 +453,160 @@ func loadCharacterProfileData(character repository.Character, logger *zap.Logger
 	return experience, skills, discovery
 }
 
+func (g *Game) buildPlayerSetupFunc(
+	ctx context.Context,
+	character repository.Character,
+	pos spawnPos,
+	normalizedAttributes characterattrs.Values,
+	profileExperience components.CharacterExperience,
+	profileSkills []string,
+	profileDiscovery []string,
+) func(*ecs.World, types.Handle) {
+	return func(w *ecs.World, h types.Handle) {
+		playerDef, _ := objectdefs.Global().GetByKey("player")
+		var playerTypeID uint32
+		var playerBehaviors []string
+		if playerDef != nil {
+			playerTypeID = uint32(playerDef.DefID)
+			playerBehaviors = playerDef.CopyBehaviorOrder()
+		}
+		ecs.AddComponent(w, h, components.EntityInfo{
+			TypeID:    playerTypeID,
+			Behaviors: playerBehaviors,
+			IsStatic:  false,
+			Region:    character.Region,
+			Layer:     character.Layer,
+		})
+		ecs.AddComponent(w, h, components.Transform{
+			X:         float64(pos.X),
+			Y:         float64(pos.Y),
+			Direction: headingDegreesToRadians(character.Heading),
+		})
+		ecs.AddComponent(w, h, components.ChunkRef{
+			CurrentChunkX: pos.X / _const.ChunkWorldSize,
+			CurrentChunkY: pos.Y / _const.ChunkWorldSize,
+			PrevChunkX:    pos.X / _const.ChunkWorldSize,
+			PrevChunkY:    pos.Y / _const.ChunkWorldSize,
+		})
+		ecs.AddComponent(w, h, components.Movement{
+			VelocityX:        0,
+			VelocityY:        0,
+			Mode:             _const.Walk,
+			State:            _const.StateIdle,
+			Speed:            _const.PlayerSpeed,
+			TargetType:       _const.TargetNone,
+			TargetX:          0,
+			TargetY:          0,
+			TargetHandle:     types.InvalidHandle,
+			InteractionRange: 5.0,
+		})
+		ecs.AddComponent(w, h, components.Collider{
+			HalfWidth:  _const.PlayerColliderSize / 2,
+			HalfHeight: _const.PlayerColliderSize / 2,
+			Layer:      _const.PlayerLayer,
+			Mask:       _const.PlayerMask,
+		})
+		ecs.AddComponent(w, h, components.CollisionResult{
+			HasCollision: false,
+		})
+		ecs.AddComponent(w, h, components.Appearance{
+			Name:     &character.Name,
+			Resource: "player",
+		})
+		ecs.AddComponent(w, h, components.Vision{
+			Radius: _const.PlayerVisionRadius,
+			Power:  _const.PlayerVisionPower,
+		})
+		ecs.AddComponent(w, h, components.CharacterProfile{
+			Attributes: characterattrs.Clone(normalizedAttributes),
+			Experience: components.CharacterExperience{
+				LP:       profileExperience.LP,
+				Nature:   profileExperience.Nature,
+				Industry: profileExperience.Industry,
+				Combat:   profileExperience.Combat,
+			},
+			Skills:    append([]string(nil), profileSkills...),
+			Discovery: append([]string(nil), profileDiscovery...),
+		})
+		initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
+		ecs.AddComponent(w, h, initialStats)
+		ecs.UpdateEntityStatsRegenSchedule(
+			w,
+			h,
+			initialStats.Stamina,
+			initialStats.Energy,
+			entitystats.MaxStaminaFromAttributes(normalizedAttributes),
+		)
+
+		// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
+		visState := ecs.GetResource[ecs.VisibilityState](w)
+		visState.VisibleByObserver[h] = ecs.ObserverVisibility{
+			Known:          make(map[types.Handle]types.EntityID, 32),
+			NextUpdateTime: time.Time{}, // Zero time for immediate update
+		}
+
+		// Load player inventories from database
+		dbInventories, err := g.db.Queries().GetInventoriesByOwner(ctx, character.ID)
+		if err != nil {
+			g.logger.Error("Failed to load inventories from database",
+				zap.Int64("character_id", character.ID),
+				zap.Error(err))
+		} else {
+			// Parse inventories from database format
+			inventoryDataList, parseWarnings := g.inventoryLoader.ParseInventoriesFromDB(dbInventories)
+			if len(parseWarnings) > 0 {
+				g.logger.Warn("Inventory parse warnings",
+					zap.Int64("character_id", character.ID),
+					zap.Strings("warnings", parseWarnings))
+			}
+
+			// Always take inventories from database and enrich with missing defaults by kind+key
+			inventoryDataList = g.enrichWithMissingDefaults(inventoryDataList)
+
+			// Load inventories into ECS
+			loadResult, err := g.inventoryLoader.LoadPlayerInventories(w, types.EntityID(character.ID), inventoryDataList)
+			if err != nil {
+				g.logger.Error("Failed to load player inventories",
+					zap.Int64("character_id", character.ID),
+					zap.Error(err))
+			} else {
+				if len(loadResult.Warnings) > 0 {
+					g.logger.Warn("Inventory load warnings",
+						zap.Int64("character_id", character.ID),
+						zap.Strings("warnings", loadResult.Warnings))
+				}
+
+				// Create InventoryOwner component with all inventory links (including nested)
+				inventoryLinks := make([]components.InventoryLink, 0, len(loadResult.ContainerHandles))
+				refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+				for _, containerHandle := range loadResult.ContainerHandles {
+					if !w.Alive(containerHandle) {
+						continue
+					}
+					container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+					if hasContainer {
+						inventoryLinks = append(inventoryLinks, components.InventoryLink{
+							Kind:    container.Kind,
+							Key:     container.Key,
+							OwnerID: container.OwnerID,
+							Handle:  containerHandle,
+						})
+						refIndex.Add(container.Kind, container.OwnerID, container.Key, containerHandle)
+					}
+				}
+				ecs.AddComponent(w, h, components.InventoryOwner{
+					Inventories: inventoryLinks,
+				})
+
+				g.logger.Debug("Player inventories loaded",
+					zap.Int64("character_id", character.ID),
+					zap.Int("containers", len(loadResult.ContainerHandles)),
+					zap.Bool("lost_and_found_used", loadResult.LostAndFoundUsed))
+			}
+		}
+	}
+}
+
 func buildInitialEntityStats(
 	rawStamina float64,
 	rawEnergy float64,
