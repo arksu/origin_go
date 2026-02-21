@@ -32,22 +32,16 @@ func (p *PendingAdminSpawn) Clear(playerID types.EntityID) {
 // PendingAdminTeleport tracks deferred admin teleports per player.
 // When a player issues /tp without coordinates, the next map click supplies target coordinates.
 type PendingAdminTeleport struct {
-	Entries map[types.EntityID]AdminTeleportEntry
+	Entries map[types.EntityID]struct{}
 }
 
-// AdminTeleportEntry holds validated parameters for a deferred /tp command.
-type AdminTeleportEntry struct {
-	// TargetLayer overrides current layer when set.
-	TargetLayer *int
+func (p *PendingAdminTeleport) Set(playerID types.EntityID) {
+	p.Entries[playerID] = struct{}{}
 }
 
-func (p *PendingAdminTeleport) Set(playerID types.EntityID, entry AdminTeleportEntry) {
-	p.Entries[playerID] = entry
-}
-
-func (p *PendingAdminTeleport) Get(playerID types.EntityID) (AdminTeleportEntry, bool) {
-	e, ok := p.Entries[playerID]
-	return e, ok
+func (p *PendingAdminTeleport) Get(playerID types.EntityID) bool {
+	_, ok := p.Entries[playerID]
+	return ok
 }
 
 func (p *PendingAdminTeleport) Clear(playerID types.EntityID) {

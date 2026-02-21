@@ -291,7 +291,7 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 	// Check for pending admin spawn — intercept click as spawn target
 	if s.adminHandler != nil {
 		pendingTeleport := ecs.GetResource[ecs.PendingAdminTeleport](w)
-		if _, hasPendingTeleport := pendingTeleport.Get(cmd.CharacterID); hasPendingTeleport {
+		if pendingTeleport.Get(cmd.CharacterID) {
 			s.adminHandler.ExecutePendingTeleport(w, cmd.CharacterID, playerHandle, float64(moveTo.X), float64(moveTo.Y))
 			return
 		}
@@ -344,7 +344,7 @@ func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle typ
 	// Check for pending admin spawn — use target entity's position as spawn target
 	if s.adminHandler != nil {
 		pendingTeleport := ecs.GetResource[ecs.PendingAdminTeleport](w)
-		if _, hasPendingTeleport := pendingTeleport.Get(cmd.CharacterID); hasPendingTeleport {
+		if pendingTeleport.Get(cmd.CharacterID) {
 			targetEntityID := types.EntityID(moveToEntity.EntityId)
 			targetHandle := w.GetHandleByEntityID(targetEntityID)
 			if targetHandle != types.InvalidHandle && w.Alive(targetHandle) {

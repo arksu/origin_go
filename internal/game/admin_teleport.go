@@ -18,13 +18,12 @@ import (
 )
 
 type adminTeleportRequest struct {
-	PlayerID     types.EntityID
-	SourceLayer  int
-	TargetLayer  int
-	TargetX      int
-	TargetY      int
-	RequestedAt  time.Time
-	OriginalText string
+	PlayerID    types.EntityID
+	SourceLayer int
+	TargetLayer int
+	TargetX     int
+	TargetY     int
+	RequestedAt time.Time
 }
 
 type adminTeleportSnapshot struct {
@@ -86,8 +85,8 @@ func (g *Game) executeAdminTeleport(req adminTeleportRequest) {
 		return
 	}
 
-	characterBefore, beforeErr := g.db.Queries().GetCharacter(g.ctx, int64(req.PlayerID))
-	if beforeErr != nil {
+	characterTemplate, charErr := g.db.Queries().GetCharacter(g.ctx, int64(req.PlayerID))
+	if charErr != nil {
 		g.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, "Teleport failed: character not found.")
 		return
 	}
@@ -99,19 +98,13 @@ func (g *Game) executeAdminTeleport(req adminTeleportRequest) {
 	}
 	snapshot.client.Layer = req.TargetLayer
 
-	characterAfter, afterErr := g.db.Queries().GetCharacter(g.ctx, int64(req.PlayerID))
-	if afterErr != nil {
-		g.logger.Warn("Teleport: failed to reload character after SaveSync, fallback to prefetch",
-			zap.Uint64("player_id", uint64(req.PlayerID)),
-			zap.Error(afterErr))
-		characterAfter = characterBefore
-	}
-	characterAfter.Layer = req.TargetLayer
-	characterAfter.X = req.TargetX
-	characterAfter.Y = req.TargetY
+	characterSpawn := characterTemplate
+	characterSpawn.Layer = req.TargetLayer
+	characterSpawn.X = req.TargetX
+	characterSpawn.Y = req.TargetY
 
-	if _, spawnErr := g.spawnTeleportedPlayer(snapshot.client, targetShard, characterAfter, req.TargetX, req.TargetY, true); spawnErr != nil {
-		rollbackChar := characterBefore
+	if _, spawnErr := g.spawnTeleportedPlayer(snapshot.client, targetShard, characterSpawn, req.TargetX, req.TargetY, true); spawnErr != nil {
+		rollbackChar := characterTemplate
 		rollbackChar.Layer = snapshot.sourceLayer
 		rollbackChar.X = snapshot.sourceX
 		rollbackChar.Y = snapshot.sourceY
@@ -126,15 +119,16 @@ func (g *Game) executeAdminTeleport(req adminTeleportRequest) {
 				zap.Error(rollbackErr))
 			return
 		}
-		g.sendTeleportSystemMessage(req.PlayerID, snapshot.sourceLayer, "Teleport failed, restored previous position.")
+		g.sendTeleportSystemMessageToClient(snapshot.client, "Teleport failed, restored previous position.")
 		return
 	}
 
-	if _, err := g.db.Pool().Exec(
-		g.ctx,
-		"UPDATE character SET x=$2, y=$3, layer=$4 WHERE id=$1 AND deleted_at IS NULL",
-		int64(req.PlayerID), req.TargetX, req.TargetY, req.TargetLayer,
-	); err != nil {
+	if err := g.db.Queries().UpdateCharacterPositionAndLayer(g.ctx, repository.UpdateCharacterPositionAndLayerParams{
+		ID:    int64(req.PlayerID),
+		X:     req.TargetX,
+		Y:     req.TargetY,
+		Layer: req.TargetLayer,
+	}); err != nil {
 		g.logger.Warn("Teleport: failed to persist final position/layer",
 			zap.Uint64("player_id", uint64(req.PlayerID)),
 			zap.Int("target_layer", req.TargetLayer),
@@ -143,14 +137,11 @@ func (g *Game) executeAdminTeleport(req adminTeleportRequest) {
 			zap.Error(err))
 	}
 
-	g.sendTeleportSystemMessage(req.PlayerID, req.TargetLayer, fmt.Sprintf("Teleported to (%d, %d) layer %d.", req.TargetX, req.TargetY, req.TargetLayer))
+	g.sendTeleportSystemMessageToClient(snapshot.client, fmt.Sprintf("Teleported to (%d, %d) layer %d.", req.TargetX, req.TargetY, req.TargetLayer))
 }
 
 func (g *Game) detachTeleportSource(req adminTeleportRequest, shard *Shard) (adminTeleportSnapshot, error) {
 	snapshot := adminTeleportSnapshot{sourceLayer: req.SourceLayer}
-
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
 
 	shard.ClientsMu.RLock()
 	client, exists := shard.Clients[req.PlayerID]
@@ -158,6 +149,10 @@ func (g *Game) detachTeleportSource(req adminTeleportRequest, shard *Shard) (adm
 	if !exists || client == nil {
 		return snapshot, fmt.Errorf("client not bound")
 	}
+	snapshot.client = client
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
 	playerHandle := shard.world.GetHandleByEntityID(req.PlayerID)
 	if playerHandle == types.InvalidHandle || !shard.world.Alive(playerHandle) {
@@ -170,7 +165,6 @@ func (g *Game) detachTeleportSource(req adminTeleportRequest, shard *Shard) (adm
 	}
 	snapshot.sourceX = int(transform.X)
 	snapshot.sourceY = int(transform.Y)
-	snapshot.client = client
 
 	if shard.characterSaver != nil {
 		if err := shard.characterSaver.SaveSync(shard.world, req.PlayerID, playerHandle); err != nil {
@@ -204,7 +198,6 @@ func (g *Game) detachTeleportSource(req adminTeleportRequest, shard *Shard) (adm
 	ecs.GetResource[ecs.CharacterEntities](shard.world).Remove(req.PlayerID)
 	ecs.GetResource[ecs.DetachedEntities](shard.world).RemoveDetachedEntity(req.PlayerID)
 	shard.UnregisterEntityAOI(req.PlayerID)
-
 	shard.PlayerInbox().RemoveClient(client.ID)
 	shard.ClientsMu.Lock()
 	delete(shard.Clients, req.PlayerID)
@@ -241,9 +234,7 @@ func (g *Game) spawnTeleportedPlayer(
 		IgnoreObjectCollision: ignoreObjectCollision,
 	})
 	if !ok || handle == types.InvalidHandle {
-		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
-		shard.mu.Unlock()
 		return types.InvalidHandle, fmt.Errorf("spawn blocked")
 	}
 
@@ -252,36 +243,8 @@ func (g *Game) spawnTeleportedPlayer(
 	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
 	client.Layer = character.Layer
-	shard.PlayerInbox().RemoveClient(client.ID)
-	shard.ClientsMu.Lock()
-	shard.Clients[playerEntityID] = client
-	shard.ClientsMu.Unlock()
-
-	client.StreamEpoch.Add(1)
-	client.InWorld.Store(true)
-	g.sendPlayerEnterWorld(client, playerEntityID, shard, character)
-	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, client.StreamEpoch.Load())
-
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendInventorySnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.InventorySnapshotJobPayload{Handle: handle},
-	})
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendCharacterProfileSnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.CharacterProfileSnapshotJobPayload{Handle: handle},
-	})
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendPlayerStatsSnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.PlayerStatsSnapshotJobPayload{Handle: handle},
-	})
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendMovementModeSnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.MovementModeSnapshotJobPayload{Handle: handle},
-	})
+	g.attachClientToWorld(shard, client, playerEntityID, character, handle)
+	g.ensureObserverVisibilityImmediate(shard.world, handle)
 
 	return handle, nil
 }
@@ -308,6 +271,27 @@ func (g *Game) sendTeleportSystemMessage(playerID types.EntityID, layer int, tex
 		return
 	}
 	shard.SendChatMessage(playerID, netproto.ChatChannel_CHAT_CHANNEL_LOCAL, 0, "[Server]", text)
+}
+
+func (g *Game) sendTeleportSystemMessageToClient(c *network.Client, text string) {
+	if c == nil {
+		return
+	}
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_Chat{
+			Chat: &netproto.S2C_ChatMessage{
+				Channel:      netproto.ChatChannel_CHAT_CHANNEL_LOCAL,
+				FromEntityId: 0,
+				FromName:     "[Server]",
+				Text:         text,
+			},
+		},
+	}
+	data, err := proto.Marshal(response)
+	if err != nil {
+		return
+	}
+	c.Send(data)
 }
 
 func invalidateVisibilityForTeleport(
