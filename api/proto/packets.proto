@@ -585,6 +585,11 @@ message S2C_ExpGained {
   optional int64 combat = 5;
 }
 
+message S2C_Fx {
+  string fx_key = 1;
+  Vector2 position = 2;
+}
+
 message S2C_ChatMessage {
   ChatChannel channel = 1;
 

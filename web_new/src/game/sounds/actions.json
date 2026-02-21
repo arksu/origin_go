@@ -15,5 +15,11 @@
       "sound/tree_fall/tree_fall_01.mp3"
     ],
     "volume": 0.95
+  },
+  "exp_gain": {
+    "files": [
+      "sound/exp_gain.mp3"
+    ],
+    "volume": 0.4
   }
 }

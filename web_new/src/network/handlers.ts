@@ -70,10 +70,24 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
+    console.log('[Handlers] S2C_ExpGained received:', {
+      entityId: toNumber(msg.entityId || 0),
+      lp: toNumber(msg.lp || 0),
+      nature: toNumber(msg.nature || 0),
+      industry: toNumber(msg.industry || 0),
+      combat: toNumber(msg.combat || 0),
+    })
+
     const targetEntityId = toNumber(msg.entityId || 0)
     if (gameStore.playerEntityId == null || targetEntityId !== gameStore.playerEntityId) {
       return
     }
+
+    const lpGained = toNumber(msg.lp || 0)
+    if (lpGained > 0) {
+      gameFacade.playLpGainAnimation(targetEntityId)
+    }
+
     gameStore.applyExpGained(msg)
   })
 
