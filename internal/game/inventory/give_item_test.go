@@ -328,14 +328,16 @@ func TestGiveItem_AddsDiscoveryKeyOnceOnSuccessfulGive(t *testing.T) {
 	first := service.GiveItem(world, playerID, playerHandle, "wheat_seed_mini", 1, 10)
 	require.NotNil(t, first)
 	require.True(t, first.Success, first.Message)
+	assert.Equal(t, int64(77), first.DiscoveryLPGained, "first discovery should grant LP delta")
 	second := service.GiveItem(world, playerID, playerHandle, "wheat_seed_mini", 1, 10)
 	require.NotNil(t, second)
 	require.True(t, second.Success, second.Message)
+	assert.Equal(t, int64(0), second.DiscoveryLPGained, "repeated discovery should not grant LP delta")
 
 	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle)
 	require.True(t, hasProfile)
 	assert.Equal(t, []string{"existing_key", "wheat_seed_mini"}, profile.Discovery)
-	assert.Equal(t, 87, profile.Experience.LP, "discovery LP should be granted only once for a new key")
+	assert.Equal(t, int64(87), profile.Experience.LP, "discovery LP should be granted only once for a new key")
 }
 
 func TestGiveItem_DoesNotAddDiscoveryOnFailedGive(t *testing.T) {
@@ -374,9 +376,10 @@ func TestGiveItem_DoesNotAddDiscoveryOnFailedGive(t *testing.T) {
 	result := service.GiveItem(world, playerID, playerHandle, "grid_only_mini", 1, 10)
 	require.NotNil(t, result)
 	require.False(t, result.Success)
+	assert.Equal(t, int64(0), result.DiscoveryLPGained, "failed give should not report LP gain")
 
 	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle)
 	require.True(t, hasProfile)
 	assert.Empty(t, profile.Discovery)
-	assert.Equal(t, 10, profile.Experience.LP, "failed give must not grant discovery LP")
+	assert.Equal(t, int64(10), profile.Experience.LP, "failed give must not grant discovery LP")
 }

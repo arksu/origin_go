@@ -674,6 +674,22 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function applyExpGained(snapshot: proto.IS2C_ExpGained | null | undefined) {
+    if (!snapshot || playerEntityId.value == null) return
+
+    const targetEntityId = sanitizeNonNegativeInt64(snapshot.entityId)
+    if (targetEntityId !== playerEntityId.value) {
+      return
+    }
+
+    characterExperience.value = {
+      lp: clampNonNegative(characterExperience.value.lp + sanitizeSignedInt64(snapshot.lp)),
+      nature: clampNonNegative(characterExperience.value.nature + sanitizeSignedInt64(snapshot.nature)),
+      industry: clampNonNegative(characterExperience.value.industry + sanitizeSignedInt64(snapshot.industry)),
+      combat: clampNonNegative(characterExperience.value.combat + sanitizeSignedInt64(snapshot.combat)),
+    }
+  }
+
   function setPlayerStats(snapshot: proto.IS2C_PlayerStats | null | undefined) {
     if (!snapshot) {
       playerStats.value = defaultPlayerStats()
@@ -877,6 +893,7 @@ export const useGameStore = defineStore('game', () => {
     togglePlayerStatsWindow,
     setPlayerStatsWindowVisible,
     setCharacterProfileSnapshot,
+    applyExpGained,
     setPlayerStats,
     onContainerOpened,
     onContainerClosed,
@@ -945,6 +962,27 @@ function sanitizeNonNegativeInt64(raw: number | Long | null | undefined): number
   }
 
   return 0
+}
+
+function sanitizeSignedInt64(raw: number | Long | null | undefined): number {
+  if (raw == null) return 0
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) return 0
+    return Math.trunc(raw)
+  }
+
+  if (typeof raw.toNumber === 'function') {
+    const value = raw.toNumber()
+    if (!Number.isFinite(value)) return 0
+    return Math.trunc(value)
+  }
+
+  return 0
+}
+
+function clampNonNegative(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Math.trunc(value)
 }
 
 function clampStatCurrent(rawCurrent: number | null | undefined, max: number): number {
