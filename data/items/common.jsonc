@@ -6,6 +6,7 @@
       "defId": 3004,
       "key": "branch",
       "name": "Branch",
+      "discoveryLP": 10,
       "resource": "items/branch.png",
       "tags": [],
       "size": {
