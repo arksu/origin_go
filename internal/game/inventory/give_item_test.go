@@ -309,3 +309,64 @@ func TestExecutorGiveItem_ReturnsLatestRootRevisionAfterCascade(t *testing.T) {
 	require.NotNil(t, rootInfo, "expected updated containers to include root inventory")
 	assert.Equal(t, rootContainer.Version, rootInfo.Container.Version, "returned root revision must match world revision after cascade")
 }
+
+func TestGiveItem_AddsDiscoveryKeyOnceOnSuccessfulGive(t *testing.T) {
+	previousRegistry := itemdefs.Global()
+	t.Cleanup(func() { itemdefs.SetGlobalForTesting(previousRegistry) })
+	itemdefs.SetGlobalForTesting(createGiveItemRegistry())
+
+	world, playerID, playerHandle, _, _, _, _ := setupGiveItemWorld(t)
+	ecs.AddComponent(world, playerHandle, components.CharacterProfile{
+		Discovery: []string{"existing_key"},
+	})
+	service := NewInventoryOperationService(zap.NewNop(), &sequentialIDAllocator{next: 14000}, nil)
+
+	first := service.GiveItem(world, playerID, playerHandle, "wheat_seed_mini", 1, 10)
+	require.NotNil(t, first)
+	require.True(t, first.Success, first.Message)
+	second := service.GiveItem(world, playerID, playerHandle, "wheat_seed_mini", 1, 10)
+	require.NotNil(t, second)
+	require.True(t, second.Success, second.Message)
+
+	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle)
+	require.True(t, hasProfile)
+	assert.Equal(t, []string{"existing_key", "wheat_seed_mini"}, profile.Discovery)
+}
+
+func TestGiveItem_DoesNotAddDiscoveryOnFailedGive(t *testing.T) {
+	previousRegistry := itemdefs.Global()
+	t.Cleanup(func() { itemdefs.SetGlobalForTesting(previousRegistry) })
+	itemdefs.SetGlobalForTesting(createGiveItemRegistry())
+
+	world, playerID, playerHandle, rootHandle, _, handHandle, _ := setupGiveItemWorld(t)
+	ecs.AddComponent(world, playerHandle, components.CharacterProfile{})
+	addItemToContainer(world, rootHandle, components.InvItem{
+		ItemID:   types.EntityID(15001),
+		TypeID:   202,
+		Resource: "iron_ore_mini.png",
+		Quality:  10,
+		Quantity: 1,
+		W:        1,
+		H:        1,
+		X:        1,
+		Y:        0,
+	})
+	addItemToContainer(world, handHandle, components.InvItem{
+		ItemID:   types.EntityID(15002),
+		TypeID:   202,
+		Resource: "iron_ore_mini.png",
+		Quality:  10,
+		Quantity: 1,
+		W:        1,
+		H:        1,
+	})
+	service := NewInventoryOperationService(zap.NewNop(), &sequentialIDAllocator{next: 15000}, nil)
+
+	result := service.GiveItem(world, playerID, playerHandle, "grid_only_mini", 1, 10)
+	require.NotNil(t, result)
+	require.False(t, result.Success)
+
+	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle)
+	require.True(t, hasProfile)
+	assert.Empty(t, profile.Discovery)
+}
