@@ -163,7 +163,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
-	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, nil, behaviorRegistry, s.eventBus, logger)
+	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
 	s.adminHandler = adminHandler
 	networkCmdSystem.SetAdminHandler(adminHandler)
 	networkCmdSystem.SetInventorySnapshotSender(s)

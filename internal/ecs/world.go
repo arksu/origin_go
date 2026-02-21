@@ -156,7 +156,7 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		Entries: make(map[types.EntityID]AdminSpawnEntry, 4),
 	})
 	InitResource(w, PendingAdminTeleport{
-		Entries: make(map[types.EntityID]AdminTeleportEntry, 4),
+		Entries: make(map[types.EntityID]struct{}, 4),
 	})
 	InitResource(w, TimeState{})
 

@@ -35,7 +35,6 @@ func TestHandleOnline(t *testing.T) {
 		nil, // entityIDAllocator
 		nil, // chunkProvider
 		nil, // visionForcer
-		nil, // teleportExecutor
 		nil, // behaviorRegistry
 		eventBus,
 		logger,
@@ -107,7 +106,6 @@ func TestHandleErrorWarn(t *testing.T) {
 		nil, // entityIDAllocator
 		nil, // chunkProvider
 		nil, // visionForcer
-		nil, // teleportExecutor
 		nil, // behaviorRegistry
 		eventBus,
 		logger,
@@ -158,11 +156,11 @@ func TestHandleTeleportPendingClick(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		mockTeleport,
 		nil,
 		eventBus,
 		logger,
 	)
+	handler.SetTeleportExecutor(mockTeleport)
 
 	playerID := types.EntityID(77)
 	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/tp"); !handled {
@@ -170,7 +168,7 @@ func TestHandleTeleportPendingClick(t *testing.T) {
 	}
 
 	pending := ecs.GetResource[ecs.PendingAdminTeleport](world)
-	if _, ok := pending.Get(playerID); !ok {
+	if !pending.Get(playerID) {
 		t.Fatal("expected pending teleport after /tp")
 	}
 }
@@ -190,11 +188,11 @@ func TestHandleTeleportImmediate(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		mockTeleport,
 		nil,
 		eventBus,
 		logger,
 	)
+	handler.SetTeleportExecutor(mockTeleport)
 
 	playerID := types.EntityID(78)
 	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/tp 100 200 2"); !handled {

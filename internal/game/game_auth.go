@@ -361,18 +361,10 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		return
 	}
 
-	// Add client to shard's client map
-	shard.ClientsMu.Lock()
-	shard.Clients[playerEntityID] = c
-	shard.ClientsMu.Unlock()
-
 	// Final check: ensure spawn context hasn't timed out before sending packets
 	select {
 	case <-ctx.Done():
 		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
-		shard.ClientsMu.Lock()
-		delete(shard.Clients, playerEntityID)
-		shard.ClientsMu.Unlock()
 		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
 		shard.mu.Unlock()
@@ -380,33 +372,8 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	default:
 	}
 
-	// After successful spawn: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
-	c.StreamEpoch.Add(1)
-	c.InWorld.Store(true)
-	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
-	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
-
-	// Enqueue inventory snapshot job to be processed on the ECS tick thread (avoids concurrent map access)
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendInventorySnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.InventorySnapshotJobPayload{Handle: *playerHandle},
-	})
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendCharacterProfileSnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.CharacterProfileSnapshotJobPayload{Handle: *playerHandle},
-	})
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendPlayerStatsSnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.PlayerStatsSnapshotJobPayload{Handle: *playerHandle},
-	})
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendMovementModeSnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.MovementModeSnapshotJobPayload{Handle: *playerHandle},
-	})
+	g.attachClientToWorld(shard, c, playerEntityID, character, *playerHandle)
+	g.ensureObserverVisibilityImmediate(shard.world, *playerHandle)
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -694,11 +661,6 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 
 	detachedDuration := time.Since(detachedEntity.DetachedAt)
 
-	// Add client to shard's client map
-	shard.ClientsMu.Lock()
-	shard.Clients[playerEntityID] = c
-	shard.ClientsMu.Unlock()
-
 	// Get current position from entity
 	var posX, posY int
 	if transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, handle); hasTransform {
@@ -706,10 +668,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		posY = int(transform.Y)
 	}
 
-	// After successful reattach: increment epoch, enable chunk events, send PlayerEnterWorld, then set InWorld = true
-	c.StreamEpoch.Add(1)
-	c.InWorld.Store(true)
-	g.sendPlayerEnterWorld(c, playerEntityID, shard, character)
+	g.attachClientToWorld(shard, c, playerEntityID, character, handle)
 
 	// Force immediate visibility update for the reattached observer
 	visState := ecs.GetResource[ecs.VisibilityState](shard.world)
@@ -733,32 +692,6 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 				)
 			}
 		}
-	}
-
-	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, c.StreamEpoch.Load())
-
-	// Enqueue inventory snapshot job to be processed on the ECS tick thread (avoids concurrent map access)
-	if handle != types.InvalidHandle {
-		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-			JobType:  network.JobSendInventorySnapshot,
-			TargetID: playerEntityID,
-			Payload:  &network.InventorySnapshotJobPayload{Handle: handle},
-		})
-		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-			JobType:  network.JobSendCharacterProfileSnapshot,
-			TargetID: playerEntityID,
-			Payload:  &network.CharacterProfileSnapshotJobPayload{Handle: handle},
-		})
-		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-			JobType:  network.JobSendPlayerStatsSnapshot,
-			TargetID: playerEntityID,
-			Payload:  &network.PlayerStatsSnapshotJobPayload{Handle: handle},
-		})
-		_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-			JobType:  network.JobSendMovementModeSnapshot,
-			TargetID: playerEntityID,
-			Payload:  &network.MovementModeSnapshotJobPayload{Handle: handle},
-		})
 	}
 
 	g.logger.Info("Player reattached to existing entity",
@@ -859,6 +792,72 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 		return
 	}
 	c.Send(data)
+}
+
+func (g *Game) attachClientToWorld(
+	shard *Shard,
+	client *network.Client,
+	playerEntityID types.EntityID,
+	character repository.Character,
+	handle types.Handle,
+) {
+	if shard == nil || client == nil {
+		return
+	}
+
+	shard.PlayerInbox().RemoveClient(client.ID)
+	shard.ClientsMu.Lock()
+	shard.Clients[playerEntityID] = client
+	shard.ClientsMu.Unlock()
+
+	client.StreamEpoch.Add(1)
+	client.InWorld.Store(true)
+	g.sendPlayerEnterWorld(client, playerEntityID, shard, character)
+	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, client.StreamEpoch.Load())
+
+	g.enqueuePlayerBootstrapSnapshots(shard, playerEntityID, handle)
+}
+
+func (g *Game) enqueuePlayerBootstrapSnapshots(shard *Shard, playerEntityID types.EntityID, handle types.Handle) {
+	if shard == nil || handle == types.InvalidHandle {
+		return
+	}
+
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendInventorySnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.InventorySnapshotJobPayload{Handle: handle},
+	})
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendCharacterProfileSnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.CharacterProfileSnapshotJobPayload{Handle: handle},
+	})
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendPlayerStatsSnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.PlayerStatsSnapshotJobPayload{Handle: handle},
+	})
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendMovementModeSnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.MovementModeSnapshotJobPayload{Handle: handle},
+	})
+}
+
+func (g *Game) ensureObserverVisibilityImmediate(w *ecs.World, observerHandle types.Handle) {
+	if w == nil || observerHandle == types.InvalidHandle || !w.Alive(observerHandle) {
+		return
+	}
+	visState := ecs.GetResource[ecs.VisibilityState](w)
+	visState.Mu.Lock()
+	observer := visState.VisibleByObserver[observerHandle]
+	if observer.Known == nil {
+		observer.Known = make(map[types.Handle]types.EntityID, 32)
+	}
+	observer.NextUpdateTime = time.Time{}
+	visState.VisibleByObserver[observerHandle] = observer
+	visState.Mu.Unlock()
 }
 
 // enrichWithMissingDefaults enriches database inventories with missing default inventories by kind+key

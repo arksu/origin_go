@@ -27,6 +27,14 @@ UPDATE character
 SET x = $2, y = $3
 WHERE id = $1;
 
+-- name: UpdateCharacterPositionAndLayer :exec
+UPDATE character
+SET x = $2,
+    y = $3,
+    layer = $4
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: CreateCharacter :one
 INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes, exp, skills,
                        discovery)

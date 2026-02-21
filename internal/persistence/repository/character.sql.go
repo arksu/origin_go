@@ -349,6 +349,32 @@ func (q *Queries) UpdateCharacterPosition(ctx context.Context, arg UpdateCharact
 	return err
 }
 
+const updateCharacterPositionAndLayer = `-- name: UpdateCharacterPositionAndLayer :exec
+UPDATE character
+SET x = $2,
+    y = $3,
+    layer = $4
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+type UpdateCharacterPositionAndLayerParams struct {
+	ID    int64 `json:"id"`
+	X     int   `json:"x"`
+	Y     int   `json:"y"`
+	Layer int   `json:"layer"`
+}
+
+func (q *Queries) UpdateCharacterPositionAndLayer(ctx context.Context, arg UpdateCharacterPositionAndLayerParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterPositionAndLayer,
+		arg.ID,
+		arg.X,
+		arg.Y,
+		arg.Layer,
+	)
+	return err
+}
+
 const updateCharacters = `-- name: UpdateCharacters :exec
 UPDATE character
 SET

@@ -75,7 +75,6 @@ func NewChatAdminCommandHandler(
 	entityIDAllocator inventory.EntityIDAllocator,
 	chunkProvider AdminSpawnChunkProvider,
 	visionForcer AdminVisionForcer,
-	teleportExecutor AdminTeleportExecutor,
 	behaviorRegistry contracts.BehaviorRegistry,
 	eventBus *eventbus.EventBus,
 	logger *zap.Logger,
@@ -88,7 +87,6 @@ func NewChatAdminCommandHandler(
 		entityIDAllocator:     entityIDAllocator,
 		chunkProvider:         chunkProvider,
 		visionForcer:          visionForcer,
-		teleportExecutor:      teleportExecutor,
 		behaviorRegistry:      behaviorRegistry,
 		eventBus:              eventBus,
 		logger:                logger,
@@ -266,9 +264,12 @@ func (h *ChatAdminCommandHandler) handleTeleport(
 	case 0:
 		// /tp click mode (current layer only)
 		ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
-		ecs.GetResource[ecs.PendingAdminTeleport](w).Set(playerID, ecs.AdminTeleportEntry{})
+		ecs.GetResource[ecs.PendingAdminTeleport](w).Set(playerID)
 		h.sendSystemMessage(playerID, "Click on the map where you want to teleport.")
 		h.logger.Info("Admin /tp pending click", zap.Uint64("player_id", uint64(playerID)))
+		return
+	case 1:
+		h.sendSystemMessage(playerID, "missing y coordinate: usage /tp <x> <y> [layer]")
 		return
 	case 2, 3:
 		x, err := strconv.Atoi(args[0])
@@ -423,13 +424,11 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 func (h *ChatAdminCommandHandler) ExecutePendingTeleport(
 	w *ecs.World,
 	playerID types.EntityID,
-	playerHandle types.Handle,
+	_ types.Handle,
 	targetX, targetY float64,
 ) {
-	_ = playerHandle
 	pending := ecs.GetResource[ecs.PendingAdminTeleport](w)
-	entry, ok := pending.Get(playerID)
-	if !ok {
+	if !pending.Get(playerID) {
 		return
 	}
 	pending.Clear(playerID)
@@ -442,7 +441,7 @@ func (h *ChatAdminCommandHandler) ExecutePendingTeleport(
 	targetXI := int(math.Round(targetX))
 	targetYI := int(math.Round(targetY))
 
-	if err := h.teleportExecutor.RequestAdminTeleport(playerID, w.Layer, targetXI, targetYI, entry.TargetLayer); err != nil {
+	if err := h.teleportExecutor.RequestAdminTeleport(playerID, w.Layer, targetXI, targetYI, nil); err != nil {
 		h.sendSystemMessage(playerID, "teleport failed: "+err.Error())
 		return
 	}
