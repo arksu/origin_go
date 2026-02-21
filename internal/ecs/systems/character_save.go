@@ -152,8 +152,8 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories))
 }
 
-// SaveDetached enqueues a lightweight snapshot for detached-entity expiration path.
-// Detached players cannot issue commands, so inventory state is expected to be unchanged.
+// SaveDetached enqueues a snapshot for detached-entity expiration path.
+// We still persist inventories here to avoid losing recent in-memory changes on detach expiry.
 func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, handle types.Handle) {
 	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
 	if !hasTransform {
@@ -167,7 +167,8 @@ func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, han
 	if !hasStats {
 		return
 	}
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, nil))
+	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories))
 }
 
 func (s *CharacterSaver) buildSnapshot(
@@ -387,13 +388,12 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 		Discovery:  discovery,
 	}
 
-	err := s.db.Queries().UpdateCharacters(ctx, params)
-	if err != nil {
+	charUpdateErr := s.db.Queries().UpdateCharacters(ctx, params)
+	if charUpdateErr != nil {
 		s.logger.Error("Failed to execute batch update",
 			zap.Int("batch_size", len(batch)),
 			zap.Any("params", params),
-			zap.Error(err))
-		return
+			zap.Error(charUpdateErr))
 	}
 
 	// Batch upsert all inventories in a single query
@@ -419,7 +419,7 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 			}
 		}
 
-		err = s.db.Queries().UpsertInventories(ctx, repository.UpsertInventoriesParams{
+		err := s.db.Queries().UpsertInventories(ctx, repository.UpsertInventoriesParams{
 			OwnerIds:      ownerIDs,
 			Kinds:         kinds,
 			InventoryKeys: inventoryKeys,
@@ -431,6 +431,14 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 				zap.Int("batch_size", len(batch)),
 				zap.Int("inventory_count", totalInv),
 				zap.Error(err))
+		} else if charUpdateErr != nil {
+			s.logger.Warn("Inventories were persisted despite character batch update failure",
+				zap.Int("batch_size", len(batch)),
+				zap.Int("inventory_count", totalInv))
+		} else {
+			s.logger.Debug("Successfully saved inventories",
+				zap.Int("batch_size", len(batch)),
+				zap.Int("inventory_count", totalInv))
 		}
 	}
 }
