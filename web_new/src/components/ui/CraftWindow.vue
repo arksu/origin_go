@@ -80,10 +80,42 @@ function prettifyKey(value: string | null | undefined): string {
     .join(' ')
 }
 
-function itemLabel(entry: { itemKey?: string | null; count?: number | null }): string {
+function craftInputLabel(entry: { itemKey?: string | null; itemTag?: string | null; count?: number | null }): string {
+  const count = Math.max(1, Number(entry.count || 0))
+  const itemKey = (entry.itemKey || '').trim()
+  if (itemKey) {
+    return `${prettifyKey(itemKey)} x${count}`
+  }
+  const itemTag = (entry.itemTag || '').trim()
+  const tagName = itemTag ? prettifyKey(itemTag) : '-'
+  return `Any ${tagName} x${count}`
+}
+
+function craftOutputLabel(entry: { itemKey?: string | null; count?: number | null }): string {
   const name = prettifyKey(entry.itemKey)
   const count = Math.max(1, Number(entry.count || 0))
   return `${name} x${count}`
+}
+
+function iconNameForInput(entry: { itemKey?: string | null; itemTag?: string | null }): string {
+  const itemKey = (entry.itemKey || '').trim()
+  if (itemKey) return itemKey
+  return (entry.itemTag || '').trim()
+}
+
+function iconNameForOutput(entry: { itemKey?: string | null }): string {
+  return (entry.itemKey || '').trim()
+}
+
+function firstRecipeOutputIconName(recipe: proto.ICraftRecipeEntry | null | undefined): string {
+  if (!recipe?.outputs || recipe.outputs.length === 0) return ''
+  return iconNameForOutput(recipe.outputs[0] || {})
+}
+
+function iconUrl(iconName: string): string {
+  const normalized = iconName.trim()
+  if (!normalized) return ''
+  return `/assets/game/items/${normalized}.png`
 }
 </script>
 
@@ -121,6 +153,12 @@ function itemLabel(entry: { itemKey?: string | null; count?: number | null }): s
               }"
               @click="selectRecipe(recipe.craftKey || '')"
             >
+              <span class="craft-window__icon-slot craft-window__icon-slot--recipe">
+                <span
+                  class="craft-window__icon"
+                  :style="{ backgroundImage: iconUrl(firstRecipeOutputIconName(recipe)) ? `url(${iconUrl(firstRecipeOutputIconName(recipe))})` : 'none' }"
+                />
+              </span>
               <span class="craft-window__recipe-name">{{ recipe.name || prettifyKey(recipe.craftKey) }}</span>
             </button>
 
@@ -143,7 +181,13 @@ function itemLabel(entry: { itemKey?: string | null; count?: number | null }): s
                   class="craft-window__chip"
                   :class="{ 'is-muted': !(selectedRecipe.flags?.hasInputs ?? false) }"
                 >
-                  {{ itemLabel(input) }}
+                  <span class="craft-window__icon-slot">
+                    <span
+                      class="craft-window__icon"
+                      :style="{ backgroundImage: iconUrl(iconNameForInput(input)) ? `url(${iconUrl(iconNameForInput(input))})` : 'none' }"
+                    />
+                  </span>
+                  {{ craftInputLabel(input) }}
                 </div>
               </div>
             </div>
@@ -157,7 +201,13 @@ function itemLabel(entry: { itemKey?: string | null; count?: number | null }): s
                   class="craft-window__chip craft-window__chip--output"
                   :class="{ 'is-muted': !(selectedRecipe.flags?.hasOutputSpace ?? false) }"
                 >
-                  {{ itemLabel(output) }}
+                  <span class="craft-window__icon-slot">
+                    <span
+                      class="craft-window__icon"
+                      :style="{ backgroundImage: iconUrl(iconNameForOutput(output)) ? `url(${iconUrl(iconNameForOutput(output))})` : 'none' }"
+                    />
+                  </span>
+                  {{ craftOutputLabel(output) }}
                 </div>
               </div>
             </div>
@@ -270,6 +320,9 @@ function itemLabel(entry: { itemKey?: string | null; count?: number | null }): s
 
 .craft-window__recipe-row {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   padding: 8px 10px;
   border-radius: 6px;
@@ -329,6 +382,7 @@ function itemLabel(entry: { itemKey?: string | null; count?: number | null }): s
 .craft-window__chip {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 28px;
   padding: 4px 9px;
   border-radius: 6px;
@@ -351,6 +405,33 @@ function itemLabel(entry: { itemKey?: string | null; count?: number | null }): s
 
 .craft-window__chip.is-muted {
   opacity: 0.5;
+}
+
+.craft-window__icon-slot {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: url('/assets/img/inventory_slot.png') no-repeat center center;
+  background-size: 32px 32px;
+}
+
+.craft-window__icon-slot--recipe {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  background-size: 28px 28px;
+}
+
+.craft-window__icon {
+  width: 28px;
+  height: 28px;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: contain;
+  display: block;
 }
 
 .craft-window__empty {

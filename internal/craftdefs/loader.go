@@ -144,6 +144,13 @@ func applyDefaults(c *CraftDef) {
 	c.RequiredSkills = normalizeStringSet(c.RequiredSkills)
 	c.RequiredDiscovery = normalizeStringSet(c.RequiredDiscovery)
 	c.RequiredLinkedObject = strings.TrimSpace(c.RequiredLinkedObject)
+	for i := range c.Inputs {
+		c.Inputs[i].ItemKey = strings.TrimSpace(c.Inputs[i].ItemKey)
+		c.Inputs[i].ItemTag = strings.TrimSpace(c.Inputs[i].ItemTag)
+	}
+	for i := range c.Outputs {
+		c.Outputs[i].ItemKey = strings.TrimSpace(c.Outputs[i].ItemKey)
+	}
 	if c.QualityFormula == "" {
 		c.QualityFormula = QualityFormulaWeightedAverageFloor
 	}
@@ -174,14 +181,23 @@ func validateCraft(c *CraftDef, filePath string) error {
 
 	totalQualityWeight := uint64(0)
 	for i, in := range c.Inputs {
-		if strings.TrimSpace(in.ItemKey) == "" {
-			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: fmt.Sprintf("inputs[%d].itemKey is required", i)}
+		hasItemKey := in.ItemKey != ""
+		hasItemTag := in.ItemTag != ""
+		if hasItemKey == hasItemTag {
+			return &LoadError{
+				FilePath: filePath,
+				DefID:    c.DefID,
+				Key:      c.Key,
+				Message:  fmt.Sprintf("inputs[%d] must define exactly one of itemKey or itemTag", i),
+			}
 		}
 		if in.Count == 0 {
 			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: fmt.Sprintf("inputs[%d].count must be > 0", i)}
 		}
-		if _, ok := itemdefs.Global().GetByKey(in.ItemKey); !ok {
-			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: fmt.Sprintf("inputs[%d].itemKey unknown: %s", i, in.ItemKey)}
+		if hasItemKey {
+			if _, ok := itemdefs.Global().GetByKey(in.ItemKey); !ok {
+				return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: fmt.Sprintf("inputs[%d].itemKey unknown: %s", i, in.ItemKey)}
+			}
 		}
 		totalQualityWeight += uint64(in.QualityWeight)
 	}

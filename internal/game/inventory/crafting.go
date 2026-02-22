@@ -35,46 +35,8 @@ func (e *InventoryExecutor) HasCraftInputs(
 	playerHandle types.Handle,
 	craft *craftdefs.CraftDef,
 ) bool {
-	if e == nil || e.service == nil || w == nil || craft == nil {
-		return false
-	}
-	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-	if !hasOwner {
-		return false
-	}
-
-	required := make(map[string]uint64, len(craft.Inputs))
-	for _, in := range craft.Inputs {
-		required[in.ItemKey] += uint64(in.Count)
-	}
-
-	counts := make(map[string]uint64, len(required))
-	for _, link := range craftOrderedInventoryLinks(owner, playerID) {
-		if !w.Alive(link.Handle) {
-			continue
-		}
-		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
-		if !ok {
-			continue
-		}
-		for _, item := range container.Items {
-			def, ok := itemdefs.Global().GetByID(int(item.TypeID))
-			if !ok {
-				continue
-			}
-			if _, needed := required[def.Key]; !needed {
-				continue
-			}
-			counts[def.Key] += uint64(item.Quantity)
-		}
-	}
-
-	for key, need := range required {
-		if counts[key] < need {
-			return false
-		}
-	}
-	return true
+	preview := e.PreviewCraftInputs(w, playerID, playerHandle, craft)
+	return preview.Success && !preview.Overflow
 }
 
 // CanFitCraftOutputsOneCycle simulates give placement (grid+nested+hand) for all outputs of one craft cycle.
@@ -220,7 +182,7 @@ func (e *InventoryExecutor) consumeCraftInputsInternal(
 	var weightedSum uint64
 	var weightSum uint64
 
-	for _, input := range craft.Inputs {
+	processInput := func(input craftdefs.CraftInput) bool {
 		remaining := input.Count
 		for _, link := range orderedLinks {
 			if remaining == 0 {
@@ -234,7 +196,7 @@ func (e *InventoryExecutor) consumeCraftInputsInternal(
 			for idx := 0; idx < len(container.Items) && remaining > 0; {
 				item := &container.Items[idx]
 				def, ok := itemdefs.Global().GetByID(int(item.TypeID))
-				if !ok || def.Key != input.ItemKey {
+				if !ok || !craftInputMatchesItemDef(input, def) {
 					idx++
 					continue
 				}
@@ -246,28 +208,28 @@ func (e *InventoryExecutor) consumeCraftInputsInternal(
 				weightedTerm, ok := mulUint64Checked(uint64(item.Quality), uint64(input.QualityWeight))
 				if !ok {
 					result.Overflow = true
-					return result
+					return false
 				}
 				weightedTerm, ok = mulUint64Checked(weightedTerm, uint64(consumeQty))
 				if !ok {
 					result.Overflow = true
-					return result
+					return false
 				}
 				nextWeighted, ok := addUint64Checked(weightedSum, weightedTerm)
 				if !ok {
 					result.Overflow = true
-					return result
+					return false
 				}
 
 				weightTerm, ok := mulUint64Checked(uint64(input.QualityWeight), uint64(consumeQty))
 				if !ok {
 					result.Overflow = true
-					return result
+					return false
 				}
 				nextWeightSum, ok := addUint64Checked(weightSum, weightTerm)
 				if !ok {
 					result.Overflow = true
-					return result
+					return false
 				}
 				weightedSum = nextWeighted
 				weightSum = nextWeightSum
@@ -291,6 +253,26 @@ func (e *InventoryExecutor) consumeCraftInputsInternal(
 			}
 		}
 		if remaining > 0 {
+			return false
+		}
+		return true
+	}
+
+	// Exact-item requirements reserve matches first so generic tag requirements
+	// cannot consume items intended for exact inputs.
+	for _, input := range craft.Inputs {
+		if input.ItemKey == "" {
+			continue
+		}
+		if !processInput(input) {
+			return result
+		}
+	}
+	for _, input := range craft.Inputs {
+		if input.ItemKey != "" {
+			continue
+		}
+		if !processInput(input) {
 			return result
 		}
 	}
@@ -456,4 +438,29 @@ func addUint64Checked(a, b uint64) (uint64, bool) {
 		return 0, false
 	}
 	return a + b, true
+}
+
+func craftInputMatchesItemDef(input craftdefs.CraftInput, def *itemdefs.ItemDef) bool {
+	if def == nil {
+		return false
+	}
+	if input.ItemKey != "" {
+		return def.Key == input.ItemKey
+	}
+	if input.ItemTag != "" {
+		return itemDefHasTag(def, input.ItemTag)
+	}
+	return false
+}
+
+func itemDefHasTag(def *itemdefs.ItemDef, want string) bool {
+	if def == nil || want == "" {
+		return false
+	}
+	for _, tag := range def.Tags {
+		if tag == want {
+			return true
+		}
+	}
+	return false
 }

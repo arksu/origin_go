@@ -592,9 +592,10 @@ message S2C_CyclicActionFinished {
 }
 
 message CraftInputDef {
-  string item_key = 1;
+  optional string item_key = 1;
   uint32 count = 2;
   uint32 quality_weight = 3;
+  optional string item_tag = 4;
 }
 
 message CraftOutputDef {

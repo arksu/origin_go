@@ -360,11 +360,19 @@ func (s *CraftingService) buildCraftList(w *ecs.World, playerID types.EntityID, 
 			entry.RequiredLinkedObjectKey = &key
 		}
 		for _, in := range craft.Inputs {
-			entry.Inputs = append(entry.Inputs, &netproto.CraftInputDef{
-				ItemKey:       in.ItemKey,
+			inputDef := &netproto.CraftInputDef{
 				Count:         in.Count,
 				QualityWeight: in.QualityWeight,
-			})
+			}
+			if in.ItemKey != "" {
+				key := in.ItemKey
+				inputDef.ItemKey = &key
+			}
+			if in.ItemTag != "" {
+				tag := in.ItemTag
+				inputDef.ItemTag = &tag
+			}
+			entry.Inputs = append(entry.Inputs, inputDef)
 		}
 		for _, o := range craft.Outputs {
 			entry.Outputs = append(entry.Outputs, &netproto.CraftOutputDef{

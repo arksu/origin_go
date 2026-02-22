@@ -6,7 +6,8 @@ const (
 )
 
 type CraftInput struct {
-	ItemKey       string `json:"itemKey"`
+	ItemKey       string `json:"itemKey,omitempty"`
+	ItemTag       string `json:"itemTag,omitempty"`
 	Count         uint32 `json:"count"`
 	QualityWeight uint32 `json:"qualityWeight"`
 }
