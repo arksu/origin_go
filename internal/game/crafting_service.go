@@ -291,6 +291,9 @@ func (s *CraftingService) SendCraftListSnapshot(w *ecs.World, entityID types.Ent
 	if s == nil || s.sender == nil || w == nil || handle == types.InvalidHandle || !w.Alive(handle) {
 		return
 	}
+	if !ecs.GetResource[ecs.OpenedWindowsState](w).IsOpen(entityID, "craft") {
+		return
+	}
 	list := &netproto.S2C_CraftList{Recipes: s.buildCraftList(w, entityID, handle)}
 	s.sender.SendCraftList(entityID, list)
 }
