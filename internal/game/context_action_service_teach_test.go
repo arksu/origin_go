@@ -306,3 +306,54 @@ func TestContextActionService_SyntheticTeachCycleComplete_LowStaminaCancelsAndWa
 		t.Fatalf("unexpected low-stamina alert severity: %v", alert.Severity)
 	}
 }
+
+func TestCyclicActionSystem_TeachCanceledWhenHandItemLostDuringCast(t *testing.T) {
+	setTeachTestItemRegistry(t)
+	world := ecs.NewWorldForTesting()
+	service := newTeachTestService(world, nil, nil)
+	system := NewCyclicActionSystem(service, nil, nil)
+
+	teacherID := types.EntityID(7001)
+	learnerID := types.EntityID(7002)
+	teacherHandle, handHandle := spawnTeachTestPlayer(world, teacherID, nil, 300, true)
+	learnerHandle, _ := spawnTeachTestPlayer(world, learnerID, nil, 300, false)
+
+	ecs.AddComponent(world, teacherHandle, components.ActiveCyclicAction{
+		ActionID:           teachContextActionID,
+		TargetKind:         components.CyclicActionTargetObject,
+		TargetID:           learnerID,
+		TargetHandle:       learnerHandle,
+		CycleDurationTicks: teachCycleDurationTicks,
+		CycleElapsedTicks:  0,
+		CycleIndex:         1,
+	})
+	ecs.MutateComponent[components.Movement](world, teacherHandle, func(m *components.Movement) bool {
+		m.State = constt.StateInteracting
+		return true
+	})
+
+	linkState := ecs.GetResource[ecs.LinkState](world)
+	linkState.SetLink(ecs.PlayerLink{
+		PlayerID: teacherID,
+		TargetID: learnerID,
+	})
+
+	ecs.MutateComponent[components.InventoryContainer](world, handHandle, func(c *components.InventoryContainer) bool {
+		c.Items = nil
+		return true
+	})
+
+	system.Update(world, 0.05)
+
+	if _, hasAction := ecs.GetComponent[components.ActiveCyclicAction](world, teacherHandle); hasAction {
+		t.Fatalf("expected teach active action to be canceled when hand item is lost")
+	}
+	movement, _ := ecs.GetComponent[components.Movement](world, teacherHandle)
+	if movement.State != constt.StateIdle {
+		t.Fatalf("expected movement state idle after cancel, got %d", movement.State)
+	}
+	learnerProfile, _ := ecs.GetComponent[components.CharacterProfile](world, learnerHandle)
+	if len(learnerProfile.Discovery) != 0 {
+		t.Fatalf("expected learner discovery unchanged after cancel, got %+v", learnerProfile.Discovery)
+	}
+}

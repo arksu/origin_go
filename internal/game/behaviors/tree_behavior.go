@@ -5,11 +5,9 @@ import (
 	"math"
 	"strings"
 
-	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
@@ -731,77 +729,7 @@ func consumePlayerStaminaForTreeCycle(
 	playerHandle types.Handle,
 	cost float64,
 ) bool {
-	if world == nil || playerHandle == types.InvalidHandle || !world.Alive(playerHandle) {
-		return false
-	}
-
-	stats, hasStats := ecs.GetComponent[components.EntityStats](world, playerHandle)
-	if !hasStats {
-		return true
-	}
-
-	con := characterattrs.DefaultValue
-	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle); hasProfile {
-		con = characterattrs.Get(profile.Attributes, characterattrs.CON)
-	}
-	maxStamina := entitystats.MaxStaminaFromCon(con)
-	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
-	statsChanged := currentStamina != stats.Stamina
-	currentEnergy := stats.Energy
-	if currentEnergy < 0 {
-		currentEnergy = 0
-		statsChanged = true
-	}
-
-	if !entitystats.CanConsumeLongActionStamina(currentStamina, maxStamina, cost) {
-		if statsChanged {
-			ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
-				entityStats.Stamina = currentStamina
-				entityStats.Energy = currentEnergy
-			})
-			ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
-		}
-		ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, currentStamina, currentEnergy, maxStamina)
-		return false
-	}
-
-	nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
-	statsChanged = statsChanged || nextStamina != stats.Stamina
-	if statsChanged {
-		ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
-			entityStats.Stamina = nextStamina
-			entityStats.Energy = currentEnergy
-		})
-	}
-
-	modeMutated := ecs.MutateComponent[components.Movement](world, playerHandle, func(m *components.Movement) bool {
-		mode, canMove := entitystats.ResolveAllowedMoveMode(m.Mode, nextStamina, maxStamina, currentEnergy)
-		changed := false
-		if mode != m.Mode {
-			m.Mode = mode
-			changed = true
-		}
-		if !canMove {
-			if m.Mode != constt.Crawl {
-				m.Mode = constt.Crawl
-				changed = true
-			}
-			if m.State == constt.StateMoving {
-				m.ClearTarget()
-				changed = true
-			}
-		}
-		return changed
-	})
-	if modeMutated {
-		ecs.MarkMovementModeDirtyByHandle(world, playerHandle)
-	}
-
-	if statsChanged {
-		ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
-	}
-	ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, nextStamina, currentEnergy, maxStamina)
-	return true
+	return ConsumePlayerLongActionStamina(world, playerHandle, cost)
 }
 
 func sendWarningMiniAlert(playerID types.EntityID, alerts contracts.MiniAlertSender, reasonCode string) {

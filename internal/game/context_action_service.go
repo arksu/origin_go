@@ -5,13 +5,12 @@ import (
 	"strconv"
 	"strings"
 
-	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
-	"origin/internal/entitystats"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
@@ -416,10 +415,10 @@ func (s *ContextActionService) isActiveCyclicActionStillValid(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) bool {
+	if w == nil {
+		return false
+	}
 	if s.isSyntheticTeachCyclicAction(action) {
-		if w == nil {
-			return false
-		}
 		targetID := action.TargetID
 		targetHandle := action.TargetHandle
 		if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
@@ -708,9 +707,9 @@ func (s *ContextActionService) startTeachCyclicAction(
 	playerHandle types.Handle,
 	targetID types.EntityID,
 	targetHandle types.Handle,
-) bool {
+) {
 	if w == nil || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
-		return false
+		return
 	}
 	nowTick := ecs.GetResource[ecs.TimeState](w).Tick
 	ecs.AddComponent(w, playerHandle, components.ActiveCyclicAction{
@@ -727,7 +726,6 @@ func (s *ContextActionService) startTeachCyclicAction(
 		m.State = constt.StateInteracting
 		return true
 	})
-	return true
 }
 
 func (s *ContextActionService) isSyntheticTeachCyclicAction(action components.ActiveCyclicAction) bool {
@@ -760,25 +758,15 @@ func (s *ContextActionService) handleSyntheticTeachCycleComplete(
 		return contracts.BehaviorCycleDecisionComplete
 	}
 
-	if !consumePlayerStaminaForTeachCycle(w, playerHandle, teachCycleStaminaCost) {
+	if !behaviors.ConsumePlayerLongActionStamina(w, playerHandle, teachCycleStaminaCost) {
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "LOW_STAMINA")
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	taught := false
 	ecs.MutateComponent[components.CharacterProfile](w, targetHandle, func(profile *components.CharacterProfile) bool {
-		for _, existingKey := range profile.Discovery {
-			if existingKey == itemDef.Key {
-				return false
-			}
-		}
 		profile.Discovery = components.NormalizeStringSet(append(profile.Discovery, itemDef.Key))
-		taught = true
 		return true
 	})
-	if !taught {
-		return contracts.BehaviorCycleDecisionComplete
-	}
 
 	s.sendTeachMiniAlerts(playerID, action.TargetID)
 	return contracts.BehaviorCycleDecisionComplete
@@ -787,82 +775,4 @@ func (s *ContextActionService) handleSyntheticTeachCycleComplete(
 func (s *ContextActionService) sendTeachMiniAlerts(teacherID, learnerID types.EntityID) {
 	s.sendMiniAlert(teacherID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, teachSuccessTeacherReasonCode)
 	s.sendMiniAlert(learnerID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, teachSuccessLearnerReasonCode)
-}
-
-func consumePlayerStaminaForTeachCycle(
-	world *ecs.World,
-	playerHandle types.Handle,
-	cost float64,
-) bool {
-	if world == nil || playerHandle == types.InvalidHandle || !world.Alive(playerHandle) {
-		return false
-	}
-
-	stats, hasStats := ecs.GetComponent[components.EntityStats](world, playerHandle)
-	if !hasStats {
-		return true
-	}
-
-	con := characterattrs.DefaultValue
-	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle); hasProfile {
-		con = characterattrs.Get(profile.Attributes, characterattrs.CON)
-	}
-	maxStamina := entitystats.MaxStaminaFromCon(con)
-	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
-	statsChanged := currentStamina != stats.Stamina
-	currentEnergy := stats.Energy
-	if currentEnergy < 0 {
-		currentEnergy = 0
-		statsChanged = true
-	}
-
-	if !entitystats.CanConsumeLongActionStamina(currentStamina, maxStamina, cost) {
-		if statsChanged {
-			ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
-				entityStats.Stamina = currentStamina
-				entityStats.Energy = currentEnergy
-			})
-			ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
-		}
-		ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, currentStamina, currentEnergy, maxStamina)
-		return false
-	}
-
-	nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
-	statsChanged = statsChanged || nextStamina != stats.Stamina
-	if statsChanged {
-		ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
-			entityStats.Stamina = nextStamina
-			entityStats.Energy = currentEnergy
-		})
-	}
-
-	modeMutated := ecs.MutateComponent[components.Movement](world, playerHandle, func(m *components.Movement) bool {
-		mode, canMove := entitystats.ResolveAllowedMoveMode(m.Mode, nextStamina, maxStamina, currentEnergy)
-		changed := false
-		if mode != m.Mode {
-			m.Mode = mode
-			changed = true
-		}
-		if !canMove {
-			if m.Mode != constt.Crawl {
-				m.Mode = constt.Crawl
-				changed = true
-			}
-			if m.State == constt.StateMoving {
-				m.ClearTarget()
-				changed = true
-			}
-		}
-		return changed
-	})
-	if modeMutated {
-		ecs.MarkMovementModeDirtyByHandle(world, playerHandle)
-	}
-
-	if statsChanged {
-		ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
-	}
-	ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, nextStamina, currentEnergy, maxStamina)
-	return true
 }
