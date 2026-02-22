@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "source": "starter crafts",
+  "crafts": [
+    {
+      "defId": 1,
+      "key": "stone_axe",
+      "name": "Stone Axe",
+      "inputs": [
+        {
+          "itemKey": "branch",
+          "count": 1,
+          "qualityWeight": 1
+        },
+        {
+          "itemKey": "stone",
+          "count": 1,
+          "qualityWeight": 1
+        }
+      ],
+      "outputs": [
+        {
+          "itemKey": "stone_axe",
+          "count": 1
+        }
+      ],
+      "staminaCost": 100,
+      "ticksRequired": 10,
+      "requiredDiscovery": ["branch", "stone"]
+    }
+  ]
+}
