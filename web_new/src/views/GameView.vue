@@ -11,12 +11,13 @@ import EquipmentWindow from '@/components/ui/EquipmentWindow.vue'
 import NestedInventoryWindow from '@/components/ui/NestedInventoryWindow.vue'
 import CharacterSheetWindow from '@/components/ui/CharacterSheetWindow.vue'
 import PlayerStatsWindow from '@/components/ui/PlayerStatsWindow.vue'
+import CraftWindow from '@/components/ui/CraftWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import MovementModePanel from '@/components/ui/MovementModePanel.vue'
-import { sendChatMessage } from '@/network'
+import { sendChatMessage, sendOpenWindow, sendCloseWindow } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
@@ -73,6 +74,7 @@ const openNestedInventoryWindows = computed(() => {
 const miniAlerts = computed(() => gameStore.miniAlerts)
 const showCharacterSheet = computed(() => gameStore.characterSheetVisible)
 const showPlayerStatsWindow = computed(() => gameStore.playerStatsWindowVisible)
+const showCraftWindow = computed(() => gameStore.craftWindowVisible)
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -244,6 +246,26 @@ function handleEquipmentClose() {
   gameStore.setPlayerEquipmentVisible(false)
 }
 
+function openCraftWindow() {
+  if (gameStore.craftWindowVisible) return
+  gameStore.setCraftWindowVisible(true)
+  sendOpenWindow('craft')
+}
+
+function closeCraftWindow() {
+  if (!gameStore.craftWindowVisible) return
+  gameStore.setCraftWindowVisible(false)
+  sendCloseWindow('craft')
+}
+
+function toggleCraftWindow() {
+  if (gameStore.craftWindowVisible) {
+    closeCraftWindow()
+    return
+  }
+  openCraftWindow()
+}
+
 function alertTypeForSeverity(severity: proto.AlertSeverity): 'error' | 'warning' | 'info' {
   switch (severity) {
     case proto.AlertSeverity.ALERT_SEVERITY_ERROR:
@@ -269,6 +291,7 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         gameStore.setPlayerEquipmentVisible(false)
         gameStore.setCharacterSheetVisible(false)
         gameStore.setPlayerStatsWindowVisible(false)
+        closeCraftWindow()
         gameStore.closeContextMenu()
         break
       case '/':
@@ -295,6 +318,9 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         break
       case 'p':
         gameStore.togglePlayerStatsWindow()
+        break
+      case 'o':
+        toggleCraftWindow()
         break
       default:
         config.action()
@@ -340,6 +366,9 @@ useHotkeys(hotkeys)
         <p v-if="showLoadingSlowHint" class="game-loading-overlay__hint">Still loading, please wait...</p>
       </div>
       <div class="game-ui">
+        <AppButton variant="secondary" size="sm" @click="toggleCraftWindow">
+          {{ showCraftWindow ? 'Close Craft' : 'Craft' }}
+        </AppButton>
         <AppButton variant="secondary" size="sm" @click="handleBack">Exit</AppButton>
       </div>
       <div v-if="miniAlerts.length > 0" class="game-mini-alerts">
@@ -377,6 +406,10 @@ useHotkeys(hotkeys)
 
       <div v-if="showPlayerStatsWindow" class="game-player-stats-window">
         <PlayerStatsWindow @close="handlePlayerStatsClose" />
+      </div>
+
+      <div v-if="showCraftWindow" class="game-craft-window">
+        <CraftWindow @close="closeCraftWindow" />
       </div>
       
       <!-- Nested inventory windows -->
@@ -499,6 +532,8 @@ useHotkeys(hotkeys)
   top: 1rem;
   right: 1rem;
   z-index: 100;
+  display: flex;
+  gap: 8px;
 }
 
 .game-chat {
@@ -589,6 +624,16 @@ useHotkeys(hotkeys)
   height: 100%;
   pointer-events: none;
   z-index: 225;
+}
+
+.game-craft-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 260;
 }
 
 .game-disconnected {
