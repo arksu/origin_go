@@ -83,6 +83,13 @@ export function registerMessageHandlers(): void {
     }
   })
 
+  messageDispatcher.on('craftList', (msg: proto.IS2C_CraftList) => {
+    console.log('[Handlers] craftList:', {
+      recipes: msg.recipes?.length || 0,
+    })
+    gameStore.setCraftListSnapshot(msg)
+  })
+
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
     console.log('[Handlers] S2C_ExpGained received:', {
       entityId: toNumber(msg.entityId || 0),

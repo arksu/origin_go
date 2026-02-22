@@ -94,6 +94,7 @@ export class MessageDispatcher {
     if (message.cyclicActionFinished) return 'cyclicActionFinished'
     if (message.sound) return 'sound'
     if (message.fx) return 'fx'
+    if (message.craftList) return 'craftList'
     if (message.characterProfile) return 'characterProfile'
     if (message.playerStats) return 'playerStats'
     if (message.expGained) return 'expGained'

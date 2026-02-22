@@ -106,6 +106,8 @@ export interface CharacterExperienceState {
   combat: number
 }
 
+export type CraftRecipeState = proto.ICraftRecipeEntry
+
 export type WorldBootstrapState =
   | 'idle'
   | 'waiting_enter_world'
@@ -156,6 +158,9 @@ export const useGameStore = defineStore('game', () => {
   })
   const characterSheetVisible = ref(false)
   const playerStatsWindowVisible = ref(false)
+  const craftWindowVisible = ref(false)
+  const craftRecipes = ref<CraftRecipeState[]>([])
+  const selectedCraftKey = ref<string>('')
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
@@ -277,6 +282,9 @@ export const useGameStore = defineStore('game', () => {
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
     playerStatsWindowVisible.value = false
+    craftWindowVisible.value = false
+    craftRecipes.value = []
+    selectedCraftKey.value = ''
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -309,6 +317,9 @@ export const useGameStore = defineStore('game', () => {
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
     playerStatsWindowVisible.value = false
+    craftWindowVisible.value = false
+    craftRecipes.value = []
+    selectedCraftKey.value = ''
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -641,6 +652,39 @@ export const useGameStore = defineStore('game', () => {
     playerStatsWindowVisible.value = visible
   }
 
+  function toggleCraftWindow() {
+    craftWindowVisible.value = !craftWindowVisible.value
+  }
+
+  function setCraftWindowVisible(visible: boolean) {
+    craftWindowVisible.value = visible
+  }
+
+  function selectCraftRecipe(craftKey: string | null | undefined) {
+    const key = (craftKey || '').trim()
+    selectedCraftKey.value = key
+  }
+
+  function setCraftListSnapshot(snapshot: proto.IS2C_CraftList | null | undefined) {
+    const nextRecipes = (snapshot?.recipes || []).slice()
+    craftRecipes.value = nextRecipes
+
+    if (nextRecipes.length === 0) {
+      selectedCraftKey.value = ''
+      return
+    }
+
+    if (!selectedCraftKey.value) {
+      selectedCraftKey.value = nextRecipes[0]?.craftKey || ''
+      return
+    }
+
+    const selectedStillExists = nextRecipes.some((recipe) => (recipe.craftKey || '') === selectedCraftKey.value)
+    if (!selectedStillExists) {
+      selectedCraftKey.value = nextRecipes[0]?.craftKey || ''
+    }
+  }
+
   function setCharacterProfileSnapshot(snapshot: proto.IS2C_CharacterProfile | null | undefined) {
     const entries = snapshot?.attributes
     const defaults = defaultCharacterAttributes()
@@ -798,6 +842,9 @@ export const useGameStore = defineStore('game', () => {
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
     playerStatsWindowVisible.value = false
+    craftWindowVisible.value = false
+    craftRecipes.value = []
+    selectedCraftKey.value = ''
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -841,6 +888,9 @@ export const useGameStore = defineStore('game', () => {
     playerEquipmentVisible,
     characterSheetVisible,
     playerStatsWindowVisible,
+    craftWindowVisible,
+    craftRecipes,
+    selectedCraftKey,
     characterAttributes,
     characterExperience,
     playerStats,
@@ -892,6 +942,10 @@ export const useGameStore = defineStore('game', () => {
     setCharacterSheetVisible,
     togglePlayerStatsWindow,
     setPlayerStatsWindowVisible,
+    toggleCraftWindow,
+    setCraftWindowVisible,
+    selectCraftRecipe,
+    setCraftListSnapshot,
     setCharacterProfileSnapshot,
     applyExpGained,
     setPlayerStats,

@@ -73,6 +73,13 @@ export const DEFAULT_HOTKEYS: HotkeyConfig[] = [
     }
   },
   {
+    key: 'o',
+    description: 'Toggle craft window',
+    action: () => {
+      console.log('[Hotkeys] Craft window toggle - not implemented yet')
+    }
+  },
+  {
     key: '`',
     description: 'Toggle debug overlay',
     action: () => {

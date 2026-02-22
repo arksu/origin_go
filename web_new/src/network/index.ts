@@ -79,4 +79,50 @@ export function sendMovementMode(mode: proto.MovementMode): void {
   })
 }
 
+export function sendOpenWindow(name: string): void {
+  const normalized = name.trim()
+  if (!normalized) return
+
+  gameConnection.send({
+    openWindow: proto.C2S_OpenWindow.create({
+      name: normalized,
+    }),
+  })
+}
+
+export function sendCloseWindow(name: string): void {
+  const normalized = name.trim()
+  if (!normalized) return
+
+  gameConnection.send({
+    closeWindow: proto.C2S_CloseWindow.create({
+      name: normalized,
+    }),
+  })
+}
+
+export function sendStartCraftOne(craftKey: string): void {
+  const normalized = craftKey.trim()
+  if (!normalized) return
+
+  gameConnection.send({
+    startCraftOne: proto.C2S_StartCraftOne.create({
+      craftKey: normalized,
+    }),
+  })
+}
+
+export function sendStartCraftMany(craftKey: string, cycles: number): void {
+  const normalized = craftKey.trim()
+  if (!normalized) return
+
+  const safeCycles = Math.max(1, Math.floor(cycles))
+  gameConnection.send({
+    startCraftMany: proto.C2S_StartCraftMany.create({
+      craftKey: normalized,
+      cycles: safeCycles,
+    }),
+  })
+}
+
 export { gameConnection, messageDispatcher }
