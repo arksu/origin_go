@@ -24,6 +24,9 @@ type LoadError struct {
 }
 
 func (e *LoadError) Error() string {
+	if e.DefID != 0 && e.Key != "" {
+		return fmt.Sprintf("%s: defId=%d key=%s: %s", e.FilePath, e.DefID, e.Key, e.Message)
+	}
 	if e.DefID != 0 {
 		return fmt.Sprintf("%s: defId=%d: %s", e.FilePath, e.DefID, e.Message)
 	}

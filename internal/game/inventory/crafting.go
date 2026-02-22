@@ -78,6 +78,8 @@ func (e *InventoryExecutor) HasCraftInputs(
 }
 
 // CanFitCraftOutputsOneCycle simulates give placement (grid+nested+hand) for all outputs of one craft cycle.
+// It intentionally does NOT model world-drop fallback: start-craft precheck requires one full cycle to fit
+// into inventory tree + hand before crafting can begin.
 func (e *InventoryExecutor) CanFitCraftOutputsOneCycle(
 	w *ecs.World,
 	playerID types.EntityID,
@@ -150,6 +152,8 @@ func (e *InventoryExecutor) CanFitCraftOutputsOneCycle(
 			if !exists {
 				return false
 			}
+			// Intentionally strict: if hand is already occupied at precheck time, the cycle is considered
+			// "no space" even though runtime output spawning could fall back to dropping the item to world.
 			if len(hand.Items) > 0 {
 				return false
 			}
@@ -164,11 +168,31 @@ func (e *InventoryExecutor) CanFitCraftOutputsOneCycle(
 }
 
 // ConsumeCraftInputs consumes one cycle inputs from player inventories and returns quality aggregation data.
+func (e *InventoryExecutor) PreviewCraftInputs(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	craft *craftdefs.CraftDef,
+) CraftConsumeInputsResult {
+	return e.consumeCraftInputsInternal(w, playerID, playerHandle, craft, false)
+}
+
+// ConsumeCraftInputs consumes one cycle inputs from player inventories and returns quality aggregation data.
 func (e *InventoryExecutor) ConsumeCraftInputs(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	craft *craftdefs.CraftDef,
+) CraftConsumeInputsResult {
+	return e.consumeCraftInputsInternal(w, playerID, playerHandle, craft, true)
+}
+
+func (e *InventoryExecutor) consumeCraftInputsInternal(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	craft *craftdefs.CraftDef,
+	commit bool,
 ) CraftConsumeInputsResult {
 	result := CraftConsumeInputsResult{}
 	if e == nil || e.service == nil || w == nil || craft == nil {
@@ -271,6 +295,14 @@ func (e *InventoryExecutor) ConsumeCraftInputs(
 		}
 	}
 
+	result.Success = true
+	result.QualityWeighted = weightedSum
+	result.QualityWeightSum = weightSum
+
+	if !commit {
+		return result
+	}
+
 	updatedOwner, _ := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
 	updated := make([]*ContainerInfo, 0, len(changed))
 	for handle := range changed {
@@ -289,12 +321,7 @@ func (e *InventoryExecutor) ConsumeCraftInputs(
 			Owner:     &updatedOwner,
 		})
 	}
-	updated = e.applyNestedCascade(w, playerID, updated)
-
-	result.Success = true
-	result.UpdatedContainers = updated
-	result.QualityWeighted = weightedSum
-	result.QualityWeightSum = weightSum
+	result.UpdatedContainers = e.applyNestedCascade(w, playerID, updated)
 	return result
 }
 
