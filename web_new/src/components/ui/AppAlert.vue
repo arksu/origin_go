@@ -39,9 +39,10 @@ withDefaults(defineProps<Props>(), {
   }
 
   &--info {
-    background-color: rgba(52, 152, 219, 0.15);
-    color: #3498db;
-    border: 1px solid rgba(52, 152, 219, 0.3);
+    background-color: rgba(52, 152, 219, 0.4);
+    color: #ffffff;
+    border: 1px solid rgba(52, 152, 219, 0.6);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   }
 }
 </style>
