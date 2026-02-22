@@ -5,6 +5,7 @@ import "sync"
 type Registry struct {
 	byID  map[int]*CraftDef
 	byKey map[string]*CraftDef
+	all   []*CraftDef
 }
 
 var (
@@ -16,11 +17,13 @@ func NewRegistry(crafts []CraftDef) *Registry {
 	r := &Registry{
 		byID:  make(map[int]*CraftDef, len(crafts)),
 		byKey: make(map[string]*CraftDef, len(crafts)),
+		all:   make([]*CraftDef, 0, len(crafts)),
 	}
 	for i := range crafts {
 		craft := &crafts[i]
 		r.byID[craft.DefID] = craft
 		r.byKey[craft.Key] = craft
+		r.all = append(r.all, craft)
 	}
 	return r
 }
@@ -45,10 +48,8 @@ func (r *Registry) All() []*CraftDef {
 	if r == nil {
 		return nil
 	}
-	out := make([]*CraftDef, 0, len(r.byID))
-	for _, v := range r.byID {
-		out = append(out, v)
-	}
+	out := make([]*CraftDef, len(r.all))
+	copy(out, r.all)
 	return out
 }
 
@@ -66,6 +67,7 @@ func SetGlobal(r *Registry) {
 }
 
 func SetGlobalForTesting(r *Registry) {
+	registryOnce = sync.Once{}
 	globalRegistry = r
 }
 

@@ -70,7 +70,7 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 1001, pickaxe.DefID)
 	assert.Nil(t, pickaxe.Stack)
-	assert.Equal(t, 50, pickaxe.DiscoveryLP)
+	assert.Equal(t, int64(50), pickaxe.DiscoveryLP)
 }
 
 func TestLoadFromDirectory_DiscoveryLPOverride(t *testing.T) {
@@ -106,11 +106,11 @@ func TestLoadFromDirectory_DiscoveryLPOverride(t *testing.T) {
 
 	defaultLP, ok := registry.GetByKey("default_lp_item")
 	require.True(t, ok)
-	assert.Equal(t, 50, defaultLP.DiscoveryLP)
+	assert.Equal(t, int64(50), defaultLP.DiscoveryLP)
 
 	customLP, ok := registry.GetByKey("custom_lp_item")
 	require.True(t, ok)
-	assert.Equal(t, 77, customLP.DiscoveryLP)
+	assert.Equal(t, int64(77), customLP.DiscoveryLP)
 }
 
 func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {
