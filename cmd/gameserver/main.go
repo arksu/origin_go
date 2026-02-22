@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"origin/internal/config"
+	"origin/internal/craftdefs"
 	"origin/internal/game"
 	"origin/internal/game/behaviors"
 	"origin/internal/game/events"
@@ -96,6 +97,12 @@ func main() {
 		logger.Fatal("Failed to load object definitions", zap.Error(err))
 	}
 	objectdefs.SetGlobal(objRegistry)
+
+	craftRegistry, err := craftdefs.LoadFromDirectory("./data/crafts", logger)
+	if err != nil {
+		logger.Fatal("Failed to load craft definitions", zap.Error(err))
+	}
+	craftdefs.SetGlobal(craftRegistry)
 
 	inventoryLoader := inventory.NewInventoryLoader(logger)
 	inventorySnapshotSender := inventory.NewSnapshotSender(logger)

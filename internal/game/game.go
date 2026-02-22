@@ -208,6 +208,10 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleOpenContainer(c, msg.Sequence, payload.OpenContainer)
 	case *netproto.ClientMessage_CloseContainer:
 		g.handleCloseContainer(c, msg.Sequence, payload.CloseContainer)
+	case *netproto.ClientMessage_StartCraftOne:
+		g.handleStartCraftOne(c, msg.Sequence, payload.StartCraftOne)
+	case *netproto.ClientMessage_StartCraftMany:
+		g.handleStartCraftMany(c, msg.Sequence, payload.StartCraftMany)
 	default:
 		g.logger.Warn("Unknown packet type", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
 	}
@@ -548,6 +552,58 @@ func (g *Game) handleCloseContainer(c *network.Client, sequence uint32, msg *net
 		CommandID:   uint64(sequence),
 		CommandType: network.CmdCloseContainer,
 		Payload:     msg.Ref,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	}
+	_ = shard.PlayerInbox().Enqueue(cmd)
+}
+
+func (g *Game) handleStartCraftOne(c *network.Client, sequence uint32, msg *netproto.C2S_StartCraftOne) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || strings.TrimSpace(msg.CraftKey) == "" {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid craft request")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdStartCraftOne,
+		Payload:     msg,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	}
+	_ = shard.PlayerInbox().Enqueue(cmd)
+}
+
+func (g *Game) handleStartCraftMany(c *network.Client, sequence uint32, msg *netproto.C2S_StartCraftMany) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || strings.TrimSpace(msg.CraftKey) == "" || msg.Cycles == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid craft request")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	cmd := &network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdStartCraftMany,
+		Payload:     msg,
 		ReceivedAt:  time.Now(),
 		Layer:       c.Layer,
 	}

@@ -49,10 +49,11 @@ type Shard struct {
 	characterSaver *systems.CharacterSaver
 
 	// Command queues for network/ECS separation
-	playerInbox    *network.PlayerCommandInbox
-	serverInbox    *network.ServerJobInbox
-	snapshotSender *inventory.SnapshotSender
-	adminHandler   *ChatAdminCommandHandler
+	playerInbox     *network.PlayerCommandInbox
+	serverInbox     *network.ServerJobInbox
+	snapshotSender  *inventory.SnapshotSender
+	adminHandler    *ChatAdminCommandHandler
+	craftingService *CraftingService
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -108,6 +109,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
+	craftingService := NewCraftingService(s.world, s.eventBus, inventoryExecutor, s, logger)
 	contextActionService := NewContextActionService(
 		s.world,
 		s.eventBus,
@@ -188,10 +190,13 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		behaviorRegistry,
 		logger,
 	)
+	contextActionService.SetCraftingService(craftingService)
 	contextActionService.SetSoundEventSender(s)
+	s.craftingService = craftingService
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 	networkCmdSystem.SetContextActionService(contextActionService)
 	networkCmdSystem.SetContextMenuSender(s)
+	networkCmdSystem.SetCraftCommandService(craftingService)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
@@ -823,6 +828,33 @@ func (s *Shard) SendInventoryUpdate(entityID types.EntityID, states []*netproto.
 	client.Send(data)
 }
 
+// SendCraftList sends visible craft recipes and live craftability flags to a client.
+func (s *Shard) SendCraftList(entityID types.EntityID, list *netproto.S2C_CraftList) {
+	if list == nil {
+		return
+	}
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_CraftList{
+			CraftList: list,
+		},
+	}
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal craft list",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+	client.Send(data)
+}
+
 // SendFx sends a visual effect trigger to a client.
 func (s *Shard) SendFx(entityID types.EntityID, fx *netproto.S2C_Fx) {
 	if fx == nil {
@@ -967,6 +999,14 @@ func (s *Shard) SendPlayerStatsDeltaIfChanged(w *ecs.World, entityID types.Entit
 // SendMovementModeSnapshot sends the initial movement mode snapshot after enter-world/reattach.
 func (s *Shard) SendMovementModeSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
 	s.sendMovementMode(w, entityID, handle, true)
+}
+
+// SendCraftListSnapshot sends a fresh craft list snapshot for the player.
+func (s *Shard) SendCraftListSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+	if s.craftingService == nil {
+		return
+	}
+	s.craftingService.SendCraftListSnapshot(w, entityID, handle)
 }
 
 // SendMovementModeDeltaIfChanged sends movement mode only when it differs from last sent.

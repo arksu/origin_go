@@ -53,6 +53,7 @@ type ContextActionService struct {
 	soundEvents      *SoundEventService
 	behaviorRegistry contracts.BehaviorRegistry
 	actionDeps       contracts.ExecutionDeps
+	crafting         *CraftingService
 }
 
 func NewContextActionService(
@@ -125,6 +126,13 @@ func (s *ContextActionService) SetSoundEventSender(sender soundEventSender) {
 		return
 	}
 	s.soundEvents.SetSender(sender)
+}
+
+func (s *ContextActionService) SetCraftingService(crafting *CraftingService) {
+	if s == nil {
+		return
+	}
+	s.crafting = crafting
 }
 
 var _ systems.ContextActionResolver = (*ContextActionService)(nil)
@@ -378,6 +386,9 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	if s.isSyntheticTeachCyclicAction(action) {
 		return s.handleSyntheticTeachCycleComplete(w, playerID, playerHandle, action)
 	}
+	if s.crafting != nil && s.crafting.IsSyntheticCraftAction(action) {
+		return s.crafting.HandleCraftCycleComplete(w, playerID, playerHandle, action)
+	}
 	if action.BehaviorKey == "" || s.behaviorRegistry == nil {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -429,6 +440,9 @@ func (s *ContextActionService) isActiveCyclicActionStillValid(
 		}
 		_, ok := s.resolvePlayerHandItemDef(w, playerID, playerHandle)
 		return ok
+	}
+	if s.crafting != nil && s.crafting.IsSyntheticCraftAction(action) {
+		return s.crafting.IsActiveCraftStillValid(w, playerID, playerHandle, action)
 	}
 	if w == nil || s.behaviorRegistry == nil || action.BehaviorKey == "" || action.ActionID == "" {
 		return false
@@ -506,6 +520,7 @@ func (s *ContextActionService) finishActiveCyclicAction(
 	}
 	s.sendCyclicActionFinished(playerID, activeAction, result, reasonCode)
 	ecs.RemoveComponent[components.ActiveCyclicAction](s.world, playerHandle)
+	ecs.RemoveComponent[components.ActiveCraft](s.world, playerHandle)
 	ecs.MutateComponent[components.Movement](s.world, playerHandle, func(m *components.Movement) bool {
 		if m.State == constt.StateInteracting {
 			m.State = constt.StateIdle

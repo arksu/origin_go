@@ -42,6 +42,7 @@ type InventorySnapshotSender interface {
 	SendCharacterProfileSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 	SendPlayerStatsSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 	SendMovementModeSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
+	SendCraftListSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 }
 
 // InventoryOperationExecutor executes inventory operations
@@ -119,6 +120,11 @@ type ContextMenuSender interface {
 	SendContextMenu(entityID types.EntityID, menu *netproto.S2C_ContextMenu)
 }
 
+type CraftCommandService interface {
+	HandleStartCraftOne(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_StartCraftOne)
+	HandleStartCraftMany(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_StartCraftMany)
+}
+
 type NetworkCommandSystem struct {
 	ecs.BaseSystem
 
@@ -142,6 +148,7 @@ type NetworkCommandSystem struct {
 	openContainerService OpenContainerCoordinator
 	contextActionService ContextActionResolver
 	contextMenuSender    ContextMenuSender
+	craftCommandService  CraftCommandService
 	contextPendingTTL    time.Duration
 
 	// Reusable buffers to avoid allocations
@@ -200,6 +207,10 @@ func (s *NetworkCommandSystem) SetContextActionService(service ContextActionReso
 
 func (s *NetworkCommandSystem) SetContextMenuSender(sender ContextMenuSender) {
 	s.contextMenuSender = sender
+}
+
+func (s *NetworkCommandSystem) SetCraftCommandService(service CraftCommandService) {
+	s.craftCommandService = service
 }
 
 func (s *NetworkCommandSystem) SetContextPendingTTL(ttl time.Duration) {
@@ -269,6 +280,10 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleOpenContainer(w, handle, cmd)
 	case network.CmdCloseContainer:
 		s.handleCloseContainer(w, handle, cmd)
+	case network.CmdStartCraftOne:
+		s.handleStartCraftOne(w, handle, cmd)
+	case network.CmdStartCraftMany:
+		s.handleStartCraftMany(w, handle, cmd)
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -277,6 +292,30 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 
 	// Mark as processed for deduplication
 	s.playerInbox.MarkProcessed(cmd.ClientID, cmd.CommandID)
+}
+
+func (s *NetworkCommandSystem) handleStartCraftOne(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_StartCraftOne)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for StartCraftOne", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	if s.craftCommandService == nil {
+		return
+	}
+	s.craftCommandService.HandleStartCraftOne(w, cmd.CharacterID, playerHandle, msg)
+}
+
+func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_StartCraftMany)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for StartCraftMany", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	if s.craftCommandService == nil {
+		return
+	}
+	s.craftCommandService.HandleStartCraftMany(w, cmd.CharacterID, playerHandle, msg)
 }
 
 func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
@@ -895,6 +934,9 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 	if result.Success && s.openContainerService != nil && len(response.Updated) > 0 {
 		s.openContainerService.BroadcastInventoryUpdates(w, cmd.CharacterID, response.Updated)
 	}
+	if result.Success && s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendCraftListSnapshot(w, cmd.CharacterID, playerHandle)
+	}
 
 	s.logger.Debug("InventoryOp completed",
 		zap.Uint64("client_id", cmd.ClientID),
@@ -1149,6 +1191,8 @@ func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.Serve
 		s.handlePlayerStatsSnapshotJob(w, job)
 	case network.JobSendMovementModeSnapshot:
 		s.handleMovementModeSnapshotJob(w, job)
+	case network.JobSendCraftListSnapshot:
+		s.handleCraftListSnapshotJob(w, job)
 	default:
 		s.logger.Warn("Unknown server job type", zap.Uint16("job_type", job.JobType))
 	}
@@ -1224,6 +1268,21 @@ func (s *NetworkCommandSystem) handleMovementModeSnapshotJob(w *ecs.World, job *
 	_ = s.enforceMovementModeByStamina(w, payload.Handle)
 	if s.inventorySnapshotSender != nil {
 		s.inventorySnapshotSender.SendMovementModeSnapshot(w, job.TargetID, payload.Handle)
+	}
+}
+
+func (s *NetworkCommandSystem) handleCraftListSnapshotJob(w *ecs.World, job *network.ServerJob) {
+	payload, ok := job.Payload.(*network.CraftListSnapshotJobPayload)
+	if !ok {
+		s.logger.Error("Invalid payload for craft list snapshot job")
+		return
+	}
+	if !w.Alive(payload.Handle) {
+		s.logger.Debug("Craft list snapshot job: entity no longer alive", zap.Uint64("entity_id", uint64(job.TargetID)))
+		return
+	}
+	if s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendCraftListSnapshot(w, job.TargetID, payload.Handle)
 	}
 }
 

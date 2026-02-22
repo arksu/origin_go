@@ -22,6 +22,8 @@ const (
 	CmdInventoryOp
 	CmdOpenContainer
 	CmdCloseContainer
+	CmdStartCraftOne
+	CmdStartCraftMany
 )
 
 // PlayerCommand represents an intent from a client to be processed by ECS
@@ -47,6 +49,7 @@ const (
 	JobSendCharacterProfileSnapshot
 	JobSendPlayerStatsSnapshot
 	JobSendMovementModeSnapshot
+	JobSendCraftListSnapshot
 )
 
 // ServerJob represents an internal job to be processed by ECS
@@ -76,6 +79,11 @@ type PlayerStatsSnapshotJobPayload struct {
 
 // MovementModeSnapshotJobPayload is the payload for JobSendMovementModeSnapshot.
 type MovementModeSnapshotJobPayload struct {
+	Handle types.Handle
+}
+
+// CraftListSnapshotJobPayload is the payload for JobSendCraftListSnapshot.
+type CraftListSnapshotJobPayload struct {
 	Handle types.Handle
 }
 
