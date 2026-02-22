@@ -4640,9 +4640,10 @@ func (x *S2C_CyclicActionFinished) GetReasonCode() string {
 
 type CraftInputDef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemKey       string                 `protobuf:"bytes,1,opt,name=item_key,json=itemKey,proto3" json:"item_key,omitempty"`
+	ItemKey       *string                `protobuf:"bytes,1,opt,name=item_key,json=itemKey,proto3,oneof" json:"item_key,omitempty"`
 	Count         uint32                 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	QualityWeight uint32                 `protobuf:"varint,3,opt,name=quality_weight,json=qualityWeight,proto3" json:"quality_weight,omitempty"`
+	ItemTag       *string                `protobuf:"bytes,4,opt,name=item_tag,json=itemTag,proto3,oneof" json:"item_tag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4678,8 +4679,8 @@ func (*CraftInputDef) Descriptor() ([]byte, []int) {
 }
 
 func (x *CraftInputDef) GetItemKey() string {
-	if x != nil {
-		return x.ItemKey
+	if x != nil && x.ItemKey != nil {
+		return *x.ItemKey
 	}
 	return ""
 }
@@ -4696,6 +4697,13 @@ func (x *CraftInputDef) GetQualityWeight() uint32 {
 		return x.QualityWeight
 	}
 	return 0
+}
+
+func (x *CraftInputDef) GetItemTag() string {
+	if x != nil && x.ItemTag != nil {
+		return *x.ItemTag
+	}
+	return ""
 }
 
 type CraftOutputDef struct {
@@ -6167,11 +6175,14 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x06result\x18\x04 \x01(\x0e2\x1f.proto.CyclicActionFinishResultR\x06result\x12$\n" +
 	"\vreason_code\x18\x05 \x01(\tH\x00R\n" +
 	"reasonCode\x88\x01\x01B\x0e\n" +
-	"\f_reason_code\"g\n" +
-	"\rCraftInputDef\x12\x19\n" +
-	"\bitem_key\x18\x01 \x01(\tR\aitemKey\x12\x14\n" +
+	"\f_reason_code\"\xa6\x01\n" +
+	"\rCraftInputDef\x12\x1e\n" +
+	"\bitem_key\x18\x01 \x01(\tH\x00R\aitemKey\x88\x01\x01\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\rR\x05count\x12%\n" +
-	"\x0equality_weight\x18\x03 \x01(\rR\rqualityWeight\"A\n" +
+	"\x0equality_weight\x18\x03 \x01(\rR\rqualityWeight\x12\x1e\n" +
+	"\bitem_tag\x18\x04 \x01(\tH\x01R\aitemTag\x88\x01\x01B\v\n" +
+	"\t_item_keyB\v\n" +
+	"\t_item_tag\"A\n" +
 	"\x0eCraftOutputDef\x12\x19\n" +
 	"\bitem_key\x18\x01 \x01(\tR\aitemKey\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\rR\x05count\"\xe2\x01\n" +
@@ -6607,6 +6618,7 @@ func file_api_proto_packets_proto_init() {
 	}
 	file_api_proto_packets_proto_msgTypes[53].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[61].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[62].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[65].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[68].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[70].OneofWrappers = []any{}
