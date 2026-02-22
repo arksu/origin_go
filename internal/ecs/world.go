@@ -158,6 +158,9 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 	InitResource(w, PendingAdminTeleport{
 		Entries: make(map[types.EntityID]struct{}, 4),
 	})
+	InitResource(w, OpenedWindowsState{
+		ByPlayer: make(map[types.EntityID]map[string]struct{}, 64),
+	})
 	InitResource(w, TimeState{})
 
 	return w

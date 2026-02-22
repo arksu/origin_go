@@ -381,6 +381,14 @@ message C2S_StartCraftMany {
   uint32 cycles = 2;
 }
 
+message C2S_OpenWindow {
+  string name = 1;
+}
+
+message C2S_CloseWindow {
+  string name = 1;
+}
+
 // Обёртка для всех клиентских сообщений
 message ClientMessage {
   uint32 sequence = 1; // sequence number для ack
@@ -395,6 +403,8 @@ message ClientMessage {
     C2S_CloseContainer close_container = 17;
     C2S_StartCraftOne start_craft_one = 18;
     C2S_StartCraftMany start_craft_many = 19;
+    C2S_OpenWindow open_window = 20;
+    C2S_CloseWindow close_window = 21;
     //    C2S_StopMovement stop_movement = 13;
     //    C2S_Interact interact = 14;
     //    C2S_Attack attack = 15;

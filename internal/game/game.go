@@ -212,6 +212,10 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleStartCraftOne(c, msg.Sequence, payload.StartCraftOne)
 	case *netproto.ClientMessage_StartCraftMany:
 		g.handleStartCraftMany(c, msg.Sequence, payload.StartCraftMany)
+	case *netproto.ClientMessage_OpenWindow:
+		g.handleOpenWindow(c, msg.Sequence, payload.OpenWindow)
+	case *netproto.ClientMessage_CloseWindow:
+		g.handleCloseWindow(c, msg.Sequence, payload.CloseWindow)
 	default:
 		g.logger.Warn("Unknown packet type", zap.Uint64("client_id", c.ID), zap.Any("payload", msg.Payload))
 	}
@@ -610,6 +614,56 @@ func (g *Game) handleStartCraftMany(c *network.Client, sequence uint32, msg *net
 	_ = shard.PlayerInbox().Enqueue(cmd)
 }
 
+func (g *Game) handleOpenWindow(c *network.Client, sequence uint32, msg *netproto.C2S_OpenWindow) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || strings.TrimSpace(msg.Name) == "" {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid window name")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	_ = shard.PlayerInbox().Enqueue(&network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdOpenWindow,
+		Payload:     msg,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	})
+}
+
+func (g *Game) handleCloseWindow(c *network.Client, sequence uint32, msg *netproto.C2S_CloseWindow) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || strings.TrimSpace(msg.Name) == "" {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid window name")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	_ = shard.PlayerInbox().Enqueue(&network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdCloseWindow,
+		Payload:     msg,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	})
+}
+
 func (g *Game) handleDisconnect(c *network.Client) {
 	g.logger.Info("Client disconnected", zap.Uint64("client_id", c.ID))
 
@@ -647,6 +701,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 				shard.mu.Lock()
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
+				ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(playerEntityID)
 
 				if disconnectDelay > 0 && playerHandle != types.InvalidHandle {
 					// Detached mode: keep entity in world for DisconnectDelay seconds

@@ -9,6 +9,7 @@ import (
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -284,6 +285,10 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleStartCraftOne(w, handle, cmd)
 	case network.CmdStartCraftMany:
 		s.handleStartCraftMany(w, handle, cmd)
+	case network.CmdOpenWindow:
+		s.handleOpenWindow(w, handle, cmd)
+	case network.CmdCloseWindow:
+		s.handleCloseWindow(w, handle, cmd)
 	default:
 		s.logger.Warn("Unknown command type",
 			zap.Uint64("client_id", cmd.ClientID),
@@ -316,6 +321,35 @@ func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle t
 		return
 	}
 	s.craftCommandService.HandleStartCraftMany(w, cmd.CharacterID, playerHandle, msg)
+}
+
+func (s *NetworkCommandSystem) handleOpenWindow(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_OpenWindow)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for OpenWindow", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	name := strings.TrimSpace(msg.Name)
+	if name == "" {
+		return
+	}
+	ecs.GetResource[ecs.OpenedWindowsState](w).Open(cmd.CharacterID, name)
+	if name == "craft" && s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendCraftListSnapshot(w, cmd.CharacterID, playerHandle)
+	}
+}
+
+func (s *NetworkCommandSystem) handleCloseWindow(w *ecs.World, _ types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_CloseWindow)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for CloseWindow", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	name := strings.TrimSpace(msg.Name)
+	if name == "" {
+		return
+	}
+	ecs.GetResource[ecs.OpenedWindowsState](w).Close(cmd.CharacterID, name)
 }
 
 func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
