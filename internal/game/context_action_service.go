@@ -3,13 +3,17 @@ package game
 import (
 	"context"
 	"strconv"
+	"strings"
 
+	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
@@ -24,6 +28,14 @@ var contextActionDuplicateTotal = promauto.NewCounterVec(
 		Help: "Duplicate context actions produced by different behaviors",
 	},
 	[]string{"entity_def", "action_id", "winner_behavior", "loser_behavior"},
+)
+
+const (
+	teachContextActionID                 = "teach"
+	teachSuccessTeacherReasonCode        = "TEACH_SUCCESS"
+	teachSuccessLearnerReasonCode        = "TAUGHT_BY_PLAYER"
+	teachCycleDurationTicks       uint32 = 10
+	teachCycleStaminaCost                = 100.0
 )
 
 type miniAlertSender interface {
@@ -126,59 +138,71 @@ func (s *ContextActionService) ComputeActions(
 	targetHandle types.Handle,
 ) []systems.ContextAction {
 	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
-	if !hasInfo || len(entityInfo.Behaviors) == 0 {
-		return nil
-	}
-	if s.behaviorRegistry == nil {
-		return nil
-	}
 
 	actions := make([]systems.ContextAction, 0, 4)
 	seen := make(map[string]string, 4) // actionID -> behavior key
-	defName := s.entityDefName(entityInfo.TypeID)
+	defName := s.entityDefName(0)
+	if hasInfo {
+		defName = s.entityDefName(entityInfo.TypeID)
+	}
 
 	// Deterministic merge in definition order.
 	// Duplicate action IDs are content mistakes:
 	// first behavior wins + WARN + metric.
-	for _, behaviorKey := range entityInfo.Behaviors {
-		behavior, found := s.behaviorRegistry.GetBehavior(behaviorKey)
-		if !found {
-			continue
-		}
-		provider, ok := behavior.(contracts.ContextActionProvider)
-		if !ok {
-			continue
-		}
-
-		behaviorActions := provider.ProvideActions(&contracts.BehaviorActionListContext{
-			World:        w,
-			PlayerID:     playerID,
-			PlayerHandle: playerHandle,
-			TargetID:     targetID,
-			TargetHandle: targetHandle,
-			Deps:         &s.actionDeps,
-		})
-		for _, action := range behaviorActions {
-			if action.ActionID == "" {
+	if hasInfo && len(entityInfo.Behaviors) > 0 && s.behaviorRegistry != nil {
+		for _, behaviorKey := range entityInfo.Behaviors {
+			behavior, found := s.behaviorRegistry.GetBehavior(behaviorKey)
+			if !found {
 				continue
 			}
-			if winnerBehavior, exists := seen[action.ActionID]; exists {
-				s.logger.Warn("duplicate context action detected",
-					zap.Uint32("entity_type_id", entityInfo.TypeID),
-					zap.String("entity_def", defName),
-					zap.String("action_id", action.ActionID),
-					zap.String("winner_behavior", winnerBehavior),
-					zap.String("loser_behavior", behaviorKey),
-				)
-				contextActionDuplicateTotal.WithLabelValues(defName, action.ActionID, winnerBehavior, behaviorKey).Inc()
+			provider, ok := behavior.(contracts.ContextActionProvider)
+			if !ok {
 				continue
 			}
 
-			seen[action.ActionID] = behaviorKey
-			actions = append(actions, action)
+			behaviorActions := provider.ProvideActions(&contracts.BehaviorActionListContext{
+				World:        w,
+				PlayerID:     playerID,
+				PlayerHandle: playerHandle,
+				TargetID:     targetID,
+				TargetHandle: targetHandle,
+				Deps:         &s.actionDeps,
+			})
+			for _, action := range behaviorActions {
+				if action.ActionID == "" {
+					continue
+				}
+				if winnerBehavior, exists := seen[action.ActionID]; exists {
+					s.logger.Warn("duplicate context action detected",
+						zap.Uint32("entity_type_id", entityInfo.TypeID),
+						zap.String("entity_def", defName),
+						zap.String("action_id", action.ActionID),
+						zap.String("winner_behavior", winnerBehavior),
+						zap.String("loser_behavior", behaviorKey),
+					)
+					contextActionDuplicateTotal.WithLabelValues(defName, action.ActionID, winnerBehavior, behaviorKey).Inc()
+					continue
+				}
+
+				seen[action.ActionID] = behaviorKey
+				actions = append(actions, action)
+			}
 		}
 	}
 
+	if _, exists := seen[teachContextActionID]; !exists &&
+		s.isTeachTargetPlayer(w, playerID, targetID, targetHandle) {
+		if _, ok := s.resolvePlayerHandItemDef(w, playerID, playerHandle); ok {
+			actions = append(actions, systems.ContextAction{
+				ActionID: teachContextActionID,
+				Title:    "Teach",
+			})
+		}
+	}
+
+	if len(actions) == 0 {
+		return nil
+	}
 	return actions
 }
 
@@ -190,6 +214,10 @@ func (s *ContextActionService) ExecuteAction(
 	targetHandle types.Handle,
 	actionID string,
 ) bool {
+	if actionID == teachContextActionID {
+		return s.executeTeachAction(w, playerID, playerHandle, targetID, targetHandle)
+	}
+
 	behavior, found := s.resolveBehaviorForAction(w, playerID, playerHandle, targetID, targetHandle, actionID)
 	if !found {
 		// State changed or action no longer provided by behaviors.
@@ -348,6 +376,9 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if s.isSyntheticTeachCyclicAction(action) {
+		return s.handleSyntheticTeachCycleComplete(w, playerID, playerHandle, action)
+	}
 	if action.BehaviorKey == "" || s.behaviorRegistry == nil {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -385,6 +416,21 @@ func (s *ContextActionService) isActiveCyclicActionStillValid(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) bool {
+	if s.isSyntheticTeachCyclicAction(action) {
+		if w == nil {
+			return false
+		}
+		targetID := action.TargetID
+		targetHandle := action.TargetHandle
+		if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+			targetHandle = w.GetHandleByEntityID(targetID)
+		}
+		if !s.isTeachTargetPlayer(w, playerID, targetID, targetHandle) {
+			return false
+		}
+		_, ok := s.resolvePlayerHandItemDef(w, playerID, playerHandle)
+		return ok
+	}
 	if w == nil || s.behaviorRegistry == nil || action.BehaviorKey == "" || action.ActionID == "" {
 		return false
 	}
@@ -555,4 +601,268 @@ func mapBehaviorSeverity(severity contracts.BehaviorAlertSeverity) netproto.Aler
 
 func (s *ContextActionService) entityDefName(typeID uint32) string {
 	return "type_" + strconv.Itoa(int(typeID))
+}
+
+func (s *ContextActionService) isTeachTargetPlayer(
+	w *ecs.World,
+	playerID types.EntityID,
+	targetID types.EntityID,
+	targetHandle types.Handle,
+) bool {
+	if w == nil || playerID == 0 || targetID == 0 || playerID == targetID {
+		return false
+	}
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		return false
+	}
+	_, hasProfile := ecs.GetComponent[components.CharacterProfile](w, targetHandle)
+	return hasProfile
+}
+
+func (s *ContextActionService) resolvePlayerHandItemDef(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+) (*itemdefs.ItemDef, bool) {
+	if w == nil || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return nil, false
+	}
+
+	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+	if !hasOwner {
+		return nil, false
+	}
+
+	var handHandle types.Handle
+	for _, link := range owner.Inventories {
+		if link.Kind != constt.InventoryHand || link.OwnerID != playerID || link.Key != 0 {
+			continue
+		}
+		handHandle = link.Handle
+		break
+	}
+	if handHandle == types.InvalidHandle || !w.Alive(handHandle) {
+		return nil, false
+	}
+
+	container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, handHandle)
+	if !hasContainer || container.Kind != constt.InventoryHand || len(container.Items) != 1 {
+		return nil, false
+	}
+
+	registry := itemdefs.Global()
+	if registry == nil {
+		return nil, false
+	}
+	itemDef, found := registry.GetByID(int(container.Items[0].TypeID))
+	if !found || itemDef == nil || strings.TrimSpace(itemDef.Key) == "" {
+		return nil, false
+	}
+	return itemDef, true
+}
+
+func (s *ContextActionService) learnerHasDiscoveryKey(
+	w *ecs.World,
+	targetHandle types.Handle,
+	itemKey string,
+) bool {
+	if w == nil || targetHandle == types.InvalidHandle || itemKey == "" {
+		return false
+	}
+	profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, targetHandle)
+	if !hasProfile {
+		return false
+	}
+	for _, existingKey := range profile.Discovery {
+		if existingKey == itemKey {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ContextActionService) executeTeachAction(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	targetID types.EntityID,
+	targetHandle types.Handle,
+) bool {
+	if !s.isTeachTargetPlayer(w, playerID, targetID, targetHandle) {
+		return true
+	}
+	itemDef, ok := s.resolvePlayerHandItemDef(w, playerID, playerHandle)
+	if !ok {
+		return true
+	}
+	if s.learnerHasDiscoveryKey(w, targetHandle, itemDef.Key) {
+		return true
+	}
+	s.startTeachCyclicAction(w, playerID, playerHandle, targetID, targetHandle)
+	return true
+}
+
+func (s *ContextActionService) startTeachCyclicAction(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	targetID types.EntityID,
+	targetHandle types.Handle,
+) bool {
+	if w == nil || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return false
+	}
+	nowTick := ecs.GetResource[ecs.TimeState](w).Tick
+	ecs.AddComponent(w, playerHandle, components.ActiveCyclicAction{
+		ActionID:           teachContextActionID,
+		TargetKind:         components.CyclicActionTargetObject,
+		TargetID:           targetID,
+		TargetHandle:       targetHandle,
+		CycleDurationTicks: teachCycleDurationTicks,
+		CycleElapsedTicks:  0,
+		CycleIndex:         1,
+		StartedTick:        nowTick,
+	})
+	ecs.MutateComponent[components.Movement](w, playerHandle, func(m *components.Movement) bool {
+		m.State = constt.StateInteracting
+		return true
+	})
+	return true
+}
+
+func (s *ContextActionService) isSyntheticTeachCyclicAction(action components.ActiveCyclicAction) bool {
+	return action.BehaviorKey == "" && action.ActionID == teachContextActionID
+}
+
+func (s *ContextActionService) handleSyntheticTeachCycleComplete(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	action components.ActiveCyclicAction,
+) contracts.BehaviorCycleDecision {
+	if w == nil || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	targetHandle := action.TargetHandle
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		targetHandle = w.GetHandleByEntityID(action.TargetID)
+	}
+	if !s.isTeachTargetPlayer(w, playerID, action.TargetID, targetHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	itemDef, ok := s.resolvePlayerHandItemDef(w, playerID, playerHandle)
+	if !ok {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+	if s.learnerHasDiscoveryKey(w, targetHandle, itemDef.Key) {
+		return contracts.BehaviorCycleDecisionComplete
+	}
+
+	if !consumePlayerStaminaForTeachCycle(w, playerHandle, teachCycleStaminaCost) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "LOW_STAMINA")
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	taught := false
+	ecs.MutateComponent[components.CharacterProfile](w, targetHandle, func(profile *components.CharacterProfile) bool {
+		for _, existingKey := range profile.Discovery {
+			if existingKey == itemDef.Key {
+				return false
+			}
+		}
+		profile.Discovery = components.NormalizeStringSet(append(profile.Discovery, itemDef.Key))
+		taught = true
+		return true
+	})
+	if !taught {
+		return contracts.BehaviorCycleDecisionComplete
+	}
+
+	s.sendTeachMiniAlerts(playerID, action.TargetID)
+	return contracts.BehaviorCycleDecisionComplete
+}
+
+func (s *ContextActionService) sendTeachMiniAlerts(teacherID, learnerID types.EntityID) {
+	s.sendMiniAlert(teacherID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, teachSuccessTeacherReasonCode)
+	s.sendMiniAlert(learnerID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, teachSuccessLearnerReasonCode)
+}
+
+func consumePlayerStaminaForTeachCycle(
+	world *ecs.World,
+	playerHandle types.Handle,
+	cost float64,
+) bool {
+	if world == nil || playerHandle == types.InvalidHandle || !world.Alive(playerHandle) {
+		return false
+	}
+
+	stats, hasStats := ecs.GetComponent[components.EntityStats](world, playerHandle)
+	if !hasStats {
+		return true
+	}
+
+	con := characterattrs.DefaultValue
+	if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](world, playerHandle); hasProfile {
+		con = characterattrs.Get(profile.Attributes, characterattrs.CON)
+	}
+	maxStamina := entitystats.MaxStaminaFromCon(con)
+	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
+	statsChanged := currentStamina != stats.Stamina
+	currentEnergy := stats.Energy
+	if currentEnergy < 0 {
+		currentEnergy = 0
+		statsChanged = true
+	}
+
+	if !entitystats.CanConsumeLongActionStamina(currentStamina, maxStamina, cost) {
+		if statsChanged {
+			ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
+				entityStats.Stamina = currentStamina
+				entityStats.Energy = currentEnergy
+			})
+			ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
+		}
+		ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, currentStamina, currentEnergy, maxStamina)
+		return false
+	}
+
+	nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
+	statsChanged = statsChanged || nextStamina != stats.Stamina
+	if statsChanged {
+		ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
+			entityStats.Stamina = nextStamina
+			entityStats.Energy = currentEnergy
+		})
+	}
+
+	modeMutated := ecs.MutateComponent[components.Movement](world, playerHandle, func(m *components.Movement) bool {
+		mode, canMove := entitystats.ResolveAllowedMoveMode(m.Mode, nextStamina, maxStamina, currentEnergy)
+		changed := false
+		if mode != m.Mode {
+			m.Mode = mode
+			changed = true
+		}
+		if !canMove {
+			if m.Mode != constt.Crawl {
+				m.Mode = constt.Crawl
+				changed = true
+			}
+			if m.State == constt.StateMoving {
+				m.ClearTarget()
+				changed = true
+			}
+		}
+		return changed
+	})
+	if modeMutated {
+		ecs.MarkMovementModeDirtyByHandle(world, playerHandle)
+	}
+
+	if statsChanged {
+		ecs.MarkPlayerStatsDirtyByHandle(world, playerHandle, ecs.ResolvePlayerStatsTTLms(world))
+	}
+	ecs.UpdateEntityStatsRegenSchedule(world, playerHandle, nextStamina, currentEnergy, maxStamina)
+	return true
 }
