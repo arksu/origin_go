@@ -3,10 +3,11 @@ import { DebugOverlay, setObjectManager } from './DebugOverlay'
 import { ChunkManager } from './ChunkManager'
 import { ObjectManager } from './ObjectManager'
 import { moveController } from './MoveController'
-import { InputController } from './InputController'
+import { InputController, Modifiers } from './InputController'
 import { cameraController } from './CameraController'
 import { playerCommandController } from './PlayerCommandController'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
+import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { config } from '@/config'
@@ -27,6 +28,7 @@ export class Render {
   private chunkManager: ChunkManager
   private objectManager: ObjectManager
   private inputController: InputController
+  private buildGhostController: BuildGhostController
 
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
@@ -50,6 +52,7 @@ export class Render {
     this.objectManager = new ObjectManager()
     this.objectManager.setParentContainer(this.objectsContainer)
     this.inputController = new InputController()
+    this.buildGhostController = new BuildGhostController(this.objectsContainer)
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -98,7 +101,11 @@ export class Render {
 
     this.inputController.onClick((event) => {
       this.lastClickScreen = { x: event.screenX, y: event.screenY }
+      this.lastPointerScreen = { x: event.screenX, y: event.screenY }
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
+      if (event.button === 0 && this.buildGhostController.isActive()) {
+        this.updateBuildGhostAtScreen(event.screenX, event.screenY, event.modifiers)
+      }
       const consumed = this.onClickCallback?.({
         screen: this.lastClickScreen,
         world: this.lastClickWorld,
@@ -176,6 +183,7 @@ export class Render {
   private update(): void {
     this.updateMovement()
     this.updateCamera()
+    this.updateBuildGhost()
     this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
@@ -227,6 +235,30 @@ export class Render {
     this.lastHoverCamX = camState.x
     this.lastHoverCamY = camState.y
     this.lastHoverZoom = camState.zoom
+  }
+
+  private updateBuildGhost(): void {
+    if (!this.buildGhostController.isActive()) {
+      return
+    }
+
+    this.buildGhostController.update(
+      this.lastPointerScreen,
+      this.screenToWorld.bind(this),
+      (this.inputController.getModifiers() & Modifiers.SHIFT) === 0,
+    )
+  }
+
+  private updateBuildGhostAtScreen(screenX: number, screenY: number, modifiers: number): void {
+    if (!this.buildGhostController.isActive()) {
+      return
+    }
+
+    this.buildGhostController.update(
+      { x: screenX, y: screenY },
+      this.screenToWorld.bind(this),
+      (modifiers & Modifiers.SHIFT) === 0,
+    )
   }
 
   private updateChunkBuilds(): void {
@@ -443,6 +475,23 @@ export class Render {
     this.onClickCallback = callback
   }
 
+  armBuildGhost(options: ArmBuildGhostOptions): void {
+    this.buildGhostController.arm(options)
+    this.updateBuildGhost()
+  }
+
+  cancelBuildGhost(): void {
+    this.buildGhostController.cancel()
+  }
+
+  isBuildGhostActive(): boolean {
+    return this.buildGhostController.isActive()
+  }
+
+  getBuildGhostWorldPosition(): ScreenPoint | null {
+    return this.buildGhostController.getCurrentWorldPosition()
+  }
+
   toggleDebugOverlay(): void {
     this.debugOverlay.toggle()
   }
@@ -474,6 +523,7 @@ export class Render {
    * This keeps canvas/input alive between reconnect attempts.
    */
   resetWorld(): void {
+    this.buildGhostController.cancel()
     this.objectManager.clear()
     this.chunkManager.clear()
     terrainManager.resetWorld()
@@ -490,6 +540,7 @@ export class Render {
     this.app.ticker.stop()
 
     this.inputController.destroy()
+    this.buildGhostController.destroy()
 
     this.chunkManager.destroy()
     this.objectManager.destroy()

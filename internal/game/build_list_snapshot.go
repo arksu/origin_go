@@ -5,6 +5,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	netproto "origin/internal/network/proto"
+	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
 
@@ -60,19 +61,36 @@ func (s *Shard) buildVisibleBuildList(w *ecs.World, playerHandle types.Handle) [
 		}
 
 		out = append(out, &netproto.BuildRecipeEntry{
-			BuildKey:          build.Key,
-			Name:              build.Name,
-			Inputs:            inputs,
-			StaminaCost:       build.StaminaCost,
-			TicksRequired:     build.TicksRequired,
-			RequiredSkills:    append([]string(nil), build.RequiredSkills...),
-			RequiredDiscovery: append([]string(nil), build.RequiredDiscovery...),
-			AllowedTiles:      allowedTiles,
-			DisallowedTiles:   disallowedTiles,
-			ObjectKey:         build.ObjectKey,
+			BuildKey:           build.Key,
+			Name:               build.Name,
+			Inputs:             inputs,
+			StaminaCost:        build.StaminaCost,
+			TicksRequired:      build.TicksRequired,
+			RequiredSkills:     append([]string(nil), build.RequiredSkills...),
+			RequiredDiscovery:  append([]string(nil), build.RequiredDiscovery...),
+			AllowedTiles:       allowedTiles,
+			DisallowedTiles:    disallowedTiles,
+			ObjectKey:          build.ObjectKey,
+			ObjectResourcePath: resolveBuildObjectResourcePath(build.ObjectKey),
 		})
 	}
 	return out
+}
+
+func resolveBuildObjectResourcePath(objectKey string) string {
+	key := objectKey
+	if key == "" {
+		return ""
+	}
+	reg := objectdefs.Global()
+	if reg == nil {
+		return ""
+	}
+	def, ok := reg.GetByKey(key)
+	if !ok || def == nil {
+		return ""
+	}
+	return def.Resource
 }
 
 func isBuildVisibleForPlayer(w *ecs.World, playerHandle types.Handle, build *builddefs.BuildDef) bool {

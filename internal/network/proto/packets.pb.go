@@ -5139,19 +5139,20 @@ func (x *BuildInputDef) GetItemTag() string {
 }
 
 type BuildRecipeEntry struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	BuildKey          string                 `protobuf:"bytes,1,opt,name=build_key,json=buildKey,proto3" json:"build_key,omitempty"`
-	Name              string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Inputs            []*BuildInputDef       `protobuf:"bytes,3,rep,name=inputs,proto3" json:"inputs,omitempty"`
-	StaminaCost       float64                `protobuf:"fixed64,4,opt,name=stamina_cost,json=staminaCost,proto3" json:"stamina_cost,omitempty"`
-	TicksRequired     uint32                 `protobuf:"varint,5,opt,name=ticks_required,json=ticksRequired,proto3" json:"ticks_required,omitempty"`
-	RequiredSkills    []string               `protobuf:"bytes,6,rep,name=required_skills,json=requiredSkills,proto3" json:"required_skills,omitempty"`
-	RequiredDiscovery []string               `protobuf:"bytes,7,rep,name=required_discovery,json=requiredDiscovery,proto3" json:"required_discovery,omitempty"`
-	AllowedTiles      []uint32               `protobuf:"varint,8,rep,packed,name=allowed_tiles,json=allowedTiles,proto3" json:"allowed_tiles,omitempty"`
-	DisallowedTiles   []uint32               `protobuf:"varint,9,rep,packed,name=disallowed_tiles,json=disallowedTiles,proto3" json:"disallowed_tiles,omitempty"`
-	ObjectKey         string                 `protobuf:"bytes,10,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	BuildKey           string                 `protobuf:"bytes,1,opt,name=build_key,json=buildKey,proto3" json:"build_key,omitempty"`
+	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Inputs             []*BuildInputDef       `protobuf:"bytes,3,rep,name=inputs,proto3" json:"inputs,omitempty"`
+	StaminaCost        float64                `protobuf:"fixed64,4,opt,name=stamina_cost,json=staminaCost,proto3" json:"stamina_cost,omitempty"`
+	TicksRequired      uint32                 `protobuf:"varint,5,opt,name=ticks_required,json=ticksRequired,proto3" json:"ticks_required,omitempty"`
+	RequiredSkills     []string               `protobuf:"bytes,6,rep,name=required_skills,json=requiredSkills,proto3" json:"required_skills,omitempty"`
+	RequiredDiscovery  []string               `protobuf:"bytes,7,rep,name=required_discovery,json=requiredDiscovery,proto3" json:"required_discovery,omitempty"`
+	AllowedTiles       []uint32               `protobuf:"varint,8,rep,packed,name=allowed_tiles,json=allowedTiles,proto3" json:"allowed_tiles,omitempty"`
+	DisallowedTiles    []uint32               `protobuf:"varint,9,rep,packed,name=disallowed_tiles,json=disallowedTiles,proto3" json:"disallowed_tiles,omitempty"`
+	ObjectKey          string                 `protobuf:"bytes,10,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	ObjectResourcePath string                 `protobuf:"bytes,11,opt,name=object_resource_path,json=objectResourcePath,proto3" json:"object_resource_path,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *BuildRecipeEntry) Reset() {
@@ -5250,6 +5251,13 @@ func (x *BuildRecipeEntry) GetDisallowedTiles() []uint32 {
 func (x *BuildRecipeEntry) GetObjectKey() string {
 	if x != nil {
 		return x.ObjectKey
+	}
+	return ""
+}
+
+func (x *BuildRecipeEntry) GetObjectResourcePath() string {
+	if x != nil {
+		return x.ObjectResourcePath
 	}
 	return ""
 }
@@ -6533,7 +6541,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x0equality_weight\x18\x03 \x01(\rR\rqualityWeight\x12\x1e\n" +
 	"\bitem_tag\x18\x04 \x01(\tH\x01R\aitemTag\x88\x01\x01B\v\n" +
 	"\t_item_keyB\v\n" +
-	"\t_item_tag\"\x82\x03\n" +
+	"\t_item_tag\"\xb4\x03\n" +
 	"\x10BuildRecipeEntry\x12\x1b\n" +
 	"\tbuild_key\x18\x01 \x01(\tR\bbuildKey\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12,\n" +
@@ -6546,7 +6554,8 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x10disallowed_tiles\x18\t \x03(\rR\x0fdisallowedTiles\x12\x1d\n" +
 	"\n" +
 	"object_key\x18\n" +
-	" \x01(\tR\tobjectKey\"@\n" +
+	" \x01(\tR\tobjectKey\x120\n" +
+	"\x14object_resource_path\x18\v \x01(\tR\x12objectResourcePath\"@\n" +
 	"\rS2C_BuildList\x12/\n" +
 	"\x06builds\x18\x01 \x03(\v2\x17.proto.BuildRecipeEntryR\x06builds\"p\n" +
 	"\tS2C_Sound\x12\x1b\n" +
