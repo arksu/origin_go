@@ -15,6 +15,26 @@ const (
 	TileCave       = 42
 )
 
+var knownTileIDs = map[int]struct{}{
+	TileWaterDeep:  {},
+	TileWater:      {},
+	TileStone:      {},
+	TilePlowed:     {},
+	TileForestPine: {},
+	TileForestLeaf: {},
+	TileGrass:      {},
+	TileSwamp:      {},
+	TileClay:       {},
+	TileDirt:       {},
+	TileSand:       {},
+	TileCave:       {},
+}
+
+func IsKnownTileID(tileID int) bool {
+	_, ok := knownTileIDs[tileID]
+	return ok
+}
+
 func IsTilePassable(tileID byte) bool {
 	return tileID != TileWaterDeep && tileID != TileSwamp
 }

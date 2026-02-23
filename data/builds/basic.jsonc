@@ -1,0 +1,36 @@
+{
+  "v": 1,
+  "source": "basic",
+  "builds": [
+    {
+      "defId": 10001,
+      "key": "build_box",
+      "name": "Build Box",
+      "inputs": [
+        { "itemKey": "block_of_wood", "count": 2, "qualityWeight": 3 },
+        { "itemKey": "branch", "count": 4, "qualityWeight": 1 }
+      ],
+      "staminaCost": 8,
+      "ticksRequired": 40,
+      "requiredSkills": ["carpentry"],
+      "requiredDiscovery": ["containers"],
+      "allowedTiles": [30, 17, 11],
+      "objectKey": "box"
+    },
+    {
+      "defId": 10002,
+      "key": "build_crate_from_ore_batch",
+      "name": "Build Crate (Ore Batch)",
+      "inputs": [
+        { "itemTag": "ore", "count": 3, "qualityWeight": 2 },
+        { "itemKey": "branch", "count": 2, "qualityWeight": 1 }
+      ],
+      "staminaCost": 10,
+      "ticksRequired": 50,
+      "requiredSkills": ["construction"],
+      "requiredDiscovery": ["storage"],
+      "disallowedTiles": [1, 23],
+      "objectKey": "crate"
+    }
+  ]
+}
