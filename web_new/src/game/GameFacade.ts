@@ -1,6 +1,7 @@
 import { Render } from './Render'
 import { playerCommandController } from './PlayerCommandController'
 import type { DebugInfo, ScreenPoint } from './types'
+import type { ArmBuildGhostOptions } from './BuildGhostController'
 
 export class GameFacade {
   private render: Render | null = null
@@ -62,6 +63,22 @@ export class GameFacade {
 
   worldToScreen(worldX: number, worldY: number): ScreenPoint {
     return this.render?.worldToScreen(worldX, worldY) ?? { x: 0, y: 0 }
+  }
+
+  armBuildGhost(options: ArmBuildGhostOptions): void {
+    this.render?.armBuildGhost(options)
+  }
+
+  cancelBuildGhost(): void {
+    this.render?.cancelBuildGhost()
+  }
+
+  isBuildGhostActive(): boolean {
+    return this.render?.isBuildGhostActive() ?? false
+  }
+
+  getBuildGhostWorldPosition(): ScreenPoint | null {
+    return this.render?.getBuildGhostWorldPosition() ?? null
   }
 
   updateDebugStats(objectsCount: number, chunksLoaded: number): void {

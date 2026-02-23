@@ -84,6 +84,37 @@ const showEquipment = computed(() => {
   return visible && hasEquipment
 })
 
+function findBuildRecipeByKey(buildKey: string): proto.IBuildRecipeEntry | null {
+  const normalized = buildKey.trim()
+  if (!normalized) return null
+  return gameStore.buildRecipes.find((recipe) => (recipe.buildKey || '') === normalized) || null
+}
+
+function syncBuildGhostFromStore(): void {
+  if (!gameFacade || !canvasInitialized.value || !gameFacade.isInitialized?.()) {
+    return
+  }
+
+  const armedBuildKey = (gameStore.armedBuildKey || '').trim()
+  if (!armedBuildKey) {
+    gameFacade.cancelBuildGhost?.()
+    return
+  }
+
+  const build = findBuildRecipeByKey(armedBuildKey)
+  if (!build) {
+    gameStore.clearBuildPlacement()
+    gameFacade.cancelBuildGhost?.()
+    return
+  }
+
+  gameFacade.armBuildGhost?.({
+    buildKey: armedBuildKey,
+    objectKey: build.objectKey || '',
+    objectResourcePath: build.objectResourcePath || '',
+  })
+}
+
 async function initCanvas() {
   if (!gameCanvas.value || canvasInitialized.value) return
 
@@ -98,21 +129,36 @@ async function initCanvas() {
         return false
       }
 
-      const armedBuildKey = gameStore.consumeArmedBuildPlacement()
+      const armedBuildKey = (gameStore.armedBuildKey || '').trim()
       if (!armedBuildKey) {
         return false
       }
 
+      const ghostPos = gameFacade?.getBuildGhostWorldPosition?.()
+      const targetPos = ghostPos || { x: worldX, y: worldY }
+
       sendStartBuild(armedBuildKey, {
-        x: worldX,
-        y: worldY,
+        x: targetPos.x,
+        y: targetPos.y,
       })
+      gameStore.clearBuildPlacement()
+      gameFacade?.cancelBuildGhost?.()
       return true
     })
+
+    syncBuildGhostFromStore()
   } catch (err) {
     console.error('[GameView] Failed to init canvas:', err)
   }
 }
+
+watch(() => gameStore.armedBuildKey, () => {
+  syncBuildGhostFromStore()
+})
+
+watch(() => gameStore.buildRecipes, () => {
+  syncBuildGhostFromStore()
+})
 
 watch(isConnected, async (connected) => {
   if (connected) {
@@ -284,6 +330,7 @@ function openBuildWindow() {
 function closeBuildWindow() {
   if (!gameStore.buildWindowVisible) return
   gameStore.setBuildWindowVisible(false)
+  gameFacade?.cancelBuildGhost?.()
   sendCloseWindow('build')
 }
 
@@ -323,6 +370,11 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         chatContainerRef.value?.focusChat()
         break
       case 'Escape':
+        if ((gameStore.armedBuildKey || '').trim()) {
+          gameStore.clearBuildPlacement()
+          gameFacade?.cancelBuildGhost?.()
+          break
+        }
         chatContainerRef.value?.unfocusChat()
         gameStore.setPlayerInventoryVisible(false)
         gameStore.setPlayerEquipmentVisible(false)

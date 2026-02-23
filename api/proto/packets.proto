@@ -653,6 +653,7 @@ message BuildRecipeEntry {
   repeated uint32 allowed_tiles = 8;
   repeated uint32 disallowed_tiles = 9;
   string object_key = 10;
+  string object_resource_path = 11;
 }
 
 message S2C_BuildList {
