@@ -640,6 +640,7 @@ message BuildInputDef {
   uint32 count = 2;
   uint32 quality_weight = 3;
   optional string item_tag = 4;
+  string resource = 5;
 }
 
 message BuildRecipeEntry {

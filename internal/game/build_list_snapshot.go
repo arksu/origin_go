@@ -4,6 +4,7 @@ import (
 	"origin/internal/builddefs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -44,6 +45,7 @@ func (s *Shard) buildVisibleBuildList(w *ecs.World, playerHandle types.Handle) [
 			}
 			if in.ItemKey != "" {
 				entry.ItemKey = &in.ItemKey
+				entry.Resource = resolveBuildInputResourcePath(in.ItemKey)
 			}
 			if in.ItemTag != "" {
 				entry.ItemTag = &in.ItemTag
@@ -91,6 +93,22 @@ func resolveBuildObjectResourcePath(objectKey string) string {
 		return ""
 	}
 	return def.Resource
+}
+
+func resolveBuildInputResourcePath(itemKey string) string {
+	key := itemKey
+	if key == "" {
+		return ""
+	}
+	reg := itemdefs.Global()
+	if reg == nil {
+		return ""
+	}
+	def, ok := reg.GetByKey(key)
+	if !ok || def == nil {
+		return ""
+	}
+	return def.ResolveResource(false)
 }
 
 func isBuildVisibleForPlayer(w *ecs.World, playerHandle types.Handle, build *builddefs.BuildDef) bool {

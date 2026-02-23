@@ -5076,6 +5076,7 @@ type BuildInputDef struct {
 	Count         uint32                 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	QualityWeight uint32                 `protobuf:"varint,3,opt,name=quality_weight,json=qualityWeight,proto3" json:"quality_weight,omitempty"`
 	ItemTag       *string                `protobuf:"bytes,4,opt,name=item_tag,json=itemTag,proto3,oneof" json:"item_tag,omitempty"`
+	Resource      string                 `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5134,6 +5135,13 @@ func (x *BuildInputDef) GetQualityWeight() uint32 {
 func (x *BuildInputDef) GetItemTag() string {
 	if x != nil && x.ItemTag != nil {
 		return *x.ItemTag
+	}
+	return ""
+}
+
+func (x *BuildInputDef) GetResource() string {
+	if x != nil {
+		return x.Resource
 	}
 	return ""
 }
@@ -6534,12 +6542,13 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x05flags\x18\v \x01(\v2\x1c.proto.CraftRequirementFlagsR\x05flagsB\x1d\n" +
 	"\x1b_required_linked_object_key\"B\n" +
 	"\rS2C_CraftList\x121\n" +
-	"\arecipes\x18\x01 \x03(\v2\x17.proto.CraftRecipeEntryR\arecipes\"\xa6\x01\n" +
+	"\arecipes\x18\x01 \x03(\v2\x17.proto.CraftRecipeEntryR\arecipes\"\xc2\x01\n" +
 	"\rBuildInputDef\x12\x1e\n" +
 	"\bitem_key\x18\x01 \x01(\tH\x00R\aitemKey\x88\x01\x01\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\rR\x05count\x12%\n" +
 	"\x0equality_weight\x18\x03 \x01(\rR\rqualityWeight\x12\x1e\n" +
-	"\bitem_tag\x18\x04 \x01(\tH\x01R\aitemTag\x88\x01\x01B\v\n" +
+	"\bitem_tag\x18\x04 \x01(\tH\x01R\aitemTag\x88\x01\x01\x12\x1a\n" +
+	"\bresource\x18\x05 \x01(\tR\bresourceB\v\n" +
 	"\t_item_keyB\v\n" +
 	"\t_item_tag\"\xb4\x03\n" +
 	"\x10BuildRecipeEntry\x12\x1b\n" +
