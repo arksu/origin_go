@@ -108,6 +108,7 @@ export interface CharacterExperienceState {
 
 export type CraftRecipeState = proto.ICraftRecipeEntry
 export type BuildRecipeState = proto.IBuildRecipeEntry
+export type BuildStateItemState = proto.IBuildStateItem
 
 export type WorldBootstrapState =
   | 'idle'
@@ -166,6 +167,9 @@ export const useGameStore = defineStore('game', () => {
   const buildRecipes = ref<BuildRecipeState[]>([])
   const selectedBuildKey = ref<string>('')
   const armedBuildKey = ref<string>('')
+  const buildStateWindowVisible = ref(false)
+  const buildStateEntityId = ref<number | null>(null)
+  const buildStateList = ref<BuildStateItemState[]>([])
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
@@ -294,6 +298,9 @@ export const useGameStore = defineStore('game', () => {
     buildRecipes.value = []
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
+    buildStateWindowVisible.value = false
+    buildStateEntityId.value = null
+    buildStateList.value = []
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -333,6 +340,9 @@ export const useGameStore = defineStore('game', () => {
     buildRecipes.value = []
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
+    buildStateWindowVisible.value = false
+    buildStateEntityId.value = null
+    buildStateList.value = []
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -372,6 +382,9 @@ export const useGameStore = defineStore('game', () => {
 
   function despawnEntity(entityId: number) {
     entities.value.delete(entityId)
+    if (buildStateEntityId.value === entityId) {
+      closeBuildStateWindow()
+    }
   }
 
   function updateEntityMovement(entityId: number, movement: EntityMovement) {
@@ -753,6 +766,31 @@ export const useGameStore = defineStore('game', () => {
     armedBuildKey.value = ''
   }
 
+  function setBuildStateSnapshot(snapshot: proto.IS2C_BuildState | null | undefined) {
+    const rawEntityId = snapshot?.entityId
+    const entityId = rawEntityId == null ? 0 : Number(rawEntityId)
+    if (!Number.isFinite(entityId) || entityId <= 0) {
+      closeBuildStateWindow()
+      return
+    }
+    buildStateEntityId.value = Math.trunc(entityId)
+    buildStateList.value = (snapshot?.list || []).slice()
+    buildStateWindowVisible.value = true
+  }
+
+  function closeBuildStateWindow() {
+    buildStateWindowVisible.value = false
+    buildStateEntityId.value = null
+    buildStateList.value = []
+  }
+
+  function closeBuildStateWindowIfEntity(entityId: number | null | undefined) {
+    const target = entityId == null ? 0 : Math.trunc(Number(entityId))
+    if (!Number.isFinite(target) || target <= 0) return
+    if (buildStateEntityId.value !== target) return
+    closeBuildStateWindow()
+  }
+
   function consumeArmedBuildPlacement(): string {
     const key = armedBuildKey.value.trim()
     if (!key) return ''
@@ -924,6 +962,9 @@ export const useGameStore = defineStore('game', () => {
     buildRecipes.value = []
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
+    buildStateWindowVisible.value = false
+    buildStateEntityId.value = null
+    buildStateList.value = []
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -974,6 +1015,9 @@ export const useGameStore = defineStore('game', () => {
     buildRecipes,
     selectedBuildKey,
     armedBuildKey,
+    buildStateWindowVisible,
+    buildStateEntityId,
+    buildStateList,
     characterAttributes,
     characterExperience,
     playerStats,
@@ -1035,6 +1079,9 @@ export const useGameStore = defineStore('game', () => {
     setBuildListSnapshot,
     armBuildPlacement,
     clearBuildPlacement,
+    setBuildStateSnapshot,
+    closeBuildStateWindow,
+    closeBuildStateWindowIfEntity,
     consumeArmedBuildPlacement,
     setCharacterProfileSnapshot,
     applyExpGained,

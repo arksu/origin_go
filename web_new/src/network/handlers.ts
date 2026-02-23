@@ -97,6 +97,21 @@ export function registerMessageHandlers(): void {
     gameStore.setBuildListSnapshot(msg)
   })
 
+  messageDispatcher.on('buildState', (msg: proto.IS2C_BuildState) => {
+    console.log('[Handlers] buildState:', {
+      entityId: msg.entityId,
+      rows: msg.list?.length || 0,
+    })
+    gameStore.setBuildStateSnapshot(msg)
+  })
+
+  messageDispatcher.on('buildStateClosed', (msg: proto.IS2C_BuildStateClosed) => {
+    console.log('[Handlers] buildStateClosed:', {
+      entityId: msg.entityId,
+    })
+    gameStore.closeBuildStateWindowIfEntity(toNumber(msg.entityId || 0))
+  })
+
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
     console.log('[Handlers] S2C_ExpGained received:', {
       entityId: toNumber(msg.entityId || 0),

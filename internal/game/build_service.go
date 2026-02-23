@@ -28,6 +28,7 @@ const (
 
 type buildRuntimeSender interface {
 	SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniAlert)
+	SendBuildStateClosed(entityID types.EntityID, msg *netproto.S2C_BuildStateClosed)
 }
 
 type buildPendingContextStarter interface {
@@ -168,6 +169,51 @@ func (s *BuildService) HandleStartBuild(
 	})
 }
 
+func (s *BuildService) HandleBuildProgress(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	msg *netproto.C2S_BuildProgress,
+) {
+	if s == nil || w == nil || w != s.world || msg == nil || playerID == 0 {
+		return
+	}
+	if playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return
+	}
+	targetID := types.EntityID(msg.EntityId)
+	if targetID == 0 {
+		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
+		return
+	}
+	targetHandle := w.GetHandleByEntityID(targetID)
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
+		return
+	}
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+	if !hasInfo || info.TypeID != constt.BuildObjectTypeID {
+		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
+		return
+	}
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	link, linked := linkState.GetLink(playerID)
+	if !linked || link.TargetID != targetID {
+		s.sendWarning(playerID, "BUILD_PROGRESS_NOT_LINKED")
+		return
+	}
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, targetHandle)
+	if !hasState {
+		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
+		return
+	}
+	if _, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey); !ok {
+		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
+		return
+	}
+	s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, "BUILD_PROGRESS_COMING_SOON")
+}
+
 func (s *BuildService) FinalizePendingBuildPlacement(
 	w *ecs.World,
 	playerID types.EntityID,
@@ -280,6 +326,16 @@ func (s *BuildService) onLinkBroken(_ context.Context, event eventbus.Event) err
 	ev, ok := event.(*ecs.LinkBrokenEvent)
 	if !ok || s == nil || s.world == nil || ev.Layer != s.world.Layer || ev.TargetID == 0 {
 		return nil
+	}
+	if s.alerts != nil {
+		targetHandle := s.world.GetHandleByEntityID(ev.TargetID)
+		if targetHandle != types.InvalidHandle && s.world.Alive(targetHandle) {
+			if info, hasInfo := ecs.GetComponent[components.EntityInfo](s.world, targetHandle); hasInfo && info.TypeID == constt.BuildObjectTypeID {
+				s.alerts.SendBuildStateClosed(ev.PlayerID, &netproto.S2C_BuildStateClosed{
+					EntityId: uint64(ev.TargetID),
+				})
+			}
+		}
 	}
 
 	linkState := ecs.GetResource[ecs.LinkState](s.world)

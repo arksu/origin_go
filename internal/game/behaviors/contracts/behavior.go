@@ -131,6 +131,10 @@ type MiniAlertSender interface {
 	SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniAlert)
 }
 
+type BuildStateSender interface {
+	SendBuildState(entityID types.EntityID, state *netproto.S2C_BuildState)
+}
+
 type GiveItemOutcome struct {
 	Success      bool
 	AnyDropped   bool
@@ -157,6 +161,7 @@ type ExecutionDeps struct {
 	IDAllocator      EntityIDAllocator
 	VisionForcer     VisionUpdateForcer
 	Alerts           MiniAlertSender
+	BuildState       BuildStateSender
 	BehaviorRegistry BehaviorRegistry
 	Logger           *zap.Logger
 }

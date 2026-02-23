@@ -13,12 +13,13 @@ import CharacterSheetWindow from '@/components/ui/CharacterSheetWindow.vue'
 import PlayerStatsWindow from '@/components/ui/PlayerStatsWindow.vue'
 import CraftWindow from '@/components/ui/CraftWindow.vue'
 import BuildWindow from '@/components/ui/BuildWindow.vue'
+import BuildStateWindow from '@/components/ui/BuildStateWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import MovementModePanel from '@/components/ui/MovementModePanel.vue'
-import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild } from '@/network'
+import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
@@ -77,6 +78,9 @@ const showCharacterSheet = computed(() => gameStore.characterSheetVisible)
 const showPlayerStatsWindow = computed(() => gameStore.playerStatsWindowVisible)
 const showCraftWindow = computed(() => gameStore.craftWindowVisible)
 const showBuildWindow = computed(() => gameStore.buildWindowVisible)
+const showBuildStateWindow = computed(() => gameStore.buildStateWindowVisible)
+const currentBuildStateEntityId = computed(() => gameStore.buildStateEntityId)
+const currentBuildStateList = computed(() => gameStore.buildStateList)
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -334,6 +338,14 @@ function closeBuildWindow() {
   sendCloseWindow('build')
 }
 
+function handleBuildStateWindowClose() {
+  gameStore.closeBuildStateWindow()
+}
+
+function handleBuildStateProgress(entityId: number) {
+  sendBuildProgress(entityId)
+}
+
 function toggleBuildWindow() {
   if (gameStore.buildWindowVisible) {
     closeBuildWindow()
@@ -382,6 +394,7 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         gameStore.setPlayerStatsWindowVisible(false)
         closeCraftWindow()
         closeBuildWindow()
+        gameStore.closeBuildStateWindow()
         gameStore.closeContextMenu()
         break
       case '/':
@@ -507,6 +520,15 @@ useHotkeys(hotkeys)
 
       <div v-if="showBuildWindow" class="game-build-window">
         <BuildWindow @close="closeBuildWindow" />
+      </div>
+
+      <div v-if="showBuildStateWindow" class="game-build-state-window">
+        <BuildStateWindow
+          :entity-id="currentBuildStateEntityId"
+          :list="currentBuildStateList"
+          @close="handleBuildStateWindowClose"
+          @progress="handleBuildStateProgress"
+        />
       </div>
       
       <!-- Nested inventory windows -->
@@ -741,6 +763,16 @@ useHotkeys(hotkeys)
   height: 100%;
   pointer-events: none;
   z-index: 261;
+}
+
+.game-build-state-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 262;
 }
 
 .game-disconnected {

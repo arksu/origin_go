@@ -96,6 +96,8 @@ export class MessageDispatcher {
     if (message.fx) return 'fx'
     if (message.craftList) return 'craftList'
     if (message.buildList) return 'buildList'
+    if (message.buildState) return 'buildState'
+    if (message.buildStateClosed) return 'buildStateClosed'
     if (message.characterProfile) return 'characterProfile'
     if (message.playerStats) return 'playerStats'
     if (message.expGained) return 'expGained'
