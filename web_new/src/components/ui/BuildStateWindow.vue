@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { proto } from '@/network/proto/packets.js'
+import { toNonNegativeProtoInt } from '@/utils/protoNumbers'
 import GameWindow from './GameWindow.vue'
 import AppButton from './AppButton.vue'
 
@@ -69,13 +70,13 @@ function rowIconUrl(row: proto.IBuildStateItem): string {
   return fallbackIconUrl(fallbackIconName(row))
 }
 
+function rowIconStyle(row: proto.IBuildStateItem): { backgroundImage: string } {
+  const url = rowIconUrl(row)
+  return { backgroundImage: url ? `url(${url})` : 'none' }
+}
+
 function asCount(value: unknown): number {
-  if (value == null) return 0
-  if (typeof value === 'number') return Math.max(0, Math.trunc(value))
-  if (typeof value === 'object' && value !== null && 'toNumber' in value && typeof (value as { toNumber?: unknown }).toNumber === 'function') {
-    return Math.max(0, Math.trunc((value as { toNumber: () => number }).toNumber()))
-  }
-  return 0
+  return toNonNegativeProtoInt(value)
 }
 
 function leftCount(row: proto.IBuildStateItem): number {
@@ -104,7 +105,7 @@ function leftCount(row: proto.IBuildStateItem): number {
           <span class="build-state-window__icon-slot">
             <span
               class="build-state-window__icon"
-              :style="{ backgroundImage: rowIconUrl(row) ? `url(${rowIconUrl(row)})` : 'none' }"
+              :style="rowIconStyle(row)"
             />
           </span>
           <span class="build-state-window__label">{{ buildRowLabel(row) }}</span>

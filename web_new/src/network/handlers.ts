@@ -109,7 +109,7 @@ export function registerMessageHandlers(): void {
     console.log('[Handlers] buildStateClosed:', {
       entityId: msg.entityId,
     })
-    gameStore.closeBuildStateWindowIfEntity(toNumber(msg.entityId || 0))
+    gameStore.closeBuildStateWindowIfEntity(msg.entityId)
   })
 
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {

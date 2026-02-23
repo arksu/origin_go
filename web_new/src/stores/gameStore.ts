@@ -298,9 +298,7 @@ export const useGameStore = defineStore('game', () => {
     buildRecipes.value = []
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
-    buildStateWindowVisible.value = false
-    buildStateEntityId.value = null
-    buildStateList.value = []
+    closeBuildStateWindow()
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -340,9 +338,7 @@ export const useGameStore = defineStore('game', () => {
     buildRecipes.value = []
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
-    buildStateWindowVisible.value = false
-    buildStateEntityId.value = null
-    buildStateList.value = []
+    closeBuildStateWindow()
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -767,13 +763,12 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function setBuildStateSnapshot(snapshot: proto.IS2C_BuildState | null | undefined) {
-    const rawEntityId = snapshot?.entityId
-    const entityId = rawEntityId == null ? 0 : Number(rawEntityId)
-    if (!Number.isFinite(entityId) || entityId <= 0) {
+    const entityId = sanitizeNonNegativeInt64(snapshot?.entityId)
+    if (entityId <= 0) {
       closeBuildStateWindow()
       return
     }
-    buildStateEntityId.value = Math.trunc(entityId)
+    buildStateEntityId.value = entityId
     buildStateList.value = (snapshot?.list || []).slice()
     buildStateWindowVisible.value = true
   }
@@ -784,9 +779,9 @@ export const useGameStore = defineStore('game', () => {
     buildStateList.value = []
   }
 
-  function closeBuildStateWindowIfEntity(entityId: number | null | undefined) {
-    const target = entityId == null ? 0 : Math.trunc(Number(entityId))
-    if (!Number.isFinite(target) || target <= 0) return
+  function closeBuildStateWindowIfEntity(entityId: number | Long | null | undefined) {
+    const target = sanitizeNonNegativeInt64(entityId)
+    if (target <= 0) return
     if (buildStateEntityId.value !== target) return
     closeBuildStateWindow()
   }
@@ -962,9 +957,7 @@ export const useGameStore = defineStore('game', () => {
     buildRecipes.value = []
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
-    buildStateWindowVisible.value = false
-    buildStateEntityId.value = null
-    buildStateList.value = []
+    closeBuildStateWindow()
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
