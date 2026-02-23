@@ -28,10 +28,7 @@ func NewBuildPlacementSystem(world *ecs.World, service BuildPlacementFinalizer, 
 	}
 	query := ecs.NewPreparedQuery(
 		world,
-		0|
-			(1<<components.ColliderComponentID)|
-			(1<<components.CollisionResultComponentID)|
-			(1<<components.PendingBuildPlacementComponentID),
+		0|(1<<components.PendingBuildPlacementComponentID),
 		0,
 	)
 	return &BuildPlacementSystem{

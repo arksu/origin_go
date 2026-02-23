@@ -51,7 +51,7 @@
       "contextMenuEvenForOneItem": false,
       "components": {
       },
-      "resource": "boulder", // temp
+      "resource": "build",
       "behaviors": {
         "build": {}
       }

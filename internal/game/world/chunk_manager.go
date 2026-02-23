@@ -17,6 +17,7 @@ import (
 	ecssystems "origin/internal/ecs/systems"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/mathutil"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 
@@ -1283,8 +1284,8 @@ func (cm *ChunkManager) RemoveStaticFromChunkSpatial(handle types.Handle, chunkX
 func (cm *ChunkManager) GetTileID(tileX, tileY int) (byte, bool) {
 	chunkSize := _const.ChunkSize
 	chunkCoord := types.ChunkCoord{
-		X: floorDiv(tileX, chunkSize),
-		Y: floorDiv(tileY, chunkSize),
+		X: mathutil.FloorDiv(tileX, chunkSize),
+		Y: mathutil.FloorDiv(tileY, chunkSize),
 	}
 	chunk := cm.GetChunk(chunkCoord)
 	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
@@ -1300,18 +1301,6 @@ func (cm *ChunkManager) GetTileID(tileX, tileY int) (byte, bool) {
 		localTileY += chunkSize
 	}
 	return chunk.TileID(localTileX, localTileY, chunkSize)
-}
-
-func floorDiv(a, b int) int {
-	if b == 0 {
-		return 0
-	}
-	q := a / b
-	r := a % b
-	if r != 0 && ((r < 0) != (b < 0)) {
-		q--
-	}
-	return q
 }
 
 func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {

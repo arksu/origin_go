@@ -13,6 +13,7 @@ import (
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
+	"origin/internal/mathutil"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -134,10 +135,9 @@ func (s *BuildService) HandleStartBuild(
 	// Replace any previous pending build placement.
 	s.CancelPendingBuildPlacement(w, playerID, playerHandle)
 
-	// Align with context-action intent lifecycle to avoid stale auto-open/link requests.
-	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
-	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
-	ecs.GetResource[ecs.LinkState](w).ClearIntent(playerID)
+	// Break an active link immediately so phantom placement starts from a clean interaction state.
+	// LinkSystem would also break it after movement, but doing it here avoids stale linked state until then.
+	s.breakActiveLink(w, playerID)
 
 	resultCollider := objectdefs.BuildColliderComponent(resultColliderDef)
 	ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
@@ -199,8 +199,8 @@ func (s *BuildService) FinalizePendingBuildPlacement(
 		s.sendWarning(playerID, "BUILD_RESULT_NO_COLLIDER")
 		return
 	}
-	chunkX := floorDivInt(pending.TargetX, constt.ChunkWorldSize)
-	chunkY := floorDivInt(pending.TargetY, constt.ChunkWorldSize)
+	chunkX := mathutil.FloorDiv(pending.TargetX, constt.ChunkWorldSize)
+	chunkY := mathutil.FloorDiv(pending.TargetY, constt.ChunkWorldSize)
 	chunkCoord := types.ChunkCoord{X: chunkX, Y: chunkY}
 	chunk := s.chunkManager.GetChunkFast(chunkCoord)
 	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
@@ -266,6 +266,8 @@ func (s *BuildService) CancelPendingBuildPlacement(w *ecs.World, playerID types.
 		return
 	}
 	ecs.RemoveComponent[components.PendingBuildPlacement](w, playerHandle)
+	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
 	ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
 		col.Phantom = nil
 	})
@@ -376,8 +378,8 @@ func (s *BuildService) validateTileRules(buildDef *builddefs.BuildDef, worldX, w
 		s.sendError(playerID, "BUILD_PENDING_FAILED")
 		return false
 	}
-	tileX := floorDivInt(worldX, constt.CoordPerTile)
-	tileY := floorDivInt(worldY, constt.CoordPerTile)
+	tileX := mathutil.FloorDiv(worldX, constt.CoordPerTile)
+	tileY := mathutil.FloorDiv(worldY, constt.CoordPerTile)
 	tileID, ok := s.chunkManager.GetTileID(tileX, tileY)
 	if !ok {
 		s.sendWarning(playerID, "BUILD_OUTSIDE_LOADED_CHUNK")
@@ -471,14 +473,20 @@ func (s *BuildService) sendResolveError(playerID types.EntityID, reasonCode stri
 	}
 }
 
-func floorDivInt(a, b int) int {
-	if b == 0 {
-		return 0
+func (s *BuildService) breakActiveLink(w *ecs.World, playerID types.EntityID) {
+	if s == nil || w == nil || playerID == 0 {
+		return
 	}
-	q := a / b
-	r := a % b
-	if r != 0 && ((r < 0) != (b < 0)) {
-		q--
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	link, removed := linkState.RemoveLink(playerID)
+	if !removed || s.eventBus == nil {
+		return
 	}
-	return q
+	if err := s.eventBus.PublishSync(ecs.NewLinkBrokenEvent(w.Layer, playerID, link.TargetID, ecs.LinkBreakMoved)); err != nil {
+		s.logger.Warn("failed to publish LinkBroken(moved) for build arm",
+			zap.Error(err),
+			zap.Uint64("player_id", uint64(playerID)),
+			zap.Uint64("target_id", uint64(link.TargetID)),
+		)
+	}
 }
