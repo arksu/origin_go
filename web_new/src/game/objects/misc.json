@@ -129,6 +129,18 @@
       }
     ]
   },
+  "build": {
+    "offset": [
+      50,
+      50
+    ],
+    "layers": [
+      {
+        "interactive": true,
+        "img": "obj/build/build.png"
+      }
+    ]
+  },
   "unknown": {
     "offset": [
       10,
