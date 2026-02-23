@@ -129,6 +129,7 @@ type CraftCommandService interface {
 
 type BuildCommandService interface {
 	HandleStartBuild(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_BuildStart)
+	HandleBuildProgress(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_BuildProgress)
 }
 
 type NetworkCommandSystem struct {
@@ -297,6 +298,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleStartCraftMany(w, handle, cmd)
 	case network.CmdStartBuild:
 		s.handleStartBuild(w, handle, cmd)
+	case network.CmdBuildProgress:
+		s.handleBuildProgress(w, handle, cmd)
 	case network.CmdOpenWindow:
 		s.handleOpenWindow(w, handle, cmd)
 	case network.CmdCloseWindow:
@@ -345,6 +348,18 @@ func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types
 		return
 	}
 	s.buildCommandService.HandleStartBuild(w, cmd.CharacterID, playerHandle, msg)
+}
+
+func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_BuildProgress)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for BuildProgress", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	if s.buildCommandService == nil {
+		return
+	}
+	s.buildCommandService.HandleBuildProgress(w, cmd.CharacterID, playerHandle, msg)
 }
 
 func (s *NetworkCommandSystem) handleOpenWindow(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {

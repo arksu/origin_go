@@ -25,6 +25,7 @@ const (
 	CmdStartCraftOne
 	CmdStartCraftMany
 	CmdStartBuild
+	CmdBuildProgress
 	CmdOpenWindow
 	CmdCloseWindow
 )

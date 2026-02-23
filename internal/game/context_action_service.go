@@ -112,6 +112,9 @@ func NewContextActionService(
 			Logger:           logger,
 		},
 	}
+	if buildStateSender, ok := any(alerts).(contracts.BuildStateSender); ok {
+		s.actionDeps.BuildState = buildStateSender
+	}
 
 	if eventBus != nil {
 		eventBus.SubscribeSync(ecs.TopicGameplayLinkCreated, eventbus.PriorityHigh, s.onLinkCreated)

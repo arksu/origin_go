@@ -897,6 +897,58 @@ func (s *Shard) SendBuildList(entityID types.EntityID, list *netproto.S2C_BuildL
 	client.Send(data)
 }
 
+func (s *Shard) SendBuildState(entityID types.EntityID, state *netproto.S2C_BuildState) {
+	if state == nil {
+		return
+	}
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_BuildState{
+			BuildState: state,
+		},
+	}
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal build state",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+	client.Send(data)
+}
+
+func (s *Shard) SendBuildStateClosed(entityID types.EntityID, msg *netproto.S2C_BuildStateClosed) {
+	if msg == nil {
+		return
+	}
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_BuildStateClosed{
+			BuildStateClosed: msg,
+		},
+	}
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal build state closed",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+	client.Send(data)
+}
+
 // SendFx sends a visual effect trigger to a client.
 func (s *Shard) SendFx(entityID types.EntityID, fx *netproto.S2C_Fx) {
 	if fx == nil {

@@ -144,4 +144,15 @@ export function sendStartBuild(buildKey: string, pos: { x: number; y: number }):
   })
 }
 
+export function sendBuildProgress(entityId: number): void {
+  const target = Math.trunc(entityId)
+  if (!Number.isFinite(target) || target <= 0) return
+
+  gameConnection.send({
+    buildProgress: proto.C2S_BuildProgress.create({
+      entityId: target,
+    }),
+  })
+}
+
 export { gameConnection, messageDispatcher }
