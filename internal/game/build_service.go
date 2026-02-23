@@ -311,12 +311,7 @@ func (s *BuildService) isEmptyBuildObject(targetHandle types.Handle) bool {
 	if !ok || buildState == nil {
 		return false
 	}
-	for _, item := range buildState.Items {
-		if item.PutCount+item.BuildCount > 0 {
-			return false
-		}
-	}
-	return true
+	return buildState.IsEmpty()
 }
 
 func (s *BuildService) despawnBuildObject(w *ecs.World, targetID types.EntityID, targetHandle types.Handle) {
@@ -415,11 +410,13 @@ func buildStateFromDef(buildDef *builddefs.BuildDef, resultDef *objectdefs.Objec
 	items := make([]components.BuildRequiredItemState, 0, len(buildDef.Inputs))
 	for i, input := range buildDef.Inputs {
 		items = append(items, components.BuildRequiredItemState{
-			Slot:          i,
-			ItemKey:       input.ItemKey,
-			ItemTag:       input.ItemTag,
-			RequiredCount: input.Count,
-			QualityWeight: input.QualityWeight,
+			Slot:              i,
+			ItemKey:           input.ItemKey,
+			ItemTag:           input.ItemTag,
+			RequiredCount:     input.Count,
+			QualityWeight:     input.QualityWeight,
+			BuildQualityTotal: 0,
+			PutItems:          nil,
 		})
 	}
 	return &components.BuildBehaviorState{
