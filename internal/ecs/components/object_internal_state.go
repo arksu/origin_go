@@ -37,6 +37,31 @@ type TakeBehaviorState struct {
 	Taken map[string]int `json:"-"`
 }
 
+type BuildBehaviorState struct {
+	BuildKey     string                   `json:"build_key,omitempty"`
+	BuildDefID   int                      `json:"build_def_id,omitempty"`
+	ObjectKey    string                   `json:"object_key,omitempty"`
+	ObjectTypeID uint32                   `json:"object_type_id,omitempty"`
+	TargetX      int                      `json:"target_x,omitempty"`
+	TargetY      int                      `json:"target_y,omitempty"`
+	Items        []BuildRequiredItemState `json:"items,omitempty"`
+}
+
+type BuildRequiredItemState struct {
+	Slot int `json:"slot,omitempty"`
+
+	ItemKey string `json:"item_key,omitempty"`
+	ItemTag string `json:"item_tag,omitempty"`
+
+	RequiredCount uint32 `json:"required_count,omitempty"`
+	PutCount      uint32 `json:"put_count,omitempty"`
+	BuildCount    uint32 `json:"build_count,omitempty"`
+
+	QualityWeight        uint32 `json:"quality_weight,omitempty"`
+	PutQualityWeighted   uint64 `json:"put_quality_weighted,omitempty"`
+	BuildQualityWeighted uint64 `json:"build_quality_weighted,omitempty"`
+}
+
 func (s TreeBehaviorState) MarshalJSON() ([]byte, error) {
 	payload := make(map[string]any, 3+len(s.Taken))
 	if s.ChopPoints > 0 {

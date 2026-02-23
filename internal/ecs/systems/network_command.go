@@ -127,6 +127,10 @@ type CraftCommandService interface {
 	HandleStartCraftMany(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_StartCraftMany)
 }
 
+type BuildCommandService interface {
+	HandleStartBuild(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_BuildStart)
+}
+
 type NetworkCommandSystem struct {
 	ecs.BaseSystem
 
@@ -151,6 +155,7 @@ type NetworkCommandSystem struct {
 	contextActionService ContextActionResolver
 	contextMenuSender    ContextMenuSender
 	craftCommandService  CraftCommandService
+	buildCommandService  BuildCommandService
 	contextPendingTTL    time.Duration
 
 	// Reusable buffers to avoid allocations
@@ -213,6 +218,10 @@ func (s *NetworkCommandSystem) SetContextMenuSender(sender ContextMenuSender) {
 
 func (s *NetworkCommandSystem) SetCraftCommandService(service CraftCommandService) {
 	s.craftCommandService = service
+}
+
+func (s *NetworkCommandSystem) SetBuildCommandService(service BuildCommandService) {
+	s.buildCommandService = service
 }
 
 func (s *NetworkCommandSystem) SetContextPendingTTL(ttl time.Duration) {
@@ -286,6 +295,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleStartCraftOne(w, handle, cmd)
 	case network.CmdStartCraftMany:
 		s.handleStartCraftMany(w, handle, cmd)
+	case network.CmdStartBuild:
+		s.handleStartBuild(w, handle, cmd)
 	case network.CmdOpenWindow:
 		s.handleOpenWindow(w, handle, cmd)
 	case network.CmdCloseWindow:
@@ -322,6 +333,18 @@ func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle t
 		return
 	}
 	s.craftCommandService.HandleStartCraftMany(w, cmd.CharacterID, playerHandle, msg)
+}
+
+func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_BuildStart)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for BuildStart", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	if s.buildCommandService == nil {
+		return
+	}
+	s.buildCommandService.HandleStartBuild(w, cmd.CharacterID, playerHandle, msg)
 }
 
 func (s *NetworkCommandSystem) handleOpenWindow(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
@@ -773,6 +796,21 @@ func (s *NetworkCommandSystem) startPendingContextAction(
 		ActionID:       actionID,
 		ExpireAtUnixMs: expireAt,
 	})
+}
+
+// StartPendingContextActionFromServer reuses the normal move->link->execute flow for server-triggered actions.
+func (s *NetworkCommandSystem) StartPendingContextActionFromServer(
+	w *ecs.World,
+	playerHandle types.Handle,
+	playerID types.EntityID,
+	targetEntityID types.EntityID,
+	targetHandle types.Handle,
+	actionID string,
+) {
+	if s == nil || s.contextActionService == nil || w == nil {
+		return
+	}
+	s.startPendingContextAction(w, playerHandle, playerID, targetEntityID, targetHandle, actionID)
 }
 
 // handlePickupInteract attempts immediate pickup if in range, otherwise sets movement + PendingInteraction.

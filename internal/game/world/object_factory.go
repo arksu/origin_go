@@ -518,14 +518,14 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 	}
 
 	obj := &repository.Object{
-		ID:     int64(externalID.ID),
-		TypeID: int(info.TypeID),
-		Region: info.Region,
-		X:      int(transform.X),
-		Y:      int(transform.Y),
-		Layer:  info.Layer,
-		ChunkX: chunkRef.CurrentChunkX,
-		ChunkY: chunkRef.CurrentChunkY,
+		ID:      int64(externalID.ID),
+		TypeID:  int(info.TypeID),
+		Region:  info.Region,
+		X:       int(transform.X),
+		Y:       int(transform.Y),
+		Layer:   info.Layer,
+		ChunkX:  chunkRef.CurrentChunkX,
+		ChunkY:  chunkRef.CurrentChunkY,
 		Quality: clampQualityToInt16(info.Quality),
 		Heading: sql.NullInt16{
 			Int16: radiansToHeadingDegrees(transform.Direction),
@@ -608,6 +608,12 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 				return nil, fmt.Errorf("failed to decode take state: %w", err)
 			}
 			runtimeState.Behaviors[behaviorKey] = &takeState
+		case "build":
+			var buildState components.BuildBehaviorState
+			if err := json.Unmarshal(rawBehaviorState, &buildState); err != nil {
+				return nil, fmt.Errorf("failed to decode build state: %w", err)
+			}
+			runtimeState.Behaviors[behaviorKey] = &buildState
 		default:
 			cloned := append([]byte(nil), rawBehaviorState...)
 			runtimeState.Behaviors[behaviorKey] = json.RawMessage(cloned)

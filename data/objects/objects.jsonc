@@ -42,6 +42,19 @@
           ]
         }
       }
+    },
+    {
+      "defId": 1001,
+      "key": "build",
+      "name": "Build",
+      "static": true,
+      "contextMenuEvenForOneItem": false,
+      "components": {
+      },
+      "resource": "boulder", // temp
+      "behaviors": {
+        "build": {}
+      }
     }
   ]
 }

@@ -1280,6 +1280,40 @@ func (cm *ChunkManager) RemoveStaticFromChunkSpatial(handle types.Handle, chunkX
 	chunk.Spatial().RemoveStatic(handle, x, y)
 }
 
+func (cm *ChunkManager) GetTileID(tileX, tileY int) (byte, bool) {
+	chunkSize := _const.ChunkSize
+	chunkCoord := types.ChunkCoord{
+		X: floorDiv(tileX, chunkSize),
+		Y: floorDiv(tileY, chunkSize),
+	}
+	chunk := cm.GetChunk(chunkCoord)
+	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
+		return 0, false
+	}
+
+	localTileX := tileX % chunkSize
+	localTileY := tileY % chunkSize
+	if localTileX < 0 {
+		localTileX += chunkSize
+	}
+	if localTileY < 0 {
+		localTileY += chunkSize
+	}
+	return chunk.TileID(localTileX, localTileY, chunkSize)
+}
+
+func floorDiv(a, b int) int {
+	if b == 0 {
+		return 0
+	}
+	q := a / b
+	r := a % b
+	if r != 0 && ((r < 0) != (b < 0)) {
+		q--
+	}
+	return q
+}
+
 func (cm *ChunkManager) IsTilePassable(tileX, tileY int) bool {
 	chunkSize := _const.ChunkSize
 	chunkCoord := types.ChunkCoord{
