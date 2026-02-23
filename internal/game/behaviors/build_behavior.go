@@ -12,7 +12,10 @@ import (
 	"origin/internal/types"
 )
 
-const buildActionOpen = "open"
+const (
+	buildActionOpen       = "open"
+	buildBehaviorStateKey = "build"
+)
 
 type buildBehavior struct{}
 
@@ -88,7 +91,7 @@ func buildStateSnapshot(world *ecs.World, targetID types.EntityID, targetHandle 
 	if !hasInternalState {
 		return nil, false
 	}
-	buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, "build")
+	buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey)
 	if !ok || buildState == nil {
 		return nil, false
 	}
@@ -152,6 +155,6 @@ func isBuildTargetStatePresent(world *ecs.World, targetHandle types.Handle) bool
 	if !hasInternalState {
 		return false
 	}
-	_, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, "build")
+	_, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey)
 	return ok
 }

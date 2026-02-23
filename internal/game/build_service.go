@@ -327,8 +327,8 @@ func (s *BuildService) onLinkBroken(_ context.Context, event eventbus.Event) err
 	if !ok || s == nil || s.world == nil || ev.Layer != s.world.Layer || ev.TargetID == 0 {
 		return nil
 	}
+	targetHandle := s.world.GetHandleByEntityID(ev.TargetID)
 	if s.alerts != nil {
-		targetHandle := s.world.GetHandleByEntityID(ev.TargetID)
 		if targetHandle != types.InvalidHandle && s.world.Alive(targetHandle) {
 			if info, hasInfo := ecs.GetComponent[components.EntityInfo](s.world, targetHandle); hasInfo && info.TypeID == constt.BuildObjectTypeID {
 				s.alerts.SendBuildStateClosed(ev.PlayerID, &netproto.S2C_BuildStateClosed{
@@ -343,7 +343,6 @@ func (s *BuildService) onLinkBroken(_ context.Context, event eventbus.Event) err
 		return nil
 	}
 
-	targetHandle := s.world.GetHandleByEntityID(ev.TargetID)
 	if targetHandle == types.InvalidHandle || !s.world.Alive(targetHandle) {
 		return nil
 	}
