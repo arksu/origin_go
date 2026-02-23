@@ -12,11 +12,14 @@ The `game` package is the core of the game server, responsible for managing game
 internal/game/
 ├── game.go              # Main game logic and game loop
 ├── game_auth.go          # Player authentication and spawning
+├── crafting_service.go    # Craft list visibility + craft runtime integration
 ├── shard.go              # Individual shard management
 ├── shard_manager.go      # Multi-shard coordination
 ├── errors.go             # Common error definitions
 ├── id.go                 # Entity ID management
 ├── inventory/            # Inventory system
+│   ├── crafting.go       # Craft input consume/preview + output placement/drop helpers
+│   ├── give_item.go      # Standard give/spawn helpers (+ discovery LP)
 │   ├── loader.go         # Inventory loading from database
 │   ├── saver.go          # Inventory saving to database
 │   ├── snapshot.go       # Inventory snapshot sending to clients
@@ -55,7 +58,7 @@ internal/game/
   - Character loading and validation
   - Character attributes normalization and fail-safe self-heal on auth load
   - World spawning and initial setup
-  - Post-enter-world snapshots sending (inventory + character attributes)
+  - Post-enter-world snapshots sending (inventory + character profile + player stats)
   - Player reattachment after disconnect
 - **Key Functions**: `handleAuth()`, `spawnAndLogin()`, `reattachPlayer()`
 
@@ -82,6 +85,8 @@ internal/game/
 ### Inventory (`inventory/`)
 - **Purpose**: Player inventory management
 - **Components**:
+  - `crafting.go`: Craft input preview/consume and output give/drop helpers
+  - `give_item.go`: Standard give/spawn flow and discovery LP hooks
   - `loader.go`: Loads inventory data from database
   - `saver.go`: Saves inventory data to database
   - `snapshot.go`: Sends inventory snapshots to clients
@@ -123,6 +128,16 @@ internal/game/
   - Delegate cyclic cycle completion to behavior cyclic capability
 - **Key Types**: `ContextActionService`
 
+### Crafting (`crafting_service.go`)
+- **Purpose**: Data-driven crafting runtime integrated with cyclic actions and inventory.
+- **Key Responsibilities**:
+  - Build `S2C_CraftList` with server-filtered visibility and live craftability flags
+  - Validate `C2S_StartCraftOne` / `C2S_StartCraftMany`
+  - Start and maintain synthetic cyclic craft actions
+  - Consume inputs, compute result quality, and spawn outputs via standard give/drop flow
+  - Refresh craft list snapshots on craft/inventory/link changes (gated by opened `"craft"` window)
+- **Key Types**: `CraftingService`
+
 ## Data Flow
 
 ### Player Connection Flow
@@ -131,7 +146,7 @@ internal/game/
 3. Load character + normalize attributes (self-heal DB when needed) → `game_auth.go:handleAuth()`
 4. Spawn in world and attach runtime attributes component → `game_auth.go:spawnAndLogin()`
 5. Send `S2C_PlayerEnterWorld` → `game_auth.go:sendPlayerEnterWorld()`
-6. Send inventory and character-attributes snapshots via server jobs → `network_command.go`
+6. Send inventory/profile/player-stats snapshots via server jobs → `network_command.go`
 7. Setup event handlers → `events/game_events.go`
 
 ### Game Loop Flow
@@ -219,7 +234,6 @@ Common error types defined in `errors.go`:
 
 The `systems/` directory is reserved for future game systems:
 - Combat system
-- Crafting system
 - Movement system enhancements
 - AI/NPC systems
 - Quest system

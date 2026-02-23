@@ -81,10 +81,14 @@ messageDispatcher.on('objectMove', (msg) => { /* ... */ })
 - `chunkLoad`, `chunkUnload`
 - `playerEnterWorld`, `playerLeaveWorld`
 - `objectSpawn`, `objectDespawn`, `objectMove`
+- `movementMode`
 - `inventoryUpdate`, `inventoryOpResult`
-- `characterAttributes`
 - `containerOpened`, `containerClosed`
-- `contextMenu`, `miniAlert`
+- `chat`, `contextMenu`, `miniAlert`
+- `cyclicActionProgress`, `cyclicActionFinished`
+- `sound`, `fx`
+- `characterProfile`, `playerStats`, `expGained`
+- `craftList`
 - `error`, `warning`
 
 **Debug Features**:
@@ -150,15 +154,19 @@ registerMessageHandlers()
 | `objectSpawn` | Spawn entity in store + facade, init in MoveController |
 | `objectDespawn` | Remove entity from store + facade + MoveController |
 | `objectMove` | Feed to MoveController, update store position |
-| `characterAttributes` | Store full character attributes snapshot for Character Sheet UI |
+| `characterProfile` | Store full character profile snapshot (attributes + exp) |
+| `playerStats` | Update stamina/energy state |
+| `expGained` | Apply experience delta in store |
 | `contextMenu` | Open context menu state in `gameStore` |
 | `miniAlert` | Push center-screen transient alert in `gameStore` |
+| `craftList` | Replace craft recipe list snapshot in `gameStore` |
 
-### Character Attributes Contract
+### Character Profile + Craft Contract
 
-- Server sends `S2C_CharacterAttributes` after `S2C_PlayerEnterWorld`.
-- Payload is always a **full snapshot** of 9 required attributes.
+- Server sends `S2C_CharacterProfile` after `S2C_PlayerEnterWorld`.
+- Profile payload is a **full snapshot** of attributes + experience.
 - Client should treat missing/invalid values as fail-safe `1` at store boundary.
+- Client receives `S2C_CraftList` only after opening the craft UI (`C2S_OpenWindow("craft")`) and while it remains open.
 
 ## Protocol
 
@@ -170,7 +178,7 @@ Located in `proto/` directory:
 
 Generated via `protobufjs-cli`:
 ```bash
-npm run proto:generate
+npm run proto
 ```
 
 ### Message Format
@@ -247,5 +255,5 @@ All errors transition to `error` state. Handler must reset or retry.
 | `TimeSync.ts` | Server time estimation via RTT |
 | `handlers.ts` | Message → state/render bridge |
 | `types.ts` | Connection state types |
-| `index.ts` | Module exports |
+| `index.ts` | Module exports + packet send helpers (`openWindow`, craft start, etc.) |
 | `proto/` | Protobuf generated code |

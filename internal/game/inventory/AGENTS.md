@@ -27,10 +27,12 @@ Key design goals:
 
 ```
 internal/game/inventory/
+├── crafting.go            # Craft input preview/consume + output fit/give-or-drop helpers
 ├── operations.go          # Core inventory operations (ExecuteMove)
 ├── operations_test.go     # Unit tests for operations
 ├── content_rules_test.go  # Tests for container content validation
 ├── executor.go            # ECS integration (InventoryExecutor)
+├── give_item.go           # Standard item spawning into inventory/hand (+ discovery LP)
 ├── validation.go          # Validation logic and content rules
 ├── placement.go           # Grid placement and collision detection
 ├── loader.go              # Database loading (InventoryLoader)
@@ -394,6 +396,19 @@ case network.CmdInventoryOp:
     s.handleInventoryOp(w, handle, cmd)
 ```
 
+### Crafting Integration
+
+`InventoryExecutor` also provides crafting helpers used by `CraftingService`:
+
+- `HasCraftInputs(...)` / `PreviewCraftInputs(...)` / `ConsumeCraftInputs(...)`
+- `CanFitCraftOutputsOneCycle(...)` (strict pre-start fit check; does not model drop fallback)
+- `GiveCraftOutputOrDrop(...)` (standard give path first, then drop-to-world fallback)
+
+Craft input matching rules:
+- Exact `itemKey` inputs are allocated first
+- Tag inputs (`itemTag`) are allocated second
+- Tag inputs match any item definition that contains the required tag
+
 ### Database Integration
 
 `InventoryLoader` and `InventorySaver` handle persistence:
@@ -421,7 +436,6 @@ All validation errors include descriptive messages for client display.
 ## Future Extensions
 
 Potential enhancements:
-- **Crafting integration** - Consume items from inventory for recipes
 - **Trading system** - Atomic exchange between players
 - **Loot tables** - Weighted random item generation
 - **Durability/Wear** - Item degradation over time
