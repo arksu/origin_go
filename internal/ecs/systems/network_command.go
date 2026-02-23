@@ -44,6 +44,7 @@ type InventorySnapshotSender interface {
 	SendPlayerStatsSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 	SendMovementModeSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 	SendCraftListSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
+	SendBuildListSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle)
 }
 
 // InventoryOperationExecutor executes inventory operations
@@ -336,6 +337,9 @@ func (s *NetworkCommandSystem) handleOpenWindow(w *ecs.World, playerHandle types
 	ecs.GetResource[ecs.OpenedWindowsState](w).Open(cmd.CharacterID, name)
 	if name == "craft" && s.inventorySnapshotSender != nil {
 		s.inventorySnapshotSender.SendCraftListSnapshot(w, cmd.CharacterID, playerHandle)
+	}
+	if name == "build" && s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendBuildListSnapshot(w, cmd.CharacterID, playerHandle)
 	}
 }
 
@@ -1227,6 +1231,8 @@ func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.Serve
 		s.handleMovementModeSnapshotJob(w, job)
 	case network.JobSendCraftListSnapshot:
 		s.handleCraftListSnapshotJob(w, job)
+	case network.JobSendBuildListSnapshot:
+		s.handleBuildListSnapshotJob(w, job)
 	default:
 		s.logger.Warn("Unknown server job type", zap.Uint16("job_type", job.JobType))
 	}
@@ -1317,6 +1323,21 @@ func (s *NetworkCommandSystem) handleCraftListSnapshotJob(w *ecs.World, job *net
 	}
 	if s.inventorySnapshotSender != nil {
 		s.inventorySnapshotSender.SendCraftListSnapshot(w, job.TargetID, payload.Handle)
+	}
+}
+
+func (s *NetworkCommandSystem) handleBuildListSnapshotJob(w *ecs.World, job *network.ServerJob) {
+	payload, ok := job.Payload.(*network.BuildListSnapshotJobPayload)
+	if !ok {
+		s.logger.Error("Invalid payload for build list snapshot job")
+		return
+	}
+	if !w.Alive(payload.Handle) {
+		s.logger.Debug("Build list snapshot job: entity no longer alive", zap.Uint64("entity_id", uint64(job.TargetID)))
+		return
+	}
+	if s.inventorySnapshotSender != nil {
+		s.inventorySnapshotSender.SendBuildListSnapshot(w, job.TargetID, payload.Handle)
 	}
 }
 

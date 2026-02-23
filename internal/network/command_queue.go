@@ -52,6 +52,7 @@ const (
 	JobSendPlayerStatsSnapshot
 	JobSendMovementModeSnapshot
 	JobSendCraftListSnapshot
+	JobSendBuildListSnapshot
 )
 
 // ServerJob represents an internal job to be processed by ECS
@@ -86,6 +87,11 @@ type MovementModeSnapshotJobPayload struct {
 
 // CraftListSnapshotJobPayload is the payload for JobSendCraftListSnapshot.
 type CraftListSnapshotJobPayload struct {
+	Handle types.Handle
+}
+
+// BuildListSnapshotJobPayload is the payload for JobSendBuildListSnapshot.
+type BuildListSnapshotJobPayload struct {
 	Handle types.Handle
 }
 
