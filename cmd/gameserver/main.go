@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"origin/internal/builddefs"
 	"origin/internal/config"
 	"origin/internal/craftdefs"
 	"origin/internal/game"
@@ -103,6 +104,12 @@ func main() {
 		logger.Fatal("Failed to load craft definitions", zap.Error(err))
 	}
 	craftdefs.SetGlobal(craftRegistry)
+
+	buildRegistry, err := builddefs.LoadFromDirectory("./data/builds", logger)
+	if err != nil {
+		logger.Fatal("Failed to load build definitions", zap.Error(err))
+	}
+	builddefs.SetGlobal(buildRegistry)
 
 	inventoryLoader := inventory.NewInventoryLoader(logger)
 	inventorySnapshotSender := inventory.NewSnapshotSender(logger)

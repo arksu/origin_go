@@ -4,17 +4,16 @@
   "builds": [
     {
       "defId": 10001,
-      "key": "build_box",
-      "name": "Build Box",
+      "key": "box",
+      "name": "Box",
       "inputs": [
-        { "itemKey": "block_of_wood", "count": 2, "qualityWeight": 3 },
-        { "itemKey": "branch", "count": 4, "qualityWeight": 1 }
+        { "itemKey": "branch", "count": 5, "qualityWeight": 1 }
       ],
       "staminaCost": 8,
       "ticksRequired": 40,
-      "requiredSkills": ["carpentry"],
-      "requiredDiscovery": ["containers"],
-      "allowedTiles": [30, 17, 11],
+      "requiredSkills": [],
+      "requiredDiscovery": [],
+      "allowedTiles": [],
       "objectKey": "box"
     },
     {

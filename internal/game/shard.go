@@ -855,6 +855,33 @@ func (s *Shard) SendCraftList(entityID types.EntityID, list *netproto.S2C_CraftL
 	client.Send(data)
 }
 
+// SendBuildList sends visible build recipes to a client.
+func (s *Shard) SendBuildList(entityID types.EntityID, list *netproto.S2C_BuildList) {
+	if list == nil {
+		return
+	}
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_BuildList{
+			BuildList: list,
+		},
+	}
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal build list",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+	client.Send(data)
+}
+
 // SendFx sends a visual effect trigger to a client.
 func (s *Shard) SendFx(entityID types.EntityID, fx *netproto.S2C_Fx) {
 	if fx == nil {
@@ -1007,6 +1034,14 @@ func (s *Shard) SendCraftListSnapshot(w *ecs.World, entityID types.EntityID, han
 		return
 	}
 	s.craftingService.SendCraftListSnapshot(w, entityID, handle)
+}
+
+// SendBuildListSnapshot sends a fresh build list snapshot for the player.
+func (s *Shard) SendBuildListSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+	if s == nil {
+		return
+	}
+	s.sendBuildListSnapshot(w, entityID, handle)
 }
 
 // SendMovementModeDeltaIfChanged sends movement mode only when it differs from last sent.

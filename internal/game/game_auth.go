@@ -848,6 +848,11 @@ func (g *Game) enqueuePlayerBootstrapSnapshots(shard *Shard, playerEntityID type
 		TargetID: playerEntityID,
 		Payload:  &network.CraftListSnapshotJobPayload{Handle: handle},
 	})
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendBuildListSnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.BuildListSnapshotJobPayload{Handle: handle},
+	})
 }
 
 func (g *Game) ensureObserverVisibilityImmediate(w *ecs.World, observerHandle types.Handle) {
