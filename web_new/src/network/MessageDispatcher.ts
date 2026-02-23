@@ -95,6 +95,7 @@ export class MessageDispatcher {
     if (message.sound) return 'sound'
     if (message.fx) return 'fx'
     if (message.craftList) return 'craftList'
+    if (message.buildList) return 'buildList'
     if (message.characterProfile) return 'characterProfile'
     if (message.playerStats) return 'playerStats'
     if (message.expGained) return 'expGained'

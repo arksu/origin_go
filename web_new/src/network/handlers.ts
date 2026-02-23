@@ -90,6 +90,13 @@ export function registerMessageHandlers(): void {
     gameStore.setCraftListSnapshot(msg)
   })
 
+  messageDispatcher.on('buildList', (msg: proto.IS2C_BuildList) => {
+    console.log('[Handlers] buildList:', {
+      builds: msg.builds?.length || 0,
+    })
+    gameStore.setBuildListSnapshot(msg)
+  })
+
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
     console.log('[Handlers] S2C_ExpGained received:', {
       entityId: toNumber(msg.entityId || 0),

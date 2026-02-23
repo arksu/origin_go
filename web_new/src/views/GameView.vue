@@ -12,12 +12,13 @@ import NestedInventoryWindow from '@/components/ui/NestedInventoryWindow.vue'
 import CharacterSheetWindow from '@/components/ui/CharacterSheetWindow.vue'
 import PlayerStatsWindow from '@/components/ui/PlayerStatsWindow.vue'
 import CraftWindow from '@/components/ui/CraftWindow.vue'
+import BuildWindow from '@/components/ui/BuildWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import MovementModePanel from '@/components/ui/MovementModePanel.vue'
-import { sendChatMessage, sendOpenWindow, sendCloseWindow } from '@/network'
+import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild } from '@/network'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
@@ -75,6 +76,7 @@ const miniAlerts = computed(() => gameStore.miniAlerts)
 const showCharacterSheet = computed(() => gameStore.characterSheetVisible)
 const showPlayerStatsWindow = computed(() => gameStore.playerStatsWindowVisible)
 const showCraftWindow = computed(() => gameStore.craftWindowVisible)
+const showBuildWindow = computed(() => gameStore.buildWindowVisible)
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -89,8 +91,23 @@ async function initCanvas() {
     await gameFacade.init(gameCanvas.value)
     canvasInitialized.value = true
 
-    gameFacade.onPlayerClick((screenX: number, screenY: number) => {
-      console.debug('[GameView] Click:', screenX, screenY)
+    gameFacade.onPlayerClick(({ screenX, screenY, worldX, worldY, button }: { screenX: number; screenY: number; worldX: number; worldY: number; button: number }) => {
+      console.debug('[GameView] Click:', screenX, screenY, 'button=', button)
+
+      if (button !== 0) {
+        return false
+      }
+
+      const armedBuildKey = gameStore.consumeArmedBuildPlacement()
+      if (!armedBuildKey) {
+        return false
+      }
+
+      sendStartBuild(armedBuildKey, {
+        x: worldX,
+        y: worldY,
+      })
+      return true
     })
   } catch (err) {
     console.error('[GameView] Failed to init canvas:', err)
@@ -258,6 +275,26 @@ function closeCraftWindow() {
   sendCloseWindow('craft')
 }
 
+function openBuildWindow() {
+  if (gameStore.buildWindowVisible) return
+  gameStore.setBuildWindowVisible(true)
+  sendOpenWindow('build')
+}
+
+function closeBuildWindow() {
+  if (!gameStore.buildWindowVisible) return
+  gameStore.setBuildWindowVisible(false)
+  sendCloseWindow('build')
+}
+
+function toggleBuildWindow() {
+  if (gameStore.buildWindowVisible) {
+    closeBuildWindow()
+    return
+  }
+  openBuildWindow()
+}
+
 function toggleCraftWindow() {
   if (gameStore.craftWindowVisible) {
     closeCraftWindow()
@@ -292,6 +329,7 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
         gameStore.setCharacterSheetVisible(false)
         gameStore.setPlayerStatsWindowVisible(false)
         closeCraftWindow()
+        closeBuildWindow()
         gameStore.closeContextMenu()
         break
       case '/':
@@ -369,6 +407,9 @@ useHotkeys(hotkeys)
         <AppButton variant="secondary" size="sm" @click="toggleCraftWindow">
           {{ showCraftWindow ? 'Close Craft' : 'Craft' }}
         </AppButton>
+        <AppButton variant="secondary" size="sm" @click="toggleBuildWindow">
+          {{ showBuildWindow ? 'Close Build' : 'Build' }}
+        </AppButton>
         <AppButton variant="secondary" size="sm" @click="handleBack">Exit</AppButton>
       </div>
       <div v-if="miniAlerts.length > 0" class="game-mini-alerts">
@@ -410,6 +451,10 @@ useHotkeys(hotkeys)
 
       <div v-if="showCraftWindow" class="game-craft-window">
         <CraftWindow @close="closeCraftWindow" />
+      </div>
+
+      <div v-if="showBuildWindow" class="game-build-window">
+        <BuildWindow @close="closeBuildWindow" />
       </div>
       
       <!-- Nested inventory windows -->
@@ -634,6 +679,16 @@ useHotkeys(hotkeys)
   height: 100%;
   pointer-events: none;
   z-index: 260;
+}
+
+.game-build-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 261;
 }
 
 .game-disconnected {

@@ -31,7 +31,7 @@ export class Render {
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
 
-  private onClickCallback: ((screen: ScreenPoint) => void) | null = null
+  private onClickCallback: ((event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void) | null = null
 
   private canvas: HTMLCanvasElement | null = null
   private lastPointerScreen: ScreenPoint | null = null
@@ -99,7 +99,14 @@ export class Render {
     this.inputController.onClick((event) => {
       this.lastClickScreen = { x: event.screenX, y: event.screenY }
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
-      this.onClickCallback?.(this.lastClickScreen)
+      const consumed = this.onClickCallback?.({
+        screen: this.lastClickScreen,
+        world: this.lastClickWorld,
+        button: event.button,
+      }) === true
+      if (consumed) {
+        return
+      }
 
       const gameStore = useGameStore()
 
@@ -432,7 +439,7 @@ export class Render {
     })
   }
 
-  onPointerClick(callback: (screen: ScreenPoint) => void): void {
+  onPointerClick(callback: (event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void): void {
     this.onClickCallback = callback
   }
 

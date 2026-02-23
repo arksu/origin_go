@@ -125,4 +125,23 @@ export function sendStartCraftMany(craftKey: string, cycles: number): void {
   })
 }
 
+export function sendStartBuild(buildKey: string, pos: { x: number; y: number }): void {
+  const normalized = buildKey.trim()
+  if (!normalized) return
+
+  const x = Math.trunc(pos.x)
+  const y = Math.trunc(pos.y)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return
+
+  gameConnection.send({
+    buildStart: proto.C2S_BuildStart.create({
+      buildKey: normalized,
+      pos: proto.Vector2.create({
+        x,
+        y,
+      }),
+    }),
+  })
+}
+
 export { gameConnection, messageDispatcher }

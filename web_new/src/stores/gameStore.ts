@@ -107,6 +107,7 @@ export interface CharacterExperienceState {
 }
 
 export type CraftRecipeState = proto.ICraftRecipeEntry
+export type BuildRecipeState = proto.IBuildRecipeEntry
 
 export type WorldBootstrapState =
   | 'idle'
@@ -161,6 +162,10 @@ export const useGameStore = defineStore('game', () => {
   const craftWindowVisible = ref(false)
   const craftRecipes = ref<CraftRecipeState[]>([])
   const selectedCraftKey = ref<string>('')
+  const buildWindowVisible = ref(false)
+  const buildRecipes = ref<BuildRecipeState[]>([])
+  const selectedBuildKey = ref<string>('')
+  const armedBuildKey = ref<string>('')
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
@@ -285,6 +290,10 @@ export const useGameStore = defineStore('game', () => {
     craftWindowVisible.value = false
     craftRecipes.value = []
     selectedCraftKey.value = ''
+    buildWindowVisible.value = false
+    buildRecipes.value = []
+    selectedBuildKey.value = ''
+    armedBuildKey.value = ''
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -320,6 +329,10 @@ export const useGameStore = defineStore('game', () => {
     craftWindowVisible.value = false
     craftRecipes.value = []
     selectedCraftKey.value = ''
+    buildWindowVisible.value = false
+    buildRecipes.value = []
+    selectedBuildKey.value = ''
+    armedBuildKey.value = ''
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -660,6 +673,17 @@ export const useGameStore = defineStore('game', () => {
     craftWindowVisible.value = visible
   }
 
+  function toggleBuildWindow() {
+    buildWindowVisible.value = !buildWindowVisible.value
+  }
+
+  function setBuildWindowVisible(visible: boolean) {
+    buildWindowVisible.value = visible
+    if (!visible) {
+      armedBuildKey.value = ''
+    }
+  }
+
   function selectCraftRecipe(craftKey: string | null | undefined) {
     const key = (craftKey || '').trim()
     selectedCraftKey.value = key
@@ -683,6 +707,57 @@ export const useGameStore = defineStore('game', () => {
     if (!selectedStillExists) {
       selectedCraftKey.value = nextRecipes[0]?.craftKey || ''
     }
+  }
+
+  function selectBuildRecipe(buildKey: string | null | undefined) {
+    const key = (buildKey || '').trim()
+    selectedBuildKey.value = key
+  }
+
+  function setBuildListSnapshot(snapshot: proto.IS2C_BuildList | null | undefined) {
+    const nextRecipes = (snapshot?.builds || []).slice()
+    buildRecipes.value = nextRecipes
+
+    if (nextRecipes.length === 0) {
+      selectedBuildKey.value = ''
+      if (armedBuildKey.value) {
+        armedBuildKey.value = ''
+      }
+      return
+    }
+
+    if (!selectedBuildKey.value) {
+      selectedBuildKey.value = nextRecipes[0]?.buildKey || ''
+    } else {
+      const selectedStillExists = nextRecipes.some((recipe) => (recipe.buildKey || '') === selectedBuildKey.value)
+      if (!selectedStillExists) {
+        selectedBuildKey.value = nextRecipes[0]?.buildKey || ''
+      }
+    }
+
+    if (armedBuildKey.value) {
+      const armedStillExists = nextRecipes.some((recipe) => (recipe.buildKey || '') === armedBuildKey.value)
+      if (!armedStillExists) {
+        armedBuildKey.value = ''
+      }
+    }
+  }
+
+  function armBuildPlacement(buildKey: string | null | undefined) {
+    const key = (buildKey || '').trim()
+    if (!key) return
+    armedBuildKey.value = key
+  }
+
+  function clearBuildPlacement() {
+    armedBuildKey.value = ''
+  }
+
+  function consumeArmedBuildPlacement(): string {
+    const key = armedBuildKey.value.trim()
+    if (!key) return ''
+    armedBuildKey.value = ''
+    return key
   }
 
   function setCharacterProfileSnapshot(snapshot: proto.IS2C_CharacterProfile | null | undefined) {
@@ -845,6 +920,10 @@ export const useGameStore = defineStore('game', () => {
     craftWindowVisible.value = false
     craftRecipes.value = []
     selectedCraftKey.value = ''
+    buildWindowVisible.value = false
+    buildRecipes.value = []
+    selectedBuildKey.value = ''
+    armedBuildKey.value = ''
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -891,6 +970,10 @@ export const useGameStore = defineStore('game', () => {
     craftWindowVisible,
     craftRecipes,
     selectedCraftKey,
+    buildWindowVisible,
+    buildRecipes,
+    selectedBuildKey,
+    armedBuildKey,
     characterAttributes,
     characterExperience,
     playerStats,
@@ -946,6 +1029,13 @@ export const useGameStore = defineStore('game', () => {
     setCraftWindowVisible,
     selectCraftRecipe,
     setCraftListSnapshot,
+    toggleBuildWindow,
+    setBuildWindowVisible,
+    selectBuildRecipe,
+    setBuildListSnapshot,
+    armBuildPlacement,
+    clearBuildPlacement,
+    consumeArmedBuildPlacement,
     setCharacterProfileSnapshot,
     applyExpGained,
     setPlayerStats,
