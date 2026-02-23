@@ -2,7 +2,21 @@
 
 # Origin Go
 
-Backend and tooling for a 2D MMO/survival prototype:
+Backend and tooling for a 2D MMO/survival prototype.
+
+This repository contains the server, data definitions, tools, and web clients used to build and experiment with the game. Contributions are welcome, including bug fixes, gameplay improvements, tooling, docs, and tests.
+
+## Welcome
+
+If you want to explore or contribute, a good place to start is:
+
+- `docs/` for design notes, ADRs, and feature specs
+- `cmd/gameserver` for server entrypoint
+- `internal/` for game/runtime/server systems
+- `data/` for item/object/crafting definitions
+- `web_new/` for the main web client
+
+Project components:
 
 - Go game server (`cmd/gameserver`)
 - map generator (`cmd/mapgen`)
@@ -48,6 +62,8 @@ go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
 ## Quick Start (Backend)
 
+This is the fastest way to get the backend running locally.
+
 1. Start infrastructure:
 
 ```bash
@@ -73,6 +89,16 @@ make run
 export DATABASE_USER=db
 export DATABASE_PASSWORD=db
 export DATABASE_DATABASE=db
+```
+
+## Quick Start (Web Client)
+
+Run the main web client in a separate terminal:
+
+```bash
+cd web_new
+npm install
+npm run dev
 ```
 
 ## Build Workflows
@@ -154,6 +180,46 @@ npm run dev
 - Server loads config from `config.yaml` (if present) and environment variables.
 - Defaults are defined in `internal/config/config.go`.
 - Environment keys follow dot-to-underscore convention (example: `game.tick_rate` -> `GAME_TICK_RATE`).
+
+## Contributing
+
+Contributions of all sizes are useful. If you are not sure where to start, docs updates, small bug fixes, tests, and cleanup PRs are all welcome.
+
+### Before opening a PR
+
+1. Open an issue first for large changes (new systems, protocol changes, major refactors) so the approach can be aligned early.
+2. Keep PRs focused on one change when possible.
+3. Include a short description of the behavior change and how you tested it.
+
+### Recommended local checks
+
+```bash
+make test
+```
+
+For frontend changes in `web_new`:
+
+```bash
+cd web_new
+npm run type-check
+npm run lint
+```
+
+### Reporting bugs
+
+Please include:
+
+- what you expected to happen
+- what actually happened
+- reproduction steps
+- logs/error messages (if available)
+- screenshots/video for UI issues (if relevant)
+
+## Community Guidelines
+
+- Be respectful and constructive in issues and PR reviews.
+- Assume good intent and focus feedback on the code and behavior.
+- Prefer clear problem statements and reproducible reports.
 
 ## Documentation
 

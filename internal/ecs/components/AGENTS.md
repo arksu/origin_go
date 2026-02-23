@@ -147,6 +147,7 @@ Maintain this list as you add new components:
 | 24 | PendingContextActionComponentID | Pending context-menu action until link created   |
 | 25 | ActiveCyclicActionComponentID   | Runtime state for active cyclic action UI/sync   |
 | 26 | CharacterProfileComponentID     | Runtime player-only profile (attributes, experience, etc.) |
+| 28 | ActiveCraftComponentID          | Runtime craft batch state paired with synthetic cyclic action |
 
 ## Migration from Auto-Assignment
 

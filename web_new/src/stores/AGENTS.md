@@ -83,6 +83,9 @@ if (authStore.isAuthenticated) { /* proceed */ }
 | `contextMenu` | `ContextMenuState \| null` | Server-provided context actions for selected entity |
 | `miniAlerts` | `MiniAlertItem[]` | Center-screen transient alerts with severity and TTL |
 | `characterSheetVisible` | `boolean` | Visibility flag for Character Sheet window |
+| `craftWindowVisible` | `boolean` | Visibility flag for Craft window |
+| `craftRecipes` | `proto.ICraftRecipeEntry[]` | Server-filtered craft recipes + live flags (`S2C_CraftList`) |
+| `selectedCraftKey` | `string` | Currently selected craft recipe key in UI |
 | `characterAttributes` | `CharacterAttributeViewItem[]` | Full snapshot of 9 character attributes for UI |
 
 ### Types
@@ -146,14 +149,23 @@ interface ChunkData {
 - `openContextMenu(entityId, actions)` — On `S2C_ContextMenu`
 - `closeContextMenu()` — Explicit close on click/hotkey
 - `pushMiniAlert(input)` — On `S2C_MiniAlert` with debounce/coalesce/max-visible rules
-- `setCharacterProfileSnapshot(entries)` — On `S2C_CharacterProfile`, normalize attributes to 9 values
+- `setCharacterProfileSnapshot(snapshot)` — On `S2C_CharacterProfile`, normalize attributes + exp
+- `setCraftListSnapshot(snapshot)` — On `S2C_CraftList`, replace recipes and keep selection stable if possible
 - `toggleCharacterSheet()` / `setCharacterSheetVisible(visible)` — Character Sheet window controls
+- `toggleCraftWindow()` / `setCraftWindowVisible(visible)` — Craft window controls
+- `selectCraftRecipe(craftKey)` — Craft UI selection
 
 ### Character Sheet Rules
 
 - Store keeps attributes as presentation-ready list (`label`, `icon`, `value`).
 - Snapshot processing is full-replace (no partial merge).
 - Fail-safe for UI: missing/invalid/<1 values become `1`.
+
+### Craft List Rules
+
+- `craftRecipes` is a full snapshot from server (`S2C_CraftList`), not incremental.
+- Visibility filtering happens on server side; client only renders what is provided.
+- `selectedCraftKey` should remain stable across refreshes when the recipe still exists; otherwise select first available recipe.
 
 #### Reset
 - `reset()` — Full cleanup (logout, disconnect, leave world)

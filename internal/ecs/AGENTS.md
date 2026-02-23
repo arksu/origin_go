@@ -411,3 +411,10 @@ For long-lived behavior state updates (tree growth, machines, etc.), use the sch
   - global processing budget per tick,
   - per-object restore catch-up cap.
 - Always read current game tick from `TimeState.Tick`; do not call wall clock directly inside ECS behavior systems.
+
+## UI Open State Resource
+
+Server-side UI-open state is tracked in ECS resource `OpenedWindowsState` (per player entity ID → set of window names).
+
+- Use it to gate expensive snapshot recomputes/pushes (for example `S2C_CraftList` only while `"craft"` window is open).
+- Treat it as UI/network state only; gameplay validation must remain server-authoritative and must not rely on window visibility.

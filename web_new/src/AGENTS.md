@@ -55,7 +55,9 @@ Server → Network → gameStore → gameFacade → PIXI Render
 - RMB on object is the entry point for context interactions.
 - Context menu data comes from server (`S2C_ContextMenu`), client only renders and sends selection.
 - Mini alerts are center-screen transient UI from server reason codes (`S2C_MiniAlert`).
-- Character attributes come from server (`S2C_CharacterAttributes`) as full snapshot and are shown in `Character Sheet` window.
+- Character profile comes from server (`S2C_CharacterProfile`) as full snapshot (attributes + exp) and is shown in UI windows.
+- Craft recipes come from server (`S2C_CraftList`) and are already filtered by server requirements; client only renders the provided list.
+- Craft UI must send `C2S_OpenWindow("craft")` / `C2S_CloseWindow("craft")` so the server can gate craft-list recomputation and pushes.
 - Keep anti-spam logic in store/UI (`debounce`, `coalesce`, max visible items), not in Pixi layer.
 
 ## Stack
@@ -144,9 +146,9 @@ Full AGENTS.md documentation inside. Key stores:
 ## Build Commands
 
 ```bash
-npm run dev        # Vite dev server
-npm run build      # Production build
-npm run proto:gen  # Generate protobuf types
+npm run dev     # Vite dev server (regenerates proto first)
+npm run build   # Production build (regenerates proto first)
+npm run proto   # Generate protobuf JS + TS typings
 ```
 
 ## Communication Between Layers
