@@ -381,6 +381,11 @@ message C2S_StartCraftMany {
   uint32 cycles = 2;
 }
 
+message C2S_BuildStart {
+  string build_key = 1;
+  Vector2 pos = 2;
+}
+
 message C2S_OpenWindow {
   string name = 1;
 }
@@ -405,6 +410,7 @@ message ClientMessage {
     C2S_StartCraftMany start_craft_many = 19;
     C2S_OpenWindow open_window = 20;
     C2S_CloseWindow close_window = 21;
+    C2S_BuildStart build_start = 22;
     //    C2S_StopMovement stop_movement = 13;
     //    C2S_Interact interact = 14;
     //    C2S_Attack attack = 15;
@@ -629,6 +635,30 @@ message S2C_CraftList {
   repeated CraftRecipeEntry recipes = 1;
 }
 
+message BuildInputDef {
+  optional string item_key = 1;
+  uint32 count = 2;
+  uint32 quality_weight = 3;
+  optional string item_tag = 4;
+}
+
+message BuildRecipeEntry {
+  string build_key = 1;
+  string name = 2;
+  repeated BuildInputDef inputs = 3;
+  double stamina_cost = 4;
+  uint32 ticks_required = 5;
+  repeated string required_skills = 6;
+  repeated string required_discovery = 7;
+  repeated uint32 allowed_tiles = 8;
+  repeated uint32 disallowed_tiles = 9;
+  string object_key = 10;
+}
+
+message S2C_BuildList {
+  repeated BuildRecipeEntry builds = 1;
+}
+
 message S2C_Sound {
   string sound_key = 1;
   double x = 2;
@@ -709,6 +739,7 @@ message ServerMessage {
     S2C_ExpGained exp_gained = 32;
     S2C_Fx fx = 33;
     S2C_CraftList craft_list = 34;
+    S2C_BuildList build_list = 35;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
