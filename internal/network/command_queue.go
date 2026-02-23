@@ -24,6 +24,7 @@ const (
 	CmdCloseContainer
 	CmdStartCraftOne
 	CmdStartCraftMany
+	CmdStartBuild
 	CmdOpenWindow
 	CmdCloseWindow
 )

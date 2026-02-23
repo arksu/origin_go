@@ -54,6 +54,7 @@ type Shard struct {
 	snapshotSender  *inventory.SnapshotSender
 	adminHandler    *ChatAdminCommandHandler
 	craftingService *CraftingService
+	buildService    *BuildService
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -193,10 +194,23 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	contextActionService.SetCraftingService(craftingService)
 	contextActionService.SetSoundEventSender(s)
 	s.craftingService = craftingService
+	buildService := NewBuildService(
+		s.world,
+		s.eventBus,
+		s.chunkManager,
+		s.entityIDManager,
+		behaviorRegistry,
+		visionSystem,
+		s,
+		networkCmdSystem,
+		logger,
+	)
+	s.buildService = buildService
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 	networkCmdSystem.SetContextActionService(contextActionService)
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetCraftCommandService(craftingService)
+	networkCmdSystem.SetBuildCommandService(buildService)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
@@ -208,6 +222,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
+	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))

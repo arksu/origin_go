@@ -212,6 +212,8 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleStartCraftOne(c, msg.Sequence, payload.StartCraftOne)
 	case *netproto.ClientMessage_StartCraftMany:
 		g.handleStartCraftMany(c, msg.Sequence, payload.StartCraftMany)
+	case *netproto.ClientMessage_BuildStart:
+		g.handleStartBuild(c, msg.Sequence, payload.BuildStart)
 	case *netproto.ClientMessage_OpenWindow:
 		g.handleOpenWindow(c, msg.Sequence, payload.OpenWindow)
 	case *netproto.ClientMessage_CloseWindow:
@@ -612,6 +614,31 @@ func (g *Game) handleStartCraftMany(c *network.Client, sequence uint32, msg *net
 		Layer:       c.Layer,
 	}
 	_ = shard.PlayerInbox().Enqueue(cmd)
+}
+
+func (g *Game) handleStartBuild(c *network.Client, sequence uint32, msg *netproto.C2S_BuildStart) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || msg.Pos == nil || strings.TrimSpace(msg.BuildKey) == "" {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid build request")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	_ = shard.PlayerInbox().Enqueue(&network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdStartBuild,
+		Payload:     msg,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	})
 }
 
 func (g *Game) handleOpenWindow(c *network.Client, sequence uint32, msg *netproto.C2S_OpenWindow) {

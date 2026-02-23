@@ -250,6 +250,7 @@ func testBehaviors(_ *testing.T) contracts.BehaviorRegistry {
 		byKey: map[string]contracts.Behavior{
 			"tree":      testTreeBehavior{},
 			"take":      testTakeBehavior{},
+			"build":     testPriorityOnlyBehavior{key: "build"},
 			"container": testPriorityOnlyBehavior{key: "container"},
 			"player":    testPriorityOnlyBehavior{key: "player"},
 		},

@@ -137,6 +137,7 @@ func DefaultRegistry() (*Registry, error) {
 	defaultRegistryOnce.Do(func() {
 		defaultRegistry, defaultRegistryErr = NewRegistry(
 			containerBehavior{},
+			buildBehavior{},
 			treeBehavior{},
 			takeBehavior{},
 			playerBehavior{},
