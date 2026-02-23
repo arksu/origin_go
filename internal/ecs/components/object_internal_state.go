@@ -54,12 +54,58 @@ type BuildRequiredItemState struct {
 	ItemTag string `json:"item_tag,omitempty"`
 
 	RequiredCount uint32 `json:"required_count,omitempty"`
-	PutCount      uint32 `json:"put_count,omitempty"`
 	BuildCount    uint32 `json:"build_count,omitempty"`
 
-	QualityWeight        uint32 `json:"quality_weight,omitempty"`
-	PutQualityWeighted   uint64 `json:"put_quality_weighted,omitempty"`
-	BuildQualityWeighted uint64 `json:"build_quality_weighted,omitempty"`
+	QualityWeight     uint32              `json:"quality_weight,omitempty"`
+	BuildQualityTotal uint32              `json:"build_quality_total,omitempty"`
+	PutItems          []BuildPutItemState `json:"put_items,omitempty"`
+}
+
+type BuildPutItemState struct {
+	ItemKey string `json:"item_key,omitempty"`
+	Quality uint32 `json:"quality,omitempty"`
+	Count   uint32 `json:"count,omitempty"`
+}
+
+func (s *BuildRequiredItemState) PutCount() uint32 {
+	if s == nil || len(s.PutItems) == 0 {
+		return 0
+	}
+	var total uint32
+	for _, item := range s.PutItems {
+		total += item.Count
+	}
+	return total
+}
+
+func (s *BuildRequiredItemState) MergePutItem(itemKey string, quality uint32, count uint32) {
+	if s == nil || count == 0 || itemKey == "" {
+		return
+	}
+	for i := range s.PutItems {
+		if s.PutItems[i].ItemKey == itemKey && s.PutItems[i].Quality == quality {
+			s.PutItems[i].Count += count
+			return
+		}
+	}
+	s.PutItems = append(s.PutItems, BuildPutItemState{
+		ItemKey: itemKey,
+		Quality: quality,
+		Count:   count,
+	})
+}
+
+func (s *BuildBehaviorState) IsEmpty() bool {
+	if s == nil {
+		return true
+	}
+	for i := range s.Items {
+		item := &s.Items[i]
+		if item.BuildCount > 0 || item.PutCount() > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (s TreeBehaviorState) MarshalJSON() ([]byte, error) {
