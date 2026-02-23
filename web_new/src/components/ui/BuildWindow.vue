@@ -97,14 +97,10 @@ function buildInputLabel(entry: { itemKey?: string | null; itemTag?: string | nu
   return `Any ${prettifyKey(itemTag)} x${count}`
 }
 
-function inputIconName(entry: { itemKey?: string | null; itemTag?: string | null }): string {
-  return (entry.itemKey || entry.itemTag || '').trim()
-}
-
-function itemIconUrl(iconName: string): string {
-  const normalized = iconName.trim()
+function itemResourceUrl(resource: string | null | undefined): string {
+  const normalized = (resource || '').trim()
   if (!normalized) return ''
-  return `/assets/game/items/${normalized}.png`
+  return `/assets/game/${normalized}`
 }
 
 function tileLabel(tileID: number | null | undefined): string {
@@ -199,7 +195,7 @@ function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefin
                   <span class="build-window__icon-slot">
                     <span
                       class="build-window__icon"
-                      :style="{ backgroundImage: itemIconUrl(inputIconName(input)) ? `url(${itemIconUrl(inputIconName(input))})` : 'none' }"
+                      :style="{ backgroundImage: itemResourceUrl(input.resource) ? `url(${itemResourceUrl(input.resource)})` : 'none' }"
                     />
                   </span>
                   {{ buildInputLabel(input) }}
