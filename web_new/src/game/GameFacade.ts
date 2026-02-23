@@ -28,9 +28,15 @@ export class GameFacade {
     return this.initialized
   }
 
-  onPlayerClick(callback: (screenX: number, screenY: number) => void): void {
-    this.render?.onPointerClick((point: ScreenPoint) => {
-      callback(point.x, point.y)
+  onPlayerClick(callback: (event: { screenX: number; screenY: number; worldX: number; worldY: number; button: number }) => boolean | void): void {
+    this.render?.onPointerClick((event) => {
+      return callback({
+        screenX: event.screen.x,
+        screenY: event.screen.y,
+        worldX: event.world.x,
+        worldY: event.world.y,
+        button: event.button,
+      })
     })
   }
 
@@ -97,8 +103,8 @@ export class GameFacade {
     this.render?.updateObjectPosition(entityId, x, y)
   }
 
-  playFx(x: number, y: number, fxKey: string): void {
-    this.render?.playFx(x, y, fxKey)
+  playFx(entityId: number, fxKey: string): void {
+    this.render?.playFx(entityId, fxKey)
   }
 
   toggleDebugOverlay(): void {
