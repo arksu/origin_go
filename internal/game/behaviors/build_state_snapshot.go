@@ -1,6 +1,7 @@
 package behaviors
 
 import (
+	"origin/internal/builddefs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/itemdefs"
@@ -42,8 +43,9 @@ func BuildStateSnapshotForTarget(world *ecs.World, targetID types.EntityID, targ
 		rows = append(rows, row)
 	}
 	return &netproto.S2C_BuildState{
-		EntityId: uint64(targetID),
-		List:     rows,
+		EntityId:  uint64(targetID),
+		List:      rows,
+		BuildName: resolveBuildStateName(buildState),
 	}, true
 }
 
@@ -72,4 +74,25 @@ func resolveBuildStateItemResource(itemKey string) string {
 		return ""
 	}
 	return def.ResolveResource(false)
+}
+
+func resolveBuildStateName(buildState *components.BuildBehaviorState) string {
+	if buildState == nil {
+		return ""
+	}
+	reg := builddefs.Global()
+	if reg == nil {
+		return ""
+	}
+	if buildState.BuildDefID > 0 {
+		if def, ok := reg.GetByID(buildState.BuildDefID); ok && def != nil {
+			return def.Name
+		}
+	}
+	if buildState.BuildKey != "" {
+		if def, ok := reg.GetByKey(buildState.BuildKey); ok && def != nil {
+			return def.Name
+		}
+	}
+	return ""
 }

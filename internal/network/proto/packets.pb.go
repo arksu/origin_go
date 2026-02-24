@@ -5533,6 +5533,7 @@ type S2C_BuildState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EntityId      uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
 	List          []*BuildStateItem      `protobuf:"bytes,2,rep,name=list,proto3" json:"list,omitempty"`
+	BuildName     string                 `protobuf:"bytes,3,opt,name=build_name,json=buildName,proto3" json:"build_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5579,6 +5580,13 @@ func (x *S2C_BuildState) GetList() []*BuildStateItem {
 		return x.List
 	}
 	return nil
+}
+
+func (x *S2C_BuildState) GetBuildName() string {
+	if x != nil {
+		return x.BuildName
+	}
+	return ""
 }
 
 type S2C_BuildStateClosed struct {
@@ -6926,10 +6934,12 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	" \x01(\tR\tobjectKey\x120\n" +
 	"\x14object_resource_path\x18\v \x01(\tR\x12objectResourcePath\"@\n" +
 	"\rS2C_BuildList\x12/\n" +
-	"\x06builds\x18\x01 \x03(\v2\x17.proto.BuildRecipeEntryR\x06builds\"X\n" +
+	"\x06builds\x18\x01 \x03(\v2\x17.proto.BuildRecipeEntryR\x06builds\"w\n" +
 	"\x0eS2C_BuildState\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12)\n" +
-	"\x04list\x18\x02 \x03(\v2\x15.proto.BuildStateItemR\x04list\"3\n" +
+	"\x04list\x18\x02 \x03(\v2\x15.proto.BuildStateItemR\x04list\x12\x1d\n" +
+	"\n" +
+	"build_name\x18\x03 \x01(\tR\tbuildName\"3\n" +
 	"\x14S2C_BuildStateClosed\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"p\n" +
 	"\tS2C_Sound\x12\x1b\n" +

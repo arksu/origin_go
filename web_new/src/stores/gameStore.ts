@@ -169,6 +169,7 @@ export const useGameStore = defineStore('game', () => {
   const armedBuildKey = ref<string>('')
   const buildStateWindowVisible = ref(false)
   const buildStateEntityId = ref<number | null>(null)
+  const buildStateName = ref<string>('')
   const buildStateList = ref<BuildStateItemState[]>([])
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
@@ -769,6 +770,7 @@ export const useGameStore = defineStore('game', () => {
       return
     }
     buildStateEntityId.value = entityId
+    buildStateName.value = (snapshot?.buildName || '').trim()
     buildStateList.value = (snapshot?.list || []).slice()
     buildStateWindowVisible.value = true
   }
@@ -776,6 +778,7 @@ export const useGameStore = defineStore('game', () => {
   function closeBuildStateWindow() {
     buildStateWindowVisible.value = false
     buildStateEntityId.value = null
+    buildStateName.value = ''
     buildStateList.value = []
   }
 
@@ -1010,6 +1013,7 @@ export const useGameStore = defineStore('game', () => {
     armedBuildKey,
     buildStateWindowVisible,
     buildStateEntityId,
+    buildStateName,
     buildStateList,
     characterAttributes,
     characterExperience,

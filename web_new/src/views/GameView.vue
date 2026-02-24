@@ -82,6 +82,7 @@ const showCraftWindow = computed(() => gameStore.craftWindowVisible)
 const showBuildWindow = computed(() => gameStore.buildWindowVisible)
 const showBuildStateWindow = computed(() => gameStore.buildStateWindowVisible)
 const currentBuildStateEntityId = computed(() => gameStore.buildStateEntityId)
+const currentBuildStateName = computed(() => gameStore.buildStateName)
 const currentBuildStateList = computed(() => gameStore.buildStateList)
 const buildStateHandHasItem = computed(() => !!gameStore.handState?.item)
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
@@ -536,6 +537,7 @@ useHotkeys(hotkeys)
       <div v-if="showBuildStateWindow" class="game-build-state-window">
         <BuildStateWindow
           :entity-id="currentBuildStateEntityId"
+          :title="currentBuildStateName"
           :list="currentBuildStateList"
           :hand-has-item="buildStateHandHasItem"
           @close="handleBuildStateWindowClose"

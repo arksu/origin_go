@@ -7,6 +7,7 @@ import AppButton from './AppButton.vue'
 
 interface Props {
   entityId: number | null
+  title?: string
   list: proto.IBuildStateItem[]
   handHasItem?: boolean
 }
@@ -34,6 +35,10 @@ const displayRows = computed(() => rows.value.map((row, idx) => ({
   iconUrl: rowIconUrl(row),
 })))
 const canBuild = computed(() => Number.isFinite(props.entityId ?? NaN) && (props.entityId ?? 0) > 0)
+const windowTitle = computed(() => {
+  const normalized = (props.title || '').trim()
+  return normalized || 'Build'
+})
 const windowInnerHeight = computed(() => {
   const rowCount = Math.max(rows.value.length, 1)
   const listHeight = LIST_VERTICAL_CHROME_PX + (rowCount * ROW_HEIGHT_PX) + (Math.max(rowCount - 1, 0) * ROW_GAP_PX)
@@ -181,7 +186,7 @@ onUnmounted(() => {
     :id="7103"
     :inner-width="WINDOW_INNER_WIDTH"
     :inner-height="windowInnerHeight"
-    title="Build"
+    :title="windowTitle"
     @close="onClose"
   >
     <div class="build-state-window">
