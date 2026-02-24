@@ -7,6 +7,7 @@ import (
 	"time"
 
 	constt "origin/internal/const"
+	"origin/internal/core"
 
 	"github.com/sqlc-dev/pqtype"
 	"go.uber.org/zap"
@@ -22,6 +23,8 @@ type DroppedItemPersisterDB struct {
 	db     *persistence.Postgres
 	logger *zap.Logger
 }
+
+var _ ObjectDespawnPersistence = (*DroppedItemPersisterDB)(nil)
 
 func NewDroppedItemPersisterDB(db *persistence.Postgres, logger *zap.Logger) *DroppedItemPersisterDB {
 	return &DroppedItemPersisterDB{db: db, logger: logger}
@@ -95,4 +98,11 @@ func (p *DroppedItemPersisterDB) DeleteDroppedObject(region int, entityID types.
 	}
 
 	return nil
+}
+
+func (p *DroppedItemPersisterDB) RecordChunkObjectDespawn(chunk *core.Chunk, entityID types.EntityID) {
+	if chunk == nil || entityID == 0 {
+		return
+	}
+	chunk.MarkDeletedObjectID(entityID)
 }

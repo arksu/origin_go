@@ -62,6 +62,7 @@ type buildPendingContextStarter interface {
 type BuildService struct {
 	world            *ecs.World
 	chunkManager     *gameworld.ChunkManager
+	despawnPersist   gameworld.ObjectDespawnPersistence
 	eventBus         *eventbus.EventBus
 	idAllocator      contracts.EntityIDAllocator
 	behaviorRegistry contracts.BehaviorRegistry
@@ -79,6 +80,7 @@ func NewBuildService(
 	world *ecs.World,
 	eventBus *eventbus.EventBus,
 	chunkManager *gameworld.ChunkManager,
+	despawnPersist gameworld.ObjectDespawnPersistence,
 	idAllocator contracts.EntityIDAllocator,
 	behaviorRegistry contracts.BehaviorRegistry,
 	visionForcer contracts.VisionUpdateForcer,
@@ -93,6 +95,7 @@ func NewBuildService(
 	s := &BuildService{
 		world:            world,
 		chunkManager:     chunkManager,
+		despawnPersist:   despawnPersist,
 		eventBus:         eventBus,
 		idAllocator:      idAllocator,
 		behaviorRegistry: behaviorRegistry,
@@ -554,8 +557,11 @@ func (s *BuildService) despawnBuildObject(w *ecs.World, targetID types.EntityID,
 			} else {
 				chunk.Spatial().RemoveDynamic(targetHandle, int(transform.X), int(transform.Y))
 			}
-			chunk.MarkDeletedObjectID(targetID)
-			chunk.MarkRawDataDirty()
+			if s.despawnPersist != nil {
+				s.despawnPersist.RecordChunkObjectDespawn(chunk, targetID)
+			} else {
+				chunk.MarkDeletedObjectID(targetID)
+			}
 		}
 	}
 	ecs.CancelBehaviorTicksByEntityID(w, targetID)

@@ -18,10 +18,25 @@ function distance2D(ax: number, ay: number, bx: number, by: number): number {
 
 const SOUND_ATTENUATION_MODEL = SoundAttenuationModel.Smoothstep
 
+function clearClientWorldState(): void {
+  const gameStore = useGameStore()
+  gameStore.setPlayerLeaveWorld()
+  gameFacade.setPlayerEntityId(null)
+  gameFacade.resetWorld()
+  moveController.clear()
+}
+
 export function registerMessageHandlers(): void {
   const gameStore = useGameStore()
 
   messageDispatcher.on('playerEnterWorld', (msg: proto.IS2C_PlayerEnterWorld) => {
+    // Some relogin/reconnect paths can deliver a fresh enter-world snapshot
+    // without a preceding playerLeaveWorld packet. Clear stale client world state
+    // first so object spawns do not collide with leftovers in ObjectManager.
+    if (gameStore.playerEntityId != null || gameStore.entities.size > 0 || gameStore.worldParams != null) {
+      clearClientWorldState()
+    }
+
     const coordPerTile = msg.coordPerTile || 32
     const chunkSize = msg.chunkSize || 128
     const streamEpoch = msg.streamEpoch || 0
@@ -49,10 +64,7 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('playerLeaveWorld', () => {
-    gameStore.setPlayerLeaveWorld()
-    gameFacade.setPlayerEntityId(null)
-    gameFacade.resetWorld()
-    moveController.clear()
+    clearClientWorldState()
   })
 
   messageDispatcher.on('characterProfile', (msg: proto.IS2C_CharacterProfile) => {
