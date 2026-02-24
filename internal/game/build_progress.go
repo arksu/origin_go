@@ -97,7 +97,7 @@ func (s *BuildService) HandleBuildCycleComplete(
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	if totalBuildPutItemCount(ctx.buildState) == 0 {
+	if s.totalBuildPutItemCountForTarget(w, ctx.targetHandle) == 0 {
 		s.SendBuildStateSnapshotToLinkedPlayers(w, ctx.targetID)
 		s.sendWarning(playerID, "BUILD_PROGRESS_NO_MATERIALS")
 		return contracts.BehaviorCycleDecisionCanceled
@@ -123,12 +123,9 @@ func (s *BuildService) startBuildCyclicAction(
 	}
 
 	ctx, ok := s.resolveBuildCycleContext(w, playerID, playerHandle, targetID)
-	if !ok || ctx.targetHandle != targetHandle {
-		// targetHandle equality mismatch is not fatal; use re-resolved handle below.
-		if !ok {
-			s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
-			return
-		}
+	if !ok {
+		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
+		return
 	}
 	if ctx.buildDef == nil || ctx.buildDef.TicksRequired == 0 {
 		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_DEF")
@@ -278,6 +275,21 @@ func totalBuildPutItemCount(buildState *components.BuildBehaviorState) uint32 {
 	return total
 }
 
+func (s *BuildService) totalBuildPutItemCountForTarget(w *ecs.World, targetHandle types.Handle) uint32 {
+	if s == nil || w == nil || w != s.world || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		return 0
+	}
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, targetHandle)
+	if !hasState {
+		return 0
+	}
+	buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey)
+	if !ok || buildState == nil {
+		return 0
+	}
+	return totalBuildPutItemCount(buildState)
+}
+
 func (s *BuildService) processOneBuildItem(
 	w *ecs.World,
 	targetHandle types.Handle,
@@ -352,44 +364,38 @@ func (s *BuildService) rollbackProcessedBuildItem(
 		}
 
 		if item.RemovedEmptyStack {
-			insertAt := item.StackIndex
-			if insertAt < 0 {
-				insertAt = 0
-			}
-			if insertAt > len(slot.PutItems) {
-				insertAt = len(slot.PutItems)
-			}
-			slot.PutItems = append(slot.PutItems, components.BuildPutItemState{})
-			copy(slot.PutItems[insertAt+1:], slot.PutItems[insertAt:])
-			slot.PutItems[insertAt] = components.BuildPutItemState{
+			insertBuildPutStackAt(slot, item.StackIndex, components.BuildPutItemState{
 				ItemKey: item.ItemKey,
 				Quality: item.Quality,
 				Count:   1,
-			}
+			})
 		} else if item.StackIndex >= 0 && item.StackIndex < len(slot.PutItems) &&
 			slot.PutItems[item.StackIndex].ItemKey == item.ItemKey &&
 			slot.PutItems[item.StackIndex].Quality == item.Quality {
 			slot.PutItems[item.StackIndex].Count++
 		} else {
-			// Fallback keeps material count correct if stack shape changed unexpectedly.
-			insertAt := item.StackIndex
-			if insertAt < 0 {
-				insertAt = 0
-			}
-			if insertAt > len(slot.PutItems) {
-				insertAt = len(slot.PutItems)
-			}
-			slot.PutItems = append(slot.PutItems, components.BuildPutItemState{})
-			copy(slot.PutItems[insertAt+1:], slot.PutItems[insertAt:])
-			slot.PutItems[insertAt] = components.BuildPutItemState{
-				ItemKey: item.ItemKey,
-				Quality: item.Quality,
-				Count:   1,
-			}
+			// Fallback preserves material correctness if slot content changed unexpectedly.
+			// Merge/append is safer than inserting at a stale index.
+			slot.MergePutItem(item.ItemKey, item.Quality, 1)
 		}
 		state.IsDirty = true
 		return true
 	})
+}
+
+func insertBuildPutStackAt(slot *components.BuildRequiredItemState, insertAt int, stack components.BuildPutItemState) {
+	if slot == nil || stack.ItemKey == "" || stack.Count == 0 {
+		return
+	}
+	if insertAt < 0 {
+		insertAt = 0
+	}
+	if insertAt > len(slot.PutItems) {
+		insertAt = len(slot.PutItems)
+	}
+	slot.PutItems = append(slot.PutItems, components.BuildPutItemState{})
+	copy(slot.PutItems[insertAt+1:], slot.PutItems[insertAt:])
+	slot.PutItems[insertAt] = stack
 }
 
 func (s *BuildService) hasBuildStamina(w *ecs.World, playerHandle types.Handle, cost float64) bool {
