@@ -49,28 +49,21 @@
       "name": "Crate",
       "inputs": [
         {
-          "itemTag": "ore",
+          "itemTag": "seed",
           "count": 3,
           "qualityWeight": 2
         },
         {
-          "itemKey": "branch",
+          "itemKey": "stone",
           "count": 2,
           "qualityWeight": 1
         }
       ],
       "staminaCost": 10,
       "ticksRequired": 50,
-      "requiredSkills": [
-        "construction"
-      ],
-      "requiredDiscovery": [
-        "storage"
-      ],
-      "disallowedTiles": [
-        1,
-        23
-      ],
+      "requiredSkills": [],
+      "requiredDiscovery": [],
+      "disallowedTiles": [],
       "objectKey": "crate"
     }
   ]

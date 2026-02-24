@@ -685,6 +685,7 @@ message S2C_BuildList {
 message S2C_BuildState {
   uint64 entity_id = 1;
   repeated BuildStateItem list = 2;
+  string build_name = 3;
 }
 
 message S2C_BuildStateClosed {
