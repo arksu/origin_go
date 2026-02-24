@@ -44,13 +44,26 @@
       }
     },
     {
+      "defId": 14,
+      "key": "kiln",
+      "name": "Kiln",
+      "static": true,
+      "components": {
+        "collider": {
+          "w": 36,
+          "h": 36
+        }
+      },
+      "resource": "kiln",
+      "behaviors": {}
+    },
+    {
       "defId": 1001,
       "key": "build",
       "name": "Build",
       "static": true,
       "contextMenuEvenForOneItem": false,
-      "components": {
-      },
+      "components": {},
       "resource": "build",
       "behaviors": {
         "build": {}

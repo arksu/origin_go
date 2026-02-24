@@ -3,7 +3,7 @@
   "source": "basic",
   "builds": [
     {
-      "defId": 10001,
+      "defId": 1,
       "key": "box",
       "name": "Box",
       "inputs": [
@@ -26,9 +26,27 @@
       "objectKey": "box"
     },
     {
-      "defId": 10002,
-      "key": "build_crate_from_ore_batch",
-      "name": "Build Crate (Ore Batch)",
+      "defId": 2,
+      "key": "kiln",
+      "name": "Kiln",
+      "inputs": [
+        {
+          "itemKey": "stone",
+          "count": 3,
+          "qualityWeight": 1
+        }
+      ],
+      "staminaCost": 8,
+      "ticksRequired": 20,
+      "requiredSkills": [],
+      "requiredDiscovery": [],
+      "allowedTiles": [],
+      "objectKey": "kiln"
+    },
+    {
+      "defId": 3,
+      "key": "crate",
+      "name": "Crate",
       "inputs": [
         {
           "itemTag": "ore",
