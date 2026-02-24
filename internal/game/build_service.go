@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -146,7 +147,7 @@ func (s *BuildService) HandleStartBuild(
 
 	targetX := int(msg.Pos.X)
 	targetY := int(msg.Pos.Y)
-	if !s.validateTileRules(buildDef, targetX, targetY, playerID) {
+	if !s.validateTileRules(buildDef, resultColliderDef, targetX, targetY, playerID) {
 		return
 	}
 
@@ -595,13 +596,59 @@ func (s *BuildService) resolveBuildDefs(buildKey string) (*builddefs.BuildDef, *
 	return buildDef, resultDef, buildSiteDef, resultDef.Components.Collider, ""
 }
 
-func (s *BuildService) validateTileRules(buildDef *builddefs.BuildDef, worldX, worldY int, playerID types.EntityID) bool {
+func (s *BuildService) validateTileRules(
+	buildDef *builddefs.BuildDef,
+	resultColliderDef *objectdefs.ColliderDef,
+	worldX, worldY int,
+	playerID types.EntityID,
+) bool {
 	if s == nil || s.chunkManager == nil || buildDef == nil {
 		s.sendError(playerID, "BUILD_PENDING_FAILED")
 		return false
 	}
-	tileX := mathutil.FloorDiv(worldX, constt.CoordPerTile)
-	tileY := mathutil.FloorDiv(worldY, constt.CoordPerTile)
+
+	halfWidth := 0.0
+	halfHeight := 0.0
+	if resultColliderDef != nil {
+		halfWidth = resultColliderDef.W / 2.0
+		halfHeight = resultColliderDef.H / 2.0
+	}
+	if halfWidth <= 0 || halfHeight <= 0 {
+		tileX := mathutil.FloorDiv(worldX, constt.CoordPerTile)
+		tileY := mathutil.FloorDiv(worldY, constt.CoordPerTile)
+		return s.validateTileRulesForTile(buildDef, tileX, tileY, playerID)
+	}
+
+	minWorldX := float64(worldX) - halfWidth
+	minWorldY := float64(worldY) - halfHeight
+	maxWorldXExclusive := float64(worldX) + halfWidth
+	maxWorldYExclusive := float64(worldY) + halfHeight
+
+	// Treat collider max edge as exclusive so an object exactly touching a tile border
+	// does not incorrectly require the adjacent tile.
+	maxWorldXIncluded := math.Nextafter(maxWorldXExclusive, math.Inf(-1))
+	maxWorldYIncluded := math.Nextafter(maxWorldYExclusive, math.Inf(-1))
+
+	minTileX := int(math.Floor(minWorldX / float64(constt.CoordPerTile)))
+	minTileY := int(math.Floor(minWorldY / float64(constt.CoordPerTile)))
+	maxTileX := int(math.Floor(maxWorldXIncluded / float64(constt.CoordPerTile)))
+	maxTileY := int(math.Floor(maxWorldYIncluded / float64(constt.CoordPerTile)))
+
+	for tileY := minTileY; tileY <= maxTileY; tileY++ {
+		for tileX := minTileX; tileX <= maxTileX; tileX++ {
+			if !s.validateTileRulesForTile(buildDef, tileX, tileY, playerID) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (s *BuildService) validateTileRulesForTile(
+	buildDef *builddefs.BuildDef,
+	tileX, tileY int,
+	playerID types.EntityID,
+) bool {
 	tileID, ok := s.chunkManager.GetTileID(tileX, tileY)
 	if !ok {
 		s.sendWarning(playerID, "BUILD_OUTSIDE_LOADED_CHUNK")
