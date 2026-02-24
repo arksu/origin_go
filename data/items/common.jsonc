@@ -48,6 +48,17 @@
       }
     },
     {
+      "defId": 3009,
+      "key": "birch_bark",
+      "name": "Birch Bark",
+      "resource": "items/birch_bark.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
       "defId": 3008,
       "key": "stone",
       "name": "Stone",
