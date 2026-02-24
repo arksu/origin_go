@@ -103,10 +103,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldMinY := float64(cfg.Game.WorldMinYChunks * chunkSize)
 	worldMaxY := float64((cfg.Game.WorldMinYChunks + cfg.Game.WorldHeightChunks) * chunkSize)
 
-	droppedItemPersister := world.NewDroppedItemPersisterDB(db, logger)
+	worldObjectPersistence := world.NewDroppedItemPersisterDB(db, logger)
 	// Create vision system first so it can be passed to other systems
 	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, enableVisionStats, logger)
-	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, droppedItemPersister, s.chunkManager, visionSystem)
+	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
@@ -198,6 +198,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		s.world,
 		s.eventBus,
 		s.chunkManager,
+		worldObjectPersistence,
 		s.entityIDManager,
 		behaviorRegistry,
 		visionSystem,
@@ -246,7 +247,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewPlayerStatsPushSystem(s))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
-	s.world.AddSystem(systems.NewDropDecaySystem(droppedItemPersister, s.chunkManager, logger))
+	s.world.AddSystem(systems.NewDropDecaySystem(worldObjectPersistence, s.chunkManager, logger))
 
 	return s
 }

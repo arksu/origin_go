@@ -190,7 +190,7 @@ onUnmounted(() => {
 <template>
   <GameWindow
     :id="7102"
-    :inner-width="700"
+    :inner-width="490"
     :inner-height="360"
     title="Build"
     @close="onClose"
