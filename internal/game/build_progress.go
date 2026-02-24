@@ -10,9 +10,9 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/entitystats"
-	"origin/internal/eventbus"
 	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
+	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -468,7 +468,7 @@ func (s *BuildService) finalizeCompletedBuild(
 	}
 
 	s.closeAndBreakLinksForCompletedBuild(w, actorPlayerID, targetID)
-	s.transformCompletedBuildTarget(w, targetID, targetHandle, info, buildDef, buildState, resultDef)
+	s.transformCompletedBuildTarget(w, targetID, targetHandle, buildDef, buildState, resultDef)
 	return true
 }
 
@@ -558,7 +558,6 @@ func (s *BuildService) transformCompletedBuildTarget(
 	w *ecs.World,
 	targetID types.EntityID,
 	targetHandle types.Handle,
-	targetInfo components.EntityInfo,
 	buildDef *builddefs.BuildDef,
 	buildState *components.BuildBehaviorState,
 	resultDef *objectdefs.ObjectDef,
@@ -566,95 +565,25 @@ func (s *BuildService) transformCompletedBuildTarget(
 	if s == nil || w == nil || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) || resultDef == nil {
 		return
 	}
-	previousTypeID := targetInfo.TypeID
-
 	var computedQuality uint32
 	var hasComputedQuality bool
 	if buildDef != nil && buildState != nil {
 		computedQuality, hasComputedQuality = s.computeCompletedBuildObjectQuality(buildDef, buildState)
 	}
-
-	ecs.WithComponent(w, targetHandle, func(info *components.EntityInfo) {
-		info.TypeID = uint32(resultDef.DefID)
-		info.Behaviors = resultDef.CopyBehaviorOrder()
-		info.IsStatic = resultDef.IsStatic
-		if hasComputedQuality {
-			info.Quality = computedQuality
-		}
+	var qualityOverride *uint32
+	if hasComputedQuality {
+		qualityOverride = &computedQuality
+	}
+	gameworld.TransformObjectToDefInPlace(w, targetID, targetHandle, resultDef, gameworld.TransformObjectInPlaceOptions{
+		DeleteBehaviorStateKeys: []string{buildBehaviorStateKey},
+		ClearFlags:              true,
+		QualityOverride:         qualityOverride,
+		BehaviorRegistry:        s.behaviorRegistry,
+		Chunks:                  s.chunkManager,
+		EventBus:                s.eventBus,
+		Logger:                  s.logger,
+		InventoryInitializer:    s.objectInvInit,
 	})
-
-	if s.objectInvInit != nil {
-		s.objectInvInit.EnsureObjectInventoriesForDef(w, targetHandle, targetID, resultDef)
-	}
-
-	resource := objectdefs.ResolveAppearanceResource(resultDef, nil)
-	if resource == "" {
-		resource = resultDef.Resource
-	}
-	if _, hasAppearance := ecs.GetComponent[components.Appearance](w, targetHandle); hasAppearance {
-		ecs.WithComponent(w, targetHandle, func(appearance *components.Appearance) {
-			appearance.Resource = resource
-		})
-	}
-
-	if resultDef.Components != nil && resultDef.Components.Collider != nil {
-		nextCollider := objectdefs.BuildColliderComponent(resultDef.Components.Collider)
-		if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider {
-			ecs.WithComponent(w, targetHandle, func(c *components.Collider) {
-				c.HalfWidth = nextCollider.HalfWidth
-				c.HalfHeight = nextCollider.HalfHeight
-				c.Layer = nextCollider.Layer
-				c.Mask = nextCollider.Mask
-			})
-		} else {
-			ecs.AddComponent(w, targetHandle, nextCollider)
-		}
-	} else {
-		ecs.RemoveComponent[components.Collider](w, targetHandle)
-	}
-
-	ecs.WithComponent(w, targetHandle, func(state *components.ObjectInternalState) {
-		components.DeleteBehaviorState(state, buildBehaviorStateKey)
-		state.Flags = nil
-		state.IsDirty = true
-	})
-
-	ecs.CancelBehaviorTicksByEntityID(w, targetID)
-	if s.behaviorRegistry != nil {
-		currentInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
-		if hasInfo {
-			if err := s.behaviorRegistry.InitObjectBehaviors(&contracts.BehaviorObjectInitContext{
-				World:        w,
-				Handle:       targetHandle,
-				EntityID:     targetID,
-				EntityType:   currentInfo.TypeID,
-				PreviousType: previousTypeID,
-				Reason:       contracts.ObjectBehaviorInitReasonTransform,
-			}, currentInfo.Behaviors); err != nil {
-				s.logger.Error("build finalize: failed to init transformed object behaviors",
-					zap.Uint64("target_id", uint64(targetID)),
-					zap.Error(err))
-			}
-		}
-	}
-
-	if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, targetHandle); hasChunkRef && s.chunkManager != nil {
-		chunk := s.chunkManager.GetChunkFast(types.ChunkCoord{
-			X: chunkRef.CurrentChunkX,
-			Y: chunkRef.CurrentChunkY,
-		})
-		if chunk != nil {
-			chunk.MarkRawDataDirty()
-		}
-	}
-
-	if s.eventBus != nil {
-		s.eventBus.PublishAsync(
-			ecs.NewEntityAppearanceChangedEvent(targetInfo.Layer, targetID, targetHandle),
-			eventbus.PriorityMedium,
-		)
-	}
-	ecs.MarkObjectBehaviorDirty(w, targetHandle)
 }
 
 func (s *BuildService) computeCompletedBuildObjectQuality(

@@ -547,8 +547,6 @@ func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contrac
 			ctx.World,
 			ctx.TargetID,
 			ctx.TargetHandle,
-			targetInfo,
-			targetChunkRef,
 			completedStage.TransformToDefKey,
 			deps,
 		)
@@ -1228,8 +1226,6 @@ func transformTargetToDef(
 	world *ecs.World,
 	targetID types.EntityID,
 	targetHandle types.Handle,
-	targetInfo components.EntityInfo,
-	targetChunkRef components.ChunkRef,
 	transformDefKey string,
 	deps contracts.ExecutionDeps,
 ) {
@@ -1239,80 +1235,14 @@ func transformTargetToDef(
 		logger.Warn("tree chop: stump def not found", zap.String("def_key", transformDefKey))
 		return
 	}
-
-	previousTypeID := targetInfo.TypeID
-	ecs.WithComponent(world, targetHandle, func(info *components.EntityInfo) {
-		info.TypeID = uint32(stumpDef.DefID)
-		info.Behaviors = stumpDef.CopyBehaviorOrder()
-		info.IsStatic = stumpDef.IsStatic
+	gameworld.TransformObjectToDefInPlace(world, targetID, targetHandle, stumpDef, gameworld.TransformObjectInPlaceOptions{
+		DeleteBehaviorStateKeys: []string{treeBehaviorKey},
+		ClearFlags:              true,
+		BehaviorRegistry:        deps.BehaviorRegistry,
+		Chunks:                  deps.Chunks,
+		EventBus:                deps.EventBus,
+		Logger:                  logger,
 	})
-	ecs.WithComponent(world, targetHandle, func(appearance *components.Appearance) {
-		resource := objectdefs.ResolveAppearanceResource(stumpDef, nil)
-		if resource == "" {
-			resource = stumpDef.Resource
-		}
-		appearance.Resource = resource
-	})
-
-	if stumpDef.Components != nil && stumpDef.Components.Collider != nil {
-		collider := objectdefs.BuildColliderComponent(stumpDef.Components.Collider)
-		if _, hasCollider := ecs.GetComponent[components.Collider](world, targetHandle); hasCollider {
-			ecs.WithComponent(world, targetHandle, func(existing *components.Collider) {
-				existing.HalfWidth = collider.HalfWidth
-				existing.HalfHeight = collider.HalfHeight
-				existing.Layer = collider.Layer
-				existing.Mask = collider.Mask
-			})
-		} else {
-			ecs.AddComponent(world, targetHandle, collider)
-		}
-	} else {
-		ecs.RemoveComponent[components.Collider](world, targetHandle)
-	}
-
-	ecs.WithComponent(world, targetHandle, func(state *components.ObjectInternalState) {
-		components.DeleteBehaviorState(state, treeBehaviorKey)
-		state.Flags = nil
-		state.IsDirty = true
-	})
-	ecs.CancelBehaviorTicksByEntityID(world, targetID)
-
-	if deps.BehaviorRegistry != nil {
-		currentInfo, hasInfo := ecs.GetComponent[components.EntityInfo](world, targetHandle)
-		if hasInfo {
-			if initErr := deps.BehaviorRegistry.InitObjectBehaviors(&contracts.BehaviorObjectInitContext{
-				World:        world,
-				Handle:       targetHandle,
-				EntityID:     targetID,
-				EntityType:   currentInfo.TypeID,
-				PreviousType: previousTypeID,
-				Reason:       contracts.ObjectBehaviorInitReasonTransform,
-			}, currentInfo.Behaviors); initErr != nil {
-				logger.Error("tree chop: failed to init transformed object behaviors",
-					zap.Uint64("target_id", uint64(targetID)),
-					zap.Error(initErr),
-				)
-			}
-		}
-	}
-
-	if deps.Chunks != nil {
-		chunk := deps.Chunks.GetChunkFast(types.ChunkCoord{
-			X: targetChunkRef.CurrentChunkX,
-			Y: targetChunkRef.CurrentChunkY,
-		})
-		if chunk != nil {
-			chunk.MarkRawDataDirty()
-		}
-	}
-
-	if deps.EventBus != nil {
-		deps.EventBus.PublishAsync(
-			ecs.NewEntityAppearanceChangedEvent(targetInfo.Layer, targetID, targetHandle),
-			eventbus.PriorityMedium,
-		)
-	}
-	ecs.MarkObjectBehaviorDirty(world, targetHandle)
 }
 
 func deleteTreeTarget(
