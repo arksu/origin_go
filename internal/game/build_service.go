@@ -60,19 +60,10 @@ type buildPendingContextStarter interface {
 	)
 }
 
-type buildObjectInventoryInitializer interface {
-	EnsureObjectInventoriesForDef(
-		w *ecs.World,
-		objectHandle types.Handle,
-		ownerID types.EntityID,
-		def *objectdefs.ObjectDef,
-	) bool
-}
-
 type BuildService struct {
 	world            *ecs.World
 	chunkManager     *gameworld.ChunkManager
-	objectInvInit    buildObjectInventoryInitializer
+	objectInvInit    gameworld.ObjectInventoryInitializer
 	despawnPersist   gameworld.ObjectDespawnPersistence
 	eventBus         *eventbus.EventBus
 	idAllocator      contracts.EntityIDAllocator
@@ -91,7 +82,7 @@ func NewBuildService(
 	world *ecs.World,
 	eventBus *eventbus.EventBus,
 	chunkManager *gameworld.ChunkManager,
-	objectInvInit buildObjectInventoryInitializer,
+	objectInvInit gameworld.ObjectInventoryInitializer,
 	despawnPersist gameworld.ObjectDespawnPersistence,
 	idAllocator contracts.EntityIDAllocator,
 	behaviorRegistry contracts.BehaviorRegistry,
