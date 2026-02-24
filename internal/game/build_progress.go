@@ -583,6 +583,10 @@ func (s *BuildService) transformCompletedBuildTarget(
 		}
 	})
 
+	if s.objectInvInit != nil {
+		s.objectInvInit.EnsureObjectInventoriesForDef(w, targetHandle, targetID, resultDef)
+	}
+
 	resource := objectdefs.ResolveAppearanceResource(resultDef, nil)
 	if resource == "" {
 		resource = resultDef.Resource

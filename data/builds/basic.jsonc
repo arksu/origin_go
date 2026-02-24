@@ -9,17 +9,17 @@
       "inputs": [
         {
           "itemKey": "branch",
-          "count": 5,
+          "count": 2,
           "qualityWeight": 1
         },
         {
-          "itemKey": "block_of_wood",
+          "itemKey": "stone",
           "count": 3,
           "qualityWeight": 1
         }
       ],
       "staminaCost": 8,
-      "ticksRequired": 40,
+      "ticksRequired": 20,
       "requiredSkills": [],
       "requiredDiscovery": [],
       "allowedTiles": [],
