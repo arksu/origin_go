@@ -208,6 +208,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger,
 	)
 	s.buildService = buildService
+	contextActionService.SetBuildService(buildService)
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 	networkCmdSystem.SetContextActionService(contextActionService)
 	networkCmdSystem.SetContextMenuSender(s)

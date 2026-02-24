@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	buildPendingTTL       = 15 * time.Second
-	buildBehaviorStateKey = "build"
+	buildPendingTTL        = 15 * time.Second
+	buildBehaviorStateKey  = "build"
+	buildSyntheticActionID = "build"
 )
 
 type buildRuntimeSender interface {
@@ -225,16 +226,7 @@ func (s *BuildService) HandleBuildProgress(
 		s.sendWarning(playerID, "BUILD_PROGRESS_NOT_LINKED")
 		return
 	}
-	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, targetHandle)
-	if !hasState {
-		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
-		return
-	}
-	if _, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey); !ok {
-		s.sendWarning(playerID, "BUILD_PROGRESS_INVALID_TARGET")
-		return
-	}
-	s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, "BUILD_PROGRESS_COMING_SOON")
+	s.startBuildCyclicAction(w, playerID, playerHandle, targetID, targetHandle)
 }
 
 func (s *BuildService) HandleBuildTakeBack(

@@ -54,6 +54,7 @@ type ContextActionService struct {
 	behaviorRegistry contracts.BehaviorRegistry
 	actionDeps       contracts.ExecutionDeps
 	crafting         *CraftingService
+	build            *BuildService
 }
 
 func NewContextActionService(
@@ -136,6 +137,13 @@ func (s *ContextActionService) SetCraftingService(crafting *CraftingService) {
 		return
 	}
 	s.crafting = crafting
+}
+
+func (s *ContextActionService) SetBuildService(build *BuildService) {
+	if s == nil {
+		return
+	}
+	s.build = build
 }
 
 var _ systems.ContextActionResolver = (*ContextActionService)(nil)
@@ -392,6 +400,9 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	if s.crafting != nil && s.crafting.IsSyntheticCraftAction(action) {
 		return s.crafting.HandleCraftCycleComplete(w, playerID, playerHandle, action)
 	}
+	if s.build != nil && s.build.IsSyntheticBuildAction(action) {
+		return s.build.HandleBuildCycleComplete(w, playerID, playerHandle, action)
+	}
 	if action.BehaviorKey == "" || s.behaviorRegistry == nil {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -446,6 +457,9 @@ func (s *ContextActionService) isActiveCyclicActionStillValid(
 	}
 	if s.crafting != nil && s.crafting.IsSyntheticCraftAction(action) {
 		return s.crafting.IsActiveCraftStillValid(w, playerID, playerHandle, action)
+	}
+	if s.build != nil && s.build.IsSyntheticBuildAction(action) {
+		return s.build.IsActiveBuildStillValid(w, playerID, playerHandle, action)
 	}
 	if w == nil || s.behaviorRegistry == nil || action.BehaviorKey == "" || action.ActionID == "" {
 		return false
