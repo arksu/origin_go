@@ -46,18 +46,18 @@ func NewExpireDetachedSystem(
 	onExpireBatch func(entityIDs []types.EntityID),
 ) *ExpireDetachedSystem {
 	return &ExpireDetachedSystem{
-		BaseSystem:     ecs.NewBaseSystem("ExpireDetachedSystem", 950), // Run after ChunkSystem
-		logger:         logger,
-		onExpire:       onExpire,
-		onExpireBatch:  onExpireBatch,
-		characterSaver: characterSaver,
-		expiredBuffer:  make([]types.EntityID, 0, 64),
+		BaseSystem:        ecs.NewBaseSystem("ExpireDetachedSystem", 950), // Run after ChunkSystem
+		logger:            logger,
+		onExpire:          onExpire,
+		onExpireBatch:     onExpireBatch,
+		characterSaver:    characterSaver,
+		expiredBuffer:     make([]types.EntityID, 0, 64),
 		pendingUnregister: make([]types.EntityID, 0, 512),
 		// Throughput guard: with 10Hz ticks, 16/tick caps at ~160 despawns/sec.
 		// Use a higher value now that expensive AOI recalculation is deferred.
-		maxPerTick:     256,
+		maxPerTick: 256,
 		// Keep each recalc bounded; large single-shot recalcs can freeze shard for seconds.
-		unregisterFlushChunkSize: 128,
+		unregisterFlushChunkSize:    128,
 		maxUnregisterFlushesPerTick: 1,
 	}
 }
@@ -119,6 +119,15 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 		// Call cleanup callback before despawn (for spatial index, AOI, etc.)
 		if s.onExpire != nil {
 			s.onExpire(entityID, handle)
+		}
+
+		// Detached/despawned player must behave like an unlink to downstream systems.
+		if _, _, err := ecs.BreakLinkForPlayer(w, entityID, ecs.LinkBreakDespawn); err != nil {
+			s.logger.Warn("Failed to publish LinkBroken for expired detached entity",
+				zap.Error(err),
+				zap.Uint64("entity_id", uint64(entityID)),
+				zap.Int("layer", w.Layer),
+			)
 		}
 
 		// Despawn the entity
@@ -203,6 +212,14 @@ func DespawnDetachedEntity(w *ecs.World, entityID types.EntityID, logger *zap.Lo
 		zap.Duration("detached_duration", detachedDuration),
 		zap.Int("layer", w.Layer),
 	)
+
+	if _, _, err := ecs.BreakLinkForPlayer(w, entityID, ecs.LinkBreakDespawn); err != nil {
+		logger.Warn("Failed to publish LinkBroken for manually despawned detached entity",
+			zap.Error(err),
+			zap.Uint64("entity_id", uint64(entityID)),
+			zap.Int("layer", w.Layer),
+		)
+	}
 
 	// Despawn the entity
 	w.Despawn(handle)

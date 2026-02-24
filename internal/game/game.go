@@ -758,6 +758,13 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(playerEntityID)
 
 				if disconnectDelay > 0 && playerHandle != types.InvalidHandle {
+					if _, _, err := ecs.BreakLinkForPlayer(shard.world, playerEntityID, ecs.LinkBreakClosed); err != nil {
+						g.logger.Warn("Failed to publish LinkBroken on detach",
+							zap.Error(err),
+							zap.Int64("character_id", int64(playerEntityID)),
+							zap.Int("layer", c.Layer),
+						)
+					}
 					// Detached mode: keep entity in world for DisconnectDelay seconds
 					gameNow := g.clock.GameNow()
 					expirationTime := gameNow.Add(time.Duration(disconnectDelay) * time.Second)
@@ -782,6 +789,13 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				} else {
 					// Immediate despawn (DisconnectDelay=0 or entity not found)
 					if playerHandle != types.InvalidHandle {
+						if _, _, err := ecs.BreakLinkForPlayer(shard.world, playerEntityID, ecs.LinkBreakDespawn); err != nil {
+							g.logger.Warn("Failed to publish LinkBroken on disconnect despawn",
+								zap.Error(err),
+								zap.Int64("character_id", int64(playerEntityID)),
+								zap.Int("layer", c.Layer),
+							)
+						}
 						// Remove from chunk spatial index before despawning
 						if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](shard.world, playerHandle); hasChunkRef {
 							if transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, playerHandle); hasTransform {

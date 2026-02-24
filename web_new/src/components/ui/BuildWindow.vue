@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useGameStore } from '@/stores/gameStore'
 import type { proto } from '@/network/proto/packets.js'
 import objectVisualDefs from '@/game/objects'
@@ -49,6 +49,11 @@ const selectedBuild = computed<proto.IBuildRecipeEntry | null>(() => {
   return filteredBuilds.value[0] || null
 })
 
+const tooltipVisible = ref(false)
+const tooltipX = ref(0)
+const tooltipY = ref(0)
+let tooltipElement: HTMLDivElement | null = null
+
 watch(
   selectedBuild,
   (build) => {
@@ -89,12 +94,16 @@ function prettifyKey(value: string | null | undefined): string {
     .join(' ')
 }
 
-function buildInputLabel(entry: { itemKey?: string | null; itemTag?: string | null; count?: number | null }): string {
-  const count = Math.max(1, Number(entry.count || 0))
+function buildInputTooltipLabel(entry: { itemKey?: string | null; itemTag?: string | null }): string {
   const itemKey = (entry.itemKey || '').trim()
-  if (itemKey) return `${prettifyKey(itemKey)} x${count}`
+  if (itemKey) return prettifyKey(itemKey)
   const itemTag = (entry.itemTag || '').trim()
-  return `Any ${prettifyKey(itemTag)} x${count}`
+  return `Any ${prettifyKey(itemTag)}`
+}
+
+function buildInputCountLabel(entry: { count?: number | null }): string {
+  const count = Math.max(1, Number(entry.count || 0))
+  return `x${count}`
 }
 
 function itemResourceUrl(resource: string | null | undefined): string {
@@ -132,6 +141,50 @@ function objectIconUrl(objectKey: string | null | undefined): string {
 function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefined): string {
   return objectIconUrl(build?.objectKey)
 }
+
+function createTooltip(text: string) {
+  if (tooltipElement) return
+  tooltipElement = document.createElement('div')
+  tooltipElement.className = 'build-item-tooltip-global'
+  tooltipElement.innerHTML = `<pre>${text}</pre>`
+  document.body.appendChild(tooltipElement)
+}
+
+function removeTooltip() {
+  if (!tooltipElement) return
+  document.body.removeChild(tooltipElement)
+  tooltipElement = null
+}
+
+function updateTooltipPosition() {
+  if (!tooltipElement) return
+  tooltipElement.style.left = `${tooltipX.value}px`
+  tooltipElement.style.top = `${tooltipY.value}px`
+}
+
+function onInputMouseEnter(input: proto.IBuildInputDef, event: MouseEvent) {
+  tooltipVisible.value = true
+  tooltipX.value = event.clientX + 10
+  tooltipY.value = event.clientY + 10
+  createTooltip(buildInputTooltipLabel(input))
+  updateTooltipPosition()
+}
+
+function onInputMouseMove(event: MouseEvent) {
+  if (!tooltipVisible.value) return
+  tooltipX.value = event.clientX + 10
+  tooltipY.value = event.clientY + 10
+  updateTooltipPosition()
+}
+
+function onInputMouseLeave() {
+  tooltipVisible.value = false
+  removeTooltip()
+}
+
+onUnmounted(() => {
+  removeTooltip()
+})
 </script>
 
 <template>
@@ -166,10 +219,13 @@ function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefin
               @click="selectBuild(build.buildKey || '')"
             >
               <span class="build-window__icon-slot build-window__icon-slot--recipe">
-                <span
+                <img
+                  v-if="firstResultIconForBuild(build)"
                   class="build-window__icon"
-                  :style="{ backgroundImage: firstResultIconForBuild(build) ? `url(${firstResultIconForBuild(build)})` : 'none' }"
-                />
+                  :src="firstResultIconForBuild(build)"
+                  alt=""
+                  draggable="false"
+                >
               </span>
               <span class="build-window__recipe-name">{{ build.name || prettifyKey(build.buildKey) }}</span>
             </button>
@@ -191,14 +247,20 @@ function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefin
                   v-for="(input, idx) in selectedBuild.inputs || []"
                   :key="`${selectedBuild.buildKey || 'build'}-in-${idx}`"
                   class="build-window__chip"
+                  @mouseenter="onInputMouseEnter(input, $event)"
+                  @mousemove="onInputMouseMove"
+                  @mouseleave="onInputMouseLeave"
                 >
                   <span class="build-window__icon-slot">
-                    <span
+                    <img
+                      v-if="itemResourceUrl(input.resource)"
                       class="build-window__icon"
-                      :style="{ backgroundImage: itemResourceUrl(input.resource) ? `url(${itemResourceUrl(input.resource)})` : 'none' }"
-                    />
+                      :src="itemResourceUrl(input.resource)"
+                      alt=""
+                      draggable="false"
+                    >
                   </span>
-                  {{ buildInputLabel(input) }}
+                  {{ buildInputCountLabel(input) }}
                 </div>
               </div>
             </div>
@@ -235,10 +297,13 @@ function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefin
               <div class="build-window__chips">
                 <div class="build-window__chip build-window__chip--result">
                   <span class="build-window__icon-slot">
-                    <span
+                    <img
+                      v-if="objectIconUrl(selectedBuild.objectKey)"
                       class="build-window__icon"
-                      :style="{ backgroundImage: objectIconUrl(selectedBuild.objectKey) ? `url(${objectIconUrl(selectedBuild.objectKey)})` : 'none' }"
-                    />
+                      :src="objectIconUrl(selectedBuild.objectKey)"
+                      alt=""
+                      draggable="false"
+                    >
                   </span>
                   {{ prettifyKey(selectedBuild.objectKey) }}
                 </div>
@@ -439,24 +504,22 @@ function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefin
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: url('/assets/img/inventory_slot.png') no-repeat center center;
-  background-size: 32px 32px;
 }
 
 .build-window__icon-slot--recipe {
-  width: 28px;
-  height: 28px;
-  flex-basis: 28px;
-  background-size: 28px 28px;
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
 }
 
 .build-window__icon {
-  width: 28px;
-  height: 28px;
-  background-repeat: no-repeat;
-  background-position: center center;
-  background-size: contain;
   display: block;
+  width: auto;
+  height: auto;
+  max-width: 31px;
+  max-height: 31px;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 
 .build-window__empty {
@@ -492,5 +555,22 @@ function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefin
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     align-content: start;
   }
+}
+</style>
+
+<style lang="scss">
+.build-item-tooltip-global {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffffff;
+  border: 2px solid #555;
+  border-radius: 8px;
+  padding: 3px 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  z-index: 999999;
+  pointer-events: none;
+  max-width: 300px;
+  word-wrap: break-word;
 }
 </style>

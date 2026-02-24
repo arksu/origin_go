@@ -39,6 +39,8 @@ type ObjectFactory struct {
 	droppedInvLoader DroppedInventoryLoader
 }
 
+const buildBehaviorStateKey = "build"
+
 // NewObjectFactory creates a factory backed by the given object definitions registry.
 func NewObjectFactory(loader DroppedInventoryLoader) *ObjectFactory {
 	return &ObjectFactory{droppedInvLoader: loader}
@@ -515,6 +517,15 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 	chunkRef, ok := ecs.GetComponent[components.ChunkRef](w, h)
 	if !ok {
 		return nil, ErrEntityNotFound
+	}
+
+	if info.TypeID == constt.BuildObjectTypeID {
+		if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h); hasState {
+			if buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey); ok && buildState != nil && buildState.IsEmpty() {
+				// Empty construction sites are transient intentions and must not persist across shutdown/restart.
+				return nil, nil
+			}
+		}
 	}
 
 	obj := &repository.Object{

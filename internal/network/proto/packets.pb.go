@@ -260,6 +260,7 @@ const (
 	InventoryKind_INVENTORY_KIND_HAND         InventoryKind = 1
 	InventoryKind_INVENTORY_KIND_EQUIPMENT    InventoryKind = 2
 	InventoryKind_INVENTORY_KIND_DROPPED_ITEM InventoryKind = 3
+	InventoryKind_INVENTORY_KIND_BUILD        InventoryKind = 4
 )
 
 // Enum value maps for InventoryKind.
@@ -269,12 +270,14 @@ var (
 		1: "INVENTORY_KIND_HAND",
 		2: "INVENTORY_KIND_EQUIPMENT",
 		3: "INVENTORY_KIND_DROPPED_ITEM",
+		4: "INVENTORY_KIND_BUILD",
 	}
 	InventoryKind_value = map[string]int32{
 		"INVENTORY_KIND_GRID":         0,
 		"INVENTORY_KIND_HAND":         1,
 		"INVENTORY_KIND_EQUIPMENT":    2,
 		"INVENTORY_KIND_DROPPED_ITEM": 3,
+		"INVENTORY_KIND_BUILD":        4,
 	}
 )
 
@@ -6959,12 +6962,13 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x11WEATHER_TYPE_RAIN\x10\x01\x12\x14\n" +
 	"\x10WEATHER_TYPE_FOG\x10\x02\x12\x16\n" +
 	"\x12WEATHER_TYPE_STORM\x10\x03\x12\x15\n" +
-	"\x11WEATHER_TYPE_SNOW\x10\x04*\x80\x01\n" +
+	"\x11WEATHER_TYPE_SNOW\x10\x04*\x9a\x01\n" +
 	"\rInventoryKind\x12\x17\n" +
 	"\x13INVENTORY_KIND_GRID\x10\x00\x12\x17\n" +
 	"\x13INVENTORY_KIND_HAND\x10\x01\x12\x1c\n" +
 	"\x18INVENTORY_KIND_EQUIPMENT\x10\x02\x12\x1f\n" +
-	"\x1bINVENTORY_KIND_DROPPED_ITEM\x10\x03*\xb9\x04\n" +
+	"\x1bINVENTORY_KIND_DROPPED_ITEM\x10\x03\x12\x18\n" +
+	"\x14INVENTORY_KIND_BUILD\x10\x04*\xb9\x04\n" +
 	"\tErrorCode\x12\x13\n" +
 	"\x0fERROR_CODE_NONE\x10\x00\x12\x1e\n" +
 	"\x1aERROR_CODE_INVALID_REQUEST\x10\x01\x12 \n" +
