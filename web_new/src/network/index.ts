@@ -155,4 +155,18 @@ export function sendBuildProgress(entityId: number): void {
   })
 }
 
+export function sendBuildTakeBack(entityId: number, slot: number): void {
+  const target = Math.trunc(entityId)
+  const row = Math.trunc(slot)
+  if (!Number.isFinite(target) || target <= 0) return
+  if (!Number.isFinite(row) || row < 0) return
+
+  gameConnection.send({
+    buildTakeBack: proto.C2S_BuildTakeBack.create({
+      entityId: target,
+      slot: row,
+    }),
+  })
+}
+
 export { gameConnection, messageDispatcher }

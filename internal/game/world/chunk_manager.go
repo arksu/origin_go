@@ -912,6 +912,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 			State:   restoredState,
 			IsDirty: false,
 		})
+		cm.objectFactory.RestoreDerivedComponentsFromState(cm.world, h)
 
 		isStatic := cm.objectFactory.IsStatic(raw)
 		if info, hasInfo := ecs.GetComponent[components.EntityInfo](cm.world, h); hasInfo && len(info.Behaviors) > 0 {

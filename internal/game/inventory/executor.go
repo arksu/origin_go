@@ -110,6 +110,40 @@ func (e *InventoryExecutor) GiveItem(
 	return result
 }
 
+// GiveItemToHandOnly creates a new item and places it into hand only (no grid fallback).
+func (e *InventoryExecutor) GiveItemToHandOnly(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	itemKey string,
+	count uint32,
+	quality uint32,
+) *GiveItemResult {
+	result := e.service.GiveItemToHandOnly(w, playerID, playerHandle, itemKey, count, quality)
+	if result.Success {
+		result.UpdatedContainers = e.applyNestedCascade(w, playerID, result.UpdatedContainers)
+	}
+	return result
+}
+
+// BuildInventoryStates converts updated internal containers to proto states for client sync.
+func (e *InventoryExecutor) BuildInventoryStates(
+	w *ecs.World,
+	updated []*ContainerInfo,
+) []*netproto.InventoryState {
+	if len(updated) == 0 {
+		return nil
+	}
+	states := make([]*netproto.InventoryState, 0, len(updated))
+	for _, info := range updated {
+		if info == nil || info.Container == nil {
+			continue
+		}
+		states = append(states, systems.BuildInventoryStateProto(e.convertContainerToState(w, info)))
+	}
+	return states
+}
+
 // registerDroppedSpatial adds a newly spawned dropped entity to chunk spatial.
 func (e *InventoryExecutor) registerDroppedSpatial(w *ecs.World, entityID types.EntityID) {
 	if e.spatialRegistrar == nil {

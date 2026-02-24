@@ -101,6 +101,18 @@ func (s *InventoryOperationService) ExecuteMove(
 	moveSpec *netproto.InventoryMoveSpec,
 	expected []*netproto.InventoryExpected,
 ) *OperationResult {
+	if moveSpec == nil || moveSpec.Src == nil || moveSpec.Dst == nil {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Invalid move request",
+		}
+	}
+
+	if constt.InventoryKind(moveSpec.Dst.Kind) == constt.InventoryBuild {
+		return s.executeMoveToBuild(w, playerID, playerHandle, opID, moveSpec, expected)
+	}
+
 	// 1. Resolve source container
 	srcInfo, err := s.validator.ResolveContainer(w, moveSpec.Src, playerID, playerHandle)
 	if err != nil {

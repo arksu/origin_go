@@ -7,7 +7,6 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
-	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
@@ -68,7 +67,7 @@ func (buildBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) 
 		return contracts.BehaviorResult{OK: true}
 	}
 
-	snapshot, ok := buildStateSnapshot(ctx.World, ctx.TargetID, ctx.TargetHandle)
+	snapshot, ok := BuildStateSnapshotForTarget(ctx.World, ctx.TargetID, ctx.TargetHandle)
 	if !ok || snapshot == nil {
 		if deps.Alerts != nil {
 			deps.Alerts.SendMiniAlert(ctx.PlayerID, &netproto.S2C_MiniAlert{
@@ -81,59 +80,6 @@ func (buildBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) 
 	}
 	deps.BuildState.SendBuildState(ctx.PlayerID, snapshot)
 	return contracts.BehaviorResult{OK: true}
-}
-
-func buildStateSnapshot(world *ecs.World, targetID types.EntityID, targetHandle types.Handle) (*netproto.S2C_BuildState, bool) {
-	if world == nil || targetID == 0 || targetHandle == types.InvalidHandle || !world.Alive(targetHandle) {
-		return nil, false
-	}
-	internalState, hasInternalState := ecs.GetComponent[components.ObjectInternalState](world, targetHandle)
-	if !hasInternalState {
-		return nil, false
-	}
-	buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey)
-	if !ok || buildState == nil {
-		return nil, false
-	}
-
-	rows := make([]*netproto.BuildStateItem, 0, len(buildState.Items))
-	for i := range buildState.Items {
-		slot := &buildState.Items[i]
-		row := &netproto.BuildStateItem{
-			Resource:      resolveBuildStateItemResource(slot.ItemKey),
-			RequiredCount: slot.RequiredCount,
-			PutCount:      slot.PutCount(),
-			BuildCount:    slot.BuildCount,
-		}
-		if slot.ItemKey != "" {
-			itemKey := slot.ItemKey
-			row.ItemKey = &itemKey
-		}
-		if slot.ItemTag != "" {
-			itemTag := slot.ItemTag
-			row.ItemTag = &itemTag
-		}
-		rows = append(rows, row)
-	}
-	return &netproto.S2C_BuildState{
-		EntityId: uint64(targetID),
-		List:     rows,
-	}, true
-}
-
-func resolveBuildStateItemResource(itemKey string) string {
-	if itemKey == "" {
-		return ""
-	}
-	reg := itemdefs.Global()
-	if reg == nil {
-		return ""
-	}
-	def, ok := reg.GetByKey(itemKey)
-	if !ok || def == nil {
-		return ""
-	}
-	return def.ResolveResource(false)
 }
 
 func isBuildTargetUsable(ctx *contracts.BehaviorActionListContext) bool {

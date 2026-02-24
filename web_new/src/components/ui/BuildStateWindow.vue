@@ -8,6 +8,7 @@ import AppButton from './AppButton.vue'
 interface Props {
   entityId: number | null
   list: proto.IBuildStateItem[]
+  handHasItem?: boolean
 }
 
 const props = defineProps<Props>()
@@ -15,6 +16,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
   progress: [entityId: number]
+  putFromHand: [entityId: number]
+  takeBack: [entityId: number, slot: number]
 }>()
 
 const WINDOW_INNER_WIDTH = 210
@@ -50,6 +53,31 @@ function onBuild() {
   const entityId = Math.trunc(Number(props.entityId ?? 0))
   if (!Number.isFinite(entityId) || entityId <= 0) return
   emit('progress', entityId)
+}
+
+function emitPutFromHand() {
+  const entityId = Math.trunc(Number(props.entityId ?? 0))
+  if (!Number.isFinite(entityId) || entityId <= 0) return
+  emit('putFromHand', entityId)
+}
+
+function onListClick() {
+  if (!props.handHasItem) return
+  emitPutFromHand()
+}
+
+function onRowClick(slot: number) {
+  const entityId = Math.trunc(Number(props.entityId ?? 0))
+  if (!Number.isFinite(entityId) || entityId <= 0) return
+
+  if (props.handHasItem) {
+    emit('putFromHand', entityId)
+    return
+  }
+
+  const slotIndex = Math.trunc(slot)
+  if (!Number.isFinite(slotIndex) || slotIndex < 0) return
+  emit('takeBack', entityId, slotIndex)
 }
 
 function prettifyKey(value: string | null | undefined): string {
@@ -157,11 +185,12 @@ onUnmounted(() => {
     @close="onClose"
   >
     <div class="build-state-window">
-      <div class="build-state-window__list">
+      <div class="build-state-window__list" @click="onListClick">
         <div
           v-for="entry in displayRows"
           :key="`${entityId || 0}-row-${entry.idx}`"
           class="build-state-window__row"
+          @click.stop="onRowClick(entry.idx)"
           @mouseenter="onRowMouseEnter(entry.row, $event)"
           @mousemove="onRowMouseMove"
           @mouseleave="onRowMouseLeave"

@@ -73,6 +73,7 @@ const (
 	InventoryHand        InventoryKind = 1
 	InventoryEquipment   InventoryKind = 2
 	InventoryDroppedItem InventoryKind = 3
+	InventoryBuild       InventoryKind = 4
 )
 
 // DefaultHandMouseOffset — дефолтный оффсет курсора при взятии предмета в руку,
