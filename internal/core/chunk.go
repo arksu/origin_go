@@ -42,8 +42,11 @@ type Chunk struct {
 	// rawDirtyObjectIDs tracks object IDs changed while chunk was active and then deactivated.
 	// It allows delta persistence for inactive chunks without rewriting all raw objects.
 	rawDirtyObjectIDs map[types.EntityID]struct{}
-	rawDataDirty      bool
-	spatial           *SpatialHashGrid
+	// deletedObjectIDs tracks runtime-despawned object ids that must be soft-deleted in DB
+	// on the next save, even though they no longer exist in the active ECS chunk handles.
+	deletedObjectIDs map[types.EntityID]struct{}
+	rawDataDirty     bool
+	spatial          *SpatialHashGrid
 
 	mu sync.RWMutex
 }
@@ -63,6 +66,7 @@ func NewChunk(coord types.ChunkCoord, region int, layer int, chunkSize int) *Chu
 		isSwimmable:           make([]uint64, bitsetSize),
 		rawInventoriesByOwner: make(map[types.EntityID][]repository.Inventory, 8),
 		rawDirtyObjectIDs:     make(map[types.EntityID]struct{}, 8),
+		deletedObjectIDs:      make(map[types.EntityID]struct{}, 8),
 		spatial:               NewSpatialHashGrid(cellSize),
 	}
 }
@@ -99,6 +103,7 @@ func (c *Chunk) AddRawObject(obj *repository.Object) {
 	c.rawObjects = append(c.rawObjects, obj)
 	if obj != nil {
 		c.rawDirtyObjectIDs[types.EntityID(obj.ID)] = struct{}{}
+		delete(c.deletedObjectIDs, types.EntityID(obj.ID))
 	}
 	c.rawDataDirty = true
 	c.mu.Unlock()
@@ -152,6 +157,32 @@ func (c *Chunk) GetRawDirtyObjectIDs() map[types.EntityID]struct{} {
 func (c *Chunk) ClearRawDirtyObjectIDs() {
 	c.mu.Lock()
 	c.rawDirtyObjectIDs = make(map[types.EntityID]struct{}, 8)
+	c.mu.Unlock()
+}
+
+func (c *Chunk) MarkDeletedObjectID(id types.EntityID) {
+	if id == 0 {
+		return
+	}
+	c.mu.Lock()
+	c.deletedObjectIDs[id] = struct{}{}
+	c.rawDataDirty = true
+	c.mu.Unlock()
+}
+
+func (c *Chunk) GetDeletedObjectIDs() map[types.EntityID]struct{} {
+	c.mu.RLock()
+	ids := make(map[types.EntityID]struct{}, len(c.deletedObjectIDs))
+	for id := range c.deletedObjectIDs {
+		ids[id] = struct{}{}
+	}
+	c.mu.RUnlock()
+	return ids
+}
+
+func (c *Chunk) ClearDeletedObjectIDs() {
+	c.mu.Lock()
+	c.deletedObjectIDs = make(map[types.EntityID]struct{}, 8)
 	c.mu.Unlock()
 }
 
@@ -327,11 +358,13 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	rawObjects := c.GetRawObjects()
 	rawInventoriesByOwner := c.GetRawInventoriesByOwner()
 	rawDirtyObjectIDs := c.GetRawDirtyObjectIDs()
+	pendingDeletedObjectIDs := c.GetDeletedObjectIDs()
 	c.mu.RUnlock()
 
 	// Determine dirty objects to save
 	var objectsToSave []*repository.Object
 	inventoriesToSave := make([]repository.Inventory, 0, 16)
+	deletedObjectIDs := make([]int64, 0, 8)
 	var dirtyHandles []types.Handle
 
 	if len(totalHandles) > 0 {
@@ -360,7 +393,12 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				continue
 			}
 			if obj == nil {
-				// Skip players and other non-persistent entities
+				// Skip players and other non-persistent entities. If a previously persisted
+				// object now resolves to nil (e.g. empty transient build site), mark it for delete.
+				if extID, hasExtID := ecs.GetComponent[ecs.ExternalID](world, h); hasExtID {
+					deletedObjectIDs = append(deletedObjectIDs, int64(extID.ID))
+					dirtyHandles = append(dirtyHandles, h)
+				}
 				continue
 			}
 			objectsToSave = append(objectsToSave, obj)
@@ -424,8 +462,27 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		}
 	}
 
-	// Save objects batch
+	for deletedID := range pendingDeletedObjectIDs {
+		deletedObjectIDs = append(deletedObjectIDs, int64(deletedID))
+	}
+
+	// Delete objects that became non-persistent (serialize -> nil) before upserts.
 	saveFailed := false
+	if len(deletedObjectIDs) > 0 {
+		for _, objectID := range deletedObjectIDs {
+			if err := db.Queries().DeleteObject(ctx, objectID); err != nil {
+				logger.Error("failed to delete object during chunk save",
+					zap.Int64("object_id", objectID),
+					zap.Any("coord", c.Coord),
+					zap.Error(err),
+				)
+				saveFailed = true
+			}
+		}
+	}
+
+	// Save objects batch
+	// (saveFailed may already be set by delete pass above)
 	if len(objectsToSave) > 0 {
 		nonNilObjects := make([]*repository.Object, 0, len(objectsToSave))
 		for _, obj := range objectsToSave {
@@ -469,6 +526,9 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	if !saveFailed && len(totalHandles) == 0 {
 		c.ClearRawDataDirty()
 		c.ClearRawDirtyObjectIDs()
+	}
+	if !saveFailed {
+		c.ClearDeletedObjectIDs()
 	}
 
 	savedTiles := 0

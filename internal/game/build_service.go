@@ -554,6 +554,7 @@ func (s *BuildService) despawnBuildObject(w *ecs.World, targetID types.EntityID,
 			} else {
 				chunk.Spatial().RemoveDynamic(targetHandle, int(transform.X), int(transform.Y))
 			}
+			chunk.MarkDeletedObjectID(targetID)
 			chunk.MarkRawDataDirty()
 		}
 	}
