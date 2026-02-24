@@ -391,6 +391,11 @@ message C2S_BuildProgress {
   uint64 entity_id = 1;
 }
 
+message C2S_BuildTakeBack {
+  uint64 entity_id = 1;
+  uint32 slot = 2;
+}
+
 message C2S_OpenWindow {
   string name = 1;
 }
@@ -417,6 +422,7 @@ message ClientMessage {
     C2S_CloseWindow close_window = 21;
     C2S_BuildStart build_start = 22;
     C2S_BuildProgress build_progress = 23;
+    C2S_BuildTakeBack build_take_back = 24;
     //    C2S_StopMovement stop_movement = 13;
     //    C2S_Interact interact = 14;
     //    C2S_Attack attack = 15;

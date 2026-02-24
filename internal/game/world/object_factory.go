@@ -634,6 +634,54 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 	return runtimeState, nil
 }
 
+// RestoreDerivedComponentsFromState rehydrates runtime-derived ECS components that are not
+// fully represented by the base object definition and must be reconstructed from persisted state.
+func (f *ObjectFactory) RestoreDerivedComponentsFromState(w *ecs.World, h types.Handle) {
+	if f == nil || w == nil || h == types.InvalidHandle || !w.Alive(h) {
+		return
+	}
+	f.restoreBuildSiteColliderFromState(w, h)
+}
+
+func (f *ObjectFactory) restoreBuildSiteColliderFromState(w *ecs.World, h types.Handle) {
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, h)
+	if !hasInfo || info.TypeID != constt.BuildObjectTypeID {
+		return
+	}
+
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h)
+	if !hasState {
+		return
+	}
+	buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey)
+	if !ok || buildState == nil {
+		return
+	}
+
+	reg := objectdefs.Global()
+	if reg == nil {
+		return
+	}
+
+	var resultDef *objectdefs.ObjectDef
+	if buildState.ObjectTypeID > 0 {
+		if def, found := reg.GetByID(int(buildState.ObjectTypeID)); found {
+			resultDef = def
+		}
+	}
+	if resultDef == nil && buildState.ObjectKey != "" {
+		if def, found := reg.GetByKey(buildState.ObjectKey); found {
+			resultDef = def
+		}
+	}
+	if resultDef == nil || resultDef.Components == nil || resultDef.Components.Collider == nil {
+		return
+	}
+
+	// Build sites intentionally borrow the final object's collider dimensions for interaction/linking.
+	ecs.AddComponent(w, h, objectdefs.BuildColliderComponent(resultDef.Components.Collider))
+}
+
 func serializePersistentObjectState(internalState components.ObjectInternalState) ([]byte, bool, error) {
 	runtimeState, ok := components.GetRuntimeObjectState(internalState)
 	if !ok || len(runtimeState.Behaviors) == 0 {

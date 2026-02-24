@@ -130,6 +130,67 @@ func (s *InventoryOperationService) GiveItem(
 	}
 }
 
+// GiveItemToHandOnly creates a new item instance and places it into the player's hand only.
+// It fails if the hand is occupied or the item cannot be held in hand.
+func (s *InventoryOperationService) GiveItemToHandOnly(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	itemKey string,
+	count uint32,
+	quality uint32,
+) *GiveItemResult {
+	itemReg := itemdefs.Global()
+	if itemReg == nil {
+		return &GiveItemResult{Success: false, Message: "item registry unavailable"}
+	}
+	itemDef, ok := itemReg.GetByKey(itemKey)
+	if !ok || itemDef == nil {
+		return &GiveItemResult{Success: false, Message: "unknown item key: " + itemKey}
+	}
+	if s.idAllocator == nil {
+		return &GiveItemResult{Success: false, Message: "id allocator not configured"}
+	}
+	if count == 0 {
+		count = 1
+	}
+	if count != 1 {
+		return &GiveItemResult{Success: false, Message: "hand-only give supports exactly one item"}
+	}
+
+	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+	if !hasOwner {
+		return &GiveItemResult{Success: false, Message: "player has no inventory owner"}
+	}
+
+	newItem := components.InvItem{
+		TypeID:   uint32(itemDef.DefID),
+		Resource: itemDef.ResolveResource(false),
+		Quality:  quality,
+		Quantity: 1,
+		W:        uint8(itemDef.Size.W),
+		H:        uint8(itemDef.Size.H),
+	}
+	updated := s.tryAddToHand(w, playerID, playerHandle, &owner, &newItem, itemDef)
+	if len(updated) == 0 {
+		return &GiveItemResult{
+			Success:      false,
+			Message:      "granted 0/1 items: hand is not available",
+			GrantedCount: 0,
+		}
+	}
+
+	discoveryLPGained := s.recordDiscoveryOnGive(w, playerHandle, itemDef)
+	return &GiveItemResult{
+		Success:           true,
+		Message:           "granted 1/1 items; placed in hand",
+		GrantedCount:      1,
+		PlacedInHand:      true,
+		UpdatedContainers: updated,
+		DiscoveryLPGained: discoveryLPGained,
+	}
+}
+
 func (s *InventoryOperationService) recordDiscoveryOnGive(
 	w *ecs.World,
 	playerHandle types.Handle,
@@ -255,6 +316,10 @@ func (s *InventoryOperationService) placeNewItemInContainer(
 
 	ecs.MutateComponent[components.InventoryContainer](w, containerHandle, func(c *components.InventoryContainer) bool {
 		c.Items = append(c.Items, *item)
+		if c.Kind == constt.InventoryHand {
+			c.HandMouseOffsetX = constt.DefaultHandMouseOffset
+			c.HandMouseOffsetY = constt.DefaultHandMouseOffset
+		}
 		c.Version++
 		return true
 	})

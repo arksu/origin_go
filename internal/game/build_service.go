@@ -11,8 +11,11 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/game/inventory"
 	gameworld "origin/internal/game/world"
+	"origin/internal/itemdefs"
 	"origin/internal/mathutil"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
@@ -28,7 +31,21 @@ const (
 
 type buildRuntimeSender interface {
 	SendMiniAlert(entityID types.EntityID, alert *netproto.S2C_MiniAlert)
+	SendBuildState(entityID types.EntityID, state *netproto.S2C_BuildState)
 	SendBuildStateClosed(entityID types.EntityID, msg *netproto.S2C_BuildStateClosed)
+	SendInventoryUpdate(entityID types.EntityID, states []*netproto.InventoryState)
+}
+
+type buildInventoryService interface {
+	GiveItemToHandOnly(
+		w *ecs.World,
+		playerID types.EntityID,
+		playerHandle types.Handle,
+		itemKey string,
+		count uint32,
+		quality uint32,
+	) *inventory.GiveItemResult
+	BuildInventoryStates(w *ecs.World, updated []*inventory.ContainerInfo) []*netproto.InventoryState
 }
 
 type buildPendingContextStarter interface {
@@ -50,6 +67,7 @@ type BuildService struct {
 	behaviorRegistry contracts.BehaviorRegistry
 	visionForcer     contracts.VisionUpdateForcer
 	alerts           buildRuntimeSender
+	inventory        buildInventoryService
 	pendingStarter   buildPendingContextStarter
 	logger           *zap.Logger
 }
@@ -65,6 +83,7 @@ func NewBuildService(
 	behaviorRegistry contracts.BehaviorRegistry,
 	visionForcer contracts.VisionUpdateForcer,
 	alerts buildRuntimeSender,
+	inventory buildInventoryService,
 	pendingStarter buildPendingContextStarter,
 	logger *zap.Logger,
 ) *BuildService {
@@ -79,6 +98,7 @@ func NewBuildService(
 		behaviorRegistry: behaviorRegistry,
 		visionForcer:     visionForcer,
 		alerts:           alerts,
+		inventory:        inventory,
 		pendingStarter:   pendingStarter,
 		logger:           logger,
 	}
@@ -212,6 +232,156 @@ func (s *BuildService) HandleBuildProgress(
 		return
 	}
 	s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, "BUILD_PROGRESS_COMING_SOON")
+}
+
+func (s *BuildService) HandleBuildTakeBack(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	msg *netproto.C2S_BuildTakeBack,
+) {
+	if s == nil || w == nil || w != s.world || msg == nil || playerID == 0 {
+		return
+	}
+	if playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return
+	}
+	targetID := types.EntityID(msg.EntityId)
+	if targetID == 0 {
+		s.sendWarning(playerID, "BUILD_TAKE_INVALID_TARGET")
+		return
+	}
+	targetHandle := w.GetHandleByEntityID(targetID)
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		s.sendWarning(playerID, "BUILD_TAKE_INVALID_TARGET")
+		return
+	}
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+	if !hasInfo || info.TypeID != constt.BuildObjectTypeID {
+		s.sendWarning(playerID, "BUILD_TAKE_INVALID_TARGET")
+		return
+	}
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	link, linked := linkState.GetLink(playerID)
+	if !linked || link.TargetID != targetID {
+		s.sendWarning(playerID, "BUILD_TAKE_NOT_LINKED")
+		return
+	}
+
+	slotIndex := int(msg.Slot)
+	slotExists := false
+	itemKey := ""
+	itemQuality := uint32(0)
+	if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, targetHandle); hasState {
+		if buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey); ok && buildState != nil {
+			if slotIndex >= 0 && slotIndex < len(buildState.Items) {
+				slotExists = true
+				stackIndex := findLastNonEmptyBuildPutStack(buildState.Items[slotIndex].PutItems)
+				if stackIndex >= 0 {
+					itemKey = buildState.Items[slotIndex].PutItems[stackIndex].ItemKey
+					itemQuality = buildState.Items[slotIndex].PutItems[stackIndex].Quality
+				}
+			}
+		}
+	}
+	if !slotExists {
+		s.sendWarning(playerID, "BUILD_TAKE_INVALID_SLOT")
+		return
+	}
+	if itemKey == "" {
+		s.sendWarning(playerID, "BUILD_TAKE_SLOT_EMPTY")
+		return
+	}
+
+	handHandle, handContainer, ok := s.resolvePlayerHandContainer(w, playerID, playerHandle)
+	if !ok || handHandle == types.InvalidHandle || handContainer == nil {
+		s.sendError(playerID, "BUILD_TAKE_HAND_PLACE_FAILED")
+		return
+	}
+	if len(handContainer.Items) > 0 {
+		s.sendWarning(playerID, "BUILD_TAKE_HAND_NOT_EMPTY")
+		return
+	}
+
+	itemReg := itemdefs.Global()
+	if itemReg == nil {
+		s.sendError(playerID, "BUILD_TAKE_ITEM_DEF_MISSING")
+		return
+	}
+	if _, exists := itemReg.GetByKey(itemKey); !exists {
+		s.sendError(playerID, "BUILD_TAKE_ITEM_DEF_MISSING")
+		return
+	}
+	if s.inventory == nil {
+		s.sendError(playerID, "BUILD_TAKE_HAND_PLACE_FAILED")
+		return
+	}
+
+	taken := false
+	ecs.MutateComponent[components.ObjectInternalState](w, targetHandle, func(state *components.ObjectInternalState) bool {
+		buildState, hasBuild := components.GetBehaviorState[components.BuildBehaviorState](*state, buildBehaviorStateKey)
+		if !hasBuild || buildState == nil || slotIndex < 0 || slotIndex >= len(buildState.Items) {
+			return false
+		}
+		slot := &buildState.Items[slotIndex]
+		stackIndex := findLastNonEmptyBuildPutStack(slot.PutItems)
+		if stackIndex < 0 {
+			return false
+		}
+		stack := &slot.PutItems[stackIndex]
+		if stack.Count == 0 || stack.ItemKey != itemKey || stack.Quality != itemQuality {
+			return false
+		}
+		stack.Count--
+		if stack.Count == 0 {
+			slot.PutItems = append(slot.PutItems[:stackIndex], slot.PutItems[stackIndex+1:]...)
+		}
+		state.IsDirty = true
+		taken = true
+		return true
+	})
+	if !taken {
+		s.sendWarning(playerID, "BUILD_TAKE_SLOT_EMPTY")
+		return
+	}
+
+	giveResult := s.inventory.GiveItemToHandOnly(w, playerID, playerHandle, itemKey, 1, itemQuality)
+	if giveResult == nil || !giveResult.Success {
+		ecs.MutateComponent[components.ObjectInternalState](w, targetHandle, func(state *components.ObjectInternalState) bool {
+			buildState, hasBuild := components.GetBehaviorState[components.BuildBehaviorState](*state, buildBehaviorStateKey)
+			if !hasBuild || buildState == nil || slotIndex < 0 || slotIndex >= len(buildState.Items) {
+				return false
+			}
+			buildState.Items[slotIndex].MergePutItem(itemKey, itemQuality, 1)
+			state.IsDirty = true
+			return true
+		})
+		s.sendError(playerID, "BUILD_TAKE_HAND_PLACE_FAILED")
+		return
+	}
+
+	if s.alerts != nil {
+		states := s.inventory.BuildInventoryStates(w, giveResult.UpdatedContainers)
+		if len(states) > 0 {
+			s.alerts.SendInventoryUpdate(playerID, states)
+		}
+	}
+	s.SendBuildStateSnapshot(w, playerID, targetID)
+}
+
+func (s *BuildService) SendBuildStateSnapshot(
+	w *ecs.World,
+	playerID types.EntityID,
+	targetID types.EntityID,
+) {
+	if s == nil || s.alerts == nil || w == nil || w != s.world || playerID == 0 || targetID == 0 {
+		return
+	}
+	snapshot, ok := behaviors.BuildStateSnapshotForEntityID(w, targetID)
+	if !ok || snapshot == nil {
+		return
+	}
+	s.alerts.SendBuildState(playerID, snapshot)
 }
 
 func (s *BuildService) FinalizePendingBuildPlacement(
@@ -541,4 +711,41 @@ func (s *BuildService) breakActiveLink(w *ecs.World, playerID types.EntityID) {
 			zap.Uint64("target_id", uint64(link.TargetID)),
 		)
 	}
+}
+
+func (s *BuildService) resolvePlayerHandContainer(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+) (types.Handle, *components.InventoryContainer, bool) {
+	if w == nil || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return types.InvalidHandle, nil, false
+	}
+	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
+	if !hasOwner {
+		return types.InvalidHandle, nil, false
+	}
+	for _, link := range owner.Inventories {
+		if link.Kind != constt.InventoryHand || link.OwnerID != playerID {
+			continue
+		}
+		if link.Handle == types.InvalidHandle || !w.Alive(link.Handle) {
+			return types.InvalidHandle, nil, false
+		}
+		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+		if !hasContainer {
+			return types.InvalidHandle, nil, false
+		}
+		return link.Handle, &container, true
+	}
+	return types.InvalidHandle, nil, false
+}
+
+func findLastNonEmptyBuildPutStack(stacks []components.BuildPutItemState) int {
+	for i := len(stacks) - 1; i >= 0; i-- {
+		if stacks[i].Count > 0 {
+			return i
+		}
+	}
+	return -1
 }

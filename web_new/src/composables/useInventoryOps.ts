@@ -238,6 +238,39 @@ export function useInventoryOps() {
     sendInventoryOp(op)
   }
 
+  function placeItemIntoBuild(buildEntityId: number) {
+    const targetEntityId = Math.trunc(buildEntityId)
+    if (!Number.isFinite(targetEntityId) || targetEntityId <= 0) return
+
+    const handRef = gameStore.getPlayerHandRef()
+    if (!handRef) return
+
+    const hand = gameStore.handState
+    if (!hand?.item) return
+
+    const handState = gameStore.handInventoryState
+    const itemId = Number(hand.item.itemId ?? 0)
+    if (!Number.isFinite(itemId) || itemId <= 0) return
+
+    const op: proto.IInventoryOp = {
+      opId: gameStore.allocOpId(),
+      expected: buildExpected(handState, undefined),
+      move: {
+        src: handRef,
+        dst: {
+          kind: proto.InventoryKind.INVENTORY_KIND_BUILD,
+          ownerId: targetEntityId,
+          inventoryKey: 0,
+        },
+        itemId,
+        allowSwapOrMerge: false,
+      },
+    }
+
+    console.log('[InventoryOps] placeItemIntoBuild:', op)
+    sendInventoryOp(op)
+  }
+
   /**
    * Find the InventoryState for a given ref from the store.
    */
@@ -252,6 +285,7 @@ export function useInventoryOps() {
     placeOrSwapItem,
     placeItemToEquipmentSlot,
     placeOrSwapItemInEquipmentSlot,
+    placeItemIntoBuild,
     findInventoryState,
     getPlacePositionFromSlotClick,
   }

@@ -216,6 +216,8 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleStartBuild(c, msg.Sequence, payload.BuildStart)
 	case *netproto.ClientMessage_BuildProgress:
 		g.handleBuildProgress(c, msg.Sequence, payload.BuildProgress)
+	case *netproto.ClientMessage_BuildTakeBack:
+		g.handleBuildTakeBack(c, msg.Sequence, payload.BuildTakeBack)
 	case *netproto.ClientMessage_OpenWindow:
 		g.handleOpenWindow(c, msg.Sequence, payload.OpenWindow)
 	case *netproto.ClientMessage_CloseWindow:
@@ -662,6 +664,31 @@ func (g *Game) handleBuildProgress(c *network.Client, sequence uint32, msg *netp
 		CharacterID: c.CharacterID,
 		CommandID:   uint64(sequence),
 		CommandType: network.CmdBuildProgress,
+		Payload:     msg,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	})
+}
+
+func (g *Game) handleBuildTakeBack(c *network.Client, sequence uint32, msg *netproto.C2S_BuildTakeBack) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || msg.EntityId == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid build take-back request")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	_ = shard.PlayerInbox().Enqueue(&network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdBuildTakeBack,
 		Payload:     msg,
 		ReceivedAt:  time.Now(),
 		Layer:       c.Layer,

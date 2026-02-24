@@ -202,6 +202,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		behaviorRegistry,
 		visionSystem,
 		s,
+		inventoryExecutor,
 		networkCmdSystem,
 		logger,
 	)

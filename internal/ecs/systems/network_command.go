@@ -130,6 +130,8 @@ type CraftCommandService interface {
 type BuildCommandService interface {
 	HandleStartBuild(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_BuildStart)
 	HandleBuildProgress(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_BuildProgress)
+	HandleBuildTakeBack(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_BuildTakeBack)
+	SendBuildStateSnapshot(w *ecs.World, playerID, targetID types.EntityID)
 }
 
 type NetworkCommandSystem struct {
@@ -300,6 +302,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleStartBuild(w, handle, cmd)
 	case network.CmdBuildProgress:
 		s.handleBuildProgress(w, handle, cmd)
+	case network.CmdBuildTakeBack:
+		s.handleBuildTakeBack(w, handle, cmd)
 	case network.CmdOpenWindow:
 		s.handleOpenWindow(w, handle, cmd)
 	case network.CmdCloseWindow:
@@ -360,6 +364,18 @@ func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle ty
 		return
 	}
 	s.buildCommandService.HandleBuildProgress(w, cmd.CharacterID, playerHandle, msg)
+}
+
+func (s *NetworkCommandSystem) handleBuildTakeBack(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_BuildTakeBack)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for BuildTakeBack", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	if s.buildCommandService == nil {
+		return
+	}
+	s.buildCommandService.HandleBuildTakeBack(w, cmd.CharacterID, playerHandle, msg)
 }
 
 func (s *NetworkCommandSystem) handleOpenWindow(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
@@ -1024,6 +1040,13 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 
 	if result.Success && s.openContainerService != nil && len(response.Updated) > 0 {
 		s.openContainerService.BroadcastInventoryUpdates(w, cmd.CharacterID, response.Updated)
+	}
+	if result.Success && s.buildCommandService != nil {
+		if move := op.GetMove(); move != nil && move.Dst != nil &&
+			move.Dst.Kind == netproto.InventoryKind_INVENTORY_KIND_BUILD &&
+			move.Dst.OwnerId > 0 {
+			s.buildCommandService.SendBuildStateSnapshot(w, cmd.CharacterID, types.EntityID(move.Dst.OwnerId))
+		}
 	}
 	if result.Success && s.inventorySnapshotSender != nil {
 		s.inventorySnapshotSender.SendCraftListSnapshot(w, cmd.CharacterID, playerHandle)

@@ -19,13 +19,15 @@ import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import MovementModePanel from '@/components/ui/MovementModePanel.vue'
-import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress } from '@/network'
+import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack } from '@/network'
+import { useInventoryOps } from '@/composables/useInventoryOps'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
 
 const router = useRouter()
 const gameStore = useGameStore()
+const { placeItemIntoBuild } = useInventoryOps()
 
 const gameCanvas = ref<HTMLCanvasElement | null>(null)
 const chatContainerRef = ref<InstanceType<typeof ChatContainer>>()
@@ -81,6 +83,7 @@ const showBuildWindow = computed(() => gameStore.buildWindowVisible)
 const showBuildStateWindow = computed(() => gameStore.buildStateWindowVisible)
 const currentBuildStateEntityId = computed(() => gameStore.buildStateEntityId)
 const currentBuildStateList = computed(() => gameStore.buildStateList)
+const buildStateHandHasItem = computed(() => !!gameStore.handState?.item)
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -346,6 +349,14 @@ function handleBuildStateProgress(entityId: number) {
   sendBuildProgress(entityId)
 }
 
+function handleBuildStatePutFromHand(entityId: number) {
+  placeItemIntoBuild(entityId)
+}
+
+function handleBuildStateTakeBack(entityId: number, slot: number) {
+  sendBuildTakeBack(entityId, slot)
+}
+
 function toggleBuildWindow() {
   if (gameStore.buildWindowVisible) {
     closeBuildWindow()
@@ -526,8 +537,11 @@ useHotkeys(hotkeys)
         <BuildStateWindow
           :entity-id="currentBuildStateEntityId"
           :list="currentBuildStateList"
+          :hand-has-item="buildStateHandHasItem"
           @close="handleBuildStateWindowClose"
           @progress="handleBuildStateProgress"
+          @put-from-hand="handleBuildStatePutFromHand"
+          @take-back="handleBuildStateTakeBack"
         />
       </div>
       
