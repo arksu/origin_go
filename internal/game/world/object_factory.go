@@ -225,6 +225,53 @@ func (f *ObjectFactory) isContainerDefinition(def *objectdefs.ObjectDef) bool {
 	return def.HasBehavior("container")
 }
 
+// EnsureObjectInventoriesForDef ensures object-owned root inventories exist in ECS for a live object
+// that has just changed type/definition at runtime (e.g. build-site -> final container object).
+func (f *ObjectFactory) EnsureObjectInventoriesForDef(
+	w *ecs.World,
+	objectHandle types.Handle,
+	ownerID types.EntityID,
+	def *objectdefs.ObjectDef,
+) bool {
+	if f == nil || w == nil || objectHandle == types.InvalidHandle || !w.Alive(objectHandle) || ownerID == 0 || def == nil {
+		return false
+	}
+	if !f.isContainerDefinition(def) {
+		return false
+	}
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	if rootHandle, found := refIndex.Lookup(constt.InventoryGrid, ownerID, 0); found && w.Alive(rootHandle) {
+		if _, hasOwner := ecs.GetComponent[components.InventoryOwner](w, objectHandle); !hasOwner {
+			ecs.AddComponent(w, objectHandle, components.InventoryOwner{
+				Inventories: []components.InventoryLink{{
+					Kind:    constt.InventoryGrid,
+					Key:     0,
+					OwnerID: ownerID,
+					Handle:  rootHandle,
+				}},
+			})
+			return true
+		}
+		return false
+	}
+
+	links := f.spawnObjectInventories(w, ownerID, def, nil)
+	if len(links) == 0 {
+		return false
+	}
+	if _, hasOwner := ecs.GetComponent[components.InventoryOwner](w, objectHandle); hasOwner {
+		ecs.WithComponent(w, objectHandle, func(owner *components.InventoryOwner) {
+			owner.Inventories = links
+		})
+	} else {
+		ecs.AddComponent(w, objectHandle, components.InventoryOwner{
+			Inventories: links,
+		})
+	}
+	return true
+}
+
 // HasPersistentInventories returns true for object types that can own persistent
 // inventories in ECS/DB (dropped items or defs with components.inventory).
 // Behaviors are used as a conservative fallback for legacy defs.

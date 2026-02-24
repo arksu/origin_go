@@ -198,6 +198,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		s.world,
 		s.eventBus,
 		s.chunkManager,
+		objectFactory,
 		worldObjectPersistence,
 		s.entityIDManager,
 		behaviorRegistry,
