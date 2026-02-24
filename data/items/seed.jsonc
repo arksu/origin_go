@@ -6,7 +6,7 @@
             "defId": 4002,
             "key": "seed_wheat",
             "name": "Wheat Seeds",
-            "resource": "items/yarn.png",
+            "resource": "items/seed_wheat.png",
             "tags": [
                 "seed"
             ],

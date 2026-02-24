@@ -35,12 +35,60 @@
       },
       "resource": "trees/birch/1",
       "appearance": [
-        { "id": "stage1", "when": { "flags": ["tree.stage1"] }, "resource": "trees/birch/1" },
-        { "id": "stage2", "when": { "flags": ["tree.stage2"] }, "resource": "trees/birch/2" },
-        { "id": "stage3", "when": { "flags": ["tree.stage3"] }, "resource": "trees/birch/3" },
-        { "id": "stage4", "when": { "flags": ["tree.stage4"] }, "resource": "trees/birch/4" },
-        { "id": "stage5", "when": { "flags": ["tree.stage5"] }, "resource": "trees/birch/5" },
-        { "id": "stage6", "when": { "flags": ["tree.stage6"] }, "resource": "trees/birch/6" }
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "tree.stage1"
+            ]
+          },
+          "resource": "trees/birch/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "tree.stage2"
+            ]
+          },
+          "resource": "trees/birch/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "tree.stage3"
+            ]
+          },
+          "resource": "trees/birch/3"
+        },
+        {
+          "id": "stage4",
+          "when": {
+            "flags": [
+              "tree.stage4"
+            ]
+          },
+          "resource": "trees/birch/4"
+        },
+        {
+          "id": "stage5",
+          "when": {
+            "flags": [
+              "tree.stage5"
+            ]
+          },
+          "resource": "trees/birch/5"
+        },
+        {
+          "id": "stage6",
+          "when": {
+            "flags": [
+              "tree.stage6"
+            ]
+          },
+          "resource": "trees/birch/6"
+        }
       ],
       "behaviors": {
         "tree": {
@@ -59,7 +107,13 @@
               "stageDurationTicks": 60,
               "allowChop": true,
               "spawnChopObject": [],
-              "spawnChopItem": ["branch", "branch", "branch", "branch", "branch"],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
               "take": []
             },
             {
@@ -67,7 +121,10 @@
               "stageDurationTicks": 60,
               "allowChop": true,
               "spawnChopObject": [],
-              "spawnChopItem": ["block_of_wood", "block_of_wood"],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
               "take": [
                 {
                   "id": "take_branch",
@@ -82,7 +139,12 @@
               "stageDurationTicks": 60,
               "allowChop": true,
               "spawnChopObject": [],
-              "spawnChopItem": ["block_of_wood", "block_of_wood", "block_of_wood", "block_of_wood"],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
               "take": [
                 {
                   "id": "take_branch",
@@ -102,7 +164,9 @@
               "chopPointsTotal": 5,
               "stageDurationTicks": 60,
               "allowChop": true,
-              "spawnChopObject": ["log"],
+              "spawnChopObject": [
+                "log"
+              ],
               "spawnChopItem": [],
               "transformToDefKey": "stump_birch",
               "take": [
@@ -121,7 +185,7 @@
                 {
                   "id": "take_bark",
                   "name": "Take Bark",
-                  "itemDefKey": "bark",
+                  "itemDefKey": "birch_bark",
                   "count": 1
                 }
               ]
@@ -130,7 +194,10 @@
               "chopPointsTotal": 6,
               "stageDurationTicks": 60,
               "allowChop": true,
-              "spawnChopObject": ["log", "log"],
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
               "spawnChopItem": [],
               "transformToDefKey": "stump_birch",
               "take": [
@@ -149,7 +216,7 @@
                 {
                   "id": "take_bark",
                   "name": "Take Bark",
-                  "itemDefKey": "bark",
+                  "itemDefKey": "birch_bark",
                   "count": 1
                 }
               ]
