@@ -3,6 +3,7 @@ package world
 import (
 	"testing"
 
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/objectdefs"
@@ -86,3 +87,55 @@ func TestObjectFactorySerialize_SavesQualityFromEntityInfo(t *testing.T) {
 	}
 }
 
+func TestObjectFactorySerialize_SkipsEmptyBuildObject(t *testing.T) {
+	previousRegistry := objectdefs.Global()
+	t.Cleanup(func() {
+		objectdefs.SetGlobalForTesting(previousRegistry)
+	})
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
+		{DefID: 1, Key: "player", Name: "Player", IsStatic: false},
+	}))
+
+	world := ecs.NewWorldForTesting()
+	factory := &ObjectFactory{}
+
+	entityID := types.EntityID(2002)
+	handle := world.Spawn(entityID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, ecs.ExternalID{ID: entityID})
+		ecs.AddComponent(w, h, components.EntityInfo{
+			TypeID:   constt.BuildObjectTypeID,
+			IsStatic: true,
+			Region:   1,
+			Layer:    0,
+		})
+		ecs.AddComponent(w, h, components.Transform{X: 7, Y: 8})
+		ecs.AddComponent(w, h, components.ChunkRef{
+			CurrentChunkX: 0,
+			CurrentChunkY: 0,
+			PrevChunkX:    0,
+			PrevChunkY:    0,
+		})
+		state := components.ObjectInternalState{}
+		components.SetBehaviorState(&state, "build", &components.BuildBehaviorState{
+			BuildKey: "campfire",
+			Items: []components.BuildRequiredItemState{
+				{
+					Slot:          0,
+					ItemKey:       "stone",
+					RequiredCount: 4,
+					BuildCount:    0,
+					PutItems:      nil,
+				},
+			},
+		})
+		ecs.AddComponent(w, h, state)
+	})
+
+	raw, err := factory.Serialize(world, handle)
+	if err != nil {
+		t.Fatalf("serialize failed: %v", err)
+	}
+	if raw != nil {
+		t.Fatalf("expected empty build object to be skipped from persistence")
+	}
+}

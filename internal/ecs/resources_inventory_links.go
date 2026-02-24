@@ -140,6 +140,33 @@ func (s *LinkState) GetLink(playerID types.EntityID) (PlayerLink, bool) {
 	return link, ok
 }
 
+// BreakLinkForPlayer removes the active gameplay link for a player, clears link intent,
+// and publishes LinkBrokenEvent when a link existed.
+func BreakLinkForPlayer(w *World, playerID types.EntityID, reason LinkBreakReason) (PlayerLink, bool, error) {
+	if w == nil || playerID == 0 {
+		return PlayerLink{}, false, nil
+	}
+	linkState := GetResource[LinkState](w)
+	link, removed := linkState.RemoveLink(playerID)
+	if !removed {
+		linkState.ClearIntent(playerID)
+		return PlayerLink{}, false, nil
+	}
+
+	// Keep a newer retarget intent alive only if it points elsewhere.
+	if intent, hasIntent := linkState.IntentByPlayer[playerID]; !hasIntent || intent.TargetID == link.TargetID {
+		linkState.ClearIntent(playerID)
+	}
+
+	if w.eventBus == nil {
+		return link, true, nil
+	}
+	if err := w.eventBus.PublishSync(NewLinkBrokenEvent(w.Layer, playerID, link.TargetID, reason)); err != nil {
+		return link, true, err
+	}
+	return link, true, nil
+}
+
 // OpenContainerState tracks per-player opened world object containers and nested refs.
 //
 // Invariants:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import type { proto } from '@/network/proto/packets.js'
 import { toNonNegativeProtoInt } from '@/utils/protoNumbers'
 import GameWindow from './GameWindow.vue'
@@ -17,8 +17,30 @@ const emit = defineEmits<{
   progress: [entityId: number]
 }>()
 
+const WINDOW_INNER_WIDTH = 210
+const ROW_HEIGHT_PX = 40
+const ROW_GAP_PX = 6
+const LIST_VERTICAL_CHROME_PX = 10 // padding + border
+const PANEL_GAP_PX = 10
+const ACTIONS_HEIGHT_PX = 34
+
 const rows = computed(() => props.list || [])
+const displayRows = computed(() => rows.value.map((row, idx) => ({
+  row,
+  idx,
+  iconUrl: rowIconUrl(row),
+})))
 const canBuild = computed(() => Number.isFinite(props.entityId ?? NaN) && (props.entityId ?? 0) > 0)
+const windowInnerHeight = computed(() => {
+  const rowCount = Math.max(rows.value.length, 1)
+  const listHeight = LIST_VERTICAL_CHROME_PX + (rowCount * ROW_HEIGHT_PX) + (Math.max(rowCount - 1, 0) * ROW_GAP_PX)
+  return listHeight + PANEL_GAP_PX + ACTIONS_HEIGHT_PX
+})
+
+const tooltipVisible = ref(false)
+const tooltipX = ref(0)
+const tooltipY = ref(0)
+let tooltipElement: HTMLDivElement | null = null
 
 function onClose() {
   emit('close')
@@ -32,7 +54,7 @@ function onBuild() {
 
 function prettifyKey(value: string | null | undefined): string {
   const normalized = (value || '').trim()
-  if (!normalized) return '-'
+  if (!normalized) return 'Unknown'
   return normalized
     .split('_')
     .filter(Boolean)
@@ -40,7 +62,7 @@ function prettifyKey(value: string | null | undefined): string {
     .join(' ')
 }
 
-function buildRowLabel(row: proto.IBuildStateItem): string {
+function rowTooltipText(row: proto.IBuildStateItem): string {
   const itemKey = (row.itemKey || '').trim()
   if (itemKey) return prettifyKey(itemKey)
   const itemTag = (row.itemTag || '').trim()
@@ -70,11 +92,6 @@ function rowIconUrl(row: proto.IBuildStateItem): string {
   return fallbackIconUrl(fallbackIconName(row))
 }
 
-function rowIconStyle(row: proto.IBuildStateItem): { backgroundImage: string } {
-  const url = rowIconUrl(row)
-  return { backgroundImage: url ? `url(${url})` : 'none' }
-}
-
 function asCount(value: unknown): number {
   return toNonNegativeProtoInt(value)
 }
@@ -85,36 +102,85 @@ function leftCount(row: proto.IBuildStateItem): number {
   const built = asCount(row.buildCount)
   return Math.max(required - put - built, 0)
 }
+
+function createTooltip(text: string) {
+  if (tooltipElement) return
+  tooltipElement = document.createElement('div')
+  tooltipElement.className = 'build-item-tooltip-global'
+  tooltipElement.innerHTML = `<pre>${text}</pre>`
+  document.body.appendChild(tooltipElement)
+}
+
+function removeTooltip() {
+  if (!tooltipElement) return
+  document.body.removeChild(tooltipElement)
+  tooltipElement = null
+}
+
+function updateTooltipPosition() {
+  if (!tooltipElement) return
+  tooltipElement.style.left = `${tooltipX.value}px`
+  tooltipElement.style.top = `${tooltipY.value}px`
+}
+
+function onRowMouseEnter(row: proto.IBuildStateItem, event: MouseEvent) {
+  tooltipVisible.value = true
+  tooltipX.value = event.clientX + 10
+  tooltipY.value = event.clientY + 10
+  createTooltip(rowTooltipText(row))
+  updateTooltipPosition()
+}
+
+function onRowMouseMove(event: MouseEvent) {
+  if (!tooltipVisible.value) return
+  tooltipX.value = event.clientX + 10
+  tooltipY.value = event.clientY + 10
+  updateTooltipPosition()
+}
+
+function onRowMouseLeave() {
+  tooltipVisible.value = false
+  removeTooltip()
+}
+
+onUnmounted(() => {
+  removeTooltip()
+})
 </script>
 
 <template>
   <GameWindow
     :id="7103"
-    :inner-width="420"
-    :inner-height="330"
+    :inner-width="WINDOW_INNER_WIDTH"
+    :inner-height="windowInnerHeight"
     title="Build"
     @close="onClose"
   >
     <div class="build-state-window">
       <div class="build-state-window__list">
         <div
-          v-for="(row, idx) in rows"
-          :key="`${entityId || 0}-row-${idx}`"
+          v-for="entry in displayRows"
+          :key="`${entityId || 0}-row-${entry.idx}`"
           class="build-state-window__row"
+          @mouseenter="onRowMouseEnter(entry.row, $event)"
+          @mousemove="onRowMouseMove"
+          @mouseleave="onRowMouseLeave"
         >
           <span class="build-state-window__icon-slot">
-            <span
+            <img
+              v-if="entry.iconUrl"
               class="build-state-window__icon"
-              :style="rowIconStyle(row)"
+              :src="entry.iconUrl"
+              alt=""
+              draggable="false"
             />
           </span>
-          <span class="build-state-window__label">{{ buildRowLabel(row) }}</span>
           <span class="build-state-window__counts">
-            {{ leftCount(row) }}/{{ asCount(row.putCount) }}/{{ asCount(row.buildCount) }}
+            {{ leftCount(entry.row) }}/{{ asCount(entry.row.putCount) }}/{{ asCount(entry.row.buildCount) }}
           </span>
         </div>
 
-        <div v-if="rows.length === 0" class="build-state-window__empty">
+        <div v-if="displayRows.length === 0" class="build-state-window__empty">
           No requirements
         </div>
       </div>
@@ -151,18 +217,18 @@ function leftCount(row: proto.IBuildStateItem): number {
 
 .build-state-window__row {
   display: grid;
-  grid-template-columns: 26px 1fr auto;
+  grid-template-columns: 36px 1fr;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
+  height: 40px;
   padding: 4px 6px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
 }
 
 .build-state-window__icon-slot {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,23 +238,18 @@ function leftCount(row: proto.IBuildStateItem): number {
 }
 
 .build-state-window__icon {
-  width: 20px;
-  height: 20px;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-}
-
-.build-state-window__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #dfe8ea;
-  font-size: 13px;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 32px;
+  max-height: 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 
 .build-state-window__counts {
+  justify-self: center;
+  text-align: center;
   color: #b8d7de;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -204,7 +265,25 @@ function leftCount(row: proto.IBuildStateItem): number {
 
 .build-state-window__actions {
   display: flex;
+  min-height: 34px;
   justify-content: center;
   align-items: center;
+}
+</style>
+
+<style lang="scss">
+.build-item-tooltip-global {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffffff;
+  border: 2px solid #555;
+  border-radius: 8px;
+  padding: 3px 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  z-index: 999999;
+  pointer-events: none;
+  max-width: 300px;
+  word-wrap: break-word;
 }
 </style>

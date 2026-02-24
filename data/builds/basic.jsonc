@@ -7,7 +7,16 @@
       "key": "box",
       "name": "Box",
       "inputs": [
-        { "itemKey": "branch", "count": 5, "qualityWeight": 1 }
+        {
+          "itemKey": "branch",
+          "count": 5,
+          "qualityWeight": 1
+        },
+        {
+          "itemKey": "block_of_wood",
+          "count": 3,
+          "qualityWeight": 1
+        }
       ],
       "staminaCost": 8,
       "ticksRequired": 40,
@@ -21,14 +30,29 @@
       "key": "build_crate_from_ore_batch",
       "name": "Build Crate (Ore Batch)",
       "inputs": [
-        { "itemTag": "ore", "count": 3, "qualityWeight": 2 },
-        { "itemKey": "branch", "count": 2, "qualityWeight": 1 }
+        {
+          "itemTag": "ore",
+          "count": 3,
+          "qualityWeight": 2
+        },
+        {
+          "itemKey": "branch",
+          "count": 2,
+          "qualityWeight": 1
+        }
       ],
       "staminaCost": 10,
       "ticksRequired": 50,
-      "requiredSkills": ["construction"],
-      "requiredDiscovery": ["storage"],
-      "disallowedTiles": [1, 23],
+      "requiredSkills": [
+        "construction"
+      ],
+      "requiredDiscovery": [
+        "storage"
+      ],
+      "disallowedTiles": [
+        1,
+        23
+      ],
       "objectKey": "crate"
     }
   ]
