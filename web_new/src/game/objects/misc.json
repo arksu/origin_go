@@ -1,4 +1,16 @@
 {
+  "kiln": {
+    "offset": [
+      80,
+      120
+    ],
+    "layers": [
+      {
+        "interactive": true,
+        "img": "obj/kiln/kiln.png"
+      }
+    ]
+  },
   "boulder": {
     "offset": [
       100,

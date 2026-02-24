@@ -121,6 +121,12 @@ type LayerDefLike = { img?: string; shadow?: boolean }
 type VariantDefLike = { layers?: LayerDefLike[] }
 type ObjectVisualDefsLike = Record<string, Record<string, VariantDefLike>>
 
+function firstLayerImage(layers: LayerDefLike[] | undefined): string {
+  if (!Array.isArray(layers)) return ''
+  const preferred = layers.find((layer) => layer?.img && !layer.shadow) || layers.find((layer) => layer?.img)
+  return preferred?.img ? `/assets/game/${preferred.img}` : ''
+}
+
 function objectIconUrl(objectKey: string | null | undefined): string {
   const key = (objectKey || '').trim()
   if (!key) return ''
@@ -128,12 +134,12 @@ function objectIconUrl(objectKey: string | null | undefined): string {
   const objDef = allDefs[key]
   if (!objDef || typeof objDef !== 'object') return ''
 
+  const directImage = firstLayerImage((objDef as unknown as VariantDefLike).layers)
+  if (directImage) return directImage
+
   for (const variant of Object.values(objDef)) {
-    if (!variant || !Array.isArray(variant.layers)) continue
-    const preferred = variant.layers.find((layer) => layer?.img && !layer.shadow) || variant.layers.find((layer) => layer?.img)
-    if (preferred?.img) {
-      return `/assets/game/${preferred.img}`
-    }
+    const image = firstLayerImage(variant?.layers)
+    if (image) return image
   }
   return ''
 }
