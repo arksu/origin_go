@@ -60,19 +60,22 @@
       <div class="actions">
         <button class="small-btn" @click="reloadFromOriginal">Reset To Original</button>
         <button class="small-btn warn" @click="clearToTransparent">Clear (Scratch)</button>
+        <button class="small-btn" :disabled="undoHistory.length === 0" @click="undoLastAction">
+          Undo ({{ undoHistory.length }})
+        </button>
         <button class="small-btn" @click="refreshSuggestion">Suggest Filename</button>
         <button class="small-btn" @click="resetZoom">Zoom {{ zoom.toFixed(2) }}x</button>
       </div>
 
       <div class="hint">
-        Paint sets pixel alpha directly (no opacity stacking on repeated movement in the same stroke).
+        Paint sets pixel alpha directly (no opacity stacking on repeated movement in the same stroke). Hold Shift while dragging to erase alpha.
       </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useObjectEditorStore } from '@/stores/objectEditorStore'
 import { paintStrokeConstantAlpha } from '@/utils/shadowPaint'
 
@@ -89,6 +92,7 @@ const resizeHeight = ref(0)
 const canvasOffsetX = ref(0)
 const canvasOffsetY = ref(0)
 const isPanningCanvas = ref(false)
+const undoHistory = ref<Array<{ pixels: Uint8ClampedArray; width: number; height: number }>>([])
 
 let ctx: CanvasRenderingContext2D | null = null
 let originalPixels: Uint8ClampedArray | null = null
@@ -98,12 +102,14 @@ let workingPixels: Uint8ClampedArray | null = null
 let imageWidth = 0
 let imageHeight = 0
 let isPainting = false
+let isErasingStroke = false
 let lastPoint: { x: number; y: number } | null = null
 let visitedPixels = new Set<number>()
 let panStartClientX = 0
 let panStartClientY = 0
 let panStartOffsetX = 0
 let panStartOffsetY = 0
+const UNDO_HISTORY_LIMIT = 20
 
 const sourcePath = computed(() => store.getSelectedShadowLayerSourcePath())
 const fallbackSourcePath = computed(() => store.getSelectedShadowFallbackSourcePath())
@@ -133,6 +139,7 @@ watch(
 
 async function loadCanvasForSelection(): Promise<void> {
   isPainting = false
+  isErasingStroke = false
   isPanningCanvas.value = false
   lastPoint = null
   visitedPixels = new Set()
@@ -142,6 +149,7 @@ async function loadCanvasForSelection(): Promise<void> {
   resizeHeight.value = 0
   canvasOffsetX.value = 0
   canvasOffsetY.value = 0
+  resetUndoHistory()
 
   if (!store.canPaintSelectedShadow || !sourcePath.value) {
     clearCanvas()
@@ -287,6 +295,31 @@ function clearCanvas(): void {
   canvasPixelHeight.value = 0
   canvasOffsetX.value = 0
   canvasOffsetY.value = 0
+  resetUndoHistory()
+}
+
+function resetUndoHistory(): void {
+  undoHistory.value = []
+}
+
+function pushUndoSnapshot(): void {
+  if (!workingPixels || imageWidth <= 0 || imageHeight <= 0) return
+  undoHistory.value.push({
+    pixels: new Uint8ClampedArray(workingPixels),
+    width: imageWidth,
+    height: imageHeight,
+  })
+  if (undoHistory.value.length > UNDO_HISTORY_LIMIT) {
+    undoHistory.value.splice(0, undoHistory.value.length - UNDO_HISTORY_LIMIT)
+  }
+}
+
+function pixelsEqual(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
 }
 
 function resizePixelBuffer(
@@ -328,7 +361,9 @@ function onPointerDown(event: PointerEvent): void {
   if (!store.canPaintSelectedShadow || !workingPixels) return
   const point = pointerToPixel(event)
   if (!point) return
+  pushUndoSnapshot()
   isPainting = true
+  isErasingStroke = event.shiftKey
   lastPoint = point
   visitedPixels = new Set()
   paintAt(point, point)
@@ -345,6 +380,7 @@ function onPointerMove(event: PointerEvent): void {
 
 function onPointerUp(): void {
   isPainting = false
+  isErasingStroke = false
   lastPoint = null
   visitedPixels = new Set()
 }
@@ -378,7 +414,7 @@ function paintAt(from: { x: number; y: number }, to: { x: number; y: number }): 
     width: imageWidth,
     height: imageHeight,
     radius: Math.max(1, brushSize.value),
-    alpha: Math.max(0, Math.min(255, alpha.value)),
+    alpha: isErasingStroke ? 0 : Math.max(0, Math.min(255, alpha.value)),
     from,
     to,
     visited: visitedPixels,
@@ -400,8 +436,25 @@ function commitDraftToStore(): void {
   })
 }
 
+function syncCanvasToStoreAfterUndo(): void {
+  if (!workingPixels || imageWidth <= 0 || imageHeight <= 0) return
+  const sameAsOriginal = !!originalPixels
+    && originalWidth === imageWidth
+    && originalHeight === imageHeight
+    && pixelsEqual(originalPixels, workingPixels)
+
+  if (sameAsOriginal) {
+    store.resetSelectedShadowDraft()
+    targetRelPath.value = store.suggestShadowRelPathForSelected() ?? targetRelPath.value
+    return
+  }
+
+  commitDraftToStore()
+}
+
 function reloadFromOriginal(): void {
   if (!originalPixels) return
+  pushUndoSnapshot()
   imageWidth = originalWidth || imageWidth
   imageHeight = originalHeight || imageHeight
   resizeWidth.value = imageWidth
@@ -409,12 +462,12 @@ function reloadFromOriginal(): void {
   workingPixels = new Uint8ClampedArray(originalPixels)
   setupCanvas()
   drawWorkingPixels()
-  store.resetSelectedShadowDraft()
-  targetRelPath.value = store.suggestShadowRelPathForSelected() ?? targetRelPath.value
+  syncCanvasToStoreAfterUndo()
 }
 
 function clearToTransparent(): void {
   if (imageWidth <= 0 || imageHeight <= 0) return
+  pushUndoSnapshot()
   workingPixels = createTransparentPixels(imageWidth, imageHeight)
   setupCanvas()
   drawWorkingPixels()
@@ -439,6 +492,7 @@ function applyResize(): void {
   if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight)) return
   if (nextWidth === imageWidth && nextHeight === imageHeight) return
 
+  pushUndoSnapshot()
   workingPixels = resizePixelBuffer(workingPixels, imageWidth, imageHeight, nextWidth, nextHeight)
   imageWidth = nextWidth
   imageHeight = nextHeight
@@ -447,6 +501,35 @@ function applyResize(): void {
   setupCanvas()
   drawWorkingPixels()
   commitDraftToStore()
+}
+
+function undoLastAction(): void {
+  const entry = undoHistory.value.pop()
+  if (!entry) return
+  workingPixels = new Uint8ClampedArray(entry.pixels)
+  imageWidth = entry.width
+  imageHeight = entry.height
+  resizeWidth.value = entry.width
+  resizeHeight.value = entry.height
+  setupCanvas()
+  drawWorkingPixels()
+  syncCanvasToStoreAfterUndo()
+}
+
+function onKeyDown(event: KeyboardEvent): void {
+  const isUndo = (event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'z'
+  if (!isUndo) return
+  const target = event.target as HTMLElement | null
+  if (target && (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.isContentEditable
+  )) {
+    return
+  }
+  if (!store.canPaintSelectedShadow || undoHistory.value.length === 0) return
+  event.preventDefault()
+  undoLastAction()
 }
 
 function refreshSuggestion(): void {
@@ -463,7 +546,12 @@ function commitTargetRelPath(): void {
   store.setSelectedShadowTargetRelPath(next)
 }
 
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+})
+
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
   clearCanvas()
 })
 </script>
