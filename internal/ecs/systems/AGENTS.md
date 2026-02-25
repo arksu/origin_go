@@ -38,6 +38,13 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 ## System Details
 
+### NetworkCommandSystem (Priority: 0)
+
+**Build integration notes**:
+- Routes build commands (`BuildStart`, `BuildProgress`, `BuildTakeBack`) to `BuildService` on the ECS thread.
+- After successful inventory move into a build-site (`dst.kind = INVENTORY_KIND_BUILD`), trigger immediate build-state snapshot refresh; hand inventory updates still flow through inventory result/update packets.
+- Keep build-state sends on the ECS thread to preserve deterministic ordering with inventory/build mutations.
+
 ### MovementSystem (Priority: 100)
 
 **Purpose**: Processes entity movement intent and calculates velocity-based movement.

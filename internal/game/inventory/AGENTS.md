@@ -61,6 +61,12 @@ result := service.ExecuteMove(world, playerID, playerHandle, opID, moveSpec, exp
 6. **Execute** - Modify ECS components atomically
 7. **Build result** - Return updated containers for network sync
 
+### Build-site Special Flow
+
+- `C2S_InventoryOp.move` may target `dst.kind = InventoryBuild` for hand -> build-site deposits.
+- Build-site deposits are aggregated into `BuildBehaviorState.Items[].PutItems`, not a generic `InventoryState` container.
+- Build -> hand take-back must use dedicated build packet flow because aggregated build deposits do not preserve item instance IDs.
+
 ### Container Types
 
 | Kind | OwnerID | Purpose |
@@ -69,6 +75,7 @@ result := service.ExecuteMove(world, playerID, playerHandle, opID, moveSpec, exp
 | `InventoryHand` | Player ID | Single item held for drag operations |
 | `InventoryEquipment` | Player ID | Equipment slots (head, chest, etc.) |
 | `InventoryDroppedItem` | - | Ground items (not yet implemented) |
+| `InventoryBuild` | Build-site entity ID | Special deposit destination for build-site `PutItems` |
 
 **Nested Containers:** When an item with `ContainerDef` is placed in a grid, its nested inventory has `OwnerID = item.ItemID` (not player ID). This distinguishes nested containers from player-owned containers.
 
@@ -214,6 +221,11 @@ message InventoryMoveSpec {
 ```
 
 Server stores offset in `InventoryContainer.HandMouseOffsetX/Y` and returns it in `InventoryHandState.hand_pos` for proper client-side rendering.
+
+### Hand-only Give Helpers
+
+- Use hand-only item creation/placement helpers for flows that synthesize a new item instance directly into player hand (for example build take-back).
+- Hand-only helpers must fail if hand is occupied; do not silently fall back to grid placement for these flows.
 
 ### Database Persistence
 

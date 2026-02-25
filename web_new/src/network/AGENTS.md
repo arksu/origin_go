@@ -89,6 +89,7 @@ messageDispatcher.on('objectMove', (msg) => { /* ... */ })
 - `sound`, `fx`
 - `characterProfile`, `playerStats`, `expGained`
 - `craftList`
+- `buildState`, `buildStateClosed`
 - `error`, `warning`
 
 **Debug Features**:
@@ -160,6 +161,8 @@ registerMessageHandlers()
 | `contextMenu` | Open context menu state in `gameStore` |
 | `miniAlert` | Push center-screen transient alert in `gameStore` |
 | `craftList` | Replace craft recipe list snapshot in `gameStore` |
+| `buildState` | Replace active build-site snapshot (`entityId`, `buildName`, rows`) in `gameStore` |
+| `buildStateClosed` | Close build-state window for the matching target |
 
 ### Character Profile + Craft Contract
 
@@ -167,6 +170,7 @@ registerMessageHandlers()
 - Profile payload is a **full snapshot** of attributes + experience.
 - Client should treat missing/invalid values as fail-safe `1` at store boundary.
 - Client receives `S2C_CraftList` only after opening the craft UI (`C2S_OpenWindow("craft")`) and while it remains open.
+- Client receives `S2C_BuildState` for build-site UI refreshes after open/put/take/progress server actions; inventory hand changes arrive via inventory messages.
 
 ## Protocol
 

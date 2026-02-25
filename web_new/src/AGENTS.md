@@ -58,7 +58,16 @@ Server → Network → gameStore → gameFacade → PIXI Render
 - Character profile comes from server (`S2C_CharacterProfile`) as full snapshot (attributes + exp) and is shown in UI windows.
 - Craft recipes come from server (`S2C_CraftList`) and are already filtered by server requirements; client only renders the provided list.
 - Craft UI must send `C2S_OpenWindow("craft")` / `C2S_CloseWindow("craft")` so the server can gate craft-list recomputation and pushes.
+- Build-state UI is also server-authoritative (`S2C_BuildState` rows/counters + `buildName` title); client should not recompute build progress locally.
 - Keep anti-spam logic in store/UI (`debounce`, `coalesce`, max visible items), not in Pixi layer.
+
+### Build UI Rules
+
+- Build recipe list window and build-site state window are separate UI states.
+- Build-state window click semantics are input-mode dependent:
+  - hand has item → put to build-site
+  - empty hand + row click → take back one deposited item from that row
+- Object icon helpers must handle both visual JSON shapes used in `src/game/objects`: direct `{layers}` and nested variant maps.
 
 ## Stack
 

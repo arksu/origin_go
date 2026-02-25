@@ -160,6 +160,8 @@ processJob(job)
 
 These jobs are consumed by `NetworkCommandSystem` on ECS tick thread, not directly from network goroutines.
 
+Build/UI refresh jobs must follow the same rule (enqueue/consume on ECS thread) so snapshot ordering stays deterministic with gameplay mutations.
+
 ### 3. NetworkCommandSystem
 
 ECS system that bridges network and game logic.
@@ -172,6 +174,10 @@ ECS system that bridges network and game logic.
 2. Validate entity existence
 3. Route commands to appropriate handlers
 4. Mark commands as processed for deduplication
+
+**Build routing notes**:
+- Build packets (`BuildStart`, `BuildProgress`, `BuildTakeBack`) must be handled through `NetworkCommandSystem`, not directly in network goroutines.
+- Build-state refreshes triggered by inventory operations (for `dst.kind = INVENTORY_KIND_BUILD`) should be emitted from the ECS thread after the inventory mutation succeeds.
 
 **Integration:**
 

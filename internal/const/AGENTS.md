@@ -13,3 +13,4 @@
 - Treat persisted key names as schema contract; avoid renames.
 - Add new keys only when they are globally relevant and cross-cutting.
 - Keep gameplay tuning constants here only if they are true shared constants (not runtime config).
+- Keep protocol-facing enum values synchronized with protobuf enums (for example inventory kinds shared with client/server packets).
