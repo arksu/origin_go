@@ -41,6 +41,6 @@ log.txt
 # env file
 .env
 
-build
+build/
 web_new/node_modules
 web_new/src/network/proto/*
