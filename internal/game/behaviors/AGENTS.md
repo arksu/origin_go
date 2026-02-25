@@ -57,3 +57,4 @@ Implementations must be idempotent and avoid clobbering valid restored runtime s
 - Keep behavior-specific logic colocated inside this package; do not split one behavior across multiple packages.
 - Keep helpers private unless they are needed by multiple behavior files.
 - Prefer simple, explicit flows over generic abstraction layers.
+- Shared build-state snapshot helpers may live here when that avoids `internal/game` ↔ `behaviors` import cycles.

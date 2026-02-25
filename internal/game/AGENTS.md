@@ -138,6 +138,16 @@ internal/game/
   - Refresh craft list snapshots on craft/inventory/link changes (gated by opened `"craft"` window)
 - **Key Types**: `CraftingService`
 
+### Building (`build_service.go`, `build_progress.go`)
+- **Purpose**: Data-driven build placement and build-site runtime, including progress via cyclic actions.
+- **Key Responsibilities**:
+  - Validate/start build placement with phantom collider preview
+  - Manage build-site UI snapshots (`S2C_BuildState`)
+  - Handle build deposits/take-back semantics around `PutItems`
+  - Run synthetic cyclic build progress (`ActionID = "build"`)
+  - Transform build-site into final object on completion (same entity id)
+  - Break links / close build windows for linked players on completion
+
 ## Data Flow
 
 ### Player Connection Flow
@@ -208,6 +218,14 @@ Key configuration parameters:
 - Lifecycle init hooks run for `spawn`, `restore`, and `transform` object flows.
 - Chunk activation (`world/chunk_manager.go`) runs behavior lifecycle init (`restore`) and then forces behavior recompute for all loaded objects with behaviors.
 - Inventory mutations that affect object-root containers must mark object behavior dirty, so appearance/flags stay in sync.
+- Runtime object def changes should use shared world transform helpers so collider/appearance/behavior/inventory updates stay consistent.
+
+## Build Runtime Notes
+
+- Build progress is server-authoritative and runs as a synthetic cyclic action; multiple players may build the same site simultaneously.
+- Parallel build progress safety relies on single-threaded ECS tick ordering plus per-cycle revalidation/current-state mutation (no mutexes).
+- Build placement tile restrictions (`allowedTiles` / `disallowedTiles`) are validated against the full result collider footprint (all overlapped tiles), not only the anchor tile.
+- Build-state snapshots are shared-state UI; refreshes should target linked players after successful put/take/progress mutations.
 
 ## Server Time Bootstrap Notes
 

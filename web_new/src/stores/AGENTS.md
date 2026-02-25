@@ -86,6 +86,9 @@ if (authStore.isAuthenticated) { /* proceed */ }
 | `craftWindowVisible` | `boolean` | Visibility flag for Craft window |
 | `craftRecipes` | `proto.ICraftRecipeEntry[]` | Server-filtered craft recipes + live flags (`S2C_CraftList`) |
 | `selectedCraftKey` | `string` | Currently selected craft recipe key in UI |
+| `buildStateEntityId` | `number \| null` | Active build-site entity for Build State window |
+| `buildStateName` | `string` | Server-provided build name for Build State window title |
+| `buildStateList` | `proto.IBuildStateItem[]` | Build-site requirement/progress rows from `S2C_BuildState` |
 | `characterAttributes` | `CharacterAttributeViewItem[]` | Full snapshot of 9 character attributes for UI |
 
 ### Types
@@ -151,6 +154,7 @@ interface ChunkData {
 - `pushMiniAlert(input)` — On `S2C_MiniAlert` with debounce/coalesce/max-visible rules
 - `setCharacterProfileSnapshot(snapshot)` — On `S2C_CharacterProfile`, normalize attributes + exp
 - `setCraftListSnapshot(snapshot)` — On `S2C_CraftList`, replace recipes and keep selection stable if possible
+- `setBuildStateSnapshot(snapshot)` — On `S2C_BuildState`, full-replace active build-site entity/name/rows
 - `toggleCharacterSheet()` / `setCharacterSheetVisible(visible)` — Character Sheet window controls
 - `toggleCraftWindow()` / `setCraftWindowVisible(visible)` — Craft window controls
 - `selectCraftRecipe(craftKey)` — Craft UI selection
@@ -166,6 +170,12 @@ interface ChunkData {
 - `craftRecipes` is a full snapshot from server (`S2C_CraftList`), not incremental.
 - Visibility filtering happens on server side; client only renders what is provided.
 - `selectedCraftKey` should remain stable across refreshes when the recipe still exists; otherwise select first available recipe.
+
+### Build State Rules
+
+- Build-state payload is a full snapshot from server; store should replace rows, not patch counts locally.
+- `buildStateName` is display data from server (`S2C_BuildState.buildName`) and should be cleared together with build-state entity/list on close.
+- `closeBuildStateWindowIfEntity(entityId)` must only close when ids match to avoid unrelated window closures during shared-state updates.
 
 #### Reset
 - `reset()` — Full cleanup (logout, disconnect, leave world)

@@ -16,6 +16,7 @@
 - Use `ecssystems.RecomputeObjectBehaviorsNow(...)` after activation for newly built behavior-bearing objects.
 - Do not rely on debug fallback sweeps for initial state correctness.
 - Keep behavior scheduler cleanup on despawn (`ecs.CancelBehaviorTicksByEntityID`) intact.
+- On restore, rehydrate runtime-derived components implied by persisted behavior state when required (for example build-site collider restored from build behavior state).
 
 ## Persistence
 
@@ -23,3 +24,11 @@
 - Runtime flags are computed and should not be persisted directly.
 - `ObjectInternalState.IsDirty` is used for save filtering.
 - Empty behavior state persists as `NULL` (not empty JSON payload).
+- Runtime despawns of chunk-owned objects must preserve delete intent until chunk save (tombstone/deferred delete), otherwise objects can reappear after restart.
+
+## Runtime Transform / Despawn Contracts
+
+- Prefer shared in-place transform helper (`TransformObjectToDefInPlace(...)`) for runtime object type changes.
+- In-place transforms must keep collider/appearance/entity info/behavior init/dirty-mark updates consistent in one path.
+- Container result defs must ensure object inventories exist immediately after transform (same-tick openability).
+- Use shared despawn-persistence abstraction for gameplay-driven despawns instead of feature-specific DB delete logic.
