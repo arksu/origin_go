@@ -35,6 +35,7 @@
           @keydown.enter.prevent="onRenameSelected"
         />
         <button class="small-btn" :disabled="!store.selectedObjectPath" @click="onRenameSelected">Rename</button>
+        <button class="small-btn danger" :disabled="!store.selectedObjectPath" @click="onRemoveSelected">Remove</button>
       </div>
       <div class="path-line">
         <span class="label">Selected:</span>
@@ -103,6 +104,11 @@ function onRenameSelected(): void {
   if (!store.selectedObjectPath) return
   store.renameSelectedObject(renameInput.value)
 }
+
+function onRemoveSelected(): void {
+  if (!store.selectedObjectPath) return
+  store.removeSelectedObject()
+}
 </script>
 
 <style scoped>
@@ -167,6 +173,16 @@ h3 {
 .small-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.small-btn.danger {
+  border-color: #7f1d1d;
+  color: #fecaca;
+  background: #351919;
+}
+
+.small-btn.danger:hover:not(:disabled) {
+  background: #4a1f1f;
 }
 
 .subpath-input {

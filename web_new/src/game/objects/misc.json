@@ -1,7 +1,7 @@
 {
   "kiln": {
     "offset": [
-      80,
+      79,
       120
     ],
     "layers": [
@@ -21,13 +21,21 @@
   },
   "boulder": {
     "offset": [
-      100,
+      108,
       120
     ],
     "layers": [
       {
         "interactive": true,
         "img": "obj/boulder/boulder.png"
+      },
+      {
+        "img": "obj/boulder/boulder_.png",
+        "offset": [
+          56,
+          80
+        ],
+        "shadow": true
       }
     ]
   },
@@ -79,33 +87,6 @@
           "offset": [
             14,
             28
-          ],
-          "shadow": true
-        }
-      ]
-    }
-  },
-  "runestone": {
-    "runestone": {
-      "offset": [
-        15,
-        36
-      ],
-      "layers": [
-        {
-          "interactive": true,
-          "img": "obj/runestone/runestone.png",
-          "offset": [
-            7,
-            7
-          ],
-          "z": 0
-        },
-        {
-          "img": "obj/runestone/runestone_.png",
-          "offset": [
-            6,
-            32
           ],
           "shadow": true
         }
@@ -171,12 +152,41 @@
   },
   "unknown": {
     "offset": [
-      10,
-      20
+      15,
+      28
     ],
     "layers": [
       {
-        "img": "question.png"
+        "img": "question.png",
+        "offset": [
+          0,
+          0
+        ]
+      }
+    ]
+  },
+  "runestone": {
+    "offset": [
+      12,
+      36
+    ],
+    "layers": [
+      {
+        "interactive": true,
+        "img": "obj/runestone/runestone.png",
+        "offset": [
+          0,
+          0
+        ],
+        "z": 0
+      },
+      {
+        "img": "obj/runestone/runestone_.png",
+        "offset": [
+          3,
+          32
+        ],
+        "shadow": true
       }
     ]
   }
