@@ -10,9 +10,9 @@
         "img": "obj/kiln/kiln.png"
       },
       {
-        "img": "obj/kiln/kiln_2_.png",
+        "img": "obj/kiln/kiln_.png",
         "offset": [
-          34,
+          38,
           57
         ],
         "shadow": true

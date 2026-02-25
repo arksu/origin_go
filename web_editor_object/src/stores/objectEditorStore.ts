@@ -401,6 +401,37 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     }
   }
 
+  function renameSelectedObject(newKeyRaw: string): void {
+    const root = selectedWorkingRoot.value
+    const currentPath = selectedObjectPath.value
+    if (!root || !currentPath) return
+
+    const nextKey = newKeyRaw.trim()
+    clearValidation()
+    try {
+      if (!nextKey) {
+        throw new Error('Rename key cannot be empty')
+      }
+      if (nextKey.includes('.')) {
+        throw new Error('Rename key cannot contain dot')
+      }
+
+      const parts = splitDotPath(currentPath)
+      if (parts.length === 0) {
+        throw new Error('Cannot rename root')
+      }
+      const currentKey = parts[parts.length - 1]!
+      if (currentKey === nextKey) return
+
+      const parentPath = parts.slice(0, -1).join('.')
+      const nextPath = moveNodeToParent(root, currentPath, parentPath, nextKey)
+      selectedObjectPath.value = nextPath
+      markChanged({ tree: true })
+    } catch (error) {
+      pushValidation('rename-node', String(error))
+    }
+  }
+
   function addSubPathToSelected(relativeSubPath: string): void {
     const root = selectedWorkingRoot.value
     if (!root) return
@@ -671,6 +702,7 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     moveSelectedLayerDown,
     moveNodeAsChild,
     moveNodeToRoot,
+    renameSelectedObject,
     addSubPathToSelected,
     flattenSelectedWrapper,
     getSelectedShadowLayerSourcePath,
