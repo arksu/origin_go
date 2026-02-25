@@ -26,6 +26,16 @@
         />
         <button class="small-btn" @click="onAddSubPath">Add</button>
       </div>
+      <div class="rename-row">
+        <input
+          v-model="renameInput"
+          class="subpath-input"
+          placeholder="rename selected object key"
+          :disabled="!store.selectedObjectPath"
+          @keydown.enter.prevent="onRenameSelected"
+        />
+        <button class="small-btn" :disabled="!store.selectedObjectPath" @click="onRenameSelected">Rename</button>
+      </div>
       <div class="path-line">
         <span class="label">Selected:</span>
         <code>{{ store.selectedObjectPath || '(none)' }}</code>
@@ -50,12 +60,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useObjectEditorStore } from '@/stores/objectEditorStore'
 import ObjectNodeTree from '@/components/ObjectNodeTree.vue'
 
 const store = useObjectEditorStore()
 const subPathInput = ref('')
+const renameInput = ref('')
+
+watch(
+  () => store.selectedObjectPath,
+  (path) => {
+    const parts = path.split('.').filter(Boolean)
+    renameInput.value = parts[parts.length - 1] ?? ''
+  },
+  { immediate: true },
+)
 
 function onAddSubPath(): void {
   const value = subPathInput.value.trim()
@@ -77,6 +97,11 @@ function onDropRoot(e: DragEvent): void {
   const sourcePath = e.dataTransfer?.getData('text/plain')?.trim()
   if (!sourcePath) return
   store.moveNodeToRoot(sourcePath)
+}
+
+function onRenameSelected(): void {
+  if (!store.selectedObjectPath) return
+  store.renameSelectedObject(renameInput.value)
 }
 </script>
 
@@ -118,7 +143,8 @@ h3 {
 }
 
 .toolbar,
-.subpath-row {
+.subpath-row,
+.rename-row {
   display: flex;
   gap: 6px;
   margin-bottom: 8px;
@@ -136,6 +162,11 @@ h3 {
 
 .small-btn:hover {
   background: #3d3d3d;
+}
+
+.small-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .subpath-input {
