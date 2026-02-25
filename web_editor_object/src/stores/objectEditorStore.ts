@@ -15,6 +15,7 @@ import {
   cloneJson,
   ensureNumberPair,
   flattenSingleChildWrapper,
+  getParentAtPath,
   getNodeAtPath,
   isPlainObject,
   isResourceDefLike,
@@ -432,6 +433,54 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     }
   }
 
+  function removeSelectedObject(): void {
+    const root = selectedWorkingRoot.value
+    const currentPath = selectedObjectPath.value
+    const fileName = selectedFileName.value
+    if (!root || !currentPath) return
+
+    clearValidation()
+    try {
+      const parentRef = getParentAtPath(root, currentPath)
+      if (!parentRef) {
+        throw new Error('Cannot remove root')
+      }
+      const { parent, key } = parentRef
+      if (!(key in parent)) {
+        throw new Error('Selected object not found')
+      }
+
+      delete parent[key]
+
+      // Drop pending shadow drafts for removed subtree so save payload stays consistent.
+      for (const draftKey of Object.keys(shadowDrafts.value)) {
+        if (!draftKey.startsWith(`${fileName}::`)) continue
+        const [, objectPath] = draftKey.split('::')
+        if (!objectPath) continue
+        if (objectPath === currentPath || objectPath.startsWith(`${currentPath}.`)) {
+          delete shadowDrafts.value[draftKey]
+        }
+      }
+
+      const parentPath = splitDotPath(currentPath).slice(0, -1).join('.')
+      if (parentPath) {
+        selectedObjectPath.value = parentPath
+      } else {
+        selectedObjectPath.value = findFirstResourcePath(root) ?? ''
+      }
+
+      if (selectedResource.value && selectedResource.value.layers.length > 0) {
+        selectedLayerIndex.value = 0
+      } else {
+        selectedLayerIndex.value = -1
+      }
+
+      markChanged({ tree: true })
+    } catch (error) {
+      pushValidation('remove-node', String(error))
+    }
+  }
+
   function addSubPathToSelected(relativeSubPath: string): void {
     const root = selectedWorkingRoot.value
     if (!root) return
@@ -703,6 +752,7 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     moveNodeAsChild,
     moveNodeToRoot,
     renameSelectedObject,
+    removeSelectedObject,
     addSubPathToSelected,
     flattenSelectedWrapper,
     getSelectedShadowLayerSourcePath,

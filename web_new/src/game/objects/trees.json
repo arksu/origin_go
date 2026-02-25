@@ -16,10 +16,10 @@
           "z": 0
         },
         {
-          "img": "obj/trees/log/log_y_.png",
+          "img": "obj/trees/log/log_y_2_.png",
           "offset": [
-            0,
-            0
+            4,
+            1
           ],
           "shadow": true
         }
@@ -41,10 +41,10 @@
           "z": 0
         },
         {
-          "img": "obj/trees/log/log_x_.png",
+          "img": "obj/trees/log/log_x_2_.png",
           "offset": [
-            5,
-            0
+            2,
+            -2
           ],
           "shadow": true
         }
