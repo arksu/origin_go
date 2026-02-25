@@ -19,7 +19,7 @@
             "defId": 4003,
             "key": "seed_carrot",
             "name": "Carrot Seeds",
-            "resource": "items/yarn.png",
+            "resource": "items/seed_carrot.png",
             "tags": [
                 "seed"
             ],
