@@ -229,6 +229,7 @@ export function registerMessageHandlers(): void {
   messageDispatcher.on('objectMove', (msg: proto.IS2C_ObjectMove) => {
     const entityId = toNumber(msg.entityId!)
     const carriedByEntityId = toNumber(msg.carriedByEntityId || 0)
+    const previousCarrierId = gameFacade.getObjectCarryVisualCarrierId(entityId)
 
     if (!msg.movement) return
 
@@ -260,20 +261,27 @@ export function registerMessageHandlers(): void {
       })
     }
 
-    // Feed movement data to MoveController for interpolation
-    gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
+    // When a carried object is dropped, server immediate-relocate moves can reuse move_seq=0.
+    // Treat the carried->not-carried transition as a snap so the final authoritative drop position
+    // is applied even if MoveController would otherwise reject the packet as out-of-order.
+    const isCarryDropTransition = previousCarrierId != null && carriedByEntityId === 0
+    const effectiveTeleport = isTeleport || isCarryDropTransition
 
     moveController.onObjectMove(
       entityId,
       serverTimeMs,
       moveSeq,
-      isTeleport,
+      effectiveTeleport,
       x, y,
       vx, vy,
       isMoving,
       moveMode,
       heading,
     )
+
+    // Update carry visual relation after movement is accepted so clearing the carry visual
+    // does not briefly reveal a stale logical object position.
+    gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
 
     // Update store with server data (source of truth)
     const movement: EntityMovement = {

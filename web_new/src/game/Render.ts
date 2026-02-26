@@ -492,6 +492,10 @@ export class Render {
     this.objectManager.clearCarryVisualRelation(objectId)
   }
 
+  getObjectCarryVisualCarrierId(objectId: number): number | null {
+    return this.objectManager.getCarryVisualCarrierId(objectId)
+  }
+
   playFx(entityId: number, fxKey: string): void {
     const objectView = this.objectManager.getObject(entityId)
     if (!objectView) return
