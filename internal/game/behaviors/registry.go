@@ -138,6 +138,7 @@ func DefaultRegistry() (*Registry, error) {
 		defaultRegistry, defaultRegistryErr = NewRegistry(
 			containerBehavior{},
 			buildBehavior{},
+			liftBehavior{},
 			treeBehavior{},
 			takeBehavior{},
 			playerBehavior{},

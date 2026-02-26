@@ -2,6 +2,7 @@ import { Render } from './Render'
 import { playerCommandController } from './PlayerCommandController'
 import type { DebugInfo, ScreenPoint } from './types'
 import type { ArmBuildGhostOptions } from './BuildGhostController'
+import type { ArmLiftGhostOptions } from './LiftGhostController'
 
 export class GameFacade {
   private render: Render | null = null
@@ -79,6 +80,22 @@ export class GameFacade {
 
   getBuildGhostWorldPosition(): ScreenPoint | null {
     return this.render?.getBuildGhostWorldPosition() ?? null
+  }
+
+  armLiftGhost(options: ArmLiftGhostOptions): void {
+    this.render?.armLiftGhost(options)
+  }
+
+  cancelLiftGhost(): void {
+    this.render?.cancelLiftGhost()
+  }
+
+  isLiftGhostActive(): boolean {
+    return this.render?.isLiftGhostActive() ?? false
+  }
+
+  getLiftGhostWorldPosition(): ScreenPoint | null {
+    return this.render?.getLiftGhostWorldPosition() ?? null
   }
 
   updateDebugStats(objectsCount: number, chunksLoaded: number): void {

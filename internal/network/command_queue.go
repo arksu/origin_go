@@ -27,6 +27,7 @@ const (
 	CmdStartBuild
 	CmdBuildProgress
 	CmdBuildTakeBack
+	CmdLiftPutDown
 	CmdOpenWindow
 	CmdCloseWindow
 )

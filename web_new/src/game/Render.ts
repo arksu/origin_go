@@ -8,6 +8,7 @@ import { cameraController } from './CameraController'
 import { playerCommandController } from './PlayerCommandController'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
+import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { config } from '@/config'
@@ -29,6 +30,7 @@ export class Render {
   private objectManager: ObjectManager
   private inputController: InputController
   private buildGhostController: BuildGhostController
+  private liftGhostController: LiftGhostController
 
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
@@ -53,6 +55,7 @@ export class Render {
     this.objectManager.setParentContainer(this.objectsContainer)
     this.inputController = new InputController()
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
+    this.liftGhostController = new LiftGhostController(this.objectsContainer)
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -105,6 +108,8 @@ export class Render {
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
       if (event.button === 0 && this.buildGhostController.isActive()) {
         this.updateBuildGhostAtScreen(event.screenX, event.screenY, event.modifiers)
+      } else if (event.button === 0 && this.liftGhostController.isActive()) {
+        this.updateLiftGhostAtScreen(event.screenX, event.screenY)
       }
       const consumed = this.onClickCallback?.({
         screen: this.lastClickScreen,
@@ -184,6 +189,7 @@ export class Render {
     this.updateMovement()
     this.updateCamera()
     this.updateBuildGhost()
+    this.updateLiftGhost()
     this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
@@ -258,6 +264,26 @@ export class Render {
       { x: screenX, y: screenY },
       this.screenToWorld.bind(this),
       (modifiers & Modifiers.SHIFT) === 0,
+    )
+  }
+
+  private updateLiftGhost(): void {
+    if (!this.liftGhostController.isActive()) {
+      return
+    }
+    this.liftGhostController.update(
+      this.lastPointerScreen,
+      this.screenToWorld.bind(this),
+    )
+  }
+
+  private updateLiftGhostAtScreen(screenX: number, screenY: number): void {
+    if (!this.liftGhostController.isActive()) {
+      return
+    }
+    this.liftGhostController.update(
+      { x: screenX, y: screenY },
+      this.screenToWorld.bind(this),
     )
   }
 
@@ -492,6 +518,23 @@ export class Render {
     return this.buildGhostController.getCurrentWorldPosition()
   }
 
+  armLiftGhost(options: ArmLiftGhostOptions): void {
+    this.liftGhostController.arm(options)
+    this.updateLiftGhost()
+  }
+
+  cancelLiftGhost(): void {
+    this.liftGhostController.cancel()
+  }
+
+  isLiftGhostActive(): boolean {
+    return this.liftGhostController.isActive()
+  }
+
+  getLiftGhostWorldPosition(): ScreenPoint | null {
+    return this.liftGhostController.getCurrentWorldPosition()
+  }
+
   toggleDebugOverlay(): void {
     this.debugOverlay.toggle()
   }
@@ -524,6 +567,7 @@ export class Render {
    */
   resetWorld(): void {
     this.buildGhostController.cancel()
+    this.liftGhostController.cancel()
     this.objectManager.clear()
     this.chunkManager.clear()
     terrainManager.resetWorld()
@@ -541,6 +585,7 @@ export class Render {
 
     this.inputController.destroy()
     this.buildGhostController.destroy()
+    this.liftGhostController.destroy()
 
     this.chunkManager.destroy()
     this.objectManager.destroy()

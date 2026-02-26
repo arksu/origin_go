@@ -8,7 +8,10 @@
       "name": "Log",
       "static": true,
       "hp": 1,
-      "resource": "trees/log_y"
+      "resource": "trees/log_y",
+      "behaviors": {
+        "lift": {}
+      }
     },
     {
       "defId": 4,
@@ -16,7 +19,10 @@
       "name": "Log",
       "static": true,
       "hp": 1,
-      "resource": "trees/log_x"
+      "resource": "trees/log_x",
+      "behaviors": {
+        "lift": {}
+      }
     },
     {
       "defId": 1,

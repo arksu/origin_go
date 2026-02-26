@@ -109,6 +109,53 @@ func (c *Chunk) AddRawObject(obj *repository.Object) {
 	c.mu.Unlock()
 }
 
+func (c *Chunk) RemoveRawObjectByID(id types.EntityID) {
+	if id == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for i := 0; i < len(c.rawObjects); i++ {
+		obj := c.rawObjects[i]
+		if obj == nil || types.EntityID(obj.ID) != id {
+			continue
+		}
+		c.rawObjects = append(c.rawObjects[:i], c.rawObjects[i+1:]...)
+		i--
+	}
+	delete(c.rawDirtyObjectIDs, id)
+	c.rawDataDirty = true
+}
+
+func (c *Chunk) UpsertRawObject(obj *repository.Object) {
+	if obj == nil {
+		return
+	}
+	id := types.EntityID(obj.ID)
+	if id == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	replaced := false
+	for i := range c.rawObjects {
+		if c.rawObjects[i] == nil || types.EntityID(c.rawObjects[i].ID) != id {
+			continue
+		}
+		c.rawObjects[i] = obj
+		replaced = true
+		break
+	}
+	if !replaced {
+		c.rawObjects = append(c.rawObjects, obj)
+	}
+	c.rawDirtyObjectIDs[id] = struct{}{}
+	delete(c.deletedObjectIDs, id)
+	c.rawDataDirty = true
+}
+
 func (c *Chunk) ClearRawObjects() {
 	c.mu.Lock()
 	c.rawObjects = nil
@@ -132,6 +179,34 @@ func (c *Chunk) GetRawInventoriesByOwner() map[types.EntityID][]repository.Inven
 func (c *Chunk) ClearRawInventoriesByOwner() {
 	c.mu.Lock()
 	c.rawInventoriesByOwner = make(map[types.EntityID][]repository.Inventory, 8)
+	c.mu.Unlock()
+}
+
+func (c *Chunk) RemoveRawInventoriesByOwner(ownerID types.EntityID) {
+	if ownerID == 0 {
+		return
+	}
+	c.mu.Lock()
+	delete(c.rawInventoriesByOwner, ownerID)
+	delete(c.rawDirtyObjectIDs, ownerID)
+	c.rawDataDirty = true
+	c.mu.Unlock()
+}
+
+func (c *Chunk) SetRawInventoriesForOwner(ownerID types.EntityID, rows []repository.Inventory) {
+	if ownerID == 0 {
+		return
+	}
+	c.mu.Lock()
+	if len(rows) == 0 {
+		delete(c.rawInventoriesByOwner, ownerID)
+	} else {
+		cloned := make([]repository.Inventory, len(rows))
+		copy(cloned, rows)
+		c.rawInventoriesByOwner[ownerID] = cloned
+	}
+	c.rawDirtyObjectIDs[ownerID] = struct{}{}
+	c.rawDataDirty = true
 	c.mu.Unlock()
 }
 

@@ -124,6 +124,14 @@ export function registerMessageHandlers(): void {
     gameStore.closeBuildStateWindowIfEntity(msg.entityId)
   })
 
+  messageDispatcher.on('liftCarryState', (msg: proto.IS2C_LiftCarryState) => {
+    console.log('[Handlers] liftCarryState:', {
+      active: !!msg.active,
+      entityId: msg.entityId,
+    })
+    gameStore.setLiftCarryState(msg)
+  })
+
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
     console.log('[Handlers] S2C_ExpGained received:', {
       entityId: toNumber(msg.entityId || 0),

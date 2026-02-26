@@ -169,4 +169,22 @@ export function sendBuildTakeBack(entityId: number, slot: number): void {
   })
 }
 
+export function sendLiftPutDown(entityId: number, pos: { x: number; y: number }): void {
+  const target = Math.trunc(entityId)
+  const x = Math.trunc(pos.x)
+  const y = Math.trunc(pos.y)
+  if (!Number.isFinite(target) || target <= 0) return
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return
+
+  gameConnection.send({
+    liftPutDown: proto.C2S_LiftPutDown.create({
+      entityId: target,
+      pos: proto.Vector2.create({
+        x,
+        y,
+      }),
+    }),
+  })
+}
+
 export { gameConnection, messageDispatcher }

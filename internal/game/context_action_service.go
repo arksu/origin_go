@@ -55,6 +55,7 @@ type ContextActionService struct {
 	actionDeps       contracts.ExecutionDeps
 	crafting         *CraftingService
 	build            *BuildService
+	lift             *LiftService
 }
 
 func NewContextActionService(
@@ -144,6 +145,26 @@ func (s *ContextActionService) SetBuildService(build *BuildService) {
 		return
 	}
 	s.build = build
+}
+
+func (s *ContextActionService) SetLiftService(lift *LiftService) {
+	if s == nil {
+		return
+	}
+	s.lift = lift
+	if lift == nil {
+		s.actionDeps.LiftObject = nil
+		return
+	}
+	s.actionDeps.LiftObject = func(
+		w *ecs.World,
+		playerID types.EntityID,
+		playerHandle types.Handle,
+		targetID types.EntityID,
+		targetHandle types.Handle,
+	) contracts.BehaviorResult {
+		return lift.StartLiftFromContextAction(w, playerID, playerHandle, targetID, targetHandle)
+	}
 }
 
 var _ systems.ContextActionResolver = (*ContextActionService)(nil)

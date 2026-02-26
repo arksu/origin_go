@@ -55,6 +55,7 @@ type Shard struct {
 	adminHandler    *ChatAdminCommandHandler
 	craftingService *CraftingService
 	buildService    *BuildService
+	liftService     *LiftService
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -210,11 +211,21 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	)
 	s.buildService = buildService
 	contextActionService.SetBuildService(buildService)
+	liftService := NewLiftService(
+		s.world,
+		s.chunkManager,
+		s.eventBus,
+		s,
+		logger,
+	)
+	s.liftService = liftService
+	contextActionService.SetLiftService(liftService)
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 	networkCmdSystem.SetContextActionService(contextActionService)
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetCraftCommandService(craftingService)
 	networkCmdSystem.SetBuildCommandService(buildService)
+	networkCmdSystem.SetLiftCommandService(liftService)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
@@ -227,7 +238,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
 	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
+	s.world.AddSystem(systems.NewLiftPlacementSystem(s.world, liftService, logger))
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
+	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))
 	s.world.AddSystem(visionSystem)
@@ -310,6 +323,18 @@ func (s *Shard) Update(ts ecs.TimeState) {
 func (s *Shard) Stop() {
 	s.mu.Lock()
 	s.state = ShardStateStopping
+	if s.liftService != nil {
+		handles := ecs.NewQuery(s.world).
+			With(components.LiftCarryStateComponentID).
+			Handles()
+		for _, h := range handles {
+			playerID, hasID := s.world.GetExternalID(h)
+			if !hasID {
+				continue
+			}
+			_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, playerID, h, false)
+		}
+	}
 	s.mu.Unlock()
 
 	if s.characterSaver != nil {
@@ -527,7 +552,9 @@ func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 // onDetachedEntityExpired is called when a detached entity's TTL expires.
 // It handles per-entity spatial cleanup before despawn.
 func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
-	_ = entityID
+	if s.liftService != nil {
+		_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, entityID, handle, false)
+	}
 
 	// Remove from chunk spatial index
 	if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](s.world, handle); hasChunkRef {
@@ -946,6 +973,32 @@ func (s *Shard) SendBuildStateClosed(entityID types.EntityID, msg *netproto.S2C_
 	data, err := proto.Marshal(response)
 	if err != nil {
 		s.logger.Error("Failed to marshal build state closed",
+			zap.Int64("entity_id", int64(entityID)),
+			zap.Error(err))
+		return
+	}
+	client.Send(data)
+}
+
+func (s *Shard) SendLiftCarryState(entityID types.EntityID, msg *netproto.S2C_LiftCarryState) {
+	if msg == nil {
+		return
+	}
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_LiftCarryState{
+			LiftCarryState: msg,
+		},
+	}
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal lift carry state",
 			zap.Int64("entity_id", int64(entityID)),
 			zap.Error(err))
 		return

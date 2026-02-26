@@ -171,6 +171,8 @@ export const useGameStore = defineStore('game', () => {
   const buildStateEntityId = ref<number | null>(null)
   const buildStateName = ref<string>('')
   const buildStateList = ref<BuildStateItemState[]>([])
+  const liftCarryActive = ref(false)
+  const liftCarriedEntityId = ref<number | null>(null)
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
@@ -340,6 +342,8 @@ export const useGameStore = defineStore('game', () => {
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
     closeBuildStateWindow()
+    liftCarryActive.value = false
+    liftCarriedEntityId.value = null
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -381,6 +385,10 @@ export const useGameStore = defineStore('game', () => {
     entities.value.delete(entityId)
     if (buildStateEntityId.value === entityId) {
       closeBuildStateWindow()
+    }
+    if (liftCarriedEntityId.value === entityId) {
+      liftCarryActive.value = false
+      liftCarriedEntityId.value = null
     }
   }
 
@@ -789,6 +797,23 @@ export const useGameStore = defineStore('game', () => {
     closeBuildStateWindow()
   }
 
+  function setLiftCarryState(snapshot: proto.IS2C_LiftCarryState | null | undefined) {
+    const active = !!snapshot?.active
+    if (!active) {
+      liftCarryActive.value = false
+      liftCarriedEntityId.value = null
+      return
+    }
+    const entityId = sanitizeNonNegativeInt64(snapshot?.entityId)
+    if (entityId <= 0) {
+      liftCarryActive.value = false
+      liftCarriedEntityId.value = null
+      return
+    }
+    liftCarryActive.value = true
+    liftCarriedEntityId.value = entityId
+  }
+
   function consumeArmedBuildPlacement(): string {
     const key = armedBuildKey.value.trim()
     if (!key) return ''
@@ -961,6 +986,8 @@ export const useGameStore = defineStore('game', () => {
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
     closeBuildStateWindow()
+    liftCarryActive.value = false
+    liftCarriedEntityId.value = null
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -1015,6 +1042,8 @@ export const useGameStore = defineStore('game', () => {
     buildStateEntityId,
     buildStateName,
     buildStateList,
+    liftCarryActive,
+    liftCarriedEntityId,
     characterAttributes,
     characterExperience,
     playerStats,
@@ -1079,6 +1108,7 @@ export const useGameStore = defineStore('game', () => {
     setBuildStateSnapshot,
     closeBuildStateWindow,
     closeBuildStateWindowIfEntity,
+    setLiftCarryState,
     consumeArmedBuildPlacement,
     setCharacterProfileSnapshot,
     applyExpGained,
