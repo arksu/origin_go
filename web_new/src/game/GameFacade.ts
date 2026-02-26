@@ -145,6 +145,10 @@ export class GameFacade {
     this.render?.clearObjectCarryVisualRelation(objectId)
   }
 
+  getObjectCarryVisualCarrierId(objectId: number): number | null {
+    return this.render?.getObjectCarryVisualCarrierId(objectId) ?? null
+  }
+
   playFx(entityId: number, fxKey: string): void {
     this.render?.playFx(entityId, fxKey)
   }

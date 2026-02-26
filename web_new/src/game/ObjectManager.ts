@@ -223,6 +223,10 @@ export class ObjectManager {
     return this.objects.get(entityId)
   }
 
+  getCarryVisualCarrierId(objectId: number): number | null {
+    return this.carriedByByObject.get(objectId) ?? null
+  }
+
   /**
    * Find entity at screen coordinates.
    * Returns { entityId, typeId } if found, null otherwise.
