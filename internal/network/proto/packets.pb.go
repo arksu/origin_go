@@ -4121,13 +4121,14 @@ func (x *S2C_ChunkUnload) GetCoord() *ChunkCoord {
 }
 
 type S2C_ObjectSpawn struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EntityId      uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	TypeId        uint32                 `protobuf:"varint,2,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"` // defId from object definitions
-	ResourcePath  string                 `protobuf:"bytes,3,opt,name=resource_path,json=resourcePath,proto3" json:"resource_path,omitempty"`
-	Position      *EntityPosition        `protobuf:"bytes,4,opt,name=position,proto3" json:"position,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	EntityId          uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	TypeId            uint32                 `protobuf:"varint,2,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"` // defId from object definitions
+	ResourcePath      string                 `protobuf:"bytes,3,opt,name=resource_path,json=resourcePath,proto3" json:"resource_path,omitempty"`
+	Position          *EntityPosition        `protobuf:"bytes,4,opt,name=position,proto3" json:"position,omitempty"`
+	CarriedByEntityId uint64                 `protobuf:"varint,5,opt,name=carried_by_entity_id,json=carriedByEntityId,proto3" json:"carried_by_entity_id,omitempty"` // 0 when not carried
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *S2C_ObjectSpawn) Reset() {
@@ -4188,6 +4189,13 @@ func (x *S2C_ObjectSpawn) GetPosition() *EntityPosition {
 	return nil
 }
 
+func (x *S2C_ObjectSpawn) GetCarriedByEntityId() uint64 {
+	if x != nil {
+		return x.CarriedByEntityId
+	}
+	return 0
+}
+
 type S2C_ObjectDespawn struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EntityId      uint64                 `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
@@ -4241,9 +4249,10 @@ type S2C_ObjectMove struct {
 	// monotonically increasing per entity (wrap ok)
 	MoveSeq uint32 `protobuf:"varint,4,opt,name=move_seq,json=moveSeq,proto3" json:"move_seq,omitempty"`
 	// if true: client should snap/reset buffer
-	IsTeleport    bool `protobuf:"varint,5,opt,name=is_teleport,json=isTeleport,proto3" json:"is_teleport,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IsTeleport        bool   `protobuf:"varint,5,opt,name=is_teleport,json=isTeleport,proto3" json:"is_teleport,omitempty"`
+	CarriedByEntityId uint64 `protobuf:"varint,6,opt,name=carried_by_entity_id,json=carriedByEntityId,proto3" json:"carried_by_entity_id,omitempty"` // 0 when not carried
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *S2C_ObjectMove) Reset() {
@@ -4309,6 +4318,13 @@ func (x *S2C_ObjectMove) GetIsTeleport() bool {
 		return x.IsTeleport
 	}
 	return false
+}
+
+func (x *S2C_ObjectMove) GetCarriedByEntityId() uint64 {
+	if x != nil {
+		return x.CarriedByEntityId
+	}
+	return 0
 }
 
 type S2C_MovementMode struct {
@@ -6944,21 +6960,23 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rS2C_ChunkLoad\x12&\n" +
 	"\x05chunk\x18\x01 \x01(\v2\x10.proto.ChunkDataR\x05chunk\":\n" +
 	"\x0fS2C_ChunkUnload\x12'\n" +
-	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\x9f\x01\n" +
+	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\xd0\x01\n" +
 	"\x0fS2C_ObjectSpawn\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x17\n" +
 	"\atype_id\x18\x02 \x01(\rR\x06typeId\x12#\n" +
 	"\rresource_path\x18\x03 \x01(\tR\fresourcePath\x121\n" +
-	"\bposition\x18\x04 \x01(\v2\x15.proto.EntityPositionR\bposition\"0\n" +
+	"\bposition\x18\x04 \x01(\v2\x15.proto.EntityPositionR\bposition\x12/\n" +
+	"\x14carried_by_entity_id\x18\x05 \x01(\x04R\x11carriedByEntityId\"0\n" +
 	"\x11S2C_ObjectDespawn\x12\x1b\n" +
-	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"\xc2\x01\n" +
+	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"\xf3\x01\n" +
 	"\x0eS2C_ObjectMove\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x121\n" +
 	"\bmovement\x18\x02 \x01(\v2\x15.proto.EntityMovementR\bmovement\x12$\n" +
 	"\x0eserver_time_ms\x18\x03 \x01(\x03R\fserverTimeMs\x12\x19\n" +
 	"\bmove_seq\x18\x04 \x01(\rR\amoveSeq\x12\x1f\n" +
 	"\vis_teleport\x18\x05 \x01(\bR\n" +
-	"isTeleport\"i\n" +
+	"isTeleport\x12/\n" +
+	"\x14carried_by_entity_id\x18\x06 \x01(\x04R\x11carriedByEntityId\"i\n" +
 	"\x10S2C_MovementMode\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x128\n" +
 	"\rmovement_mode\x18\x02 \x01(\x0e2\x13.proto.MovementModeR\fmovementMode\"\xfb\x02\n" +

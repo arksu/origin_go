@@ -10,6 +10,9 @@ import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
 export class ObjectManager {
   private parentContainer: Container | null = null
   private objects: Map<number, ObjectView> = new Map()
+  private carriedByByObject: Map<number, number> = new Map()
+  private carriedObjectsByCarrier: Map<number, Set<number>> = new Map()
+  private activeCarriedObjects: Set<number> = new Set()
   private needsSort = false
   private boundsVisible: boolean = false
   private hoveredEntityId: number | null = null
@@ -57,6 +60,14 @@ export class ObjectManager {
    * Despawn an object.
    */
   despawnObject(entityId: number): void {
+    const carriedSet = this.carriedObjectsByCarrier.get(entityId)
+    if (carriedSet && carriedSet.size > 0) {
+      for (const carriedObjectId of Array.from(carriedSet)) {
+        this.clearCarryVisualRelation(carriedObjectId)
+      }
+    }
+    this.clearCarryVisualRelation(entityId)
+
     const objectView = this.objects.get(entityId)
     if (!objectView) {
       console.warn(`[ObjectManager] Cannot despawn object ${entityId}: not found`)
@@ -99,6 +110,110 @@ export class ObjectManager {
     cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
 
     this.needsSort = true
+  }
+
+  setCarryVisualRelation(objectId: number, carrierId: number | null): void {
+    const nextCarrierId = carrierId != null && carrierId > 0 ? carrierId : null
+    const prevCarrierId = this.carriedByByObject.get(objectId)
+    if ((prevCarrierId ?? null) === nextCarrierId) {
+      return
+    }
+
+    if (prevCarrierId != null) {
+      const prevSet = this.carriedObjectsByCarrier.get(prevCarrierId)
+      if (prevSet) {
+        prevSet.delete(objectId)
+        if (prevSet.size === 0) {
+          this.carriedObjectsByCarrier.delete(prevCarrierId)
+        }
+      }
+      this.carriedByByObject.delete(objectId)
+      this.activeCarriedObjects.delete(objectId)
+    }
+
+    const objectView = this.objects.get(objectId)
+
+    if (nextCarrierId == null) {
+      if (objectView) {
+        objectView.clearScreenPositionOverride()
+        objectView.clearVisualScreenOffset()
+        objectView.setZIndexOverride(null)
+        objectView.setInteractionSuppressed(false)
+        cullingController.updateObjectBounds(objectId, objectView.computeScreenBounds())
+      }
+      this.needsSort = true
+      return
+    }
+
+    this.carriedByByObject.set(objectId, nextCarrierId)
+    let carriedSet = this.carriedObjectsByCarrier.get(nextCarrierId)
+    if (!carriedSet) {
+      carriedSet = new Set<number>()
+      this.carriedObjectsByCarrier.set(nextCarrierId, carriedSet)
+    }
+    carriedSet.add(objectId)
+    this.activeCarriedObjects.add(objectId)
+
+    if (objectView) {
+      objectView.setInteractionSuppressed(true)
+    }
+    this.needsSort = true
+  }
+
+  clearCarryVisualRelation(objectId: number): void {
+    this.setCarryVisualRelation(objectId, null)
+  }
+
+  syncActiveCarryVisuals(offsetPx: number): void {
+    if (this.activeCarriedObjects.size === 0) {
+      return
+    }
+
+    const staleObjectIds: number[] = []
+    for (const objectId of this.activeCarriedObjects) {
+      const carrierId = this.carriedByByObject.get(objectId)
+      if (carrierId == null) {
+        staleObjectIds.push(objectId)
+        continue
+      }
+
+      const objectView = this.objects.get(objectId)
+      if (!objectView) {
+        staleObjectIds.push(objectId)
+        continue
+      }
+
+      objectView.setInteractionSuppressed(true)
+
+      const carrierView = this.objects.get(carrierId)
+      if (!carrierView) {
+        const hadOverride = objectView.getZIndexOverride() != null
+        objectView.clearScreenPositionOverride()
+        objectView.clearVisualScreenOffset()
+        objectView.setZIndexOverride(null)
+        cullingController.updateObjectBounds(objectId, objectView.computeScreenBounds())
+        if (hadOverride) {
+          this.needsSort = true
+        }
+        continue
+      }
+
+      const targetZ = TERRAIN_BASE_Z_INDEX + carrierView.getContainer().y + 1
+      const zChanged = objectView.getZIndexOverride() !== targetZ
+      objectView.setScreenPositionOverride(
+        carrierView.getContainer().x,
+        carrierView.getContainer().y - offsetPx,
+      )
+      objectView.setZIndexOverride(targetZ)
+      cullingController.updateObjectBounds(objectId, objectView.computeScreenBounds())
+      if (zChanged) {
+        this.needsSort = true
+      }
+    }
+
+    for (const staleObjectId of staleObjectIds) {
+      this.clearCarryVisualRelation(staleObjectId)
+    }
   }
 
   /**
@@ -227,7 +342,8 @@ export class ObjectManager {
     for (const entityId of visibleIds) {
       const obj = this.objects.get(entityId)
       if (obj) {
-        obj.getContainer().zIndex = TERRAIN_BASE_Z_INDEX + obj.getContainer().y
+        const zIndexOverride = obj.getZIndexOverride()
+        obj.getContainer().zIndex = zIndexOverride ?? (TERRAIN_BASE_Z_INDEX + obj.getContainer().y)
       }
     }
   }
@@ -265,6 +381,9 @@ export class ObjectManager {
       obj.destroy()
     }
     this.objects.clear()
+    this.carriedByByObject.clear()
+    this.carriedObjectsByCarrier.clear()
+    this.activeCarriedObjects.clear()
   }
 
   /**

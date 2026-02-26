@@ -186,6 +186,7 @@ export function registerMessageHandlers(): void {
     const posY = msg.position?.position?.y || 0
     const heading = msg.position?.position?.heading || 0
     const resourcePath = msg.resourcePath || ''
+    const carriedByEntityId = toNumber(msg.carriedByEntityId || 0)
 
     // console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.typeId}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
 
@@ -202,6 +203,7 @@ export function registerMessageHandlers(): void {
 
     gameStore.spawnEntity(objectData)
     gameFacade.spawnObject(objectData)
+    gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
 
     // Initialize entity in MoveController for smooth movement
     moveController.initEntity(entityId, posX, posY, heading)
@@ -226,6 +228,7 @@ export function registerMessageHandlers(): void {
 
   messageDispatcher.on('objectMove', (msg: proto.IS2C_ObjectMove) => {
     const entityId = toNumber(msg.entityId!)
+    const carriedByEntityId = toNumber(msg.carriedByEntityId || 0)
 
     if (!msg.movement) return
 
@@ -258,6 +261,8 @@ export function registerMessageHandlers(): void {
     }
 
     // Feed movement data to MoveController for interpolation
+    gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
+
     moveController.onObjectMove(
       entityId,
       serverTimeMs,

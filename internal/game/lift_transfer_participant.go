@@ -243,7 +243,11 @@ func (p *LiftCarryTransferParticipant) restoreCarryToShard(
 		shard.chunkManager,
 		shard.EventBus(),
 		objectHandle,
-		gameworld.RelocateWorldObjectImmediateOptions{IsTeleport: true, ForceReindex: true},
+		gameworld.RelocateWorldObjectImmediateOptions{
+			IsTeleport:        true,
+			ForceReindex:      true,
+			CarriedByEntityID: req.PlayerID,
+		},
 		playerTransform.X,
 		playerTransform.Y,
 		p.logger,

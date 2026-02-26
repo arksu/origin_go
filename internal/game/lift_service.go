@@ -349,7 +349,10 @@ func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID,
 		s.chunkManager,
 		s.eventBus,
 		objectHandle,
-		gameworld.RelocateWorldObjectImmediateOptions{IsTeleport: false},
+		gameworld.RelocateWorldObjectImmediateOptions{
+			IsTeleport:        false,
+			CarriedByEntityID: playerID,
+		},
 		playerTransform.X,
 		playerTransform.Y,
 		s.logger,
@@ -387,17 +390,21 @@ func (s *LiftService) ForceDropCarryAtPlayerPosition(
 		return false
 	}
 	s.restoreCarriedObjectRuntime(w, objectHandle)
+	ecs.RemoveComponent[components.LiftedObjectState](w, objectHandle)
 	_ = gameworld.RelocateWorldObjectImmediate(
 		w,
 		s.chunkManager,
 		s.eventBus,
 		objectHandle,
-		gameworld.RelocateWorldObjectImmediateOptions{IsTeleport: false, ForceReindex: true},
+		gameworld.RelocateWorldObjectImmediateOptions{
+			IsTeleport:        false,
+			ForceReindex:      true,
+			CarriedByEntityID: 0,
+		},
 		playerTransform.X,
 		playerTransform.Y,
 		s.logger,
 	)
-	ecs.RemoveComponent[components.LiftedObjectState](w, objectHandle)
 	s.clearCarryStateForPlayer(w, playerID, playerHandle, sendCarryState)
 	return true
 }
@@ -424,7 +431,8 @@ func (s *LiftService) finalizeLiftPutDown(
 		return
 	}
 
-	if _, ok := ecs.GetComponent[components.LiftedObjectState](w, objectHandle); !ok {
+	liftedState, ok := ecs.GetComponent[components.LiftedObjectState](w, objectHandle)
+	if !ok {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
@@ -447,24 +455,29 @@ func (s *LiftService) finalizeLiftPutDown(
 	}
 
 	s.restoreCarriedObjectRuntime(w, objectHandle)
+	ecs.RemoveComponent[components.LiftedObjectState](w, objectHandle)
 	if !gameworld.RelocateWorldObjectImmediate(
 		w,
 		s.chunkManager,
 		s.eventBus,
 		objectHandle,
-		gameworld.RelocateWorldObjectImmediateOptions{IsTeleport: false, ForceReindex: true},
+		gameworld.RelocateWorldObjectImmediateOptions{
+			IsTeleport:        false,
+			ForceReindex:      true,
+			CarriedByEntityID: 0,
+		},
 		dropX,
 		dropY,
 		s.logger,
 	) {
 		// Keep carrying on failed placement relocation.
+		ecs.AddComponent(w, objectHandle, liftedState)
 		s.disableCarriedObjectRuntime(w, objectHandle, playerID, playerHandle)
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
 		return
 	}
 
-	ecs.RemoveComponent[components.LiftedObjectState](w, objectHandle)
 	s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 }
@@ -513,7 +526,11 @@ func (s *LiftService) startCarryingObject(
 		s.chunkManager,
 		s.eventBus,
 		targetHandle,
-		gameworld.RelocateWorldObjectImmediateOptions{IsTeleport: false, ForceReindex: true},
+		gameworld.RelocateWorldObjectImmediateOptions{
+			IsTeleport:        false,
+			ForceReindex:      true,
+			CarriedByEntityID: playerID,
+		},
 		playerTransform.X,
 		playerTransform.Y,
 		s.logger,

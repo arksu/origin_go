@@ -160,20 +160,23 @@ func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int, epoch uint32)
 
 // MoveBatchEntry holds movement data for a single entity within a batch.
 type MoveBatchEntry struct {
-	EntityID     types.EntityID
-	Handle       types.Handle
-	X            int
-	Y            int
-	Heading      float64
-	VelocityX    int
-	VelocityY    int
-	MoveMode     constt.MoveMode
-	IsMoving     bool
-	TargetX      *int
-	TargetY      *int
-	ServerTimeMs int64
-	MoveSeq      uint32
-	IsTeleport   bool
+	EntityID types.EntityID
+	Handle   types.Handle
+	// Carry visual relation for observers (0 when not carried). Set by the movement producer
+	// so the visibility dispatcher can stay allocation/lookup stable on the hot path.
+	CarriedByEntityID types.EntityID
+	X                 int
+	Y                 int
+	Heading           float64
+	VelocityX         int
+	VelocityY         int
+	MoveMode          constt.MoveMode
+	IsMoving          bool
+	TargetX           *int
+	TargetY           *int
+	ServerTimeMs      int64
+	MoveSeq           uint32
+	IsTeleport        bool
 }
 
 // ObjectMoveBatchEvent carries all movement updates for one tick in a single event.

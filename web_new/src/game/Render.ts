@@ -20,6 +20,8 @@ import { fxManager } from './fx/FxManager'
 import type { DebugInfo, ScreenPoint } from './types'
 import { clearAlphaMaskCache } from './PixelHitTest'
 
+const CARRIED_OBJECT_OFFSET_PX = 56
+
 export class Render {
   private app: Application
   private mapContainer: Container
@@ -187,6 +189,7 @@ export class Render {
 
   private update(): void {
     this.updateMovement()
+    this.objectManager.syncActiveCarryVisuals(CARRIED_OBJECT_OFFSET_PX)
     this.updateCamera()
     this.updateBuildGhost()
     this.updateLiftGhost()
@@ -479,6 +482,14 @@ export class Render {
 
   updateObjectPosition(entityId: number, x: number, y: number): void {
     this.objectManager.updateObjectPosition(entityId, x, y)
+  }
+
+  setObjectCarryVisualRelation(objectId: number, carrierId: number | null): void {
+    this.objectManager.setCarryVisualRelation(objectId, carrierId)
+  }
+
+  clearObjectCarryVisualRelation(objectId: number): void {
+    this.objectManager.clearCarryVisualRelation(objectId)
   }
 
   playFx(entityId: number, fxKey: string): void {

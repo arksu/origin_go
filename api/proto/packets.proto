@@ -521,6 +521,7 @@ message S2C_ObjectSpawn {
   uint32 type_id = 2; // defId from object definitions
   string resource_path = 3;
   EntityPosition position = 4;
+  uint64 carried_by_entity_id = 5; // 0 when not carried
 }
 
 message S2C_ObjectDespawn {
@@ -538,6 +539,7 @@ message S2C_ObjectMove {
 
   // if true: client should snap/reset buffer
   bool is_teleport = 5;
+  uint64 carried_by_entity_id = 6; // 0 when not carried
 }
 
 message S2C_MovementMode {
