@@ -139,6 +139,7 @@ export class ObjectManager {
         objectView.clearVisualScreenOffset()
         objectView.setZIndexOverride(null)
         objectView.setInteractionSuppressed(false)
+        objectView.setShadowSuppressed(false)
         cullingController.updateObjectBounds(objectId, objectView.computeScreenBounds())
       }
       this.needsSort = true
@@ -156,6 +157,7 @@ export class ObjectManager {
 
     if (objectView) {
       objectView.setInteractionSuppressed(true)
+      objectView.setShadowSuppressed(true)
     }
     this.needsSort = true
   }
@@ -184,6 +186,7 @@ export class ObjectManager {
       }
 
       objectView.setInteractionSuppressed(true)
+      objectView.setShadowSuppressed(true)
 
       const carrierView = this.objects.get(carrierId)
       if (!carrierView) {

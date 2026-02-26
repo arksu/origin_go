@@ -52,6 +52,7 @@ export class ObjectView {
 
   private resDef: ResourceDef | undefined
   private sprites: Sprite[] = []
+  private shadowSprites: Sprite[] = []
   private interactiveSprites: Sprite[] = []
   private interactiveSpritesSorted: Sprite[] = []
   private interactiveOrderDirty = true
@@ -64,6 +65,7 @@ export class ObjectView {
   private isHovered = false
   private hoverBorderDirty = true
   private hoverBorderSignature = ''
+  private shadowSuppressed = false
 
   constructor(options: ObjectViewOptions) {
     this.entityId = options.entityId
@@ -169,6 +171,10 @@ export class ObjectView {
       if (this.isDestroyed) {
         spr.destroy()
         return
+      }
+      if (layer.shadow) {
+        this.shadowSprites.push(spr)
+        spr.visible = !this.shadowSuppressed
       }
       if (layer.interactive) {
         this.setInteractive(spr)
@@ -681,6 +687,16 @@ export class ObjectView {
 
   setInteractionSuppressed(suppressed: boolean): void {
     this.interactionSuppressed = suppressed
+  }
+
+  setShadowSuppressed(suppressed: boolean): void {
+    if (this.shadowSuppressed === suppressed) {
+      return
+    }
+    this.shadowSuppressed = suppressed
+    for (const spr of this.shadowSprites) {
+      spr.visible = !suppressed
+    }
   }
 
   private createBoundsGraphics(): void {
