@@ -478,6 +478,7 @@ func (s *LiftService) finalizeLiftPutDown(
 		return
 	}
 
+	s.stopPlayerMovementNow(w, playerID, playerHandle)
 	s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 }
@@ -602,6 +603,48 @@ func (s *LiftService) clearPendingLiftTransitionState(w *ecs.World, playerID typ
 
 func (s *LiftService) clearPendingInteractionIntents(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
 	systems.ClearPlayerInteractionIntents(w, playerHandle, playerID)
+}
+
+func (s *LiftService) stopPlayerMovementNow(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+	if s == nil || w == nil || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) || playerID == 0 {
+		return
+	}
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	if !hasTransform {
+		return
+	}
+
+	var stopMoveEntry *ecs.MoveBatchEntry
+	ecs.MutateComponent[components.Movement](w, playerHandle, func(m *components.Movement) bool {
+		if m.State != _const.StateMoving {
+			return false
+		}
+
+		stopMoveEntry = &ecs.MoveBatchEntry{
+			EntityID:     playerID,
+			Handle:       playerHandle,
+			X:            int(transform.X),
+			Y:            int(transform.Y),
+			Heading:      transform.Direction,
+			VelocityX:    0,
+			VelocityY:    0,
+			MoveMode:     m.Mode,
+			IsMoving:     false,
+			ServerTimeMs: ecs.GetResource[ecs.TimeState](w).UnixMs,
+			MoveSeq:      m.MoveSeq,
+			IsTeleport:   false,
+		}
+		m.ClearTarget()
+		m.MoveSeq++
+		return true
+	})
+
+	if stopMoveEntry != nil && s.eventBus != nil {
+		s.eventBus.PublishAsync(
+			ecs.NewObjectMoveBatchEvent(w.Layer, []ecs.MoveBatchEntry{*stopMoveEntry}),
+			eventbus.PriorityMedium,
+		)
+	}
 }
 
 func (s *LiftService) breakActiveLink(w *ecs.World, playerID types.EntityID) {
