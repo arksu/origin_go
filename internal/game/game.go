@@ -91,8 +91,9 @@ type Game struct {
 	tickStats         tickStats
 	enableStats       bool
 	enableVisionStats bool
-	teleportMu        sync.Mutex
-	teleportInFlight  map[types.EntityID]struct{}
+	transferMu        sync.Mutex
+	transferInFlight  map[types.EntityID]struct{}
+	transferService   *PlayerTransferService
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -136,13 +137,15 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 			minDuration: time.Hour,
 			systemStats: make(map[string]ecs.SystemTimingStat),
 		},
-		teleportInFlight: make(map[types.EntityID]struct{}),
+		transferInFlight: make(map[types.EntityID]struct{}),
 	}
 	g.state.Store(int32(GameStateStarting))
 
 	g.entityIDManager = NewEntityIDManager(cfg, db, logger)
 	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, inventorySnapshotSender, enableVisionStats, logger)
 	g.networkServer = network.NewServer(&cfg.Network, &cfg.Game, logger)
+	g.transferService = NewPlayerTransferService(g, logger)
+	g.transferService.RegisterParticipant(NewLiftCarryTransferParticipant(logger))
 
 	g.setupNetworkHandlers()
 	for _, shard := range g.shardManager.GetShards() {
@@ -218,6 +221,8 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleBuildProgress(c, msg.Sequence, payload.BuildProgress)
 	case *netproto.ClientMessage_BuildTakeBack:
 		g.handleBuildTakeBack(c, msg.Sequence, payload.BuildTakeBack)
+	case *netproto.ClientMessage_LiftPutDown:
+		g.handleLiftPutDown(c, msg.Sequence, payload.LiftPutDown)
 	case *netproto.ClientMessage_OpenWindow:
 		g.handleOpenWindow(c, msg.Sequence, payload.OpenWindow)
 	case *netproto.ClientMessage_CloseWindow:
@@ -695,6 +700,31 @@ func (g *Game) handleBuildTakeBack(c *network.Client, sequence uint32, msg *netp
 	})
 }
 
+func (g *Game) handleLiftPutDown(c *network.Client, sequence uint32, msg *netproto.C2S_LiftPutDown) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil || msg.EntityId == 0 || msg.Pos == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid lift put-down request")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	_ = shard.PlayerInbox().Enqueue(&network.PlayerCommand{
+		ClientID:    c.ID,
+		CharacterID: c.CharacterID,
+		CommandID:   uint64(sequence),
+		CommandType: network.CmdLiftPutDown,
+		Payload:     msg,
+		ReceivedAt:  time.Now(),
+		Layer:       c.Layer,
+	})
+}
+
 func (g *Game) handleOpenWindow(c *network.Client, sequence uint32, msg *netproto.C2S_OpenWindow) {
 	if c.CharacterID == 0 {
 		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
@@ -783,6 +813,9 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				shard.mu.Lock()
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
 				ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(playerEntityID)
+				if playerHandle != types.InvalidHandle && shard.liftService != nil {
+					_ = shard.liftService.ForceDropCarryAtPlayerPosition(shard.world, playerEntityID, playerHandle, false)
+				}
 
 				if disconnectDelay > 0 && playerHandle != types.InvalidHandle {
 					if _, _, err := ecs.BreakLinkForPlayer(shard.world, playerEntityID, ecs.LinkBreakClosed); err != nil {

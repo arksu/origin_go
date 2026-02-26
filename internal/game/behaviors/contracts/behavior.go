@@ -152,10 +152,19 @@ type GiveItemFn func(
 	quality uint32,
 ) GiveItemOutcome
 
+type LiftObjectFn func(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	targetID types.EntityID,
+	targetHandle types.Handle,
+) BehaviorResult
+
 // ExecutionDeps contains shared dependencies for context action execution.
 type ExecutionDeps struct {
 	OpenContainer    OpenContainerFn
 	GiveItem         GiveItemFn
+	LiftObject       LiftObjectFn
 	EventBus         *eventbus.EventBus
 	Chunks           TreeChunkProvider
 	IDAllocator      EntityIDAllocator

@@ -98,6 +98,7 @@ export class MessageDispatcher {
     if (message.buildList) return 'buildList'
     if (message.buildState) return 'buildState'
     if (message.buildStateClosed) return 'buildStateClosed'
+    if (message.liftCarryState) return 'liftCarryState'
     if (message.characterProfile) return 'characterProfile'
     if (message.playerStats) return 'playerStats'
     if (message.expGained) return 'expGained'

@@ -3,35 +3,15 @@ package game
 import (
 	"context"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"origin/internal/characterattrs"
 	"origin/internal/ecs"
-	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
-	"time"
-
-	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 )
-
-type adminTeleportRequest struct {
-	PlayerID    types.EntityID
-	SourceLayer int
-	TargetLayer int
-	TargetX     int
-	TargetY     int
-	RequestedAt time.Time
-}
-
-type adminTeleportSnapshot struct {
-	client      *network.Client
-	sourceLayer int
-	sourceX     int
-	sourceY     int
-}
 
 // RequestAdminTeleport schedules full leave+respawn teleport flow for an admin command.
 func (g *Game) RequestAdminTeleport(playerID types.EntityID, sourceLayer int, targetX, targetY int, targetLayer *int) error {
@@ -47,163 +27,18 @@ func (g *Game) RequestAdminTeleport(playerID types.EntityID, sourceLayer int, ta
 		return fmt.Errorf("target (%d,%d) outside world bounds", targetX, targetY)
 	}
 
-	g.teleportMu.Lock()
-	if _, exists := g.teleportInFlight[playerID]; exists {
-		g.teleportMu.Unlock()
-		return fmt.Errorf("teleport already in progress")
+	if g.transferService == nil {
+		return fmt.Errorf("transfer service unavailable")
 	}
-	g.teleportInFlight[playerID] = struct{}{}
-	g.teleportMu.Unlock()
-
-	req := adminTeleportRequest{
-		PlayerID:    playerID,
-		SourceLayer: sourceLayer,
-		TargetLayer: resolvedLayer,
-		TargetX:     targetX,
-		TargetY:     targetY,
-		RequestedAt: time.Now(),
-	}
-
-	go g.executeAdminTeleport(req)
-	return nil
-}
-
-func (g *Game) executeAdminTeleport(req adminTeleportRequest) {
-	defer func() {
-		g.teleportMu.Lock()
-		delete(g.teleportInFlight, req.PlayerID)
-		g.teleportMu.Unlock()
-	}()
-
-	sourceShard := g.shardManager.GetShard(req.SourceLayer)
-	if sourceShard == nil {
-		return
-	}
-	targetShard := g.shardManager.GetShard(req.TargetLayer)
-	if targetShard == nil {
-		g.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, fmt.Sprintf("Teleport failed: target layer %d not found.", req.TargetLayer))
-		return
-	}
-
-	characterTemplate, charErr := g.db.Queries().GetCharacter(g.ctx, int64(req.PlayerID))
-	if charErr != nil {
-		g.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, "Teleport failed: character not found.")
-		return
-	}
-
-	snapshot, detachErr := g.detachTeleportSource(req, sourceShard)
-	if detachErr != nil {
-		g.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, "Teleport failed: could not detach current entity.")
-		return
-	}
-	snapshot.client.Layer = req.TargetLayer
-
-	characterSpawn := characterTemplate
-	characterSpawn.Layer = req.TargetLayer
-	characterSpawn.X = req.TargetX
-	characterSpawn.Y = req.TargetY
-
-	if _, spawnErr := g.spawnTeleportedPlayer(snapshot.client, targetShard, characterSpawn, req.TargetX, req.TargetY, true); spawnErr != nil {
-		rollbackChar := characterTemplate
-		rollbackChar.Layer = snapshot.sourceLayer
-		rollbackChar.X = snapshot.sourceX
-		rollbackChar.Y = snapshot.sourceY
-		snapshot.client.Layer = snapshot.sourceLayer
-		if _, rollbackErr := g.spawnTeleportedPlayer(snapshot.client, sourceShard, rollbackChar, snapshot.sourceX, snapshot.sourceY, true); rollbackErr != nil {
-			snapshot.client.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Teleport failed and rollback failed. Reconnect required.")
-			g.logger.Error("Teleport rollback failed",
-				zap.Uint64("player_id", uint64(req.PlayerID)),
-				zap.Int("source_layer", snapshot.sourceLayer),
-				zap.Int("source_x", snapshot.sourceX),
-				zap.Int("source_y", snapshot.sourceY),
-				zap.Error(rollbackErr))
-			return
-		}
-		g.sendTeleportSystemMessageToClient(snapshot.client, "Teleport failed, restored previous position.")
-		return
-	}
-
-	if err := g.db.Queries().UpdateCharacterPositionAndLayer(g.ctx, repository.UpdateCharacterPositionAndLayerParams{
-		ID:    int64(req.PlayerID),
-		X:     req.TargetX,
-		Y:     req.TargetY,
-		Layer: req.TargetLayer,
-	}); err != nil {
-		g.logger.Warn("Teleport: failed to persist final position/layer",
-			zap.Uint64("player_id", uint64(req.PlayerID)),
-			zap.Int("target_layer", req.TargetLayer),
-			zap.Int("target_x", req.TargetX),
-			zap.Int("target_y", req.TargetY),
-			zap.Error(err))
-	}
-
-	g.sendTeleportSystemMessageToClient(snapshot.client, fmt.Sprintf("Teleported to (%d, %d) layer %d.", req.TargetX, req.TargetY, req.TargetLayer))
-}
-
-func (g *Game) detachTeleportSource(req adminTeleportRequest, shard *Shard) (adminTeleportSnapshot, error) {
-	snapshot := adminTeleportSnapshot{sourceLayer: req.SourceLayer}
-
-	shard.ClientsMu.RLock()
-	client, exists := shard.Clients[req.PlayerID]
-	shard.ClientsMu.RUnlock()
-	if !exists || client == nil {
-		return snapshot, fmt.Errorf("client not bound")
-	}
-	snapshot.client = client
-
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-
-	playerHandle := shard.world.GetHandleByEntityID(req.PlayerID)
-	if playerHandle == types.InvalidHandle || !shard.world.Alive(playerHandle) {
-		return snapshot, fmt.Errorf("entity not alive")
-	}
-
-	transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, playerHandle)
-	if !hasTransform {
-		return snapshot, fmt.Errorf("missing transform")
-	}
-	snapshot.sourceX = int(transform.X)
-	snapshot.sourceY = int(transform.Y)
-
-	if shard.characterSaver != nil {
-		if err := shard.characterSaver.SaveSync(shard.world, req.PlayerID, playerHandle); err != nil {
-			g.logger.Warn("Teleport: SaveSync failed",
-				zap.Uint64("player_id", uint64(req.PlayerID)),
-				zap.Error(err))
-		}
-	}
-
-	g.sendPlayerLeaveWorld(client, req.PlayerID)
-	client.InWorld.Store(false)
-
-	invalidateVisibilityForTeleport(shard.world, shard.layer, playerHandle, req.PlayerID, shard.EventBus())
-
-	// Clear stateful per-player resources before despawn.
-	linkState := ecs.GetResource[ecs.LinkState](shard.world)
-	linkState.ClearIntent(req.PlayerID)
-	linkState.RemoveLink(req.PlayerID)
-	openState := ecs.GetResource[ecs.OpenContainerState](shard.world)
-	openState.CloseAllForPlayer(req.PlayerID)
-	ecs.GetResource[ecs.PendingAdminSpawn](shard.world).Clear(req.PlayerID)
-	ecs.GetResource[ecs.PendingAdminTeleport](shard.world).Clear(req.PlayerID)
-
-	if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](shard.world, playerHandle); hasChunkRef {
-		if chunk := shard.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
-			chunk.Spatial().RemoveDynamic(playerHandle, int(transform.X), int(transform.Y))
-		}
-	}
-
-	shard.world.Despawn(playerHandle)
-	ecs.GetResource[ecs.CharacterEntities](shard.world).Remove(req.PlayerID)
-	ecs.GetResource[ecs.DetachedEntities](shard.world).RemoveDetachedEntity(req.PlayerID)
-	shard.UnregisterEntityAOI(req.PlayerID)
-	shard.PlayerInbox().RemoveClient(client.ID)
-	shard.ClientsMu.Lock()
-	delete(shard.Clients, req.PlayerID)
-	shard.ClientsMu.Unlock()
-
-	return snapshot, nil
+	return g.transferService.RequestTransfer(PlayerTransferRequest{
+		PlayerID:              playerID,
+		SourceLayer:           sourceLayer,
+		TargetLayer:           resolvedLayer,
+		TargetX:               targetX,
+		TargetY:               targetY,
+		IgnoreObjectCollision: true,
+		Cause:                 PlayerTransferCauseAdminTeleport,
+	})
 }
 
 func (g *Game) spawnTeleportedPlayer(

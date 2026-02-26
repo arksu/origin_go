@@ -134,6 +134,13 @@ type BuildCommandService interface {
 	SendBuildStateSnapshot(w *ecs.World, playerID, targetID types.EntityID)
 }
 
+type LiftCommandService interface {
+	HandleLiftPutDown(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_LiftPutDown)
+	TryStartNoColliderLiftInteract(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle, interactionType netproto.InteractionType) bool
+	IsPlayerCarrying(w *ecs.World, playerHandle types.Handle) bool
+	SendCarryLockedWarning(playerID types.EntityID)
+}
+
 type NetworkCommandSystem struct {
 	ecs.BaseSystem
 
@@ -159,6 +166,7 @@ type NetworkCommandSystem struct {
 	contextMenuSender    ContextMenuSender
 	craftCommandService  CraftCommandService
 	buildCommandService  BuildCommandService
+	liftCommandService   LiftCommandService
 	contextPendingTTL    time.Duration
 
 	// Reusable buffers to avoid allocations
@@ -225,6 +233,10 @@ func (s *NetworkCommandSystem) SetCraftCommandService(service CraftCommandServic
 
 func (s *NetworkCommandSystem) SetBuildCommandService(service BuildCommandService) {
 	s.buildCommandService = service
+}
+
+func (s *NetworkCommandSystem) SetLiftCommandService(service LiftCommandService) {
+	s.liftCommandService = service
 }
 
 func (s *NetworkCommandSystem) SetContextPendingTTL(ttl time.Duration) {
@@ -304,6 +316,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleBuildProgress(w, handle, cmd)
 	case network.CmdBuildTakeBack:
 		s.handleBuildTakeBack(w, handle, cmd)
+	case network.CmdLiftPutDown:
+		s.handleLiftPutDown(w, handle, cmd)
 	case network.CmdOpenWindow:
 		s.handleOpenWindow(w, handle, cmd)
 	case network.CmdCloseWindow:
@@ -319,6 +333,9 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 }
 
 func (s *NetworkCommandSystem) handleStartCraftOne(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	msg, ok := cmd.Payload.(*netproto.C2S_StartCraftOne)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for StartCraftOne", zap.Uint64("client_id", cmd.ClientID))
@@ -331,6 +348,9 @@ func (s *NetworkCommandSystem) handleStartCraftOne(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	msg, ok := cmd.Payload.(*netproto.C2S_StartCraftMany)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for StartCraftMany", zap.Uint64("client_id", cmd.ClientID))
@@ -343,6 +363,9 @@ func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle t
 }
 
 func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	msg, ok := cmd.Payload.(*netproto.C2S_BuildStart)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for BuildStart", zap.Uint64("client_id", cmd.ClientID))
@@ -355,6 +378,9 @@ func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types
 }
 
 func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	msg, ok := cmd.Payload.(*netproto.C2S_BuildProgress)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for BuildProgress", zap.Uint64("client_id", cmd.ClientID))
@@ -367,6 +393,9 @@ func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleBuildTakeBack(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	msg, ok := cmd.Payload.(*netproto.C2S_BuildTakeBack)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for BuildTakeBack", zap.Uint64("client_id", cmd.ClientID))
@@ -376,6 +405,18 @@ func (s *NetworkCommandSystem) handleBuildTakeBack(w *ecs.World, playerHandle ty
 		return
 	}
 	s.buildCommandService.HandleBuildTakeBack(w, cmd.CharacterID, playerHandle, msg)
+}
+
+func (s *NetworkCommandSystem) handleLiftPutDown(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	msg, ok := cmd.Payload.(*netproto.C2S_LiftPutDown)
+	if !ok || msg == nil {
+		s.logger.Error("Invalid payload type for LiftPutDown", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	if s.liftCommandService == nil {
+		return
+	}
+	s.liftCommandService.HandleLiftPutDown(w, cmd.CharacterID, playerHandle, msg)
 }
 
 func (s *NetworkCommandSystem) handleOpenWindow(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
@@ -679,6 +720,9 @@ func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	interact, ok := cmd.Payload.(*netproto.Interact)
 	if !ok {
 		s.logger.Error("Invalid payload type for Interact",
@@ -702,6 +746,10 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 	}
 
 	if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
+		if s.liftCommandService != nil &&
+			s.liftCommandService.TryStartNoColliderLiftInteract(w, cmd.CharacterID, playerHandle, targetEntityID, targetHandle, interact.Type) {
+			return
+		}
 		return
 	}
 	if s.contextActionService == nil {
@@ -730,6 +778,9 @@ func (s *NetworkCommandSystem) handleSelectContextAction(
 	playerHandle types.Handle,
 	cmd *network.PlayerCommand,
 ) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	selectAction, ok := cmd.Payload.(*netproto.SelectContextAction)
 	if !ok {
 		s.logger.Error("Invalid payload type for SelectContextAction",
@@ -1076,6 +1127,9 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 }
 
 func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
+		return
+	}
 	ref, ok := cmd.Payload.(*netproto.InventoryRef)
 	if !ok || ref == nil {
 		s.logger.Error("Invalid payload type for OpenContainer",
@@ -1090,6 +1144,17 @@ func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle ty
 	if openErr := s.openContainerService.HandleOpenRequest(w, cmd.CharacterID, playerHandle, ref); openErr != nil {
 		s.sendInventoryError(cmd.CharacterID, 0, openErr.Code, openErr.Message)
 	}
+}
+
+func (s *NetworkCommandSystem) rejectIfCarrying(w *ecs.World, playerHandle types.Handle, playerID types.EntityID) bool {
+	if s == nil || s.liftCommandService == nil {
+		return false
+	}
+	if !s.liftCommandService.IsPlayerCarrying(w, playerHandle) {
+		return false
+	}
+	s.liftCommandService.SendCarryLockedWarning(playerID)
+	return true
 }
 
 func (s *NetworkCommandSystem) handleCloseContainer(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {

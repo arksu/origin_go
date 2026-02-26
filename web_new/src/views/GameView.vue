@@ -19,7 +19,7 @@ import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import MovementModePanel from '@/components/ui/MovementModePanel.vue'
-import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack } from '@/network'
+import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack, sendLiftPutDown } from '@/network'
 import { useInventoryOps } from '@/composables/useInventoryOps'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
@@ -85,6 +85,13 @@ const currentBuildStateEntityId = computed(() => gameStore.buildStateEntityId)
 const currentBuildStateName = computed(() => gameStore.buildStateName)
 const currentBuildStateList = computed(() => gameStore.buildStateList)
 const buildStateHandHasItem = computed(() => !!gameStore.handState?.item)
+const liftCarryActive = computed(() => gameStore.liftCarryActive)
+const liftCarriedEntityId = computed(() => gameStore.liftCarriedEntityId)
+const liftCarriedResourcePath = computed(() => {
+  const entityId = gameStore.liftCarriedEntityId
+  if (!entityId) return ''
+  return gameStore.entities.get(entityId)?.resourcePath || ''
+})
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -123,6 +130,22 @@ function syncBuildGhostFromStore(): void {
   })
 }
 
+function syncLiftGhostFromStore(): void {
+  if (!gameFacade || !canvasInitialized.value || !gameFacade.isInitialized?.()) {
+    return
+  }
+
+  if (!gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
+    gameFacade.cancelLiftGhost?.()
+    return
+  }
+
+  gameFacade.armLiftGhost?.({
+    entityId: gameStore.liftCarriedEntityId,
+    resourcePath: gameStore.entities.get(gameStore.liftCarriedEntityId)?.resourcePath || '',
+  })
+}
+
 async function initCanvas() {
   if (!gameCanvas.value || canvasInitialized.value) return
 
@@ -139,6 +162,16 @@ async function initCanvas() {
 
       const armedBuildKey = (gameStore.armedBuildKey || '').trim()
       if (!armedBuildKey) {
+        const carriedEntityId = gameStore.liftCarriedEntityId
+        if (gameStore.liftCarryActive && carriedEntityId) {
+          const ghostPos = gameFacade?.getLiftGhostWorldPosition?.()
+          const targetPos = ghostPos || { x: worldX, y: worldY }
+          sendLiftPutDown(carriedEntityId, {
+            x: targetPos.x,
+            y: targetPos.y,
+          })
+          return true
+        }
         return false
       }
 
@@ -155,6 +188,7 @@ async function initCanvas() {
     })
 
     syncBuildGhostFromStore()
+    syncLiftGhostFromStore()
   } catch (err) {
     console.error('[GameView] Failed to init canvas:', err)
   }
@@ -167,6 +201,13 @@ watch(() => gameStore.armedBuildKey, () => {
 watch(() => gameStore.buildRecipes, () => {
   syncBuildGhostFromStore()
 })
+
+watch(
+  [liftCarryActive, liftCarriedEntityId, liftCarriedResourcePath, () => gameStore.entities.size],
+  () => {
+    syncLiftGhostFromStore()
+  }
+)
 
 watch(isConnected, async (connected) => {
   if (connected) {
