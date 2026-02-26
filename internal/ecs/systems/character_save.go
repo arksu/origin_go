@@ -499,9 +499,9 @@ func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []Char
 				zap.Int("batch_size", len(batch)),
 				zap.Int("inventory_count", totalInv))
 		} else {
-			s.logger.Debug("Successfully saved inventories",
-				zap.Int("batch_size", len(batch)),
-				zap.Int("inventory_count", totalInv))
+			// s.logger.Debug("Successfully saved inventories",
+			// 	zap.Int("batch_size", len(batch)),
+			// 	zap.Int("inventory_count", totalInv))
 		}
 	}
 }
