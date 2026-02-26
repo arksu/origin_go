@@ -1201,9 +1201,7 @@ func (s *NetworkCommandSystem) clearPendingInteractionIntents(
 	playerHandle types.Handle,
 	playerID types.EntityID,
 ) {
-	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
-	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
-	s.clearLinkIntent(w, playerID)
+	ClearPlayerInteractionIntents(w, playerHandle, playerID)
 }
 
 func (s *NetworkCommandSystem) computeContextActions(

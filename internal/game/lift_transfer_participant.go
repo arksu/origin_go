@@ -159,18 +159,39 @@ func (p *LiftCarryTransferParticipant) OnTargetRestoreFailure(
 		// Best effort persistence for the force-dropped object if it exists.
 		if objectHandle := targetShard.world.GetHandleByEntityID(state.ObjectEntityID); objectHandle != types.InvalidHandle && targetShard.world.Alive(objectHandle) {
 			if err := g.objectFactory.PersistWorldObjectNow(g.db, targetShard.world, objectHandle); err != nil {
-				p.logger.Warn("Lift transfer restore failure: persist after force-drop failed",
+				p.logger.Error("Lift transfer restore failure: persist after force-drop failed",
 					zap.Uint64("player_id", uint64(req.PlayerID)),
 					zap.Uint64("object_id", uint64(state.ObjectEntityID)),
+					zap.Int("target_layer", req.TargetLayer),
+					zap.Int("source_layer", state.SourceLayer),
+					zap.Int("source_chunk_x", state.SourceChunk.X),
+					zap.Int("source_chunk_y", state.SourceChunk.Y),
+					zap.Int("snapshot_type_id", state.ObjectSnapshot.TypeID),
+					zap.Int("snapshot_version", state.ObjectSnapshot.Version),
 					zap.Error(err),
 				)
 			}
 		}
 	}
 
-	p.logger.Warn("Lift transfer restore failed",
+	fields := []zap.Field{
 		zap.Uint64("player_id", uint64(req.PlayerID)),
+		zap.Int("target_layer", req.TargetLayer),
 		zap.Error(restoreErr),
+	}
+	if state != nil {
+		fields = append(fields,
+			zap.Bool("has_carry_state", state.HasCarry),
+			zap.Uint64("object_id", uint64(state.ObjectEntityID)),
+			zap.Int("source_layer", state.SourceLayer),
+			zap.Int("source_chunk_x", state.SourceChunk.X),
+			zap.Int("source_chunk_y", state.SourceChunk.Y),
+			zap.Int("snapshot_type_id", state.ObjectSnapshot.TypeID),
+			zap.Int("snapshot_version", state.ObjectSnapshot.Version),
+		)
+	}
+	p.logger.Error("Lift transfer restore failed (teleport completed; carry canceled/force-drop attempted)",
+		fields...,
 	)
 }
 
@@ -257,6 +278,7 @@ func (p *LiftCarryTransferParticipant) patchChunkCachesAfterTransfer(
 	// Remove stale source raw caches so future inactive saves do not resurrect the moved object.
 	if sourceShard := g.shardManager.GetShard(state.SourceLayer); sourceShard != nil {
 		if sourceChunk := sourceShard.chunkManager.GetChunkFast(state.SourceChunk); sourceChunk != nil {
+			// These helpers intentionally mark rawDataDirty so cache repairs persist.
 			sourceChunk.RemoveRawObjectByID(objectID)
 			sourceChunk.RemoveRawInventoriesByOwner(objectID)
 		}

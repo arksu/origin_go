@@ -193,14 +193,11 @@ func (s *LiftService) HandleLiftPutDown(
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
 		return
 	}
-	objectHandle := carry.ObjectHandle
-	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
-		objectHandle = w.GetHandleByEntityID(carry.ObjectEntityID)
-		if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
-			s.clearCarryStateForPlayer(w, playerID, playerHandle, false)
-			s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-			return
-		}
+	objectHandle, ok := s.resolveCarriedObjectHandle(w, carry)
+	if !ok {
+		s.clearCarryStateForPlayer(w, playerID, playerHandle, false)
+		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
+		return
 	}
 	lifted, hasLifted := ecs.GetComponent[components.LiftedObjectState](w, objectHandle)
 	if !hasLifted {
@@ -244,15 +241,15 @@ func (s *LiftService) HandleLiftPutDown(
 	})
 	expireAt := ecs.GetResource[ecs.TimeState](w).UnixMs + liftPendingTTL.Milliseconds()
 	ecs.AddComponent(w, playerHandle, components.PendingLiftTransition{
-		Mode:              components.LiftTransitionModePutDown,
-		ObjectEntityID:    carry.ObjectEntityID,
-		ObjectHandle:      objectHandle,
-		TargetX:           targetX,
-		TargetY:           targetY,
+		Mode:               components.LiftTransitionModePutDown,
+		ObjectEntityID:     carry.ObjectEntityID,
+		ObjectHandle:       objectHandle,
+		TargetX:            targetX,
+		TargetY:            targetY,
 		UsesObjectCollider: usesObjectCollider,
-		PhantomHalfW:      halfW,
-		PhantomHalfH:      halfH,
-		ExpireAtUnixMs:    expireAt,
+		PhantomHalfW:       halfW,
+		PhantomHalfH:       halfH,
+		ExpireAtUnixMs:     expireAt,
 	})
 }
 
@@ -337,13 +334,10 @@ func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID,
 		return
 	}
 
-	objectHandle := carry.ObjectHandle
-	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
-		objectHandle = w.GetHandleByEntityID(carry.ObjectEntityID)
-		if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
-			s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
-			return
-		}
+	objectHandle, ok := s.resolveCarriedObjectHandle(w, carry)
+	if !ok {
+		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
+		return
 	}
 	if _, ok := ecs.GetComponent[components.LiftedObjectState](w, objectHandle); !ok {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
@@ -387,11 +381,8 @@ func (s *LiftService) ForceDropCarryAtPlayerPosition(
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, sendCarryState)
 		return false
 	}
-	objectHandle := carry.ObjectHandle
-	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
-		objectHandle = w.GetHandleByEntityID(carry.ObjectEntityID)
-	}
-	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
+	objectHandle, ok := s.resolveCarriedObjectHandle(w, carry)
+	if !ok {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, sendCarryState)
 		return false
 	}
@@ -425,11 +416,8 @@ func (s *LiftService) finalizeLiftPutDown(
 		return
 	}
 
-	objectHandle := carry.ObjectHandle
-	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
-		objectHandle = w.GetHandleByEntityID(carry.ObjectEntityID)
-	}
-	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
+	objectHandle, ok := s.resolveCarriedObjectHandle(w, carry)
+	if !ok {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
@@ -515,8 +503,8 @@ func (s *LiftService) startCarryingObject(
 	ecs.AddComponent(w, targetHandle, liftedState)
 	s.disableCarriedObjectRuntime(w, targetHandle, playerID, playerHandle)
 	ecs.AddComponent(w, playerHandle, components.LiftCarryState{
-		ObjectEntityID: targetID,
-		ObjectHandle:   targetHandle,
+		ObjectEntityID:  targetID,
+		ObjectHandle:    targetHandle,
 		StartedAtUnixMs: ecs.GetResource[ecs.TimeState](w).UnixMs,
 	})
 
@@ -596,11 +584,7 @@ func (s *LiftService) clearPendingLiftTransitionState(w *ecs.World, playerID typ
 }
 
 func (s *LiftService) clearPendingInteractionIntents(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
-	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
-	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
-	if playerID != 0 {
-		ecs.GetResource[ecs.LinkState](w).ClearIntent(playerID)
-	}
+	systems.ClearPlayerInteractionIntents(w, playerHandle, playerID)
 }
 
 func (s *LiftService) breakActiveLink(w *ecs.World, playerID types.EntityID) {
@@ -651,6 +635,20 @@ func (s *LiftService) isLiftableTarget(w *ecs.World, targetHandle types.Handle) 
 		}
 	}
 	return false
+}
+
+func (s *LiftService) resolveCarriedObjectHandle(w *ecs.World, carry components.LiftCarryState) (types.Handle, bool) {
+	if w == nil || carry.ObjectEntityID == 0 {
+		return types.InvalidHandle, false
+	}
+	objectHandle := carry.ObjectHandle
+	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
+		objectHandle = w.GetHandleByEntityID(carry.ObjectEntityID)
+	}
+	if objectHandle == types.InvalidHandle || !w.Alive(objectHandle) {
+		return types.InvalidHandle, false
+	}
+	return objectHandle, true
 }
 
 func (s *LiftService) sendCarryState(playerID types.EntityID, active bool, entityID types.EntityID) {
