@@ -720,9 +720,6 @@ func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	interact, ok := cmd.Payload.(*netproto.Interact)
 	if !ok {
 		s.logger.Error("Invalid payload type for Interact",
@@ -778,9 +775,6 @@ func (s *NetworkCommandSystem) handleSelectContextAction(
 	playerHandle types.Handle,
 	cmd *network.PlayerCommand,
 ) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	selectAction, ok := cmd.Payload.(*netproto.SelectContextAction)
 	if !ok {
 		s.logger.Error("Invalid payload type for SelectContextAction",
@@ -1127,9 +1121,6 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 }
 
 func (s *NetworkCommandSystem) handleOpenContainer(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	ref, ok := cmd.Payload.(*netproto.InventoryRef)
 	if !ok || ref == nil {
 		s.logger.Error("Invalid payload type for OpenContainer",

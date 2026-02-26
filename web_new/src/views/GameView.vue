@@ -92,6 +92,7 @@ const liftCarriedResourcePath = computed(() => {
   if (!entityId) return ''
   return gameStore.entities.get(entityId)?.resourcePath || ''
 })
+const liftPutDownModeActive = ref(false)
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -135,7 +136,7 @@ function syncLiftGhostFromStore(): void {
     return
   }
 
-  if (!gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
+  if (!liftPutDownModeActive.value || !gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
     gameFacade.cancelLiftGhost?.()
     return
   }
@@ -144,6 +145,21 @@ function syncLiftGhostFromStore(): void {
     entityId: gameStore.liftCarriedEntityId,
     resourcePath: gameStore.entities.get(gameStore.liftCarriedEntityId)?.resourcePath || '',
   })
+}
+
+function cancelLiftPutDownMode(): void {
+  if (!liftPutDownModeActive.value) return
+  liftPutDownModeActive.value = false
+  gameFacade?.cancelLiftGhost?.()
+}
+
+function toggleLiftPutDownMode(): void {
+  if (!gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
+    cancelLiftPutDownMode()
+    return
+  }
+  liftPutDownModeActive.value = !liftPutDownModeActive.value
+  syncLiftGhostFromStore()
 }
 
 async function initCanvas() {
@@ -163,7 +179,7 @@ async function initCanvas() {
       const armedBuildKey = (gameStore.armedBuildKey || '').trim()
       if (!armedBuildKey) {
         const carriedEntityId = gameStore.liftCarriedEntityId
-        if (gameStore.liftCarryActive && carriedEntityId) {
+        if (liftPutDownModeActive.value && gameStore.liftCarryActive && carriedEntityId) {
           const ghostPos = gameFacade?.getLiftGhostWorldPosition?.()
           const targetPos = ghostPos || { x: worldX, y: worldY }
           sendLiftPutDown(carriedEntityId, {
@@ -203,8 +219,11 @@ watch(() => gameStore.buildRecipes, () => {
 })
 
 watch(
-  [liftCarryActive, liftCarriedEntityId, liftCarriedResourcePath, () => gameStore.entities.size],
+  [liftCarryActive, liftCarriedEntityId, liftCarriedResourcePath, liftPutDownModeActive, () => gameStore.entities.size],
   () => {
+    if (!gameStore.liftCarryActive) {
+      liftPutDownModeActive.value = false
+    }
     syncLiftGhostFromStore()
   }
 )
@@ -440,6 +459,10 @@ const hotkeys: HotkeyConfig[] = DEFAULT_HOTKEYS.map(config => ({
           gameFacade?.cancelBuildGhost?.()
           break
         }
+        if (liftPutDownModeActive.value) {
+          cancelLiftPutDownMode()
+          break
+        }
         chatContainerRef.value?.unfocusChat()
         gameStore.setPlayerInventoryVisible(false)
         gameStore.setPlayerEquipmentVisible(false)
@@ -527,6 +550,14 @@ useHotkeys(hotkeys)
         </AppButton>
         <AppButton variant="secondary" size="sm" @click="toggleBuildWindow">
           {{ showBuildWindow ? 'Close Build' : 'Build' }}
+        </AppButton>
+        <AppButton
+          v-if="liftCarryActive"
+          variant="secondary"
+          size="sm"
+          @click="toggleLiftPutDownMode"
+        >
+          {{ liftPutDownModeActive ? 'Cancel Lift down' : 'Lift down' }}
         </AppButton>
         <AppButton variant="secondary" size="sm" @click="handleBack">Exit</AppButton>
       </div>
