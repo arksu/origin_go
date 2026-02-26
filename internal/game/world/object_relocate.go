@@ -11,7 +11,7 @@ import (
 )
 
 type RelocateWorldObjectImmediateOptions struct {
-	IsTeleport bool
+	IsTeleport   bool
 	ForceReindex bool
 }
 
@@ -49,10 +49,7 @@ func RelocateWorldObjectImmediate(
 	}
 
 	oldChunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
-	newChunkCoord := types.ChunkCoord{
-		X: int(x) / _const.ChunkWorldSize,
-		Y: int(y) / _const.ChunkWorldSize,
-	}
+	newChunkCoord := types.WorldToChunkCoord(int(x), int(y), _const.ChunkSize, _const.CoordPerTile)
 
 	oldChunk := chunkManager.GetChunkFast(oldChunkCoord)
 	newChunk := oldChunk

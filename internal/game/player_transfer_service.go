@@ -263,11 +263,14 @@ func (s *PlayerTransferService) restoreParticipantsOnTarget(
 	playerHandle types.Handle,
 	states map[string]any,
 ) {
-	if targetShard == nil || playerHandle == types.InvalidHandle || !targetShard.world.Alive(playerHandle) {
+	if targetShard == nil || playerHandle == types.InvalidHandle {
 		return
 	}
 	targetShard.mu.Lock()
 	defer targetShard.mu.Unlock()
+	if !targetShard.world.Alive(playerHandle) {
+		return
+	}
 	for _, participant := range s.participants {
 		if participant == nil {
 			continue
@@ -285,11 +288,14 @@ func (s *PlayerTransferService) restoreParticipantsOnRollback(
 	playerHandle types.Handle,
 	states map[string]any,
 ) {
-	if sourceShard == nil || playerHandle == types.InvalidHandle || !sourceShard.world.Alive(playerHandle) {
+	if sourceShard == nil || playerHandle == types.InvalidHandle {
 		return
 	}
 	sourceShard.mu.Lock()
 	defer sourceShard.mu.Unlock()
+	if !sourceShard.world.Alive(playerHandle) {
+		return
+	}
 	for i := len(s.participants) - 1; i >= 0; i-- {
 		participant := s.participants[i]
 		if participant == nil {
@@ -310,10 +316,5 @@ func (s *PlayerTransferService) sendFailureToLayer(req PlayerTransferRequest, te
 	if s == nil || s.game == nil || text == "" {
 		return
 	}
-	switch req.Cause {
-	case PlayerTransferCauseAdminTeleport:
-		s.game.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, text)
-	default:
-		s.game.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, text)
-	}
+	s.game.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, text)
 }

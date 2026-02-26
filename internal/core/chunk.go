@@ -182,6 +182,9 @@ func (c *Chunk) ClearRawInventoriesByOwner() {
 	c.mu.Unlock()
 }
 
+// RemoveRawInventoriesByOwner mutates the inactive/preloaded raw-inventory cache and
+// intentionally marks rawDataDirty. Callers use this for transfer/cache repair paths,
+// not only gameplay deletes, so the dirtying side effect is part of the contract.
 func (c *Chunk) RemoveRawInventoriesByOwner(ownerID types.EntityID) {
 	if ownerID == 0 {
 		return
@@ -193,6 +196,9 @@ func (c *Chunk) RemoveRawInventoriesByOwner(ownerID types.EntityID) {
 	c.mu.Unlock()
 }
 
+// SetRawInventoriesForOwner replaces the inactive/preloaded raw-inventory cache rows for
+// an owner and intentionally marks rawDataDirty/rawDirtyObjectIDs so future saves preserve
+// cache repairs (e.g. cross-shard transfer moves).
 func (c *Chunk) SetRawInventoriesForOwner(ownerID types.EntityID, rows []repository.Inventory) {
 	if ownerID == 0 {
 		return
