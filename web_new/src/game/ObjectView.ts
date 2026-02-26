@@ -44,6 +44,11 @@ export class ObjectView {
 
   private position: { x: number; y: number }
   private size: { x: number; y: number }
+  private screenOffsetX = 0
+  private screenOffsetY = 0
+  private screenPositionOverride: { x: number; y: number } | null = null
+  private zIndexOverride: number | null = null
+  private interactionSuppressed = false
 
   private resDef: ResourceDef | undefined
   private sprites: Sprite[] = []
@@ -270,9 +275,14 @@ export class ObjectView {
   }
 
   private updateScreenPosition(): void {
+    if (this.screenPositionOverride) {
+      this.container.x = this.screenPositionOverride.x
+      this.container.y = this.screenPositionOverride.y
+      return
+    }
     const screenPos = coordGame2Screen(this.position.x, this.position.y)
-    this.container.x = screenPos.x
-    this.container.y = screenPos.y
+    this.container.x = screenPos.x + this.screenOffsetX
+    this.container.y = screenPos.y + this.screenOffsetY
   }
 
   getDepthY(): number {
@@ -319,6 +329,10 @@ export class ObjectView {
     screenY: number,
     screenToWorld: (x: number, y: number) => { x: number; y: number }
   ): boolean {
+    if (this.interactionSuppressed) {
+      return false
+    }
+
     const sortedSprites = this.getInteractiveSpritesForHitTest()
     for (const sprite of sortedSprites) {
       if (!sprite.visible || !sprite.renderable) continue
@@ -616,6 +630,57 @@ export class ObjectView {
 
   isBoundsVisible(): boolean {
     return this.boundsGraphics !== null
+  }
+
+  setVisualScreenOffset(dx: number, dy: number): void {
+    if (this.screenOffsetX === dx && this.screenOffsetY === dy) {
+      return
+    }
+    this.screenOffsetX = dx
+    this.screenOffsetY = dy
+    this.updateScreenPosition()
+    this.updateBoundsGraphics()
+  }
+
+  clearVisualScreenOffset(): void {
+    this.setVisualScreenOffset(0, 0)
+  }
+
+  setScreenPositionOverride(x: number, y: number): void {
+    const current = this.screenPositionOverride
+    if (current && current.x === x && current.y === y) {
+      return
+    }
+    this.screenPositionOverride = { x, y }
+    this.updateScreenPosition()
+    this.updateBoundsGraphics()
+  }
+
+  clearScreenPositionOverride(): void {
+    if (this.screenPositionOverride == null) {
+      return
+    }
+    this.screenPositionOverride = null
+    this.updateScreenPosition()
+    this.updateBoundsGraphics()
+  }
+
+  setZIndexOverride(zIndex: number | null): void {
+    if (this.zIndexOverride === zIndex) {
+      return
+    }
+    this.zIndexOverride = zIndex
+    if (zIndex != null) {
+      this.container.zIndex = zIndex
+    }
+  }
+
+  getZIndexOverride(): number | null {
+    return this.zIndexOverride
+  }
+
+  setInteractionSuppressed(suppressed: boolean): void {
+    this.interactionSuppressed = suppressed
   }
 
   private createBoundsGraphics(): void {

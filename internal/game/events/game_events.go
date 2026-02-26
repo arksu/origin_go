@@ -115,11 +115,12 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 		msg := &netproto.ServerMessage{
 			Payload: &netproto.ServerMessage_ObjectMove{
 				ObjectMove: &netproto.S2C_ObjectMove{
-					EntityId:     uint64(entry.EntityID),
-					Movement:     movement,
-					ServerTimeMs: entry.ServerTimeMs,
-					MoveSeq:      entry.MoveSeq,
-					IsTeleport:   entry.IsTeleport,
+					EntityId:          uint64(entry.EntityID),
+					Movement:          movement,
+					ServerTimeMs:      entry.ServerTimeMs,
+					MoveSeq:           entry.MoveSeq,
+					IsTeleport:        entry.IsTeleport,
+					CarriedByEntityId: uint64(entry.CarriedByEntityID),
 				},
 			},
 		}
@@ -192,6 +193,7 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 		sizeX         int32
 		sizeY         int32
 		resourcePath  = "unknown"
+		carriedByID   uint64
 	)
 	shard.WithWorldRead(func(w *ecs.World) {
 		transform, hasTransform = ecs.GetComponent[components.Transform](w, event.TargetHandle)
@@ -206,6 +208,7 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 		if appearance, hasAppearance := ecs.GetComponent[components.Appearance](w, event.TargetHandle); hasAppearance && appearance.Resource != "" {
 			resourcePath = appearance.Resource
 		}
+		carriedByID = carryVisualCarrierIDForHandle(w, event.TargetHandle)
 	})
 	if !hasTransform || !hasEntityInfo {
 		return nil
@@ -214,9 +217,10 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 	msg := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_ObjectSpawn{
 			ObjectSpawn: &netproto.S2C_ObjectSpawn{
-				EntityId:     uint64(event.TargetID),
-				TypeId:       entityInfo.TypeID,
-				ResourcePath: resourcePath,
+				EntityId:          uint64(event.TargetID),
+				TypeId:            entityInfo.TypeID,
+				ResourcePath:      resourcePath,
+				CarriedByEntityId: carriedByID,
 				Position: &netproto.EntityPosition{
 					Position: &netproto.Position{
 						X: int32(transform.X),
@@ -309,6 +313,7 @@ func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.
 		appearance      components.Appearance
 		sizeX           int32
 		sizeY           int32
+		carriedByID     uint64
 		observerHandles []types.Handle
 		observerIDs     []types.EntityID
 	)
@@ -327,6 +332,7 @@ func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.
 			sizeX = int32(collider.HalfWidth * 2)
 			sizeY = int32(collider.HalfHeight * 2)
 		}
+		carriedByID = carryVisualCarrierIDForHandle(w, event.TargetHandle)
 		hasTarget = true
 
 		visibilityState := ecs.GetResource[ecs.VisibilityState](w)
@@ -355,9 +361,10 @@ func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.
 	msg := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_ObjectSpawn{
 			ObjectSpawn: &netproto.S2C_ObjectSpawn{
-				EntityId:     uint64(event.TargetID),
-				TypeId:       entityInfo.TypeID,
-				ResourcePath: appearance.Resource,
+				EntityId:          uint64(event.TargetID),
+				TypeId:            entityInfo.TypeID,
+				ResourcePath:      appearance.Resource,
+				CarriedByEntityId: carriedByID,
 				Position: &netproto.EntityPosition{
 					Position: &netproto.Position{
 						X: int32(transform.X),
@@ -396,6 +403,16 @@ func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.
 	shard.ClientsMu.RUnlock()
 
 	return nil
+}
+
+func carryVisualCarrierIDForHandle(w *ecs.World, handle types.Handle) uint64 {
+	if w == nil || handle == types.InvalidHandle || !w.Alive(handle) {
+		return 0
+	}
+	if lifted, ok := ecs.GetComponent[components.LiftedObjectState](w, handle); ok && lifted.CarrierPlayerID != 0 {
+		return uint64(lifted.CarrierPlayerID)
+	}
+	return 0
 }
 
 func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e eventbus.Event) error {

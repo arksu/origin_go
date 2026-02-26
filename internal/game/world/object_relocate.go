@@ -11,8 +11,9 @@ import (
 )
 
 type RelocateWorldObjectImmediateOptions struct {
-	IsTeleport   bool
-	ForceReindex bool
+	IsTeleport        bool
+	ForceReindex      bool
+	CarriedByEntityID types.EntityID
 }
 
 // RelocateWorldObjectImmediate moves a live world object immediately outside the normal
@@ -111,14 +112,15 @@ func RelocateWorldObjectImmediate(
 		serverTimeMs := ecs.GetResource[ecs.TimeState](w).UnixMs
 		heading := transform.Direction
 		eb.PublishAsync(ecs.NewObjectMoveBatchEvent(w.Layer, []ecs.MoveBatchEntry{{
-			EntityID:     entityID,
-			Handle:       handle,
-			X:            newXi,
-			Y:            newYi,
-			Heading:      heading,
-			IsMoving:     false,
-			ServerTimeMs: serverTimeMs,
-			IsTeleport:   opts.IsTeleport,
+			EntityID:          entityID,
+			Handle:            handle,
+			CarriedByEntityID: opts.CarriedByEntityID,
+			X:                 newXi,
+			Y:                 newYi,
+			Heading:           heading,
+			IsMoving:          false,
+			ServerTimeMs:      serverTimeMs,
+			IsTeleport:        opts.IsTeleport,
 		}}), eventbus.PriorityMedium)
 	}
 
