@@ -42,5 +42,9 @@ log.txt
 .env
 
 build/
+output/
+input/
+input_failed/
+tmp/
 web_new/node_modules
 web_new/src/network/proto/*
