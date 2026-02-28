@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shlex
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
 LOGGER = logging.getLogger("image-pixel-processor")
+DEFAULT_STAGES = ("remove_background", "frame_split", "unfaker")
 
 
 @dataclass
@@ -75,14 +78,11 @@ def parse_args() -> argparse.Namespace:
         help="Directory where files are moved when processing fails.",
     )
     parser.add_argument(
-        "--unfaker-command",
-        required=True,
-        help=(
-            "Command used to run Unfaker. Use placeholders {input} and {output} when needed. "
-            "If placeholders are omitted, input and output paths are appended as positional args."
-        ),
+        "--poll-interval-ms",
+        type=int,
+        default=500,
+        help="Polling interval in milliseconds.",
     )
-    parser.add_argument("--poll-interval-ms", type=int, default=500, help="Polling interval in milliseconds.")
     parser.add_argument(
         "--stable-for-ms",
         type=int,
@@ -102,6 +102,14 @@ def parse_args() -> argparse.Namespace:
         help="Pixel is counted as transparent when alpha is below this value.",
     )
     parser.add_argument(
+        "--bg-model",
+        default="auto",
+        help=(
+            "Background model for rembg. Use 'auto' to select best available "
+            "(priority: bria-rmbg,birefnet-general,isnet-general-use,u2net)."
+        ),
+    )
+    parser.add_argument(
         "--frame-min-area",
         type=int,
         default=16,
@@ -117,6 +125,14 @@ def parse_args() -> argparse.Namespace:
         "--extensions",
         default=",".join(ext.lstrip(".") for ext in SUPPORTED_EXTENSIONS),
         help="Comma-separated image extensions to process.",
+    )
+    parser.add_argument(
+        "--stages",
+        default=",".join(DEFAULT_STAGES),
+        help=(
+            "Comma-separated pipeline stages in execution order. "
+            "Supported: remove_background,frame_split,unfaker"
+        ),
     )
     parser.add_argument(
         "--unfaker-timeout-seconds",
@@ -157,6 +173,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("alpha-ratio-threshold must be within [0.0, 1.0]")
     if not 0 <= args.alpha_value_threshold <= 255:
         raise ValueError("alpha-value-threshold must be within [0, 255]")
+    if not str(args.bg_model).strip():
+        raise ValueError("bg-model must not be empty")
     if args.frame_min_area <= 0:
         raise ValueError("frame-min-area must be > 0")
     if args.component_min_area is not None and args.component_min_area <= 0:
@@ -178,6 +196,25 @@ def normalize_extensions(raw_extensions: str) -> tuple[str, ...]:
     return normalized
 
 
+def normalize_stages(raw_stages: str) -> tuple[str, ...]:
+    parts = [part.strip().lower() for part in raw_stages.split(",") if part.strip()]
+    if not parts:
+        raise ValueError("stages must not be empty")
+    return tuple(parts)
+
+
+def build_default_unfaker_command() -> str:
+    script_dir = Path(__file__).resolve().parent
+    unfaker_script = script_dir / "unfaker.py"
+    if not unfaker_script.exists():
+        raise FileNotFoundError(f"Unfaker script not found: {unfaker_script}")
+
+    venv_python = script_dir / ".venv" / "bin" / "python"
+    python_executable = venv_python if venv_python.exists() else Path(sys.executable)
+
+    return f"{shlex.quote(str(python_executable))} {shlex.quote(str(unfaker_script))}"
+
+
 def main() -> None:
     args = parse_args()
     validate_args(args)
@@ -191,7 +228,7 @@ def main() -> None:
             move_to_failed,
             release_processing_lock,
         )
-        from pipeline import PipelineConfig, PixelPipeline
+        from pipeline import PipelineConfig, PixelPipeline, SUPPORTED_STAGES
     except ModuleNotFoundError as exc:
         script_dir = Path(__file__).resolve().parent
         venv_path = script_dir / ".venv"
@@ -203,7 +240,7 @@ def main() -> None:
             f"  source {venv_path}/bin/activate\n"
             f"  python3 -m pip install -r {script_dir / 'requirements.txt'}\n"
             f"Or run via helper script:\n"
-            f"  {script_dir / 'run_watcher.sh'} --input ... --output ... --unfaker-command ...\n"
+            f"  {script_dir / 'run_watcher.sh'} --input ... --output ...\n"
         )
         raise SystemExit(message) from exc
 
@@ -212,7 +249,17 @@ def main() -> None:
     failed_dir = Path(args.failed_dir).expanduser().resolve()
     temp_dir = Path(args.tmp_dir).expanduser().resolve() if args.tmp_dir else output_dir / ".tmp"
     extensions = normalize_extensions(args.extensions)
+    stages = normalize_stages(args.stages)
     min_frame_area = args.component_min_area if args.component_min_area is not None else args.frame_min_area
+    unfaker_command = build_default_unfaker_command()
+
+    unsupported_stages = [stage for stage in stages if stage not in SUPPORTED_STAGES]
+    if unsupported_stages:
+        raise ValueError(
+            "Unsupported stages: "
+            + ",".join(unsupported_stages)
+            + f". Supported stages: {','.join(SUPPORTED_STAGES)}"
+        )
 
     ensure_directory(input_dir)
     ensure_directory(output_dir)
@@ -226,23 +273,28 @@ def main() -> None:
         PipelineConfig(
             output_dir=output_dir,
             temp_dir=temp_dir,
-            unfaker_command=args.unfaker_command,
+            unfaker_command=unfaker_command,
+            background_model=str(args.bg_model).strip().lower(),
             alpha_ratio_threshold=args.alpha_ratio_threshold,
             alpha_value_threshold=args.alpha_value_threshold,
             min_frame_area=min_frame_area,
             unfaker_timeout_seconds=args.unfaker_timeout_seconds,
+            stages=stages,
         )
     )
     tracker = StableFileTracker(stable_for_seconds=args.stable_for_ms / 1000.0)
     poll_interval_seconds = args.poll_interval_ms / 1000.0
 
     LOGGER.info(
-        "event=watcher_start input=%s output=%s failed_dir=%s temp_dir=%s extensions=%s",
+        "event=watcher_start input=%s output=%s failed_dir=%s temp_dir=%s extensions=%s stages=%s bg_model=%s unfaker_command=%s",
         input_dir,
         output_dir,
         failed_dir,
         temp_dir,
         ",".join(extensions),
+        ",".join(stages),
+        str(args.bg_model).strip().lower(),
+        unfaker_command,
     )
 
     while True:

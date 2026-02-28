@@ -1,17 +1,17 @@
 # Unfaker Source
 
-`unfaker.py`, `unfaker_content_adaptive.py`, and `unfaker_wu_quantizer.py` were downloaded from:
+Current strict parity target:
 
-- Repository: `https://github.com/painebenjamin/unfake.py`
-- Commit: `8345c4f1ebdfc6704d570c4d394d2b1cf83945a6`
-- Files:
-  - `src/unfake/pixel.py` -> `unfaker.py`
-  - `src/unfake/content_adaptive.py` -> `unfaker_content_adaptive.py`
-  - `src/unfake/wu_quantizer.py` -> `unfaker_wu_quantizer.py`
+- Repository: `https://github.com/jenissimo/unfake.js`
+- Commit: `2b4e5d88bdc45626a1faedfc473445ef42a6e8bd`
+- Source files:
+  - `browser-tool/lib/pixel.js`
+  - `browser-tool/lib/utils.js`
 
-The upstream project declares MIT license in `pyproject.toml`.
+Local parity manifest:
 
-Local adjustments:
+- See `PARITY_TARGET.md` for required 1:1 algorithm list and defaults.
 
-- Replaced package-relative imports with local module imports.
-- Added positional output argument support (`unfaker.py <input> <output>`) for watcher integration.
+Historical note:
+
+- Initial Python bootstrap came from `painebenjamin/unfake.py` and has since been refactored to match `jenissimo/unfake.js` strict core flow.

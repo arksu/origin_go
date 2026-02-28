@@ -4,13 +4,9 @@ import shlex
 import subprocess
 import tempfile
 from dataclasses import dataclass
-import logging
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -40,12 +36,10 @@ def run_unfaker(
     with tempfile.NamedTemporaryFile(suffix=".png", dir=temp_dir, delete=False) as output_file:
         output_path = Path(output_file.name)
 
-    prepared_input = _prepare_frame_for_unfaker(frame)
-    prepared_input.save(input_path, format="PNG")
+    frame.convert("RGBA").save(input_path, format="PNG")
     output_path.unlink(missing_ok=True)
 
     command = _build_command(unfaker_command=unfaker_command, input_path=input_path, output_path=output_path)
-    command = _ensure_unfaker_default_scale(command)
 
     try:
         completed = subprocess.run(
@@ -84,58 +78,3 @@ def _build_command(unfaker_command: str, input_path: Path, output_path: Path) ->
     tokens = shlex.split(unfaker_command)
     tokens.extend([str(input_path), str(output_path)])
     return tokens
-
-
-def _ensure_unfaker_default_scale(command: list[str]) -> list[str]:
-    if not command:
-        return command
-    if not _looks_like_unfaker_command(command):
-        return command
-    if _has_explicit_scale_flag(command):
-        return command
-
-    with_scale = list(command)
-    with_scale.extend(["--scale", "1"])
-    logger.debug("event=unfaker_scale_default_applied scale=1 command=%s", with_scale)
-    return with_scale
-
-
-def _looks_like_unfaker_command(command: list[str]) -> bool:
-    joined = " ".join(command).lower()
-    return "unfaker.py" in joined or "unfake.py" in joined
-
-
-def _has_explicit_scale_flag(command: list[str]) -> bool:
-    for token in command:
-        if token == "--scale" or token == "-s":
-            return True
-        if token.startswith("--scale="):
-            return True
-    return False
-
-
-def _prepare_frame_for_unfaker(frame: Image.Image) -> Image.Image:
-    """Normalize RGBA before Unfaker.
-
-    Why: rembg often returns soft alpha masks. Unfaker's default alpha threshold is 128,
-    which can erase objects entirely when alpha values are low. We de-premultiply RGB from
-    alpha and convert alpha to a hard mask to preserve visible sprites.
-    """
-    rgba = frame.convert("RGBA")
-    rgba_array = np.asarray(rgba, dtype=np.uint16).copy()
-
-    alpha = rgba_array[:, :, 3]
-    non_zero_alpha = alpha > 0
-    if not bool(non_zero_alpha.any()):
-        return rgba
-
-    for channel_index in range(3):
-        channel = rgba_array[:, :, channel_index]
-        channel[non_zero_alpha] = np.minimum(
-            255,
-            (channel[non_zero_alpha] * 255 + (alpha[non_zero_alpha] // 2)) // alpha[non_zero_alpha],
-        )
-        rgba_array[:, :, channel_index] = channel
-
-    rgba_array[:, :, 3] = np.where(non_zero_alpha, 255, 0)
-    return Image.fromarray(rgba_array.astype(np.uint8), mode="RGBA")
