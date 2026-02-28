@@ -13,6 +13,8 @@ export interface SpineDefLike {
 export interface LayerDefLike {
   img?: string
   frames?: FrameDefLike[]
+  fps?: number
+  loop?: boolean
   spine?: SpineDefLike
   interactive?: boolean
   offset?: number[]
@@ -24,7 +26,6 @@ export interface ResourceDefLike {
   layers: LayerDefLike[]
   offset?: number[]
   size?: number[]
-  fps?: number
 }
 
 export interface ObjectFileEntry {

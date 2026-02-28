@@ -8,6 +8,7 @@
     "build": "npm run proto && vue-tsc --build && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --build --force",
+    "validate-objects": "node scripts/validate-object-schema.mjs",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
     "proto": "pbjs -t static-module -w es6 -o src/network/proto/packets.js ../api/proto/packets.proto && pbts -o src/network/proto/packets.d.ts src/network/proto/packets.js"
   },

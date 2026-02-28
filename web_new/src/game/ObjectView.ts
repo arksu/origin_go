@@ -20,6 +20,18 @@ import {
 } from '@/constants/render'
 import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
 
+interface AnimatedFrameLayer {
+  layer: LayerDef
+  sprite: Sprite
+  textures: Texture[]
+  frameOffsets: Array<readonly [number, number] | number[] | undefined>
+  frameCount: number
+  fps: number
+  loop: boolean
+  groupKey: string
+  currentFrame: number
+}
+
 export interface ObjectViewOptions {
   entityId: number
   typeId: number
@@ -30,7 +42,7 @@ export interface ObjectViewOptions {
 
 /**
  * ObjectView represents a visual game object with multi-layer rendering.
- * Supports: static sprites, shadow layers, Spine animations with 8-direction movement.
+ * Supports: static sprites, frame sprites, shadow layers, and Spine animations.
  */
 export class ObjectView {
   readonly entityId: number
@@ -58,6 +70,9 @@ export class ObjectView {
   private interactiveOrderDirty = true
   private spineAnimations: Array<Spine | undefined> = []
   private layerIndexMap: Map<number, number> = new Map() // layerIdx -> spineAnimations index
+  private animatedFrameLayers: AnimatedFrameLayer[] = []
+  private hasFrameAnimation = false
+  private animationStartMs = 0
   private lastDir = 4 // default south
   private isDestroyed = false
   private isDroppedItem = false
@@ -75,6 +90,7 @@ export class ObjectView {
 
     this.container = new Container()
     this.container.sortableChildren = true
+    this.animationStartMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
 
     if (this.typeId === DROP_ITEM_TYPE_ID) {
       this.isDroppedItem = true
@@ -98,6 +114,10 @@ export class ObjectView {
 
   getContainer(): Container {
     return this.container
+  }
+
+  hasAnimatedFrames(): boolean {
+    return this.hasFrameAnimation
   }
 
   private buildDroppedItem(resourcePath: string): void {
@@ -157,6 +177,11 @@ export class ObjectView {
       if (!layer) continue
       if (layer.img) {
         this.addSpriteLayer(layer)
+        continue
+      }
+      if (Array.isArray(layer.frames) && layer.frames.length > 0) {
+        this.addFrameLayer(layer)
+        continue
       }
       if (layer.spine) {
         const currentSpineIdx = spineIdx++
@@ -201,6 +226,129 @@ export class ObjectView {
       this.spineAnimations[spineIdx] = spineAnim
       this.container.addChild(spineAnim)
     })
+  }
+
+  private addFrameLayer(layer: LayerDef): void {
+    if (!this.resDef || !Array.isArray(layer.frames) || layer.frames.length === 0) return
+
+    const frames = layer.frames
+    const fps = Number(layer.fps ?? 0)
+    const isAnimated = Number.isFinite(fps) && fps > 0
+    if (!isAnimated) {
+      const firstFrame = frames[0]
+      if (!firstFrame) return
+      ResourceLoader.createFrameSprite(layer, this.resDef, firstFrame).then((spr) => {
+        if (this.isDestroyed) {
+          spr.destroy()
+          return
+        }
+        if (layer.shadow) {
+          this.shadowSprites.push(spr)
+          spr.visible = !this.shadowSuppressed
+        }
+        if (layer.interactive) {
+          this.setInteractive(spr)
+          this.registerInteractiveSprite(spr)
+        }
+        this.sprites.push(spr)
+        this.container.addChild(spr)
+      })
+      return
+    }
+
+    this.hasFrameAnimation = true
+    Promise.all(frames.map((frame) => ResourceLoader.loadTexture(frame.img))).then((textures) => {
+      if (this.isDestroyed || !this.resDef) {
+        return
+      }
+
+      const initialFrame = frames[0]
+      if (!initialFrame) return
+      const sprite = new Sprite(textures[0] ?? Texture.WHITE)
+      const initialPos = ResourceLoader.resolveLayerPosition(layer, this.resDef, initialFrame.offset)
+      sprite.x = initialPos.x
+      sprite.y = initialPos.y
+      sprite.zIndex = ResourceLoader.resolveLayerZ(layer)
+
+      if (layer.shadow) {
+        this.shadowSprites.push(sprite)
+        sprite.visible = !this.shadowSuppressed
+      }
+      if (layer.interactive) {
+        this.setInteractive(sprite)
+        this.registerInteractiveSprite(sprite)
+      }
+      this.sprites.push(sprite)
+      this.container.addChild(sprite)
+
+      const frameLayer: AnimatedFrameLayer = {
+        layer,
+        sprite,
+        textures,
+        frameOffsets: frames.map((frame) => frame.offset),
+        frameCount: frames.length,
+        fps,
+        loop: layer.loop !== false,
+        groupKey: `${fps}:${frames.length}`,
+        currentFrame: 0,
+      }
+      this.animatedFrameLayers.push(frameLayer)
+
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      this.updateAnimatedFrameLayer(frameLayer, this.computeFrameIndex(frameLayer, nowMs, new Map()))
+    }).catch((err: unknown) => {
+      console.warn('[ObjectView] Failed to load frame animation layer', err)
+    })
+  }
+
+  updateAnimation(nowMs: number): void {
+    if (!this.hasFrameAnimation || this.animatedFrameLayers.length === 0 || this.isDestroyed || !this.resDef) {
+      return
+    }
+
+    const sharedSteps = new Map<string, number>()
+    for (const frameLayer of this.animatedFrameLayers) {
+      const nextFrame = this.computeFrameIndex(frameLayer, nowMs, sharedSteps)
+      this.updateAnimatedFrameLayer(frameLayer, nextFrame)
+    }
+  }
+
+  private computeFrameIndex(
+    frameLayer: AnimatedFrameLayer,
+    nowMs: number,
+    sharedSteps: Map<string, number>,
+  ): number {
+    const cached = sharedSteps.get(frameLayer.groupKey)
+    let step = cached
+    if (step == null) {
+      const elapsedMs = Math.max(0, nowMs - this.animationStartMs)
+      step = Math.floor((elapsedMs * frameLayer.fps) / 1000)
+      sharedSteps.set(frameLayer.groupKey, step)
+    }
+
+    if (frameLayer.loop) {
+      return step % frameLayer.frameCount
+    }
+    return Math.min(step, frameLayer.frameCount - 1)
+  }
+
+  private updateAnimatedFrameLayer(frameLayer: AnimatedFrameLayer, frameIndex: number): void {
+    if (!this.resDef || frameIndex === frameLayer.currentFrame) {
+      return
+    }
+
+    frameLayer.currentFrame = frameIndex
+    frameLayer.sprite.texture = frameLayer.textures[frameIndex] ?? Texture.WHITE
+    const pos = ResourceLoader.resolveLayerPosition(frameLayer.layer, this.resDef, frameLayer.frameOffsets[frameIndex])
+    frameLayer.sprite.x = pos.x
+    frameLayer.sprite.y = pos.y
+
+    if (frameLayer.layer.interactive) {
+      this.hoverBorderDirty = true
+      if (this.isHovered && this.hoverGraphics) {
+        this.rebuildHoverBorder()
+      }
+    }
   }
 
   private createPlaceholder(): void {
@@ -764,6 +912,7 @@ export class ObjectView {
     if (this.placeholder) {
       this.placeholder.destroy()
     }
+    this.animatedFrameLayers = []
     this.container.destroy({ children: true })
   }
 }

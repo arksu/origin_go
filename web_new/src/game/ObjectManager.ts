@@ -10,6 +10,7 @@ import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
 export class ObjectManager {
   private parentContainer: Container | null = null
   private objects: Map<number, ObjectView> = new Map()
+  private animatedObjectIds: Set<number> = new Set()
   private carriedByByObject: Map<number, number> = new Map()
   private carriedObjectsByCarrier: Map<number, Set<number>> = new Map()
   private activeCarriedObjects: Set<number> = new Set()
@@ -37,6 +38,9 @@ export class ObjectManager {
 
     const objectView = new ObjectView(options)
     this.objects.set(options.entityId, objectView)
+    if (objectView.hasAnimatedFrames()) {
+      this.animatedObjectIds.add(options.entityId)
+    }
     this.parentContainer!.addChild(objectView.getContainer())
 
     // Register with culling controller
@@ -73,6 +77,7 @@ export class ObjectManager {
       console.warn(`[ObjectManager] Cannot despawn object ${entityId}: not found`)
       return
     }
+    this.animatedObjectIds.delete(entityId)
 
     // Unregister from culling controller
     cullingController.unregisterObject(entityId)
@@ -330,6 +335,22 @@ export class ObjectManager {
    * Performs Z-sorting if needed.
    */
   update(): void {
+    if (this.animatedObjectIds.size > 0) {
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      const staleAnimatedIds: number[] = []
+      for (const entityId of this.animatedObjectIds) {
+        const objectView = this.objects.get(entityId)
+        if (!objectView) {
+          staleAnimatedIds.push(entityId)
+          continue
+        }
+        objectView.updateAnimation(nowMs)
+      }
+      for (const entityId of staleAnimatedIds) {
+        this.animatedObjectIds.delete(entityId)
+      }
+    }
+
     if (this.needsSort) {
       this.sortByDepth()
       this.needsSort = false
@@ -388,6 +409,7 @@ export class ObjectManager {
       obj.destroy()
     }
     this.objects.clear()
+    this.animatedObjectIds.clear()
     this.carriedByByObject.clear()
     this.carriedObjectsByCarrier.clear()
     this.activeCarriedObjects.clear()
