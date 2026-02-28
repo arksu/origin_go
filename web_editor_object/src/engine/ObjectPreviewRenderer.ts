@@ -9,11 +9,25 @@ interface RenderedLayer {
   kind: 'img' | 'frames' | 'spine' | 'placeholder'
   object: RenderDisplay
   zIndex: number
+  animated?: AnimatedFrameLayer
+}
+
+interface AnimatedFrameLayer {
+  layerIndex: number
+  sprite: Sprite
+  resource: ResourceDefLike
+  layer: LayerDefLike
+  textures: Texture[]
+  frameOffsets: Array<readonly [number, number] | number[] | undefined>
+  frameCount: number
+  fps: number
+  loop: boolean
+  groupKey: string
+  currentFrame: number
 }
 
 interface RenderOptions {
   selectedLayerIndex: number
-  getFrameIndex: (layerIndex: number) => number
   getImageOverride: (layerIndex: number) => string | undefined
 }
 
@@ -23,6 +37,7 @@ export class ObjectPreviewRenderer {
   private crosshair = new Graphics()
   private overlay = new Graphics()
   private renderedLayers: RenderedLayer[] = []
+  private animatedFrameLayers: AnimatedFrameLayer[] = []
   private scale = 4
   private panX = 0
   private panY = 0
@@ -40,6 +55,8 @@ export class ObjectPreviewRenderer {
   private boundWheel = (e: WheelEvent) => this.onWheel(e)
   private canvasEl: HTMLCanvasElement | null = null
   private spineLoadLocks = new Map<string, Promise<void>>()
+  private animationStartMs = 0
+  private readonly tickerUpdate = () => this.updateFrameAnimations()
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.canvasEl = canvas
@@ -56,6 +73,7 @@ export class ObjectPreviewRenderer {
 
     this.world.sortableChildren = true
     this.app.stage.addChild(this.world)
+    this.app.ticker.add(this.tickerUpdate)
     this.crosshair.zIndex = 999999
     this.overlay.zIndex = 1000000
     this.app.stage.addChild(this.crosshair)
@@ -103,6 +121,7 @@ export class ObjectPreviewRenderer {
   async renderResource(resource: ResourceDefLike | null, options: RenderOptions): Promise<void> {
     this.clearWorld()
     this.selectedLayerIndex = options.selectedLayerIndex
+    this.animationStartMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
     this.drawSelection()
     if (!resource) return
 
@@ -117,6 +136,9 @@ export class ObjectPreviewRenderer {
         }
         if (!rendered) continue
         this.renderedLayers.push(rendered)
+        if (rendered.animated) {
+          this.animatedFrameLayers.push(rendered.animated)
+        }
         rendered.object.zIndex = rendered.zIndex
         this.world.addChild(rendered.object)
       } catch (error) {
@@ -150,15 +172,40 @@ export class ObjectPreviewRenderer {
     }
 
     if (Array.isArray(layer.frames) && layer.frames.length > 0) {
-      const frameIndex = Math.max(0, Math.min(options.getFrameIndex(layerIndex), layer.frames.length - 1))
-      const frame = layer.frames[frameIndex]!
-      const sprite = new Sprite(await this.loadTexture(`/assets/game/${frame.img}`))
+      const textures = await Promise.all(
+        layer.frames.map((frame) => this.loadTexture(`/assets/game/${frame.img}`)),
+      )
+      const frame = layer.frames[0]!
+      const sprite = new Sprite(textures[0] ?? Texture.WHITE)
       const [x, y] = this.computeLayerPosition(resource, layer, [
         Number(frame.offset?.[0] ?? 0),
         Number(frame.offset?.[1] ?? 0),
       ])
       sprite.position.set(x, y)
-      return { layerIndex, kind: 'frames', object: sprite, zIndex }
+      const fps = Number(layer.fps ?? 0)
+      if (!Number.isFinite(fps) || fps <= 0) {
+        return { layerIndex, kind: 'frames', object: sprite, zIndex }
+      }
+
+      return {
+        layerIndex,
+        kind: 'frames',
+        object: sprite,
+        zIndex,
+        animated: {
+          layerIndex,
+          sprite,
+          resource,
+          layer,
+          textures,
+          frameOffsets: layer.frames.map((item) => item.offset),
+          frameCount: layer.frames.length,
+          fps,
+          loop: layer.loop !== false,
+          groupKey: `${fps}:${layer.frames.length}`,
+          currentFrame: 0,
+        },
+      }
     }
 
     if (layer.spine) {
@@ -297,6 +344,58 @@ export class ObjectPreviewRenderer {
       this.destroyDisplay(layer.object)
     }
     this.renderedLayers = []
+    this.animatedFrameLayers = []
+  }
+
+  private updateFrameAnimations(): void {
+    if (this.animatedFrameLayers.length === 0) {
+      return
+    }
+
+    const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const sharedSteps = new Map<string, number>()
+    let selectionChanged = false
+
+    for (const frameLayer of this.animatedFrameLayers) {
+      const nextFrame = this.computeAnimationFrame(frameLayer, nowMs, sharedSteps)
+      if (nextFrame === frameLayer.currentFrame) {
+        continue
+      }
+
+      frameLayer.currentFrame = nextFrame
+      frameLayer.sprite.texture = frameLayer.textures[nextFrame] ?? Texture.WHITE
+      const [x, y] = this.computeLayerPosition(frameLayer.resource, frameLayer.layer, [
+        Number(frameLayer.frameOffsets[nextFrame]?.[0] ?? 0),
+        Number(frameLayer.frameOffsets[nextFrame]?.[1] ?? 0),
+      ])
+      frameLayer.sprite.position.set(x, y)
+
+      if (frameLayer.layerIndex === this.selectedLayerIndex) {
+        selectionChanged = true
+      }
+    }
+
+    if (selectionChanged) {
+      this.drawSelection()
+    }
+  }
+
+  private computeAnimationFrame(
+    frameLayer: AnimatedFrameLayer,
+    nowMs: number,
+    sharedSteps: Map<string, number>,
+  ): number {
+    let step = sharedSteps.get(frameLayer.groupKey)
+    if (step == null) {
+      const elapsedMs = Math.max(0, nowMs - this.animationStartMs)
+      step = Math.floor((elapsedMs * frameLayer.fps) / 1000)
+      sharedSteps.set(frameLayer.groupKey, step)
+    }
+
+    if (frameLayer.loop) {
+      return step % frameLayer.frameCount
+    }
+    return Math.min(step, frameLayer.frameCount - 1)
   }
 
   private destroyDisplay(display?: RenderDisplay | null): void {
@@ -436,6 +535,7 @@ export class ObjectPreviewRenderer {
       this.canvasEl.removeEventListener('wheel', this.boundWheel)
     }
     this.canvasEl = null
+    this.app?.ticker.remove(this.tickerUpdate)
     this.crosshair.destroy()
     this.overlay.destroy()
     this.world.destroy({ children: true })

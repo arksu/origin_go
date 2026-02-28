@@ -13,6 +13,8 @@ export interface LayerDef {
   z?: number
   shadow?: boolean
   frames?: FrameDef[]
+  fps?: number
+  loop?: boolean
 }
 
 export interface FrameDef {
@@ -35,7 +37,6 @@ export interface ResourceDef {
   layers: LayerDef[]
   size?: [number, number]
   offset?: [number, number]
-  fps?: number
 }
 
 /**
@@ -93,27 +94,47 @@ export class ResourceLoader {
     return promise
   }
 
+  static resolveLayerZ(layer: LayerDef): number {
+    return layer.shadow ? -1 : (layer.z ?? 0)
+  }
+
+  static resolveLayerPosition(
+    layer: LayerDef,
+    resDef: ResourceDef,
+    frameOffset?: readonly [number, number] | number[],
+  ): { x: number; y: number } {
+    const layerOffsetX = Number(layer.offset?.[0] ?? 0)
+    const layerOffsetY = Number(layer.offset?.[1] ?? 0)
+    const rootOffsetX = Number(resDef.offset?.[0] ?? 0)
+    const rootOffsetY = Number(resDef.offset?.[1] ?? 0)
+    const frameOffsetX = Number(frameOffset?.[0] ?? 0)
+    const frameOffsetY = Number(frameOffset?.[1] ?? 0)
+    return {
+      x: layerOffsetX - rootOffsetX + frameOffsetX,
+      y: layerOffsetY - rootOffsetY + frameOffsetY,
+    }
+  }
+
   /**
    * Create a Sprite from a loaded texture with layer offsets applied.
    */
   static async createSprite(layer: LayerDef, resDef: ResourceDef): Promise<Sprite> {
     const tex = await this.loadTexture(layer.img!)
     const spr = new Sprite(tex)
+    const pos = this.resolveLayerPosition(layer, resDef)
+    spr.x = pos.x
+    spr.y = pos.y
+    spr.zIndex = this.resolveLayerZ(layer)
+    return spr
+  }
 
-    if (layer.offset) {
-      spr.x = layer.offset[0]
-      spr.y = layer.offset[1]
-    }
-    if (resDef.offset) {
-      spr.x -= resDef.offset[0]
-      spr.y -= resDef.offset[1]
-    }
-    if (layer.shadow) {
-      spr.zIndex = -1
-    } else {
-      spr.zIndex = layer.z ?? 0
-    }
-
+  static async createFrameSprite(layer: LayerDef, resDef: ResourceDef, frame: FrameDef): Promise<Sprite> {
+    const tex = await this.loadTexture(frame.img)
+    const spr = new Sprite(tex)
+    const pos = this.resolveLayerPosition(layer, resDef, frame.offset)
+    spr.x = pos.x
+    spr.y = pos.y
+    spr.zIndex = this.resolveLayerZ(layer)
     return spr
   }
 

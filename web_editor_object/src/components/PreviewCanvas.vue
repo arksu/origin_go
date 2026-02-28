@@ -23,10 +23,6 @@ let resizeObserver: ResizeObserver | null = null
 function renderNow(): void {
   void renderer.renderResource(store.selectedResource, {
     selectedLayerIndex: store.selectedLayerIndex,
-    getFrameIndex: (layerIndex) => {
-      if (layerIndex !== store.selectedLayerIndex) return 0
-      return store.selectedLayerFrameIndex
-    },
     getImageOverride: (layerIndex) =>
       layerIndex === store.selectedLayerIndex ? store.selectedLayerPreviewOverride : undefined,
   })
@@ -86,7 +82,6 @@ watch(
     store.selectedFileIndex,
     store.selectedObjectPath,
     store.selectedLayerIndex,
-    store.selectedLayerFrameIndex,
     store.selectedLayerPreviewOverride,
   ],
   () => nextTick(renderNow),

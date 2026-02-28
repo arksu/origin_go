@@ -62,6 +62,11 @@ export class BuildGhostView {
 
       if (layer.img) {
         this.addSpriteLayer(layer)
+        continue
+      }
+      if (Array.isArray(layer.frames) && layer.frames.length > 0) {
+        this.addFrameLayer(layer)
+        continue
       }
       if (layer.spine) {
         const currentSpineIdx = spineIdx++
@@ -82,6 +87,24 @@ export class BuildGhostView {
 
       sprite.eventMode = 'none'
       this.container.addChild(sprite)
+    })
+  }
+
+  private addFrameLayer(layer: LayerDef): void {
+    if (!this.resDef || !Array.isArray(layer.frames) || layer.frames.length === 0) return
+    const firstFrame = layer.frames[0]
+    if (!firstFrame) return
+
+    ResourceLoader.createFrameSprite(layer, this.resDef, firstFrame).then((sprite) => {
+      if (this.isDestroyed) {
+        sprite.destroy()
+        return
+      }
+
+      sprite.eventMode = 'none'
+      this.container.addChild(sprite)
+    }).catch((err: unknown) => {
+      console.warn('[BuildGhostView] Failed to load frame layer', err)
     })
   }
 

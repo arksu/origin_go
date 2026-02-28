@@ -16,10 +16,6 @@
           <label>Root Offset Y</label>
           <input type="number" :value="rootOffset[1]" @input="onRootOffsetInput(1, $event)" />
         </div>
-        <div class="row" v-if="store.selectedResource.fps != null">
-          <label>FPS</label>
-          <span class="readonly">{{ store.selectedResource.fps }} (read-only)</span>
-        </div>
       </div>
 
       <div class="section">
@@ -93,6 +89,14 @@
           <div class="row">
             <label>Frames</label>
             <span class="readonly">{{ store.selectedLayer.frames.length }} (read-only)</span>
+          </div>
+          <div class="row">
+            <label>FPS</label>
+            <span class="readonly">{{ store.selectedLayer.fps ?? 'n/a' }} (read-only)</span>
+          </div>
+          <div class="row">
+            <label>Loop</label>
+            <span class="readonly">{{ store.selectedLayer.loop ?? true }} (read-only)</span>
           </div>
           <div class="row">
             <label>Preview Frame</label>
