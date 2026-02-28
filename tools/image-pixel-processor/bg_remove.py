@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -9,8 +10,16 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+AUTO_BG_MODEL = "auto"
+AUTO_MODEL_PRIORITY = (
+    "bria-rmbg",
+    "birefnet-general",
+    "isnet-general-use",
+    "u2net",
+)
 
-def remove_background(image: Image.Image) -> Image.Image:
+
+def remove_background(image: Image.Image, model_name: str = AUTO_BG_MODEL) -> Image.Image:
     try:
         from rembg import remove
     except ImportError as exc:
@@ -33,16 +42,13 @@ def remove_background(image: Image.Image) -> Image.Image:
     source = image.convert("RGBA")
     input_buffer = io.BytesIO()
     source.save(input_buffer, format="PNG")
+    payload = input_buffer.getvalue()
 
-    try:
-        output_bytes = remove(input_buffer.getvalue())
-    except Exception as exc:
-        if "onnxruntime backend" in str(exc).lower():
-            raise RuntimeError(
-                "rembg failed because no onnxruntime backend is available. "
-                "Activate venv and run: python3 -m pip install 'rembg[cpu]'"
-            ) from exc
-        raise
+    output_bytes = _remove_with_selected_model(
+        remove=remove,
+        payload=payload,
+        requested_model=model_name,
+    )
 
     rembg_result = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
     soft_mask, strong_ratio, median_alpha, p90_alpha = _is_soft_mask(rembg_result)
@@ -58,6 +64,62 @@ def remove_background(image: Image.Image) -> Image.Image:
         p90_alpha,
     )
     return fallback_result
+
+
+def _remove_with_selected_model(remove, payload: bytes, requested_model: str) -> bytes:
+    model_candidates = _resolve_model_candidates(requested_model)
+    last_error: Exception | None = None
+
+    for model in model_candidates:
+        try:
+            session = _session_for_model(model)
+            output = remove(payload, session=session)
+            logger.info("event=bg_model_selected requested=%s selected=%s", requested_model, model)
+            return output
+        except Exception as exc:  # pragma: no cover - network/model load runtime path
+            if "onnxruntime backend" in str(exc).lower():
+                raise RuntimeError(
+                    "rembg failed because no onnxruntime backend is available. "
+                    "Activate venv and run: python3 -m pip install 'rembg[cpu]'"
+                ) from exc
+            last_error = exc
+            if requested_model.strip().lower() != AUTO_BG_MODEL:
+                raise RuntimeError(f"Background model '{model}' failed: {exc}") from exc
+            logger.warning("event=bg_model_candidate_failed model=%s error=%s", model, exc)
+
+    candidate_list = ",".join(model_candidates)
+    raise RuntimeError(f"All background models failed ({candidate_list})") from last_error
+
+
+def _resolve_model_candidates(requested_model: str) -> tuple[str, ...]:
+    normalized = requested_model.strip().lower()
+    if not normalized:
+        raise ValueError("background model must not be empty")
+
+    if normalized != AUTO_BG_MODEL:
+        return (normalized,)
+
+    available = _available_rembg_models()
+    ranked = [model for model in AUTO_MODEL_PRIORITY if model in available]
+    if not ranked:
+        ranked = [model for model in AUTO_MODEL_PRIORITY if model != "bria-rmbg"]
+    return tuple(dict.fromkeys(ranked))
+
+
+@lru_cache(maxsize=1)
+def _available_rembg_models() -> set[str]:
+    try:
+        from rembg.sessions import sessions_class
+    except Exception:  # pragma: no cover - import safety fallback
+        return set(AUTO_MODEL_PRIORITY)
+    return {session_class.name() for session_class in sessions_class}
+
+
+@lru_cache(maxsize=8)
+def _session_for_model(model_name: str):
+    from rembg import new_session
+
+    return new_session(model_name=model_name)
 
 
 def _is_soft_mask(image: Image.Image) -> tuple[bool, float, float, float]:

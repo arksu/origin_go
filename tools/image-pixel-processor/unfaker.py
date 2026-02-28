@@ -42,6 +42,10 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("unfake.py")
 
+# Size guard keeps processing stable while allowing 4K-class inputs.
+MAX_INPUT_DIMENSION = 8000
+MAX_INPUT_PIXELS = 4096 * 4096
+
 
 @dataclass
 class ProcessingManifest:
@@ -202,6 +206,12 @@ def edge_aware_detect(image: np.ndarray) -> int:
     best_scale = scale_counts.most_common(1)[0][0]
     logger.info(f"Edge-aware detection found scales: {all_scales}, best: {best_scale}")
     return best_scale
+
+
+def legacy_edge_aware_detect(image: np.ndarray) -> int:
+    """Legacy edge-aware detection using a single ROI."""
+    gray = cv2.cvtColor(image, cv2.COLOR_RGBA2GRAY if image.shape[2] == 4 else cv2.COLOR_RGB2GRAY)
+    return single_region_edge_detect(gray)
 
 
 def single_region_edge_detect(gray: np.ndarray) -> int:
@@ -757,21 +767,36 @@ def detect_optimal_color_count(
     return result  # type: ignore[no-any-return]
 
 
+def validate_image_size(width: int, height: int) -> None:
+    if width <= 0 or height <= 0:
+        raise ValueError(f"Invalid image size: {width}x{height}")
+
+    if width > MAX_INPUT_DIMENSION or height > MAX_INPUT_DIMENSION:
+        raise ValueError(
+            f"Image too large: {width}x{height} "
+            f"(max dimension {MAX_INPUT_DIMENSION}px)"
+        )
+
+    if width * height > MAX_INPUT_PIXELS:
+        raise ValueError(
+            f"Image too large: {width}x{height} "
+            f"(max area {MAX_INPUT_PIXELS} pixels)"
+        )
+
+
 async def process_image(
     file_path_or_image: str | Image.Image | NDArray,
-    max_colors: int | None = None,  # None for auto-detection
+    max_colors: int = 32,
     manual_scale: int | list[int] | None = None,
-    detect_method: str = "auto",  # 'auto', 'runs', 'edge'
-    downscale_method: str = "dominant",  # 'dominant', 'median', 'mode', 'mean', 'nearest', 'content-adaptive'
-    dom_mean_threshold: float = 0.05,
+    detect_method: str = "auto",
+    edge_detect_method: str = "tiled",
+    downscale_method: str = "dominant",
+    dom_mean_threshold: float = 0.15,
     cleanup: dict[str, bool] | None = None,
     fixed_palette: list[str] | None = None,
     alpha_threshold: int = 128,
-    background_tolerance: int = 1,
-    background_mode: str = "edges",
     snap_grid: bool = True,
     auto_color_detect: bool = False,
-    transparent_background: bool = False,
     file_path: str | None = None,  # deprecated
 ) -> dict:
     """
@@ -779,20 +804,17 @@ async def process_image(
 
     Args:
         file_path_or_image: Path to input image, PIL image, or numpy array
-        max_colors: Maximum number of colors in output (None for auto-detection)
+        max_colors: Maximum number of colors in output
         manual_scale: Manual scale override
         detect_method: Scale detection method ('auto', 'runs', 'edge')
+        edge_detect_method: Edge detector variant ('tiled' or 'legacy')
         downscale_method: Downscaling algorithm ('dominant', 'median', 'mode', 'mean', 'nearest', 'content-adaptive')
         dom_mean_threshold: Threshold for dominant color method
         cleanup: Cleanup options dict with 'morph' and 'jaggy' keys
         fixed_palette: Optional fixed color palette (hex strings)
         alpha_threshold: Alpha binarization threshold (0-255)
-        background_tolerance: Background tolerance for transparent background (0-255)
-        background_mode: Flood-fill mode - "edges" (all edge pixels), "corners" (four corners),
-                        or "midpoints" (midpoint of each edge)
         snap_grid: Whether to snap to pixel grid
         auto_color_detect: Force automatic color detection
-        transparent_background: Whether to make background transparent
         file_path: Path to input image (deprecated)
 
     Returns:
@@ -843,17 +865,12 @@ async def process_image(
 
     logger.info(f"Processing image: {original_size[0]}x{original_size[1]}")
 
-    # Check size limits
-    if (
-        current.shape[0] > 8000
-        or current.shape[1] > 8000
-        or (current.shape[0] * current.shape[1] > 10_000_000)
-    ):
-        raise ValueError(f"Image too large: {current.shape[1]}x{current.shape[0]}")
+    validate_image_size(width=current.shape[1], height=current.shape[0])
 
     # 1. Pre-processing: Binarize alpha
     if alpha_threshold is not None:
         current = alpha_binarization(current, alpha_threshold)
+    original_for_adaptive_scale = current.copy()
 
     # 2. Scale Detection
     scale = 1
@@ -868,7 +885,8 @@ async def process_image(
                 else runs_based_detect(current)
             )
         elif detect_method == "edge":
-            scale = edge_aware_detect(current)
+            edge_fn = edge_aware_detect if edge_detect_method == "tiled" else legacy_edge_aware_detect
+            scale = edge_fn(current)
         else:  # auto
             scale = (
                 runs_based_detect_accelerated(current)
@@ -877,7 +895,8 @@ async def process_image(
             )
             if scale <= 1:
                 logger.info("Runs detection failed, trying edge detection")
-                scale = edge_aware_detect(current)
+                edge_fn = edge_aware_detect if edge_detect_method == "tiled" else legacy_edge_aware_detect
+                scale = edge_fn(current)
 
     # 2.5. Snap to grid
     if snap_grid and scale > 1:
@@ -897,53 +916,68 @@ async def process_image(
     if cleanup.get("morph", False):
         current = morphological_cleanup(current)
 
-    # 3.5. Auto-detect optimal colors if requested
-    if max_colors is None or auto_color_detect:
-        max_colors = detect_optimal_color_count(current)
-        logger.info(f"Auto-detected optimal color count: {max_colors}")
-    else:
-        max_colors = max_colors or 32  # Default if not specified
+    effective_max_colors = max(2, int(max_colors))
 
     # 4. Color Quantization
     initial_colors = count_colors(current)
     colors_used = initial_colors
+    quantize_after = False
 
-    if max_colors < 256 and initial_colors > max_colors:
-        logger.info(f"Quantizing from {initial_colors} to max {max_colors} colors")
-        current, palette_colors = quantize_colors(current, max_colors, fixed_palette)
+    if auto_color_detect and initial_colors > 2:
+        logger.info("Auto-detecting optimal color count...")
+        effective_max_colors = detect_optimal_color_count(
+            current,
+            downsample_to=64,
+            color_quantize_factor=48,
+            dominance_threshold=0.015,
+            max_colors=min(effective_max_colors, 32),
+        )
+        logger.info(f"Auto-detected optimal color count: {effective_max_colors}")
+
+    if downscale_method == "content-adaptive":
+        pass
+    elif effective_max_colors < 256 and initial_colors > effective_max_colors:
+        logger.info(f"Quantizing from {initial_colors} to max {effective_max_colors} colors")
+        current, palette_colors = quantize_colors(current, effective_max_colors, fixed_palette)
         colors_used = len(palette_colors)
 
     # 5. Downscaling
-    if scale > 1 or downscale_method == "content-adaptive":
+    if scale > 1:
         logger.info(f'Downscaling by {scale}x using "{downscale_method}" method')
         if downscale_method == "dominant":
-            # Use accelerated version if available
             if "RUST_AVAILABLE" in globals() and RUST_AVAILABLE:
                 current = downscale_dominant_color_accelerated(current, scale, dom_mean_threshold)
             else:
                 current = downscale_by_dominant_color(current, scale, dom_mean_threshold)
         elif downscale_method == "content-adaptive":
-            target_w = current.shape[1] // scale if scale > 1 else current.shape[1] // 2
-            target_h = current.shape[0] // scale if scale > 1 else current.shape[0] // 2
-            current = content_adaptive_downscale(current, target_w, target_h)
-            # Post-quantize after content-adaptive
-            if max_colors < 256:
-                current, _ = quantize_colors(current, max_colors, fixed_palette)
-        else:
+            target_w = max(1, int(original_size[0] // scale))
+            target_h = max(1, int(original_size[1] // scale))
+            current = content_adaptive_downscale(original_for_adaptive_scale, target_w, target_h)
+            quantize_after = True
+        elif downscale_method in {"median", "mode", "mean", "nearest"}:
             current = downscale_block(current, scale, downscale_method)
+            quantize_after = True
+        else:
+            logger.warning(
+                'Unknown downscale method "%s", falling back to "median".',
+                downscale_method,
+            )
+            current = downscale_block(current, scale, "median")
+            quantize_after = True
         current = finalize_pixels(current)
 
-    # 6. Post-cleanup
+    # 6. Optional post-downscale quantization
+    if quantize_after and effective_max_colors < 256:
+        logger.info("Post-downscale quantization...")
+        current, palette_colors = quantize_colors(current, effective_max_colors, fixed_palette)
+        colors_used = len(palette_colors)
+
+    # 7. Post-cleanup
     if cleanup.get("jaggy", False):
         logger.info("Cleaning up jaggy edges")
         current = jaggy_cleaner(current)
 
-    # 6.5. Make background transparent
-    if transparent_background:
-        logger.info(f"Making background transparent (mode={background_mode})")
-        current = make_background_transparent(current, background_tolerance, background_mode)
-
-    # 7. Extract palette and save
+    # 8. Extract palette and save
     palette = extract_palette(current)
 
     # Convert back to PIL and save as PNG
@@ -958,11 +992,14 @@ async def process_image(
         processing_steps={
             "scale_detection": {
                 "method": detect_method,
+                "edge_method": None
+                if manual_scale
+                else (edge_detect_method if detect_method in {"edge", "auto"} else None),
                 "detected_scale": scale,
                 "manual_scale": manual_scale,
             },
             "color_quantization": {
-                "max_colors": max_colors,
+                "max_colors": effective_max_colors,
                 "initial_colors": initial_colors,
                 "final_colors": colors_used,
                 "fixed_palette": len(fixed_palette) if fixed_palette else None,
@@ -973,15 +1010,13 @@ async def process_image(
                 "dom_mean_threshold": dom_mean_threshold,
                 "applied": scale > 1,
             },
-            "cleanup": cleanup,
+            "cleanup": {
+                "morphological": bool(cleanup.get("morph", False)),
+                "jaggy": bool(cleanup.get("jaggy", False)),
+            },
             "alpha_processing": {
                 "threshold": alpha_threshold,
                 "binarized": alpha_threshold is not None,
-            },
-            "background_transparent": {
-                "tolerance": background_tolerance,
-                "mode": background_mode,
-                "applied": transparent_background,
             },
             "grid_snapping": {"enabled": snap_grid, "applied": snap_grid and scale > 1},
         },
@@ -1031,7 +1066,7 @@ Examples:
         "-o", "--output", default=None, help="Output image file (optional flag form)"
     )
     parser.add_argument(
-        "-c", "--colors", type=int, help="Maximum number of colors (default: auto-detect)"
+        "-c", "--colors", type=int, default=32, help="Maximum number of colors (default: 32)"
     )
     parser.add_argument(
         "--auto-colors", action="store_true", help="Auto-detect optimal color count"
@@ -1045,6 +1080,12 @@ Examples:
         help="Scale detection method (default: auto)",
     )
     parser.add_argument(
+        "--edge-detect-method",
+        choices=["tiled", "legacy"],
+        default="tiled",
+        help="Edge detection method when --detect is edge/auto (default: tiled)",
+    )
+    parser.add_argument(
         "-m",
         "--method",
         choices=["dominant", "median", "mode", "mean", "nearest", "content-adaptive"],
@@ -1052,24 +1093,9 @@ Examples:
         help="Downscaling method (default: dominant)",
     )
     parser.add_argument(
-        "--threshold", type=float, default=0.05, help="Dominant color threshold (default: 0.05)"
+        "--threshold", type=float, default=0.15, help="Dominant color threshold (default: 0.15)"
     )
     parser.add_argument("--cleanup", help="Cleanup options: morph,jaggy (comma-separated)")
-    parser.add_argument(
-        "--transparent-background", action="store_true", help="Make background transparent"
-    )
-    parser.add_argument(
-        "--background-tolerance",
-        type=int,
-        default=1,
-        help="Background tolerance for transparent background (default: 1)",
-    )
-    parser.add_argument(
-        "--background-mode",
-        choices=["edges", "corners", "midpoints"],
-        default="edges",
-        help="Flood-fill mode: edges (all edge pixels), corners (four corners), or midpoints (edge midpoints) (default: edges)",
-    )
     parser.add_argument("--palette", help="Fixed palette file (hex colors, one per line)")
     parser.add_argument(
         "--alpha-threshold",
@@ -1117,16 +1143,14 @@ Examples:
             max_colors=args.colors,
             manual_scale=args.scale,
             detect_method=args.detect,
+            edge_detect_method=args.edge_detect_method,
             downscale_method=args.method,
             dom_mean_threshold=args.threshold,
             cleanup=cleanup_options,
             fixed_palette=fixed_palette,
             alpha_threshold=args.alpha_threshold,
-            background_tolerance=args.background_tolerance,
-            background_mode=args.background_mode,
             snap_grid=not args.no_snap,
             auto_color_detect=args.auto_colors,
-            transparent_background=args.transparent_background,
         )
 
         # Save the processed image
