@@ -81,31 +81,47 @@ Validation rules:
 
 ### Known Tile IDs
 
-- `1` = `TileWaterDeep`
-- `3` = `TileWater`
-- `10` = `TileStone`
-- `11` = `TilePlowed`
-- `13` = `TileForestPine`
-- `15` = `TileForestLeaf`
-- `17` = `TileGrass`
-- `23` = `TileSwamp`
-- `29` = `TileClay`
-- `30` = `TileDirt`
-- `32` = `TileSand`
-- `42` = `TileCave`
+- `1` = `TileDeepWater`
+- `3` = `TileShallowWater`
+- `5` = `TileBrickRed`
+- `6` = `TileBrickYellow`
+- `7` = `TileBrickBlack`
+- `8` = `TileBrickBlue`
+- `9` = `TileBrickWhite`
+- `12` = `TileStonePaving`
+- `14` = `TilePlowed`
+- `20` = `TileConiferousForest`
+- `25` = `TileBroadleafForest`
+- `30` = `TileThicket`
+- `35` = `TileGrass`
+- `40` = `TileHeath`
+- `45` = `TileMoor`
+- `50` = `TileSwamp1`
+- `53` = `TileSwamp2`
+- `56` = `TileSwamp3`
+- `60` = `TileDirt`
+- `64` = `TileClay`
+- `68` = `TileSand`
+- `80` = `TileHouse`
+- `90` = `TileHouseCellar`
+- `100` = `TileMineEntry`
+- `105` = `TileMine`
+- `110` = `TileCave`
+- `120` = `TileMountain`
+- `255` = `TileVoid`
 
 ### Examples
 
 Allow only land-like tiles:
 
 ```json
-"allowedTiles": [10, 11, 17, 30]
+"allowedTiles": [12, 14, 35, 60]
 ```
 
 Disallow swamp/water:
 
 ```json
-"disallowedTiles": [1, 3, 23]
+"disallowedTiles": [1, 3, 50, 53, 56]
 ```
 
 ## `objectKey` (Build Result)
@@ -124,4 +140,3 @@ It must match an object in `data/objects`, for example:
 - input uses both `itemKey` and `itemTag`
 - input references unknown item key
 - total `qualityWeight == 0`
-
