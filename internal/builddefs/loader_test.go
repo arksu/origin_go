@@ -91,7 +91,7 @@ func TestLoadFromDirectory_SuccessNormalizationAndDefaults(t *testing.T) {
       ],
       "staminaCost": 0,
       "ticksRequired": 20,
-      "disallowedTiles": [` + fmt.Sprintf("%d, %d, %d", types.TileSwamp, types.TileWaterDeep, types.TileSwamp) + `],
+      "disallowedTiles": [` + fmt.Sprintf("%d, %d, %d", types.TileSwamp1, types.TileDeepWater, types.TileSwamp1) + `],
       "requiredSkills": [],
       "requiredDiscovery": [],
       "objectKey": "crate_obj"
@@ -127,7 +127,7 @@ func TestLoadFromDirectory_SuccessNormalizationAndDefaults(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "ore_crate", oreCrate.Name)
 	assert.Empty(t, oreCrate.AllowedTiles)
-	assert.Equal(t, []int{types.TileWaterDeep, types.TileSwamp}, oreCrate.DisallowedTiles)
+	assert.Equal(t, []int{types.TileDeepWater, types.TileSwamp1}, oreCrate.DisallowedTiles)
 	require.Len(t, oreCrate.Inputs, 2)
 	assert.Equal(t, "ore", oreCrate.Inputs[0].ItemTag)
 	assert.Equal(t, "branch", oreCrate.Inputs[1].ItemKey)
@@ -415,7 +415,7 @@ func TestLoadFromDirectory_ValidationErrors(t *testing.T) {
       "staminaCost": 1,
       "ticksRequired": 1,
       "allowedTiles": [` + fmt.Sprintf("%d", types.TileGrass) + `],
-      "disallowedTiles": [` + fmt.Sprintf("%d", types.TileSwamp) + `],
+      "disallowedTiles": [` + fmt.Sprintf("%d", types.TileSwamp1) + `],
       "objectKey": "campfire_obj"
     }`,
 			wantErr: "only one of allowedTiles or disallowedTiles",

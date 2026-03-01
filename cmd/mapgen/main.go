@@ -281,10 +281,10 @@ func (g *MapGenerator) boulderDefForTile(tile byte) *objectdefs.ObjectDef {
 
 func (g *MapGenerator) treeDefForTile(tile byte) *objectdefs.ObjectDef {
 	switch tile {
-	case types.TileForestPine:
+	case types.TileConiferousForest:
 		def, _ := g.objectDefs.GetByKey("tree_birch")
 		return def
-	case types.TileForestLeaf:
+	case types.TileBroadleafForest:
 		def, _ := g.objectDefs.GetByKey("tree_birch")
 		return def
 	}
@@ -308,10 +308,10 @@ func (g *MapGenerator) getTileType(worldX, worldY float64) byte {
 	temperature = (temperature + 1) / 2
 
 	if elevation < 0.25 {
-		return types.TileWaterDeep
+		return types.TileDeepWater
 	}
 	if elevation < 0.35 {
-		return types.TileWater
+		return types.TileShallowWater
 	}
 
 	if elevation < 0.42 {
@@ -320,9 +320,9 @@ func (g *MapGenerator) getTileType(worldX, worldY float64) byte {
 
 	if moisture > 0.6 {
 		if temperature > 0.5 {
-			return types.TileForestLeaf
+			return types.TileBroadleafForest
 		}
-		return types.TileForestPine
+		return types.TileConiferousForest
 	}
 
 	return types.TileGrass
