@@ -255,6 +255,7 @@ func (p *LiftCarryTransferParticipant) restoreCarryToShard(
 		return fmt.Errorf("failed to relocate restored carried object")
 	}
 
+	shard.liftService.reconcileMovementModeForCarry(shard.world, playerHandle)
 	shard.liftService.sendCarryState(req.PlayerID, true, state.ObjectEntityID)
 
 	if persistMovedObject {

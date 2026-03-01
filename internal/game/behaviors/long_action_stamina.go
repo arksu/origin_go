@@ -58,23 +58,23 @@ func ConsumePlayerLongActionStamina(
 			entityStats.Energy = currentEnergy
 		})
 	}
+	_, isCarrying := ecs.GetComponent[components.LiftCarryState](world, playerHandle)
 
 	modeMutated := ecs.MutateComponent[components.Movement](world, playerHandle, func(m *components.Movement) bool {
-		mode, canMove := entitystats.ResolveAllowedMoveMode(m.Mode, nextStamina, maxStamina, currentEnergy)
-		changed := false
-		if mode != m.Mode {
+		mode, canMove := entitystats.ResolveAllowedMoveModeWithCarry(
+			m.Mode,
+			nextStamina,
+			maxStamina,
+			currentEnergy,
+			isCarrying,
+		)
+		changed := mode != m.Mode
+		if changed {
 			m.Mode = mode
-			changed = true
 		}
-		if !canMove {
-			if m.Mode != constt.Crawl {
-				m.Mode = constt.Crawl
-				changed = true
-			}
-			if m.State == constt.StateMoving {
-				m.ClearTarget()
-				changed = true
-			}
+		if !canMove && m.State == constt.StateMoving {
+			m.ClearTarget()
+			changed = true
 		}
 		return changed
 	})

@@ -4,10 +4,12 @@ import (
 	"slices"
 	"time"
 
+	"origin/internal/characterattrs"
 	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
@@ -543,6 +545,7 @@ func (s *LiftService) startCarryingObject(
 		return false
 	}
 
+	s.reconcileMovementModeForCarry(w, playerHandle)
 	s.sendCarryState(playerID, true, targetID)
 	return true
 }
@@ -603,6 +606,61 @@ func (s *LiftService) clearPendingLiftTransitionState(w *ecs.World, playerID typ
 
 func (s *LiftService) clearPendingInteractionIntents(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
 	systems.ClearPlayerInteractionIntents(w, playerHandle, playerID)
+}
+
+func (s *LiftService) reconcileMovementModeForCarry(w *ecs.World, playerHandle types.Handle) {
+	if s == nil || w == nil || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return
+	}
+	movement, hasMovement := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !hasMovement {
+		return
+	}
+	_, isCarrying := ecs.GetComponent[components.LiftCarryState](w, playerHandle)
+
+	currentStamina := 1.0
+	maxStamina := 1.0
+	currentEnergy := 0.0
+	if stats, hasStats := ecs.GetComponent[components.EntityStats](w, playerHandle); hasStats {
+		con := characterattrs.DefaultValue
+		if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, playerHandle); hasProfile {
+			con = characterattrs.Get(profile.Attributes, characterattrs.CON)
+		}
+		maxStamina = entitystats.MaxStaminaFromCon(con)
+		currentStamina = entitystats.ClampStamina(stats.Stamina, maxStamina)
+		currentEnergy = stats.Energy
+		if currentEnergy < 0 {
+			currentEnergy = 0
+		}
+	}
+
+	allowedMode, canMove := entitystats.ResolveAllowedMoveModeWithCarry(
+		movement.Mode,
+		currentStamina,
+		maxStamina,
+		currentEnergy,
+		isCarrying,
+	)
+	modeChanged := movement.Mode != allowedMode
+	forceStopped := !canMove && movement.State == _const.StateMoving
+
+	if modeChanged || !canMove {
+		ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+			m.Mode = allowedMode
+			if !canMove && m.State == _const.StateMoving {
+				m.ClearTarget()
+			}
+		})
+		ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
+	}
+
+	if forceStopped {
+		transform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+		if !hasTransform {
+			return
+		}
+		ecs.GetResource[ecs.MovedEntities](w).Add(playerHandle, transform.X, transform.Y)
+	}
 }
 
 func (s *LiftService) stopPlayerMovementNow(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {

@@ -61,6 +61,16 @@ func SwimStaminaCostPerTick(con int) float64 {
 }
 
 func ResolveAllowedMoveMode(mode constt.MoveMode, stamina float64, maxStamina float64, energy float64) (constt.MoveMode, bool) {
+	return ResolveAllowedMoveModeWithCarry(mode, stamina, maxStamina, energy, false)
+}
+
+func ResolveAllowedMoveModeWithCarry(
+	mode constt.MoveMode,
+	stamina float64,
+	maxStamina float64,
+	energy float64,
+	isCarrying bool,
+) (constt.MoveMode, bool) {
 	if mode > constt.Swim {
 		mode = constt.Walk
 	}
@@ -83,14 +93,26 @@ func ResolveAllowedMoveMode(mode constt.MoveMode, stamina float64, maxStamina fl
 	}
 	if stamina < maxStamina*constt.StaminaNoRunThresholdPercent {
 		if mode == constt.Run || mode == constt.FastRun {
-			return constt.Walk, true
+			mode = constt.Walk
 		}
-		return mode, true
+		return applyCarryMoveCap(mode, isCarrying), true
 	}
 	if stamina < maxStamina*constt.StaminaNoFastRunThresholdPercent && mode == constt.FastRun {
-		return constt.Run, true
+		mode = constt.Run
 	}
-	return mode, true
+	return applyCarryMoveCap(mode, isCarrying), true
+}
+
+func applyCarryMoveCap(mode constt.MoveMode, isCarrying bool) constt.MoveMode {
+	if !isCarrying {
+		return mode
+	}
+	switch mode {
+	case constt.Run, constt.FastRun, constt.Swim:
+		return constt.Walk
+	default:
+		return mode
+	}
 }
 
 func LongActionStaminaFloor(maxStamina float64) float64 {
