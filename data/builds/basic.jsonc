@@ -22,9 +22,7 @@
       "ticksRequired": 20,
       "requiredSkills": [],
       "requiredDiscovery": [],
-      "allowedTiles": [
-        32
-      ],
+      "allowedTiles": [],
       "objectKey": "box"
     },
     {
@@ -42,9 +40,7 @@
       "ticksRequired": 20,
       "requiredSkills": [],
       "requiredDiscovery": [],
-      "allowedTiles": [
-        32
-      ],
+      "allowedTiles": [],
       "objectKey": "kiln"
     },
     {

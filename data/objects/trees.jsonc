@@ -232,6 +232,1571 @@
       }
     },
     {
+      "defId": 5,
+      "key": "tree_pine",
+      "name": "Pine Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/pine/6",
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_pine",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_pine",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 6,
+      "key": "stump_pine",
+      "name": "Pine Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/pine/stump"
+    },
+    {
+      "defId": 20,
+      "key": "tree_oak",
+      "name": "Oak Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/oak/1",
+      "appearance": [
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "tree.stage1"
+            ]
+          },
+          "resource": "trees/oak/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "tree.stage2"
+            ]
+          },
+          "resource": "trees/oak/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "tree.stage3"
+            ]
+          },
+          "resource": "trees/oak/3"
+        },
+        {
+          "id": "stage4",
+          "when": {
+            "flags": [
+              "tree.stage4"
+            ]
+          },
+          "resource": "trees/oak/4"
+        },
+        {
+          "id": "stage5",
+          "when": {
+            "flags": [
+              "tree.stage5"
+            ]
+          },
+          "resource": "trees/oak/5"
+        },
+        {
+          "id": "stage6",
+          "when": {
+            "flags": [
+              "tree.stage6"
+            ]
+          },
+          "resource": "trees/oak/6"
+        }
+      ],
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_oak",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_oak",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 21,
+      "key": "stump_oak",
+      "name": "Oak Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/oak/stump"
+    },
+    {
+      "defId": 22,
+      "key": "tree_apple",
+      "name": "Apple Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/apple/1",
+      "appearance": [
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "tree.stage1"
+            ]
+          },
+          "resource": "trees/apple/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "tree.stage2"
+            ]
+          },
+          "resource": "trees/apple/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "tree.stage3"
+            ]
+          },
+          "resource": "trees/apple/3"
+        },
+        {
+          "id": "stage4",
+          "when": {
+            "flags": [
+              "tree.stage4"
+            ]
+          },
+          "resource": "trees/apple/4"
+        },
+        {
+          "id": "stage5",
+          "when": {
+            "flags": [
+              "tree.stage5"
+            ]
+          },
+          "resource": "trees/apple/5"
+        },
+        {
+          "id": "stage6",
+          "when": {
+            "flags": [
+              "tree.stage6"
+            ]
+          },
+          "resource": "trees/apple/6"
+        }
+      ],
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_apple",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_apple",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 23,
+      "key": "stump_apple",
+      "name": "Apple Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/apple/stump"
+    },
+    {
+      "defId": 24,
+      "key": "tree_maple",
+      "name": "Maple Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/maple/6",
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_maple",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_maple",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 25,
+      "key": "stump_maple",
+      "name": "Maple Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/maple/stump"
+    },
+    {
+      "defId": 26,
+      "key": "tree_yew",
+      "name": "Yew Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/yew/1",
+      "appearance": [
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "tree.stage1"
+            ]
+          },
+          "resource": "trees/yew/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "tree.stage2"
+            ]
+          },
+          "resource": "trees/yew/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "tree.stage3"
+            ]
+          },
+          "resource": "trees/yew/3"
+        },
+        {
+          "id": "stage4",
+          "when": {
+            "flags": [
+              "tree.stage4"
+            ]
+          },
+          "resource": "trees/yew/4"
+        },
+        {
+          "id": "stage5",
+          "when": {
+            "flags": [
+              "tree.stage5"
+            ]
+          },
+          "resource": "trees/yew/5"
+        },
+        {
+          "id": "stage6",
+          "when": {
+            "flags": [
+              "tree.stage6"
+            ]
+          },
+          "resource": "trees/yew/6"
+        }
+      ],
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_yew",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_yew",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 27,
+      "key": "stump_yew",
+      "name": "Yew Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/yew/stump"
+    },
+    {
+      "defId": 28,
+      "key": "tree_elm",
+      "name": "Elm Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/elm/6",
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_elm",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_elm",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 29,
+      "key": "stump_elm",
+      "name": "Elm Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/elm/stump"
+    },
+    {
+      "defId": 30,
+      "key": "tree_hazel",
+      "name": "Hazel Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/hazel/6",
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_hazel",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_hazel",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 31,
+      "key": "stump_hazel",
+      "name": "Hazel Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/hazel/stump"
+    },
+    {
+      "defId": 32,
+      "key": "tree_willow",
+      "name": "Willow Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/willow/6",
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_willow",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_willow",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 33,
+      "key": "stump_willow",
+      "name": "Willow Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/willow/stump"
+    },
+    {
+      "defId": 34,
+      "key": "tree_fir",
+      "name": "Fir Tree",
+      "static": true,
+      "hp": 100,
+      "contextMenuEvenForOneItem": true,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/fir/1",
+      "appearance": [
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "tree.stage1"
+            ]
+          },
+          "resource": "trees/fir/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "tree.stage2"
+            ]
+          },
+          "resource": "trees/fir/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "tree.stage3"
+            ]
+          },
+          "resource": "trees/fir/3"
+        },
+        {
+          "id": "stage4",
+          "when": {
+            "flags": [
+              "tree.stage4"
+            ]
+          },
+          "resource": "trees/fir/4"
+        },
+        {
+          "id": "stage5",
+          "when": {
+            "flags": [
+              "tree.stage5"
+            ]
+          },
+          "resource": "trees/fir/5"
+        },
+        {
+          "id": "stage6",
+          "when": {
+            "flags": [
+              "tree.stage6"
+            ]
+          },
+          "resource": "trees/fir/6"
+        }
+      ],
+      "behaviors": {
+        "tree": {
+          "priority": 20,
+          "stages": [
+            {
+              "chopPointsTotal": 1,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 2,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "branch",
+                "branch",
+                "branch",
+                "branch",
+                "branch"
+              ],
+              "take": []
+            },
+            {
+              "chopPointsTotal": 3,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 4,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [],
+              "spawnChopItem": [
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood",
+                "block_of_wood"
+              ],
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 4
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 5,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_fir",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "chopPointsTotal": 6,
+              "stageDurationTicks": 60,
+              "allowChop": true,
+              "spawnChopObject": [
+                "log",
+                "log"
+              ],
+              "spawnChopItem": [],
+              "transformToDefKey": "stump_fir",
+              "take": [
+                {
+                  "id": "take_branch",
+                  "name": "Take Branch",
+                  "itemDefKey": "branch",
+                  "count": 7
+                },
+                {
+                  "id": "take_bark",
+                  "name": "Take Bark",
+                  "itemDefKey": "bark",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 35,
+      "key": "stump_fir",
+      "name": "Fir Stump",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 10,
+          "h": 10,
+          "layer": 1,
+          "mask": 1
+        }
+      },
+      "resource": "trees/fir/stump"
+    },
+    {
       "defId": 2,
       "key": "stump_birch",
       "name": "Birch Stump",

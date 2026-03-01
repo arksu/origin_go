@@ -282,7 +282,7 @@ func (g *MapGenerator) boulderDefForTile(tile byte) *objectdefs.ObjectDef {
 func (g *MapGenerator) treeDefForTile(tile byte) *objectdefs.ObjectDef {
 	switch tile {
 	case types.TileConiferousForest:
-		def, _ := g.objectDefs.GetByKey("tree_birch")
+		def, _ := g.objectDefs.GetByKey("tree_pine")
 		return def
 	case types.TileBroadleafForest:
 		def, _ := g.objectDefs.GetByKey("tree_birch")
