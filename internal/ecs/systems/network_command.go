@@ -656,9 +656,17 @@ func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, player
 	if !hasMovement {
 		return false
 	}
+	_, isCarrying := ecs.GetComponent[components.LiftCarryState](w, playerHandle)
 
 	stats, hasStats := ecs.GetComponent[components.EntityStats](w, playerHandle)
 	if !hasStats {
+		allowedMode, _ := entitystats.ResolveAllowedMoveModeWithCarry(movement.Mode, 1, 1, 0, isCarrying)
+		if movement.Mode != allowedMode {
+			ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+				m.Mode = allowedMode
+			})
+			ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
+		}
 		return true
 	}
 
@@ -680,24 +688,25 @@ func (s *NetworkCommandSystem) enforceMovementModeByStamina(w *ecs.World, player
 		ecs.UpdateEntityStatsRegenSchedule(w, playerHandle, currentStamina, currentEnergy, maxStamina)
 	}
 
-	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina, currentEnergy)
+	allowedMode, canMove := entitystats.ResolveAllowedMoveModeWithCarry(
+		movement.Mode,
+		currentStamina,
+		maxStamina,
+		currentEnergy,
+		isCarrying,
+	)
 	modeChanged := movement.Mode != allowedMode
-	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
-		m.Mode = allowedMode
-	})
-	if modeChanged {
+	if modeChanged || !canMove {
+		ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+			m.Mode = allowedMode
+		})
 		ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
 	}
-	if canMove {
-		return true
+	if !canMove {
+		s.stopMovementAndEmit(w, playerHandle)
+		return false
 	}
-
-	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
-		m.Mode = constt.Crawl
-	})
-	ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
-	s.stopMovementAndEmit(w, playerHandle)
-	return false
+	return true
 }
 
 func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle types.Handle) {

@@ -70,13 +70,14 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				stats.Stamina = clampedStamina
 			}
 
-			allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, stats.Stamina, maxStamina, stats.Energy)
-			if movement.Mode != allowedMode {
-				ecs.WithComponent(w, h, func(m *components.Movement) {
-					m.Mode = allowedMode
-				})
-				ecs.MarkMovementModeDirtyByHandle(w, h)
-			}
+			_, isCarrying := ecs.GetComponent[components.LiftCarryState](w, h)
+			allowedMode, canMove := entitystats.ResolveAllowedMoveModeWithCarry(
+				movement.Mode,
+				stats.Stamina,
+				maxStamina,
+				stats.Energy,
+				isCarrying,
+			)
 			if !canMove {
 				ecs.WithComponent(w, h, func(m *components.Movement) {
 					m.Mode = constt.Crawl
@@ -85,6 +86,12 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				ecs.MarkMovementModeDirtyByHandle(w, h)
 				movedEntities.Add(h, transform.X, transform.Y)
 				return
+			}
+			if movement.Mode != allowedMode {
+				ecs.WithComponent(w, h, func(m *components.Movement) {
+					m.Mode = allowedMode
+				})
+				ecs.MarkMovementModeDirtyByHandle(w, h)
 			}
 			movement.Mode = allowedMode
 		}

@@ -66,3 +66,36 @@ func TestCanConsumeLongActionStamina(t *testing.T) {
 		t.Fatalf("expected consume to pass at exact floor")
 	}
 }
+
+func TestResolveAllowedMoveModeWithCarry_CapsRunModes(t *testing.T) {
+	max := 100.0
+
+	mode, canMove := ResolveAllowedMoveModeWithCarry(constt.Run, 90, max, 1000, true)
+	if !canMove || mode != constt.Walk {
+		t.Fatalf("expected carry run to downgrade to walk, got mode=%v canMove=%v", mode, canMove)
+	}
+
+	mode, canMove = ResolveAllowedMoveModeWithCarry(constt.FastRun, 90, max, 1000, true)
+	if !canMove || mode != constt.Walk {
+		t.Fatalf("expected carry fast run to downgrade to walk, got mode=%v canMove=%v", mode, canMove)
+	}
+
+	mode, canMove = ResolveAllowedMoveModeWithCarry(constt.Swim, 90, max, 1000, true)
+	if !canMove || mode != constt.Walk {
+		t.Fatalf("expected carry swim to downgrade to walk, got mode=%v canMove=%v", mode, canMove)
+	}
+}
+
+func TestResolveAllowedMoveModeWithCarry_PrioritizesOverstuffedAndNoMove(t *testing.T) {
+	max := 100.0
+
+	mode, canMove := ResolveAllowedMoveModeWithCarry(constt.FastRun, 90, max, 1001, true)
+	if !canMove || mode != constt.Crawl {
+		t.Fatalf("expected carry overstuffed to force crawl, got mode=%v canMove=%v", mode, canMove)
+	}
+
+	mode, canMove = ResolveAllowedMoveModeWithCarry(constt.Run, 4, max, 1000, true)
+	if canMove || mode != constt.Crawl {
+		t.Fatalf("expected carry below no-move threshold to stop movement, got mode=%v canMove=%v", mode, canMove)
+	}
+}

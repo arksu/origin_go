@@ -224,7 +224,14 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		}
 	}
 
-	allowedMode, canMove := entitystats.ResolveAllowedMoveMode(movement.Mode, currentStamina, maxStamina, currentEnergy)
+	_, isCarrying := ecs.GetComponent[components.LiftCarryState](w, handle)
+	allowedMode, canMove := entitystats.ResolveAllowedMoveModeWithCarry(
+		movement.Mode,
+		currentStamina,
+		maxStamina,
+		currentEnergy,
+		isCarrying,
+	)
 	modeChanged := movement.Mode != allowedMode
 	forceStopped := false
 	if !canMove && movement.State == constt.StateMoving {
@@ -242,13 +249,8 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	if modeChanged || !canMove {
 		ecs.WithComponent(w, handle, func(m *components.Movement) {
 			m.Mode = allowedMode
-			if !canMove {
-				if m.Mode != constt.Crawl {
-					m.Mode = constt.Crawl
-				}
-				if m.State == constt.StateMoving {
-					m.ClearTarget()
-				}
+			if !canMove && m.State == constt.StateMoving {
+				m.ClearTarget()
 			}
 		})
 		ecs.MarkMovementModeDirtyByHandle(w, handle)
