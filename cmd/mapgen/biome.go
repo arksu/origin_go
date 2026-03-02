@@ -272,13 +272,6 @@ func classifyBaseTileFromBiome(
 	x int,
 	y int,
 ) byte {
-	if elevation < deepWaterThreshold {
-		return tileWaterDeep
-	}
-	if elevation < shallowWaterThreshold {
-		return tileWater
-	}
-
 	// Inland shoreline sand is handled in a dedicated post-pass so lakes/rivers
 	// do not get a hard sand ring from elevation alone.
 	if signals.Moisture < 0.22 && signals.Temperature > 0.62 && signals.Continentalness > 0.45 {
