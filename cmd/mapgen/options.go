@@ -21,6 +21,14 @@ type RiverOptions struct {
 	LayoutDraw             bool    `yaml:"layout_draw"`
 	MajorRiverCount        int     `yaml:"major_count"`
 	LakeCount              int     `yaml:"lake_count"`
+	LakeSizeSmallMin       int     `yaml:"lake_size_small_min"`
+	LakeSizeSmallMax       int     `yaml:"lake_size_small_max"`
+	LakeSizeMediumMin      int     `yaml:"lake_size_medium_min"`
+	LakeSizeMediumMax      int     `yaml:"lake_size_medium_max"`
+	LakeSizeLargeMin       int     `yaml:"lake_size_large_min"`
+	LakeSizeLargeMax       int     `yaml:"lake_size_large_max"`
+	LakeSizeMediumChance   float64 `yaml:"lake_size_medium_chance"`
+	LakeSizeLargeChance    float64 `yaml:"lake_size_large_chance"`
 	LakeBorderMix          float64 `yaml:"lake_border_mix"`
 	MaxLakeDegree          int     `yaml:"max_lake_degree"`
 	ShapeLongMeanderScale  float64 `yaml:"shape_long_meander_scale"`
@@ -125,6 +133,14 @@ func DefaultMapgenOptions() MapgenOptions {
 			LayoutDraw:             true,
 			MajorRiverCount:        30,
 			LakeCount:              220,
+			LakeSizeSmallMin:       10,
+			LakeSizeSmallMax:       30,
+			LakeSizeMediumMin:      36,
+			LakeSizeMediumMax:      88,
+			LakeSizeLargeMin:       96,
+			LakeSizeLargeMax:       240,
+			LakeSizeMediumChance:   0.24,
+			LakeSizeLargeChance:    0.04,
 			LakeBorderMix:          0.35,
 			MaxLakeDegree:          2,
 			ShapeLongMeanderScale:  0.55,
@@ -318,6 +334,33 @@ func (o MapgenOptions) Validate() error {
 	}
 	if o.River.LakeCount <= 1 {
 		return errors.New("river.lake_count must be > 1")
+	}
+	if o.River.LakeSizeSmallMin < 0 || o.River.LakeSizeSmallMax < 0 {
+		return errors.New("river lake small size bounds must be >= 0")
+	}
+	if o.River.LakeSizeSmallMin > 0 && o.River.LakeSizeSmallMax > 0 && o.River.LakeSizeSmallMax < o.River.LakeSizeSmallMin {
+		return errors.New("river.lake_size_small_max must be >= river.lake_size_small_min")
+	}
+	if o.River.LakeSizeMediumMin < 0 || o.River.LakeSizeMediumMax < 0 {
+		return errors.New("river lake medium size bounds must be >= 0")
+	}
+	if o.River.LakeSizeMediumMin > 0 && o.River.LakeSizeMediumMax > 0 && o.River.LakeSizeMediumMax < o.River.LakeSizeMediumMin {
+		return errors.New("river.lake_size_medium_max must be >= river.lake_size_medium_min")
+	}
+	if o.River.LakeSizeLargeMin < 0 || o.River.LakeSizeLargeMax < 0 {
+		return errors.New("river lake large size bounds must be >= 0")
+	}
+	if o.River.LakeSizeLargeMin > 0 && o.River.LakeSizeLargeMax > 0 && o.River.LakeSizeLargeMax < o.River.LakeSizeLargeMin {
+		return errors.New("river.lake_size_large_max must be >= river.lake_size_large_min")
+	}
+	if o.River.LakeSizeMediumChance < 0 || o.River.LakeSizeMediumChance > 1 {
+		return errors.New("river.lake_size_medium_chance must be within [0,1]")
+	}
+	if o.River.LakeSizeLargeChance < 0 || o.River.LakeSizeLargeChance > 1 {
+		return errors.New("river.lake_size_large_chance must be within [0,1]")
+	}
+	if o.River.LakeSizeMediumChance+o.River.LakeSizeLargeChance > 0.95 {
+		return errors.New("river lake size chance sum must be <= 0.95")
 	}
 	if o.River.LakeBorderMix < 0 || o.River.LakeBorderMix > 1 {
 		return errors.New("river.lake_border_mix must be within [0,1]")

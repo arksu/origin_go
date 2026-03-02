@@ -493,13 +493,21 @@ func TestDrawLayoutLakeConnectivityChanceAffectsRiverDensity(t *testing.T) {
 
 	base := DefaultMapgenOptions().River
 	base.LayoutDraw = true
-	base.MajorRiverCount = 24
+	base.MajorRiverCount = 10
 	base.LakeCount = 90
 	base.LakeBorderMix = 0.35
-	base.MaxLakeDegree = 3
+	base.MaxLakeDegree = 5
 	base.LakeConnectionLimit = 120
 	base.RiverWidthMin = 5
 	base.RiverWidthMax = 5
+	base.LakeSizeSmallMin = 8
+	base.LakeSizeSmallMax = 14
+	base.LakeSizeMediumMin = 16
+	base.LakeSizeMediumMax = 22
+	base.LakeSizeLargeMin = 24
+	base.LakeSizeLargeMax = 30
+	base.LakeSizeMediumChance = 0.22
+	base.LakeSizeLargeChance = 0.02
 	base.FlowShallowThreshold = 2
 	base.FlowDeepThreshold = 3
 
@@ -597,6 +605,59 @@ func TestDrawLayoutAvoidsTinyIsolatedRiverDots(t *testing.T) {
 	smallComponents := countRiverComponentsAtMostSize(network.Class, width, height, 24)
 	if smallComponents > 0 {
 		t.Fatalf("expected no tiny isolated river components, got %d", smallComponents)
+	}
+}
+
+func TestGenerateDrawLakesProducesVariedSizesAndShapes(t *testing.T) {
+	opts := DefaultMapgenOptions().River
+	opts.LayoutDraw = true
+	opts.LakeCount = 120
+	opts.LakeSizeSmallMin = 8
+	opts.LakeSizeSmallMax = 18
+	opts.LakeSizeMediumMin = 22
+	opts.LakeSizeMediumMax = 44
+	opts.LakeSizeLargeMin = 52
+	opts.LakeSizeLargeMax = 72
+	opts.LakeSizeMediumChance = 0.30
+	opts.LakeSizeLargeChance = 0.08
+
+	lakes := generateDrawLakes(1024, 1024, 777, opts)
+	if len(lakes) < 80 {
+		t.Fatalf("expected many lakes, got %d", len(lakes))
+	}
+
+	minRadius := 1 << 30
+	maxRadius := 0
+	nonCircular := 0
+	largeCount := 0
+	lobeVariety := make(map[int]struct{})
+	for _, lake := range lakes {
+		if lake.Radius < minRadius {
+			minRadius = lake.Radius
+		}
+		if lake.Radius > maxRadius {
+			maxRadius = lake.Radius
+		}
+		if lake.RadiusX != lake.RadiusY {
+			nonCircular++
+		}
+		if lake.Radius >= opts.LakeSizeLargeMin {
+			largeCount++
+		}
+		lobeVariety[lake.LobeCount] = struct{}{}
+	}
+
+	if maxRadius-minRadius < 3 {
+		t.Fatalf("expected varied lake sizes, min=%d max=%d", minRadius, maxRadius)
+	}
+	if nonCircular == 0 {
+		t.Fatalf("expected non-circular lakes")
+	}
+	if len(lobeVariety) < 2 {
+		t.Fatalf("expected variety in lake shape lobes")
+	}
+	if largeCount == 0 {
+		t.Fatalf("expected at least one large lake")
 	}
 }
 

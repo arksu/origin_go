@@ -278,11 +278,14 @@ func classifyBaseTileFromBiome(
 	if elevation < shallowWaterThreshold {
 		return tileWater
 	}
-	if elevation < sandThreshold {
-		if opts.HNHEnabled && signals.Wetness > 0.66 && coordHash01(seed, x, y, biomeVariantSalt^0x01) < opts.VariantDensity*0.25 {
-			return tileClay
-		}
+
+	// Inland shoreline sand is handled in a dedicated post-pass so lakes/rivers
+	// do not get a hard sand ring from elevation alone.
+	if signals.Moisture < 0.22 && signals.Temperature > 0.62 && signals.Continentalness > 0.45 {
 		return tileSand
+	}
+	if opts.HNHEnabled && signals.Wetness > 0.68 && coordHash01(seed, x, y, biomeVariantSalt^0x01) < opts.VariantDensity*0.18 {
+		return tileClay
 	}
 
 	if !opts.Enabled {

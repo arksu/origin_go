@@ -47,6 +47,26 @@ func TestMapgenOptionsValidateRejectsInvalid(t *testing.T) {
 			},
 		},
 		{
+			name: "river medium lake chance range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.LakeSizeMediumChance = 1.1
+			},
+		},
+		{
+			name: "river lake size chance sum",
+			mut: func(opts *MapgenOptions) {
+				opts.River.LakeSizeMediumChance = 0.7
+				opts.River.LakeSizeLargeChance = 0.4
+			},
+		},
+		{
+			name: "river large lake bounds ordering",
+			mut: func(opts *MapgenOptions) {
+				opts.River.LakeSizeLargeMin = 80
+				opts.River.LakeSizeLargeMax = 60
+			},
+		},
+		{
 			name: "river lake border mix range",
 			mut: func(opts *MapgenOptions) {
 				opts.River.LakeBorderMix = -0.1
