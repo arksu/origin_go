@@ -132,12 +132,6 @@ func parallelForRows(height int, threads int, fn func(y int)) {
 }
 
 func resolveTileType(elevation float64, baseTile byte, rc RiverClass, riverEnabled bool) byte {
-	if elevation < deepWaterThreshold {
-		return tileWaterDeep
-	}
-	if elevation < shallowWaterThreshold {
-		return tileWater
-	}
 	if riverEnabled {
 		switch rc {
 		case riverDeep:
