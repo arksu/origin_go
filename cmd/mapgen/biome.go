@@ -27,6 +27,9 @@ const (
 	biomeBlendSalt        = uint64(0xC984E2A58A77DD21)
 	biomeVariantSalt      = uint64(0xDEADBEEF1248AA55)
 	biomeEdgeNoiseSalt    = uint64(0x1B6F2D7E89AC55D3)
+	biomeWarpXSalt        = uint64(0x9C1245AA7E31D095)
+	biomeWarpYSalt        = uint64(0xB77A6D4E1F89C213)
+	biomeSelectorSalt     = uint64(0xE31F55A9CC7284D0)
 )
 
 type biomeMacroLayout struct {
@@ -34,6 +37,8 @@ type biomeMacroLayout struct {
 	gridY      int
 	cellWidth  int
 	cellHeight int
+	width      int
+	height     int
 	blendWidth float64
 	points     []biomeMacroPoint
 }
@@ -51,6 +56,8 @@ func buildBiomeMacroLayout(width, height int, seed int64, opts BiomeOptions) bio
 			gridY:      1,
 			cellWidth:  maxInt(1, width),
 			cellHeight: maxInt(1, height),
+			width:      maxInt(1, width),
+			height:     maxInt(1, height),
 			blendWidth: 0,
 			points: []biomeMacroPoint{
 				{
@@ -110,6 +117,8 @@ func buildBiomeMacroLayout(width, height int, seed int64, opts BiomeOptions) bio
 		gridY:      gridY,
 		cellWidth:  cellWidth,
 		cellHeight: cellHeight,
+		width:      width,
+		height:     height,
 		blendWidth: float64(maxInt(0, opts.BlendWidth)),
 		points:     points,
 	}
@@ -154,26 +163,72 @@ func assignMacroFamilies(cellCount int, seed int64, opts BiomeOptions) []biomeFa
 	return families
 }
 
-func (m biomeMacroLayout) familyAt(x, y int, seed int64, jitter int) biomeFamily {
+func (m biomeMacroLayout) familyAt(x, y int, seed int64, opts BiomeOptions) biomeFamily {
 	if len(m.points) == 0 {
 		return biomeFamilyGrassland
 	}
 
-	centerGX := minInt(maxInt(0, x/m.cellWidth), m.gridX-1)
-	centerGY := minInt(maxInt(0, y/m.cellHeight), m.gridY-1)
+	queryX := float64(x)
+	queryY := float64(y)
+
+	cellMinSize := float64(maxInt(1, minInt(m.cellWidth, m.cellHeight)))
+	blendWidth := m.blendWidth
+	if blendWidth <= 0 {
+		blendWidth = cellMinSize * 0.25
+	}
+
+	// Domain-warp the macro lookup so Voronoi borders curve instead of
+	// forming straight cell-edge artifacts.
+	warpStrength := cellMinSize*0.34 + float64(opts.RegionJitter)*0.16 + blendWidth*0.10
+	if opts.DomainWarpStrength > 0 {
+		warpStrength += math.Min(opts.DomainWarpStrength, cellMinSize) * 0.30
+	}
+	maxWarp := cellMinSize*0.95 + blendWidth*0.55 + 24
+	warpStrength = clampFloat(warpStrength, 0, maxWarp)
+	if warpStrength > 0 {
+		longScale := maxFloat64(64.0, cellMinSize*1.65)
+		shortScale := maxFloat64(20.0, cellMinSize*0.72)
+
+		warpLongX := smoothHashNoise2D(seed, queryX+137.3, queryY-53.7, longScale, biomeWarpXSalt)
+		warpLongY := smoothHashNoise2D(seed, queryX-92.1, queryY+118.4, longScale, biomeWarpYSalt)
+		warpShortX := smoothHashNoise2D(seed, queryX-29.2, queryY+79.5, shortScale, biomeWarpXSalt^biomeBlendSalt)
+		warpShortY := smoothHashNoise2D(seed, queryX+63.7, queryY-41.6, shortScale, biomeWarpYSalt^biomeBlendSalt)
+
+		warpX := ((warpLongX-0.5)*0.68 + (warpShortX-0.5)*0.32) * 2 * warpStrength
+		warpY := ((warpLongY-0.5)*0.68 + (warpShortY-0.5)*0.32) * 2 * warpStrength
+
+		if m.width > 0 {
+			queryX = clampFloat(queryX+warpX, 0, float64(m.width-1))
+		} else {
+			queryX += warpX
+		}
+		if m.height > 0 {
+			queryY = clampFloat(queryY+warpY, 0, float64(m.height-1))
+		} else {
+			queryY += warpY
+		}
+	}
+
+	centerGX := minInt(maxInt(0, int(queryX)/m.cellWidth), m.gridX-1)
+	centerGY := minInt(maxInt(0, int(queryY)/m.cellHeight), m.gridY-1)
+
+	searchRadius := 1
+	if cellMinSize > 0 {
+		padding := blendWidth + warpStrength*0.6
+		searchRadius += int(math.Ceil(padding / cellMinSize))
+	}
+	searchRadius = minInt(3, maxInt(1, searchRadius))
 
 	nearestDist2 := math.MaxFloat64
 	secondDist2 := math.MaxFloat64
 	nearestFamily := biomeFamilyGrassland
 	secondFamily := biomeFamilyGrassland
 
-	// Points are stored per grid cell, so 3x3 neighbor lookup gives near-Voronoi
-	// regions without expensive all-point scans.
-	for gy := centerGY - 1; gy <= centerGY+1; gy++ {
+	for gy := centerGY - searchRadius; gy <= centerGY+searchRadius; gy++ {
 		if gy < 0 || gy >= m.gridY {
 			continue
 		}
-		for gx := centerGX - 1; gx <= centerGX+1; gx++ {
+		for gx := centerGX - searchRadius; gx <= centerGX+searchRadius; gx++ {
 			if gx < 0 || gx >= m.gridX {
 				continue
 			}
@@ -182,8 +237,8 @@ func (m biomeMacroLayout) familyAt(x, y int, seed int64, jitter int) biomeFamily
 				continue
 			}
 			point := m.points[idx]
-			dx := float64(x) - point.X
-			dy := float64(y) - point.Y
+			dx := queryX - point.X
+			dy := queryY - point.Y
 			dist2 := dx*dx + dy*dy
 			if dist2 < nearestDist2 {
 				secondDist2 = nearestDist2
@@ -197,7 +252,7 @@ func (m biomeMacroLayout) familyAt(x, y int, seed int64, jitter int) biomeFamily
 		}
 	}
 
-	if nearestFamily == secondFamily || m.blendWidth <= 0 {
+	if nearestFamily == secondFamily {
 		return nearestFamily
 	}
 
@@ -209,20 +264,41 @@ func (m biomeMacroLayout) familyAt(x, y int, seed int64, jitter int) biomeFamily
 
 	// Approximate distance to Voronoi boundary between nearest and second site.
 	boundaryDistance := (secondDist - nearestDist) * 0.5
-	blendWidth := m.blendWidth
-	if blendWidth == 0 || boundaryDistance >= blendWidth {
+	if blendWidth <= 0 {
+		blendWidth = cellMinSize * 0.25
+	}
+	if blendWidth <= 0 || boundaryDistance >= blendWidth*1.35 {
 		return nearestFamily
 	}
 
-	noiseScale := maxFloat64(12.0, blendWidth*0.65)
-	if jitter > 0 {
-		noiseScale = maxFloat64(8.0, noiseScale-float64(jitter)*0.08)
+	edgePrimaryScale := maxFloat64(18.0, blendWidth*0.72)
+	edgeSecondaryScale := maxFloat64(8.0, blendWidth*0.28)
+	if opts.RegionJitter > 0 {
+		edgePrimaryScale = maxFloat64(14.0, edgePrimaryScale-float64(opts.RegionJitter)*0.03)
 	}
-	coherentNoise := smoothHashNoise2D(seed, float64(x), float64(y), noiseScale, biomeEdgeNoiseSalt)
-	offset := (coherentNoise - 0.5) * blendWidth * 0.9
-	if nearestDist+offset > secondDist {
+
+	edgeNoiseLarge := smoothHashNoise2D(seed, queryX, queryY, edgePrimaryScale, biomeEdgeNoiseSalt)
+	edgeNoiseSmall := smoothHashNoise2D(seed, queryX+43.5, queryY-27.1, edgeSecondaryScale, biomeEdgeNoiseSalt^0x5A5A)
+	edgeNoise := edgeNoiseLarge*0.65 + edgeNoiseSmall*0.35
+	warpedBoundaryDistance := boundaryDistance + (edgeNoise-0.5)*blendWidth*1.55
+
+	if warpedBoundaryDistance >= blendWidth {
+		return nearestFamily
+	}
+	if warpedBoundaryDistance <= -blendWidth {
 		return secondFamily
 	}
+
+	transition := 0.5 - warpedBoundaryDistance/(2*blendWidth)
+	transition = clampFloat(transition, 0, 1)
+	transition = transition * transition * (3 - 2*transition)
+
+	selectorScale := maxFloat64(10.0, blendWidth*0.30)
+	selector := smoothHashNoise2D(seed, queryX+11.4, queryY-19.8, selectorScale, biomeSelectorSalt)
+	if selector < transition {
+		return secondFamily
+	}
+
 	return nearestFamily
 }
 
@@ -475,6 +551,76 @@ func smoothBiomeEdges(tiles []byte, width, height, passes int) {
 					replace = true
 				}
 				if replace {
+					next[idx] = dominantTile
+				}
+
+				for _, cIndex := range touched {
+					counts[cIndex] = 0
+				}
+			}
+		}
+
+		copy(tiles, next)
+	}
+}
+
+func cleanBiomeBorderArtifacts(tiles []byte, width, height, passes int) {
+	if passes <= 0 || len(tiles) == 0 {
+		return
+	}
+
+	neighbors := [8][2]int{
+		{-1, -1}, {0, -1}, {1, -1},
+		{-1, 0}, {1, 0},
+		{-1, 1}, {0, 1}, {1, 1},
+	}
+
+	var counts [256]int
+	touched := make([]int, 0, 8)
+
+	for pass := 0; pass < passes; pass++ {
+		next := make([]byte, len(tiles))
+		copy(next, tiles)
+
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				idx := tileIndex(x, y, width)
+				current := tiles[idx]
+				if isLockedCoastTile(current) {
+					continue
+				}
+
+				touched = touched[:0]
+				sameCount := 0
+				dominantTile := current
+				dominantCount := 0
+
+				for _, d := range neighbors {
+					nx := x + d[0]
+					ny := y + d[1]
+					if nx < 0 || ny < 0 || nx >= width || ny >= height {
+						continue
+					}
+					nTile := tiles[tileIndex(nx, ny, width)]
+					if isLockedCoastTile(nTile) {
+						continue
+					}
+					if nTile == current {
+						sameCount++
+					}
+					cIndex := int(nTile)
+					if counts[cIndex] == 0 {
+						touched = append(touched, cIndex)
+					}
+					counts[cIndex]++
+					if counts[cIndex] > dominantCount {
+						dominantCount = counts[cIndex]
+						dominantTile = nTile
+					}
+				}
+
+				shouldReplace := dominantTile != current && ((sameCount <= 2 && dominantCount >= 4) || (sameCount <= 1 && dominantCount >= 3))
+				if shouldReplace {
 					next[idx] = dominantTile
 				}
 
