@@ -783,6 +783,62 @@ func TestGenerateBlueNoiseLakeCentersLargeMapDistribution(t *testing.T) {
 	}
 }
 
+func TestBuildLakeBasinsLargeLakeCreatesElongatedSpine(t *testing.T) {
+	sizeProfile := lakeSizeProfile{
+		SmallMin:  8,
+		SmallMax:  14,
+		MediumMin: 20,
+		MediumMax: 34,
+		LargeMin:  56,
+		LargeMax:  72,
+	}
+
+	largeLake := buildDrawLakeProfileForClass(91, 7, sizeProfile, lakeSizeLarge)
+	largeLake.X = 500
+	largeLake.Y = 500
+	largeBasins := buildLakeBasins(largeLake)
+	if len(largeBasins) < 7 {
+		t.Fatalf("expected many basins for large lake, got=%d", len(largeBasins))
+	}
+
+	smallLake := buildDrawLakeProfileForClass(91, 7, sizeProfile, lakeSizeSmall)
+	smallLake.X = 500
+	smallLake.Y = 500
+	smallBasins := buildLakeBasins(smallLake)
+	if len(largeBasins) <= len(smallBasins) {
+		t.Fatalf("expected large lake to use richer basin structure: large=%d small=%d", len(largeBasins), len(smallBasins))
+	}
+
+	cosR := math.Cos(largeLake.Rotation)
+	sinR := math.Sin(largeLake.Rotation)
+	minAlong, maxAlong := math.MaxFloat64, -math.MaxFloat64
+	minCross, maxCross := math.MaxFloat64, -math.MaxFloat64
+	for _, basin := range largeBasins {
+		dx := basin.X - float64(largeLake.X)
+		dy := basin.Y - float64(largeLake.Y)
+		along := dx*cosR + dy*sinR
+		cross := -dx*sinR + dy*cosR
+		if along < minAlong {
+			minAlong = along
+		}
+		if along > maxAlong {
+			maxAlong = along
+		}
+		if cross < minCross {
+			minCross = cross
+		}
+		if cross > maxCross {
+			maxCross = cross
+		}
+	}
+
+	alongSpan := maxAlong - minAlong
+	crossSpan := maxCross - minCross
+	if alongSpan <= crossSpan*1.15 {
+		t.Fatalf("expected elongated large-lake basin envelope, along=%.2f cross=%.2f", alongSpan, crossSpan)
+	}
+}
+
 func TestPathCrowdingRatioPenalizesNearbyRivers(t *testing.T) {
 	width := 64
 	height := 64
