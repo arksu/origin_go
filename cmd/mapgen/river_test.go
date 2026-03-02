@@ -783,6 +783,34 @@ func TestGenerateBlueNoiseLakeCentersLargeMapDistribution(t *testing.T) {
 	}
 }
 
+func TestPathCrowdingRatioPenalizesNearbyRivers(t *testing.T) {
+	width := 64
+	height := 64
+	flow := make([]uint32, width*height)
+
+	// Existing straight river corridor around x=24.
+	for y := 5; y < height-5; y++ {
+		flow[tileIndex(24, y, width)] = 20
+	}
+
+	opts := DefaultMapgenOptions().River
+	opts.FlowShallowThreshold = 6
+	opts.RiverWidthMin = 6
+
+	nearPath := make([]int, 0, height-10)
+	farPath := make([]int, 0, height-10)
+	for y := 5; y < height-5; y++ {
+		nearPath = append(nearPath, tileIndex(27, y, width))
+		farPath = append(farPath, tileIndex(44, y, width))
+	}
+
+	nearCrowding := pathCrowdingRatio(flow, width, height, nearPath, opts)
+	farCrowding := pathCrowdingRatio(flow, width, height, farPath, opts)
+	if nearCrowding <= farCrowding {
+		t.Fatalf("expected near path to be more crowded: near=%.3f far=%.3f", nearCrowding, farCrowding)
+	}
+}
+
 func countRiverComponentsAtMostSize(classMask []RiverClass, width, height, maxSize int) int {
 	visited := make([]bool, len(classMask))
 	queue := make([]int, 0, 256)
