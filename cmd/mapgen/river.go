@@ -222,18 +222,18 @@ func buildDrawLayoutRiverFlow(
 	if len(lakes) == 0 {
 		return flow, 0
 	}
-	for _, lake := range lakes {
-		carveDrawLakeFootprint(flow, width, height, lake, opts)
-	}
 
 	degree := make([]int, len(lakes))
 	connected := make([]bool, len(lakes))
+	lakeUsed := make([]bool, len(lakes))
 	usedPairs := make(map[uint64]struct{}, opts.MajorRiverCount+opts.LakeConnectionLimit+8)
 	linksCreated := 0
 
 	majorCount := maxInt(1, opts.MajorRiverCount)
 	borderLinks := clampInt(int(math.Round(float64(majorCount)*opts.LakeBorderMix)), 0, majorCount)
 	lakeToLakeLinks := majorCount - borderLinks
+	longPathOpts := opts
+	longPathOpts.MeanderStrength = maxFloat(opts.MeanderStrength*opts.ShapeLongMeanderScale, 0.0015)
 
 	for linkID := 0; linkID < lakeToLakeLinks; linkID++ {
 		from, to, ok := selectDrawLakePair(lakes, degree, connected, usedPairs, width, height, seed+int64(linkID)*1619, opts)
@@ -241,7 +241,9 @@ func buildDrawLayoutRiverFlow(
 			break
 		}
 		pairKey := makeLakePairKey(lakes[from].ID, lakes[to].ID)
-		path, ok := buildDrawPathWithAttempts(flow, width, height, lakes[from].X, lakes[from].Y, lakes[to].X, lakes[to].Y, seed+int64(linkID)*1223, opts)
+		startX, startY := lakeShorePoint(lakes[from], lakes[to].X, lakes[to].Y, width, height)
+		endX, endY := lakeShorePoint(lakes[to], lakes[from].X, lakes[from].Y, width, height)
+		path, ok := buildDrawPathWithAttempts(flow, width, height, startX, startY, endX, endY, seed+int64(linkID)*1223, longPathOpts)
 		if !ok {
 			usedPairs[pairKey] = struct{}{}
 			continue
@@ -253,6 +255,8 @@ func buildDrawLayoutRiverFlow(
 		degree[to]++
 		connected[from] = true
 		connected[to] = true
+		lakeUsed[from] = true
+		lakeUsed[to] = true
 		usedPairs[pairKey] = struct{}{}
 		linksCreated++
 	}
@@ -265,7 +269,8 @@ func buildDrawLayoutRiverFlow(
 			break
 		}
 		targetX, targetY := chooseDrawBorderTarget(width, height, side, lakes[sourceIdx], seed, int64(linkID))
-		path, ok := buildDrawPathWithAttempts(flow, width, height, lakes[sourceIdx].X, lakes[sourceIdx].Y, targetX, targetY, seed+int64(linkID)*3203, opts)
+		startX, startY := lakeShorePoint(lakes[sourceIdx], targetX, targetY, width, height)
+		path, ok := buildDrawPathWithAttempts(flow, width, height, startX, startY, targetX, targetY, seed+int64(linkID)*3203, longPathOpts)
 		if !ok {
 			continue
 		}
@@ -274,51 +279,31 @@ func buildDrawLayoutRiverFlow(
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
 		degree[sourceIdx]++
 		connected[sourceIdx] = true
+		lakeUsed[sourceIdx] = true
 		linksCreated++
 	}
 
 	desiredConnectedLakes := clampInt(int(math.Round(float64(len(lakes))*opts.LakeConnectChance)), 0, len(lakes))
-	extraBudget := maxInt(0, opts.LakeConnectionLimit)
-	for extraID := 0; extraID < extraBudget; extraID++ {
-		if countTrue(connected) >= desiredConnectedLakes {
-			break
-		}
+	shortCreated := connectShortJitterStage(
+		flow,
+		width,
+		height,
+		lakes,
+		degree,
+		connected,
+		lakeUsed,
+		usedPairs,
+		desiredConnectedLakes,
+		seed+9187,
+		opts,
+	)
+	linksCreated += shortCreated
 
-		sourceIdx, ok := selectDrawExtraSourceLake(lakes, degree, connected, seed+int64(extraID)*4447, opts.MaxLakeDegree)
-		if !ok {
-			break
-		}
-
-		targetIdx, ok := selectDrawTargetLakeForSource(sourceIdx, lakes, degree, connected, usedPairs, width, height, seed+int64(extraID)*5081, opts)
-		if ok {
-			pairKey := makeLakePairKey(lakes[sourceIdx].ID, lakes[targetIdx].ID)
-			path, ok := buildDrawPathWithAttempts(flow, width, height, lakes[sourceIdx].X, lakes[sourceIdx].Y, lakes[targetIdx].X, lakes[targetIdx].Y, seed+int64(extraID)*5437, opts)
-			if !ok {
-				usedPairs[pairKey] = struct{}{}
-				continue
-			}
-			riverWidth := riverWidthForLink(seed, lakes[sourceIdx].ID, lakes[targetIdx].ID, opts)
-			carveRiverCorridor(flow, width, height, path, riverWidth, opts)
-			degree[sourceIdx]++
-			degree[targetIdx]++
-			connected[sourceIdx] = true
-			connected[targetIdx] = true
-			usedPairs[pairKey] = struct{}{}
-			linksCreated++
+	for lakeIndex, lake := range lakes {
+		if !lakeUsed[lakeIndex] {
 			continue
 		}
-
-		side := (sideOffset + borderLinks + extraID) % 4
-		targetX, targetY := chooseDrawBorderTarget(width, height, side, lakes[sourceIdx], seed+7919, int64(extraID))
-		path, ok := buildDrawPathWithAttempts(flow, width, height, lakes[sourceIdx].X, lakes[sourceIdx].Y, targetX, targetY, seed+int64(extraID)*5743, opts)
-		if !ok {
-			continue
-		}
-		riverWidth := riverWidthForLink(seed, lakes[sourceIdx].ID, 1_500_000+extraID, opts)
-		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
-		degree[sourceIdx]++
-		connected[sourceIdx] = true
-		linksCreated++
+		carveDrawLakeFootprint(flow, width, height, lake, opts)
 	}
 
 	return flow, linksCreated
@@ -398,8 +383,8 @@ func generateDrawLakes(width int, height int, seed int64, opts RiverOptions) []d
 }
 
 func drawLakeRadiusForID(seed int64, lakeID int, opts RiverOptions) int {
-	minRadius := maxInt(2, opts.RiverWidthMin/2+1)
-	maxRadius := maxInt(minRadius, opts.RiverWidthMax/2+3)
+	minRadius := maxInt(3, opts.RiverWidthMin/3+1)
+	maxRadius := maxInt(minRadius+1, opts.RiverWidthMax/2+1)
 	if minRadius == maxRadius {
 		return minRadius
 	}
@@ -422,14 +407,20 @@ func canPlaceDrawLake(lakes []drawLake, x, y, radius, minGap int) bool {
 
 func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opts RiverOptions) {
 	outerRadius := maxInt(2, lake.Radius)
-	innerRadius := maxInt(1, int(math.Round(float64(outerRadius)*0.55)))
-	outerSq := outerRadius * outerRadius
-	innerSq := innerRadius * innerRadius
+	innerRadius := maxInt(1, int(math.Round(float64(outerRadius)*0.48)))
+	phaseA := coordHash01(int64(lake.ID), lake.X, lake.Y, riverSinkLakeSalt) * 2 * math.Pi
+	phaseB := coordHash01(int64(lake.ID), lake.Y, lake.X, riverLakeLinkSalt) * 2 * math.Pi
 
 	for dy := -outerRadius; dy <= outerRadius; dy++ {
 		for dx := -outerRadius; dx <= outerRadius; dx++ {
-			d2 := dx*dx + dy*dy
-			if d2 > outerSq {
+			dist := math.Hypot(float64(dx), float64(dy))
+			angle := math.Atan2(float64(dy), float64(dx))
+			shape := math.Sin(angle*2+phaseA)*0.12 + math.Sin(angle*5+phaseB)*0.08
+			effectiveOuter := float64(outerRadius) * (1 + shape)
+			if effectiveOuter < float64(innerRadius)+0.75 {
+				effectiveOuter = float64(innerRadius) + 0.75
+			}
+			if dist > effectiveOuter {
 				continue
 			}
 			x := lake.X + dx
@@ -438,7 +429,11 @@ func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opt
 				continue
 			}
 			idx := tileIndex(x, y, width)
-			if d2 <= innerSq {
+			effectiveInner := float64(innerRadius) * (1 + shape*0.35)
+			if effectiveInner < 1 {
+				effectiveInner = 1
+			}
+			if dist <= effectiveInner {
 				if flow[idx] < uint32(opts.FlowDeepThreshold) {
 					flow[idx] = uint32(opts.FlowDeepThreshold)
 				}
@@ -574,17 +569,30 @@ func chooseDrawBorderTarget(width int, height int, side int, source drawLake, se
 	switch side {
 	case 0:
 		jitter := int(math.Round((coordHash01(seed+linkID, source.X, source.Y, riverWidthSalt) - 0.5) * 2 * float64(maxInt(12, width/8))))
-		return clampInt(source.X+jitter, 1, width-2), 1
+		return clampInt(source.X+jitter, 0, width-1), 0
 	case 1:
 		jitter := int(math.Round((coordHash01(seed+linkID, source.Y, source.X, riverWidthSalt) - 0.5) * 2 * float64(maxInt(12, height/8))))
-		return width - 2, clampInt(source.Y+jitter, 1, height-2)
+		return width - 1, clampInt(source.Y+jitter, 0, height-1)
 	case 2:
 		jitter := int(math.Round((coordHash01(seed+linkID, source.X, source.Y, riverWidthSalt^0x13579) - 0.5) * 2 * float64(maxInt(12, width/8))))
-		return clampInt(source.X+jitter, 1, width-2), height - 2
+		return clampInt(source.X+jitter, 0, width-1), height - 1
 	default:
 		jitter := int(math.Round((coordHash01(seed+linkID, source.Y, source.X, riverWidthSalt^0x2468ACE) - 0.5) * 2 * float64(maxInt(12, height/8))))
-		return 1, clampInt(source.Y+jitter, 1, height-2)
+		return 0, clampInt(source.Y+jitter, 0, height-1)
 	}
+}
+
+func lakeShorePoint(lake drawLake, targetX, targetY, width, height int) (int, int) {
+	dx := float64(targetX - lake.X)
+	dy := float64(targetY - lake.Y)
+	length := math.Hypot(dx, dy)
+	if length <= 0.0001 {
+		return clampInt(lake.X, 0, width-1), clampInt(lake.Y, 0, height-1)
+	}
+	radius := maxInt(1, lake.Radius-1)
+	x := float64(lake.X) + dx/length*float64(radius)
+	y := float64(lake.Y) + dy/length*float64(radius)
+	return clampInt(int(math.Round(x)), 0, width-1), clampInt(int(math.Round(y)), 0, height-1)
 }
 
 func selectDrawExtraSourceLake(
@@ -684,6 +692,187 @@ func selectDrawTargetLakeForSource(
 	return bestIdx, found
 }
 
+func connectShortJitterStage(
+	flow []uint32,
+	width int,
+	height int,
+	lakes []drawLake,
+	degree []int,
+	connected []bool,
+	lakeUsed []bool,
+	usedPairs map[uint64]struct{},
+	desiredConnectedLakes int,
+	seed int64,
+	opts RiverOptions,
+) int {
+	budget := maxInt(0, opts.LakeConnectionLimit)
+	if budget == 0 || len(lakes) < 2 {
+		return 0
+	}
+
+	shortPathOpts := opts
+	shortPathOpts.MeanderStrength = maxFloat(
+		opts.MeanderStrength*opts.ShapeShortMeanderScale,
+		opts.MeanderStrength+opts.ShapeShortMeanderBias,
+	)
+
+	shortMinDistance := maxInt(24, opts.RiverWidthMax*2+10)
+	if opts.LakeLinkMinDistance > 0 {
+		shortMinDistance = maxInt(shortMinDistance, opts.LakeLinkMinDistance/2)
+	}
+	shortMaxDistance := minInt(opts.LakeLinkMaxDistance, maxInt(48, minInt(width, height)/3))
+	if shortMaxDistance < shortMinDistance {
+		shortMaxDistance = shortMinDistance
+	}
+
+	linksCreated := 0
+	for shortID := 0; shortID < budget; shortID++ {
+		if desiredConnectedLakes > 0 && countTrue(connected) >= desiredConnectedLakes {
+			break
+		}
+
+		from, to, ok := selectShortJitterLakePair(
+			lakes,
+			degree,
+			connected,
+			usedPairs,
+			shortMinDistance,
+			shortMaxDistance,
+			seed+int64(shortID)*7919,
+			opts.MaxLakeDegree,
+		)
+		if ok {
+			pairKey := makeLakePairKey(lakes[from].ID, lakes[to].ID)
+			startX, startY := lakeShorePoint(lakes[from], lakes[to].X, lakes[to].Y, width, height)
+			endX, endY := lakeShorePoint(lakes[to], lakes[from].X, lakes[from].Y, width, height)
+			path, ok := buildDrawPathWithAttempts(
+				flow,
+				width,
+				height,
+				startX,
+				startY,
+				endX,
+				endY,
+				seed+int64(shortID)*10427,
+				shortPathOpts,
+			)
+			if !ok {
+				usedPairs[pairKey] = struct{}{}
+				continue
+			}
+
+			riverWidth := riverWidthForLink(seed, lakes[from].ID, lakes[to].ID, opts)
+			carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+			degree[from]++
+			degree[to]++
+			connected[from] = true
+			connected[to] = true
+			lakeUsed[from] = true
+			lakeUsed[to] = true
+			usedPairs[pairKey] = struct{}{}
+			linksCreated++
+			continue
+		}
+
+		sourceIdx, ok := selectDrawExtraSourceLake(lakes, degree, connected, seed+int64(shortID)*12007, opts.MaxLakeDegree)
+		if !ok {
+			break
+		}
+
+		side := int(splitMix64(uint64(seed)+uint64(shortID)*0x9E3779B185EBCA87) % 4)
+		targetX, targetY := chooseDrawBorderTarget(width, height, side, lakes[sourceIdx], seed+21701, int64(shortID))
+		startX, startY := lakeShorePoint(lakes[sourceIdx], targetX, targetY, width, height)
+		path, ok := buildDrawPathWithAttempts(
+			flow,
+			width,
+			height,
+			startX,
+			startY,
+			targetX,
+			targetY,
+			seed+int64(shortID)*14561,
+			shortPathOpts,
+		)
+		if !ok {
+			continue
+		}
+
+		riverWidth := riverWidthForLink(seed, lakes[sourceIdx].ID, 2_000_000+shortID, opts)
+		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		degree[sourceIdx]++
+		connected[sourceIdx] = true
+		lakeUsed[sourceIdx] = true
+		linksCreated++
+	}
+
+	return linksCreated
+}
+
+func selectShortJitterLakePair(
+	lakes []drawLake,
+	degree []int,
+	connected []bool,
+	usedPairs map[uint64]struct{},
+	minDistance int,
+	maxDistance int,
+	seed int64,
+	maxDegree int,
+) (int, int, bool) {
+	if len(lakes) < 2 {
+		return 0, 0, false
+	}
+
+	bestA := 0
+	bestB := 0
+	bestScore := 0.0
+	found := false
+	targetDistance := float64(minDistance+maxDistance) * 0.5
+	requiresAttachment := countTrue(connected) > 0
+
+	for i := 0; i < len(lakes)-1; i++ {
+		if degree[i] >= maxDegree {
+			continue
+		}
+		for j := i + 1; j < len(lakes); j++ {
+			if degree[j] >= maxDegree {
+				continue
+			}
+			pairKey := makeLakePairKey(lakes[i].ID, lakes[j].ID)
+			if _, exists := usedPairs[pairKey]; exists {
+				continue
+			}
+
+			if requiresAttachment && !connected[i] && !connected[j] {
+				continue
+			}
+
+			distance := math.Hypot(float64(lakes[i].X-lakes[j].X), float64(lakes[i].Y-lakes[j].Y))
+			if distance < float64(minDistance) || distance > float64(maxDistance) {
+				continue
+			}
+
+			score := math.Abs(distance-targetDistance) + float64(degree[i]+degree[j])*340
+			if connected[i] == connected[j] {
+				score += 90
+				if connected[i] {
+					score += 140
+				}
+			} else {
+				score -= 120
+			}
+			score += coordHash01(seed, lakes[i].ID, lakes[j].ID, riverGridSalt) * 50
+			if !found || score < bestScore {
+				found = true
+				bestA = i
+				bestB = j
+				bestScore = score
+			}
+		}
+	}
+
+	return bestA, bestB, found
+}
+
 func buildDrawPathWithAttempts(
 	flow []uint32,
 	width int,
@@ -741,20 +930,23 @@ func buildDrawPath(
 		return []int{tileIndex(startX, startY, width)}
 	}
 
-	segments := maxInt(4, minInt(32, int(distance/70)+3))
+	segments := maxInt(4, minInt(32, int(distance/float64(maxInt(1, opts.ShapeSegmentLength)))+3))
 	dirX := dx / distance
 	dirY := dy / distance
 	perpX := -dirY
 	perpY := dirX
 
-	baseAmplitude := float64(maxInt(10, opts.RiverWidthMax*3))
-	meanderAmplitude := float64(minInt(width, height)) * opts.MeanderStrength * 8.5
+	baseAmplitude := float64(maxInt(10, opts.RiverWidthMax*3)) * opts.ShapeAmplitudeScale
+	meanderAmplitude := float64(minInt(width, height)) * opts.MeanderStrength * 8.5 * opts.ShapeAmplitudeScale
 	amplitude := maxFloat(baseAmplitude, meanderAmplitude)
-	amplitude = minFloat(amplitude, distance*0.40)
+	amplitude = minFloat(amplitude, distance*opts.ShapeDistanceCap)
 	if amplitude < 2 {
 		amplitude = 2
 	}
-	waveCount := 1.25 + coordHash01(seed, startX, startY, riverMeanderSalt)*1.75
+	waveCount := (1.25 + coordHash01(seed, startX, startY, riverMeanderSalt)*1.75) * opts.ShapeFrequencyScale
+	if waveCount < 0.25 {
+		waveCount = 0.25
+	}
 	phase := coordHash01(seed, targetX, targetY, lakeLinkJitterSalt) * 2 * math.Pi
 
 	controlX := make([]int, 0, segments+1)
@@ -767,15 +959,15 @@ func buildDrawPath(
 		if i > 0 && i < segments {
 			falloff := math.Sin(math.Pi * t)
 			wave := math.Sin((t*waveCount*2*math.Pi)+phase) * amplitude * falloff
-			noise := (coordHash01(seed+int64(i)*37, int(math.Round(px)), int(math.Round(py)), riverMeanderSalt) - 0.5) * 2 * (amplitude * 0.30) * falloff
+			noise := (coordHash01(seed+int64(i)*37, int(math.Round(px)), int(math.Round(py)), riverMeanderSalt) - 0.5) * 2 * (amplitude * opts.ShapeNoiseScale) * falloff
 			cross := wave + noise
-			along := (coordHash01(seed+int64(i)*59, int(math.Round(py)), int(math.Round(px)), lakeLinkJitterSalt) - 0.5) * 2 * (amplitude * 0.16) * falloff
+			along := (coordHash01(seed+int64(i)*59, int(math.Round(py)), int(math.Round(px)), lakeLinkJitterSalt) - 0.5) * 2 * (amplitude * opts.ShapeAlongScale) * falloff
 			px += perpX*cross + dirX*along
 			py += perpY*cross + dirY*along
 		}
 
-		cx := clampInt(int(math.Round(px)), 1, width-2)
-		cy := clampInt(int(math.Round(py)), 1, height-2)
+		cx := clampInt(int(math.Round(px)), 0, width-1)
+		cy := clampInt(int(math.Round(py)), 0, height-1)
 		controlX = append(controlX, cx)
 		controlY = append(controlY, cy)
 	}
@@ -814,8 +1006,8 @@ func rasterizeSmoothControlPath(width int, height int, controlX []int, controlY 
 			t := float64(step) / float64(steps)
 			sx := catmullRom(float64(p0x), float64(p1x), float64(p2x), float64(p3x), t)
 			sy := catmullRom(float64(p0y), float64(p1y), float64(p2y), float64(p3y), t)
-			x := clampInt(int(math.Round(sx)), 1, width-2)
-			y := clampInt(int(math.Round(sy)), 1, height-2)
+			x := clampInt(int(math.Round(sx)), 0, width-1)
+			y := clampInt(int(math.Round(sy)), 0, height-1)
 			path = appendRasterizedPathSegment(path, seen, width, prevX, prevY, x, y)
 			prevX = x
 			prevY = y

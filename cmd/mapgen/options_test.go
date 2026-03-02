@@ -59,6 +59,60 @@ func TestMapgenOptionsValidateRejectsInvalid(t *testing.T) {
 			},
 		},
 		{
+			name: "river long meander scale range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeLongMeanderScale = 0
+			},
+		},
+		{
+			name: "river short meander scale range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeShortMeanderScale = 9
+			},
+		},
+		{
+			name: "river short meander bias range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeShortMeanderBias = 0.06
+			},
+		},
+		{
+			name: "river amplitude scale range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeAmplitudeScale = -1
+			},
+		},
+		{
+			name: "river frequency scale range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeFrequencyScale = 0
+			},
+		},
+		{
+			name: "river noise scale range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeNoiseScale = 1.1
+			},
+		},
+		{
+			name: "river along scale range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeAlongScale = -0.1
+			},
+		},
+		{
+			name: "river distance cap range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeDistanceCap = 1.0
+			},
+		},
+		{
+			name: "river segment length range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeSegmentLength = 10
+			},
+		},
+		{
 			name: "voronoi cell size must be > 1",
 			mut: func(opts *MapgenOptions) {
 				opts.River.VoronoiCellSize = 1

@@ -567,3 +567,83 @@ func TestBuildDrawPathProducesWindingCurve(t *testing.T) {
 		t.Fatalf("expected visibly winding path, max perpendicular deviation too small: %.3f", maxDeviation)
 	}
 }
+
+func TestDrawLayoutAvoidsTinyIsolatedRiverDots(t *testing.T) {
+	width := 320
+	height := 320
+	elevation := make([]float32, width*height)
+	for idx := range elevation {
+		elevation[idx] = 0.8
+	}
+
+	opts := DefaultMapgenOptions().River
+	opts.LayoutDraw = true
+	opts.MajorRiverCount = 26
+	opts.LakeCount = 120
+	opts.LakeBorderMix = 0.35
+	opts.MaxLakeDegree = 2
+	opts.LakeConnectChance = 0.8
+	opts.LakeConnectionLimit = 100
+	opts.RiverWidthMin = 5
+	opts.RiverWidthMax = 9
+	opts.FlowShallowThreshold = 2
+	opts.FlowDeepThreshold = 3
+
+	network, err := BuildRiverNetwork(elevation, width, height, 5151, opts)
+	if err != nil {
+		t.Fatalf("BuildRiverNetwork error: %v", err)
+	}
+
+	smallComponents := countRiverComponentsAtMostSize(network.Class, width, height, 24)
+	if smallComponents > 0 {
+		t.Fatalf("expected no tiny isolated river components, got %d", smallComponents)
+	}
+}
+
+func countRiverComponentsAtMostSize(classMask []RiverClass, width, height, maxSize int) int {
+	visited := make([]bool, len(classMask))
+	queue := make([]int, 0, 256)
+	smallCount := 0
+	neighbors := [8][2]int{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}}
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			start := tileIndex(x, y, width)
+			if visited[start] || classMask[start] == riverNone {
+				continue
+			}
+
+			queue = queue[:0]
+			queue = append(queue, start)
+			visited[start] = true
+			componentSize := 0
+
+			for head := 0; head < len(queue); head++ {
+				idx := queue[head]
+				componentSize++
+				cx := idx % width
+				cy := idx / width
+
+				for _, offset := range neighbors {
+					nx := cx + offset[0]
+					ny := cy + offset[1]
+					if nx < 0 || ny < 0 || nx >= width || ny >= height {
+						continue
+					}
+					nIdx := tileIndex(nx, ny, width)
+					if visited[nIdx] || classMask[nIdx] == riverNone {
+						continue
+					}
+					visited[nIdx] = true
+					queue = append(queue, nIdx)
+				}
+			}
+
+			if componentSize <= maxSize {
+				smallCount++
+			}
+		}
+	}
+
+	return smallCount
+}
