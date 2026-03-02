@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"flag"
 	"fmt"
 	"math"
 	"math/rand"
@@ -33,10 +35,17 @@ func main() {
 
 	opts, err := ParseMapgenOptions(os.Args[1:])
 	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
 		logger.Fatal("invalid mapgen options", zap.Error(err))
 	}
 	if opts.Seed == 0 {
 		opts.Seed = time.Now().UnixNano()
+	}
+	if opts.PNG.OverviewOnly {
+		runOverviewOnly(logger, opts)
+		return
 	}
 
 	cfg := config.MustLoad(logger)
@@ -127,6 +136,7 @@ func main() {
 		zap.Int("river_bank_radius", opts.River.BankRadius),
 		zap.Int("river_lake_flow_threshold", opts.River.LakeFlowThreshold),
 		zap.Bool("png_export", opts.PNG.Export),
+		zap.Bool("png_overview_only", opts.PNG.OverviewOnly),
 		zap.String("png_dir", opts.PNG.OutputDir),
 		zap.Int("png_scale", opts.PNG.Scale),
 		zap.Bool("png_highlight_rivers", opts.PNG.HighlightRivers),
@@ -137,6 +147,38 @@ func main() {
 	}
 
 	logger.Info("map generation completed")
+}
+
+func runOverviewOnly(logger *zap.Logger, opts MapgenOptions) {
+	logger.Info("starting overview-only map generation",
+		zap.Int("chunks_x", opts.ChunksX),
+		zap.Int("chunks_y", opts.ChunksY),
+		zap.Int64("seed", opts.Seed),
+		zap.Int("threads", opts.Threads),
+		zap.Bool("river_enabled", opts.River.Enabled),
+		zap.Bool("png_export", opts.PNG.Export),
+		zap.Bool("png_overview_only", opts.PNG.OverviewOnly),
+		zap.String("png_dir", opts.PNG.OutputDir),
+		zap.Int("png_scale", opts.PNG.Scale),
+	)
+
+	perlin := NewPerlinNoise(opts.Seed)
+	noiseFields := NewNoiseFields(perlin, _const.CoordPerTile)
+	terrain, err := BuildTerrainPrecompute(opts, _const.ChunkSize, noiseFields)
+	if err != nil {
+		logger.Fatal("overview-only precompute failed", zap.Error(err))
+	}
+	if err := ExportMapPNGs(terrain.Tiles, terrain.RiverClass, terrain.WidthTiles, terrain.HeightTiles, _const.ChunkSize, opts.PNG); err != nil {
+		logger.Fatal("overview-only png export failed", zap.Error(err))
+	}
+
+	logger.Info("overview-only map generation completed",
+		zap.Int("width_tiles", terrain.WidthTiles),
+		zap.Int("height_tiles", terrain.HeightTiles),
+		zap.Int("river_sources", terrain.RiverSources),
+		zap.Int("river_shallow_tiles", terrain.RiverShallowTiles),
+		zap.Int("river_deep_tiles", terrain.RiverDeepTiles),
+	)
 }
 
 type MapGenerator struct {
@@ -185,6 +227,10 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 		if err := ExportMapPNGs(terrain.Tiles, terrain.RiverClass, terrain.WidthTiles, terrain.HeightTiles, g.chunkSize, g.options.PNG); err != nil {
 			return fmt.Errorf("export map pngs: %w", err)
 		}
+	}
+	if g.options.PNG.OverviewOnly {
+		g.logger.Info("overview-only mode enabled, skipping database writes and chunk/object generation")
+		return nil
 	}
 
 	g.logger.Info("truncating existing data for region", zap.Int("region", g.region))

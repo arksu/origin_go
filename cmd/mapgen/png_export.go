@@ -42,19 +42,27 @@ func ExportMapPNGs(tiles []byte, riverClass []RiverClass, widthTiles, heightTile
 	}
 
 	chunksDir := filepath.Join(opts.OutputDir, "chunks")
-	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
-		return fmt.Errorf("create chunk png directory: %w", err)
-	}
-	if err := cleanPNGFiles(chunksDir); err != nil {
-		return fmt.Errorf("clean chunk png directory: %w", err)
-	}
+	if opts.OverviewOnly {
+		if _, err := os.Stat(chunksDir); err == nil {
+			if err := cleanPNGFiles(chunksDir); err != nil {
+				return fmt.Errorf("clean chunk png directory: %w", err)
+			}
+		}
+	} else {
+		if err := os.MkdirAll(chunksDir, 0o755); err != nil {
+			return fmt.Errorf("create chunk png directory: %w", err)
+		}
+		if err := cleanPNGFiles(chunksDir); err != nil {
+			return fmt.Errorf("clean chunk png directory: %w", err)
+		}
 
-	chunksX := widthTiles / chunkSize
-	chunksY := heightTiles / chunkSize
-	for chunkY := 0; chunkY < chunksY; chunkY++ {
-		for chunkX := 0; chunkX < chunksX; chunkX++ {
-			if err := writeChunkPNG(chunksDir, tiles, riverClass, widthTiles, chunkSize, chunkX, chunkY, opts.Scale, opts.HighlightRivers); err != nil {
-				return err
+		chunksX := widthTiles / chunkSize
+		chunksY := heightTiles / chunkSize
+		for chunkY := 0; chunkY < chunksY; chunkY++ {
+			for chunkX := 0; chunkX < chunksX; chunkX++ {
+				if err := writeChunkPNG(chunksDir, tiles, riverClass, widthTiles, chunkSize, chunkX, chunkY, opts.Scale, opts.HighlightRivers); err != nil {
+					return err
+				}
 			}
 		}
 	}

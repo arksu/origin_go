@@ -90,3 +90,54 @@ func TestExportMapPNGsWritesChunksAndOverview(t *testing.T) {
 		t.Fatalf("unexpected overview dimensions: %dx%d", overviewConfig.Width, overviewConfig.Height)
 	}
 }
+
+func TestExportMapPNGsOverviewOnlySkipsChunks(t *testing.T) {
+	tempDir := t.TempDir()
+
+	widthTiles := 4
+	heightTiles := 4
+	chunkSize := 2
+	tiles := []byte{
+		tileWaterDeep, tileWater, tileSand, tileGrass,
+		tileWater, tileForestPine, tileForestLeaf, tileGrass,
+		tileSand, tileGrass, tileWaterDeep, tileWater,
+		tileGrass, tileGrass, tileWater, tileWaterDeep,
+	}
+
+	chunksDir := filepath.Join(tempDir, "chunks")
+	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
+		t.Fatalf("mkdir chunks dir: %v", err)
+	}
+	staleChunk := filepath.Join(chunksDir, "stale.png")
+	if err := os.WriteFile(staleChunk, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write stale chunk file: %v", err)
+	}
+
+	opts := PNGOptions{
+		Export:          true,
+		OverviewOnly:    true,
+		OutputDir:       tempDir,
+		Scale:           1,
+		HighlightRivers: true,
+	}
+	riverClass := make([]RiverClass, len(tiles))
+	riverClass[0] = riverDeep
+	if err := ExportMapPNGs(tiles, riverClass, widthTiles, heightTiles, chunkSize, opts); err != nil {
+		t.Fatalf("ExportMapPNGs error: %v", err)
+	}
+
+	if _, err := os.Stat(staleChunk); !os.IsNotExist(err) {
+		t.Fatalf("expected stale chunk png to be removed in overview-only mode, err=%v", err)
+	}
+
+	if entries, err := os.ReadDir(chunksDir); err != nil {
+		t.Fatalf("read chunks dir: %v", err)
+	} else if len(entries) != 0 {
+		t.Fatalf("expected no chunk pngs in overview-only mode, found %d entries", len(entries))
+	}
+
+	overview := filepath.Join(tempDir, "overview.png")
+	if _, err := os.Stat(overview); err != nil {
+		t.Fatalf("expected overview png %q: %v", overview, err)
+	}
+}

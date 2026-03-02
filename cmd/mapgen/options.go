@@ -60,6 +60,7 @@ type RiverOptions struct {
 
 type PNGOptions struct {
 	Export          bool
+	OverviewOnly    bool
 	OutputDir       string
 	Scale           int
 	HighlightRivers bool
@@ -125,6 +126,7 @@ func DefaultMapgenOptions() MapgenOptions {
 		},
 		PNG: PNGOptions{
 			Export:          false,
+			OverviewOnly:    false,
 			OutputDir:       "map_png",
 			Scale:           1,
 			HighlightRivers: true,
@@ -183,13 +185,17 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 	fs.IntVar(&opts.River.BankRadius, "river-bank-radius", opts.River.BankRadius, "bank expansion radius around deep river tiles")
 	fs.IntVar(&opts.River.LakeFlowThreshold, "river-lake-flow-threshold", opts.River.LakeFlowThreshold, "minimum sink flow needed to form a lake")
 
-	fs.BoolVar(&opts.PNG.Export, "png-export", opts.PNG.Export, "export generated chunks and overview image to PNG")
+	fs.BoolVar(&opts.PNG.Export, "png-export", opts.PNG.Export, "export map PNGs (chunks + overview by default)")
+	fs.BoolVar(&opts.PNG.OverviewOnly, "png-overview-only", opts.PNG.OverviewOnly, "export only overview.png; skip chunk PNGs and all DB work (implies -png-export)")
 	fs.StringVar(&opts.PNG.OutputDir, "png-dir", opts.PNG.OutputDir, "output directory for PNG exports")
 	fs.IntVar(&opts.PNG.Scale, "png-scale", opts.PNG.Scale, "PNG scale in pixels per tile")
 	fs.BoolVar(&opts.PNG.HighlightRivers, "png-highlight-rivers", opts.PNG.HighlightRivers, "highlight river channels in PNG exports")
 
 	if err := fs.Parse(args); err != nil {
 		return MapgenOptions{}, err
+	}
+	if opts.PNG.OverviewOnly {
+		opts.PNG.Export = true
 	}
 
 	if err := opts.Validate(); err != nil {
