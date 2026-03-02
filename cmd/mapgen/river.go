@@ -1610,7 +1610,9 @@ func buildDrawPathWithAttempts(
 	seed int64,
 	opts RiverOptions,
 ) ([]int, bool) {
+	bestScore := math.MaxFloat64
 	bestOverlap := math.MaxFloat64
+	bestCrowding := math.MaxFloat64
 	var bestPath []int
 	minLen := maxInt(8, opts.RiverWidthMax)
 
@@ -1620,16 +1622,23 @@ func buildDrawPathWithAttempts(
 			continue
 		}
 		overlap := pathOverlapRatio(flow, path, opts)
-		if overlap < bestOverlap {
+		crowding := pathCrowdingRatio(flow, width, height, path, opts)
+		score := overlap + crowding*0.75
+		if score < bestScore {
+			bestScore = score
 			bestOverlap = overlap
+			bestCrowding = crowding
 			bestPath = path
 		}
-		if overlap <= 0.30 {
+		if overlap <= 0.22 && crowding <= 0.34 {
 			break
 		}
 	}
 
 	if len(bestPath) == 0 {
+		return nil, false
+	}
+	if bestOverlap > 0.72 && bestCrowding > 0.72 {
 		return nil, false
 	}
 	return bestPath, true
@@ -1808,6 +1817,52 @@ func pathOverlapRatio(flow []uint32, path []int, opts RiverOptions) float64 {
 		}
 	}
 	return float64(overlap) / float64(len(path))
+}
+
+func pathCrowdingRatio(flow []uint32, width, height int, path []int, opts RiverOptions) float64 {
+	if len(path) == 0 || len(flow) != width*height {
+		return 1
+	}
+
+	bufferRadius := maxInt(2, opts.RiverWidthMin/2)
+	bufferRadiusSquared := bufferRadius * bufferRadius
+	crowded := 0
+
+	for _, idx := range path {
+		if idx < 0 || idx >= len(flow) {
+			continue
+		}
+		x := idx % width
+		y := idx / width
+		hasNearbyRiver := false
+
+		for dy := -bufferRadius; dy <= bufferRadius && !hasNearbyRiver; dy++ {
+			for dx := -bufferRadius; dx <= bufferRadius; dx++ {
+				if dx == 0 && dy == 0 {
+					continue
+				}
+				if dx*dx+dy*dy > bufferRadiusSquared {
+					continue
+				}
+				nx := x + dx
+				ny := y + dy
+				if nx < 0 || ny < 0 || nx >= width || ny >= height {
+					continue
+				}
+				nIdx := tileIndex(nx, ny, width)
+				if flow[nIdx] >= uint32(opts.FlowShallowThreshold) {
+					hasNearbyRiver = true
+					break
+				}
+			}
+		}
+
+		if hasNearbyRiver {
+			crowded++
+		}
+	}
+
+	return float64(crowded) / float64(len(path))
 }
 
 func countTrue(values []bool) int {

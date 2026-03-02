@@ -9,7 +9,7 @@ world:
 river:
   enabled: true
   layout_draw: true
-  major_count: 42
+  major_count: 34
   lake_count: 220
   lake_size_small_min: 10
   lake_size_small_max: 30
@@ -19,8 +19,8 @@ river:
   lake_size_large_max: 240
   lake_size_medium_chance: 0.24
   lake_size_large_chance: 0.04
-  lake_border_mix: 0.28
-  max_lake_degree: 3
+  lake_border_mix: 0.32
+  max_lake_degree: 2
   shape_long_meander_scale: 0.55
   shape_short_meander_scale: 2.2
   shape_short_meander_bias: 0.0035
@@ -39,9 +39,9 @@ river:
   voronoi_bias: 0.01
   sink_lake_chance: 0.03
   lake_min_size: 48
-  lake_connect_chance: 0.88
-  lake_connection_limit: 220
-  lake_link_min_distance: 120
+  lake_connect_chance: 0.72
+  lake_connection_limit: 140
+  lake_link_min_distance: 180
   lake_link_max_distance: 1800
   river_width_min: 5
   river_width_max: 15
