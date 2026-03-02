@@ -1711,24 +1711,27 @@ func buildDrawPathWithAttempts(
 	bestScore := math.MaxFloat64
 	bestOverlap := math.MaxFloat64
 	bestCrowding := math.MaxFloat64
+	bestCrossings := maxInt(width, height)
 	var bestPath []int
 	minLen := maxInt(8, opts.RiverWidthMax)
 
-	for attempt := 0; attempt < 6; attempt++ {
+	for attempt := 0; attempt < 12; attempt++ {
 		path := buildDrawPath(width, height, startX, startY, targetX, targetY, seed+int64(attempt)*8191, opts)
 		if len(path) < minLen {
 			continue
 		}
 		overlap := pathOverlapRatio(flow, path, opts)
 		crowding := pathCrowdingRatio(flow, width, height, path, opts)
-		score := overlap + crowding*0.75
+		crossings := pathCrossingCount(flow, width, path, opts)
+		score := overlap*1.15 + crowding*1.45 + float64(crossings)*0.20
 		if score < bestScore {
 			bestScore = score
 			bestOverlap = overlap
 			bestCrowding = crowding
+			bestCrossings = crossings
 			bestPath = path
 		}
-		if overlap <= 0.22 && crowding <= 0.34 {
+		if overlap <= 0.10 && crowding <= 0.18 && crossings == 0 {
 			break
 		}
 	}
@@ -1736,7 +1739,11 @@ func buildDrawPathWithAttempts(
 	if len(bestPath) == 0 {
 		return nil, false
 	}
-	if bestOverlap > 0.72 && bestCrowding > 0.72 {
+	allowedCrossings := maxInt(0, minInt(2, len(bestPath)/260))
+	if bestCrossings > allowedCrossings {
+		return nil, false
+	}
+	if bestOverlap > 0.46 && bestCrowding > 0.50 {
 		return nil, false
 	}
 	return bestPath, true
@@ -1915,6 +1922,49 @@ func pathOverlapRatio(flow []uint32, path []int, opts RiverOptions) float64 {
 		}
 	}
 	return float64(overlap) / float64(len(path))
+}
+
+func pathCrossingCount(flow []uint32, width int, path []int, opts RiverOptions) int {
+	if len(path) == 0 {
+		return 0
+	}
+	if width <= 0 {
+		return 0
+	}
+	height := len(flow) / width
+
+	endpointBuffer := maxInt(6, opts.RiverWidthMax*2)
+	crossings := 0
+	for pathIndex, idx := range path {
+		if pathIndex < endpointBuffer || pathIndex >= len(path)-endpointBuffer {
+			continue
+		}
+		if idx < 0 || idx >= len(flow) {
+			continue
+		}
+		if flow[idx] < uint32(opts.FlowShallowThreshold) {
+			continue
+		}
+
+		x := idx % width
+		y := idx / width
+		neighbors := 0
+		for _, offset := range [8][2]int{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}} {
+			nx := x + offset[0]
+			ny := y + offset[1]
+			if nx < 0 || ny < 0 || nx >= width || ny >= height {
+				continue
+			}
+			nIdx := tileIndex(nx, ny, width)
+			if flow[nIdx] >= uint32(opts.FlowShallowThreshold) {
+				neighbors++
+			}
+		}
+		if neighbors >= 2 {
+			crossings++
+		}
+	}
+	return crossings
 }
 
 func pathCrowdingRatio(flow []uint32, width, height int, path []int, opts RiverOptions) float64 {

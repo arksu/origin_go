@@ -867,6 +867,31 @@ func TestPathCrowdingRatioPenalizesNearbyRivers(t *testing.T) {
 	}
 }
 
+func TestPathCrossingCountDetectsInteriorCrossings(t *testing.T) {
+	width := 64
+	height := 64
+	flow := make([]uint32, width*height)
+
+	// Existing vertical river at x=32.
+	for y := 0; y < height; y++ {
+		flow[tileIndex(32, y, width)] = 20
+	}
+
+	path := make([]int, 0, 45)
+	for x := 10; x <= 54; x++ {
+		path = append(path, tileIndex(x, 32, width))
+	}
+
+	opts := DefaultMapgenOptions().River
+	opts.FlowShallowThreshold = 6
+	opts.RiverWidthMax = 3
+
+	crossings := pathCrossingCount(flow, width, path, opts)
+	if crossings == 0 {
+		t.Fatalf("expected crossing count > 0 for interior crossing")
+	}
+}
+
 func countRiverComponentsAtMostSize(classMask []RiverClass, width, height, maxSize int) int {
 	visited := make([]bool, len(classMask))
 	queue := make([]int, 0, 256)
