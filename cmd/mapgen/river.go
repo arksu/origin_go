@@ -106,6 +106,13 @@ type lakeBasin struct {
 	Weight  float64
 }
 
+type lakeInlet struct {
+	LakeIndex  int
+	X          int
+	Y          int
+	RiverWidth int
+}
+
 type regionalAnchor struct {
 	LakeIndex int
 	CellX     int
@@ -281,6 +288,7 @@ func buildDrawLayoutRiverFlow(
 	connected := make([]bool, len(lakes))
 	lakeUsed := make([]bool, len(lakes))
 	usedPairs := make(map[uint64]struct{}, opts.MajorRiverCount+opts.LakeConnectionLimit+8)
+	lakeInlets := make([]lakeInlet, 0, maxInt(16, opts.MajorRiverCount*2+opts.LakeConnectionLimit*2))
 	linksCreated := 0
 
 	majorCount := maxInt(1, opts.MajorRiverCount)
@@ -302,6 +310,7 @@ func buildDrawLayoutRiverFlow(
 		seed,
 		opts,
 		longPathOpts,
+		&lakeInlets,
 	)
 	linksCreated += regionalCreated
 
@@ -321,6 +330,8 @@ func buildDrawLayoutRiverFlow(
 
 		riverWidth := riverWidthForLink(seed, lakes[from].ID, lakes[to].ID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordLakeInlet(&lakeInlets, from, startX, startY, riverWidth)
+		recordLakeInlet(&lakeInlets, to, endX, endY, riverWidth)
 		degree[from]++
 		degree[to]++
 		connected[from] = true
@@ -347,6 +358,7 @@ func buildDrawLayoutRiverFlow(
 
 		riverWidth := riverWidthForLink(seed, lakes[sourceIdx].ID, 1_000_000+linkID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordLakeInlet(&lakeInlets, sourceIdx, startX, startY, riverWidth)
 		degree[sourceIdx]++
 		connected[sourceIdx] = true
 		lakeUsed[sourceIdx] = true
@@ -366,12 +378,14 @@ func buildDrawLayoutRiverFlow(
 		desiredConnectedLakes,
 		seed+9187,
 		opts,
+		&lakeInlets,
 	)
 	linksCreated += shortCreated
 
 	for _, lake := range lakes {
 		carveDrawLakeFootprint(flow, width, height, lake, opts)
 	}
+	carveLakeInletChannels(flow, width, height, lakes, lakeInlets, opts)
 
 	return flow, linksCreated
 }
@@ -1036,6 +1050,201 @@ func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opt
 	}
 }
 
+func recordLakeInlet(lakeInlets *[]lakeInlet, lakeIndex, x, y, riverWidth int) {
+	if lakeInlets == nil || lakeIndex < 0 {
+		return
+	}
+	if riverWidth < 1 {
+		riverWidth = 1
+	}
+	*lakeInlets = append(*lakeInlets, lakeInlet{
+		LakeIndex:  lakeIndex,
+		X:          x,
+		Y:          y,
+		RiverWidth: riverWidth,
+	})
+}
+
+func carveLakeInletChannels(
+	flow []uint32,
+	width int,
+	height int,
+	lakes []drawLake,
+	inlets []lakeInlet,
+	opts RiverOptions,
+) {
+	if len(flow) == 0 || len(lakes) == 0 || len(inlets) == 0 || width <= 0 || height <= 0 {
+		return
+	}
+
+	inletsByLake := make([][]lakeInlet, len(lakes))
+	for _, inlet := range inlets {
+		if inlet.LakeIndex < 0 || inlet.LakeIndex >= len(lakes) {
+			continue
+		}
+		if inlet.X < 0 || inlet.Y < 0 || inlet.X >= width || inlet.Y >= height {
+			continue
+		}
+		inletsByLake[inlet.LakeIndex] = append(inletsByLake[inlet.LakeIndex], inlet)
+	}
+
+	for lakeIndex, lakeInlets := range inletsByLake {
+		if len(lakeInlets) == 0 {
+			continue
+		}
+		lake := lakes[lakeIndex]
+		basins := buildLakeBasins(lake)
+		if len(basins) == 0 {
+			continue
+		}
+		shoreThreshold := lakeShoreThreshold(lake)
+		hubX, hubY, ok := selectLakeInletHub(flow, width, height, lake, basins, shoreThreshold, opts)
+		if !ok {
+			continue
+		}
+		for _, inlet := range lakeInlets {
+			carveLakeInletPath(flow, width, height, inlet.X, inlet.Y, hubX, hubY, inlet.RiverWidth, opts)
+		}
+	}
+}
+
+func selectLakeInletHub(
+	flow []uint32,
+	width int,
+	height int,
+	lake drawLake,
+	basins []lakeBasin,
+	shoreThreshold float64,
+	opts RiverOptions,
+) (int, int, bool) {
+	searchRadius := clampInt(maxInt(4, maxInt(lake.RadiusX, lake.RadiusY)/2), 4, 36)
+	bestScore := -math.MaxFloat64
+	bestX := clampInt(lake.X, 0, width-1)
+	bestY := clampInt(lake.Y, 0, height-1)
+	found := false
+
+	for y := bestY - searchRadius; y <= bestY+searchRadius; y++ {
+		if y < 0 || y >= height {
+			continue
+		}
+		for x := bestX - searchRadius; x <= bestX+searchRadius; x++ {
+			if x < 0 || x >= width {
+				continue
+			}
+			contour, core := lakeContourValue(lake, basins, float64(x), float64(y))
+			if contour < shoreThreshold {
+				continue
+			}
+			idx := tileIndex(x, y, width)
+			if flow[idx] < uint32(opts.FlowShallowThreshold) {
+				continue
+			}
+
+			distance := math.Hypot(float64(x-lake.X), float64(y-lake.Y))
+			distancePenalty := distance / float64(maxInt(1, searchRadius))
+			score := core*0.72 + contour*0.28 - distancePenalty*0.35
+			if flow[idx] >= uint32(opts.FlowDeepThreshold) {
+				score += 0.45
+			}
+			if !found || score > bestScore {
+				found = true
+				bestScore = score
+				bestX = x
+				bestY = y
+			}
+		}
+	}
+
+	if found {
+		return bestX, bestY, true
+	}
+
+	centerIdx := tileIndex(bestX, bestY, width)
+	if flow[centerIdx] >= uint32(opts.FlowShallowThreshold) {
+		return bestX, bestY, true
+	}
+	return 0, 0, false
+}
+
+func carveLakeInletPath(
+	flow []uint32,
+	width int,
+	height int,
+	startX int,
+	startY int,
+	endX int,
+	endY int,
+	riverWidth int,
+	opts RiverOptions,
+) {
+	if startX < 0 || startY < 0 || startX >= width || startY >= height {
+		return
+	}
+	if endX < 0 || endY < 0 || endX >= width || endY >= height {
+		return
+	}
+
+	deepRadius := clampInt(int(math.Round(float64(maxInt(2, riverWidth))*0.22)), 1, 4)
+	if riverWidth >= 10 {
+		deepRadius = maxInt(deepRadius, 2)
+	}
+	bankRadius := deepRadius + 1
+
+	steps := maxInt(absInt(endX-startX), absInt(endY-startY))
+	if steps == 0 {
+		carveLakeInletCircleOnWater(flow, width, height, startX, startY, deepRadius, bankRadius, opts)
+		return
+	}
+
+	for step := 0; step <= steps; step++ {
+		t := float64(step) / float64(steps)
+		x := int(math.Round(float64(startX) + float64(endX-startX)*t))
+		y := int(math.Round(float64(startY) + float64(endY-startY)*t))
+		carveLakeInletCircleOnWater(flow, width, height, x, y, deepRadius, bankRadius, opts)
+	}
+}
+
+func carveLakeInletCircleOnWater(
+	flow []uint32,
+	width int,
+	height int,
+	centerX int,
+	centerY int,
+	deepRadius int,
+	bankRadius int,
+	opts RiverOptions,
+) {
+	if deepRadius < 1 {
+		deepRadius = 1
+	}
+	if bankRadius < deepRadius {
+		bankRadius = deepRadius
+	}
+
+	deepSq := deepRadius * deepRadius
+	bankSq := bankRadius * bankRadius
+	for dy := -bankRadius; dy <= bankRadius; dy++ {
+		for dx := -bankRadius; dx <= bankRadius; dx++ {
+			distSq := dx*dx + dy*dy
+			if distSq > bankSq {
+				continue
+			}
+			x := centerX + dx
+			y := centerY + dy
+			if x < 0 || y < 0 || x >= width || y >= height {
+				continue
+			}
+			idx := tileIndex(x, y, width)
+			if flow[idx] < uint32(opts.FlowShallowThreshold) {
+				continue
+			}
+			if distSq <= deepSq && flow[idx] < uint32(opts.FlowDeepThreshold) {
+				flow[idx] = uint32(opts.FlowDeepThreshold)
+			}
+		}
+	}
+}
+
 func connectRegionalLakeBackbone(
 	flow []uint32,
 	width int,
@@ -1049,6 +1258,7 @@ func connectRegionalLakeBackbone(
 	seed int64,
 	opts RiverOptions,
 	pathOpts RiverOptions,
+	lakeInlets *[]lakeInlet,
 ) int {
 	if maxLinks <= 0 || len(lakes) < 2 {
 		return 0
@@ -1154,6 +1364,8 @@ func connectRegionalLakeBackbone(
 
 		riverWidth := riverWidthForLink(seed, lakes[fromLake].ID, lakes[toLake].ID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordLakeInlet(lakeInlets, fromLake, startX, startY, riverWidth)
+		recordLakeInlet(lakeInlets, toLake, endX, endY, riverWidth)
 		degree[fromLake]++
 		degree[toLake]++
 		connected[fromLake] = true
@@ -1533,6 +1745,7 @@ func connectShortJitterStage(
 	desiredConnectedLakes int,
 	seed int64,
 	opts RiverOptions,
+	lakeInlets *[]lakeInlet,
 ) int {
 	budget := maxInt(0, opts.LakeConnectionLimit)
 	if budget == 0 || len(lakes) < 2 {
@@ -1592,6 +1805,8 @@ func connectShortJitterStage(
 
 			riverWidth := riverWidthForLink(seed, lakes[from].ID, lakes[to].ID, opts)
 			carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+			recordLakeInlet(lakeInlets, from, startX, startY, riverWidth)
+			recordLakeInlet(lakeInlets, to, endX, endY, riverWidth)
 			degree[from]++
 			degree[to]++
 			connected[from] = true
@@ -1628,6 +1843,7 @@ func connectShortJitterStage(
 
 		riverWidth := riverWidthForLink(seed, lakes[sourceIdx].ID, 2_000_000+shortID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordLakeInlet(lakeInlets, sourceIdx, startX, startY, riverWidth)
 		degree[sourceIdx]++
 		connected[sourceIdx] = true
 		lakeUsed[sourceIdx] = true

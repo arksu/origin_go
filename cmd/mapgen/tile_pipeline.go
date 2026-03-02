@@ -49,7 +49,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 			idx := tileIndex(x, y, widthTiles)
 			elevationValue := float64(elevation[idx])
 			signals := fields.BiomeSignals(x, y, opts.Biome)
-			family := macroLayout.familyAt(x, y, opts.Seed, opts.Biome.RegionJitter)
+			family := macroLayout.familyAt(x, y, opts.Seed, opts.Biome)
 			baseTiles[idx] = classifyBaseTileFromBiome(elevationValue, signals, family, opts.Biome, opts.Seed, x, y)
 		}
 	})
@@ -57,6 +57,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 		smoothBiomeTiles(baseTiles, widthTiles, heightTiles, opts.Biome.SmoothingPasses)
 		removeTinyBiomePatches(baseTiles, widthTiles, heightTiles, opts.Biome.MinPatchTiles)
 		smoothBiomeEdges(baseTiles, widthTiles, heightTiles, maxInt(1, opts.Biome.SmoothingPasses))
+		cleanBiomeBorderArtifacts(baseTiles, widthTiles, heightTiles, maxInt(1, opts.Biome.SmoothingPasses))
 	}
 
 	tiles := make([]byte, tileCount)
@@ -132,6 +133,13 @@ func parallelForRows(height int, threads int, fn func(y int)) {
 }
 
 func resolveTileType(elevation float64, baseTile byte, rc RiverClass, riverEnabled bool) byte {
+	if elevation < deepWaterThreshold {
+		return tileWaterDeep
+	}
+	if elevation < shallowWaterThreshold {
+		return tileWater
+	}
+
 	if riverEnabled {
 		switch rc {
 		case riverDeep:

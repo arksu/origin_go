@@ -892,6 +892,108 @@ func TestPathCrossingCountDetectsInteriorCrossings(t *testing.T) {
 	}
 }
 
+func TestCarveLakeInletChannelsExtendsDeepFlowIntoLake(t *testing.T) {
+	width := 96
+	height := 96
+	opts := DefaultMapgenOptions().River
+	opts.FlowShallowThreshold = 6
+	opts.FlowDeepThreshold = 20
+
+	lake := drawLake{
+		ID:           77,
+		X:            48,
+		Y:            48,
+		Radius:       16,
+		RadiusX:      18,
+		RadiusY:      14,
+		SizeClass:    lakeSizeMedium,
+		Rotation:     0.35,
+		LobeCount:    4,
+		Irregularity: 0.14,
+		DeepRatio:    0.46,
+		PhaseA:       1.2,
+		PhaseB:       3.4,
+	}
+
+	flow := make([]uint32, width*height)
+	carveDrawLakeFootprint(flow, width, height, lake, opts)
+
+	inletX, inletY := lakeShorePoint(lake, width-1, lake.Y, width, height)
+	inletIdx := tileIndex(inletX, inletY, width)
+	flow[inletIdx] = uint32(opts.FlowDeepThreshold)
+
+	beforeDeep := countDeepTilesInLake(flow, width, height, lake, opts)
+	carveLakeInletChannels(
+		flow,
+		width,
+		height,
+		[]drawLake{lake},
+		[]lakeInlet{{LakeIndex: 0, X: inletX, Y: inletY, RiverWidth: 12}},
+		opts,
+	)
+	afterDeep := countDeepTilesInLake(flow, width, height, lake, opts)
+
+	if afterDeep <= beforeDeep {
+		t.Fatalf("expected inlet channel pass to increase deep lake tiles: before=%d after=%d", beforeDeep, afterDeep)
+	}
+}
+
+func TestCarveLakeInletChannelsDoesNotCreateWaterOnDryTiles(t *testing.T) {
+	width := 48
+	height := 48
+	opts := DefaultMapgenOptions().River
+	opts.FlowShallowThreshold = 6
+	opts.FlowDeepThreshold = 20
+
+	flow := make([]uint32, width*height)
+	lake := drawLake{ID: 9, X: 24, Y: 24, Radius: 10, RadiusX: 11, RadiusY: 9, SizeClass: lakeSizeSmall, DeepRatio: 0.45}
+	inletX, inletY := 30, 24
+
+	carveLakeInletChannels(
+		flow,
+		width,
+		height,
+		[]drawLake{lake},
+		[]lakeInlet{{LakeIndex: 0, X: inletX, Y: inletY, RiverWidth: 9}},
+		opts,
+	)
+
+	for idx, value := range flow {
+		if value != 0 {
+			t.Fatalf("expected inlet channel pass to skip dry maps, found non-zero flow at idx=%d value=%d", idx, value)
+		}
+	}
+}
+
+func countDeepTilesInLake(flow []uint32, width, height int, lake drawLake, opts RiverOptions) int {
+	basins := buildLakeBasins(lake)
+	if len(basins) == 0 {
+		return 0
+	}
+	shoreThreshold := lakeShoreThreshold(lake)
+	deepCount := 0
+
+	minX := clampInt(lake.X-maxInt(lake.RadiusX, lake.Radius)-4, 0, width-1)
+	maxX := clampInt(lake.X+maxInt(lake.RadiusX, lake.Radius)+4, 0, width-1)
+	minY := clampInt(lake.Y-maxInt(lake.RadiusY, lake.Radius)-4, 0, height-1)
+	maxY := clampInt(lake.Y+maxInt(lake.RadiusY, lake.Radius)+4, 0, height-1)
+
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			contour, _ := lakeContourValue(lake, basins, float64(x), float64(y))
+			if contour < shoreThreshold {
+				continue
+			}
+			idx := tileIndex(x, y, width)
+			if flow[idx] >= uint32(opts.FlowDeepThreshold) {
+				deepCount++
+			}
+		}
+	}
+
+	return deepCount
+}
+
 func countRiverComponentsAtMostSize(classMask []RiverClass, width, height, maxSize int) int {
 	visited := make([]bool, len(classMask))
 	queue := make([]int, 0, 256)
