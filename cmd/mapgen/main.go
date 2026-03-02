@@ -3,23 +3,23 @@ package main
 import (
 	"context"
 	"database/sql"
-	"flag"
 	"fmt"
 	"math"
 	"math/rand"
 	_const "origin/internal/const"
-	"sync/atomic"
-	"time"
-
-	"go.uber.org/zap"
-
-	"origin/internal/config"
 	"origin/internal/game/behaviors"
 	"origin/internal/itemdefs"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
+	"os"
+	"sync/atomic"
+	"time"
+
+	"go.uber.org/zap"
+
+	"origin/internal/config"
 )
 
 const (
@@ -31,13 +31,13 @@ func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	var (
-		chunksX = flag.Int("chunks-x", 50, "number of chunks in X direction")
-		chunksY = flag.Int("chunks-y", 50, "number of chunks in Y direction")
-		seed    = flag.Int64("seed", 0, "random seed (0 = use current time)")
-		threads = flag.Int("threads", 4, "number of worker threads")
-	)
-	flag.Parse()
+	opts, err := ParseMapgenOptions(os.Args[1:])
+	if err != nil {
+		logger.Fatal("invalid mapgen options", zap.Error(err))
+	}
+	if opts.Seed == 0 {
+		opts.Seed = time.Now().UnixNano()
+	}
 
 	cfg := config.MustLoad(logger)
 
@@ -57,11 +57,6 @@ func main() {
 		logger.Fatal("failed to load object definitions", zap.Error(err))
 	}
 
-	if *seed == 0 {
-		*seed = time.Now().UnixNano()
-	}
-	rng := rand.New(rand.NewSource(*seed))
-
 	ctx := context.Background()
 	db, err := persistence.NewPostgres(ctx, &cfg.Database, logger)
 	if err != nil {
@@ -69,27 +64,61 @@ func main() {
 	}
 	defer db.Close()
 
+	perlin := NewPerlinNoise(opts.Seed)
 	gen := &MapGenerator{
 		cfg:          cfg,
 		db:           db,
 		logger:       logger,
-		rng:          rng,
 		chunkSize:    _const.ChunkSize,
 		coordPerTile: _const.CoordPerTile,
 		region:       cfg.Game.Region,
-		perlin:       NewPerlinNoise(*seed),
-		seed:         *seed,
+		perlin:       perlin,
+		seed:         opts.Seed,
 		objectDefs:   objRegistry,
+		options:      opts,
+		noiseFields:  NewNoiseFields(perlin, _const.CoordPerTile),
 	}
 
 	logger.Info("starting map generation",
-		zap.Int("chunks_x", *chunksX),
-		zap.Int("chunks_y", *chunksY),
-		zap.Int64("seed", *seed),
+		zap.Int("chunks_x", opts.ChunksX),
+		zap.Int("chunks_y", opts.ChunksY),
+		zap.Int64("seed", opts.Seed),
 		zap.Int("region", cfg.Game.Region),
-		zap.Int("threads", *threads))
+		zap.Int("threads", opts.Threads),
+		zap.Bool("river_enabled", opts.River.Enabled),
+		zap.Float64("river_source_elevation_min", opts.River.SourceElevationMin),
+		zap.Float64("river_source_chance", opts.River.SourceChance),
+		zap.Float64("river_meander_strength", opts.River.MeanderStrength),
+		zap.Int("river_voronoi_cell_size", opts.River.VoronoiCellSize),
+		zap.Float64("river_voronoi_edge_threshold", opts.River.VoronoiEdgeThreshold),
+		zap.Float64("river_voronoi_source_boost", opts.River.VoronoiSourceBoost),
+		zap.Float64("river_voronoi_bias", opts.River.VoronoiBias),
+		zap.Float64("river_sink_lake_chance", opts.River.SinkLakeChance),
+		zap.Int("river_lake_min_size", opts.River.LakeMinSize),
+		zap.Float64("river_lake_connect_chance", opts.River.LakeConnectChance),
+		zap.Int("river_lake_connection_limit", opts.River.LakeConnectionLimit),
+		zap.Int("river_lake_link_min_distance", opts.River.LakeLinkMinDistance),
+		zap.Int("river_lake_link_max_distance", opts.River.LakeLinkMaxDistance),
+		zap.Int("river_width_min", opts.River.RiverWidthMin),
+		zap.Int("river_width_max", opts.River.RiverWidthMax),
+		zap.Bool("river_grid_enabled", opts.River.GridEnabled),
+		zap.Int("river_grid_spacing", opts.River.GridSpacing),
+		zap.Int("river_grid_jitter", opts.River.GridJitter),
+		zap.Int("river_trunk_count", opts.River.TrunkRiverCount),
+		zap.Float64("river_trunk_source_elevation_min", opts.River.TrunkSourceElevation),
+		zap.Int("river_trunk_min_length", opts.River.TrunkMinLength),
+		zap.Float64("river_coast_sample_chance", opts.River.CoastSampleChance),
+		zap.Int("river_flow_shallow_threshold", opts.River.FlowShallowThreshold),
+		zap.Int("river_flow_deep_threshold", opts.River.FlowDeepThreshold),
+		zap.Int("river_bank_radius", opts.River.BankRadius),
+		zap.Int("river_lake_flow_threshold", opts.River.LakeFlowThreshold),
+		zap.Bool("png_export", opts.PNG.Export),
+		zap.String("png_dir", opts.PNG.OutputDir),
+		zap.Int("png_scale", opts.PNG.Scale),
+		zap.Bool("png_highlight_rivers", opts.PNG.HighlightRivers),
+	)
 
-	if err := gen.Generate(ctx, *chunksX, *chunksY, *threads); err != nil {
+	if err := gen.Generate(ctx); err != nil {
 		logger.Fatal("map generation failed", zap.Error(err))
 	}
 
@@ -100,13 +129,16 @@ type MapGenerator struct {
 	cfg          *config.Config
 	db           *persistence.Postgres
 	logger       *zap.Logger
-	rng          *rand.Rand
 	chunkSize    int
 	coordPerTile int
 	region       int
 	perlin       *PerlinNoise
+	noiseFields  *NoiseFields
 	seed         int64
 	objectDefs   *objectdefs.Registry
+	options      MapgenOptions
+	terrain      *TerrainPrecompute
+
 	lastEntityID atomic.Uint64
 	generated    atomic.Int32
 }
@@ -115,7 +147,32 @@ type ChunkTask struct {
 	X, Y int
 }
 
-func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY, threads int) error {
+func (g *MapGenerator) Generate(ctx context.Context) error {
+	g.logger.Info("precomputing terrain")
+	terrain, err := BuildTerrainPrecompute(g.options, g.chunkSize, g.noiseFields)
+	if err != nil {
+		return fmt.Errorf("precompute terrain: %w", err)
+	}
+	g.terrain = terrain
+
+	g.logger.Info("terrain precompute completed",
+		zap.Int("width_tiles", terrain.WidthTiles),
+		zap.Int("height_tiles", terrain.HeightTiles),
+		zap.Int("river_sources", terrain.RiverSources),
+		zap.Int("river_shallow_tiles", terrain.RiverShallowTiles),
+		zap.Int("river_deep_tiles", terrain.RiverDeepTiles),
+	)
+
+	if g.options.PNG.Export {
+		g.logger.Info("exporting map pngs",
+			zap.String("dir", g.options.PNG.OutputDir),
+			zap.Int("scale", g.options.PNG.Scale),
+		)
+		if err := ExportMapPNGs(terrain.Tiles, terrain.RiverClass, terrain.WidthTiles, terrain.HeightTiles, g.chunkSize, g.options.PNG); err != nil {
+			return fmt.Errorf("export map pngs: %w", err)
+		}
+	}
+
 	g.logger.Info("truncating existing data for region", zap.Int("region", g.region))
 	if err := g.db.Queries().DeleteChunksByRegion(ctx, g.region); err != nil {
 		return fmt.Errorf("delete chunks: %w", err)
@@ -127,29 +184,25 @@ func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY, threads i
 	g.lastEntityID.Store(uint64(g.db.GetGlobalVarLong(ctx, "last_used_id")))
 	g.logger.Info("loaded last entity ID", zap.Uint64("last_entity_id", g.lastEntityID.Load()))
 
-	totalChunks := chunksX * chunksY
+	totalChunks := g.options.ChunksX * g.options.ChunksY
 	g.generated.Store(0)
 
-	// Create task channel
-	tasks := make(chan ChunkTask, threads*2)
-	errs := make(chan error, threads)
+	tasks := make(chan ChunkTask, g.options.Threads*2)
+	errs := make(chan error, g.options.Threads)
 
-	// Start workers
-	for i := 0; i < threads; i++ {
-		go g.worker(ctx, tasks, errs, i)
+	for i := 0; i < g.options.Threads; i++ {
+		go g.worker(ctx, tasks, errs)
 	}
 
-	// Send tasks
 	go func() {
 		defer close(tasks)
-		for cy := 0; cy < chunksY; cy++ {
-			for cx := 0; cx < chunksX; cx++ {
+		for cy := 0; cy < g.options.ChunksY; cy++ {
+			for cx := 0; cx < g.options.ChunksX; cx++ {
 				tasks <- ChunkTask{X: cx, Y: cy}
 			}
 		}
 	}()
 
-	// Wait for completion or errors
 	completed := 0
 	for completed < totalChunks {
 		select {
@@ -174,12 +227,9 @@ func (g *MapGenerator) Generate(ctx context.Context, chunksX, chunksY, threads i
 	return nil
 }
 
-func (g *MapGenerator) worker(ctx context.Context, tasks <-chan ChunkTask, errs chan<- error, workerID int) {
-	// Create separate RNG for each worker
-	rng := rand.New(rand.NewSource(g.seed + int64(workerID*1000)))
-
+func (g *MapGenerator) worker(ctx context.Context, tasks <-chan ChunkTask, errs chan<- error) {
 	for task := range tasks {
-		if err := g.generateChunkWithRNG(ctx, task.X, task.Y, rng); err != nil {
+		if err := g.generateChunk(ctx, task.X, task.Y); err != nil {
 			errs <- fmt.Errorf("generate chunk (%d,%d): %w", task.X, task.Y, err)
 			return
 		}
@@ -187,20 +237,40 @@ func (g *MapGenerator) worker(ctx context.Context, tasks <-chan ChunkTask, errs 
 	}
 }
 
+func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) error {
+	seed := deterministicChunkSeed(g.seed, chunkX, chunkY)
+	rng := rand.New(rand.NewSource(seed))
+	return g.generateChunkWithRNG(ctx, chunkX, chunkY, rng)
+}
+
+func deterministicChunkSeed(seed int64, chunkX, chunkY int) int64 {
+	mix := uint64(seed)
+	mix ^= uint64(int64(chunkX)) * 0x9E3779B185EBCA87
+	mix ^= uint64(int64(chunkY)) * 0xC2B2AE3D27D4EB4F
+	mixed := splitMix64(mix)
+	if mixed == 0 {
+		mixed = 1
+	}
+	return int64(mixed & math.MaxInt64)
+}
+
 func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY int, rng *rand.Rand) error {
+	if g.terrain == nil {
+		return fmt.Errorf("terrain precompute is not initialized")
+	}
+
 	tilesPerChunk := g.chunkSize
 	tiles := make([]byte, tilesPerChunk*tilesPerChunk)
 	var entities []repository.UpsertObjectParams
 
-	worldOffsetX := float64(int(chunkX) * g.chunkSize * g.coordPerTile)
-	worldOffsetY := float64(int(chunkY) * g.chunkSize * g.coordPerTile)
+	worldOffsetX := float64(chunkX * g.chunkSize * g.coordPerTile)
+	worldOffsetY := float64(chunkY * g.chunkSize * g.coordPerTile)
 
 	for ty := 0; ty < g.chunkSize; ty++ {
 		for tx := 0; tx < g.chunkSize; tx++ {
-			worldX := worldOffsetX + float64(tx*g.coordPerTile)
-			worldY := worldOffsetY + float64(ty*g.coordPerTile)
-
-			tile := g.getTileType(worldX, worldY)
+			globalTileX := chunkX*g.chunkSize + tx
+			globalTileY := chunkY*g.chunkSize + ty
+			tile := g.terrain.Tiles[tileIndex(globalTileX, globalTileY, g.terrain.WidthTiles)]
 			tiles[ty*g.chunkSize+tx] = tile
 
 			if treeDef := g.treeDefForTile(tile); treeDef != nil && rng.Float64() < TreeDensity {
@@ -282,50 +352,13 @@ func (g *MapGenerator) boulderDefForTile(tile byte) *objectdefs.ObjectDef {
 func (g *MapGenerator) treeDefForTile(tile byte) *objectdefs.ObjectDef {
 	switch tile {
 	case types.TileConiferousForest:
-		def, _ := g.objectDefs.GetByKey("tree_pine")
+		def, _ := g.objectDefs.GetByKey("tree_birch")
 		return def
 	case types.TileBroadleafForest:
 		def, _ := g.objectDefs.GetByKey("tree_birch")
 		return def
 	}
 	return nil
-}
-
-func (g *MapGenerator) generateChunk(ctx context.Context, chunkX, chunkY int) error {
-	// Use the original RNG for backward compatibility
-	return g.generateChunkWithRNG(ctx, chunkX, chunkY, g.rng)
-}
-
-func (g *MapGenerator) getTileType(worldX, worldY float64) byte {
-	scale := 0.002
-
-	elevation := g.perlin.Noise2D(worldX*scale, worldY*scale)
-	moisture := g.perlin.Noise2D(worldX*scale*0.5+1000, worldY*scale*0.5+1000)
-	temperature := g.perlin.Noise2D(worldX*scale*0.3+2000, worldY*scale*0.3+2000)
-
-	elevation = (elevation + 1) / 2
-	moisture = (moisture + 1) / 2
-	temperature = (temperature + 1) / 2
-
-	if elevation < 0.25 {
-		return types.TileDeepWater
-	}
-	if elevation < 0.35 {
-		return types.TileShallowWater
-	}
-
-	if elevation < 0.42 {
-		return types.TileSand
-	}
-
-	if moisture > 0.6 {
-		if temperature > 0.5 {
-			return types.TileBroadleafForest
-		}
-		return types.TileConiferousForest
-	}
-
-	return types.TileGrass
 }
 
 type PerlinNoise struct {
