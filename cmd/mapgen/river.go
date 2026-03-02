@@ -27,6 +27,9 @@ const (
 	lakeShapeSaltA     = uint64(0x6E4B9D1337CA822D)
 	lakeShapeSaltB     = uint64(0xC17A6E995D4AF63B)
 	lakeShapeSaltC     = uint64(0xA13E2C7FD9B5E741)
+	lakeBasinSaltA     = uint64(0x8D58AC26AFE12B37)
+	lakeBasinSaltB     = uint64(0x53FB9B2A74C9D1E3)
+	lakeBasinSaltC     = uint64(0x2C1FD0B4E6958A71)
 )
 
 type RiverNetwork struct {
@@ -88,6 +91,33 @@ type lakeSizeProfile struct {
 	LargeChance  float64
 	MaxRadius    int
 }
+
+type lakeCenter struct {
+	X int
+	Y int
+}
+
+type lakeBasin struct {
+	X       float64
+	Y       float64
+	RadiusX float64
+	RadiusY float64
+	Weight  float64
+}
+
+type regionalAnchor struct {
+	LakeIndex int
+	CellX     int
+	CellY     int
+}
+
+type lakeSizeClass byte
+
+const (
+	lakeSizeSmall lakeSizeClass = iota
+	lakeSizeMedium
+	lakeSizeLarge
+)
 
 func BuildRiverNetwork(
 	elevation []float32,
@@ -258,7 +288,23 @@ func buildDrawLayoutRiverFlow(
 	longPathOpts := opts
 	longPathOpts.MeanderStrength = maxFloat(opts.MeanderStrength*opts.ShapeLongMeanderScale, 0.0015)
 
-	for linkID := 0; linkID < lakeToLakeLinks; linkID++ {
+	regionalCreated := connectRegionalLakeBackbone(
+		flow,
+		width,
+		height,
+		lakes,
+		degree,
+		connected,
+		lakeUsed,
+		usedPairs,
+		lakeToLakeLinks,
+		seed,
+		opts,
+		longPathOpts,
+	)
+	linksCreated += regionalCreated
+
+	for linkID := regionalCreated; linkID < lakeToLakeLinks; linkID++ {
 		from, to, ok := selectDrawLakePair(lakes, degree, connected, usedPairs, width, height, seed+int64(linkID)*1619, opts)
 		if !ok {
 			break
@@ -322,10 +368,7 @@ func buildDrawLayoutRiverFlow(
 	)
 	linksCreated += shortCreated
 
-	for lakeIndex, lake := range lakes {
-		if !lakeUsed[lakeIndex] {
-			continue
-		}
+	for _, lake := range lakes {
 		carveDrawLakeFootprint(flow, width, height, lake, opts)
 	}
 
@@ -345,63 +388,247 @@ func generateDrawLakes(width int, height int, seed int64, opts RiverOptions) []d
 		margin = 1
 	}
 	minGap := maxInt(4, opts.RiverWidthMax/2+2)
+	minDistance := float64(maxInt(14, sizeProfile.SmallMax+minGap))
+	centerCandidates := generateBlueNoiseLakeCenters(width, height, margin, target*7, minDistance, seed)
+	shuffleLakeCenters(centerCandidates, seed)
 
-	gridCols := int(math.Round(math.Sqrt(float64(target) * float64(width) / float64(maxInt(height, 1)))))
-	if gridCols < 1 {
-		gridCols = 1
+	largeTarget := int(math.Round(float64(target) * sizeProfile.LargeChance))
+	mediumTarget := int(math.Round(float64(target) * sizeProfile.MediumChance))
+	if sizeProfile.LargeChance > 0 && target >= 20 && largeTarget == 0 {
+		largeTarget = 1
 	}
-	gridRows := int(math.Ceil(float64(target) / float64(gridCols)))
-	if gridRows < 1 {
-		gridRows = 1
+	if largeTarget > target {
+		largeTarget = target
 	}
-
-	cellWidth := maxInt(1, width/gridCols)
-	cellHeight := maxInt(1, height/gridRows)
-	jitterX := maxInt(2, cellWidth/3)
-	jitterY := maxInt(2, cellHeight/3)
-
-	for gy := 0; gy < gridRows && len(lakes) < target; gy++ {
-		for gx := 0; gx < gridCols && len(lakes) < target; gx++ {
-			baseX := gx*cellWidth + cellWidth/2
-			baseY := gy*cellHeight + cellHeight/2
-
-			xOffset := (coordHash01(seed, gx, gy, voronoiPointXSalt) - 0.5) * 2 * float64(jitterX)
-			yOffset := (coordHash01(seed, gy, gx, voronoiPointYSalt) - 0.5) * 2 * float64(jitterY)
-
-			x := clampInt(int(math.Round(float64(baseX)+xOffset)), margin, width-margin-1)
-			y := clampInt(int(math.Round(float64(baseY)+yOffset)), margin, height-margin-1)
-			lakeID := len(lakes)
-			profile := buildDrawLakeProfile(seed, lakeID, sizeProfile)
-			if !canPlaceDrawLake(lakes, x, y, profile.Radius, minGap) {
-				continue
-			}
-			profile.ID = lakeID
-			profile.X = x
-			profile.Y = y
-			lakes = append(lakes, profile)
-		}
+	if mediumTarget > target-largeTarget {
+		mediumTarget = target - largeTarget
 	}
+	smallTarget := target - largeTarget - mediumTarget
+	remainingLarge := largeTarget
+	remainingMedium := mediumTarget
+	remainingSmall := smallTarget
+	failedInCurrentClass := 0
 
-	attemptLimit := target * 24
+	attemptLimit := maxInt(target*40, len(centerCandidates)+target*8)
+	centerIdx := 0
 	for attempt := 0; attempt < attemptLimit && len(lakes) < target; attempt++ {
-		xRange := maxInt(1, width-2*margin)
-		yRange := maxInt(1, height-2*margin)
-		x := margin + int(math.Floor(coordHash01(seed, attempt, target, riverGridSalt)*float64(xRange)))
-		y := margin + int(math.Floor(coordHash01(seed, target, attempt, riverGridSalt^0x1248ACED)*float64(yRange)))
-		x = clampInt(x, margin, width-margin-1)
-		y = clampInt(y, margin, height-margin-1)
+		var center lakeCenter
+		if centerIdx < len(centerCandidates) {
+			center = centerCandidates[centerIdx]
+			centerIdx++
+		} else {
+			fallback, ok := bestCandidateLakeCenter(width, height, margin, lakes, seed, attempt)
+			if !ok {
+				break
+			}
+			center = fallback
+		}
+
+		sizeClass := lakeSizeSmall
+		switch {
+		case remainingLarge > 0:
+			sizeClass = lakeSizeLarge
+		case remainingMedium > 0:
+			sizeClass = lakeSizeMedium
+		default:
+			sizeClass = lakeSizeSmall
+		}
+
 		profileID := len(lakes) + attempt*13
-		profile := buildDrawLakeProfile(seed, profileID, sizeProfile)
-		if !canPlaceDrawLake(lakes, x, y, profile.Radius, minGap) {
+		profile := buildDrawLakeProfileForClass(seed, profileID, sizeProfile, sizeClass)
+		if !canPlaceDrawLake(lakes, center.X, center.Y, profile.Radius, minGap) {
+			failedInCurrentClass++
+			if failedInCurrentClass > maxInt(24, target/3) {
+				switch sizeClass {
+				case lakeSizeLarge:
+					if remainingLarge > 0 {
+						remainingLarge--
+						remainingMedium++
+					}
+				case lakeSizeMedium:
+					if remainingMedium > 0 {
+						remainingMedium--
+						remainingSmall++
+					}
+				}
+				failedInCurrentClass = 0
+			}
 			continue
 		}
+		failedInCurrentClass = 0
 		profile.ID = len(lakes)
-		profile.X = x
-		profile.Y = y
+		profile.X = center.X
+		profile.Y = center.Y
 		lakes = append(lakes, profile)
+
+		switch sizeClass {
+		case lakeSizeLarge:
+			if remainingLarge > 0 {
+				remainingLarge--
+			}
+		case lakeSizeMedium:
+			if remainingMedium > 0 {
+				remainingMedium--
+			}
+		default:
+			if remainingSmall > 0 {
+				remainingSmall--
+			}
+		}
 	}
 
 	return lakes
+}
+
+func generateBlueNoiseLakeCenters(
+	width int,
+	height int,
+	margin int,
+	target int,
+	minDistance float64,
+	seed int64,
+) []lakeCenter {
+	if target <= 0 {
+		return nil
+	}
+	if minDistance < 2 {
+		minDistance = 2
+	}
+
+	minX := clampInt(margin, 0, maxInt(0, width-1))
+	minY := clampInt(margin, 0, maxInt(0, height-1))
+	maxX := clampInt(width-margin-1, 0, maxInt(0, width-1))
+	maxY := clampInt(height-margin-1, 0, maxInt(0, height-1))
+	if minX >= maxX || minY >= maxY {
+		return nil
+	}
+
+	spanX := maxX - minX + 1
+	spanY := maxY - minY + 1
+	if spanX <= 1 || spanY <= 1 {
+		return nil
+	}
+
+	centers := make([]lakeCenter, 0, target)
+	used := make(map[int]struct{}, target*2)
+
+	pickRandomCandidate := func(step, saltOffset int) lakeCenter {
+		x := minX + int(math.Floor(coordHash01(seed, step, saltOffset, riverGridSalt)*float64(spanX)))
+		y := minY + int(math.Floor(coordHash01(seed, saltOffset, step, riverGridSalt^riverSourceSalt)*float64(spanY)))
+		return lakeCenter{
+			X: clampInt(x, minX, maxX),
+			Y: clampInt(y, minY, maxY),
+		}
+	}
+
+	first := pickRandomCandidate(0, 0)
+	centers = append(centers, first)
+	used[tileIndex(first.X, first.Y, width)] = struct{}{}
+
+	candidateCount := 24
+	minDistanceSq := minDistance * minDistance
+	maxIterations := target * 10
+	for step := 1; step < maxIterations && len(centers) < target; step++ {
+		bestCandidate := lakeCenter{}
+		bestScore := -1.0
+		found := false
+
+		for candidateID := 0; candidateID < candidateCount; candidateID++ {
+			candidate := pickRandomCandidate(step, candidateID+1)
+			candidateIdx := tileIndex(candidate.X, candidate.Y, width)
+			if _, exists := used[candidateIdx]; exists {
+				continue
+			}
+
+			nearestSq := math.MaxFloat64
+			for _, center := range centers {
+				dx := float64(center.X - candidate.X)
+				dy := float64(center.Y - candidate.Y)
+				distanceSq := dx*dx + dy*dy
+				if distanceSq < nearestSq {
+					nearestSq = distanceSq
+				}
+			}
+
+			score := nearestSq + coordHash01(seed, candidate.X, candidate.Y, riverWidthSalt)*0.01
+			if score > bestScore {
+				bestScore = score
+				bestCandidate = candidate
+				found = true
+			}
+		}
+
+		if !found {
+			continue
+		}
+		if bestScore < minDistanceSq*0.12 && len(centers) > target/2 {
+			break
+		}
+		centers = append(centers, bestCandidate)
+		used[tileIndex(bestCandidate.X, bestCandidate.Y, width)] = struct{}{}
+	}
+
+	return centers
+}
+
+func shuffleLakeCenters(centers []lakeCenter, seed int64) {
+	if len(centers) < 2 {
+		return
+	}
+	state := splitMix64(uint64(seed) ^ lakeBasinSaltA)
+	for i := len(centers) - 1; i > 0; i-- {
+		state = splitMix64(state + uint64(i)*0x9E3779B185EBCA87)
+		j := int(state % uint64(i+1))
+		centers[i], centers[j] = centers[j], centers[i]
+	}
+}
+
+func bestCandidateLakeCenter(
+	width int,
+	height int,
+	margin int,
+	lakes []drawLake,
+	seed int64,
+	attemptID int,
+) (lakeCenter, bool) {
+	minX := clampInt(margin, 0, maxInt(0, width-1))
+	minY := clampInt(margin, 0, maxInt(0, height-1))
+	maxX := clampInt(width-margin-1, 0, maxInt(0, width-1))
+	maxY := clampInt(height-margin-1, 0, maxInt(0, height-1))
+	if minX >= maxX || minY >= maxY {
+		return lakeCenter{}, false
+	}
+
+	if len(lakes) == 0 {
+		x := minX + int(math.Floor(coordHash01(seed, attemptID, maxX, riverGridSalt)*float64(maxX-minX+1)))
+		y := minY + int(math.Floor(coordHash01(seed, maxY, attemptID, riverGridSalt^riverSourceSalt)*float64(maxY-minY+1)))
+		return lakeCenter{X: clampInt(x, minX, maxX), Y: clampInt(y, minY, maxY)}, true
+	}
+
+	best := lakeCenter{}
+	bestScore := -1.0
+	found := false
+	for candidateID := 0; candidateID < 28; candidateID++ {
+		x := minX + int(math.Floor(coordHash01(seed, attemptID, candidateID, voronoiPointXSalt)*float64(maxX-minX+1)))
+		y := minY + int(math.Floor(coordHash01(seed, candidateID, attemptID, voronoiPointYSalt)*float64(maxY-minY+1)))
+		score := math.MaxFloat64
+		for _, lake := range lakes {
+			dist := math.Hypot(float64(lake.X-x), float64(lake.Y-y))
+			edgeDistance := dist - float64(lake.Radius)
+			if edgeDistance < score {
+				score = edgeDistance
+			}
+		}
+		if !found || score > bestScore {
+			found = true
+			best = lakeCenter{X: x, Y: y}
+			bestScore = score
+		}
+	}
+	if !found {
+		return lakeCenter{}, false
+	}
+	return best, true
 }
 
 func resolveLakeSizeProfile(width, height int, opts RiverOptions) lakeSizeProfile {
@@ -497,18 +724,22 @@ func resolveLakeSizeProfile(width, height int, opts RiverOptions) lakeSizeProfil
 
 func buildDrawLakeProfile(seed int64, lakeID int, sizeProfile lakeSizeProfile) drawLake {
 	sizeRoll := coordHash01(seed, lakeID, sizeProfile.MaxRadius, riverSinkLakeSalt)
-	minMajor := sizeProfile.SmallMin
-	maxMajor := sizeProfile.SmallMax
-	exp := 1.35
+	sizeClass := lakeSizeSmall
 	if sizeRoll < sizeProfile.LargeChance {
-		minMajor = sizeProfile.LargeMin
-		maxMajor = sizeProfile.LargeMax
-		exp = 0.78
+		sizeClass = lakeSizeLarge
 	} else if sizeRoll < sizeProfile.LargeChance+sizeProfile.MediumChance {
-		minMajor = sizeProfile.MediumMin
-		maxMajor = sizeProfile.MediumMax
-		exp = 1.0
+		sizeClass = lakeSizeMedium
 	}
+	return buildDrawLakeProfileForClass(seed, lakeID, sizeProfile, sizeClass)
+}
+
+func buildDrawLakeProfileForClass(
+	seed int64,
+	lakeID int,
+	sizeProfile lakeSizeProfile,
+	sizeClass lakeSizeClass,
+) drawLake {
+	minMajor, maxMajor, exp := lakeSizeClassRange(sizeProfile, sizeClass)
 	radiusRoll := coordHash01(seed, lakeID, minMajor+maxMajor, lakeShapeSaltA^riverSinkLakeSalt)
 	major := minMajor + int(math.Round(math.Pow(radiusRoll, exp)*float64(maxMajor-minMajor)))
 	if major < minMajor {
@@ -548,6 +779,17 @@ func buildDrawLakeProfile(seed int64, lakeID int, sizeProfile lakeSizeProfile) d
 	}
 }
 
+func lakeSizeClassRange(sizeProfile lakeSizeProfile, sizeClass lakeSizeClass) (minMajor int, maxMajor int, exp float64) {
+	switch sizeClass {
+	case lakeSizeLarge:
+		return sizeProfile.LargeMin, sizeProfile.LargeMax, 0.78
+	case lakeSizeMedium:
+		return sizeProfile.MediumMin, sizeProfile.MediumMax, 1.0
+	default:
+		return sizeProfile.SmallMin, sizeProfile.SmallMax, 1.35
+	}
+}
+
 func canPlaceDrawLake(lakes []drawLake, x, y, radius, minGap int) bool {
 	for _, lake := range lakes {
 		required := lake.Radius + radius + minGap
@@ -560,47 +802,130 @@ func canPlaceDrawLake(lakes []drawLake, x, y, radius, minGap int) bool {
 	return true
 }
 
-func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opts RiverOptions) {
-	outerX := maxInt(2, lake.RadiusX)
-	outerY := maxInt(2, lake.RadiusY)
+func buildLakeBasins(lake drawLake) []lakeBasin {
+	baseRadiusX := float64(maxInt(2, lake.RadiusX))
+	baseRadiusY := float64(maxInt(2, lake.RadiusY))
 	cosR := math.Cos(lake.Rotation)
 	sinR := math.Sin(lake.Rotation)
+
+	basinCount := clampInt(2+lake.LobeCount/2, 2, 5)
+	basins := make([]lakeBasin, 0, basinCount)
+	basins = append(basins, lakeBasin{
+		X:       float64(lake.X),
+		Y:       float64(lake.Y),
+		RadiusX: baseRadiusX,
+		RadiusY: baseRadiusY,
+		Weight:  1.15,
+	})
+
+	span := minFloat(baseRadiusX, baseRadiusY)
+	for basinID := 1; basinID < basinCount; basinID++ {
+		angle := lake.PhaseA + float64(basinID)*2*math.Pi/float64(maxInt(1, basinCount-1))
+		angle += (coordHash01(int64(lake.ID), basinID, lake.Radius, lakeBasinSaltA) - 0.5) * 1.8
+		distance := span * (0.22 + coordHash01(int64(lake.ID), basinID, lake.RadiusX, lakeBasinSaltB)*0.56)
+		localX := math.Cos(angle) * distance
+		localY := math.Sin(angle) * distance * (0.68 + coordHash01(int64(lake.ID), basinID, lake.RadiusY, lakeBasinSaltC)*0.52)
+
+		offsetX := localX*cosR - localY*sinR
+		offsetY := localX*sinR + localY*cosR
+		radiusX := baseRadiusX * (0.34 + coordHash01(int64(lake.ID), basinID, lake.X, lakeShapeSaltA)*0.54)
+		radiusY := baseRadiusY * (0.34 + coordHash01(int64(lake.ID), basinID, lake.Y, lakeShapeSaltB)*0.54)
+		weight := 0.55 + coordHash01(int64(lake.ID), basinID, lake.X+lake.Y, riverLakeLinkSalt)*0.55
+		basins = append(basins, lakeBasin{
+			X:       float64(lake.X) + offsetX,
+			Y:       float64(lake.Y) + offsetY,
+			RadiusX: maxFloat(2, radiusX),
+			RadiusY: maxFloat(2, radiusY),
+			Weight:  weight,
+		})
+	}
+
+	return basins
+}
+
+func lakeContourValue(lake drawLake, basins []lakeBasin, x, y float64) (float64, float64) {
+	sum := 0.0
+	core := 0.0
+	for _, basin := range basins {
+		dx := (x - basin.X) / maxFloat(1, basin.RadiusX)
+		dy := (y - basin.Y) / maxFloat(1, basin.RadiusY)
+		value := 1 - (dx*dx + dy*dy)
+		if value <= 0 {
+			continue
+		}
+		weighted := value * basin.Weight
+		sum += weighted
+		if weighted > core {
+			core = weighted
+		}
+	}
+	if sum <= 0 {
+		return 0, 0
+	}
+
+	noiseScale := maxFloat(8, float64(maxInt(6, lake.Radius/2)))
+	roughness := (smoothHashNoise2D(int64(lake.ID)+211, x, y, noiseScale, lakeShapeSaltC) - 0.5) * lake.Irregularity * 0.22
+	contour := sum + roughness
+	return contour, core
+}
+
+func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opts RiverOptions) {
+	basins := buildLakeBasins(lake)
+	if len(basins) == 0 {
+		return
+	}
+
 	deepRatio := clamp01(lake.DeepRatio)
 	if deepRatio < 0.30 {
 		deepRatio = 0.30
 	}
 
-	boundsX := outerX + maxInt(2, int(math.Round(float64(outerX)*lake.Irregularity))+2)
-	boundsY := outerY + maxInt(2, int(math.Round(float64(outerY)*lake.Irregularity))+2)
+	minX := width - 1
+	minY := height - 1
+	maxX := 0
+	maxY := 0
+	for _, basin := range basins {
+		boundX := int(math.Ceil(basin.RadiusX)) + 3
+		boundY := int(math.Ceil(basin.RadiusY)) + 3
+		basinMinX := int(math.Floor(basin.X)) - boundX
+		basinMaxX := int(math.Ceil(basin.X)) + boundX
+		basinMinY := int(math.Floor(basin.Y)) - boundY
+		basinMaxY := int(math.Ceil(basin.Y)) + boundY
+		if basinMinX < minX {
+			minX = basinMinX
+		}
+		if basinMinY < minY {
+			minY = basinMinY
+		}
+		if basinMaxX > maxX {
+			maxX = basinMaxX
+		}
+		if basinMaxY > maxY {
+			maxY = basinMaxY
+		}
+	}
 
-	for dy := -boundsY; dy <= boundsY; dy++ {
-		for dx := -boundsX; dx <= boundsX; dx++ {
-			lx := float64(dx)*cosR + float64(dy)*sinR
-			ly := -float64(dx)*sinR + float64(dy)*cosR
-			base := math.Sqrt((lx*lx)/float64(outerX*outerX) + (ly*ly)/float64(outerY*outerY))
-			angle := math.Atan2(ly, lx)
-			shape := 1 +
-				lake.Irregularity*math.Sin(float64(lake.LobeCount)*angle+lake.PhaseA) +
-				lake.Irregularity*0.55*math.Sin(float64(lake.LobeCount*2-1)*angle+lake.PhaseB)
-			noiseScale := float64(maxInt(6, lake.Radius/2))
-			localNoise := (smoothHashNoise2D(int64(lake.ID)+43, float64(lake.X+dx), float64(lake.Y+dy), noiseScale, lakeShapeSaltC) - 0.5) * lake.Irregularity * 0.35
-			shape += localNoise
-			if shape < 0.55 {
-				shape = 0.55
-			}
+	minX = clampInt(minX, 0, width-1)
+	minY = clampInt(minY, 0, height-1)
+	maxX = clampInt(maxX, 0, width-1)
+	maxY = clampInt(maxY, 0, height-1)
+	if minX > maxX || minY > maxY {
+		return
+	}
 
-			if base > shape {
-				continue
-			}
-			x := lake.X + dx
-			y := lake.Y + dy
-			if x < 0 || y < 0 || x >= width || y >= height {
+	shoreThreshold := 0.22
+	deepThreshold := 0.78 - deepRatio*0.46
+
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			contour, core := lakeContourValue(lake, basins, float64(x), float64(y))
+			if contour < shoreThreshold {
 				continue
 			}
 			idx := tileIndex(x, y, width)
 
-			innerLimit := shape * deepRatio
-			if base <= innerLimit {
+			deepScore := core*0.72 + contour*0.28
+			if deepScore >= deepThreshold {
 				if flow[idx] < uint32(opts.FlowDeepThreshold) {
 					flow[idx] = uint32(opts.FlowDeepThreshold)
 				}
@@ -611,6 +936,209 @@ func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opt
 			}
 		}
 	}
+}
+
+func connectRegionalLakeBackbone(
+	flow []uint32,
+	width int,
+	height int,
+	lakes []drawLake,
+	degree []int,
+	connected []bool,
+	lakeUsed []bool,
+	usedPairs map[uint64]struct{},
+	maxLinks int,
+	seed int64,
+	opts RiverOptions,
+	pathOpts RiverOptions,
+) int {
+	if maxLinks <= 0 || len(lakes) < 2 {
+		return 0
+	}
+
+	baseCols := clampInt(int(math.Round(math.Sqrt(float64(maxLinks)*float64(width)/float64(maxInt(height, 1))))), 3, 9)
+	baseRows := clampInt(int(math.Round(float64(baseCols)*float64(height)/float64(maxInt(width, 1)))), 3, 9)
+	if baseCols < 1 {
+		baseCols = 1
+	}
+	if baseRows < 1 {
+		baseRows = 1
+	}
+
+	buckets := make([][]int, baseCols*baseRows)
+	for lakeIndex, lake := range lakes {
+		cellX := clampInt(lake.X*baseCols/maxInt(1, width), 0, baseCols-1)
+		cellY := clampInt(lake.Y*baseRows/maxInt(1, height), 0, baseRows-1)
+		buckets[cellY*baseCols+cellX] = append(buckets[cellY*baseCols+cellX], lakeIndex)
+	}
+
+	anchors := make([]regionalAnchor, 0, baseCols*baseRows)
+	cellAnchor := make([]int, baseCols*baseRows)
+	for idx := range cellAnchor {
+		cellAnchor[idx] = -1
+	}
+
+	for cellY := 0; cellY < baseRows; cellY++ {
+		for cellX := 0; cellX < baseCols; cellX++ {
+			cellIdx := cellY*baseCols + cellX
+			bucket := buckets[cellIdx]
+			if len(bucket) == 0 {
+				continue
+			}
+
+			cellCenterX := float64((cellX*width)/baseCols + width/(baseCols*2))
+			cellCenterY := float64((cellY*height)/baseRows + height/(baseRows*2))
+			bestLake := bucket[0]
+			bestScore := math.MaxFloat64
+			for _, lakeIndex := range bucket {
+				lake := lakes[lakeIndex]
+				distance := math.Hypot(float64(lake.X)-cellCenterX, float64(lake.Y)-cellCenterY)
+				score := distance + float64(degree[lakeIndex])*130
+				if connected[lakeIndex] {
+					score += 180
+				}
+				score += coordHash01(seed, lake.ID, cellIdx, riverGridSalt) * 35
+				if score < bestScore {
+					bestScore = score
+					bestLake = lakeIndex
+				}
+			}
+
+			cellAnchor[cellIdx] = bestLake
+			anchors = append(anchors, regionalAnchor{
+				LakeIndex: bestLake,
+				CellX:     cellX,
+				CellY:     cellY,
+			})
+		}
+	}
+
+	if len(anchors) < 2 {
+		return 0
+	}
+
+	linksCreated := 0
+	edgeID := 0
+	connectPair := func(fromLake, toLake int) bool {
+		if linksCreated >= maxLinks {
+			return false
+		}
+		if fromLake == toLake {
+			return false
+		}
+		if degree[fromLake] >= opts.MaxLakeDegree || degree[toLake] >= opts.MaxLakeDegree {
+			return false
+		}
+
+		pairKey := makeLakePairKey(lakes[fromLake].ID, lakes[toLake].ID)
+		if _, exists := usedPairs[pairKey]; exists {
+			return false
+		}
+
+		startX, startY := lakeShorePoint(lakes[fromLake], lakes[toLake].X, lakes[toLake].Y, width, height)
+		endX, endY := lakeShorePoint(lakes[toLake], lakes[fromLake].X, lakes[fromLake].Y, width, height)
+		path, ok := buildDrawPathWithAttempts(
+			flow,
+			width,
+			height,
+			startX,
+			startY,
+			endX,
+			endY,
+			seed+int64(edgeID)*1223+733,
+			pathOpts,
+		)
+		edgeID++
+		if !ok {
+			usedPairs[pairKey] = struct{}{}
+			return false
+		}
+
+		riverWidth := riverWidthForLink(seed, lakes[fromLake].ID, lakes[toLake].ID, opts)
+		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		degree[fromLake]++
+		degree[toLake]++
+		connected[fromLake] = true
+		connected[toLake] = true
+		lakeUsed[fromLake] = true
+		lakeUsed[toLake] = true
+		usedPairs[pairKey] = struct{}{}
+		linksCreated++
+		return true
+	}
+
+	for cellY := 0; cellY < baseRows && linksCreated < maxLinks; cellY++ {
+		for cellX := 0; cellX < baseCols && linksCreated < maxLinks; cellX++ {
+			current := cellAnchor[cellY*baseCols+cellX]
+			if current < 0 {
+				continue
+			}
+			if cellX+1 < baseCols {
+				right := cellAnchor[cellY*baseCols+cellX+1]
+				if right >= 0 {
+					connectPair(current, right)
+				}
+			}
+			if cellY+1 < baseRows {
+				down := cellAnchor[(cellY+1)*baseCols+cellX]
+				if down >= 0 {
+					connectPair(current, down)
+				}
+			}
+			if cellX+1 < baseCols && cellY+1 < baseRows {
+				diag := cellAnchor[(cellY+1)*baseCols+cellX+1]
+				if diag >= 0 && coordHash01(seed, cellX, cellY, lakeLinkTargetSalt) < 0.45 {
+					connectPair(current, diag)
+				}
+			}
+		}
+	}
+
+	if linksCreated >= maxLinks {
+		return linksCreated
+	}
+
+	for _, anchor := range anchors {
+		if linksCreated >= maxLinks {
+			break
+		}
+		fromLake := anchor.LakeIndex
+		bestLake := -1
+		bestScore := math.MaxFloat64
+		for _, candidate := range anchors {
+			toLake := candidate.LakeIndex
+			if toLake == fromLake {
+				continue
+			}
+			if degree[fromLake] >= opts.MaxLakeDegree || degree[toLake] >= opts.MaxLakeDegree {
+				continue
+			}
+			pairKey := makeLakePairKey(lakes[fromLake].ID, lakes[toLake].ID)
+			if _, exists := usedPairs[pairKey]; exists {
+				continue
+			}
+
+			distance := math.Hypot(float64(lakes[fromLake].X-lakes[toLake].X), float64(lakes[fromLake].Y-lakes[toLake].Y))
+			if distance < float64(maxInt(24, opts.LakeLinkMinDistance/2)) {
+				continue
+			}
+
+			score := distance + float64(degree[fromLake]+degree[toLake])*120
+			if connected[fromLake] && connected[toLake] {
+				score += 260
+			}
+			score += coordHash01(seed, lakes[fromLake].ID, lakes[toLake].ID, riverSourceSalt) * 55
+			if score < bestScore {
+				bestScore = score
+				bestLake = toLake
+			}
+		}
+		if bestLake >= 0 {
+			connectPair(fromLake, bestLake)
+		}
+	}
+
+	return linksCreated
 }
 
 func selectDrawLakePair(
@@ -661,10 +1189,10 @@ func selectDrawLakePair(
 
 			score := math.Abs(distance-targetDist) + float64(degree[i]+degree[j])*850
 			if connected[i] {
-				score += 180
+				score += 420
 			}
 			if connected[j] {
-				score += 180
+				score += 420
 			}
 
 			coarseCellAX := lakes[i].X * 6 / maxInt(1, width)
@@ -719,7 +1247,7 @@ func selectDrawLakeForBorder(
 		}
 		score := distanceToSide + float64(degree[idx])*500
 		if connected[idx] {
-			score += 120
+			score += 300
 		}
 		score += coordHash01(seed, lake.X, lake.Y, riverGridSalt) * 60
 		if !found || score < bestScore {
@@ -757,28 +1285,45 @@ func lakeShorePoint(lake drawLake, targetX, targetY, width, height int) (int, in
 		return clampInt(lake.X, 0, width-1), clampInt(lake.Y, 0, height-1)
 	}
 
-	angleWorld := math.Atan2(dy, dx)
-	localAngle := angleWorld - lake.Rotation
-	cosA := math.Cos(localAngle)
-	sinA := math.Sin(localAngle)
-	rx := float64(maxInt(1, lake.RadiusX))
-	ry := float64(maxInt(1, lake.RadiusY))
-	denom := math.Sqrt((cosA*cosA)/(rx*rx) + (sinA*sinA)/(ry*ry))
-	if denom <= 0 {
-		denom = 1
-	}
-	ellipseRadius := 1.0 / denom
+	angle := math.Atan2(dy, dx)
+	dirX := math.Cos(angle)
+	dirY := math.Sin(angle)
+	basins := buildLakeBasins(lake)
+	shoreThreshold := 0.22
 
-	shape := 1 +
-		lake.Irregularity*math.Sin(float64(lake.LobeCount)*localAngle+lake.PhaseA) +
-		lake.Irregularity*0.55*math.Sin(float64(lake.LobeCount*2-1)*localAngle+lake.PhaseB)
-	if shape < 0.55 {
-		shape = 0.55
+	maxRange := float64(maxInt(lake.RadiusX, lake.RadiusY)) * 2.8
+	for _, basin := range basins {
+		distance := math.Hypot(basin.X-float64(lake.X), basin.Y-float64(lake.Y))
+		extent := distance + maxFloat(basin.RadiusX, basin.RadiusY) + 3
+		if extent > maxRange {
+			maxRange = extent
+		}
 	}
-	radius := maxFloat(1, ellipseRadius*shape-1)
-	x := float64(lake.X) + math.Cos(angleWorld)*radius
-	y := float64(lake.Y) + math.Sin(angleWorld)*radius
-	return clampInt(int(math.Round(x)), 0, width-1), clampInt(int(math.Round(y)), 0, height-1)
+	if maxRange < 2 {
+		maxRange = 2
+	}
+
+	shoreX := float64(lake.X)
+	shoreY := float64(lake.Y)
+	seenInside := false
+	for dist := 0.0; dist <= maxRange; dist += 0.7 {
+		sampleX := float64(lake.X) + dirX*dist
+		sampleY := float64(lake.Y) + dirY*dist
+		contour, _ := lakeContourValue(lake, basins, sampleX, sampleY)
+		if contour >= shoreThreshold {
+			seenInside = true
+			shoreX = sampleX
+			shoreY = sampleY
+			continue
+		}
+		if seenInside {
+			break
+		}
+	}
+
+	x := clampInt(int(math.Round(shoreX)), 0, width-1)
+	y := clampInt(int(math.Round(shoreY)), 0, height-1)
+	return x, y
 }
 
 func selectDrawExtraSourceLake(
@@ -1013,7 +1558,6 @@ func selectShortJitterLakePair(
 	bestScore := 0.0
 	found := false
 	targetDistance := float64(minDistance+maxDistance) * 0.5
-	requiresAttachment := countTrue(connected) > 0
 
 	for i := 0; i < len(lakes)-1; i++ {
 		if degree[i] >= maxDegree {
@@ -1025,10 +1569,6 @@ func selectShortJitterLakePair(
 			}
 			pairKey := makeLakePairKey(lakes[i].ID, lakes[j].ID)
 			if _, exists := usedPairs[pairKey]; exists {
-				continue
-			}
-
-			if requiresAttachment && !connected[i] && !connected[j] {
 				continue
 			}
 

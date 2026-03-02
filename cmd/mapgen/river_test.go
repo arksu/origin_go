@@ -631,6 +631,12 @@ func TestGenerateDrawLakesProducesVariedSizesAndShapes(t *testing.T) {
 	nonCircular := 0
 	largeCount := 0
 	lobeVariety := make(map[int]struct{})
+	leftBand := 0
+	centerBand := 0
+	rightBand := 0
+	topBand := 0
+	middleBand := 0
+	bottomBand := 0
 	for _, lake := range lakes {
 		if lake.Radius < minRadius {
 			minRadius = lake.Radius
@@ -645,6 +651,22 @@ func TestGenerateDrawLakesProducesVariedSizesAndShapes(t *testing.T) {
 			largeCount++
 		}
 		lobeVariety[lake.LobeCount] = struct{}{}
+		switch {
+		case lake.X < 1024/3:
+			leftBand++
+		case lake.X < (1024*2)/3:
+			centerBand++
+		default:
+			rightBand++
+		}
+		switch {
+		case lake.Y < 1024/3:
+			topBand++
+		case lake.Y < (1024*2)/3:
+			middleBand++
+		default:
+			bottomBand++
+		}
 	}
 
 	if maxRadius-minRadius < 3 {
@@ -658,6 +680,106 @@ func TestGenerateDrawLakesProducesVariedSizesAndShapes(t *testing.T) {
 	}
 	if largeCount == 0 {
 		t.Fatalf("expected at least one large lake")
+	}
+	if leftBand == 0 || centerBand == 0 || rightBand == 0 {
+		t.Fatalf("expected lakes across horizontal bands: left=%d center=%d right=%d", leftBand, centerBand, rightBand)
+	}
+	if topBand == 0 || middleBand == 0 || bottomBand == 0 {
+		t.Fatalf("expected lakes across vertical bands: top=%d middle=%d bottom=%d", topBand, middleBand, bottomBand)
+	}
+}
+
+func TestGenerateBlueNoiseLakeCentersSpacing(t *testing.T) {
+	minDistance := 22.0
+	centers := generateBlueNoiseLakeCenters(600, 600, 20, 180, minDistance, 77)
+	if len(centers) < 80 {
+		t.Fatalf("expected many blue-noise centers, got %d", len(centers))
+	}
+
+	minPairDistance := math.MaxFloat64
+	for i := 0; i < len(centers)-1; i++ {
+		for j := i + 1; j < len(centers); j++ {
+			distance := math.Hypot(float64(centers[i].X-centers[j].X), float64(centers[i].Y-centers[j].Y))
+			if distance < minPairDistance {
+				minPairDistance = distance
+			}
+		}
+	}
+
+	if minPairDistance < minDistance-3.0 {
+		t.Fatalf("expected center spacing near minDistance, got minPairDistance=%.2f minDistance=%.2f", minPairDistance, minDistance)
+	}
+}
+
+func TestGenerateDrawLakesDefaultLargeMapDistribution(t *testing.T) {
+	opts := DefaultMapgenOptions().River
+	opts.LayoutDraw = true
+
+	width := 6400
+	height := 6400
+	lakes := generateDrawLakes(width, height, 123, opts)
+	if len(lakes) < opts.LakeCount/3 {
+		t.Fatalf("expected substantial lake count, got=%d want_at_least=%d", len(lakes), opts.LakeCount/3)
+	}
+
+	left := 0
+	center := 0
+	right := 0
+	top := 0
+	middle := 0
+	bottom := 0
+	for _, lake := range lakes {
+		switch {
+		case lake.X < width/3:
+			left++
+		case lake.X < (2*width)/3:
+			center++
+		default:
+			right++
+		}
+		switch {
+		case lake.Y < height/3:
+			top++
+		case lake.Y < (2*height)/3:
+			middle++
+		default:
+			bottom++
+		}
+	}
+
+	if left == 0 || center == 0 || right == 0 {
+		t.Fatalf("expected default lake placement across horizontal bands: left=%d center=%d right=%d total=%d", left, center, right, len(lakes))
+	}
+	if top == 0 || middle == 0 || bottom == 0 {
+		t.Fatalf("expected default lake placement across vertical bands: top=%d middle=%d bottom=%d total=%d", top, middle, bottom, len(lakes))
+	}
+}
+
+func TestGenerateBlueNoiseLakeCentersLargeMapDistribution(t *testing.T) {
+	width := 6400
+	height := 6400
+	margin := 246
+	minDistance := 39.0
+	centers := generateBlueNoiseLakeCenters(width, height, margin, 1540, minDistance, 123)
+	if len(centers) < 500 {
+		t.Fatalf("expected many centers, got %d", len(centers))
+	}
+
+	left := 0
+	center := 0
+	right := 0
+	for _, c := range centers {
+		switch {
+		case c.X < width/3:
+			left++
+		case c.X < (2*width)/3:
+			center++
+		default:
+			right++
+		}
+	}
+	if left == 0 || center == 0 || right == 0 {
+		t.Fatalf("expected blue-noise centers across bands: left=%d center=%d right=%d total=%d", left, center, right, len(centers))
 	}
 }
 

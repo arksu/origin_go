@@ -9,7 +9,7 @@ world:
 river:
   enabled: true
   layout_draw: true
-  major_count: 22
+  major_count: 120
   lake_count: 200
   lake_size_small_min: 12
   lake_size_small_max: 34
@@ -18,21 +18,21 @@ river:
   lake_size_large_min: 108
   lake_size_large_max: 260
   lake_size_medium_chance: 0.26
-  lake_size_large_chance: 0.05
+  lake_size_large_chance: 0.08
   lake_border_mix: 0.42
-  max_lake_degree: 3
-  shape_long_meander_scale: 0.65
-  shape_short_meander_scale: 0.45
+  max_lake_degree: 5
+  shape_long_meander_scale: 0.95
+  shape_short_meander_scale: 0.05
   shape_short_meander_bias: 0.0045
-  shape_amplitude_scale: 0.35
-  shape_frequency_scale: 0.7
+  shape_amplitude_scale: 1.95
+  shape_frequency_scale: 0.45
   shape_noise_scale: 0.28
-  shape_along_scale: 0.17
-  shape_distance_cap: 0.42
-  shape_segment_length: 64
-  source_elevation_min: 0.50
-  source_chance: 0.00018
-  meander_strength: 0.0035
+  shape_along_scale: 0.07
+  shape_distance_cap: 0.22
+  shape_segment_length: 80
+  source_elevation_min: 0.90
+  source_chance: 0.0018
+  meander_strength: 0.045
   voronoi_cell_size: 92
   voronoi_edge_threshold: 0.15
   voronoi_source_boost: 0.025
@@ -44,8 +44,8 @@ river:
   lake_link_min_distance: 100
   lake_link_max_distance: 1900
   river_width_min: 5
-  river_width_max: 14
-  grid_enabled: true
+  river_width_max: 20
+  grid_enabled: false
   grid_spacing: 720
   grid_jitter: 70
   trunk_count: 10
