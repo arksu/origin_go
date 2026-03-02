@@ -138,65 +138,35 @@ On push/PR to `main`, CI will:
 ### Map generation
 
 ```bash
-go run ./cmd/mapgen -chunks-x 50 -chunks-y 50 -seed 123
+go run ./cmd/mapgen -gen-config etc/mapgen/presets/default.yaml
 ```
 
-Common mapgen flags:
+Mapgen is now **preset-driven**. Generation shaping options (rivers, biomes, climate, ecology) live in YAML presets under `etc/mapgen/presets/`.
 
-- `-river-enabled` (default `true`)
-- `-river-layout-draw` (default `true`)
-- `-river-major-count` (default `30`)
-- `-river-lake-count` (default `220`)
-- `-river-lake-border-mix` (default `0.35`)
-- `-river-max-lake-degree` (default `2`)
-- `-river-shape-long-meander-scale` (default `0.55`)
-- `-river-shape-short-meander-scale` (default `2.2`)
-- `-river-shape-short-meander-bias` (default `0.0035`)
-- `-river-shape-amplitude-scale` (default `1.0`)
-- `-river-shape-frequency-scale` (default `1.0`)
-- `-river-shape-noise-scale` (default `0.30`)
-- `-river-shape-along-scale` (default `0.16`)
-- `-river-shape-distance-cap` (default `0.40`)
-- `-river-shape-segment-length` (default `70`)
-- `-river-source-elevation-min` (default `0.55`)
-- `-river-source-chance` (default `0.00015`)
-- `-river-meander-strength` (default `0.003`)
-- `-river-voronoi-cell-size` (default `96`)
-- `-river-voronoi-edge-threshold` (default `0.14`)
-- `-river-voronoi-source-boost` (default `0.02`)
-- `-river-voronoi-bias` (default `0.01`)
-- `-river-sink-lake-chance` (default `0.03`)
-- `-river-lake-min-size` (default `48`)
-- `-river-lake-connect-chance` (default `0.75`)
-- `-river-lake-connection-limit` (default `120`)
-- `-river-lake-link-min-distance` (default `120`)
-- `-river-lake-link-max-distance` (default `1800`)
-- `-river-width-min` (default `5`)
-- `-river-width-max` (default `15`)
-- `-river-grid-enabled` (default `true`)
-- `-river-grid-spacing` (default `760`)
-- `-river-grid-jitter` (default `64`)
-- `-river-trunk-count` (default `8`)
-- `-river-trunk-source-elevation-min` (default `0.62`)
-- `-river-trunk-min-length` (default `180`)
-- `-river-coast-sample-chance` (default `0.012`)
-- `-river-flow-shallow-threshold` (default `6`)
-- `-river-flow-deep-threshold` (default `20`)
-- `-river-bank-radius` (default `1`)
-- `-river-lake-flow-threshold` (default `28`)
-- `-png-export` (default `false`)
-- `-png-overview-only` (default `false`, implies `-png-export=true`, writes only `overview.png`, skips DB writes and DB connection)
-- `-png-dir` (default `map_png`)
-- `-png-scale` (default `1`)
-- `-png-highlight-rivers` (default `true`)
+Core mapgen flags:
+
+- `-gen-config` (default `etc/mapgen/presets/default.yaml`)
+- `-chunks-x` (optional runtime override)
+- `-chunks-y` (optional runtime override)
+- `-seed` (optional runtime override, `0` = current time)
+- `-threads` (optional runtime override)
+- `-png-export`
+- `-png-overview-only` (implies `-png-export=true`; writes only `overview.png`; skips DB writes and DB connection)
+- `-png-dir`
+- `-png-scale`
+- `-png-highlight-rivers`
+
+Preset examples:
+
+- `etc/mapgen/presets/default.yaml` - balanced default
+- `etc/mapgen/presets/hnh.yaml` - Haven & Hearth inspired biome flavor
+- `etc/mapgen/presets/minecraft_like.yaml` - Minecraft-style climate/region profile
 
 Example with PNG export:
 
 ```bash
 go run ./cmd/mapgen \
-  -chunks-x 50 \
-  -chunks-y 50 \
-  -seed 123 \
+  -gen-config etc/mapgen/presets/hnh.yaml \
   -png-export \
   -png-dir map_png \
   -png-scale 1
@@ -206,9 +176,7 @@ Example overview-only export (no DB access):
 
 ```bash
 go run ./cmd/mapgen \
-  -chunks-x 50 \
-  -chunks-y 50 \
-  -seed 123 \
+  -gen-config etc/mapgen/presets/minecraft_like.yaml \
   -png-overview-only \
   -png-dir map_png
 ```

@@ -38,6 +38,52 @@ func (f *NoiseFields) MoistureTemperature(tileX, tileY int) (float64, float64) {
 	return normalizeNoise(moisture), normalizeNoise(temperature)
 }
 
+func (f *NoiseFields) BiomeSignals(tileX, tileY int, opts BiomeOptions) BiomeSignals {
+	worldX := float64(tileX * f.coordPerTile)
+	worldY := float64(tileY * f.coordPerTile)
+
+	warpFreq := terrainScale * 0.08
+	warpX := f.perlin.Noise2D(worldX*warpFreq+4300, worldY*warpFreq+4300)
+	warpY := f.perlin.Noise2D(worldX*warpFreq+5300, worldY*warpFreq+5300)
+
+	sampleX := worldX + warpX*opts.DomainWarpStrength
+	sampleY := worldY + warpY*opts.DomainWarpStrength
+
+	temperature := normalizeNoise(f.perlin.Noise2D(
+		sampleX*terrainScale*0.3*opts.TemperatureScale+2000,
+		sampleY*terrainScale*0.3*opts.TemperatureScale+2000,
+	))
+	moisture := normalizeNoise(f.perlin.Noise2D(
+		sampleX*terrainScale*0.5*opts.MoistureScale+1000,
+		sampleY*terrainScale*0.5*opts.MoistureScale+1000,
+	))
+	continentalness := normalizeNoise(f.perlin.Noise2D(
+		sampleX*terrainScale*0.22*opts.ContinentalnessScale+3000,
+		sampleY*terrainScale*0.22*opts.ContinentalnessScale+3000,
+	))
+	erosion := normalizeNoise(f.perlin.Noise2D(
+		sampleX*terrainScale*0.6*opts.ErosionScale+4000,
+		sampleY*terrainScale*0.6*opts.ErosionScale+4000,
+	))
+	weirdness := normalizeNoise(f.perlin.Noise2D(
+		sampleX*terrainScale*1.1*opts.WeirdnessScale+5000,
+		sampleY*terrainScale*1.1*opts.WeirdnessScale+5000,
+	))
+
+	ruggedness := clamp01((math.Abs(weirdness-0.5)*2*0.6 + (1.0-erosion)*0.7 + continentalness*0.35) / 1.65)
+	wetness := clamp01((moisture*0.75 + (1.0-continentalness)*0.25) * opts.SwampClumpScale)
+
+	return BiomeSignals{
+		Temperature:     temperature,
+		Moisture:        moisture,
+		Continentalness: continentalness,
+		Erosion:         erosion,
+		Weirdness:       weirdness,
+		Ruggedness:      ruggedness,
+		Wetness:         wetness,
+	}
+}
+
 func normalizeNoise(value float64) float64 {
 	return (value + 1) / 2
 }

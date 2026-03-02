@@ -42,17 +42,33 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 		riverSources = riverNetwork.SourceCount
 	}
 
+	baseTiles := make([]byte, tileCount)
+	macroLayout := buildBiomeMacroLayout(widthTiles, heightTiles, opts.Seed, opts.Biome)
+	parallelForRows(heightTiles, opts.Threads, func(y int) {
+		for x := 0; x < widthTiles; x++ {
+			idx := tileIndex(x, y, widthTiles)
+			elevationValue := float64(elevation[idx])
+			signals := fields.BiomeSignals(x, y, opts.Biome)
+			family := macroLayout.familyAt(x, y, opts.Seed, opts.Biome.RegionJitter)
+			baseTiles[idx] = classifyBaseTileFromBiome(elevationValue, signals, family, opts.Biome, opts.Seed, x, y)
+		}
+	})
+	if opts.Biome.Enabled {
+		smoothBiomeTiles(baseTiles, widthTiles, heightTiles, opts.Biome.SmoothingPasses)
+		removeTinyBiomePatches(baseTiles, widthTiles, heightTiles, opts.Biome.MinPatchTiles)
+		smoothBiomeEdges(baseTiles, widthTiles, heightTiles, maxInt(1, opts.Biome.SmoothingPasses))
+	}
+
 	tiles := make([]byte, tileCount)
 	parallelForRows(heightTiles, opts.Threads, func(y int) {
 		for x := 0; x < widthTiles; x++ {
 			idx := tileIndex(x, y, widthTiles)
 			elevationValue := float64(elevation[idx])
-			moisture, temperature := fields.MoistureTemperature(x, y)
 			rc := riverNone
 			if opts.River.Enabled && len(riverClass) == tileCount {
 				rc = riverClass[idx]
 			}
-			tiles[idx] = resolveTileType(elevationValue, moisture, temperature, rc, opts.River.Enabled)
+			tiles[idx] = resolveTileType(elevationValue, baseTiles[idx], rc, opts.River.Enabled)
 		}
 	})
 
@@ -114,7 +130,7 @@ func parallelForRows(height int, threads int, fn func(y int)) {
 	}
 }
 
-func resolveTileType(elevation, moisture, temperature float64, rc RiverClass, riverEnabled bool) byte {
+func resolveTileType(elevation float64, baseTile byte, rc RiverClass, riverEnabled bool) byte {
 	if elevation < deepWaterThreshold {
 		return tileWaterDeep
 	}
@@ -129,5 +145,5 @@ func resolveTileType(elevation, moisture, temperature float64, rc RiverClass, ri
 			return tileWater
 		}
 	}
-	return classifyBaseTile(elevation, moisture, temperature)
+	return baseTile
 }

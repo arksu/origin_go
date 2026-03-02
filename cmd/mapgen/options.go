@@ -14,73 +14,112 @@ const (
 	maxOverviewPixels  = uint64(250_000_000)
 )
 
+const defaultGenConfigPath = "etc/mapgen/presets/default.yaml"
+
 type RiverOptions struct {
-	Enabled                bool
-	LayoutDraw             bool
-	MajorRiverCount        int
-	LakeCount              int
-	LakeBorderMix          float64
-	MaxLakeDegree          int
-	ShapeLongMeanderScale  float64
-	ShapeShortMeanderScale float64
-	ShapeShortMeanderBias  float64
-	ShapeAmplitudeScale    float64
-	ShapeFrequencyScale    float64
-	ShapeNoiseScale        float64
-	ShapeAlongScale        float64
-	ShapeDistanceCap       float64
-	ShapeSegmentLength     int
-	SourceElevationMin     float64
-	SourceChance           float64
-	MeanderStrength        float64
-	VoronoiCellSize        int
-	VoronoiEdgeThreshold   float64
-	VoronoiSourceBoost     float64
-	VoronoiBias            float64
-	SinkLakeChance         float64
-	LakeMinSize            int
-	LakeConnectChance      float64
-	LakeConnectionLimit    int
-	LakeLinkMinDistance    int
-	LakeLinkMaxDistance    int
-	RiverWidthMin          int
-	RiverWidthMax          int
-	GridEnabled            bool
-	GridSpacing            int
-	GridJitter             int
-	TrunkRiverCount        int
-	TrunkSourceElevation   float64
-	TrunkMinLength         int
-	CoastSampleChance      float64
-	FlowShallowThreshold   int
-	FlowDeepThreshold      int
-	BankRadius             int
-	LakeFlowThreshold      int
+	Enabled                bool    `yaml:"enabled"`
+	LayoutDraw             bool    `yaml:"layout_draw"`
+	MajorRiverCount        int     `yaml:"major_count"`
+	LakeCount              int     `yaml:"lake_count"`
+	LakeBorderMix          float64 `yaml:"lake_border_mix"`
+	MaxLakeDegree          int     `yaml:"max_lake_degree"`
+	ShapeLongMeanderScale  float64 `yaml:"shape_long_meander_scale"`
+	ShapeShortMeanderScale float64 `yaml:"shape_short_meander_scale"`
+	ShapeShortMeanderBias  float64 `yaml:"shape_short_meander_bias"`
+	ShapeAmplitudeScale    float64 `yaml:"shape_amplitude_scale"`
+	ShapeFrequencyScale    float64 `yaml:"shape_frequency_scale"`
+	ShapeNoiseScale        float64 `yaml:"shape_noise_scale"`
+	ShapeAlongScale        float64 `yaml:"shape_along_scale"`
+	ShapeDistanceCap       float64 `yaml:"shape_distance_cap"`
+	ShapeSegmentLength     int     `yaml:"shape_segment_length"`
+	SourceElevationMin     float64 `yaml:"source_elevation_min"`
+	SourceChance           float64 `yaml:"source_chance"`
+	MeanderStrength        float64 `yaml:"meander_strength"`
+	VoronoiCellSize        int     `yaml:"voronoi_cell_size"`
+	VoronoiEdgeThreshold   float64 `yaml:"voronoi_edge_threshold"`
+	VoronoiSourceBoost     float64 `yaml:"voronoi_source_boost"`
+	VoronoiBias            float64 `yaml:"voronoi_bias"`
+	SinkLakeChance         float64 `yaml:"sink_lake_chance"`
+	LakeMinSize            int     `yaml:"lake_min_size"`
+	LakeConnectChance      float64 `yaml:"lake_connect_chance"`
+	LakeConnectionLimit    int     `yaml:"lake_connection_limit"`
+	LakeLinkMinDistance    int     `yaml:"lake_link_min_distance"`
+	LakeLinkMaxDistance    int     `yaml:"lake_link_max_distance"`
+	RiverWidthMin          int     `yaml:"river_width_min"`
+	RiverWidthMax          int     `yaml:"river_width_max"`
+	GridEnabled            bool    `yaml:"grid_enabled"`
+	GridSpacing            int     `yaml:"grid_spacing"`
+	GridJitter             int     `yaml:"grid_jitter"`
+	TrunkRiverCount        int     `yaml:"trunk_count"`
+	TrunkSourceElevation   float64 `yaml:"trunk_source_elevation_min"`
+	TrunkMinLength         int     `yaml:"trunk_min_length"`
+	CoastSampleChance      float64 `yaml:"coast_sample_chance"`
+	FlowShallowThreshold   int     `yaml:"flow_shallow_threshold"`
+	FlowDeepThreshold      int     `yaml:"flow_deep_threshold"`
+	BankRadius             int     `yaml:"bank_radius"`
+	LakeFlowThreshold      int     `yaml:"lake_flow_threshold"`
+}
+
+type BiomeOptions struct {
+	Enabled                 bool    `yaml:"enabled"`
+	HNHEnabled              bool    `yaml:"hnh_enabled"`
+	VariantDensity          float64 `yaml:"hnh_variant_density"`
+	RegionCount             int     `yaml:"hnh_region_count"`
+	RegionJitter            int     `yaml:"hnh_region_jitter"`
+	BlendWidth              int     `yaml:"hnh_blend_width"`
+	SmoothingPasses         int     `yaml:"hnh_smoothing_passes"`
+	MinPatchTiles           int     `yaml:"hnh_min_patch_tiles"`
+	SwampClumpScale         float64 `yaml:"hnh_swamp_clump_scale"`
+	MountainRuggedThreshold float64 `yaml:"hnh_mountain_rugged_threshold"`
+	ForestShare             float64 `yaml:"hnh_forest_share"`
+	GrasslandShare          float64 `yaml:"hnh_grassland_share"`
+	WetlandShare            float64 `yaml:"hnh_wetland_share"`
+	HeathMoorShare          float64 `yaml:"hnh_heath_moor_share"`
+	MountainShare           float64 `yaml:"hnh_mountain_share"`
+
+	TemperatureScale     float64 `yaml:"temperature_scale"`
+	MoistureScale        float64 `yaml:"moisture_scale"`
+	ContinentalnessScale float64 `yaml:"continentalness_scale"`
+	ErosionScale         float64 `yaml:"erosion_scale"`
+	WeirdnessScale       float64 `yaml:"weirdness_scale"`
+	DomainWarpStrength   float64 `yaml:"domain_warp_strength"`
+}
+
+type EcologyOptions struct {
+	Enabled      bool    `yaml:"enabled"`
+	TickInterval int     `yaml:"tick_interval"`
+	CellsPerTick int     `yaml:"cells_per_tick"`
+	ChunkBudget  int     `yaml:"chunk_budget"`
+	SpreadScale  float64 `yaml:"spread_scale"`
 }
 
 type PNGOptions struct {
-	Export          bool
-	OverviewOnly    bool
-	OutputDir       string
-	Scale           int
-	HighlightRivers bool
+	Export          bool   `yaml:"export"`
+	OverviewOnly    bool   `yaml:"overview_only"`
+	OutputDir       string `yaml:"output_dir"`
+	Scale           int    `yaml:"scale"`
+	HighlightRivers bool   `yaml:"highlight_rivers"`
 }
 
 type MapgenOptions struct {
-	ChunksX int
-	ChunksY int
-	Seed    int64
-	Threads int
-	River   RiverOptions
-	PNG     PNGOptions
+	ConfigPath string
+	ChunksX    int
+	ChunksY    int
+	Seed       int64
+	Threads    int
+	River      RiverOptions
+	Biome      BiomeOptions
+	Ecology    EcologyOptions
+	PNG        PNGOptions
 }
 
 func DefaultMapgenOptions() MapgenOptions {
 	return MapgenOptions{
-		ChunksX: 50,
-		ChunksY: 50,
-		Seed:    0,
-		Threads: 4,
+		ConfigPath: defaultGenConfigPath,
+		ChunksX:    50,
+		ChunksY:    50,
+		Seed:       0,
+		Threads:    4,
 		River: RiverOptions{
 			Enabled:                true,
 			LayoutDraw:             true,
@@ -124,6 +163,36 @@ func DefaultMapgenOptions() MapgenOptions {
 			BankRadius:             1,
 			LakeFlowThreshold:      28,
 		},
+		Biome: BiomeOptions{
+			Enabled:                 true,
+			HNHEnabled:              true,
+			VariantDensity:          0.55,
+			RegionCount:             140,
+			RegionJitter:            220,
+			BlendWidth:              96,
+			SmoothingPasses:         2,
+			MinPatchTiles:           20,
+			SwampClumpScale:         1.0,
+			MountainRuggedThreshold: 0.66,
+			ForestShare:             0.30,
+			GrasslandShare:          0.30,
+			WetlandShare:            0.14,
+			HeathMoorShare:          0.14,
+			MountainShare:           0.12,
+			TemperatureScale:        1.0,
+			MoistureScale:           1.0,
+			ContinentalnessScale:    1.0,
+			ErosionScale:            1.0,
+			WeirdnessScale:          1.0,
+			DomainWarpStrength:      48.0,
+		},
+		Ecology: EcologyOptions{
+			Enabled:      true,
+			TickInterval: 300,
+			CellsPerTick: 5000,
+			ChunkBudget:  12,
+			SpreadScale:  1.0,
+		},
 		PNG: PNGOptions{
 			Export:          false,
 			OverviewOnly:    false,
@@ -135,64 +204,74 @@ func DefaultMapgenOptions() MapgenOptions {
 }
 
 func ParseMapgenOptions(args []string) (MapgenOptions, error) {
-	opts := DefaultMapgenOptions()
+	defaults := DefaultMapgenOptions()
+
+	var (
+		genConfigPath      = defaultGenConfigPath
+		chunksX            = defaults.ChunksX
+		chunksY            = defaults.ChunksY
+		seed               = defaults.Seed
+		threads            = defaults.Threads
+		pngExport          = defaults.PNG.Export
+		pngOverviewOnly    = defaults.PNG.OverviewOnly
+		pngDir             = defaults.PNG.OutputDir
+		pngScale           = defaults.PNG.Scale
+		pngHighlightRivers = defaults.PNG.HighlightRivers
+	)
 
 	fs := flag.NewFlagSet("mapgen", flag.ContinueOnError)
-	fs.IntVar(&opts.ChunksX, "chunks-x", opts.ChunksX, "number of chunks in X direction")
-	fs.IntVar(&opts.ChunksY, "chunks-y", opts.ChunksY, "number of chunks in Y direction")
-	fs.Int64Var(&opts.Seed, "seed", opts.Seed, "random seed (0 = use current time)")
-	fs.IntVar(&opts.Threads, "threads", opts.Threads, "number of worker threads")
-
-	fs.BoolVar(&opts.River.Enabled, "river-enabled", opts.River.Enabled, "enable procedural river generation")
-	fs.BoolVar(&opts.River.LayoutDraw, "river-layout-draw", opts.River.LayoutDraw, "draw-style river layout (road-like), independent from elevation routing")
-	fs.IntVar(&opts.River.MajorRiverCount, "river-major-count", opts.River.MajorRiverCount, "number of major rivers to generate")
-	fs.IntVar(&opts.River.LakeCount, "river-lake-count", opts.River.LakeCount, "number of inland lakes to draw")
-	fs.Float64Var(&opts.River.LakeBorderMix, "river-lake-border-mix", opts.River.LakeBorderMix, "share [0..1] of major rivers that connect lakes to map border")
-	fs.IntVar(&opts.River.MaxLakeDegree, "river-max-lake-degree", opts.River.MaxLakeDegree, "maximum number of river connections per lake")
-	fs.Float64Var(&opts.River.ShapeLongMeanderScale, "river-shape-long-meander-scale", opts.River.ShapeLongMeanderScale, "multiplier for long-stage (uniform backbone) meander strength")
-	fs.Float64Var(&opts.River.ShapeShortMeanderScale, "river-shape-short-meander-scale", opts.River.ShapeShortMeanderScale, "multiplier for short-stage (local connector) meander strength")
-	fs.Float64Var(&opts.River.ShapeShortMeanderBias, "river-shape-short-meander-bias", opts.River.ShapeShortMeanderBias, "extra absolute meander added in short-stage routing")
-	fs.Float64Var(&opts.River.ShapeAmplitudeScale, "river-shape-amplitude-scale", opts.River.ShapeAmplitudeScale, "global curvature amplitude scale for draw-style rivers")
-	fs.Float64Var(&opts.River.ShapeFrequencyScale, "river-shape-frequency-scale", opts.River.ShapeFrequencyScale, "global wave frequency scale for draw-style rivers")
-	fs.Float64Var(&opts.River.ShapeNoiseScale, "river-shape-noise-scale", opts.River.ShapeNoiseScale, "random lateral noise contribution scale for draw-style rivers")
-	fs.Float64Var(&opts.River.ShapeAlongScale, "river-shape-along-scale", opts.River.ShapeAlongScale, "forward jitter contribution scale for draw-style rivers")
-	fs.Float64Var(&opts.River.ShapeDistanceCap, "river-shape-distance-cap", opts.River.ShapeDistanceCap, "maximum curvature amplitude as share of source-target distance")
-	fs.IntVar(&opts.River.ShapeSegmentLength, "river-shape-segment-length", opts.River.ShapeSegmentLength, "control-point spacing in tiles (smaller = smoother)")
-	fs.Float64Var(&opts.River.SourceElevationMin, "river-source-elevation-min", opts.River.SourceElevationMin, "minimum elevation [0..1] for river sources")
-	fs.Float64Var(&opts.River.SourceChance, "river-source-chance", opts.River.SourceChance, "chance [0..1] per tile to become a river source")
-	fs.Float64Var(&opts.River.MeanderStrength, "river-meander-strength", opts.River.MeanderStrength, "meander noise strength used as a tie-breaker")
-	fs.IntVar(&opts.River.VoronoiCellSize, "river-voronoi-cell-size", opts.River.VoronoiCellSize, "voronoi cell size in tiles used to shape river network")
-	fs.Float64Var(&opts.River.VoronoiEdgeThreshold, "river-voronoi-edge-threshold", opts.River.VoronoiEdgeThreshold, "edge sensitivity for voronoi-guided channeling (>0)")
-	fs.Float64Var(&opts.River.VoronoiSourceBoost, "river-voronoi-source-boost", opts.River.VoronoiSourceBoost, "extra source chance added on voronoi edges")
-	fs.Float64Var(&opts.River.VoronoiBias, "river-voronoi-bias", opts.River.VoronoiBias, "downhill step bias towards voronoi edges")
-	fs.Float64Var(&opts.River.SinkLakeChance, "river-sink-lake-chance", opts.River.SinkLakeChance, "chance [0..1] to form a sink lake when sink flow threshold is met")
-	fs.IntVar(&opts.River.LakeMinSize, "river-lake-min-size", opts.River.LakeMinSize, "minimum inland lake size in tiles for lake-link generation")
-	fs.Float64Var(&opts.River.LakeConnectChance, "river-lake-connect-chance", opts.River.LakeConnectChance, "target share [0..1] of lakes connected by rivers in draw layout (chance per lake in elevation layout)")
-	fs.IntVar(&opts.River.LakeConnectionLimit, "river-lake-connection-limit", opts.River.LakeConnectionLimit, "extra connection budget in draw layout (maximum lake links in elevation layout)")
-	fs.IntVar(&opts.River.LakeLinkMinDistance, "river-lake-link-min-distance", opts.River.LakeLinkMinDistance, "minimum lake center distance in tiles for linking")
-	fs.IntVar(&opts.River.LakeLinkMaxDistance, "river-lake-link-max-distance", opts.River.LakeLinkMaxDistance, "maximum lake center distance in tiles for linking")
-	fs.IntVar(&opts.River.RiverWidthMin, "river-width-min", opts.River.RiverWidthMin, "minimum generated river width in tiles")
-	fs.IntVar(&opts.River.RiverWidthMax, "river-width-max", opts.River.RiverWidthMax, "maximum generated river width in tiles")
-	fs.BoolVar(&opts.River.GridEnabled, "river-grid-enabled", opts.River.GridEnabled, "enable uniform grid river stage")
-	fs.IntVar(&opts.River.GridSpacing, "river-grid-spacing", opts.River.GridSpacing, "grid spacing in tiles for uniform river distribution")
-	fs.IntVar(&opts.River.GridJitter, "river-grid-jitter", opts.River.GridJitter, "per-step jitter in tiles applied to grid rivers")
-	fs.IntVar(&opts.River.TrunkRiverCount, "river-trunk-count", opts.River.TrunkRiverCount, "number of major trunk rivers routed to coastline")
-	fs.Float64Var(&opts.River.TrunkSourceElevation, "river-trunk-source-elevation-min", opts.River.TrunkSourceElevation, "minimum elevation [0..1] for trunk river sources")
-	fs.IntVar(&opts.River.TrunkMinLength, "river-trunk-min-length", opts.River.TrunkMinLength, "minimum path length in tiles for trunk river carving")
-	fs.Float64Var(&opts.River.CoastSampleChance, "river-coast-sample-chance", opts.River.CoastSampleChance, "chance [0..1] to keep a coastline tile as trunk target sample")
-	fs.IntVar(&opts.River.FlowShallowThreshold, "river-flow-shallow-threshold", opts.River.FlowShallowThreshold, "flow threshold for shallow river tiles")
-	fs.IntVar(&opts.River.FlowDeepThreshold, "river-flow-deep-threshold", opts.River.FlowDeepThreshold, "flow threshold for deep river tiles")
-	fs.IntVar(&opts.River.BankRadius, "river-bank-radius", opts.River.BankRadius, "bank expansion radius around deep river tiles")
-	fs.IntVar(&opts.River.LakeFlowThreshold, "river-lake-flow-threshold", opts.River.LakeFlowThreshold, "minimum sink flow needed to form a lake")
-
-	fs.BoolVar(&opts.PNG.Export, "png-export", opts.PNG.Export, "export map PNGs (chunks + overview by default)")
-	fs.BoolVar(&opts.PNG.OverviewOnly, "png-overview-only", opts.PNG.OverviewOnly, "export only overview.png; skip chunk PNGs and all DB work (implies -png-export)")
-	fs.StringVar(&opts.PNG.OutputDir, "png-dir", opts.PNG.OutputDir, "output directory for PNG exports")
-	fs.IntVar(&opts.PNG.Scale, "png-scale", opts.PNG.Scale, "PNG scale in pixels per tile")
-	fs.BoolVar(&opts.PNG.HighlightRivers, "png-highlight-rivers", opts.PNG.HighlightRivers, "highlight river channels in PNG exports")
+	fs.StringVar(&genConfigPath, "gen-config", genConfigPath, "path to YAML generation preset")
+	fs.IntVar(&chunksX, "chunks-x", chunksX, "override chunks in X direction")
+	fs.IntVar(&chunksY, "chunks-y", chunksY, "override chunks in Y direction")
+	fs.Int64Var(&seed, "seed", seed, "override random seed (0 = use current time)")
+	fs.IntVar(&threads, "threads", threads, "override worker thread count")
+	fs.BoolVar(&pngExport, "png-export", pngExport, "override png export toggle")
+	fs.BoolVar(&pngOverviewOnly, "png-overview-only", pngOverviewOnly, "export only overview.png (implies -png-export=true, skips DB writes)")
+	fs.StringVar(&pngDir, "png-dir", pngDir, "override png output directory")
+	fs.IntVar(&pngScale, "png-scale", pngScale, "override png scale in pixels per tile")
+	fs.BoolVar(&pngHighlightRivers, "png-highlight-rivers", pngHighlightRivers, "override river highlighting in PNG exports")
 
 	if err := fs.Parse(args); err != nil {
 		return MapgenOptions{}, err
+	}
+
+	overrides := map[string]struct{}{}
+	fs.Visit(func(f *flag.Flag) {
+		overrides[f.Name] = struct{}{}
+	})
+
+	opts, resolvedConfigPath, err := LoadMapgenOptionsFromYAML(genConfigPath, defaults)
+	if err != nil {
+		return MapgenOptions{}, err
+	}
+	opts.ConfigPath = resolvedConfigPath
+
+	if _, ok := overrides["chunks-x"]; ok {
+		opts.ChunksX = chunksX
+	}
+	if _, ok := overrides["chunks-y"]; ok {
+		opts.ChunksY = chunksY
+	}
+	if _, ok := overrides["seed"]; ok {
+		opts.Seed = seed
+	}
+	if _, ok := overrides["threads"]; ok {
+		opts.Threads = threads
+	}
+	if _, ok := overrides["png-export"]; ok {
+		opts.PNG.Export = pngExport
+	}
+	if _, ok := overrides["png-overview-only"]; ok {
+		opts.PNG.OverviewOnly = pngOverviewOnly
+	}
+	if _, ok := overrides["png-dir"]; ok {
+		opts.PNG.OutputDir = pngDir
+	}
+	if _, ok := overrides["png-scale"]; ok {
+		opts.PNG.Scale = pngScale
+	}
+	if _, ok := overrides["png-highlight-rivers"]; ok {
+		opts.PNG.HighlightRivers = pngHighlightRivers
 	}
 	if opts.PNG.OverviewOnly {
 		opts.PNG.Export = true
@@ -232,121 +311,196 @@ func (o MapgenOptions) Validate() error {
 	}
 
 	if o.River.SourceElevationMin < 0 || o.River.SourceElevationMin > 1 {
-		return errors.New("river-source-elevation-min must be within [0,1]")
+		return errors.New("river.source_elevation_min must be within [0,1]")
 	}
 	if o.River.MajorRiverCount <= 0 {
-		return errors.New("river-major-count must be > 0")
+		return errors.New("river.major_count must be > 0")
 	}
 	if o.River.LakeCount <= 1 {
-		return errors.New("river-lake-count must be > 1")
+		return errors.New("river.lake_count must be > 1")
 	}
 	if o.River.LakeBorderMix < 0 || o.River.LakeBorderMix > 1 {
-		return errors.New("river-lake-border-mix must be within [0,1]")
+		return errors.New("river.lake_border_mix must be within [0,1]")
 	}
 	if o.River.MaxLakeDegree <= 0 {
-		return errors.New("river-max-lake-degree must be > 0")
+		return errors.New("river.max_lake_degree must be > 0")
 	}
 	if o.River.ShapeLongMeanderScale <= 0 || o.River.ShapeLongMeanderScale > 4 {
-		return errors.New("river-shape-long-meander-scale must be within (0,4]")
+		return errors.New("river.shape_long_meander_scale must be within (0,4]")
 	}
 	if o.River.ShapeShortMeanderScale <= 0 || o.River.ShapeShortMeanderScale > 8 {
-		return errors.New("river-shape-short-meander-scale must be within (0,8]")
+		return errors.New("river.shape_short_meander_scale must be within (0,8]")
 	}
 	if o.River.ShapeShortMeanderBias < 0 || o.River.ShapeShortMeanderBias > 0.05 {
-		return errors.New("river-shape-short-meander-bias must be within [0,0.05]")
+		return errors.New("river.shape_short_meander_bias must be within [0,0.05]")
 	}
 	if o.River.ShapeAmplitudeScale <= 0 || o.River.ShapeAmplitudeScale > 3 {
-		return errors.New("river-shape-amplitude-scale must be within (0,3]")
+		return errors.New("river.shape_amplitude_scale must be within (0,3]")
 	}
 	if o.River.ShapeFrequencyScale <= 0 || o.River.ShapeFrequencyScale > 3 {
-		return errors.New("river-shape-frequency-scale must be within (0,3]")
+		return errors.New("river.shape_frequency_scale must be within (0,3]")
 	}
 	if o.River.ShapeNoiseScale < 0 || o.River.ShapeNoiseScale > 1 {
-		return errors.New("river-shape-noise-scale must be within [0,1]")
+		return errors.New("river.shape_noise_scale must be within [0,1]")
 	}
 	if o.River.ShapeAlongScale < 0 || o.River.ShapeAlongScale > 1 {
-		return errors.New("river-shape-along-scale must be within [0,1]")
+		return errors.New("river.shape_along_scale must be within [0,1]")
 	}
 	if o.River.ShapeDistanceCap <= 0 || o.River.ShapeDistanceCap > 0.9 {
-		return errors.New("river-shape-distance-cap must be within (0,0.9]")
+		return errors.New("river.shape_distance_cap must be within (0,0.9]")
 	}
 	if o.River.ShapeSegmentLength < 20 || o.River.ShapeSegmentLength > 300 {
-		return errors.New("river-shape-segment-length must be within [20,300]")
+		return errors.New("river.shape_segment_length must be within [20,300]")
 	}
 	if o.River.SourceChance < 0 || o.River.SourceChance > 1 {
-		return errors.New("river-source-chance must be within [0,1]")
+		return errors.New("river.source_chance must be within [0,1]")
 	}
 	if o.River.VoronoiCellSize <= 1 {
-		return errors.New("river-voronoi-cell-size must be > 1")
+		return errors.New("river.voronoi_cell_size must be > 1")
 	}
 	if o.River.VoronoiEdgeThreshold <= 0 {
-		return errors.New("river-voronoi-edge-threshold must be > 0")
+		return errors.New("river.voronoi_edge_threshold must be > 0")
 	}
 	if o.River.VoronoiSourceBoost < 0 || o.River.VoronoiSourceBoost > 1 {
-		return errors.New("river-voronoi-source-boost must be within [0,1]")
+		return errors.New("river.voronoi_source_boost must be within [0,1]")
 	}
 	if o.River.VoronoiBias < 0 || o.River.VoronoiBias > 1 {
-		return errors.New("river-voronoi-bias must be within [0,1]")
+		return errors.New("river.voronoi_bias must be within [0,1]")
 	}
 	if o.River.SinkLakeChance < 0 || o.River.SinkLakeChance > 1 {
-		return errors.New("river-sink-lake-chance must be within [0,1]")
+		return errors.New("river.sink_lake_chance must be within [0,1]")
 	}
 	if o.River.LakeMinSize <= 0 {
-		return errors.New("river-lake-min-size must be > 0")
+		return errors.New("river.lake_min_size must be > 0")
 	}
 	if o.River.LakeConnectChance < 0 || o.River.LakeConnectChance > 1 {
-		return errors.New("river-lake-connect-chance must be within [0,1]")
+		return errors.New("river.lake_connect_chance must be within [0,1]")
 	}
 	if o.River.LakeConnectionLimit < 0 {
-		return errors.New("river-lake-connection-limit must be >= 0")
+		return errors.New("river.lake_connection_limit must be >= 0")
 	}
 	if o.River.LakeLinkMinDistance < 0 {
-		return errors.New("river-lake-link-min-distance must be >= 0")
+		return errors.New("river.lake_link_min_distance must be >= 0")
 	}
 	if o.River.LakeLinkMaxDistance <= 0 {
-		return errors.New("river-lake-link-max-distance must be > 0")
+		return errors.New("river.lake_link_max_distance must be > 0")
 	}
 	if o.River.LakeLinkMaxDistance <= o.River.LakeLinkMinDistance {
-		return errors.New("river-lake-link-max-distance must be > river-lake-link-min-distance")
+		return errors.New("river.lake_link_max_distance must be > river.lake_link_min_distance")
 	}
 	if o.River.RiverWidthMin <= 0 {
-		return errors.New("river-width-min must be > 0")
+		return errors.New("river.river_width_min must be > 0")
 	}
 	if o.River.RiverWidthMax < o.River.RiverWidthMin {
-		return errors.New("river-width-max must be >= river-width-min")
+		return errors.New("river.river_width_max must be >= river.river_width_min")
 	}
 	if o.River.GridSpacing <= 0 {
-		return errors.New("river-grid-spacing must be > 0")
+		return errors.New("river.grid_spacing must be > 0")
 	}
 	if o.River.GridJitter < 0 {
-		return errors.New("river-grid-jitter must be >= 0")
+		return errors.New("river.grid_jitter must be >= 0")
 	}
 	if o.River.GridJitter >= o.River.GridSpacing/2 {
-		return errors.New("river-grid-jitter must be < river-grid-spacing/2")
+		return errors.New("river.grid_jitter must be < river.grid_spacing/2")
 	}
 	if o.River.TrunkRiverCount < 0 {
-		return errors.New("river-trunk-count must be >= 0")
+		return errors.New("river.trunk_count must be >= 0")
 	}
 	if o.River.TrunkSourceElevation < 0 || o.River.TrunkSourceElevation > 1 {
-		return errors.New("river-trunk-source-elevation-min must be within [0,1]")
+		return errors.New("river.trunk_source_elevation_min must be within [0,1]")
 	}
 	if o.River.TrunkMinLength <= 0 {
-		return errors.New("river-trunk-min-length must be > 0")
+		return errors.New("river.trunk_min_length must be > 0")
 	}
 	if o.River.CoastSampleChance <= 0 || o.River.CoastSampleChance > 1 {
-		return errors.New("river-coast-sample-chance must be within (0,1]")
+		return errors.New("river.coast_sample_chance must be within (0,1]")
 	}
 	if o.River.FlowShallowThreshold <= 0 {
-		return errors.New("river-flow-shallow-threshold must be > 0")
+		return errors.New("river.flow_shallow_threshold must be > 0")
 	}
 	if o.River.FlowDeepThreshold <= o.River.FlowShallowThreshold {
-		return errors.New("river-flow-deep-threshold must be > river-flow-shallow-threshold")
+		return errors.New("river.flow_deep_threshold must be > river.flow_shallow_threshold")
 	}
 	if o.River.BankRadius < 0 {
-		return errors.New("river-bank-radius must be >= 0")
+		return errors.New("river.bank_radius must be >= 0")
 	}
 	if o.River.LakeFlowThreshold < o.River.FlowShallowThreshold {
-		return errors.New("river-lake-flow-threshold must be >= river-flow-shallow-threshold")
+		return errors.New("river.lake_flow_threshold must be >= river.flow_shallow_threshold")
+	}
+
+	if o.Biome.RegionCount <= 0 {
+		return errors.New("biomes.hnh_region_count must be > 0")
+	}
+	if o.Biome.RegionJitter < 0 {
+		return errors.New("biomes.hnh_region_jitter must be >= 0")
+	}
+	if o.Biome.BlendWidth < 0 {
+		return errors.New("biomes.hnh_blend_width must be >= 0")
+	}
+	if o.Biome.SmoothingPasses < 0 {
+		return errors.New("biomes.hnh_smoothing_passes must be >= 0")
+	}
+	if o.Biome.MinPatchTiles <= 0 {
+		return errors.New("biomes.hnh_min_patch_tiles must be > 0")
+	}
+	if o.Biome.VariantDensity < 0 || o.Biome.VariantDensity > 1 {
+		return errors.New("biomes.hnh_variant_density must be within [0,1]")
+	}
+	if o.Biome.SwampClumpScale <= 0 || o.Biome.SwampClumpScale > 4 {
+		return errors.New("biomes.hnh_swamp_clump_scale must be within (0,4]")
+	}
+	if o.Biome.MountainRuggedThreshold < 0 || o.Biome.MountainRuggedThreshold > 1 {
+		return errors.New("biomes.hnh_mountain_rugged_threshold must be within [0,1]")
+	}
+	if err := validateBiomeShare("biomes.hnh_forest_share", o.Biome.ForestShare); err != nil {
+		return err
+	}
+	if err := validateBiomeShare("biomes.hnh_grassland_share", o.Biome.GrasslandShare); err != nil {
+		return err
+	}
+	if err := validateBiomeShare("biomes.hnh_wetland_share", o.Biome.WetlandShare); err != nil {
+		return err
+	}
+	if err := validateBiomeShare("biomes.hnh_heath_moor_share", o.Biome.HeathMoorShare); err != nil {
+		return err
+	}
+	if err := validateBiomeShare("biomes.hnh_mountain_share", o.Biome.MountainShare); err != nil {
+		return err
+	}
+	landShare := o.Biome.ForestShare + o.Biome.GrasslandShare + o.Biome.WetlandShare + o.Biome.HeathMoorShare + o.Biome.MountainShare
+	if landShare > 1.0 {
+		return errors.New("sum of biome land shares must be <= 1.0")
+	}
+	if o.Biome.TemperatureScale <= 0 {
+		return errors.New("biomes.temperature_scale must be > 0")
+	}
+	if o.Biome.MoistureScale <= 0 {
+		return errors.New("biomes.moisture_scale must be > 0")
+	}
+	if o.Biome.ContinentalnessScale <= 0 {
+		return errors.New("biomes.continentalness_scale must be > 0")
+	}
+	if o.Biome.ErosionScale <= 0 {
+		return errors.New("biomes.erosion_scale must be > 0")
+	}
+	if o.Biome.WeirdnessScale <= 0 {
+		return errors.New("biomes.weirdness_scale must be > 0")
+	}
+	if o.Biome.DomainWarpStrength < 0 || o.Biome.DomainWarpStrength > 512 {
+		return errors.New("biomes.domain_warp_strength must be within [0,512]")
+	}
+
+	if o.Ecology.TickInterval <= 0 {
+		return errors.New("ecology.tick_interval must be > 0")
+	}
+	if o.Ecology.CellsPerTick <= 0 {
+		return errors.New("ecology.cells_per_tick must be > 0")
+	}
+	if o.Ecology.ChunkBudget <= 0 {
+		return errors.New("ecology.chunk_budget must be > 0")
+	}
+	if o.Ecology.SpreadScale <= 0 || o.Ecology.SpreadScale > 10 {
+		return errors.New("ecology.spread_scale must be within (0,10]")
 	}
 
 	if strings.TrimSpace(o.PNG.OutputDir) == "" {
@@ -366,7 +520,7 @@ func (o MapgenOptions) Validate() error {
 		return fmt.Errorf("tile count overflow: %w", err)
 	}
 
-	estimatedBytes, err := estimatePrecomputeBytes(tileCount, o.River.Enabled)
+	estimatedBytes, err := estimatePrecomputeBytes(tileCount, o.River.Enabled, o.Biome.Enabled)
 	if err != nil {
 		return err
 	}
@@ -383,10 +537,23 @@ func (o MapgenOptions) Validate() error {
 	return nil
 }
 
-func estimatePrecomputeBytes(tileCount uint64, riverEnabled bool) (uint64, error) {
-	bytesPerTile := uint64(5) // elevation float32 + final tile byte
+func validateBiomeShare(name string, value float64) error {
+	if value < 0 || value > 1 {
+		return fmt.Errorf("%s must be within [0,1]", name)
+	}
+	return nil
+}
+
+func estimatePrecomputeBytes(tileCount uint64, riverEnabled, biomeEnabled bool) (uint64, error) {
+	// elevation float32 + final tile byte
+	bytesPerTile := uint64(5)
 	if riverEnabled {
-		bytesPerTile += 5 // flow uint32 + river class byte
+		// flow uint32 + river class byte
+		bytesPerTile += 5
+	}
+	if biomeEnabled {
+		// base tile byte + climate fields (temperature, moisture, continentalness, erosion, weirdness, ruggedness)
+		bytesPerTile += 1 + 6*4
 	}
 	return checkedMulUint64(tileCount, bytesPerTile)
 }

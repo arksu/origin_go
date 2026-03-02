@@ -2,7 +2,6 @@ package main
 
 import (
 	"math/rand"
-	"reflect"
 	"testing"
 )
 
@@ -224,7 +223,7 @@ func TestDeterministicChunkSeedStableAcrossOrder(t *testing.T) {
 }
 
 func TestParseMapgenOptionsOverviewOnlyImpliesPNGExport(t *testing.T) {
-	opts, err := ParseMapgenOptions([]string{"-png-overview-only"})
+	opts, err := ParseMapgenOptions([]string{"-gen-config", "etc/mapgen/presets/default.yaml", "-png-overview-only"})
 	if err != nil {
 		t.Fatalf("ParseMapgenOptions error: %v", err)
 	}
@@ -236,13 +235,34 @@ func TestParseMapgenOptionsOverviewOnlyImpliesPNGExport(t *testing.T) {
 	}
 }
 
-func TestParseMapgenOptionsStableDefaults(t *testing.T) {
-	want := DefaultMapgenOptions()
-	got, err := ParseMapgenOptions(nil)
+func TestParseMapgenOptionsLoadsYAMLAndOverridesRuntimeFlags(t *testing.T) {
+	got, err := ParseMapgenOptions([]string{
+		"-gen-config", "etc/mapgen/presets/default.yaml",
+		"-chunks-x", "12",
+		"-threads", "7",
+		"-png-export",
+	})
 	if err != nil {
 		t.Fatalf("ParseMapgenOptions error: %v", err)
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("defaults mismatch after parse")
+
+	if got.ChunksX != 12 {
+		t.Fatalf("expected chunks-x override to apply, got=%d", got.ChunksX)
+	}
+	if got.Threads != 7 {
+		t.Fatalf("expected threads override to apply, got=%d", got.Threads)
+	}
+	if !got.PNG.Export {
+		t.Fatalf("expected png-export override to apply")
+	}
+	if got.ConfigPath == "" {
+		t.Fatalf("expected resolved config path to be set")
+	}
+}
+
+func TestParseMapgenOptionsRejectsMissingConfig(t *testing.T) {
+	_, err := ParseMapgenOptions([]string{"-gen-config", "missing-config.yaml"})
+	if err == nil {
+		t.Fatalf("expected missing config error")
 	}
 }

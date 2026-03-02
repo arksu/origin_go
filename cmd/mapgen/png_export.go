@@ -186,8 +186,14 @@ func tileColor(tile byte, riverClass RiverClass, highlightRivers bool) color.RGB
 		return color.RGBA{R: 43, G: 88, B: 43, A: 255}
 	case tileForestLeaf:
 		return color.RGBA{R: 62, G: 123, B: 60, A: 255}
+	case tileThicket:
+		return color.RGBA{R: 52, G: 105, B: 48, A: 255}
 	case tileGrass:
 		return color.RGBA{R: 104, G: 164, B: 78, A: 255}
+	case tileHeath:
+		return color.RGBA{R: 151, G: 143, B: 83, A: 255}
+	case tileMoor:
+		return color.RGBA{R: 112, G: 107, B: 85, A: 255}
 	case tileSwamp:
 		return color.RGBA{R: 83, G: 106, B: 82, A: 255}
 	case tileClay:
@@ -196,6 +202,8 @@ func tileColor(tile byte, riverClass RiverClass, highlightRivers bool) color.RGB
 		return color.RGBA{R: 127, G: 96, B: 66, A: 255}
 	case tileStone:
 		return color.RGBA{R: 132, G: 132, B: 132, A: 255}
+	case tileMountain:
+		return color.RGBA{R: 99, G: 104, B: 109, A: 255}
 	default:
 		return color.RGBA{R: 255, G: 0, B: 255, A: 255}
 	}
