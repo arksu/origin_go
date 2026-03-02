@@ -95,7 +95,9 @@ func classifyBaseTile(elevation, moisture, temperature float64) byte {
 	if elevation < shallowWaterThreshold {
 		return tileWater
 	}
-	if elevation < sandThreshold {
+
+	// Sand is climate-driven instead of an automatic elevation ring around water.
+	if moisture < 0.22 && temperature > 0.58 && elevation < 0.62 {
 		return tileSand
 	}
 	if moisture > 0.6 {

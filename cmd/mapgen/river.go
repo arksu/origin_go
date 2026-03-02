@@ -24,6 +24,9 @@ const (
 	voronoiPointYSalt  = uint64(0xBF58476D1CE4E5B9)
 	lakeLinkJitterSalt = uint64(0x369DEA0F31A53F85)
 	lakeLinkTargetSalt = uint64(0xDB4F0B9175AE2165)
+	lakeShapeSaltA     = uint64(0x6E4B9D1337CA822D)
+	lakeShapeSaltB     = uint64(0xC17A6E995D4AF63B)
+	lakeShapeSaltC     = uint64(0xA13E2C7FD9B5E741)
 )
 
 type RiverNetwork struct {
@@ -60,10 +63,30 @@ type outletPoint struct {
 }
 
 type drawLake struct {
-	ID     int
-	X      int
-	Y      int
-	Radius int
+	ID           int
+	X            int
+	Y            int
+	Radius       int
+	RadiusX      int
+	RadiusY      int
+	Rotation     float64
+	LobeCount    int
+	Irregularity float64
+	DeepRatio    float64
+	PhaseA       float64
+	PhaseB       float64
+}
+
+type lakeSizeProfile struct {
+	SmallMin     int
+	SmallMax     int
+	MediumMin    int
+	MediumMax    int
+	LargeMin     int
+	LargeMax     int
+	MediumChance float64
+	LargeChance  float64
+	MaxRadius    int
 }
 
 func BuildRiverNetwork(
@@ -162,7 +185,7 @@ func buildElevationRoutedRiverFlow(
 				sinkX, sinkY := sinkIdx%width, sinkIdx/width
 				if flow[sinkIdx] >= uint32(opts.LakeFlowThreshold) &&
 					coordHash01(seed, sinkX, sinkY, riverSinkLakeSalt) < opts.SinkLakeChance {
-					carveSinkLake(flow, width, height, sinkX, sinkY, opts)
+					carveSinkLake(flow, width, height, sinkX, sinkY, seed, opts)
 				}
 			}
 		}
@@ -316,11 +339,12 @@ func generateDrawLakes(width int, height int, seed int64, opts RiverOptions) []d
 
 	target := opts.LakeCount
 	lakes := make([]drawLake, 0, target)
-	margin := maxInt(6, opts.RiverWidthMax*2+4)
+	sizeProfile := resolveLakeSizeProfile(width, height, opts)
+	margin := maxInt(6, sizeProfile.MaxRadius+6)
 	if margin*2 >= width || margin*2 >= height {
 		margin = 1
 	}
-	minGap := maxInt(2, opts.RiverWidthMax/2)
+	minGap := maxInt(4, opts.RiverWidthMax/2+2)
 
 	gridCols := int(math.Round(math.Sqrt(float64(target) * float64(width) / float64(maxInt(height, 1)))))
 	if gridCols < 1 {
@@ -346,16 +370,15 @@ func generateDrawLakes(width int, height int, seed int64, opts RiverOptions) []d
 
 			x := clampInt(int(math.Round(float64(baseX)+xOffset)), margin, width-margin-1)
 			y := clampInt(int(math.Round(float64(baseY)+yOffset)), margin, height-margin-1)
-			radius := drawLakeRadiusForID(seed, len(lakes), opts)
-			if !canPlaceDrawLake(lakes, x, y, radius, minGap) {
+			lakeID := len(lakes)
+			profile := buildDrawLakeProfile(seed, lakeID, sizeProfile)
+			if !canPlaceDrawLake(lakes, x, y, profile.Radius, minGap) {
 				continue
 			}
-			lakes = append(lakes, drawLake{
-				ID:     len(lakes),
-				X:      x,
-				Y:      y,
-				Radius: radius,
-			})
+			profile.ID = lakeID
+			profile.X = x
+			profile.Y = y
+			lakes = append(lakes, profile)
 		}
 	}
 
@@ -367,30 +390,162 @@ func generateDrawLakes(width int, height int, seed int64, opts RiverOptions) []d
 		y := margin + int(math.Floor(coordHash01(seed, target, attempt, riverGridSalt^0x1248ACED)*float64(yRange)))
 		x = clampInt(x, margin, width-margin-1)
 		y = clampInt(y, margin, height-margin-1)
-		radius := drawLakeRadiusForID(seed, len(lakes)+attempt, opts)
-		if !canPlaceDrawLake(lakes, x, y, radius, minGap) {
+		profileID := len(lakes) + attempt*13
+		profile := buildDrawLakeProfile(seed, profileID, sizeProfile)
+		if !canPlaceDrawLake(lakes, x, y, profile.Radius, minGap) {
 			continue
 		}
-		lakes = append(lakes, drawLake{
-			ID:     len(lakes),
-			X:      x,
-			Y:      y,
-			Radius: radius,
-		})
+		profile.ID = len(lakes)
+		profile.X = x
+		profile.Y = y
+		lakes = append(lakes, profile)
 	}
 
 	return lakes
 }
 
-func drawLakeRadiusForID(seed int64, lakeID int, opts RiverOptions) int {
-	minRadius := maxInt(3, opts.RiverWidthMin/3+1)
-	maxRadius := maxInt(minRadius+1, opts.RiverWidthMax/2+1)
-	if minRadius == maxRadius {
-		return minRadius
+func resolveLakeSizeProfile(width, height int, opts RiverOptions) lakeSizeProfile {
+	mapLimit := maxInt(8, minInt(width, height)/5)
+
+	smallMin := maxInt(6, opts.RiverWidthMin+1)
+	smallMax := maxInt(smallMin+2, opts.RiverWidthMax*2+4)
+	if opts.LakeSizeSmallMin > 0 {
+		smallMin = opts.LakeSizeSmallMin
 	}
-	span := maxRadius - minRadius + 1
-	v := coordHash01(seed, lakeID, maxRadius, riverSinkLakeSalt)
-	return minRadius + int(math.Floor(v*float64(span)))
+	if opts.LakeSizeSmallMax > 0 {
+		smallMax = opts.LakeSizeSmallMax
+	}
+	if smallMax < smallMin+1 {
+		smallMax = smallMin + 1
+	}
+	if smallMax > mapLimit {
+		smallMax = mapLimit
+	}
+	if smallMin > smallMax {
+		smallMin = smallMax
+	}
+
+	mediumMin := maxInt(smallMax+4, int(math.Round(float64(minInt(width, height))*0.006)))
+	mediumMax := maxInt(mediumMin+8, int(math.Round(float64(minInt(width, height))*0.015)))
+	if opts.LakeSizeMediumMin > 0 {
+		mediumMin = opts.LakeSizeMediumMin
+	}
+	if opts.LakeSizeMediumMax > 0 {
+		mediumMax = opts.LakeSizeMediumMax
+	}
+	if mediumMin <= smallMax {
+		mediumMin = smallMax + 2
+	}
+	if mediumMax < mediumMin+1 {
+		mediumMax = mediumMin + 1
+	}
+	if mediumMax > mapLimit {
+		mediumMax = mapLimit
+	}
+	if mediumMin > mediumMax {
+		mediumMin = mediumMax
+	}
+
+	largeMin := maxInt(mediumMax+6, int(math.Round(float64(minInt(width, height))*0.02)))
+	largeMax := maxInt(largeMin+12, int(math.Round(float64(minInt(width, height))*0.045)))
+	if opts.LakeSizeLargeMin > 0 {
+		largeMin = opts.LakeSizeLargeMin
+	}
+	if opts.LakeSizeLargeMax > 0 {
+		largeMax = opts.LakeSizeLargeMax
+	}
+	if largeMin <= mediumMax {
+		largeMin = mediumMax + 2
+	}
+	if largeMax < largeMin+1 {
+		largeMax = largeMin + 1
+	}
+	if largeMax > mapLimit {
+		largeMax = mapLimit
+	}
+	if largeMin > largeMax {
+		largeMin = largeMax
+	}
+
+	mediumChance := opts.LakeSizeMediumChance
+	largeChance := opts.LakeSizeLargeChance
+	if mediumChance <= 0 && largeChance <= 0 {
+		mediumChance = 0.24
+		largeChance = 0.04
+	}
+	mediumChance = clamp01(mediumChance)
+	largeChance = clamp01(largeChance)
+	if mediumChance+largeChance > 0.95 {
+		scale := 0.95 / (mediumChance + largeChance)
+		mediumChance *= scale
+		largeChance *= scale
+	}
+
+	maxRadius := maxInt(smallMax, maxInt(mediumMax, largeMax))
+	return lakeSizeProfile{
+		SmallMin:     smallMin,
+		SmallMax:     smallMax,
+		MediumMin:    mediumMin,
+		MediumMax:    mediumMax,
+		LargeMin:     largeMin,
+		LargeMax:     largeMax,
+		MediumChance: mediumChance,
+		LargeChance:  largeChance,
+		MaxRadius:    maxRadius,
+	}
+}
+
+func buildDrawLakeProfile(seed int64, lakeID int, sizeProfile lakeSizeProfile) drawLake {
+	sizeRoll := coordHash01(seed, lakeID, sizeProfile.MaxRadius, riverSinkLakeSalt)
+	minMajor := sizeProfile.SmallMin
+	maxMajor := sizeProfile.SmallMax
+	exp := 1.35
+	if sizeRoll < sizeProfile.LargeChance {
+		minMajor = sizeProfile.LargeMin
+		maxMajor = sizeProfile.LargeMax
+		exp = 0.78
+	} else if sizeRoll < sizeProfile.LargeChance+sizeProfile.MediumChance {
+		minMajor = sizeProfile.MediumMin
+		maxMajor = sizeProfile.MediumMax
+		exp = 1.0
+	}
+	radiusRoll := coordHash01(seed, lakeID, minMajor+maxMajor, lakeShapeSaltA^riverSinkLakeSalt)
+	major := minMajor + int(math.Round(math.Pow(radiusRoll, exp)*float64(maxMajor-minMajor)))
+	if major < minMajor {
+		major = minMajor
+	}
+	if major > maxMajor {
+		major = maxMajor
+	}
+
+	ratio := 0.55 + coordHash01(seed, lakeID, major, lakeShapeSaltA)*0.40
+	minor := maxInt(3, int(math.Round(float64(major)*ratio)))
+	if minor > major {
+		minor = major
+	}
+
+	rotation := coordHash01(seed, lakeID, minor, lakeShapeSaltB) * math.Pi
+	lobeCount := 2 + int(math.Floor(coordHash01(seed, lakeID, major, lakeShapeSaltC)*4))
+	irregularity := 0.08 + coordHash01(seed, lakeID, major, riverLakeLinkSalt)*0.24
+	if major < 8 {
+		irregularity *= 0.8
+	}
+	deepRatio := 0.42 + coordHash01(seed, lakeID, minor, riverSinkLakeSalt^lakeShapeSaltA)*0.20
+
+	phaseA := coordHash01(seed, lakeID, major, lakeShapeSaltA^riverSinkLakeSalt) * 2 * math.Pi
+	phaseB := coordHash01(seed, lakeID, minor, lakeShapeSaltB^riverLakeLinkSalt) * 2 * math.Pi
+
+	return drawLake{
+		Radius:       major,
+		RadiusX:      major,
+		RadiusY:      minor,
+		Rotation:     rotation,
+		LobeCount:    lobeCount,
+		Irregularity: irregularity,
+		DeepRatio:    deepRatio,
+		PhaseA:       phaseA,
+		PhaseB:       phaseB,
+	}
 }
 
 func canPlaceDrawLake(lakes []drawLake, x, y, radius, minGap int) bool {
@@ -406,21 +561,35 @@ func canPlaceDrawLake(lakes []drawLake, x, y, radius, minGap int) bool {
 }
 
 func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opts RiverOptions) {
-	outerRadius := maxInt(2, lake.Radius)
-	innerRadius := maxInt(1, int(math.Round(float64(outerRadius)*0.48)))
-	phaseA := coordHash01(int64(lake.ID), lake.X, lake.Y, riverSinkLakeSalt) * 2 * math.Pi
-	phaseB := coordHash01(int64(lake.ID), lake.Y, lake.X, riverLakeLinkSalt) * 2 * math.Pi
+	outerX := maxInt(2, lake.RadiusX)
+	outerY := maxInt(2, lake.RadiusY)
+	cosR := math.Cos(lake.Rotation)
+	sinR := math.Sin(lake.Rotation)
+	deepRatio := clamp01(lake.DeepRatio)
+	if deepRatio < 0.30 {
+		deepRatio = 0.30
+	}
 
-	for dy := -outerRadius; dy <= outerRadius; dy++ {
-		for dx := -outerRadius; dx <= outerRadius; dx++ {
-			dist := math.Hypot(float64(dx), float64(dy))
-			angle := math.Atan2(float64(dy), float64(dx))
-			shape := math.Sin(angle*2+phaseA)*0.12 + math.Sin(angle*5+phaseB)*0.08
-			effectiveOuter := float64(outerRadius) * (1 + shape)
-			if effectiveOuter < float64(innerRadius)+0.75 {
-				effectiveOuter = float64(innerRadius) + 0.75
+	boundsX := outerX + maxInt(2, int(math.Round(float64(outerX)*lake.Irregularity))+2)
+	boundsY := outerY + maxInt(2, int(math.Round(float64(outerY)*lake.Irregularity))+2)
+
+	for dy := -boundsY; dy <= boundsY; dy++ {
+		for dx := -boundsX; dx <= boundsX; dx++ {
+			lx := float64(dx)*cosR + float64(dy)*sinR
+			ly := -float64(dx)*sinR + float64(dy)*cosR
+			base := math.Sqrt((lx*lx)/float64(outerX*outerX) + (ly*ly)/float64(outerY*outerY))
+			angle := math.Atan2(ly, lx)
+			shape := 1 +
+				lake.Irregularity*math.Sin(float64(lake.LobeCount)*angle+lake.PhaseA) +
+				lake.Irregularity*0.55*math.Sin(float64(lake.LobeCount*2-1)*angle+lake.PhaseB)
+			noiseScale := float64(maxInt(6, lake.Radius/2))
+			localNoise := (smoothHashNoise2D(int64(lake.ID)+43, float64(lake.X+dx), float64(lake.Y+dy), noiseScale, lakeShapeSaltC) - 0.5) * lake.Irregularity * 0.35
+			shape += localNoise
+			if shape < 0.55 {
+				shape = 0.55
 			}
-			if dist > effectiveOuter {
+
+			if base > shape {
 				continue
 			}
 			x := lake.X + dx
@@ -429,11 +598,9 @@ func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opt
 				continue
 			}
 			idx := tileIndex(x, y, width)
-			effectiveInner := float64(innerRadius) * (1 + shape*0.35)
-			if effectiveInner < 1 {
-				effectiveInner = 1
-			}
-			if dist <= effectiveInner {
+
+			innerLimit := shape * deepRatio
+			if base <= innerLimit {
 				if flow[idx] < uint32(opts.FlowDeepThreshold) {
 					flow[idx] = uint32(opts.FlowDeepThreshold)
 				}
@@ -589,9 +756,28 @@ func lakeShorePoint(lake drawLake, targetX, targetY, width, height int) (int, in
 	if length <= 0.0001 {
 		return clampInt(lake.X, 0, width-1), clampInt(lake.Y, 0, height-1)
 	}
-	radius := maxInt(1, lake.Radius-1)
-	x := float64(lake.X) + dx/length*float64(radius)
-	y := float64(lake.Y) + dy/length*float64(radius)
+
+	angleWorld := math.Atan2(dy, dx)
+	localAngle := angleWorld - lake.Rotation
+	cosA := math.Cos(localAngle)
+	sinA := math.Sin(localAngle)
+	rx := float64(maxInt(1, lake.RadiusX))
+	ry := float64(maxInt(1, lake.RadiusY))
+	denom := math.Sqrt((cosA*cosA)/(rx*rx) + (sinA*sinA)/(ry*ry))
+	if denom <= 0 {
+		denom = 1
+	}
+	ellipseRadius := 1.0 / denom
+
+	shape := 1 +
+		lake.Irregularity*math.Sin(float64(lake.LobeCount)*localAngle+lake.PhaseA) +
+		lake.Irregularity*0.55*math.Sin(float64(lake.LobeCount*2-1)*localAngle+lake.PhaseB)
+	if shape < 0.55 {
+		shape = 0.55
+	}
+	radius := maxFloat(1, ellipseRadius*shape-1)
+	x := float64(lake.X) + math.Cos(angleWorld)*radius
+	y := float64(lake.Y) + math.Sin(angleWorld)*radius
 	return clampInt(int(math.Round(x)), 0, width-1), clampInt(int(math.Round(y)), 0, height-1)
 }
 
@@ -1201,16 +1387,65 @@ func chooseLowerNeighbor(
 	return bestX, bestY, found
 }
 
-func carveSinkLake(flow []uint32, width, height, sinkX, sinkY int, opts RiverOptions) {
-	for dy := -1; dy <= 1; dy++ {
-		for dx := -1; dx <= 1; dx++ {
+func carveSinkLake(flow []uint32, width, height, sinkX, sinkY int, seed int64, opts RiverOptions) {
+	majorMin := maxInt(2, opts.RiverWidthMin/2+1)
+	majorMax := maxInt(majorMin+1, opts.RiverWidthMax/2+4)
+	if opts.LakeSizeSmallMin > 0 {
+		majorMin = maxInt(2, opts.LakeSizeSmallMin/3)
+	}
+	if opts.LakeSizeSmallMax > 0 {
+		majorMax = maxInt(majorMin+1, opts.LakeSizeSmallMax/2)
+	}
+	roll := coordHash01(seed, sinkX, sinkY, riverSinkLakeSalt)
+	radiusX := majorMin + int(math.Round(roll*float64(majorMax-majorMin)))
+	ratio := 0.58 + coordHash01(seed, sinkY, sinkX, lakeShapeSaltA)*0.36
+	radiusY := maxInt(2, int(math.Round(float64(radiusX)*ratio)))
+
+	rotation := coordHash01(seed, sinkX, sinkY, lakeShapeSaltB) * math.Pi
+	lobeCount := 2 + int(math.Floor(coordHash01(seed, sinkX, sinkY, lakeShapeSaltC)*3))
+	irregularity := 0.08 + coordHash01(seed, sinkY, sinkX, riverLakeLinkSalt)*0.18
+	deepRatio := 0.45 + coordHash01(seed, sinkX+sinkY, sinkX-sinkY, riverWidthSalt)*0.2
+	if deepRatio < 0.35 {
+		deepRatio = 0.35
+	}
+	if deepRatio > 0.7 {
+		deepRatio = 0.7
+	}
+	phaseA := coordHash01(seed, sinkX, sinkY, lakeShapeSaltA^riverSinkLakeSalt) * 2 * math.Pi
+	phaseB := coordHash01(seed, sinkY, sinkX, lakeShapeSaltB^riverLakeLinkSalt) * 2 * math.Pi
+
+	cosR := math.Cos(rotation)
+	sinR := math.Sin(rotation)
+	boundsX := radiusX + maxInt(2, int(math.Round(float64(radiusX)*irregularity))+2)
+	boundsY := radiusY + maxInt(2, int(math.Round(float64(radiusY)*irregularity))+2)
+
+	for dy := -boundsY; dy <= boundsY; dy++ {
+		for dx := -boundsX; dx <= boundsX; dx++ {
+			lx := float64(dx)*cosR + float64(dy)*sinR
+			ly := -float64(dx)*sinR + float64(dy)*cosR
+			base := math.Sqrt((lx*lx)/float64(radiusX*radiusX) + (ly*ly)/float64(radiusY*radiusY))
+			angle := math.Atan2(ly, lx)
+			shape := 1 +
+				irregularity*math.Sin(float64(lobeCount)*angle+phaseA) +
+				irregularity*0.55*math.Sin(float64(lobeCount*2-1)*angle+phaseB)
+			noiseScale := float64(maxInt(5, radiusX))
+			shape += (smoothHashNoise2D(seed+917, float64(sinkX+dx), float64(sinkY+dy), noiseScale, lakeShapeSaltC) - 0.5) * irregularity * 0.3
+			if shape < 0.55 {
+				shape = 0.55
+			}
+			if base > shape {
+				continue
+			}
+
 			x := sinkX + dx
 			y := sinkY + dy
 			if x < 0 || y < 0 || x >= width || y >= height {
 				continue
 			}
 			idx := tileIndex(x, y, width)
-			if dx == 0 && dy == 0 {
+
+			innerLimit := shape * deepRatio
+			if base <= innerLimit {
 				if flow[idx] < uint32(opts.FlowDeepThreshold) {
 					flow[idx] = uint32(opts.FlowDeepThreshold)
 				}

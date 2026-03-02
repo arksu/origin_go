@@ -11,6 +11,14 @@ river:
   layout_draw: false
   major_count: 18
   lake_count: 180
+  lake_size_small_min: 8
+  lake_size_small_max: 24
+  lake_size_medium_min: 30
+  lake_size_medium_max: 68
+  lake_size_large_min: 76
+  lake_size_large_max: 170
+  lake_size_medium_chance: 0.18
+  lake_size_large_chance: 0.02
   lake_border_mix: 0.30
   max_lake_degree: 2
   shape_long_meander_scale: 0.55

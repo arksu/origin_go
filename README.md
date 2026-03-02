@@ -162,6 +162,13 @@ Preset examples:
 - `etc/mapgen/presets/hnh.yaml` - Haven & Hearth inspired biome flavor
 - `etc/mapgen/presets/minecraft_like.yaml` - Minecraft-style climate/region profile
 
+Lake size/shape knobs are configured in YAML under `river`:
+
+- `lake_size_small_min`, `lake_size_small_max`
+- `lake_size_medium_min`, `lake_size_medium_max`
+- `lake_size_large_min`, `lake_size_large_max`
+- `lake_size_medium_chance`, `lake_size_large_chance`
+
 Example with PNG export:
 
 ```bash
