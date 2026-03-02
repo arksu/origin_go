@@ -185,6 +185,7 @@ Common mapgen flags:
 - `-river-bank-radius` (default `1`)
 - `-river-lake-flow-threshold` (default `28`)
 - `-png-export` (default `false`)
+- `-png-overview-only` (default `false`, implies `-png-export=true`, writes only `overview.png`, skips DB writes and DB connection)
 - `-png-dir` (default `map_png`)
 - `-png-scale` (default `1`)
 - `-png-highlight-rivers` (default `true`)
@@ -199,6 +200,17 @@ go run ./cmd/mapgen \
   -png-export \
   -png-dir map_png \
   -png-scale 1
+```
+
+Example overview-only export (no DB access):
+
+```bash
+go run ./cmd/mapgen \
+  -chunks-x 50 \
+  -chunks-y 50 \
+  -seed 123 \
+  -png-overview-only \
+  -png-dir map_png
 ```
 
 ### Load testing

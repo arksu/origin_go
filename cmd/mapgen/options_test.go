@@ -2,6 +2,7 @@ package main
 
 import (
 	"math/rand"
+	"reflect"
 	"testing"
 )
 
@@ -219,5 +220,29 @@ func TestDeterministicChunkSeedStableAcrossOrder(t *testing.T) {
 		if got != valuesA[coord] {
 			t.Fatalf("chunk (%d,%d) mismatch across order: got=%d want=%d", coord[0], coord[1], got, valuesA[coord])
 		}
+	}
+}
+
+func TestParseMapgenOptionsOverviewOnlyImpliesPNGExport(t *testing.T) {
+	opts, err := ParseMapgenOptions([]string{"-png-overview-only"})
+	if err != nil {
+		t.Fatalf("ParseMapgenOptions error: %v", err)
+	}
+	if !opts.PNG.OverviewOnly {
+		t.Fatalf("expected overview-only to be enabled")
+	}
+	if !opts.PNG.Export {
+		t.Fatalf("expected overview-only to imply png-export=true")
+	}
+}
+
+func TestParseMapgenOptionsStableDefaults(t *testing.T) {
+	want := DefaultMapgenOptions()
+	got, err := ParseMapgenOptions(nil)
+	if err != nil {
+		t.Fatalf("ParseMapgenOptions error: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("defaults mismatch after parse")
 	}
 }
