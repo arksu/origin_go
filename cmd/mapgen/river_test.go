@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"reflect"
 	"testing"
 )
@@ -414,5 +415,155 @@ func TestDefaultRiverCoverageOnPerlinTerrainIsVisible(t *testing.T) {
 			deep,
 			shallow,
 		)
+	}
+}
+
+func TestDrawLayoutSpreadsRiversAcrossMapBands(t *testing.T) {
+	width := 480
+	height := 480
+	elevation := make([]float32, width*height)
+	for idx := range elevation {
+		elevation[idx] = 0.8
+	}
+
+	opts := DefaultMapgenOptions().River
+	opts.LayoutDraw = true
+	opts.MajorRiverCount = 28
+	opts.LakeCount = 120
+	opts.LakeBorderMix = 0.4
+	opts.MaxLakeDegree = 2
+	opts.LakeConnectChance = 0.7
+	opts.LakeConnectionLimit = 80
+	opts.RiverWidthMin = 7
+	opts.RiverWidthMax = 7
+	opts.FlowShallowThreshold = 2
+	opts.FlowDeepThreshold = 3
+
+	network, err := BuildRiverNetwork(elevation, width, height, 99123, opts)
+	if err != nil {
+		t.Fatalf("BuildRiverNetwork draw layout error: %v", err)
+	}
+
+	left := 0
+	center := 0
+	right := 0
+	top := 0
+	middle := 0
+	bottom := 0
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			rc := network.Class[tileIndex(x, y, width)]
+			if rc == riverNone {
+				continue
+			}
+			switch {
+			case x < width/3:
+				left++
+			case x < (2*width)/3:
+				center++
+			default:
+				right++
+			}
+			switch {
+			case y < height/3:
+				top++
+			case y < (2*height)/3:
+				middle++
+			default:
+				bottom++
+			}
+		}
+	}
+
+	if left == 0 || center == 0 || right == 0 {
+		t.Fatalf("expected draw layout rivers across horizontal bands: left=%d center=%d right=%d", left, center, right)
+	}
+	if top == 0 || middle == 0 || bottom == 0 {
+		t.Fatalf("expected draw layout rivers across vertical bands: top=%d middle=%d bottom=%d", top, middle, bottom)
+	}
+}
+
+func TestDrawLayoutLakeConnectivityChanceAffectsRiverDensity(t *testing.T) {
+	width := 360
+	height := 360
+	elevation := make([]float32, width*height)
+	for idx := range elevation {
+		elevation[idx] = 0.8
+	}
+
+	base := DefaultMapgenOptions().River
+	base.LayoutDraw = true
+	base.MajorRiverCount = 24
+	base.LakeCount = 90
+	base.LakeBorderMix = 0.35
+	base.MaxLakeDegree = 3
+	base.LakeConnectionLimit = 120
+	base.RiverWidthMin = 5
+	base.RiverWidthMax = 5
+	base.FlowShallowThreshold = 2
+	base.FlowDeepThreshold = 3
+
+	low := base
+	low.LakeConnectChance = 0.2
+	lowNetwork, err := BuildRiverNetwork(elevation, width, height, 7001, low)
+	if err != nil {
+		t.Fatalf("BuildRiverNetwork low connectivity error: %v", err)
+	}
+
+	high := base
+	high.LakeConnectChance = 0.85
+	highNetwork, err := BuildRiverNetwork(elevation, width, height, 7001, high)
+	if err != nil {
+		t.Fatalf("BuildRiverNetwork high connectivity error: %v", err)
+	}
+
+	lowCount := 0
+	highCount := 0
+	for idx := range lowNetwork.Class {
+		if lowNetwork.Class[idx] != riverNone {
+			lowCount++
+		}
+		if highNetwork.Class[idx] != riverNone {
+			highCount++
+		}
+	}
+	if highCount <= lowCount {
+		t.Fatalf("expected higher lake-connect-chance to increase river density: low=%d high=%d", lowCount, highCount)
+	}
+}
+
+func TestBuildDrawPathProducesWindingCurve(t *testing.T) {
+	opts := DefaultMapgenOptions().River
+	opts.MeanderStrength = 0.01
+	opts.RiverWidthMin = 8
+	opts.RiverWidthMax = 8
+
+	startX, startY := 24, 24
+	targetX, targetY := 220, 180
+	path := buildDrawPath(256, 256, startX, startY, targetX, targetY, 424242, opts)
+	if len(path) < 16 {
+		t.Fatalf("expected non-trivial draw path length, got %d", len(path))
+	}
+
+	lineDX := float64(targetX - startX)
+	lineDY := float64(targetY - startY)
+	lineLen := math.Hypot(lineDX, lineDY)
+	if lineLen == 0 {
+		t.Fatalf("invalid zero line length")
+	}
+
+	maxDeviation := 0.0
+	for _, idx := range path {
+		x := float64(idx % 256)
+		y := float64(idx / 256)
+		// Perpendicular distance from point to start-target line.
+		numerator := math.Abs(lineDY*x - lineDX*y + float64(targetX*startY-targetY*startX))
+		deviation := numerator / lineLen
+		if deviation > maxDeviation {
+			maxDeviation = deviation
+		}
+	}
+	if maxDeviation < 6.0 {
+		t.Fatalf("expected visibly winding path, max perpendicular deviation too small: %.3f", maxDeviation)
 	}
 }
