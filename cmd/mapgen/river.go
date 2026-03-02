@@ -72,6 +72,7 @@ type drawLake struct {
 	Radius       int
 	RadiusX      int
 	RadiusY      int
+	SizeClass    lakeSizeClass
 	Rotation     float64
 	LobeCount    int
 	Irregularity float64
@@ -770,6 +771,7 @@ func buildDrawLakeProfileForClass(
 		Radius:       major,
 		RadiusX:      major,
 		RadiusY:      minor,
+		SizeClass:    sizeClass,
 		Rotation:     rotation,
 		LobeCount:    lobeCount,
 		Irregularity: irregularity,
@@ -808,7 +810,15 @@ func buildLakeBasins(lake drawLake) []lakeBasin {
 	cosR := math.Cos(lake.Rotation)
 	sinR := math.Sin(lake.Rotation)
 
-	basinCount := clampInt(2+lake.LobeCount/2, 2, 5)
+	if lake.SizeClass == lakeSizeLarge {
+		return buildLargeLakeBasins(lake, baseRadiusX, baseRadiusY, cosR, sinR)
+	}
+
+	basinCount := clampInt(2+lake.LobeCount/2, 2, 6)
+	if lake.SizeClass == lakeSizeMedium {
+		basinCount = clampInt(4+lake.LobeCount/2, 4, 7)
+	}
+
 	basins := make([]lakeBasin, 0, basinCount)
 	basins = append(basins, lakeBasin{
 		X:       float64(lake.X),
@@ -843,6 +853,91 @@ func buildLakeBasins(lake drawLake) []lakeBasin {
 	return basins
 }
 
+func buildLargeLakeBasins(lake drawLake, baseRadiusX, baseRadiusY, cosR, sinR float64) []lakeBasin {
+	chainCount := clampInt(6+lake.LobeCount, 7, 12)
+	basins := make([]lakeBasin, 0, chainCount+6)
+
+	spineLength := baseRadiusX * (1.35 + coordHash01(int64(lake.ID), lake.RadiusX, lake.RadiusY, lakeBasinSaltA)*0.75)
+	for i := 0; i < chainCount; i++ {
+		t := float64(i) / float64(maxInt(1, chainCount-1))
+		along := (t - 0.5) * spineLength
+		swayWave := math.Sin(t*2*math.Pi+lake.PhaseA) * baseRadiusY * (0.24 + lake.Irregularity*0.42)
+		swayNoise := (coordHash01(int64(lake.ID), i, lake.Radius, lakeBasinSaltB) - 0.5) * baseRadiusY * 0.68
+		sway := swayWave + swayNoise
+
+		offsetX := along*cosR - sway*sinR
+		offsetY := along*sinR + sway*cosR
+
+		taper := 1 - math.Abs(t-0.5)*1.55
+		if taper < 0.22 {
+			taper = 0.22
+		}
+		radiusX := baseRadiusX * (0.20 + taper*0.48) * (0.85 + coordHash01(int64(lake.ID), i, lake.X, lakeShapeSaltA)*0.35)
+		radiusY := baseRadiusY * (0.24 + taper*0.55) * (0.80 + coordHash01(int64(lake.ID), i, lake.Y, lakeShapeSaltB)*0.40)
+		weight := 0.68 + taper*0.72 + coordHash01(int64(lake.ID), i, lake.X+lake.Y, lakeShapeSaltC)*0.25
+
+		basins = append(basins, lakeBasin{
+			X:       float64(lake.X) + offsetX,
+			Y:       float64(lake.Y) + offsetY,
+			RadiusX: maxFloat(3, radiusX),
+			RadiusY: maxFloat(3, radiusY),
+			Weight:  weight,
+		})
+
+		// Side embayments create realistic large-lake bays without noisy pixel spikes.
+		if i <= 1 || i >= chainCount-2 {
+			continue
+		}
+		if coordHash01(int64(lake.ID), i, lake.RadiusX+lake.RadiusY, lakeBasinSaltC) >= 0.34 {
+			continue
+		}
+
+		side := 1.0
+		if coordHash01(int64(lake.ID), i, lake.Radius, lakeBasinSaltA^lakeBasinSaltB) < 0.5 {
+			side = -1.0
+		}
+		armDist := baseRadiusY * (0.45 + coordHash01(int64(lake.ID), i, lake.RadiusY, riverLakeLinkSalt)*0.55)
+		sideLocalX := along + (coordHash01(int64(lake.ID), i, lake.X, lakeBasinSaltB)-0.5)*baseRadiusX*0.22
+		sideLocalY := sway + side*armDist
+		sideOffsetX := sideLocalX*cosR - sideLocalY*sinR
+		sideOffsetY := sideLocalX*sinR + sideLocalY*cosR
+		sideRadiusX := baseRadiusX * (0.16 + taper*0.20)
+		sideRadiusY := baseRadiusY * (0.18 + taper*0.28)
+
+		basins = append(basins, lakeBasin{
+			X:       float64(lake.X) + sideOffsetX,
+			Y:       float64(lake.Y) + sideOffsetY,
+			RadiusX: maxFloat(2, sideRadiusX),
+			RadiusY: maxFloat(2, sideRadiusY),
+			Weight:  0.45 + taper*0.35,
+		})
+	}
+
+	return basins
+}
+
+func lakeShoreThreshold(lake drawLake) float64 {
+	switch lake.SizeClass {
+	case lakeSizeLarge:
+		return 0.17
+	case lakeSizeMedium:
+		return 0.20
+	default:
+		return 0.22
+	}
+}
+
+func lakeRoughnessScale(lake drawLake) float64 {
+	switch lake.SizeClass {
+	case lakeSizeLarge:
+		return 0.12
+	case lakeSizeMedium:
+		return 0.17
+	default:
+		return 0.22
+	}
+}
+
 func lakeContourValue(lake drawLake, basins []lakeBasin, x, y float64) (float64, float64) {
 	sum := 0.0
 	core := 0.0
@@ -864,7 +959,10 @@ func lakeContourValue(lake drawLake, basins []lakeBasin, x, y float64) (float64,
 	}
 
 	noiseScale := maxFloat(8, float64(maxInt(6, lake.Radius/2)))
-	roughness := (smoothHashNoise2D(int64(lake.ID)+211, x, y, noiseScale, lakeShapeSaltC) - 0.5) * lake.Irregularity * 0.22
+	if lake.SizeClass == lakeSizeLarge {
+		noiseScale *= 1.8
+	}
+	roughness := (smoothHashNoise2D(int64(lake.ID)+211, x, y, noiseScale, lakeShapeSaltC) - 0.5) * lake.Irregularity * lakeRoughnessScale(lake)
 	contour := sum + roughness
 	return contour, core
 }
@@ -913,7 +1011,7 @@ func carveDrawLakeFootprint(flow []uint32, width, height int, lake drawLake, opt
 		return
 	}
 
-	shoreThreshold := 0.22
+	shoreThreshold := lakeShoreThreshold(lake)
 	deepThreshold := 0.78 - deepRatio*0.46
 
 	for y := minY; y <= maxY; y++ {
@@ -1289,7 +1387,7 @@ func lakeShorePoint(lake drawLake, targetX, targetY, width, height int) (int, in
 	dirX := math.Cos(angle)
 	dirY := math.Sin(angle)
 	basins := buildLakeBasins(lake)
-	shoreThreshold := 0.22
+	shoreThreshold := lakeShoreThreshold(lake)
 
 	maxRange := float64(maxInt(lake.RadiusX, lake.RadiusY)) * 2.8
 	for _, basin := range basins {
