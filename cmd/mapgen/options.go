@@ -15,38 +15,47 @@ const (
 )
 
 type RiverOptions struct {
-	Enabled              bool
-	LayoutDraw           bool
-	MajorRiverCount      int
-	LakeCount            int
-	LakeBorderMix        float64
-	MaxLakeDegree        int
-	SourceElevationMin   float64
-	SourceChance         float64
-	MeanderStrength      float64
-	VoronoiCellSize      int
-	VoronoiEdgeThreshold float64
-	VoronoiSourceBoost   float64
-	VoronoiBias          float64
-	SinkLakeChance       float64
-	LakeMinSize          int
-	LakeConnectChance    float64
-	LakeConnectionLimit  int
-	LakeLinkMinDistance  int
-	LakeLinkMaxDistance  int
-	RiverWidthMin        int
-	RiverWidthMax        int
-	GridEnabled          bool
-	GridSpacing          int
-	GridJitter           int
-	TrunkRiverCount      int
-	TrunkSourceElevation float64
-	TrunkMinLength       int
-	CoastSampleChance    float64
-	FlowShallowThreshold int
-	FlowDeepThreshold    int
-	BankRadius           int
-	LakeFlowThreshold    int
+	Enabled                bool
+	LayoutDraw             bool
+	MajorRiverCount        int
+	LakeCount              int
+	LakeBorderMix          float64
+	MaxLakeDegree          int
+	ShapeLongMeanderScale  float64
+	ShapeShortMeanderScale float64
+	ShapeShortMeanderBias  float64
+	ShapeAmplitudeScale    float64
+	ShapeFrequencyScale    float64
+	ShapeNoiseScale        float64
+	ShapeAlongScale        float64
+	ShapeDistanceCap       float64
+	ShapeSegmentLength     int
+	SourceElevationMin     float64
+	SourceChance           float64
+	MeanderStrength        float64
+	VoronoiCellSize        int
+	VoronoiEdgeThreshold   float64
+	VoronoiSourceBoost     float64
+	VoronoiBias            float64
+	SinkLakeChance         float64
+	LakeMinSize            int
+	LakeConnectChance      float64
+	LakeConnectionLimit    int
+	LakeLinkMinDistance    int
+	LakeLinkMaxDistance    int
+	RiverWidthMin          int
+	RiverWidthMax          int
+	GridEnabled            bool
+	GridSpacing            int
+	GridJitter             int
+	TrunkRiverCount        int
+	TrunkSourceElevation   float64
+	TrunkMinLength         int
+	CoastSampleChance      float64
+	FlowShallowThreshold   int
+	FlowDeepThreshold      int
+	BankRadius             int
+	LakeFlowThreshold      int
 }
 
 type PNGOptions struct {
@@ -72,38 +81,47 @@ func DefaultMapgenOptions() MapgenOptions {
 		Seed:    0,
 		Threads: 4,
 		River: RiverOptions{
-			Enabled:              true,
-			LayoutDraw:           true,
-			MajorRiverCount:      30,
-			LakeCount:            220,
-			LakeBorderMix:        0.35,
-			MaxLakeDegree:        2,
-			SourceElevationMin:   0.55,
-			SourceChance:         0.00015,
-			MeanderStrength:      0.003,
-			VoronoiCellSize:      96,
-			VoronoiEdgeThreshold: 0.14,
-			VoronoiSourceBoost:   0.02,
-			VoronoiBias:          0.01,
-			SinkLakeChance:       0.03,
-			LakeMinSize:          48,
-			LakeConnectChance:    0.75,
-			LakeConnectionLimit:  120,
-			LakeLinkMinDistance:  120,
-			LakeLinkMaxDistance:  1800,
-			RiverWidthMin:        5,
-			RiverWidthMax:        15,
-			GridEnabled:          true,
-			GridSpacing:          760,
-			GridJitter:           64,
-			TrunkRiverCount:      8,
-			TrunkSourceElevation: 0.62,
-			TrunkMinLength:       180,
-			CoastSampleChance:    0.012,
-			FlowShallowThreshold: 6,
-			FlowDeepThreshold:    20,
-			BankRadius:           1,
-			LakeFlowThreshold:    28,
+			Enabled:                true,
+			LayoutDraw:             true,
+			MajorRiverCount:        30,
+			LakeCount:              220,
+			LakeBorderMix:          0.35,
+			MaxLakeDegree:          2,
+			ShapeLongMeanderScale:  0.55,
+			ShapeShortMeanderScale: 2.2,
+			ShapeShortMeanderBias:  0.0035,
+			ShapeAmplitudeScale:    1.0,
+			ShapeFrequencyScale:    1.0,
+			ShapeNoiseScale:        0.30,
+			ShapeAlongScale:        0.16,
+			ShapeDistanceCap:       0.40,
+			ShapeSegmentLength:     70,
+			SourceElevationMin:     0.55,
+			SourceChance:           0.00015,
+			MeanderStrength:        0.003,
+			VoronoiCellSize:        96,
+			VoronoiEdgeThreshold:   0.14,
+			VoronoiSourceBoost:     0.02,
+			VoronoiBias:            0.01,
+			SinkLakeChance:         0.03,
+			LakeMinSize:            48,
+			LakeConnectChance:      0.75,
+			LakeConnectionLimit:    120,
+			LakeLinkMinDistance:    120,
+			LakeLinkMaxDistance:    1800,
+			RiverWidthMin:          5,
+			RiverWidthMax:          15,
+			GridEnabled:            true,
+			GridSpacing:            760,
+			GridJitter:             64,
+			TrunkRiverCount:        8,
+			TrunkSourceElevation:   0.62,
+			TrunkMinLength:         180,
+			CoastSampleChance:      0.012,
+			FlowShallowThreshold:   6,
+			FlowDeepThreshold:      20,
+			BankRadius:             1,
+			LakeFlowThreshold:      28,
 		},
 		PNG: PNGOptions{
 			Export:          false,
@@ -129,6 +147,15 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 	fs.IntVar(&opts.River.LakeCount, "river-lake-count", opts.River.LakeCount, "number of inland lakes to draw")
 	fs.Float64Var(&opts.River.LakeBorderMix, "river-lake-border-mix", opts.River.LakeBorderMix, "share [0..1] of major rivers that connect lakes to map border")
 	fs.IntVar(&opts.River.MaxLakeDegree, "river-max-lake-degree", opts.River.MaxLakeDegree, "maximum number of river connections per lake")
+	fs.Float64Var(&opts.River.ShapeLongMeanderScale, "river-shape-long-meander-scale", opts.River.ShapeLongMeanderScale, "multiplier for long-stage (uniform backbone) meander strength")
+	fs.Float64Var(&opts.River.ShapeShortMeanderScale, "river-shape-short-meander-scale", opts.River.ShapeShortMeanderScale, "multiplier for short-stage (local connector) meander strength")
+	fs.Float64Var(&opts.River.ShapeShortMeanderBias, "river-shape-short-meander-bias", opts.River.ShapeShortMeanderBias, "extra absolute meander added in short-stage routing")
+	fs.Float64Var(&opts.River.ShapeAmplitudeScale, "river-shape-amplitude-scale", opts.River.ShapeAmplitudeScale, "global curvature amplitude scale for draw-style rivers")
+	fs.Float64Var(&opts.River.ShapeFrequencyScale, "river-shape-frequency-scale", opts.River.ShapeFrequencyScale, "global wave frequency scale for draw-style rivers")
+	fs.Float64Var(&opts.River.ShapeNoiseScale, "river-shape-noise-scale", opts.River.ShapeNoiseScale, "random lateral noise contribution scale for draw-style rivers")
+	fs.Float64Var(&opts.River.ShapeAlongScale, "river-shape-along-scale", opts.River.ShapeAlongScale, "forward jitter contribution scale for draw-style rivers")
+	fs.Float64Var(&opts.River.ShapeDistanceCap, "river-shape-distance-cap", opts.River.ShapeDistanceCap, "maximum curvature amplitude as share of source-target distance")
+	fs.IntVar(&opts.River.ShapeSegmentLength, "river-shape-segment-length", opts.River.ShapeSegmentLength, "control-point spacing in tiles (smaller = smoother)")
 	fs.Float64Var(&opts.River.SourceElevationMin, "river-source-elevation-min", opts.River.SourceElevationMin, "minimum elevation [0..1] for river sources")
 	fs.Float64Var(&opts.River.SourceChance, "river-source-chance", opts.River.SourceChance, "chance [0..1] per tile to become a river source")
 	fs.Float64Var(&opts.River.MeanderStrength, "river-meander-strength", opts.River.MeanderStrength, "meander noise strength used as a tie-breaker")
@@ -212,6 +239,33 @@ func (o MapgenOptions) Validate() error {
 	}
 	if o.River.MaxLakeDegree <= 0 {
 		return errors.New("river-max-lake-degree must be > 0")
+	}
+	if o.River.ShapeLongMeanderScale <= 0 || o.River.ShapeLongMeanderScale > 4 {
+		return errors.New("river-shape-long-meander-scale must be within (0,4]")
+	}
+	if o.River.ShapeShortMeanderScale <= 0 || o.River.ShapeShortMeanderScale > 8 {
+		return errors.New("river-shape-short-meander-scale must be within (0,8]")
+	}
+	if o.River.ShapeShortMeanderBias < 0 || o.River.ShapeShortMeanderBias > 0.05 {
+		return errors.New("river-shape-short-meander-bias must be within [0,0.05]")
+	}
+	if o.River.ShapeAmplitudeScale <= 0 || o.River.ShapeAmplitudeScale > 3 {
+		return errors.New("river-shape-amplitude-scale must be within (0,3]")
+	}
+	if o.River.ShapeFrequencyScale <= 0 || o.River.ShapeFrequencyScale > 3 {
+		return errors.New("river-shape-frequency-scale must be within (0,3]")
+	}
+	if o.River.ShapeNoiseScale < 0 || o.River.ShapeNoiseScale > 1 {
+		return errors.New("river-shape-noise-scale must be within [0,1]")
+	}
+	if o.River.ShapeAlongScale < 0 || o.River.ShapeAlongScale > 1 {
+		return errors.New("river-shape-along-scale must be within [0,1]")
+	}
+	if o.River.ShapeDistanceCap <= 0 || o.River.ShapeDistanceCap > 0.9 {
+		return errors.New("river-shape-distance-cap must be within (0,0.9]")
+	}
+	if o.River.ShapeSegmentLength < 20 || o.River.ShapeSegmentLength > 300 {
+		return errors.New("river-shape-segment-length must be within [20,300]")
 	}
 	if o.River.SourceChance < 0 || o.River.SourceChance > 1 {
 		return errors.New("river-source-chance must be within [0,1]")
