@@ -35,6 +35,30 @@ func TestMapgenOptionsValidateRejectsInvalid(t *testing.T) {
 			},
 		},
 		{
+			name: "river major count must be positive",
+			mut: func(opts *MapgenOptions) {
+				opts.River.MajorRiverCount = 0
+			},
+		},
+		{
+			name: "river lake count must be > 1",
+			mut: func(opts *MapgenOptions) {
+				opts.River.LakeCount = 1
+			},
+		},
+		{
+			name: "river lake border mix range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.LakeBorderMix = -0.1
+			},
+		},
+		{
+			name: "river max lake degree must be positive",
+			mut: func(opts *MapgenOptions) {
+				opts.River.MaxLakeDegree = 0
+			},
+		},
+		{
 			name: "voronoi cell size must be > 1",
 			mut: func(opts *MapgenOptions) {
 				opts.River.VoronoiCellSize = 1

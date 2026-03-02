@@ -16,6 +16,11 @@ const (
 
 type RiverOptions struct {
 	Enabled              bool
+	LayoutDraw           bool
+	MajorRiverCount      int
+	LakeCount            int
+	LakeBorderMix        float64
+	MaxLakeDegree        int
 	SourceElevationMin   float64
 	SourceChance         float64
 	MeanderStrength      float64
@@ -68,6 +73,11 @@ func DefaultMapgenOptions() MapgenOptions {
 		Threads: 4,
 		River: RiverOptions{
 			Enabled:              true,
+			LayoutDraw:           true,
+			MajorRiverCount:      30,
+			LakeCount:            220,
+			LakeBorderMix:        0.35,
+			MaxLakeDegree:        2,
 			SourceElevationMin:   0.55,
 			SourceChance:         0.00015,
 			MeanderStrength:      0.003,
@@ -75,10 +85,10 @@ func DefaultMapgenOptions() MapgenOptions {
 			VoronoiEdgeThreshold: 0.14,
 			VoronoiSourceBoost:   0.02,
 			VoronoiBias:          0.01,
-			SinkLakeChance:       0.08,
+			SinkLakeChance:       0.03,
 			LakeMinSize:          48,
-			LakeConnectChance:    0.35,
-			LakeConnectionLimit:  64,
+			LakeConnectChance:    0.75,
+			LakeConnectionLimit:  120,
 			LakeLinkMinDistance:  120,
 			LakeLinkMaxDistance:  1800,
 			RiverWidthMin:        5,
@@ -114,6 +124,11 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 	fs.IntVar(&opts.Threads, "threads", opts.Threads, "number of worker threads")
 
 	fs.BoolVar(&opts.River.Enabled, "river-enabled", opts.River.Enabled, "enable procedural river generation")
+	fs.BoolVar(&opts.River.LayoutDraw, "river-layout-draw", opts.River.LayoutDraw, "draw-style river layout (road-like), independent from elevation routing")
+	fs.IntVar(&opts.River.MajorRiverCount, "river-major-count", opts.River.MajorRiverCount, "number of major rivers to generate")
+	fs.IntVar(&opts.River.LakeCount, "river-lake-count", opts.River.LakeCount, "number of inland lakes to draw")
+	fs.Float64Var(&opts.River.LakeBorderMix, "river-lake-border-mix", opts.River.LakeBorderMix, "share [0..1] of major rivers that connect lakes to map border")
+	fs.IntVar(&opts.River.MaxLakeDegree, "river-max-lake-degree", opts.River.MaxLakeDegree, "maximum number of river connections per lake")
 	fs.Float64Var(&opts.River.SourceElevationMin, "river-source-elevation-min", opts.River.SourceElevationMin, "minimum elevation [0..1] for river sources")
 	fs.Float64Var(&opts.River.SourceChance, "river-source-chance", opts.River.SourceChance, "chance [0..1] per tile to become a river source")
 	fs.Float64Var(&opts.River.MeanderStrength, "river-meander-strength", opts.River.MeanderStrength, "meander noise strength used as a tie-breaker")
@@ -123,8 +138,8 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 	fs.Float64Var(&opts.River.VoronoiBias, "river-voronoi-bias", opts.River.VoronoiBias, "downhill step bias towards voronoi edges")
 	fs.Float64Var(&opts.River.SinkLakeChance, "river-sink-lake-chance", opts.River.SinkLakeChance, "chance [0..1] to form a sink lake when sink flow threshold is met")
 	fs.IntVar(&opts.River.LakeMinSize, "river-lake-min-size", opts.River.LakeMinSize, "minimum inland lake size in tiles for lake-link generation")
-	fs.Float64Var(&opts.River.LakeConnectChance, "river-lake-connect-chance", opts.River.LakeConnectChance, "chance [0..1] for each inland lake to create an outgoing link")
-	fs.IntVar(&opts.River.LakeConnectionLimit, "river-lake-connection-limit", opts.River.LakeConnectionLimit, "maximum number of generated lake-to-lake river links")
+	fs.Float64Var(&opts.River.LakeConnectChance, "river-lake-connect-chance", opts.River.LakeConnectChance, "target share [0..1] of lakes connected by rivers in draw layout (chance per lake in elevation layout)")
+	fs.IntVar(&opts.River.LakeConnectionLimit, "river-lake-connection-limit", opts.River.LakeConnectionLimit, "extra connection budget in draw layout (maximum lake links in elevation layout)")
 	fs.IntVar(&opts.River.LakeLinkMinDistance, "river-lake-link-min-distance", opts.River.LakeLinkMinDistance, "minimum lake center distance in tiles for linking")
 	fs.IntVar(&opts.River.LakeLinkMaxDistance, "river-lake-link-max-distance", opts.River.LakeLinkMaxDistance, "maximum lake center distance in tiles for linking")
 	fs.IntVar(&opts.River.RiverWidthMin, "river-width-min", opts.River.RiverWidthMin, "minimum generated river width in tiles")
@@ -185,6 +200,18 @@ func (o MapgenOptions) Validate() error {
 
 	if o.River.SourceElevationMin < 0 || o.River.SourceElevationMin > 1 {
 		return errors.New("river-source-elevation-min must be within [0,1]")
+	}
+	if o.River.MajorRiverCount <= 0 {
+		return errors.New("river-major-count must be > 0")
+	}
+	if o.River.LakeCount <= 1 {
+		return errors.New("river-lake-count must be > 1")
+	}
+	if o.River.LakeBorderMix < 0 || o.River.LakeBorderMix > 1 {
+		return errors.New("river-lake-border-mix must be within [0,1]")
+	}
+	if o.River.MaxLakeDegree <= 0 {
+		return errors.New("river-max-lake-degree must be > 0")
 	}
 	if o.River.SourceChance < 0 || o.River.SourceChance > 1 {
 		return errors.New("river-source-chance must be within [0,1]")
