@@ -20,7 +20,7 @@ river:
   lake_size_medium_chance: 0.26
   lake_size_large_chance: 0.08
   lake_border_mix: 0.42
-  max_lake_degree: 3
+  max_lake_degree: 4
   shape_long_meander_scale: 0.95
   shape_short_meander_scale: 0.05
   shape_short_meander_bias: 0.0045
@@ -39,10 +39,10 @@ river:
   voronoi_bias: 0.012
   sink_lake_chance: 0.02
   lake_min_size: 44
-  lake_connect_chance: 0.35
-  lake_connection_limit: 40
+  lake_connect_chance: 0.65
+  lake_connection_limit: 60
   lake_link_min_distance: 100
-  lake_link_max_distance: 1200
+  lake_link_max_distance: 1900
   river_width_min: 5
   river_width_max: 20
   grid_enabled: false
