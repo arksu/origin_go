@@ -9,9 +9,9 @@
 *.dylib
 *.DS_Store
 .gocache/
-gameserver
-mapgen
-load_test
+/gameserver
+/mapgen
+/load_test
 
 .windsurf/
 .vscode/
@@ -43,6 +43,7 @@ log.txt
 
 build/
 output/
+map_png/
 input/
 input_failed/
 tmp/

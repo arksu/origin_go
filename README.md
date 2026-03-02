@@ -141,6 +141,52 @@ On push/PR to `main`, CI will:
 go run ./cmd/mapgen -chunks-x 50 -chunks-y 50 -seed 123
 ```
 
+Common mapgen flags:
+
+- `-river-enabled` (default `true`)
+- `-river-source-elevation-min` (default `0.55`)
+- `-river-source-chance` (default `0.00015`)
+- `-river-meander-strength` (default `0.003`)
+- `-river-voronoi-cell-size` (default `96`)
+- `-river-voronoi-edge-threshold` (default `0.14`)
+- `-river-voronoi-source-boost` (default `0.02`)
+- `-river-voronoi-bias` (default `0.01`)
+- `-river-sink-lake-chance` (default `0.08`)
+- `-river-lake-min-size` (default `48`)
+- `-river-lake-connect-chance` (default `0.35`)
+- `-river-lake-connection-limit` (default `64`)
+- `-river-lake-link-min-distance` (default `120`)
+- `-river-lake-link-max-distance` (default `1800`)
+- `-river-width-min` (default `5`)
+- `-river-width-max` (default `15`)
+- `-river-grid-enabled` (default `true`)
+- `-river-grid-spacing` (default `760`)
+- `-river-grid-jitter` (default `64`)
+- `-river-trunk-count` (default `8`)
+- `-river-trunk-source-elevation-min` (default `0.62`)
+- `-river-trunk-min-length` (default `180`)
+- `-river-coast-sample-chance` (default `0.012`)
+- `-river-flow-shallow-threshold` (default `6`)
+- `-river-flow-deep-threshold` (default `20`)
+- `-river-bank-radius` (default `1`)
+- `-river-lake-flow-threshold` (default `28`)
+- `-png-export` (default `false`)
+- `-png-dir` (default `map_png`)
+- `-png-scale` (default `1`)
+- `-png-highlight-rivers` (default `true`)
+
+Example with PNG export:
+
+```bash
+go run ./cmd/mapgen \
+  -chunks-x 50 \
+  -chunks-y 50 \
+  -seed 123 \
+  -png-export \
+  -png-dir map_png \
+  -png-scale 1
+```
+
 ### Load testing
 
 ```bash
