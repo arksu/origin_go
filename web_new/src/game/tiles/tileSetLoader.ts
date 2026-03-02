@@ -15,6 +15,7 @@ import clay from './configs/clay.json'
 import grass from './configs/grass.json'
 import moor from './configs/moor.json'
 import fen from './configs/fen.json'
+import mountain from './configs/mountain.json'
 
 import terrainWald from '../terrain/configs/wald.json'
 import terrainHeath from '../terrain/configs/heath.json'
@@ -47,6 +48,7 @@ export function initTileSets(): void {
     registerTileSet(29, clay)
     registerTileSet(30, dirt)
     registerTileSet(32, sand)
+    registerTileSet(120, mountain)
 
-    console.log('[TileSetLoader] Tile sets initialized: 14 types, 2 terrain types registered')
+    console.log('[TileSetLoader] Tile sets initialized: 15 types, 2 terrain types registered')
 }

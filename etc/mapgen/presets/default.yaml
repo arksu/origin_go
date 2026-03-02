@@ -1,0 +1,87 @@
+version: 1
+
+world:
+  chunks_x: 50
+  chunks_y: 50
+  seed: 0
+  threads: 4
+
+river:
+  enabled: true
+  layout_draw: true
+  major_count: 30
+  lake_count: 220
+  lake_border_mix: 0.35
+  max_lake_degree: 2
+  shape_long_meander_scale: 0.55
+  shape_short_meander_scale: 2.2
+  shape_short_meander_bias: 0.0035
+  shape_amplitude_scale: 1.0
+  shape_frequency_scale: 1.0
+  shape_noise_scale: 0.30
+  shape_along_scale: 0.16
+  shape_distance_cap: 0.40
+  shape_segment_length: 70
+  source_elevation_min: 0.55
+  source_chance: 0.00015
+  meander_strength: 0.003
+  voronoi_cell_size: 96
+  voronoi_edge_threshold: 0.14
+  voronoi_source_boost: 0.02
+  voronoi_bias: 0.01
+  sink_lake_chance: 0.03
+  lake_min_size: 48
+  lake_connect_chance: 0.75
+  lake_connection_limit: 120
+  lake_link_min_distance: 120
+  lake_link_max_distance: 1800
+  river_width_min: 5
+  river_width_max: 15
+  grid_enabled: true
+  grid_spacing: 760
+  grid_jitter: 64
+  trunk_count: 8
+  trunk_source_elevation_min: 0.62
+  trunk_min_length: 180
+  coast_sample_chance: 0.012
+  flow_shallow_threshold: 6
+  flow_deep_threshold: 20
+  bank_radius: 1
+  lake_flow_threshold: 28
+
+biomes:
+  enabled: true
+  hnh_enabled: true
+  hnh_variant_density: 0.55
+  hnh_region_count: 140
+  hnh_region_jitter: 220
+  hnh_blend_width: 96
+  hnh_smoothing_passes: 2
+  hnh_min_patch_tiles: 20
+  hnh_swamp_clump_scale: 1.0
+  hnh_mountain_rugged_threshold: 0.66
+  hnh_forest_share: 0.30
+  hnh_grassland_share: 0.30
+  hnh_wetland_share: 0.14
+  hnh_heath_moor_share: 0.14
+  hnh_mountain_share: 0.12
+  temperature_scale: 1.0
+  moisture_scale: 1.0
+  continentalness_scale: 1.0
+  erosion_scale: 1.0
+  weirdness_scale: 1.0
+  domain_warp_strength: 48.0
+
+ecology:
+  enabled: true
+  tick_interval: 300
+  cells_per_tick: 5000
+  chunk_budget: 12
+  spread_scale: 1.0
+
+png:
+  export: false
+  overview_only: false
+  output_dir: map_png
+  scale: 1
+  highlight_rivers: true

@@ -18,7 +18,11 @@
 .aiassistant/
 .idea/
 .codex/
-etc/
+etc/*
+!etc/mapgen/
+etc/mapgen/*
+!etc/mapgen/presets/
+!etc/mapgen/presets/*.yaml
 
 # Test binary, built with `go test -c`
 *.test

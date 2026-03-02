@@ -7,36 +7,36 @@ func isWaterTile(tile byte) bool {
 }
 
 func TestResolveTileTypeOceanPrecedenceOverRiver(t *testing.T) {
-	got := resolveTileType(0.30, 0.9, 0.9, riverDeep, true)
+	got := resolveTileType(0.30, tileForestLeaf, riverDeep, true)
 	if got != tileWater {
 		t.Fatalf("expected shallow ocean water to win over river override, got tile=%d", got)
 	}
 }
 
 func TestResolveTileTypeRiverOverridesLand(t *testing.T) {
-	gotDeep := resolveTileType(0.60, 0.2, 0.2, riverDeep, true)
+	gotDeep := resolveTileType(0.60, tileGrass, riverDeep, true)
 	if gotDeep != tileWaterDeep {
 		t.Fatalf("expected deep river override on land, got tile=%d", gotDeep)
 	}
 
-	gotShallow := resolveTileType(0.60, 0.2, 0.2, riverShallow, true)
+	gotShallow := resolveTileType(0.60, tileGrass, riverShallow, true)
 	if gotShallow != tileWater {
 		t.Fatalf("expected shallow river override on land, got tile=%d", gotShallow)
 	}
 }
 
 func TestResolveTileTypeMatchesBiomeWhenNoRiver(t *testing.T) {
-	got := resolveTileType(0.70, 0.7, 0.7, riverNone, false)
+	got := resolveTileType(0.70, tileForestLeaf, riverNone, false)
 	if got != tileForestLeaf {
 		t.Fatalf("expected forest leaf biome tile, got tile=%d", got)
 	}
 
-	got = resolveTileType(0.70, 0.7, 0.4, riverNone, false)
+	got = resolveTileType(0.70, tileForestPine, riverNone, false)
 	if got != tileForestPine {
 		t.Fatalf("expected forest pine biome tile, got tile=%d", got)
 	}
 
-	got = resolveTileType(0.70, 0.2, 0.4, riverNone, false)
+	got = resolveTileType(0.70, tileGrass, riverNone, false)
 	if got != tileGrass {
 		t.Fatalf("expected grass biome tile, got tile=%d", got)
 	}
