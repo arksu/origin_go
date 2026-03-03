@@ -99,6 +99,7 @@ const showEquipment = computed(() => {
   const hasEquipment = !!playerEquipment.value?.equipment
   return visible && hasEquipment
 })
+const deathDialog = computed(() => gameStore.deathDialog)
 
 function findBuildRecipeByKey(buildKey: string): proto.IBuildRecipeEntry | null {
   const normalized = buildKey.trim()
@@ -346,6 +347,11 @@ function handleBack() {
   router.push('/characters')
 }
 
+function handleDeathDialogBack() {
+  gameStore.clearDeathDialog()
+  handleBack()
+}
+
 function handleRetry() {
   if (gameStore.wsToken) {
     gameStore.startWorldBootstrap()
@@ -534,6 +540,13 @@ useHotkeys(hotkeys)
     <!-- Connected state -->
     <div v-else-if="isConnected" class="game-canvas-wrapper">
       <canvas ref="gameCanvas" class="game-canvas"></canvas>
+      <div v-if="deathDialog" class="game-death-dialog-backdrop">
+        <div class="game-death-dialog">
+          <h2 class="game-death-dialog__title">{{ deathDialog.title }}</h2>
+          <p class="game-death-dialog__message">{{ deathDialog.message }}</p>
+          <AppButton @click="handleDeathDialogBack">Back to characters</AppButton>
+        </div>
+      </div>
       <div
         v-if="showLoadingOverlay"
         class="game-loading-overlay"
@@ -750,6 +763,39 @@ useHotkeys(hotkeys)
   width: calc(100% - 70px);
   max-width: 340px;
   z-index: 100;
+}
+
+.game-death-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(7, 10, 14, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.game-death-dialog {
+  width: min(420px, calc(100% - 32px));
+  padding: 22px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(20, 24, 30, 0.95);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
+  color: #e8edf2;
+  text-align: center;
+}
+
+.game-death-dialog__title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.game-death-dialog__message {
+  margin: 0 0 16px;
+  font-size: 16px;
 }
 
 .game-mini-alerts {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 
 	"github.com/sqlc-dev/pqtype"
 
@@ -784,40 +785,134 @@ func (f *ObjectFactory) SerializeObjectInventories(w *ecs.World, h types.Handle)
 	entityID := externalID.ID
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 
-	// Root object-owned container: kind=Grid, key=0
-	rootHandle, found := refIndex.Lookup(constt.InventoryGrid, entityID, 0)
-	if !found || !w.Alive(rootHandle) {
-		// Dropped items store inventory in kind=DroppedItem.
-		droppedHandle, droppedFound := refIndex.Lookup(constt.InventoryDroppedItem, entityID, 0)
-		if !droppedFound || !w.Alive(droppedHandle) {
+	// Dropped items persist through their dedicated dropped-item root container.
+	if droppedHandle, droppedFound := refIndex.Lookup(constt.InventoryDroppedItem, entityID, 0); droppedFound && w.Alive(droppedHandle) {
+		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, droppedHandle)
+		if !hasContainer {
 			return nil, nil
 		}
-		rootHandle = droppedHandle
+		row, err := f.serializeRootInventoryRow(w, container)
+		if err != nil {
+			return nil, err
+		}
+		return []repository.Inventory{row}, nil
 	}
 
-	container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, rootHandle)
-	if !hasContainer {
+	rootContainers := f.collectObjectRootContainers(w, h, entityID)
+	if len(rootContainers) == 0 {
 		return nil, nil
 	}
 
+	rows := make([]repository.Inventory, 0, len(rootContainers))
+	for _, container := range rootContainers {
+		row, err := f.serializeRootInventoryRow(w, container)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+
+	return rows, nil
+}
+
+type objectRootContainerRef struct {
+	Kind   constt.InventoryKind
+	Key    uint32
+	Handle types.Handle
+}
+
+func (f *ObjectFactory) collectObjectRootContainers(
+	w *ecs.World,
+	objectHandle types.Handle,
+	ownerID types.EntityID,
+) []components.InventoryContainer {
+	if w == nil || objectHandle == types.InvalidHandle || !w.Alive(objectHandle) || ownerID == 0 {
+		return nil
+	}
+
+	refs := make([]objectRootContainerRef, 0, 3)
+	seen := make(map[[2]uint32]struct{}, 4)
+
+	if owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, objectHandle); hasOwner {
+		for _, link := range owner.Inventories {
+			if link.OwnerID != ownerID || link.Handle == types.InvalidHandle || !w.Alive(link.Handle) {
+				continue
+			}
+			key := [2]uint32{uint32(link.Kind), link.Key}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			refs = append(refs, objectRootContainerRef{
+				Kind:   link.Kind,
+				Key:    link.Key,
+				Handle: link.Handle,
+			})
+		}
+	}
+
+	if len(refs) == 0 {
+		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+		fallbackKinds := []constt.InventoryKind{
+			constt.InventoryGrid,
+			constt.InventoryEquipment,
+			constt.InventoryHand,
+		}
+		for _, kind := range fallbackKinds {
+			handle, found := refIndex.Lookup(kind, ownerID, 0)
+			if !found || !w.Alive(handle) {
+				continue
+			}
+			refs = append(refs, objectRootContainerRef{
+				Kind:   kind,
+				Key:    0,
+				Handle: handle,
+			})
+		}
+	}
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	sort.SliceStable(refs, func(i, j int) bool {
+		if refs[i].Kind == refs[j].Kind {
+			return refs[i].Key < refs[j].Key
+		}
+		return refs[i].Kind < refs[j].Kind
+	})
+
+	containers := make([]components.InventoryContainer, 0, len(refs))
+	for _, ref := range refs {
+		container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, ref.Handle)
+		if !hasContainer || container.OwnerID != ownerID || container.Kind != ref.Kind || container.Key != ref.Key {
+			continue
+		}
+		containers = append(containers, container)
+	}
+	return containers
+}
+
+func (f *ObjectFactory) serializeRootInventoryRow(
+	w *ecs.World,
+	container components.InventoryContainer,
+) (repository.Inventory, error) {
 	data, err := f.serializeContainerData(w, container)
 	if err != nil {
-		return nil, err
+		return repository.Inventory{}, err
 	}
 
 	payload, err := json.Marshal(data)
 	if err != nil {
-		return nil, err
+		return repository.Inventory{}, err
 	}
 
-	return []repository.Inventory{
-		{
-			OwnerID:      int64(container.OwnerID),
-			Kind:         int16(container.Kind),
-			InventoryKey: int16(container.Key),
-			Data:         payload,
-			Version:      int(container.Version),
-		},
+	return repository.Inventory{
+		OwnerID:      int64(container.OwnerID),
+		Kind:         int16(container.Kind),
+		InventoryKey: int16(container.Key),
+		Data:         payload,
+		Version:      int(container.Version),
 	}, nil
 }
 

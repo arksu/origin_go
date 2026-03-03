@@ -25,6 +25,7 @@ import (
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence"
 	"time"
 )
@@ -261,6 +262,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewEntityStatsRegenSystem())
 	s.world.AddSystem(systems.NewPlayerStatsPushSystem(s))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
+	s.world.AddSystem(NewPlayerDeathSystem(s))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
 	s.world.AddSystem(systems.NewDropDecaySystem(worldObjectPersistence, s.chunkManager, logger))
 
@@ -573,6 +575,218 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 // onDetachedEntitiesExpired handles AOI cleanup in one batch after detached despawns.
 func (s *Shard) onDetachedEntitiesExpired(entityIDs []types.EntityID) {
 	s.chunkManager.UnregisterEntities(entityIDs)
+}
+
+func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return
+	}
+
+	if s.liftService != nil {
+		_ = s.liftService.ForceDropCarryAtPlayerPosition(w, playerID, playerHandle, false)
+	}
+
+	if _, _, err := ecs.BreakLinkForPlayer(w, playerID, ecs.LinkBreakDespawn); err != nil {
+		s.logger.Warn("Failed to break link during permanent death", zap.Uint64("player_id", uint64(playerID)), zap.Error(err))
+	}
+
+	invalidateVisibilityForTeleport(w, s.layer, playerHandle, playerID, s.eventBus)
+	s.clearPlayerTransientStateForDeath(w, playerID, playerHandle)
+	s.convertPlayerEntityToCorpse(w, playerID, playerHandle)
+	s.persistPermanentDeath(playerID)
+	s.detachClientAfterPermanentDeath(playerID)
+
+	ecs.GetResource[ecs.DetachedEntities](w).RemoveDetachedEntity(playerID)
+	s.UnregisterEntityAOI(playerID)
+	ecs.ForgetPlayerStatsState(w, playerID)
+
+	if s.chunkManager != nil {
+		if factory := s.chunkManager.ObjectFactory(); factory != nil {
+			if err := factory.PersistWorldObjectNow(s.db, w, playerHandle); err != nil {
+				s.logger.Warn("Failed to persist corpse object immediately",
+					zap.Uint64("player_id", uint64(playerID)),
+					zap.Error(err))
+			}
+		}
+	}
+}
+
+func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	linkState.ClearIntent(playerID)
+	linkState.RemoveLink(playerID)
+
+	openState := ecs.GetResource[ecs.OpenContainerState](w)
+	openState.CloseAllForPlayer(playerID)
+
+	ecs.GetResource[ecs.OpenedWindowsState](w).ClearPlayer(playerID)
+	ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+
+	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
+	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
+	ecs.RemoveComponent[components.PendingBuildPlacement](w, playerHandle)
+	ecs.RemoveComponent[components.PendingLiftTransition](w, playerHandle)
+	ecs.RemoveComponent[components.ActiveCyclicAction](w, playerHandle)
+	ecs.RemoveComponent[components.ActiveCraft](w, playerHandle)
+	ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
+		col.Phantom = nil
+	})
+}
+
+func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+	def, ok := objectdefs.Global().GetByKey("player_death")
+	if !ok || def == nil {
+		s.logger.Error("player_death object definition not found")
+		return
+	}
+
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, playerHandle)
+	if hasTransform && hasChunkRef {
+		if chunk := s.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
+			chunk.Spatial().RemoveDynamic(playerHandle, int(transform.X), int(transform.Y))
+		}
+	}
+
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, playerHandle)
+	corpseInfo := components.EntityInfo{
+		TypeID:    uint32(def.DefID),
+		Behaviors: def.CopyBehaviorOrder(),
+		IsStatic:  true,
+		Region:    s.cfg.Game.Region,
+		Layer:     s.layer,
+	}
+	if hasInfo {
+		corpseInfo.Quality = info.Quality
+		corpseInfo.Region = info.Region
+		corpseInfo.Layer = info.Layer
+	}
+	ecs.AddComponent(w, playerHandle, corpseInfo)
+
+	resource := objectdefs.ResolveAppearanceResource(def, nil)
+	if resource == "" {
+		resource = def.Resource
+	}
+	if _, hasAppearance := ecs.GetComponent[components.Appearance](w, playerHandle); hasAppearance {
+		ecs.WithComponent(w, playerHandle, func(a *components.Appearance) {
+			a.Resource = resource
+		})
+	} else {
+		ecs.AddComponent(w, playerHandle, components.Appearance{Resource: resource})
+	}
+
+	if def.Components != nil && def.Components.Collider != nil {
+		ecs.AddComponent(w, playerHandle, objectdefs.BuildColliderComponent(def.Components.Collider))
+	}
+
+	ecs.RemoveComponent[components.Movement](w, playerHandle)
+	ecs.RemoveComponent[components.CollisionResult](w, playerHandle)
+	ecs.RemoveComponent[components.Vision](w, playerHandle)
+	ecs.RemoveComponent[components.Stealth](w, playerHandle)
+	ecs.RemoveComponent[components.CharacterProfile](w, playerHandle)
+	ecs.RemoveComponent[components.EntityStats](w, playerHandle)
+	ecs.RemoveComponent[components.EntityHealth](w, playerHandle)
+	ecs.RemoveComponent[components.LiftCarryState](w, playerHandle)
+
+	ecs.AddComponent(w, playerHandle, components.ObjectInternalState{IsDirty: true})
+	ecs.MarkObjectBehaviorDirty(w, playerHandle)
+
+	if s.chunkManager != nil {
+		if factory := s.chunkManager.ObjectFactory(); factory != nil {
+			factory.EnsureObjectInventoriesForDef(w, playerHandle, playerID, def)
+		}
+	}
+
+	if hasTransform && hasChunkRef {
+		if chunk := s.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
+			chunk.Spatial().AddStatic(playerHandle, int(transform.X), int(transform.Y))
+			chunk.MarkRawDataDirty()
+		}
+	}
+}
+
+func (s *Shard) persistPermanentDeath(playerID types.EntityID) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.db.WithTx(ctx, func(q *repository.Queries) error {
+		if err := q.SetCharacterOffline(ctx, int64(playerID)); err != nil {
+			s.logger.Warn("Failed to set character offline during permanent death",
+				zap.Uint64("player_id", uint64(playerID)),
+				zap.Error(err))
+		}
+		if err := q.ClearAuthToken(ctx, int64(playerID)); err != nil {
+			s.logger.Warn("Failed to clear auth token during permanent death",
+				zap.Uint64("player_id", uint64(playerID)),
+				zap.Error(err))
+		}
+		return q.DeleteCharacterByID(ctx, int64(playerID))
+	}); err != nil {
+		s.logger.Error("Failed to persist permanent death",
+			zap.Uint64("player_id", uint64(playerID)),
+			zap.Error(err))
+	}
+}
+
+func (s *Shard) detachClientAfterPermanentDeath(playerID types.EntityID) {
+	s.ClientsMu.RLock()
+	client, ok := s.Clients[playerID]
+	s.ClientsMu.RUnlock()
+	if !ok || client == nil {
+		return
+	}
+
+	s.sendPlayerLeaveWorldToClient(client, playerID)
+	s.sendDeathDialogToClient(client, "Death", "you are death")
+
+	client.InWorld.Store(false)
+	client.StreamEpoch.Store(0)
+	client.CharacterID = 0
+	s.PlayerInbox().RemoveClient(client.ID)
+
+	s.ClientsMu.Lock()
+	delete(s.Clients, playerID)
+	s.ClientsMu.Unlock()
+}
+
+func (s *Shard) sendPlayerLeaveWorldToClient(client *network.Client, entityID types.EntityID) {
+	if client == nil {
+		return
+	}
+	message := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_PlayerLeaveWorld{
+			PlayerLeaveWorld: &netproto.S2C_PlayerLeaveWorld{
+				EntityId: uint64(entityID),
+			},
+		},
+	}
+	data, err := proto.Marshal(message)
+	if err != nil {
+		s.logger.Error("Failed to marshal player leave world", zap.Error(err))
+		return
+	}
+	client.Send(data)
+}
+
+func (s *Shard) sendDeathDialogToClient(client *network.Client, title string, message string) {
+	if client == nil {
+		return
+	}
+	response := &netproto.ServerMessage{
+		Payload: &netproto.ServerMessage_DeathDialog{
+			DeathDialog: &netproto.S2C_DeathDialog{
+				Title:   title,
+				Message: message,
+			},
+		},
+	}
+	data, err := proto.Marshal(response)
+	if err != nil {
+		s.logger.Error("Failed to marshal death dialog", zap.Error(err))
+		return
+	}
+	client.Send(data)
 }
 
 // SendChatMessage sends a chat message to a single entity
@@ -1193,6 +1407,16 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 	}
 	snapshot.StaminaMax = entitystats.RoundToUint32(entitystats.MaxStaminaFromAttributes(attributes))
 	snapshot.EnergyMax = entitystats.RoundToUint32(_const.EnergyMax)
+	snapshot.SHP = 100
+	snapshot.HHP = 100
+	snapshot.SHPMax = 100
+	snapshot.HHPMax = 100
+	if health, hasHealth := ecs.GetComponent[components.EntityHealth](w, handle); hasHealth {
+		snapshot.SHP = uint32(maxInt16(health.SHP, 0))
+		snapshot.HHP = uint32(maxInt16(health.HHP, 0))
+		snapshot.SHPMax = uint32(maxInt16(health.SHPMax, 0))
+		snapshot.HHPMax = uint32(maxInt16(health.HHPMax, 0))
+	}
 
 	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
 	if !updateState.ShouldSendPlayerStats(entityID, snapshot, force) {
@@ -1214,6 +1438,10 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 				Energy:     snapshot.Energy,
 				StaminaMax: snapshot.StaminaMax,
 				EnergyMax:  snapshot.EnergyMax,
+				Shp:        snapshot.SHP,
+				Hhp:        snapshot.HHP,
+				ShpMax:     snapshot.SHPMax,
+				HhpMax:     snapshot.HHPMax,
 			},
 		},
 	}
@@ -1375,4 +1603,11 @@ func (s *Shard) BroadcastChatMessage(entityIDs []types.EntityID, channel netprot
 			client.Send(data)
 		}
 	}
+}
+
+func maxInt16(value int16, min int16) int16 {
+	if value < min {
+		return min
+	}
+	return value
 }

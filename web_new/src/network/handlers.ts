@@ -81,6 +81,10 @@ export function registerMessageHandlers(): void {
     gameStore.setPlayerStats(msg)
   })
 
+  messageDispatcher.on('deathDialog', (msg: proto.IS2C_DeathDialog) => {
+    gameStore.setDeathDialog(msg)
+  })
+
   messageDispatcher.on('fx', (msg: proto.IS2C_Fx) => {
     const targetEntityId = gameStore.playerEntityId
     if (targetEntityId == null) return
