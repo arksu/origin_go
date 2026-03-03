@@ -161,6 +161,7 @@ func TestHandleTeleportPendingClick(t *testing.T) {
 		eventBus,
 		logger,
 	)
+	handler.SetAllowReviveCommand(true)
 	handler.SetTeleportExecutor(mockTeleport)
 
 	playerID := types.EntityID(77)
@@ -231,6 +232,7 @@ func TestHandleHealthCommands(t *testing.T) {
 		eventBus,
 		logger,
 	)
+	handler.SetAllowReviveCommand(true)
 
 	playerID := types.EntityID(9001)
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
@@ -294,6 +296,35 @@ func TestHandleHealthCommands(t *testing.T) {
 	movement, _ := ecs.GetComponent[components.Movement](world, playerHandle)
 	if movement.State == _const.StateStunned {
 		t.Fatalf("expected movement unstunned after /revive")
+	}
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/health"); !handled {
+		t.Fatal("expected /health to be recognized")
+	}
+	if mockChat.messages[playerID] == "" {
+		t.Fatalf("expected /health snapshot message")
+	}
+}
+
+func TestHandleReviveDisabledOutsideDev(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+	handler.SetAllowReviveCommand(false)
+
+	playerID := types.EntityID(9002)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityHealth{SHP: 1, HHP: 1})
+	})
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/revive"); !handled {
+		t.Fatal("expected /revive to be recognized even when disabled")
+	}
+	if got := mockChat.messages[playerID]; got != "revive command is disabled" {
+		t.Fatalf("unexpected message: %q", got)
 	}
 }
 

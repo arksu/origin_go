@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
@@ -56,6 +55,8 @@ type ChatAdminCommandHandler struct {
 	behaviorRegistry      contracts.BehaviorRegistry
 	eventBus              *eventbus.EventBus
 	logger                *zap.Logger
+	lifeDeathFactor       float64
+	allowRevive           bool
 }
 
 // AdminAlertSender sends direct error/warning packets to a single player.
@@ -92,11 +93,25 @@ func NewChatAdminCommandHandler(
 		behaviorRegistry:      behaviorRegistry,
 		eventBus:              eventBus,
 		logger:                logger,
+		lifeDeathFactor:       1,
+		allowRevive:           false,
 	}
 }
 
 func (h *ChatAdminCommandHandler) SetTeleportExecutor(executor AdminTeleportExecutor) {
 	h.teleportExecutor = executor
+}
+
+func (h *ChatAdminCommandHandler) SetLifeDeathFactor(value float64) {
+	if value <= 0 {
+		h.lifeDeathFactor = 1
+		return
+	}
+	h.lifeDeathFactor = value
+}
+
+func (h *ChatAdminCommandHandler) SetAllowReviveCommand(allow bool) {
+	h.allowRevive = allow
 }
 
 // HandleCommand parses and executes an admin command.
@@ -145,6 +160,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 		return true
 	case "/damage":
 		h.handleDamage(w, playerID, playerHandle, parts[1:])
+		return true
+	case "/health":
+		h.handleHealthSnapshot(w, playerID, playerHandle)
 		return true
 	case "/revive":
 		h.handleRevive(w, playerID, playerHandle)
@@ -611,7 +629,8 @@ func (h *ChatAdminCommandHandler) handleSHP(
 	}
 
 	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
-		shp, hhp := entityhealth.ClampHealth(value, health.HHP, maxFloat(health.HHP, 0))
+		mhp := resolveMaxHHPForHandle(w, playerHandle, h.lifeDeathFactor)
+		shp, hhp := entityhealth.ClampHealth(value, health.HHP, mhp)
 		health.SHP = shp
 		health.HHP = hhp
 		return true
@@ -643,9 +662,13 @@ func (h *ChatAdminCommandHandler) handleHHP(
 	}
 
 	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
+		mhp := resolveMaxHHPForHandle(w, playerHandle, h.lifeDeathFactor)
 		nextHHP := value
 		if nextHHP < 0 {
 			nextHHP = 0
+		}
+		if nextHHP > mhp {
+			nextHHP = mhp
 		}
 		if health.SHP > nextHHP {
 			health.SHP = nextHHP
@@ -690,7 +713,7 @@ func (h *ChatAdminCommandHandler) handleDamage(
 	}
 
 	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
-		mhp := maxFloat(health.HHP, health.SHP)
+		mhp := resolveMaxHHPForHandle(w, playerHandle, h.lifeDeathFactor)
 		if mhp <= 0 {
 			mhp = 1
 		}
@@ -711,12 +734,13 @@ func (h *ChatAdminCommandHandler) handleRevive(
 	playerID types.EntityID,
 	playerHandle types.Handle,
 ) {
+	if !h.allowRevive {
+		h.sendSystemMessage(playerID, "revive command is disabled")
+		return
+	}
+
 	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
-		con := characterattrs.DefaultValue
-		if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, playerHandle); hasProfile {
-			con = characterattrs.Get(profile.Attributes, characterattrs.CON)
-		}
-		mhp := entityhealth.MaxHHPFromCon(con, 1.0)
+		mhp := resolveMaxHHPForHandle(w, playerHandle, h.lifeDeathFactor)
 		health.SHP = mhp
 		health.HHP = mhp
 		health.KOUntilTick = 0
@@ -733,6 +757,29 @@ func (h *ChatAdminCommandHandler) handleRevive(
 	})
 	ecs.MarkPlayerStatsDirty(w, playerID, 0)
 	h.sendSystemMessage(playerID, "revived")
+}
+
+func (h *ChatAdminCommandHandler) handleHealthSnapshot(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+) {
+	health, hasHealth := ecs.GetComponent[components.EntityHealth](w, playerHandle)
+	if !hasHealth {
+		h.sendSystemMessage(playerID, "health component missing")
+		return
+	}
+	mhp := resolveMaxHHPForHandle(w, playerHandle, h.lifeDeathFactor)
+	h.sendSystemMessage(
+		playerID,
+		fmt.Sprintf(
+			"health: shp=%.2f hhp=%.2f mhp=%.2f ko=%t",
+			health.SHP,
+			health.HHP,
+			mhp,
+			health.KOUntilTick > 0,
+		),
+	)
 }
 
 // findActiveChunkForPoint returns the active chunk containing the given world point,
@@ -756,13 +803,6 @@ func (h *ChatAdminCommandHandler) findActiveChunkForPoint(
 		}
 	}
 	return nil
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (h *ChatAdminCommandHandler) isContainerDef(def *objectdefs.ObjectDef) bool {
