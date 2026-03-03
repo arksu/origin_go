@@ -158,6 +158,8 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 	switch req.Cause {
 	case PlayerTransferCauseAdminTeleport:
 		g.sendTeleportSystemMessageToClient(snapshot.Client, fmt.Sprintf("Teleported to (%d, %d) layer %d.", req.TargetX, req.TargetY, req.TargetLayer))
+	case PlayerTransferCauseDeathRespawn:
+		g.sendTeleportSystemMessageToClient(snapshot.Client, "You awaken at a new location.")
 	default:
 		g.sendTeleportSystemMessageToClient(snapshot.Client, "Transfer complete.")
 	}

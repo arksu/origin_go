@@ -77,6 +77,10 @@ export function registerMessageHandlers(): void {
       staminaMax: msg.staminaMax,
       energy: msg.energy,
       energyMax: msg.energyMax,
+      shp: msg.shp,
+      hhp: msg.hhp,
+      mhp: msg.mhp,
+      isKnockedOut: msg.isKnockedOut,
     })
     gameStore.setPlayerStats(msg)
   })

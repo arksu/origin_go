@@ -75,12 +75,20 @@ type GameConfig struct {
 	ChatMaxLen        int `mapstructure:"chat_max_len"`         // Max chat message length (default: 256)
 	ChatMinIntervalMs int `mapstructure:"chat_min_interval_ms"` // Min interval between messages in ms (default: 400)
 
-	InteractionPendingTimeout   time.Duration `mapstructure:"interaction_pending_timeout"`     // Pending context action timeout (default: 15s)
-	ObjectBehaviorBudgetPerTick int           `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
-	BehaviorTickGlobalBudget    int           `mapstructure:"behavior_tick_global_budget_per_tick"`
-	BehaviorTickCatchupLimit    int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
-	PlayerStatsTTLms            int           `mapstructure:"player_stats_ttl_ms"`
-	StaminaRegenIntervalTicks   int           `mapstructure:"stamina_regen_interval_ticks"`
+	InteractionPendingTimeout     time.Duration `mapstructure:"interaction_pending_timeout"`     // Pending context action timeout (default: 15s)
+	ObjectBehaviorBudgetPerTick   int           `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
+	BehaviorTickGlobalBudget      int           `mapstructure:"behavior_tick_global_budget_per_tick"`
+	BehaviorTickCatchupLimit      int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
+	PlayerStatsTTLms              int           `mapstructure:"player_stats_ttl_ms"`
+	StaminaRegenIntervalTicks     int           `mapstructure:"stamina_regen_interval_ticks"`
+	LifeDeathFactor               float64       `mapstructure:"life_death_factor"`
+	ShpRegenIntervalTicks         int           `mapstructure:"shp_regen_interval_ticks"`
+	StarvationDamageIntervalTicks int           `mapstructure:"starvation_damage_interval_ticks"`
+	KnockoutDurationTicks         int           `mapstructure:"knockout_duration_ticks"`
+	DeathRespawnDelayTicks        int           `mapstructure:"death_respawn_delay_ticks"`
+	DeathRespawnHHPPercent        float64       `mapstructure:"death_respawn_hhp_percent"`
+	DeathRespawnEnergy            float64       `mapstructure:"death_respawn_energy"`
+	DeathRespawnStamina           float64       `mapstructure:"death_respawn_stamina"`
 }
 
 type EntityIDConfig struct {
@@ -157,6 +165,46 @@ func Load(logger *zap.Logger) (*Config, error) {
 			zap.Int("stamina_regen_interval_ticks", cfg.Game.StaminaRegenIntervalTicks),
 		)
 	}
+	if cfg.Game.LifeDeathFactor < 0.8 || cfg.Game.LifeDeathFactor > 1.2 {
+		logger.Fatal("Invalid life/death factor: game.life_death_factor must be in [0.8, 1.2]",
+			zap.Float64("game.life_death_factor", cfg.Game.LifeDeathFactor),
+		)
+	}
+	if cfg.Game.ShpRegenIntervalTicks <= 0 {
+		logger.Fatal("Invalid SHP regen interval: game.shp_regen_interval_ticks must be > 0",
+			zap.Int("game.shp_regen_interval_ticks", cfg.Game.ShpRegenIntervalTicks),
+		)
+	}
+	if cfg.Game.StarvationDamageIntervalTicks <= 0 {
+		logger.Fatal("Invalid starvation interval: game.starvation_damage_interval_ticks must be > 0",
+			zap.Int("game.starvation_damage_interval_ticks", cfg.Game.StarvationDamageIntervalTicks),
+		)
+	}
+	if cfg.Game.KnockoutDurationTicks <= 0 {
+		logger.Fatal("Invalid KO duration: game.knockout_duration_ticks must be > 0",
+			zap.Int("game.knockout_duration_ticks", cfg.Game.KnockoutDurationTicks),
+		)
+	}
+	if cfg.Game.DeathRespawnDelayTicks <= 0 {
+		logger.Fatal("Invalid death respawn delay: game.death_respawn_delay_ticks must be > 0",
+			zap.Int("game.death_respawn_delay_ticks", cfg.Game.DeathRespawnDelayTicks),
+		)
+	}
+	if cfg.Game.DeathRespawnHHPPercent <= 0 || cfg.Game.DeathRespawnHHPPercent > 1 {
+		logger.Fatal("Invalid death respawn HHP percent: game.death_respawn_hhp_percent must be in (0, 1]",
+			zap.Float64("game.death_respawn_hhp_percent", cfg.Game.DeathRespawnHHPPercent),
+		)
+	}
+	if cfg.Game.DeathRespawnEnergy < 0 {
+		logger.Fatal("Invalid death respawn energy: game.death_respawn_energy must be >= 0",
+			zap.Float64("game.death_respawn_energy", cfg.Game.DeathRespawnEnergy),
+		)
+	}
+	if cfg.Game.DeathRespawnStamina < 0 {
+		logger.Fatal("Invalid death respawn stamina: game.death_respawn_stamina must be >= 0",
+			zap.Float64("game.death_respawn_stamina", cfg.Game.DeathRespawnStamina),
+		)
+	}
 
 	return &cfg, nil
 }
@@ -218,6 +266,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.behavior_tick_catchup_limit_ticks", 2000)
 	v.SetDefault("game.player_stats_ttl_ms", 1000)
 	v.SetDefault("game.stamina_regen_interval_ticks", _const.DefaultStaminaRegenIntervalTicks)
+	v.SetDefault("game.life_death_factor", 1.0)
+	v.SetDefault("game.shp_regen_interval_ticks", 100)
+	v.SetDefault("game.starvation_damage_interval_ticks", 432000)
+	v.SetDefault("game.knockout_duration_ticks", 300)
+	v.SetDefault("game.death_respawn_delay_ticks", 30)
+	v.SetDefault("game.death_respawn_hhp_percent", 0.25)
+	v.SetDefault("game.death_respawn_energy", 1000.0)
+	v.SetDefault("game.death_respawn_stamina", 0.0)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)

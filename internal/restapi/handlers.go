@@ -22,6 +22,7 @@ import (
 
 	"origin/internal/config"
 	"origin/internal/ecs/components"
+	"origin/internal/entityhealth"
 	"origin/internal/entitystats"
 	"origin/internal/game"
 	"origin/internal/persistence"
@@ -277,6 +278,8 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	initialStamina := entitystats.MaxStaminaFromCon(characterattrs.DefaultValue)
 	initialStaminaDBValue := math.Round(initialStamina)
 	initialEnergyDBValue := math.Round(_const.DefaultEnergy)
+	initialMHP := entityhealth.MaxHHPFromCon(characterattrs.DefaultValue, h.gameConfig.LifeDeathFactor)
+	initialMHPDBValue := int(math.Round(initialMHP))
 
 	_, err = h.db.Queries().CreateCharacter(r.Context(), repository.CreateCharacterParams{
 		ID:         int64(id),
@@ -286,6 +289,8 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		Y:          y,
 		Stamina:    initialStaminaDBValue,
 		Energy:     initialEnergyDBValue,
+		Shp:        initialMHPDBValue,
+		Hhp:        initialMHPDBValue,
 		Attributes: defaultAttributes,
 		Exp:        defaultExperience,
 		Skills:     defaultSkills,

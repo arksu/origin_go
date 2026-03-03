@@ -2,12 +2,12 @@ package components
 
 import "origin/internal/ecs"
 
-// EntityHealth stores legacy HP pools used for permanent death flow.
+// EntityHealth stores runtime SHP/HHP pools and transient KO/death timers.
 type EntityHealth struct {
-	SHP    int16
-	HHP    int16
-	SHPMax int16
-	HHPMax int16
+	SHP            float64
+	HHP            float64
+	KOUntilTick    uint64
+	RespawnDueTick uint64
 }
 
 const EntityHealthComponentID ecs.ComponentID = 33

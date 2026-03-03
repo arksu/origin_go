@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"strings"
 
+	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/entityhealth"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
@@ -134,6 +136,18 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 		return true
 	case "/energy":
 		h.handleEnergy(w, playerID, playerHandle, parts[1:])
+		return true
+	case "/shp":
+		h.handleSHP(w, playerID, playerHandle, parts[1:])
+		return true
+	case "/hhp":
+		h.handleHHP(w, playerID, playerHandle, parts[1:])
+		return true
+	case "/damage":
+		h.handleDamage(w, playerID, playerHandle, parts[1:])
+		return true
+	case "/revive":
+		h.handleRevive(w, playerID, playerHandle)
 		return true
 	default:
 		return false
@@ -578,6 +592,149 @@ func (h *ChatAdminCommandHandler) handleEnergy(
 		zap.Float64("energy", value))
 }
 
+// handleSHP processes: /shp <value>
+func (h *ChatAdminCommandHandler) handleSHP(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	args []string,
+) {
+	if len(args) == 0 {
+		h.sendSystemMessage(playerID, "usage: /shp <value>")
+		return
+	}
+
+	value, err := strconv.ParseFloat(args[0], 64)
+	if err != nil {
+		h.sendSystemMessage(playerID, "invalid SHP value: "+args[0])
+		return
+	}
+
+	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
+		shp, hhp := entityhealth.ClampHealth(value, health.HHP, maxFloat(health.HHP, 0))
+		health.SHP = shp
+		health.HHP = hhp
+		return true
+	}) {
+		h.sendSystemMessage(playerID, "health component missing")
+		return
+	}
+
+	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	h.sendSystemMessage(playerID, fmt.Sprintf("SHP set to %.2f", value))
+}
+
+// handleHHP processes: /hhp <value>
+func (h *ChatAdminCommandHandler) handleHHP(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	args []string,
+) {
+	if len(args) == 0 {
+		h.sendSystemMessage(playerID, "usage: /hhp <value>")
+		return
+	}
+
+	value, err := strconv.ParseFloat(args[0], 64)
+	if err != nil {
+		h.sendSystemMessage(playerID, "invalid HHP value: "+args[0])
+		return
+	}
+
+	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
+		nextHHP := value
+		if nextHHP < 0 {
+			nextHHP = 0
+		}
+		if health.SHP > nextHHP {
+			health.SHP = nextHHP
+		}
+		if health.SHP < 0 {
+			health.SHP = 0
+		}
+		health.HHP = nextHHP
+		return true
+	}) {
+		h.sendSystemMessage(playerID, "health component missing")
+		return
+	}
+
+	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	h.sendSystemMessage(playerID, fmt.Sprintf("HHP set to %.2f", value))
+}
+
+// handleDamage processes: /damage <soft> [hard]
+func (h *ChatAdminCommandHandler) handleDamage(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	args []string,
+) {
+	if len(args) == 0 {
+		h.sendSystemMessage(playerID, "usage: /damage <soft> [hard]")
+		return
+	}
+	softDamage, err := strconv.ParseFloat(args[0], 64)
+	if err != nil {
+		h.sendSystemMessage(playerID, "invalid soft damage: "+args[0])
+		return
+	}
+	hardDamage := 0.0
+	if len(args) > 1 {
+		hardDamage, err = strconv.ParseFloat(args[1], 64)
+		if err != nil {
+			h.sendSystemMessage(playerID, "invalid hard damage: "+args[1])
+			return
+		}
+	}
+
+	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
+		mhp := maxFloat(health.HHP, health.SHP)
+		if mhp <= 0 {
+			mhp = 1
+		}
+		health.SHP, health.HHP, _, _ = entityhealth.ApplyDamage(health.SHP, health.HHP, mhp, softDamage, hardDamage)
+		return true
+	}) {
+		h.sendSystemMessage(playerID, "health component missing")
+		return
+	}
+
+	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	h.sendSystemMessage(playerID, fmt.Sprintf("damage applied: soft=%.2f hard=%.2f", softDamage, hardDamage))
+}
+
+// handleRevive processes: /revive
+func (h *ChatAdminCommandHandler) handleRevive(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+) {
+	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
+		con := characterattrs.DefaultValue
+		if profile, hasProfile := ecs.GetComponent[components.CharacterProfile](w, playerHandle); hasProfile {
+			con = characterattrs.Get(profile.Attributes, characterattrs.CON)
+		}
+		mhp := entityhealth.MaxHHPFromCon(con, 1.0)
+		health.SHP = mhp
+		health.HHP = mhp
+		health.KOUntilTick = 0
+		health.RespawnDueTick = 0
+		return true
+	}) {
+		h.sendSystemMessage(playerID, "health component missing")
+		return
+	}
+
+	ecs.WithComponent(w, playerHandle, func(movement *components.Movement) {
+		movement.ClearTarget()
+		movement.State = constt.StateIdle
+	})
+	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	h.sendSystemMessage(playerID, "revived")
+}
+
 // findActiveChunkForPoint returns the active chunk containing the given world point,
 // or nil if the point is outside all of the player's active chunks.
 func (h *ChatAdminCommandHandler) findActiveChunkForPoint(
@@ -599,6 +756,13 @@ func (h *ChatAdminCommandHandler) findActiveChunkForPoint(
 		}
 	}
 	return nil
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (h *ChatAdminCommandHandler) isContainerDef(def *objectdefs.ObjectDef) bool {

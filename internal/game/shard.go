@@ -3,10 +3,12 @@ package game
 import (
 	"context"
 	"fmt"
+	"math"
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/entityhealth"
 	"origin/internal/entitystats"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
@@ -57,12 +59,17 @@ type Shard struct {
 	craftingService *CraftingService
 	buildService    *BuildService
 	liftService     *LiftService
+	respawnExecutor DeathRespawnExecutor
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
 
 	state ShardState
 	mu    sync.RWMutex
+}
+
+type DeathRespawnExecutor interface {
+	RequestDeathRespawn(playerID types.EntityID, sourceLayer int) error
 }
 
 func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, eb *eventbus.EventBus, enableVisionStats bool, logger *zap.Logger) *Shard {
@@ -262,7 +269,17 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewEntityStatsRegenSystem())
 	s.world.AddSystem(systems.NewPlayerStatsPushSystem(s))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
-	s.world.AddSystem(NewPlayerDeathSystem(s))
+	s.world.AddSystem(NewPlayerDeathSystem(s, PlayerDeathSystemConfig{
+		LifeDeathFactor:                 cfg.Game.LifeDeathFactor,
+		ShpRegenIntervalTicks:           uint64(cfg.Game.ShpRegenIntervalTicks),
+		StarvationDamageIntervalTicks:   uint64(cfg.Game.StarvationDamageIntervalTicks),
+		KnockoutDurationTicks:           uint64(cfg.Game.KnockoutDurationTicks),
+		DeathRespawnDelayTicks:          uint64(cfg.Game.DeathRespawnDelayTicks),
+		DeathRespawnHHPPercent:          cfg.Game.DeathRespawnHHPPercent,
+		DeathRespawnEnergy:              cfg.Game.DeathRespawnEnergy,
+		DeathRespawnStamina:             cfg.Game.DeathRespawnStamina,
+		StarvationSoftDamagePerInterval: 10,
+	}))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
 	s.world.AddSystem(systems.NewDropDecaySystem(worldObjectPersistence, s.chunkManager, logger))
 
@@ -279,6 +296,12 @@ func (s *Shard) SetAdminTeleportExecutor(executor AdminTeleportExecutor) {
 	if s.adminHandler != nil {
 		s.adminHandler.SetTeleportExecutor(executor)
 	}
+}
+
+func (s *Shard) SetDeathRespawnExecutor(executor DeathRespawnExecutor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.respawnExecutor = executor
 }
 
 func (s *Shard) World() *ecs.World {
@@ -575,6 +598,59 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 // onDetachedEntitiesExpired handles AOI cleanup in one batch after detached despawns.
 func (s *Shard) onDetachedEntitiesExpired(entityIDs []types.EntityID) {
 	s.chunkManager.UnregisterEntities(entityIDs)
+}
+
+func (s *Shard) HandlePlayerDeathRespawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, mhp float64) bool {
+	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return false
+	}
+	if s.respawnExecutor == nil {
+		s.logger.Warn("Death respawn executor unavailable", zap.Uint64("player_id", uint64(playerID)))
+		return false
+	}
+
+	previousHealth, hasHealth := ecs.GetComponent[components.EntityHealth](w, playerHandle)
+	if !hasHealth {
+		return false
+	}
+	previousStats, hasStats := ecs.GetComponent[components.EntityStats](w, playerHandle)
+
+	penaltyHHP := math.Ceil(mhp * s.cfg.Game.DeathRespawnHHPPercent)
+	if penaltyHHP < 1 {
+		penaltyHHP = 1
+	}
+
+	ecs.WithComponent(w, playerHandle, func(health *components.EntityHealth) {
+		health.HHP = penaltyHHP
+		health.SHP = penaltyHHP
+		health.KOUntilTick = 0
+		health.RespawnDueTick = 0
+	})
+	if hasStats {
+		ecs.WithComponent(w, playerHandle, func(stats *components.EntityStats) {
+			stats.Stamina = s.cfg.Game.DeathRespawnStamina
+			stats.Energy = s.cfg.Game.DeathRespawnEnergy
+		})
+	}
+	applyStunnedStateAndClearActions(w, playerHandle)
+
+	if err := s.respawnExecutor.RequestDeathRespawn(playerID, s.layer); err != nil {
+		ecs.WithComponent(w, playerHandle, func(health *components.EntityHealth) {
+			*health = previousHealth
+		})
+		if hasStats {
+			ecs.WithComponent(w, playerHandle, func(stats *components.EntityStats) {
+				*stats = previousStats
+			})
+		}
+		s.logger.Warn("Failed to request death respawn",
+			zap.Uint64("player_id", uint64(playerID)),
+			zap.Error(err))
+		return false
+	}
+
+	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	return true
 }
 
 func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
@@ -1400,15 +1476,17 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 	}
 	snapshot.StaminaMax = entitystats.RoundToUint32(entitystats.MaxStaminaFromAttributes(attributes))
 	snapshot.EnergyMax = entitystats.RoundToUint32(_const.EnergyMax)
-	snapshot.SHP = 100
-	snapshot.HHP = 100
-	snapshot.SHPMax = 100
-	snapshot.HHPMax = 100
+	mhp := resolveMaxHHPForHandle(w, handle, s.cfg.Game.LifeDeathFactor)
+	snapshot.SHP = entitystats.RoundToUint32(mhp)
+	snapshot.HHP = entitystats.RoundToUint32(mhp)
+	snapshot.MHP = entitystats.RoundToUint32(mhp)
+	snapshot.IsKnockedOut = false
 	if health, hasHealth := ecs.GetComponent[components.EntityHealth](w, handle); hasHealth {
-		snapshot.SHP = uint32(maxInt16(health.SHP, 0))
-		snapshot.HHP = uint32(maxInt16(health.HHP, 0))
-		snapshot.SHPMax = uint32(maxInt16(health.SHPMax, 0))
-		snapshot.HHPMax = uint32(maxInt16(health.HHPMax, 0))
+		clampedSHP, clampedHHP := entityhealth.ClampHealth(health.SHP, health.HHP, mhp)
+		snapshot.SHP = entitystats.RoundToUint32(clampedSHP)
+		snapshot.HHP = entitystats.RoundToUint32(clampedHHP)
+		snapshot.MHP = entitystats.RoundToUint32(mhp)
+		snapshot.IsKnockedOut = health.KOUntilTick > 0
 	}
 
 	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
@@ -1427,14 +1505,14 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 	response := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_PlayerStats{
 			PlayerStats: &netproto.S2C_PlayerStats{
-				Stamina:    snapshot.Stamina,
-				Energy:     snapshot.Energy,
-				StaminaMax: snapshot.StaminaMax,
-				EnergyMax:  snapshot.EnergyMax,
-				Shp:        snapshot.SHP,
-				Hhp:        snapshot.HHP,
-				ShpMax:     snapshot.SHPMax,
-				HhpMax:     snapshot.HHPMax,
+				Stamina:      snapshot.Stamina,
+				Energy:       snapshot.Energy,
+				StaminaMax:   snapshot.StaminaMax,
+				EnergyMax:    snapshot.EnergyMax,
+				Shp:          snapshot.SHP,
+				Hhp:          snapshot.HHP,
+				Mhp:          snapshot.MHP,
+				IsKnockedOut: snapshot.IsKnockedOut,
 			},
 		},
 	}

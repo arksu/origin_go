@@ -27,8 +27,8 @@ func (q *Queries) ClearAuthToken(ctx context.Context, id int64) error {
 const createCharacter = `-- name: CreateCharacter :one
 INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes, exp, skills,
                        discovery)
-VALUES ($1, $2, $3, 1, $4, $5, 0, 0, $6, $7, 100, 100, $8::jsonb,
-        $9::jsonb, $10::jsonb, $11::jsonb)
+VALUES ($1, $2, $3, 1, $4, $5, 0, 0, $6, $7, $8, $9, $10::jsonb,
+        $11::jsonb, $12::jsonb, $13::jsonb)
 RETURNING id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes, exp, skills, discovery, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 `
 
@@ -40,6 +40,8 @@ type CreateCharacterParams struct {
 	Y          int             `json:"y"`
 	Stamina    float64         `json:"stamina"`
 	Energy     float64         `json:"energy"`
+	Shp        int             `json:"shp"`
+	Hhp        int             `json:"hhp"`
 	Attributes json.RawMessage `json:"attributes"`
 	Exp        json.RawMessage `json:"exp"`
 	Skills     json.RawMessage `json:"skills"`
@@ -55,6 +57,8 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 		arg.Y,
 		arg.Stamina,
 		arg.Energy,
+		arg.Shp,
+		arg.Hhp,
 		arg.Attributes,
 		arg.Exp,
 		arg.Skills,

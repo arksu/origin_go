@@ -287,9 +287,19 @@ func (s *CharacterSaver) resolveStatsSnapshotValues(w *ecs.World, entityID types
 
 func (s *CharacterSaver) resolveHealthSnapshotValues(w *ecs.World, handle types.Handle) (int16, int16) {
 	if health, hasHealth := ecs.GetComponent[components.EntityHealth](w, handle); hasHealth {
-		return health.SHP, health.HHP
+		return roundAndClampInt16(health.SHP), roundAndClampInt16(health.HHP)
 	}
 	return 100, 100
+}
+
+func roundAndClampInt16(value float64) int16 {
+	if value <= math.MinInt16 {
+		return math.MinInt16
+	}
+	if value >= math.MaxInt16 {
+		return math.MaxInt16
+	}
+	return int16(math.Round(value))
 }
 
 func (s *CharacterSaver) serializeCharacterProfile(w *ecs.World, entityID types.EntityID, handle types.Handle) (string, string, string, string) {
