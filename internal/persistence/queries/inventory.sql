@@ -14,6 +14,13 @@ WHERE owner_id = ANY(sqlc.arg(owner_ids)::bigint[])
   AND deleted_at IS NULL
 ORDER BY owner_id, kind, inventory_key;
 
+-- name: GetInventoriesByOwners :many
+SELECT *
+FROM inventory
+WHERE owner_id = ANY(sqlc.arg(owner_ids)::bigint[])
+  AND deleted_at IS NULL
+ORDER BY owner_id, kind, inventory_key;
+
 -- name: UpsertInventory :one
 INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
 VALUES ($1, $2, $3, $4, $5)

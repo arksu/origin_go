@@ -90,6 +90,13 @@ export interface PlayerResourceStat {
 export interface PlayerStatsState {
   stamina: PlayerResourceStat
   energy: PlayerResourceStat
+  shp: PlayerResourceStat
+  hhp: PlayerResourceStat
+}
+
+export interface DeathDialogState {
+  title: string
+  message: string
 }
 
 export interface CharacterAttributeViewItem {
@@ -176,6 +183,7 @@ export const useGameStore = defineStore('game', () => {
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
+  const deathDialog = ref<DeathDialogState | null>(null)
   const playerMoveMode = ref<number | null>(null)
   const hasBootstrapFirstChunk = ref(false)
   const hasBootstrapPlayerSpawn = ref(false)
@@ -311,6 +319,7 @@ export const useGameStore = defineStore('game', () => {
     miniAlertDebounceUntil.clear()
     clearLastServerErrorMessage()
     resetWorldBootstrap()
+    deathDialog.value = null
     if (miniAlertTimer) {
       clearInterval(miniAlertTimer)
       miniAlertTimer = null
@@ -352,6 +361,7 @@ export const useGameStore = defineStore('game', () => {
     miniAlerts.value = []
     miniAlertDebounceUntil.clear()
     resetWorldBootstrap()
+    deathDialog.value = null
     if (miniAlertTimer) {
       clearInterval(miniAlertTimer)
       miniAlertTimer = null
@@ -878,6 +888,8 @@ export const useGameStore = defineStore('game', () => {
 
     const staminaMax = sanitizeMaxStat(snapshot.staminaMax)
     const energyMax = sanitizeMaxStat(snapshot.energyMax)
+    const shpMax = sanitizeMaxStat(snapshot.shpMax)
+    const hhpMax = sanitizeMaxStat(snapshot.hhpMax)
 
     playerStats.value = {
       stamina: {
@@ -888,7 +900,30 @@ export const useGameStore = defineStore('game', () => {
         current: clampStatCurrent(snapshot.energy, energyMax),
         max: energyMax,
       },
+      shp: {
+        current: clampStatCurrent(snapshot.shp, shpMax),
+        max: shpMax,
+      },
+      hhp: {
+        current: clampStatCurrent(snapshot.hhp, hhpMax),
+        max: hhpMax,
+      },
     }
+  }
+
+  function setDeathDialog(snapshot: proto.IS2C_DeathDialog | null | undefined) {
+    if (!snapshot) {
+      deathDialog.value = null
+      return
+    }
+
+    const title = (snapshot.title || '').trim() || 'Death'
+    const message = (snapshot.message || '').trim() || 'you are death'
+    deathDialog.value = { title, message }
+  }
+
+  function clearDeathDialog() {
+    deathDialog.value = null
   }
 
   function setPlayerInventoryVisible(visible: boolean) {
@@ -991,6 +1026,7 @@ export const useGameStore = defineStore('game', () => {
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
+    deathDialog.value = null
     playerMoveMode.value = null
     contextMenu.value = null
     miniAlerts.value = []
@@ -1047,6 +1083,7 @@ export const useGameStore = defineStore('game', () => {
     characterAttributes,
     characterExperience,
     playerStats,
+    deathDialog,
     playerMoveMode,
     openNestedInventories,
     mousePos,
@@ -1113,6 +1150,8 @@ export const useGameStore = defineStore('game', () => {
     setCharacterProfileSnapshot,
     applyExpGained,
     setPlayerStats,
+    setDeathDialog,
+    clearDeathDialog,
     onContainerOpened,
     onContainerClosed,
     closeNestedInventory,
@@ -1148,6 +1187,8 @@ function defaultPlayerStats(): PlayerStatsState {
   return {
     stamina: { current: 0, max: 0 },
     energy: { current: 0, max: 0 },
+    shp: { current: 0, max: 0 },
+    hhp: { current: 0, max: 0 },
   }
 }
 

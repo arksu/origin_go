@@ -673,7 +673,7 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 
 	rawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory, len(ownerIDs))
 	if len(ownerIDs) > 0 {
-		inventories, invErr := loadGridInventoriesByOwners(ctx, db, ownerIDs)
+		inventories, invErr := loadInventoriesByOwners(ctx, db, ownerIDs)
 		if invErr != nil {
 			logger.Error("failed to load object inventories",
 				zap.Int("chunk_x", c.Coord.X),
@@ -752,9 +752,9 @@ func upsertObjectsBatch(ctx context.Context, db *persistence.Postgres, objects [
 	return nil
 }
 
-func loadGridInventoriesByOwners(ctx context.Context, db *persistence.Postgres, ownerIDs []int64) ([]repository.Inventory, error) {
+func loadInventoriesByOwners(ctx context.Context, db *persistence.Postgres, ownerIDs []int64) ([]repository.Inventory, error) {
 	if len(ownerIDs) == 0 {
 		return nil, nil
 	}
-	return db.Queries().GetGridInventoriesByOwners(ctx, ownerIDs)
+	return db.Queries().GetInventoriesByOwners(ctx, ownerIDs)
 }

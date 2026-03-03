@@ -142,6 +142,7 @@ func DefaultRegistry() (*Registry, error) {
 			treeBehavior{},
 			takeBehavior{},
 			playerBehavior{},
+			playerDeathBehavior{},
 		)
 	})
 	return defaultRegistry, defaultRegistryErr

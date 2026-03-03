@@ -58,6 +58,43 @@
       "behaviors": {}
     },
     {
+      "defId": 12,
+      "key": "player_death",
+      "name": "Player Death",
+      "static": true,
+      "components": {
+        "collider": {
+          "w": 9,
+          "h": 9
+        },
+        "inventory": [
+          {
+            "kind": "grid",
+            "key": 0,
+            "w": 4,
+            "h": 4
+          },
+          {
+            "kind": "equipment",
+            "key": 0,
+            "w": 1,
+            "h": 1
+          },
+          {
+            "kind": "hand",
+            "key": 0,
+            "w": 1,
+            "h": 1
+          }
+        ]
+      },
+      "resource": "player", // TODO: replace with lying-body sprite/spine animation resource.
+      "behaviors": {
+        "container": {},
+        "player_death": {}
+      }
+    },
+    {
       "defId": 1001,
       "key": "build",
       "name": "Build",

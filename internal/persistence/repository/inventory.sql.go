@@ -111,6 +111,46 @@ func (q *Queries) GetInventoriesByOwner(ctx context.Context, ownerID int64) ([]I
 	return items, nil
 }
 
+const getInventoriesByOwners = `-- name: GetInventoriesByOwners :many
+SELECT id, owner_id, kind, inventory_key, data, updated_at, deleted_at, version
+FROM inventory
+WHERE owner_id = ANY($1::bigint[])
+  AND deleted_at IS NULL
+ORDER BY owner_id, kind, inventory_key
+`
+
+func (q *Queries) GetInventoriesByOwners(ctx context.Context, ownerIds []int64) ([]Inventory, error) {
+	rows, err := q.db.QueryContext(ctx, getInventoriesByOwners, pq.Array(ownerIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Inventory
+	for rows.Next() {
+		var i Inventory
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.InventoryKey,
+			&i.Data,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateInventory = `-- name: UpdateInventory :exec
 UPDATE inventory
 SET data = $2, version = $3, updated_at = now()

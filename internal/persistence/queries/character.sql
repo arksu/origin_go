@@ -15,6 +15,7 @@ ORDER BY id;
 SELECT *
 from character
 where auth_token = $1
+  AND deleted_at IS NULL
 FOR UPDATE;
 
 -- name: ClearAuthToken :exec
@@ -47,6 +48,12 @@ UPDATE character
 SET deleted_at = now()
 WHERE id = $1
   AND account_id = $2
+  AND deleted_at IS NULL;
+
+-- name: DeleteCharacterByID :exec
+UPDATE character
+SET deleted_at = now()
+WHERE id = $1
   AND deleted_at IS NULL;
 
 -- name: SetCharacterAuthToken :exec

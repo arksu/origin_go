@@ -148,8 +148,9 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 	if !hasStats {
 		return
 	}
+	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories))
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories))
 }
 
 // SaveSync persists character snapshot immediately in caller goroutine.
@@ -165,8 +166,9 @@ func (s *CharacterSaver) SaveSync(w *ecs.World, entityID types.EntityID, handle 
 	if !hasStats {
 		return nil
 	}
+	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories)
+	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -230,8 +232,9 @@ func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, han
 	if !hasStats {
 		return
 	}
+	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, inventories))
+	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories))
 }
 
 func (s *CharacterSaver) buildSnapshot(
@@ -243,6 +246,8 @@ func (s *CharacterSaver) buildSnapshot(
 	discoveryRaw string,
 	staminaValue float64,
 	energyValue float64,
+	shpValue int16,
+	hhpValue int16,
 	inventories []InventorySnapshot,
 ) CharacterSnapshot {
 	return CharacterSnapshot{
@@ -252,8 +257,8 @@ func (s *CharacterSaver) buildSnapshot(
 		Heading:     normalizeCharacterHeading(transform.Direction),
 		Stamina:     staminaValue,
 		Energy:      energyValue,
-		SHP:         100, // TODO
-		HHP:         100, // TODO
+		SHP:         shpValue,
+		HHP:         hhpValue,
 		Attributes:  attributesRaw,
 		Exp:         experienceRaw,
 		Skills:      skillsRaw,
@@ -278,6 +283,13 @@ func (s *CharacterSaver) resolveStatsSnapshotValues(w *ecs.World, entityID types
 	s.logger.Warn("Character entity missing EntityStats component, skip character save snapshot",
 		zap.Uint64("entity_id", uint64(entityID)))
 	return 0, 0, false
+}
+
+func (s *CharacterSaver) resolveHealthSnapshotValues(w *ecs.World, handle types.Handle) (int16, int16) {
+	if health, hasHealth := ecs.GetComponent[components.EntityHealth](w, handle); hasHealth {
+		return health.SHP, health.HHP
+	}
+	return 100, 100
 }
 
 func (s *CharacterSaver) serializeCharacterProfile(w *ecs.World, entityID types.EntityID, handle types.Handle) (string, string, string, string) {

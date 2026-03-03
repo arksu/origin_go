@@ -501,6 +501,15 @@ message S2C_PlayerStats {
   uint32 energy = 2;
   uint32 stamina_max = 3;
   uint32 energy_max = 4;
+  uint32 shp = 5;
+  uint32 hhp = 6;
+  uint32 shp_max = 7;
+  uint32 hhp_max = 8;
+}
+
+message S2C_DeathDialog {
+  string title = 1;
+  string message = 2;
 }
 
 // on teleport, layer change - show loading screen on client, remove all chunks, entities
@@ -789,6 +798,7 @@ message ServerMessage {
     S2C_BuildState build_state = 36;
     S2C_BuildStateClosed build_state_closed = 37;
     S2C_LiftCarryState lift_carry_state = 38;
+    S2C_DeathDialog death_dialog = 39;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

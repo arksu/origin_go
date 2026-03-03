@@ -260,6 +260,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			})
 			initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 			ecs.AddComponent(w, h, initialStats)
+			ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp))
 			ecs.UpdateEntityStatsRegenSchedule(
 				w,
 				h,
@@ -497,6 +498,7 @@ func (g *Game) buildPlayerSetupFunc(
 		})
 		initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 		ecs.AddComponent(w, h, initialStats)
+		ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp))
 		ecs.UpdateEntityStatsRegenSchedule(
 			w,
 			h,
@@ -588,6 +590,26 @@ func buildInitialEntityStats(
 	return components.EntityStats{
 		Stamina: initialStamina,
 		Energy:  initialEnergy,
+	}
+}
+
+func buildInitialEntityHealth(rawSHP int, rawHHP int) components.EntityHealth {
+	const defaultMax int16 = 100
+	clamp := func(value int) int16 {
+		if value < 0 {
+			return 0
+		}
+		if value > int(defaultMax) {
+			return defaultMax
+		}
+		return int16(value)
+	}
+
+	return components.EntityHealth{
+		SHP:    clamp(rawSHP),
+		HHP:    clamp(rawHHP),
+		SHPMax: defaultMax,
+		HHPMax: defaultMax,
 	}
 }
 

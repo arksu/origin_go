@@ -110,6 +110,18 @@ func (q *Queries) DeleteCharacter(ctx context.Context, arg DeleteCharacterParams
 	return err
 }
 
+const deleteCharacterByID = `-- name: DeleteCharacterByID :exec
+UPDATE character
+SET deleted_at = now()
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteCharacterByID(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteCharacterByID, id)
+	return err
+}
+
 const getCharacter = `-- name: GetCharacter :one
 SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes, exp, skills, discovery, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 FROM character
@@ -155,6 +167,7 @@ const getCharacterByTokenForUpdate = `-- name: GetCharacterByTokenForUpdate :one
 SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes, exp, skills, discovery, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 from character
 where auth_token = $1
+  AND deleted_at IS NULL
 FOR UPDATE
 `
 
