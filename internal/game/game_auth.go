@@ -11,6 +11,7 @@ import (
 	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/entityhealth"
 	"origin/internal/entitystats"
 	"origin/internal/eventbus"
 	"origin/internal/game/inventory"
@@ -260,7 +261,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			})
 			initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 			ecs.AddComponent(w, h, initialStats)
-			ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp))
+			ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp, normalizedAttributes, g.cfg.Game.LifeDeathFactor))
 			ecs.UpdateEntityStatsRegenSchedule(
 				w,
 				h,
@@ -498,7 +499,7 @@ func (g *Game) buildPlayerSetupFunc(
 		})
 		initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 		ecs.AddComponent(w, h, initialStats)
-		ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp))
+		ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp, normalizedAttributes, g.cfg.Game.LifeDeathFactor))
 		ecs.UpdateEntityStatsRegenSchedule(
 			w,
 			h,
@@ -593,23 +594,17 @@ func buildInitialEntityStats(
 	}
 }
 
-func buildInitialEntityHealth(rawSHP int, rawHHP int) components.EntityHealth {
-	const defaultMax int16 = 100
-	clamp := func(value int) int16 {
-		if value < 0 {
-			return 0
-		}
-		if value > int(defaultMax) {
-			return defaultMax
-		}
-		return int16(value)
-	}
-
+func buildInitialEntityHealth(
+	rawSHP int,
+	rawHHP int,
+	attributes characterattrs.Values,
+	lifeDeathFactor float64,
+) components.EntityHealth {
+	mhp := entityhealth.MaxHHPFromCon(characterattrs.Get(attributes, characterattrs.CON), lifeDeathFactor)
+	shp, hhp := entityhealth.ClampHealth(float64(rawSHP), float64(rawHHP), mhp)
 	return components.EntityHealth{
-		SHP:    clamp(rawSHP),
-		HHP:    clamp(rawHHP),
-		SHPMax: defaultMax,
-		HHPMax: defaultMax,
+		SHP: shp,
+		HHP: hhp,
 	}
 }
 

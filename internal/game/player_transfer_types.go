@@ -11,6 +11,7 @@ type PlayerTransferCause uint8
 const (
 	PlayerTransferCauseAdminTeleport PlayerTransferCause = iota + 1
 	PlayerTransferCauseStairs
+	PlayerTransferCauseDeathRespawn
 )
 
 type PlayerTransferRequest struct {
@@ -42,4 +43,3 @@ type PlayerTransferParticipant interface {
 	RestoreSourceRollback(g *Game, sourceShard *Shard, req PlayerTransferRequest, playerHandle types.Handle, state any) error
 	OnTargetRestoreFailure(g *Game, targetShard *Shard, req PlayerTransferRequest, playerHandle types.Handle, state any, restoreErr error)
 }
-

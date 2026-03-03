@@ -503,8 +503,8 @@ message S2C_PlayerStats {
   uint32 energy_max = 4;
   uint32 shp = 5;
   uint32 hhp = 6;
-  uint32 shp_max = 7;
-  uint32 hhp_max = 8;
+  uint32 mhp = 7;
+  bool is_knocked_out = 8;
 }
 
 message S2C_DeathDialog {

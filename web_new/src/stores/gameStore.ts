@@ -92,6 +92,7 @@ export interface PlayerStatsState {
   energy: PlayerResourceStat
   shp: PlayerResourceStat
   hhp: PlayerResourceStat
+  isKnockedOut: boolean
 }
 
 export interface DeathDialogState {
@@ -888,8 +889,9 @@ export const useGameStore = defineStore('game', () => {
 
     const staminaMax = sanitizeMaxStat(snapshot.staminaMax)
     const energyMax = sanitizeMaxStat(snapshot.energyMax)
-    const shpMax = sanitizeMaxStat(snapshot.shpMax)
-    const hhpMax = sanitizeMaxStat(snapshot.hhpMax)
+    const mhp = sanitizeMaxStat(snapshot.mhp)
+    const hhpCurrent = clampStatCurrent(snapshot.hhp, mhp)
+    const shpMax = hhpCurrent
 
     playerStats.value = {
       stamina: {
@@ -905,9 +907,10 @@ export const useGameStore = defineStore('game', () => {
         max: shpMax,
       },
       hhp: {
-        current: clampStatCurrent(snapshot.hhp, hhpMax),
-        max: hhpMax,
+        current: hhpCurrent,
+        max: mhp,
       },
+      isKnockedOut: !!snapshot.isKnockedOut,
     }
   }
 
@@ -1189,6 +1192,7 @@ function defaultPlayerStats(): PlayerStatsState {
     energy: { current: 0, max: 0 },
     shp: { current: 0, max: 0 },
     hhp: { current: 0, max: 0 },
+    isKnockedOut: false,
   }
 }
 

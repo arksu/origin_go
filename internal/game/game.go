@@ -150,6 +150,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	g.setupNetworkHandlers()
 	for _, shard := range g.shardManager.GetShards() {
 		shard.SetAdminTeleportExecutor(g)
+		shard.SetDeathRespawnExecutor(g)
 	}
 
 	g.resetOnlinePlayers()

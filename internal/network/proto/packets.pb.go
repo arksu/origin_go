@@ -3927,8 +3927,8 @@ type S2C_PlayerStats struct {
 	EnergyMax     uint32                 `protobuf:"varint,4,opt,name=energy_max,json=energyMax,proto3" json:"energy_max,omitempty"`
 	Shp           uint32                 `protobuf:"varint,5,opt,name=shp,proto3" json:"shp,omitempty"`
 	Hhp           uint32                 `protobuf:"varint,6,opt,name=hhp,proto3" json:"hhp,omitempty"`
-	ShpMax        uint32                 `protobuf:"varint,7,opt,name=shp_max,json=shpMax,proto3" json:"shp_max,omitempty"`
-	HhpMax        uint32                 `protobuf:"varint,8,opt,name=hhp_max,json=hhpMax,proto3" json:"hhp_max,omitempty"`
+	Mhp           uint32                 `protobuf:"varint,7,opt,name=mhp,proto3" json:"mhp,omitempty"`
+	IsKnockedOut  bool                   `protobuf:"varint,8,opt,name=is_knocked_out,json=isKnockedOut,proto3" json:"is_knocked_out,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4005,18 +4005,18 @@ func (x *S2C_PlayerStats) GetHhp() uint32 {
 	return 0
 }
 
-func (x *S2C_PlayerStats) GetShpMax() uint32 {
+func (x *S2C_PlayerStats) GetMhp() uint32 {
 	if x != nil {
-		return x.ShpMax
+		return x.Mhp
 	}
 	return 0
 }
 
-func (x *S2C_PlayerStats) GetHhpMax() uint32 {
+func (x *S2C_PlayerStats) GetIsKnockedOut() bool {
 	if x != nil {
-		return x.HhpMax
+		return x.IsKnockedOut
 	}
-	return 0
+	return false
 }
 
 type S2C_DeathDialog struct {
@@ -7047,7 +7047,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\x01 \x03(\v2\x1e.proto.CharacterAttributeEntryR\n" +
 	"attributes\x12,\n" +
-	"\x03exp\x18\x02 \x01(\v2\x1a.proto.CharacterExperienceR\x03exp\"\xd9\x01\n" +
+	"\x03exp\x18\x02 \x01(\v2\x1a.proto.CharacterExperienceR\x03exp\"\xdf\x01\n" +
 	"\x0fS2C_PlayerStats\x12\x18\n" +
 	"\astamina\x18\x01 \x01(\rR\astamina\x12\x16\n" +
 	"\x06energy\x18\x02 \x01(\rR\x06energy\x12\x1f\n" +
@@ -7056,9 +7056,9 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\n" +
 	"energy_max\x18\x04 \x01(\rR\tenergyMax\x12\x10\n" +
 	"\x03shp\x18\x05 \x01(\rR\x03shp\x12\x10\n" +
-	"\x03hhp\x18\x06 \x01(\rR\x03hhp\x12\x17\n" +
-	"\ashp_max\x18\a \x01(\rR\x06shpMax\x12\x17\n" +
-	"\ahhp_max\x18\b \x01(\rR\x06hhpMax\"A\n" +
+	"\x03hhp\x18\x06 \x01(\rR\x03hhp\x12\x10\n" +
+	"\x03mhp\x18\a \x01(\rR\x03mhp\x12$\n" +
+	"\x0eis_knocked_out\x18\b \x01(\bR\fisKnockedOut\"A\n" +
 	"\x0fS2C_DeathDialog\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"3\n" +

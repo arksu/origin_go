@@ -58,14 +58,14 @@ type playerStatsPushState struct {
 }
 
 type PlayerStatsNetSnapshot struct {
-	Stamina    uint32
-	Energy     uint32
-	StaminaMax uint32
-	EnergyMax  uint32
-	SHP        uint32
-	HHP        uint32
-	SHPMax     uint32
-	HHPMax     uint32
+	Stamina      uint32
+	Energy       uint32
+	StaminaMax   uint32
+	EnergyMax    uint32
+	SHP          uint32
+	HHP          uint32
+	MHP          uint32
+	IsKnockedOut bool
 }
 
 type movementModeState struct {
@@ -299,8 +299,8 @@ func (s *EntityStatsUpdateState) ShouldSendPlayerStats(entityID types.EntityID, 
 		last.EnergyMax != next.EnergyMax ||
 		last.SHP != next.SHP ||
 		last.HHP != next.HHP ||
-		last.SHPMax != next.SHPMax ||
-		last.HHPMax != next.HHPMax
+		last.MHP != next.MHP ||
+		last.IsKnockedOut != next.IsKnockedOut
 }
 
 func (s *EntityStatsUpdateState) MarkPlayerStatsSent(entityID types.EntityID, snapshot PlayerStatsNetSnapshot, nowUnixMs int64) bool {

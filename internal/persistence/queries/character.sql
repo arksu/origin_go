@@ -39,7 +39,7 @@ WHERE id = $1
 -- name: CreateCharacter :one
 INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, attributes, exp, skills,
                        discovery)
-VALUES ($1, $2, $3, 1, $4, $5, 0, 0, sqlc.arg(stamina), sqlc.arg(energy), 100, 100, sqlc.arg(attributes)::jsonb,
+VALUES ($1, $2, $3, 1, $4, $5, 0, 0, sqlc.arg(stamina), sqlc.arg(energy), sqlc.arg(shp), sqlc.arg(hhp), sqlc.arg(attributes)::jsonb,
         sqlc.arg(exp)::jsonb, sqlc.arg(skills)::jsonb, sqlc.arg(discovery)::jsonb)
 RETURNING *;
 

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	_const "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -209,6 +210,90 @@ func TestHandleTeleportImmediate(t *testing.T) {
 	}
 	if mockTeleport.lastTargetLayer == nil || *mockTeleport.lastTargetLayer != 2 {
 		t.Fatalf("expected target layer 2, got %+v", mockTeleport.lastTargetLayer)
+	}
+}
+
+func TestHandleHealthCommands(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+
+	handler := NewChatAdminCommandHandler(
+		nil,
+		nil,
+		mockChat,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		eventBus,
+		logger,
+	)
+
+	playerID := types.EntityID(9001)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityHealth{
+			SHP: 20,
+			HHP: 30,
+		})
+		ecs.AddComponent(w, h, components.EntityStats{
+			Stamina: 50,
+			Energy:  900,
+		})
+		ecs.AddComponent(w, h, components.Movement{
+			State: _const.StateStunned,
+		})
+	})
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/shp 12.5"); !handled {
+		t.Fatal("expected /shp to be recognized")
+	}
+	health, _ := ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if health.SHP != 12.5 {
+		t.Fatalf("expected SHP=12.5 after /shp, got %v", health.SHP)
+	}
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/hhp 10"); !handled {
+		t.Fatal("expected /hhp to be recognized")
+	}
+	health, _ = ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if health.HHP != 10 {
+		t.Fatalf("expected HHP=10 after /hhp, got %v", health.HHP)
+	}
+	if health.SHP > health.HHP {
+		t.Fatalf("expected SHP<=HHP after /hhp, got SHP=%v HHP=%v", health.SHP, health.HHP)
+	}
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/damage 3 4"); !handled {
+		t.Fatal("expected /damage to be recognized")
+	}
+	health, _ = ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if health.SHP != 6 || health.HHP != 6 {
+		t.Fatalf("expected (/damage 3 4) => SHP=6 HHP=6, got SHP=%v HHP=%v", health.SHP, health.HHP)
+	}
+
+	ecs.WithComponent(world, playerHandle, func(h *components.EntityHealth) {
+		h.SHP = 0
+		h.HHP = 0
+		h.KOUntilTick = 100
+		h.RespawnDueTick = 200
+	})
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/revive"); !handled {
+		t.Fatal("expected /revive to be recognized")
+	}
+	health, _ = ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if health.HHP <= 0 || health.SHP <= 0 {
+		t.Fatalf("expected positive HP after /revive, got SHP=%v HHP=%v", health.SHP, health.HHP)
+	}
+	if health.KOUntilTick != 0 || health.RespawnDueTick != 0 {
+		t.Fatalf("expected KO/respawn timers cleared after /revive, got KO=%d respawn=%d", health.KOUntilTick, health.RespawnDueTick)
+	}
+	movement, _ := ecs.GetComponent[components.Movement](world, playerHandle)
+	if movement.State == _const.StateStunned {
+		t.Fatalf("expected movement unstunned after /revive")
 	}
 }
 
