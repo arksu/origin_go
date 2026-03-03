@@ -242,33 +242,97 @@ func (f *ObjectFactory) EnsureObjectInventoriesForDef(
 	}
 
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	if rootHandle, found := refIndex.Lookup(constt.InventoryGrid, ownerID, 0); found && w.Alive(rootHandle) {
-		if _, hasOwner := ecs.GetComponent[components.InventoryOwner](w, objectHandle); !hasOwner {
-			ecs.AddComponent(w, objectHandle, components.InventoryOwner{
-				Inventories: []components.InventoryLink{{
-					Kind:    constt.InventoryGrid,
-					Key:     0,
-					OwnerID: ownerID,
-					Handle:  rootHandle,
-				}},
-			})
-			return true
+	type inventoryRefKey struct {
+		kind constt.InventoryKind
+		key  uint32
+	}
+
+	defByRef := make(map[inventoryRefKey]objectdefs.InventoryDef, len(def.Components.Inventory))
+	desiredRefs := make([]inventoryRefKey, 0, len(def.Components.Inventory))
+	for _, invDef := range def.Components.Inventory {
+		ref := inventoryRefKey{
+			kind: parseInventoryKind(invDef.Kind),
+			key:  invDef.Key,
 		}
+		if _, exists := defByRef[ref]; exists {
+			continue
+		}
+		defByRef[ref] = invDef
+		desiredRefs = append(desiredRefs, ref)
+	}
+	if len(desiredRefs) == 0 {
 		return false
 	}
 
-	links := f.spawnObjectInventories(w, ownerID, def, nil)
+	links := make([]components.InventoryLink, 0, len(desiredRefs))
+	spawnedAny := false
+	for _, ref := range desiredRefs {
+		if existingHandle, found := refIndex.Lookup(ref.kind, ownerID, ref.key); found && w.Alive(existingHandle) {
+			links = append(links, components.InventoryLink{
+				Kind:    ref.kind,
+				Key:     ref.key,
+				OwnerID: ownerID,
+				Handle:  existingHandle,
+			})
+			continue
+		}
+
+		invDef := defByRef[ref]
+		containerHandle := w.SpawnWithoutExternalID()
+		if containerHandle == types.InvalidHandle {
+			continue
+		}
+		container := components.InventoryContainer{
+			OwnerID: ownerID,
+			Kind:    ref.kind,
+			Key:     ref.key,
+			Version: 1,
+			Width:   uint8(maxInt(invDef.W, 0)),
+			Height:  uint8(maxInt(invDef.H, 0)),
+			Items:   []components.InvItem{},
+		}
+		ecs.AddComponent(w, containerHandle, container)
+		refIndex.Add(container.Kind, container.OwnerID, container.Key, containerHandle)
+		links = append(links, components.InventoryLink{
+			Kind:    container.Kind,
+			Key:     container.Key,
+			OwnerID: container.OwnerID,
+			Handle:  containerHandle,
+		})
+		spawnedAny = true
+	}
+
 	if len(links) == 0 {
 		return false
 	}
-	if _, hasOwner := ecs.GetComponent[components.InventoryOwner](w, objectHandle); hasOwner {
-		ecs.WithComponent(w, objectHandle, func(owner *components.InventoryOwner) {
-			owner.Inventories = links
+
+	if owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, objectHandle); hasOwner {
+		if inventoryLinksEqual(owner.Inventories, links) {
+			return spawnedAny
+		}
+		ecs.WithComponent(w, objectHandle, func(existing *components.InventoryOwner) {
+			existing.Inventories = links
 		})
-	} else {
-		ecs.AddComponent(w, objectHandle, components.InventoryOwner{
-			Inventories: links,
-		})
+		return true
+	}
+
+	ecs.AddComponent(w, objectHandle, components.InventoryOwner{
+		Inventories: links,
+	})
+	return true
+}
+
+func inventoryLinksEqual(a []components.InventoryLink, b []components.InventoryLink) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for index := range a {
+		if a[index].Kind != b[index].Kind ||
+			a[index].Key != b[index].Key ||
+			a[index].OwnerID != b[index].OwnerID ||
+			a[index].Handle != b[index].Handle {
+			return false
+		}
 	}
 	return true
 }
@@ -851,24 +915,27 @@ func (f *ObjectFactory) collectObjectRootContainers(
 		}
 	}
 
-	if len(refs) == 0 {
-		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-		fallbackKinds := []constt.InventoryKind{
-			constt.InventoryGrid,
-			constt.InventoryEquipment,
-			constt.InventoryHand,
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	supplementKinds := []constt.InventoryKind{
+		constt.InventoryGrid,
+		constt.InventoryEquipment,
+		constt.InventoryHand,
+	}
+	for _, kind := range supplementKinds {
+		key := [2]uint32{uint32(kind), 0}
+		if _, exists := seen[key]; exists {
+			continue
 		}
-		for _, kind := range fallbackKinds {
-			handle, found := refIndex.Lookup(kind, ownerID, 0)
-			if !found || !w.Alive(handle) {
-				continue
-			}
-			refs = append(refs, objectRootContainerRef{
-				Kind:   kind,
-				Key:    0,
-				Handle: handle,
-			})
+		handle, found := refIndex.Lookup(kind, ownerID, 0)
+		if !found || !w.Alive(handle) {
+			continue
 		}
+		seen[key] = struct{}{}
+		refs = append(refs, objectRootContainerRef{
+			Kind:   kind,
+			Key:    0,
+			Handle: handle,
+		})
 	}
 
 	if len(refs) == 0 {

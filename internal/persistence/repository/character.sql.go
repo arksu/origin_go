@@ -420,6 +420,7 @@ FROM (
              unnest($12::text[])::jsonb as discovery
      ) AS v
 WHERE character.id = v.id
+  AND character.deleted_at IS NULL
 `
 
 type UpdateCharactersParams struct {

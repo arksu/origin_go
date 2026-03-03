@@ -122,4 +122,5 @@ FROM (
              unnest(sqlc.arg(skills)::text[])::jsonb as skills,
              unnest(sqlc.arg(discovery)::text[])::jsonb as discovery
      ) AS v
-WHERE character.id = v.id;
+WHERE character.id = v.id
+  AND character.deleted_at IS NULL;

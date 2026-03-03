@@ -58,7 +58,7 @@
       "behaviors": {}
     },
     {
-      "defId": 12,
+      "defId": 15,
       "key": "player_death",
       "name": "Player Death",
       "static": true,

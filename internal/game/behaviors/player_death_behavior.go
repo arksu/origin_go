@@ -115,7 +115,7 @@ func (playerDeathBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteCon
 		}
 	}
 
-	markCorpseDirtyAfterUnequip(ctx.World, ctx.TargetID, ctx.TargetHandle)
+	markCorpseDirtyAfterUnequip(ctx.World, ctx.TargetHandle)
 	return contracts.BehaviorResult{OK: true}
 }
 
@@ -164,23 +164,13 @@ func collectUnequipCandidates(w *ecs.World, corpseID types.EntityID) (types.Hand
 	return equipmentHandle, candidates
 }
 
-func markCorpseDirtyAfterUnequip(w *ecs.World, corpseID types.EntityID, corpseHandle types.Handle) {
-	if w == nil || corpseID == 0 {
-		return
-	}
-	if corpseHandle == types.InvalidHandle || !w.Alive(corpseHandle) {
-		corpseHandle = w.GetHandleByEntityID(corpseID)
-	}
-	if corpseHandle == types.InvalidHandle || !w.Alive(corpseHandle) {
+func markCorpseDirtyAfterUnequip(w *ecs.World, corpseHandle types.Handle) {
+	if w == nil || corpseHandle == types.InvalidHandle || !w.Alive(corpseHandle) {
 		return
 	}
 
-	if _, hasState := ecs.GetComponent[components.ObjectInternalState](w, corpseHandle); hasState {
-		ecs.WithComponent(w, corpseHandle, func(state *components.ObjectInternalState) {
-			state.IsDirty = true
-		})
-	} else {
-		ecs.AddComponent(w, corpseHandle, components.ObjectInternalState{IsDirty: true})
-	}
+	ecs.WithComponent(w, corpseHandle, func(state *components.ObjectInternalState) {
+		state.IsDirty = true
+	})
 	ecs.MarkObjectBehaviorDirty(w, corpseHandle)
 }
