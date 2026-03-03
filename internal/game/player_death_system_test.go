@@ -1,6 +1,7 @@
 package game
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -180,5 +181,108 @@ func TestPlayerDeathSystem_DeathSchedulesAndRequestsRespawn(t *testing.T) {
 	}
 	if handler.calls[0].handle != playerHandle {
 		t.Fatalf("unexpected handle: %d", handler.calls[0].handle)
+	}
+}
+
+func TestPlayerDeathSystem_RegenUsesEnergyBands(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(81004)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityHealth{
+			SHP: 10,
+			HHP: 25,
+		})
+		ecs.AddComponent(w, h, components.EntityStats{
+			Energy: 950,
+		})
+	})
+	ecs.GetResource[ecs.CharacterEntities](world).Add(playerID, playerHandle, time.Now())
+	*ecs.GetResource[ecs.TimeState](world) = ecs.TimeState{Tick: 100}
+
+	system := NewPlayerDeathSystem(&testPlayerDeathHandler{}, PlayerDeathSystemConfig{
+		LifeDeathFactor:                 1,
+		ShpRegenIntervalTicks:           100,
+		StarvationDamageIntervalTicks:   1000,
+		KnockoutDurationTicks:           30,
+		DeathRespawnDelayTicks:          3,
+		DeathRespawnHHPPercent:          0.25,
+		DeathRespawnEnergy:              1000,
+		DeathRespawnStamina:             0,
+		StarvationSoftDamagePerInterval: 10,
+	})
+	system.Update(world, 0)
+
+	health, _ := ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if math.Abs(health.SHP-10.05) > 0.0001 {
+		t.Fatalf("expected SHP regen to 10.05, got %v", health.SHP)
+	}
+}
+
+func TestPlayerDeathSystem_StarvationAppliesSoftDamage(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(81005)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityHealth{
+			SHP: 5,
+			HHP: 25,
+		})
+		ecs.AddComponent(w, h, components.EntityStats{
+			Energy: 400,
+		})
+		ecs.AddComponent(w, h, components.Movement{State: _const.StateIdle})
+	})
+	ecs.GetResource[ecs.CharacterEntities](world).Add(playerID, playerHandle, time.Now())
+	*ecs.GetResource[ecs.TimeState](world) = ecs.TimeState{Tick: 200}
+
+	system := NewPlayerDeathSystem(&testPlayerDeathHandler{}, PlayerDeathSystemConfig{
+		LifeDeathFactor:                 1,
+		ShpRegenIntervalTicks:           1000,
+		StarvationDamageIntervalTicks:   200,
+		KnockoutDurationTicks:           30,
+		DeathRespawnDelayTicks:          3,
+		DeathRespawnHHPPercent:          0.25,
+		DeathRespawnEnergy:              1000,
+		DeathRespawnStamina:             0,
+		StarvationSoftDamagePerInterval: 10,
+	})
+	system.Update(world, 0)
+
+	health, _ := ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if health.SHP != 0 || health.HHP != 25 {
+		t.Fatalf("expected starvation damage to bring SHP to 0 only, got SHP=%v HHP=%v", health.SHP, health.HHP)
+	}
+	if health.KOUntilTick != 230 {
+		t.Fatalf("expected KO timer after starvation KO, got %d", health.KOUntilTick)
+	}
+}
+
+func TestPlayerDeathSystem_ClampsInvariantEachTick(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(81006)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityHealth{
+			SHP: 100,
+			HHP: 100,
+		})
+	})
+	ecs.GetResource[ecs.CharacterEntities](world).Add(playerID, playerHandle, time.Now())
+	*ecs.GetResource[ecs.TimeState](world) = ecs.TimeState{Tick: 1}
+
+	system := NewPlayerDeathSystem(&testPlayerDeathHandler{}, PlayerDeathSystemConfig{
+		LifeDeathFactor:                 1,
+		ShpRegenIntervalTicks:           1000,
+		StarvationDamageIntervalTicks:   1000,
+		KnockoutDurationTicks:           30,
+		DeathRespawnDelayTicks:          3,
+		DeathRespawnHHPPercent:          0.25,
+		DeathRespawnEnergy:              1000,
+		DeathRespawnStamina:             0,
+		StarvationSoftDamagePerInterval: 10,
+	})
+	system.Update(world, 0)
+
+	health, _ := ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if health.HHP != 25 || health.SHP != 25 {
+		t.Fatalf("expected clamp to MHP=25, got SHP=%v HHP=%v", health.SHP, health.HHP)
 	}
 }
