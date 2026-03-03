@@ -665,16 +665,9 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 	ecs.AddComponent(w, playerHandle, corpseInfo)
 
 	resource := objectdefs.ResolveAppearanceResource(def, nil)
-	if resource == "" {
-		resource = def.Resource
-	}
-	if _, hasAppearance := ecs.GetComponent[components.Appearance](w, playerHandle); hasAppearance {
-		ecs.WithComponent(w, playerHandle, func(a *components.Appearance) {
-			a.Resource = resource
-		})
-	} else {
-		ecs.AddComponent(w, playerHandle, components.Appearance{Resource: resource})
-	}
+	ecs.WithComponent(w, playerHandle, func(a *components.Appearance) {
+		a.Resource = resource
+	})
 
 	if def.Components != nil && def.Components.Collider != nil {
 		ecs.AddComponent(w, playerHandle, objectdefs.BuildColliderComponent(def.Components.Collider))

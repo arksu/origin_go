@@ -13,11 +13,7 @@ import (
 )
 
 func TestPlayerDeathBehavior_UnequipSuccess(t *testing.T) {
-	previousRegistry := itemdefs.Global()
-	t.Cleanup(func() {
-		itemdefs.SetGlobalForTesting(previousRegistry)
-	})
-	itemdefs.SetGlobalForTesting(newPlayerDeathBehaviorItemRegistry())
+	setupPlayerDeathItemRegistry(t)
 
 	world, playerID, playerHandle, corpseID, corpseHandle, equipmentHandle := setupPlayerDeathBehaviorWorld(
 		t,
@@ -90,11 +86,7 @@ func TestPlayerDeathBehavior_UnequipSuccess(t *testing.T) {
 }
 
 func TestPlayerDeathBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
-	previousRegistry := itemdefs.Global()
-	t.Cleanup(func() {
-		itemdefs.SetGlobalForTesting(previousRegistry)
-	})
-	itemdefs.SetGlobalForTesting(newPlayerDeathBehaviorItemRegistry())
+	setupPlayerDeathItemRegistry(t)
 
 	world, playerID, playerHandle, corpseID, corpseHandle, equipmentHandle := setupPlayerDeathBehaviorWorld(
 		t,
@@ -153,11 +145,7 @@ func TestPlayerDeathBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
 }
 
 func TestPlayerDeathBehavior_NoEligibleItemsNoAction(t *testing.T) {
-	previousRegistry := itemdefs.Global()
-	t.Cleanup(func() {
-		itemdefs.SetGlobalForTesting(previousRegistry)
-	})
-	itemdefs.SetGlobalForTesting(newPlayerDeathBehaviorItemRegistry())
+	setupPlayerDeathItemRegistry(t)
 
 	world, playerID, playerHandle, corpseID, corpseHandle, _ := setupPlayerDeathBehaviorWorld(
 		t,
@@ -200,11 +188,7 @@ func TestPlayerDeathBehavior_NoEligibleItemsNoAction(t *testing.T) {
 }
 
 func TestPlayerDeathBehavior_SkipsContainerItems(t *testing.T) {
-	previousRegistry := itemdefs.Global()
-	t.Cleanup(func() {
-		itemdefs.SetGlobalForTesting(previousRegistry)
-	})
-	itemdefs.SetGlobalForTesting(newPlayerDeathBehaviorItemRegistry())
+	setupPlayerDeathItemRegistry(t)
 
 	world, playerID, playerHandle, corpseID, corpseHandle, _ := setupPlayerDeathBehaviorWorld(
 		t,
@@ -309,6 +293,15 @@ func newPlayerDeathBehaviorItemRegistry() *itemdefs.Registry {
 			},
 		},
 	})
+}
+
+func setupPlayerDeathItemRegistry(t *testing.T) {
+	t.Helper()
+	previousRegistry := itemdefs.Global()
+	t.Cleanup(func() {
+		itemdefs.SetGlobalForTesting(previousRegistry)
+	})
+	itemdefs.SetGlobalForTesting(newPlayerDeathBehaviorItemRegistry())
 }
 
 func boolPtr(value bool) *bool {
