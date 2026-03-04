@@ -1,4 +1,5 @@
 import { getRandomByCoord } from '../utils/random'
+import { TILE_SAND } from './tileIds'
 
 interface TileVariant {
   img: string
@@ -58,6 +59,7 @@ export class TileSet {
 }
 
 const tileSets: Map<number, TileSet> = new Map()
+const warnedUnknownTileIDs: Set<number> = new Set()
 
 export function registerTileSet(tileType: number, data: { ground: TileVariant[]; borders: TileVariant[][]; corners: TileVariant[][] }): void {
   tileSets.set(tileType, new TileSet(data))
@@ -69,7 +71,17 @@ export function getTileSet(tileType: number): TileSet | undefined {
 
 export function getGroundTextureName(tileType: number, x: number, y: number): string | null {
   const set = tileSets.get(tileType)
-  return set?.getGroundTexture(x, y) ?? null
+  if (set) {
+    return set.getGroundTexture(x, y)
+  }
+
+  if (!warnedUnknownTileIDs.has(tileType)) {
+    warnedUnknownTileIDs.add(tileType)
+    console.warn(`[TileSet] Unknown tile ID ${tileType}; using fallback tile ${TILE_SAND}`)
+  }
+
+  const fallbackSet = tileSets.get(TILE_SAND)
+  return fallbackSet?.getGroundTexture(x, y) ?? null
 }
 
 export function hasTileSet(tileType: number): boolean {

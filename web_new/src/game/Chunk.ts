@@ -9,6 +9,7 @@ import {
 } from './tiles/Tile'
 import { getGroundTextureName, getTileSet } from './tiles/TileSet'
 import { type AABB, fromMinMax } from './culling/AABB'
+import { TILE_SAND } from './tiles/tileIds'
 
 const DIVIDER = 4
 
@@ -40,6 +41,7 @@ void main() {
 }`
 
 let glProgram: GlProgram | null = null
+const warnedMissingTextureFrames: Set<string> = new Set()
 
 function getGlProgram(): GlProgram {
   if (!glProgram) {
@@ -191,17 +193,30 @@ export class Chunk {
         const globalX = this.x * chunkSize + x
         const globalY = this.y * chunkSize + y
 
-        const textureName = getGroundTextureName(tileType, globalX, globalY)
+        let textureName = getGroundTextureName(tileType, globalX, globalY)
+        if (!textureName) {
+          textureName = getGroundTextureName(TILE_SAND, globalX, globalY)
+        }
         if (!textureName) {
           texturesMissing++
           if (!firstMissingTexture) firstMissingTexture = `tileType=${tileType} has no texture name`
           continue
         }
 
-        const texture = spritesheet.textures[textureName]
+        let texture = spritesheet.textures[textureName]
+        if (!texture) {
+          const fallbackTextureName = getGroundTextureName(TILE_SAND, globalX, globalY)
+          if (fallbackTextureName) {
+            texture = spritesheet.textures[fallbackTextureName]
+          }
+        }
         if (!texture) {
           texturesMissing++
           if (!firstMissingTexture) firstMissingTexture = textureName
+          if (!warnedMissingTextureFrames.has(textureName)) {
+            warnedMissingTextureFrames.add(textureName)
+            console.warn(`[Chunk] Missing texture frame "${textureName}" (tileType=${tileType})`)
+          }
           continue
         }
         texturesFound++

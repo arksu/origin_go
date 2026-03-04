@@ -18,3 +18,4 @@ export {
 } from './TileSet'
 
 export { initTileSets } from './tileSetLoader'
+export * from './tileIds'
