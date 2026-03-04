@@ -109,7 +109,7 @@ function updateTooltipPosition() {
 function handleMouseEnter(event: MouseEvent) {
   tooltipVisible.value = true
   tooltipX.value = event.clientX + 10
-  tooltipY.value = event.clientY + 10
+  tooltipY.value = event.clientY - 10
   createTooltip()
   updateTooltipPosition()
 }
@@ -117,7 +117,7 @@ function handleMouseEnter(event: MouseEvent) {
 function handleMouseMove(event: MouseEvent) {
   if (!tooltipVisible.value) return
   tooltipX.value = event.clientX + 10
-  tooltipY.value = event.clientY + 10
+  tooltipY.value = event.clientY - 10
   updateTooltipPosition()
 }
 
@@ -184,6 +184,7 @@ onUnmounted(() => {
 <style lang="scss">
 .stat-tooltip-global {
   position: fixed;
+  transform: translateY(-100%);
   background: rgba(0, 0, 0, 0.75);
   color: #ffffff;
   border: 2px solid #555;

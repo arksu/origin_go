@@ -788,8 +788,8 @@ useHotkeys(hotkeys)
 
         <div class="hud-bottom-row">
           <div class="hud-bottom-left-stats">
-            <PlayerStatsBars />
             <MovementModePanel />
+            <PlayerStatsBars />
           </div>
 
           <div class="hud-bottom-center-alerts">
