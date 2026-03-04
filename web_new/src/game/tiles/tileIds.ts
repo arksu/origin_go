@@ -21,7 +21,9 @@ export const TILE_SAND = 68
 export const TILE_MOUNTAIN = 120
 export const TILE_VOID = 255
 
-export const MAPGEN_TILE_IDS: readonly number[] = [
+// Tile IDs that mapgen emits and must have a registered tileset.
+// TILE_VOID is excluded — it is diagnostic-only and has no visual tileset.
+export const RENDERABLE_TILE_IDS: readonly number[] = [
   TILE_DEEP_WATER,
   TILE_SHALLOW_WATER,
   TILE_STONE_PAVING,
@@ -39,5 +41,4 @@ export const MAPGEN_TILE_IDS: readonly number[] = [
   TILE_CLAY,
   TILE_SAND,
   TILE_MOUNTAIN,
-  TILE_VOID,
 ]

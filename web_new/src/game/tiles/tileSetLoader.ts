@@ -1,7 +1,7 @@
 import { hasTileSet, registerTileSet } from './TileSet'
 import { registerTerrain } from '../terrain'
 import {
-    MAPGEN_TILE_IDS,
+    RENDERABLE_TILE_IDS,
     TILE_BROADLEAF_FOREST,
     TILE_CLAY,
     TILE_CONIFEROUS_FOREST,
@@ -19,7 +19,6 @@ import {
     TILE_SWAMP_2,
     TILE_SWAMP_3,
     TILE_THICKET,
-    TILE_VOID,
 } from './tileIds'
 
 import water from './configs/water.json'
@@ -73,14 +72,14 @@ export function initTileSets(): void {
     registerTileSet(TILE_SAND, sand)
     registerTileSet(TILE_MOUNTAIN, mountain)
 
-    const missingTileSets = MAPGEN_TILE_IDS.filter((tileID) => tileID !== TILE_VOID && !hasTileSet(tileID))
+    const missingTileSets = RENDERABLE_TILE_IDS.filter((id) => !hasTileSet(id))
     if (missingTileSets.length > 0) {
         console.warn(
             `[TileSetLoader] Tile sets initialized with missing mapgen tile IDs: ${missingTileSets.join(', ')}`,
         )
     } else {
         console.log(
-            `[TileSetLoader] Tile sets initialized for mapgen contract (${MAPGEN_TILE_IDS.length - 1} IDs).`,
+            `[TileSetLoader] Tile sets initialized for mapgen contract (${RENDERABLE_TILE_IDS.length} IDs).`,
         )
     }
 }
