@@ -7,7 +7,7 @@ import {
   TILE_HEIGHT_HALF,
   getChunkSize,
 } from './tiles/Tile'
-import { getGroundTextureName, getTileSet } from './tiles/TileSet'
+import { getGroundTextureName, getTileSet, getRegisteredTileIdsBelow } from './tiles/TileSet'
 import { type AABB, fromMinMax } from './culling/AABB'
 import { TILE_SAND } from './tiles/tileIds'
 
@@ -193,10 +193,7 @@ export class Chunk {
         const globalX = this.x * chunkSize + x
         const globalY = this.y * chunkSize + y
 
-        let textureName = getGroundTextureName(tileType, globalX, globalY)
-        if (!textureName) {
-          textureName = getGroundTextureName(TILE_SAND, globalX, globalY)
-        }
+        const textureName = getGroundTextureName(tileType, globalX, globalY)
         if (!textureName) {
           texturesMissing++
           if (!firstMissingTexture) firstMissingTexture = `tileType=${tileType} has no texture name`
@@ -413,9 +410,11 @@ export class Chunk {
     const globalX = this.x * chunkSize + x
     const globalY = this.y * chunkSize + y
 
-    for (let i = currentTileType - 1; i >= 0; i--) {
-      const tileSet = getTileSet(i)
-      if (!tileSet) continue
+    const belowIds = getRegisteredTileIdsBelow(currentTileType)
+    for (const i of belowIds) {
+      const tileSet = getTileSet(i)!
+      // Note: borders/corners are not rendered for unregistered neighbor tile IDs.
+      // This is acceptable — border transitions to unknown tiles are undefined.
 
       let borderMask = 0
       let cornerMask = 0

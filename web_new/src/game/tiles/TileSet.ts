@@ -63,6 +63,7 @@ const warnedUnknownTileIDs: Set<number> = new Set()
 
 export function registerTileSet(tileType: number, data: { ground: TileVariant[]; borders: TileVariant[][]; corners: TileVariant[][] }): void {
   tileSets.set(tileType, new TileSet(data))
+  sortedIdsDirty = true
 }
 
 export function getTileSet(tileType: number): TileSet | undefined {
@@ -86,4 +87,23 @@ export function getGroundTextureName(tileType: number, x: number, y: number): st
 
 export function hasTileSet(tileType: number): boolean {
   return tileSets.has(tileType)
+}
+
+let sortedRegisteredIds: number[] = []
+let sortedIdsDirty = true
+
+function ensureSortedIds(): void {
+  if (!sortedIdsDirty) return
+  sortedRegisteredIds = [...tileSets.keys()].sort((a, b) => a - b)
+  sortedIdsDirty = false
+}
+
+export function getRegisteredTileIdsBelow(tileType: number): number[] {
+  ensureSortedIds()
+  const result: number[] = []
+  for (let k = sortedRegisteredIds.length - 1; k >= 0; k--) {
+    const id = sortedRegisteredIds[k]!
+    if (id < tileType) result.push(id)
+  }
+  return result
 }
