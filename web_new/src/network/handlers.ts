@@ -83,6 +83,9 @@ export function registerMessageHandlers(): void {
       isKnockedOut: msg.isKnockedOut,
     })
     gameStore.setPlayerStats(msg)
+    if (gameStore.playerEntityId != null) {
+      gameFacade.setObjectKnockedOutPose(gameStore.playerEntityId, !!msg.isKnockedOut)
+    }
   })
 
   messageDispatcher.on('deathDialog', (msg: proto.IS2C_DeathDialog) => {
@@ -222,6 +225,7 @@ export function registerMessageHandlers(): void {
       console.log(`[Handlers] Player entity spawned: entityId=${entityId}, pos=(${posX}, ${posY})`)
       gameFacade.setPlayerEntityId(entityId)
       gameFacade.setCamera(posX, posY)
+      gameFacade.setObjectKnockedOutPose(entityId, gameStore.playerStats.isKnockedOut)
       gameStore.markBootstrapPlayerSpawned()
     }
   })

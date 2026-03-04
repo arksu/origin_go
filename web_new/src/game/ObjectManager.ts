@@ -14,6 +14,7 @@ export class ObjectManager {
   private carriedByByObject: Map<number, number> = new Map()
   private carriedObjectsByCarrier: Map<number, Set<number>> = new Map()
   private activeCarriedObjects: Set<number> = new Set()
+  private knockedOutObjectIds: Set<number> = new Set()
   private needsSort = false
   private boundsVisible: boolean = false
   private hoveredEntityId: number | null = null
@@ -37,6 +38,7 @@ export class ObjectManager {
     }
 
     const objectView = new ObjectView(options)
+    objectView.setKnockedOutPose(this.knockedOutObjectIds.has(options.entityId))
     this.objects.set(options.entityId, objectView)
     if (objectView.hasAnimatedFrames()) {
       this.animatedObjectIds.add(options.entityId)
@@ -235,6 +237,23 @@ export class ObjectManager {
     return this.carriedByByObject.get(objectId) ?? null
   }
 
+  setKnockedOutPose(entityId: number, knockedOut: boolean): void {
+    if (knockedOut) {
+      this.knockedOutObjectIds.add(entityId)
+    } else {
+      this.knockedOutObjectIds.delete(entityId)
+    }
+
+    const objectView = this.objects.get(entityId)
+    if (!objectView) {
+      return
+    }
+
+    objectView.setKnockedOutPose(knockedOut)
+    cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
+    this.needsSort = true
+  }
+
   /**
    * Find entity at screen coordinates.
    * Returns { entityId, typeId } if found, null otherwise.
@@ -413,6 +432,7 @@ export class ObjectManager {
     this.carriedByByObject.clear()
     this.carriedObjectsByCarrier.clear()
     this.activeCarriedObjects.clear()
+    this.knockedOutObjectIds.clear()
   }
 
   /**

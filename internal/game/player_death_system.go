@@ -1,7 +1,6 @@
 package game
 
 import (
-	"math"
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
 	"origin/internal/ecs"
@@ -31,7 +30,7 @@ type PlayerDeathHandler interface {
 }
 
 // PlayerDeathSystem executes SHP/HHP runtime transitions:
-// KO on SHP<=0, death on HHP<=0 with delayed respawn callback.
+// KO on SHP<=0 (persistent until SHP recovers), death on HHP<=0 with delayed respawn callback.
 type PlayerDeathSystem struct {
 	ecs.BaseSystem
 	handler PlayerDeathHandler
@@ -191,35 +190,23 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 				dirty = true
 			}
 			dirty = true
-		} else if health.KOUntilTick != 0 {
-			if nowTick >= health.KOUntilTick {
-				health.KOUntilTick = 0
-				wakeupSHP := math.Round(health.HHP * 0.1)
-				if wakeupSHP < 1 {
-					wakeupSHP = 1
-				}
-				if wakeupSHP > health.HHP {
-					wakeupSHP = health.HHP
-				}
-				if wakeupSHP != health.SHP {
-					health.SHP = wakeupSHP
-				}
-				if clearStunnedState(w, handle) {
-					dirty = true
-				}
-				dirty = true
-			} else if applyStunnedStateAndClearActions(w, handle) {
-				dirty = true
-			}
 		} else if health.SHP <= 0 {
 			if health.KOUntilTick == 0 {
-				health.KOUntilTick = nowTick + s.cfg.KnockoutDurationTicks
+				knockedOutAtTick := nowTick
+				if knockedOutAtTick == 0 {
+					knockedOutAtTick = 1
+				}
+				health.KOUntilTick = knockedOutAtTick
 				dirty = true
 			}
 			if applyStunnedStateAndClearActions(w, handle) {
 				dirty = true
 			}
 		} else {
+			if health.KOUntilTick != 0 {
+				health.KOUntilTick = 0
+				dirty = true
+			}
 			if clearStunnedState(w, handle) {
 				dirty = true
 			}
