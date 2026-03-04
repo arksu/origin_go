@@ -506,6 +506,9 @@ function executeAction(actionId: ActionId): void {
     case 'inventory':
       gameStore.togglePlayerInventory()
       return
+    case 'equip':
+      gameStore.togglePlayerEquipment()
+      return
     case 'settings':
       console.log('[HUD] Settings action selected (not implemented yet)')
       return
