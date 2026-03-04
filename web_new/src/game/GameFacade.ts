@@ -137,6 +137,10 @@ export class GameFacade {
     this.render?.updateObjectPosition(entityId, x, y)
   }
 
+  setObjectKnockedOutPose(entityId: number, knockedOut: boolean): void {
+    this.render?.setObjectKnockedOutPose(entityId, knockedOut)
+  }
+
   setObjectCarryVisualRelation(objectId: number, carrierId: number | null): void {
     this.render?.setObjectCarryVisualRelation(objectId, carrierId)
   }

@@ -484,6 +484,10 @@ export class Render {
     this.objectManager.updateObjectPosition(entityId, x, y)
   }
 
+  setObjectKnockedOutPose(entityId: number, knockedOut: boolean): void {
+    this.objectManager.setKnockedOutPose(entityId, knockedOut)
+  }
+
   setObjectCarryVisualRelation(objectId: number, carrierId: number | null): void {
     this.objectManager.setCarryVisualRelation(objectId, carrierId)
   }

@@ -81,6 +81,7 @@ export class ObjectView {
   private hoverBorderDirty = true
   private hoverBorderSignature = ''
   private shadowSuppressed = false
+  private knockedOutPose = false
 
   constructor(options: ObjectViewOptions) {
     this.entityId = options.entityId
@@ -845,6 +846,20 @@ export class ObjectView {
     for (const spr of this.shadowSprites) {
       spr.visible = !suppressed
     }
+  }
+
+  setKnockedOutPose(enabled: boolean): void {
+    if (this.knockedOutPose === enabled) {
+      return
+    }
+    this.knockedOutPose = enabled
+
+    // Temporary KO visualization until we have a dedicated lying-body asset/animation.
+    this.container.rotation = enabled ? -Math.PI * 0.5 : 0
+    if (enabled) {
+      this.onStopped()
+    }
+    this.updateBoundsGraphics()
   }
 
   private createBoundsGraphics(): void {

@@ -64,8 +64,8 @@ func TestPlayerDeathSystem_KnockoutSetsStunnedState(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing health component")
 	}
-	if health.KOUntilTick != 130 {
-		t.Fatalf("expected knockout until tick 130, got %d", health.KOUntilTick)
+	if health.KOUntilTick != 100 {
+		t.Fatalf("expected knockout marker tick=100, got %d", health.KOUntilTick)
 	}
 	movement, hasMovement := ecs.GetComponent[components.Movement](world, playerHandle)
 	if !hasMovement {
@@ -76,7 +76,7 @@ func TestPlayerDeathSystem_KnockoutSetsStunnedState(t *testing.T) {
 	}
 }
 
-func TestPlayerDeathSystem_WakesUpAfterKnockout(t *testing.T) {
+func TestPlayerDeathSystem_DoesNotAutoWakeFromKnockout(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	playerID := types.EntityID(81002)
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
@@ -115,19 +115,65 @@ func TestPlayerDeathSystem_WakesUpAfterKnockout(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing health component")
 	}
-	if health.KOUntilTick != 0 {
-		t.Fatalf("expected KO timer cleared, got %d", health.KOUntilTick)
+	if health.KOUntilTick != 15 {
+		t.Fatalf("expected KO marker to remain set, got %d", health.KOUntilTick)
 	}
-	if health.SHP != 2 {
-		t.Fatalf("expected wakeup SHP to be 2, got %v", health.SHP)
+	if health.SHP != 0 {
+		t.Fatalf("expected SHP to stay at 0 while knocked out, got %v", health.SHP)
 	}
 
 	movement, hasMovement := ecs.GetComponent[components.Movement](world, playerHandle)
 	if !hasMovement {
 		t.Fatalf("missing movement component")
 	}
+	if movement.State != _const.StateStunned {
+		t.Fatalf("expected movement to remain stunned while knocked out")
+	}
+}
+
+func TestPlayerDeathSystem_KnockoutClearsWhenShpRecovers(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	playerID := types.EntityID(81007)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityHealth{
+			SHP:         3,
+			HHP:         20,
+			KOUntilTick: 15,
+		})
+		ecs.AddComponent(w, h, components.Movement{
+			State: _const.StateStunned,
+		})
+	})
+
+	ecs.GetResource[ecs.CharacterEntities](world).Add(playerID, playerHandle, time.Now())
+	*ecs.GetResource[ecs.TimeState](world) = ecs.TimeState{Tick: 20}
+
+	system := NewPlayerDeathSystem(&testPlayerDeathHandler{}, PlayerDeathSystemConfig{
+		LifeDeathFactor:                 1,
+		ShpRegenIntervalTicks:           100,
+		StarvationDamageIntervalTicks:   1000,
+		KnockoutDurationTicks:           30,
+		DeathRespawnDelayTicks:          3,
+		DeathRespawnHHPPercent:          0.25,
+		DeathRespawnEnergy:              1000,
+		DeathRespawnStamina:             0,
+		StarvationSoftDamagePerInterval: 10,
+	})
+	system.Update(world, 0)
+
+	health, ok := ecs.GetComponent[components.EntityHealth](world, playerHandle)
+	if !ok {
+		t.Fatalf("missing health component")
+	}
+	if health.KOUntilTick != 0 {
+		t.Fatalf("expected KO marker cleared after SHP recovery, got %d", health.KOUntilTick)
+	}
+	movement, hasMovement := ecs.GetComponent[components.Movement](world, playerHandle)
+	if !hasMovement {
+		t.Fatalf("missing movement component")
+	}
 	if movement.State == _const.StateStunned {
-		t.Fatalf("expected movement unstunned after KO wake")
+		t.Fatalf("expected movement unstunned after SHP recovery")
 	}
 }
 
@@ -251,8 +297,8 @@ func TestPlayerDeathSystem_StarvationAppliesSoftDamage(t *testing.T) {
 	if health.SHP != 0 || health.HHP != 25 {
 		t.Fatalf("expected starvation damage to bring SHP to 0 only, got SHP=%v HHP=%v", health.SHP, health.HHP)
 	}
-	if health.KOUntilTick != 230 {
-		t.Fatalf("expected KO timer after starvation KO, got %d", health.KOUntilTick)
+	if health.KOUntilTick != 200 {
+		t.Fatalf("expected KO marker tick after starvation KO, got %d", health.KOUntilTick)
 	}
 }
 
