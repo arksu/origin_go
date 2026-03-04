@@ -275,7 +275,6 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		LifeDeathFactor:                 cfg.Game.LifeDeathFactor,
 		ShpRegenIntervalTicks:           uint64(cfg.Game.ShpRegenIntervalTicks),
 		StarvationDamageIntervalTicks:   uint64(cfg.Game.StarvationDamageIntervalTicks),
-		KnockoutDurationTicks:           uint64(cfg.Game.KnockoutDurationTicks),
 		DeathRespawnDelayTicks:          uint64(cfg.Game.DeathRespawnDelayTicks),
 		DeathRespawnHHPPercent:          cfg.Game.DeathRespawnHHPPercent,
 		DeathRespawnEnergy:              cfg.Game.DeathRespawnEnergy,
