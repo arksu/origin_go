@@ -84,7 +84,6 @@ type GameConfig struct {
 	LifeDeathFactor               float64       `mapstructure:"life_death_factor"`
 	ShpRegenIntervalTicks         int           `mapstructure:"shp_regen_interval_ticks"`
 	StarvationDamageIntervalTicks int           `mapstructure:"starvation_damage_interval_ticks"`
-	KnockoutDurationTicks         int           `mapstructure:"knockout_duration_ticks"`
 	DeathRespawnDelayTicks        int           `mapstructure:"death_respawn_delay_ticks"`
 	DeathRespawnHHPPercent        float64       `mapstructure:"death_respawn_hhp_percent"`
 	DeathRespawnEnergy            float64       `mapstructure:"death_respawn_energy"`
@@ -180,11 +179,6 @@ func Load(logger *zap.Logger) (*Config, error) {
 			zap.Int("game.starvation_damage_interval_ticks", cfg.Game.StarvationDamageIntervalTicks),
 		)
 	}
-	if cfg.Game.KnockoutDurationTicks <= 0 {
-		logger.Fatal("Invalid KO duration: game.knockout_duration_ticks must be > 0",
-			zap.Int("game.knockout_duration_ticks", cfg.Game.KnockoutDurationTicks),
-		)
-	}
 	if cfg.Game.DeathRespawnDelayTicks <= 0 {
 		logger.Fatal("Invalid death respawn delay: game.death_respawn_delay_ticks must be > 0",
 			zap.Int("game.death_respawn_delay_ticks", cfg.Game.DeathRespawnDelayTicks),
@@ -269,7 +263,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.life_death_factor", 1.0)
 	v.SetDefault("game.shp_regen_interval_ticks", 100)
 	v.SetDefault("game.starvation_damage_interval_ticks", 432000)
-	v.SetDefault("game.knockout_duration_ticks", 300)
 	v.SetDefault("game.death_respawn_delay_ticks", 30)
 	v.SetDefault("game.death_respawn_hhp_percent", 0.25)
 	v.SetDefault("game.death_respawn_energy", 1000.0)

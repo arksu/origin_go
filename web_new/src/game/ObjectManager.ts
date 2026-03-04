@@ -80,6 +80,7 @@ export class ObjectManager {
       return
     }
     this.animatedObjectIds.delete(entityId)
+    this.knockedOutObjectIds.delete(entityId)
 
     // Unregister from culling controller
     cullingController.unregisterObject(entityId)

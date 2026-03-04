@@ -17,7 +17,6 @@ type PlayerDeathSystemConfig struct {
 	LifeDeathFactor                 float64
 	ShpRegenIntervalTicks           uint64
 	StarvationDamageIntervalTicks   uint64
-	KnockoutDurationTicks           uint64
 	DeathRespawnDelayTicks          uint64
 	DeathRespawnHHPPercent          float64
 	DeathRespawnEnergy              float64
@@ -77,9 +76,6 @@ func normalizePlayerDeathSystemConfig(cfg PlayerDeathSystemConfig) PlayerDeathSy
 	}
 	if cfg.StarvationDamageIntervalTicks == 0 {
 		cfg.StarvationDamageIntervalTicks = 432000
-	}
-	if cfg.KnockoutDurationTicks == 0 {
-		cfg.KnockoutDurationTicks = 300
 	}
 	if cfg.DeathRespawnDelayTicks == 0 {
 		cfg.DeathRespawnDelayTicks = 30
