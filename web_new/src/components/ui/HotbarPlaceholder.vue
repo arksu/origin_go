@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
+  getActionIconPath,
+  getActionLabel,
   getActionShortLabel,
+  isActionId,
   type ActionId,
   type HotbarState,
 } from '@/game/hud/actionCatalog'
@@ -23,6 +26,10 @@ const emit = defineEmits<{
 
 const longPressTimer = ref<number | null>(null)
 const longPressTriggered = ref(false)
+const tooltipText = ref('')
+const tooltipX = ref(0)
+const tooltipY = ref(0)
+const tooltipVisible = ref(false)
 
 const leftGroupSlots = computed(() => [0, 1, 2, 3, 4])
 const rightGroupSlots = computed(() => [5, 6, 7, 8, 9])
@@ -31,17 +38,7 @@ function parseActionIdFromDataTransfer(event: DragEvent): ActionId | null {
   const actionRaw = event.dataTransfer?.getData('application/x-origin-action-id')
     || event.dataTransfer?.getData('text/plain')
     || ''
-  if (
-    actionRaw !== 'settings' &&
-    actionRaw !== 'actions' &&
-    actionRaw !== 'craft' &&
-    actionRaw !== 'build' &&
-    actionRaw !== 'stats' &&
-    actionRaw !== 'inventory'
-  ) {
-    return null
-  }
-  return actionRaw
+  return isActionId(actionRaw) ? actionRaw : null
 }
 
 function onDrop(event: DragEvent, slotIndex: number): void {
@@ -68,24 +65,80 @@ function clearLongPressTimer(): void {
   }
 }
 
+function showTooltip(text: string, clientX: number, clientY: number): void {
+  tooltipText.value = text
+  tooltipX.value = clientX + 10
+  tooltipY.value = clientY + 10
+  tooltipVisible.value = true
+}
+
+function hideTooltip(): void {
+  tooltipVisible.value = false
+}
+
 function onSlotPointerDown(event: PointerEvent, slotIndex: number): void {
-  if (event.pointerType !== 'touch' || !props.assignments[slotIndex]) {
+  const actionId = props.assignments[slotIndex]
+  if (!actionId) {
+    hideTooltip()
+    return
+  }
+  showTooltip(slotTooltip(slotIndex), event.clientX, event.clientY)
+  if (event.pointerType !== 'touch') {
     return
   }
   longPressTriggered.value = false
   clearLongPressTimer()
   longPressTimer.value = window.setTimeout(() => {
     longPressTriggered.value = true
+    hideTooltip()
     emit('clear', slotIndex)
   }, 650)
 }
 
 function onSlotPointerUp(): void {
   clearLongPressTimer()
+  hideTooltip()
 }
 
 function isDropTarget(slotIndex: number): boolean {
   return props.draggingActionId != null && props.touchHoverSlot === slotIndex
+}
+
+function slotTooltip(slotIndex: number): string {
+  const actionId = props.assignments[slotIndex]
+  if (!actionId) {
+    return `Hotbar slot ${slotIndex + 1} (empty)`
+  }
+  return `Hotbar slot ${slotIndex + 1}: ${getActionLabel(actionId)}`
+}
+
+function onSlotPointerEnter(event: PointerEvent, slotIndex: number): void {
+  if (!props.assignments[slotIndex]) {
+    hideTooltip()
+    return
+  }
+  if (event.pointerType === 'touch') {
+    return
+  }
+  showTooltip(slotTooltip(slotIndex), event.clientX, event.clientY)
+}
+
+function onSlotPointerMove(event: PointerEvent, slotIndex: number): void {
+  if (!props.assignments[slotIndex]) {
+    hideTooltip()
+    return
+  }
+  if (event.pointerType === 'touch' && !tooltipVisible.value) {
+    return
+  }
+  if (!tooltipVisible.value) {
+    return
+  }
+  showTooltip(slotTooltip(slotIndex), event.clientX, event.clientY)
+}
+
+function onSlotPointerLeave(): void {
+  hideTooltip()
 }
 </script>
 
@@ -104,12 +157,23 @@ function isDropTarget(slotIndex: number): boolean {
         @drop="onDrop($event, slotIndex)"
         @click="onActivate(slotIndex)"
         @contextmenu.prevent="emit('clear', slotIndex)"
+        @pointerenter="onSlotPointerEnter($event, slotIndex)"
+        @pointermove="onSlotPointerMove($event, slotIndex)"
+        @pointerleave="onSlotPointerLeave"
         @pointerdown="onSlotPointerDown($event, slotIndex)"
         @pointerup="onSlotPointerUp"
         @pointercancel="onSlotPointerUp"
       >
         <span class="hotbar__slot-index">{{ slotIndex + 1 }}</span>
-        <span v-if="assignments[slotIndex]" class="hotbar__slot-label">{{ getActionShortLabel(assignments[slotIndex]!) }}</span>
+        <template v-if="assignments[slotIndex]">
+          <img
+            class="hotbar__slot-icon"
+            :src="getActionIconPath(assignments[slotIndex]!)"
+            :alt="getActionShortLabel(assignments[slotIndex]!)"
+            draggable="false"
+          >
+          <span class="hotbar__slot-label">{{ getActionShortLabel(assignments[slotIndex]!) }}</span>
+        </template>
       </button>
     </div>
 
@@ -128,15 +192,35 @@ function isDropTarget(slotIndex: number): boolean {
         @drop="onDrop($event, slotIndex)"
         @click="onActivate(slotIndex)"
         @contextmenu.prevent="emit('clear', slotIndex)"
+        @pointerenter="onSlotPointerEnter($event, slotIndex)"
+        @pointermove="onSlotPointerMove($event, slotIndex)"
+        @pointerleave="onSlotPointerLeave"
         @pointerdown="onSlotPointerDown($event, slotIndex)"
         @pointerup="onSlotPointerUp"
         @pointercancel="onSlotPointerUp"
       >
         <span class="hotbar__slot-index">{{ slotIndex + 1 }}</span>
-        <span v-if="assignments[slotIndex]" class="hotbar__slot-label">{{ getActionShortLabel(assignments[slotIndex]!) }}</span>
+        <template v-if="assignments[slotIndex]">
+          <img
+            class="hotbar__slot-icon"
+            :src="getActionIconPath(assignments[slotIndex]!)"
+            :alt="getActionShortLabel(assignments[slotIndex]!)"
+            draggable="false"
+          >
+          <span class="hotbar__slot-label">{{ getActionShortLabel(assignments[slotIndex]!) }}</span>
+        </template>
       </button>
     </div>
   </div>
+  <Teleport to="body">
+    <div
+      v-if="tooltipVisible"
+      class="hotbar__tooltip"
+      :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
+    >
+      {{ tooltipText }}
+    </div>
+  </Teleport>
 </template>
 
 <style scoped lang="scss">
@@ -182,10 +266,32 @@ function isDropTarget(slotIndex: number): boolean {
 }
 
 .hotbar__slot-label {
-  display: inline-block;
+  display: none;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.hotbar__slot-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+  margin: 12px auto 0;
+  pointer-events: none;
+}
+
+.hotbar__tooltip {
+  position: fixed;
+  padding: 4px 8px;
+  border: 1px solid rgba(217, 199, 155, 0.8);
+  border-radius: 6px;
+  background: rgba(11, 16, 22, 0.94);
+  color: #e8ecf1;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1000;
 }
 
 @media (max-width: 900px) {
@@ -206,6 +312,12 @@ function isDropTarget(slotIndex: number): boolean {
   .hotbar__slot-index,
   .hotbar__slot-label {
     font-size: 9px;
+  }
+
+  .hotbar__slot-icon {
+    width: 17px;
+    height: 17px;
+    margin-top: 11px;
   }
 }
 
@@ -233,6 +345,12 @@ function isDropTarget(slotIndex: number): boolean {
   .hotbar__slot-label {
     font-size: 8px;
     letter-spacing: 0.02em;
+  }
+
+  .hotbar__slot-icon {
+    width: 14px;
+    height: 14px;
+    margin-top: 10px;
   }
 }
 </style>

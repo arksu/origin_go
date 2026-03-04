@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ACTION_CATALOG, type ActionId } from '@/game/hud/actionCatalog'
+import { ACTION_CATALOG, getActionLabel, type ActionId } from '@/game/hud/actionCatalog'
 
 const emit = defineEmits<{
   activate: [actionId: ActionId]
@@ -16,6 +16,29 @@ const touchPointerId = ref<number | null>(null)
 const touchDragActive = ref(false)
 const touchStartX = ref(0)
 const touchStartY = ref(0)
+const tooltipText = ref('')
+const tooltipX = ref(0)
+const tooltipY = ref(0)
+const tooltipVisible = ref(false)
+const touchTooltipTimer = ref<number | null>(null)
+
+function clearTouchTooltipTimer(): void {
+  if (touchTooltipTimer.value != null) {
+    window.clearTimeout(touchTooltipTimer.value)
+    touchTooltipTimer.value = null
+  }
+}
+
+function showTooltip(text: string, clientX: number, clientY: number): void {
+  tooltipText.value = text
+  tooltipX.value = clientX + 10
+  tooltipY.value = clientY - 10
+  tooltipVisible.value = true
+}
+
+function hideTooltip(): void {
+  tooltipVisible.value = false
+}
 
 function onButtonClick(actionId: ActionId): void {
   if (touchDragActive.value) {
@@ -28,6 +51,7 @@ function onDragStart(event: DragEvent, actionId: ActionId): void {
   event.dataTransfer?.setData('text/plain', actionId)
   event.dataTransfer?.setData('application/x-origin-action-id', actionId)
   event.dataTransfer!.effectAllowed = 'copy'
+  hideTooltip()
   emit('dragStart', actionId)
 }
 
@@ -46,9 +70,20 @@ function onPointerDown(event: PointerEvent, actionId: ActionId): void {
   touchDragActive.value = false
   touchStartX.value = event.clientX
   touchStartY.value = event.clientY
+  clearTouchTooltipTimer()
+  touchTooltipTimer.value = window.setTimeout(() => {
+    showTooltip(getActionLabel(actionId), event.clientX, event.clientY)
+  }, 350)
 }
 
-function onPointerMove(event: PointerEvent): void {
+function onPointerMove(event: PointerEvent, actionLabel: string): void {
+  if (event.pointerType !== 'touch') {
+    if (tooltipVisible.value) {
+      showTooltip(actionLabel, event.clientX, event.clientY)
+    }
+    return
+  }
+
   if (touchPointerId.value == null || touchPointerId.value !== event.pointerId || !touchActionId.value) {
     return
   }
@@ -58,6 +93,8 @@ function onPointerMove(event: PointerEvent): void {
   const movedEnough = Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8
 
   if (!touchDragActive.value && movedEnough) {
+    clearTouchTooltipTimer()
+    hideTooltip()
     touchDragActive.value = true
     emit('dragStart', touchActionId.value)
     emit('touchDragStart', {
@@ -100,6 +137,20 @@ function onPointerUp(event: PointerEvent, actionId: ActionId): void {
   touchActionId.value = null
   touchPointerId.value = null
   touchDragActive.value = false
+  clearTouchTooltipTimer()
+  hideTooltip()
+}
+
+function onPointerEnter(event: PointerEvent, actionLabel: string): void {
+  if (event.pointerType === 'touch') {
+    return
+  }
+  showTooltip(actionLabel, event.clientX, event.clientY)
+}
+
+function onPointerLeave(): void {
+  clearTouchTooltipTimer()
+  hideTooltip()
 }
 </script>
 
@@ -115,13 +166,23 @@ function onPointerUp(event: PointerEvent, actionId: ActionId): void {
       @click="onButtonClick(entry.id)"
       @dragstart="onDragStart($event, entry.id)"
       @dragend="onDragEnd"
+      @pointerenter="onPointerEnter($event, entry.label)"
+      @pointerleave="onPointerLeave"
       @pointerdown="onPointerDown($event, entry.id)"
-      @pointermove="onPointerMove"
+      @pointermove="onPointerMove($event, entry.label)"
       @pointerup="onPointerUp($event, entry.id)"
       @pointercancel="onPointerUp($event, entry.id)"
     >
-      {{ entry.shortLabel }}
+      <img class="actions-rail__icon" :src="entry.iconPath" :alt="entry.label" draggable="false">
+      <span class="actions-rail__fallback">{{ entry.shortLabel }}</span>
     </button>
+    <div
+      v-if="tooltipVisible"
+      class="actions-rail__tooltip"
+      :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
+    >
+      {{ tooltipText }}
+    </div>
   </nav>
 </template>
 
@@ -134,6 +195,7 @@ function onPointerUp(event: PointerEvent, actionId: ActionId): void {
 }
 
 .actions-rail__button {
+  position: relative;
   width: 48px;
   height: 48px;
   border: 1px solid rgba(217, 199, 155, 0.72);
@@ -145,6 +207,37 @@ function onPointerUp(event: PointerEvent, actionId: ActionId): void {
   letter-spacing: 0.04em;
   cursor: pointer;
   user-select: none;
+}
+
+.actions-rail__icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  margin: 0 auto;
+  pointer-events: none;
+}
+
+.actions-rail__fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.actions-rail__tooltip {
+  position: fixed;
+  transform: translateY(-100%);
+  padding: 4px 8px;
+  border: 1px solid rgba(217, 199, 155, 0.8);
+  border-radius: 6px;
+  background: rgba(11, 16, 22, 0.94);
+  color: #e8ecf1;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1000;
 }
 
 .actions-rail__button:active {
@@ -160,7 +253,12 @@ function onPointerUp(event: PointerEvent, actionId: ActionId): void {
     width: 42px;
     height: 42px;
     border-radius: 9px;
-    font-size: 9px;
+    font-size: 8px;
+  }
+
+  .actions-rail__icon {
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -173,8 +271,13 @@ function onPointerUp(event: PointerEvent, actionId: ActionId): void {
     width: 34px;
     height: 34px;
     border-radius: 8px;
-    font-size: 8px;
+    font-size: 7px;
     letter-spacing: 0.02em;
+  }
+
+  .actions-rail__icon {
+    width: 15px;
+    height: 15px;
   }
 }
 </style>
