@@ -37,11 +37,20 @@ export interface WheelEvent {
   screenY: number
 }
 
+export interface PinchEvent {
+  scaleFactor: number
+  centerX: number
+  centerY: number
+}
+
 type ClickHandler = (event: PointerClickEvent) => void
 type DragStartHandler = (button: number) => void
 type DragMoveHandler = (event: PointerDragEvent) => void
 type DragEndHandler = (button: number) => void
 type WheelHandler = (event: WheelEvent) => void
+type PinchStartHandler = () => void
+type PinchMoveHandler = (event: PinchEvent) => void
+type PinchEndHandler = () => void
 type PointerMoveHandler = (screenX: number, screenY: number) => void
 
 export class InputController {
@@ -52,12 +61,19 @@ export class InputController {
   private pointerDownPos: ScreenPoint | null = null
   private pointerDownButton: number = -1
   private isDragging: boolean = false
+  private isPinching: boolean = false
+  private suppressNextClick: boolean = false
+  private activeTouchPoints: Map<number, ScreenPoint> = new Map()
+  private pinchLastDistance: number = 0
 
   private onClickHandler: ClickHandler | null = null
   private onDragStartHandler: DragStartHandler | null = null
   private onDragMoveHandler: DragMoveHandler | null = null
   private onDragEndHandler: DragEndHandler | null = null
   private onWheelHandler: WheelHandler | null = null
+  private onPinchStartHandler: PinchStartHandler | null = null
+  private onPinchMoveHandler: PinchMoveHandler | null = null
+  private onPinchEndHandler: PinchEndHandler | null = null
   private onPointerMoveHandler: PointerMoveHandler | null = null
 
   private boundPointerDown: (e: globalThis.PointerEvent) => void
@@ -84,6 +100,8 @@ export class InputController {
 
   init(canvas: HTMLCanvasElement): void {
     this.canvas = canvas
+    // Route touch gestures (including two-finger pinch) to the game input pipeline.
+    this.canvas.style.touchAction = 'none'
 
     canvas.addEventListener('pointerdown', this.boundPointerDown)
     canvas.addEventListener('pointermove', this.boundPointerMove)
@@ -137,6 +155,18 @@ export class InputController {
     this.onWheelHandler = handler
   }
 
+  onPinchStart(handler: PinchStartHandler): void {
+    this.onPinchStartHandler = handler
+  }
+
+  onPinchMove(handler: PinchMoveHandler): void {
+    this.onPinchMoveHandler = handler
+  }
+
+  onPinchEnd(handler: PinchEndHandler): void {
+    this.onPinchEndHandler = handler
+  }
+
   onPointerMove(handler: PointerMoveHandler): void {
     this.onPointerMoveHandler = handler
   }
@@ -146,6 +176,18 @@ export class InputController {
   }
 
   private handlePointerDown(e: globalThis.PointerEvent): void {
+    if (e.pointerType === 'touch') {
+      e.preventDefault()
+      this.activeTouchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (this.activeTouchPoints.size === 1) {
+        this.pointerDownPos = { x: e.clientX, y: e.clientY }
+        this.pointerDownButton = 0
+        this.isDragging = false
+      }
+      this.updatePinchState()
+      return
+    }
+
     this.pointerDownPos = { x: e.clientX, y: e.clientY }
     this.pointerDownButton = e.button
     this.isDragging = false
@@ -158,6 +200,38 @@ export class InputController {
   private handlePointerMove(e: globalThis.PointerEvent): void {
     this.onPointerMoveHandler?.(e.clientX, e.clientY)
 
+    if (e.pointerType === 'touch') {
+      e.preventDefault()
+      this.activeTouchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (this.isPinching) {
+        const pinch = this.computePinchStep()
+        if (pinch) {
+          this.onPinchMoveHandler?.(pinch)
+        }
+        return
+      }
+    } else {
+      if (this.pointerDownPos === null) return
+
+      const dx = e.clientX - this.pointerDownPos.x
+      const dy = e.clientY - this.pointerDownPos.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+
+      if (!this.isDragging && distance > CLICK_DRAG_THRESHOLD_PX) {
+        this.isDragging = true
+        this.onDragStartHandler?.(this.pointerDownButton)
+      }
+
+      if (this.isDragging) {
+        this.onDragMoveHandler?.({
+          deltaX: e.movementX,
+          deltaY: e.movementY,
+          button: this.pointerDownButton,
+        })
+      }
+      return
+    }
+
     if (this.pointerDownPos === null) return
 
     const dx = e.clientX - this.pointerDownPos.x
@@ -166,19 +240,42 @@ export class InputController {
 
     if (!this.isDragging && distance > CLICK_DRAG_THRESHOLD_PX) {
       this.isDragging = true
-      this.onDragStartHandler?.(this.pointerDownButton)
-    }
-
-    if (this.isDragging) {
-      this.onDragMoveHandler?.({
-        deltaX: e.movementX,
-        deltaY: e.movementY,
-        button: this.pointerDownButton,
-      })
     }
   }
 
   private handlePointerUp(e: globalThis.PointerEvent): void {
+    if (e.pointerType === 'touch') {
+      e.preventDefault()
+      const wasPinching = this.isPinching
+      this.activeTouchPoints.delete(e.pointerId)
+      this.updatePinchState()
+      if (wasPinching) {
+        return
+      }
+
+      if (this.pointerDownPos === null) {
+        return
+      }
+
+      if (this.isDragging) {
+        this.onDragEndHandler?.(this.pointerDownButton)
+      } else if (this.suppressNextClick) {
+        this.suppressNextClick = false
+      } else {
+        this.onClickHandler?.({
+          screenX: e.clientX,
+          screenY: e.clientY,
+          button: 0,
+          modifiers: this.modifiers,
+        })
+      }
+
+      this.pointerDownPos = null
+      this.pointerDownButton = -1
+      this.isDragging = false
+      return
+    }
+
     if (this.pointerDownPos === null) return
 
     if (e.button === 1) {
@@ -187,6 +284,8 @@ export class InputController {
 
     if (this.isDragging) {
       this.onDragEndHandler?.(this.pointerDownButton)
+    } else if (this.suppressNextClick) {
+      this.suppressNextClick = false
     } else {
       this.onClickHandler?.({
         screenX: e.clientX,
@@ -249,5 +348,75 @@ export class InputController {
     this.pointerDownPos = null
     this.pointerDownButton = -1
     this.isDragging = false
+    this.isPinching = false
+    this.suppressNextClick = false
+    this.activeTouchPoints.clear()
+    this.pinchLastDistance = 0
+  }
+
+  private updatePinchState(): void {
+    if (this.activeTouchPoints.size < 2) {
+      if (this.isPinching) {
+        this.isPinching = false
+        this.pinchLastDistance = 0
+        this.onPinchEndHandler?.()
+      }
+      return
+    }
+
+    if (!this.isPinching) {
+      this.isPinching = true
+      this.suppressNextClick = true
+      this.pointerDownPos = null
+      this.pointerDownButton = -1
+      this.isDragging = false
+      this.pinchLastDistance = this.computePinchDistance()
+      this.onPinchStartHandler?.()
+    }
+  }
+
+  private computePinchStep(): PinchEvent | null {
+    if (this.activeTouchPoints.size < 2) {
+      return null
+    }
+
+    const points = Array.from(this.activeTouchPoints.values())
+    const a = points[0]
+    const b = points[1]
+    if (!a || !b) {
+      return null
+    }
+
+    const currentDistance = this.computePinchDistance()
+    if (currentDistance <= 0 || this.pinchLastDistance <= 0) {
+      this.pinchLastDistance = currentDistance
+      return null
+    }
+
+    const scaleFactor = currentDistance / this.pinchLastDistance
+    this.pinchLastDistance = currentDistance
+
+    // Ignore tiny jitter from finger micro-movements.
+    if (Math.abs(scaleFactor - 1) < 0.005) {
+      return null
+    }
+
+    return {
+      scaleFactor,
+      centerX: (a.x + b.x) / 2,
+      centerY: (a.y + b.y) / 2,
+    }
+  }
+
+  private computePinchDistance(): number {
+    const points = Array.from(this.activeTouchPoints.values())
+    const a = points[0]
+    const b = points[1]
+    if (!a || !b) {
+      return 0
+    }
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    return Math.sqrt(dx * dx + dy * dy)
   }
 }

@@ -182,6 +182,11 @@ export class Render {
       cameraController.adjustZoom(event.deltaY > 0 ? 1 : -1)
     })
 
+    this.inputController.onPinchMove((event) => {
+      // Continuous pinch zoom: distance growth zooms in, shrink zooms out.
+      cameraController.setZoom(cameraController.getZoom() * event.scaleFactor)
+    })
+
     this.inputController.onPointerMove((screenX, screenY) => {
       this.lastPointerScreen = { x: screenX, y: screenY }
     })

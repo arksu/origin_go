@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useGameStore } from '@/stores/gameStore'
 import StatBar from '@/components/ui/StatBar.vue'
+import HealthBar from '@/components/ui/HealthBar.vue'
 
 const gameStore = useGameStore()
 const playerStats = computed(() => gameStore.playerStats)
@@ -35,22 +36,14 @@ const energyLayers = [
       :layers="energyLayers"
     />
 
-    <StatBar
-      label="HHP"
-      :current="playerStats.hhp.current"
-      :max="playerStats.hhp.max"
-      frame-color="#b45555"
-      bar-back-color="#1e0808"
-      bar1-color="#d94a4a"
-    />
-
-    <StatBar
-      label="SHP"
-      :current="playerStats.shp.current"
-      :max="playerStats.shp.max"
-      frame-color="#d07e5f"
-      bar-back-color="#1f0f09"
-      bar1-color="#f29f6b"
+    <HealthBar
+      :mhp="playerStats.hhp.max"
+      :hhp="playerStats.hhp.current"
+      :shp="playerStats.shp.current"
+      frame-color="#bfa57a"
+      bar-back-color="#1a0707"
+      hhp-color="#7a1f1f"
+      shp-color="#d94a3a"
     />
 
     <div v-if="playerStats.isKnockedOut" class="ko-badge">
