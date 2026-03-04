@@ -11,7 +11,6 @@ type PlayerTransferCause uint8
 const (
 	PlayerTransferCauseAdminTeleport PlayerTransferCause = iota + 1
 	PlayerTransferCauseStairs
-	PlayerTransferCauseDeathRespawn
 )
 
 type PlayerTransferRequest struct {

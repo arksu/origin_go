@@ -827,6 +827,7 @@ func (g *Game) attachClientToWorld(
 	shard.Clients[playerEntityID] = client
 	shard.ClientsMu.Unlock()
 
+	client.ClearDeadObserverMode()
 	client.StreamEpoch.Add(1)
 	client.InWorld.Store(true)
 	g.sendPlayerEnterWorld(client, playerEntityID, shard, character)

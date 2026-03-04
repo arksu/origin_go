@@ -18,16 +18,13 @@ type testPlayerDeathHandler struct {
 type testPlayerDeathCall struct {
 	playerID types.EntityID
 	handle   types.Handle
-	mhp      float64
 }
 
-func (h *testPlayerDeathHandler) HandlePlayerDeathRespawn(_ *ecs.World, playerID types.EntityID, playerHandle types.Handle, mhp float64) bool {
+func (h *testPlayerDeathHandler) HandlePlayerPermanentDeath(_ *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
 	h.calls = append(h.calls, testPlayerDeathCall{
 		playerID: playerID,
 		handle:   playerHandle,
-		mhp:      mhp,
 	})
-	return true
 }
 
 func TestPlayerDeathSystem_KnockoutSetsStunnedState(t *testing.T) {
@@ -51,10 +48,6 @@ func TestPlayerDeathSystem_KnockoutSetsStunnedState(t *testing.T) {
 		LifeDeathFactor:                 1,
 		ShpRegenIntervalTicks:           100,
 		StarvationDamageIntervalTicks:   1000,
-		DeathRespawnDelayTicks:          3,
-		DeathRespawnHHPPercent:          0.25,
-		DeathRespawnEnergy:              1000,
-		DeathRespawnStamina:             0,
 		StarvationSoftDamagePerInterval: 10,
 	})
 	system.Update(world, 0)
@@ -97,10 +90,6 @@ func TestPlayerDeathSystem_DoesNotAutoWakeFromKnockout(t *testing.T) {
 		LifeDeathFactor:                 1,
 		ShpRegenIntervalTicks:           100,
 		StarvationDamageIntervalTicks:   1000,
-		DeathRespawnDelayTicks:          3,
-		DeathRespawnHHPPercent:          0.25,
-		DeathRespawnEnergy:              1000,
-		DeathRespawnStamina:             0,
 		StarvationSoftDamagePerInterval: 10,
 	})
 	system.Update(world, 0)
@@ -150,10 +139,6 @@ func TestPlayerDeathSystem_KnockoutClearsWhenShpRecovers(t *testing.T) {
 		LifeDeathFactor:                 1,
 		ShpRegenIntervalTicks:           100,
 		StarvationDamageIntervalTicks:   1000,
-		DeathRespawnDelayTicks:          3,
-		DeathRespawnHHPPercent:          0.25,
-		DeathRespawnEnergy:              1000,
-		DeathRespawnStamina:             0,
 		StarvationSoftDamagePerInterval: 10,
 	})
 	system.Update(world, 0)
@@ -174,7 +159,7 @@ func TestPlayerDeathSystem_KnockoutClearsWhenShpRecovers(t *testing.T) {
 	}
 }
 
-func TestPlayerDeathSystem_DeathSchedulesAndRequestsRespawn(t *testing.T) {
+func TestPlayerDeathSystem_DeathTriggersPermanentDeathOnceAndRemovesCharacter(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	playerID := types.EntityID(81003)
 	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
@@ -197,32 +182,26 @@ func TestPlayerDeathSystem_DeathSchedulesAndRequestsRespawn(t *testing.T) {
 		LifeDeathFactor:                 1,
 		ShpRegenIntervalTicks:           100,
 		StarvationDamageIntervalTicks:   1000,
-		DeathRespawnDelayTicks:          3,
-		DeathRespawnHHPPercent:          0.25,
-		DeathRespawnEnergy:              1000,
-		DeathRespawnStamina:             0,
 		StarvationSoftDamagePerInterval: 10,
 	})
 
 	*ecs.GetResource[ecs.TimeState](world) = ecs.TimeState{Tick: 10}
 	system.Update(world, 0)
-	health, _ := ecs.GetComponent[components.EntityHealth](world, playerHandle)
-	if health.RespawnDueTick != 13 {
-		t.Fatalf("expected respawn due tick=13, got %d", health.RespawnDueTick)
-	}
-
-	*ecs.GetResource[ecs.TimeState](world) = ecs.TimeState{Tick: 13}
-	system.Update(world, 0)
 	system.Update(world, 0)
 
 	if len(handler.calls) != 1 {
-		t.Fatalf("expected exactly one respawn callback, got %d", len(handler.calls))
+		t.Fatalf("expected exactly one permanent death callback, got %d", len(handler.calls))
 	}
 	if handler.calls[0].playerID != playerID {
 		t.Fatalf("unexpected player id: %d", handler.calls[0].playerID)
 	}
 	if handler.calls[0].handle != playerHandle {
 		t.Fatalf("unexpected handle: %d", handler.calls[0].handle)
+	}
+
+	characters := ecs.GetResource[ecs.CharacterEntities](world)
+	if _, exists := characters.Map[playerID]; exists {
+		t.Fatalf("expected character to be removed after permanent death callback")
 	}
 }
 
@@ -245,10 +224,6 @@ func TestPlayerDeathSystem_RegenUsesEnergyBands(t *testing.T) {
 		LifeDeathFactor:                 1,
 		ShpRegenIntervalTicks:           100,
 		StarvationDamageIntervalTicks:   1000,
-		DeathRespawnDelayTicks:          3,
-		DeathRespawnHHPPercent:          0.25,
-		DeathRespawnEnergy:              1000,
-		DeathRespawnStamina:             0,
 		StarvationSoftDamagePerInterval: 10,
 	})
 	system.Update(world, 0)
@@ -279,10 +254,6 @@ func TestPlayerDeathSystem_StarvationAppliesSoftDamage(t *testing.T) {
 		LifeDeathFactor:                 1,
 		ShpRegenIntervalTicks:           1000,
 		StarvationDamageIntervalTicks:   200,
-		DeathRespawnDelayTicks:          3,
-		DeathRespawnHHPPercent:          0.25,
-		DeathRespawnEnergy:              1000,
-		DeathRespawnStamina:             0,
 		StarvationSoftDamagePerInterval: 10,
 	})
 	system.Update(world, 0)
@@ -312,10 +283,6 @@ func TestPlayerDeathSystem_ClampsInvariantEachTick(t *testing.T) {
 		LifeDeathFactor:                 1,
 		ShpRegenIntervalTicks:           1000,
 		StarvationDamageIntervalTicks:   1000,
-		DeathRespawnDelayTicks:          3,
-		DeathRespawnHHPPercent:          0.25,
-		DeathRespawnEnergy:              1000,
-		DeathRespawnStamina:             0,
 		StarvationSoftDamagePerInterval: 10,
 	})
 	system.Update(world, 0)

@@ -84,10 +84,6 @@ type GameConfig struct {
 	LifeDeathFactor               float64       `mapstructure:"life_death_factor"`
 	ShpRegenIntervalTicks         int           `mapstructure:"shp_regen_interval_ticks"`
 	StarvationDamageIntervalTicks int           `mapstructure:"starvation_damage_interval_ticks"`
-	DeathRespawnDelayTicks        int           `mapstructure:"death_respawn_delay_ticks"`
-	DeathRespawnHHPPercent        float64       `mapstructure:"death_respawn_hhp_percent"`
-	DeathRespawnEnergy            float64       `mapstructure:"death_respawn_energy"`
-	DeathRespawnStamina           float64       `mapstructure:"death_respawn_stamina"`
 }
 
 type EntityIDConfig struct {
@@ -179,26 +175,6 @@ func Load(logger *zap.Logger) (*Config, error) {
 			zap.Int("game.starvation_damage_interval_ticks", cfg.Game.StarvationDamageIntervalTicks),
 		)
 	}
-	if cfg.Game.DeathRespawnDelayTicks <= 0 {
-		logger.Fatal("Invalid death respawn delay: game.death_respawn_delay_ticks must be > 0",
-			zap.Int("game.death_respawn_delay_ticks", cfg.Game.DeathRespawnDelayTicks),
-		)
-	}
-	if cfg.Game.DeathRespawnHHPPercent <= 0 || cfg.Game.DeathRespawnHHPPercent > 1 {
-		logger.Fatal("Invalid death respawn HHP percent: game.death_respawn_hhp_percent must be in (0, 1]",
-			zap.Float64("game.death_respawn_hhp_percent", cfg.Game.DeathRespawnHHPPercent),
-		)
-	}
-	if cfg.Game.DeathRespawnEnergy < 0 {
-		logger.Fatal("Invalid death respawn energy: game.death_respawn_energy must be >= 0",
-			zap.Float64("game.death_respawn_energy", cfg.Game.DeathRespawnEnergy),
-		)
-	}
-	if cfg.Game.DeathRespawnStamina < 0 {
-		logger.Fatal("Invalid death respawn stamina: game.death_respawn_stamina must be >= 0",
-			zap.Float64("game.death_respawn_stamina", cfg.Game.DeathRespawnStamina),
-		)
-	}
 
 	return &cfg, nil
 }
@@ -263,10 +239,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.life_death_factor", 1.0)
 	v.SetDefault("game.shp_regen_interval_ticks", 100)
 	v.SetDefault("game.starvation_damage_interval_ticks", 432000)
-	v.SetDefault("game.death_respawn_delay_ticks", 30)
-	v.SetDefault("game.death_respawn_hhp_percent", 0.25)
-	v.SetDefault("game.death_respawn_energy", 1000.0)
-	v.SetDefault("game.death_respawn_stamina", 0.0)
 
 	// EntityID defaults
 	v.SetDefault("entity_id.range_size", 1000)

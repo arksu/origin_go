@@ -280,7 +280,6 @@ func TestHandleHealthCommands(t *testing.T) {
 		h.SHP = 0
 		h.HHP = 0
 		h.KOUntilTick = 100
-		h.RespawnDueTick = 200
 	})
 
 	if handled := handler.HandleCommand(world, playerID, playerHandle, "/revive"); !handled {
@@ -290,8 +289,8 @@ func TestHandleHealthCommands(t *testing.T) {
 	if health.HHP <= 0 || health.SHP <= 0 {
 		t.Fatalf("expected positive HP after /revive, got SHP=%v HHP=%v", health.SHP, health.HHP)
 	}
-	if health.KOUntilTick != 0 || health.RespawnDueTick != 0 {
-		t.Fatalf("expected KO/respawn timers cleared after /revive, got KO=%d respawn=%d", health.KOUntilTick, health.RespawnDueTick)
+	if health.KOUntilTick != 0 {
+		t.Fatalf("expected KO marker cleared after /revive, got KO=%d", health.KOUntilTick)
 	}
 	movement, _ := ecs.GetComponent[components.Movement](world, playerHandle)
 	if movement.State == _const.StateStunned {
