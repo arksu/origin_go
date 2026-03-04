@@ -17,19 +17,15 @@ type PlayerDeathSystemConfig struct {
 	LifeDeathFactor                 float64
 	ShpRegenIntervalTicks           uint64
 	StarvationDamageIntervalTicks   uint64
-	DeathRespawnDelayTicks          uint64
-	DeathRespawnHHPPercent          float64
-	DeathRespawnEnergy              float64
-	DeathRespawnStamina             float64
 	StarvationSoftDamagePerInterval float64
 }
 
 type PlayerDeathHandler interface {
-	HandlePlayerDeathRespawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, mhp float64) bool
+	HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 }
 
 // PlayerDeathSystem executes SHP/HHP runtime transitions:
-// KO on SHP<=0 (persistent until SHP recovers), death on HHP<=0 with delayed respawn callback.
+// KO on SHP<=0 (persistent until SHP recovers), permanent death on HHP<=0.
 type PlayerDeathSystem struct {
 	ecs.BaseSystem
 	handler PlayerDeathHandler
@@ -63,7 +59,10 @@ func (s *PlayerDeathSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 
-		s.processPlayerHealth(w, entityID, handle, nowTick)
+		if s.processPlayerHealth(w, entityID, handle, nowTick) {
+			// Remove immediately to guarantee one-time permanent death processing.
+			characters.Remove(entityID)
+		}
 	}
 }
 
@@ -77,19 +76,13 @@ func normalizePlayerDeathSystemConfig(cfg PlayerDeathSystemConfig) PlayerDeathSy
 	if cfg.StarvationDamageIntervalTicks == 0 {
 		cfg.StarvationDamageIntervalTicks = 432000
 	}
-	if cfg.DeathRespawnDelayTicks == 0 {
-		cfg.DeathRespawnDelayTicks = 30
-	}
-	if cfg.DeathRespawnHHPPercent <= 0 || cfg.DeathRespawnHHPPercent > 1 {
-		cfg.DeathRespawnHHPPercent = 0.25
-	}
 	if cfg.StarvationSoftDamagePerInterval <= 0 {
 		cfg.StarvationSoftDamagePerInterval = defaultStarvationSoftDamagePerInterval
 	}
 	return cfg
 }
 
-func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.EntityID, handle types.Handle, nowTick uint64) {
+func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.EntityID, handle types.Handle, nowTick uint64) bool {
 	mhp := resolveMaxHHPForHandle(w, handle, s.cfg.LifeDeathFactor)
 	if mhp <= 0 {
 		mhp = 1
@@ -103,6 +96,7 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 
 	dirty := false
 	koStateChanged := false
+	triggerPermanentDeath := false
 
 	ecs.WithComponent(w, handle, func(health *components.EntityHealth) {
 		wasKnockedOut := health.KOUntilTick > 0
@@ -119,29 +113,9 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 				health.KOUntilTick = 0
 				dirty = true
 			}
-			if health.RespawnDueTick == 0 {
-				health.RespawnDueTick = nowTick + s.cfg.DeathRespawnDelayTicks
-				dirty = true
-			}
-			if applyStunnedStateAndClearActions(w, handle) {
-				dirty = true
-			}
-			if health.RespawnDueTick > 0 && nowTick >= health.RespawnDueTick {
-				if s.handler != nil && s.handler.HandlePlayerDeathRespawn(w, playerID, handle, mhp) {
-					health.RespawnDueTick = 0
-					dirty = true
-				} else {
-					health.RespawnDueTick = nowTick + s.cfg.DeathRespawnDelayTicks
-					dirty = true
-				}
-			}
 			koStateChanged = wasKnockedOut
+			triggerPermanentDeath = true
 			return
-		}
-
-		if health.RespawnDueTick != 0 {
-			health.RespawnDueTick = 0
-			dirty = true
 		}
 
 		if s.cfg.StarvationDamageIntervalTicks > 0 &&
@@ -181,11 +155,13 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 		}
 
 		if health.HHP <= 0 {
-			health.RespawnDueTick = nowTick + s.cfg.DeathRespawnDelayTicks
-			if applyStunnedStateAndClearActions(w, handle) {
+			if health.KOUntilTick != 0 {
+				health.KOUntilTick = 0
 				dirty = true
 			}
-			dirty = true
+			koStateChanged = wasKnockedOut
+			triggerPermanentDeath = true
+			return
 		} else if health.SHP <= 0 {
 			if health.KOUntilTick == 0 {
 				knockedOutAtTick := nowTick
@@ -217,6 +193,14 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 	if dirty || koStateChanged {
 		ecs.MarkPlayerStatsDirty(w, playerID, ecs.ResolvePlayerStatsTTLms(w))
 	}
+
+	if !triggerPermanentDeath {
+		return false
+	}
+	if s.handler != nil {
+		s.handler.HandlePlayerPermanentDeath(w, playerID, handle)
+	}
+	return true
 }
 
 func applyStunnedStateAndClearActions(w *ecs.World, handle types.Handle) bool {

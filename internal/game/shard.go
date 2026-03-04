@@ -3,7 +3,6 @@ package game
 import (
 	"context"
 	"fmt"
-	"math"
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
 	"origin/internal/ecs/components"
@@ -39,6 +38,8 @@ const (
 	ShardStateStopping
 )
 
+const permanentDeathObserverDuration = 60 * time.Second
+
 type Shard struct {
 	layer           int
 	cfg             *config.Config
@@ -59,17 +60,12 @@ type Shard struct {
 	craftingService *CraftingService
 	buildService    *BuildService
 	liftService     *LiftService
-	respawnExecutor DeathRespawnExecutor
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
 
 	state ShardState
 	mu    sync.RWMutex
-}
-
-type DeathRespawnExecutor interface {
-	RequestDeathRespawn(playerID types.EntityID, sourceLayer int) error
 }
 
 func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, eb *eventbus.EventBus, enableVisionStats bool, logger *zap.Logger) *Shard {
@@ -275,10 +271,6 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		LifeDeathFactor:                 cfg.Game.LifeDeathFactor,
 		ShpRegenIntervalTicks:           uint64(cfg.Game.ShpRegenIntervalTicks),
 		StarvationDamageIntervalTicks:   uint64(cfg.Game.StarvationDamageIntervalTicks),
-		DeathRespawnDelayTicks:          uint64(cfg.Game.DeathRespawnDelayTicks),
-		DeathRespawnHHPPercent:          cfg.Game.DeathRespawnHHPPercent,
-		DeathRespawnEnergy:              cfg.Game.DeathRespawnEnergy,
-		DeathRespawnStamina:             cfg.Game.DeathRespawnStamina,
 		StarvationSoftDamagePerInterval: 10,
 	}))
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
@@ -297,12 +289,6 @@ func (s *Shard) SetAdminTeleportExecutor(executor AdminTeleportExecutor) {
 	if s.adminHandler != nil {
 		s.adminHandler.SetTeleportExecutor(executor)
 	}
-}
-
-func (s *Shard) SetDeathRespawnExecutor(executor DeathRespawnExecutor) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.respawnExecutor = executor
 }
 
 func (s *Shard) World() *ecs.World {
@@ -601,59 +587,6 @@ func (s *Shard) onDetachedEntitiesExpired(entityIDs []types.EntityID) {
 	s.chunkManager.UnregisterEntities(entityIDs)
 }
 
-func (s *Shard) HandlePlayerDeathRespawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, mhp float64) bool {
-	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
-		return false
-	}
-	if s.respawnExecutor == nil {
-		s.logger.Warn("Death respawn executor unavailable", zap.Uint64("player_id", uint64(playerID)))
-		return false
-	}
-
-	previousHealth, hasHealth := ecs.GetComponent[components.EntityHealth](w, playerHandle)
-	if !hasHealth {
-		return false
-	}
-	previousStats, hasStats := ecs.GetComponent[components.EntityStats](w, playerHandle)
-
-	penaltyHHP := math.Ceil(mhp * s.cfg.Game.DeathRespawnHHPPercent)
-	if penaltyHHP < 1 {
-		penaltyHHP = 1
-	}
-
-	ecs.WithComponent(w, playerHandle, func(health *components.EntityHealth) {
-		health.HHP = penaltyHHP
-		health.SHP = penaltyHHP
-		health.KOUntilTick = 0
-		health.RespawnDueTick = 0
-	})
-	if hasStats {
-		ecs.WithComponent(w, playerHandle, func(stats *components.EntityStats) {
-			stats.Stamina = s.cfg.Game.DeathRespawnStamina
-			stats.Energy = s.cfg.Game.DeathRespawnEnergy
-		})
-	}
-	applyStunnedStateAndClearActions(w, playerHandle)
-
-	if err := s.respawnExecutor.RequestDeathRespawn(playerID, s.layer); err != nil {
-		ecs.WithComponent(w, playerHandle, func(health *components.EntityHealth) {
-			*health = previousHealth
-		})
-		if hasStats {
-			ecs.WithComponent(w, playerHandle, func(stats *components.EntityStats) {
-				*stats = previousStats
-			})
-		}
-		s.logger.Warn("Failed to request death respawn",
-			zap.Uint64("player_id", uint64(playerID)),
-			zap.Error(err))
-		return false
-	}
-
-	ecs.MarkPlayerStatsDirty(w, playerID, 0)
-	return true
-}
-
 func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return
@@ -667,14 +600,16 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 		s.logger.Warn("Failed to break link during permanent death", zap.Uint64("player_id", uint64(playerID)), zap.Error(err))
 	}
 
-	invalidateVisibilityForTeleport(w, s.layer, playerHandle, playerID, s.eventBus)
 	s.clearPlayerTransientStateForDeath(w, playerID, playerHandle)
 	s.convertPlayerEntityToCorpse(w, playerID, playerHandle)
 	s.persistPermanentDeath(playerID)
-	s.detachClientAfterPermanentDeath(playerID)
+	hasObserverClient := s.enterClientObserverModeAfterPermanentDeath(w, playerID)
 
 	ecs.GetResource[ecs.DetachedEntities](w).RemoveDetachedEntity(playerID)
-	s.UnregisterEntityAOI(playerID)
+	if !hasObserverClient {
+		cleanupObserverModeStateForHandle(w, playerHandle)
+		s.UnregisterEntityAOI(playerID)
+	}
 	ecs.ForgetPlayerStatsState(w, playerID)
 
 	if s.chunkManager != nil {
@@ -752,7 +687,6 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 
 	ecs.RemoveComponent[components.Movement](w, playerHandle)
 	ecs.RemoveComponent[components.CollisionResult](w, playerHandle)
-	ecs.RemoveComponent[components.Vision](w, playerHandle)
 	ecs.RemoveComponent[components.Stealth](w, playerHandle)
 	ecs.RemoveComponent[components.CharacterProfile](w, playerHandle)
 	ecs.RemoveComponent[components.EntityStats](w, playerHandle)
@@ -799,44 +733,28 @@ func (s *Shard) persistPermanentDeath(playerID types.EntityID) {
 	}
 }
 
-func (s *Shard) detachClientAfterPermanentDeath(playerID types.EntityID) {
+func (s *Shard) enterClientObserverModeAfterPermanentDeath(w *ecs.World, playerID types.EntityID) bool {
+	if w == nil {
+		return false
+	}
 	s.ClientsMu.RLock()
 	client, ok := s.Clients[playerID]
 	s.ClientsMu.RUnlock()
 	if !ok || client == nil {
-		return
+		return false
 	}
 
-	s.sendPlayerLeaveWorldToClient(client, playerID)
-	s.sendDeathDialogToClient(client, "Death", "you are death")
-
-	client.InWorld.Store(false)
-	client.StreamEpoch.Store(0)
-	client.CharacterID = 0
+	s.sendDeathDialogToClient(client, "Death", "You are dead")
 	s.PlayerInbox().RemoveClient(client.ID)
+	ensureObserverVisibilityNow(w, playerID)
 
-	s.ClientsMu.Lock()
-	delete(s.Clients, playerID)
-	s.ClientsMu.Unlock()
-}
-
-func (s *Shard) sendPlayerLeaveWorldToClient(client *network.Client, entityID types.EntityID) {
-	if client == nil {
-		return
+	baseUnixMs := time.Now().UnixMilli()
+	timeState := ecs.GetResource[ecs.TimeState](w)
+	if timeState.UnixMs > 0 {
+		baseUnixMs = timeState.UnixMs
 	}
-	message := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_PlayerLeaveWorld{
-			PlayerLeaveWorld: &netproto.S2C_PlayerLeaveWorld{
-				EntityId: uint64(entityID),
-			},
-		},
-	}
-	data, err := proto.Marshal(message)
-	if err != nil {
-		s.logger.Error("Failed to marshal player leave world", zap.Error(err))
-		return
-	}
-	client.Send(data)
+	client.SetDeadObserverDeadlineUnixMs(baseUnixMs + permanentDeathObserverDuration.Milliseconds())
+	return true
 }
 
 func (s *Shard) sendDeathDialogToClient(client *network.Client, title string, message string) {
@@ -857,6 +775,63 @@ func (s *Shard) sendDeathDialogToClient(client *network.Client, title string, me
 		return
 	}
 	client.Send(data)
+}
+
+func ensureObserverVisibilityNow(w *ecs.World, playerID types.EntityID) {
+	if w == nil || playerID == 0 {
+		return
+	}
+	handle := w.GetHandleByEntityID(playerID)
+	if handle == types.InvalidHandle || !w.Alive(handle) {
+		return
+	}
+
+	visState := ecs.GetResource[ecs.VisibilityState](w)
+	visState.Mu.Lock()
+	defer visState.Mu.Unlock()
+
+	observer := visState.VisibleByObserver[handle]
+	if observer.Known == nil {
+		observer.Known = make(map[types.Handle]types.EntityID, 32)
+	}
+	observer.NextUpdateTime = time.Time{}
+	visState.VisibleByObserver[handle] = observer
+}
+
+func cleanupObserverModeStateForHandle(w *ecs.World, observerHandle types.Handle) {
+	if w == nil || observerHandle == types.InvalidHandle || !w.Alive(observerHandle) {
+		return
+	}
+
+	ecs.RemoveComponent[components.Vision](w, observerHandle)
+
+	visState := ecs.GetResource[ecs.VisibilityState](w)
+	visState.Mu.Lock()
+	defer visState.Mu.Unlock()
+
+	observerVis, hasObserver := visState.VisibleByObserver[observerHandle]
+	if hasObserver {
+		for knownHandle := range observerVis.Known {
+			if observers := visState.ObserversByVisibleTarget[knownHandle]; observers != nil {
+				delete(observers, observerHandle)
+				if len(observers) == 0 {
+					delete(visState.ObserversByVisibleTarget, knownHandle)
+				}
+			}
+		}
+		delete(visState.VisibleByObserver, observerHandle)
+	}
+
+	// Defensive cleanup for stale reverse links.
+	for targetHandle, observers := range visState.ObserversByVisibleTarget {
+		if _, exists := observers[observerHandle]; !exists {
+			continue
+		}
+		delete(observers, observerHandle)
+		if len(observers) == 0 {
+			delete(visState.ObserversByVisibleTarget, targetHandle)
+		}
+	}
 }
 
 // SendChatMessage sends a chat message to a single entity

@@ -56,6 +56,8 @@ type Client struct {
 	Layer       int
 	StreamEpoch atomic.Uint32
 	InWorld     atomic.Bool
+
+	DeadObserverDeadlineUnixMs atomic.Int64
 }
 
 // SendError sends an error message to the client
@@ -340,6 +342,18 @@ func (c *Client) Close() {
 
 func (c *Client) Done() <-chan struct{} {
 	return c.closeCh
+}
+
+func (c *Client) SetDeadObserverDeadlineUnixMs(deadlineUnixMs int64) {
+	c.DeadObserverDeadlineUnixMs.Store(deadlineUnixMs)
+}
+
+func (c *Client) ClearDeadObserverMode() {
+	c.DeadObserverDeadlineUnixMs.Store(0)
+}
+
+func (c *Client) IsDeadObserverMode() bool {
+	return c.DeadObserverDeadlineUnixMs.Load() > 0
 }
 
 func (s *Server) GetClient(id uint64) *Client {

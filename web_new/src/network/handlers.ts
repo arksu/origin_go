@@ -90,6 +90,9 @@ export function registerMessageHandlers(): void {
 
   messageDispatcher.on('deathDialog', (msg: proto.IS2C_DeathDialog) => {
     gameStore.setDeathDialog(msg)
+    if (gameStore.playerEntityId != null) {
+      gameFacade.setObjectKnockedOutPose(gameStore.playerEntityId, true)
+    }
   })
 
   messageDispatcher.on('fx', (msg: proto.IS2C_Fx) => {

@@ -150,7 +150,6 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	g.setupNetworkHandlers()
 	for _, shard := range g.shardManager.GetShards() {
 		shard.SetAdminTeleportExecutor(g)
-		shard.SetDeathRespawnExecutor(g)
 	}
 
 	g.resetOnlinePlayers()
@@ -192,6 +191,11 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 	msg := &netproto.ClientMessage{}
 	if err := proto.Unmarshal(data, msg); err != nil {
 		g.logger.Warn("Failed to unmarshal packet", zap.Uint64("client_id", c.ID), zap.Error(err))
+		return
+	}
+
+	if c.IsDeadObserverMode() && !isPayloadAllowedWhileDeadObserver(msg.Payload) {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Character is dead")
 		return
 	}
 
@@ -780,6 +784,35 @@ func (g *Game) handleDisconnect(c *network.Client) {
 	g.logger.Info("Client disconnected", zap.Uint64("client_id", c.ID))
 
 	if c.CharacterID != 0 {
+		if c.IsDeadObserverMode() {
+			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
+				playerEntityID := c.CharacterID
+				shard.PlayerInbox().RemoveClient(c.ID)
+				shard.ClientsMu.Lock()
+				if activeClient, hasClient := shard.Clients[playerEntityID]; hasClient && activeClient == c {
+					delete(shard.Clients, playerEntityID)
+				}
+				shard.ClientsMu.Unlock()
+
+				shard.mu.Lock()
+				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
+				cleanupObserverModeStateForHandle(shard.world, playerHandle)
+				shard.mu.Unlock()
+
+				shard.UnregisterEntityAOI(playerEntityID)
+				g.logger.Debug("Dead observer session ended",
+					zap.Uint64("client_id", c.ID),
+					zap.Int64("character_id", int64(playerEntityID)),
+					zap.Int("layer", c.Layer),
+				)
+			}
+			c.ClearDeadObserverMode()
+			c.InWorld.Store(false)
+			c.StreamEpoch.Store(0)
+			c.CharacterID = 0
+			return
+		}
+
 		if g.getState() == GameStateRunning {
 			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
 				playerEntityID := c.CharacterID
@@ -898,6 +931,8 @@ func (g *Game) handleDisconnect(c *network.Client) {
 			}
 		}
 	}
+
+	c.ClearDeadObserverMode()
 }
 
 func (g *Game) resetOnlinePlayers() {
@@ -1029,14 +1064,18 @@ func (g *Game) update(ts ecs.TimeState) {
 		}
 	}
 	collectDuration := time.Since(collectStart)
+	deadObserverTimeoutStart := time.Now()
+	g.enforceDeadObserverTimeouts(ts.UnixMs)
+	deadObserverTimeoutDuration := time.Since(deadObserverTimeoutStart)
 
 	duration := time.Since(start)
 
 	// Accumulate game-level timing (not through shards to avoid duplication)
 	g.accumulateStat("ShardScheduling", schedDuration)
 	g.accumulateStat("StatsCollect", collectDuration)
+	g.accumulateStat("DeadObserverTimeouts", deadObserverTimeoutDuration)
 
-	unaccounted := duration - schedDuration - collectDuration
+	unaccounted := duration - schedDuration - collectDuration - deadObserverTimeoutDuration
 	if unaccounted < 0 {
 		unaccounted = 0
 	}
@@ -1090,6 +1129,46 @@ func (g *Game) update(ts ecs.TimeState) {
 	if duration > g.tickStats.maxDuration {
 		g.tickStats.maxDuration = duration
 	}
+}
+
+func (g *Game) enforceDeadObserverTimeouts(nowUnixMs int64) {
+	if g == nil || g.shardManager == nil {
+		return
+	}
+	if nowUnixMs <= 0 {
+		nowUnixMs = time.Now().UnixMilli()
+	}
+
+	expired := make([]*network.Client, 0, 8)
+	for _, shard := range g.shardManager.GetShards() {
+		if shard == nil {
+			continue
+		}
+		shard.ClientsMu.RLock()
+		for _, client := range shard.Clients {
+			if client == nil {
+				continue
+			}
+			deadlineUnixMs := client.DeadObserverDeadlineUnixMs.Load()
+			if isDeadObserverDeadlineExpired(deadlineUnixMs, nowUnixMs) {
+				expired = append(expired, client)
+			}
+		}
+		shard.ClientsMu.RUnlock()
+	}
+
+	for _, client := range expired {
+		client.Close()
+	}
+}
+
+func isPayloadAllowedWhileDeadObserver(payload any) bool {
+	_, isPing := payload.(*netproto.ClientMessage_Ping)
+	return isPing
+}
+
+func isDeadObserverDeadlineExpired(deadlineUnixMs int64, nowUnixMs int64) bool {
+	return deadlineUnixMs > 0 && nowUnixMs >= deadlineUnixMs
 }
 
 func (g *Game) Stop() {

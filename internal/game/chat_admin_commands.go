@@ -744,7 +744,6 @@ func (h *ChatAdminCommandHandler) handleRevive(
 		health.SHP = mhp
 		health.HHP = mhp
 		health.KOUntilTick = 0
-		health.RespawnDueTick = 0
 		return true
 	}) {
 		h.sendSystemMessage(playerID, "health component missing")

@@ -41,37 +41,6 @@ func (g *Game) RequestAdminTeleport(playerID types.EntityID, sourceLayer int, ta
 	})
 }
 
-// RequestDeathRespawn schedules a same-layer random respawn transfer.
-func (g *Game) RequestDeathRespawn(playerID types.EntityID, sourceLayer int) error {
-	if sourceLayer < 0 || sourceLayer >= g.cfg.Game.MaxLayers {
-		return fmt.Errorf("invalid layer: %d", sourceLayer)
-	}
-	if g.transferService == nil {
-		return fmt.Errorf("transfer service unavailable")
-	}
-
-	character, err := g.db.Queries().GetCharacter(g.ctx, int64(playerID))
-	if err != nil {
-		return fmt.Errorf("character not found")
-	}
-
-	candidates := g.generateSpawnCandidates(character.X, character.Y)
-	if len(candidates) == 0 {
-		return fmt.Errorf("no valid respawn positions")
-	}
-	target := candidates[len(candidates)-1]
-
-	return g.transferService.RequestTransfer(PlayerTransferRequest{
-		PlayerID:              playerID,
-		SourceLayer:           sourceLayer,
-		TargetLayer:           sourceLayer,
-		TargetX:               target.X,
-		TargetY:               target.Y,
-		IgnoreObjectCollision: true,
-		Cause:                 PlayerTransferCauseDeathRespawn,
-	})
-}
-
 func (g *Game) spawnTeleportedPlayer(
 	client *network.Client,
 	shard *Shard,
