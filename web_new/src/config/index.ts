@@ -1,13 +1,20 @@
-const defaultWsUrl =
-  import.meta.env.DEV
-    ? 'ws://localhost:8080/ws'
-    : typeof window !== 'undefined'
-    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
-    : 'ws://localhost:8080/ws'
+function resolveDefaultWsUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:8080/ws'
+  }
+
+  const isHttpsPage = window.location.protocol === 'https:'
+  const wsProtocol = import.meta.env.VITE_WS_PROTOCOL || (isHttpsPage ? 'wss' : 'ws')
+  const wsHost = import.meta.env.VITE_WS_HOST || window.location.hostname
+  const wsPort = import.meta.env.VITE_WS_PORT || (import.meta.env.DEV ? '8080' : window.location.port)
+  const hostWithPort = wsPort ? `${wsHost}:${wsPort}` : wsHost
+
+  return `${wsProtocol}://${hostWithPort}/ws`
+}
 
 export const config = {
   API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api',
-  WS_URL: import.meta.env.VITE_WS_URL || defaultWsUrl,
+  WS_URL: import.meta.env.VITE_WS_URL || resolveDefaultWsUrl(),
   DEBUG: import.meta.env.VITE_DEBUG === 'true' || import.meta.env.DEV,
   BUILD_INFO: {
     version: __APP_VERSION__,

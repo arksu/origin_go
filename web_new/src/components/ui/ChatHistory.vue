@@ -81,6 +81,7 @@ watch(visibleMessages, async () => {
 .chat-history {
   display: flex;
   flex-direction: column;
+  width: 100%;
   pointer-events: none;
   overflow-y: auto;
   overflow-x: hidden;
