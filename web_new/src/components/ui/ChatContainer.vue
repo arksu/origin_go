@@ -44,7 +44,8 @@ defineExpose({
 .chat-container {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
+  width: 100%;
   pointer-events: auto; // Re-enable for chat interaction
 }
 </style>

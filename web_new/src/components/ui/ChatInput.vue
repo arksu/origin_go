@@ -116,6 +116,7 @@ defineExpose({
   border-radius: 6px;
   background-color: #7b917eb3;
   padding: 0.1em 0.4em;
+  width: 100%;
   pointer-events: auto;
   white-space: nowrap;
   display: flex;

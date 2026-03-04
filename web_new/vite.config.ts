@@ -12,6 +12,8 @@ function getGitCommitHash(): string {
 }
 
 const buildId = process.env.BUILD_ID || new Date().toISOString().replace(/[-:TZ.]/g, '')
+const hmrClientPort = process.env.VITE_HMR_CLIENT_PORT ? Number(process.env.VITE_HMR_CLIENT_PORT) : undefined
+const hmrPort = process.env.VITE_HMR_PORT ? Number(process.env.VITE_HMR_PORT) : undefined
 
 export default defineConfig({
   plugins: [vue()],
@@ -28,6 +30,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    hmr: {
+      host: process.env.VITE_HMR_HOST,
+      protocol: process.env.VITE_HMR_PROTOCOL as 'ws' | 'wss' | undefined,
+      clientPort: Number.isFinite(hmrClientPort) ? hmrClientPort : undefined,
+      port: Number.isFinite(hmrPort) ? hmrPort : undefined,
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
