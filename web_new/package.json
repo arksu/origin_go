@@ -13,14 +13,14 @@
     "proto": "pbjs -t static-module -w es6 -o src/network/proto/packets.js ../api/proto/packets.proto && pbts -o src/network/proto/packets.d.ts src/network/proto/packets.js"
   },
   "dependencies": {
-    "@esotericsoftware/spine-pixi-v8": "^4.2.101",
-    "axios": "^1.13.4",
+    "@esotericsoftware/spine-pixi-v8": "^4.2.106",
+    "axios": "^1.13.6",
     "howler": "^2.2.4",
     "pinia": "^3.0.4",
     "pixi.js": "^8.16.0",
-    "protobufjs": "^7.5.4",
-    "vue": "^3.5.27",
-    "vue-router": "^4.6.4"
+    "protobufjs": "^8.0.0",
+    "vue": "^3.5.29",
+    "vue-router": "^5.0.3"
   },
   "devDependencies": {
     "@rushstack/eslint-patch": "^1.15.0",
