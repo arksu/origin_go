@@ -357,6 +357,7 @@ def create_actions(rig: bpy.types.Object) -> None:
             height,
         )
     finish_action(idle, 24)
+    idle.use_fake_user = True
 
     walk = bpy.data.actions.new("walk")
     rig.animation_data.action = walk
@@ -381,6 +382,7 @@ def create_actions(rig: bpy.types.Object) -> None:
             0.028 * (1 - abs(phase)),
         )
     finish_action(walk, 8)
+    walk.use_fake_user = True
     rig.animation_data.action = idle
 
 
