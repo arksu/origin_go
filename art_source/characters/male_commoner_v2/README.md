@@ -39,3 +39,17 @@ in-place standing actions rather than T-pose renders.
 
 The generator recreates the `.blend` and previews. Approved changes should be
 made in the generator so they remain reproducible.
+
+## Pixel-art bake
+
+Run the complete deterministic bake pipeline from the repository root:
+
+```sh
+tools/blender/bake_male_commoner_v2.sh --preview
+```
+
+Remove `--preview` to bake every idle and walk frame in every direction. The
+generated output is under `bake/` and intentionally ignored by Git. It has
+fixed 96x144 logical frames, nearest-neighbour 4x review copies, a shared
+palette, one-pixel silhouette outline, and `manifest.json` for future Pixi
+atlas packing.
