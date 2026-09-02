@@ -48,6 +48,7 @@ log.txt
 build/
 output/
 map_png/
+art_source/characters/*/bake/
 input/
 input_failed/
 tmp/
