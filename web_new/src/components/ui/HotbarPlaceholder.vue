@@ -199,7 +199,7 @@ function onSlotPointerLeave(): void {
         @pointerup="onSlotPointerUp"
         @pointercancel="onSlotPointerUp"
       >
-        <span class="hotbar__slot-index">{{ slotIndex + 1 }}</span>
+        <span class="hotbar__slot-index">{{ slotIndex === 9 ? '0' : slotIndex + 1 }}</span>
         <template v-if="assignments[slotIndex]">
           <img
             class="hotbar__slot-icon"
