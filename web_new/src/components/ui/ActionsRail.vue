@@ -198,9 +198,10 @@ function onPointerLeave(): void {
   position: relative;
   width: 48px;
   height: 48px;
-  border: 1px solid rgba(217, 199, 155, 0.72);
-  border-radius: 10px;
-  background: rgba(26, 35, 41, 0.84);
+  padding: 0;
+  border: 1px solid rgba(110, 113, 92, 0.8);
+  border-radius: 5px;
+  background: #202b2b;
   color: #e8ecf1;
   font-size: 10px;
   font-weight: 700;
@@ -210,10 +211,12 @@ function onPointerLeave(): void {
 }
 
 .actions-rail__icon {
-  width: 22px;
-  height: 22px;
+  position: absolute;
+  inset: 2px;
+  width: 42px;
+  height: 42px;
   display: block;
-  margin: 0 auto;
+  margin: 0;
   pointer-events: none;
 }
 
@@ -252,13 +255,13 @@ function onPointerLeave(): void {
   .actions-rail__button {
     width: 42px;
     height: 42px;
-    border-radius: 9px;
+    border-radius: 5px;
     font-size: 8px;
   }
 
   .actions-rail__icon {
-    width: 18px;
-    height: 18px;
+    width: 36px;
+    height: 36px;
   }
 }
 
@@ -270,14 +273,14 @@ function onPointerLeave(): void {
   .actions-rail__button {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
+    border-radius: 4px;
     font-size: 7px;
     letter-spacing: 0.02em;
   }
 
   .actions-rail__icon {
-    width: 15px;
-    height: 15px;
+    width: 28px;
+    height: 28px;
   }
 }
 </style>
