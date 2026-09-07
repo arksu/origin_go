@@ -225,10 +225,21 @@ function onSlotPointerLeave(): void {
 
 <style scoped lang="scss">
 .hotbar {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: auto;
+}
+
+.hotbar::before {
+  content: '';
+  position: absolute;
+  inset: -6px -10px;
+  z-index: -1;
+  background: url('/assets/img/hud/hotbar-background.svg') center / 100% 100% no-repeat;
+  pointer-events: none;
 }
 
 .hotbar__group {
@@ -244,9 +255,10 @@ function onSlotPointerLeave(): void {
   position: relative;
   width: 46px;
   height: 46px;
-  border: 1px solid rgba(212, 188, 136, 0.85);
-  border-radius: 10px;
-  background: rgba(26, 34, 40, 0.88);
+  padding: 0;
+  border: 1px solid rgba(110, 113, 92, 0.8);
+  border-radius: 5px;
+  background: #202b2b;
   color: #eef3f8;
   cursor: pointer;
   user-select: none;
@@ -259,10 +271,16 @@ function onSlotPointerLeave(): void {
 
 .hotbar__slot-index {
   position: absolute;
-  left: 5px;
-  top: 4px;
-  font-size: 10px;
-  color: #c8d3de;
+  left: 1px;
+  top: 1px;
+  z-index: 1;
+  min-width: 11px;
+  border-radius: 2px;
+  background: rgba(22, 33, 34, 0.94);
+  font: 10px/13px Arial, sans-serif;
+  text-align: center;
+  color: #efe0b5;
+  pointer-events: none;
 }
 
 .hotbar__slot-label {
@@ -273,10 +291,12 @@ function onSlotPointerLeave(): void {
 }
 
 .hotbar__slot-icon {
-  width: 20px;
-  height: 20px;
+  position: absolute;
+  inset: 2px;
+  width: 40px;
+  height: 40px;
   display: block;
-  margin: 12px auto 0;
+  margin: 0;
   pointer-events: none;
 }
 
@@ -306,7 +326,7 @@ function onSlotPointerLeave(): void {
   .hotbar__slot {
     width: 40px;
     height: 40px;
-    border-radius: 9px;
+    border-radius: 5px;
   }
 
   .hotbar__slot-index,
@@ -315,13 +335,16 @@ function onSlotPointerLeave(): void {
   }
 
   .hotbar__slot-icon {
-    width: 17px;
-    height: 17px;
-    margin-top: 11px;
+    width: 34px;
+    height: 34px;
   }
 }
 
 @media (orientation: landscape) and (pointer: coarse) {
+  .hotbar::before {
+    inset: -4px -6px;
+  }
+
   .hotbar__group {
     gap: 4px;
   }
@@ -333,12 +356,10 @@ function onSlotPointerLeave(): void {
   .hotbar__slot {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
+    border-radius: 4px;
   }
 
   .hotbar__slot-index {
-    left: 4px;
-    top: 3px;
     font-size: 8px;
   }
 
@@ -348,9 +369,8 @@ function onSlotPointerLeave(): void {
   }
 
   .hotbar__slot-icon {
-    width: 14px;
-    height: 14px;
-    margin-top: 10px;
+    width: 28px;
+    height: 28px;
   }
 }
 </style>
