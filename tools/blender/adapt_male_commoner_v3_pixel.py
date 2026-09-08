@@ -16,6 +16,10 @@ import bpy
 import bmesh
 import numpy as np
 from mathutils import Vector
+from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from commoner_concept_refinement import refine_source
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "art_source/characters/male_commoner_v3"
@@ -154,12 +158,15 @@ def character_objects():
 def adapt_character():
     body = next(obj for obj in character_objects() if obj.name.startswith("Body"))
     body.data.shape_keys.key_blocks["Concept • muscular surface sculpt"].value = CONFIG["body_sculpt_strength"]
+    refine_source(body, CONFIG["concept_refinement"])
     materials = {
-        "skin": matte("Pixel • warm skin / large shapes", (.72, .36, .15), .18),
+        "skin": matte("Pixel • warm skin / large shapes", (.62, .30, .12), .25),
         "hair": matte("Pixel • chestnut / broad locks", (.15, .060, .024), .35),
+        "hair_dark": matte("Pixel • chestnut shadow locks", (.115, .042, .015), .35),
+        "hair_light": matte("Pixel • chestnut light locks", (.19, .082, .030), .35),
         "brow": matte("Pixel • bold brows", (.044, .020, .018), .15),
         "linen": matte("Pixel • cream cloth / no weave", (.72, .60, .38), .60),
-        "edge": matte("Pixel • cloth edge", (.45, .335, .18), .55),
+        "edge": matte("Pixel • cloth edge", (.63, .48, .27), .55),
     }
     for obj in character_objects():
         if obj.name.startswith(("Nail", "Brow fibre")) or "hem stitch" in obj.name:
@@ -174,19 +181,7 @@ def adapt_character():
             obj = bpy.context.view_layer.objects.active
         if obj.type != "MESH":
             continue
-        if obj.name.startswith("Brow"):
-            # Eyebrow thickness is a design feature at 48 px, not individual fibres.
-            for vertex in obj.data.vertices:
-                vertex.co.z = 1.799 + (vertex.co.z - 1.799) * 1.25
         if obj.name.startswith("Hair"):
-            if "fitted underlayer" in obj.name:
-                editable = bmesh.new()
-                editable.from_mesh(obj.data)
-                editable.verts.ensure_lookup_table()
-                editable.faces.new([editable.verts[index] for index in reversed(range(80))])
-                bmesh.ops.recalc_face_normals(editable, faces=list(editable.faces))
-                editable.to_mesh(obj.data)
-                editable.free()
             smoothing = obj.modifiers.new("Broad lock surfaces", "SMOOTH")
             smoothing.factor = .65
             smoothing.iterations = 5
@@ -195,19 +190,20 @@ def adapt_character():
             continue
         material = materials["skin"]
         if obj.name.startswith("Hair"):
-            material = materials["hair"]
+            tone = int(obj.name[-2:]) % 5 if obj.name[-2:].isdigit() else 0
+            material = materials["hair_light" if tone == 2 else "hair_dark" if tone == 4 else "hair"]
         elif obj.name.startswith("Brow"):
             material = materials["brow"]
         elif any(coll.name.startswith("04") for coll in obj.users_collection):
             material = materials["linen"]
-            if "rolled" in obj.name:
+            if "hem" in obj.name:
                 material = materials["edge"]
         obj.data.materials.clear()
         obj.data.materials.append(material)
     bpy.context.view_layer.update()
     smoothing = body.modifiers.new("Soft cartoon anatomy", "SMOOTH")
     smoothing.factor = .65
-    smoothing.iterations = 18
+    smoothing.iterations = 12
     face = body.vertex_groups.new(name="Face • reduce micro-creases")
     for vertex in body.data.vertices:
         if vertex.co.z > 1.41:
@@ -301,6 +297,24 @@ def validate(body):
         raise ValueError("Stylized body has a degenerate face")
     editable.free()
     report["checks"] = {"finite_geometry": True, "closed_body": True, "no_degenerate_body_faces": True, "editable_shape_keys": len(body.data.shape_keys.key_blocks), "body_uv_layers": len(body.data.uv_layers)}
+    if any("side tie" in obj.name for obj in character_objects()):
+        raise ValueError("Obsolete projecting cloth ties remain in the character")
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    surface = BVHTree.FromObject(body, depsgraph)
+    band = bpy.data.objects["Linen • fitted folded waistband"].evaluated_get(depsgraph)
+    mesh = band.to_mesh()
+    clearances = []
+    for vertex in mesh.vertices:
+        nearest, normal, _, distance = surface.find_nearest(vertex.co)
+        if nearest is None:
+            raise ValueError("Cannot verify waistband clearance")
+        clearances.append((vertex.co - nearest).dot(normal))
+    band.to_mesh_clear()
+    if min(clearances) < -.001 or max(clearances) > .030:
+        raise ValueError(f"Waistband does not fit the torso: {min(clearances):.5f}..{max(clearances):.5f} m")
+    report["waistband_clearance_m"] = {"min": min(clearances), "max": max(clearances)}
+    report["checks"]["waistband_fits_torso"] = True
+    report["checks"]["no_projecting_ties"] = True
     (OUT / "validation.json").write_text(json.dumps(report, indent=2) + "\n")
 
 
@@ -415,6 +429,8 @@ def main():
             ("front", 0, 0, (0, 0, .93), 2.05),
             ("back", 180, 0, (0, 0, .93), 2.05),
             ("portrait", 18, 5, (0, -.09, 1.62), .58),
+            ("linen_side", 90, 0, (0, 0, .82), .52),
+            ("linen_front", 0, 0, (0, -.02, .81), .52),
         ]:
             place_camera("Pixel • model review", azimuth, elevation, target, scale)
             render(OUT / "previews" / f"model_{name}.png", (720, 900) if args.preview else (1200, 1500), 24 if args.preview else 64)
