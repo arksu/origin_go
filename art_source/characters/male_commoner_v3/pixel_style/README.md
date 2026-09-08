@@ -13,7 +13,11 @@ static bake proof, not a rigged or animated game character.
   Timeline frames 1–8 select the eight directions; these are turntable keys, not
   skeletal character animations.
 - `previews/model_turnaround.png`: front, three-quarter, back and face views.
+- `previews/concept_comparison.png`: the concept next to the updated model,
+  with face and repaired-wrap detail views.
 - `previews/model_bake_pose.png`: the compact static pose used for sprite proofs.
+- `previews/model_linen_front.png` and `model_linen_side.png`: close inspection of
+  the repaired wrap, including the upper panel tucked beneath the belt.
 - `previews/pixel_readability.png`: native-size and nearest-neighbour enlarged
   examples at 32×48, 48×64 and 64×96; all eight directions at 48×64.
 - `bake/pixel/`: transparent PNG frames and eight-column static turnaround atlases.
@@ -29,6 +33,14 @@ static bake proof, not a rigged or animated game character.
   length or a percentage increase in total arm volume.
 - Anatomical body remains a continuous UV-mapped mesh with editable sculpt keys.
   Non-destructive smoothing reduces small skin and facial creases.
+- The concept refinement adds a separate expression/chest shape key: a subtle
+  smile, broader jaw, stronger chest planes and more visible abdominal volumes.
+  `concept_refinement` in the style configuration holds the sculpt controls.
+- Hair is rebuilt into asymmetric swept forelocks and layered side/nape curls,
+  with a continuous fitted underlayer and three restrained chestnut tones.
+- The linen wrap is rebuilt with wider panels and flatter hems. The protruding
+  side ties are removed. Panel tops sit underneath the continuous waistband,
+  avoiding the previous floating loop and cloth/belt surface intersection.
 - Matte skin, broad chestnut hair locks and cream cloth. Photographic skin maps,
   pore bump, hair strand shaders, cloth weave, nail plates and stitch objects are
   not used by the visible character. Upstream packed images remain in the file
@@ -74,6 +86,12 @@ the fixed camera/light on all eight frames.
 `validation.json` records finite geometry, closed body edges, non-degenerate body
 faces, retained shape keys/UVs and source/config hashes. The bake checks enforce
 source dimensions, a transparent margin, binary alpha and palette membership.
+The saved source check also measures waistband clearance from the evaluated body
+and rejects any remaining obsolete side-tie geometry. Construction details are
+in `tools/blender/commoner_concept_refinement.py`.
+The shared leg-proportion deformation blends continuously across the centreline;
+both cloth panels are checked for reversed horizontal vertex order to prevent
+the former central self-intersection.
 These are technical checks; final style acceptance is visual.
 
 ## Remaining production work
