@@ -1,0 +1,15 @@
+{
+  "source_url": "https://files2.makehumancommunity.org/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip",
+  "license_url": "https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html",
+  "license": "CC0-1.0",
+  "retrieved": "2026-09-08",
+  "archive_sha256": "b542127a8e25547c7c29c19f2d1d2adb9a664c80396ecd694095dbc8028a0107",
+  "files": {
+    "skins/young_caucasian_male/young_lightskinned_male_diffuse.png": "862a26e335e958b70534cb5f0d7c47ef30ab148a56c42b3e9da969cf76f12963",
+    "skins/young_caucasian_male/young_caucasian_male.thumb": "9ea46d1b5c4230bcff248b1262eaf4f5b4b14bbffd8fc09d2c20c6058f02e12d",
+    "skins/young_caucasian_male/young_caucasian_male.mhmat": "6eda60b07ff2afbde078a2535ef3913593d84e9de92b2eb76c30f396a181fe2e",
+    "proxymeshes/male_muscle_13290/male_muscle_13290.thumb": "68b7f1aa0a82ba8769a9249b89a462dc4955dc8e68413ac4b1bc9c24489ec32b",
+    "proxymeshes/male_muscle_13290/male_muscle_13290.proxy": "d8ad7508561445b1739b375618fef0b57e08d15112104ebed01a87286043ed41",
+    "proxymeshes/male_muscle_13290/male_muscle_13290.obj": "4f384d7ec5b0a5f370e24117c8f98dfa7ee2a3b357d9275872ae4393135f2b0e"
+  }
+}

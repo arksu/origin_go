@@ -1,0 +1,96 @@
+{
+  "rotation_subject": "model",
+  "rotation_origin": [
+    0,
+    0,
+    0
+  ],
+  "camera_fixed": true,
+  "key_light_fixed": true,
+  "camera_world_matrix": [
+    [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.5000000596046448,
+      -0.8660253882408142,
+      -5.196152210235596
+    ],
+    [
+      0.0,
+      0.8660253882408142,
+      0.5000000596046448,
+      3.8499999046325684
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "key_light_world_matrix": [
+    [
+      0.800000011920929,
+      0.42844367027282715,
+      -0.42004287242889404,
+      -3.0
+    ],
+    [
+      -0.6000000238418579,
+      0.5712582468986511,
+      -0.5600571632385254,
+      -4.0
+    ],
+    [
+      3.053639829886379e-08,
+      0.7000714540481567,
+      0.7140728235244751,
+      6.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "frames": {
+    "1": {
+      "direction": "s",
+      "model_rotation_z_degrees": 0
+    },
+    "2": {
+      "direction": "se",
+      "model_rotation_z_degrees": -45
+    },
+    "3": {
+      "direction": "e",
+      "model_rotation_z_degrees": -90
+    },
+    "4": {
+      "direction": "ne",
+      "model_rotation_z_degrees": -135
+    },
+    "5": {
+      "direction": "n",
+      "model_rotation_z_degrees": -180
+    },
+    "6": {
+      "direction": "nw",
+      "model_rotation_z_degrees": -225
+    },
+    "7": {
+      "direction": "w",
+      "model_rotation_z_degrees": -270
+    },
+    "8": {
+      "direction": "sw",
+      "model_rotation_z_degrees": -315
+    }
+  }
+}

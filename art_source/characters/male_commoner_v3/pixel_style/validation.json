@@ -1,0 +1,291 @@
+{
+  "source_sha256": "baa38db5fedca5d35e90971f5e552fe34df9660da83efa43eb8fa1acc8ba3b47",
+  "config_sha256": "1dadc7ca82ab92c5f6b98345fcd62501c68f71890c959ce059135715d807db88",
+  "blender": "5.2.1 LTS",
+  "rigged": false,
+  "objects": {
+    "Anatomical control cage \u2022 UV / original vertex IDs": {
+      "vertices": 13290,
+      "faces": 13288
+    },
+    "Body \u2022 continuous anatomical surface": {
+      "vertices": 212610,
+      "faces": 212608
+    },
+    "Brow \u2022 fitted L": {
+      "vertices": 287,
+      "faces": 240
+    },
+    "Brow \u2022 fitted R": {
+      "vertices": 287,
+      "faces": 240
+    },
+    "Eyes \u2022 fitted iris and cornea": {
+      "vertices": 1064,
+      "faces": 1020
+    },
+    "Front rolled bottom hem": {
+      "vertices": 1010,
+      "faces": 1000
+    },
+    "Front rolled side hem -1": {
+      "vertices": 1010,
+      "faces": 1000
+    },
+    "Front rolled side hem 1": {
+      "vertices": 1010,
+      "faces": 1000
+    },
+    "Hair \u2022 fine swept hairline 01": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 fine swept hairline 02": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 fine swept hairline 03": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 fine swept hairline 04": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 fitted underlayer": {
+      "vertices": 2000,
+      "faces": 1921
+    },
+    "Hair \u2022 layered sweep 1.04": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.05": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.06": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.07": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.08": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.09": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.10": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.11": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.12": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.13": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.14": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.15": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.16": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.17": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.18": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.19": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 1.20": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.04": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.05": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.06": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.07": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.08": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.09": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.10": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.11": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.12": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.13": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.14": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.15": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.16": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.17": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.18": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.19": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.20": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.21": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 layered sweep 2.22": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 01": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 02": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 03": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 04": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 05": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 06": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 07": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 08": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 09": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Hair \u2022 signature forelock 10": {
+      "vertices": 620,
+      "faces": 602
+    },
+    "Linen \u2022 front draped panel": {
+      "vertices": 4745,
+      "faces": 4608
+    },
+    "Linen \u2022 gathered waistband": {
+      "vertices": 2880,
+      "faces": 2688
+    },
+    "Linen \u2022 rear draped panel": {
+      "vertices": 4745,
+      "faces": 4608
+    },
+    "Linen \u2022 side tie": {
+      "vertices": 450,
+      "faces": 440
+    },
+    "Linen \u2022 side tie.001": {
+      "vertices": 450,
+      "faces": 440
+    },
+    "Rear rolled bottom hem": {
+      "vertices": 1010,
+      "faces": 1000
+    },
+    "Rear rolled side hem -1": {
+      "vertices": 1010,
+      "faces": 1000
+    },
+    "Rear rolled side hem 1": {
+      "vertices": 1010,
+      "faces": 1000
+    },
+    "Waistband \u2022 folded edge": {
+      "vertices": 1920,
+      "faces": 1920
+    },
+    "Waistband \u2022 folded edge.001": {
+      "vertices": 1920,
+      "faces": 1920
+    }
+  },
+  "checks": {
+    "finite_geometry": true,
+    "closed_body": true,
+    "no_degenerate_body_faces": true,
+    "editable_shape_keys": 2,
+    "body_uv_layers": 1
+  }
+}

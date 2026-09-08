@@ -1,0 +1,555 @@
+{
+  "stage": "Static style proof; no character animation",
+  "rotation_subject": "model",
+  "camera_fixed": true,
+  "key_light_fixed": true,
+  "directions_in_atlas_order": [
+    "s",
+    "se",
+    "e",
+    "ne",
+    "n",
+    "nw",
+    "w",
+    "sw"
+  ],
+  "palette": [
+    "#30232e",
+    "#4b2b30",
+    "#69402e",
+    "#8d5333",
+    "#ad7041",
+    "#d29253",
+    "#ebb16e",
+    "#ffcf8f",
+    "#ffe0ac",
+    "#39282b",
+    "#543129",
+    "#774631",
+    "#a56637",
+    "#c38b4b",
+    "#655247",
+    "#8c795b",
+    "#b5a17a",
+    "#d9c696",
+    "#f2e1b4",
+    "#fff2d1",
+    "#f9e8cf",
+    "#283338"
+  ],
+  "outline": "#30232e",
+  "supersampling": 4,
+  "checks": {
+    "dimensions_match": true,
+    "binary_alpha": true,
+    "palette_locked": true,
+    "no_frame_clipping": true,
+    "all_24_frames_present": true
+  },
+  "frames": {
+    "bake/pixel/32x48/s.png": {
+      "opaque_bbox": [
+        5,
+        4,
+        27,
+        45
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/s.png": {
+      "opaque_bbox": [
+        9,
+        6,
+        39,
+        59
+      ],
+      "colors_used": 18,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/s.png": {
+      "opaque_bbox": [
+        11,
+        10,
+        53,
+        89
+      ],
+      "colors_used": 18,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    },
+    "bake/pixel/32x48/se.png": {
+      "opaque_bbox": [
+        1,
+        4,
+        24,
+        46
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/se.png": {
+      "opaque_bbox": [
+        5,
+        6,
+        34,
+        61
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/se.png": {
+      "opaque_bbox": [
+        4,
+        9,
+        46,
+        91
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    },
+    "bake/pixel/32x48/e.png": {
+      "opaque_bbox": [
+        5,
+        3,
+        20,
+        45
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/e.png": {
+      "opaque_bbox": [
+        9,
+        5,
+        29,
+        60
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/e.png": {
+      "opaque_bbox": [
+        10,
+        7,
+        38,
+        89
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    },
+    "bake/pixel/32x48/ne.png": {
+      "opaque_bbox": [
+        2,
+        2,
+        24,
+        44
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/ne.png": {
+      "opaque_bbox": [
+        5,
+        3,
+        34,
+        58
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/ne.png": {
+      "opaque_bbox": [
+        4,
+        5,
+        46,
+        87
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    },
+    "bake/pixel/32x48/n.png": {
+      "opaque_bbox": [
+        5,
+        2,
+        27,
+        42
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/n.png": {
+      "opaque_bbox": [
+        9,
+        3,
+        39,
+        56
+      ],
+      "colors_used": 18,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/n.png": {
+      "opaque_bbox": [
+        11,
+        5,
+        53,
+        84
+      ],
+      "colors_used": 18,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    },
+    "bake/pixel/32x48/nw.png": {
+      "opaque_bbox": [
+        8,
+        2,
+        30,
+        44
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/nw.png": {
+      "opaque_bbox": [
+        14,
+        4,
+        43,
+        58
+      ],
+      "colors_used": 19,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/nw.png": {
+      "opaque_bbox": [
+        18,
+        6,
+        60,
+        87
+      ],
+      "colors_used": 18,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    },
+    "bake/pixel/32x48/w.png": {
+      "opaque_bbox": [
+        12,
+        3,
+        27,
+        45
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/w.png": {
+      "opaque_bbox": [
+        19,
+        5,
+        39,
+        60
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/w.png": {
+      "opaque_bbox": [
+        26,
+        8,
+        54,
+        89
+      ],
+      "colors_used": 19,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    },
+    "bake/pixel/32x48/sw.png": {
+      "opaque_bbox": [
+        8,
+        4,
+        31,
+        46
+      ],
+      "colors_used": 15,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        32,
+        48
+      ],
+      "ground_anchor": [
+        16.0,
+        40.98742138192553
+      ]
+    },
+    "bake/pixel/48x64/sw.png": {
+      "opaque_bbox": [
+        14,
+        6,
+        43,
+        61
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        48,
+        64
+      ],
+      "ground_anchor": [
+        24.0,
+        54.6498951759007
+      ]
+    },
+    "bake/pixel/64x96/sw.png": {
+      "opaque_bbox": [
+        18,
+        9,
+        60,
+        91
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "size": [
+        64,
+        96
+      ],
+      "ground_anchor": [
+        32.0,
+        81.97484276385106
+      ]
+    }
+  }
+}
