@@ -103,6 +103,25 @@ def model_sheet():
     sheet.save(OUT / "previews/model_turnaround.png")
 
 
+def concept_sheet():
+    sheet = Image.new("RGB", (1520, 940), BACKGROUND)
+    draw = ImageDraw.Draw(sheet)
+    draw.text((30, 20), "V3 / СВЕРКА С КОНЦЕПТОМ И ПРОВЕРКА ПОВЯЗКИ", font=font(28), fill="#f7dfb8")
+    reference = Image.open(OUT.parent / "reference/male_commoner_concept.png").convert("RGB")
+    panels = [
+        (reference.crop((122, 120, 425, 774)), "КОНЦЕПТ · ФРАГМЕНТ", 220, 100, (390, 740)),
+        (Image.open(OUT / "previews/model_front.png").convert("RGB"), "ОБНОВЛЁННАЯ МОДЕЛЬ", 730, 100, (600, 740)),
+        (Image.open(OUT / "previews/model_portrait.png").convert("RGB"), "ЛИЦО", 1290, 100, (300, 375)),
+        (Image.open(OUT / "previews/model_linen_side.png").convert("RGB"), "ПОВЯЗКА СБОКУ", 1290, 550, (300, 375)),
+    ]
+    for source, label, center, top, bounds in panels:
+        source.thumbnail(bounds, Image.Resampling.LANCZOS)
+        sheet.paste(source, (center - source.width // 2, top))
+        draw.text((center - source.width // 2, top - 30), label, font=font(18), fill="#a2b6b7")
+    draw.text((30, 890), "Мультяшные пропорции сохранены для маленького игрового кадра.", font=font(20), fill="#a2b6b7")
+    sheet.save(OUT / "previews/concept_comparison.png")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--allow-partial", action="store_true")
@@ -133,6 +152,7 @@ def main():
     (OUT / "bake/manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     review_sheet(frames)
     model_sheet()
+    concept_sheet()
     print(f"Baked and verified {len(reports)} frames; review: {OUT / 'previews/pixel_readability.png'}")
 
 

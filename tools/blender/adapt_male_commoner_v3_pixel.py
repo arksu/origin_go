@@ -76,7 +76,9 @@ def stylize(coordinates):
 
     # Broader lower legs and less pinched wrists preserve the extremities at 48 px.
     lower_leg = (1 - smoothstep(.85, 1.04, height)) * smoothstep(.10, .28, height)
-    leg_center = np.sign(horizontal) * np.interp(height, [.1, .55, 1.03], [.212, .160, .118])
+    # The same deformation also fits clothing: a hard sign at the centreline folds
+    # the cloth across itself, so the left/right leg influence must blend continuously.
+    leg_center = np.tanh(horizontal / .07) * np.interp(height, [.1, .55, 1.03], [.212, .160, .118])
     result[:, 0] += (horizontal - leg_center) * .14 * lower_leg
     result[:, 1] += depth * .07 * lower_leg
     torso = smoothstep(.99, 1.26, height) * (1 - smoothstep(1.53, 1.64, height))
@@ -288,6 +290,10 @@ def validate(body):
         obj.data.vertices.foreach_get("co", coordinates)
         if not np.isfinite(coordinates).all():
             raise ValueError(f"Nonfinite geometry: {obj.name}")
+        if "broad concept panel" in obj.name:
+            rows = coordinates.reshape((obj["grid_rows"], obj["grid_columns"], 3))
+            if np.min(np.diff(rows[:, :, 0], axis=1)) <= 0:
+                raise ValueError(f"Cloth crosses itself at its centreline: {obj.name}")
         report["objects"][obj.name] = {"vertices": len(obj.data.vertices), "faces": len(obj.data.polygons)}
     editable = bmesh.new()
     editable.from_mesh(body.data)
@@ -315,6 +321,7 @@ def validate(body):
     report["waistband_clearance_m"] = {"min": min(clearances), "max": max(clearances)}
     report["checks"]["waistband_fits_torso"] = True
     report["checks"]["no_projecting_ties"] = True
+    report["checks"]["cloth_rows_do_not_fold_across_centreline"] = True
     (OUT / "validation.json").write_text(json.dumps(report, indent=2) + "\n")
 
 

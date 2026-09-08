@@ -54,7 +54,7 @@
         27,
         45
       ],
-      "colors_used": 17,
+      "colors_used": 15,
       "alpha_values": [
         0,
         255
@@ -75,7 +75,7 @@
         39,
         59
       ],
-      "colors_used": 18,
+      "colors_used": 17,
       "alpha_values": [
         0,
         255
@@ -92,7 +92,7 @@
     "bake/pixel/64x96/s.png": {
       "opaque_bbox": [
         11,
-        10,
+        9,
         53,
         89
       ],
@@ -117,7 +117,7 @@
         24,
         46
       ],
-      "colors_used": 17,
+      "colors_used": 16,
       "alpha_values": [
         0,
         255
@@ -138,7 +138,7 @@
         34,
         61
       ],
-      "colors_used": 17,
+      "colors_used": 19,
       "alpha_values": [
         0,
         255
@@ -156,10 +156,10 @@
       "opaque_bbox": [
         4,
         9,
-        46,
+        47,
         91
       ],
-      "colors_used": 17,
+      "colors_used": 19,
       "alpha_values": [
         0,
         255
@@ -218,11 +218,11 @@
     "bake/pixel/64x96/e.png": {
       "opaque_bbox": [
         10,
-        7,
-        38,
+        8,
+        40,
         89
       ],
-      "colors_used": 17,
+      "colors_used": 16,
       "alpha_values": [
         0,
         255
@@ -239,7 +239,7 @@
     "bake/pixel/32x48/ne.png": {
       "opaque_bbox": [
         2,
-        2,
+        3,
         24,
         44
       ],
@@ -260,7 +260,7 @@
     "bake/pixel/48x64/ne.png": {
       "opaque_bbox": [
         5,
-        3,
+        4,
         34,
         58
       ],
@@ -281,8 +281,8 @@
     "bake/pixel/64x96/ne.png": {
       "opaque_bbox": [
         4,
-        5,
-        46,
+        7,
+        47,
         87
       ],
       "colors_used": 16,
@@ -302,11 +302,11 @@
     "bake/pixel/32x48/n.png": {
       "opaque_bbox": [
         5,
-        2,
+        3,
         27,
         42
       ],
-      "colors_used": 17,
+      "colors_used": 18,
       "alpha_values": [
         0,
         255
@@ -323,7 +323,7 @@
     "bake/pixel/48x64/n.png": {
       "opaque_bbox": [
         9,
-        3,
+        4,
         39,
         56
       ],
@@ -344,7 +344,7 @@
     "bake/pixel/64x96/n.png": {
       "opaque_bbox": [
         11,
-        5,
+        6,
         53,
         84
       ],
@@ -365,11 +365,11 @@
     "bake/pixel/32x48/nw.png": {
       "opaque_bbox": [
         8,
-        2,
+        3,
         30,
         44
       ],
-      "colors_used": 17,
+      "colors_used": 19,
       "alpha_values": [
         0,
         255
@@ -390,7 +390,7 @@
         43,
         58
       ],
-      "colors_used": 19,
+      "colors_used": 18,
       "alpha_values": [
         0,
         255
@@ -406,12 +406,12 @@
     },
     "bake/pixel/64x96/nw.png": {
       "opaque_bbox": [
-        18,
+        17,
         6,
         60,
         87
       ],
-      "colors_used": 18,
+      "colors_used": 19,
       "alpha_values": [
         0,
         255
@@ -432,7 +432,7 @@
         27,
         45
       ],
-      "colors_used": 17,
+      "colors_used": 15,
       "alpha_values": [
         0,
         255
@@ -453,7 +453,7 @@
         39,
         60
       ],
-      "colors_used": 17,
+      "colors_used": 18,
       "alpha_values": [
         0,
         255
@@ -469,8 +469,8 @@
     },
     "bake/pixel/64x96/w.png": {
       "opaque_bbox": [
-        26,
-        8,
+        24,
+        7,
         54,
         89
       ],
@@ -512,7 +512,7 @@
     "bake/pixel/48x64/sw.png": {
       "opaque_bbox": [
         14,
-        6,
+        5,
         43,
         61
       ],
@@ -532,12 +532,12 @@
     },
     "bake/pixel/64x96/sw.png": {
       "opaque_bbox": [
-        18,
+        17,
         9,
         60,
         91
       ],
-      "colors_used": 17,
+      "colors_used": 16,
       "alpha_values": [
         0,
         255

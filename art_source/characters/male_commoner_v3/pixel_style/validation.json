@@ -224,10 +224,11 @@
     "editable_shape_keys": 3,
     "body_uv_layers": 1,
     "waistband_fits_torso": true,
-    "no_projecting_ties": true
+    "no_projecting_ties": true,
+    "cloth_rows_do_not_fold_across_centreline": true
   },
   "waistband_clearance_m": {
-    "min": 0.0038585427246289328,
+    "min": 0.0038593296631006524,
     "max": 0.01480021899624262
   }
 }

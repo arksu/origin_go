@@ -27,7 +27,7 @@ def refine_expression(body, controls):
     delta[:, 2] += controls["smile_lift"] * smile
     delta[:, 0] += horizontal * .08 * np.exp(-((height - 1.704) / .027) ** 2 - (horizontal / .062) ** 4) * front
     jaw = np.exp(-((height - 1.671) / .037) ** 2 - ((np.abs(horizontal) - .058) / .042) ** 2)
-    delta[:, 0] += np.sign(horizontal) * controls["jaw_width"] * jaw
+    delta[:, 0] += np.tanh(horizontal / .025) * controls["jaw_width"] * jaw
     chin = np.exp(-(horizontal / .042) ** 4 - ((height - 1.666) / .028) ** 2) * front
     delta[:, 1] -= .004 * chin
     lower_lids = np.exp(-((np.abs(horizontal) - .037) / .028) ** 4 - ((height - 1.752) / .011) ** 2) * front
@@ -49,18 +49,28 @@ def refine_expression(body, controls):
 def hair_lock(name, controls, width, depth, collection):
     vertices, faces, uv_faces = [], [], []
     rows, sides = 32, 16
+    skull_center = Vector((0, -.044, 1.796))
+    def lock_center(amount):
+        point = bezier(controls, amount)
+        relative = point - skull_center
+        ellipsoid_radius = math.sqrt((relative.x / .102) ** 2 + (relative.y / .121) ** 2 + (relative.z / .147) ** 2)
+        contact = skull_center + relative / ellipsoid_radius
+        clearance = .001 + .014 * math.sin(math.pi * amount) + .024 * amount ** 5
+        if (point - contact).dot(relative.normalized()) > clearance:
+            point = contact + relative.normalized() * clearance
+        return point
     for row in range(rows + 1):
         amount = row / rows
-        center = bezier(controls, amount)
-        tangent = (bezier(controls, min(1, amount + .002)) - bezier(controls, max(0, amount - .002))).normalized()
+        center = lock_center(amount)
+        tangent = (lock_center(min(1, amount + .002)) - lock_center(max(0, amount - .002))).normalized()
         outward = (center - Vector((0, -.044, 1.79))).normalized()
         lateral = tangent.cross(outward).normalized()
         normal = lateral.cross(tangent).normalized()
-        profile = (.56 + .75 * math.sin(math.pi * amount)) * (1 - amount) ** .42 + .012
+        profile = (.40 + .78 * math.sin(math.pi * amount)) * (1 - amount) ** .52 + .008
         for side in range(sides):
             angle = TAU * side / sides
             # One broad crest gives each curl a readable light plane without strand noise.
-            crest = 1 + .12 * math.cos(angle * 2)
+            crest = 1 + .16 * math.cos(angle * 4)
             point = center + lateral * (math.cos(angle) * width * profile) + normal * (math.sin(angle) * depth * profile * crest)
             vertices.append(tuple(point))
             if row:
@@ -106,15 +116,15 @@ def create_tousled_hair(collection):
             theta = .82 + (TAU - 1.64) * index / (count - 1)
             theta += randomizer.uniform(-.045, .045)
             phi_start = .33 + .57 * tier + randomizer.uniform(-.08, .08)
-            phi_end = 1.31 + .58 * tier - .19 * math.cos(theta) + randomizer.uniform(-.08, .08)
-            sweep = .18 * math.sin(theta * 2) + randomizer.uniform(-.09, .09)
+            phi_end = 1.31 + .58 * tier - .19 * math.cos(theta) + randomizer.uniform(-.17, .17)
+            sweep = .24 * math.sin(theta * 2) + randomizer.uniform(-.13, .13)
             controls = [scalp(theta - .13, phi_start, -.008), scalp(theta - .13, phi_start + .32, .030), scalp(theta + sweep, phi_end - .11, .029), scalp(theta + sweep + .13, phi_end - .02, .036)]
             hair_lock(f"Hair • loose {'crown' if tier == 0 else 'nape'} curl {index:02}", controls, .023 + randomizer.uniform(-.003, .004), .011 + randomizer.uniform(-.001, .002), collection)
 
     forelocks = [
-        ([(-.012,-.090,1.912),(-.015,-.155,1.985),(.050,-.150,2.006),(.055,-.105,1.968)], .030, .018),
-        ([(-.034,-.074,1.901),(-.072,-.137,1.978),(-.092,-.122,1.999),(-.110,-.074,1.949)], .027, .016),
-        ([(.011,-.049,1.916),(.038,-.077,2.009),(.106,-.077,1.987),(.122,-.022,1.943)], .027, .016),
+        ([(-.025,-.110,1.890),(-.002,-.145,1.965),(.045,-.090,1.980),(.008,-.032,1.965)], .023, .014),
+        ([(-.013,-.090,1.915),(-.035,-.155,1.967),(-.105,-.152,1.950),(-.123,-.090,1.911)], .024, .014),
+        ([(.011,-.049,1.916),(.038,-.077,1.980),(.106,-.077,1.965),(.122,-.022,1.922)], .023, .014),
         ([(.037,-.033,1.904),(.080,-.046,1.975),(.131,-.026,1.947),(.146,.004,1.896)], .024, .014),
         ([(-.035,-.123,1.892),(-.078,-.195,1.928),(-.122,-.174,1.905),(-.121,-.114,1.861)], .026, .014),
         ([(-.019,-.127,1.903),(-.057,-.180,1.934),(-.081,-.195,1.888),(-.052,-.168,1.818)], .025, .013),
@@ -154,6 +164,18 @@ def create_concept_linen(body, collection):
     for obj in list(collection.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
     evaluated = body.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    root_profiles = {}
+    root_samples = np.linspace(-.155, .155, 33)
+    for back in (False, True):
+        sign = 1 if back else -1
+        depths = []
+        for horizontal in root_samples:
+            hit, point, _, _ = evaluated.ray_cast(Vector((horizontal, sign, 1.075)), Vector((0, -sign, 0)))
+            if not hit:
+                raise ValueError("Cloth panel root missed the waist")
+            depths.append(point.y)
+        # Cloth follows the broad waist contour, not the body's central skin crease.
+        root_profiles[back] = np.polyfit(root_samples, depths, 4)
 
     def waist(theta, amount):
         height = 1.128 - .072 * amount + .014 * math.sin(theta) ** 2
@@ -167,19 +189,27 @@ def create_concept_linen(body, collection):
     def panel(horizontal, amount, back):
         sign = 1 if back else -1
         width = .155 * (1 - .13 * amount)
-        height = 1.104 - amount * (.274 + .015 * (1 - horizontal * horizontal))
+        height = 1.077 - amount * (.247 + .015 * (1 - horizontal * horizontal))
         position_x = width * horizontal
         ray = Vector((0, -sign, 0))
-        hit, root, _, _ = evaluated.ray_cast(Vector((horizontal * .155, sign, 1.108)), ray)
-        if not hit:
-            raise ValueError("Cloth panel root missed the waist")
-        fold = .012 * math.cos(math.pi * (abs(horizontal) * 1.5 + amount * 1.6)) * amount ** .6
-        fold += .005 * math.sin(horizontal * math.pi * 3 + amount) * amount
+        root_depth = float(np.polyval(root_profiles[back], horizontal * .155))
+        smooth_center = math.sqrt(horizontal * horizontal + .035) - math.sqrt(.035)
+        fold = .018 * math.cos(math.pi * (smooth_center * 1.5 + amount * 1.6)) * amount ** .6
+        fold += .003 * math.sin(horizontal * math.pi * 3 + amount) * amount
         fold += .003 * math.sin(horizontal * math.pi * 5) * math.exp(-amount * 9)
-        position_y = root.y + sign * (.009 + .033 * amount + fold)
+        position_y = root_depth + sign * (.009 + .033 * amount + fold)
         hit, contact, _, _ = evaluated.ray_cast(Vector((position_x, sign, height)), ray)
         if hit:
-            position_y = sign * max(sign * position_y, sign * contact.y + .008)
+            desired_depth = sign * position_y
+            skin_clearance = sign * contact.y + .008
+            # A hard max makes a sharp seam where the drape meets the body envelope.
+            # Smooth max stays outside both surfaces and keeps the fabric tangent continuous.
+            position_y = sign * (max(desired_depth, skin_clearance) + .006 * math.log1p(math.exp(-abs(desired_depth - skin_clearance) / .006)))
+            # The upper edge is tucked under the belt; it must not share its surface.
+            transition = min(1, max(0, (amount - .07) / .09))
+            transition = transition * transition * (3 - 2 * transition)
+            tucked = contact.y + sign * .0025
+            position_y = tucked * (1 - transition) + position_y * transition
         return Vector((position_x, position_y, height))
 
     def surface(name, columns, rows, point, closed=False):
@@ -195,6 +225,8 @@ def create_concept_linen(body, collection):
                     faces.append((first, second, second + row_width, first + row_width))
                     uv.append(((previous / columns, (row - 1) / rows), (column / columns, (row - 1) / rows), (column / columns, row / rows), (previous / columns, row / rows)))
         obj = mesh_object(name, vertices, faces, collection, uv_faces=uv)
+        obj["grid_columns"] = row_width
+        obj["grid_rows"] = rows + 1
         subdivide(obj, 1)
         thickness = obj.modifiers.new("Linen edge thickness", "SOLIDIFY")
         thickness.thickness = .002
