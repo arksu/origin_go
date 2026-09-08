@@ -1,0 +1,36 @@
+{
+  "source": "male_commoner_walk.blend",
+  "pixel_sample_factor": 2,
+  "directions": [
+    "s",
+    "se",
+    "e",
+    "ne",
+    "n",
+    "nw",
+    "w",
+    "sw"
+  ],
+  "timeline_samples": [
+    0,
+    6,
+    8,
+    12,
+    16,
+    18,
+    24,
+    30,
+    32,
+    36,
+    40,
+    42
+  ],
+  "materials": {
+    "1": "skin",
+    "2": "hair",
+    "3": "linen",
+    "4": "eyes",
+    "5": "brows"
+  },
+  "camera_and_light_fixed": true
+}

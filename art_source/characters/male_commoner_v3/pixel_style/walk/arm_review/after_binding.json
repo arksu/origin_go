@@ -1,0 +1,34 @@
+[
+  {
+    "side": "l",
+    "region": "upper",
+    "vertices": 1068,
+    "primary_bone": "upper_arm.l",
+    "primary_mean_weight": 0.9367677891968788,
+    "head_mean_weight": 0.0
+  },
+  {
+    "side": "l",
+    "region": "forearm",
+    "vertices": 1946,
+    "primary_bone": "forearm.l",
+    "primary_mean_weight": 0.9733566286507516,
+    "head_mean_weight": 0.0
+  },
+  {
+    "side": "r",
+    "region": "upper",
+    "vertices": 1068,
+    "primary_bone": "upper_arm.r",
+    "primary_mean_weight": 0.9367677891968788,
+    "head_mean_weight": 0.0
+  },
+  {
+    "side": "r",
+    "region": "forearm",
+    "vertices": 1946,
+    "primary_bone": "forearm.r",
+    "primary_mean_weight": 0.9733566286507516,
+    "head_mean_weight": 0.0
+  }
+]
