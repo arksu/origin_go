@@ -1,0 +1,21 @@
+{
+  "cycle_seconds": 0.96,
+  "timeline_fps": 50,
+  "timeline_frames": 48,
+  "frame_size": [
+    80,
+    96
+  ],
+  "sample_counts": [
+    6,
+    8
+  ],
+  "stance_fraction": 0.6,
+  "half_step_m": 0.21,
+  "foot_lift_m": 0.095,
+  "pelvis_lowering_m": 0.045,
+  "pelvis_bob_m": 0.014,
+  "camera_scale": 1.94,
+  "camera_target_height": 0.83,
+  "supersampling": 4
+}

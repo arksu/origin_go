@@ -1,0 +1,22 @@
+{
+  "name": "Origin warm ink",
+  "outer_ink": "#19180f",
+  "inner_ink": "#392b1c",
+  "skin_shadow_rim": "#533425",
+  "contrast": 1.08,
+  "depth_edge_m": 0.065,
+  "hair_depth_edge_m": 0.075,
+  "minimum_line_cluster": 3,
+  "ramps": {
+    "skin": ["#392b1c", "#533425", "#7c4b31", "#a6693f", "#ca8d51", "#e6b06a", "#f4cc86", "#fbe0a5"],
+    "hair": ["#19180f", "#2d2517", "#4d351e", "#76512d", "#966637", "#b1844b"],
+    "linen": ["#392b1c", "#544930", "#81704d", "#a9996d", "#d3c08e", "#f0ddae"],
+    "eyes": ["#19180f", "#533425", "#f5e4c5", "#242721"]
+  },
+  "reference_assets": [
+    "web_new/public/assets/game/obj/barrel/barrel.png",
+    "web_new/public/assets/game/obj/trees/log/log_y.png",
+    "web_new/public/assets/game/items/leather_boots.png",
+    "web_new/public/assets/game/items/stone_axe.png"
+  ]
+}
