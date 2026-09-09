@@ -32,6 +32,12 @@ interface AnimatedFrameLayer {
   currentFrame: number
 }
 
+interface DirectionalSpriteLayer {
+  layer: LayerDef
+  sprite: Sprite
+  textures: Texture[][]
+}
+
 export interface ObjectViewOptions {
   entityId: number
   typeId: number
@@ -71,9 +77,11 @@ export class ObjectView {
   private spineAnimations: Array<Spine | undefined> = []
   private layerIndexMap: Map<number, number> = new Map() // layerIdx -> spineAnimations index
   private animatedFrameLayers: AnimatedFrameLayer[] = []
+  private directionalSpriteLayers: DirectionalSpriteLayer[] = []
   private hasFrameAnimation = false
   private animationStartMs = 0
-  private lastDir = 4 // default south
+  private walkStartMs: number | null = null
+  private lastDir = 3 // south in MoveController direction order
   private isDestroyed = false
   private isDroppedItem = false
   private hasSpineLayers = false
@@ -184,12 +192,47 @@ export class ObjectView {
         this.addFrameLayer(layer)
         continue
       }
+      if (layer.spriteSheet) {
+        this.addDirectionalSpriteLayer(layer)
+        continue
+      }
       if (layer.spine) {
         const currentSpineIdx = spineIdx++
         this.layerIndexMap.set(i, currentSpineIdx)
         this.addSpineLayer(layer, currentSpineIdx)
       }
     }
+  }
+
+  private addDirectionalSpriteLayer(layer: LayerDef): void {
+    if (!layer.spriteSheet) return
+    // ObjectManager registers animated objects before asynchronous loading completes.
+    this.hasFrameAnimation = true
+    ResourceLoader.loadDirectionalSpriteSheet(layer.spriteSheet).then((textures) => {
+      if (this.isDestroyed || !this.resDef) return
+      const sprite = new Sprite()
+      const position = ResourceLoader.resolveLayerPosition(layer, this.resDef)
+      sprite.position.set(position.x, position.y)
+      sprite.zIndex = ResourceLoader.resolveLayerZ(layer)
+      sprite.roundPixels = true
+      if (layer.shadow) {
+        this.shadowSprites.push(sprite)
+        sprite.visible = !this.shadowSuppressed
+      }
+      if (layer.interactive) {
+        this.setInteractive(sprite)
+        this.registerInteractiveSprite(sprite)
+      }
+      this.sprites.push(sprite)
+      this.container.addChild(sprite)
+      const frameLayer = { layer, sprite, textures }
+      this.directionalSpriteLayers.push(frameLayer)
+      // Movement may have started, turned or stopped while the atlas was loading.
+      this.updateDirectionalSpriteLayer(frameLayer, performance.now())
+    }).catch((error: unknown) => {
+      console.error('[ObjectView] Failed to load directional animation', error)
+      if (!this.isDestroyed && !this.placeholder) this.createPlaceholder()
+    })
   }
 
   private addSpriteLayer(layer: LayerDef): void {
@@ -303,14 +346,33 @@ export class ObjectView {
   }
 
   updateAnimation(nowMs: number): void {
-    if (!this.hasFrameAnimation || this.animatedFrameLayers.length === 0 || this.isDestroyed || !this.resDef) {
+    if (!this.hasFrameAnimation || this.isDestroyed || !this.resDef) {
       return
     }
 
+    for (const frameLayer of this.directionalSpriteLayers) {
+      this.updateDirectionalSpriteLayer(frameLayer, nowMs)
+    }
+    if (this.animatedFrameLayers.length === 0) return
     const sharedSteps = new Map<string, number>()
     for (const frameLayer of this.animatedFrameLayers) {
       const nextFrame = this.computeFrameIndex(frameLayer, nowMs, sharedSteps)
       this.updateAnimatedFrameLayer(frameLayer, nextFrame)
+    }
+  }
+
+  private updateDirectionalSpriteLayer(frameLayer: DirectionalSpriteLayer, nowMs: number): void {
+    const def = frameLayer.layer.spriteSheet!
+    const frame = this.walkStartMs == null
+      ? def.idleFrame
+      : Math.floor(Math.max(0, nowMs - this.walkStartMs) / def.frameDurationMs) % def.frameCount
+    const texture = frameLayer.textures[this.lastDir]?.[frame]
+    if (!texture || frameLayer.sprite.texture === texture) return
+
+    frameLayer.sprite.texture = texture
+    if (frameLayer.layer.interactive) {
+      this.hoverBorderDirty = true
+      if (this.isHovered && this.hoverGraphics) this.rebuildHoverBorder()
     }
   }
 
@@ -375,9 +437,13 @@ export class ObjectView {
   /**
    * Called when the entity is moving in a direction (0-7).
    */
-  onMoved(dir: number): void {
+  onMoved(dir: number, nowMs = performance.now()): void {
+    if (this.isDestroyed || this.knockedOutPose || this.isDroppedItem || !this.resDef) return
+    if (!Number.isInteger(dir) || dir < 0 || dir > 7) return
     this.lastDir = dir
-    if (this.isDroppedItem || !this.resDef) return
+    // Repeated movement updates and turns must not restart the stride.
+    this.walkStartMs ??= nowMs
+    this.updateAnimation(nowMs)
 
     this.resDef.layers.forEach((layer, layerIdx) => {
       if (!layer.spine?.dirs) return
@@ -400,7 +466,9 @@ export class ObjectView {
    * Called when the entity stops moving.
    */
   onStopped(): void {
-    if (this.isDroppedItem || !this.resDef) return
+    if (this.isDestroyed || this.isDroppedItem || !this.resDef) return
+    this.walkStartMs = null
+    this.updateAnimation(performance.now())
 
     this.resDef.layers.forEach((layer, layerIdx) => {
       if (!layer.spine?.dirs) return
@@ -450,7 +518,30 @@ export class ObjectView {
     const halfWidth = Math.max(this.size.x, this.size.y) * 2 + 64
     const halfHeight = Math.max(this.size.x, this.size.y) + 128
 
-    return fromMinMax(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy)
+    let minX = cx - halfWidth
+    let minY = cy - halfHeight
+    let maxX = cx + halfWidth
+    let maxY = cy
+    // Baked feet extend below the ground anchor; include the entire frame even
+    // before it loads, and also when the existing KO pose rotates the container.
+    for (const layer of this.resDef?.layers ?? []) {
+      if (!layer.spriteSheet || !this.resDef) continue
+      const position = ResourceLoader.resolveLayerPosition(layer, this.resDef)
+      const [width, height] = layer.spriteSheet.frameSize
+      const cosine = Math.cos(this.container.rotation)
+      const sine = Math.sin(this.container.rotation)
+      for (const localX of [position.x, position.x + width]) {
+        for (const localY of [position.y, position.y + height]) {
+          const rotatedX = cx + localX * cosine - localY * sine
+          const rotatedY = cy + localX * sine + localY * cosine
+          minX = Math.min(minX, rotatedX)
+          minY = Math.min(minY, rotatedY)
+          maxX = Math.max(maxX, rotatedX)
+          maxY = Math.max(maxY, rotatedY)
+        }
+      }
+    }
+    return fromMinMax(minX, minY, maxX, maxY)
   }
 
   getPosition(): { x: number; y: number } {
@@ -928,6 +1019,7 @@ export class ObjectView {
       this.placeholder.destroy()
     }
     this.animatedFrameLayers = []
+    this.directionalSpriteLayers = []
     this.container.destroy({ children: true })
   }
 }
