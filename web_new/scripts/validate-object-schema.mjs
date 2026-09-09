@@ -21,10 +21,41 @@ function validateLayerSource(layer, context, errors) {
   const hasImg = typeof layer.img === 'string'
   const hasFrames = Array.isArray(layer.frames)
   const hasSpine = isPlainObject(layer.spine)
-  const sourceCount = Number(hasImg) + Number(hasFrames) + Number(hasSpine)
+  const hasSpriteSheet = isPlainObject(layer.spriteSheet)
+  const sourceCount = Number(hasImg) + Number(hasFrames) + Number(hasSpine) + Number(hasSpriteSheet)
 
   if (sourceCount !== 1) {
-    errors.push(`${context}: layer must have exactly one source (img | frames | spine)`)
+    errors.push(`${context}: layer must have exactly one source (img | frames | spine | spriteSheet)`)
+  }
+}
+
+function validateSpriteSheet(layer, context, errors) {
+  const sheet = layer.spriteSheet
+  if (sheet == null) return
+  if (!isPlainObject(sheet)) {
+    errors.push(`${context}: spriteSheet must be an object`)
+    return
+  }
+  if (typeof sheet.img !== 'string' || !sheet.img.trim()) {
+    errors.push(`${context}: spriteSheet.img must be a non-empty asset path`)
+  }
+  if (!Array.isArray(sheet.frameSize) || sheet.frameSize.length !== 2 ||
+      sheet.frameSize.some((size) => !Number.isInteger(size) || size <= 0)) {
+    errors.push(`${context}: spriteSheet.frameSize must contain two positive integers`)
+  }
+  if (!Number.isInteger(sheet.frameCount) || sheet.frameCount < 1) {
+    errors.push(`${context}: spriteSheet.frameCount must be a positive integer`)
+  }
+  if (!Number.isFinite(sheet.frameDurationMs) || sheet.frameDurationMs <= 0) {
+    errors.push(`${context}: spriteSheet.frameDurationMs must be positive`)
+  }
+  const directions = ['NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'N']
+  if (!Array.isArray(sheet.directions) || sheet.directions.length !== directions.length ||
+      directions.some((direction) => !sheet.directions.includes(direction))) {
+    errors.push(`${context}: spriteSheet.directions must contain each of the eight compass directions once`)
+  }
+  if (!Number.isInteger(sheet.idleFrame) || sheet.idleFrame < 0 || sheet.idleFrame >= sheet.frameCount) {
+    errors.push(`${context}: spriteSheet.idleFrame must reference an existing frame`)
   }
 }
 
@@ -72,6 +103,7 @@ function validateResource(resource, context, errors) {
     }
 
     validateLayerSource(layer, layerContext, errors)
+    validateSpriteSheet(layer, layerContext, errors)
     const animatedSpec = validateAnimatedLayer(layer, layerContext, errors)
     if (animatedSpec) {
       animated.push(animatedSpec)

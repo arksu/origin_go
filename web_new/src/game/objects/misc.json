@@ -95,37 +95,19 @@
   },
   "player": {
     "offset": [
-      0,
-      0
+      40,
+      84
     ],
     "layers": [
       {
-        "spine": {
-          "file": "spine/character/spine",
-          "scale": 0.16,
-          "skin": "boy",
-          "dirs": {
-            "walk": [
-              "ne-walk",
-              "e-walk",
-              "se-walk",
-              "s-walk",
-              "sw-walk",
-              "w-walk",
-              "nw-walk",
-              "n-walk"
-            ],
-            "idle": [
-              "ne-idle",
-              "e-idle",
-              "se-idle",
-              "s-idle",
-              "sw-idle",
-              "w-idle",
-              "nw-idle",
-              "n-idle"
-            ]
-          }
+        "interactive": true,
+        "spriteSheet": {
+          "img": "characters/male_commoner/walk.png",
+          "frameSize": [80, 96],
+          "frameCount": 8,
+          "frameDurationMs": 120,
+          "directions": ["S", "SE", "E", "NE", "N", "NW", "W", "SW"],
+          "idleFrame": 2
         }
       }
     ]

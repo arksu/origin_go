@@ -1,4 +1,4 @@
-import { Assets, Texture, Sprite } from 'pixi.js'
+import { Assets, Texture, Sprite, Rectangle } from 'pixi.js'
 import { Spine } from '@esotericsoftware/spine-pixi-v8'
 import objects from './objects'
 import { clearAlphaMaskCache } from './PixelHitTest'
@@ -8,6 +8,7 @@ import { clearAlphaMaskCache } from './PixelHitTest'
 export interface LayerDef {
   img?: string
   spine?: SpineDef
+  spriteSheet?: DirectionalSpriteSheetDef
   interactive?: boolean
   offset?: [number, number]
   z?: number
@@ -15,6 +16,19 @@ export interface LayerDef {
   frames?: FrameDef[]
   fps?: number
   loop?: boolean
+}
+
+// MoveController uses this order; baked atlas rows can use a different order.
+export const MOVEMENT_DIRECTIONS = ['NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'N'] as const
+export type MovementDirection = typeof MOVEMENT_DIRECTIONS[number]
+
+export interface DirectionalSpriteSheetDef {
+  img: string
+  frameSize: [number, number]
+  frameCount: number
+  frameDurationMs: number
+  directions: MovementDirection[]
+  idleFrame: number
 }
 
 export interface FrameDef {
@@ -46,6 +60,7 @@ export interface ResourceDef {
 export class ResourceLoader {
   private static textureCache = new Map<string, Texture>()
   private static textureLoading = new Map<string, Promise<Texture>>()
+  private static spriteSheetLoading = new Map<string, Promise<Texture[][]>>()
 
   /**
    * Resolve a resource path (e.g. "trees/oak/6") to its ResourceDef from objects.json.
@@ -96,6 +111,35 @@ export class ResourceLoader {
 
   static resolveLayerZ(layer: LayerDef): number {
     return layer.shadow ? -1 : (layer.z ?? 0)
+  }
+
+  /** Share atlas frames across entities, in MoveController direction order. */
+  static loadDirectionalSpriteSheet(def: DirectionalSpriteSheetDef): Promise<Texture[][]> {
+    const key = JSON.stringify([def.img, def.frameSize, def.frameCount, def.directions])
+    const cached = this.spriteSheetLoading.get(key)
+    if (cached) return cached
+
+    const loading = this.loadTexture(def.img).then((atlas) => {
+      const [width, height] = def.frameSize
+      if (atlas === Texture.WHITE || atlas.width !== width * def.frameCount ||
+          atlas.height !== height * MOVEMENT_DIRECTIONS.length) {
+        throw new Error(`Invalid directional atlas dimensions: ${def.img}`)
+      }
+      const rows = MOVEMENT_DIRECTIONS.map((direction) => def.directions.indexOf(direction))
+      if (rows.some((row) => row < 0)) {
+        throw new Error(`Directional atlas must contain all eight directions: ${def.img}`)
+      }
+      atlas.source.scaleMode = 'nearest'
+      return rows.map((row) => Array.from({ length: def.frameCount }, (_, column) => new Texture({
+        source: atlas.source,
+        frame: new Rectangle(column * width, row * height, width, height),
+      })))
+    }).catch((error: unknown) => {
+      this.spriteSheetLoading.delete(key)
+      throw error
+    })
+    this.spriteSheetLoading.set(key, loading)
+    return loading
   }
 
   static resolveLayerPosition(
@@ -199,6 +243,7 @@ export class ResourceLoader {
 
   static clearCache(): void {
     this.textureCache.clear()
+    this.spriteSheetLoading.clear()
     clearAlphaMaskCache()
   }
 
