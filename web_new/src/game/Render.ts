@@ -318,7 +318,7 @@ export class Render {
     for (const [entityId, renderPos] of positions) {
       this.objectManager.updateObjectPosition(
         entityId, renderPos.x, renderPos.y,
-        renderPos.isMoving, renderPos.direction,
+        renderPos.isMoving, renderPos.direction, renderPos.distanceMoved,
       )
     }
   }

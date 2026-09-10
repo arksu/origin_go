@@ -49,13 +49,16 @@ function validateSpriteSheet(layer, context, errors) {
   if (!Number.isFinite(sheet.frameDurationMs) || sheet.frameDurationMs <= 0) {
     errors.push(`${context}: spriteSheet.frameDurationMs must be positive`)
   }
+  if (!Number.isFinite(sheet.cycleDistanceTiles) || sheet.cycleDistanceTiles <= 0) {
+    errors.push(`${context}: spriteSheet.cycleDistanceTiles must be positive`)
+  }
   const directions = ['NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'N']
   if (!Array.isArray(sheet.directions) || sheet.directions.length !== directions.length ||
       directions.some((direction) => !sheet.directions.includes(direction))) {
     errors.push(`${context}: spriteSheet.directions must contain each of the eight compass directions once`)
   }
-  if (!Number.isInteger(sheet.idleFrame) || sheet.idleFrame < 0 || sheet.idleFrame >= sheet.frameCount) {
-    errors.push(`${context}: spriteSheet.idleFrame must reference an existing frame`)
+  if (!Number.isInteger(sheet.idleFrame) || sheet.idleFrame < 0 || sheet.idleFrame > sheet.frameCount) {
+    errors.push(`${context}: spriteSheet.idleFrame must reference a walk frame or the single column immediately after the walk`)
   }
 }
 

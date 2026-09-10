@@ -3,7 +3,7 @@ import type { Spine } from '@esotericsoftware/spine-pixi-v8'
 import { ResourceLoader, type ResourceDef, type LayerDef } from './ResourceLoader'
 import { coordGame2Screen } from './utils/coordConvert'
 import { type AABB, fromMinMax } from './culling/AABB'
-import { TEXTURE_WIDTH, TEXTURE_HEIGHT } from './tiles/Tile'
+import { TEXTURE_WIDTH, TEXTURE_HEIGHT, getCoordPerTile } from './tiles/Tile'
 import {
   OBJECT_BOUNDS_COLOR,
   OBJECT_BOUNDS_WIDTH,
@@ -80,7 +80,8 @@ export class ObjectView {
   private directionalSpriteLayers: DirectionalSpriteLayer[] = []
   private hasFrameAnimation = false
   private animationStartMs = 0
-  private walkStartMs: number | null = null
+  private isWalking = false
+  private walkDistanceTiles = 0
   private lastDir = 3 // south in MoveController direction order
   private isDestroyed = false
   private isDroppedItem = false
@@ -228,7 +229,7 @@ export class ObjectView {
       const frameLayer = { layer, sprite, textures }
       this.directionalSpriteLayers.push(frameLayer)
       // Movement may have started, turned or stopped while the atlas was loading.
-      this.updateDirectionalSpriteLayer(frameLayer, performance.now())
+      this.updateDirectionalSpriteLayer(frameLayer)
     }).catch((error: unknown) => {
       console.error('[ObjectView] Failed to load directional animation', error)
       if (!this.isDestroyed && !this.placeholder) this.createPlaceholder()
@@ -351,7 +352,7 @@ export class ObjectView {
     }
 
     for (const frameLayer of this.directionalSpriteLayers) {
-      this.updateDirectionalSpriteLayer(frameLayer, nowMs)
+      this.updateDirectionalSpriteLayer(frameLayer)
     }
     if (this.animatedFrameLayers.length === 0) return
     const sharedSteps = new Map<string, number>()
@@ -361,11 +362,12 @@ export class ObjectView {
     }
   }
 
-  private updateDirectionalSpriteLayer(frameLayer: DirectionalSpriteLayer, nowMs: number): void {
+  private updateDirectionalSpriteLayer(frameLayer: DirectionalSpriteLayer): void {
     const def = frameLayer.layer.spriteSheet!
-    const frame = this.walkStartMs == null
-      ? def.idleFrame
-      : Math.floor(Math.max(0, nowMs - this.walkStartMs) / def.frameDurationMs) % def.frameCount
+    // A small tolerance keeps exact frame boundaries stable after many additions.
+    const frame = this.isWalking
+      ? Math.floor(this.walkDistanceTiles / def.cycleDistanceTiles * def.frameCount + 1e-8) % def.frameCount
+      : def.idleFrame
     const texture = frameLayer.textures[this.lastDir]?.[frame]
     if (!texture || frameLayer.sprite.texture === texture) return
 
@@ -437,13 +439,18 @@ export class ObjectView {
   /**
    * Called when the entity is moving in a direction (0-7).
    */
-  onMoved(dir: number, nowMs = performance.now()): void {
+  onMoved(dir: number, distanceMoved = 0): void {
     if (this.isDestroyed || this.knockedOutPose || this.isDroppedItem || !this.resDef) return
     if (!Number.isInteger(dir) || dir < 0 || dir > 7) return
+    if (!Number.isFinite(distanceMoved) || distanceMoved < 0) {
+      throw new Error(`Invalid movement distance for entity ${this.entityId}: ${distanceMoved}`)
+    }
     this.lastDir = dir
-    // Repeated movement updates and turns must not restart the stride.
-    this.walkStartMs ??= nowMs
-    this.updateAnimation(nowMs)
+    this.isWalking = true
+    // World displacement is independent of zoom and already includes interpolation.
+    // Accumulate fractional frames so speed changes and turns retain stride phase.
+    this.walkDistanceTiles += distanceMoved / getCoordPerTile()
+    this.updateAnimation(performance.now())
 
     this.resDef.layers.forEach((layer, layerIdx) => {
       if (!layer.spine?.dirs) return
@@ -467,7 +474,8 @@ export class ObjectView {
    */
   onStopped(): void {
     if (this.isDestroyed || this.isDroppedItem || !this.resDef) return
-    this.walkStartMs = null
+    this.isWalking = false
+    this.walkDistanceTiles = 0
     this.updateAnimation(performance.now())
 
     this.resDef.layers.forEach((layer, layerIdx) => {

@@ -12,14 +12,17 @@
 
 import { timeSync } from '@/network/TimeSync'
 import { DEBUG_MOVEMENT } from '@/constants/game'
+import { getCoordPerTile } from './tiles/Tile'
 
 // Constants
 const MAX_KEYFRAMES = 32
 const MAX_EXTRAPOLATION_MS = 180
 const SNAP_DISTANCE_SQUARED = 2400 * 2400 // ~0.75 tiles at 32 coord/tile -> (0.75 * 32 * 100)^2
-const ERROR_CORRECTION_SPEED = 0.15 // per-frame lerp factor for small corrections
+const REFERENCE_FRAME_MS = 1000 / 60
+const ERROR_CORRECTION_SPEED = 0.15 // damping at the reference 60 FPS
 const ERROR_CORRECTION_SPEED_LOW = 0.03 // reduced correction during movement start
 const ERROR_CORRECTION_RAMP_MS = 200 // time to ramp up correction speed
+const STOP_SETTLE_DISTANCE_TILES = 1 / 256 // at most 0.18 native pixels in the tile projection
 const VELOCITY_DECAY_RATE = 0.9 // decay rate when extrapolating past max time
 
 export interface MoveKeyframe {
@@ -38,9 +41,10 @@ export interface RenderPosition {
   x: number
   y: number
   heading: number
-  isMoving: boolean
+  isMoving: boolean // visual locomotion, including smoothing after a server stop
   moveMode: number
   direction: number // 0-7 index for 8-direction animations (NE,E,SE,S,SW,W,NW,N)
+  distanceMoved: number // actual interpolated world displacement, excluding snaps
 }
 
 export interface EntityMoveState {
@@ -57,6 +61,7 @@ export interface EntityMoveState {
   // Interpolation state
   isExtrapolating: boolean
   extrapolationStartMs: number
+  lastVisualUpdateClientMs: number | null
 
   // Movement start tracking for smooth ramp-in
   movementStartClientMs: number
@@ -117,6 +122,7 @@ class MoveController {
       visualHeading: heading,
       isExtrapolating: false,
       extrapolationStartMs: 0,
+      lastVisualUpdateClientMs: null,
       movementStartClientMs: 0,
       wasMovingLastFrame: false,
       ignoredOutOfOrder: 0,
@@ -270,7 +276,19 @@ class MoveController {
     const renderTimeMs = serverNowMs - interpolationDelayMs
 
     for (const [entityId, state] of this.entities) {
-      const pos = this.interpolateEntity(state, renderTimeMs, clientNowMs)
+      // Teleport packets already reset visualX/Y before this update. For error
+      // correction snaps inside interpolation, exclude the entire displacement.
+      const previousX = state.visualX
+      const previousY = state.visualY
+      const previousSnapCount = state.snapCount
+      const deltaMs = state.lastVisualUpdateClientMs === null
+        ? REFERENCE_FRAME_MS
+        : Math.max(0, clientNowMs - state.lastVisualUpdateClientMs)
+      state.lastVisualUpdateClientMs = clientNowMs
+      const pos = this.interpolateEntity(state, renderTimeMs, clientNowMs, deltaMs)
+      const distanceMoved = state.snapCount === previousSnapCount
+        ? Math.hypot(pos.x - previousX, pos.y - previousY)
+        : 0
 
       // if (DEBUG_MOVEMENT && (_distance > 0.04)) {
       //   console.log(`[MoveController] Entity ${entityId}:`, {
@@ -286,7 +304,7 @@ class MoveController {
       //   })
       // }
 
-      result.set(entityId, pos)
+      result.set(entityId, { ...pos, distanceMoved })
     }
 
     this.lastRenderPositions = result
@@ -300,7 +318,7 @@ class MoveController {
     return this.lastRenderPositions.get(entityId) ?? null
   }
 
-  private interpolateEntity(state: EntityMoveState, renderTimeMs: number, clientNowMs: number): RenderPosition {
+  private interpolateEntity(state: EntityMoveState, renderTimeMs: number, clientNowMs: number, deltaMs: number): Omit<RenderPosition, 'distanceMoved'> {
     const keyframes = state.keyframes
 
     // No keyframes - return current visual position
@@ -414,15 +432,28 @@ class MoveController {
         const timeSinceMovementStart = clientNowMs - state.movementStartClientMs
         if (timeSinceMovementStart < ERROR_CORRECTION_RAMP_MS) {
           // Lerp from LOW to NORMAL over ramp duration
-          const rampProgress = timeSinceMovementStart / ERROR_CORRECTION_RAMP_MS
+          const rampProgress = Math.max(0, timeSinceMovementStart) / ERROR_CORRECTION_RAMP_MS
           const easedProgress = rampProgress * rampProgress // ease-in quadratic
           correctionSpeed = ERROR_CORRECTION_SPEED_LOW +
             (ERROR_CORRECTION_SPEED - ERROR_CORRECTION_SPEED_LOW) * easedProgress
         }
       }
 
-      state.visualX += errorX * correctionSpeed
-      state.visualY += errorY * correctionSpeed
+      // Preserve the 60 FPS feel without making the stop tail longer on a
+      // slower display (or advancing it twice when rendering at the same time).
+      const correctionFactor = 1 - Math.pow(1 - correctionSpeed, deltaMs / REFERENCE_FRAME_MS)
+      state.visualX += errorX * correctionFactor
+      state.visualY += errorY * correctionFactor
+    }
+
+    // A future stopped B sample still has a moving interpolation target. Only
+    // finish damping once that target is stationary, at a subpixel remainder.
+    const isStationaryStop = !isMoving && (!frameA || !frameB || renderTimeMs >= frameB.tServerMs ||
+      (frameA.x === frameB.x && frameA.y === frameB.y))
+    const settleDistance = STOP_SETTLE_DISTANCE_TILES * getCoordPerTile()
+    if (isStationaryStop && Math.hypot(targetX - state.visualX, targetY - state.visualY) <= settleDistance) {
+      state.visualX = targetX
+      state.visualY = targetY
     }
 
     state.visualHeading = heading
@@ -442,7 +473,9 @@ class MoveController {
       dir = calcDirectionFromHeading(heading)
     }
 
-    const finalIsMoving = isMoving // Trust server's isMoving flag for animations
+    // Server stop ends extrapolation, but the displayed body may still travel.
+    // Keep the stride phase until arrival; distanceMoved controls its slowing pace.
+    const finalIsMoving = isMoving || state.visualX !== targetX || state.visualY !== targetY
 
     return {
       x: state.visualX,

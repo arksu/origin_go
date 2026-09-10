@@ -1,0 +1,228 @@
+{
+  "action": "standing_idle",
+  "source": "male_commoner_idle.blend",
+  "frame_size": [
+    80,
+    96
+  ],
+  "anchor": [
+    40,
+    84
+  ],
+  "directions": [
+    "s",
+    "se",
+    "e",
+    "ne",
+    "n",
+    "nw",
+    "w",
+    "sw"
+  ],
+  "idle_column": 8,
+  "walk_frame_count": 8,
+  "walk_frame_duration_ms": 120,
+  "palette": [
+    "#19180f",
+    "#392b1c",
+    "#533425",
+    "#7c4b31",
+    "#a6693f",
+    "#ca8d51",
+    "#e6b06a",
+    "#f4cc86",
+    "#fbe0a5",
+    "#2d2517",
+    "#4d351e",
+    "#76512d",
+    "#966637",
+    "#b1844b",
+    "#544930",
+    "#81704d",
+    "#a9996d",
+    "#d3c08e",
+    "#f0ddae",
+    "#f5e4c5",
+    "#242721"
+  ],
+  "pixel_finish": {
+    "name": "Origin warm ink",
+    "outer_ink": "#19180f",
+    "inner_ink": "#392b1c",
+    "skin_shadow_rim": "#533425",
+    "contrast": 1.08,
+    "depth_edge_m": 0.065,
+    "hair_depth_edge_m": 0.075,
+    "minimum_line_cluster": 3,
+    "ramps": {
+      "skin": [
+        "#392b1c",
+        "#533425",
+        "#7c4b31",
+        "#a6693f",
+        "#ca8d51",
+        "#e6b06a",
+        "#f4cc86",
+        "#fbe0a5"
+      ],
+      "hair": [
+        "#19180f",
+        "#2d2517",
+        "#4d351e",
+        "#76512d",
+        "#966637",
+        "#b1844b"
+      ],
+      "linen": [
+        "#392b1c",
+        "#544930",
+        "#81704d",
+        "#a9996d",
+        "#d3c08e",
+        "#f0ddae"
+      ],
+      "eyes": [
+        "#19180f",
+        "#533425",
+        "#f5e4c5",
+        "#242721"
+      ]
+    },
+    "reference_assets": [
+      "web_new/public/assets/game/obj/barrel/barrel.png",
+      "web_new/public/assets/game/obj/trees/log/log_y.png",
+      "web_new/public/assets/game/items/leather_boots.png",
+      "web_new/public/assets/game/items/stone_axe.png"
+    ]
+  },
+  "frames": [
+    {
+      "direction": "s",
+      "opaque_bbox": [
+        21,
+        6,
+        59,
+        91
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 442,
+      "internal_ink_pixels": 84
+    },
+    {
+      "direction": "se",
+      "opaque_bbox": [
+        25,
+        6,
+        57,
+        91
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 339,
+      "internal_ink_pixels": 117
+    },
+    {
+      "direction": "e",
+      "opaque_bbox": [
+        32,
+        4,
+        54,
+        89
+      ],
+      "colors_used": 14,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 284,
+      "internal_ink_pixels": 154
+    },
+    {
+      "direction": "ne",
+      "opaque_bbox": [
+        25,
+        3,
+        57,
+        87
+      ],
+      "colors_used": 15,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 323,
+      "internal_ink_pixels": 118
+    },
+    {
+      "direction": "n",
+      "opaque_bbox": [
+        21,
+        3,
+        59,
+        85
+      ],
+      "colors_used": 17,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 421,
+      "internal_ink_pixels": 91
+    },
+    {
+      "direction": "nw",
+      "opaque_bbox": [
+        23,
+        4,
+        55,
+        87
+      ],
+      "colors_used": 16,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 323,
+      "internal_ink_pixels": 114
+    },
+    {
+      "direction": "w",
+      "opaque_bbox": [
+        26,
+        5,
+        48,
+        89
+      ],
+      "colors_used": 15,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 279,
+      "internal_ink_pixels": 164
+    },
+    {
+      "direction": "sw",
+      "opaque_bbox": [
+        23,
+        6,
+        55,
+        91
+      ],
+      "colors_used": 15,
+      "alpha_values": [
+        0,
+        255
+      ],
+      "outer_ink_pixels": 339,
+      "internal_ink_pixels": 119
+    }
+  ]
+}
