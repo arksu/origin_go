@@ -25,8 +25,9 @@ export type MovementDirection = typeof MOVEMENT_DIRECTIONS[number]
 export interface DirectionalSpriteSheetDef {
   img: string
   frameSize: [number, number]
-  frameCount: number
+  frameCount: number // walk columns; an additional idle column may follow
   frameDurationMs: number
+  cycleDistanceTiles: number
   directions: MovementDirection[]
   idleFrame: number
 }
@@ -115,13 +116,14 @@ export class ResourceLoader {
 
   /** Share atlas frames across entities, in MoveController direction order. */
   static loadDirectionalSpriteSheet(def: DirectionalSpriteSheetDef): Promise<Texture[][]> {
-    const key = JSON.stringify([def.img, def.frameSize, def.frameCount, def.directions])
+    const columns = Math.max(def.frameCount, def.idleFrame + 1)
+    const key = JSON.stringify([def.img, def.frameSize, columns, def.directions])
     const cached = this.spriteSheetLoading.get(key)
     if (cached) return cached
 
     const loading = this.loadTexture(def.img).then((atlas) => {
       const [width, height] = def.frameSize
-      if (atlas === Texture.WHITE || atlas.width !== width * def.frameCount ||
+      if (atlas === Texture.WHITE || atlas.width !== width * columns ||
           atlas.height !== height * MOVEMENT_DIRECTIONS.length) {
         throw new Error(`Invalid directional atlas dimensions: ${def.img}`)
       }
@@ -130,7 +132,7 @@ export class ResourceLoader {
         throw new Error(`Directional atlas must contain all eight directions: ${def.img}`)
       }
       atlas.source.scaleMode = 'nearest'
-      return rows.map((row) => Array.from({ length: def.frameCount }, (_, column) => new Texture({
+      return rows.map((row) => Array.from({ length: columns }, (_, column) => new Texture({
         source: atlas.source,
         frame: new Rectangle(column * width, row * height, width, height),
       })))

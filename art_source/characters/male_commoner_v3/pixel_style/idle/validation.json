@@ -1,0 +1,16 @@
+{
+  "feet_min_z_m": {
+    "l": 0.0009999035391956568,
+    "r": 0.0009999035391956568
+  },
+  "both_feet_planted": true,
+  "camera_and_lights_fixed": true,
+  "frame_size": [
+    80,
+    96
+  ],
+  "anchor": [
+    40,
+    84
+  ]
+}

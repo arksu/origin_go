@@ -26,10 +26,12 @@ def neighbours(mask):
     return [shifted(mask, rows, columns) for rows in (-1, 0, 1) for columns in (-1, 0, 1) if rows or columns]
 
 
-def load_geometry(path, width, height):
-    direction, count = path.parent.name, int(path.parent.parent.name)
-    sample = int(path.stem) * 48 // count
-    with np.load(OUT / "geometry" / f"{direction}_{sample:02}.npz") as buffers:
+def load_geometry(path, width, height, geometry_path=None):
+    if geometry_path is None:
+        direction, count = path.parent.name, int(path.parent.parent.name)
+        sample = int(path.stem) * 48 // count
+        geometry_path = OUT / "geometry" / f"{direction}_{sample:02}.npz"
+    with np.load(geometry_path) as buffers:
         def blocks(name):
             return buffers[name].reshape(height,2,width,2).transpose(0,2,1,3).reshape(height,width,4)
         materials = blocks("material")
@@ -105,13 +107,13 @@ def internal_lines(material, depth, heights, opaque):
     return supported | material_lines
 
 
-def resolve_frame(path, width, height):
+def resolve_frame(path, width, height, *, geometry_path=None):
     source = Image.open(path).convert("RGBA")
     if source.size != (width*4,height*4):
         raise ValueError(f"Unexpected walk render size: {path}: {source.size}")
     pixels = np.array(source.resize((width,height),Image.Resampling.BOX))
     opaque = pixels[:,:,3]>=CONFIG["alpha_threshold"]
-    material, depth, heights = load_geometry(path,width,height)
+    material, depth, heights = load_geometry(path,width,height,geometry_path)
     rgb = remove_isolated_colors(quantize_materials(pixels[:,:,:3],material),opaque,material,heights)
     outer = np.logical_or.reduce(neighbours(opaque)) & ~opaque
     inner = internal_lines(material,depth,heights,opaque)
