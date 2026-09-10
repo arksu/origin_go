@@ -19,6 +19,8 @@ import {
   HOVER_BORDER_ALPHA,
 } from '@/constants/render'
 import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
+import type { ActorHandle, ActorRenderer } from './actors/ActorRenderer'
+import { ACTOR_RENDER, type EquipmentId } from './actors/config'
 
 interface AnimatedFrameLayer {
   layer: LayerDef
@@ -91,8 +93,10 @@ export class ObjectView {
   private hoverBorderSignature = ''
   private shadowSuppressed = false
   private knockedOutPose = false
+  private actorHandle: ActorHandle | null = null
+  private carrying = false
 
-  constructor(options: ObjectViewOptions) {
+  constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer) {
     this.entityId = options.entityId
     this.typeId = options.typeId
     this.position = options.position
@@ -180,6 +184,23 @@ export class ObjectView {
   }
 
   private buildLayers(): void {
+    if (!this.resDef) return
+    if (this.resDef.actor3d && this.actorRenderer) {
+      this.hasFrameAnimation = true
+      const handle = this.actorRenderer.create()
+      this.actorHandle = handle
+      this.container.addChild(handle.sprite)
+      this.setInteractive(handle.sprite)
+      void handle.actor.ready.then(() => this.syncActor()).catch((error: unknown) => {
+        console.error(`[ObjectView] 3D character ${this.entityId} failed; using baked animation`, error)
+        if (!this.isDestroyed) this.useBakedCharacter()
+      })
+      return
+    }
+    this.buildSpriteLayers()
+  }
+
+  private buildSpriteLayers(): void {
     if (!this.resDef) return
     let spineIdx = 0
     for (let i = 0; i < this.resDef.layers.length; i++) {
@@ -350,6 +371,7 @@ export class ObjectView {
     if (!this.hasFrameAnimation || this.isDestroyed || !this.resDef) {
       return
     }
+    this.syncActor()
 
     for (const frameLayer of this.directionalSpriteLayers) {
       this.updateDirectionalSpriteLayer(frameLayer)
@@ -530,6 +552,18 @@ export class ObjectView {
     let minY = cy - halfHeight
     let maxX = cx + halfWidth
     let maxY = cy
+    if (this.actorHandle) {
+      const cosine = Math.cos(this.container.rotation)
+      const sine = Math.sin(this.container.rotation)
+      for (const localX of [-ACTOR_RENDER.anchorX, ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorX]) {
+        for (const localY of [-ACTOR_RENDER.anchorY, ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorY]) {
+          minX = Math.min(minX, cx + localX * cosine - localY * sine)
+          maxX = Math.max(maxX, cx + localX * cosine - localY * sine)
+          minY = Math.min(minY, cy + localX * sine + localY * cosine)
+          maxY = Math.max(maxY, cy + localX * sine + localY * cosine)
+        }
+      }
+    }
     // Baked feet extend below the ground anchor; include the entire frame even
     // before it loads, and also when the existing KO pose rotates the container.
     for (const layer of this.resDef?.layers ?? []) {
@@ -585,6 +619,10 @@ export class ObjectView {
   ): boolean {
     if (this.interactionSuppressed) {
       return false
+    }
+    if (this.actorHandle && this.actorRenderer) {
+      const point = this.container.toLocal({ x: screenX, y: screenY })
+      return this.actorRenderer.hitTest(this.actorHandle, point.x, point.y)
     }
 
     const sortedSprites = this.getInteractiveSpritesForHitTest()
@@ -692,6 +730,11 @@ export class ObjectView {
   }
 
   setHovered(hovered: boolean): void {
+    if (this.actorHandle) {
+      this.isHovered = hovered
+      this.actorHandle.actor.hovered = hovered
+      return
+    }
     if (this.isHovered === hovered) {
       if (hovered) {
         const signature = this.computeHoverSignature()
@@ -961,6 +1004,40 @@ export class ObjectView {
     this.updateBoundsGraphics()
   }
 
+  private syncActor(): void {
+    if (!this.actorHandle || this.isDestroyed) return
+    const actor = this.actorHandle.actor
+    actor.direction = this.lastDir
+    actor.walking = this.isWalking
+    actor.distanceTiles = this.walkDistanceTiles
+    actor.carrying = this.carrying && !this.knockedOutPose
+    actor.hovered = this.isHovered
+  }
+
+  setCarrying(enabled: boolean): void {
+    this.carrying = enabled
+    this.syncActor()
+  }
+
+  getCarryOffsetPx(fallback: number): number { return this.actorHandle ? 94 : fallback }
+
+  setActorPriority(priority: boolean): void {
+    if (this.actorHandle) this.actorHandle.priority = priority
+  }
+
+  async setActorEquipment(ids: readonly EquipmentId[]): Promise<void> {
+    if (!this.actorHandle) return
+    await this.actorHandle.actor.ready
+    if (!this.isDestroyed) await this.actorHandle.actor.setEquipment(ids)
+  }
+
+  useBakedCharacter(): void {
+    if (!this.actorHandle) return
+    this.actorRenderer?.release(this.actorHandle)
+    this.actorHandle = null
+    this.buildSpriteLayers()
+  }
+
   private createBoundsGraphics(): void {
     if (this.boundsGraphics) return
     this.boundsGraphics = new Graphics()
@@ -1012,6 +1089,10 @@ export class ObjectView {
   destroy(): void {
     if (this.isDestroyed) return
     this.isDestroyed = true
+    if (this.actorHandle) {
+      this.actorRenderer?.release(this.actorHandle)
+      this.actorHandle = null
+    }
     this.removeBoundsGraphics()
     for (const spr of this.sprites) {
       spr.destroy()

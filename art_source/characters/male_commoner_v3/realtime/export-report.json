@@ -1,0 +1,40 @@
+{
+  "source": "art_source/characters/male_commoner_v3/pixel_style/walk/male_commoner_walk.blend",
+  "bones": 50,
+  "skinning": "dual_quaternion",
+  "clips": [
+    "idle",
+    "walk",
+    "carry_idle",
+    "carry_walk"
+  ],
+  "meshes": {
+    "body": {
+      "vertices": 5502,
+      "triangles": 11000,
+      "morphs": 0
+    },
+    "hair": {
+      "vertices": 2283,
+      "triangles": 4249,
+      "morphs": 0
+    },
+    "eyes": {
+      "vertices": 304,
+      "triangles": 550,
+      "morphs": 0
+    },
+    "linen_wrap": {
+      "vertices": 786,
+      "triangles": 1540,
+      "morphs": 8
+    },
+    "linen_belt": {
+      "vertices": 160,
+      "triangles": 320,
+      "morphs": 0
+    }
+  },
+  "triangles": 17659,
+  "low_triangles": 6478
+}
