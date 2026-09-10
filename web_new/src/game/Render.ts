@@ -1,4 +1,4 @@
-import { Application, Container, TextureStyle } from 'pixi.js'
+import { Application, Container, TextureStyle, WebGLRenderer } from 'pixi.js'
 import { DebugOverlay, setObjectManager } from './DebugOverlay'
 import { ChunkManager } from './ChunkManager'
 import { ObjectManager } from './ObjectManager'
@@ -19,6 +19,8 @@ import { terrainManager } from './terrain'
 import { fxManager } from './fx/FxManager'
 import type { DebugInfo, ScreenPoint } from './types'
 import { clearAlphaMaskCache } from './PixelHitTest'
+import { ActorRenderer } from './actors/ActorRenderer'
+import type { EquipmentId } from './actors/config'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
 
@@ -33,6 +35,7 @@ export class Render {
   private inputController: InputController
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
+  private actorRenderer: ActorRenderer | null = null
 
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
@@ -72,7 +75,18 @@ export class Render {
       resizeTo: window,
       background: '#353e67ff',
       antialias: false,
+      preference: 'webgl',
     })
+
+    // Keep a comparison path while the runtime renderer is evaluated in game.
+    if (new URLSearchParams(window.location.search).get('characters') !== 'baked') {
+      try {
+        this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer)
+        this.objectManager.setActorRenderer(this.actorRenderer)
+      } catch (error) {
+        console.error('[Render] Hybrid characters unavailable; using baked animation', error)
+      }
+    }
 
     // Limit maximum FPS to reduce system load
     this.app.ticker.maxFPS = MAX_FPS
@@ -201,6 +215,14 @@ export class Render {
     this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
+    try {
+      this.actorRenderer?.render()
+    } catch (error) {
+      console.error('[Render] Hybrid character rendering failed; using baked animation', error)
+      this.objectManager.useBakedCharacters()
+      this.actorRenderer?.destroy()
+      this.actorRenderer = null
+    }
     this.updateHoverHighlight()
 
     this.updateDebugOverlay()
@@ -235,7 +257,7 @@ export class Render {
       this.lastHoverCheckScreen.y !== this.lastPointerScreen.y
     )
 
-    if (!camChanged && !pointerChanged) {
+    if (!camChanged && !pointerChanged && !this.actorRenderer?.hasUpdatedPoses) {
       return
     }
 
@@ -467,6 +489,13 @@ export class Render {
 
   setPlayerEntityId(entityId: number | null): void {
     cameraController.setTargetEntity(entityId)
+    this.objectManager.setPlayerEntityId(entityId)
+  }
+
+  async setCharacterEquipment(entityId: number, items: readonly EquipmentId[]): Promise<void> {
+    const view = this.objectManager.getObject(entityId)
+    if (!view) throw new Error(`Cannot equip missing character ${entityId}`)
+    await view.setActorEquipment(items)
   }
 
   loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
@@ -613,6 +642,8 @@ export class Render {
 
     this.chunkManager.destroy()
     this.objectManager.destroy()
+    this.actorRenderer?.destroy()
+    this.actorRenderer = null
     this.debugOverlay.destroy()
     cameraController.reset()
     this.app.destroy(true, { children: true, texture: true })

@@ -2,6 +2,7 @@ import { Container } from 'pixi.js'
 import { ObjectView, type ObjectViewOptions } from './ObjectView'
 import { cullingController } from './culling'
 import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
+import type { ActorRenderer } from './actors/ActorRenderer'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
@@ -18,6 +19,20 @@ export class ObjectManager {
   private needsSort = false
   private boundsVisible: boolean = false
   private hoveredEntityId: number | null = null
+  private actorRenderer: ActorRenderer | undefined
+  private playerEntityId: number | null = null
+
+  setActorRenderer(renderer: ActorRenderer | undefined): void { this.actorRenderer = renderer }
+
+  setPlayerEntityId(entityId: number | null): void {
+    this.playerEntityId = entityId
+    for (const [id, view] of this.objects) view.setActorPriority(id === entityId)
+  }
+
+  useBakedCharacters(): void {
+    for (const view of this.objects.values()) view.useBakedCharacter()
+    this.actorRenderer = undefined
+  }
 
   /**
    * Set the shared parent container (objectsContainer) where object views
@@ -37,7 +52,9 @@ export class ObjectManager {
       this.despawnObject(options.entityId)
     }
 
-    const objectView = new ObjectView(options)
+    const objectView = new ObjectView(options, this.actorRenderer)
+    objectView.setCarrying((this.carriedObjectsByCarrier.get(options.entityId)?.size ?? 0) > 0)
+    objectView.setActorPriority(options.entityId === this.playerEntityId)
     objectView.setKnockedOutPose(this.knockedOutObjectIds.has(options.entityId))
     this.objects.set(options.entityId, objectView)
     if (objectView.hasAnimatedFrames()) {
@@ -138,6 +155,7 @@ export class ObjectManager {
       }
       this.carriedByByObject.delete(objectId)
       this.activeCarriedObjects.delete(objectId)
+      this.objects.get(prevCarrierId)?.setCarrying((this.carriedObjectsByCarrier.get(prevCarrierId)?.size ?? 0) > 0)
     }
 
     const objectView = this.objects.get(objectId)
@@ -163,6 +181,7 @@ export class ObjectManager {
     }
     carriedSet.add(objectId)
     this.activeCarriedObjects.add(objectId)
+    this.objects.get(nextCarrierId)?.setCarrying(true)
 
     if (objectView) {
       objectView.setInteractionSuppressed(true)
@@ -214,7 +233,7 @@ export class ObjectManager {
       const zChanged = objectView.getZIndexOverride() !== targetZ
       objectView.setScreenPositionOverride(
         carrierView.getContainer().x,
-        carrierView.getContainer().y - offsetPx,
+        carrierView.getContainer().y - carrierView.getCarryOffsetPx(offsetPx),
       )
       objectView.setZIndexOverride(targetZ)
       cullingController.updateObjectBounds(objectId, objectView.computeScreenBounds())

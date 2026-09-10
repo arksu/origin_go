@@ -88,6 +88,9 @@ function validateAnimatedLayer(layer, context, errors) {
 }
 
 function validateResource(resource, context, errors) {
+  if (resource.actor3d != null && resource.actor3d !== 'commoner') {
+    errors.push(`${context}: unsupported actor3d model: ${resource.actor3d}`)
+  }
   if (!Array.isArray(resource.layers)) {
     return
   }

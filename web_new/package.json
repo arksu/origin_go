@@ -19,6 +19,7 @@
     "pinia": "^3.0.4",
     "pixi.js": "^8.16.0",
     "protobufjs": "^7.5.4",
+    "three": "^0.186.0",
     "vue": "^3.5.29",
     "vue-router": "^5.0.3"
   },
@@ -27,6 +28,7 @@
     "@tsconfig/node20": "^20.1.9",
     "@types/howler": "^2.2.12",
     "@types/node": "^25.3.5",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vue/eslint-config-typescript": "^14.7.0",
     "@vue/tsconfig": "^0.9.0",

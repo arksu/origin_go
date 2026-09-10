@@ -94,6 +94,7 @@
     }
   },
   "player": {
+    "actor3d": "commoner",
     "offset": [
       40,
       84

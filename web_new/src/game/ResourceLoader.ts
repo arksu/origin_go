@@ -49,6 +49,7 @@ export type Directions = {
 }
 
 export interface ResourceDef {
+  actor3d?: 'commoner'
   layers: LayerDef[]
   size?: [number, number]
   offset?: [number, number]

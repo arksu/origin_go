@@ -3,6 +3,7 @@ import { playerCommandController } from './PlayerCommandController'
 import type { DebugInfo, ScreenPoint } from './types'
 import type { ArmBuildGhostOptions } from './BuildGhostController'
 import type { ArmLiftGhostOptions } from './LiftGhostController'
+import type { EquipmentId } from './actors/config'
 
 export class GameFacade {
   private render: Render | null = null
@@ -115,6 +116,11 @@ export class GameFacade {
     if (entityId !== null) {
       playerCommandController.setPlayerId(entityId)
     }
+  }
+
+  async setCharacterEquipment(entityId: number, items: readonly EquipmentId[]): Promise<void> {
+    if (!this.render) throw new Error('Game renderer is not initialized')
+    await this.render.setCharacterEquipment(entityId, items)
   }
 
   loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
