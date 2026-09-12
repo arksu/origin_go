@@ -1,4 +1,5 @@
-import { Application, Container, Graphics, Text, WebGLRenderer } from 'pixi.js'
+import { Application, Container, Graphics, Sprite, Text, WebGLRenderer } from 'pixi.js'
+import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer, type ActorHandle } from '../src/game/actors/ActorRenderer'
 import { ACTOR_RENDER, type EquipmentId } from '../src/game/actors/config'
 
@@ -21,6 +22,8 @@ async function main() {
   app.ticker.maxFPS = 30
   const world = new Container()
   app.stage.addChild(world)
+  const barrel = await ResourceLoader.loadTexture('obj/barrel/barrel.png')
+  barrel.source.scaleMode = 'nearest'
   let previous = performance.now()
   let generation = 0
   let lastReport = 0
@@ -29,6 +32,8 @@ async function main() {
   const equipped = (): EquipmentId[] => [...(wrap.checked ? ['linen_wrap' as const] : []), ...(belt.checked ? ['linen_belt' as const] : [])]
   async function populate() {
     const ownGeneration = ++generation
+    frames.length = 0
+    previous = performance.now()
     for (const handle of handles.splice(0)) renderer.release(handle)
     for (const child of world.removeChildren()) child.destroy({ children: true })
     const number = Number(count.value)
@@ -46,6 +51,9 @@ async function main() {
       handle.actor.direction = indices[index % 8]!
       handle.actor.distanceTiles = index * .021
       container.addChild(handle.sprite)
+      const reference = new Sprite(barrel)
+      reference.position.set(22, -barrel.height)
+      container.addChild(reference)
       const label = new Text({ text: directions[index % 8], style: { fontSize: 8, fill: '#bec4a6', fontFamily: 'monospace' } })
       label.anchor.set(.5, 0)
       label.y = 12

@@ -1,0 +1,11 @@
+Runtime commoner model and clothing exported for Origin from the project's
+approved male_commoner_v3 Blender scenes by tools/blender/export_commoner_realtime.py.
+
+Underlying anatomical asset: MakeHuman, CC0 1.0 Universal.
+Full upstream asset license is retained in the source repository at:
+art_source/characters/male_commoner_v3/source/makehuman/LICENSE.ASSETS.md
+
+Source scenes, project modifications, animation and export report:
+art_source/characters/male_commoner_v3/
+
+No Project Zomboid code or assets are included.

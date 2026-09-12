@@ -172,6 +172,9 @@ export class ActorRenderer {
   private readonly onContextLost = (event: Event): void => { event.preventDefault(); this.lost = true }
   private readonly beforeThreeContextRestore = (): void => { this.pixi.resetState() }
   private readonly onContextRestored = (): void => {
+    // Three rebuilds its background from the shared context's alpha attribute.
+    // Pixi's opaque canvas must not make our offscreen character frames opaque.
+    this.renderer.setClearColor(0, 0)
     const framebuffer = this.pixi.gl.createFramebuffer()
     if (!framebuffer) throw new Error('Unable to restore actor picking framebuffer')
     this.readFramebuffer = framebuffer
