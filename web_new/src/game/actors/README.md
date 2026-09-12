@@ -19,7 +19,7 @@ exceeded. This estimate is not total browser or GPU memory.
 
 Clips: `idle`, `walk`, `carry_idle`, `carry_walk`. Eight sampled poses per walking
 cycle advance with actual client displacement, including final movement damping.
-One cycle covers 0.765424409 tiles. Time alone does not advance a stopped actor.
+One cycle covers 0.965424409 tiles. Time alone does not advance a stopped actor.
 Skinning uses dual quaternions to preserve the source Blender shoulder/arm volume.
 The universal carry pose does not depend on prop size. Carried world props remain
 2D and use the existing sorting; interleaved 3D hand/prop depth is not implemented.
@@ -54,13 +54,22 @@ Run `npm run dev` from `web_new`, then open:
 - `/tests/hybrid-integration.html`: actual ObjectManager/ObjectView integration,
   64 skeletal poses, distance invariance, picking, gear races, carry relation,
   culling, LOD, context restoration and baked fallback.
-- `/tests/player-walk.html`: existing movement and terminal-deceleration checks.
+- Movement and terminal-deceleration regressions now run against live actors in the integration page.
 
-The game uses hybrid rendering by default. Append `?characters=baked` to the game
-URL for comparison. Unsupported WebGL2, load failures and rendering failures
-fall back to the existing baked character. WebGL restore explicitly reapplies
-transparent clears because Three derives its reset default from Pixi's opaque
-canvas context.
+The game requires hybrid rendering and WebGL2. Baked character atlases and the
+comparison/fallback path have been removed. Initialization errors propagate to
+the game initialization handler; runtime rendering or model-loading failures stop
+the render loop and show an explicit reload message. Context restoration reapplies
+transparent clears because Three derives its reset default from Pixi's opaque canvas.
+
+Facing uses actual displayed world displacement projected into screen coordinates,
+then eight equal screen sectors with a three-degree boundary dead band. Adjacent
+sector changes must persist for 120 ms and the current facing is held for at least
+250 ms. Sharp turns of two or more sectors and movement starts respond immediately. Zero
+animation-distance corrections do not turn the actor. Model yaw is computed by
+inverting the orthographic camera elevation, so the forward vector projects onto
+the selected screen ray. Camera pan/zoom do not change facing. The review page
+shows these rays and actors moving along them.
 
 ## Verification, 2026-09-12
 
@@ -81,3 +90,13 @@ Phone performance, thermal throttling and a full populated live server scene
 remain unverified. The review scene measures character work, not the complete
 game workload. CPU submission time is not GPU execution time. Current build
 warnings include large JavaScript chunks and dependency eval/mixed imports.
+
+## Screen-facing revision, 2026-09-13
+
+Removed the two published baked atlases and 357 generated bake images, keeping
+Blender sources, concept and material maps. Legacy sprite-only review files were
+removed; terminal-stop tests now inspect the live actor animation. The integration
+suite also projects the model forward vector through a real Three camera, checks
+ObjectManager displacement at three zoom levels, zero-distance corrections and
+adjacent-sector noise at 30/60/144 FPS. The user's cycle distance remains
+0.965424409 tiles. The design commit is 9fd00b7; implementation is uncommitted.

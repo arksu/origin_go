@@ -36,6 +36,7 @@ export class Render {
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
   private actorRenderer: ActorRenderer | null = null
+  private renderErrorNotice: HTMLElement | null = null
 
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
@@ -78,15 +79,8 @@ export class Render {
       preference: 'webgl',
     })
 
-    // Keep a comparison path while the runtime renderer is evaluated in game.
-    if (new URLSearchParams(window.location.search).get('characters') !== 'baked') {
-      try {
-        this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer)
-        this.objectManager.setActorRenderer(this.actorRenderer)
-      } catch (error) {
-        console.error('[Render] Hybrid characters unavailable; using baked animation', error)
-      }
-    }
+    this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer)
+    this.objectManager.setActorRenderer(this.actorRenderer)
 
     // Limit maximum FPS to reduce system load
     this.app.ticker.maxFPS = MAX_FPS
@@ -218,10 +212,15 @@ export class Render {
     try {
       this.actorRenderer?.render()
     } catch (error) {
-      console.error('[Render] Hybrid character rendering failed; using baked animation', error)
-      this.objectManager.useBakedCharacters()
-      this.actorRenderer?.destroy()
-      this.actorRenderer = null
+      console.error('[Render] Character rendering failed', error)
+      this.app.stop()
+      const notice = document.createElement('div')
+      this.renderErrorNotice = notice
+      notice.setAttribute('role', 'alert')
+      notice.textContent = 'Не удалось отобразить персонажа. Перезагрузите страницу.'
+      notice.style.cssText = 'position:fixed;inset:40% 10% auto;padding:24px;background:#281f1b;color:#fff;z-index:10000;text-align:center'
+      this.app.canvas.parentElement?.append(notice)
+      return
     }
     this.updateHoverHighlight()
 
@@ -634,6 +633,8 @@ export class Render {
   }
 
   destroy(): void {
+    this.renderErrorNotice?.remove()
+    this.renderErrorNotice = null
     this.app.ticker.stop()
 
     this.inputController.destroy()
