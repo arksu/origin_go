@@ -1,3 +1,5 @@
+import { facingFromDisplacement, screenFacingAngle } from '../src/game/actors/facing'
+import { coordScreen2Game } from '../src/game/utils/coordConvert'
 import { Application, Container, Graphics, Sprite, Text, WebGLRenderer } from 'pixi.js'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer, type ActorHandle } from '../src/game/actors/ActorRenderer'
@@ -11,6 +13,7 @@ const belt = document.querySelector<HTMLInputElement>('#belt')!
 const wrap = document.querySelector<HTMLInputElement>('#wrap')!
 const frames: number[] = []
 const handles: ActorHandle[] = []
+const shadows = new Map<ActorHandle, Graphics>()
 const directions = ['S', 'SE', 'E', 'NE', 'N', 'NW', 'W', 'SW']
 const indices = [3, 2, 1, 0, 7, 6, 5, 4]
 
@@ -32,6 +35,7 @@ async function main() {
   const equipped = (): EquipmentId[] => [...(wrap.checked ? ['linen_wrap' as const] : []), ...(belt.checked ? ['linen_belt' as const] : [])]
   async function populate() {
     const ownGeneration = ++generation
+    shadows.clear()
     frames.length = 0
     previous = performance.now()
     for (const handle of handles.splice(0)) renderer.release(handle)
@@ -45,10 +49,16 @@ async function main() {
       container.position.set(16 + spacing * (index % columns) + spacing / 2, (number > 8 ? 145 : 248) + Math.floor(index / columns) * (number > 8 ? 160 : 264))
       container.scale.set(scale)
       const shadow = new Graphics().ellipse(0, 0, 15, 5).fill({ color: '#17201b', alpha: .45 })
-      container.addChild(shadow)
+      const angle = screenFacingAngle(indices[index % 8]!)
+      const rayX = Math.cos(angle) * 38
+      const rayY = Math.sin(angle) * 38
+      const ray = new Graphics().moveTo(-rayX, -rayY).lineTo(rayX, rayY).stroke({ color: '#83a7a0', width: 1 })
+      ray.circle(rayX, rayY, 2).fill('#d5e9ae')
+      container.addChild(ray, shadow)
       const handle = renderer.create()
       handle.priority = true
-      handle.actor.direction = indices[index % 8]!
+      const delta = coordScreen2Game(rayX, rayY)
+      handle.actor.direction = facingFromDisplacement(delta.x, delta.y, 3)
       handle.actor.distanceTiles = index * .021
       container.addChild(handle.sprite)
       const reference = new Sprite(barrel)
@@ -60,6 +70,7 @@ async function main() {
       container.addChild(label)
       world.addChild(container)
       handles.push(handle)
+      shadows.set(handle, shadow)
     }
     await Promise.all(handles.map((handle) => handle.actor.ready))
     if (ownGeneration !== generation) return
@@ -92,6 +103,12 @@ async function main() {
       handle.actor.walking = state.value.endsWith('walk')
       handle.actor.carrying = state.value.startsWith('carry')
       if (handle.actor.walking) handle.actor.distanceTiles += delta / 960 * ACTOR_RENDER.cycleDistanceTiles * Number(speed.value)
+      const angle = screenFacingAngle(handle.actor.direction)
+      const travel = handle.actor.walking ? ((handle.actor.distanceTiles / ACTOR_RENDER.cycleDistanceTiles) % 1) * 32 - 16 : 0
+      const offsetX = Math.cos(angle) * travel
+      const offsetY = Math.sin(angle) * travel
+      handle.sprite.position.set(-ACTOR_RENDER.anchorX + offsetX, -ACTOR_RENDER.anchorY + offsetY)
+      shadows.get(handle)!.position.set(offsetX, offsetY)
     }
     try { renderer.render(now) } catch (error) { failure = error }
     if (now - lastReport > 500) {

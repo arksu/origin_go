@@ -29,11 +29,6 @@ export class ObjectManager {
     for (const [id, view] of this.objects) view.setActorPriority(id === entityId)
   }
 
-  useBakedCharacters(): void {
-    for (const view of this.objects.values()) view.useBakedCharacter()
-    this.actorRenderer = undefined
-  }
-
   /**
    * Set the shared parent container (objectsContainer) where object views
    * are added directly alongside terrain sprites for correct z-sorting.
@@ -126,7 +121,8 @@ export class ObjectManager {
 
     if (isMoving !== undefined && direction !== undefined) {
       if (isMoving) {
-        objectView.onMoved(direction, distanceMoved ?? Math.hypot(x - previousPosition.x, y - previousPosition.y))
+        objectView.onMoved(direction, distanceMoved ?? Math.hypot(x - previousPosition.x, y - previousPosition.y),
+          distanceMoved === 0 ? { x: 0, y: 0 } : { x: x - previousPosition.x, y: y - previousPosition.y })
       } else {
         objectView.onStopped()
       }

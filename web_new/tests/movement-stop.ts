@@ -1,7 +1,7 @@
-import { Sprite } from 'pixi.js'
+import type { ActorHandle } from '../src/game/actors/ActorRenderer'
+import { ACTOR_RENDER } from '../src/game/actors/config'
 import { moveController } from '../src/game/MoveController'
 import { ObjectManager } from '../src/game/ObjectManager'
-import { ResourceLoader } from '../src/game/ResourceLoader'
 import { getCoordPerTile, setWorldParams } from '../src/game/tiles/Tile'
 import { coordGame2Screen } from '../src/game/utils/coordConvert'
 import { timeSync } from '../src/network/TimeSync'
@@ -12,13 +12,14 @@ function check(condition: unknown, message: string): asserts condition {
 
 export async function verifyMovementStopping(manager: ObjectManager): Promise<void> {
   const entityId = 901
-  const sheet = ResourceLoader.getResourceDef('player')!.layers[0]!.spriteSheet!
-  const textures = await ResourceLoader.loadDirectionalSpriteSheet(sheet)
+  const sheet = { cycleDistanceTiles: ACTOR_RENDER.cycleDistanceTiles, frameCount: ACTOR_RENDER.walkSamples }
   manager.spawnObject({ entityId, typeId: 1, resourcePath: 'player', position: { x: 0, y: 0 }, size: { x: 4, y: 4 } })
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   const view = manager.getObject(entityId)!
-  const sprite = view.getContainer().children.find((child) => child instanceof Sprite)
-  check(sprite instanceof Sprite, 'Stop regression needs the production player sprite')
+  const handle = (view as unknown as { actorHandle: ActorHandle }).actorHandle
+  await handle.actor.ready
+  const isIdle = () => !handle.actor.walking
+  const frame = () => Math.floor(handle.actor.distanceTiles / sheet.cycleDistanceTiles * sheet.frameCount + 1e-8) % sheet.frameCount
   const originalNow = Date.now
   const originalCoordPerTile = getCoordPerTile()
 
@@ -59,7 +60,7 @@ export async function verifyMovementStopping(manager: ObjectManager): Promise<vo
             const remaining = Math.hypot(targetX - position.x, targetY - position.y)
             if (remaining === 0) {
               check(!position.isMoving, 'Exact arrival must end visual movement')
-              check(sprite.texture === textures[direction]![sheet.idleFrame], 'Arrival must select the standing pose')
+              check(isIdle(), 'Arrival must select the standing pose')
               const finalCorrection = coordGame2Screen(
                 Math.cos(heading) * position.distanceMoved, Math.sin(heading) * position.distanceMoved)
               check(Math.hypot(finalCorrection.x, finalCorrection.y) < .25, 'Final stop correction must stay below a native pixel')
@@ -69,7 +70,7 @@ export async function verifyMovementStopping(manager: ObjectManager): Promise<vo
             }
             check(position.isMoving, `Server stop must keep walking during visual travel (${direction}, ${frameRate} FPS)`)
             const expectedFrame = Math.floor(totalDistance / cycleDistance * sheet.frameCount + 1e-8) % sheet.frameCount
-            check(sprite.texture === textures[direction]![expectedFrame], 'Deceleration must preserve the distance-based stride phase')
+            check(!isIdle() && frame() === expectedFrame, 'Deceleration must preserve the distance-based stride phase')
             visitedFrames.add(expectedFrame)
             if (clientNow > startTime + 100 + 1000 / frameRate) {
               check(position.distanceMoved < previousDistance, 'Travel and effective animation FPS must decrease during settling')
@@ -95,13 +96,13 @@ export async function verifyMovementStopping(manager: ObjectManager): Promise<vo
           check(restarted.isMoving && restarted.distanceMoved > 0, 'Walking must resume after a completed stop')
           manager.updateObjectPosition(entityId, restarted.x, restarted.y,
             restarted.isMoving, restarted.direction, restarted.distanceMoved)
-          check(sprite.texture !== textures[direction]![sheet.idleFrame], 'Restart must leave the standing pose')
+          check(!isIdle(), 'Restart must leave the standing pose')
           moveController.onObjectMove(entityId, restartTime + 10, 5, true, 10000, 10000, 0, 0, false, 1, heading)
           const teleported = moveController.update().get(entityId)!
           check(!teleported.isMoving && teleported.distanceMoved === 0, 'Teleport must cancel pending visual settling')
           manager.updateObjectPosition(entityId, teleported.x, teleported.y,
             teleported.isMoving, teleported.direction, teleported.distanceMoved)
-          check(sprite.texture === textures[direction]![sheet.idleFrame], 'A stopped teleport must immediately show idle')
+          check(isIdle(), 'A stopped teleport must immediately show idle')
         }
         check(Math.max(...settleDurations) - Math.min(...settleDurations) < 70,
           'Stop duration must not depend on rendering at 30, 60 or 144 FPS')
@@ -127,14 +128,14 @@ export async function verifyMovementStopping(manager: ObjectManager): Promise<vo
     manager.updateObjectPosition(entityId, resumed.x, resumed.y,
       resumed.isMoving, resumed.direction, resumed.distanceMoved)
     const resumedFrame = Math.floor((settling.distanceMoved + resumed.distanceMoved) / cycleDistance * sheet.frameCount)
-    check(resumed.isMoving && sprite.texture === textures[2]![resumedFrame],
+    check(resumed.isMoving && !isIdle() && frame() === resumedFrame,
       'Restart during deceleration must keep the accumulated stride without flashing idle')
     manager.setKnockedOutPose(entityId, true)
     clientNow += 1000 / 60
     const afterKO = moveController.update().get(entityId)!
     manager.updateObjectPosition(entityId, afterKO.x, afterKO.y,
       afterKO.isMoving, afterKO.direction, afterKO.distanceMoved)
-    check(sprite.texture === textures[2]![sheet.idleFrame], 'KO must suppress walking even while the controller still settles')
+    check(isIdle(), 'KO must suppress walking even while the controller still settles')
     manager.setKnockedOutPose(entityId, false)
 
     // Even a very short buffered segment must not settle at an intermediate

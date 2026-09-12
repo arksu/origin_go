@@ -1,3 +1,6 @@
+import type { ActorHandle } from '../src/game/actors/ActorRenderer'
+import { verifyMovementStopping } from './movement-stop'
+import { verifyScreenFacing } from './screen-facing'
 import { Application, Container, Sprite, Texture, WebGLRenderer } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
@@ -168,15 +171,33 @@ async function main() {
   check(view.hitTestRmbScreenPoint(120, 160, coordScreen2Game), 'Picking framebuffer must survive context restoration')
   pass('Actual WebGL context loss / texture restoration / picking restoration')
 
+  verifyScreenFacing()
+  const liveActor = (view as unknown as { actorHandle: ActorHandle }).actorHandle.actor
+  for (const scale of [.5, 1, 2]) {
+    world.scale.set(scale)
+    for (let direction = 0; direction < 8; direction++) {
+      const angle = (direction - 1) * Math.PI / 4
+      const delta = coordScreen2Game(Math.cos(angle) * 20, Math.sin(angle) * 20)
+      manager.updateObjectPosition(101, 0, 0, false, 3, 0)
+      // Deliberately wrong server direction: visible displacement owns facing.
+      manager.updateObjectPosition(101, delta.x, delta.y, true, 3, Math.hypot(delta.x, delta.y))
+      hash()
+      check(liveActor.direction === direction, `Production facing must follow screen ray ${direction} at scale ${scale}`)
+      manager.updateObjectPosition(101, delta.x, delta.y, false, 3, 0)
+      check(liveActor.direction === direction, 'Stop must preserve the displayed facing')
+      manager.updateObjectPosition(101, 5000, 5000, true, 3, 0)
+      check(liveActor.direction === direction, 'Zero-distance teleport must not turn the character')
+    }
+  }
+  world.scale.set(2)
+  pass('Screen sectors / actual ObjectManager displacement / zoom / inverse camera projection / boundary hysteresis')
+  await verifyMovementStopping(manager)
+  pass('Live actor / server stop / deceleration / 8 directions / 30–144 FPS / restart / teleport / KO')
   manager.despawnObject(201)
-  manager.useBakedCharacters()
+  manager.despawnObject(101)
   renderer.destroy()
-  await ResourceLoader.loadDirectionalSpriteSheet(ResourceLoader.getResourceDef('player')!.layers[0]!.spriteSheet!)
-  await paint()
-  manager.update()
-  app.render()
-  check(view.getContainer().children.some((child) => child instanceof Sprite && child.texture.width === 80), 'Baked fallback must load after hybrid teardown')
-  pass('Renderer teardown / working baked fallback')
+  check(Number(renderer.metrics.actors) === 0 && renderer.metrics.assets === 0, 'Teardown must release all actor resources')
+  pass('Renderer teardown / no baked fallback')
   result.textContent += '\n\nALL CHECKS PASSED'
 }
 void main().catch((error: unknown) => { result.textContent += '\nFAIL ' + (error instanceof Error ? error.stack : String(error)); console.error(error) })

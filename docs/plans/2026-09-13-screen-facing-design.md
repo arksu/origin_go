@@ -23,3 +23,12 @@ from ObjectManager displacement; derive model yaw from camera elevation; remove
 baked resources and paths; migrate tests and add a ray comparison; build and run
 browser checks. The referenced writing-plans skill is unavailable in this session,
 so this concrete plan is included here.
+
+User follow-up: suppress visible boundary flicker. Adjacent directions require
+120 ms persistence and a 250 ms minimum facing hold; sharp turns remain immediate.
+
+Verification: production build and object schema checks pass. All 11 hybrid
+integration groups pass in the existing local browser server, including projected
+screen rays at three zoom levels, facing stabilization at 30/60/144 FPS, live
+terminal deceleration, context restoration and resource teardown. Reviewed the
+moving actor ray scene. No new implementation commit was created.

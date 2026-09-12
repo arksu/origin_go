@@ -99,20 +99,7 @@
       40,
       84
     ],
-    "layers": [
-      {
-        "interactive": true,
-        "spriteSheet": {
-          "img": "characters/male_commoner/walk_idle.png",
-          "frameSize": [80, 96],
-          "frameCount": 8,
-          "frameDurationMs": 120,
-          "cycleDistanceTiles": 0.765424409,
-          "directions": ["S", "SE", "E", "NE", "N", "NW", "W", "SW"],
-          "idleFrame": 8
-        }
-      }
-    ]
+    "layers": []
   },
   "build": {
     "offset": [

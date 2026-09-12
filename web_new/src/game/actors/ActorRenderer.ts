@@ -48,7 +48,7 @@ export class ActorRenderer {
     this.renderer.info.autoReset = false
     const half = ACTOR_RENDER.orthoHeight / 2
     this.camera = new OrthographicCamera(-half, half, half, -half, .1, 20)
-    this.camera.position.set(0, ACTOR_RENDER.cameraHeight + 3, Math.sqrt(27))
+    this.camera.position.set(0, ACTOR_RENDER.cameraHeight + 6 * Math.sin(ACTOR_RENDER.cameraElevation), 6 * Math.cos(ACTOR_RENDER.cameraElevation))
     this.camera.lookAt(0, ACTOR_RENDER.cameraHeight, 0)
     const framebuffer = this.pixi.gl.createFramebuffer()
     if (!framebuffer) throw new Error('Unable to allocate actor picking framebuffer')
@@ -96,6 +96,7 @@ export class ActorRenderer {
           }
           continue
         }
+        if (handle.actor.error) throw new Error('Character model could not be loaded', { cause: handle.actor.error })
         if (!handle.actor.isReady) continue
         const transform = handle.sprite.parent!.worldTransform
         handle.actor.setLowDetail(Math.hypot(transform.a, transform.b) < .8)

@@ -9,7 +9,7 @@
   select,button { background: #2e3b38; color: #eddfba; padding: 8px; border: 1px solid #657563; border-radius: 4px; }
   canvas { display: block; max-width: 100%; image-rendering: pixelated; } pre { white-space: pre-wrap; color: #b5c9b7; font-size: 12px; }
 </style></head>
-<body><main><h1>Персонаж • realtime 3D → пиксель арт</h1><p>Фиксированные камера и свет. Игровая модель, скелет и отдельная экипировка.</p>
+<body><main><h1>Персонаж • realtime 3D → пиксель арт</h1><p>Восемь экранных направлений. Луч под ногами показывает траекторию; точка — направление движения. В конце отрезка цикл начинается заново.</p>
 <div class="controls">
 <label>Состояние <select id="state"><option value="idle">Покой</option><option value="walk">Ходьба</option><option value="carry_idle">Переноска / покой</option><option value="carry_walk">Переноска / ходьба</option></select></label>
 <label>Персонажей <select id="count"><option>8</option><option>1</option><option>30</option></select></label>

@@ -1,3 +1,4 @@
+import { facingFromDisplacement, FacingStabilizer } from './actors/facing'
 import { Container, Sprite, Graphics, Text, Texture, Rectangle } from 'pixi.js'
 import type { Spine } from '@esotericsoftware/spine-pixi-v8'
 import { ResourceLoader, type ResourceDef, type LayerDef } from './ResourceLoader'
@@ -84,6 +85,7 @@ export class ObjectView {
   private animationStartMs = 0
   private isWalking = false
   private walkDistanceTiles = 0
+  private readonly facingStabilizer = new FacingStabilizer()
   private lastDir = 3 // south in MoveController direction order
   private isDestroyed = false
   private isDroppedItem = false
@@ -185,15 +187,16 @@ export class ObjectView {
 
   private buildLayers(): void {
     if (!this.resDef) return
-    if (this.resDef.actor3d && this.actorRenderer) {
+    if (this.resDef.actor3d) {
+      if (!this.actorRenderer) throw new Error('3D character requires the actor renderer')
       this.hasFrameAnimation = true
       const handle = this.actorRenderer.create()
       this.actorHandle = handle
       this.container.addChild(handle.sprite)
       this.setInteractive(handle.sprite)
       void handle.actor.ready.then(() => this.syncActor()).catch((error: unknown) => {
-        console.error(`[ObjectView] 3D character ${this.entityId} failed; using baked animation`, error)
-        if (!this.isDestroyed) this.useBakedCharacter()
+        console.error(`[ObjectView] 3D character ${this.entityId} failed`, error)
+        // ActorRenderer surfaces this failure through the game render error path.
       })
       return
     }
@@ -461,13 +464,18 @@ export class ObjectView {
   /**
    * Called when the entity is moving in a direction (0-7).
    */
-  onMoved(dir: number, distanceMoved = 0): void {
+  onMoved(dir: number, distanceMoved = 0, displacement?: { x: number; y: number }): void {
     if (this.isDestroyed || this.knockedOutPose || this.isDroppedItem || !this.resDef) return
     if (!Number.isInteger(dir) || dir < 0 || dir > 7) return
     if (!Number.isFinite(distanceMoved) || distanceMoved < 0) {
       throw new Error(`Invalid movement distance for entity ${this.entityId}: ${distanceMoved}`)
     }
-    this.lastDir = dir
+    if (this.actorHandle && displacement) {
+      const next = facingFromDisplacement(displacement.x, displacement.y, this.lastDir)
+      this.lastDir = this.facingStabilizer.update(this.lastDir, next, performance.now(), !this.isWalking)
+    } else {
+      this.lastDir = dir
+    }
     this.isWalking = true
     // World displacement is independent of zoom and already includes interpolation.
     // Accumulate fractional frames so speed changes and turns retain stride phase.
@@ -1029,13 +1037,6 @@ export class ObjectView {
     if (!this.actorHandle) return
     await this.actorHandle.actor.ready
     if (!this.isDestroyed) await this.actorHandle.actor.setEquipment(ids)
-  }
-
-  useBakedCharacter(): void {
-    if (!this.actorHandle) return
-    this.actorRenderer?.release(this.actorHandle)
-    this.actorHandle = null
-    this.buildSpriteLayers()
   }
 
   private createBoundsGraphics(): void {

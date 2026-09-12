@@ -7,7 +7,7 @@ import { DualQuaternionSkin } from './DualQuaternionSkin'
 import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_EQUIPMENT, EQUIPMENT, type EquipmentId } from './config'
 
 interface EquipmentInstance { root: Group; release: () => void; meshes: SkinnedMesh[] }
-const ANGLES = [135, 90, 45, 0, 315, 270, 225, 180]
+import { actorYawForFacing } from './facing'
 
 export class ActorInstance {
   readonly root = new Group()
@@ -152,7 +152,7 @@ export class ActorInstance {
     const key = `${name}/${phase}/${this.direction}/${this.hovered}`
     if (key === this.lastPose) return false
     this.lastPose = key
-    this.root.rotation.y = (ANGLES[this.direction] ?? 0) * Math.PI / 180
+    this.root.rotation.y = actorYawForFacing(this.direction)
     const active = this.actions.get(name)!
     for (const action of this.actions.values()) action.stop()
     active.play()
