@@ -50,8 +50,8 @@
       "static": true,
       "components": {
         "collider": {
-          "w": 36,
-          "h": 36
+          "w": 24,
+          "h": 24
         }
       },
       "resource": "kiln",
