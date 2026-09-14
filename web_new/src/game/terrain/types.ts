@@ -17,12 +17,6 @@ export interface TerrainDrawCmd {
   textureFrameId: string
   x: number
   y: number
+  depthY: number
   zOffset: number
-}
-
-export interface TerrainRenderContext {
-  tileX: number
-  tileY: number
-  anchorScreenX: number
-  anchorScreenY: number
 }

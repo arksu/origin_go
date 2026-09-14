@@ -12,7 +12,8 @@
           1,
           -14
         ],
-        "p": 5
+        "p": 5,
+        "z": -9
       },
       {
         "img": "terrain/wald/image_2.png",
@@ -20,7 +21,8 @@
           16,
           -16
         ],
-        "p": 5
+        "p": 5,
+        "z": -3
       },
       {
         "img": "terrain/wald/image_3.png",
@@ -28,7 +30,8 @@
           1,
           -6
         ],
-        "p": 5
+        "p": 5,
+        "z": 8
       },
       {
         "img": "terrain/wald/image_4.png",
@@ -36,7 +39,8 @@
           5,
           -5
         ],
-        "p": 5
+        "p": 5,
+        "z": -9
       },
       {
         "img": "terrain/wald/image_5.png",
@@ -44,7 +48,8 @@
           25,
           -27
         ],
-        "p": 5
+        "p": 5,
+        "z": -8
       },
       {
         "img": "terrain/wald/image_6.png",
@@ -52,7 +57,8 @@
           -11,
           -9
         ],
-        "p": 5
+        "p": 5,
+        "z": 1
       },
       {
         "img": "terrain/wald/image_7.png",
@@ -60,7 +66,8 @@
           0,
           5
         ],
-        "p": 5
+        "p": 5,
+        "z": 14
       },
       {
         "img": "terrain/wald/image_8.png",
@@ -68,7 +75,8 @@
           -7,
           -1
         ],
-        "p": 5
+        "p": 5,
+        "z": 23
       }
     ]
   }
