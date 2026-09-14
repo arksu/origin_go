@@ -106,6 +106,7 @@ export class TerrainGenerator {
       textureFrameId: layer.img,
       x: anchorScreenX + dx,
       y: anchorScreenY + dy,
+      depthY: anchorScreenY + TILE_HEIGHT_HALF,
       zOffset: layer.z ?? 0,
     }
   }

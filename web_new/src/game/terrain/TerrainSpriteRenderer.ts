@@ -1,7 +1,6 @@
 import { Sprite, Container, Spritesheet } from 'pixi.js'
 import type { ITerrainRenderer } from './ITerrainRenderer'
-import type { TerrainDrawCmd, TerrainRenderContext } from './types'
-import { TILE_HEIGHT_HALF } from '../tiles/Tile'
+import type { TerrainDrawCmd } from './types'
 import { terrainSpritePool } from './TerrainSpritePool'
 import { terrainMetrics } from './TerrainMetricsCollector'
 import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
@@ -13,7 +12,7 @@ interface TerrainSpriteData {
 
 /**
  * Sprite-based terrain renderer with object pooling.
- * Uses anchorScreenY directly for zIndex calculation (no coordGame2Screen call).
+ * Uses the generator's explicit ground-contact depth for zIndex calculation.
  * Does NOT register individual sprites with culling - uses bulk clearTerrainForSubchunk.
  */
 export class TerrainSpriteRenderer implements ITerrainRenderer {
@@ -34,12 +33,10 @@ export class TerrainSpriteRenderer implements ITerrainRenderer {
 
   /**
    * Add terrain sprites for a tile.
-   * Uses anchorScreenY from context for zIndex (optimization: no coordGame2Screen call).
    */
-  addTile(cmds: TerrainDrawCmd[], context: TerrainRenderContext): void {
+  addTile(cmds: TerrainDrawCmd[]): void {
     for (const cmd of cmds) {
-      // Use anchorScreenY directly for zIndex calculation (spec item 4)
-      const zIndex = TERRAIN_BASE_Z_INDEX + context.anchorScreenY + TILE_HEIGHT_HALF + cmd.zOffset
+      const zIndex = TERRAIN_BASE_Z_INDEX + cmd.depthY + cmd.zOffset
 
       const sprite = terrainSpritePool.acquire(cmd.textureFrameId, cmd.x, cmd.y, zIndex)
       if (!sprite) continue

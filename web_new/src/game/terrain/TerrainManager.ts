@@ -1,7 +1,6 @@
 import { Container, Spritesheet } from 'pixi.js'
 import { TerrainSpriteRenderer } from './TerrainSpriteRenderer'
 import { getTerrainGenerator } from './TerrainRegistry'
-import type { TerrainRenderContext } from './types'
 import type { TerrainSubchunk, TerrainBuildTask } from './TerrainSubchunkTypes'
 import { TerrainSubchunkState } from './TerrainSubchunkTypes'
 import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getChunkSize, getFullChunkSize } from '../tiles/Tile'
@@ -261,13 +260,7 @@ export class TerrainManager {
 
         const cmds = generator.generate(globalTileX, globalTileY, anchorScreenX, anchorScreenY)
         if (cmds && cmds.length > 0) {
-          const context: TerrainRenderContext = {
-            tileX: globalTileX,
-            tileY: globalTileY,
-            anchorScreenX,
-            anchorScreenY,
-          }
-          this.renderer.addTile(cmds, context)
+          this.renderer.addTile(cmds)
         }
       }
     }
