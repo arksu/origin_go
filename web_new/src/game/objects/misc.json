@@ -1,8 +1,8 @@
 {
   "kiln": {
     "offset": [
-      79,
-      120
+      64,
+      144
     ],
     "layers": [
       {
@@ -12,8 +12,8 @@
       {
         "img": "obj/kiln/kiln_.png",
         "offset": [
-          38,
-          57
+          0,
+          112
         ],
         "shadow": true
       }

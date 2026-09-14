@@ -39,9 +39,12 @@ const { placeItemIntoBuild } = useInventoryOps()
 const gameCanvas = ref<HTMLCanvasElement | null>(null)
 const chatContainerRef = ref<InstanceType<typeof ChatContainer>>()
 const canvasInitialized = ref(false)
+const rendererInitializing = ref(true)
 let gameFacade: any = null
 let connectToGame: any = null
 let disconnectFromGame: any = null
+let canvasInitPromise: Promise<boolean> | null = null
+let viewUnmounted = false
 const navigatingAway = ref(false)
 const showLoadingOverlay = ref(false)
 const loadingOverlayFading = ref(false)
@@ -51,8 +54,8 @@ let loadingSlowHintTimer: ReturnType<typeof setTimeout> | null = null
 
 const connectionState = computed(() => gameStore.connectionState)
 const connectionError = computed(() => gameStore.connectionError)
-const isConnecting = computed(() => 
-  connectionState.value === 'connecting' || connectionState.value === 'authenticating'
+const isConnecting = computed(() =>
+  rendererInitializing.value || connectionState.value === 'connecting' || connectionState.value === 'authenticating'
 )
 const isConnected = computed(() => connectionState.value === 'connected')
 const hasError = computed(() => connectionState.value === 'error')
@@ -209,9 +212,15 @@ function toggleLiftPutDownMode(): void {
   syncLiftGhostFromStore()
 }
 
-async function initCanvas() {
-  if (!gameCanvas.value || canvasInitialized.value) return
+async function initCanvas(): Promise<boolean> {
+  if (canvasInitialized.value) return true
+  if (!gameCanvas.value) {
+    gameStore.setConnectionState('error', { code: 'RENDER_INIT_FAILED', message: 'Game canvas is unavailable' })
+    rendererInitializing.value = false
+    return false
+  }
 
+  rendererInitializing.value = true
   try {
     await gameFacade.init(gameCanvas.value)
     canvasInitialized.value = true
@@ -252,8 +261,30 @@ async function initCanvas() {
 
     syncBuildGhostFromStore()
     syncLiftGhostFromStore()
+    return true
   } catch (err) {
     console.error('[GameView] Failed to init canvas:', err)
+    if (!viewUnmounted) {
+      gameStore.setConnectionState('error', {
+        code: 'RENDER_INIT_FAILED',
+        message: err instanceof Error ? err.message : 'Failed to initialize game renderer',
+      })
+    }
+    return false
+  } finally {
+    rendererInitializing.value = false
+  }
+}
+
+async function ensureCanvasInitialized(): Promise<boolean> {
+  if (canvasInitialized.value) return true
+  if (canvasInitPromise) return canvasInitPromise
+
+  canvasInitPromise = initCanvas()
+  try {
+    return await canvasInitPromise
+  } finally {
+    canvasInitPromise = null
   }
 }
 
@@ -274,13 +305,6 @@ watch(
     syncLiftGhostFromStore()
   }
 )
-
-watch(isConnected, async (connected) => {
-  if (connected) {
-    await nextTick()
-    await initCanvas()
-  }
-})
 
 watch([isConnected, worldBootstrapState], ([connected, bootstrap]) => {
   if (!connected) {
@@ -362,27 +386,36 @@ onMounted(async () => {
     import('@/network')
   ])
 
+  if (viewUnmounted) return
+
   gameFacade = gameModule.gameFacade
   connectToGame = networkModule.connectToGame
   disconnectFromGame = networkModule.disconnectFromGame
 
   gameStore.clearLastServerErrorMessage()
   gameStore.startWorldBootstrap()
+  await nextTick()
+  if (viewUnmounted) return
+  const rendererReady = await ensureCanvasInitialized()
+  if (!rendererReady || viewUnmounted) return
   connectToGame(gameStore.wsToken)
 })
 
 onUnmounted(() => {
+  viewUnmounted = true
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('resize', onOrientationChange)
   window.matchMedia('(orientation: portrait)').removeEventListener('change', onOrientationChange)
 
-  if (gameFacade) {
-    gameFacade.destroy()
-  }
-  canvasInitialized.value = false
   if (disconnectFromGame) {
     disconnectFromGame()
   }
+  if (canvasInitPromise) {
+    void canvasInitPromise.then(() => gameFacade?.destroy())
+  } else {
+    gameFacade?.destroy()
+  }
+  canvasInitialized.value = false
   if (overlayHideTimer) {
     clearTimeout(overlayHideTimer)
     overlayHideTimer = null
@@ -404,9 +437,10 @@ function handleDeathDialogBack() {
   handleBack()
 }
 
-function handleRetry() {
+async function handleRetry() {
   if (gameStore.wsToken) {
     gameStore.startWorldBootstrap()
+    if (!await ensureCanvasInitialized() || viewUnmounted) return
     connectToGame(gameStore.wsToken)
   }
 }
@@ -721,7 +755,7 @@ useHotkeys(hotkeys)
     <div v-if="isConnecting" class="game-connecting">
       <AppSpinner size="lg" />
       <p class="game-connecting__text">
-        {{ connectionState === 'authenticating' ? 'Authenticating...' : 'Connecting...' }}
+        {{ rendererInitializing ? 'Preparing game...' : connectionState === 'authenticating' ? 'Authenticating...' : 'Connecting...' }}
       </p>
     </div>
 
@@ -737,7 +771,7 @@ useHotkeys(hotkeys)
     </div>
 
     <!-- Connected state -->
-    <div v-else-if="isConnected" class="game-canvas-wrapper">
+    <div v-show="isConnected" class="game-canvas-wrapper">
       <canvas ref="gameCanvas" class="game-canvas"></canvas>
       <div v-if="deathDialog" class="game-death-dialog-backdrop">
         <div class="game-death-dialog">
@@ -880,7 +914,7 @@ useHotkeys(hotkeys)
     </div>
 
     <!-- Disconnected state -->
-    <div v-else class="game-disconnected">
+    <div v-if="!isConnecting && !hasError && !isConnected" class="game-disconnected">
       <p>Disconnected from server</p>
       <AppButton @click="handleBack">Back to characters</AppButton>
     </div>
