@@ -4,17 +4,19 @@ import type { DebugInfo, ScreenPoint } from './types'
 import type { ArmBuildGhostOptions } from './BuildGhostController'
 import type { ArmLiftGhostOptions } from './LiftGhostController'
 import type { EquippedVisual } from '../types/characterVisual'
+import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 
 export class GameFacade {
   private render: Render | null = null
   private initialized: boolean = false
+  private actorRenderSettings: Readonly<ActorRenderSettings> = DEFAULT_ACTOR_RENDER_SETTINGS
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     if (this.initialized) {
       this.destroy()
     }
 
-    this.render = new Render()
+    this.render = new Render(this.actorRenderSettings)
     await this.render.init(canvas)
     this.initialized = true
   }
@@ -29,6 +31,16 @@ export class GameFacade {
 
   isInitialized(): boolean {
     return this.initialized
+  }
+
+  /** Can be set before init; the future Settings UI will call this method. */
+  setActorRenderSettings(settings: Partial<ActorRenderSettings>): void {
+    this.actorRenderSettings = resolveActorRenderSettings({ ...this.actorRenderSettings, ...settings })
+    this.render?.setActorRenderSettings(this.actorRenderSettings)
+  }
+
+  getActorRenderSettings(): Readonly<ActorRenderSettings> {
+    return this.actorRenderSettings
   }
 
   onPlayerClick(callback: (event: { screenX: number; screenY: number; worldX: number; worldY: number; button: number }) => boolean | void): void {

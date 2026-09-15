@@ -4,11 +4,11 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import type { ActorAssetCache } from './ActorAssetCache'
 import { createActorMaterial } from './ActorMaterial'
 import { DualQuaternionSkin } from './DualQuaternionSkin'
-import { ACTOR_RENDER, COMMONER_MODEL } from './config'
+import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_ACTOR_RENDER_SETTINGS, type ActorRenderSettings } from './config'
 import { DEFAULT_EQUIPMENT, EQUIPMENT, armForSlot, validateEquipment, type ArmSide, type EquipmentDefinition, type EquipmentBinding } from './equipment'
 import { ActorSockets } from './ActorSockets'
 import { ActorArmLayers } from './ActorArmLayers'
-import { actorYawForFacing } from './facing'
+import { actorYawForScreenAngle, screenFacingAngle } from './facing'
 import type { EquippedVisual, EquipmentSlot } from '../../types/characterVisual'
 
 interface EquipmentInstance {
@@ -22,7 +22,7 @@ export class ActorInstance {
   readonly root = new Group()
   readonly ready: Promise<void>
   revision = 0
-  direction = 3
+  private facingDirection = 3
   distanceTiles = 0
   walking = false
   carrying = false
@@ -43,6 +43,11 @@ export class ActorInstance {
   private requestedEquipment: readonly EquippedVisual[] = []
   private releaseModel: (() => void) | null = null
   private lastPose = ''
+  private lastPoseState = ''
+  private immediateRender = true
+  private facingAngle = screenFacingAngle(3)
+  private targetFacingAngle = screenFacingAngle(3)
+  private lastFacingUpdateMs: number | null = null
   private destroyed = false
   private lowDetail = false
 
@@ -151,6 +156,7 @@ export class ActorInstance {
     this.armProfiles = profiles
     for (const side of ['left', 'right'] as const) this.armLayers.setPose(side, poses[side])
     this.lastPose = ''
+    this.immediateRender = true
     this.updatePose()
   }
 
@@ -222,18 +228,65 @@ export class ActorInstance {
 
   setArmPose(side: ArmSide, clip: string | null, sampleTime = 0): void {
     if (!this.armLayers) throw new Error('Character is not loaded')
-    if (this.armLayers.setPose(side, clip, sampleTime)) this.lastPose = ''
+    if (this.armLayers.setPose(side, clip, sampleTime)) {
+      this.lastPose = ''
+      this.immediateRender = true
+    }
     delete this.armProfiles[side]
   }
 
-  updatePose(now = performance.now()): boolean {
+  get direction(): number { return this.facingDirection }
+
+  set direction(direction: number) {
+    if (!Number.isInteger(direction) || direction < 0 || direction > 7) throw new Error(`Invalid facing direction: ${direction}`)
+    if (direction === this.facingDirection) return
+    this.facingDirection = direction
+    this.setFacingAngle(screenFacingAngle(direction))
+  }
+
+  setFacingAngle(angle: number): void {
+    if (!Number.isFinite(angle)) throw new Error('Invalid screen-facing angle')
+    const target = Math.atan2(Math.sin(angle), Math.cos(angle))
+    if (Math.abs(Math.atan2(Math.sin(target - this.targetFacingAngle), Math.cos(target - this.targetFacingAngle))) < 1e-6) return
+    this.targetFacingAngle = target
+    this.lastPose = ''
+    this.immediateRender = true
+  }
+
+  private updateFacing(now: number, settings: ActorRenderSettings): boolean {
+    if (settings.mode === 'baked8') {
+      const direction = ((Math.floor(this.targetFacingAngle / (Math.PI / 4) + .5) + 1) % 8 + 8) % 8
+      const next = screenFacingAngle(direction)
+      const changed = Math.abs(Math.atan2(Math.sin(next - this.facingAngle), Math.cos(next - this.facingAngle))) > 1e-6
+      this.facingDirection = direction
+      this.facingAngle = next
+      this.lastFacingUpdateMs = now
+      return changed
+    }
+    const previousUpdate = this.lastFacingUpdateMs
+    this.lastFacingUpdateMs = now
+    if (previousUpdate === null) return false
+    const difference = Math.atan2(Math.sin(this.targetFacingAngle - this.facingAngle), Math.cos(this.targetFacingAngle - this.facingAngle))
+    const maximumStep = Math.PI * Math.max(0, now - previousUpdate) / settings.turnDurationMs
+    const step = Math.max(-maximumStep, Math.min(maximumStep, difference))
+    if (Math.abs(step) < 1e-6) return false
+    this.facingAngle = Math.atan2(Math.sin(this.facingAngle + step), Math.cos(this.facingAngle + step))
+    return true
+  }
+
+  updatePose(now = performance.now(), settings: ActorRenderSettings = DEFAULT_ACTOR_RENDER_SETTINGS): boolean {
     if (!this.mixer || this.destroyed) return false
-    const phase = this.walking ? Math.floor((this.distanceTiles / ACTOR_RENDER.cycleDistanceTiles % 1) * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : 0
+    const continuousPhase = this.walking ? ((this.distanceTiles / ACTOR_RENDER.cycleDistanceTiles) % 1 + 1) % 1 : 0
+    const phase = settings.mode === 'baked8' ? Math.floor(continuousPhase * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : continuousPhase
+    const facingChanged = this.updateFacing(now, settings)
     const name = `${this.carrying ? 'carry_' : ''}${this.walking ? 'walk' : 'idle'}`
-    const key = `${name}/${phase}/${this.direction}/${this.hovered}`
-    if (key === this.lastPose && (this.carrying || !this.armLayers?.transitioning)) return false
+    const key = `${settings.mode}/${name}/${phase}/${this.facingAngle}/${this.hovered}`
+    if (!facingChanged && key === this.lastPose && (this.carrying || !this.armLayers?.transitioning)) return false
+    const state = `${settings.mode}/${name}/${this.hovered}`
+    if (state !== this.lastPoseState) this.immediateRender = true
     this.lastPose = key
-    this.root.rotation.y = actorYawForFacing(this.direction)
+    this.lastPoseState = state
+    this.root.rotation.y = actorYawForScreenAngle(this.facingAngle)
     if (!this.carrying && this.armLayers) {
       for (const side of ['left', 'right'] as const) {
         const profile = this.armProfiles[side]
@@ -267,6 +320,9 @@ export class ActorInstance {
   }
 
   get isReady(): boolean { return this.loaded && !this.error }
+  get needsImmediateRender(): boolean { return this.immediateRender }
+  acknowledgeRender(): void { this.immediateRender = false }
+  invalidateRender(): void { this.lastPose = ''; this.immediateRender = true }
   get equippedVisuals(): readonly EquippedVisual[] { return this.requestedEquipment }
 
   setLowDetail(enabled: boolean): void {
@@ -276,6 +332,7 @@ export class ActorInstance {
       if (object.userData.lod === 0) object.visible = !enabled
       if (object.userData.lod === 1) object.visible = enabled
     })
+    this.immediateRender = true
     this.revision++
   }
 

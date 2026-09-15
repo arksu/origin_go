@@ -1,4 +1,4 @@
-import { facingFromDisplacement, FacingStabilizer } from './actors/facing'
+import { facingFromDisplacement, FacingStabilizer, screenFacingAngleFromDisplacement } from './actors/facing'
 import { Container, Sprite, Graphics, Text, Texture, Rectangle } from 'pixi.js'
 import type { Spine } from '@esotericsoftware/spine-pixi-v8'
 import { ResourceLoader, type ResourceDef, type LayerDef } from './ResourceLoader'
@@ -88,6 +88,7 @@ export class ObjectView {
   private walkDistanceTiles = 0
   private readonly facingStabilizer = new FacingStabilizer()
   private lastDir = 3 // south in MoveController direction order
+  private actorFacingAngle: number | null = null
   private isDestroyed = false
   private isDroppedItem = false
   private hasSpineLayers = false
@@ -472,6 +473,8 @@ export class ObjectView {
       throw new Error(`Invalid movement distance for entity ${this.entityId}: ${distanceMoved}`)
     }
     if (this.actorHandle && displacement) {
+      this.actorFacingAngle = screenFacingAngleFromDisplacement(displacement.x, displacement.y)
+      if (this.actorFacingAngle !== null) this.actorHandle.actor.setFacingAngle(this.actorFacingAngle)
       const next = facingFromDisplacement(displacement.x, displacement.y, this.lastDir)
       this.lastDir = this.facingStabilizer.update(this.lastDir, next, performance.now(), !this.isWalking)
     } else {
@@ -1016,7 +1019,8 @@ export class ObjectView {
   private syncActor(): void {
     if (!this.actorHandle || this.isDestroyed) return
     const actor = this.actorHandle.actor
-    actor.direction = this.lastDir
+    if (this.actorFacingAngle === null) actor.direction = this.lastDir
+    else actor.setFacingAngle(this.actorFacingAngle)
     actor.walking = this.isWalking
     actor.distanceTiles = this.walkDistanceTiles
     actor.carrying = this.carrying && !this.knockedOutPose

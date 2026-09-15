@@ -1,4 +1,5 @@
 export { GameFacade, gameFacade } from './GameFacade'
+export type { ActorRenderSettings } from './actors/config'
 export { Render } from './Render'
 export { DebugOverlay } from './DebugOverlay'
 export { Chunk } from './Chunk'

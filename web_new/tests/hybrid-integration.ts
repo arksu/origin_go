@@ -22,7 +22,10 @@ async function main() {
   app.stop()
   document.querySelector('#preview')!.append(app.canvas)
   check((app.renderer as WebGLRenderer).gl.getError() === 0, 'GL error after Pixi initialization')
-  const renderer = new ActorRenderer(app.renderer as WebGLRenderer)
+  // This scene validates the discrete export contract: eight headings and eight
+  // gait samples are expected to hash to stable generated textures. It still
+  // renders the current Three.js Meshy model, never a legacy atlas.
+  const renderer = new ActorRenderer(app.renderer as WebGLRenderer, { mode: 'baked8' })
   check((app.renderer as WebGLRenderer).gl.getError() === 0, 'GL error after Three/Pixi initialization')
   const manager = new ObjectManager()
   const world = new Container()

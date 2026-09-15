@@ -10,7 +10,8 @@ import { useGameStore } from '../src/stores/gameStore'
 import { ActorInstance } from '../src/game/actors/ActorInstance'
 import { ActorArmLayers } from '../src/game/actors/ActorArmLayers'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
-import { ACTOR_RENDER, COMMONER_MODEL } from '../src/game/actors/config'
+import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
+import { actorYawForScreenAngle } from '../src/game/actors/facing'
 import type { EquipmentDefinition } from '../src/game/actors/equipment'
 
 function visual(revision: string, generation = '0:4294967297') {
@@ -31,6 +32,27 @@ test('public snapshot round-trips uint64 and rejects malformed slots, keys and r
   assert.throws(() => decodeCharacterVisual({ ...state, equipment: [{ slot: 0, visualKey: 'axe' }] }))
   assert.throws(() => decodeCharacterVisual({ ...state, equipment: [{ slot: 7, visualKey: '../../axe' }] }))
   assert.throws(() => decodeCharacterVisual({ ...state, equipment: [{ slot: 7, visualKey: 'axe' }, { slot: 7, visualKey: 'sword' }] }))
+})
+
+test('actor render settings expose validated local and remote update rates', () => {
+  assert.deepEqual(DEFAULT_ACTOR_RENDER_SETTINGS, {
+    mode: 'hybrid3d',
+    localAnimationFps: 60,
+    remoteAnimationFps: 20,
+    turnDurationMs: 500,
+    renderStationaryChangesImmediately: true,
+  })
+  assert.deepEqual(resolveActorRenderSettings({ remoteAnimationFps: 12 }), {
+    mode: 'hybrid3d',
+    localAnimationFps: 60,
+    remoteAnimationFps: 12,
+    turnDurationMs: 500,
+    renderStationaryChangesImmediately: true,
+  })
+  assert.throws(() => resolveActorRenderSettings({ localAnimationFps: 0 }))
+  assert.throws(() => resolveActorRenderSettings({ mode: 'sprite8' as 'hybrid3d' }))
+  assert.throws(() => resolveActorRenderSettings({ turnDurationMs: 0 }))
+  assert.throws(() => resolveActorRenderSettings({ renderStationaryChangesImmediately: 'yes' as unknown as boolean }))
 })
 
 test('store accepts only a newer revision of the current incarnation and cannot resurrect despawned actors', () => {
@@ -133,6 +155,34 @@ async function fixtureActor() {
   await actor.ready
   return { actor, cache }
 }
+
+test('distance-driven walk samples the 3D clip continuously', async () => {
+  const { actor } = await fixtureActor()
+  actor.walking = true
+  actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .10
+  actor.updatePose(10)
+  const first = actor.root.getObjectByName('pelvis')!.position.x
+  actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .11
+  actor.updatePose(20)
+  const second = actor.root.getObjectByName('pelvis')!.position.x
+  assert.notEqual(second, first, 'a sub-eighth stride movement must update the skeletal pose')
+  actor.destroy()
+})
+
+test('hybrid mode turns continuously while baked8 rounds Three.js output to eight angles', async () => {
+  const { actor } = await fixtureActor()
+  const angularDistance = (first: number, second: number) => Math.abs(Math.atan2(Math.sin(first - second), Math.cos(first - second)))
+  actor.setFacingAngle(-Math.PI / 2)
+  actor.updatePose(0, DEFAULT_ACTOR_RENDER_SETTINGS)
+  actor.updatePose(250, DEFAULT_ACTOR_RENDER_SETTINGS)
+  assert.ok(angularDistance(actor.root.rotation.y, actorYawForScreenAngle(0)) < 1e-6,
+    'a 180-degree target must be halfway through its turn after 250ms')
+  actor.setFacingAngle(Math.PI / 10)
+  actor.updatePose(300, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode: 'baked8' })
+  assert.ok(angularDistance(actor.root.rotation.y, actorYawForScreenAngle(0)) < 1e-6,
+    'baked8 must round the current Three.js bake to the nearest eight-direction angle')
+  actor.destroy()
+})
 
 test('sockets retain authored transforms and follow their hand or forearm bone', () => {
   const rig = fixtureRig()

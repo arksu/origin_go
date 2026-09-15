@@ -20,6 +20,7 @@ import { fxManager } from './fx/FxManager'
 import type { DebugInfo, ScreenPoint } from './types'
 import { clearAlphaMaskCache } from './PixelHitTest'
 import { ActorRenderer } from './actors/ActorRenderer'
+import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import type { EquippedVisual } from '../types/characterVisual'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
@@ -36,6 +37,7 @@ export class Render {
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
   private actorRenderer: ActorRenderer | null = null
+  private actorRenderSettings: Readonly<ActorRenderSettings>
   private renderErrorNotice: HTMLElement | null = null
 
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
@@ -50,7 +52,8 @@ export class Render {
   private lastHoverCamY = Number.NaN
   private lastHoverZoom = Number.NaN
 
-  constructor() {
+  constructor(actorRenderSettings: Partial<ActorRenderSettings> = {}) {
+    this.actorRenderSettings = resolveActorRenderSettings({ ...DEFAULT_ACTOR_RENDER_SETTINGS, ...actorRenderSettings })
     this.app = new Application()
     this.mapContainer = new Container()
     this.objectsContainer = new Container()
@@ -79,7 +82,7 @@ export class Render {
       preference: 'webgl',
     })
 
-    this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer)
+    this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer, this.actorRenderSettings)
     this.objectManager.setActorRenderer(this.actorRenderer)
 
     // Limit maximum FPS to reduce system load
@@ -105,6 +108,15 @@ export class Render {
     this.setupInputController()
 
     this.app.ticker.add(this.update.bind(this))
+  }
+
+  setActorRenderSettings(settings: Partial<ActorRenderSettings>): void {
+    this.actorRenderSettings = resolveActorRenderSettings({ ...this.actorRenderSettings, ...settings })
+    this.actorRenderer?.setSettings(this.actorRenderSettings)
+  }
+
+  getActorRenderSettings(): Readonly<ActorRenderSettings> {
+    return this.actorRenderSettings
   }
 
   private setupInputController(): void {
