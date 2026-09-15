@@ -9,7 +9,7 @@ export const ACTOR_RENDER = {
   supersampling: 2,
   orthoHeight: 1.94 * 128 / 96,
   cameraHeight: (116 - 64) / (96 / 1.94) / Math.cos(Math.PI / 6),
-  cycleDistanceTiles: 0.965424409,
+  cycleDistanceTiles: 1.20678051125,
   walkSamples: 8,
   maxResidentBytes: 128 * 1024 * 1024,
   maxOutputSlots: 128,
@@ -17,13 +17,13 @@ export const ACTOR_RENDER = {
 } as const
 
 const ROOT = '/assets/game/characters/male_commoner/realtime/'
-export const COMMONER_MODEL = ROOT + 'commoner.glb'
-export const EQUIPMENT = {
-  linen_wrap: { url: ROOT + 'linen_wrap.glb', slot: 'legs' },
-  linen_belt: { url: ROOT + 'linen_belt.glb', slot: 'waist' },
-} as const
-export type EquipmentId = keyof typeof EQUIPMENT
-export const DEFAULT_EQUIPMENT: readonly EquipmentId[] = ['linen_wrap', 'linen_belt']
+export const COMMONER_MODEL = ROOT + 'commoner_meshy.glb'
+// The old linen meshes use different bind matrices and cannot fit this rig.
+// Populate this catalog with garments authored against the Meshy skeleton.
+export const EQUIPMENT: Readonly<Record<string, { url: string; slot: string }>> = {}
+export type EquipmentId = string
+// Meshy supplied the wrap and belt welded into the character's base mesh.
+export const DEFAULT_EQUIPMENT: readonly EquipmentId[] = []
 
 export const ACTOR_PALETTE = [
   ['#392b1c', '#533425', '#7c4b31', '#a6693f', '#ca8d51', '#e6b06a', '#f4cc86', '#fbe0a5'],

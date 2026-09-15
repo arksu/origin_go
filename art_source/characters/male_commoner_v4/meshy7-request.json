@@ -1,0 +1,28 @@
+{
+  "status": "not_submitted",
+  "reference": "web_new/public/assets/img/equip_back.png",
+  "uploaded_media_id": "a78eee39-0580-4e36-bb8d-db9d12e1573d",
+  "blocker": "Higgsfield catalog supports meshy_v7_image_to_3d, but generate_3d is not exposed in this tool session.",
+  "params": {
+    "model": "meshy_v7_image_to_3d",
+    "count": 1,
+    "medias": [
+      {
+        "role": "image",
+        "value": "a78eee39-0580-4e36-bb8d-db9d12e1573d"
+      }
+    ],
+    "model_type": "standard",
+    "topology": "quad",
+    "target_polycount": 100000,
+    "symmetry_mode": "auto",
+    "should_remesh": true,
+    "should_texture": true,
+    "enable_pbr": true,
+    "pose_mode": "a-pose",
+    "enable_rigging": false,
+    "enable_animation": false,
+    "ultra_mode": true,
+    "texture_prompt": "Match the supplied character reference faithfully: muscular adult male, warm natural skin, short swept brown hair, dark brown matte suede-like wrap loincloth with a broad hanging front panel, overlapping side panels and deep fabric folds; separate-looking dark brown leather waist belt, antique brass rectangular buckle and leather belt tail. Preserve the reference garment silhouette and materials. Clean neutral base colors for relighting in a game, no baked directional shadows or specular highlights, no background, floor, pedestal, text or extra props."
+  }
+}

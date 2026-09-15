@@ -10,8 +10,10 @@ GPU copies; only interaction picking reads a single alpha pixel.
 ## Content and animation
 
 `config.ts` contains URLs, equipment slots, palette, distance per cycle and budgets.
-The initial equipment catalog contains the source linen wrap and belt. Call
-`GameFacade.setCharacterEquipment(entityId, items)` to replace these pieces.
+The current Meshy base contains a welded wrap and belt, so default equipment
+and the active equipment catalog are empty. The old linen pieces have incompatible
+bind matrices. `GameFacade.setCharacterEquipment(entityId, items)` remains the
+entry point for future garments authored against the current rig.
 Inventory-to-catalog mapping and additional authored clothing are future work.
 Assets are loaded on demand and shared between actors, with reference-counted
 leases and eviction of unused assets when the 128 MiB estimated asset budget is
@@ -19,12 +21,15 @@ exceeded. This estimate is not total browser or GPU memory.
 
 Clips: `idle`, `walk`, `carry_idle`, `carry_walk`. Eight sampled poses per walking
 cycle advance with actual client displacement, including final movement damping.
-One cycle covers 0.965424409 tiles. Time alone does not advance a stopped actor.
-Skinning uses dual quaternions to preserve the source Blender shoulder/arm volume.
+One cycle covers 1.20678051125 tiles. Time alone does not advance a stopped actor.
+Skinning follows each mesh’s `skinning` extra: the Meshy model uses linear
+skinning, matching Blender; the old dual-quaternion path remains supported.
+All four clips use a 0.21 m ankle-center width. Walking retains donor foot timing
+with 25% longer forward/backward travel; cycle distance scales with that travel.
 The universal carry pose does not depend on prop size. Carried world props remain
 2D and use the existing sorting; interleaved 3D hand/prop depth is not implemented.
 
-High detail: 17,659 triangles including both garments; low detail: 6,478.
+High detail: 16,000 triangles including the integrated garment; low detail: 5,500.
 Normal-scale actors use high detail; projected scale below 0.8 selects low detail.
 Secondary actors update at most 15 times per second; unchanged poses are reused.
 The player has priority. Offscreen actors return their texture to the pool.
@@ -34,26 +39,25 @@ excluding driver overhead, asset buffers and per-instance skeleton resources.
 
 ## Reproduce and inspect
 
-From the repository root:
+The current pipeline is `tools/blender/rig_meshy_commoner.py`, executed through
+Blender MCP. It reads the user-supplied Meshy GLB and appends the existing v3
+animation donor. Its output and provenance are documented in
+`art_source/characters/male_commoner_v4/README.md`. Copy its `commoner_meshy.glb`
+to the public realtime directory after validation and visual review.
 
-```sh
-/Applications/Blender.app/Contents/MacOS/Blender --background --python-exit-code 1 --python tools/blender/export_commoner_realtime.py
-```
-
-This reads the approved idle/walk Blender sources and writes the runtime Blender
-scene, `art_source/characters/male_commoner_v3/realtime/export-report.json`, and
-three GLBs under `web_new/public/assets/game/characters/male_commoner/realtime`.
-The source scenes are preserved. The current GLBs total 1,458,608 bytes.
-The anatomical source is MakeHuman; its asset license is CC0 1.0, preserved in
-`art_source/characters/male_commoner_v3/source/makehuman/LICENSE.ASSETS.md`.
+The source GLB preserves the original 2048² PBR maps; the runtime uses a 1024²
+base-color atlas and the existing fixed light and pixel outline pass. Painted
+materials compare against the combined game palette so skin, hair and leather
+can share a texture. The v3 exporter and MakeHuman attribution apply only to the
+retained legacy source/assets, not the new Meshy geometry.
 
 Run `npm run dev` from `web_new`, then open:
 
-- `/tests/hybrid-character.html`: eight directions, idle/walk/carry, equipment,
+- `/tests/hybrid-character.html`: eight directions, idle/walk/carry,
   real game barrel for comparison, 1/8/30 actors, context loss and live metrics.
 - `/tests/hybrid-integration.html`: actual ObjectManager/ObjectView integration,
-  64 skeletal poses, distance invariance, picking, gear races, carry relation,
-  culling, LOD, context restoration and baked fallback.
+  64 skeletal poses, distance invariance, picking, rejected legacy gear, carry relation,
+  culling, LOD and context restoration.
 - Movement and terminal-deceleration regressions now run against live actors in the integration page.
 
 The game requires hybrid rendering and WebGL2. Baked character atlases and the
@@ -99,4 +103,4 @@ removed; terminal-stop tests now inspect the live actor animation. The integrati
 suite also projects the model forward vector through a real Three camera, checks
 ObjectManager displacement at three zoom levels, zero-distance corrections and
 adjacent-sector noise at 30/60/144 FPS. The user's cycle distance remains
-0.965424409 tiles. The design commit is 9fd00b7; implementation is uncommitted.
+1.20678051125 tiles. The design commit is 9fd00b7; implementation is uncommitted.

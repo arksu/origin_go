@@ -3,14 +3,12 @@ import { coordScreen2Game } from '../src/game/utils/coordConvert'
 import { Application, Container, Graphics, Sprite, Text, WebGLRenderer } from 'pixi.js'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer, type ActorHandle } from '../src/game/actors/ActorRenderer'
-import { ACTOR_RENDER, type EquipmentId } from '../src/game/actors/config'
+import { ACTOR_RENDER } from '../src/game/actors/config'
 
 const result = document.querySelector<HTMLPreElement>('#result')!
 const state = document.querySelector<HTMLSelectElement>('#state')!
 const count = document.querySelector<HTMLSelectElement>('#count')!
 const speed = document.querySelector<HTMLInputElement>('#speed')!
-const belt = document.querySelector<HTMLInputElement>('#belt')!
-const wrap = document.querySelector<HTMLInputElement>('#wrap')!
 const frames: number[] = []
 const handles: ActorHandle[] = []
 const shadows = new Map<ActorHandle, Graphics>()
@@ -32,7 +30,6 @@ async function main() {
   let lastReport = 0
   let failure: unknown = null
 
-  const equipped = (): EquipmentId[] => [...(wrap.checked ? ['linen_wrap' as const] : []), ...(belt.checked ? ['linen_belt' as const] : [])]
   async function populate() {
     const ownGeneration = ++generation
     shadows.clear()
@@ -74,12 +71,8 @@ async function main() {
     }
     await Promise.all(handles.map((handle) => handle.actor.ready))
     if (ownGeneration !== generation) return
-    await Promise.all(handles.map((handle) => handle.actor.setEquipment(equipped())))
   }
   count.addEventListener('change', () => { void populate().catch((error) => { failure = error }) })
-  for (const input of [belt, wrap]) input.addEventListener('change', () => {
-    void Promise.all(handles.map((handle) => handle.actor.setEquipment(equipped()))).catch((error) => { failure = error })
-  })
   app.canvas.addEventListener('pointermove', (event) => {
     const rect = app.canvas.getBoundingClientRect()
     const point = { x: (event.clientX - rect.left) * app.screen.width / rect.width, y: (event.clientY - rect.top) * app.screen.height / rect.height }

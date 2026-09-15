@@ -47,7 +47,7 @@ export class ActorInstance {
       this.skins.set(mesh.skeleton, skin)
     }
     const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((source) => {
-      const material = createActorMaterial(source, skin!)
+      const material = createActorMaterial(source, skin!, mesh.userData.skinning === 'linear')
       this.materials.add(material)
       return material
     })
@@ -81,10 +81,10 @@ export class ActorInstance {
 
   async setEquipment(ids: readonly EquipmentId[]): Promise<void> {
     if (new Set(ids).size !== ids.length || ids.some((id) => !Object.hasOwn(EQUIPMENT, id))) throw new Error('Invalid character equipment')
-    const slots = ids.map((id) => EQUIPMENT[id].slot)
+    const slots = ids.map((id) => EQUIPMENT[id]!.slot)
     if (new Set(slots).size !== slots.length) throw new Error('Two equipment pieces occupy the same slot')
     const revision = ++this.equipmentRevision
-    const leases = await Promise.allSettled(ids.map((id) => this.cache.acquire(EQUIPMENT[id].url)))
+    const leases = await Promise.allSettled(ids.map((id) => this.cache.acquire(EQUIPMENT[id]!.url)))
     const acquired = leases.filter((lease) => lease.status === 'fulfilled').map((lease) => lease.value)
     const failure = leases.find((lease) => lease.status === 'rejected')
     if (this.destroyed || revision !== this.equipmentRevision || failure) {

@@ -1,0 +1,16 @@
+{
+  "source": "art_source/characters/male_commoner_v4/source/meshy_character.glb",
+  "donor": "art_source/characters/male_commoner_v3/realtime/male_commoner_realtime.blend",
+  "bones": 50,
+  "clips": [
+    "idle",
+    "walk",
+    "carry_idle",
+    "carry_walk"
+  ],
+  "triangles": 16000,
+  "low_triangles": 5500,
+  "texture_size": 1024,
+  "garment": "integrated in source mesh",
+  "skinning": "linear"
+}
