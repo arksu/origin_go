@@ -94,10 +94,11 @@ def main():
                 continue
             channel = copy.deepcopy(channel)
             sampler = copy.deepcopy(animation['samplers'][channel['sampler']])
-            sampler['input'] = accessor(sampler['input'])
             if name in overrides:
+                sampler['input'] = accessor(sampler['input'])
                 sampler['output'] = constant_accessor(sampler['output'], overrides[name][node_name][channel['target']['path']])
             else:
+                sampler['input'] = accessor(sampler['input'])
                 sampler['output'] = accessor(sampler['output'])
             channel['sampler'] = len(result['samplers'])
             channel['target']['node'] = nodes[node_name]
