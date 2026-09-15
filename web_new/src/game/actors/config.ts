@@ -9,7 +9,7 @@ export const ACTOR_RENDER = {
   supersampling: 2,
   orthoHeight: 1.94 * 128 / 96,
   cameraHeight: (116 - 64) / (96 / 1.94) / Math.cos(Math.PI / 6),
-  cycleDistanceTiles: 1.20678051125,
+  cycleDistanceTiles: 1.677975879375,
   walkSamples: 8,
   maxResidentBytes: 128 * 1024 * 1024,
   maxOutputSlots: 128,

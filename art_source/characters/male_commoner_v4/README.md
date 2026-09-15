@@ -41,10 +41,12 @@ collapsed wrists; the corrected hands follow the forearm axis with their existin
 finger shape. This changes the faulty wrist orientation, without opening or turning
 the palms into upward-facing support hands. `validation.json` now checks wrist
 alignment and limits the relative skinning rotation across each wrist to 30 degrees.
-Idle/walk bone matrices were unchanged by this carry-only correction.
+The carry grip now turns inward by sharing a mirrored 90-degree axial turn
+between the upper arm and forearm. The wrist remains aligned and inherits the
+forearm rotation. Idle bone matrices remain unchanged.
 
-Forward/backward foot travel remains 1.25 times the donor motion, with cycle distance
-1.20678051125 tiles. Idle and moving ankle-center width remains 0.21 m.
+Forward/backward foot travel is 1.4375 times the donor motion (a further 15%
+increase over 1.25), with cycle distance 1.3877975879375 tiles. Idle and moving ankle-center width remains 0.21 m.
 
 Photo references used for the wrist/shoulder correction:
 - Evan Osar / On Target Publications, left-hand overhead side-view photograph:
@@ -55,3 +57,10 @@ Photo references used for the wrist/shoulder correction:
   https://games-assets.crossfit.com/10-AG-Test1-2021.jpg
 These guide the forearm/wrist silhouette and arm placement, not the character's
 object-dependent grip or a literal exercise animation.
+
+Skin base-color correction: `tools/blender/brighten_meshy_skin.py` applies a 1.15
+RGB multiplier through a conservative skin-color mask with protected garment,
+buckle and hair UV regions. The unadjusted image remains packed as the source,
+so rerunning the correction does not compound it. The rig generator applies this
+step before export. `skin-brightness-validation.json` records the protected pixel
+comparison; lighting and the runtime palette remain unchanged.

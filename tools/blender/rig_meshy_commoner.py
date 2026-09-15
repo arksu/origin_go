@@ -6,15 +6,18 @@ The generated wrap is welded into the mesh, so it remains part of the base.
 from pathlib import Path
 import json
 import math
+import runpy
 import bpy
 import bmesh
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Quaternion
 
 ROOT = Path('/Users/park/projects/origin_go')
 OUT = ROOT / 'art_source/characters/male_commoner_v4'
 SOURCE = OUT / 'source/meshy_character.glb'
 DONOR = ROOT / 'art_source/characters/male_commoner_v3/realtime/male_commoner_realtime.blend'
 CLIPS = ('idle', 'walk', 'carry_idle', 'carry_walk')
+WALK_STRIDE_SCALE = 1.25 * 1.15
+CARRY_INWARD_TWIST = math.radians(90)
 
 
 def activate(obj):
@@ -244,6 +247,10 @@ def fit_carry(rig, desired, rest):
             parent_delta = desired[parent].to_quaternion() @ rest[parent].to_quaternion().inverted()
             rotation = parent_delta @ rest[name].to_quaternion()
             rotation = (rotation @ Vector((0, 1, 0))).rotation_difference((end - start).normalized()) @ rotation
+            if name.startswith(('upper_arm.', 'forearm.')):
+                # Share the inward turn across the arm so the wrist keeps its
+                # volume instead of absorbing the entire axial rotation.
+                rotation = Quaternion((end - start).normalized(), -sign * CARRY_INWARD_TWIST / 2) @ rotation
             desired[name] = Matrix.LocRotScale(start, rotation, Vector((1, 1, 1)))
 
 
@@ -311,7 +318,7 @@ def retarget(rig, clips):
                 else:
                     position = rest[key].translation + sample[key].translation - reference[key].translation
                 desired[key] = Matrix.LocRotScale(position, rotation, Vector((1, 1, 1)))
-            fit_walk_stance(rig, desired, 1.25 if name.endswith('walk') else 1.0)
+            fit_walk_stance(rig, desired, WALK_STRIDE_SCALE if name.endswith('walk') else 1.0)
             if name.startswith('carry'):
                 fit_carry(rig, desired, rest)
             for bone in rig.data.bones:
@@ -408,6 +415,7 @@ def main():
     bpy.context.window.scene = scene
     clips, parents = read_motion()
     mesh = import_mesh()
+    runpy.run_path(str(ROOT / 'tools/blender/brighten_meshy_skin.py'))['brighten_skin'](mesh, OUT / 'review')
     rig = make_rig(clips['idle'][0], parents)
     bind(mesh, rig)
     retarget(rig, clips)
