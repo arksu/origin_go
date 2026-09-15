@@ -2,12 +2,13 @@ import { Color, DoubleSide, MeshStandardMaterial, ShaderMaterial, Vector3, type 
 import type { DualQuaternionSkin } from './DualQuaternionSkin'
 import { DQ_DECLARATIONS } from './DualQuaternionSkin'
 
-export function createActorMaterial(source: Material, skin: DualQuaternionSkin): ShaderMaterial {
+export function createActorMaterial(source: Material, skin: DualQuaternionSkin, linearSkinning = false): ShaderMaterial {
   const original = source as MeshStandardMaterial
-  const region = source.name.includes('brows') ? 5 : ({ skin: 1, hair: 2, linen: 3, eyes: 4 } as Record<string, number>)[source.userData.region as string] ?? 2
+  const region = source.name.includes('brows') ? 5 : ({ skin: 1, hair: 2, linen: 3, eyes: 4, textured: 6 } as Record<string, number>)[source.userData.region as string] ?? 2
   return new ShaderMaterial({
     name: `Pixel ${source.name}`,
     side: DoubleSide,
+    defines: linearSkinning ? { ACTOR_LINEAR_SKINNING: 1 } : {},
     uniforms: {
       dqBones: { value: skin.texture },
       baseColor: { value: (original.color?.clone() ?? new Color(.62, .30, .12)).convertLinearToSRGB() },
@@ -25,17 +26,29 @@ export function createActorMaterial(source: Material, skin: DualQuaternionSkin):
       varying vec2 surfaceUV;
       varying float surfaceHeight;
       void main() {
-        loadDQ();
+        #ifdef ACTOR_LINEAR_SKINNING
+          #include <skinbase_vertex>
+        #else
+          loadDQ();
+        #endif
         #include <beginnormal_vertex>
         #include <morphinstance_vertex>
         #include <morphnormal_vertex>
-        objectNormal = mat3(bindMatrixInverse) * rotateDQ(mat3(bindMatrix) * objectNormal);
+        #ifdef ACTOR_LINEAR_SKINNING
+          #include <skinnormal_vertex>
+        #else
+          objectNormal = mat3(bindMatrixInverse) * rotateDQ(mat3(bindMatrix) * objectNormal);
+        #endif
         surfaceNormal = normalize(mat3(modelMatrix) * objectNormal);
         surfaceUV = uv;
         #include <begin_vertex>
         #include <morphtarget_vertex>
-        vec3 bound = (bindMatrix * vec4(transformed, 1.0)).xyz;
-        transformed = (bindMatrixInverse * vec4(rotateDQ(bound) + translateDQ(), 1.0)).xyz;
+        #ifdef ACTOR_LINEAR_SKINNING
+          #include <skinning_vertex>
+        #else
+          vec3 bound = (bindMatrix * vec4(transformed, 1.0)).xyz;
+          transformed = (bindMatrixInverse * vec4(rotateDQ(bound) + translateDQ(), 1.0)).xyz;
+        #endif
         surfaceHeight = (modelMatrix * vec4(transformed, 1.0)).y;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
       }`,

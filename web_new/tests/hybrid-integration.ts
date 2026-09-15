@@ -54,7 +54,8 @@ async function main() {
   for (let attempt = 0; attempt < 300 && sprite.texture === Texture.EMPTY; attempt++) { render(); await paint() }
   check(sprite.texture !== Texture.EMPTY && sprite.texture.width === 128, 'GLB must become a live 128-pixel GPU texture')
   check(renderer.metrics.actors === 1 && manager.getObjectCount() === 1, 'Despawn during loading must release its instance')
-  pass('Production ObjectView / async move, stop, despawn / GLB and two equipment resources')
+  check(renderer.metrics.assets === 1, 'Default Meshy actor must load only its integrated character asset')
+  pass('Production ObjectView / async move, stop, despawn / one shared textured GLB')
 
   const playerSprite = sprite
   function pixels() {
@@ -117,13 +118,15 @@ async function main() {
   check(hash() === idle, 'Stopping must restore the standing pose')
   pass('64 skeletal walk poses / distance at 30, 60, 144 FPS / stationary clock / idle')
 
-  await view.setActorEquipment(['linen_wrap'])
-  check(hash() !== idle, 'Removing a belt must change the rendered equipment')
-  const staleSwap = view.setActorEquipment(['linen_belt'])
+  let rejectedLegacyGear = false
+  try { await view.setActorEquipment(['linen_wrap']) } catch { rejectedLegacyGear = true }
+  check(rejectedLegacyGear, 'Incompatible legacy clothing must be rejected')
+  check(hash() === idle, 'Rejected equipment must preserve the existing character')
+  const staleSwap = view.setActorEquipment([])
   const latestSwap = view.setActorEquipment(DEFAULT_EQUIPMENT)
   await Promise.all([staleSwap, latestSwap])
   check(hash() === idle, 'Latest equipment request must win without changing the body pose')
-  pass('Separate equipment / asynchronous replacement / shared-resource reuse')
+  pass('Integrated garment / incompatible equipment rejected / asynchronous empty replacement')
 
   manager.spawnObject({ entityId: 201, typeId: 10, resourcePath: 'box/normal', position: { x: 0, y: 0 }, size: { x: 4, y: 4 } })
   await ResourceLoader.loadTexture('obj/box/box.png')
@@ -196,7 +199,7 @@ async function main() {
   manager.despawnObject(201)
   manager.despawnObject(101)
   renderer.destroy()
-  check(Number(renderer.metrics.actors) === 0 && renderer.metrics.assets === 0, 'Teardown must release all actor resources')
+  check(Number(renderer.metrics.actors) === 0 && Number(renderer.metrics.assets) === 0, 'Teardown must release all actor resources')
   pass('Renderer teardown / no baked fallback')
   result.textContent += '\n\nALL CHECKS PASSED'
 }

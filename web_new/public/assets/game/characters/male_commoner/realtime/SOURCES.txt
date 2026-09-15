@@ -1,3 +1,11 @@
+ACTIVE MODEL: commoner_meshy.glb
+User-supplied Meshy AI Stonebound Titan GLB, received 2026-09-15.
+Source and rig: art_source/characters/male_commoner_v4/
+Rigging/export: tools/blender/rig_meshy_commoner.py, executed through Blender MCP.
+Motion donor: preserved male_commoner_v3 realtime Blender actions.
+The MakeHuman license below does not describe the new Meshy geometry.
+
+RETAINED LEGACY ASSETS (not loaded by the default character):
 Runtime commoner model and clothing exported for Origin from the project's
 approved male_commoner_v3 Blender scenes by tools/blender/export_commoner_realtime.py.
 
