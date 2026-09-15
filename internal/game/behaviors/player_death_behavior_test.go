@@ -83,6 +83,10 @@ func TestPlayerDeathBehavior_UnequipSuccess(t *testing.T) {
 	if !hasState || !state.IsDirty {
 		t.Fatalf("expected corpse state marked dirty after unequip")
 	}
+	dirty := ecs.GetResource[ecs.CharacterVisualDirtyQueue](world).Drain(0, nil)
+	if len(dirty) != 1 || dirty[0] != corpseHandle {
+		t.Fatalf("expected corpse visual invalidation, got %v", dirty)
+	}
 }
 
 func TestPlayerDeathBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
@@ -141,6 +145,9 @@ func TestPlayerDeathBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
 	}
 	if state.IsDirty {
 		t.Fatalf("did not expect corpse dirty flag on failed give")
+	}
+	if dirty := ecs.GetResource[ecs.CharacterVisualDirtyQueue](world).Drain(0, nil); len(dirty) != 0 {
+		t.Fatalf("failed unequip must not invalidate public visuals: %v", dirty)
 	}
 }
 

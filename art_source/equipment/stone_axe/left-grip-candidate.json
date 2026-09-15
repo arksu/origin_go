@@ -1,0 +1,20 @@
+{
+  "scene": "Stone axe LEFT grip adjustment",
+  "object": "stone_axe.004",
+  "bone": "hand.l",
+  "source_scene_unchanged": "Stone axe travel grip.003",
+  "left_candidate": {
+    "position": [
+      -0.019444139674305916,
+      0.08826126158237457,
+      -0.006447228137403727
+    ],
+    "quaternion": [
+      -0.07940661907196045,
+      0.16381719708442688,
+      0.09703122824430466,
+      0.97849041223526
+    ]
+  },
+  "max_attachment_error": 2.980232238769531e-07
+}

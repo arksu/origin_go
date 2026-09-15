@@ -234,6 +234,9 @@ func (s *InventoryOperationService) ExecuteMove(
 
 	if placementResult.SwapItem != nil {
 		// Swap operation - validate reverse placement
+		if err := s.validator.ValidateItemAllowedInContainer(w, placementResult.SwapItem, srcInfo, srcItem.EquipSlot); err != nil {
+			return &OperationResult{Success: false, ErrorCode: err.Code, Message: err.Message}
+		}
 		if !s.placementService.ValidateSwap(
 			srcInfo.Container, srcItem,
 			dstInfo.Container, placementResult.SwapItem,

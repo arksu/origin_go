@@ -18,12 +18,7 @@ export const ACTOR_RENDER = {
 
 const ROOT = '/assets/game/characters/male_commoner/realtime/'
 export const COMMONER_MODEL = ROOT + 'commoner_meshy.glb'
-// The old linen meshes use different bind matrices and cannot fit this rig.
-// Populate this catalog with garments authored against the Meshy skeleton.
-export const EQUIPMENT: Readonly<Record<string, { url: string; slot: string }>> = {}
-export type EquipmentId = string
-// Meshy supplied the wrap and belt welded into the character's base mesh.
-export const DEFAULT_EQUIPMENT: readonly EquipmentId[] = []
+export { EQUIPMENT, DEFAULT_EQUIPMENT } from './equipment'
 
 export const ACTOR_PALETTE = [
   ['#392b1c', '#533425', '#7c4b31', '#a6693f', '#ca8d51', '#e6b06a', '#f4cc86', '#fbe0a5'],

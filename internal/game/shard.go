@@ -266,6 +266,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.characterSaver = systems.NewCharacterSaver(db, cfg.Game.SaveWorkers, inventorySaver, logger)
 	s.world.AddSystem(systems.NewEntityStatsRegenSystem())
 	s.world.AddSystem(systems.NewPlayerStatsPushSystem(s))
+	s.world.AddSystem(systems.NewCharacterVisualSystem(s, logger))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(NewPlayerDeathSystem(s, PlayerDeathSystemConfig{
 		LifeDeathFactor:                 cfg.Game.LifeDeathFactor,

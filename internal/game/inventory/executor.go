@@ -74,6 +74,13 @@ func (e *InventoryExecutor) ExecuteOperation(
 
 	// Mark changed world-object roots for deferred behavior recompute.
 	e.markBehaviorDirtyForUpdatedRoots(w, result)
+	if result.Success {
+		for _, info := range result.UpdatedContainers {
+			if info != nil && info.Container != nil && info.Container.Kind == constt.InventoryEquipment && info.Container.Key == 0 {
+				ecs.MarkCharacterVisualDirty(w, info.Container.OwnerID)
+			}
+		}
+	}
 
 	// Convert updated containers
 	for _, container := range result.UpdatedContainers {

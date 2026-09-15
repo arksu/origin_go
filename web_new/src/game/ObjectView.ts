@@ -21,7 +21,8 @@ import {
 } from '@/constants/render'
 import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
 import type { ActorHandle, ActorRenderer } from './actors/ActorRenderer'
-import { ACTOR_RENDER, type EquipmentId } from './actors/config'
+import { ACTOR_RENDER } from './actors/config'
+import type { EquippedVisual } from '../types/characterVisual'
 
 interface AnimatedFrameLayer {
   layer: LayerDef
@@ -1033,7 +1034,7 @@ export class ObjectView {
     if (this.actorHandle) this.actorHandle.priority = priority
   }
 
-  async setActorEquipment(ids: readonly EquipmentId[]): Promise<void> {
+  async setActorEquipment(ids: readonly EquippedVisual[]): Promise<void> {
     if (!this.actorHandle) return
     await this.actorHandle.actor.ready
     if (!this.isDestroyed) await this.actorHandle.actor.setEquipment(ids)

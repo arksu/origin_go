@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { proto } from '@/network/proto/packets.js'
 import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERVAL_MS, CHAT_MAX_MESSAGES } from '@/constants/chat'
 import type { ConnectionState, ConnectionError } from '@/network/types'
+import { isNewerCharacterVisual, type CharacterVisualState } from '@/types/characterVisual'
 
 export interface Position {
   x: number
@@ -25,6 +26,7 @@ export interface GameObjectData {
   position: { x: number; y: number }
   size: { x: number; y: number }
   movement?: EntityMovement
+  characterVisual?: CharacterVisualState
 }
 
 export interface ChunkData {
@@ -390,6 +392,15 @@ export const useGameStore = defineStore('game', () => {
   // Entity actions
   function spawnEntity(data: GameObjectData) {
     entities.value.set(data.entityId, data)
+  }
+
+  function updateCharacterVisual(entityId: number, state: CharacterVisualState): boolean {
+    const entity = entities.value.get(entityId)
+    // A spawn carries a complete snapshot. Unknown entities and old incarnations
+    // cannot be resurrected by a late appearance packet.
+    if (!entity?.characterVisual || !isNewerCharacterVisual(entity.characterVisual, state)) return false
+    entity.characterVisual = state
+    return true
   }
 
   function despawnEntity(entityId: number) {
@@ -1118,6 +1129,7 @@ export const useGameStore = defineStore('game', () => {
     loadChunk,
     unloadChunk,
     spawnEntity,
+    updateCharacterVisual,
     despawnEntity,
     updateEntityMovement,
     setPlayerMoveMode,

@@ -126,6 +126,9 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		inQueue: make(map[types.Handle]struct{}, 256),
 		head:    0,
 	})
+	InitResource(w, CharacterVisualDirtyQueue{ObjectBehaviorDirtyQueue: ObjectBehaviorDirtyQueue{
+		inQueue: make(map[types.Handle]struct{}, 64),
+	}})
 	InitResource(w, BehaviorTickSchedule{
 		queue:    make(behaviorTickMinHeap, 0, 256),
 		latest:   make(map[BehaviorTickKey]behaviorTickState, 256),
