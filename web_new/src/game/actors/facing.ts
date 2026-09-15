@@ -7,11 +7,18 @@ export function screenFacingAngle(direction: number): number {
   return (direction - 1) * Math.PI / 4
 }
 
+export function screenFacingAngleFromDisplacement(dx: number, dy: number): number | null {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new Error('Non-finite character displacement')
+  if (dx === 0 && dy === 0) return null
+  const screen = coordGame2Screen(dx, dy)
+  return Math.atan2(screen.y, screen.x)
+}
+
 export function facingFromDisplacement(dx: number, dy: number, previous: number): number {
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new Error('Non-finite character displacement')
   if (dx === 0 && dy === 0) return previous
-  const screen = coordGame2Screen(dx, dy)
-  const angle = Math.atan2(screen.y, screen.x)
+  const angle = screenFacingAngleFromDisplacement(dx, dy)
+  if (angle === null) return previous
   const difference = Math.atan2(Math.sin(angle - screenFacingAngle(previous)), Math.cos(angle - screenFacingAngle(previous)))
   // A small dead band prevents alternating frames at a sector boundary.
   if (Math.abs(difference) <= Math.PI / 8 + ACTOR_RENDER.facingHysteresis) return previous
@@ -19,7 +26,11 @@ export function facingFromDisplacement(dx: number, dy: number, previous: number)
 }
 
 export function actorYawForFacing(direction: number): number {
-  const angle = screenFacingAngle(direction)
+  return actorYawForScreenAngle(screenFacingAngle(direction))
+}
+
+export function actorYawForScreenAngle(angle: number): number {
+  if (!Number.isFinite(angle)) throw new Error('Invalid screen-facing angle')
   // Camera pitch compresses ground-plane depth by sin(elevation).
   return Math.atan2(Math.cos(angle), Math.sin(angle) / Math.sin(ACTOR_RENDER.cameraElevation))
 }

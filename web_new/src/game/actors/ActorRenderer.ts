@@ -3,7 +3,7 @@ import { OrthographicCamera, Scene, WebGLRenderer } from 'three'
 import { ActorAssetCache } from './ActorAssetCache'
 import { ActorInstance } from './ActorInstance'
 import { PixelActorPass } from './PixelActorPass'
-import { ACTOR_RENDER } from './config'
+import { ACTOR_RENDER, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './config'
 
 export interface ActorHandle {
   readonly actor: ActorInstance
@@ -29,8 +29,10 @@ export class ActorRenderer {
   private destroyed = false
   private renderedThisFrame = 0
   private renderMs = 0
+  private settings: Readonly<ActorRenderSettings>
 
-  constructor(private readonly pixi: PixiRenderer) {
+  constructor(private readonly pixi: PixiRenderer, settings: Partial<ActorRenderSettings> = {}) {
+    this.settings = resolveActorRenderSettings({ ...DEFAULT_ACTOR_RENDER_SETTINGS, ...settings })
     if (pixi.context.webGLVersion !== 2) throw new Error('Hybrid characters require WebGL2')
     // Three initializes array textures immediately; WebGL forbids those uploads
     // while Pixi's UNPACK_PREMULTIPLY_ALPHA_WEBGL flag is still enabled.
@@ -69,6 +71,19 @@ export class ActorRenderer {
     return handle
   }
 
+  /** Settings UI can call this without recreating character assets or textures. */
+  setSettings(settings: Partial<ActorRenderSettings>): void {
+    this.settings = resolveActorRenderSettings({ ...this.settings, ...settings })
+    for (const handle of this.actors) handle.actor.invalidateRender()
+  }
+
+  getSettings(): Readonly<ActorRenderSettings> { return this.settings }
+
+  private updateIntervalMs(handle: ActorHandle): number {
+    const fps = handle.priority ? this.settings.localAnimationFps : this.settings.remoteAnimationFps
+    return 1000 / fps
+  }
+
   private allocateOutput(): Texture | null {
     const pooled = this.outputs.pop()
     if (pooled) return pooled
@@ -100,9 +115,10 @@ export class ActorRenderer {
         if (!handle.actor.isReady) continue
         const transform = handle.sprite.parent!.worldTransform
         handle.actor.setLowDetail(Math.hypot(transform.a, transform.b) < .8)
-        handle.actor.updatePose()
+        handle.actor.updatePose(now, this.settings)
         if (handle.renderedRevision === handle.actor.revision) continue
-        if (!handle.priority && handle.renderedRevision >= 0 && now - handle.lastRenderMs < ACTOR_RENDER.secondaryUpdateMs) continue
+        const immediate = handle.actor.needsImmediateRender && this.settings.renderStationaryChangesImmediately
+        if (!immediate && handle.renderedRevision >= 0 && now - handle.lastRenderMs < this.updateIntervalMs(handle)) continue
         if (handle.sprite.texture === Texture.EMPTY) {
           const texture = this.allocateOutput()
           if (!texture) continue
@@ -121,6 +137,7 @@ export class ActorRenderer {
         this.copyOutput(handle.sprite.texture)
         handle.lastRenderMs = now
         handle.renderedRevision = handle.actor.revision
+        handle.actor.acknowledgeRender()
         this.renderedThisFrame++
       }
     } finally {

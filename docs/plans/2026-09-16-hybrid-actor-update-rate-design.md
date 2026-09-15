@@ -5,11 +5,14 @@
 Render the local character's 3D pose smoothly while limiting visible remote
 characters to 20 generated pixel-art frames per second. A stationary character
 keeps its most recently generated GPU texture and does not incur 3D rendering.
+The renderer can also be switched to an eight-direction, eight-phase visual
+mode that still bakes its textures from the current Three.js character.
 
 ## Design
 
 `ActorRenderSettings` is the non-UI settings contract for the future Settings
-window. It holds local and remote target FPS plus event-refresh policies. The
+window. It holds render mode, local and remote target FPS, turn duration and
+event-refresh policies. The
 renderer accepts the settings at construction and exposes `setSettings()` for
 the eventual UI; validation rejects invalid rates.
 
@@ -25,14 +28,26 @@ positions. The Blender clip is sampled continuously; the selected renderer rate
 decides how often that pose is copied into the 2D world. This preserves equal
 stride phase for equal traveled distance at every client FPS.
 
+`hybrid3d` derives a precise screen-space heading from actual movement and
+turns through the shortest arc at 360 degrees per second, making a 180 degree
+turn take 500 ms. `baked8` rounds the heading and gait phase to eight values.
+Both modes render the current Three.js character into the GPU texture; neither
+mode restores or depends on the old v3 raster atlas.
+
 ## Defaults
 
 | Setting | Default | Purpose |
 | --- | ---: | --- |
+| `mode` | `hybrid3d` | Continuous 3D or discrete Three.js-baked eight-direction mode |
 | `localAnimationFps` | 60 | Smooth local-player feedback |
 | `remoteAnimationFps` | 20 | Pixel-art cadence and bounded GPU work |
+| `turnDurationMs` | 500 | Time for a 180-degree hybrid turn |
 | `renderStationaryChangesImmediately` | true | Equipment, carry and facing changes appear immediately |
-| `renderHoverChangesImmediately` | true | Hit/hover outline never lags |
+
+The public code-level switch is `gameFacade.setActorRenderSettings({ mode: 'hybrid3d' })`
+or `gameFacade.setActorRenderSettings({ mode: 'baked8' })`.
+It can be called before renderer initialization; the value is retained and
+used when the shared Three.js renderer is created.
 
 ## Validation
 
