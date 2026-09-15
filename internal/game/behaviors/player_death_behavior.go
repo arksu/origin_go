@@ -116,6 +116,7 @@ func (playerDeathBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteCon
 	}
 
 	markCorpseDirtyAfterUnequip(ctx.World, ctx.TargetHandle)
+	ecs.MarkCharacterVisualDirty(ctx.World, ctx.TargetID)
 	return contracts.BehaviorResult{OK: true}
 }
 

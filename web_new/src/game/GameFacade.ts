@@ -3,7 +3,7 @@ import { playerCommandController } from './PlayerCommandController'
 import type { DebugInfo, ScreenPoint } from './types'
 import type { ArmBuildGhostOptions } from './BuildGhostController'
 import type { ArmLiftGhostOptions } from './LiftGhostController'
-import type { EquipmentId } from './actors/config'
+import type { EquippedVisual } from '../types/characterVisual'
 
 export class GameFacade {
   private render: Render | null = null
@@ -118,7 +118,7 @@ export class GameFacade {
     }
   }
 
-  async setCharacterEquipment(entityId: number, items: readonly EquipmentId[]): Promise<void> {
+  async setCharacterEquipment(entityId: number, items: readonly EquippedVisual[]): Promise<void> {
     if (!this.render) throw new Error('Game renderer is not initialized')
     await this.render.setCharacterEquipment(entityId, items)
   }

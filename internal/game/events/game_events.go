@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"origin/internal/charactervisual"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -178,80 +179,80 @@ func (d *NetworkVisibilityDispatcher) handleEntitySpawn(ctx context.Context, e e
 	if !ok {
 		return nil
 	}
-
-	// Get the specific shard by layer
 	shard := d.shardManager.GetShard(event.Layer)
 	if shard == nil {
 		return nil
 	}
-
-	var (
-		hasTransform  bool
-		hasEntityInfo bool
-		transform     components.Transform
-		entityInfo    components.EntityInfo
-		sizeX         int32
-		sizeY         int32
-		resourcePath  = "unknown"
-		carriedByID   uint64
-	)
+	// Capture and enqueue under the same world read lock. Visual updates are
+	// authored on the ECS thread; a later spawn always includes their latest state.
 	shard.WithWorldRead(func(w *ecs.World) {
-		transform, hasTransform = ecs.GetComponent[components.Transform](w, event.TargetHandle)
-		entityInfo, hasEntityInfo = ecs.GetComponent[components.EntityInfo](w, event.TargetHandle)
-		if !hasTransform || !hasEntityInfo {
-			return
+		spawn := d.buildObjectSpawn(w, event.TargetID, event.TargetHandle)
+		if spawn != nil {
+			d.sendObjectSpawn(w, shard, event.ObserverID, event.TargetHandle, spawn)
 		}
-		if collider, hasCollider := ecs.GetComponent[components.Collider](w, event.TargetHandle); hasCollider {
-			sizeX = int32(collider.HalfWidth * 2)  // Convert from half-width to full width
-			sizeY = int32(collider.HalfHeight * 2) // Convert from half-height to full height
-		}
-		if appearance, hasAppearance := ecs.GetComponent[components.Appearance](w, event.TargetHandle); hasAppearance && appearance.Resource != "" {
-			resourcePath = appearance.Resource
-		}
-		carriedByID = carryVisualCarrierIDForHandle(w, event.TargetHandle)
 	})
-	if !hasTransform || !hasEntityInfo {
+	return nil
+}
+
+func (d *NetworkVisibilityDispatcher) buildObjectSpawn(w *ecs.World, entityID types.EntityID, handle types.Handle) *netproto.S2C_ObjectSpawn {
+	if !w.Alive(handle) {
 		return nil
 	}
-
-	msg := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_ObjectSpawn{
-			ObjectSpawn: &netproto.S2C_ObjectSpawn{
-				EntityId:          uint64(event.TargetID),
-				TypeId:            entityInfo.TypeID,
-				ResourcePath:      resourcePath,
-				CarriedByEntityId: carriedByID,
-				Position: &netproto.EntityPosition{
-					Position: &netproto.Position{
-						X: int32(transform.X),
-						Y: int32(transform.Y),
-					},
-					Size: &netproto.Vector2{
-						X: sizeX,
-						Y: sizeY,
-					},
-				},
-			},
+	actualID, ok := w.GetExternalID(handle)
+	if !ok || actualID != entityID {
+		return nil
+	}
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, handle)
+	if !hasTransform || !hasInfo {
+		return nil
+	}
+	resource := "unknown"
+	if appearance, ok := ecs.GetComponent[components.Appearance](w, handle); ok && appearance.Resource != "" {
+		resource = appearance.Resource
+	}
+	size := &netproto.Vector2{}
+	if collider, ok := ecs.GetComponent[components.Collider](w, handle); ok {
+		size.X, size.Y = int32(collider.HalfWidth*2), int32(collider.HalfHeight*2)
+	}
+	visual, err := charactervisual.Snapshot(w, handle)
+	if err != nil {
+		d.logger.Error("Unable to build spawn visual", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+		return nil
+	}
+	return &netproto.S2C_ObjectSpawn{
+		EntityId: uint64(entityID), TypeId: info.TypeID, ResourcePath: resource,
+		CarriedByEntityId: carryVisualCarrierIDForHandle(w, handle),
+		CharacterVisual:   visual,
+		Position: &netproto.EntityPosition{
+			Position: &netproto.Position{X: int32(transform.X), Y: int32(transform.Y)},
+			Size:     size,
 		},
 	}
+}
 
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		d.logger.Error("failed to marshal ObjectSpawn message",
-			zap.Error(err),
-			zap.Int64("observer_id", int64(event.ObserverID)),
-			zap.Int64("target_id", int64(event.TargetID)),
-		)
-		return nil
+func (d *NetworkVisibilityDispatcher) sendObjectSpawn(w *ecs.World, shard *game.Shard, observerID types.EntityID, target types.Handle, spawn *netproto.S2C_ObjectSpawn) {
+	observer := w.GetHandleByEntityID(observerID)
+	visibility := ecs.GetResource[ecs.VisibilityState](w)
+	visibility.Mu.RLock()
+	_, visible := visibility.ObserversByVisibleTarget[target][observer]
+	visibility.Mu.RUnlock()
+	if !visible {
+		return
 	}
-
 	shard.ClientsMu.RLock()
-	if client, exists := shard.Clients[event.ObserverID]; exists {
-		client.Send(data)
+	defer shard.ClientsMu.RUnlock()
+	client := shard.Clients[observerID]
+	if client == nil || !client.InWorld.Load() {
+		return
 	}
-	shard.ClientsMu.RUnlock()
-
-	return nil
+	spawn.StreamEpoch = client.StreamEpoch.Load()
+	encoded, err := proto.Marshal(&netproto.ServerMessage{Payload: &netproto.ServerMessage_ObjectSpawn{ObjectSpawn: spawn}})
+	if err != nil {
+		d.logger.Error("Unable to encode ObjectSpawn", zap.Error(err))
+		return
+	}
+	client.Send(encoded)
 }
 
 func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e eventbus.Event) error {
@@ -259,40 +260,43 @@ func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e
 	if !ok {
 		return nil
 	}
-
-	// Get the specific shard by layer
 	shard := d.shardManager.GetShard(event.Layer)
 	if shard == nil {
 		return nil
 	}
-
-	shard.ClientsMu.RLock()
-	// Find the client that is the observer
-	if client, exists := shard.Clients[event.ObserverID]; exists {
-		msg := &netproto.ServerMessage{
-			Payload: &netproto.ServerMessage_ObjectDespawn{
-				ObjectDespawn: &netproto.S2C_ObjectDespawn{
-					EntityId: uint64(event.TargetID),
-				},
-			},
+	shard.WithWorldRead(func(w *ecs.World) {
+		// Async visibility jobs can run after the target has re-entered AOI.
+		// Never let an old despawn erase its newer spawn and equipment snapshot.
+		if targetVisibleToObserver(w, event.ObserverID, event.TargetID) {
+			return
 		}
-
-		data, err := proto.Marshal(msg)
+		shard.ClientsMu.RLock()
+		defer shard.ClientsMu.RUnlock()
+		client := shard.Clients[event.ObserverID]
+		if client == nil || !client.InWorld.Load() {
+			return
+		}
+		message := &netproto.ServerMessage{Payload: &netproto.ServerMessage_ObjectDespawn{
+			ObjectDespawn: &netproto.S2C_ObjectDespawn{EntityId: uint64(event.TargetID), StreamEpoch: client.StreamEpoch.Load()},
+		}}
+		encoded, err := proto.Marshal(message)
 		if err != nil {
-			d.logger.Error("failed to marshal ObjectDespawn message",
-				zap.Error(err),
-				zap.Int64("observer_id", int64(event.ObserverID)),
-				zap.Int64("target_id", int64(event.TargetID)),
-			)
-			shard.ClientsMu.RUnlock()
-			return nil
+			d.logger.Error("Unable to encode ObjectDespawn", zap.Error(err))
+			return
 		}
-
-		client.Send(data)
-	}
-	shard.ClientsMu.RUnlock()
-
+		client.Send(encoded)
+	})
 	return nil
+}
+
+func targetVisibleToObserver(w *ecs.World, observerID, targetID types.EntityID) bool {
+	observer := w.GetHandleByEntityID(observerID)
+	target := w.GetHandleByEntityID(targetID)
+	visibility := ecs.GetResource[ecs.VisibilityState](w)
+	visibility.Mu.RLock()
+	defer visibility.Mu.RUnlock()
+	_, visible := visibility.ObserversByVisibleTarget[target][observer]
+	return visible
 }
 
 func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.Context, e eventbus.Event) error {
@@ -300,108 +304,28 @@ func (d *NetworkVisibilityDispatcher) handleEntityAppearanceChanged(ctx context.
 	if !ok {
 		return nil
 	}
-
 	shard := d.shardManager.GetShard(event.Layer)
 	if shard == nil {
 		return nil
 	}
-
-	var (
-		hasTarget       bool
-		transform       components.Transform
-		entityInfo      components.EntityInfo
-		appearance      components.Appearance
-		sizeX           int32
-		sizeY           int32
-		carriedByID     uint64
-		observerHandles []types.Handle
-		observerIDs     []types.EntityID
-	)
 	shard.WithWorldRead(func(w *ecs.World) {
-		if !w.Alive(event.TargetHandle) {
+		spawn := d.buildObjectSpawn(w, event.TargetID, event.TargetHandle)
+		if spawn == nil {
 			return
 		}
-		var hasTransform, hasEntityInfo, hasAppearance bool
-		transform, hasTransform = ecs.GetComponent[components.Transform](w, event.TargetHandle)
-		entityInfo, hasEntityInfo = ecs.GetComponent[components.EntityInfo](w, event.TargetHandle)
-		appearance, hasAppearance = ecs.GetComponent[components.Appearance](w, event.TargetHandle)
-		if !hasTransform || !hasEntityInfo || !hasAppearance {
-			return
-		}
-		if collider, hasCollider := ecs.GetComponent[components.Collider](w, event.TargetHandle); hasCollider {
-			sizeX = int32(collider.HalfWidth * 2)
-			sizeY = int32(collider.HalfHeight * 2)
-		}
-		carriedByID = carryVisualCarrierIDForHandle(w, event.TargetHandle)
-		hasTarget = true
-
-		visibilityState := ecs.GetResource[ecs.VisibilityState](w)
-		visibilityState.Mu.RLock()
-		observers := visibilityState.ObserversByVisibleTarget[event.TargetHandle]
-		observerHandles = make([]types.Handle, 0, len(observers))
-		for observerHandle := range observers {
-			observerHandles = append(observerHandles, observerHandle)
-		}
-		visibilityState.Mu.RUnlock()
-
-		if len(observerHandles) == 0 {
-			return
-		}
-		observerIDs = make([]types.EntityID, 0, len(observerHandles))
-		for _, observerHandle := range observerHandles {
-			if observerEntityID, ok := w.GetExternalID(observerHandle); ok {
-				observerIDs = append(observerIDs, observerEntityID)
+		visibility := ecs.GetResource[ecs.VisibilityState](w)
+		visibility.Mu.RLock()
+		observers := make([]types.EntityID, 0, len(visibility.ObserversByVisibleTarget[event.TargetHandle]))
+		for handle := range visibility.ObserversByVisibleTarget[event.TargetHandle] {
+			if id, ok := w.GetExternalID(handle); ok {
+				observers = append(observers, id)
 			}
 		}
-	})
-	if !hasTarget {
-		return nil
-	}
-
-	msg := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_ObjectSpawn{
-			ObjectSpawn: &netproto.S2C_ObjectSpawn{
-				EntityId:          uint64(event.TargetID),
-				TypeId:            entityInfo.TypeID,
-				ResourcePath:      appearance.Resource,
-				CarriedByEntityId: carriedByID,
-				Position: &netproto.EntityPosition{
-					Position: &netproto.Position{
-						X: int32(transform.X),
-						Y: int32(transform.Y),
-					},
-					Size: &netproto.Vector2{
-						X: sizeX,
-						Y: sizeY,
-					},
-				},
-			},
-		},
-	}
-
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		d.logger.Error("failed to marshal appearance-changed ObjectSpawn message",
-			zap.Error(err),
-			zap.Int64("target_id", int64(event.TargetID)),
-		)
-		return nil
-	}
-
-	if len(observerIDs) == 0 {
-		return nil
-	}
-
-	shard.ClientsMu.RLock()
-	for _, observerEntityID := range observerIDs {
-		client, exists := shard.Clients[observerEntityID]
-		if !exists || client == nil {
-			continue
+		visibility.Mu.RUnlock()
+		for _, observerID := range observers {
+			d.sendObjectSpawn(w, shard, observerID, event.TargetHandle, spawn)
 		}
-		client.Send(data)
-	}
-	shard.ClientsMu.RUnlock()
-
+	})
 	return nil
 }
 

@@ -825,12 +825,14 @@ func (g *Game) attachClientToWorld(
 	shard.PlayerInbox().RemoveClient(client.ID)
 	shard.ClientsMu.Lock()
 	shard.Clients[playerEntityID] = client
-	shard.ClientsMu.Unlock()
 
+	// Visibility packets use ClientsMu too: publish the new epoch only together
+	// with EnterWorld, otherwise an initial spawn can arrive before bootstrap.
 	client.ClearDeadObserverMode()
 	client.StreamEpoch.Add(1)
 	client.InWorld.Store(true)
 	g.sendPlayerEnterWorld(client, playerEntityID, shard, character)
+	shard.ClientsMu.Unlock()
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, client.StreamEpoch.Load())
 
 	g.enqueuePlayerBootstrapSnapshots(shard, playerEntityID, handle)

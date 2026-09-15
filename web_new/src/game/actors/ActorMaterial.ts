@@ -2,15 +2,15 @@ import { Color, DoubleSide, MeshStandardMaterial, ShaderMaterial, Vector3, type 
 import type { DualQuaternionSkin } from './DualQuaternionSkin'
 import { DQ_DECLARATIONS } from './DualQuaternionSkin'
 
-export function createActorMaterial(source: Material, skin: DualQuaternionSkin, linearSkinning = false): ShaderMaterial {
+export function createActorMaterial(source: Material, skin?: DualQuaternionSkin, linearSkinning = false): ShaderMaterial {
   const original = source as MeshStandardMaterial
-  const region = source.name.includes('brows') ? 5 : ({ skin: 1, hair: 2, linen: 3, eyes: 4, textured: 6 } as Record<string, number>)[source.userData.region as string] ?? 2
+  const region = !skin ? 6 : source.name.includes('brows') ? 5 : ({ skin: 1, hair: 2, linen: 3, eyes: 4, textured: 6 } as Record<string, number>)[source.userData.region as string] ?? 2
   return new ShaderMaterial({
     name: `Pixel ${source.name}`,
     side: DoubleSide,
-    defines: linearSkinning ? { ACTOR_LINEAR_SKINNING: 1 } : {},
+    defines: !skin ? { ACTOR_RIGID: 1 } : linearSkinning ? { ACTOR_LINEAR_SKINNING: 1 } : {},
     uniforms: {
-      dqBones: { value: skin.texture },
+      dqBones: { value: skin?.texture ?? null },
       baseColor: { value: (original.color?.clone() ?? new Color(.62, .30, .12)).convertLinearToSRGB() },
       lightDirection: { value: new Vector3(-3, 6, 4).normalize() },
       region: { value: region },
@@ -21,14 +21,16 @@ export function createActorMaterial(source: Material, skin: DualQuaternionSkin, 
       #include <common>
       #include <skinning_pars_vertex>
       #include <morphtarget_pars_vertex>
-      ${DQ_DECLARATIONS}
+      #ifndef ACTOR_RIGID
+        ${DQ_DECLARATIONS}
+      #endif
       varying vec3 surfaceNormal;
       varying vec2 surfaceUV;
       varying float surfaceHeight;
       void main() {
         #ifdef ACTOR_LINEAR_SKINNING
           #include <skinbase_vertex>
-        #else
+        #elif !defined(ACTOR_RIGID)
           loadDQ();
         #endif
         #include <beginnormal_vertex>
@@ -36,7 +38,7 @@ export function createActorMaterial(source: Material, skin: DualQuaternionSkin, 
         #include <morphnormal_vertex>
         #ifdef ACTOR_LINEAR_SKINNING
           #include <skinnormal_vertex>
-        #else
+        #elif !defined(ACTOR_RIGID)
           objectNormal = mat3(bindMatrixInverse) * rotateDQ(mat3(bindMatrix) * objectNormal);
         #endif
         surfaceNormal = normalize(mat3(modelMatrix) * objectNormal);
@@ -45,7 +47,7 @@ export function createActorMaterial(source: Material, skin: DualQuaternionSkin, 
         #include <morphtarget_vertex>
         #ifdef ACTOR_LINEAR_SKINNING
           #include <skinning_vertex>
-        #else
+        #elif !defined(ACTOR_RIGID)
           vec3 bound = (bindMatrix * vec4(transformed, 1.0)).xyz;
           transformed = (bindMatrixInverse * vec4(rotateDQ(bound) + translateDQ(), 1.0)).xyz;
         #endif

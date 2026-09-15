@@ -60,7 +60,7 @@ export class ActorAssetCache {
 
   async acquire(url: string): Promise<{ asset: GLTF; release: () => void }> {
     if (this.destroyed) throw new Error('Actor asset cache is disposed')
-    if (!url.startsWith('/assets/game/characters/')) throw new Error(`Invalid actor asset URL: ${url}`)
+    if (!/^\/assets\/game\/(characters|equipment)\/[a-zA-Z0-9_./-]+\.glb$/.test(url) || url.split('/').includes('..')) throw new Error(`Invalid actor asset URL: ${url}`)
     let entry = this.entries.get(url)
     if (!entry) {
       const created: Entry = { promise: Promise.resolve(null as unknown as GLTF), references: 0, bytes: 0, lastUsed: performance.now() }

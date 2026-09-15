@@ -4,6 +4,7 @@ import { useGameStore, type EntityMovement } from '@/stores/gameStore'
 import { gameFacade, moveController, playerCommandController, soundManager } from '@/game'
 import { DEBUG_MOVEMENT } from '@/constants/game'
 import { distanceAttenuation, SoundAttenuationModel } from '@/game/soundAttenuation'
+import { decodeCharacterVisual } from '@/types/characterVisual'
 
 function toNumber(value: number | Long): number {
   if (typeof value === 'number') return value
@@ -195,6 +196,7 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('objectSpawn', (msg: proto.IS2C_ObjectSpawn) => {
+    if (msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
     const entityId = toNumber(msg.entityId!)
     const posX = msg.position?.position?.x || 0
     const posY = msg.position?.position?.y || 0
@@ -202,12 +204,21 @@ export function registerMessageHandlers(): void {
     const resourcePath = msg.resourcePath || ''
     const carriedByEntityId = toNumber(msg.carriedByEntityId || 0)
 
+    const characterVisual = msg.characterVisual ? decodeCharacterVisual(msg.characterVisual) : undefined
+    const existing = gameStore.entities.get(entityId)
+    if (characterVisual && existing?.characterVisual?.generation === characterVisual.generation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
+      if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterEquipment(entityId, characterVisual.equipment)
+      gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
+      return
+    }
+
     // console.log(`[Handlers] objectSpawn: entityId=${entityId}, type=${msg.typeId}, resource="${resourcePath}", pos=(${posX}, ${posY}), playerEntityId=${gameStore.playerEntityId}`)
 
     const objectData = {
       entityId,
       typeId: msg.typeId || 0,
       resourcePath,
+      characterVisual,
       position: { x: posX, y: posY },
       size: {
         x: msg.position?.size?.x || 0,
@@ -217,6 +228,7 @@ export function registerMessageHandlers(): void {
 
     gameStore.spawnEntity(objectData)
     gameFacade.spawnObject(objectData)
+    if (characterVisual) applyCharacterEquipment(entityId, characterVisual.equipment)
     gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
 
     // Initialize entity in MoveController for smooth movement
@@ -233,7 +245,22 @@ export function registerMessageHandlers(): void {
     }
   })
 
+  function applyCharacterEquipment(entityId: number, equipment: import('@/types/characterVisual').CharacterVisualState['equipment']): void {
+    void gameFacade.setCharacterEquipment(entityId, equipment).catch((error: unknown) => {
+      console.error('[Handlers] Unable to apply character equipment', { entityId, error })
+      gameStore.pushMiniAlert({ reasonCode: 'CHARACTER_EQUIPMENT_LOAD_FAILED', severity: proto.AlertSeverity.ALERT_SEVERITY_WARNING, ttlMs: 5000 })
+    })
+  }
+
+  messageDispatcher.on('characterVisual', (msg: proto.IS2C_CharacterVisual) => {
+    if (!msg.state || msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
+    const entityId = toNumber(msg.entityId || 0)
+    const state = decodeCharacterVisual(msg.state)
+    if (gameStore.updateCharacterVisual(entityId, state)) applyCharacterEquipment(entityId, state.equipment)
+  })
+
   messageDispatcher.on('objectDespawn', (msg: proto.IS2C_ObjectDespawn) => {
+    if (msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
     const entityId = toNumber(msg.entityId!)
     // console.log(`[Handlers] objectDespawn: entityId=${entityId}`)
     gameStore.despawnEntity(entityId)

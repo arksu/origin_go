@@ -1,6 +1,7 @@
 import type { ActorHandle } from '../src/game/actors/ActorRenderer'
 import { verifyMovementStopping } from './movement-stop'
 import { verifyScreenFacing } from './screen-facing'
+import { verifyCharacterEquipment, verifyStoneAxe } from './character-equipment'
 import { Application, Container, Sprite, Texture, WebGLRenderer } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
@@ -42,10 +43,10 @@ async function main() {
   const sprite = view.getContainer().children.find((child) => child instanceof Sprite)
   check(sprite instanceof Sprite, 'Production ObjectView must allocate the hybrid sprite synchronously')
   let renderTime = 0
-  const render = () => {
+  const render = (updateWorld = true) => {
     const gl = (app.renderer as WebGLRenderer).gl
     check(gl.getError() === 0, 'GL error left before test frame')
-    manager.update()
+    if (updateWorld) manager.update()
     renderer.render(renderTime += 100)
     check(gl.getError() === 0, `GL error in actor pass at ${renderTime}`)
     app.render()
@@ -58,8 +59,8 @@ async function main() {
   pass('Production ObjectView / async move, stop, despawn / one shared textured GLB')
 
   const playerSprite = sprite
-  function pixels() {
-    render()
+  function pixels(updateWorld = true) {
+    render(updateWorld)
     let error = (app.renderer as WebGLRenderer).gl.getError()
     check(error === 0, `GL error after mixed render: ${error}; completed ${checks.length} groups`)
     const pixels = app.renderer.extract.pixels({ target: playerSprite.texture }).pixels
@@ -70,8 +71,8 @@ async function main() {
     check(error === 0, `GL error after test extraction: ${error}; completed ${checks.length} groups`)
     return pixels
   }
-  function hash() {
-    const values = pixels()
+  function hash(updateWorld = true) {
+    const values = pixels(updateWorld)
     let hash = 2166136261
     for (const value of values) hash = Math.imul(hash ^ value, 16777619)
     return hash >>> 0
@@ -118,15 +119,17 @@ async function main() {
   check(hash() === idle, 'Stopping must restore the standing pose')
   pass('64 skeletal walk poses / distance at 30, 60, 144 FPS / stationary clock / idle')
 
-  let rejectedLegacyGear = false
-  try { await view.setActorEquipment(['linen_wrap']) } catch { rejectedLegacyGear = true }
-  check(rejectedLegacyGear, 'Incompatible legacy clothing must be rejected')
+  await view.setActorEquipment([{ slot: 'legs', visualKey: 'linen_wrap' }])
+  check(hash() === idle, 'Items without a registered 3D visual must preserve the body')
+  let rejectedDuplicateSlot = false
+  try { await view.setActorEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }, { slot: 'right_hand', visualKey: 'stone_axe' }]) } catch { rejectedDuplicateSlot = true }
+  check(rejectedDuplicateSlot, 'Duplicate equipment slots must be rejected')
   check(hash() === idle, 'Rejected equipment must preserve the existing character')
   const staleSwap = view.setActorEquipment([])
   const latestSwap = view.setActorEquipment(DEFAULT_EQUIPMENT)
   await Promise.all([staleSwap, latestSwap])
   check(hash() === idle, 'Latest equipment request must win without changing the body pose')
-  pass('Integrated garment / incompatible equipment rejected / asynchronous empty replacement')
+  pass('Unavailable visual fallback / duplicate slots rejected / asynchronous empty replacement')
 
   manager.spawnObject({ entityId: 201, typeId: 10, resourcePath: 'box/normal', position: { x: 0, y: 0 }, size: { x: 4, y: 4 } })
   await ResourceLoader.loadTexture('obj/box/box.png')
@@ -176,6 +179,12 @@ async function main() {
 
   verifyScreenFacing()
   const liveActor = (view as unknown as { actorHandle: ActorHandle }).actorHandle.actor
+  verifyCharacterEquipment(liveActor, hash)
+  pass('Rigid attachment shader / actual GLTF arm masks / eight gait samples / clean removal')
+  // This test authors actor samples directly; ObjectView must not overwrite
+  // them with the stationary server fixture while reading the rendered pixels.
+  await verifyStoneAxe(liveActor, () => hash(false))
+  pass('Real stone axe / 64 equipped poses / distance-driven arm / free-hand independence / left hand / carry / removal')
   for (const scale of [.5, 1, 2]) {
     world.scale.set(scale)
     for (let direction = 0; direction < 8; direction++) {

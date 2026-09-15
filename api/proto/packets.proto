@@ -278,6 +278,24 @@ message EntityAppearance {
   string name = 2;
 }
 
+// Public appearance only; item instances and private inventory contents stay private.
+message CharacterEquipmentVisual {
+  EquipSlot slot = 1;
+  string visual_key = 2; // Stable item-definition key, resolved by the client's catalog.
+}
+
+message CharacterVisualState {
+  string generation = 1; // Runtime entity incarnation, scoped to the current world stream.
+  uint64 revision = 2; // Equipment-container revision; empty equipment is a full snapshot.
+  repeated CharacterEquipmentVisual equipment = 3;
+}
+
+message S2C_CharacterVisual {
+  uint64 entity_id = 1;
+  CharacterVisualState state = 2;
+  uint32 stream_epoch = 3;
+}
+
 // ============================================================================
 // CHUNK & WORLD
 // ============================================================================
@@ -531,10 +549,13 @@ message S2C_ObjectSpawn {
   string resource_path = 3;
   EntityPosition position = 4;
   uint64 carried_by_entity_id = 5; // 0 when not carried
+  CharacterVisualState character_visual = 6;
+  uint32 stream_epoch = 7;
 }
 
 message S2C_ObjectDespawn {
   uint64 entity_id = 1;
+  uint32 stream_epoch = 2;
 }
 
 message S2C_ObjectMove {
@@ -799,6 +820,7 @@ message ServerMessage {
     S2C_BuildStateClosed build_state_closed = 37;
     S2C_LiftCarryState lift_carry_state = 38;
     S2C_DeathDialog death_dialog = 39;
+    S2C_CharacterVisual character_visual = 40;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

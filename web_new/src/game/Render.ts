@@ -20,7 +20,7 @@ import { fxManager } from './fx/FxManager'
 import type { DebugInfo, ScreenPoint } from './types'
 import { clearAlphaMaskCache } from './PixelHitTest'
 import { ActorRenderer } from './actors/ActorRenderer'
-import type { EquipmentId } from './actors/config'
+import type { EquippedVisual } from '../types/characterVisual'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
 
@@ -491,7 +491,7 @@ export class Render {
     this.objectManager.setPlayerEntityId(entityId)
   }
 
-  async setCharacterEquipment(entityId: number, items: readonly EquipmentId[]): Promise<void> {
+  async setCharacterEquipment(entityId: number, items: readonly EquippedVisual[]): Promise<void> {
     const view = this.objectManager.getObject(entityId)
     if (!view) throw new Error(`Cannot equip missing character ${entityId}`)
     await view.setActorEquipment(items)
