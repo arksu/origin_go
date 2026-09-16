@@ -289,16 +289,32 @@ export class ActorInstance {
     if (!this.mixer || this.destroyed) return false
     const continuousPhase = this.walking ? ((this.distanceTiles / ACTOR_RENDER.cycleDistanceTiles) % 1 + 1) % 1 : 0
     const phase = settings.mode === 'baked8' ? Math.floor(continuousPhase * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : continuousPhase
+    const bakedMode = settings.mode === 'baked8'
+    const holdingBakedWalkFrame = bakedMode && this.stopProgress !== undefined && this.stopProgress < 1
+    const visualWalking = holdingBakedWalkFrame || (this.walking && !(bakedMode && this.stopProgress === 1))
+    const renderedPhase = holdingBakedWalkFrame ? this.walkPhase : phase
     const facingChanged = this.updateFacing(now, settings)
-    const name = `${this.carrying ? 'carry_' : ''}${this.walking ? 'walk' : 'idle'}`
+    const name = `${this.carrying ? 'carry_' : ''}${visualWalking ? 'walk' : 'idle'}`
     const blendDuration = this.walkTarget === 0 ? ACTOR_RENDER.locomotionStopMs : ACTOR_RENDER.locomotionBlendMs
     const progress = Math.max(0, Math.min(1, (now - this.walkBlendStarted) / blendDuration))
-    if (this.stopStartWeight === undefined) {
+    if (!bakedMode && this.stopStartWeight === undefined) {
       this.walkWeight = this.walkBlendFrom + (this.walkTarget - this.walkBlendFrom) * progress
       if (progress === 1) this.walkBlendFrom = this.walkTarget
     }
-    const target = this.walking ? 1 : 0
-    if (this.stopProgress !== undefined) {
+    const target = visualWalking ? 1 : 0
+    if (bakedMode) {
+      this.stopStartWeight = undefined
+      if (visualWalking) {
+        this.walkWeight = 1
+        this.walkBlendFrom = 1
+        this.walkTarget = 1
+      } else {
+        this.walkWeight = 0
+        this.walkBlendFrom = 0
+        this.walkTarget = 0
+        this.walkBlendStarted = now
+      }
+    } else if (this.stopProgress !== undefined) {
       this.stopStartWeight ??= this.walkWeight
       this.walkWeight = this.stopStartWeight * (1 - this.stopProgress)
       this.walkBlendFrom = this.walkWeight
@@ -313,9 +329,9 @@ export class ActorInstance {
       if (this.walking) this.walkPhaseOffset = this.walkWeight > 0 ? this.walkPhase - phase : 0
     }
     if (this.stopProgress === undefined) this.stopStartWeight = undefined
-    // Keep the outgoing gait sample when stopping instead of snapping to phase zero.
-    if (this.walking) this.walkPhase = ((phase + this.walkPhaseOffset) % 1 + 1) % 1
-    const key = `${settings.mode}/${name}/${phase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}`
+    // Baked8 holds one authored pose through position settling instead of blending it at display rate.
+    if (this.walking && !holdingBakedWalkFrame) this.walkPhase = ((phase + this.walkPhaseOffset) % 1 + 1) % 1
+    const key = `${settings.mode}/${name}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}`
     if (!facingChanged && key === this.lastPose && (this.carrying || !this.armLayers?.transitioning)) return false
     const state = `${settings.mode}/${name}/${this.hovered}`
     if (state !== this.lastPoseState) this.immediateRender = true
@@ -326,10 +342,10 @@ export class ActorInstance {
       for (const side of ['left', 'right'] as const) {
         const profile = this.armProfiles[side]
         if (!profile) continue
-        const clip = this.walking ? profile.walkPose ?? profile.idlePose : profile.idlePose
+        const clip = visualWalking ? profile.walkPose ?? profile.idlePose : profile.idlePose
         // Capture the last displayed arm before locomotion overwrites it.
         if (this.armLayers.getPose(side) !== clip) this.armLayers.setPose(side, clip, 0, now)
-        this.armLayers.samplePhase(side, this.walking && profile.walkPose ? phase : 0)
+        this.armLayers.samplePhase(side, visualWalking && profile.walkPose ? renderedPhase : 0)
       }
     }
     for (const action of this.actions.values()) action.stop()
@@ -351,8 +367,8 @@ export class ActorInstance {
       for (const mesh of piece.meshes) {
         if (!mesh.morphTargetInfluences || !mesh.morphTargetDictionary) continue
         mesh.morphTargetInfluences.fill(0)
-        const index = mesh.morphTargetDictionary[`walk_cloth_${Math.round(phase * 8) % 8}`]
-        if (this.walking && index !== undefined) mesh.morphTargetInfluences[index] = 1
+        const index = mesh.morphTargetDictionary[`walk_cloth_${Math.round(renderedPhase * 8) % 8}`]
+        if (visualWalking && index !== undefined) mesh.morphTargetInfluences[index] = 1
       }
     }
     this.root.updateMatrixWorld(true)

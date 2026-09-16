@@ -22,10 +22,12 @@ import MovementModePanel from '@/components/ui/MovementModePanel.vue'
 import ActionsRail from '@/components/ui/ActionsRail.vue'
 import HotbarPlaceholder from '@/components/ui/HotbarPlaceholder.vue'
 import PortraitWarningBanner from '@/components/ui/PortraitWarningBanner.vue'
+import SettingsWindow from '@/components/ui/SettingsWindow.vue'
 import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack, sendLiftPutDown } from '@/network'
 import { useInventoryOps } from '@/composables/useInventoryOps'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useHotbarAssignments } from '@/composables/useHotbarAssignments'
+import { useActorRenderSettings, type ActorRenderMode } from '@/composables/useActorRenderSettings'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
 import { useAuthStore } from '@/stores/authStore'
@@ -118,6 +120,8 @@ const touchHoverSlot = ref<number | null>(null)
 const isPortrait = ref(false)
 const isMobileDevice = ref(false)
 const portraitWarningDismissed = ref(false)
+const showSettingsWindow = ref(false)
+const { mode: actorRenderMode, setMode: saveActorRenderMode } = useActorRenderSettings()
 
 const PORTRAIT_WARNING_DISMISSED_KEY = 'hud_portrait_warning_dismissed_v1'
 
@@ -391,6 +395,7 @@ onMounted(async () => {
   gameFacade = gameModule.gameFacade
   connectToGame = networkModule.connectToGame
   disconnectFromGame = networkModule.disconnectFromGame
+  gameFacade.setActorRenderSettings({ mode: actorRenderMode.value })
 
   gameStore.clearLastServerErrorMessage()
   gameStore.startWorldBootstrap()
@@ -469,6 +474,11 @@ function handleEquipmentClose() {
   gameStore.setPlayerEquipmentVisible(false)
 }
 
+function setActorRenderMode(mode: ActorRenderMode): void {
+  saveActorRenderMode(mode)
+  gameFacade?.setActorRenderSettings({ mode })
+}
+
 function openCraftWindow() {
   if (gameStore.craftWindowVisible) return
   gameStore.setCraftWindowVisible(true)
@@ -544,7 +554,7 @@ function executeAction(actionId: ActionId): void {
       gameStore.togglePlayerEquipment()
       return
     case 'settings':
-      console.log('[HUD] Settings action selected (not implemented yet)')
+      showSettingsWindow.value = !showSettingsWindow.value
       return
     case 'actions':
       console.log('[HUD] Actions action selected (not implemented yet)')
@@ -683,6 +693,10 @@ const hotkeys: HotkeyConfig[] = [...DEFAULT_HOTKEYS, ...hotbarNumberHotkeys].map
         chatContainerRef.value?.focusChat()
         break
       case 'Escape':
+        if (showSettingsWindow.value) {
+          showSettingsWindow.value = false
+          break
+        }
         if ((gameStore.armedBuildKey || '').trim()) {
           gameStore.clearBuildPlacement()
           gameFacade?.cancelBuildGhost?.()
@@ -876,6 +890,14 @@ useHotkeys(hotkeys)
 
       <div v-if="showPlayerStatsWindow" class="game-player-stats-window">
         <PlayerStatsWindow @close="handlePlayerStatsClose" />
+      </div>
+
+      <div v-if="showSettingsWindow" class="game-settings-window">
+        <SettingsWindow
+          :mode="actorRenderMode"
+          @close="showSettingsWindow = false"
+          @update-mode="setActorRenderMode"
+        />
       </div>
 
       <div v-if="showCraftWindow" class="game-craft-window">
@@ -1177,6 +1199,16 @@ useHotkeys(hotkeys)
   height: 100%;
   pointer-events: none;
   z-index: 255;
+}
+
+.game-settings-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 260;
 }
 
 .game-equipment {

@@ -55,7 +55,7 @@
         "img": "terrain/wald/image_6.png",
         "offset": [
           -11,
-          -9
+          -14
         ],
         "p": 5,
         "z": 1
@@ -73,7 +73,7 @@
         "img": "terrain/wald/image_8.png",
         "offset": [
           -7,
-          -1
+          -4
         ],
         "p": 5,
         "z": 23
