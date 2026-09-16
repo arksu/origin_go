@@ -1,8 +1,8 @@
 /**
- * Runtime terrain sprites use the lower half of their tile as the default
- * ground-contact depth. Keep this in step with web_new/src/game/tiles/Tile.ts.
+ * TerrainManager provides the centre of the tile as the runtime depth anchor.
+ * Keep this in step with web_new/src/game/terrain/TerrainManager.ts.
  */
-export const TERRAIN_DEFAULT_DEPTH_Y = 16
+export const TERRAIN_DEFAULT_DEPTH_Y = 0
 
 export function deriveTerrainLayerZ(
   variantOffsetY: number | undefined,
@@ -19,5 +19,5 @@ export function deriveTerrainLayerZ(
 
   // Terrain decals do not occlude actors on their own tile. World tile depth
   // still controls which decals are in front of actors on other tiles.
-  return Math.min(0, spriteBottomZ)
+  return Math.min(-1, spriteBottomZ)
 }

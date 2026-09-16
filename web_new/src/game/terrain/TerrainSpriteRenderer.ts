@@ -36,7 +36,10 @@ export class TerrainSpriteRenderer implements ITerrainRenderer {
    */
   addTile(cmds: TerrainDrawCmd[]): void {
     for (const cmd of cmds) {
-      const zIndex = TERRAIN_BASE_Z_INDEX + cmd.depthY + cmd.zOffset
+      // Terrain decals must lose a depth tie with an actor at the same world
+      // position. Older configs may contain positive offsets, so clamp them
+      // too instead of relying on each asset file having been resaved.
+      const zIndex = TERRAIN_BASE_Z_INDEX + cmd.depthY + Math.min(-1, cmd.zOffset)
 
       const sprite = terrainSpritePool.acquire(cmd.textureFrameId, cmd.x, cmd.y, zIndex)
       if (!sprite) continue

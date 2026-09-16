@@ -106,7 +106,10 @@ export class TerrainGenerator {
       textureFrameId: layer.img,
       x: anchorScreenX + dx,
       y: anchorScreenY + dy,
-      depthY: anchorScreenY + TILE_HEIGHT_HALF,
+      // TerrainManager's anchor is already the tile centre, which matches an
+      // actor's world-position depth. Adding another half tile put decals in
+      // front of actors occupying the same tile.
+      depthY: anchorScreenY,
       zOffset: layer.z ?? 0,
     }
   }

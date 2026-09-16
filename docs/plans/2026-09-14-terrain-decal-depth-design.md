@@ -15,10 +15,10 @@ location can differ, allowing a decal to render over an actor incorrectly.
 ## Decision
 
 Each terrain draw command will carry an explicit `depthY`. The generator will
-derive it from the same jittered tile anchor used for placement, plus the tile
-half-height that represents the default ground-contact plane. The renderer
-will derive z-index from this value and retain the optional per-layer `z`
-offset.
+derive it from the same jittered tile anchor used for placement. That anchor
+is the tile centre and matches the actor's world-position depth. The renderer
+will derive z-index from this value and force terrain decals below an actor at
+the same depth, even for legacy configs with a positive per-layer `z` offset.
 
 `depthY` deliberately does not use the sprite's top-left Y or bitmap height:
 large sprites may extend above their foot point, and their visual bounds are
