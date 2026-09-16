@@ -1,6 +1,7 @@
 package systems
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
@@ -59,6 +60,12 @@ func (s *LiftPlacementSystem) Update(w *ecs.World, dt float64) {
 			}
 			return
 		}
+		if hasReachedNoColliderLiftTarget(w, h, pending) {
+			if s.service != nil {
+				s.service.FinalizePendingLiftTransition(w, playerID, h, pending)
+			}
+			return
+		}
 		cr, hasCollision := ecs.GetComponent[components.CollisionResult](w, h)
 		if !hasCollision || !cr.IsPhantom {
 			return
@@ -69,3 +76,15 @@ func (s *LiftPlacementSystem) Update(w *ecs.World, dt float64) {
 	})
 }
 
+func hasReachedNoColliderLiftTarget(w *ecs.World, playerHandle types.Handle, pending components.PendingLiftTransition) bool {
+	if pending.Mode != components.LiftTransitionModePickupNoCollider {
+		return false
+	}
+	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](w, playerHandle)
+	if !hasPlayerTransform {
+		return false
+	}
+	dx := pending.TargetX - playerTransform.X
+	dy := pending.TargetY - playerTransform.Y
+	return dx*dx+dy*dy <= constt.StopDistance*constt.StopDistance
+}
