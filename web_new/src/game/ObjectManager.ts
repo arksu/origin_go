@@ -2,6 +2,7 @@ import { Container } from 'pixi.js'
 import { ObjectView, type ObjectViewOptions } from './ObjectView'
 import { cullingController } from './culling'
 import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
+import { DEBUG_SHOW_OBJECT_BOUNDS } from '@/constants/game'
 import type { ActorRenderer } from './actors/ActorRenderer'
 
 /**
@@ -17,6 +18,7 @@ export class ObjectManager {
   private activeCarriedObjects: Set<number> = new Set()
   private knockedOutObjectIds: Set<number> = new Set()
   private needsSort = false
+  private debugVisible = false
   private boundsVisible: boolean = false
   private hoveredEntityId: number | null = null
   private actorRenderer: ActorRenderer | undefined
@@ -64,7 +66,7 @@ export class ObjectManager {
       objectView.computeScreenBounds(),
     )
 
-    // Set bounds visibility if currently enabled
+    objectView.setDebugMode(this.debugVisible)
     if (this.areBoundsVisible()) {
       objectView.setBoundsVisible(true)
     }
@@ -421,6 +423,14 @@ export class ObjectManager {
     this.boundsVisible = visible
     for (const objectView of this.objects.values()) {
       objectView.setBoundsVisible(visible)
+    }
+  }
+
+  setDebugVisible(visible: boolean): void {
+    this.debugVisible = visible
+    this.setBoundsVisible(visible && DEBUG_SHOW_OBJECT_BOUNDS)
+    for (const objectView of this.objects.values()) {
+      objectView.setDebugMode(visible)
     }
   }
 

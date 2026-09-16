@@ -650,6 +650,10 @@ export class Render {
     this.debugOverlay.toggle()
   }
 
+  setDebugOverlayVisible(visible: boolean): void {
+    this.debugOverlay.setVisible(visible)
+  }
+
   updateDebugStats(objectsCount: number, chunksLoaded: number): void {
     if (!this.debugOverlay.isVisible()) return
 

@@ -4,11 +4,13 @@ import type { ActorRenderMode } from '@/composables/useActorRenderSettings'
 
 defineProps<{
   mode: ActorRenderMode
+  debugEnabled: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   updateMode: [mode: ActorRenderMode]
+  updateDebugEnabled: [enabled: boolean]
 }>()
 
 const renderModes: readonly { value: ActorRenderMode; label: string; description: string }[] = [
@@ -20,7 +22,7 @@ const renderModes: readonly { value: ActorRenderMode; label: string; description
 <template>
   <GameWindow
     :id="7003"
-    :inner-height="162"
+    :inner-height="230"
     :inner-width="270"
     title="Settings"
     @close="emit('close')"
@@ -42,6 +44,19 @@ const renderModes: readonly { value: ActorRenderMode; label: string; description
           </span>
         </label>
       </fieldset>
+
+      <p class="settings-window__title settings-window__title--debug">Debug</p>
+      <label class="settings-window__mode">
+        <input
+          :checked="debugEnabled"
+          type="checkbox"
+          @change="emit('updateDebugEnabled', ($event.target as HTMLInputElement).checked)"
+        >
+        <span>
+          <span class="settings-window__mode-label">Render debug</span>
+          <span class="settings-window__mode-description">Metrics, object bounds, and entity labels.</span>
+        </span>
+      </label>
     </section>
   </GameWindow>
 </template>
@@ -60,6 +75,10 @@ const renderModes: readonly { value: ActorRenderMode; label: string; description
   font-size: 16px;
   line-height: 1.2;
   text-shadow: 0 1px 0 #1d201f;
+}
+
+.settings-window__title--debug {
+  margin-top: 16px;
 }
 
 .settings-window__modes {
