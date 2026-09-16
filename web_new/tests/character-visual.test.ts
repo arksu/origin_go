@@ -12,6 +12,7 @@ import { ActorArmLayers } from '../src/game/actors/ActorArmLayers'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
 import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
 import { actorYawForScreenAngle } from '../src/game/actors/facing'
+import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
 import type { EquipmentDefinition } from '../src/game/actors/equipment'
 
 function visual(revision: string, generation = '0:4294967297') {
@@ -53,6 +54,24 @@ test('actor render settings expose validated local and remote update rates', () 
   assert.throws(() => resolveActorRenderSettings({ mode: 'sprite8' as 'hybrid3d' }))
   assert.throws(() => resolveActorRenderSettings({ turnDurationMs: 0 }))
   assert.throws(() => resolveActorRenderSettings({ renderStationaryChangesImmediately: 'yes' as unknown as boolean }))
+})
+
+test('actor render mode preference persists only supported values', () => {
+  const values = new Map<string, string>()
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  }
+
+  assert.equal(loadActorRenderMode(storage), 'hybrid3d')
+  values.set(ACTOR_RENDER_MODE_STORAGE_KEY, 'baked8')
+  assert.equal(loadActorRenderMode(storage), 'baked8')
+  values.set(ACTOR_RENDER_MODE_STORAGE_KEY, 'unsupported')
+  assert.equal(loadActorRenderMode(storage), 'hybrid3d')
+  persistActorRenderMode('hybrid3d', storage)
+  assert.equal(values.get(ACTOR_RENDER_MODE_STORAGE_KEY), 'hybrid3d')
+  assert.equal(loadActorRenderMode(null), 'hybrid3d')
+  assert.doesNotThrow(() => persistActorRenderMode('baked8', null))
 })
 
 test('store accepts only a newer revision of the current incarnation and cannot resurrect despawned actors', () => {
@@ -222,6 +241,34 @@ test('position stop progress drives skeletal weights without another idle tail',
     actor.updatePose(now + 900)
     assert.equal(pelvis.position.x, 0)
     assert.equal(actor.updatePose(now + 901), false)
+  } finally { actor.destroy() }
+})
+
+test('baked8 starts immediately and holds its walk frame while position is still settling', async () => {
+  const { actor } = await fixtureActor()
+  try {
+    const now = Math.ceil(performance.now())
+    const settings = { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode: 'baked8' as const }
+    const pelvis = actor.root.getObjectByName('pelvis')!
+    actor.walking = true
+    actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .25
+    actor.updatePose(now, settings)
+    assert.notEqual(pelvis.position.x, 0, 'baked8 must not blend the start of the walk pose')
+
+    actor.stopProgress = 0
+    assert.equal(actor.updatePose(now + 100, settings), false, 'the initial stop must keep the existing baked frame')
+    const heldPose = pelvis.position.x
+    const heldRevision = actor.revision
+
+    actor.stopProgress = .5
+    assert.equal(actor.updatePose(now + 250, settings), false, 'intermediate stop progress must not blend a new pose')
+    assert.equal(actor.revision, heldRevision)
+    assert.equal(pelvis.position.x, heldPose)
+
+    actor.walking = false
+    actor.stopProgress = 1
+    assert.equal(actor.updatePose(now + 400, settings), true, 'completed stop must produce the idle pose')
+    assert.equal(pelvis.position.x, 0)
   } finally { actor.destroy() }
 })
 
