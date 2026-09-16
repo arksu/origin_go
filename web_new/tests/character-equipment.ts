@@ -46,6 +46,7 @@ export function verifyCharacterEquipment(actor: ActorInstance, hash: () => numbe
     actor.walking = false
     actor.distanceTiles = 0
     actor.updatePose(performance.now() + 300)
+    actor.updatePose(performance.now() + 800)
     actor.revision++
   }
   check(hash() === bare, 'Removing a rigid mesh and arm mask must restore the original actor image')
@@ -59,13 +60,18 @@ export async function verifyStoneAxe(actor: ActorInstance, hash: () => number): 
   const bare = hash()
   const freeArm = findRigBone(actor.root, 'forearm.l')
   const freeHandPoses = []
+  actor.walking = true
+  actor.updatePose()
+  actor.updatePose(performance.now() + 500)
   for (let phase = 0; phase < 8; phase++) {
     actor.walking = true
     actor.distanceTiles = phase / 8 * ACTOR_RENDER.cycleDistanceTiles
-    actor.updatePose()
+    actor.updatePose(performance.now() + 500)
     freeHandPoses.push(freeArm.quaternion.clone())
   }
   actor.walking = false
+  actor.updatePose()
+  actor.updatePose(performance.now() + 500)
   await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }])
   const now = performance.now() + 200
   actor.updatePose(now)
@@ -75,7 +81,8 @@ export async function verifyStoneAxe(actor: ActorInstance, hash: () => number): 
   const heldArm = findRigBone(actor.root, 'upper_arm.r')
   const rotations: string[] = []
   actor.walking = true
-  actor.updatePose(now + 200)
+  actor.updatePose(now - 100)
+  actor.updatePose(now + 400)
   for (let phase = 0; phase < 8; phase++) {
     actor.walking = true
     actor.distanceTiles = phase / 8 * ACTOR_RENDER.cycleDistanceTiles
@@ -103,5 +110,6 @@ export async function verifyStoneAxe(actor: ActorInstance, hash: () => number): 
   actor.walking = false
   actor.distanceTiles = 0
   actor.updatePose(performance.now() + 300)
+  actor.updatePose(performance.now() + 800)
   check(hash() === bare, 'Removing the real axe must restore the exact bare character')
 }

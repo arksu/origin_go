@@ -102,6 +102,8 @@ async function main() {
   const poses = new Set<number>()
   for (let direction = 0; direction < 8; direction++) {
     view.onStopped()
+    view.onMoved(direction, 0)
+    for (let frame = 0; frame < 6; frame++) render()
     for (let phase = 0; phase < 8; phase++) {
       view.onMoved(direction, phase === 0 ? 0 : ACTOR_RENDER.cycleDistanceTiles * 12 / 8)
       poses.add(hash())
@@ -112,6 +114,7 @@ async function main() {
   for (const fps of [30, 60, 144]) {
     view.onStopped()
     for (let step = 0; step < fps; step++) view.onMoved(1, ACTOR_RENDER.cycleDistanceTiles * 12 * .375 / fps)
+    for (let frame = 0; frame < 6; frame++) render()
     const image = hash()
     if (!equalDistance) equalDistance = image
     check(image === equalDistance, `Walk distance must be independent of ${fps} FPS`)
@@ -119,6 +122,7 @@ async function main() {
   }
   view.onMoved(3)
   view.onStopped()
+  for (let frame = 0; frame < 6; frame++) render()
   check(hash() === idle, 'Stopping must restore the standing pose')
   pass('64 skeletal walk poses / distance at 30, 60, 144 FPS / stationary clock / idle')
 
@@ -146,6 +150,7 @@ async function main() {
   manager.clearCarryVisualRelation(201)
   view.onMoved(3)
   view.onStopped()
+  for (let frame = 0; frame < 6; frame++) render()
   check(hash() === idle, 'Releasing a carried prop must restore ordinary idle')
   manager.setKnockedOutPose(101, true)
   check(view.computeScreenBounds().minX <= -116, 'Culling must include the rotated KO image')
@@ -182,7 +187,7 @@ async function main() {
 
   verifyScreenFacing()
   const liveActor = (view as unknown as { actorHandle: ActorHandle }).actorHandle.actor
-  verifyCharacterEquipment(liveActor, hash)
+  verifyCharacterEquipment(liveActor, () => hash(false))
   pass('Rigid attachment shader / actual GLTF arm masks / eight gait samples / clean removal')
   // This test authors actor samples directly; ObjectView must not overwrite
   // them with the stationary server fixture while reading the rendered pixels.

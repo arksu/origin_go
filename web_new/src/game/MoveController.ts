@@ -12,7 +12,7 @@
 
 import { timeSync } from '@/network/TimeSync'
 import { DEBUG_MOVEMENT } from '@/constants/game'
-import { getCoordPerTile } from './tiles/Tile'
+import { LOCOMOTION_STOP_MS } from './movementTiming'
 
 // Constants
 const MAX_KEYFRAMES = 32
@@ -22,7 +22,6 @@ const REFERENCE_FRAME_MS = 1000 / 60
 const ERROR_CORRECTION_SPEED = 0.15 // damping at the reference 60 FPS
 const ERROR_CORRECTION_SPEED_LOW = 0.03 // reduced correction during movement start
 const ERROR_CORRECTION_RAMP_MS = 200 // time to ramp up correction speed
-const STOP_SETTLE_DISTANCE_TILES = 1 / 256 // at most 0.18 native pixels in the tile projection
 const VELOCITY_DECAY_RATE = 0.9 // decay rate when extrapolating past max time
 
 export interface MoveKeyframe {
@@ -45,6 +44,7 @@ export interface RenderPosition {
   moveMode: number
   direction: number // 0-7 index for 8-direction animations (NE,E,SE,S,SW,W,NW,N)
   distanceMoved: number // actual interpolated world displacement, excluding snaps
+  stopProgress?: number // shared position/skeleton transition, from 0 to 1
 }
 
 export interface EntityMoveState {
@@ -66,6 +66,7 @@ export interface EntityMoveState {
   // Movement start tracking for smooth ramp-in
   movementStartClientMs: number
   wasMovingLastFrame: boolean
+  stopTransition?: { startedMs: number; fromX: number; fromY: number; targetX: number; targetY: number }
 
   // Debug metrics
   ignoredOutOfOrder: number
@@ -171,6 +172,7 @@ class MoveController {
         console.log(`[MoveController] Teleport entity ${entityId} to (${x.toFixed(2)}, ${y.toFixed(2)})`)
       }
       state.keyframes = []
+      state.stopTransition = undefined
       state.visualX = x
       state.visualY = y
       state.visualHeading = heading
@@ -413,6 +415,10 @@ class MoveController {
       }
     }
 
+    const isStationaryStop = !isMoving && (!frameA || !frameB || renderTimeMs >= frameB.tServerMs ||
+      (frameA.x === frameB.x && frameA.y === frameB.y))
+    if (!isStationaryStop) state.stopTransition = undefined
+    let stopProgress: number | undefined
     // Apply error correction (smooth damping with adaptive ramp-in)
     const errorX = targetX - state.visualX
     const errorY = targetY - state.visualY
@@ -423,6 +429,23 @@ class MoveController {
       state.visualX = targetX
       state.visualY = targetY
       state.snapCount++
+      state.stopTransition = undefined
+      if (isStationaryStop) stopProgress = 1
+    } else if (isStationaryStop) {
+      let stop = state.stopTransition
+      if (!stop || stop.targetX !== targetX || stop.targetY !== targetY) {
+        // Finish this frame's travel before capturing the stop curve, avoiding a one-frame pause.
+        const correctionFactor = 1 - Math.pow(1 - ERROR_CORRECTION_SPEED, deltaMs / REFERENCE_FRAME_MS)
+        state.visualX += errorX * correctionFactor
+        state.visualY += errorY * correctionFactor
+        stop = { startedMs: clientNowMs, fromX: state.visualX, fromY: state.visualY, targetX, targetY }
+        state.stopTransition = stop
+      }
+      stopProgress = stop.fromX === targetX && stop.fromY === targetY
+        ? 1 : Math.min(1, Math.max(0, (clientNowMs - stop.startedMs) / LOCOMOTION_STOP_MS))
+      const remaining = (1 - stopProgress) ** 3
+      state.visualX = targetX + (stop.fromX - targetX) * remaining
+      state.visualY = targetY + (stop.fromY - targetY) * remaining
     } else {
       // Small error - smooth correction with adaptive speed
       // Ramp up correction speed during first 200ms of movement
@@ -444,16 +467,6 @@ class MoveController {
       const correctionFactor = 1 - Math.pow(1 - correctionSpeed, deltaMs / REFERENCE_FRAME_MS)
       state.visualX += errorX * correctionFactor
       state.visualY += errorY * correctionFactor
-    }
-
-    // A future stopped B sample still has a moving interpolation target. Only
-    // finish damping once that target is stationary, at a subpixel remainder.
-    const isStationaryStop = !isMoving && (!frameA || !frameB || renderTimeMs >= frameB.tServerMs ||
-      (frameA.x === frameB.x && frameA.y === frameB.y))
-    const settleDistance = STOP_SETTLE_DISTANCE_TILES * getCoordPerTile()
-    if (isStationaryStop && Math.hypot(targetX - state.visualX, targetY - state.visualY) <= settleDistance) {
-      state.visualX = targetX
-      state.visualY = targetY
     }
 
     state.visualHeading = heading
@@ -482,6 +495,7 @@ class MoveController {
       y: state.visualY,
       heading: state.visualHeading,
       isMoving: finalIsMoving,
+      stopProgress,
       moveMode,
       direction: dir,
     }

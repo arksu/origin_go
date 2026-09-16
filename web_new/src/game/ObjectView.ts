@@ -85,6 +85,7 @@ export class ObjectView {
   private hasFrameAnimation = false
   private animationStartMs = 0
   private isWalking = false
+  private stopProgress: number | undefined
   private walkDistanceTiles = 0
   private readonly facingStabilizer = new FacingStabilizer()
   private lastDir = 3 // south in MoveController direction order
@@ -506,6 +507,13 @@ export class ObjectView {
   /**
    * Called when the entity stops moving.
    */
+  setStopProgress(progress: number | undefined): void {
+    if (progress !== undefined && (!Number.isFinite(progress) || progress < 0 || progress > 1)) {
+      throw new Error(`Invalid stop progress for entity ${this.entityId}: ${progress}`)
+    }
+    this.stopProgress = progress
+  }
+
   onStopped(): void {
     if (this.isDestroyed || this.isDroppedItem || !this.resDef) return
     this.isWalking = false
@@ -1022,6 +1030,7 @@ export class ObjectView {
     if (this.actorFacingAngle === null) actor.direction = this.lastDir
     else actor.setFacingAngle(this.actorFacingAngle)
     actor.walking = this.isWalking
+    actor.stopProgress = this.stopProgress
     actor.distanceTiles = this.walkDistanceTiles
     actor.carrying = this.carrying && !this.knockedOutPose
     actor.hovered = this.isHovered

@@ -1,3 +1,5 @@
+import { LOCOMOTION_STOP_MS, LOCOMOTION_TRANSITION_MS } from '../movementTiming'
+
 export const ACTOR_RENDER = {
   cameraElevation: Math.PI / 6,
   facingHysteresis: 3 * Math.PI / 180,
@@ -11,6 +13,8 @@ export const ACTOR_RENDER = {
   cameraHeight: (116 - 64) / (96 / 1.94) / Math.cos(Math.PI / 6),
   cycleDistanceTiles: 1.677975879375,
   walkSamples: 8,
+  locomotionBlendMs: LOCOMOTION_TRANSITION_MS,
+  locomotionStopMs: LOCOMOTION_STOP_MS,
   maxResidentBytes: 128 * 1024 * 1024,
   maxOutputSlots: 128,
 } as const

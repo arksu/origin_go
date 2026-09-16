@@ -110,7 +110,7 @@ export class ObjectManager {
   /**
    * Update object position and movement state.
    */
-  updateObjectPosition(entityId: number, x: number, y: number, isMoving?: boolean, direction?: number, distanceMoved?: number): void {
+  updateObjectPosition(entityId: number, x: number, y: number, isMoving?: boolean, direction?: number, distanceMoved?: number, stopProgress?: number): void {
     const objectView = this.objects.get(entityId)
     if (!objectView) {
       return
@@ -120,6 +120,7 @@ export class ObjectManager {
     objectView.updatePosition(x, y)
 
     if (isMoving !== undefined && direction !== undefined) {
+      objectView.setStopProgress(stopProgress)
       if (isMoving) {
         objectView.onMoved(direction, distanceMoved ?? Math.hypot(x - previousPosition.x, y - previousPosition.y),
           distanceMoved === 0 ? { x: 0, y: 0 } : { x: x - previousPosition.x, y: y - previousPosition.y })
