@@ -103,8 +103,8 @@
       {
         "img": "obj/player_.png",
         "offset": [
-          0,
-          0
+          5,
+          65
         ],
         "shadow": true
       }
