@@ -431,8 +431,7 @@ func (s *LiftService) finalizeLiftPutDown(
 	pending components.PendingLiftTransition,
 ) {
 	carry, hasCarry := ecs.GetComponent[components.LiftCarryState](w, playerHandle)
-	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](w, playerHandle)
-	if !hasCarry || !hasPlayerTransform {
+	if !hasCarry {
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
 		return
@@ -454,12 +453,7 @@ func (s *LiftService) finalizeLiftPutDown(
 		return
 	}
 
-	dropX := pending.TargetX
-	dropY := pending.TargetY
-	if !pending.UsesObjectCollider {
-		dropX = playerTransform.X
-		dropY = playerTransform.Y
-	}
+	dropX, dropY := liftPutDownTargetPosition(pending)
 
 	coord := types.WorldToChunkCoord(int(dropX), int(dropY), _const.ChunkSize, _const.CoordPerTile)
 	chunk := s.chunkManager.GetChunkFast(coord)
@@ -496,6 +490,10 @@ func (s *LiftService) finalizeLiftPutDown(
 	s.stopPlayerMovementNow(w, playerID, playerHandle)
 	s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+}
+
+func liftPutDownTargetPosition(pending components.PendingLiftTransition) (float64, float64) {
+	return pending.TargetX, pending.TargetY
 }
 
 func (s *LiftService) startCarryingObject(
