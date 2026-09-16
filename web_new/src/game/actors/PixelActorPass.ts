@@ -71,12 +71,30 @@ export class PixelActorPass {
           float code = floor(center.a * 255.0 + 0.5);
           int region = int(floor(code / 32.0));
           float height = mod(code, 32.0) / 31.0 * 2.4;
+          vec3 firstCardinalColor = vec3(0.0), secondCardinalColor = vec3(0.0);
+          vec3 firstDiagonalColor = vec3(0.0), secondDiagonalColor = vec3(0.0);
+          int firstCardinalRegion = 0, secondCardinalRegion = 0;
+          int firstDiagonalRegion = 0, secondDiagonalRegion = 0;
+          int cardinalCount = 0, diagonalCount = 0;
           for (int row = -1; row <= 1; row++) for (int column = -1; column <= 1; column++) {
             if (row == 0 && column == 0) continue;
             vec2 neighbourUV = uv + vec2(float(column), float(row)) * pixel;
             vec4 neighbour = sampleCell(neighbourUV);
             bool otherOpaque = neighbour.a > 0.01;
             outer = outer || otherOpaque;
+            if (otherOpaque) {
+              int otherRegion = int(floor((neighbour.a * 255.0 + 0.5) / 32.0));
+              vec3 neighbourColor = quantize(neighbour.rgb, otherRegion);
+              if (row == 0 || column == 0) {
+                if (cardinalCount == 0) { firstCardinalColor = neighbourColor; firstCardinalRegion = otherRegion; }
+                else if (cardinalCount == 1) { secondCardinalColor = neighbourColor; secondCardinalRegion = otherRegion; }
+                cardinalCount++;
+              } else {
+                if (diagonalCount == 0) { firstDiagonalColor = neighbourColor; firstDiagonalRegion = otherRegion; }
+                else if (diagonalCount == 1) { secondDiagonalColor = neighbourColor; secondDiagonalRegion = otherRegion; }
+                diagonalCount++;
+              }
+            }
             if (opaque && otherOpaque && (row == 0 || column == 0)) {
               int otherRegion = int(floor((neighbour.a * 255.0 + 0.5) / 32.0));
               float difference = texture2D(depth, neighbourUV).r - centerDepth;
@@ -84,11 +102,42 @@ export class PixelActorPass {
               inner = inner || ((region == 2 || region == 3) && otherRegion == 1);
             }
           }
+          vec3 firstOutlineColor = opaque ? quantize(center.rgb, region) : firstCardinalColor;
+          int firstOutlineRegion = opaque ? region : firstCardinalRegion;
+          vec3 secondOutlineColor = vec3(0.0);
+          int secondOutlineRegion = 0;
+          int outlineCount = opaque ? 1 : 0;
+          if (cardinalCount > 0 && outlineCount < 2) {
+            if (outlineCount == 0) { firstOutlineColor = firstCardinalColor; firstOutlineRegion = firstCardinalRegion; }
+            else { secondOutlineColor = firstCardinalColor; secondOutlineRegion = firstCardinalRegion; }
+            outlineCount++;
+          }
+          if (cardinalCount > 1 && outlineCount < 2) {
+            secondOutlineColor = secondCardinalColor;
+            secondOutlineRegion = secondCardinalRegion;
+            outlineCount++;
+          }
+          if (diagonalCount > 0 && outlineCount < 2) {
+            if (outlineCount == 0) { firstOutlineColor = firstDiagonalColor; firstOutlineRegion = firstDiagonalRegion; }
+            else { secondOutlineColor = firstDiagonalColor; secondOutlineRegion = firstDiagonalRegion; }
+            outlineCount++;
+          }
+          if (diagonalCount > 1 && outlineCount < 2) {
+            secondOutlineColor = secondDiagonalColor;
+            secondOutlineRegion = secondDiagonalRegion;
+            outlineCount++;
+          }
+          vec3 outlineColor = firstOutlineColor;
+          // Cross-material blends create shades that the actor palette does not own.
+          if (outlineCount == 2 && firstOutlineRegion == secondOutlineRegion) {
+            outlineColor = quantize((firstOutlineColor + secondOutlineColor) * 0.5, firstOutlineRegion);
+          }
+          outlineColor *= 0.46;
           if (!opaque) {
-            gl_FragColor = outer ? vec4(hovered ? vec3(1.0,0.88,0.46) : vec3(0.098,0.094,0.059), 1.0) : vec4(0.0);
+            gl_FragColor = outer ? vec4(hovered ? vec3(1.0,0.88,0.46) : outlineColor, 1.0) : vec4(0.0);
           } else {
             vec3 color = quantize(center.rgb, region);
-            if (inner) color = region == 2 ? vec3(0.098,0.094,0.059) : vec3(0.224,0.169,0.110);
+            if (inner) color = outlineColor;
             gl_FragColor = vec4(color, 1.0);
           }
         }`,
