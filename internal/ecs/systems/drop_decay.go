@@ -1,17 +1,19 @@
 package systems
 
 import (
-	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/lifecycle"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
 )
 
-// DroppedObjectDeleter handles DB deletion of dropped objects (object + inventory).
-type DroppedObjectDeleter interface {
-	DeleteDroppedObject(region int, entityID types.EntityID) error
+const dropDecaySweepIntervalTicks = 10
+
+// ObjectDeleter handles DB deletion of a persistent object and its owned inventories.
+type ObjectDeleter interface {
+	DeleteObject(region int, entityID types.EntityID) error
 }
 
 // DroppedItemSpatialRemover removes dropped item entities from chunk spatial hash.
@@ -23,18 +25,21 @@ type DroppedItemSpatialRemover interface {
 type DropDecaySystem struct {
 	ecs.BaseSystem
 	query          *ecs.PreparedQuery
-	deleter        DroppedObjectDeleter
+	deleter        ObjectDeleter
 	spatialRemover DroppedItemSpatialRemover
 	logger         *zap.Logger
 }
 
 func NewDropDecaySystem(
-	deleter DroppedObjectDeleter,
+	deleter ObjectDeleter,
 	spatialRemover DroppedItemSpatialRemover,
 	logger *zap.Logger,
 ) *DropDecaySystem {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &DropDecaySystem{
-		BaseSystem:     ecs.NewBaseSystemWithInterval("DropDecay", 900, 60),
+		BaseSystem:     ecs.NewBaseSystemWithInterval("DropDecay", 900, dropDecaySweepIntervalTicks),
 		deleter:        deleter,
 		spatialRemover: spatialRemover,
 		logger:         logger,
@@ -66,7 +71,7 @@ func (s *DropDecaySystem) Update(w *ecs.World, dt float64) {
 			return
 		}
 
-		if dropped.DropTime+constt.DroppedDespawnSeconds <= nowRuntimeSeconds {
+		if components.IsDroppedItemExpired(dropped.DropTime, nowRuntimeSeconds) {
 			extID, hasExt := ecs.GetComponent[ecs.ExternalID](w, h)
 			if !hasExt {
 				return
@@ -102,25 +107,25 @@ func (s *DropDecaySystem) Update(w *ecs.World, dt float64) {
 		s.logger.Debug("Despawning expired dropped item",
 			zap.Uint64("entity_id", uint64(e.entityID)))
 
-		// Remove inventory container from ECS
-		refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-		containerHandle, found := refIndex.Lookup(constt.InventoryDroppedItem, e.entityID, 0)
-		if found {
-			refIndex.Remove(constt.InventoryDroppedItem, e.entityID, 0)
-			w.Despawn(containerHandle)
+		// Commit the durable deletion before changing ECS so a transient DB outage
+		// leaves the item available for a later retry instead of orphaning it.
+		if s.deleter == nil {
+			s.logger.Error("Cannot delete expired dropped object without persistence",
+				zap.Uint64("entity_id", uint64(e.entityID)))
+			continue
+		}
+		if err := s.deleter.DeleteObject(e.region, e.entityID); err != nil {
+			s.logger.Error("Failed to delete expired dropped object from DB",
+				zap.Uint64("entity_id", uint64(e.entityID)),
+				zap.Error(err))
+			continue
 		}
 		if s.spatialRemover != nil {
 			s.spatialRemover.RemoveStaticFromChunkSpatial(e.handle, e.chunkX, e.chunkY, e.x, e.y)
 		}
-		w.Despawn(e.handle)
-
-		// Soft-delete from DB (object + inventory)
-		if s.deleter != nil && e.region > 0 {
-			if err := s.deleter.DeleteDroppedObject(e.region, e.entityID); err != nil {
-				s.logger.Error("Failed to delete expired dropped object from DB",
-					zap.Uint64("entity_id", uint64(e.entityID)),
-					zap.Error(err))
-			}
+		if !lifecycle.DeleteObject(w, e.entityID, e.handle, lifecycle.DeleteObjectOptions{DeleteOwnedInventories: true}) {
+			s.logger.Warn("Failed to delete expired dropped item from ECS",
+				zap.Uint64("entity_id", uint64(e.entityID)))
 		}
 	}
 }

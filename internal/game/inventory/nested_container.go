@@ -4,6 +4,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/lifecycle"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -187,14 +188,30 @@ func containerHandleBelongsToOwner(owner *components.InventoryOwner, handle type
 }
 
 // deleteDroppedEntityFromECS removes a dropped item entity from ECS and InventoryRefIndex.
-func deleteDroppedEntityFromECS(w *ecs.World, entityID types.EntityID, handle types.Handle, logger *zap.Logger) {
+// Pickup preserves an attached nested inventory so it can be linked to the player's item;
+// expiry deletes all owned inventories with the item.
+func deleteDroppedEntityFromECS(
+	w *ecs.World,
+	entityID types.EntityID,
+	handle types.Handle,
+	deleteOwnedInventories bool,
+	logger *zap.Logger,
+) {
+	if deleteOwnedInventories {
+		if !lifecycle.DeleteObject(w, entityID, handle, lifecycle.DeleteObjectOptions{DeleteOwnedInventories: true}) && logger != nil {
+			logger.Warn("deleteDroppedEntityFromECS: entity already despawned",
+				zap.Uint64("entity_id", uint64(entityID)))
+		}
+		return
+	}
+
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	containerHandle, found := refIndex.Lookup(constt.InventoryDroppedItem, entityID, 0)
 	if found {
 		refIndex.Remove(constt.InventoryDroppedItem, entityID, 0)
 		w.Despawn(containerHandle)
 	}
-	if !w.Despawn(handle) {
+	if !lifecycle.DeleteObject(w, entityID, handle, lifecycle.DeleteObjectOptions{}) && logger != nil {
 		logger.Warn("deleteDroppedEntityFromECS: entity already despawned",
 			zap.Uint64("entity_id", uint64(entityID)))
 	}

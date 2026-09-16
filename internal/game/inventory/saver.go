@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"encoding/json"
+	"fmt"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -30,6 +31,9 @@ type InventorySaver struct {
 }
 
 func NewInventorySaver(logger *zap.Logger) *InventorySaver {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &InventorySaver{
 		logger: logger,
 	}
@@ -40,12 +44,38 @@ func (is *InventorySaver) SerializeInventories(
 	characterID types.EntityID,
 	handle types.Handle,
 ) []systems.InventorySnapshot {
-	world := w.(*ecs.World)
+	world, ok := w.(*ecs.World)
+	if !ok || world == nil {
+		is.logger.Error("InventorySaver requires an ECS world")
+		return nil
+	}
+
+	result, err := is.SerializeInventoriesStrict(world, characterID, handle)
+	if err != nil {
+		is.logger.Error("Failed to serialize player inventories",
+			zap.Uint64("character_id", uint64(characterID)),
+			zap.Error(err))
+		return nil
+	}
+	return result
+}
+
+// SerializeInventoriesStrict returns a complete player root-inventory snapshot
+// or an error. Durable world transfers use it so malformed JSON can never be
+// committed as a partial player side of a transaction.
+func (is *InventorySaver) SerializeInventoriesStrict(
+	world *ecs.World,
+	characterID types.EntityID,
+	handle types.Handle,
+) ([]systems.InventorySnapshot, error) {
+	if world == nil {
+		return nil, fmt.Errorf("serialize inventories: world is nil")
+	}
 	result := make([]systems.InventorySnapshot, 0)
 
 	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](world, handle)
 	if !hasOwner {
-		return result
+		return result, nil
 	}
 
 	for _, link := range owner.Inventories {
@@ -62,18 +92,21 @@ func (is *InventorySaver) SerializeInventories(
 			continue
 		}
 
-		snapshot := is.serializeContainer(world, characterID, container)
+		snapshot, err := is.serializeContainer(world, characterID, container)
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, snapshot)
 	}
 
-	return result
+	return result, nil
 }
 
 func (is *InventorySaver) serializeContainer(
 	world *ecs.World,
 	characterID types.EntityID,
 	container components.InventoryContainer,
-) systems.InventorySnapshot {
+) (systems.InventorySnapshot, error) {
 	items := make([]InventoryItemV1, 0, len(container.Items))
 
 	for _, invItem := range container.Items {
@@ -107,12 +140,13 @@ func (is *InventorySaver) serializeContainer(
 
 	data, err := json.Marshal(invData)
 	if err != nil {
-		is.logger.Error("Failed to marshal inventory data",
-			zap.Uint64("character_id", uint64(characterID)),
-			zap.Uint8("kind", uint8(container.Kind)),
-			zap.Uint32("key", container.Key),
-			zap.Error(err))
-		data = []byte("{}")
+		return systems.InventorySnapshot{}, fmt.Errorf(
+			"serialize inventory owner=%d kind=%d key=%d: %w",
+			characterID,
+			container.Kind,
+			container.Key,
+			err,
+		)
 	}
 
 	return systems.InventorySnapshot{
@@ -121,7 +155,7 @@ func (is *InventorySaver) serializeContainer(
 		InventoryKey: int16(container.Key),
 		Data:         data,
 		Version:      int(container.Version),
-	}
+	}, nil
 }
 
 // serializeNestedInventory serializes a single-level nested container (no recursion beyond 1 level)

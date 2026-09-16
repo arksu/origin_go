@@ -148,6 +148,14 @@ ecs.GetComponent[Transform](w, h) // Returns current position with intent
 
 ### System Best Practices
 
+#### Optional Tick Interval
+
+Every ECS system exposes `UpdateEveryNTicks()`. `BaseSystem` defaults to `0`,
+which means every tick; use `NewBaseSystemWithInterval(name, priority, n)` for
+a periodic system. The world skips the update unless the current game tick is a
+multiple of `n`. Use this for bounded maintenance sweeps, not for interactions
+whose response must be immediate.
+
 #### 1. Single Responsibility
 
 Each System should have one clear purpose:

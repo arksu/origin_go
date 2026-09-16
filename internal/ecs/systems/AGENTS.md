@@ -35,6 +35,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | 355      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState    | Dispatches to behavior scheduled-tick capability         |
 | 360      | ObjectBehaviorSystem  | Recomputes object behavior flags/state/appearance            | ObjectBehaviorDirtyQueue           | Dirty-queue driven, budget-limited                       |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                           | Handles entity chunk transitions                         |
+| 900      | DropDecaySystem       | Deletes expired dropped items                                 | DroppedItem, TimeState             | Sweeps every 10 game ticks; durable delete happens first |
 
 ## System Details
 
@@ -235,7 +236,17 @@ BehaviorTickSystem (355)
 ObjectBehaviorSystem (360)
     ↓ (applies behavior flags/resource only for dirty objects)
 ChunkSystem (400)
+    ↓ (periodic sweep, every 10 game ticks)
+DropDecaySystem (900)
 ```
+
+### DropDecaySystem (Priority: 900)
+
+Dropped items use persisted server-runtime seconds, which advance only while
+the server is online. Before an expired item is removed from ECS and the chunk
+spatial index, `DropDecaySystem` removes its object and inventory rows through
+the common persistent-object deletion path. The same expiry check is also made
+while a chunk activates, so an expired saved drop never becomes visible.
 
 ## ObjectBehaviorSystem (Priority: 360)
 

@@ -39,12 +39,13 @@ func (d *DroppedInventoryLoaderDB) LoadDroppedInventory(w *ecs.World, ownerID ty
 	// Find the DroppedItem container
 	var droppedInv *InventoryDataV1
 	for i := range invDataList {
-		if constt.InventoryKind(invDataList[i].Kind) == constt.InventoryDroppedItem {
+		if constt.InventoryKind(invDataList[i].Kind) == constt.InventoryDroppedItem && invDataList[i].Key == 0 {
 			droppedInv = &invDataList[i]
 			break
 		}
 	}
-	if droppedInv == nil || len(droppedInv.Items) == 0 {
+	if droppedInv == nil || len(droppedInv.Items) != 1 ||
+		types.EntityID(droppedInv.Items[0].ItemID) != ownerID || droppedInv.Items[0].Quantity != 1 {
 		return types.InvalidHandle, fmt.Errorf("no dropped item inventory data found")
 	}
 

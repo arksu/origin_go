@@ -74,10 +74,29 @@ result := service.ExecuteMove(world, playerID, playerHandle, opID, moveSpec, exp
 | `InventoryGrid` | Player ID or Item ID | 2D spatial storage with collision |
 | `InventoryHand` | Player ID | Single item held for drag operations |
 | `InventoryEquipment` | Player ID | Equipment slots (head, chest, etc.) |
-| `InventoryDroppedItem` | - | Ground items (not yet implemented) |
+| `InventoryDroppedItem` | Dropped item ID | One static ground item, persisted with its world object |
 | `InventoryBuild` | Build-site entity ID | Special deposit destination for build-site `PutItems` |
 
 **Nested Containers:** When an item with `ContainerDef` is placed in a grid, its nested inventory has `OwnerID = item.ItemID` (not player ID). This distinguishes nested containers from player-owned containers.
+
+### Dropped Items
+
+A dropped item is a static object (`type_id = 1000`) with no collider. Its
+object ID, contained item ID, and dropped root inventory owner ID are the same
+global entity ID. The root dropped inventory contains exactly one item record.
+When a player drops a stack, the inventory operation splits it into one
+quantity-`1` ground object per unit and allocates new global IDs as needed.
+`drop_time` uses persisted server-runtime seconds, so time while the server is
+offline does not consume the item's lifetime.
+
+`ExecuteDropToWorld` stages its ECS changes, serializes the post-drop player
+root inventories, and commits those snapshots with all generated objects and
+their dropped inventories in one database transaction. On failure it restores
+the source and removes the uncommitted ECS entities before spatial registration.
+Pickup applies the same pattern in reverse: it stages the destination update,
+then atomically deletes the dropped object/inventory rows and saves the player
+snapshots. Both paths use the shared object-deletion helper to keep ECS,
+inventory references, chunk spatial state, and database rows consistent.
 
 ### Validation Pipeline
 

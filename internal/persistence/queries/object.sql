@@ -48,10 +48,22 @@ ON CONFLICT (region, id) DO UPDATE SET
     deleted_at = NULL,
     updated_at = NOW();
 
--- name: SoftDeleteObject :exec
+-- name: SoftDeleteObject :one
 UPDATE object
 SET deleted_at = NOW()
-WHERE region = $1 AND id = $2;
+WHERE region = $1
+  AND id = $2
+  AND deleted_at IS NULL
+RETURNING id;
+
+-- name: UpdateObjectData :one
+UPDATE object
+SET data = $3,
+    updated_at = NOW()
+WHERE region = $1
+  AND id = $2
+  AND deleted_at IS NULL
+RETURNING id;
 
 -- name: DeleteObjectsByChunk :exec
 UPDATE object

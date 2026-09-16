@@ -6,6 +6,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/ecs/systems"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -19,6 +20,7 @@ type droppedItemData struct {
 	ContainedItemID uint64 `json:"contained_item_id"`
 	DropTime        int64  `json:"drop_time"`
 	DropperID       uint64 `json:"dropper_id"`
+	TimeBasis       string `json:"time_basis,omitempty"`
 }
 
 type OperationResult struct {
@@ -33,11 +35,30 @@ type OperationResult struct {
 	// (e.g. when a container item is picked up into the hand).
 	ClosedContainerRefs []*netproto.InventoryRef
 
-	// For drop_to_world operations
+	// For drop_to_world operations. A source stack is represented by one static
+	// dropped entity per unit, so this can contain more than one ID.
+	SpawnedDroppedEntityIDs []types.EntityID
+
+	// SpawnedDroppedEntityID is the first spawned ID kept for callers that only
+	// need a single-item result.
 	SpawnedDroppedEntityID *types.EntityID
 
 	// For pickup_from_world operations
 	DespawnedDroppedEntityID *types.EntityID
+	DespawnedDroppedEntity   *DroppedEntityDespawn
+}
+
+// DroppedEntityDespawn captures spatial data before a dropped entity leaves ECS.
+// The executor uses it to remove the static spatial entry after the inventory
+// operation, when looking the entity up by ID is no longer possible.
+type DroppedEntityDespawn struct {
+	EntityID types.EntityID
+	Handle   types.Handle
+	Region   int
+	ChunkX   int
+	ChunkY   int
+	X        int
+	Y        int
 }
 
 // EntityIDAllocator provides unique entity IDs for new dropped items.
@@ -48,7 +69,15 @@ type EntityIDAllocator interface {
 // DroppedItemPersister handles DB persistence for dropped item objects and their inventory.
 type DroppedItemPersister interface {
 	PersistDroppedObject(entityID types.EntityID, typeID int, region, x, y, layer, chunkX, chunkY int, objectData json.RawMessage, inventoryData json.RawMessage) error
-	DeleteDroppedObject(region int, entityID types.EntityID) error
+	DeleteObject(region int, entityID types.EntityID) error
+}
+
+// AtomicDroppedItemTransferPersister persists the player side and the world
+// side of a drop/pickup together. A transfer must not rely on the periodic
+// character saver because a process crash can happen between its writes.
+type AtomicDroppedItemTransferPersister interface {
+	PersistDroppedObjectBatchWithPlayerInventories(records []DroppedItemPersistenceRecord, inventories []systems.InventorySnapshot) error
+	DeleteDroppedObjectWithPlayerInventories(region int, entityID types.EntityID, inventories []systems.InventorySnapshot) error
 }
 
 type InventoryOperationService struct {
@@ -56,6 +85,7 @@ type InventoryOperationService struct {
 	placementService *PlacementService
 	idAllocator      EntityIDAllocator
 	persister        DroppedItemPersister
+	inventorySaver   *InventorySaver
 	logger           *zap.Logger
 }
 
@@ -64,11 +94,15 @@ func NewInventoryOperationService(
 	idAlloc EntityIDAllocator,
 	persister DroppedItemPersister,
 ) *InventoryOperationService {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &InventoryOperationService{
 		validator:        NewValidator(),
 		placementService: NewPlacementService(),
 		idAllocator:      idAlloc,
 		persister:        persister,
+		inventorySaver:   NewInventorySaver(logger),
 		logger:           logger,
 	}
 }
@@ -480,11 +514,28 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	moveSpec *netproto.InventoryMoveSpec,
 	expected []*netproto.InventoryExpected,
 ) *OperationResult {
-	if s.idAllocator == nil || s.persister == nil {
+	if moveSpec == nil || moveSpec.Src == nil {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Invalid drop request",
+		}
+	}
+
+	if s.persister == nil {
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
 			Message:   "drop dependencies not configured",
+		}
+	}
+	transferPersister, err := s.atomicTransferPersister()
+	if err != nil {
+		s.logger.Error("Atomic drop persistence is not configured", zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "drop persistence does not support atomic transfers",
 		}
 	}
 
@@ -542,12 +593,41 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 		}
 	}
 
-	// 4. Use item ID as the dropped entity ID (object.id == item.id == inventory.owner_id)
-	droppedEntityID := itemID
+	// 4. Determine how much of the source stack leaves the inventory. Ground
+	// items intentionally never stack: each unit becomes its own object/entity.
+	// Keep this value independent from srcItem: removing a full stack can shift
+	// the backing Items slice and make the pointer refer to the next item.
+	sourceQuantity := srcItem.Quantity
+	dropQuantity := sourceQuantity
+	if moveSpec.Quantity != nil {
+		dropQuantity = *moveSpec.Quantity
+	}
+	if dropQuantity == 0 || dropQuantity > sourceQuantity {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Invalid drop quantity",
+		}
+	}
+	if (sourceQuantity > 1 || dropQuantity < sourceQuantity) && s.idAllocator == nil {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "drop ID allocator is not configured",
+		}
+	}
+
 	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 
 	// Serialize nested inventory before removing item (needed for DB persistence)
 	nestedInvData := serializeNestedForDrop(w, itemID)
+	if nestedInvData != nil && sourceQuantity != 1 {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Container item stack is invalid for world drop",
+		}
+	}
 	hasNestedItems := nestedInvData != nil && len(nestedInvData.Items) > 0
 
 	// Resolve item resource (check nested items for visual)
@@ -559,70 +639,189 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	dropX := int(playerTransform.X)
 	dropY := int(playerTransform.Y)
 
-	// 5. Remove item from source container
+	// 5. Build and validate all immutable persistence payloads before changing
+	// the player. The original item ID can move to the world only when the
+	// source stack is fully removed; a partial drop must allocate new IDs.
+	baseParams := SpawnDroppedEntityParams{
+		TypeID:            srcItem.TypeID,
+		Resource:          resource,
+		Quality:           srcItem.Quality,
+		Quantity:          1,
+		W:                 srcItem.W,
+		H:                 srcItem.H,
+		DropX:             dropX,
+		DropY:             dropY,
+		Region:            playerInfo.Region,
+		Layer:             playerInfo.Layer,
+		ChunkX:            playerChunkRef.CurrentChunkX,
+		ChunkY:            playerChunkRef.CurrentChunkY,
+		DropperID:         playerID,
+		NowRuntimeSeconds: nowRuntimeSeconds,
+	}
+	dropEntries := make([]DroppedEntityPersistence, 0, int(dropQuantity))
+	droppedEntityIDs := make([]types.EntityID, 0, int(dropQuantity))
+	usedIDs := make(map[types.EntityID]struct{}, dropQuantity)
+	usesSourceItemID := dropQuantity == sourceQuantity
+	for i := uint32(0); i < dropQuantity; i++ {
+		droppedEntityID := types.EntityID(0)
+		if usesSourceItemID && i == 0 {
+			droppedEntityID = itemID
+		} else {
+			droppedEntityID = s.idAllocator.GetFreeID()
+		}
+		if droppedEntityID == 0 || (droppedEntityID == itemID && !usesSourceItemID) {
+			return &OperationResult{
+				Success:   false,
+				ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				Message:   "drop ID allocator returned an invalid ID",
+			}
+		}
+		if _, duplicate := usedIDs[droppedEntityID]; duplicate {
+			return &OperationResult{
+				Success:   false,
+				ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				Message:   "drop ID allocator returned a duplicate ID",
+			}
+		}
+		usedIDs[droppedEntityID] = struct{}{}
+
+		params := baseParams
+		params.DroppedEntityID = droppedEntityID
+		params.ItemID = droppedEntityID
+		if err := validateSpawnDroppedEntityParams(w, params); err != nil {
+			s.logger.Error("Invalid dropped entity parameters", zap.Error(err))
+			return &OperationResult{
+				Success:   false,
+				ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				Message:   "Invalid dropped entity",
+			}
+		}
+
+		entry := DroppedEntityPersistence{Params: params}
+		if i == 0 && usesSourceItemID {
+			entry.NestedInventory = nestedInvData
+		}
+		dropEntries = append(dropEntries, entry)
+		droppedEntityIDs = append(droppedEntityIDs, droppedEntityID)
+	}
+
+	records, err := buildDroppedItemPersistenceRecords(dropEntries)
+	if err != nil {
+		s.logger.Error("Failed to build dropped-item persistence records", zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Failed to prepare dropped items",
+		}
+	}
+
+	// 6. Spawn the objects before the commit, but leave them out of chunk spatial
+	// state until success. This makes spawn failures recoverable without a
+	// compensating durable delete, while a crash before commit still keeps the
+	// original player inventory authoritative.
+	spawnedIDs := make([]types.EntityID, 0, len(dropEntries))
+	for _, entry := range dropEntries {
+		if _, err := SpawnDroppedEntity(w, entry.Params); err != nil {
+			s.logger.Error("Failed to spawn dropped entity", zap.Error(err))
+			cleanupUncommittedDroppedEntities(w, spawnedIDs, s.logger)
+			return &OperationResult{
+				Success:   false,
+				ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				Message:   "Failed to spawn dropped item",
+			}
+		}
+		spawnedIDs = append(spawnedIDs, entry.Params.DroppedEntityID)
+	}
+
+	// 7. Mutate the source only long enough to create its durable snapshot. The
+	// world runs this operation under the shard tick lock, so no other system can
+	// observe the temporary state before it is either committed or restored.
+	sourceBefore, err := snapshotInventoryContainer(w, srcInfo.Handle)
+	if err != nil {
+		cleanupUncommittedDroppedEntities(w, spawnedIDs, s.logger)
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Source inventory is unavailable",
+		}
+	}
 	ecs.MutateComponent[components.InventoryContainer](w, srcInfo.Handle, func(c *components.InventoryContainer) bool {
-		c.Items = append(c.Items[:srcItemIndex], c.Items[srcItemIndex+1:]...)
-		if c.Kind == constt.InventoryHand {
-			c.HandMouseOffsetX = 0
-			c.HandMouseOffsetY = 0
+		if dropQuantity == sourceQuantity {
+			c.Items = append(c.Items[:srcItemIndex], c.Items[srcItemIndex+1:]...)
+			if c.Kind == constt.InventoryHand {
+				c.HandMouseOffsetX = 0
+				c.HandMouseOffsetY = 0
+			}
+		} else {
+			c.Items[srcItemIndex].Quantity -= dropQuantity
 		}
 		c.Version++
 		return true
 	})
 
-	// 5b. Detach nested container from player (keep alive in ECS + RefIndex)
-	detachNestedContainer(w, playerHandle, itemID)
-
-	// 6. Create dropped entity in ECS
-	dropParams := SpawnDroppedEntityParams{
-		DroppedEntityID: droppedEntityID,
-		ItemID:          itemID,
-		TypeID:          srcItem.TypeID,
-		Resource:        resource,
-		Quality:         srcItem.Quality,
-		Quantity:        srcItem.Quantity,
-		W:               srcItem.W,
-		H:               srcItem.H,
-		DropX:           dropX,
-		DropY:           dropY,
-		Region:          playerInfo.Region,
-		Layer:           playerInfo.Layer,
-		ChunkX:          playerChunkRef.CurrentChunkX,
-		ChunkY:          playerChunkRef.CurrentChunkY,
-		DropperID:       playerID,
-		NowUnix:         nowRuntimeSeconds,
-	}
-
-	if _, ok := SpawnDroppedEntity(w, dropParams); !ok {
+	rootBefore, rootInfo, err := bumpPlayerRootInventoryForNestedMutation(w, playerID, playerHandle, srcInfo.Handle)
+	if err != nil {
+		sourceBefore.restore(w)
+		cleanupUncommittedDroppedEntities(w, spawnedIDs, s.logger)
+		s.logger.Error("Failed to version player root inventory for drop", zap.Error(err))
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
-			Message:   "Failed to spawn dropped entity",
+			Message:   "Failed to prepare player inventory",
 		}
 	}
 
-	// 7. Persist to DB (object + inventory including nested)
-	if err := PersistDroppedEntity(s.persister, dropParams, nestedInvData); err != nil {
-		s.logger.Error("Failed to persist dropped object",
-			zap.Uint64("entity_id", uint64(droppedEntityID)),
-			zap.Error(err))
+	rollback := func() {
+		if rootBefore != nil {
+			rootBefore.restore(w)
+		}
+		sourceBefore.restore(w)
+		cleanupUncommittedDroppedEntities(w, spawnedIDs, s.logger)
+	}
+
+	playerInventories, err := s.serializePlayerInventoriesForTransfer(w, playerID, playerHandle)
+	if err != nil {
+		rollback()
+		s.logger.Error("Failed to serialize player inventory for drop", zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Failed to prepare player inventory",
+		}
+	}
+	if err := transferPersister.PersistDroppedObjectBatchWithPlayerInventories(records, playerInventories); err != nil {
+		rollback()
+		s.logger.Error("Failed to persist atomic drop transfer", zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Failed to persist dropped items",
+		}
+	}
+
+	// 7b. The nested inventory moves with a full container-item drop only after
+	// its player representation is durably removed.
+	if dropQuantity == sourceQuantity {
+		detachNestedContainer(w, playerHandle, itemID)
 	}
 
 	// 8. Build result
 	updatedSrc, _ := ecs.GetComponent[components.InventoryContainer](w, srcInfo.Handle)
 	srcInfo.Container = &updatedSrc
+	updatedContainers := appendUpdatedContainerIfMissing([]*ContainerInfo{srcInfo}, rootInfo)
 
-	s.logger.Debug("Item dropped to world",
+	s.logger.Debug("Items dropped to world",
 		zap.Uint64("player_id", uint64(playerID)),
-		zap.Uint64("dropped_entity_id", uint64(droppedEntityID)),
-		zap.Uint64("item_id", uint64(itemID)),
+		zap.Int("count", len(droppedEntityIDs)),
 		zap.Int("x", dropX),
 		zap.Int("y", dropY))
+	firstDroppedEntityID := droppedEntityIDs[0]
 
 	return &OperationResult{
-		Success:                true,
-		UpdatedContainers:      []*ContainerInfo{srcInfo},
-		SpawnedDroppedEntityID: &droppedEntityID,
+		Success:                 true,
+		UpdatedContainers:       updatedContainers,
+		SpawnedDroppedEntityIDs: droppedEntityIDs,
+		SpawnedDroppedEntityID:  &firstDroppedEntityID,
 	}
 }
 
@@ -640,7 +839,6 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 			Message:   "drop dependencies not configured",
 		}
 	}
-
 	// 1. Find the dropped entity by ID
 	droppedHandle := w.GetHandleByEntityID(droppedEntityID)
 	if droppedHandle == types.InvalidHandle {
@@ -652,12 +850,41 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 	}
 
 	// Verify it's actually a dropped item
-	_, hasDropped := ecs.GetComponent[components.DroppedItem](w, droppedHandle)
+	dropped, hasDropped := ecs.GetComponent[components.DroppedItem](w, droppedHandle)
 	if !hasDropped {
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
 			Message:   "Entity is not a dropped item",
+		}
+	}
+	if dropped.ContainedItemID != droppedEntityID {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Dropped item has invalid identity",
+		}
+	}
+
+	if components.IsDroppedItemExpired(dropped.DropTime, ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal) {
+		despawned := snapshotDroppedEntityDespawn(w, droppedEntityID, droppedHandle)
+		if err := s.persister.DeleteObject(despawned.Region, droppedEntityID); err != nil {
+			s.logger.Error("Failed to delete expired picked-up object from DB",
+				zap.Uint64("entity_id", uint64(droppedEntityID)),
+				zap.Error(err))
+			return &OperationResult{
+				Success:   false,
+				ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				Message:   "Failed to remove expired dropped item",
+			}
+		}
+		deleteDroppedEntityFromECS(w, droppedEntityID, droppedHandle, true, s.logger)
+		return &OperationResult{
+			Success:                  false,
+			ErrorCode:                netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
+			Message:                  "Dropped item expired",
+			DespawnedDroppedEntityID: &droppedEntityID,
+			DespawnedDroppedEntity:   &despawned,
 		}
 	}
 
@@ -695,15 +922,22 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 	}
 
 	droppedContainer, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
-	if !hasContainer || len(droppedContainer.Items) == 0 {
+	if !hasContainer || len(droppedContainer.Items) != 1 {
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
-			Message:   "Dropped item container is empty",
+			Message:   "Dropped item container is invalid",
 		}
 	}
 
 	srcItem := droppedContainer.Items[0]
+	if srcItem.ItemID != droppedEntityID {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
+			Message:   "Dropped item container has invalid identity",
+		}
+	}
 
 	// 4. Resolve destination container
 	dstInfo, verr := s.validator.ResolveContainer(w, dstRef, playerID, playerHandle)
@@ -747,7 +981,26 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 		}
 	}
 
-	// 7. Add item to destination container
+	transferPersister, err := s.atomicTransferPersister()
+	if err != nil {
+		s.logger.Error("Atomic pickup persistence is not configured", zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "pickup persistence does not support atomic transfers",
+		}
+	}
+
+	// 7. Apply the destination mutation only long enough to serialize the player
+	// side of the transaction. It is restored if the durable transfer fails.
+	destinationBefore, err := snapshotInventoryContainer(w, dstInfo.Handle)
+	if err != nil {
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Destination inventory is unavailable",
+		}
+	}
 	ecs.MutateComponent[components.InventoryContainer](w, dstInfo.Handle, func(c *components.InventoryContainer) bool {
 		srcItem.X = placementResult.X
 		srcItem.Y = placementResult.Y
@@ -760,32 +1013,64 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 		return true
 	})
 
-	// 8. Attach or create nested container for container items (e.g. seed_bag with seeds)
+	rootBefore, rootInfo, err := bumpPlayerRootInventoryForNestedMutation(w, playerID, playerHandle, dstInfo.Handle)
+	if err != nil {
+		destinationBefore.restore(w)
+		s.logger.Error("Failed to version player root inventory for pickup", zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Failed to prepare player inventory",
+		}
+	}
+	rollback := func() {
+		if rootBefore != nil {
+			rootBefore.restore(w)
+		}
+		destinationBefore.restore(w)
+	}
+
+	playerInventories, err := s.serializePlayerInventoriesForTransfer(w, playerID, playerHandle)
+	if err != nil {
+		rollback()
+		s.logger.Error("Failed to serialize player inventory for pickup", zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Failed to prepare player inventory",
+		}
+	}
+
+	despawned := snapshotDroppedEntityDespawn(w, droppedEntityID, droppedHandle)
+	if err := transferPersister.DeleteDroppedObjectWithPlayerInventories(despawned.Region, droppedEntityID, playerInventories); err != nil {
+		rollback()
+		s.logger.Error("Failed to persist atomic pickup transfer",
+			zap.Uint64("entity_id", uint64(droppedEntityID)),
+			zap.Error(err))
+		return &OperationResult{
+			Success:   false,
+			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message:   "Failed to remove dropped item",
+		}
+	}
+
+	// 8. Attach or create nested container for container items (e.g. seed_bag with seeds).
 	var nestedHandle types.Handle
 	if srcItemDef, ok := itemdefs.Global().GetByID(int(srcItem.TypeID)); ok {
 		nestedHandle = ensureNestedContainer(w, playerHandle, &srcItem, srcItemDef)
 	}
 
-	// 9. Delete dropped entity from ECS and InventoryRefIndex
-	droppedInfo, _ := ecs.GetComponent[components.EntityInfo](w, droppedHandle)
-	deleteDroppedEntityFromECS(w, droppedEntityID, droppedHandle, s.logger)
+	// 9. Delete dropped entity from ECS and InventoryRefIndex after its durable
+	// representation and player inventory have committed together.
+	deleteDroppedEntityFromECS(w, droppedEntityID, droppedHandle, false, s.logger)
 
-	// 10. Soft-delete from DB
-	if droppedInfo.Region > 0 {
-		if err := s.persister.DeleteDroppedObject(droppedInfo.Region, droppedEntityID); err != nil {
-			s.logger.Error("Failed to soft-delete picked up object from DB",
-				zap.Uint64("entity_id", uint64(droppedEntityID)),
-				zap.Error(err))
-		}
-	}
-
-	// 11. Build result
+	// 10. Build result.
 	updatedOwner, _ := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
 	updatedDst, _ := ecs.GetComponent[components.InventoryContainer](w, dstInfo.Handle)
 	dstInfo.Container = &updatedDst
 	dstInfo.Owner = &updatedOwner
 
-	updatedContainers := []*ContainerInfo{dstInfo}
+	updatedContainers := appendUpdatedContainerIfMissing([]*ContainerInfo{dstInfo}, rootInfo)
 	if nestedHandle != 0 {
 		nestedContainer, _ := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
 		updatedContainers = append(updatedContainers, &ContainerInfo{
@@ -804,5 +1089,29 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 		Success:                  true,
 		UpdatedContainers:        updatedContainers,
 		DespawnedDroppedEntityID: &droppedEntityID,
+		DespawnedDroppedEntity:   &despawned,
 	}
+}
+
+func snapshotDroppedEntityDespawn(
+	w *ecs.World,
+	entityID types.EntityID,
+	handle types.Handle,
+) DroppedEntityDespawn {
+	snapshot := DroppedEntityDespawn{
+		EntityID: entityID,
+		Handle:   handle,
+	}
+	if info, ok := ecs.GetComponent[components.EntityInfo](w, handle); ok {
+		snapshot.Region = info.Region
+	}
+	if chunkRef, ok := ecs.GetComponent[components.ChunkRef](w, handle); ok {
+		snapshot.ChunkX = chunkRef.CurrentChunkX
+		snapshot.ChunkY = chunkRef.CurrentChunkY
+	}
+	if transform, ok := ecs.GetComponent[components.Transform](w, handle); ok {
+		snapshot.X = int(transform.X)
+		snapshot.Y = int(transform.Y)
+	}
+	return snapshot
 }

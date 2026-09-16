@@ -30,6 +30,7 @@ DO UPDATE SET
     version = EXCLUDED.version,
     deleted_at = NULL,
     updated_at = now()
+WHERE inventory.version <= EXCLUDED.version
 RETURNING *;
 
 -- name: UpsertInventories :exec
@@ -45,7 +46,8 @@ DO UPDATE SET
     data = EXCLUDED.data,
     version = EXCLUDED.version,
     deleted_at = NULL,
-    updated_at = now();
+    updated_at = now()
+WHERE inventory.version <= EXCLUDED.version;
 
 -- name: UpdateInventory :exec
 UPDATE inventory
@@ -56,3 +58,8 @@ WHERE owner_id = $1 AND kind = $4 AND inventory_key = $5 AND version = $6;
 UPDATE inventory
 SET deleted_at = NOW()
 WHERE owner_id = $1 AND kind = $2 AND inventory_key = $3 AND deleted_at IS NULL;
+
+-- name: DeleteInventoriesByOwner :exec
+UPDATE inventory
+SET deleted_at = NOW()
+WHERE owner_id = $1 AND deleted_at IS NULL;

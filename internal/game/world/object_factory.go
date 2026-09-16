@@ -3,6 +3,7 @@ package world
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/lifecycle"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
@@ -26,6 +28,15 @@ type DroppedItemData struct {
 	ContainedItemID uint64 `json:"contained_item_id"`
 	DropTime        int64  `json:"drop_time"`
 	DropperID       uint64 `json:"dropper_id"`
+	TimeBasis       string `json:"time_basis,omitempty"`
+}
+
+type droppedItemDataWire struct {
+	HasInventory    *bool   `json:"has_inventory"`
+	ContainedItemID *uint64 `json:"contained_item_id"`
+	DropTime        *int64  `json:"drop_time"`
+	DropperID       *uint64 `json:"dropper_id"`
+	TimeBasis       *string `json:"time_basis"`
 }
 
 // DroppedInventoryLoader loads a dropped item's inventory from DB and creates the ECS container.
@@ -37,14 +48,39 @@ type DroppedInventoryLoader interface {
 
 // ObjectFactory builds and serializes world objects using object definitions.
 type ObjectFactory struct {
-	droppedInvLoader DroppedInventoryLoader
+	droppedInvLoader  DroppedInventoryLoader
+	objectDeleter     ObjectDeleter
+	objectDataUpdater ObjectDataUpdater
 }
 
-const buildBehaviorStateKey = "build"
+const (
+	buildBehaviorStateKey = "build"
+	// Runtime seconds cannot realistically reach this value during the lifetime
+	// of a server. A missing marker above it is an old Unix timestamp.
+	legacyDroppedItemUnixTimestampMinimum int64 = 1_000_000_000
+)
 
 // NewObjectFactory creates a factory backed by the given object definitions registry.
 func NewObjectFactory(loader DroppedInventoryLoader) *ObjectFactory {
 	return &ObjectFactory{droppedInvLoader: loader}
+}
+
+// SetObjectDeleter enables immediate database deletion for expired objects detected
+// while a chunk is loaded. The factory remains usable in tests without persistence.
+func (f *ObjectFactory) SetObjectDeleter(deleter ObjectDeleter) {
+	if f == nil {
+		return
+	}
+	f.objectDeleter = deleter
+}
+
+// SetObjectDataUpdater enables durable dropped-item metadata migrations found
+// while chunks load.
+func (f *ObjectFactory) SetObjectDataUpdater(updater ObjectDataUpdater) {
+	if f == nil {
+		return
+	}
+	f.objectDataUpdater = updater
 }
 
 // Build creates an ECS entity from a raw database object using its definition.
@@ -100,15 +136,15 @@ func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object) (
 		return types.InvalidHandle, fmt.Errorf("dropped item %d has no data", raw.ID)
 	}
 
-	var data DroppedItemData
-	if err := json.Unmarshal(raw.Data.RawMessage, &data); err != nil {
-		return types.InvalidHandle, fmt.Errorf("dropped item %d: invalid data JSON: %w", raw.ID, err)
+	data, err := f.loadDroppedItemData(w, raw)
+	if err != nil {
+		return types.InvalidHandle, fmt.Errorf("dropped item %d: %w", raw.ID, err)
 	}
 
 	// Check if already expired
 	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
-	if data.DropTime+constt.DroppedDespawnSeconds <= nowRuntimeSeconds {
-		return types.InvalidHandle, fmt.Errorf("dropped item %d: expired", raw.ID)
+	if components.IsDroppedItemExpired(data.DropTime, nowRuntimeSeconds) {
+		return types.InvalidHandle, f.deleteExpiredDroppedItem(raw)
 	}
 
 	// Load inventory from DB via injected loader
@@ -136,14 +172,21 @@ func (f *ObjectFactory) buildDroppedItemFromRecords(
 		return types.InvalidHandle, fmt.Errorf("dropped item %d has no data", raw.ID)
 	}
 
-	var data DroppedItemData
-	if err := json.Unmarshal(raw.Data.RawMessage, &data); err != nil {
-		return types.InvalidHandle, fmt.Errorf("dropped item %d: invalid data JSON: %w", raw.ID, err)
+	data, err := f.loadDroppedItemData(w, raw)
+	if err != nil {
+		return types.InvalidHandle, fmt.Errorf("dropped item %d: %w", raw.ID, err)
+	}
+
+	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
+	if components.IsDroppedItemExpired(data.DropTime, nowRuntimeSeconds) {
+		return types.InvalidHandle, f.deleteExpiredDroppedItem(raw)
 	}
 
 	var rootData *objectInventoryDataV1
 	for _, dbInv := range inventories {
-		if constt.InventoryKind(dbInv.Kind) != constt.InventoryDroppedItem {
+		if dbInv.OwnerID != raw.ID ||
+			constt.InventoryKind(dbInv.Kind) != constt.InventoryDroppedItem ||
+			dbInv.InventoryKey != 0 {
 			continue
 		}
 		var invData objectInventoryDataV1
@@ -158,6 +201,9 @@ func (f *ObjectFactory) buildDroppedItemFromRecords(
 	}
 	if rootData == nil {
 		return types.InvalidHandle, fmt.Errorf("dropped item %d: no inventory data", raw.ID)
+	}
+	if err := validateDroppedItemInventoryData(*rootData, types.EntityID(raw.ID)); err != nil {
+		return types.InvalidHandle, fmt.Errorf("dropped item %d: %w", raw.ID, err)
 	}
 
 	containerHandle := f.spawnContainerTreeFromData(w, types.EntityID(raw.ID), *rootData)
@@ -174,6 +220,15 @@ func (f *ObjectFactory) spawnDroppedItemEntity(
 	data DroppedItemData,
 	containerHandle types.Handle,
 ) (types.Handle, error) {
+	entityID := types.EntityID(raw.ID)
+	if err := validateDroppedItemContainer(w, containerHandle, entityID, types.EntityID(data.ContainedItemID)); err != nil {
+		if w.Alive(containerHandle) {
+			w.Despawn(containerHandle)
+		}
+		lifecycle.DeleteOwnedInventoryContainers(w, entityID)
+		return types.InvalidHandle, fmt.Errorf("dropped item %d: %w", raw.ID, err)
+	}
+
 	// Resolve resource from the loaded container's first item
 	resource := ""
 	droppedQuality := uint32(0)
@@ -183,7 +238,6 @@ func (f *ObjectFactory) spawnDroppedItemEntity(
 		droppedQuality = container.Items[0].Quality
 	}
 
-	entityID := types.EntityID(raw.ID)
 	containedItemID := types.EntityID(data.ContainedItemID)
 
 	h := w.Spawn(entityID, func(w *ecs.World, h types.Handle) {
@@ -213,10 +267,133 @@ func (f *ObjectFactory) spawnDroppedItemEntity(
 		refIndex.Add(constt.InventoryDroppedItem, entityID, 0, containerHandle)
 	})
 	if h == types.InvalidHandle {
+		if w.Alive(containerHandle) {
+			w.Despawn(containerHandle)
+		}
+		lifecycle.DeleteOwnedInventoryContainers(w, entityID)
 		return types.InvalidHandle, ErrEntitySpawnFailed
 	}
 
 	return h, nil
+}
+
+func parseDroppedItemData(rawData []byte, entityID types.EntityID) (DroppedItemData, error) {
+	var wire droppedItemDataWire
+	if err := json.Unmarshal(rawData, &wire); err != nil {
+		return DroppedItemData{}, fmt.Errorf("invalid data JSON: %w", err)
+	}
+	if wire.HasInventory == nil || wire.ContainedItemID == nil || wire.DropTime == nil || wire.DropperID == nil {
+		return DroppedItemData{}, errors.New("missing required metadata")
+	}
+	if !*wire.HasInventory {
+		return DroppedItemData{}, errors.New("has_inventory must be true")
+	}
+	if *wire.ContainedItemID == 0 || types.EntityID(*wire.ContainedItemID) != entityID {
+		return DroppedItemData{}, fmt.Errorf("contained_item_id must equal object ID %d", entityID)
+	}
+	if *wire.DropTime < 0 {
+		return DroppedItemData{}, fmt.Errorf("invalid drop_time %d", *wire.DropTime)
+	}
+	timeBasis := ""
+	if wire.TimeBasis != nil {
+		timeBasis = *wire.TimeBasis
+		if timeBasis != "" && timeBasis != constt.DroppedItemTimeBasisRuntimeSecondsV1 {
+			return DroppedItemData{}, fmt.Errorf("unsupported drop_time basis %q", timeBasis)
+		}
+	}
+
+	return DroppedItemData{
+		HasInventory:    *wire.HasInventory,
+		ContainedItemID: *wire.ContainedItemID,
+		DropTime:        *wire.DropTime,
+		DropperID:       *wire.DropperID,
+		TimeBasis:       timeBasis,
+	}, nil
+}
+
+func (f *ObjectFactory) loadDroppedItemData(w *ecs.World, raw *repository.Object) (DroppedItemData, error) {
+	if raw == nil || !raw.Data.Valid {
+		return DroppedItemData{}, errors.New("dropped item has no data")
+	}
+	data, err := parseDroppedItemData(raw.Data.RawMessage, types.EntityID(raw.ID))
+	if err != nil {
+		return DroppedItemData{}, err
+	}
+	if data.TimeBasis != "" || data.DropTime < legacyDroppedItemUnixTimestampMinimum {
+		return data, nil
+	}
+	if f.objectDataUpdater == nil {
+		return DroppedItemData{}, errors.New("legacy drop_time migration requires an object data updater")
+	}
+
+	data.DropTime = ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
+	data.TimeBasis = constt.DroppedItemTimeBasisRuntimeSecondsV1
+	migratedData, err := json.Marshal(data)
+	if err != nil {
+		return DroppedItemData{}, fmt.Errorf("marshal migrated dropped item data: %w", err)
+	}
+	if err := f.objectDataUpdater.UpdateObjectData(raw.Region, types.EntityID(raw.ID), migratedData); err != nil {
+		return DroppedItemData{}, fmt.Errorf("persist legacy drop_time migration: %w", err)
+	}
+	return data, nil
+}
+
+func validateDroppedItemInventoryData(data objectInventoryDataV1, entityID types.EntityID) error {
+	if constt.InventoryKind(data.Kind) != constt.InventoryDroppedItem || data.Key != 0 {
+		return errors.New("invalid root inventory reference")
+	}
+	if len(data.Items) != 1 {
+		return fmt.Errorf("expected exactly one contained item, got %d", len(data.Items))
+	}
+	item := data.Items[0]
+	if item.ItemID == 0 || types.EntityID(item.ItemID) != entityID {
+		return fmt.Errorf("root item ID must equal object ID %d", entityID)
+	}
+	if item.TypeID == 0 || item.Quantity != 1 {
+		return errors.New("invalid contained item")
+	}
+	return nil
+}
+
+func validateDroppedItemContainer(
+	w *ecs.World,
+	containerHandle types.Handle,
+	entityID types.EntityID,
+	containedItemID types.EntityID,
+) error {
+	if w == nil || containerHandle == types.InvalidHandle || !w.Alive(containerHandle) {
+		return errors.New("dropped inventory container is unavailable")
+	}
+	container, ok := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+	if !ok {
+		return errors.New("dropped inventory component is missing")
+	}
+	if container.OwnerID != entityID || container.Kind != constt.InventoryDroppedItem || container.Key != 0 {
+		return errors.New("invalid dropped inventory reference")
+	}
+	if len(container.Items) != 1 {
+		return fmt.Errorf("expected exactly one contained item, got %d", len(container.Items))
+	}
+	item := container.Items[0]
+	if item.ItemID == 0 || item.ItemID != entityID || item.ItemID != containedItemID {
+		return fmt.Errorf("contained item ID must equal object ID %d", entityID)
+	}
+	if item.TypeID == 0 || item.Quantity != 1 {
+		return errors.New("invalid contained item")
+	}
+	return nil
+}
+
+func (f *ObjectFactory) deleteExpiredDroppedItem(raw *repository.Object) error {
+	if raw == nil {
+		return ErrDroppedItemExpired
+	}
+	if f.objectDeleter != nil {
+		if err := f.objectDeleter.DeleteObject(raw.Region, types.EntityID(raw.ID)); err != nil {
+			return fmt.Errorf("delete expired dropped item %d: %w", raw.ID, err)
+		}
+	}
+	return fmt.Errorf("%w: %d", ErrDroppedItemExpired, raw.ID)
 }
 
 func (f *ObjectFactory) isContainerDefinition(def *objectdefs.ObjectDef) bool {
@@ -680,6 +857,7 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 				ContainedItemID: uint64(droppedItem.ContainedItemID),
 				DropTime:        droppedItem.DropTime,
 				DropperID:       uint64(droppedItem.DropperID),
+				TimeBasis:       constt.DroppedItemTimeBasisRuntimeSecondsV1,
 			}
 			dataJSON, err := json.Marshal(data)
 			if err != nil {

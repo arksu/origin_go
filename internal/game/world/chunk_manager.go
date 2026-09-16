@@ -887,6 +887,11 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	for _, raw := range rawObjects {
 		h, err := cm.objectFactory.Build(cm.world, raw, rawInventoriesByOwner[types.EntityID(raw.ID)])
 		if err != nil {
+			if errors.Is(err, ErrDroppedItemExpired) {
+				cm.logger.Debug("deleted expired dropped item while loading chunk",
+					zap.Int64("object_id", raw.ID))
+				continue
+			}
 			cm.logger.Error("failed to build object",
 				zap.Int64("object_id", raw.ID),
 				zap.Int("type_id", raw.TypeID),

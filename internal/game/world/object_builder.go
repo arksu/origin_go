@@ -5,7 +5,8 @@ import (
 )
 
 var (
-	ErrEntitySpawnFailed = errors.New("entity spawn failed")
-	ErrEntityNotFound    = errors.New("entity not found")
-	ErrDefNotFound       = errors.New("object definition not found")
+	ErrEntitySpawnFailed  = errors.New("entity spawn failed")
+	ErrEntityNotFound     = errors.New("entity not found")
+	ErrDefNotFound        = errors.New("object definition not found")
+	ErrDroppedItemExpired = errors.New("dropped item expired")
 )

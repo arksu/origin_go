@@ -87,6 +87,9 @@ const (
 	DroppedDespawnSeconds = 10
 	DroppedPickupRadius   = 5.0
 	DroppedPickupRadiusSq = DroppedPickupRadius * DroppedPickupRadius
+	// DroppedItemTimeBasisRuntimeSecondsV1 marks drop_time as persisted server
+	// runtime seconds. It keeps offline server time out of the decay lifetime.
+	DroppedItemTimeBasisRuntimeSecondsV1 = "runtime_seconds_v1"
 )
 
 // Entity stats (stamina/energy) constants.
