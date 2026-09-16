@@ -12,7 +12,8 @@ import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostContro
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { config } from '@/config'
-import { MAX_FPS } from '@/constants/render'
+import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
+import { proto } from '@/network/proto/packets.js'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
@@ -128,6 +129,23 @@ export class Render {
       this.lastClickScreen = { x: event.screenX, y: event.screenY }
       this.lastPointerScreen = { x: event.screenX, y: event.screenY }
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
+
+      if (event.button === 2) {
+        this.handleContextInteraction(event.screenX, event.screenY)
+        return
+      }
+
+      const gameStore = useGameStore()
+      if (event.button === 0) {
+        gameStore.closeContextMenu()
+
+        // A dropped item is always the primary-click target. Do this before
+        // build/lift callbacks so the same rule holds for mouse and touch.
+        if (this.tryQueueDroppedItemPickup(event.screenX, event.screenY)) {
+          return
+        }
+      }
+
       if (event.button === 0 && this.buildGhostController.isActive()) {
         this.updateBuildGhostAtScreen(event.screenX, event.screenY, event.modifiers)
       } else if (event.button === 0 && this.liftGhostController.isActive()) {
@@ -142,24 +160,7 @@ export class Render {
         return
       }
 
-      const gameStore = useGameStore()
-
-      if (event.button === 2) {
-        // RMB is the single entry point for context interactions.
-        const clickedEntity = this.objectManager.getEntityAtScreen(
-          event.screenX,
-          event.screenY,
-          this.screenToWorld.bind(this)
-        )
-        if (clickedEntity !== null) {
-          gameStore.closeContextMenu()
-          playerCommandController.sendInteract(clickedEntity.entityId)
-        }
-        return
-      }
-
       if (event.button === 0) {
-        gameStore.closeContextMenu()
         const hand = gameStore.handState
         const handInv = gameStore.handInventoryState
 
@@ -178,6 +179,10 @@ export class Render {
           )
         }
       }
+    })
+
+    this.inputController.onLongPress((event) => {
+      this.handleContextInteraction(event.screenX, event.screenY)
     })
 
     this.inputController.onDragStart((button) => {
@@ -210,6 +215,48 @@ export class Render {
     this.inputController.onPointerMove((screenX, screenY) => {
       this.lastPointerScreen = { x: screenX, y: screenY }
     })
+  }
+
+  private handleContextInteraction(screenX: number, screenY: number): void {
+    this.lastClickScreen = { x: screenX, y: screenY }
+    this.lastPointerScreen = { x: screenX, y: screenY }
+    this.lastClickWorld = this.screenToWorld(screenX, screenY)
+
+    const consumed = this.onClickCallback?.({
+      screen: this.lastClickScreen,
+      world: this.lastClickWorld,
+      button: 2,
+    }) === true
+    if (consumed) {
+      return
+    }
+
+    const gameStore = useGameStore()
+    gameStore.updateMousePos(screenX, screenY)
+
+    const clickedEntity = this.objectManager.getEntityAtScreen(
+      screenX,
+      screenY,
+      this.screenToWorld.bind(this),
+    )
+    if (clickedEntity !== null) {
+      gameStore.closeContextMenu()
+      playerCommandController.sendInteract(clickedEntity.entityId)
+    }
+  }
+
+  private tryQueueDroppedItemPickup(screenX: number, screenY: number): boolean {
+    const clickedEntity = this.objectManager.getEntityAtScreen(
+      screenX,
+      screenY,
+      this.screenToWorld.bind(this),
+    )
+    if (clickedEntity?.typeId !== DROP_ITEM_TYPE_ID) {
+      return false
+    }
+
+    playerCommandController.sendInteract(clickedEntity.entityId, proto.InteractionType.PICKUP)
+    return true
   }
 
   private update(): void {

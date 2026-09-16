@@ -138,10 +138,10 @@ const axeURL = '/assets/game/equipment/test_axe.glb'
 const shieldURL = '/assets/game/equipment/test_shield.glb'
 const catalog: Record<string, EquipmentDefinition> = {
   stone_axe: { kind: 'rigid', url: axeURL, bindings: {
-    right_hand: { socket: 'grip_r', pose: 'hold', walkPose: 'hold', transform: { position: [.1, 0, 0], scale: .5 } },
-    left_hand: { socket: 'grip_l', pose: 'hold' },
+    right_hand: { socket: 'grip_r', armMotion: { kind: 'layered', idlePose: 'hold', walkPose: 'hold' }, transform: { position: [.1, 0, 0], scale: .5 } },
+    left_hand: { socket: 'grip_l', armMotion: { kind: 'layered', idlePose: 'hold' } },
   } },
-  shield: { kind: 'rigid', url: shieldURL, bindings: { left_hand: { socket: 'forearm_l', pose: 'hold' } } },
+  shield: { kind: 'rigid', url: shieldURL, bindings: { left_hand: { socket: 'forearm_l', armMotion: { kind: 'layered', idlePose: 'hold' } } } },
   deferred: { kind: 'deferred' },
 }
 

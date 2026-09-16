@@ -28,6 +28,9 @@ func NewAutoInteractSystem(
 	visionSystem *VisionSystem,
 	logger *zap.Logger,
 ) *AutoInteractSystem {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &AutoInteractSystem{
 		BaseSystem:            ecs.NewBaseSystem("AutoInteractSystem", 320),
 		inventoryExecutor:     inventoryExecutor,
@@ -153,6 +156,18 @@ func (s *AutoInteractSystem) executePickup(
 	result := s.inventoryExecutor.ExecutePickupFromWorld(
 		w, playerID, playerHandle, pending.TargetEntityID, dstRef,
 	)
+	// The grid is normally preferred, but a full grid must not prevent pickup
+	// into an otherwise empty hand. The first attempt is non-mutating on this
+	// error, so retrying with the hand cannot duplicate the item.
+	if !result.Success &&
+		result.ErrorCode == netproto.ErrorCode_ERROR_CODE_INVENTORY_FULL &&
+		dstRef.Kind == netproto.InventoryKind_INVENTORY_KIND_GRID {
+		if handRef := s.emptyHandContainer(w, playerID); handRef != nil {
+			result = s.inventoryExecutor.ExecutePickupFromWorld(
+				w, playerID, playerHandle, pending.TargetEntityID, handRef,
+			)
+		}
+	}
 
 	// Send result to client
 	if s.inventoryResultSender == nil {
@@ -179,8 +194,8 @@ func (s *AutoInteractSystem) executePickup(
 		s.inventoryResultSender.SendContainerClosed(playerID, ref)
 	}
 
-	if result.Success {
-		s.logger.Debug("AutoInteract: pickup success",
+	if result.Success || !w.Alive(pending.TargetHandle) {
+		s.logger.Debug("AutoInteract: pickup completed or target despawned",
 			zap.Uint64("player_id", uint64(playerID)),
 			zap.Uint64("target_entity_id", uint64(pending.TargetEntityID)))
 
@@ -198,8 +213,6 @@ func (s *AutoInteractSystem) chooseDstContainer(
 	playerID types.EntityID,
 	playerHandle types.Handle,
 ) *netproto.InventoryRef {
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-
 	// Check grid first
 	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
 	if hasOwner {
@@ -214,7 +227,16 @@ func (s *AutoInteractSystem) chooseDstContainer(
 		}
 	}
 
-	// Fallback to hand if empty
+	return s.emptyHandContainer(w, playerID)
+}
+
+func (s *AutoInteractSystem) emptyHandContainer(
+	w *ecs.World,
+	playerID types.EntityID,
+) *netproto.InventoryRef {
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+
+	// Fallback to hand if empty.
 	handHandle, handFound := refIndex.Lookup(constt.InventoryHand, playerID, 0)
 	if handFound && w.Alive(handHandle) {
 		handContainer, hasHand := ecs.GetComponent[components.InventoryContainer](w, handHandle)

@@ -6,8 +6,12 @@ Game asset: `web_new/public/assets/game/equipment/stone_axe/stone_axe.glb`.
 - 35,424 → 1,200 triangles; one 512×512 base-color texture; rigid, 0.66 m long.
 - Grip origin sits inside the lower handle. Both hand bindings live in the catalog.
   The user's confirmed left/right transforms override the generated initial grips.
-- `axe_idle_l/r` and `axe_walk_l/r` animate only upper arm, forearm and hand.
-  The runtime samples walk by the same traveled-distance phase as the legs.
+- The runtime does not use weapon-specific arm clips while carrying this axe:
+  the axe follows the ordinary idle/walk hand motion exactly. Arm layers remain
+  available for future explicit actions, such as an attack, rather than carry.
+- Catalog policy: ordinary motion is the default for a stone axe and one-handed
+  sword. Layered motion must be explicitly requested for equipment that changes
+  how hands are used: a two-handed weapon, rod, or shield.
 - `stone_axe_user_idle_pose.blend` preserves the user's right-arm idle pose.
   `idle-pose-overrides.json` contains its exported bone-local transforms plus
   the mirrored left arm. The merger applies these only to `axe_idle_l/r`;

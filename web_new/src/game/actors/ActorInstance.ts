@@ -5,7 +5,7 @@ import type { ActorAssetCache } from './ActorAssetCache'
 import { createActorMaterial } from './ActorMaterial'
 import { DualQuaternionSkin } from './DualQuaternionSkin'
 import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_ACTOR_RENDER_SETTINGS, type ActorRenderSettings } from './config'
-import { DEFAULT_EQUIPMENT, EQUIPMENT, armForSlot, validateEquipment, type ArmSide, type EquipmentDefinition, type EquipmentBinding } from './equipment'
+import { DEFAULT_EQUIPMENT, EQUIPMENT, armForSlot, validateEquipment, type ArmMotion, type ArmSide, type EquipmentDefinition, type EquipmentBinding } from './equipment'
 import { ActorSockets } from './ActorSockets'
 import { ActorArmLayers } from './ActorArmLayers'
 import { actorYawForScreenAngle, screenFacingAngle } from './facing'
@@ -38,7 +38,7 @@ export class ActorInstance {
   private readonly skins = new Map<Skeleton, DualQuaternionSkin>()
   private readonly materials = new Set<ShaderMaterial>()
   private readonly equipment = new Map<EquipmentSlot, EquipmentInstance>()
-  private armProfiles: Partial<Record<ArmSide, EquipmentBinding>> = {}
+  private armProfiles: Partial<Record<ArmSide, Extract<ArmMotion, { kind: 'layered' }>>> = {}
   private equipmentRevision = 0
   private requestedEquipment: readonly EquippedVisual[] = []
   private releaseModel: (() => void) | null = null
@@ -110,16 +110,19 @@ export class ActorInstance {
     if (!this.model || !this.armLayers) throw new Error('Character is not loaded')
     const desired = items.map((item) => ({ ...item }))
     const poses: Record<ArmSide, string | null> = { left: null, right: null }
-    const profiles: Partial<Record<ArmSide, EquipmentBinding>> = {}
+    const profiles: Partial<Record<ArmSide, Extract<ArmMotion, { kind: 'layered' }>>> = {}
     const renderable = desired.flatMap((item) => {
       const definition = Object.hasOwn(this.catalog, item.visualKey) ? this.catalog[item.visualKey] : undefined
       if (!definition || definition.kind === 'deferred') return []
       const side = armForSlot(item.slot)
       if (definition.kind === 'rigid' && side) {
         const binding = definition.bindings[item.slot]!
-        poses[side] = binding.pose ?? null
-        profiles[side] = binding
-        this.armLayers!.validate(side, binding.walkPose ?? null)
+        const motion = binding.armMotion
+        if (motion?.kind === 'layered') {
+          poses[side] = motion.idlePose
+          profiles[side] = motion
+          this.armLayers!.validate(side, motion.walkPose ?? null)
+        }
       }
       return [{ item, definition }]
     })
@@ -291,7 +294,7 @@ export class ActorInstance {
       for (const side of ['left', 'right'] as const) {
         const profile = this.armProfiles[side]
         if (!profile) continue
-        const clip = (this.walking ? profile.walkPose ?? profile.pose : profile.pose) ?? null
+        const clip = this.walking ? profile.walkPose ?? profile.idlePose : profile.idlePose
         // Capture the last displayed arm before locomotion overwrites it.
         if (this.armLayers.getPose(side) !== clip) this.armLayers.setPose(side, clip, 0, now)
         this.armLayers.samplePhase(side, this.walking && profile.walkPose ? phase : 0)

@@ -156,10 +156,13 @@ func (q *Queries) HardDeleteObjectsByRegion(ctx context.Context, region int) err
 	return err
 }
 
-const softDeleteObject = `-- name: SoftDeleteObject :exec
+const softDeleteObject = `-- name: SoftDeleteObject :one
 UPDATE object
 SET deleted_at = NOW()
-WHERE region = $1 AND id = $2
+WHERE region = $1
+  AND id = $2
+  AND deleted_at IS NULL
+RETURNING id
 `
 
 type SoftDeleteObjectParams struct {
@@ -167,9 +170,11 @@ type SoftDeleteObjectParams struct {
 	ID     int64 `json:"id"`
 }
 
-func (q *Queries) SoftDeleteObject(ctx context.Context, arg SoftDeleteObjectParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteObject, arg.Region, arg.ID)
-	return err
+func (q *Queries) SoftDeleteObject(ctx context.Context, arg SoftDeleteObjectParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, softDeleteObject, arg.Region, arg.ID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const truncateObjects = `-- name: TruncateObjects :exec
@@ -179,6 +184,29 @@ TRUNCATE TABLE object
 func (q *Queries) TruncateObjects(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, truncateObjects)
 	return err
+}
+
+const updateObjectData = `-- name: UpdateObjectData :one
+UPDATE object
+SET data = $3,
+    updated_at = NOW()
+WHERE region = $1
+  AND id = $2
+  AND deleted_at IS NULL
+RETURNING id
+`
+
+type UpdateObjectDataParams struct {
+	Region int                   `json:"region"`
+	ID     int64                 `json:"id"`
+	Data   pqtype.NullRawMessage `json:"data"`
+}
+
+func (q *Queries) UpdateObjectData(ctx context.Context, arg UpdateObjectDataParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, updateObjectData, arg.Region, arg.ID, arg.Data)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertObject = `-- name: UpsertObject :exec

@@ -12,6 +12,17 @@ import (
 	"github.com/lib/pq"
 )
 
+const deleteInventoriesByOwner = `-- name: DeleteInventoriesByOwner :exec
+UPDATE inventory
+SET deleted_at = NOW()
+WHERE owner_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteInventoriesByOwner(ctx context.Context, ownerID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteInventoriesByOwner, ownerID)
+	return err
+}
+
 const deleteInventory = `-- name: DeleteInventory :exec
 UPDATE inventory
 SET deleted_at = NOW()
@@ -192,6 +203,7 @@ DO UPDATE SET
     version = EXCLUDED.version,
     deleted_at = NULL,
     updated_at = now()
+WHERE inventory.version <= EXCLUDED.version
 `
 
 type UpsertInventoriesParams struct {
@@ -222,6 +234,7 @@ DO UPDATE SET
     version = EXCLUDED.version,
     deleted_at = NULL,
     updated_at = now()
+WHERE inventory.version <= EXCLUDED.version
 RETURNING id, owner_id, kind, inventory_key, data, updated_at, deleted_at, version
 `
 

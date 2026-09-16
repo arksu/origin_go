@@ -1,8 +1,6 @@
 package inventory
 
 import (
-	"time"
-
 	constt "origin/internal/const"
 	"origin/internal/craftdefs"
 	"origin/internal/ecs"
@@ -356,43 +354,56 @@ func (e *InventoryExecutor) dropCraftOutputAtPlayer(
 	playerEntityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, playerHandle)
 	playerTransform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
 	playerChunk, hasChunk := ecs.GetComponent[components.ChunkRef](w, playerHandle)
-	if !hasInfo || !hasTransform || !hasChunk {
+	if !hasInfo || !hasTransform || !hasChunk || e.service.persister == nil {
 		return false
 	}
 
+	droppedItemID := e.service.idAllocator.GetFreeID()
 	params := SpawnDroppedEntityParams{
-		DroppedEntityID: e.service.idAllocator.GetFreeID(),
-		ItemID:          e.service.idAllocator.GetFreeID(),
-		TypeID:          uint32(itemDef.DefID),
-		Resource:        itemDef.ResolveResource(false),
-		Quality:         quality,
-		Quantity:        1,
-		W:               uint8(itemDef.Size.W),
-		H:               uint8(itemDef.Size.H),
-		DropX:           int(playerTransform.X),
-		DropY:           int(playerTransform.Y),
-		Region:          playerEntityInfo.Region,
-		Layer:           playerEntityInfo.Layer,
-		ChunkX:          playerChunk.CurrentChunkX,
-		ChunkY:          playerChunk.CurrentChunkY,
-		DropperID:       playerID,
-		NowUnix:         time.Now().Unix(),
+		DroppedEntityID:   droppedItemID,
+		ItemID:            droppedItemID,
+		TypeID:            uint32(itemDef.DefID),
+		Resource:          itemDef.ResolveResource(false),
+		Quality:           quality,
+		Quantity:          1,
+		W:                 uint8(itemDef.Size.W),
+		H:                 uint8(itemDef.Size.H),
+		DropX:             int(playerTransform.X),
+		DropY:             int(playerTransform.Y),
+		Region:            playerEntityInfo.Region,
+		Layer:             playerEntityInfo.Layer,
+		ChunkX:            playerChunk.CurrentChunkX,
+		ChunkY:            playerChunk.CurrentChunkY,
+		DropperID:         playerID,
+		NowRuntimeSeconds: ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal,
 	}
 
-	if _, ok := SpawnDroppedEntity(w, params); !ok {
+	if err := validateSpawnDroppedEntityParams(w, params); err != nil {
+		if e.logger != nil {
+			e.logger.Warn("Invalid crafted dropped item parameters", zap.Error(err))
+		}
+		return false
+	}
+
+	if err := PersistDroppedEntity(e.service.persister, params, nil); err != nil {
+		if e.logger != nil {
+			e.logger.Warn("Failed to persist crafted dropped item", zap.Error(err))
+		}
+		return false
+	}
+
+	if _, err := SpawnDroppedEntity(w, params); err != nil {
+		if e.logger != nil {
+			e.logger.Warn("Failed to spawn crafted dropped item", zap.Error(err))
+		}
+		if deleteErr := e.service.persister.DeleteObject(playerEntityInfo.Region, droppedItemID); deleteErr != nil && e.logger != nil {
+			e.logger.Error("Failed to clean up unspawned crafted dropped item", zap.Error(deleteErr))
+		}
 		return false
 	}
 	e.registerDroppedSpatial(w, params.DroppedEntityID)
 	if e.visionForcer != nil {
 		e.visionForcer.ForceUpdateForObserver(w, playerHandle)
-	}
-	if e.service.persister != nil {
-		if err := PersistDroppedEntity(e.service.persister, params, nil); err != nil && e.logger != nil {
-			e.logger.Warn("Failed to persist crafted dropped item",
-				zap.Uint64("player_id", uint64(playerID)),
-				zap.Error(err),
-			)
-		}
 	}
 	return true
 }

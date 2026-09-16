@@ -25,6 +25,12 @@ export interface PointerClickEvent {
   modifiers: number
 }
 
+export interface PointerLongPressEvent {
+  screenX: number
+  screenY: number
+  modifiers: number
+}
+
 export interface PointerDragEvent {
   deltaX: number
   deltaY: number
@@ -44,6 +50,7 @@ export interface PinchEvent {
 }
 
 type ClickHandler = (event: PointerClickEvent) => void
+type LongPressHandler = (event: PointerLongPressEvent) => void
 type DragStartHandler = (button: number) => void
 type DragMoveHandler = (event: PointerDragEvent) => void
 type DragEndHandler = (button: number) => void
@@ -54,6 +61,8 @@ type PinchEndHandler = () => void
 type PointerMoveHandler = (screenX: number, screenY: number) => void
 
 export class InputController {
+  private static readonly LONG_PRESS_DELAY_MS = 500
+
   private canvas: HTMLCanvasElement | null = null
 
   private modifiers: number = Modifiers.NONE
@@ -65,8 +74,12 @@ export class InputController {
   private suppressNextClick: boolean = false
   private activeTouchPoints: Map<number, ScreenPoint> = new Map()
   private pinchLastDistance: number = 0
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null
+  private longPressPointerID: number | null = null
+  private longPressTriggered: boolean = false
 
   private onClickHandler: ClickHandler | null = null
+  private onLongPressHandler: LongPressHandler | null = null
   private onDragStartHandler: DragStartHandler | null = null
   private onDragMoveHandler: DragMoveHandler | null = null
   private onDragEndHandler: DragEndHandler | null = null
@@ -139,6 +152,10 @@ export class InputController {
     this.onClickHandler = handler
   }
 
+  onLongPress(handler: LongPressHandler): void {
+    this.onLongPressHandler = handler
+  }
+
   onDragStart(handler: DragStartHandler): void {
     this.onDragStartHandler = handler
   }
@@ -183,6 +200,10 @@ export class InputController {
         this.pointerDownPos = { x: e.clientX, y: e.clientY }
         this.pointerDownButton = 0
         this.isDragging = false
+        this.longPressTriggered = false
+        this.startLongPress(e.pointerId, e.clientX, e.clientY)
+      } else {
+        this.cancelLongPress()
       }
       this.updatePinchState()
       return
@@ -204,6 +225,7 @@ export class InputController {
       e.preventDefault()
       this.activeTouchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY })
       if (this.isPinching) {
+        this.cancelLongPress()
         const pinch = this.computePinchStep()
         if (pinch) {
           this.onPinchMoveHandler?.(pinch)
@@ -240,12 +262,14 @@ export class InputController {
 
     if (!this.isDragging && distance > CLICK_DRAG_THRESHOLD_PX) {
       this.isDragging = true
+      this.cancelLongPress()
     }
   }
 
   private handlePointerUp(e: globalThis.PointerEvent): void {
     if (e.pointerType === 'touch') {
       e.preventDefault()
+      this.cancelLongPress(e.pointerId)
       const wasPinching = this.isPinching
       this.activeTouchPoints.delete(e.pointerId)
       this.updatePinchState()
@@ -257,8 +281,16 @@ export class InputController {
         return
       }
 
+      if (e.type === 'pointercancel') {
+        this.clearPointerInteraction()
+        return
+      }
+
       if (this.isDragging) {
         this.onDragEndHandler?.(this.pointerDownButton)
+      } else if (this.longPressTriggered) {
+        this.longPressTriggered = false
+        this.suppressNextClick = false
       } else if (this.suppressNextClick) {
         this.suppressNextClick = false
       } else {
@@ -277,6 +309,11 @@ export class InputController {
     }
 
     if (this.pointerDownPos === null) return
+
+    if (e.type === 'pointercancel') {
+      this.clearPointerInteraction()
+      return
+    }
 
     if (e.button === 1) {
       this.canvas?.releasePointerCapture(e.pointerId)
@@ -352,6 +389,53 @@ export class InputController {
     this.suppressNextClick = false
     this.activeTouchPoints.clear()
     this.pinchLastDistance = 0
+    this.cancelLongPress()
+    this.longPressTriggered = false
+  }
+
+  private startLongPress(pointerID: number, screenX: number, screenY: number): void {
+    this.cancelLongPress()
+    this.longPressPointerID = pointerID
+    this.longPressTimer = setTimeout(() => {
+      if (
+        this.longPressPointerID !== pointerID ||
+        this.isDragging ||
+        this.isPinching ||
+        this.activeTouchPoints.size !== 1 ||
+        !this.activeTouchPoints.has(pointerID)
+      ) {
+        return
+      }
+
+      this.longPressTimer = null
+      this.longPressTriggered = true
+      this.suppressNextClick = true
+      this.onLongPressHandler?.({
+        screenX,
+        screenY,
+        modifiers: this.modifiers,
+      })
+    }, InputController.LONG_PRESS_DELAY_MS)
+  }
+
+  private cancelLongPress(pointerID?: number): void {
+    if (pointerID !== undefined && this.longPressPointerID !== pointerID) {
+      return
+    }
+    if (this.longPressTimer !== null) {
+      clearTimeout(this.longPressTimer)
+      this.longPressTimer = null
+    }
+    this.longPressPointerID = null
+  }
+
+  private clearPointerInteraction(): void {
+    this.cancelLongPress()
+    this.pointerDownPos = null
+    this.pointerDownButton = -1
+    this.isDragging = false
+    this.suppressNextClick = false
+    this.longPressTriggered = false
   }
 
   private updatePinchState(): void {
@@ -359,12 +443,16 @@ export class InputController {
       if (this.isPinching) {
         this.isPinching = false
         this.pinchLastDistance = 0
+        // Both pointer-up events of a pinch intentionally produce no tap.
+        // Clear the guard here so the next independent tap still works.
+        this.suppressNextClick = false
         this.onPinchEndHandler?.()
       }
       return
     }
 
     if (!this.isPinching) {
+      this.cancelLongPress()
       this.isPinching = true
       this.suppressNextClick = true
       this.pointerDownPos = null

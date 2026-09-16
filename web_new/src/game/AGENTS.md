@@ -103,7 +103,7 @@ See `MoveController.ts` AGENTS.md for details.
 ### Input & Camera
 
 **InputController.ts**:
-- Pointer events (click, drag, wheel)
+- Pointer events (click, drag, wheel, touch long-press)
 - Drag threshold for pan vs click distinction
 - Modifier keys (Shift/Ctrl/Alt) tracking
 
@@ -116,12 +116,16 @@ See `MoveController.ts` AGENTS.md for details.
 - Converts input to `C2S_PlayerAction` messages
 - `MoveTo(x, y)` for ground clicks
 - `MoveToEntity(entityId)` for object clicks
-- `Interact(entityId)` for RMB context requests
+- `Interact(entityId)` for pickup or context requests
 - `SelectContextAction(entityId, actionId)` after menu selection
 
 ### Context Interaction (RMB)
 
 - `Render.ts` maps RMB click on object to `sendInteract(entityId)`.
+- Touch long-press maps to the same context request, so the desktop and mobile
+  builds share one interaction model.
+- Primary click/tap on a dropped item sends an explicit pickup interaction;
+  the server queues movement and completes the pickup on arrival.
 - Context menu UI is Vue-side (`GameView.vue`) and store-driven (`gameStore.contextMenu`).
 - Render layer never decides available actions; it only emits input intent.
 

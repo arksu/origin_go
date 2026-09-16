@@ -170,14 +170,18 @@ func (e *InventoryExecutor) registerDroppedSpatial(w *ecs.World, entityID types.
 // handleDroppedItemSpatial registers/unregisters dropped item entities in chunk spatial
 // so that VisionSystem can discover them via QueryRadius.
 func (e *InventoryExecutor) handleDroppedItemSpatial(w *ecs.World, result *OperationResult) {
-	if !result.Success || e.spatialRegistrar == nil {
+	if result == nil || e.spatialRegistrar == nil {
 		return
 	}
 
-	if result.SpawnedDroppedEntityID != nil {
-		handle := w.GetHandleByEntityID(*result.SpawnedDroppedEntityID)
+	spawnedIDs := result.SpawnedDroppedEntityIDs
+	if len(spawnedIDs) == 0 && result.SpawnedDroppedEntityID != nil {
+		spawnedIDs = []types.EntityID{*result.SpawnedDroppedEntityID}
+	}
+	for _, entityID := range spawnedIDs {
+		handle := w.GetHandleByEntityID(entityID)
 		if handle == types.InvalidHandle {
-			return
+			continue
 		}
 		transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
 		chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, handle)
@@ -186,16 +190,14 @@ func (e *InventoryExecutor) handleDroppedItemSpatial(w *ecs.World, result *Opera
 		}
 	}
 
-	if result.DespawnedDroppedEntityID != nil {
-		handle := w.GetHandleByEntityID(*result.DespawnedDroppedEntityID)
-		if handle == types.InvalidHandle {
-			return
-		}
-		transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
-		chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, handle)
-		if hasTransform && hasChunkRef {
-			e.spatialRegistrar.RemoveStaticFromChunkSpatial(handle, chunkRef.CurrentChunkX, chunkRef.CurrentChunkY, int(transform.X), int(transform.Y))
-		}
+	if despawned := result.DespawnedDroppedEntity; despawned != nil {
+		e.spatialRegistrar.RemoveStaticFromChunkSpatial(
+			despawned.Handle,
+			despawned.ChunkX,
+			despawned.ChunkY,
+			despawned.X,
+			despawned.Y,
+		)
 	}
 }
 
