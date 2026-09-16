@@ -28,6 +28,8 @@ import { useInventoryOps } from '@/composables/useInventoryOps'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useHotbarAssignments } from '@/composables/useHotbarAssignments'
 import { useActorRenderSettings, type ActorRenderMode } from '@/composables/useActorRenderSettings'
+import { useRenderDebugSettings } from '@/composables/useRenderDebugSettings'
+import { config as appConfig } from '@/config'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
 import { useAuthStore } from '@/stores/authStore'
@@ -122,6 +124,7 @@ const isMobileDevice = ref(false)
 const portraitWarningDismissed = ref(false)
 const showSettingsWindow = ref(false)
 const { mode: actorRenderMode, setMode: saveActorRenderMode } = useActorRenderSettings()
+const { enabled: renderDebugEnabled, setEnabled: saveRenderDebugEnabled } = useRenderDebugSettings(appConfig.DEBUG)
 
 const PORTRAIT_WARNING_DISMISSED_KEY = 'hud_portrait_warning_dismissed_v1'
 
@@ -396,6 +399,7 @@ onMounted(async () => {
   connectToGame = networkModule.connectToGame
   disconnectFromGame = networkModule.disconnectFromGame
   gameFacade.setActorRenderSettings({ mode: actorRenderMode.value })
+  gameFacade.setRenderDebugEnabled(renderDebugEnabled.value)
 
   gameStore.clearLastServerErrorMessage()
   gameStore.startWorldBootstrap()
@@ -477,6 +481,11 @@ function handleEquipmentClose() {
 function setActorRenderMode(mode: ActorRenderMode): void {
   saveActorRenderMode(mode)
   gameFacade?.setActorRenderSettings({ mode })
+}
+
+function setRenderDebugEnabled(enabled: boolean): void {
+  saveRenderDebugEnabled(enabled)
+  gameFacade?.setRenderDebugEnabled(enabled)
 }
 
 function openCraftWindow() {
@@ -726,9 +735,7 @@ const hotkeys: HotkeyConfig[] = [...DEFAULT_HOTKEYS, ...hotbarNumberHotkeys].map
         gameStore.togglePlayerInventory()
         break
       case '`':
-        if (gameFacade && gameFacade.isInitialized()) {
-          gameFacade.toggleDebugOverlay()
-        }
+        setRenderDebugEnabled(!renderDebugEnabled.value)
         break
       case 'c':
         gameStore.toggleCharacterSheet()
@@ -894,8 +901,10 @@ useHotkeys(hotkeys)
 
       <div v-if="showSettingsWindow" class="game-settings-window">
         <SettingsWindow
+          :debug-enabled="renderDebugEnabled"
           :mode="actorRenderMode"
           @close="showSettingsWindow = false"
+          @update-debug-enabled="setRenderDebugEnabled"
           @update-mode="setActorRenderMode"
         />
       </div>

@@ -5,11 +5,13 @@ import type { ArmBuildGhostOptions } from './BuildGhostController'
 import type { ArmLiftGhostOptions } from './LiftGhostController'
 import type { EquippedVisual } from '../types/characterVisual'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
+import { config } from '@/config'
 
 export class GameFacade {
   private render: Render | null = null
   private initialized: boolean = false
   private actorRenderSettings: Readonly<ActorRenderSettings> = DEFAULT_ACTOR_RENDER_SETTINGS
+  private renderDebugEnabled = config.DEBUG
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     if (this.initialized) {
@@ -17,6 +19,7 @@ export class GameFacade {
     }
 
     this.render = new Render(this.actorRenderSettings)
+    this.render.setDebugOverlayVisible(this.renderDebugEnabled)
     await this.render.init(canvas)
     this.initialized = true
   }
@@ -41,6 +44,11 @@ export class GameFacade {
 
   getActorRenderSettings(): Readonly<ActorRenderSettings> {
     return this.actorRenderSettings
+  }
+
+  setRenderDebugEnabled(enabled: boolean): void {
+    this.renderDebugEnabled = enabled
+    this.render?.setDebugOverlayVisible(enabled)
   }
 
   onPlayerClick(callback: (event: { screenX: number; screenY: number; worldX: number; worldY: number; button: number }) => boolean | void): void {

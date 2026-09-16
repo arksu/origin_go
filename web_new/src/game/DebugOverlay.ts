@@ -1,12 +1,11 @@
 import { Text, Container, TextStyle } from 'pixi.js'
-import { DEBUG_SHOW_OBJECT_BOUNDS } from '@/constants/game'
 import { config } from '@/config'
 import type { DebugInfo } from './types'
+import type { ObjectManager } from './ObjectManager'
 
-// Global reference to ObjectManager for bounds control
-let objectManager: any = null
+let objectManager: ObjectManager | null = null
 
-export function setObjectManager(manager: any): void {
+export function setObjectManager(manager: ObjectManager): void {
   objectManager = manager
 }
 
@@ -95,7 +94,6 @@ export class DebugOverlay {
     this.visible = !this.visible
     this.container.visible = this.visible
 
-    // Update object bounds visibility
     this.updateObjectBoundsVisibility()
   }
 
@@ -103,7 +101,6 @@ export class DebugOverlay {
     this.visible = visible
     this.container.visible = visible
 
-    // Update object bounds visibility
     this.updateObjectBoundsVisibility()
   }
 
@@ -112,10 +109,7 @@ export class DebugOverlay {
   }
 
   private updateObjectBoundsVisibility(): void {
-    if (objectManager) {
-      const shouldShowBounds = this.visible && DEBUG_SHOW_OBJECT_BOUNDS
-      objectManager.setBoundsVisible(shouldShowBounds)
-    }
+    objectManager?.setDebugVisible(this.visible)
   }
 
   destroy(): void {

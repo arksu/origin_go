@@ -13,6 +13,7 @@ import { ActorSockets } from '../src/game/actors/ActorSockets'
 import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
 import { actorYawForScreenAngle } from '../src/game/actors/facing'
 import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
+import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
 import type { EquipmentDefinition } from '../src/game/actors/equipment'
 
 function visual(revision: string, generation = '0:4294967297') {
@@ -72,6 +73,26 @@ test('actor render mode preference persists only supported values', () => {
   assert.equal(values.get(ACTOR_RENDER_MODE_STORAGE_KEY), 'hybrid3d')
   assert.equal(loadActorRenderMode(null), 'hybrid3d')
   assert.doesNotThrow(() => persistActorRenderMode('baked8', null))
+})
+
+test('render debug preference persists only strict boolean values', () => {
+  const values = new Map<string, string>()
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  }
+
+  assert.equal(loadRenderDebugEnabled(storage), false)
+  values.set(RENDER_DEBUG_STORAGE_KEY, 'true')
+  assert.equal(loadRenderDebugEnabled(storage), true)
+  values.set(RENDER_DEBUG_STORAGE_KEY, 'false')
+  assert.equal(loadRenderDebugEnabled(storage, true), false)
+  values.set(RENDER_DEBUG_STORAGE_KEY, 'enabled')
+  assert.equal(loadRenderDebugEnabled(storage, true), true)
+  persistRenderDebugEnabled(true, storage)
+  assert.equal(values.get(RENDER_DEBUG_STORAGE_KEY), 'true')
+  assert.equal(loadRenderDebugEnabled(null), false)
+  assert.doesNotThrow(() => persistRenderDebugEnabled(false, null))
 })
 
 test('store accepts only a newer revision of the current incarnation and cannot resurrect despawned actors', () => {
