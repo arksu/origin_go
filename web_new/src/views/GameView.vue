@@ -249,6 +249,7 @@ async function initCanvas(): Promise<boolean> {
             x: targetPos.x,
             y: targetPos.y,
           })
+          cancelLiftPutDownMode()
           return true
         }
         return false
