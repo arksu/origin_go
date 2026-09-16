@@ -7,7 +7,7 @@ A standalone Vue 3 SPA for editing terrain configurations with real-time PixiJS 
 - **Visual Terrain Editing**: View terrain layers rendered with PixiJS
 - **Layer Management**: Toggle visibility, select layers, view hierarchy
 - **Interactive Offset Adjustment**: Move layers with arrow keys or mouse drag
-- **Zoom & Pan**: Mouse wheel zoom (1x-16x) with smooth scaling
+- **Zoom & Pan**: Mouse wheel zoom (1x-16x) with crisp nearest-neighbor scaling
 - **Center Crosshair**: Visual guide for the (0,0) anchor point
 - **Save to JSON**: Persist offset changes back to terrain config files
 - **Live Reload**: HMR support for development
