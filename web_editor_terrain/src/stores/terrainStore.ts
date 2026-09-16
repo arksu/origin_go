@@ -10,6 +10,7 @@ export const useTerrainStore = defineStore('terrain', () => {
   const selectedLayerIndex = ref<number>(-1)
   const layerVisibilityMap = ref<Record<string, boolean>>({})
   const layerOffsetsMap = ref<Record<string, { dx: number; dy: number }>>({})
+  const layerZEdits = ref<Record<string, number>>({})
   const variantChanceEdits = ref<Record<string, number>>({})
   const layerPEdits = ref<Record<string, number>>({})
   const renderVersion = ref(0)
@@ -65,7 +66,8 @@ export const useTerrainStore = defineStore('terrain', () => {
 
   function getVariantChance(variantIdx: number): number {
     const key = variantKey(variantIdx)
-    if (key in variantChanceEdits.value) return variantChanceEdits.value[key]
+    const edit = variantChanceEdits.value[key]
+    if (edit !== undefined) return edit
     const cfg = selectedConfig.value
     return cfg?.[variantIdx]?.chance ?? 0
   }
@@ -84,7 +86,8 @@ export const useTerrainStore = defineStore('terrain', () => {
 
   function getLayerP(variantIdx: number, layerIdx: number): number {
     const key = layerKey(variantIdx, layerIdx)
-    if (key in layerPEdits.value) return layerPEdits.value[key]
+    const edit = layerPEdits.value[key]
+    if (edit !== undefined) return edit
     const cfg = selectedConfig.value
     return cfg?.[variantIdx]?.layers[layerIdx]?.p ?? 0
   }
@@ -94,6 +97,25 @@ export const useTerrainStore = defineStore('terrain', () => {
     const current = layerOffsetsMap.value[key] ?? { dx: 0, dy: 0 }
     layerOffsetsMap.value[key] = { dx: current.dx + ddx, dy: current.dy + ddy }
     renderVersion.value++
+  }
+
+  function setLayerDepth(variantIdx: number, layerIdx: number, z: number): void {
+    const cfg = selectedConfig.value
+    const layer = cfg?.[variantIdx]?.layers[layerIdx]
+    if (!layer) return
+
+    const key = layerKey(variantIdx, layerIdx)
+    if (layer.z === z) {
+      delete layerZEdits.value[key]
+      return
+    }
+    layerZEdits.value[key] = z
+  }
+
+  function getLayerZ(variantIdx: number, layerIdx: number): number | undefined {
+    const key = layerKey(variantIdx, layerIdx)
+    if (key in layerZEdits.value) return layerZEdits.value[key]
+    return selectedConfig.value?.[variantIdx]?.layers[layerIdx]?.z
   }
 
   function loadFiles(entries: TerrainFileEntry[]): void {
@@ -134,6 +156,9 @@ export const useTerrainStore = defineStore('terrain', () => {
     for (const key of Object.keys(layerPEdits.value)) {
       if (key.startsWith(`${fileIdx}:`)) return true
     }
+    for (const key of Object.keys(layerZEdits.value)) {
+      if (key.startsWith(`${fileIdx}:`)) return true
+    }
     return false
   })
 
@@ -144,18 +169,19 @@ export const useTerrainStore = defineStore('terrain', () => {
     const fileIdx = selectedFileIndex.value
     const modified: TerrainConfig = file.config.map((variant, vi) => {
       const vKey = `${fileIdx}:${vi}`
-      const newChance = vKey in variantChanceEdits.value ? variantChanceEdits.value[vKey] : variant.chance
+      const newChance = variantChanceEdits.value[vKey] ?? variant.chance
       return {
         ...variant,
         chance: newChance,
         layers: variant.layers.map((layer, li) => {
           const lKey = `${fileIdx}:${vi}:${li}`
           const o = layerOffsetsMap.value[lKey]
-          const newP = lKey in layerPEdits.value ? layerPEdits.value[lKey] : layer.p
+          const newP = layerPEdits.value[lKey] ?? layer.p
+          const newZ = layerZEdits.value[lKey] ?? layer.z
           const newOffset = o && (o.dx !== 0 || o.dy !== 0)
             ? [(layer.offset[0] ?? 0) + o.dx, (layer.offset[1] ?? 0) + o.dy]
             : layer.offset
-          return { ...layer, p: newP, offset: newOffset }
+          return { ...layer, p: newP, offset: newOffset, z: newZ }
         }),
       }
     })
@@ -164,15 +190,22 @@ export const useTerrainStore = defineStore('terrain', () => {
 
     file.config.forEach((variant, vi) => {
       const vKey = `${fileIdx}:${vi}`
-      if (vKey in variantChanceEdits.value) {
-        variant.chance = variantChanceEdits.value[vKey]
+      const newChance = variantChanceEdits.value[vKey]
+      if (newChance !== undefined) {
+        variant.chance = newChance
         delete variantChanceEdits.value[vKey]
       }
       variant.layers.forEach((layer, li) => {
         const lKey = `${fileIdx}:${vi}:${li}`
-        if (lKey in layerPEdits.value) {
-          layer.p = layerPEdits.value[lKey]
+        const newP = layerPEdits.value[lKey]
+        if (newP !== undefined) {
+          layer.p = newP
           delete layerPEdits.value[lKey]
+        }
+        const newZ = layerZEdits.value[lKey]
+        if (newZ !== undefined) {
+          layer.z = newZ
+          delete layerZEdits.value[lKey]
         }
         const o = layerOffsetsMap.value[lKey]
         if (o && (o.dx !== 0 || o.dy !== 0)) {
@@ -204,6 +237,8 @@ export const useTerrainStore = defineStore('terrain', () => {
     getVariantChance,
     setLayerP,
     getLayerP,
+    setLayerDepth,
+    getLayerZ,
     moveLayer,
     loadFiles,
     selectFile,

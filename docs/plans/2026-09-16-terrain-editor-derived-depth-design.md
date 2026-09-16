@@ -18,10 +18,12 @@ showed the entire grass sprite over an actor.
 
 Treat terrain-layer `z` as derived editor data. The editor will recalculate it
 whenever a root or layer offset changes and write the calculated value when the
-configuration is saved. It will use the same formula as the game:
+configuration is saved. Terrain decals never advance beyond their own tile's
+ground plane, so a tall grass bitmap cannot draw over an actor occupying that
+tile:
 
 ```
-layerZ = visualBottomY - TILE_HEIGHT_HALF
+layerZ = min(0, visualBottomY - TILE_HEIGHT_HALF)
 visualBottomY = -variant.offsetY + layer.offsetY + textureHeight
 ```
 
