@@ -136,10 +136,11 @@ func (s *LiftService) TryStartNoColliderLiftInteract(
 		return true
 	}
 
+	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](w, playerHandle)
 	_, hasPlayerCollider := ecs.GetComponent[components.Collider](w, playerHandle)
 	playerMov, hasMovement := ecs.GetComponent[components.Movement](w, playerHandle)
 	targetTransform, hasTargetTransform := ecs.GetComponent[components.Transform](w, targetHandle)
-	if !hasPlayerCollider || !hasMovement || !hasTargetTransform || playerMov.State == _const.StateStunned {
+	if !hasPlayerTransform || !hasPlayerCollider || !hasMovement || !hasTargetTransform || playerMov.State == _const.StateStunned {
 		s.sendWarning(playerID, "LIFT_INVALID_TARGET")
 		return true
 	}
@@ -147,6 +148,12 @@ func (s *LiftService) TryStartNoColliderLiftInteract(
 	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 	s.clearPendingInteractionIntents(w, playerID, playerHandle)
 	s.breakActiveLink(w, playerID)
+	if isWithinLiftPickupStopDistance(playerTransform, targetTransform) {
+		if !s.startCarryingObject(w, playerID, playerHandle, targetID, targetHandle) {
+			s.sendWarning(playerID, "LIFT_INVALID_TARGET")
+		}
+		return true
+	}
 
 	ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
 		col.Phantom = &components.PhantomCollider{
@@ -171,6 +178,12 @@ func (s *LiftService) TryStartNoColliderLiftInteract(
 		ExpireAtUnixMs: expireAt,
 	})
 	return true
+}
+
+func isWithinLiftPickupStopDistance(player, target components.Transform) bool {
+	dx := target.X - player.X
+	dy := target.Y - player.Y
+	return dx*dx+dy*dy <= _const.StopDistance*_const.StopDistance
 }
 
 func (s *LiftService) HandleLiftPutDown(

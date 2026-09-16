@@ -118,3 +118,39 @@ func TestLiftService_ReconcileMovementModeForCarry_NoMoveStopsMovement(t *testin
 		t.Fatalf("expected one forced movement update, got %d", moved.Count)
 	}
 }
+
+func TestIsWithinLiftPickupStopDistance(t *testing.T) {
+	testCases := []struct {
+		name   string
+		player components.Transform
+		target components.Transform
+		want   bool
+	}{
+		{
+			name:   "at stop-distance boundary",
+			player: components.Transform{X: 10, Y: 20},
+			target: components.Transform{X: 10 + constt.StopDistance, Y: 20},
+			want:   true,
+		},
+		{
+			name:   "beyond stop distance",
+			player: components.Transform{X: 10, Y: 20},
+			target: components.Transform{X: 10 + constt.StopDistance + 0.001, Y: 20},
+			want:   false,
+		},
+		{
+			name:   "diagonal beyond stop distance",
+			player: components.Transform{X: 10, Y: 20},
+			target: components.Transform{X: 10 + constt.StopDistance, Y: 20 + constt.StopDistance},
+			want:   false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := isWithinLiftPickupStopDistance(testCase.player, testCase.target); got != testCase.want {
+				t.Fatalf("isWithinLiftPickupStopDistance() = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
