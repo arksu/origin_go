@@ -27,6 +27,7 @@ function rerender(): void {
     variant,
     (idx) => store.isLayerVisible(store.selectedVariantIndex, idx),
     (idx) => store.getLayerOffset(store.selectedVariantIndex, idx),
+    (idx) => store.getLayerZ(store.selectedVariantIndex, idx),
     store.selectedLayerIndex,
   )
 }
@@ -78,10 +79,6 @@ onMounted(async () => {
 
   renderer.setOnDragMove((layerIndex, dx, dy) => {
     store.moveLayer(store.selectedVariantIndex, layerIndex, dx, dy)
-  })
-
-  renderer.setOnLayerDepthResolved((layerIndex, z) => {
-    store.setLayerDepth(store.selectedVariantIndex, layerIndex, z)
   })
 
   rerender()

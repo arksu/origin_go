@@ -26,7 +26,7 @@
                 + editor [{{ editorOffset(idx).dx }}, {{ editorOffset(idx).dy }}]
               </span>
             </div>
-            <div class="layer-meta">p: {{ store.getLayerP(store.selectedVariantIndex, idx) }}, derived z: {{ store.getLayerZ(store.selectedVariantIndex, idx) ?? 'loading…' }}</div>
+            <div class="layer-meta">p: {{ store.getLayerP(store.selectedVariantIndex, idx) }}, z: {{ store.getLayerZ(store.selectedVariantIndex, idx) }}</div>
           </div>
         </div>
       </li>
@@ -41,6 +41,15 @@
           :value="store.getLayerP(store.selectedVariantIndex, store.selectedLayerIndex)"
           min="0"
           @input="onLayerPInput"
+        />
+      </label>
+      <label class="edit-label">
+        Layer Z
+        <input
+          type="number"
+          class="edit-input"
+          :value="store.getLayerZ(store.selectedVariantIndex, store.selectedLayerIndex)"
+          @input="onLayerZInput"
         />
       </label>
     </div>
@@ -101,6 +110,13 @@ function onLayerPInput(e: Event): void {
   const val = parseInt((e.target as HTMLInputElement).value, 10)
   if (!isNaN(val) && val >= 0) {
     store.setLayerP(store.selectedVariantIndex, store.selectedLayerIndex, val)
+  }
+}
+
+function onLayerZInput(e: Event): void {
+  const value = Number((e.target as HTMLInputElement).value)
+  if (Number.isFinite(value)) {
+    store.setLayerZ(store.selectedVariantIndex, store.selectedLayerIndex, value)
   }
 }
 </script>
