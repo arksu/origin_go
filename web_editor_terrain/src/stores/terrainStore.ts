@@ -99,7 +99,8 @@ export const useTerrainStore = defineStore('terrain', () => {
     renderVersion.value++
   }
 
-  function setLayerDepth(variantIdx: number, layerIdx: number, z: number): void {
+  function setLayerZ(variantIdx: number, layerIdx: number, z: number): void {
+    if (!Number.isFinite(z)) return
     const cfg = selectedConfig.value
     const layer = cfg?.[variantIdx]?.layers[layerIdx]
     if (!layer) return
@@ -107,15 +108,15 @@ export const useTerrainStore = defineStore('terrain', () => {
     const key = layerKey(variantIdx, layerIdx)
     if (layer.z === z) {
       delete layerZEdits.value[key]
-      return
+    } else {
+      layerZEdits.value[key] = z
     }
-    layerZEdits.value[key] = z
+    renderVersion.value++
   }
 
-  function getLayerZ(variantIdx: number, layerIdx: number): number | undefined {
+  function getLayerZ(variantIdx: number, layerIdx: number): number {
     const key = layerKey(variantIdx, layerIdx)
-    if (key in layerZEdits.value) return layerZEdits.value[key]
-    return selectedConfig.value?.[variantIdx]?.layers[layerIdx]?.z
+    return layerZEdits.value[key] ?? selectedConfig.value?.[variantIdx]?.layers[layerIdx]?.z ?? 0
   }
 
   function loadFiles(entries: TerrainFileEntry[]): void {
@@ -237,7 +238,7 @@ export const useTerrainStore = defineStore('terrain', () => {
     getVariantChance,
     setLayerP,
     getLayerP,
-    setLayerDepth,
+    setLayerZ,
     getLayerZ,
     moveLayer,
     loadFiles,

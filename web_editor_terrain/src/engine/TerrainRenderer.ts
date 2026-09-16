@@ -1,6 +1,5 @@
 import { Application, Container, Sprite, Graphics, Assets, type Spritesheet } from 'pixi.js'
 import type { TerrainVariant } from '@/types/terrain'
-import { deriveTerrainLayerZ, TERRAIN_DEFAULT_DEPTH_Y } from '@/terrain/depth'
 
 export interface LayerSprite {
   sprite: Sprite
@@ -24,7 +23,6 @@ export class TerrainRenderer {
   private dragStartX = 0
   private dragStartY = 0
   private onDragMoveCallback: ((layerIndex: number, dx: number, dy: number) => void) | null = null
-  private onLayerDepthResolvedCallback: ((layerIndex: number, z: number) => void) | null = null
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new Application()
@@ -74,14 +72,11 @@ export class TerrainRenderer {
     this.onDragMoveCallback = cb
   }
 
-  setOnLayerDepthResolved(cb: (layerIndex: number, z: number) => void): void {
-    this.onLayerDepthResolvedCallback = cb
-  }
-
   renderVariant(
     variant: TerrainVariant,
     visibility: (layerIdx: number) => boolean,
     offsets: (layerIdx: number) => { dx: number; dy: number },
+    zIndexes: (layerIdx: number) => number,
     selectedLayer: number,
   ): void {
     this.clear()
@@ -110,7 +105,7 @@ export class TerrainRenderer {
       const sprite = new Sprite(texture)
       sprite.x = anchorX + dx
       sprite.y = anchorY + dy
-      const z = deriveTerrainLayerZ(variant.offset[1], layer.offset[1], offset.dy, texture.height)
+      const z = zIndexes(i)
       sprite.zIndex = z
       sprite.visible = visible
       sprite.eventMode = 'static'
@@ -125,7 +120,6 @@ export class TerrainRenderer {
       this.container.addChild(highlight)
 
       this.layerSprites.push({ sprite, highlight, layerIndex: i })
-      this.onLayerDepthResolvedCallback?.(i, z)
     }
   }
 
@@ -203,7 +197,7 @@ export class TerrainRenderer {
     const centerX = this.app.canvas.width / 2
     const centerY = this.app.canvas.height / 2
     const halfWidth = Math.min(120, centerX)
-    const screenDepthY = centerY + TERRAIN_DEFAULT_DEPTH_Y * this.scale
+    const screenDepthY = centerY
 
     this.depthGuide.clear()
     this.depthGuide.moveTo(centerX - halfWidth, screenDepthY).lineTo(centerX + halfWidth, screenDepthY)
