@@ -50,7 +50,14 @@ export class TerrainRenderer {
   }
 
   async loadSpritesheet(jsonPath: string): Promise<void> {
-    this.spritesheet = await Assets.load<Spritesheet>(jsonPath)
+    this.spritesheet = await Assets.load<Spritesheet>({
+      src: jsonPath,
+      data: {
+        textureOptions: {
+          scaleMode: 'nearest',
+        },
+      },
+    })
   }
 
   setOnLayerClick(cb: (layerIndex: number) => void): void {
