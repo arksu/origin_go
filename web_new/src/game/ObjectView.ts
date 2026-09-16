@@ -192,6 +192,7 @@ export class ObjectView {
     if (!this.resDef) return
     if (this.resDef.actor3d) {
       if (!this.actorRenderer) throw new Error('3D character requires the actor renderer')
+      this.buildSpriteLayers()
       this.hasFrameAnimation = true
       const handle = this.actorRenderer.create()
       this.actorHandle = handle
