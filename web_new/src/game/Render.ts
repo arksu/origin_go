@@ -11,7 +11,6 @@ import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostCon
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
-import { config } from '@/config'
 import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
 import { proto } from '@/network/proto/packets.js'
 import { cullingController } from './culling'
@@ -101,10 +100,8 @@ export class Render {
     this.app.stage.addChild(this.uiContainer)
     this.uiContainer.addChild(this.debugOverlay.getContainer())
 
-    // Set ObjectManager reference for DebugOverlay to control bounds
     setObjectManager(this.objectManager)
-    // Set debug overlay visibility (this will also set bounds visibility)
-    this.debugOverlay.setVisible(config.DEBUG)
+    this.debugOverlay.setVisible(this.debugOverlay.isVisible())
 
     this.setupInputController()
 
