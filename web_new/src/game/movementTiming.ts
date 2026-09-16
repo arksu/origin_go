@@ -1,0 +1,2 @@
+export const LOCOMOTION_TRANSITION_MS = 500
+export const LOCOMOTION_STOP_MS = 300

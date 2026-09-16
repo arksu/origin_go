@@ -25,6 +25,7 @@ export class ActorInstance {
   private facingDirection = 3
   distanceTiles = 0
   walking = false
+  stopProgress: number | undefined
   carrying = false
   hovered = false
   error: Error | null = null
@@ -50,6 +51,13 @@ export class ActorInstance {
   private lastFacingUpdateMs: number | null = null
   private destroyed = false
   private lowDetail = false
+  private walkWeight = 0
+  private walkTarget = 0
+  private walkBlendFrom = 0
+  private walkBlendStarted = 0
+  private walkPhase = 0
+  private walkPhaseOffset = 0
+  private stopStartWeight: number | undefined
 
   constructor(private readonly cache: Pick<ActorAssetCache, 'acquire'>, private readonly catalog: Readonly<Record<string, EquipmentDefinition>> = EQUIPMENT) {
     this.ready = this.load().catch((error: unknown) => {
@@ -283,7 +291,31 @@ export class ActorInstance {
     const phase = settings.mode === 'baked8' ? Math.floor(continuousPhase * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : continuousPhase
     const facingChanged = this.updateFacing(now, settings)
     const name = `${this.carrying ? 'carry_' : ''}${this.walking ? 'walk' : 'idle'}`
-    const key = `${settings.mode}/${name}/${phase}/${this.facingAngle}/${this.hovered}`
+    const blendDuration = this.walkTarget === 0 ? ACTOR_RENDER.locomotionStopMs : ACTOR_RENDER.locomotionBlendMs
+    const progress = Math.max(0, Math.min(1, (now - this.walkBlendStarted) / blendDuration))
+    if (this.stopStartWeight === undefined) {
+      this.walkWeight = this.walkBlendFrom + (this.walkTarget - this.walkBlendFrom) * progress
+      if (progress === 1) this.walkBlendFrom = this.walkTarget
+    }
+    const target = this.walking ? 1 : 0
+    if (this.stopProgress !== undefined) {
+      this.stopStartWeight ??= this.walkWeight
+      this.walkWeight = this.stopStartWeight * (1 - this.stopProgress)
+      this.walkBlendFrom = this.walkWeight
+      this.walkTarget = 0
+      this.walkBlendStarted = now
+    } else if (target !== this.walkTarget) {
+      // A reversal starts from the current mixture, not either endpoint.
+      this.walkBlendFrom = this.walkWeight
+      this.walkTarget = target
+      this.walkBlendStarted = now
+      // ObjectView resets its distance on stop; a quick restart must not reset the visible gait.
+      if (this.walking) this.walkPhaseOffset = this.walkWeight > 0 ? this.walkPhase - phase : 0
+    }
+    if (this.stopProgress === undefined) this.stopStartWeight = undefined
+    // Keep the outgoing gait sample when stopping instead of snapping to phase zero.
+    if (this.walking) this.walkPhase = ((phase + this.walkPhaseOffset) % 1 + 1) % 1
+    const key = `${settings.mode}/${name}/${phase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}`
     if (!facingChanged && key === this.lastPose && (this.carrying || !this.armLayers?.transitioning)) return false
     const state = `${settings.mode}/${name}/${this.hovered}`
     if (state !== this.lastPoseState) this.immediateRender = true
@@ -300,11 +332,18 @@ export class ActorInstance {
         this.armLayers.samplePhase(side, this.walking && profile.walkPose ? phase : 0)
       }
     }
-    const active = this.actions.get(name)!
     for (const action of this.actions.values()) action.stop()
-    active.play()
-    active.paused = true
-    active.time = phase * active.getClip().duration
+    const prefix = this.carrying ? 'carry_' : ''
+    for (const [clip, weight, sample] of [
+      [`${prefix}idle`, 1 - this.walkWeight, 0],
+      [`${prefix}walk`, this.walkWeight, this.walkPhase],
+    ] as const) {
+      const action = this.actions.get(clip)!
+      action.play()
+      action.paused = true
+      action.setEffectiveWeight(weight)
+      action.time = sample * action.getClip().duration
+    }
     this.mixer.update(0)
     if (!this.carrying) this.armLayers?.apply(now)
     for (const [slot, piece] of this.equipment) {

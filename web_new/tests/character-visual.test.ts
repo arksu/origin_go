@@ -169,6 +169,62 @@ test('distance-driven walk samples the 3D clip continuously', async () => {
   actor.destroy()
 })
 
+test('skeletal weights start in 500ms, stop in 300ms and reverse continuously', async () => {
+  const { actor } = await fixtureActor()
+  try {
+    const pelvis = actor.root.getObjectByName('pelvis')!
+    const now = Math.ceil(performance.now())
+    actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .5
+    actor.walking = true
+    actor.updatePose(now)
+    assert.equal(pelvis.position.x, 0, 'start must retain idle at zero weight')
+    actor.updatePose(now + 250)
+    assert.equal(pelvis.position.x, .75)
+    actor.updatePose(now + 500)
+    assert.equal(pelvis.position.x, 1.5)
+    actor.walking = false
+    actor.updatePose(now + 600)
+    assert.equal(pelvis.position.x, 1.5, 'stop must retain the outgoing walk phase')
+    actor.updatePose(now + 750)
+    assert.equal(pelvis.position.x, .75)
+    actor.distanceTiles = 0 // ObjectView resets accumulated distance on stop.
+    actor.walking = true
+    actor.updatePose(now + 750)
+    assert.equal(pelvis.position.x, .75, 'reversal must preserve the current weights')
+    actor.updatePose(now + 1000)
+    assert.equal(pelvis.position.x, 1.125)
+    actor.updatePose(now + 1250)
+    assert.equal(pelvis.position.x, 1.5)
+    actor.walking = false
+    actor.updatePose(now + 1400)
+    actor.updatePose(now + 1700)
+    assert.equal(pelvis.position.x, 0)
+    assert.equal(actor.updatePose(now + 1701), false, 'settled idle must remain cacheable')
+  } finally { actor.destroy() }
+})
+
+test('position stop progress drives skeletal weights without another idle tail', async () => {
+  const { actor } = await fixtureActor()
+  try {
+    const now = Math.ceil(performance.now())
+    const pelvis = actor.root.getObjectByName('pelvis')!
+    actor.walking = true
+    actor.updatePose(now)
+    actor.updatePose(now + 500)
+    actor.stopProgress = 0
+    actor.updatePose(now + 600)
+    assert.equal(pelvis.position.x, 1)
+    actor.stopProgress = .5
+    actor.updatePose(now + 750)
+    assert.equal(pelvis.position.x, .5)
+    actor.stopProgress = 1
+    actor.walking = false
+    actor.updatePose(now + 900)
+    assert.equal(pelvis.position.x, 0)
+    assert.equal(actor.updatePose(now + 901), false)
+  } finally { actor.destroy() }
+})
+
 test('hybrid mode turns continuously while baked8 rounds Three.js output to eight angles', async () => {
   const { actor } = await fixtureActor()
   const angularDistance = (first: number, second: number) => Math.abs(Math.atan2(Math.sin(first - second), Math.cos(first - second)))
@@ -318,6 +374,7 @@ test('arm transitions advance while idle; carry keeps base pose and locomotion p
     assert.equal(actor.updatePose(now + 201), false)
     const held = hand.position.x
     actor.walking = true
+    actor.updatePose(now + 250)
     for (const distance of [.15, .4, .9]) {
       actor.distanceTiles = distance
       actor.updatePose(now + 300)
@@ -334,7 +391,8 @@ test('arm transitions advance while idle; carry keeps base pose and locomotion p
     assert.equal(hand.position.x, held)
     actor.setArmPose('right', null)
     actor.walking = false
-    actor.updatePose(performance.now() + 300)
+    actor.updatePose(now + 600)
+    actor.updatePose(now + 1100)
     assert.equal(hand.position.x, 0)
   } finally { actor.destroy() }
 })
@@ -358,12 +416,13 @@ test('equipment arm sampling follows distance without restarting the transition 
       assert.ok(left.position.x < heldIdle, 'free hand must use base locomotion')
     }
     assert.equal(new Set(samples).size, 8)
-    assert.equal(actor.updatePose(now + 1000), false, 'wall clock alone must not advance a distance-driven arm')
+    actor.updatePose(now + 1000)
+    assert.equal(actor.updatePose(now + 1001), false, 'after blending, wall clock alone must not advance a distance-driven arm')
     actor.walking = false
     actor.updatePose(now + 1100)
     assert.equal(right.position.x, heldIdle)
     await actor.setEquipment([])
-    actor.updatePose(performance.now() + 300)
+    actor.updatePose(now + 1800)
     assert.equal(right.position.x, 0)
   } finally { actor.destroy() }
 })

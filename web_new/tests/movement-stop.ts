@@ -49,18 +49,24 @@ export async function verifyMovementStopping(manager: ObjectManager): Promise<vo
           let totalDistance = 0
           let previousDistance = Infinity
           let reachedTarget = false
+          let stopStarted: number | undefined
           const visitedFrames = new Set<number>()
           for (let tick = 0; tick <= frameRate * 2; tick++) {
             clientNow = startTime + tick * 1000 / frameRate
             const position = moveController.update().get(entityId)!
             totalDistance += position.distanceMoved
             manager.updateObjectPosition(entityId, position.x, position.y,
-              position.isMoving, position.direction, position.distanceMoved)
+              position.isMoving, position.direction, position.distanceMoved, position.stopProgress)
             manager.update()
+            if (position.stopProgress !== undefined) stopStarted ??= clientNow
+            handle.actor.updatePose(clientNow)
             const remaining = Math.hypot(targetX - position.x, targetY - position.y)
             if (remaining === 0) {
               check(!position.isMoving, 'Exact arrival must end visual movement')
               check(isIdle(), 'Arrival must select the standing pose')
+              check(position.stopProgress === 1, 'Arrival must finish the shared skeletal transition')
+              check(stopStarted !== undefined && clientNow - stopStarted >= 300 && clientNow - stopStarted < 300 + 1000 / frameRate + 1,
+                'Position and skeleton must finish in the same 300ms window')
               const finalCorrection = coordGame2Screen(
                 Math.cos(heading) * position.distanceMoved, Math.sin(heading) * position.distanceMoved)
               check(Math.hypot(finalCorrection.x, finalCorrection.y) < .25, 'Final stop correction must stay below a native pixel')
@@ -150,6 +156,9 @@ export async function verifyMovementStopping(manager: ObjectManager): Promise<vo
     check(beforeStopTime.isMoving && beforeStopTime.x < tinyTarget / 2,
       'A future stop sample must not trigger early subpixel completion')
     clientNow += 100
+    const tinySettling = moveController.update().get(entityId)!
+    check(tinySettling.stopProgress === 0, 'Tiny travel must use the same shared stop window')
+    clientNow += 300
     const tinyStop = moveController.update().get(entityId)!
     check(!tinyStop.isMoving && tinyStop.x === tinyTarget, 'A tiny movement must finish at the authoritative endpoint')
     clientNow += 1
