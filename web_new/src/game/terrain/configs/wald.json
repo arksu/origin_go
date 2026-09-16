@@ -31,7 +31,7 @@
           -6
         ],
         "p": 5,
-        "z": 8
+        "z": 0
       },
       {
         "img": "terrain/wald/image_4.png",
@@ -58,7 +58,7 @@
           -14
         ],
         "p": 5,
-        "z": 1
+        "z": -4
       },
       {
         "img": "terrain/wald/image_7.png",
@@ -67,7 +67,7 @@
           5
         ],
         "p": 5,
-        "z": 14
+        "z": 0
       },
       {
         "img": "terrain/wald/image_8.png",
@@ -76,7 +76,7 @@
           -4
         ],
         "p": 5,
-        "z": 23
+        "z": 0
       }
     ]
   }

@@ -16,7 +16,7 @@
       <h3>Variants</h3>
       <ul>
         <li
-          v-for="(variant, idx) in selectedConfig"
+          v-for="(_, idx) in selectedConfig"
           :key="idx"
           :class="{ active: idx === store.selectedVariantIndex }"
           @click="store.selectVariant(idx)"

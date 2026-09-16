@@ -80,6 +80,10 @@ onMounted(async () => {
     store.moveLayer(store.selectedVariantIndex, layerIndex, dx, dy)
   })
 
+  renderer.setOnLayerDepthResolved((layerIndex, z) => {
+    store.setLayerDepth(store.selectedVariantIndex, layerIndex, z)
+  })
+
   rerender()
 
   resizeObserver = new ResizeObserver(() => {

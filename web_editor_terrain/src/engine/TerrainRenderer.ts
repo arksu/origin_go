@@ -1,5 +1,6 @@
 import { Application, Container, Sprite, Graphics, Assets, type Spritesheet } from 'pixi.js'
 import type { TerrainVariant } from '@/types/terrain'
+import { deriveTerrainLayerZ, TERRAIN_DEFAULT_DEPTH_Y } from '@/terrain/depth'
 
 export interface LayerSprite {
   sprite: Sprite
@@ -11,6 +12,7 @@ export class TerrainRenderer {
   private app: Application | null = null
   private container: Container = new Container()
   private crosshair: Graphics = new Graphics()
+  private depthGuide: Graphics = new Graphics()
   private layerSprites: LayerSprite[] = []
   private spritesheet: Spritesheet | null = null
   private selectedLayerIndex = -1
@@ -22,6 +24,7 @@ export class TerrainRenderer {
   private dragStartX = 0
   private dragStartY = 0
   private onDragMoveCallback: ((layerIndex: number, dx: number, dy: number) => void) | null = null
+  private onLayerDepthResolvedCallback: ((layerIndex: number, z: number) => void) | null = null
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new Application()
@@ -38,10 +41,13 @@ export class TerrainRenderer {
     this.app.stage.addChild(this.container)
 
     this.crosshair.zIndex = 999999
+    this.depthGuide.zIndex = 999998
+    this.app.stage.addChild(this.depthGuide)
     this.app.stage.addChild(this.crosshair)
 
     this.applyScale()
     this.drawCrosshair()
+    this.drawDepthGuide()
 
     canvas.addEventListener('pointerdown', this.onPointerDown.bind(this))
     canvas.addEventListener('pointermove', this.onPointerMove.bind(this))
@@ -66,6 +72,10 @@ export class TerrainRenderer {
 
   setOnDragMove(cb: (layerIndex: number, dx: number, dy: number) => void): void {
     this.onDragMoveCallback = cb
+  }
+
+  setOnLayerDepthResolved(cb: (layerIndex: number, z: number) => void): void {
+    this.onLayerDepthResolvedCallback = cb
   }
 
   renderVariant(
@@ -100,7 +110,8 @@ export class TerrainRenderer {
       const sprite = new Sprite(texture)
       sprite.x = anchorX + dx
       sprite.y = anchorY + dy
-      sprite.zIndex = i
+      const z = deriveTerrainLayerZ(variant.offset[1], layer.offset[1], offset.dy, texture.height)
+      sprite.zIndex = z
       sprite.visible = visible
       sprite.eventMode = 'static'
       sprite.cursor = 'pointer'
@@ -108,12 +119,13 @@ export class TerrainRenderer {
       const highlight = new Graphics()
       this.updateHighlight(highlight, sprite, i === selectedLayer)
       highlight.visible = visible
-      highlight.zIndex = i
+      highlight.zIndex = z + 0.5
 
       this.container.addChild(sprite)
       this.container.addChild(highlight)
 
       this.layerSprites.push({ sprite, highlight, layerIndex: i })
+      this.onLayerDepthResolvedCallback?.(i, z)
     }
   }
 
@@ -159,6 +171,7 @@ export class TerrainRenderer {
       this.app.renderer.resize(width, height)
       this.applyScale()
       this.drawCrosshair()
+      this.drawDepthGuide()
     }
   }
 
@@ -185,11 +198,24 @@ export class TerrainRenderer {
     this.crosshair.stroke({ width: 1, color: 0x555555 })
   }
 
+  private drawDepthGuide(): void {
+    if (!this.app) return
+    const centerX = this.app.canvas.width / 2
+    const centerY = this.app.canvas.height / 2
+    const halfWidth = Math.min(120, centerX)
+    const screenDepthY = centerY + TERRAIN_DEFAULT_DEPTH_Y * this.scale
+
+    this.depthGuide.clear()
+    this.depthGuide.moveTo(centerX - halfWidth, screenDepthY).lineTo(centerX + halfWidth, screenDepthY)
+    this.depthGuide.stroke({ width: 1, color: 0x4ade80, alpha: 0.65 })
+  }
+
   private onWheel(e: WheelEvent): void {
     e.preventDefault()
     const delta = e.deltaY > 0 ? -0.25 : 0.25
     this.scale = Math.max(1, Math.min(16, this.scale + delta))
     this.applyScale()
+    this.drawDepthGuide()
   }
 
   private updateHighlight(g: Graphics, sprite: Sprite, selected: boolean): void {

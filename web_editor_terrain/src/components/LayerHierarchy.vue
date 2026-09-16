@@ -26,7 +26,7 @@
                 + editor [{{ editorOffset(idx).dx }}, {{ editorOffset(idx).dy }}]
               </span>
             </div>
-            <div class="layer-meta">p: {{ store.getLayerP(store.selectedVariantIndex, idx) }}{{ layer.z != null ? `, z: ${layer.z}` : '' }}</div>
+            <div class="layer-meta">p: {{ store.getLayerP(store.selectedVariantIndex, idx) }}, derived z: {{ store.getLayerZ(store.selectedVariantIndex, idx) ?? 'loading…' }}</div>
           </div>
         </div>
       </li>
