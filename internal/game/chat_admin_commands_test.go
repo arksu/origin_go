@@ -89,6 +89,44 @@ func TestHandleOnline(t *testing.T) {
 	}
 }
 
+func TestHandlePosition(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+
+	playerID := types.EntityID(42)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 345, Y: 679})
+	})
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/pos"); !handled {
+		t.Fatal("expected /pos to be recognized")
+	}
+	if got := mockChat.messages[playerID]; got != "pos: 345, 679" {
+		t.Fatalf("unexpected position message: %q", got)
+	}
+}
+
+func TestHandlePositionWithoutTransform(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+
+	playerID := types.EntityID(42)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {})
+
+	if handled := handler.HandleCommand(world, playerID, playerHandle, "/pos"); !handled {
+		t.Fatal("expected /pos to be recognized")
+	}
+	if got := mockChat.messages[playerID]; got != "position unavailable" {
+		t.Fatalf("unexpected unavailable-position message: %q", got)
+	}
+}
+
 func testTime() time.Time {
 	return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 }
