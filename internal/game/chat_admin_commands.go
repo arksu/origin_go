@@ -140,6 +140,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	case "/online":
 		h.handleOnline(w, playerID)
 		return true
+	case "/pos":
+		h.handlePosition(w, playerID, playerHandle)
+		return true
 	case "/error":
 		h.handleError(playerID, parts[1:])
 		return true
@@ -506,6 +509,27 @@ func (h *ChatAdminCommandHandler) handleOnline(
 	h.logger.Info("Admin /online executed",
 		zap.Uint64("player_id", uint64(playerID)),
 		zap.Int("online_count", onlineCount))
+}
+
+// handlePosition processes: /pos - displays the caller's current coordinates.
+func (h *ChatAdminCommandHandler) handlePosition(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+) {
+	transform, ok := ecs.GetComponent[components.Transform](w, playerHandle)
+	if !ok {
+		h.sendSystemMessage(playerID, "position unavailable")
+		return
+	}
+
+	x := int(math.Round(transform.X))
+	y := int(math.Round(transform.Y))
+	h.sendSystemMessage(playerID, fmt.Sprintf("pos: %d, %d", x, y))
+	h.logger.Info("Admin /pos executed",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.Int("x", x),
+		zap.Int("y", y))
 }
 
 // handleError processes: /error <text>
