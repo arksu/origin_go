@@ -24,6 +24,7 @@ export interface ActorManifest {
   sockets: Partial<Record<SocketId, string>>
   clips: Record<string, ClipManifest>
   bindings: Partial<Record<EquipmentSlot, GripBinding>>
+  equipmentSlots: EquipmentSlot[]
 }
 export interface ActorCatalog {
   readonly manifests: Readonly<Record<string, ActorManifest>>
@@ -79,6 +80,12 @@ export function parseActorManifest(value: unknown): ActorManifest {
     const product = inverse.clone().multiply(new Matrix4().fromArray(binding.gripMatrix))
     if (Math.abs(inverse.determinant()) < 1e-8 || product.elements.some((n, i) => Math.abs(n - (i % 5 === 0 ? 1 : 0)) > .001)) throw new Error('Invalid inverse grip matrix')
   }
+  const equipmentSlots = manifest.equipmentSlots === undefined ? [] : manifest.equipmentSlots
+  if (!Array.isArray(equipmentSlots) || equipmentSlots.some(slot => !Object.values(EQUIPMENT_SLOT_BY_ID).includes(slot as EquipmentSlot)) ||
+      new Set(equipmentSlots).size !== equipmentSlots.length) throw new Error('Invalid equipment slots')
+  if (manifest.kind !== 'equipment' || manifest.rigHash === null ? equipmentSlots.length !== 0 : equipmentSlots.length === 0) {
+    throw new Error('Invalid rigged equipment slots')
+  }
   return manifest as unknown as ActorManifest
 }
 function freeze<T>(value: T): T {
@@ -113,7 +120,9 @@ export async function loadActorCatalog(url = '/assets/game/asset-catalog.json', 
       bindings[slot as EquipmentSlot] = { socket: binding.socket, armMotion: binding.policy,
         transform: { position: position.toArray(), quaternion: rotation.normalize().toArray(), scale: scale.x } }
     }
-    equipment[id.slice('equipment/'.length)] = { kind: 'rigid', assetId: id, bindings }
+    equipment[id.slice('equipment/'.length)] = manifest.rigHash === null
+      ? { kind: 'rigid', assetId: id, bindings }
+      : { kind: 'skinned', assetId: id, slots: manifest.equipmentSlots }
   }
   return freeze({ manifests, equipment })
 }

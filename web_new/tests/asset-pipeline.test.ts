@@ -17,6 +17,7 @@ const artifact = { url: `/assets/game/test/${hash}.glb`, sha256: hash, bytes: 10
 function compatibleClipManifests(): ActorManifest {
   return { schema: 1, id: 'character/test', kind: 'character', rigHash: hash, model: { ...artifact },
     metadata: { ...artifact, url: artifact.url.replace('.glb', '.json') }, textures: [], bindings: {},
+    equipmentSlots: [],
     sockets: { grip_l: 'grip_l', grip_r: 'grip_r', forearm_l: 'forearm_l', forearm_r: 'forearm_r' },
     clips: Object.fromEntries(['idle', 'walk', 'carry_idle', 'carry_walk'].map(name => [name, {
       artifact, rigHash: hash, channelMask: ['pelvis'], duration: 1, loop: true,
@@ -94,6 +95,28 @@ test('published snapshot resolves immutable manifests and ordinary axe grip poli
   if (axe.kind !== 'rigid') throw new Error('Expected rigid axe')
   assert.equal(axe.bindings.right_hand!.armMotion!.kind, 'ordinary')
   assert.ok(Math.abs(axe.bindings.right_hand!.transform!.position![0] - .019444145) < 1e-6)
+  const shirt = catalog.equipment.nettle_shirt!
+  assert.equal(shirt.kind, 'skinned')
+  if (shirt.kind !== 'skinned') throw new Error('Expected skinned nettle shirt')
+  assert.deepEqual(shirt.slots, ['chest'])
+})
+
+test('catalog exposes rigged garments only in their declared character slots', async () => {
+  const garment = {
+    schema: 1, id: 'equipment/nettle_shirt', kind: 'equipment', rigHash: hash,
+    model: { ...artifact, url: artifact.url.replace('/test/', '/equipment/nettle_shirt/') },
+    metadata: { ...artifact, url: artifact.url.replace('/test/', '/equipment/nettle_shirt/').replace('.glb', '.json') },
+    textures: [], sockets: {}, clips: {}, bindings: {}, equipmentSlots: ['chest'],
+  }
+  const catalog = await loadActorCatalog('/assets/game/asset-catalog.json', async input => {
+    const url = String(input)
+    return Response.json(url.endsWith('asset-catalog.json')
+      ? { schema: 1, assets: { 'equipment/nettle_shirt': { ...garment.metadata } } }
+      : garment)
+  })
+  assert.deepEqual(catalog.equipment.nettle_shirt, {
+    kind: 'skinned', assetId: 'equipment/nettle_shirt', slots: ['chest'],
+  })
 })
 
 test('cache shares artifact leases across animation revisions, accounts decoded buffers once and releases final owners', async t => {
@@ -162,6 +185,23 @@ test('published meshopt model and standalone clips bind through the real GLTF pa
   assert.ok(pelvis.position.distanceTo(initial) > .001)
   assert.ok(model.scene.getObjectByName('handl'))
   mixer.stopAllAction(); mixer.uncacheRoot(model.scene)
+  ktx.dispose()
+})
+
+test('published nettle shirt selects the same linear skinning mode as the character body', async t => {
+  const previousSelf = globalThis.self
+  Object.assign(globalThis, { self: globalThis })
+  t.after(() => { Object.assign(globalThis, { self: previousSelf }) })
+  const catalog = await loadActorCatalog('/assets/game/asset-catalog.json', async input => new Response(await readFile(`${ASSET_TEST_ROOT}/public${input}`)))
+  const manifest = catalog.manifests['equipment/nettle_shirt']!
+  const ktx = new KTX2Loader()
+  t.mock.method(ktx, 'load', (_url: string, onLoad: (texture: CompressedTexture) => void) => {
+    onLoad(new CompressedTexture([{ data: new Uint8Array(16), width: 4, height: 4 }], 4, 4, RGBA_S3TC_DXT5_Format))
+  })
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(ktx)
+  const bytes = await readFile(`${ASSET_TEST_ROOT}/public${manifest.model.url}`)
+  const model = await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), manifest.model.url.slice(0, manifest.model.url.lastIndexOf('/') + 1))
+  assert.equal(model.scene.getObjectByName('nettle_shirt_tunic')!.userData.skinning, 'linear')
   ktx.dispose()
 })
 

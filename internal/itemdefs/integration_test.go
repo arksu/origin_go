@@ -30,3 +30,13 @@ func TestLoadAllItems(t *testing.T) {
 	assert.Equal(t, 1, len(seedBag.Container.Rules.AllowTags))
 	assert.Equal(t, "seed", seedBag.Container.Rules.AllowTags[0])
 }
+
+func TestLoadAllItems_RegistersNettleShirtForChestEquipment(t *testing.T) {
+	dataDir := filepath.Join("..", "..", "data", "items")
+	registry, err := LoadFromDirectory(dataDir, zap.NewNop())
+	require.NoError(t, err)
+
+	nettleShirt, ok := registry.GetByKey("nettle_shirt")
+	require.True(t, ok, "nettle_shirt should be loaded")
+	assert.Equal(t, []string{"chest"}, nettleShirt.Allowed.EquipmentSlots)
+}

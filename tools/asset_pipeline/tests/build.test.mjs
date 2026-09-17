@@ -76,6 +76,24 @@ test('concurrent real single-asset builds retain both entries', async () => {
   assert.deepEqual(Object.keys(JSON.parse(await project.catalogBytes()).assets).sort(), ['equipment/test_axe', 'equipment/test_other'])
 })
 
+test('CLI reports the source, model, textures, clips, stages, and publication progress', async () => {
+  const project = await createBuildProject()
+  const messages = []
+  const status = await runCli(['build', 'equipment/test_axe', '--blender', blenderPath, '--toktx', toolPaths.toktx], {
+    root: project.root,
+    stdout: () => {},
+    stderr: message => { messages.push(message) },
+  })
+  assert.equal(status, 0)
+  const output = messages.join('\n')
+  assert.match(output, /\[assets\] target equipment\/test_axe/)
+  assert.match(output, /\[assets\] source .*source\.blend/)
+  assert.match(output, /\[assets\] equipment\/test_axe export model .*model\.glb/)
+  assert.match(output, /\[assets\] equipment\/test_axe optimize texture .*\.png/)
+  assert.match(output, /\[assets\] equipment\/test_axe validation complete/)
+  assert.match(output, /\[assets\] publication .*asset-catalog\.json/)
+})
+
 async function blenderWrapper(project, body) {
   const path = join(project.root, 'blender-wrapper.mjs')
   await writeFile(path, `#!${process.execPath}\nimport { spawnSync } from 'node:child_process';\nimport { appendFileSync } from 'node:fs';\nconst args = process.argv.slice(2);\n${body}\nconst result = spawnSync(${JSON.stringify(blenderPath)}, args, { stdio: 'inherit' });\nprocess.exit(result.status ?? 1);\n`)

@@ -4,7 +4,7 @@ import { DQ_DECLARATIONS } from './DualQuaternionSkin'
 
 export function createActorMaterial(source: Material, skin?: DualQuaternionSkin, linearSkinning = false): ShaderMaterial {
   const original = source as MeshStandardMaterial
-  const region = !skin ? 6 : source.name.includes('brows') ? 5 : ({ skin: 1, hair: 2, linen: 3, eyes: 4, textured: 6 } as Record<string, number>)[source.userData.region as string] ?? 2
+  const region = !skin ? 6 : source.name.includes('brows') ? 5 : ({ skin: 1, hair: 2, linen: 3, eyes: 4, textured: 6, foliage: 7 } as Record<string, number>)[source.userData.region as string] ?? 2
   return new ShaderMaterial({
     name: `Pixel ${source.name}`,
     side: DoubleSide,

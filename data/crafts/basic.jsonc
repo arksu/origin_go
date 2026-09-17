@@ -27,6 +27,26 @@
       "staminaCost": 100,
       "ticksRequired": 10,
       "requiredDiscovery": ["branch", "stone"]
+    },
+    {
+      "defId": 2,
+      "key": "nettle_shirt",
+      "name": "Nettle Shirt",
+      "inputs": [
+        {
+          "itemKey": "branch",
+          "count": 1,
+          "qualityWeight": 1
+        }
+      ],
+      "outputs": [
+        {
+          "itemKey": "nettle_shirt",
+          "count": 1
+        }
+      ],
+      "staminaCost": 100,
+      "ticksRequired": 10
     }
   ]
 }

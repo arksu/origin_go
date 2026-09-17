@@ -138,7 +138,8 @@ async function dispatchCommand(arguments_: CliArguments, options: RunCliOptions)
   const operation = arguments_.command === 'build' ? buildAssets
     : arguments_.command === 'validate' ? validateAssets : verifyReproducible
   await operation({ root: options.root ?? defaultRoot, target: arguments_.target,
-    animations: arguments_.animations, ...(arguments_.clip === undefined ? {} : { clip: arguments_.clip }), toolPaths })
+    animations: arguments_.animations, ...(arguments_.clip === undefined ? {} : { clip: arguments_.clip }), toolPaths,
+    log: options.stderr ?? ((message: string) => process.stderr.write(`${message}\n`)) })
 }
 
 async function canonicalizeExecutable(path: string, flag: '--blender' | '--toktx'): Promise<string> {

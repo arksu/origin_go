@@ -21,7 +21,7 @@ export interface RawMetadata {
   clips: Record<string, ClipRecipe & { durationSeconds: number; sampleCount: number; loopClosureMaxError: number; channelMask: string[]; rig: RigMetadata }>
   modelFingerprint: string
   modelFingerprintInputs: { modelSha256: string; bindings: RawMetadata['bindings']; rigFingerprint: string | null
-    settings: Pick<AssetRecipe, 'kind' | 'rig' | 'budgets' | 'optimization'> }
+    settings: Pick<AssetRecipe, 'kind' | 'rig' | 'equipmentSlots' | 'budgets' | 'optimization'> }
 }
 export interface ExportRequest {
   recipe: AssetRecipe
