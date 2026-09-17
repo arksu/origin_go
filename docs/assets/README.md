@@ -14,20 +14,20 @@ the blends. Generated runtime files are not authoring inputs.
 Run commands from the repository root. The checked-in toolchain lock currently
 supports macOS arm64, Node 25.8.0, Blender 5.2.1 build `9e2066aef7ef`, and official
 KTX-Software 4.4.2. Install the locked Node and Blender releases, then install npm
-dependencies and decoder files:
+dependencies, decoder files and the pinned local KTX encoder:
 
 ```sh
 npm ci --prefix tools/asset_pipeline
 npm ci --prefix web_new
 npm --prefix tools/asset_pipeline run install-decoders
+tools/assets setup
 ```
 
-The exact official KTX package URL and checksum are in
-`tools/asset_pipeline/toolchain.lock.json`. Download that package, verify its
-SHA-256 with `shasum -a 256`, and install it. The local checkout also supports an
-extracted package at
+`tools/assets setup` downloads the exact official KTX package URL in
+`tools/asset_pipeline/toolchain.lock.json`, verifies its SHA-256, and extracts it
+without `sudo` into
 `tools/asset_pipeline/.tools/ktx-4.4.2/install/usr/local/bin/toktx`.
-Builds do not download or install anything. To use a system installation:
+Builds do not download or install anything. To use a separately installed encoder:
 
 ```sh
 tools/assets validate all --blender /Applications/Blender.app/Contents/MacOS/Blender --toktx /usr/local/bin/toktx

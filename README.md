@@ -137,6 +137,9 @@ The locked local toolchain is Node 25.8.0, Blender 5.2.1 LTS build
 `9e2066aef7ef`, and KTX-Software 4.4.2. For setup, browser review, asset budgets
 and failure recovery, see [the full Blender asset workflow](docs/assets/README.md).
 
+Run `tools/assets setup` once after checkout to download and verify the locked
+KTX encoder into the project-local tool cache. Builds themselves remain offline.
+
 ### Local build workflow (Makefile)
 
 Core targets:
