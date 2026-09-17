@@ -9,6 +9,7 @@
   "scripts": {
     "test": "node --test tests/baseline.test.ts tests/catalog.test.ts tests/cli.test.ts tests/toolchain.test.ts",
     "test:integration": "node --test tests/integration.test.ts",
+    "test:migration": "node --test tests/migration.test.mjs",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
