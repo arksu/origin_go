@@ -1,1 +1,15 @@
-{"assets":{"character/male_commoner":{"bytes":8019,"sha256":"f874b3869ef158d43f7a123e2689968efd2f95995ab7b2e6ad8cfea0fe2161fa","url":"/assets/game/characters/male_commoner/f874b3869ef158d43f7a123e2689968efd2f95995ab7b2e6ad8cfea0fe2161fa.json"},"equipment/stone_axe":{"bytes":3489,"sha256":"30f10eed1ba1cd7551f58905ec3828048975f650405ddc24de7dec3d0b3f24f6","url":"/assets/game/equipment/stone_axe/30f10eed1ba1cd7551f58905ec3828048975f650405ddc24de7dec3d0b3f24f6.json"}},"schema":1}
+{
+    "assets": {
+        "character/male_commoner": {
+            "bytes": 8019,
+            "sha256": "f874b3869ef158d43f7a123e2689968efd2f95995ab7b2e6ad8cfea0fe2161fa",
+            "url": "/assets/game/characters/male_commoner/f874b3869ef158d43f7a123e2689968efd2f95995ab7b2e6ad8cfea0fe2161fa.json"
+        },
+        "equipment/stone_axe": {
+            "bytes": 3489,
+            "sha256": "30f10eed1ba1cd7551f58905ec3828048975f650405ddc24de7dec3d0b3f24f6",
+            "url": "/assets/game/equipment/stone_axe/30f10eed1ba1cd7551f58905ec3828048975f650405ddc24de7dec3d0b3f24f6.json"
+        }
+    },
+    "schema": 1
+}
