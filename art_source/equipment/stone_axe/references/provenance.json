@@ -1,0 +1,149 @@
+{
+  "schema": 1,
+  "inputs": [
+    {
+      "source": "art_source/characters/male_commoner_v4/source/meshy_character.glb",
+      "reference": "art_source/character/male_commoner/references/meshy-original.glb",
+      "sha256": "103c2b5ddf8d2553be39979c58ee62290f313bf414ab6f238b961d434359b30a",
+      "bytes": 6577556,
+      "purpose": "Original Meshy geometry/material reference; not MakeHuman CC0"
+    },
+    {
+      "source": "/Users/park/Downloads/Meshy_AI_Stone_Axe_0915172926_texture.glb",
+      "reference": "art_source/equipment/stone_axe/references/meshy-original.glb",
+      "sha256": "a06a87ff67bd657b791103c7a7e4e433e56162f0d9398486068f5336c5d29b06",
+      "bytes": 6854428,
+      "purpose": "Original user-supplied Meshy axe"
+    },
+    {
+      "source": "build/asset-pipeline-baseline/artifacts/web_new/public/assets/game/characters/male_commoner/realtime/commoner_meshy.glb",
+      "reference": "art_source/character/male_commoner/references/approved-runtime.glb",
+      "sha256": "bf29e8464fc22ac66b876482ae51d7f12749f2fb1cd0aaaea0a9144d95354df8",
+      "bytes": 2928156,
+      "purpose": "Migration golden; not a normal-build input"
+    },
+    {
+      "source": "build/asset-pipeline-baseline/artifacts/web_new/public/assets/game/equipment/stone_axe/stone_axe.glb",
+      "reference": "art_source/equipment/stone_axe/references/approved-runtime.glb",
+      "sha256": "37a11ccfd798e8601d2286e9aee786a8112088ef485f1b48ec29c4b1360eaa1f",
+      "bytes": 603820,
+      "purpose": "Migration golden; not a normal-build input"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/stone_axe_user_idle_pose.blend",
+      "reference": "art_source/equipment/stone_axe/references/stone_axe_user_idle_pose.blend",
+      "sha256": "ac9531d9f6a7d953c9466114d83028134f651ae56d51e0d09ce15ea17f9e80f4",
+      "bytes": 3532072,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/stone_axe_walk_pose_edit.blend",
+      "reference": "art_source/equipment/stone_axe/references/stone_axe_walk_pose_edit.blend",
+      "sha256": "7ce0cb106146bf4979ab50751439cf04d906cbb2bed5b3ef2f52a645b379e205",
+      "bytes": 4242587,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/stone_axe_user_grip.blend",
+      "reference": "art_source/equipment/stone_axe/references/stone_axe_user_grip.blend",
+      "sha256": "befcfe75ba690d0fbd5f25d491884ffc5ead5180cfc6b249057e13e9725f0cbf",
+      "bytes": 4247028,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/stone_axe_user_grip_l.blend",
+      "reference": "art_source/equipment/stone_axe/references/stone_axe_user_grip_l.blend",
+      "sha256": "c55f69ef3b4f5cf18e6e7c0b2b723cb96935f0f3c515b0ecca8c1c12193c1d15",
+      "bytes": 4240875,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/idle-pose-overrides.json",
+      "reference": "art_source/equipment/stone_axe/references/idle-pose-overrides.json",
+      "sha256": "48769916a9dc7aef2658549f7a058564fdef13a04118d2b0322a26c012204a4d",
+      "bytes": 2346,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/grip-overrides.json",
+      "reference": "art_source/equipment/stone_axe/references/grip-overrides.json",
+      "sha256": "554609bcd42fdede097015e0e6df3c83de96c7db55ae1fae3f3b454a23d12529",
+      "bytes": 509,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/idle-pose-edit-baseline.json",
+      "reference": "art_source/equipment/stone_axe/references/idle-pose-edit-baseline.json",
+      "sha256": "999ecace4e56e66a2eeb26d418bee2da3d89a30269b14eaf0f1dcc44dbedd33b",
+      "bytes": 25020,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/user-grip-validation.json",
+      "reference": "art_source/equipment/stone_axe/references/user-grip-validation.json",
+      "sha256": "e5d190e2c3ec73e1c18d332f91bcd3bc51844baaa6a5e88253b61fc6ff800151",
+      "bytes": 1080,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/equipment/stone_axe/user-grip-validation-l.json",
+      "reference": "art_source/equipment/stone_axe/references/user-grip-validation-l.json",
+      "sha256": "26139068c71369812badf59d6f7010d35f5cd5f6ec39d67f1f5c2a36d201d6a4",
+      "bytes": 1080,
+      "purpose": "User edit provenance; walk edit is preserved without treating it as approved runtime"
+    },
+    {
+      "source": "art_source/characters/male_commoner_v3/README.md",
+      "reference": "art_source/character/male_commoner/references/motion-donor/README.md",
+      "sha256": "f60f06a329d0b6b0490f1dedd7280466a5ec5113de1d23fff623f74e3a71d1cb",
+      "bytes": 3779,
+      "purpose": "Separate motion donor provenance; does not license Meshy geometry"
+    },
+    {
+      "source": "art_source/characters/male_commoner_v3/pixel_style/walk/manifest.json",
+      "reference": "art_source/character/male_commoner/references/motion-donor/pixel_style/walk/manifest.json",
+      "sha256": "4c72a19e4bed38c51d2894003120cf2c391a8ed39c258e14e5f8c198bdc028f0",
+      "bytes": 35960,
+      "purpose": "Separate motion donor provenance; does not license Meshy geometry"
+    },
+    {
+      "source": "art_source/characters/male_commoner_v3/source/makehuman/LICENSE.ASSETS.md",
+      "reference": "art_source/character/male_commoner/references/motion-donor/source/makehuman/LICENSE.ASSETS.md",
+      "sha256": "f6089cba01cb570a24712b41ab8a586ccd3cc5ef53dc266ca50b95c288956d2c",
+      "bytes": 6962,
+      "purpose": "Separate motion donor provenance; does not license Meshy geometry"
+    },
+    {
+      "source": "art_source/characters/male_commoner_v3/source/makehuman/LICENSE.md",
+      "reference": "art_source/character/male_commoner/references/motion-donor/source/makehuman/LICENSE.md",
+      "sha256": "edd99571ca62698f78c943fd4fffb159a413c315fa0d4819d3cec5cadaf8b4f1",
+      "bytes": 3598,
+      "purpose": "Separate motion donor provenance; does not license Meshy geometry"
+    },
+    {
+      "source": "art_source/characters/male_commoner_v3/source/makehuman/manifest.json",
+      "reference": "art_source/character/male_commoner/references/motion-donor/source/makehuman/manifest.json",
+      "sha256": "4a3d858c59288ca39400ca831b9200a9b2a1e6be94fc3132953c0bb886e0b7d8",
+      "bytes": 6384,
+      "purpose": "Separate motion donor provenance; does not license Meshy geometry"
+    },
+    {
+      "source": "art_source/characters/male_commoner_v3/source/system_assets/manifest.json",
+      "reference": "art_source/character/male_commoner/references/motion-donor/source/system_assets/manifest.json",
+      "sha256": "794820514db36dc5fc23ae5127e0304e90f281f546ff0f27a68432f6bdb9db9b",
+      "bytes": 1172,
+      "purpose": "Separate motion donor provenance; does not license Meshy geometry"
+    }
+  ],
+  "previewMatrixErrors": {
+    "l_saved": 1.1920928955078125e-07,
+    "l_edited": 1.1920928955078125e-07,
+    "r_saved": 1.7881393432617188e-07,
+    "r_edited": 1.7881393432617188e-07
+  },
+  "authoredRigSource": "art_source/characters/male_commoner_v4/commoner_rigged.blend",
+  "authoredRigSourceSha256": "51bc21318415939454331a7266cf50fbd98cf9c4f7a7111d8d9824d19a4a1b5b",
+  "poseAuthority": "Shipped runtime channels, including confirmed idle overrides, win over scene save timestamps.",
+  "budgetNote": "Total published byte budgets provisional pending Task 5 measured optimization.",
+  "referencePolicy": "References preserve provenance and comparison goldens only. Normal export reads source.blend and declared linked preview."
+}

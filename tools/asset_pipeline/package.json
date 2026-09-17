@@ -1,0 +1,32 @@
+{
+  "name": "origin-asset-pipeline",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "25.8.0"
+  },
+  "scripts": {
+    "test": "node --test tests/baseline.test.ts tests/catalog.test.ts tests/cli.test.ts tests/toolchain.test.ts tests/publish.test.mjs",
+    "test:build": "node --test tests/build.test.mjs tests/partial-build.test.mjs tests/reproducibility.test.mjs",
+    "test:integration": "node --test tests/integration.test.ts",
+    "test:optimize": "node --test tests/optimize.test.mjs",
+    "test:optimize-production": "node --test tests/optimize-production.test.mjs",
+    "install-decoders": "node install-decoders.mjs",
+    "test:migration": "node --test tests/migration.test.mjs",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.5.0",
+    "@gltf-transform/extensions": "4.5.0",
+    "@gltf-transform/functions": "4.5.0",
+    "gltf-validator": "2.0.0-dev.3.10",
+    "meshoptimizer": "1.2.0",
+    "sharp": "0.35.4",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "25.3.5",
+    "typescript": "5.9.3"
+  }
+}

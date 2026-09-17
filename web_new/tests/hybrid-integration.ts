@@ -6,7 +6,7 @@ import { Application, Container, Sprite, Texture, WebGLRenderer } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer } from '../src/game/actors/ActorRenderer'
-import { ACTOR_RENDER, DEFAULT_EQUIPMENT } from '../src/game/actors/config'
+import { COMMONER_ASSET_ID, DEFAULT_EQUIPMENT } from '../src/game/actors/config'
 import { setWorldParams } from '../src/game/tiles/Tile'
 import { coordScreen2Game } from '../src/game/utils/coordConvert'
 
@@ -27,6 +27,8 @@ async function main() {
   // renders the current Three.js Meshy model, never a legacy atlas.
   const renderer = new ActorRenderer(app.renderer as WebGLRenderer, { mode: 'baked8' })
   check((app.renderer as WebGLRenderer).gl.getError() === 0, 'GL error after Three/Pixi initialization')
+  const catalog = await renderer.cache.catalog
+  const cycleDistanceTiles = catalog.manifests[COMMONER_ASSET_ID]!.clips.walk!.cycleDistanceTiles!
   const manager = new ObjectManager()
   const world = new Container()
   world.position.set(120, 250)
@@ -41,7 +43,7 @@ async function main() {
   manager.spawnObject({ ...options, position: { x: 0, y: 0 }, entityId: 102 })
   manager.despawnObject(102)
   const view = manager.getObject(101)!
-  view.onMoved(5, ACTOR_RENDER.cycleDistanceTiles * 12 * .25)
+  view.onMoved(5, cycleDistanceTiles * 12 * .25)
   view.onStopped()
   const sprite = view.getContainer().children.find((child) => child instanceof Sprite)
   check(sprite instanceof Sprite, 'Production ObjectView must allocate the hybrid sprite synchronously')
@@ -58,8 +60,8 @@ async function main() {
   for (let attempt = 0; attempt < 300 && sprite.texture === Texture.EMPTY; attempt++) { render(); await paint() }
   check(sprite.texture !== Texture.EMPTY && sprite.texture.width === 128, 'GLB must become a live 128-pixel GPU texture')
   check(renderer.metrics.actors === 1 && manager.getObjectCount() === 1, 'Despawn during loading must release its instance')
-  check(renderer.metrics.assets === 1, 'Default Meshy actor must load only its integrated character asset')
-  pass('Production ObjectView / async move, stop, despawn / one shared textured GLB')
+  check(renderer.metrics.assets === 9, 'Default actor must share one model and eight standalone animations')
+  pass('Production ObjectView / async move, stop, despawn / shared model and standalone animation artifacts')
 
   const playerSprite = sprite
   function pixels(updateWorld = true) {
@@ -105,7 +107,7 @@ async function main() {
     view.onMoved(direction, 0)
     for (let frame = 0; frame < 6; frame++) render()
     for (let phase = 0; phase < 8; phase++) {
-      view.onMoved(direction, phase === 0 ? 0 : ACTOR_RENDER.cycleDistanceTiles * 12 / 8)
+      view.onMoved(direction, phase === 0 ? 0 : cycleDistanceTiles * 12 / 8)
       poses.add(hash())
     }
   }
@@ -113,7 +115,7 @@ async function main() {
   let equalDistance = 0
   for (const fps of [30, 60, 144]) {
     view.onStopped()
-    for (let step = 0; step < fps; step++) view.onMoved(1, ACTOR_RENDER.cycleDistanceTiles * 12 * .375 / fps)
+    for (let step = 0; step < fps; step++) view.onMoved(1, cycleDistanceTiles * 12 * .375 / fps)
     for (let frame = 0; frame < 6; frame++) render()
     const image = hash()
     if (!equalDistance) equalDistance = image
@@ -145,7 +147,7 @@ async function main() {
   const carry = hash()
   check(carry !== idle, 'Server carry relation must select raised arms')
   check(manager.getObject(201)!.getContainer().y === view.getContainer().y - 94, 'Carried prop must move to the new palm height')
-  view.onMoved(5, ACTOR_RENDER.cycleDistanceTiles * 12 * .375)
+  view.onMoved(5, cycleDistanceTiles * 12 * .375)
   check(hash() !== carry, 'Carry pose must retain leg locomotion')
   manager.clearCarryVisualRelation(201)
   view.onMoved(3)

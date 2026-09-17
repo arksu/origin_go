@@ -1,4 +1,4 @@
-import { Bone, Group, PropertyBinding, type Object3D } from 'three'
+import { Bone, PropertyBinding, type Object3D } from 'three'
 import type { SocketId } from './equipment'
 
 const SOCKET_BONES: Record<SocketId, string> = {
@@ -14,17 +14,14 @@ export function findRigBone(model: Object3D, name: string): Bone {
 
 export class ActorSockets {
   private readonly sockets = new Map<SocketId, Object3D>()
-  constructor(model: Object3D) {
+  constructor(model: Object3D, names: Partial<Record<SocketId, string>> = { grip_l: 'grip_l', grip_r: 'grip_r', forearm_l: 'forearm_l', forearm_r: 'forearm_r' }) {
     for (const [name, boneName] of Object.entries(SOCKET_BONES) as [SocketId, string][]) {
       const bone = findRigBone(model, boneName)
-      const authored = bone.getObjectByName(name)
+      const authored = names[name] && bone.getObjectByName(names[name])
       if (authored) {
         this.sockets.set(name, authored)
       } else {
-        const socket = new Group()
-        socket.name = name
-        bone.add(socket)
-        this.sockets.set(name, socket)
+        throw new Error(`Character socket missing: ${name}`)
       }
     }
   }

@@ -9,9 +9,12 @@ GPU copies; only interaction picking reads a single alpha pixel.
 
 ## Content and animation
 
-`config.ts` contains URLs, equipment slots, palette, distance per cycle and budgets.
+`config.ts` contains the character asset ID, palette and render settings.
+`AssetCatalog` resolves the published catalog into immutable model, standalone
+animation and KTX2 texture URLs. Recipes and generated metadata own equipment
+bindings, locomotion distance and asset budgets.
 The current Meshy base contains a welded wrap and belt, so default equipment
-and the active equipment catalog are empty. The old linen pieces have incompatible
+is empty. The stone axe is available through catalog equipment binding; old linen pieces have incompatible
 bind matrices. `GameFacade.setCharacterEquipment(entityId, items)` remains the
 entry point for future garments authored against the current rig.
 Inventory-to-catalog mapping and additional authored clothing are future work.
@@ -21,7 +24,8 @@ exceeded. This estimate is not total browser or GPU memory.
 
 Clips: `idle`, `walk`, `carry_idle`, `carry_walk`. Eight sampled poses per walking
 cycle advance with actual client displacement, including final movement damping.
-One cycle covers 1.20678051125 tiles. Time alone does not advance a stopped actor.
+One cycle currently covers 1.677975879375 tiles, read from the loaded walk
+metadata. Time alone does not advance a stopped actor.
 Skinning follows each mesh’s `skinning` extra: the Meshy model uses linear
 skinning, matching Blender; the old dual-quaternion path remains supported.
 All four clips use a 0.21 m ankle-center width. Walking retains donor foot timing
@@ -39,11 +43,14 @@ excluding driver overhead, asset buffers and per-instance skeleton resources.
 
 ## Reproduce and inspect
 
-The current pipeline is `tools/blender/rig_meshy_commoner.py`, executed through
-Blender MCP. It reads the user-supplied Meshy GLB and appends the existing v3
-animation donor. Its output and provenance are documented in
-`art_source/characters/male_commoner_v4/README.md`. Copy its `commoner_meshy.glb`
-to the public realtime directory after validation and visual review.
+The maintained workflow is [Blender asset workflow](../../../../docs/assets/README.md).
+Edit the canonical `source.blend`, save, then run `tools/assets build` from the
+repository root. Production builds run isolated headless Blender exports and
+publish through the asset catalog; Blender MCP is an authoring/inspection helper.
+Models use meshopt compression and external KTX2 textures, with one GLB per clip.
+Shared model/texture leases survive animation revision changes and are released
+when their final owner is evicted or the cache is destroyed. Reload the page to
+load a newly published catalog snapshot.
 
 The source GLB preserves the original 2048² PBR maps; the runtime uses a 1024²
 base-color atlas and the existing fixed light and pixel outline pass. Painted
@@ -59,6 +66,7 @@ Run `npm run dev` from `web_new`, then open:
   64 skeletal poses, distance invariance, picking, rejected legacy gear, carry relation,
   culling, LOD and context restoration.
 - Movement and terminal-deceleration regressions now run against live actors in the integration page.
+- `/tests/axe-review.html`: ordinary grip binding in both hands, movement and carry.
 
 The game requires hybrid rendering and WebGL2. Baked character atlases and the
 comparison/fallback path have been removed. Initialization errors propagate to
@@ -75,7 +83,7 @@ inverting the orthographic camera elevation, so the forward vector projects onto
 the selected screen ray. Camera pan/zoom do not change facing. The review page
 shows these rays and actors moving along them.
 
-## Verification, 2026-09-12
+## Historical verification, 2026-09-12
 
 Production build, TypeScript check and object schema validation passed. All nine
 hybrid browser test groups and all eight existing movement groups passed in the
@@ -95,7 +103,7 @@ remain unverified. The review scene measures character work, not the complete
 game workload. CPU submission time is not GPU execution time. Current build
 warnings include large JavaScript chunks and dependency eval/mixed imports.
 
-## Screen-facing revision, 2026-09-13
+## Historical screen-facing revision, 2026-09-13
 
 Removed the two published baked atlases and 357 generated bake images, keeping
 Blender sources, concept and material maps. Legacy sprite-only review files were
