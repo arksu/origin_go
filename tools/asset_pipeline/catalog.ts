@@ -47,6 +47,7 @@ export interface RecipeBudgets {
   textureDimensions: { width: number; height: number }
   totalPublishedBytes: number
   boneInfluences: number
+  bones: number
 }
 
 export interface OptimizationRecipe {
@@ -331,13 +332,13 @@ function normalizeBindings(value: unknown): Record<string, BindingRecipe> {
 function normalizeBudgets(value: unknown): RecipeBudgets {
   const budgets = requireRecord(value, 'budgets')
   rejectUnknownFields(budgets, 'budgets', [
-    'trianglesByLod', 'textureDimensions', 'totalPublishedBytes', 'boneInfluences',
+    'trianglesByLod', 'textureDimensions', 'totalPublishedBytes', 'boneInfluences', 'bones',
   ])
   const triangleEntries = requireRecord(budgets.trianglesByLod, 'budgets.trianglesByLod')
   if (Object.keys(triangleEntries).length === 0) throw new Error('budgets.trianglesByLod must not be empty')
   const trianglesByLod: Record<string, number> = {}
   for (const [lod, limit] of Object.entries(triangleEntries)) {
-    requireName(lod, 'LOD name')
+    if (!/^(0|[1-9]\d*)$/.test(lod) || !Number.isSafeInteger(Number(lod))) throw new Error('LOD budget keys must be canonical numeric strings')
     trianglesByLod[lod] = requirePositiveInteger(limit, `budgets.trianglesByLod.${lod}`)
   }
   const dimensions = requireRecord(budgets.textureDimensions, 'budgets.textureDimensions')
@@ -350,6 +351,7 @@ function normalizeBudgets(value: unknown): RecipeBudgets {
     },
     totalPublishedBytes: requirePositiveInteger(budgets.totalPublishedBytes, 'budgets.totalPublishedBytes'),
     boneInfluences: requirePositiveInteger(budgets.boneInfluences, 'budgets.boneInfluences'),
+    bones: requirePositiveInteger(budgets.bones, 'budgets.bones'),
   }
 }
 

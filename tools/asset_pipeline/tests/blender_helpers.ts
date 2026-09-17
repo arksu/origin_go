@@ -45,7 +45,7 @@ export async function createFixture(kind: AssetKind, overrides: Record<string, u
     bindings: kind === 'equipment' ? Object.fromEntries(['left', 'right'].map(side => [side, {
       slot: side, socket: `socket_hand_${side}`, grip: `grip_${side}`, policy: { kind: 'ordinary' as const },
     }])) : {},
-    budgets: { trianglesByLod: { '0': 10 }, textureDimensions: { width: 256, height: 256 }, totalPublishedBytes: 1e6, boneInfluences: 4 },
+    budgets: { trianglesByLod: { '0': 10 }, textureDimensions: { width: 256, height: 256 }, totalPublishedBytes: 1e6, boneInfluences: 4, bones: 64 },
     optimization: { meshCompression: 'meshopt', texture: { codec: 'uastc', quality: 2, width: 256, height: 256, mipmaps: true } },
   }
   return { root, source, recipe, sourceHash: () => fileHash(source), directory: (name: string) => join(root, name),

@@ -165,8 +165,9 @@
       "width": 1024,
       "height": 1024
     },
-    "totalPublishedBytes": 8388608,
-    "boneInfluences": 4
+    "totalPublishedBytes": 2853888,
+    "boneInfluences": 4,
+    "bones": 50
   },
   "optimization": {
     "meshCompression": "meshopt",

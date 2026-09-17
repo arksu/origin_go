@@ -9,6 +9,9 @@
   "scripts": {
     "test": "node --test tests/baseline.test.ts tests/catalog.test.ts tests/cli.test.ts tests/toolchain.test.ts",
     "test:integration": "node --test tests/integration.test.ts",
+    "test:optimize": "node --test tests/optimize.test.mjs",
+    "test:optimize-production": "node --test tests/optimize-production.test.mjs",
+    "install-decoders": "node install-decoders.mjs",
     "test:migration": "node --test tests/migration.test.mjs",
     "type-check": "tsc --noEmit"
   },
