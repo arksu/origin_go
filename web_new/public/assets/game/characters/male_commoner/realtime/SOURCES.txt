@@ -1,12 +1,15 @@
-ACTIVE MODEL: commoner_meshy.glb
-Source and rig: art_source/characters/male_commoner_v4/
-Rigging/export: tools/blender/rig_meshy_commoner.py, executed through Blender MCP.
-Motion donor: preserved male_commoner_v3 realtime Blender actions.
+ACTIVE RUNTIME: content-hashed model, animation and KTX2 URLs in assets/game/asset-catalog.json.
+Editable source: art_source/character/male_commoner/source.blend
+Build workflow: docs/assets/README.md and tools/assets
 
+The current geometry/materials originate from the user-supplied Meshy asset.
+They do not inherit the old MakeHuman geometry's CC0 attribution.
+Original geometry, migration goldens and source hashes are retained in:
+art_source/character/male_commoner/references/
 
-Underlying anatomical asset: MakeHuman, CC0 1.0 Universal.
-Full upstream asset license is retained in the source repository at:
-art_source/characters/male_commoner_v3/source/makehuman/LICENSE.ASSETS.md
+Motion was retargeted from the earlier commoner animation. Its separate
+documentation, manifests and MakeHuman licenses remain in:
+art_source/character/male_commoner/references/motion-donor/
 
-Source scenes, project modifications, animation and export report:
-art_source/characters/male_commoner_v3/
+Legacy exports were retired on 2026-09-17. Exact inventory and Git recovery
+commit: docs/assets/legacy-removal.json.

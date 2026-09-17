@@ -1,5 +1,8 @@
 # Character v2: detailed stylised male source model
 
+> Superseded historical design. Its sources and helpers were retired on
+> 2026-09-17; see [the current asset workflow](../assets/README.md).
+
 ## Decision
 
 Replace the v1 primitive blockout as the visual source with an original,

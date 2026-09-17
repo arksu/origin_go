@@ -1,5 +1,10 @@
 # Stone axe — travel grip
 
+> Historical working-scene notes, superseded on 2026-09-17. Open `source.blend`
+> for current editing and follow `docs/assets/README.md` for export. Preserved
+> user edits and approved transforms are documented in `references/README.md`.
+> The runtime URLs and helper commands below describe the retired pipeline.
+
 Source: `/Users/park/Downloads/Meshy_AI_Stone_Axe_0915172926_texture.glb` (unchanged).
 Game asset: `web_new/public/assets/game/equipment/stone_axe/stone_axe.glb`.
 

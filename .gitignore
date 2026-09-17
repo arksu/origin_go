@@ -50,7 +50,9 @@ log.txt
 build/
 output/
 map_png/
-art_source/characters/*/bake/
+__pycache__/
+*.pyc
+art_source/**/*.blend1
 input/
 input_failed/
 tmp/

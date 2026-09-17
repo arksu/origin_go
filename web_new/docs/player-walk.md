@@ -1,5 +1,10 @@
 # Baked player walk
 
+> Historical baked-sprite workflow, superseded on 2026-09-17 for the default
+> player. Existing fallback sprites remain supported. The old Blender source
+> trees and generation commands below were retired; use
+> [the asset workflow](../../docs/assets/README.md) for current authoring.
+
 The server's existing `player` resource now uses the corrected male commoner v3
 pixel walk and standing idle in `src/game/objects/misc.json`. The shipped PNG is
 `characters/male_commoner/walk_idle.png`, copied from
