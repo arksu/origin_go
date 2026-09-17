@@ -103,6 +103,40 @@ npm run dev
 
 ## Build Workflows
 
+### Blender game assets
+
+Editable 3D sources live here:
+
+- `art_source/character/male_commoner/source.blend`
+- `art_source/equipment/stone_axe/source.blend`
+
+Open a source in Blender, make and save the edit, then run the asset CLI from the
+repository root. Builds are deterministic and headless: they do not require the
+Blender MCP or an open Blender window.
+
+```bash
+# Rebuild one model, its clips and textures.
+tools/assets build character/male_commoner
+
+# Rebuild only all animation clips, or one selected clip.
+tools/assets build character/male_commoner --animations
+tools/assets build character/male_commoner --animations --clip walk
+
+# Rebuild every registered 3D asset, then inspect or reproduce it.
+tools/assets build all
+tools/assets validate all
+tools/assets verify-reproducible all
+```
+
+The output catalog is atomically published to
+`web_new/public/assets/game/asset-catalog.json`. Animation-only builds keep the
+existing model and texture artifacts only when the saved rest rig, mesh, sockets,
+grips and toolchain remain compatible; otherwise run a full asset build.
+
+The locked local toolchain is Node 25.8.0, Blender 5.2.1 LTS build
+`9e2066aef7ef`, and KTX-Software 4.4.2. For setup, browser review, asset budgets
+and failure recovery, see [the full Blender asset workflow](docs/assets/README.md).
+
 ### Local build workflow (Makefile)
 
 Core targets:
