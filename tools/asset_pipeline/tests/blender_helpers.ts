@@ -49,6 +49,9 @@ export async function createFixture(kind: AssetKind, overrides: Record<string, u
     optimization: { meshCompression: 'meshopt', texture: { codec: 'uastc', quality: 2, width: 256, height: 256, mipmaps: true } },
   }
   return { root, source, recipe, sourceHash: () => fileHash(source), directory: (name: string) => join(root, name),
+    edit: (options: Record<string, unknown>) => generate(options, true),
+    editAction: (action: string, edit: { bone: string; frame: number; rotationZ: number }) =>
+      generate({ actionEdit: { action, ...edit } }, true),
     saveEditorState: ({ frame, action, singularPose = false }: { frame: number; action: string; singularPose?: boolean }) =>
       generate({ savedFrame: frame, savedAction: action, savedSingularPose: singularPose }, true) }
 }

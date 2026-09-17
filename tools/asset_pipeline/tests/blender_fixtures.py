@@ -153,6 +153,34 @@ else:
     bpy.context.scene.collection.children.link(preview)
     preview.objects.link(bpy.data.objects.new('NeverExportPreview', None))
 
+if options.get('actionEdit'):
+    edit = options['actionEdit']
+    rig = bpy.data.objects['Rig']
+    rig.animation_data.action = bpy.data.actions[edit['action']]
+    rig.animation_data.action_slot = rig.animation_data.action.slots[0]
+    bone = rig.pose.bones[edit['bone']]
+    bone.rotation_mode = 'XYZ'
+    bone.rotation_euler.z = edit['rotationZ']
+    bone.keyframe_insert('rotation_euler', frame=edit['frame'])
+if options.get('restEdit'):
+    rig = bpy.data.objects['Rig']
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode='EDIT')
+    rig.data.edit_bones['hand.r'].tail.x += 0.2
+    bpy.ops.object.mode_set(mode='OBJECT')
+if options.get('socketEdit'):
+    bpy.data.objects['socket_hand_right'].location.x += 0.1
+if options.get('textureEdit'):
+    image = bpy.data.images['PackedColor']
+    image.pixels = [0.75, 0.1, 0.25, 1] * 4
+    image.pack()
+if options.get('modifierEdit'):
+    bpy.data.objects['Body'].modifiers.new('Thickness', 'SOLIDIFY').thickness = 0.1
+if options.get('meshTransformEdit'):
+    bpy.data.objects['Body'].location.x += 0.2
+if options.get('removeAction'):
+    bpy.data.actions.remove(bpy.data.actions[options['removeAction']])
+
 if request['kind'] == 'character':
     rig = bpy.data.objects['Rig']
     rig.animation_data.action = bpy.data.actions[options.get('savedAction', 'walk')]

@@ -21,6 +21,24 @@ export function canonicalJSON(value) {
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
 export const assetIO = () => new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder })
 
+export async function compareBuilds(first, second) {
+  const difference = label => { throw new Error(`Reproducibility failed: ${label} differs between clean builds`) }
+  if (canonicalJSON(first.map(bundle => bundle.manifest.id)) !== canonicalJSON(second.map(bundle => bundle.manifest.id))) difference('asset set')
+  for (const [index, bundle] of first.entries()) {
+    const other = second[index]
+    const artifacts = result => ({ model: result.model, metadata: result.metadata,
+      ...Object.fromEntries(Object.entries(result.clips).map(([id, path]) => [`clip ${id}`, path])),
+      ...Object.fromEntries(result.textures.map((path, index) => [`texture ${index}`, path])) })
+    const left = artifacts(bundle.result), right = artifacts(other.result)
+    if (canonicalJSON(Object.keys(left).sort()) !== canonicalJSON(Object.keys(right).sort())) difference(`${bundle.manifest.id} artifact set`)
+    for (const label of Object.keys(left).sort()) {
+      const [before, after] = await Promise.all([readFile(left[label]), readFile(right[label])])
+      if (!before.equals(after) || sha256(before) !== sha256(after)) difference(`${bundle.manifest.id} ${label}`)
+    }
+    if (canonicalJSON(bundle.manifest) !== canonicalJSON(other.manifest)) difference(`${bundle.manifest.id} manifest`)
+  }
+}
+
 export async function validateGLB(path) {
   const root = dirname(resolve(path))
   const report = await validator.validateBytes(await readFile(path), {
