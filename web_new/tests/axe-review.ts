@@ -43,7 +43,7 @@ async function main() {
     })
     renderer.render(performance.now())
   }, undefined, 50)
-  document.querySelector('#result')!.textContent = '8 направлений • 1200 треугольников • независимый слой руки • фаза от пройденного расстояния'
+  document.querySelector('#result')!.textContent = '8 направлений • 1200 треугольников • обычный хват из каталога • фаза от пройденного расстояния'
   Object.assign(window, { axeReview: { handles, renderer, app } })
 }
 void main().catch(error => { document.querySelector('#result')!.textContent = String(error); console.error(error) })
