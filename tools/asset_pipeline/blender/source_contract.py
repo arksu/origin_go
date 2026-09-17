@@ -128,6 +128,10 @@ def validate_constraints(owner, objects, label):
 
 def validate_material(material):
     require(material is not None and material.use_nodes, 'materials must use a Principled node graph')
+    if 'region' in material:
+        region = material['region']
+        require(isinstance(region, str) and region in {'skin', 'hair', 'linen', 'eyes', 'textured'},
+                f'unsupported material region on {material.name}')
     supported = {'OUTPUT_MATERIAL', 'BSDF_PRINCIPLED', 'TEX_IMAGE', 'NORMAL_MAP', 'SEPARATE_COLOR',
                  'MATH', 'MIX', 'RGB', 'VALUE', 'UVMAP', 'TEX_COORD', 'MAPPING', 'REROUTE'}
     for node in material.node_tree.nodes:
@@ -162,6 +166,10 @@ def validate_mesh(obj, rig, max_influences):
     require(isinstance(lod, int) and lod >= 0, f'invalid lod extra on {obj.name}')
     obj['lod'] = lod
     obj['skinned'] = bool(armatures)
+    if 'skinning' in obj:
+        skinning = obj['skinning']
+        require(isinstance(skinning, str) and skinning in {'linear', 'dual_quaternion'},
+                f'unsupported mesh skinning on {obj.name}')
 
 
 def validate_source(recipe, dependencies):
@@ -180,8 +188,6 @@ def validate_source(recipe, dependencies):
     validate_names(objects, rig)
     for obj in objects:
         require(obj.parent is None or obj.parent in objects, f'undeclared parent on {obj.name}')
-        finite(matrix_values(obj.matrix_world), f'transform on {obj.name}')
-        require(abs(obj.matrix_world.determinant()) > 1e-8, f'singular transform on {obj.name}')
         validate_constraints(obj, objects, obj.name)
         if obj != rig:
             require(not obj.animation_data or (obj.animation_data.action is None and not obj.animation_data.nla_tracks), f'object animation requires rig action contract: {obj.name}')
@@ -202,6 +208,16 @@ def validate_source(recipe, dependencies):
         grip = bpy.data.objects.get(binding['grip'])
         require(grip in objects and grip.type == 'EMPTY', f'missing grip {binding["grip"]}')
     return objects, rig
+
+
+def validate_evaluated_transforms(objects):
+    # Saved pose channels can make bone-parented sockets singular even when the
+    # authored rest rig is valid. Inspect only the reset export scene's evaluation.
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    for obj in objects:
+        matrix = obj.evaluated_get(depsgraph).matrix_world
+        finite(matrix_values(matrix), f'transform on {obj.name}')
+        require(abs(matrix.determinant()) > 1e-8, f'singular transform on {obj.name}')
 
 
 def reset_scene(rig):

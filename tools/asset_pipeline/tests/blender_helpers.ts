@@ -49,7 +49,8 @@ export async function createFixture(kind: AssetKind, overrides: Record<string, u
     optimization: { meshCompression: 'meshopt', texture: { codec: 'uastc', quality: 2, width: 256, height: 256, mipmaps: true } },
   }
   return { root, source, recipe, sourceHash: () => fileHash(source), directory: (name: string) => join(root, name),
-    saveEditorState: ({ frame, action }: { frame: number; action: string }) => generate({ savedFrame: frame, savedAction: action }, true) }
+    saveEditorState: ({ frame, action, singularPose = false }: { frame: number; action: string; singularPose?: boolean }) =>
+      generate({ savedFrame: frame, savedAction: action, savedSingularPose: singularPose }, true) }
 }
 export function readGlb(bytes: Buffer): Record<string, any> {
   return JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString()) as Record<string, any>
