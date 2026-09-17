@@ -35,8 +35,8 @@
       "0": 1200
     },
     "textureDimensions": {
-      "width": 512,
-      "height": 512
+      "width": 256,
+      "height": 256
     },
     "totalPublishedBytes": 499712,
     "boneInfluences": 4,
@@ -47,8 +47,8 @@
     "texture": {
       "codec": "uastc",
       "quality": 2,
-      "width": 512,
-      "height": 512,
+      "width": 256,
+      "height": 256,
       "mipmaps": true
     }
   }
