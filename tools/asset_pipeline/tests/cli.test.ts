@@ -113,15 +113,15 @@ test('runCli rejects unusable executable overrides before dispatch', async (cont
   }
 })
 
-test('unimplemented handlers fail explicitly instead of reporting build success', async () => {
+test('future partial workflows fail explicitly instead of reporting build success', async () => {
   let standardError = ''
-  const exitCode = await runCli(['build', 'all'], {
+  const exitCode = await runCli(['build', 'all', '--animations'], {
     stdout: () => undefined,
     stderr: (message) => { standardError += message },
   })
 
   assert.equal(exitCode, 1)
-  assert.match(standardError, /build is not implemented.*no artifacts were published/i)
+  assert.match(standardError, /animation.*not implemented.*no artifacts were published/i)
 })
 
 test('help documents all accepted workflows and setup failures', () => {

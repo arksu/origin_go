@@ -16,6 +16,7 @@ export interface CliArguments {
 export type CommandDispatch = (arguments_: CliArguments) => Promise<void>
 
 export interface RunCliOptions {
+  root?: string
   dispatch?: CommandDispatch
   stdout?: (message: string) => void
   stderr?: (message: string) => void
@@ -125,8 +126,17 @@ export function parseArguments(argv: readonly string[]): CliArguments {
   return { command, target, animations, clip, blender, toktx }
 }
 
-async function unimplementedDispatch(arguments_: CliArguments): Promise<void> {
-  throw new Error(`${arguments_.command} is not implemented yet; no artifacts were published`)
+async function dispatchCommand(arguments_: CliArguments, options: RunCliOptions): Promise<void> {
+  if (arguments_.command === 'verify-reproducible' || arguments_.animations) {
+    throw new Error(`${arguments_.animations ? 'Animation-only builds' : arguments_.command} are not implemented yet; no artifacts were published`)
+  }
+  const { buildAssets, validateAssets, defaultRoot } = await import('./build.mjs')
+  const toolPaths = {
+    ...(arguments_.blender ? { blender: arguments_.blender } : {}),
+    ...(arguments_.toktx ? { toktx: arguments_.toktx } : {}),
+  }
+  const operation = arguments_.command === 'build' ? buildAssets : validateAssets
+  await operation({ root: options.root ?? defaultRoot, target: arguments_.target, toolPaths })
 }
 
 async function canonicalizeExecutable(path: string, flag: '--blender' | '--toktx'): Promise<string> {
@@ -166,7 +176,8 @@ export async function runCli(argv: readonly string[], options: RunCliOptions = {
   }
   try {
     const arguments_ = await validateExecutableOverrides(parseArguments(argv))
-    await (options.dispatch ?? unimplementedDispatch)(arguments_)
+    if (options.dispatch) await options.dispatch(arguments_)
+    else await dispatchCommand(arguments_, options)
     return 0
   } catch (error) {
     stderr(`Error: ${error instanceof Error ? error.message : String(error)}`)

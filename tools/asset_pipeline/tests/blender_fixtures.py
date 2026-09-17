@@ -161,4 +161,6 @@ if options.get('savedPose') and request['kind'] == 'character':
     rig.pose.bones['root'].location = (8, 9, 10)
 if options.get('savedSingularPose') and request['kind'] == 'character':
     rig.pose.bones['root'].scale = (0, 0, 0)
+if options.get('missingExport'):
+    bpy.data.collections['EXPORT'].name = 'MISSING_EXPORT'
 bpy.ops.wm.save_as_mainfile(filepath=str(source))
