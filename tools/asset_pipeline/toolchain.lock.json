@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "platform": {
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "node": {
+    "version": "v25.8.0"
+  },
+  "blender": {
+    "version": "5.2.1",
+    "buildHash": "9e2066aef7ef",
+    "buildPlatform": "Darwin",
+    "pythonVersion": "3.13.13",
+    "ioSceneGltf2TreeSha256": "56762edd13b74d11189a5c700d0824a009b855857c3a8432a4e6fad1f6e26442"
+  },
+  "toktx": {
+    "version": "4.4.2",
+    "binarySha256": "708e94078c8b8a8096f3573e2899bf08fbcf702d92bbbac47bd2098a1aaa6eb6",
+    "archive": {
+      "url": "https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2/KTX-Software-4.4.2-Darwin-arm64.pkg",
+      "sha256": "500bd8f9d63358c3f3a0d83b724c8574436a72c37dc0e4bad90ec1ca38032c3c"
+    }
+  }
+}

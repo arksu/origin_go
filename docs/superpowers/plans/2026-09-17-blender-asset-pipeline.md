@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-17-blender-asset-pipeline-design.md`
 
+**Execution refinement (2026-09-17):** The user retained Node after discussion of
+TypeScript. Maintained pipeline modules and tests below use `.ts` instead of `.mjs`,
+with real TypeScript interfaces instead of JSDoc. Run them using the pinned Node's
+type stripping and check with `tsc --noEmit`; add a strict `tsconfig.json`, TypeScript
+and `@types/node` in Task 1. The small executable `tools/assets` and existing client
+test-launcher `.mjs` files stay JavaScript. Task names, behavior and interfaces are unchanged.
+
 ## Global Constraints
 
 - Blender закрепляется на 5.2.1; проверяется фактическая версия бинарника.
