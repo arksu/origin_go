@@ -16,7 +16,7 @@ export interface ActorHandle {
 
 /** All character rendering shares the game's GL context; images stay on the GPU. */
 export class ActorRenderer {
-  readonly cache = new ActorAssetCache()
+  readonly cache: ActorAssetCache
   private readonly renderer: WebGLRenderer
   private readonly pass = new PixelActorPass()
   private readonly scene = new Scene()
@@ -43,7 +43,14 @@ export class ActorRenderer {
     } catch (error) {
       pixi.canvas.removeEventListener('webglcontextrestored', this.beforeThreeContextRestore)
       this.pass.destroy()
-      this.cache.destroy()
+      throw error
+    }
+    try {
+      this.cache = new ActorAssetCache(this.renderer)
+    } catch (error) {
+      pixi.canvas.removeEventListener('webglcontextrestored', this.beforeThreeContextRestore)
+      this.pass.destroy()
+      this.renderer.dispose()
       throw error
     }
     this.renderer.setClearColor(0, 0)
@@ -53,7 +60,13 @@ export class ActorRenderer {
     this.camera.position.set(0, ACTOR_RENDER.cameraHeight + 6 * Math.sin(ACTOR_RENDER.cameraElevation), 6 * Math.cos(ACTOR_RENDER.cameraElevation))
     this.camera.lookAt(0, ACTOR_RENDER.cameraHeight, 0)
     const framebuffer = this.pixi.gl.createFramebuffer()
-    if (!framebuffer) throw new Error('Unable to allocate actor picking framebuffer')
+    if (!framebuffer) {
+      pixi.canvas.removeEventListener('webglcontextrestored', this.beforeThreeContextRestore)
+      this.cache.destroy()
+      this.pass.destroy()
+      this.renderer.dispose()
+      throw new Error('Unable to allocate actor picking framebuffer')
+    }
     this.readFramebuffer = framebuffer
     pixi.canvas.addEventListener('webglcontextlost', this.onContextLost)
     pixi.canvas.addEventListener('webglcontextrestored', this.onContextRestored)
