@@ -18,6 +18,8 @@
 .aiassistant/
 .idea/
 .codex/
+.worktrees/
+.superpowers/
 etc/*
 !etc/mapgen/
 etc/mapgen/*
