@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import test from 'node:test'
 import { NodeIO } from '@gltf-transform/core'
 import { loadRecipes } from '../catalog.ts'
@@ -10,6 +11,22 @@ import { blenderPath, fileHash, readGlb, runBlender } from './blender_helpers.ts
 
 const root = resolve(import.meta.dirname, '../../..')
 const characterReferences = join(root, 'art_source/character/male_commoner/references')
+test('migration and source verification reject mismatched Blender identities before opening sources', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'migration-identity-'))
+  await mkdir(join(directory, 'migration'))
+  const script = join(directory, 'migration/migrate_sources.py')
+  await writeFile(script, await readFile(join(root, 'tools/asset_pipeline/migration/migrate_sources.py')))
+  const lock = JSON.parse(await readFile(join(root, 'tools/asset_pipeline/toolchain.lock.json'), 'utf8'))
+  for (const [field, value, expected] of [
+    ['version', '0.0.0', /Blender 0\.0\.0 is required; found 5\.2\.1/],
+    ['buildHash', '000000000000', /Blender build 000000000000 is required; found 9e2066aef7ef/],
+  ]) {
+    await writeFile(join(directory, 'toolchain.lock.json'), JSON.stringify({ ...lock, blender: { ...lock.blender, [field]: value } }))
+    for (const mode of [[], ['--verify-only'], ['--audit-only']]) {
+      await assert.rejects(runBlender(script, ['--root', root, '--baseline', characterReferences, ...mode]), expected)
+    }
+  }
+})
 test('one-time migration refuses to overwrite an editable canonical source', async () => {
   const source = join(root, 'art_source/character/male_commoner/source.blend')
   const before = await fileHash(source)
@@ -21,6 +38,9 @@ export async function loadBaseline() {
   return JSON.parse(await readFile(join(characterReferences, 'approved-baseline.json'), 'utf8'))
 }
 export async function exportMigratedSources() {
+  const inspection = await runBlender(join(root, 'tools/asset_pipeline/migration/migrate_sources.py'),
+    ['--root', root, '--baseline', characterReferences, '--verify-only'])
+  assert.match(inspection, /SOURCE_VERIFICATION=/)
   const recipes = await loadRecipes(root)
   const output = join(root, `build/migration-check-${Date.now()}`)
   await mkdir(output, { recursive: true })
@@ -142,9 +162,6 @@ test('canonical editable sources export approved mesh, textures, masks, poses an
     await assert.doesNotReject(access(join(root, path)), `missing canonical source ${path}`)
   }
   const baseline = await loadBaseline()
-  const inspection = await runBlender(join(root, 'tools/asset_pipeline/migration/migrate_sources.py'),
-    ['--root', root, '--baseline', characterReferences, '--verify-only'])
-  assert.match(inspection, /SOURCE_VERIFICATION=/)
   const { results, output } = await exportMigratedSources()
   const commoner = results['character/male_commoner'], axe = results['equipment/stone_axe']
   const modelDocument = readGlb(await readFile(join(commoner.directory, 'raw/model.glb')))
