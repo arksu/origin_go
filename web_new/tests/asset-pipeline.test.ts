@@ -73,6 +73,14 @@ test('schema validates immutable paths and compatible distance metadata', () => 
     (m: ActorManifest) => { delete m.sockets.grip_l },
   ]) { const manifest = compatibleClipManifests(); mutate(manifest); assert.throws(() => parseActorManifest(manifest)) }
 })
+test('manifest kind and clip playback require primitive strings before conditional validation', () => {
+  assert.throws(() => parseActorManifest({ ...compatibleClipManifests(), kind: ['character'], rigHash: null, sockets: {}, clips: {} }), /schema|kind/)
+  for (const playback of [['time'], ['distance'], new String('time'), new String('distance')]) {
+    const manifest = compatibleClipManifests()
+    Object.assign(manifest.clips.idle!, { playback })
+    assert.throws(() => parseActorManifest(manifest), /clip|playback/)
+  }
+})
 test('published snapshot resolves immutable manifests and ordinary axe grip policy', async () => {
   const requests: { url: string; cache?: RequestCache }[] = []
   const catalog = await loadActorCatalog('/assets/game/asset-catalog.json', async (input, init) => {
@@ -226,3 +234,87 @@ test('cache rejects ambiguous exported names before GLTFLoader silently renames 
   await assert.rejects(cache.acquire(manifest.id), (error: unknown) => error instanceof Error && error.cause instanceof Error && /Duplicate/.test(error.cause.message))
   cache.destroy()
 })
+
+function texturedGLB(textureURL: string, textureSource = 0): ArrayBuffer {
+  const geometry = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1])
+  const json = Buffer.from(JSON.stringify({
+    asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ name: 'triangle', mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0, TEXCOORD_0: 1 }, material: 0 }] }],
+    buffers: [{ byteLength: geometry.byteLength }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 36 }, { buffer: 0, byteOffset: 36, byteLength: 24 }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [0, 0, 0], max: [1, 1, 0] },
+      { bufferView: 1, componentType: 5126, count: 3, type: 'VEC2' }],
+    images: [{ uri: textureURL, mimeType: 'image/ktx2' }],
+    textures: [{ extensions: { KHR_texture_basisu: { source: textureSource } } }],
+    materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }],
+    extensionsUsed: ['KHR_texture_basisu'], extensionsRequired: ['KHR_texture_basisu'],
+  }))
+  const paddedLength = Math.ceil(json.length / 4) * 4
+  const glb = Buffer.alloc(12 + 8 + paddedLength + 8 + geometry.byteLength)
+  glb.writeUInt32LE(0x46546c67, 0); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(glb.length, 8)
+  glb.writeUInt32LE(paddedLength, 12); glb.writeUInt32LE(0x4e4f534a, 16)
+  glb.fill(0x20, 20, 20 + paddedLength); json.copy(glb, 20)
+  glb.writeUInt32LE(geometry.byteLength, 20 + paddedLength); glb.writeUInt32LE(0x004e4942, 24 + paddedLength)
+  Buffer.from(geometry.buffer).copy(glb, 28 + paddedLength)
+  return glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength)
+}
+
+for (const scenario of ['undeclared', 'undeclared already loaded', 'undeclared cached model', 'declared shared', 'declared cached model', 'invalid image index', 'decode failure', 'parser texture failure'] as const) {
+  test(`real GLTF parser enforces manifest texture ownership: ${scenario}`, async t => {
+    const previousSelf = globalThis.self
+    Object.assign(globalThis, { self: globalThis })
+    t.after(() => { Object.assign(globalThis, { self: previousSelf }) })
+    const textureHash = 'f'.repeat(64)
+    const textureArtifact = { sha256: textureHash, bytes: 16, url: `/assets/game/test/${textureHash}.ktx2` }
+    const needsOwner = ['undeclared already loaded', 'undeclared cached model', 'declared shared', 'declared cached model'].includes(scenario)
+    const manifests = ['owner', 'candidate'].map((name, index) => {
+      const sha256 = String(scenario.endsWith('cached model') ? 1 : index + 1).repeat(64)
+      return { ...compatibleClipManifests(), id: `equipment/${name}`, kind: 'equipment', rigHash: null, sockets: {}, clips: {},
+        textures: name === 'candidate' && scenario.startsWith('undeclared') ? [] : [textureArtifact],
+        model: { sha256, bytes: 100, url: `/assets/game/test/${sha256}.glb` } }
+    })
+    const references = manifests.map((manifest, index) => {
+      const sha256 = String(index + 3).repeat(64)
+      return { id: manifest.id, sha256, bytes: 100, url: `/assets/game/test/${sha256}.json` }
+    })
+    t.mock.method(globalThis, 'fetch', async (input: string) => Response.json(input.endsWith('asset-catalog.json')
+      ? { schema: 1, assets: Object.fromEntries(references.map(reference => [reference.id, reference])) }
+      : manifests[references.findIndex(reference => reference.url === input)]))
+    const texture = new CompressedTexture([{ data: new Uint8Array(16), width: 4, height: 4 }], 4, 4, RGBA_S3TC_DXT5_Format)
+    let textureDisposals = 0
+    texture.addEventListener('dispose', () => textureDisposals++)
+    t.mock.method(KTX2Loader.prototype, 'load', (_url: string, onLoad: (texture: CompressedTexture) => void, _progress: unknown, onError: (error: Error) => void) => {
+      if (scenario === 'decode failure') onError(new Error('Required KTX2 decode failed'))
+      else onLoad(texture)
+    })
+    const payload = texturedGLB(`${textureHash}.ktx2`, scenario === 'invalid image index' ? 7 : 0)
+    t.mock.method(GLTFLoader.prototype, 'loadAsync', function (this: GLTFLoader) {
+      if (scenario === 'parser texture failure') {
+        // Fail the actual parser's image-loader callback after a successful preload.
+        // GLTFLoader normally logs this error and resolves a null texture dependency.
+        t.mock.method(console, 'error', () => {})
+        t.mock.method(this.ktx2Loader!, 'load', (_url: string, _load: unknown, _progress: unknown, onError: (error: Error) => void) => onError(new Error('Image callback failed')))
+      }
+      return this.parseAsync(payload, '/assets/game/test/')
+    })
+    const cache = new ActorAssetCache({ extensions: { has: () => false }, capabilities: {} } as unknown as WebGLRenderer)
+    t.after(() => cache.destroy())
+    const owner = needsOwner ? await cache.acquire(manifests[0]!.id) : undefined
+    if (scenario === 'declared shared' || scenario === 'declared cached model') {
+      const candidate = await cache.acquire(manifests[1]!.id)
+      const material = (candidate.asset.scene.getObjectByName('triangle') as Mesh).material as MeshStandardMaterial
+      assert.equal(material.map, texture)
+      owner!.release()
+      assert.equal(textureDisposals, 0, 'another bundle must retain its own texture lease')
+      assert.equal(material.map, texture, 'a ready bundle retains its required material map')
+      candidate.release()
+      assert.equal(textureDisposals, 1)
+    } else {
+      await assert.rejects(cache.acquire(manifests[1]!.id), /Unable to load actor asset/)
+      if (owner) assert.equal(textureDisposals, 0, 'rejected candidate must not dispose another bundle texture')
+      owner?.release()
+      assert.equal(cache.loadedCount, 0)
+      assert.equal(cache.residentBytes, 0)
+    }
+  })
+}
