@@ -1,0 +1,182 @@
+[
+  {
+    "source": "art_source/characters/male_commoner_v4/commoner_rigged.blend",
+    "sha256": "51bc21318415939454331a7266cf50fbd98cf9c4f7a7111d8d9824d19a4a1b5b",
+    "actions": [
+      "Meshy carry_idle",
+      "Meshy carry_walk",
+      "Meshy idle",
+      "Meshy walk",
+      "axe_idle_l",
+      "axe_idle_l.001",
+      "axe_idle_l.002",
+      "axe_idle_r",
+      "axe_idle_r.001",
+      "axe_idle_r.002",
+      "axe_walk_l",
+      "axe_walk_l.001",
+      "axe_walk_l.002",
+      "axe_walk_r",
+      "axe_walk_r.001",
+      "axe_walk_r.002"
+    ],
+    "comparisons": {
+      "Meshy idle": {
+        "runtimeClip": "idle",
+        "maxPositionError": 1.3045531639654794e-07,
+        "maxQuaternionError": 1.3328003749250115e-07
+      },
+      "Meshy walk": {
+        "runtimeClip": "walk",
+        "maxPositionError": 4.730007194747128e-07,
+        "maxQuaternionError": 1.0876826996144582e-06
+      },
+      "Meshy carry_idle": {
+        "runtimeClip": "carry_idle",
+        "maxPositionError": 2.2581310560488213e-07,
+        "maxQuaternionError": 2.421152116249789e-07
+      },
+      "Meshy carry_walk": {
+        "runtimeClip": "carry_walk",
+        "maxPositionError": 6.413505640130961e-07,
+        "maxQuaternionError": 6.322027276634131e-07
+      },
+      "axe_idle_l": {
+        "runtimeClip": "axe_idle_l",
+        "maxPositionError": 3.306629824157621e-07,
+        "maxQuaternionError": 0.4866082868039185
+      },
+      "axe_idle_l.001": {
+        "runtimeClip": "axe_idle_l",
+        "maxPositionError": 3.306629824157621e-07,
+        "maxQuaternionError": 0.4866082868039185
+      },
+      "axe_idle_l.002": {
+        "runtimeClip": "axe_idle_l",
+        "maxPositionError": 3.306629824157621e-07,
+        "maxQuaternionError": 0.4866082868039185
+      },
+      "axe_idle_r": {
+        "runtimeClip": "axe_idle_r",
+        "maxPositionError": 1.4876827690067972e-07,
+        "maxQuaternionError": 0.4866086080661207
+      },
+      "axe_idle_r.001": {
+        "runtimeClip": "axe_idle_r",
+        "maxPositionError": 1.4876827690067972e-07,
+        "maxQuaternionError": 0.4866086080661207
+      },
+      "axe_idle_r.002": {
+        "runtimeClip": "axe_idle_r",
+        "maxPositionError": 1.4876827690067972e-07,
+        "maxQuaternionError": 0.4866086080661207
+      },
+      "axe_walk_l": {
+        "runtimeClip": "axe_walk_l",
+        "maxPositionError": 3.3676203440060373e-07,
+        "maxQuaternionError": 2.1490760299348777e-07
+      },
+      "axe_walk_l.001": {
+        "runtimeClip": "axe_walk_l",
+        "maxPositionError": 3.3676203440060373e-07,
+        "maxQuaternionError": 2.1490760299348777e-07
+      },
+      "axe_walk_l.002": {
+        "runtimeClip": "axe_walk_l",
+        "maxPositionError": 3.3676203440060373e-07,
+        "maxQuaternionError": 2.1490760299348777e-07
+      },
+      "axe_walk_r": {
+        "runtimeClip": "axe_walk_r",
+        "maxPositionError": 3.884023522370524e-07,
+        "maxQuaternionError": 1.7377590819732256e-07
+      },
+      "axe_walk_r.001": {
+        "runtimeClip": "axe_walk_r",
+        "maxPositionError": 3.884023522370524e-07,
+        "maxQuaternionError": 1.7377590819732256e-07
+      },
+      "axe_walk_r.002": {
+        "runtimeClip": "axe_walk_r",
+        "maxPositionError": 3.884023522370524e-07,
+        "maxQuaternionError": 1.7377590819732256e-07
+      }
+    }
+  },
+  {
+    "source": "art_source/equipment/stone_axe/stone_axe_user_idle_pose.blend",
+    "sha256": "ac9531d9f6a7d953c9466114d83028134f651ae56d51e0d09ce15ea17f9e80f4",
+    "actions": [],
+    "comparisons": {
+      "axe_idle_r": {
+        "runtimeClip": "axe_idle_r",
+        "maxPositionError": 1.255889007158569e-07,
+        "maxQuaternionError": 8.429369702178807e-08
+      }
+    }
+  },
+  {
+    "source": "art_source/equipment/stone_axe/stone_axe_walk_pose_edit.blend",
+    "sha256": "7ce0cb106146bf4979ab50751439cf04d906cbb2bed5b3ef2f52a645b379e205",
+    "actions": [
+      "Meshy carry_idle",
+      "Meshy carry_walk",
+      "Meshy idle",
+      "Meshy walk",
+      "axe_idle_l.002",
+      "axe_idle_r.002",
+      "axe_walk_l.002",
+      "axe_walk_r.002",
+      "axe_walk_r_user_edit"
+    ],
+    "comparisons": {
+      "axe_walk_r": {
+        "runtimeClip": "axe_walk_r",
+        "maxPositionError": 4.7071694189011674e-07,
+        "maxQuaternionError": 0.3632075882358016
+      }
+    }
+  },
+  {
+    "source": "art_source/equipment/stone_axe/stone_axe_user_grip.blend",
+    "sha256": "befcfe75ba690d0fbd5f25d491884ffc5ead5180cfc6b249057e13e9725f0cbf",
+    "actions": [
+      "Meshy carry_idle",
+      "Meshy carry_walk",
+      "Meshy idle",
+      "Meshy walk",
+      "axe_idle_l.002",
+      "axe_idle_r.002",
+      "axe_walk_l.002",
+      "axe_walk_r.002"
+    ],
+    "comparisons": {
+      "axe_walk_r": {
+        "runtimeClip": "axe_walk_r",
+        "maxPositionError": 4.9061557643982e-07,
+        "maxQuaternionError": 1.7881393432617193e-07
+      }
+    }
+  },
+  {
+    "source": "art_source/equipment/stone_axe/stone_axe_user_grip_l.blend",
+    "sha256": "c55f69ef3b4f5cf18e6e7c0b2b723cb96935f0f3c515b0ecca8c1c12193c1d15",
+    "actions": [
+      "Meshy carry_idle",
+      "Meshy carry_walk",
+      "Meshy idle",
+      "Meshy walk",
+      "axe_idle_l.002",
+      "axe_idle_r.002",
+      "axe_walk_l.002",
+      "axe_walk_r.002"
+    ],
+    "comparisons": {
+      "axe_walk_l": {
+        "runtimeClip": "axe_walk_l",
+        "maxPositionError": 5.525257316319281e-07,
+        "maxQuaternionError": 2.1490760299348777e-07
+      }
+    }
+  }
+]

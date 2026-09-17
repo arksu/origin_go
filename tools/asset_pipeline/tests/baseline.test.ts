@@ -93,4 +93,13 @@ export const EQUIPMENT = { stone_axe: { bindings: {
   assert.equal(result.comparisons[0]?.identicalSemantics, true)
   await assert.doesNotReject(readFile(join(output, 'baseline.json')))
   await assert.doesNotReject(readFile(join(output, 'artifacts', LEGACY_GLB_PATHS[0])))
+
+  const changedPath = join(root, LEGACY_GLB_PATHS[1])
+  const changed = await new NodeIO().read(changedPath)
+  const animationValues = changed.getRoot().listAnimations()[0]!.listSamplers()[0]!.getOutput()!
+  animationValues.setArray(new Float32Array([0, 0, 0, 0, 2, 0]))
+  await writeFile(changedPath, await new NodeIO().writeBinary(changed))
+  const comparison = await snapshotLegacy({ root, output: join(root, 'build/changed-baseline') })
+  assert.equal(comparison.comparisons[0]?.identicalSemantics, false)
+  assert.deepEqual(comparison.comparisons[0]?.differingSections, ['animations'])
 })
