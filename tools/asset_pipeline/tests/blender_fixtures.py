@@ -27,6 +27,8 @@ else:
     model = bpy.data.objects.new('Body', mesh)
     collection.objects.link(model)
     model['lod'] = 0
+    if options.get('runtimeExtras'):
+        model['skinning'] = options.get('skinning', 'linear')
     if options.get('customExtras'):
         model['editor_source_path'] = str(source)
         model['last_preview_action'] = 'private-editor-state'
@@ -120,6 +122,9 @@ else:
         image.pack()
         material = bpy.data.materials.new('Surface')
         material.use_nodes = True
+        if options.get('runtimeExtras'):
+            material['region'] = options.get('region', 'textured')
+            material['editor_source_path'] = str(source)
         texture = material.node_tree.nodes.new('ShaderNodeTexImage')
         texture.image = image
         material.node_tree.links.new(texture.outputs['Color'], material.node_tree.nodes.get('Principled BSDF').inputs['Base Color'])
@@ -154,4 +159,6 @@ if request['kind'] == 'character':
 bpy.context.scene.frame_set(options.get('savedFrame', 12))
 if options.get('savedPose') and request['kind'] == 'character':
     rig.pose.bones['root'].location = (8, 9, 10)
+if options.get('savedSingularPose') and request['kind'] == 'character':
+    rig.pose.bones['root'].scale = (0, 0, 0)
 bpy.ops.wm.save_as_mainfile(filepath=str(source))

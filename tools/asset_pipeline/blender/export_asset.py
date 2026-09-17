@@ -13,7 +13,7 @@ import bpy
 from mathutils import Matrix, Quaternion, Vector
 from source_contract import (binding_metadata, canonical_hash, finite, matrix_values,
                              require, reset_scene, sample_clip, select_action,
-                             validate_request, validate_source)
+                             validate_evaluated_transforms, validate_request, validate_source)
 
 
 def read_glb(path):
@@ -206,6 +206,7 @@ def main():
         scene.collection.objects.link(obj)
     bpy.context.window.scene = scene
     reset_scene(rig)
+    validate_evaluated_transforms(objects)
     bindings = binding_metadata(recipe)
     raw = output / 'raw'
     (raw / 'animations').mkdir(parents=True)
@@ -217,6 +218,13 @@ def main():
         if node.get('name') in meshes:
             obj = meshes[node['name']]
             node['extras'] = {'lod': obj['lod'], 'skinned': bool(obj['skinned'])}
+            if 'skinning' in obj:
+                node['extras']['skinning'] = obj['skinning']
+    materials = {material.name: material for obj in meshes.values() for material in obj.data.materials}
+    for material in document.get('materials', []):
+        source_material = materials.get(material.get('name'))
+        if source_material is not None and 'region' in source_material:
+            material['extras'] = {'region': source_material['region']}
     write_glb(model_path, document, binary)
     contract = skeleton_contract(document, rig)
     nodes = {node.get('name'): node for node in document.get('nodes', [])}

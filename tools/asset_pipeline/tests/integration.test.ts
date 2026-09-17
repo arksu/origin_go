@@ -211,3 +211,30 @@ test('native IK secondary targets must be declared inside EXPORT', async () => {
   const fixture = await createFixture('character', { undeclaredPoleTarget: true })
   await assert.rejects(runExport(fixture.recipe, fixture.directory('export')), /undeclared.*target/)
 })
+
+test('runtime mesh skinning and material region extras survive author-property filtering', async () => {
+  const fixture = await createFixture('character', { packedTexture: true, runtimeExtras: true, customExtras: true })
+  const result = await runExport(fixture.recipe, fixture.directory('export'), [])
+  assert.deepEqual(result.model.nodes.find((node: any) => node.name === 'Body').extras,
+    { lod: 0, skinned: true, skinning: 'linear' })
+  assert.deepEqual(result.model.materials.find((material: any) => material.name === 'Surface').extras, { region: 'textured' })
+  assert.equal(JSON.stringify(result.model).includes(fixture.root), false)
+  assert.equal(JSON.stringify(result.model).includes('private-editor-state'), false)
+})
+
+for (const overrides of [{ skinning: 'unknown' }, { region: 'unknown' }]) {
+  test(`rejects unsupported runtime extras ${JSON.stringify(overrides)}`, async () => {
+    const fixture = await createFixture('character', { packedTexture: true, runtimeExtras: true, ...overrides })
+    await assert.rejects(runExport(fixture.recipe, fixture.directory('export'), []), /skinning|region/)
+  })
+}
+
+test('saved singular pose cannot reject or change the canonical rest model', async () => {
+  const fixture = await createFixture('character')
+  const first = await runExport(fixture.recipe, fixture.directory('rest'), [])
+  await fixture.saveEditorState({ frame: 6, action: 'walk', singularPose: true })
+  const sourceHash = await fixture.sourceHash()
+  const singular = await runExport(fixture.recipe, fixture.directory('singular'), [])
+  assert.equal(singular.modelHash, first.modelHash)
+  assert.equal(await fixture.sourceHash(), sourceHash)
+})
