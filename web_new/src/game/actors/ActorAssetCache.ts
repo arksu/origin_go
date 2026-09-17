@@ -1,5 +1,5 @@
-import { BufferGeometry, CompressedTexture, InterleavedBufferAttribute, LoadingManager, Material, Mesh, PropertyBinding, SkinnedMesh, Texture, type AnimationClip, type Group, type WebGLRenderer } from 'three'
-import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js'
+import { BufferGeometry, CompressedTexture, InterleavedBufferAttribute, LoaderUtils, LoadingManager, Material, Mesh, PropertyBinding, SkinnedMesh, Texture, type AnimationClip, type Group, type WebGLRenderer } from 'three'
+import { GLTFLoader, type GLTF, type GLTFParser } from 'three/addons/loaders/GLTFLoader.js'
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { loadActorCatalog, validateAssetURL, type ActorCatalog, type ActorManifest } from './ActorAssetCatalog'
@@ -10,6 +10,25 @@ import { ACTOR_RENDER } from './config'
 export interface ActorBundle { scene: Group; animations: AnimationClip[]; manifest: ActorManifest }
 interface Lease<T> { asset: T; release(): void }
 interface Entry<T> { promise: Promise<T>; asset?: T; references: number }
+
+function validateTextureReferences(parser: GLTFParser, manifest: ActorManifest): string[] {
+  const images = parser.json.images ?? []
+  const textures = parser.json.textures ?? []
+  if (!Array.isArray(images) || !Array.isArray(textures)) throw new Error('Invalid actor texture references')
+  const declared = new Set(manifest.textures.map(texture => texture.url))
+  const urls = images.map(image => {
+    if (!image || typeof image.uri !== 'string' || image.bufferView !== undefined || image.mimeType !== undefined && image.mimeType !== 'image/ktx2') throw new Error('Actor image must reference an external KTX2 texture')
+    const url = validateAssetURL(LoaderUtils.resolveURL(image.uri, parser.options.path))
+    if (!declared.has(url)) throw new Error(`Undeclared actor texture in ${manifest.id}: ${url}`)
+    return url
+  })
+  for (const texture of textures) {
+    const source = texture?.extensions?.KHR_texture_basisu?.source
+    if (!Number.isInteger(source) || source < 0 || source >= images.length) throw new Error('Invalid actor KTX2 image reference')
+    if (texture.source !== undefined && (!Number.isInteger(texture.source) || texture.source < 0 || texture.source >= images.length)) throw new Error('Invalid actor fallback image reference')
+  }
+  return urls
+}
 
 function resources(assets: Iterable<GLTF>) {
   const geometries = new Set<BufferGeometry>(); const materials = new Set<Material>(); const textures = new Set<Texture>()
@@ -51,15 +70,16 @@ export function actorResidentBytes(assets: Iterable<GLTF>, extraTextures: Iterab
 }
 
 export class ActorAssetCache {
-  private readonly loader: GLTFLoader
+  private readonly manager = new LoadingManager()
   private readonly ktx: KTX2Loader
   private catalogPromise?: Promise<ActorCatalog>
   private readonly entries = new Map<string, Entry<GLTF>>()
   private readonly textures = new Map<string, Entry<CompressedTexture>>()
+  private readonly artifactTextures = new WeakMap<GLTF, readonly string[]>()
   private destroyed = false
 
   constructor(renderer: WebGLRenderer, private readonly catalogURL = '/assets/game/asset-catalog.json') {
-    const manager = new LoadingManager()
+    const manager = this.manager
     manager.setURLModifier(validateAssetURL)
     this.ktx = new KTX2Loader(manager).setTranscoderPath('/assets/game/decoders/basis/').detectSupport(renderer)
     const originalLoad = this.ktx.load.bind(this.ktx)
@@ -71,10 +91,17 @@ export class ActorAssetCache {
       void entry.promise.then(onLoad).catch(error => onError?.(error))
       return undefined
     }
-    this.loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(this.ktx)
-    this.loader.register(parser => ({
-      name: 'ACTOR_EXPORTED_NAMES',
+  }
+  private readonly loadTexture: (url: string) => Promise<CompressedTexture>
+
+  private async loadArtifact(url: string, manifest: ActorManifest): Promise<GLTF> {
+    // A loader's validation scope belongs to one acquisition, never to the global texture pool.
+    const loader = new GLTFLoader(this.manager).setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(this.ktx)
+    let textureURLs: readonly string[] = []
+    loader.register(parser => ({
+      name: 'ACTOR_ARTIFACT_CONTRACT',
       beforeRoot: async () => {
+        textureURLs = validateTextureReferences(parser, manifest)
         // GLTFLoader otherwise repairs collisions with suffixes, hiding an invalid rig contract.
         const names = new Set<string>()
         for (const node of parser.json.nodes ?? []) {
@@ -83,10 +110,17 @@ export class ActorAssetCache {
           if (names.has(name)) throw new Error(`Duplicate sanitized exported node name: ${name}`)
           names.add(name)
         }
+        // GLTFLoader catches image failures and returns null; require every referenced texture
+        // before allowing it to construct meshes with silently missing material maps.
+        await Promise.all((parser.json.textures ?? []).map(async (_texture: unknown, index: number) => {
+          if (!(await parser.getDependency('texture', index) instanceof Texture)) throw new Error(`Required actor texture failed: ${index} in ${url}`)
+        }))
       },
     }))
+    const asset = await loader.loadAsync(url)
+    this.artifactTextures.set(asset, textureURLs)
+    return asset
   }
-  private readonly loadTexture: (url: string) => Promise<CompressedTexture>
 
   get catalog(): Promise<ActorCatalog> {
     if (this.destroyed) return Promise.reject(new Error('Actor asset cache is disposed'))
@@ -153,12 +187,17 @@ export class ActorAssetCache {
       const textureFailure = textureResults.find(result => result.status === 'rejected')
       if (textureFailure?.status === 'rejected') throw textureFailure.reason
       const urls = [manifest.model.url, ...Object.values(manifest.clips).map(clip => clip.artifact.url)]
-      const results = await Promise.allSettled(urls.map(url => this.acquireEntry(this.entries, url, () => this.loader.loadAsync(url), asset => this.disposeArtifact(asset))))
+      const results = await Promise.allSettled(urls.map(url => this.acquireEntry(this.entries, url, () => this.loadArtifact(url, manifest), asset => this.disposeArtifact(asset))))
       for (const result of results) if (result.status === 'fulfilled') leases.push(result.value)
       const failure = results.find(result => result.status === 'rejected')
       if (failure?.status === 'rejected') throw failure.reason
       if (this.destroyed) throw new Error('Actor asset cache disposed during load')
       const assets = results.map(result => (result as PromiseFulfilledResult<Lease<GLTF>>).value.asset)
+      const declared = new Set(manifest.textures.map(texture => texture.url))
+      for (const asset of assets) for (const textureURL of this.artifactTextures.get(asset)!) {
+        // A reused model still requires this bundle's own declared texture leases.
+        if (!declared.has(textureURL)) throw new Error(`Undeclared actor texture in ${manifest.id}: ${textureURL}`)
+      }
       const model = assets[0]!
       if (model.animations.length) throw new Error('Catalog model contains embedded animations')
       const clips = assets.slice(1).flatMap(asset => asset.animations)

@@ -49,7 +49,7 @@ function artifact(value: unknown, extension: string): void {
 function matrix(value: unknown): value is number[] { return Array.isArray(value) && value.length === 16 && value.every(v => typeof v === 'number' && Number.isFinite(v)) }
 export function parseActorManifest(value: unknown): ActorManifest {
   const manifest = record(value, 'manifest')
-  if (manifest.schema !== 1 || !['character', 'equipment'].includes(String(manifest.kind)) || typeof manifest.id !== 'string' || !/^(character|equipment)\/[a-zA-Z0-9_-]+$/.test(manifest.id) || !manifest.id.startsWith(`${manifest.kind}/`)) throw new Error('Invalid actor manifest schema or id')
+  if (manifest.schema !== 1 || typeof manifest.kind !== 'string' || !['character', 'equipment'].includes(manifest.kind) || typeof manifest.id !== 'string' || !/^(character|equipment)\/[a-zA-Z0-9_-]+$/.test(manifest.id) || !manifest.id.startsWith(`${manifest.kind}/`)) throw new Error('Invalid actor manifest schema or id')
   if (manifest.kind === 'character' ? typeof manifest.rigHash !== 'string' || !HASH.test(manifest.rigHash) : manifest.rigHash !== null && (typeof manifest.rigHash !== 'string' || !HASH.test(manifest.rigHash))) throw new Error('Invalid rigHash')
   artifact(manifest.model, 'glb'); artifact(manifest.metadata, 'json')
   if (!Array.isArray(manifest.textures)) throw new Error('Invalid textures')
@@ -60,7 +60,7 @@ export function parseActorManifest(value: unknown): ActorManifest {
   const clips = record(manifest.clips, 'clips')
   for (const [name, value] of Object.entries(clips)) {
     const clip = record(value, `clip ${name}`)
-    if (!NAME.test(name) || clip.rigHash !== manifest.rigHash || !positive(clip.duration) || typeof clip.loop !== 'boolean' || !['time', 'distance'].includes(String(clip.playback))) throw new Error(`Invalid clip or rigHash: ${name}`)
+    if (!NAME.test(name) || clip.rigHash !== manifest.rigHash || !positive(clip.duration) || typeof clip.loop !== 'boolean' || typeof clip.playback !== 'string' || !['time', 'distance'].includes(clip.playback)) throw new Error(`Invalid clip or rigHash: ${name}`)
     artifact(clip.artifact, 'glb')
     if (!Array.isArray(clip.channelMask) || !clip.channelMask.length || clip.channelMask.some(node => typeof node !== 'string' || !NAME.test(node)) || new Set(clip.channelMask).size !== clip.channelMask.length) throw new Error(`Invalid channel mask: ${name}`)
     if (clip.playback === 'distance' && !positive(clip.cycleDistanceTiles)) throw new Error(`Invalid cycleDistanceTiles: ${name}`)
