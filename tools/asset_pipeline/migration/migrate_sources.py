@@ -14,6 +14,18 @@ from mathutils import Matrix, Quaternion, Vector
 BASIS = Matrix(((1, 0, 0, 0), (0, 0, 1, 0), (0, -1, 0, 0), (0, 0, 0, 1)))
 
 
+def require_locked_blender():
+    # Inspect the executing interpreter, not an executable path or environment
+    # override. Run before any source read/write in migration, audit and verification.
+    lock = json.loads((Path(__file__).resolve().parent.parent / 'toolchain.lock.json').read_text())['blender']
+    actual_version = '.'.join(str(component) for component in bpy.app.version)
+    actual_hash = bpy.app.build_hash.decode('ascii')
+    if actual_version != lock['version']:
+        raise ValueError(f"Blender {lock['version']} is required; found {actual_version}")
+    if actual_hash != lock['buildHash']:
+        raise ValueError(f"Blender build {lock['buildHash']} is required; found {actual_hash}")
+
+
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -296,6 +308,7 @@ def axe(root, baseline, destination, commoner_source):
 
 
 def main():
+    require_locked_blender()
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', required=True)
     parser.add_argument('--baseline', required=True)
