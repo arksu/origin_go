@@ -1,5 +1,5 @@
-import { readdir, readFile, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { parseDocument } from 'yaml'
 
@@ -165,6 +165,7 @@ function isPathInside(root: string, path: string): boolean {
 
 async function resolveSource(root: string, recipePath: string, sourceValue: unknown): Promise<ResolvedSource> {
   const declaredPath = requireRelativePath(sourceValue, 'source')
+  if (extname(declaredPath) !== '.blend') throw new Error('source must use the .blend extension')
   const candidatePath = resolve(recipePath, '..', declaredPath)
   let sourcePath: string
   try {
@@ -188,12 +189,26 @@ async function resolveRuntimeOutput(root: string, value: unknown): Promise<{ run
   let outputDirectory = publicDirectory
   for (const segment of runtimePath.slice(1).split('/')) {
     const candidate = resolve(outputDirectory, segment)
+    let candidateEntry
     try {
-      outputDirectory = await realpath(candidate)
+      candidateEntry = await lstat(candidate)
     } catch (error) {
       const code = error instanceof Error && 'code' in error ? error.code : undefined
       if (code !== 'ENOENT') throw error
       outputDirectory = candidate
+      continue
+    }
+    try {
+      outputDirectory = await realpath(candidate)
+    } catch (error) {
+      const code = error instanceof Error && 'code' in error ? error.code : undefined
+      if (code === 'ENOENT' && candidateEntry.isSymbolicLink()) {
+        throw new Error(`runtimePath ${runtimePath} crosses a dangling symlink`)
+      }
+      throw error
+    }
+    if (!(await stat(outputDirectory)).isDirectory()) {
+      throw new Error(`runtimePath ${runtimePath} crosses a non-directory output path`)
     }
     if (!isPathInside(publicDirectory, outputDirectory)) {
       throw new Error(`runtimePath ${runtimePath} escapes web_new/public through a symlink`)
