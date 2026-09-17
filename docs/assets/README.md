@@ -116,3 +116,19 @@ Acceptance on 2026-09-17 reused the existing browser pages and cache tests, plus
 one disposable Blender walk edit through the CLI. Evidence is in ignored
 `build/task9-acceptance/`. Mobile/thermal performance and a populated live-server
 scene remain separate from these local acceptance checks.
+
+## Retired sources
+
+The superseded v1–v3 trees, their Blender helper chain and five retired runtime
+GLBs were removed after migration and runtime acceptance. The exact 270-file
+inventory is [legacy-removal.json](legacy-removal.json); all removed bytes are
+recoverable from Git commit `296ac1db46dd48e785d17b8f1f7ae6da9a1d7184`.
+The retained motion-donor documents and licenses were verified byte-for-byte
+against their originals before deletion. No untracked or ignored files existed
+inside the deletion set.
+
+V4 and axe working scenes remain historical references where unique edits have
+not been proven redundant. The original baked-player documentation is marked
+historical; existing fallback sprites are retained. `tools/blender/mcp_client.py`
+remains a general authoring helper. `tools/asset_pipeline/migration/` records the
+one-time migration with historical input paths; normal builds never execute it.

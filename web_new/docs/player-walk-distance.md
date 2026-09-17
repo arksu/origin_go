@@ -1,5 +1,10 @@
 # Ходьба по пройденному расстоянию
 
+> Historical baked-sprite calibration. The current player uses the canonical
+> Blender recipe's `cycleDistanceTiles`; follow
+> [the asset workflow](../../docs/assets/README.md). References below to the old
+> Blender source tree record the original measurement and are not build inputs.
+
 Исследование и измерение: 2026-09-09. Изменение касается отображения персонажа;
 серверная скорость и сетевой протокол остаются прежними.
 

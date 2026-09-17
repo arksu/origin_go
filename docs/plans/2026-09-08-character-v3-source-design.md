@@ -1,5 +1,8 @@
 # Character v3: anatomical source model
 
+> Superseded historical design. Its sources and helpers were retired on
+> 2026-09-17; see [the current asset workflow](../assets/README.md).
+
 The user approved a Blender character based on the existing v2 turnaround,
 with production visual quality as the target. This stage covers the model,
 materials and review renders; animation and game integration are later work.

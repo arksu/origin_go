@@ -1,5 +1,8 @@
 # Character v2: deterministic pixel-art bake
 
+> Superseded historical design. Its sources and helpers were retired on
+> 2026-09-17; see [the current asset workflow](../assets/README.md).
+
 ## Goal
 
 Convert the rigged Blender source character into stable, transparent pixel-art
