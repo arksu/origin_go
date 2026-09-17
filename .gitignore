@@ -55,4 +55,6 @@ input/
 input_failed/
 tmp/
 web_new/node_modules
+tools/asset_pipeline/node_modules/
+tools/asset_pipeline/.tools/
 web_new/src/network/proto/*
