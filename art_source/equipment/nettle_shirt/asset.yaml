@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "id": "equipment/nettle_shirt",
+  "kind": "equipment",
+  "source": "tunic.blend",
+  "runtimePath": "/assets/game/equipment/nettle_shirt",
+  "dependencies": {
+    "export": [],
+    "preview": [
+      "character/male_commoner"
+    ]
+  },
+  "rig": {
+    "object": "commoner_rig",
+    "bones": [
+      "pelvis", "spine", "chest", "head",
+      "clavicle.l", "upper_arm.l", "forearm.l", "hand.l",
+      "finger1.1.l", "finger1.2.l", "finger1.3.l", "finger2.1.l", "finger2.2.l", "finger2.3.l",
+      "finger3.1.l", "finger3.2.l", "finger3.3.l", "finger4.1.l", "finger4.2.l", "finger4.3.l",
+      "finger5.1.l", "finger5.2.l", "finger5.3.l",
+      "clavicle.r", "upper_arm.r", "forearm.r", "hand.r",
+      "finger1.1.r", "finger1.2.r", "finger1.3.r", "finger2.1.r", "finger2.2.r", "finger2.3.r",
+      "finger3.1.r", "finger3.2.r", "finger3.3.r", "finger4.1.r", "finger4.2.r", "finger4.3.r",
+      "finger5.1.r", "finger5.2.r", "finger5.3.r",
+      "thigh.l", "shin.l", "foot.l", "toes.l", "thigh.r", "shin.r", "foot.r", "toes.r"
+    ],
+    "sockets": []
+  },
+  "equipmentSlots": ["chest"],
+  "clips": {
+    "idle": {"action": "idle", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "time"},
+    "carry_idle": {"action": "carry_idle", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "time"},
+    "walk": {"action": "walk", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "distance", "cycleDistanceTiles": 1.677975879375},
+    "carry_walk": {"action": "carry_walk", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "distance", "cycleDistanceTiles": 1.677975879375}
+  },
+  "bindings": {},
+  "budgets": {
+    "trianglesByLod": {"0": 10000},
+    "textureDimensions": {"width": 1024, "height": 1024},
+    "totalPublishedBytes": 5000000,
+    "boneInfluences": 4,
+    "bones": 50
+  },
+  "optimization": {
+    "meshCompression": "meshopt",
+    "texture": {"codec": "uastc", "quality": 2, "width": 1024, "height": 1024, "mipmaps": true}
+  }
+}

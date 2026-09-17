@@ -20,6 +20,24 @@
           "left_hand"
         ]
       }
+    },
+    {
+      "defId": 1003,
+      "key": "nettle_shirt",
+      "name": "Nettle Shirt",
+      "resource": "items/nettle_shirt.png",
+      "tags": [
+        "clothing"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      },
+      "allowed": {
+        "equipmentSlots": [
+          "chest"
+        ]
+      }
     }
   ]
 }

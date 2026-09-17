@@ -10,6 +10,15 @@ import { artifactPath, publishCatalog, readArtifact, readCatalog, withPublishLoc
 
 const pipelineDirectory = fileURLToPath(new URL('./', import.meta.url))
 export const defaultRoot = fileURLToPath(new URL('../../', import.meta.url))
+const noLog = () => {}
+
+function report(log, message) {
+  log(`[assets] ${message}`)
+}
+
+function elapsedSince(startedAt) {
+  return `${Date.now() - startedAt}ms`
+}
 
 async function hashes(paths) {
   return Object.fromEntries(await Promise.all([...new Set(paths)].sort().map(async path => [path, sha256(await readFile(path))])))
@@ -42,22 +51,36 @@ function recipeHash(recipe) {
   return sha256(canonicalJSON({ ...settings, source: source.relativePath }))
 }
 
-async function stage(staging, id, name, operation) {
-  try { return await operation() } catch (error) {
-    const log = join(staging, `${id.replaceAll('/', '-')}-${name}.log`)
+async function stage(staging, id, name, operation, log = noLog) {
+  const startedAt = Date.now()
+  report(log, `${id} ${name} start`)
+  try {
+    const result = await operation()
+    report(log, `${id} ${name} complete (${elapsedSince(startedAt)})`)
+    return result
+  } catch (error) {
+    const detailsPath = join(staging, `${id.replaceAll('/', '-')}-${name}.log`)
     const detail = [error.stack ?? String(error), error.stdout ?? '', error.stderr ?? ''].join('\n')
-    await writeFile(log, detail)
-    throw new Error(`${id} ${name} failed: ${error.message}; log: ${log}`, { cause: error })
+    await writeFile(detailsPath, detail)
+    report(log, `${id} ${name} failed (${elapsedSince(startedAt)}); details: ${detailsPath}`)
+    throw new Error(`${id} ${name} failed: ${error.message}; log: ${detailsPath}`, { cause: error })
   }
 }
 
-async function prepare(root, target, toolPaths) {
+async function prepare(root, target, toolPaths, log = noLog) {
   const recipeFiles = await findRecipeFiles(join(root, 'art_source'))
   const recipeInputs = await hashes(recipeFiles)
   const recipes = await loadRecipes(root)
   await assertStable(recipeInputs)
   const selected = selectRecipes(recipes, target)
   if (!selected.length) throw new Error('No asset recipes found')
+  report(log, `target ${target}`)
+  for (const recipe of selected) {
+    report(log, `source ${recipe.id} ${recipe.source.relativePath}`)
+    for (const [id, dependency] of dependenciesOf(recipe, recipes)) {
+      report(log, `dependency ${recipe.id} ${id} ${dependency.source.relativePath}`)
+    }
+  }
   const inputs = new Map(selected.map(recipe => [recipe.id, recipe]))
   for (const recipe of selected) for (const [id, dependency] of dependenciesOf(recipe, recipes)) inputs.set(id, dependency)
   const sourceInputs = await hashes([...inputs.values()].map(recipe => recipe.source.absolutePath))
@@ -67,7 +90,7 @@ async function prepare(root, target, toolPaths) {
   const paths = { node: process.execPath, blender: '/Applications/Blender.app/Contents/MacOS/Blender',
     toktx: join(pipelineDirectory, '.tools/ktx-4.4.2/install/usr/local/bin/toktx'), ...toolPaths }
   const lock = JSON.parse(await readFile(join(pipelineDirectory, 'toolchain.lock.json'), 'utf8'))
-  const identity = await stage(staging, target, 'preflight', () => inspectToolchain(paths, lock))
+  const identity = await stage(staging, target, 'preflight', () => inspectToolchain(paths, lock), log)
   return { root, recipes, selected, staging, sourceInputs, inputs: { ...recipeInputs, ...sourceInputs }, toolchain: { paths, identity }, recipeFiles }
 }
 
@@ -105,7 +128,8 @@ async function makeBundle(recipe, result, context, exported) {
     sockets: metadata.sockets, bindings: metadata.bindings, toolchain: metadata.toolchainHash, dependencies: exportModels }))
   return { manifest: { schema: 1, id: recipe.id, kind: recipe.kind, model, textures, clips,
     rigHash: recipe.rig ? metadata.rigHash : null, modelInputHash,
-    sockets: Object.fromEntries(Object.keys(metadata.sockets).sort().map(name => [name, name])), bindings: metadata.bindings,
+    sockets: Object.fromEntries(Object.keys(metadata.sockets).sort().map(name => [name, name])),
+    bindings: metadata.bindings, equipmentSlots: recipe.equipmentSlots,
     metadata: await artifact(result.metadata, '', 'json'),
     provenance: { source: { path: recipe.source.relativePath, sha256: context.sourceInputs[recipe.source.absolutePath] },
       dependencies, recipeHash: recipeHash(recipe), toolchain: context.toolchain.identity,
@@ -113,7 +137,7 @@ async function makeBundle(recipe, result, context, exported) {
     metrics: result.metrics }, files, result }
 }
 
-async function stageAssets(context, { animations = false, clip } = {}) {
+async function stageAssets(context, { animations = false, clip, log = noLog } = {}) {
   const exported = new Map()
   for (const recipe of context.selected) {
     const directory = join(context.staging, recipe.id.replaceAll('/', '-'))
@@ -124,14 +148,18 @@ async function stageAssets(context, { animations = false, clip } = {}) {
       try {
         const selectedClips = animations && clip !== undefined
           ? (recipe.id === context.target ? [clip] : []) : Object.keys(recipe.clips).sort()
-        await exportAsset({ recipe, selectedClips, resolvedDependencies }, directory, context.toolchain.paths.blender)
+        report(log, `${recipe.id} export model ${join(directory, 'raw/model.glb')}`)
+        for (const name of selectedClips) report(log, `${recipe.id} export animation ${name} ${join(directory, 'raw/animations', `${name}.glb`)}`)
+        const metadata = await exportAsset({ recipe, selectedClips, resolvedDependencies }, directory, context.toolchain.paths.blender)
+        for (const texture of metadata.textures) report(log, `${recipe.id} export texture ${join(directory, 'raw', texture.path)}`)
       } finally { await checkInputs(context) }
-    })
+    }, log)
     const result = await stage(context.staging, recipe.id, 'optimization', () => optimizeExport({
       rawDirectory: join(directory, 'raw'), recipe, toolchain: context.toolchain, outputDirectory: join(directory, 'optimized'),
-    }))
+      log: message => report(log, `${recipe.id} ${message}`),
+    }), log)
     // Keep raw stages until all validation (including published comparison) has finished.
-    await stage(context.staging, recipe.id, 'validation', () => validateArtifacts(result, recipe))
+    await stage(context.staging, recipe.id, 'validation', () => validateArtifacts(result, recipe), log)
     exported.set(recipe.id, await makeBundle(recipe, result, context, exported))
   }
   await checkInputs(context)
@@ -189,34 +217,35 @@ async function retainPublishedModel(bundle, previous, publicRoot, recipe) {
   return bundle
 }
 
-export async function buildAssets({ root = defaultRoot, target, animations = false, clip, toolPaths = {} }) {
+export async function buildAssets({ root = defaultRoot, target, animations = false, clip, toolPaths = {}, log = noLog }) {
   if (clip !== undefined && !animations) throw new Error('--clip requires --animations')
   root = await realpath(root)
   const publicRoot = await realpath(join(root, 'web_new/public'))
   return withPublishLock(publicRoot, async () => {
     const previousCatalog = await readCatalog(publicRoot)
-    const context = await prepare(root, target, toolPaths)
+    const context = await prepare(root, target, toolPaths, log)
     context.target = target
     const published = animations ? await publishedForPartial(context, publicRoot, previousCatalog, clip) : null
-    const manifests = await stageAssets(context, { animations, clip })
+    const manifests = await stageAssets(context, { animations, clip, log })
     if (animations) for (const bundle of manifests) {
       await stage(context.staging, bundle.manifest.id, 'compatibility', () =>
-        retainPublishedModel(bundle, published.get(bundle.manifest.id), publicRoot, context.recipes.get(bundle.manifest.id)))
+        retainPublishedModel(bundle, published.get(bundle.manifest.id), publicRoot, context.recipes.get(bundle.manifest.id)), log)
     }
     await checkInputs(context)
-    const catalog = await stage(context.staging, target, 'publication', () => publishCatalog({ publicRoot, previousCatalog, manifests }))
+    const catalog = await stage(context.staging, target, 'publication', () => publishCatalog({ publicRoot, previousCatalog, manifests }), log)
+    report(log, `publication ${join(publicRoot, 'assets/game/asset-catalog.json')} complete (${manifests.length} assets)`)
     // Publication is committed. A scratch cleanup problem must not report a failed build.
     await rm(context.staging, { recursive: true }).catch(error => { process.stderr.write(`Build committed; staging cleanup failed: ${error.message}\n`) })
     return catalog
   })
 }
 
-export async function verifyReproducible({ root = defaultRoot, target, toolPaths = {} }) {
+export async function verifyReproducible({ root = defaultRoot, target, toolPaths = {}, log = noLog }) {
   root = await realpath(root)
-  const first = await prepare(root, target, toolPaths)
-  const firstBuild = await stageAssets(first)
-  const second = await prepare(root, target, toolPaths)
-  const secondBuild = await stageAssets(second)
+  const first = await prepare(root, target, toolPaths, log)
+  const firstBuild = await stageAssets(first, { log })
+  const second = await prepare(root, target, toolPaths, log)
+  const secondBuild = await stageAssets(second, { log })
   await checkInputs(first)
   await checkInputs(second)
   await compareBuilds(firstBuild, secondBuild)
@@ -225,11 +254,11 @@ export async function verifyReproducible({ root = defaultRoot, target, toolPaths
   return { assets: firstBuild.map(bundle => bundle.manifest.id) }
 }
 
-export async function validateAssets({ root = defaultRoot, target, toolPaths = {} }) {
+export async function validateAssets({ root = defaultRoot, target, toolPaths = {}, log = noLog }) {
   root = await realpath(root)
   const publicRoot = await realpath(join(root, 'web_new/public'))
   const catalog = await readCatalog(publicRoot)
-  const context = await prepare(root, target, toolPaths)
+  const context = await prepare(root, target, toolPaths, log)
   const published = new Map()
   for (const recipe of context.selected) {
     const artifact = catalog.assets[recipe.id]
@@ -241,7 +270,7 @@ export async function validateAssets({ root = defaultRoot, target, toolPaths = {
     }
     published.set(recipe.id, manifest)
   }
-  const rebuilt = await stageAssets(context)
+  const rebuilt = await stageAssets(context, { log })
   for (const { manifest, result } of rebuilt) {
     const previous = published.get(manifest.id)
     if (canonicalJSON(previous) !== canonicalJSON(manifest)) throw new Error(`${manifest.id} published source, toolchain or artifact compatibility mismatch; run build`)

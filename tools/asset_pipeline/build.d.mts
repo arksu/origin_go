@@ -6,6 +6,7 @@ export interface BuildOptions {
   animations?: boolean
   clip?: string
   toolPaths?: Partial<ToolPaths>
+  log?: (message: string) => void
 }
 export interface Artifact { url: string; sha256: string; bytes: number }
 export interface PublishedCatalog { schema: 1; assets: Record<string, Artifact> }

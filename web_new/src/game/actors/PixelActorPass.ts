@@ -7,7 +7,8 @@ const palette = ACTOR_PALETTE.map((ramp) => ramp.map((hex) => {
 }))
 // A painted mesh can contain skin, hair and clothing in one material/UV atlas.
 // Compare against the complete palette instead of recoloring it as one region.
-const paletteShader = palette.map((ramp, region) => `if (region == ${region + 1} || region == 6${region === 1 ? ' || region == 5' : ''}) { ${ramp.map((color) => `consider(${color}, color, closest, distance);`).join('\n')} }`).join('\n')
+const paletteRegions: readonly (readonly number[])[] = [[1, 5, 6], [2], [3], [4], [7]]
+const paletteShader = palette.map((ramp, index) => `if (${paletteRegions[index]!.map((region) => `region == ${region}`).join(' || ')}) { ${ramp.map((color) => `consider(${color}, color, closest, distance);`).join('\n')} }`).join('\n')
 
 export class PixelActorPass {
   readonly source: WebGLRenderTarget

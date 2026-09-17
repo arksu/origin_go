@@ -233,7 +233,7 @@ def main():
                for name in (recipe['rig']['sockets'] if rig else [])}
     fingerprint_inputs = {'modelSha256': hashlib.sha256(model_path.read_bytes()).hexdigest(),
                           'bindings': bindings, 'rigFingerprint': contract['fingerprint'] if contract else None,
-                          'settings': {key: recipe[key] for key in ['kind', 'rig', 'budgets', 'optimization']}}
+                          'settings': {key: recipe[key] for key in ['kind', 'rig', 'equipmentSlots', 'budgets', 'optimization']}}
     metadata = {'schema': 1, 'assetId': recipe['id'], 'rig': contract, 'sockets': sockets,
                 'bindings': bindings, 'textures': texture_metadata(document, binary, raw / 'textures'), 'clips': {},
                 'modelFingerprint': canonical_hash(fingerprint_inputs), 'modelFingerprintInputs': fingerprint_inputs}

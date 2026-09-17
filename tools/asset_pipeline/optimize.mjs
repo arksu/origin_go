@@ -66,7 +66,7 @@ function compress(document) {
   document.createExtension(EXTMeshoptCompression).setRequired(true)
     .setEncoderOptions({ method: EXTMeshoptCompression.EncoderMethod.QUANTIZE })
 }
-export async function optimizeExport({ rawDirectory, recipe, toolchain, outputDirectory }) {
+export async function optimizeExport({ rawDirectory, recipe, toolchain, outputDirectory, log = () => {} }) {
   const lock = JSON.parse(await readFile(lockPath, 'utf8'))
   for (const field of ['platform', 'node', 'blender']) {
     if (canonicalJSON(toolchain.identity[field]) !== canonicalJSON(lock[field])) throw new Error(`Optimizer requires locked ${field} identity`)
@@ -79,8 +79,10 @@ export async function optimizeExport({ rawDirectory, recipe, toolchain, outputDi
   const toolchainHash = sha256(canonicalJSON({ lock, packageLockHash, profileHash }))
   await MeshoptEncoder.ready
   const io = assetIO().registerDependencies({ 'meshopt.encoder': MeshoptEncoder })
-  await validateGLB(join(rawDirectory, 'model.glb'))
-  const model = await io.read(join(rawDirectory, 'model.glb'))
+  const rawModel = join(rawDirectory, 'model.glb')
+  log(`optimize model ${rawModel}`)
+  await validateGLB(rawModel)
+  const model = await io.read(rawModel)
   const rawMetadata = JSON.parse(await readFile(join(rawDirectory, 'metadata.json'), 'utf8'))
   const rigHash = sha256(canonicalJSON({ rig: rawMetadata.rig, skins: skinContract(model) }))
   await mkdir(join(outputDirectory, 'textures'), { recursive: true })
@@ -99,11 +101,13 @@ export async function optimizeExport({ rawDirectory, recipe, toolchain, outputDi
         .resize({ width: profile.texture.width, height: profile.texture.height, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
         .png({ compressionLevel: 9, adaptiveFiltering: false }).toBuffer()
       const input = join(scratch, `${index}.png`), output = join(scratch, `${index}.ktx2`)
+      log(`optimize texture ${input}`)
       await writeFile(input, png)
       await execute(encoder, [...profile.texture.flags, output, input], { env: environment, maxBuffer: 8 * 1024 * 1024 })
       const bytes = await readFile(output), name = `${sha256(bytes)}.ktx2`
       const path = join(outputDirectory, 'textures', name)
       await writeFile(path, bytes)
+      log(`optimized texture ${path} (${png.length} -> ${bytes.length} bytes)`)
       textures.push(path)
       texture.setImage(bytes).setMimeType('image/ktx2').setURI(`textures/${name}`)
     }
@@ -111,15 +115,18 @@ export async function optimizeExport({ rawDirectory, recipe, toolchain, outputDi
   if (textures.length) model.createExtension(KHRTextureBasisu).setRequired(true)
   compress(model)
   const modelPath = join(outputDirectory, 'model.glb')
-  await writeExternalTextureGLB(io, model, modelPath, join(rawDirectory, 'model.glb'))
+  await writeExternalTextureGLB(io, model, modelPath, rawModel)
+  log(`optimized model ${modelPath}`)
   const clips = {}
   for (const id of Object.keys(rawMetadata.clips).sort()) {
     const raw = join(rawDirectory, 'animations', `${id}.glb`)
+    log(`optimize animation ${id} ${raw}`)
     await validateGLB(raw)
     const document = await io.read(raw)
     compress(document)
     clips[id] = join(outputDirectory, 'animations', `${id}.glb`)
     await writeExternalTextureGLB(io, document, clips[id], raw)
+    log(`optimized animation ${id} ${clips[id]}`)
   }
   const metadata = join(outputDirectory, 'metadata.json')
   await writeFile(metadata, canonicalJSON({ ...rawMetadata, textures: [...new Set(textures)].map(path => ({ uri: `textures/${path.split('/').at(-1)}` })),

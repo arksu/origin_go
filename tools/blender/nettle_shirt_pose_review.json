@@ -1,0 +1,15 @@
+{
+  "garment": "NettleShirt_Fitted",
+  "body": "meshy_commoner",
+  "max_influences": 4,
+  "penetration_tolerance": 0.003,
+  "proximity_limit": 0.08,
+  "poses": [
+    {"name": "rest", "action": null, "frame": 0},
+    {"name": "idle", "action": "idle", "frame": 1},
+    {"name": "walk-left", "action": "walk", "frame": 13},
+    {"name": "walk-right", "action": "walk", "frame": 37},
+    {"name": "raised-idle", "action": "carry_idle", "frame": 1},
+    {"name": "raised-walk", "action": "carry_walk", "frame": 25}
+  ]
+}

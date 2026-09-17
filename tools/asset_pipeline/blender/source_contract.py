@@ -130,7 +130,7 @@ def validate_material(material):
     require(material is not None and material.use_nodes, 'materials must use a Principled node graph')
     if 'region' in material:
         region = material['region']
-        require(isinstance(region, str) and region in {'skin', 'hair', 'linen', 'eyes', 'textured'},
+        require(isinstance(region, str) and region in {'skin', 'hair', 'linen', 'eyes', 'textured', 'foliage'},
                 f'unsupported material region on {material.name}')
     supported = {'OUTPUT_MATERIAL', 'BSDF_PRINCIPLED', 'TEX_IMAGE', 'NORMAL_MAP', 'SEPARATE_COLOR',
                  'MATH', 'MIX', 'RGB', 'VALUE', 'UVMAP', 'TEX_COORD', 'MAPPING', 'REROUTE'}

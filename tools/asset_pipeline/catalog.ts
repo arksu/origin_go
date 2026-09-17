@@ -70,6 +70,7 @@ export interface AssetRecipe {
   outputDirectory: string
   dependencies: RecipeDependencies
   rig: RigContract | null
+  equipmentSlots: string[]
   clips: Record<string, ClipRecipe>
   bindings: Record<string, BindingRecipe>
   budgets: RecipeBudgets
@@ -329,6 +330,14 @@ function normalizeBindings(value: unknown): Record<string, BindingRecipe> {
   return normalized
 }
 
+function normalizeEquipmentSlots(value: unknown, kind: AssetKind, rig: RigContract | null): string[] {
+  if (value === undefined) return []
+  if (kind !== 'equipment' || rig === null) throw new Error('equipmentSlots require rigged equipment')
+  const slots = requireUniqueNames(value, 'equipmentSlots')
+  if (!slots.length) throw new Error('equipmentSlots must not be empty')
+  return slots
+}
+
 function normalizeBudgets(value: unknown): RecipeBudgets {
   const budgets = requireRecord(value, 'budgets')
   rejectUnknownFields(budgets, 'budgets', [
@@ -391,10 +400,10 @@ function normalizeOptimization(value: unknown, budgets: RecipeBudgets): Optimiza
 
 async function normalizeRecipe(root: string, recipePath: string, value: unknown): Promise<AssetRecipe> {
   const recipe = requireRecord(value, recipePath)
-  rejectUnknownFields(recipe, recipePath, [
-    'schema', 'id', 'kind', 'source', 'runtimePath', 'dependencies', 'rig', 'clips', 'bindings',
-    'budgets', 'optimization',
-  ])
+  const fields = ['schema', 'id', 'kind', 'source', 'runtimePath', 'dependencies', 'rig', 'clips', 'bindings',
+    'budgets', 'optimization']
+  if (Object.hasOwn(recipe, 'equipmentSlots')) fields.push('equipmentSlots')
+  rejectUnknownFields(recipe, recipePath, fields)
   if (recipe.schema !== 1) throw new Error(`${recipePath} schema must be 1`)
   if (typeof recipe.kind !== 'string' || !ASSET_KINDS.has(recipe.kind as AssetKind)) {
     throw new Error(`${recipePath} kind must be character, equipment, or world_object`)
@@ -404,6 +413,7 @@ async function normalizeRecipe(root: string, recipePath: string, value: unknown)
   if (!id.startsWith(`${kind}/`)) throw new Error(`${recipePath}.id kind must match ${kind}`)
   const runtime = await resolveRuntimeOutput(root, recipe.runtimePath)
   const budgets = normalizeBudgets(recipe.budgets)
+  const rig = normalizeRig(recipe.rig, kind)
   return {
     schema: 1,
     id,
@@ -412,7 +422,8 @@ async function normalizeRecipe(root: string, recipePath: string, value: unknown)
     runtimePath: runtime.runtimePath,
     outputDirectory: runtime.outputDirectory,
     dependencies: normalizeDependencies(recipe.dependencies),
-    rig: normalizeRig(recipe.rig, kind),
+    rig,
+    equipmentSlots: normalizeEquipmentSlots(recipe.equipmentSlots, kind, rig),
     clips: normalizeClips(recipe.clips),
     bindings: normalizeBindings(recipe.bindings),
     budgets,
