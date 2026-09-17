@@ -1,0 +1,56 @@
+{
+  "object": "stone_axe.003",
+  "bone": "hand.r",
+  "authored_frame": 34,
+  "transform": {
+    "position": [
+      0.019444137811660767,
+      0.08826135843992233,
+      -0.006447324529290199
+    ],
+    "quaternion": [
+      0.09703120589256287,
+      0.97849041223526,
+      -0.07940655946731567,
+      0.16381722688674927
+    ]
+  },
+  "samples": [
+    {
+      "frame": 1,
+      "max_matrix_error": 1.1920928955078125e-07
+    },
+    {
+      "frame": 7,
+      "max_matrix_error": 1.6391277313232422e-07
+    },
+    {
+      "frame": 13,
+      "max_matrix_error": 7.450580596923828e-08
+    },
+    {
+      "frame": 19,
+      "max_matrix_error": 1.1920928955078125e-07
+    },
+    {
+      "frame": 25,
+      "max_matrix_error": 8.195638656616211e-08
+    },
+    {
+      "frame": 31,
+      "max_matrix_error": 1.1920928955078125e-07
+    },
+    {
+      "frame": 37,
+      "max_matrix_error": 8.195638656616211e-08
+    },
+    {
+      "frame": 43,
+      "max_matrix_error": 1.1920928955078125e-07
+    },
+    {
+      "frame": 49,
+      "max_matrix_error": 1.1920928955078125e-07
+    }
+  ]
+}

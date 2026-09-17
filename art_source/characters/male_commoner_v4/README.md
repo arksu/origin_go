@@ -1,5 +1,10 @@
 # Meshy commoner
 
+> Historical working sources, superseded on 2026-09-17. Open
+> `art_source/character/male_commoner/source.blend` and follow
+> `docs/assets/README.md` for current editing and export. The commands below
+> describe the retired pipeline; these working scenes remain for provenance.
+
 User-supplied source: `Meshy_AI_Stonebound_Titan_0915094206_texture.glb`, received
 2026-09-15. Unmodified copy: `source/meshy_character.glb`. This generated mesh is
 not the old MakeHuman asset and must not inherit its CC0 attribution.

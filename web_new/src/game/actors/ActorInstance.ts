@@ -1,11 +1,11 @@
 import { AnimationMixer, Bone, Group, Mesh, Skeleton, SkinnedMesh, type AnimationAction, type Object3D, type ShaderMaterial } from 'three'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
-import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
-import type { ActorAssetCache } from './ActorAssetCache'
+import type { ActorAssetCache, ActorBundle } from './ActorAssetCache'
+import { bindClips } from './ActorClipBinding'
 import { createActorMaterial } from './ActorMaterial'
 import { DualQuaternionSkin } from './DualQuaternionSkin'
-import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_ACTOR_RENDER_SETTINGS, type ActorRenderSettings } from './config'
-import { DEFAULT_EQUIPMENT, EQUIPMENT, armForSlot, validateEquipment, type ArmMotion, type ArmSide, type EquipmentDefinition, type EquipmentBinding } from './equipment'
+import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, type ActorRenderSettings } from './config'
+import { DEFAULT_EQUIPMENT, armForSlot, validateEquipment, type ArmMotion, type ArmSide, type EquipmentDefinition, type EquipmentBinding } from './equipment'
 import { ActorSockets } from './ActorSockets'
 import { ActorArmLayers } from './ActorArmLayers'
 import { actorYawForScreenAngle, screenFacingAngle } from './facing'
@@ -58,10 +58,13 @@ export class ActorInstance {
   private walkPhase = 0
   private walkPhaseOffset = 0
   private stopStartWeight: number | undefined
+  private walkCycleDistance = 0
+  private catalog: Readonly<Record<string, EquipmentDefinition>> = {}
 
-  constructor(private readonly cache: Pick<ActorAssetCache, 'acquire'>, private readonly catalog: Readonly<Record<string, EquipmentDefinition>> = EQUIPMENT) {
+  constructor(private readonly cache: Pick<ActorAssetCache, 'acquire' | 'catalog'>) {
     this.ready = this.load().catch((error: unknown) => {
       this.error = error instanceof Error ? error : new Error(String(error))
+      this.destroy()
       throw this.error
     })
   }
@@ -88,26 +91,33 @@ export class ActorInstance {
   }
 
   private async load(): Promise<void> {
-    const lease = await this.cache.acquire(COMMONER_MODEL)
+    this.catalog = (await this.cache.catalog).equipment
+    if (this.destroyed) return
+    const lease = await this.cache.acquire(COMMONER_ASSET_ID)
     if (this.destroyed) { lease.release(); return }
     this.releaseModel = lease.release
     this.model = clone(lease.asset.scene)
+    const animations = bindClips(this.model, lease.asset.manifest, lease.asset.animations)
+    const walk = lease.asset.manifest.clips.walk
+    if (!walk?.cycleDistanceTiles || walk.cycleDistanceTiles <= 0 || !Number.isFinite(walk.cycleDistanceTiles) || lease.asset.manifest.clips.carry_walk?.cycleDistanceTiles !== walk.cycleDistanceTiles) throw new Error('Invalid walk distance metadata')
+    this.walkCycleDistance = walk.cycleDistanceTiles
     this.model.traverse((object) => {
       if (object.userData.lod === 1) object.visible = false
       if (object instanceof Bone) this.bones.set(object.name, object)
       if (object instanceof SkinnedMesh) this.prepareMesh(object)
     })
     if (this.bones.size === 0) throw new Error('Character has no skeleton')
-    this.sockets = new ActorSockets(this.model)
-    this.armLayers = new ActorArmLayers(this.model, lease.asset.animations)
+    this.sockets = new ActorSockets(this.model, lease.asset.manifest.sockets)
+    this.armLayers = new ActorArmLayers(this.model, animations)
     this.root.add(this.model)
     this.mixer = new AnimationMixer(this.model)
     for (const name of ['idle', 'walk', 'carry_idle', 'carry_walk']) {
-      const clip = lease.asset.animations.find((candidate) => candidate.name === name)
+      const clip = animations.find((candidate) => candidate.name === name)
       if (!clip) throw new Error(`Character animation missing: ${name}`)
       this.actions.set(name, this.mixer.clipAction(clip))
     }
     await this.setEquipment(DEFAULT_EQUIPMENT)
+    if (this.destroyed) return
     this.loaded = true
     this.updatePose()
   }
@@ -136,7 +146,7 @@ export class ActorInstance {
     })
     for (const side of ['left', 'right'] as const) this.armLayers.validate(side, poses[side])
     const revision = ++this.equipmentRevision
-    const leases = await Promise.allSettled(renderable.map(({ definition }) => this.cache.acquire(definition.url)))
+    const leases = await Promise.allSettled(renderable.map(({ definition }) => this.cache.acquire(definition.assetId)))
     const acquired = leases.flatMap((lease) => lease.status === 'fulfilled' ? [lease.value] : [])
     const failure = leases.find((lease) => lease.status === 'rejected')
     if (this.destroyed || revision !== this.equipmentRevision || failure) {
@@ -171,7 +181,7 @@ export class ActorInstance {
     this.updatePose()
   }
 
-  private attachEquipment(asset: GLTF, release: () => void, definition: Exclude<EquipmentDefinition, { kind: 'deferred' }>, slot: EquipmentSlot): EquipmentInstance {
+  private attachEquipment(asset: ActorBundle, release: () => void, definition: Exclude<EquipmentDefinition, { kind: 'deferred' }>, slot: EquipmentSlot): EquipmentInstance {
     const source = clone(asset.scene)
     source.updateMatrixWorld(true)
     const piece: EquipmentInstance = { root: new Group(), parent: this.model!, release, meshes: [] }
@@ -287,7 +297,7 @@ export class ActorInstance {
 
   updatePose(now = performance.now(), settings: ActorRenderSettings = DEFAULT_ACTOR_RENDER_SETTINGS): boolean {
     if (!this.mixer || this.destroyed) return false
-    const continuousPhase = this.walking ? ((this.distanceTiles / ACTOR_RENDER.cycleDistanceTiles) % 1 + 1) % 1 : 0
+    const continuousPhase = this.walking ? ((this.distanceTiles / this.walkCycleDistance) % 1 + 1) % 1 : 0
     const phase = settings.mode === 'baked8' ? Math.floor(continuousPhase * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : continuousPhase
     const bakedMode = settings.mode === 'baked8'
     const holdingBakedWalkFrame = bakedMode && this.stopProgress !== undefined && this.stopProgress < 1
@@ -378,6 +388,7 @@ export class ActorInstance {
   }
 
   get isReady(): boolean { return this.loaded && !this.error }
+  get cycleDistanceTiles(): number { return this.walkCycleDistance }
   get needsImmediateRender(): boolean { return this.immediateRender }
   acknowledgeRender(): void { this.immediateRender = false }
   invalidateRender(): void { this.lastPose = ''; this.immediateRender = true }
@@ -395,6 +406,7 @@ export class ActorInstance {
   }
 
   destroy(): void {
+    if (this.destroyed) return
     this.destroyed = true
     this.equipmentRevision++
     this.equipment.forEach((piece) => this.disposeEquipment(piece))
@@ -407,6 +419,14 @@ export class ActorInstance {
     this.materials.forEach((material) => material.dispose())
     this.materials.clear()
     this.root.removeFromParent()
+    this.root.clear()
     this.releaseModel?.()
+    this.releaseModel = null
+    this.actions.clear()
+    this.bones.clear()
+    this.model = null
+    this.mixer = null
+    this.armLayers = null
+    this.sockets = null
   }
 }

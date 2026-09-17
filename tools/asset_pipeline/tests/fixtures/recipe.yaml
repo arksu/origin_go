@@ -1,0 +1,46 @@
+schema: 1
+id: character/test_commoner
+kind: character
+source: source.blend
+runtimePath: /assets/game/characters/test_commoner
+dependencies:
+  export: []
+  preview: []
+rig:
+  object: Armature
+  bones: [root, hand_l, hand_r]
+  sockets: [grip_l, grip_r]
+clips:
+  idle:
+    action: idle
+    range: { start: 1, end: 24 }
+    fps: 24
+    loop: true
+    playback: time
+  walk:
+    action: walk
+    range: { start: 1, end: 24 }
+    fps: 24
+    loop: true
+    playback: distance
+    cycleDistanceTiles: 1.677975879375
+bindings:
+  left_hand:
+    slot: left_hand
+    socket: grip_l
+    grip: GRIP_L
+    policy: { kind: ordinary }
+budgets:
+  trianglesByLod: { '0': 16000, '1': 5500 }
+  textureDimensions: { width: 1024, height: 1024 }
+  totalPublishedBytes: 4194304
+  boneInfluences: 4
+  bones: 64
+optimization:
+  meshCompression: meshopt
+  texture:
+    codec: uastc
+    quality: 2
+    width: 1024
+    height: 1024
+    mipmaps: true

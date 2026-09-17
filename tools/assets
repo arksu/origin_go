@@ -1,0 +1,18 @@
+#!/usr/bin/env node
+
+const { join } = require('node:path')
+const { pathToFileURL } = require('node:url')
+
+async function main() {
+  const cliPath = join(__dirname, 'asset_pipeline', 'cli.ts')
+  const { runCli } = await import(pathToFileURL(cliPath).href)
+  return runCli(process.argv.slice(2))
+}
+
+main().then(
+  (exitCode) => { process.exitCode = exitCode },
+  (error) => {
+    process.stderr.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  },
+)

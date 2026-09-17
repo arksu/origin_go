@@ -1,5 +1,8 @@
 # Character v1: Blender-to-2D bake
 
+> Superseded historical design. Its sources and helpers were retired on
+> 2026-09-17; see [the current asset workflow](../assets/README.md).
+
 ## Goal
 
 Create a maintainable source asset for the first playable male commoner. The

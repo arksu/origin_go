@@ -12,12 +12,12 @@ function check(condition: unknown, message: string): asserts condition {
 
 export async function verifyMovementStopping(manager: ObjectManager): Promise<void> {
   const entityId = 901
-  const sheet = { cycleDistanceTiles: ACTOR_RENDER.cycleDistanceTiles, frameCount: ACTOR_RENDER.walkSamples }
   manager.spawnObject({ entityId, typeId: 1, resourcePath: 'player', position: { x: 0, y: 0 }, size: { x: 4, y: 4 } })
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   const view = manager.getObject(entityId)!
   const handle = (view as unknown as { actorHandle: ActorHandle }).actorHandle
   await handle.actor.ready
+  const sheet = { cycleDistanceTiles: handle.actor.cycleDistanceTiles, frameCount: ACTOR_RENDER.walkSamples }
   const isIdle = () => !handle.actor.walking
   const frame = () => Math.floor(handle.actor.distanceTiles / sheet.cycleDistanceTiles * sheet.frameCount + 1e-8) % sheet.frameCount
   const originalNow = Date.now

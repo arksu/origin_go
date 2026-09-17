@@ -93,11 +93,12 @@ async function main() {
     if (frames.length > 300) frames.shift()
     previous = now
     for (const handle of handles) {
+      if (!handle.actor.isReady) continue
       handle.actor.walking = state.value.endsWith('walk')
       handle.actor.carrying = state.value.startsWith('carry')
-      if (handle.actor.walking) handle.actor.distanceTiles += delta / 960 * ACTOR_RENDER.cycleDistanceTiles * Number(speed.value)
+      if (handle.actor.walking) handle.actor.distanceTiles += delta / 960 * handle.actor.cycleDistanceTiles * Number(speed.value)
       const angle = screenFacingAngle(handle.actor.direction)
-      const travel = handle.actor.walking ? ((handle.actor.distanceTiles / ACTOR_RENDER.cycleDistanceTiles) % 1) * 32 - 16 : 0
+      const travel = handle.actor.walking ? ((handle.actor.distanceTiles / handle.actor.cycleDistanceTiles) % 1) * 32 - 16 : 0
       const offsetX = Math.cos(angle) * travel
       const offsetY = Math.sin(angle) * travel
       handle.sprite.position.set(-ACTOR_RENDER.anchorX + offsetX, -ACTOR_RENDER.anchorY + offsetY)

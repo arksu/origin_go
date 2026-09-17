@@ -20,34 +20,16 @@ export interface EquipmentBinding {
 }
 export type EquipmentDefinition =
   | { readonly kind: 'deferred' }
-  | { readonly kind: 'rigid'; readonly url: string; readonly bindings: Partial<Record<EquipmentSlot, EquipmentBinding>> }
-  | { readonly kind: 'skinned'; readonly url: string; readonly slots: readonly EquipmentSlot[] }
+  | { readonly kind: 'rigid'; readonly assetId: string; readonly bindings: Partial<Record<EquipmentSlot, EquipmentBinding>> }
+  | { readonly kind: 'skinned'; readonly assetId: string; readonly slots: readonly EquipmentSlot[] }
 
-// Grip transforms are authored against the commoner fist; quaternions avoid a
-// Blender/Three Euler-order mismatch. Held objects follow the ordinary hand
-// animation. Item-specific poses are reserved for deliberate actions, not carry.
-export const EQUIPMENT: Readonly<Record<string, EquipmentDefinition>> = {
-  stone_axe: {
-    kind: 'rigid', url: '/assets/game/equipment/stone_axe/stone_axe.glb',
-    bindings: {
-      left_hand: { socket: 'grip_l', transform: {
-        position: [-.019444086, .088261202, -.006447274],
-        quaternion: [-.079406664, .163817227, .097031258, .978490412],
-      } },
-      right_hand: { socket: 'grip_r', transform: {
-        position: [.019444138, .088261358, -.006447325],
-        quaternion: [.097031206, .978490412, -.079406559, .163817227],
-      } },
-    },
-  },
-}
 export const DEFAULT_EQUIPMENT: readonly EquippedVisual[] = []
 
 export function armForSlot(slot: EquipmentSlot): ArmSide | undefined {
   return slot === 'left_hand' ? 'left' : slot === 'right_hand' ? 'right' : undefined
 }
 
-export function validateEquipment(items: readonly EquippedVisual[], catalog = EQUIPMENT): void {
+export function validateEquipment(items: readonly EquippedVisual[], catalog: Readonly<Record<string, EquipmentDefinition>>): void {
   const slots = new Set<EquipmentSlot>()
   for (const item of items) {
     if (!item || !Object.values(EQUIPMENT_SLOT_BY_ID).includes(item.slot) || !/^[a-zA-Z0-9_-]{1,128}$/.test(item.visualKey) || slots.has(item.slot)) throw new Error('Invalid character equipment')

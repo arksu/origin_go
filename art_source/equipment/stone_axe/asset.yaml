@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "id": "equipment/stone_axe",
+  "kind": "equipment",
+  "source": "source.blend",
+  "runtimePath": "/assets/game/equipment/stone_axe",
+  "dependencies": {
+    "export": [],
+    "preview": [
+      "character/male_commoner"
+    ]
+  },
+  "rig": null,
+  "clips": {},
+  "bindings": {
+    "left_hand": {
+      "slot": "left_hand",
+      "socket": "grip_l",
+      "grip": "GRIP_L",
+      "policy": {
+        "kind": "ordinary"
+      }
+    },
+    "right_hand": {
+      "slot": "right_hand",
+      "socket": "grip_r",
+      "grip": "GRIP_R",
+      "policy": {
+        "kind": "ordinary"
+      }
+    }
+  },
+  "budgets": {
+    "trianglesByLod": {
+      "0": 1200
+    },
+    "textureDimensions": {
+      "width": 512,
+      "height": 512
+    },
+    "totalPublishedBytes": 499712,
+    "boneInfluences": 4,
+    "bones": 50
+  },
+  "optimization": {
+    "meshCompression": "meshopt",
+    "texture": {
+      "codec": "uastc",
+      "quality": 2,
+      "width": 512,
+      "height": 512,
+      "mipmaps": true
+    }
+  }
+}
