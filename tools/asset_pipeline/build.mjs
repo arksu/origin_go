@@ -5,7 +5,7 @@ import { findRecipeFiles, loadRecipes, selectRecipes } from './catalog.ts'
 import { exportAsset } from './blender.ts'
 import { inspectToolchain } from './toolchain.ts'
 import { optimizeExport } from './optimize.mjs'
-import { canonicalJSON, sha256, validateArtifacts } from './report.mjs'
+import { canonicalJSON, sha256, validateArtifacts, measureArtifacts, compareBuilds } from './report.mjs'
 import { artifactPath, publishCatalog, readArtifact, readCatalog, withPublishLock } from './publish.mjs'
 
 const pipelineDirectory = fileURLToPath(new URL('./', import.meta.url))
@@ -101,7 +101,8 @@ async function makeBundle(recipe, result, context, exported) {
     path: dependency.source.relativePath, sha256: context.sourceInputs[dependency.source.absolutePath], recipeHash: recipeHash(dependency),
   }]))
   const exportModels = Object.fromEntries(recipe.dependencies.export.map(id => [id, exported.get(id).manifest.modelInputHash]))
-  const modelInputHash = sha256(canonicalJSON({ model: metadata.modelFingerprint, toolchain: metadata.toolchainHash, dependencies: exportModels }))
+  const modelInputHash = sha256(canonicalJSON({ model: metadata.modelFingerprint, rigHash: metadata.rigHash,
+    sockets: metadata.sockets, bindings: metadata.bindings, toolchain: metadata.toolchainHash, dependencies: exportModels }))
   return { manifest: { schema: 1, id: recipe.id, kind: recipe.kind, model, textures, clips,
     rigHash: recipe.rig ? metadata.rigHash : null, modelInputHash,
     sockets: Object.fromEntries(Object.keys(metadata.sockets).sort().map(name => [name, name])), bindings: metadata.bindings,
@@ -112,7 +113,7 @@ async function makeBundle(recipe, result, context, exported) {
     metrics: result.metrics }, files, result }
 }
 
-async function stageAssets(context) {
+async function stageAssets(context, { animations = false, clip } = {}) {
   const exported = new Map()
   for (const recipe of context.selected) {
     const directory = join(context.staging, recipe.id.replaceAll('/', '-'))
@@ -121,7 +122,9 @@ async function stageAssets(context) {
     await stage(context.staging, recipe.id, 'export', async () => {
       await checkInputs(context)
       try {
-        await exportAsset({ recipe, selectedClips: Object.keys(recipe.clips).sort(), resolvedDependencies }, directory, context.toolchain.paths.blender)
+        const selectedClips = animations && clip !== undefined
+          ? (recipe.id === context.target ? [clip] : []) : Object.keys(recipe.clips).sort()
+        await exportAsset({ recipe, selectedClips, resolvedDependencies }, directory, context.toolchain.paths.blender)
       } finally { await checkInputs(context) }
     })
     const result = await stage(context.staging, recipe.id, 'optimization', () => optimizeExport({
@@ -135,19 +138,91 @@ async function stageAssets(context) {
   return [...exported.values()]
 }
 
-export async function buildAssets({ root = defaultRoot, target, animations = false, toolPaths = {} }) {
-  if (animations) throw new Error('Animation-only builds are not implemented yet; no artifacts were published')
+async function publishedForPartial(context, publicRoot, catalog, clip) {
+  if (clip !== undefined && (!context.target.startsWith('character/') || !context.recipes.get(context.target).clips[clip])) {
+    throw new Error(`Unknown or invalid selected clip: ${clip}`)
+  }
+  const published = new Map()
+  for (const recipe of context.selected) {
+    const entry = catalog.assets[recipe.id]
+    if (!entry) throw new Error(`${recipe.id} requires a prior published manifest; run a full build first`)
+    const manifest = JSON.parse(await readArtifact(publicRoot, entry))
+    if (manifest.id !== recipe.id || manifest.schema !== 1
+      || canonicalJSON(manifest.provenance.toolchain) !== canonicalJSON(context.toolchain.identity)) {
+      throw new Error(`${recipe.id} toolchain/manifest compatibility changed; run a full build`)
+    }
+    for (const artifact of [manifest.model, manifest.metadata, ...manifest.textures, ...Object.values(manifest.clips).map(value => value.artifact)]) {
+      await readArtifact(publicRoot, artifact)
+    }
+    published.set(recipe.id, manifest)
+  }
+  return published
+}
+
+async function retainPublishedModel(bundle, previous, publicRoot, recipe) {
+  const { manifest, result } = bundle
+  // Compare final output too: the joint order and inverse binds are part of
+  // the skin contract, even when the authored bone hierarchy is unchanged.
+  if (manifest.modelInputHash !== previous.modelInputHash || manifest.rigHash !== previous.rigHash
+    || canonicalJSON(manifest.model) !== canonicalJSON(previous.model)
+    || canonicalJSON(manifest.textures) !== canonicalJSON(previous.textures)) {
+    throw new Error(`${recipe.id} model compatibility changed; run a full build`)
+  }
+  const previousMetadata = JSON.parse(await readArtifact(publicRoot, previous.metadata))
+  const metadata = JSON.parse(await readFile(result.metadata, 'utf8'))
+  metadata.clips = { ...previousMetadata.clips, ...metadata.clips }
+  await writeFile(result.metadata, canonicalJSON(metadata) + '\n')
+  const bytes = await readFile(result.metadata), hash = sha256(bytes)
+  const selected = new Set(Object.values(manifest.clips).map(value => value.artifact.url))
+  manifest.model = previous.model
+  manifest.textures = previous.textures
+  manifest.clips = { ...previous.clips, ...manifest.clips }
+  manifest.metadata = { url: `${recipe.runtimePath}/${hash}.json`, sha256: hash, bytes: bytes.length }
+  bundle.files = bundle.files.filter(file => selected.has(file.artifact.url))
+  bundle.files.push({ source: result.metadata, artifact: manifest.metadata })
+  const mergedResult = { ...result, model: artifactPath(publicRoot, previous.model),
+    textures: previous.textures.map(entry => artifactPath(publicRoot, entry)),
+    clips: Object.fromEntries(Object.entries(manifest.clips).map(([id, value]) =>
+      [id, result.clips[id] ?? artifactPath(publicRoot, value.artifact)])) }
+  manifest.metrics = await measureArtifacts(mergedResult)
+  if (manifest.metrics.totalBytes > recipe.budgets.totalPublishedBytes) throw new Error(`${recipe.id} total bytes budget exceeded`)
+  return bundle
+}
+
+export async function buildAssets({ root = defaultRoot, target, animations = false, clip, toolPaths = {} }) {
+  if (clip !== undefined && !animations) throw new Error('--clip requires --animations')
   root = await realpath(root)
   const publicRoot = await realpath(join(root, 'web_new/public'))
   return withPublishLock(publicRoot, async () => {
     const previousCatalog = await readCatalog(publicRoot)
     const context = await prepare(root, target, toolPaths)
-    const manifests = await stageAssets(context)
+    context.target = target
+    const published = animations ? await publishedForPartial(context, publicRoot, previousCatalog, clip) : null
+    const manifests = await stageAssets(context, { animations, clip })
+    if (animations) for (const bundle of manifests) {
+      await stage(context.staging, bundle.manifest.id, 'compatibility', () =>
+        retainPublishedModel(bundle, published.get(bundle.manifest.id), publicRoot, context.recipes.get(bundle.manifest.id)))
+    }
+    await checkInputs(context)
     const catalog = await stage(context.staging, target, 'publication', () => publishCatalog({ publicRoot, previousCatalog, manifests }))
     // Publication is committed. A scratch cleanup problem must not report a failed build.
     await rm(context.staging, { recursive: true }).catch(error => { process.stderr.write(`Build committed; staging cleanup failed: ${error.message}\n`) })
     return catalog
   })
+}
+
+export async function verifyReproducible({ root = defaultRoot, target, toolPaths = {} }) {
+  root = await realpath(root)
+  const first = await prepare(root, target, toolPaths)
+  const firstBuild = await stageAssets(first)
+  const second = await prepare(root, target, toolPaths)
+  const secondBuild = await stageAssets(second)
+  await checkInputs(first)
+  await checkInputs(second)
+  await compareBuilds(firstBuild, secondBuild)
+  await rm(first.staging, { recursive: true })
+  await rm(second.staging, { recursive: true })
+  return { assets: firstBuild.map(bundle => bundle.manifest.id) }
 }
 
 export async function validateAssets({ root = defaultRoot, target, toolPaths = {} }) {

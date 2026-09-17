@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test tests/baseline.test.ts tests/catalog.test.ts tests/cli.test.ts tests/toolchain.test.ts tests/publish.test.mjs",
-    "test:build": "node --test tests/build.test.mjs",
+    "test:build": "node --test tests/build.test.mjs tests/partial-build.test.mjs tests/reproducibility.test.mjs",
     "test:integration": "node --test tests/integration.test.ts",
     "test:optimize": "node --test tests/optimize.test.mjs",
     "test:optimize-production": "node --test tests/optimize-production.test.mjs",

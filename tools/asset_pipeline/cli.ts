@@ -127,16 +127,15 @@ export function parseArguments(argv: readonly string[]): CliArguments {
 }
 
 async function dispatchCommand(arguments_: CliArguments, options: RunCliOptions): Promise<void> {
-  if (arguments_.command === 'verify-reproducible' || arguments_.animations) {
-    throw new Error(`${arguments_.animations ? 'Animation-only builds' : arguments_.command} are not implemented yet; no artifacts were published`)
-  }
-  const { buildAssets, validateAssets, defaultRoot } = await import('./build.mjs')
+  const { buildAssets, validateAssets, verifyReproducible, defaultRoot } = await import('./build.mjs')
   const toolPaths = {
     ...(arguments_.blender ? { blender: arguments_.blender } : {}),
     ...(arguments_.toktx ? { toktx: arguments_.toktx } : {}),
   }
-  const operation = arguments_.command === 'build' ? buildAssets : validateAssets
-  await operation({ root: options.root ?? defaultRoot, target: arguments_.target, toolPaths })
+  const operation = arguments_.command === 'build' ? buildAssets
+    : arguments_.command === 'validate' ? validateAssets : verifyReproducible
+  await operation({ root: options.root ?? defaultRoot, target: arguments_.target,
+    animations: arguments_.animations, ...(arguments_.clip === undefined ? {} : { clip: arguments_.clip }), toolPaths })
 }
 
 async function canonicalizeExecutable(path: string, flag: '--blender' | '--toktx'): Promise<string> {
