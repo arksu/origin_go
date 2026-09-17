@@ -420,7 +420,7 @@ async function normalizeRecipe(root: string, recipePath: string, value: unknown)
   }
 }
 
-async function findRecipeFiles(directory: string): Promise<string[]> {
+export async function findRecipeFiles(directory: string): Promise<string[]> {
   let entries
   try {
     entries = await readdir(directory, { withFileTypes: true })
