@@ -53,27 +53,43 @@ function validateCatalog(publicRoot, catalog) {
   }
 }
 
+async function withOwnershipGuard(lockPath, deadline, callback) {
+  // Every pathname ownership transition uses this guard, including release.
+  // A crashed guard is left for manual inspection rather than unsafe recovery.
+  const guard = `${lockPath}.guard`
+  while (true) {
+    try { await fs.mkdir(guard); break } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+      if (Date.now() >= deadline) throw new Error(`Publish lock ownership guard cannot be acquired: ${guard}. Inspect before manual recovery.`)
+      await delay(25)
+    }
+  }
+  try { return await callback() } finally { await fs.rmdir(guard) }
+}
+
+// Caller holds the ownership guard across inspection, liveness and unlink.
 async function recoverDeadLock(lockPath) {
-  // Serialize reclaimers so an old observation can never unlink a new owner.
-  const guard = `${lockPath}.recovery`
-  try { await fs.mkdir(guard) } catch (error) { if (error.code === 'EEXIST') return; throw error }
+  let owner, entry
   try {
-    let owner, entry
-    try {
-      entry = await fs.lstat(lockPath)
-      if (!entry.isFile()) return
-      owner = JSON.parse(await fs.readFile(lockPath, 'utf8'))
-    } catch (error) {
-      if (error.code === 'ENOENT' || error instanceof SyntaxError) return
-      throw error
-    }
-    if (owner.hostname !== hostname() || owner.uid !== process.getuid?.() || entry.uid !== owner.uid
-      || !Number.isSafeInteger(owner.pid) || owner.pid < 1 || typeof owner.token !== 'string') return
-    try { process.kill(owner.pid, 0) } catch (error) {
-      if (error.code === 'ESRCH') await fs.unlink(lockPath)
-      // EPERM and unknown errors cannot establish that the owner is dead.
-    }
-  } finally { await fs.rmdir(guard) }
+    entry = await fs.lstat(lockPath)
+    if (!entry.isFile()) return
+    owner = JSON.parse(await fs.readFile(lockPath, 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) return
+    throw error
+  }
+  if (owner.hostname !== hostname() || owner.uid !== process.getuid?.() || entry.uid !== owner.uid
+    || !Number.isSafeInteger(owner.pid) || owner.pid < 1 || typeof owner.token !== 'string') return
+  try { process.kill(owner.pid, 0); return } catch (error) {
+    // EPERM and unknown errors cannot establish that the owner is dead.
+    if (error.code !== 'ESRCH') return
+  }
+  const current = await fs.lstat(lockPath)
+  const currentOwner = JSON.parse(await fs.readFile(lockPath, 'utf8'))
+  if (current.dev !== entry.dev || current.ino !== entry.ino || currentOwner.token !== owner.token) {
+    throw new Error(`Publish lock ownership changed during recovery: ${lockPath}`)
+  }
+  await fs.unlink(lockPath)
 }
 
 export async function withPublishLock(publicRoot, callback, { timeoutMs = 120_000 } = {}) {
@@ -89,9 +105,13 @@ export async function withPublishLock(publicRoot, callback, { timeoutMs = 120_00
   const deadline = Date.now() + timeoutMs
   try {
     while (!acquired) {
-      try { await fs.link(candidate, lockPath); acquired = true } catch (error) {
-        if (error.code !== 'EEXIST') throw error
-        await recoverDeadLock(lockPath)
+      await withOwnershipGuard(lockPath, deadline, async () => {
+        try { await fs.link(candidate, lockPath); acquired = true } catch (error) {
+          if (error.code !== 'EEXIST') throw error
+          await recoverDeadLock(lockPath)
+        }
+      })
+      if (!acquired) {
         if (Date.now() >= deadline) throw new Error(`Publish lock is active or ownership cannot be verified: ${lockPath}. Inspect its owner before manual recovery.`)
         await delay(25)
       }
@@ -99,9 +119,11 @@ export async function withPublishLock(publicRoot, callback, { timeoutMs = 120_00
     return await callback()
   } finally {
     if (acquired) {
-      const current = JSON.parse(await fs.readFile(lockPath, 'utf8'))
-      if (current.token !== token) throw new Error(`Publish lock ownership changed: ${lockPath}`)
-      await fs.unlink(lockPath)
+      await withOwnershipGuard(lockPath, Date.now() + timeoutMs, async () => {
+        const current = JSON.parse(await fs.readFile(lockPath, 'utf8'))
+        if (current.token !== token) throw new Error(`Publish lock ownership changed: ${lockPath}`)
+        await fs.unlink(lockPath)
+      })
     }
     await fs.unlink(candidate)
   }

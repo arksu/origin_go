@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import test from 'node:test'
+import { once } from 'node:events'
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
 const publisher = () => import('../publish.mjs')
@@ -115,4 +116,86 @@ test('locks release on exceptions, recover dead local owners, and preserve live/
     await rm(lockPath)
   }
   assert.equal((await readdir(join(fixture.publicRoot, 'assets/game'))).filter(name => name.startsWith('.publish')).length, 0)
+})
+
+test('recovery cannot remove a new owner after the inspected owner releases and exits', { timeout: 10_000 }, async context => {
+  const { withPublishLock } = await publisher()
+  const fixture = await project()
+  const lockPath = join(fixture.publicRoot, 'assets/game/.publish.lock')
+  const script = `
+    import { withPublishLock } from ${JSON.stringify(new URL('../publish.mjs', import.meta.url).href)};
+    import { once } from 'node:events';
+    import fs from 'node:fs/promises';
+    await withPublishLock(process.argv[1], async () => {
+      process.send('owns-lock');
+      await once(process, 'message');
+      // Report the real release syscall outcome, without changing its behavior.
+      const mkdir = fs.mkdir.bind(fs), unlink = fs.unlink.bind(fs);
+      let reported = false;
+      const report = state => { if (!reported) { reported = true; process.send(state); } };
+      fs.mkdir = async (...args) => {
+        try { return await mkdir(...args); } catch (error) {
+          if (error.code === 'EEXIST') report('release-waits');
+          throw error;
+        }
+      };
+      fs.unlink = async (...args) => {
+        const result = await unlink(...args);
+        if (args[0] === ${JSON.stringify(lockPath)}) report('released');
+        return result;
+      };
+    });
+    process.disconnect();
+  `
+  const ownerA = spawn(process.execPath, ['--input-type=module', '-e', script, fixture.publicRoot],
+    { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
+  context.after(() => { if (ownerA.exitCode === null) ownerA.kill() })
+  assert.deepEqual(await once(ownerA, 'message'), ['owns-lock', undefined])
+  const ownerAExited = once(ownerA, 'exit')
+  const inspected = Promise.withResolvers(), resumeInspection = Promise.withResolvers()
+  const originalRead = fs.readFile.bind(fs)
+  let paused = false
+  context.mock.method(fs, 'readFile', async (...args) => {
+    const bytes = await originalRead(...args)
+    if (args[0] === lockPath && !paused && JSON.parse(bytes).pid === ownerA.pid) {
+      paused = true
+      inspected.resolve()
+      await resumeInspection.promise
+    }
+    return bytes
+  })
+  let active = 0, maximumActive = 0
+  const recoveringEntered = Promise.withResolvers()
+  const recovering = withPublishLock(fixture.publicRoot, async () => {
+    maximumActive = Math.max(maximumActive, ++active)
+    recoveringEntered.resolve()
+    --active
+  })
+  await inspected.promise
+  const releaseRequested = once(ownerA, 'message')
+  ownerA.send('release')
+  const [releaseState] = await releaseRequested
+  assert.ok(['released', 'release-waits'].includes(releaseState))
+  const earlyExit = releaseState === 'released'
+  if (earlyExit) await ownerAExited
+  const newOwnerEntered = Promise.withResolvers(), releaseNewOwner = Promise.withResolvers()
+  const newOwner = withPublishLock(fixture.publicRoot, async () => {
+    maximumActive = Math.max(maximumActive, ++active)
+    newOwnerEntered.resolve()
+    await releaseNewOwner.promise
+    --active
+  })
+  // Force the old race completely: A exits, B owns the pathname, then resume
+  // inspection holding A's bytes. Fixed release reports waiting on the guard.
+  if (earlyExit) await newOwnerEntered.promise
+  resumeInspection.resolve()
+  await newOwnerEntered.promise
+  if (earlyExit) await recoveringEntered.promise
+  const newOwnerBytes = await originalRead(lockPath, 'utf8').catch(() => null)
+  releaseNewOwner.resolve()
+  const outcomes = await Promise.allSettled([recovering, newOwner, ownerAExited])
+  assert.equal(maximumActive, 1, 'recoverer must not delete a live replacement lock and enter concurrently')
+  assert.equal(earlyExit, false, 'release must use the same guard as recovery inspection')
+  assert.equal(JSON.parse(newOwnerBytes).pid, process.pid)
+  for (const outcome of outcomes) assert.equal(outcome.status, 'fulfilled', String(outcome.reason))
 })
