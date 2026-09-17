@@ -127,6 +127,14 @@ test('rejects traversal and source symlinks that escape the repository', async (
     await assert.rejects(loadRecipes(root), /source.*escapes.*root/i)
   })
 
+  await context.test('non-Blender source payload', async () => {
+    const root = await createCatalogRoot()
+    const yaml = (await fixtureYaml()).replace('source: source.blend', 'source: payload.txt')
+    await writeRecipe(root, 'source-extension', yaml, false)
+    await writeFile(join(root, 'art_source/source-extension/payload.txt'), 'not a blend')
+    await assert.rejects(loadRecipes(root), /source.*\.blend/i)
+  })
+
   await context.test('runtime path outside the game asset namespace', async () => {
     const root = await createCatalogRoot()
     const yaml = (await fixtureYaml()).replace(
@@ -144,6 +152,14 @@ test('rejects traversal and source symlinks that escape the repository', async (
     await writeRecipe(root, 'runtime-symlink', await fixtureYaml())
     await assert.rejects(loadRecipes(root), /runtimePath.*escapes.*public/i)
   })
+
+  await context.test('dangling runtime output symlink', async () => {
+    const root = await createCatalogRoot()
+    const outside = await mkdtemp(join(tmpdir(), 'asset-output-dangling-'))
+    await symlink(join(outside, 'missing'), join(root, 'web_new/public/assets'))
+    await writeRecipe(root, 'runtime-dangling-symlink', await fixtureYaml())
+    await assert.rejects(loadRecipes(root), /runtimePath.*dangling symlink/i)
+  })
 })
 
 test('rejects unsupported kinds, invalid ranges, and incomplete positive budgets', async (context) => {
@@ -156,13 +172,21 @@ test('rejects unsupported kinds, invalid ranges, and incomplete positive budgets
     await assert.rejects(loadRecipes(root), /kind.*character.*equipment.*world_object/i)
   })
 
-  await context.test('non-finite and reversed clip values', async () => {
+  await context.test('reversed clip range', async () => {
     const root = await createCatalogRoot()
-    const yaml = (await fixtureYaml())
-      .replace('range: { start: 1, end: 24 }', 'range: { start: 24, end: 1 }')
-      .replace('fps: 24', 'fps: .nan')
-    await writeRecipe(root, 'clip', yaml)
-    await assert.rejects(loadRecipes(root), /range|finite/i)
+    const yaml = (await fixtureYaml()).replace(
+      'range: { start: 1, end: 24 }',
+      'range: { start: 24, end: 1 }',
+    )
+    await writeRecipe(root, 'clip-range', yaml)
+    await assert.rejects(loadRecipes(root), /range.*end must not precede start/i)
+  })
+
+  await context.test('non-finite clip FPS', async () => {
+    const root = await createCatalogRoot()
+    const yaml = (await fixtureYaml()).replace('fps: 24', 'fps: .nan')
+    await writeRecipe(root, 'clip-fps', yaml)
+    await assert.rejects(loadRecipes(root), /clips\.idle\.fps must be finite/i)
   })
 
   await context.test('zero triangle budget', async () => {
@@ -210,6 +234,23 @@ test('validates missing and cyclic dependencies while keeping preview out of bui
     const first = (await fixtureYaml())
       .replace('id: character/test_commoner', 'id: character/first')
       .replace('preview: []', 'preview: [equipment/second]')
+    const second = (await fixtureYaml())
+      .replace('id: character/test_commoner', 'id: equipment/second')
+      .replace('kind: character', 'kind: equipment')
+      .replace('/assets/game/characters/test_commoner', '/assets/game/equipment/second')
+      .replace('preview: []', 'preview: [character/first]')
+      .replace(/rig:\n(?:  .*\n){3}/, 'rig: null\n')
+      .replace(/clips:\n(?:  .*\n|    .*\n)+?bindings:/, 'clips: {}\nbindings:')
+    await writeRecipe(root, 'first', first)
+    await writeRecipe(root, 'second', second)
+    await assert.rejects(loadRecipes(root), /cyclic dependencies/i)
+  })
+
+  await context.test('mixed export and preview cycle', async () => {
+    const root = await createCatalogRoot()
+    const first = (await fixtureYaml())
+      .replace('id: character/test_commoner', 'id: character/first')
+      .replace('export: []', 'export: [equipment/second]')
     const second = (await fixtureYaml())
       .replace('id: character/test_commoner', 'id: equipment/second')
       .replace('kind: character', 'kind: equipment')

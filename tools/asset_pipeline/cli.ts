@@ -1,3 +1,7 @@
+import { constants } from 'node:fs'
+import { access, realpath, stat } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
+
 export type AssetCommand = 'build' | 'validate' | 'verify-reproducible'
 
 export interface CliArguments {
@@ -68,6 +72,12 @@ function readFlagValue(argv: readonly string[], index: number, flag: string): st
   return value
 }
 
+function readExecutableOverride(argv: readonly string[], index: number, flag: string): string {
+  const value = readFlagValue(argv, index, flag)
+  if (!isAbsolute(value)) throw new Error(`${flag} requires an absolute path`)
+  return value
+}
+
 export function parseArguments(argv: readonly string[]): CliArguments {
   const command = parseCommand(argv[0])
   const target = parseTarget(argv[1])
@@ -92,13 +102,13 @@ export function parseArguments(argv: readonly string[]): CliArguments {
     }
     if (flag === '--blender') {
       if (blender !== undefined) throw new Error('--blender may only be specified once')
-      blender = readFlagValue(argv, index, flag)
+      blender = readExecutableOverride(argv, index, flag)
       index += 1
       continue
     }
     if (flag === '--toktx') {
       if (toktx !== undefined) throw new Error('--toktx may only be specified once')
-      toktx = readFlagValue(argv, index, flag)
+      toktx = readExecutableOverride(argv, index, flag)
       index += 1
       continue
     }
@@ -119,6 +129,34 @@ async function unimplementedDispatch(arguments_: CliArguments): Promise<void> {
   throw new Error(`${arguments_.command} is not implemented yet; no artifacts were published`)
 }
 
+async function canonicalizeExecutable(path: string, flag: '--blender' | '--toktx'): Promise<string> {
+  let canonicalPath: string
+  try {
+    canonicalPath = await realpath(path)
+  } catch (error) {
+    const code = error instanceof Error && 'code' in error ? error.code : undefined
+    if (code === 'ENOENT') throw new Error(`${flag} executable does not exist: ${path}`)
+    throw new Error(`Unable to inspect ${flag} executable ${path}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!(await stat(canonicalPath)).isFile()) throw new Error(`${flag} must name an executable file`)
+  try {
+    await access(canonicalPath, constants.X_OK)
+  } catch {
+    throw new Error(`${flag} file is not executable: ${canonicalPath}`)
+  }
+  return canonicalPath
+}
+
+async function validateExecutableOverrides(arguments_: CliArguments): Promise<CliArguments> {
+  const blender = arguments_.blender === undefined
+    ? undefined
+    : await canonicalizeExecutable(arguments_.blender, '--blender')
+  const toktx = arguments_.toktx === undefined
+    ? undefined
+    : await canonicalizeExecutable(arguments_.toktx, '--toktx')
+  return { ...arguments_, blender, toktx }
+}
+
 export async function runCli(argv: readonly string[], options: RunCliOptions = {}): Promise<number> {
   const stdout = options.stdout ?? ((message: string) => process.stdout.write(`${message}\n`))
   const stderr = options.stderr ?? ((message: string) => process.stderr.write(`${message}\n`))
@@ -127,7 +165,7 @@ export async function runCli(argv: readonly string[], options: RunCliOptions = {
     return 0
   }
   try {
-    const arguments_ = parseArguments(argv)
+    const arguments_ = await validateExecutableOverrides(parseArguments(argv))
     await (options.dispatch ?? unimplementedDispatch)(arguments_)
     return 0
   } catch (error) {
