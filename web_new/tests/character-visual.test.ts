@@ -3,14 +3,15 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { AnimationClip, Bone, BoxGeometry, Group, Mesh, MeshStandardMaterial, ShaderMaterial, Vector3, VectorKeyframeTrack } from 'three'
-import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
+import type { ActorBundle } from '../src/game/actors/ActorAssetCache'
+import type { ActorManifest } from '../src/game/actors/ActorAssetCatalog'
 import { proto } from '../src/network/proto/packets.js'
 import { decodeCharacterVisual } from '../src/types/characterVisual'
 import { useGameStore } from '../src/stores/gameStore'
 import { ActorInstance } from '../src/game/actors/ActorInstance'
 import { ActorArmLayers } from '../src/game/actors/ActorArmLayers'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
-import { ACTOR_RENDER, COMMONER_MODEL, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
+import { COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
 import { actorYawForScreenAngle } from '../src/game/actors/facing'
 import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
 import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
@@ -134,7 +135,9 @@ function fixtureRig() {
   for (const side of ['l', 'r']) {
     const clavicle = bone(`clavicle${side}`, pelvis)
     const forearm = bone(`forearm${side}`, clavicle)
-    bone(`hand${side}`, forearm)
+    const hand = bone(`hand${side}`, forearm)
+    const grip = new Group(); grip.name = `grip_${side}`; hand.add(grip)
+    const socket = new Group(); socket.name = `forearm_${side}`; forearm.add(socket)
   }
   const clip = (name: string, factor: number) => new AnimationClip(name, 1, Object.keys(bones).map((name, index) =>
     new VectorKeyframeTrack(`${name}.position`, [0, 1], [factor * (index + 1), 0, 0, factor * (index + 2), 0, 0])))
@@ -142,8 +145,15 @@ function fixtureRig() {
   return { scene, animations, bones }
 }
 
-function gltf(scene: Group, animations: AnimationClip[] = []): GLTF {
-  return { scene, scenes: [scene], animations, cameras: [], asset: { version: '2.0' }, userData: {}, parser: {} } as unknown as GLTF
+function gltf(scene: Group, animations: AnimationClip[] = []): ActorBundle {
+  const manifest = {
+    rigHash: 'fixture', sockets: { grip_l: 'grip_l', grip_r: 'grip_r', forearm_l: 'forearm_l', forearm_r: 'forearm_r' },
+    clips: Object.fromEntries(animations.map(clip => [clip.name, { rigHash: 'fixture', duration: 1, loop: true,
+      playback: clip.name.endsWith('walk') ? 'distance' : 'time', cycleDistanceTiles: 1.677975879375,
+      channelMask: clip.tracks.map(track => track.name.split('.')[0]),
+    }])),
+  } as unknown as ActorManifest
+  return { scene, animations, manifest }
 }
 
 function prop() {
@@ -155,8 +165,9 @@ function prop() {
 }
 
 class FixtureCache {
-  readonly assets = new Map<string, GLTF>()
-  readonly pending = new Map<string, Promise<GLTF>>()
+  get catalog() { return Promise.resolve({ manifests: {}, equipment: catalog }) }
+  readonly assets = new Map<string, ActorBundle>()
+  readonly pending = new Map<string, Promise<ActorBundle>>()
   readonly references = new Map<string, number>()
   readonly calls: string[] = []
   async acquire(url: string) {
@@ -177,21 +188,21 @@ class FixtureCache {
 const axeURL = '/assets/game/equipment/test_axe.glb'
 const shieldURL = '/assets/game/equipment/test_shield.glb'
 const catalog: Record<string, EquipmentDefinition> = {
-  stone_axe: { kind: 'rigid', url: axeURL, bindings: {
+  stone_axe: { kind: 'rigid', assetId: axeURL, bindings: {
     right_hand: { socket: 'grip_r', armMotion: { kind: 'layered', idlePose: 'hold', walkPose: 'hold' }, transform: { position: [.1, 0, 0], scale: .5 } },
     left_hand: { socket: 'grip_l', armMotion: { kind: 'layered', idlePose: 'hold' } },
   } },
-  shield: { kind: 'rigid', url: shieldURL, bindings: { left_hand: { socket: 'forearm_l', armMotion: { kind: 'layered', idlePose: 'hold' } } } },
+  shield: { kind: 'rigid', assetId: shieldURL, bindings: { left_hand: { socket: 'forearm_l', armMotion: { kind: 'layered', idlePose: 'hold' } } } },
   deferred: { kind: 'deferred' },
 }
 
 async function fixtureActor() {
   const cache = new FixtureCache()
   const rig = fixtureRig()
-  cache.assets.set(COMMONER_MODEL, gltf(rig.scene, rig.animations))
+  cache.assets.set(COMMONER_ASSET_ID, gltf(rig.scene, rig.animations))
   cache.assets.set(axeURL, prop())
   cache.assets.set(shieldURL, prop())
-  const actor = new ActorInstance(cache, catalog)
+  const actor = new ActorInstance(cache)
   await actor.ready
   return { actor, cache }
 }
@@ -199,10 +210,10 @@ async function fixtureActor() {
 test('distance-driven walk samples the 3D clip continuously', async () => {
   const { actor } = await fixtureActor()
   actor.walking = true
-  actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .10
+  actor.distanceTiles = actor.cycleDistanceTiles * .10
   actor.updatePose(10)
   const first = actor.root.getObjectByName('pelvis')!.position.x
-  actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .11
+  actor.distanceTiles = actor.cycleDistanceTiles * .11
   actor.updatePose(20)
   const second = actor.root.getObjectByName('pelvis')!.position.x
   assert.notEqual(second, first, 'a sub-eighth stride movement must update the skeletal pose')
@@ -214,7 +225,7 @@ test('skeletal weights start in 500ms, stop in 300ms and reverse continuously', 
   try {
     const pelvis = actor.root.getObjectByName('pelvis')!
     const now = Math.ceil(performance.now())
-    actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .5
+    actor.distanceTiles = actor.cycleDistanceTiles * .5
     actor.walking = true
     actor.updatePose(now)
     assert.equal(pelvis.position.x, 0, 'start must retain idle at zero weight')
@@ -272,7 +283,7 @@ test('baked8 starts immediately and holds its walk frame while position is still
     const settings = { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode: 'baked8' as const }
     const pelvis = actor.root.getObjectByName('pelvis')!
     actor.walking = true
-    actor.distanceTiles = ACTOR_RENDER.cycleDistanceTiles * .25
+    actor.distanceTiles = actor.cycleDistanceTiles * .25
     actor.updatePose(now, settings)
     assert.notEqual(pelvis.position.x, 0, 'baked8 must not blend the start of the walk pose')
 
@@ -310,8 +321,7 @@ test('hybrid mode turns continuously while baked8 rounds Three.js output to eigh
 
 test('sockets retain authored transforms and follow their hand or forearm bone', () => {
   const rig = fixtureRig()
-  const authored = new Group()
-  authored.name = 'grip_l'
+  const authored = rig.scene.getObjectByName('grip_l')!
   authored.position.set(1, 2, 3)
   rig.bones.handl!.add(authored)
   const sockets = new ActorSockets(rig.scene)
@@ -411,7 +421,7 @@ test('failed or superseded loads are atomic and do not leak or revive old equipm
     await assert.rejects(actor.setEquipment([{ slot: 'left_hand', visualKey: 'shield' }, { slot: 'right_hand', visualKey: 'stone_axe' }]))
     assert.equal(right.children[0], original)
     assert.equal(cache.liveReferences, 2)
-    let finish!: (asset: GLTF) => void
+    let finish!: (asset: ActorBundle) => void
     cache.pending.set(shieldURL, new Promise((resolve) => { finish = resolve }))
     const older = actor.setEquipment([{ slot: 'left_hand', visualKey: 'shield' }])
     await actor.setEquipment([])
@@ -419,7 +429,7 @@ test('failed or superseded loads are atomic and do not leak or revive old equipm
     await older
     assert.deepEqual(actor.equippedVisuals, [])
     assert.equal(cache.liveReferences, 1)
-    let finishDestroyed!: (asset: GLTF) => void
+    let finishDestroyed!: (asset: ActorBundle) => void
     cache.pending.set(shieldURL, new Promise((resolve) => { finishDestroyed = resolve }))
     const loading = actor.setEquipment([{ slot: 'left_hand', visualKey: 'shield' }])
     actor.destroy()
@@ -477,7 +487,7 @@ test('equipment arm sampling follows distance without restarting the transition 
     actor.walking = true
     const samples: number[] = []
     for (let phase = 0; phase < 8; phase++) {
-      actor.distanceTiles = phase / 8 * ACTOR_RENDER.cycleDistanceTiles
+      actor.distanceTiles = phase / 8 * actor.cycleDistanceTiles
       actor.updatePose(now + phase * 30)
       samples.push(right.position.x)
       assert.equal(right.position.x, heldIdle + phase / 8 * 10)
@@ -493,4 +503,40 @@ test('equipment arm sampling follows distance without restarting the transition 
     actor.updatePose(now + 1800)
     assert.equal(right.position.x, 0)
   } finally { actor.destroy() }
+})
+
+test('ordinary axe carrying preserves the normal arm animation and uses loaded stride metadata', async () => {
+  const cache = new FixtureCache()
+  const rig = fixtureRig()
+  const asset = gltf(rig.scene, rig.animations)
+  asset.manifest.clips.walk!.cycleDistanceTiles = 2
+  asset.manifest.clips.carry_walk!.cycleDistanceTiles = 2
+  cache.assets.set(COMMONER_ASSET_ID, asset)
+  cache.assets.set(axeURL, prop())
+  const actor = new ActorInstance({ acquire: cache.acquire.bind(cache), catalog: Promise.resolve({ manifests: {}, equipment: {
+    stone_axe: { kind: 'rigid', assetId: axeURL, bindings: { right_hand: { socket: 'grip_r', armMotion: { kind: 'ordinary' } } } },
+  } }) })
+  await actor.ready
+  try {
+    actor.walking = true
+    actor.distanceTiles = 1
+    actor.updatePose(0, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode: 'baked8' })
+    const bare = actor.root.getObjectByName('handr')!.position.clone()
+    await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }])
+    actor.updatePose(1000, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode: 'baked8' })
+    assert.deepEqual(actor.root.getObjectByName('handr')!.position.toArray(), bare.toArray())
+    assert.equal(actor.cycleDistanceTiles, 2)
+  } finally { actor.destroy() }
+  assert.equal(cache.liveReferences, 0)
+})
+
+test('actor readiness failure releases its acquired model lease', async () => {
+  const cache = new FixtureCache(); const rig = fixtureRig()
+  rig.scene.getObjectByName('grip_l')!.removeFromParent()
+  cache.assets.set(COMMONER_ASSET_ID, gltf(rig.scene, rig.animations))
+  const actor = new ActorInstance(cache)
+  await assert.rejects(actor.ready, /socket/)
+  assert.equal(actor.isReady, false)
+  assert.equal(cache.liveReferences, 0)
+  actor.destroy()
 })

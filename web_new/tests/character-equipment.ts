@@ -2,7 +2,6 @@ import { BoxGeometry, Mesh, MeshStandardMaterial } from 'three'
 import type { ActorInstance } from '../src/game/actors/ActorInstance'
 import { ActorSockets, findRigBone } from '../src/game/actors/ActorSockets'
 import { createActorMaterial } from '../src/game/actors/ActorMaterial'
-import { ACTOR_RENDER } from '../src/game/actors/config'
 
 // Exercise the actual exported rig and shared Three/Pixi WebGL path using an
 // in-memory box, not a production weapon or a newly authored animation asset.
@@ -32,7 +31,7 @@ export function verifyCharacterEquipment(actor: ActorInstance, hash: () => numbe
     const held = right.quaternion.clone()
     for (let step = 0; step < 8; step++) {
       actor.walking = true
-      actor.distanceTiles = step / 8 * ACTOR_RENDER.cycleDistanceTiles
+      actor.distanceTiles = step / 8 * actor.cycleDistanceTiles
       actor.updatePose(performance.now() + 300)
       check(right.quaternion.angleTo(held) < 1e-6, 'Actual held arm must survive every gait sample')
       hash() // Also asserts no GL errors in the shared renderer.
@@ -65,7 +64,7 @@ export async function verifyStoneAxe(actor: ActorInstance, hash: () => number): 
   actor.updatePose(performance.now() + 500)
   for (let phase = 0; phase < 8; phase++) {
     actor.walking = true
-    actor.distanceTiles = phase / 8 * ACTOR_RENDER.cycleDistanceTiles
+    actor.distanceTiles = phase / 8 * actor.cycleDistanceTiles
     actor.updatePose(performance.now() + 500)
     freeHandPoses.push(freeArm.quaternion.clone())
   }
@@ -85,7 +84,7 @@ export async function verifyStoneAxe(actor: ActorInstance, hash: () => number): 
   actor.updatePose(now + 400)
   for (let phase = 0; phase < 8; phase++) {
     actor.walking = true
-    actor.distanceTiles = phase / 8 * ACTOR_RENDER.cycleDistanceTiles
+    actor.distanceTiles = phase / 8 * actor.cycleDistanceTiles
     actor.updatePose(now + 400)
     rotations.push(heldArm.quaternion.toArray().map(value => value.toFixed(5)).join(','))
     check(freeArm.quaternion.angleTo(freeHandPoses[phase]!) < 1e-6, `Equipped right hand changed the free arm gait at phase ${phase}: ${freeArm.quaternion.angleTo(freeHandPoses[phase]!)}`)

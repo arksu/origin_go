@@ -11,7 +11,6 @@ export const ACTOR_RENDER = {
   supersampling: 2,
   orthoHeight: 1.94 * 128 / 96,
   cameraHeight: (116 - 64) / (96 / 1.94) / Math.cos(Math.PI / 6),
-  cycleDistanceTiles: 1.677975879375,
   walkSamples: 8,
   locomotionBlendMs: LOCOMOTION_TRANSITION_MS,
   locomotionStopMs: LOCOMOTION_STOP_MS,
@@ -51,9 +50,8 @@ export function resolveActorRenderSettings(overrides: Partial<ActorRenderSetting
   return Object.freeze(settings)
 }
 
-const ROOT = '/assets/game/characters/male_commoner/realtime/'
-export const COMMONER_MODEL = ROOT + 'commoner_meshy.glb'
-export { EQUIPMENT, DEFAULT_EQUIPMENT } from './equipment'
+export const COMMONER_ASSET_ID = 'character/male_commoner'
+export { DEFAULT_EQUIPMENT } from './equipment'
 
 export const ACTOR_PALETTE = [
   ['#392b1c', '#533425', '#7c4b31', '#a6693f', '#ca8d51', '#e6b06a', '#f4cc86', '#fbe0a5'],

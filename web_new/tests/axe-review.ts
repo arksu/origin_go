@@ -1,6 +1,5 @@
 import { Application, Container, WebGLRenderer } from 'pixi.js'
 import { ActorRenderer } from '../src/game/actors/ActorRenderer'
-import { ACTOR_RENDER } from '../src/game/actors/config'
 import type { EquipmentSlot } from '../src/types/characterVisual'
 
 async function main() {
@@ -36,7 +35,7 @@ async function main() {
   button('Переноска', () => { handles.forEach(handle => { handle.actor.carrying = !handle.actor.carrying }) })
   let distance = 0
   app.ticker.add(ticker => {
-    if (walking) distance += ticker.deltaMS / 960 * ACTOR_RENDER.cycleDistanceTiles
+    if (walking) distance += ticker.deltaMS / 960 * handles[0]!.actor.cycleDistanceTiles
     handles.forEach((handle, direction) => {
       handle.actor.direction = direction
       handle.actor.walking = walking
