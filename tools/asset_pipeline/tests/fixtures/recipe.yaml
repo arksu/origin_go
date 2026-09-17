@@ -31,10 +31,11 @@ bindings:
     grip: GRIP_L
     policy: { kind: ordinary }
 budgets:
-  trianglesByLod: { high: 16000, low: 5500 }
+  trianglesByLod: { '0': 16000, '1': 5500 }
   textureDimensions: { width: 1024, height: 1024 }
   totalPublishedBytes: 4194304
   boneInfluences: 4
+  bones: 64
 optimization:
   meshCompression: meshopt
   texture:

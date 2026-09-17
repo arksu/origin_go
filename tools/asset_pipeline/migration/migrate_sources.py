@@ -357,7 +357,7 @@ def main():
                   'rig': {'object': 'commoner_rig', 'bones': bones, 'sockets': ['grip_l', 'grip_r', 'forearm_l', 'forearm_r']} if kind == 'character' else None,
                   'clips': {}, 'bindings': {},
                   'budgets': {'trianglesByLod': limits, 'textureDimensions': {'width': size, 'height': size},
-                              'totalPublishedBytes': 8388608 if kind == 'character' else 1048576, 'boneInfluences': 4},
+                              'totalPublishedBytes': 2853888 if kind == 'character' else 499712, 'boneInfluences': 4, 'bones': 50},
                   'optimization': {'meshCompression': 'meshopt', 'texture': {'codec': 'uastc', 'quality': 2, 'width': size, 'height': size, 'mipmaps': True}}}
         if kind == 'character':
             for animation in snapshot['assets'][0]['animations']:

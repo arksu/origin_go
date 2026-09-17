@@ -54,10 +54,11 @@ test('loads a strict recipe into the typed worker contract', async () => {
     slot: 'left_hand', socket: 'grip_l', grip: 'GRIP_L', policy: { kind: 'ordinary' },
   })
   assert.deepEqual(recipe?.budgets, {
-    trianglesByLod: { high: 16000, low: 5500 },
+    trianglesByLod: { '0': 16000, '1': 5500 },
     textureDimensions: { width: 1024, height: 1024 },
     totalPublishedBytes: 4194304,
     boneInfluences: 4,
+    bones: 64,
   })
   assert.deepEqual(recipe?.optimization, {
     meshCompression: 'meshopt',
@@ -71,6 +72,12 @@ test('rejects duplicate YAML keys before normalization', async () => {
   await writeRecipe(root, 'duplicate-key', yaml)
 
   await assert.rejects(loadRecipes(root), /duplicate key|Map keys must be unique/i)
+})
+
+test('rejects named LOD budgets that cannot match numeric node extras', async () => {
+  const root = await createCatalogRoot()
+  await writeRecipe(root, 'named-lod', (await fixtureYaml()).replace("trianglesByLod: { '0': 16000, '1': 5500 }", 'trianglesByLod: { high: 16000, low: 5500 }'))
+  await assert.rejects(loadRecipes(root), /numeric.*LOD|LOD.*numeric/i)
 })
 
 test('rejects duplicate recipe IDs and runtime output collisions', async (context) => {
@@ -191,9 +198,9 @@ test('rejects unsupported kinds, invalid ranges, and incomplete positive budgets
 
   await context.test('zero triangle budget', async () => {
     const root = await createCatalogRoot()
-    const yaml = (await fixtureYaml()).replace('high: 16000', 'high: 0')
+    const yaml = (await fixtureYaml()).replace("'0': 16000", "'0': 0")
     await writeRecipe(root, 'budget', yaml)
-    await assert.rejects(loadRecipes(root), /trianglesByLod\.high.*positive/i)
+    await assert.rejects(loadRecipes(root), /trianglesByLod\.0.*positive/i)
   })
 
   await context.test('out-of-range UASTC quality', async () => {
