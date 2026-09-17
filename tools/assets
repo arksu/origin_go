@@ -4,6 +4,13 @@ const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 async function main() {
+  if (process.argv.length === 3 && process.argv[2] === 'setup') {
+    const setupPath = join(__dirname, 'asset_pipeline', 'setup.mjs')
+    const { setupAssetTools } = await import(pathToFileURL(setupPath).href)
+    const result = await setupAssetTools()
+    process.stdout.write(`${result.installed ? 'Installed' : 'Verified'} locked toktx: ${result.binary}\n`)
+    return
+  }
   const cliPath = join(__dirname, 'asset_pipeline', 'cli.ts')
   const { runCli } = await import(pathToFileURL(cliPath).href)
   return runCli(process.argv.slice(2))

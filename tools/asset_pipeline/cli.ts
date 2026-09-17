@@ -28,6 +28,8 @@ const CLIP_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/
 
 export const HELP_TEXT = `Usage: tools/assets <command> <target> [options]
 
+  tools/assets setup
+
 Commands:
   build                 Build and publish selected assets
   validate              Validate sources and recipes
@@ -49,7 +51,8 @@ Examples:
   tools/assets verify-reproducible character/male_commoner
 
 Setup errors:
-  Install the locked Node version, Blender 5.2.1, and official KTX-Software.
+  Run tools/assets setup to install the locked KTX-Software archive locally.
+  Install the locked Node version and Blender 5.2.1.
   Pass non-default executable locations with --blender and --toktx.
   Builds run offline and never install missing tools.
 `
