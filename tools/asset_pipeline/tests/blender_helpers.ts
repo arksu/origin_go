@@ -39,6 +39,7 @@ export async function createFixture(kind: AssetKind, overrides: Record<string, u
     runtimePath: '/assets/game/fixtures/test', outputDirectory: join(root, 'published'),
     dependencies: { export: [], preview: [] },
     rig: kind === 'character' ? { object: 'Rig', bones: ['root', 'hand.r'], sockets: ['socket_hand_right'] } : null,
+    equipmentSlots: [],
     clips: kind === 'character' ? Object.fromEntries(['idle', 'walk'].map(name => [name, {
       action: name, range: { start: 1, end: 12 }, fps: 24, loop: true, playback: 'time' as const,
     }])) : {},
