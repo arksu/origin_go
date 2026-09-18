@@ -20,13 +20,8 @@
     ],
     "sockets": []
   },
+  "clips": {},
   "equipmentSlots": ["chest"],
-  "clips": {
-    "idle": {"action": "idle", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "time"},
-    "carry_idle": {"action": "carry_idle", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "time"},
-    "walk": {"action": "walk", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "distance", "cycleDistanceTiles": 1.677975879375},
-    "carry_walk": {"action": "carry_walk", "range": {"start": 1, "end": 49}, "fps": 50, "loop": true, "playback": "distance", "cycleDistanceTiles": 1.677975879375}
-  },
   "bindings": {},
   "budgets": {
     "trianglesByLod": {"0": 10000},
