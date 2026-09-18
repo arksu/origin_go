@@ -4,13 +4,18 @@
     <div class="hud">
       <span v-if="store.selectedObjectPath">Path: {{ store.selectedObjectPath }}</span>
       <span v-if="store.selectedLayerIndex >= 0">Layer: {{ store.selectedLayerIndex }}</span>
+      <template v-if="isSelectedFrameLayer">
+        <button class="hud-btn" @click="playSelectedLayer">Play</button>
+        <button class="hud-btn" @click="pauseSelectedLayer">Pause</button>
+        <button class="hud-btn" @click="nextSelectedLayerFrame">Next Frame</button>
+      </template>
       <button class="hud-btn" @click="renderer.resetView()">Reset View</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useObjectEditorStore } from '@/stores/objectEditorStore'
 import { ObjectPreviewRenderer } from '@/engine/ObjectPreviewRenderer'
 
@@ -19,6 +24,7 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 const renderer = new ObjectPreviewRenderer()
 let resizeObserver: ResizeObserver | null = null
+const isSelectedFrameLayer = computed(() => Array.isArray(store.selectedLayer?.frames))
 
 function renderNow(): void {
   void renderer.renderResource(store.selectedResource, {
@@ -49,6 +55,21 @@ function onKeyDown(event: KeyboardEvent): void {
   event.preventDefault()
 }
 
+function playSelectedLayer(): void {
+  if (!isSelectedFrameLayer.value) return
+  renderer.playLayerAnimation(store.selectedLayerIndex)
+}
+
+function pauseSelectedLayer(): void {
+  if (!isSelectedFrameLayer.value) return
+  renderer.pauseLayerAnimation(store.selectedLayerIndex)
+}
+
+function nextSelectedLayerFrame(): void {
+  if (!isSelectedFrameLayer.value) return
+  renderer.nextLayerAnimationFrame(store.selectedLayerIndex)
+}
+
 onMounted(async () => {
   const canvas = canvasRef.value
   const container = containerRef.value
@@ -60,6 +81,9 @@ onMounted(async () => {
   renderer.setOnLayerDrag((idx, dx, dy) => {
     if (store.selectedLayerIndex !== idx) return
     store.nudgeSelectedLayer(dx, dy)
+  })
+  renderer.setOnFrameChange((idx, frameIndex) => {
+    store.setSelectedLayerPreviewFrameIndex(idx, frameIndex)
   })
   renderNow()
 

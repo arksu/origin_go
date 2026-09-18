@@ -65,6 +65,24 @@
       "requiredDiscovery": [],
       "disallowedTiles": [],
       "objectKey": "crate"
+    },
+    {
+      "defId": 4,
+      "key": "campfire",
+      "name": "Campfire",
+      "inputs": [
+        {
+          "itemKey": "branch",
+          "count": 1,
+          "qualityWeight": 1
+        }
+      ],
+      "staminaCost": 8,
+      "ticksRequired": 20,
+      "requiredSkills": [],
+      "requiredDiscovery": [],
+      "allowedTiles": [],
+      "objectKey": "campfire"
     }
   ]
 }

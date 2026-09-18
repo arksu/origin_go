@@ -1,4 +1,49 @@
 {
+  "campfire": {
+    "offset": [
+      32,
+      63
+    ],
+    "layers": [
+      {
+        "interactive": true,
+        "img": "obj/campfire/campfire.png",
+        "offset": [
+          7,
+          28
+        ],
+        "z": 0
+      },
+      {
+        "frames": [
+          {
+            "img": "obj/campfire/flame/frame_1.png"
+          },
+          {
+            "img": "obj/campfire/flame/frame_3.png",
+            "offset": [
+              10,
+              10
+            ]
+          },
+          {
+            "img": "obj/campfire/flame/frame_2.png",
+            "offset": [
+              5,
+              7
+            ]
+          }
+        ],
+        "fps": 4,
+        "loop": true,
+        "offset": [
+          -8,
+          -3
+        ],
+        "z": 1
+      }
+    ]
+  },
   "palisade": {
     "1": {
       "offset": [

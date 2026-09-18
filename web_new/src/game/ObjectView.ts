@@ -33,6 +33,7 @@ interface AnimatedFrameLayer {
   fps: number
   loop: boolean
   groupKey: string
+  startFrame: number
   currentFrame: number
 }
 
@@ -363,6 +364,7 @@ export class ObjectView {
         fps,
         loop: layer.loop !== false,
         groupKey: `${fps}:${frames.length}`,
+        startFrame: layer.loop !== false ? Math.floor(Math.random() * frames.length) : 0,
         currentFrame: 0,
       }
       this.animatedFrameLayers.push(frameLayer)
@@ -421,7 +423,7 @@ export class ObjectView {
     }
 
     if (frameLayer.loop) {
-      return step % frameLayer.frameCount
+      return (step + frameLayer.startFrame) % frameLayer.frameCount
     }
     return Math.min(step, frameLayer.frameCount - 1)
   }

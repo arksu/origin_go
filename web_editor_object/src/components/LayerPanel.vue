@@ -57,7 +57,7 @@
           <span class="readonly">{{ layerKind(store.selectedLayer) }}</span>
         </div>
 
-        <template v-if="!Array.isArray(store.selectedLayer.frames)">
+        <template v-if="!store.selectedLayer.spine">
           <div class="row">
             <label>Offset X</label>
             <input type="number" :value="layerOffset[0]" @input="onLayerOffsetInput(0, $event)" />
@@ -92,21 +92,34 @@
           </div>
           <div class="row">
             <label>FPS</label>
-            <span class="readonly">{{ store.selectedLayer.fps ?? 'n/a' }} (read-only)</span>
-          </div>
-          <div class="row">
-            <label>Loop</label>
-            <span class="readonly">{{ store.selectedLayer.loop ?? true }} (read-only)</span>
-          </div>
-          <div class="row">
-            <label>Preview Frame</label>
             <input
               type="number"
               min="0"
-              :max="Math.max(0, store.selectedLayer.frames.length - 1)"
-              :value="store.selectedLayerFrameIndex"
-              @input="onFrameIndexInput"
+              step="0.1"
+              :value="store.selectedLayer.fps ?? 0"
+              @input="onFpsInput"
             />
+          </div>
+          <div class="row">
+            <label>Loop</label>
+            <input
+              class="checkbox"
+              type="checkbox"
+              :checked="store.selectedLayer.loop !== false"
+              @change="onLoopInput"
+            />
+          </div>
+          <div class="row">
+            <label>Preview Frame</label>
+            <span class="readonly">{{ store.selectedLayerFrameIndex + 1 }} / {{ store.selectedLayer.frames.length }}</span>
+          </div>
+          <div class="row">
+            <label>Frame Offset X</label>
+            <input type="number" :value="frameOffset[0]" @input="onFrameOffsetInput(0, $event)" />
+          </div>
+          <div class="row">
+            <label>Frame Offset Y</label>
+            <input type="number" :value="frameOffset[1]" @input="onFrameOffsetInput(1, $event)" />
           </div>
           <div class="image-preview" v-if="store.selectedLayer.frames[store.selectedLayerFrameIndex]">
             <img :src="`/assets/game/${store.selectedLayer.frames[store.selectedLayerFrameIndex]!.img}`" />
@@ -143,6 +156,7 @@ const pickerOpen = ref(false)
 
 const rootOffset = computed(() => store.getSelectedRootOffset())
 const layerOffset = computed(() => store.getSelectedLayerOffset())
+const frameOffset = computed(() => store.getSelectedFrameOffset())
 const previewSrc = computed(() => {
   const override = store.selectedLayerPreviewOverride
   if (override) return override
@@ -173,10 +187,20 @@ function onZInput(event: Event): void {
   store.setSelectedLayerZ(value)
 }
 
-function onFrameIndexInput(event: Event): void {
+function onFrameOffsetInput(axis: 0 | 1, event: Event): void {
   const value = parseInputNumber(event)
   if (value == null) return
-  store.setSelectedLayerFrameIndex(Math.max(0, Math.floor(value)))
+  store.setSelectedFrameOffsetAxis(axis, value)
+}
+
+function onFpsInput(event: Event): void {
+  const value = parseInputNumber(event)
+  if (value == null) return
+  store.setSelectedLayerFps(Math.max(0, value))
+}
+
+function onLoopInput(event: Event): void {
+  store.setSelectedLayerLoop((event.target as HTMLInputElement).checked)
 }
 
 function onSelectImage(relPath: string): void {
