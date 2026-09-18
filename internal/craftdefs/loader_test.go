@@ -29,9 +29,23 @@ func setCraftDefsTestRegistries(t *testing.T) {
 		{DefID: 1003, Key: "stone_axe", Name: "Stone Axe", Tags: []string{"tool"}},
 		{DefID: 1004, Key: "wheat_seed", Name: "Wheat Seed", Tags: []string{"seed"}},
 		{DefID: 1005, Key: "seed_pouch", Name: "Seed Pouch", Tags: []string{"container"}},
+		{DefID: 1006, Key: "raw_meat", Name: "Raw Meat", Tags: []string{"food"}},
+		{DefID: 1007, Key: "cooked_meat", Name: "Cooked Meat", Tags: []string{"food"}},
 	}))
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
 		{DefID: 2001, Key: "anvil", Name: "Anvil"},
+		{
+			DefID: 2002,
+			Key:   "campfire",
+			Name:  "Campfire",
+			Station: &objectdefs.StationDef{
+				Capabilities: []string{"cooking"},
+				States:       []string{"burning", "unlit"},
+				InitialState: "unlit",
+				Values:       map[string]float64{"temperature": 20},
+				Resources:    []objectdefs.StationResourceDef{{Key: "fuel", Amount: 5}, {Key: "thread", Amount: 2}},
+			},
+		},
 	}))
 
 	t.Cleanup(func() {
@@ -138,6 +152,77 @@ func TestLoadFromDirectory_AllowsFutureItemTag(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, recipe.Inputs, 1)
 	assert.Equal(t, "future_seed", recipe.Inputs[0].ItemTag)
+}
+
+func TestLoadFromDirectory_StationRequirements(t *testing.T) {
+	setCraftDefsTestRegistries(t)
+	dir := t.TempDir()
+
+	writeCraftDefsTestFile(t, dir, "station_craft.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"crafts": [{
+			"defId": 1,
+			"key": "cook_meat",
+			"inputs": [{"itemKey": "raw_meat", "count": 1, "qualityWeight": 1}],
+			"outputs": [{"itemKey": "cooked_meat", "count": 1}],
+			"staminaCost": 1,
+			"ticksRequired": 2,
+			"requiredLinkedObjectKey": "campfire",
+			"stationRequirements": [{
+				"capability": "cooking",
+				"state": "burning",
+				"conditions": [{
+					"source": "station",
+					"kind": "value",
+					"key": "temperature",
+					"operator": "gte",
+					"value": 600
+				}],
+				"consume": [{"resourceKey": "thread", "amount": 1}]
+			}]
+		}]
+	}`)
+
+	reg, err := LoadFromDirectory(dir, craftDefsTestLogger())
+	require.NoError(t, err)
+
+	craft, ok := reg.GetByKey("cook_meat")
+	require.True(t, ok)
+	require.Len(t, craft.StationRequirements, 1)
+	require.Equal(t, "cooking", craft.StationRequirements[0].Capability)
+	require.Equal(t, "burning", craft.StationRequirements[0].State)
+	require.Len(t, craft.StationRequirements[0].Conditions, 1)
+	assert.Equal(t, "temperature", craft.StationRequirements[0].Conditions[0].Key)
+	require.Len(t, craft.StationRequirements[0].Consume, 1)
+	assert.Equal(t, "thread", craft.StationRequirements[0].Consume[0].ResourceKey)
+}
+
+func TestLoadFromDirectory_StationRequirementsRejectUnknownResource(t *testing.T) {
+	setCraftDefsTestRegistries(t)
+	dir := t.TempDir()
+
+	writeCraftDefsTestFile(t, dir, "station_craft.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"crafts": [{
+			"defId": 1,
+			"key": "cook_meat",
+			"inputs": [{"itemKey": "raw_meat", "count": 1, "qualityWeight": 1}],
+			"outputs": [{"itemKey": "cooked_meat", "count": 1}],
+			"staminaCost": 1,
+			"ticksRequired": 2,
+			"requiredLinkedObjectKey": "campfire",
+			"stationRequirements": [{
+				"capability": "cooking",
+				"consume": [{"resourceKey": "missing", "amount": 1}]
+			}]
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, craftDefsTestLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stationRequirements[0].consume[0].resourceKey unknown for required linked object: missing")
 }
 
 func TestLoadFromDirectory_InputMissingItemKeyAndItemTag(t *testing.T) {

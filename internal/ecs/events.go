@@ -8,33 +8,35 @@ import (
 )
 
 const (
-	TopicGameplayAll               = "gameplay.*"
-	TopicGameplayCombat            = "gameplay.combat.*"
-	TopicGameplayCombatDamage      = "gameplay.combat.damage_dealt"
-	TopicGameplayCombatDeath       = "gameplay.combat.death"
-	TopicGameplayCombatHeal        = "gameplay.combat.heal"
-	TopicGameplayMovement          = "gameplay.movement.*"
-	TopicGameplayMovementMoveBatch = "gameplay.movement.move_batch"
-	TopicGameplayMovementTeleport  = "gameplay.movement.teleport"
-	TopicGameplayPlayerEnterWorld  = "gameplay.player.enter_world"
-	TopicGameplayEntity            = "gameplay.entity.*"
-	TopicGameplayEntitySpawn       = "gameplay.entity.spawn"
-	TopicGameplayEntityDespawn     = "gameplay.entity.despawn"
-	TopicGameplayEntityUpdate      = "gameplay.entity.update"
-	TopicGameplayEntityAppearance  = "gameplay.entity.appearance_changed"
-	TopicGameplayLink              = "gameplay.link.*"
-	TopicGameplayLinkCreated       = "gameplay.link.created"
-	TopicGameplayLinkBroken        = "gameplay.link.broken"
-	TopicGameplayChunk             = "gameplay.chunk.*"
-	TopicGameplayChunkLoad         = "gameplay.chunk.load"
-	TopicGameplayChunkUnload       = "gameplay.chunk.unload"
-	TopicSystemAll                 = "system.*"
-	TopicSystemTick                = "system.tick"
-	TopicSystemShutdown            = "system.shutdown"
-	TopicNetworkAll                = "network.*"
-	TopicNetworkConnect            = "network.connect"
-	TopicNetworkDisconnect         = "network.disconnect"
-	TopicNetworkMessage            = "network.message"
+	TopicGameplayAll                 = "gameplay.*"
+	TopicGameplayCombat              = "gameplay.combat.*"
+	TopicGameplayCombatDamage        = "gameplay.combat.damage_dealt"
+	TopicGameplayCombatDeath         = "gameplay.combat.death"
+	TopicGameplayCombatHeal          = "gameplay.combat.heal"
+	TopicGameplayMovement            = "gameplay.movement.*"
+	TopicGameplayMovementMoveBatch   = "gameplay.movement.move_batch"
+	TopicGameplayMovementTeleport    = "gameplay.movement.teleport"
+	TopicGameplayPlayerEnterWorld    = "gameplay.player.enter_world"
+	TopicGameplayEntity              = "gameplay.entity.*"
+	TopicGameplayEntitySpawn         = "gameplay.entity.spawn"
+	TopicGameplayEntityDespawn       = "gameplay.entity.despawn"
+	TopicGameplayEntityUpdate        = "gameplay.entity.update"
+	TopicGameplayEntityAppearance    = "gameplay.entity.appearance_changed"
+	TopicGameplayLink                = "gameplay.link.*"
+	TopicGameplayLinkCreated         = "gameplay.link.created"
+	TopicGameplayLinkBroken          = "gameplay.link.broken"
+	TopicGameplayStation             = "gameplay.station.*"
+	TopicGameplayStationStateChanged = "gameplay.station.state_changed"
+	TopicGameplayChunk               = "gameplay.chunk.*"
+	TopicGameplayChunkLoad           = "gameplay.chunk.load"
+	TopicGameplayChunkUnload         = "gameplay.chunk.unload"
+	TopicSystemAll                   = "system.*"
+	TopicSystemTick                  = "system.tick"
+	TopicSystemShutdown              = "system.shutdown"
+	TopicNetworkAll                  = "network.*"
+	TopicNetworkConnect              = "network.connect"
+	TopicNetworkDisconnect           = "network.disconnect"
+	TopicNetworkMessage              = "network.message"
 )
 
 // EntitySpawnEvent represents when an entity becomes visible to an observer
@@ -268,5 +270,26 @@ func NewLinkBrokenEvent(layer int, playerID, targetID types.EntityID, reason Lin
 		PlayerID:    playerID,
 		TargetID:    targetID,
 		BreakReason: reason,
+	}
+}
+
+// StationStateChangedEvent is published after autonomous or craft-owned station state changes.
+type StationStateChangedEvent struct {
+	topic         string
+	Timestamp     time.Time
+	Layer         int
+	StationID     types.EntityID
+	StationHandle types.Handle
+}
+
+func (e *StationStateChangedEvent) Topic() string { return e.topic }
+
+func NewStationStateChangedEvent(layer int, stationID types.EntityID, stationHandle types.Handle) *StationStateChangedEvent {
+	return &StationStateChangedEvent{
+		topic:         TopicGameplayStationStateChanged,
+		Timestamp:     time.Now(),
+		Layer:         layer,
+		StationID:     stationID,
+		StationHandle: stationHandle,
 	}
 }

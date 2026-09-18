@@ -1117,3 +1117,72 @@ func TestLoadFromDirectory_BehaviorOrderByPriority(t *testing.T) {
 	assert.Equal(t, 50, def.PriorityForBehavior("container"))
 	assert.Equal(t, 200, def.PriorityForBehavior("player"))
 }
+
+func TestLoadFromDirectory_StationDefinition(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "station.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "campfire",
+			"name": "Campfire",
+			"resource": "campfire",
+			"station": {
+				"capabilities": ["cooking"],
+				"states": ["unlit", "burning"],
+				"initialState": "burning",
+				"values": {"temperature": 800},
+				"resources": [
+					{"key": "fuel", "amount": 5},
+					{"key": "thread", "amount": 2}
+				],
+				"autonomousConsumption": [{
+					"resourceKey": "fuel",
+					"amountPerTick": 1,
+					"requiredState": "burning",
+					"stateWhenDepleted": "unlit"
+				}]
+			}
+		}]
+	}`)
+
+	registry, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.NoError(t, err)
+
+	station, ok := registry.GetByKey("campfire")
+	require.True(t, ok)
+	require.NotNil(t, station.Station)
+	assert.Equal(t, []string{"cooking"}, station.Station.Capabilities)
+	assert.Equal(t, "burning", station.Station.InitialState)
+	assert.Equal(t, float64(800), station.Station.Values["temperature"])
+	require.Len(t, station.Station.Resources, 2)
+	assert.Equal(t, "fuel", station.Station.Resources[0].Key)
+	assert.Equal(t, uint32(5), station.Station.Resources[0].Amount)
+}
+
+func TestLoadFromDirectory_StationRejectsInvalidResource(t *testing.T) {
+	dir := t.TempDir()
+
+	writeJSONC(t, dir, "station.jsonc", `{
+		"v": 1,
+		"source": "test",
+		"objects": [{
+			"defId": 1,
+			"key": "campfire",
+			"name": "Campfire",
+			"resource": "campfire",
+			"station": {
+				"capabilities": ["cooking"],
+				"states": ["unlit", "burning"],
+				"initialState": "burning",
+				"resources": [{"key": "fuel", "amount": 0}]
+			}
+		}]
+	}`)
+
+	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "station.resources[0].amount must be > 0")
+}

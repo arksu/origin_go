@@ -69,6 +69,7 @@ Validation:
 - `requiredSkills` (`[]string`)
 - `requiredDiscovery` (`[]string`)
 - `requiredLinkedObjectKey` (object key from `data/objects`)
+- `stationRequirements` (requirements for the linked station; v1 station-local only)
 - `qualityFormula` (defaults to `"weighted_avg_floor"`)
 
 Loader normalizes `requiredSkills` / `requiredDiscovery`:
@@ -84,12 +85,61 @@ Loader normalizes `requiredSkills` / `requiredDiscovery`:
 - Keep recipe names player-facing and readable
 - If craft needs a station/tool object, use `requiredLinkedObjectKey`
 
+## Station Requirements
+
+A station recipe selects an object with `requiredLinkedObjectKey` and then
+declares the current capability, state, scalar conditions, and explicit
+station-local consumptions needed per completed cycle.
+
+```jsonc
+"requiredLinkedObjectKey": "campfire",
+"stationRequirements": [
+  {
+    "capability": "cooking",
+    "state": "burning",
+    "conditions": [
+      {
+        "source": "station",
+        "kind": "value",
+        "key": "temperature",
+        "operator": "gte",
+        "value": 600
+      }
+    ],
+    "consume": [
+      { "resourceKey": "thread", "amount": 1 }
+    ]
+  }
+]
+```
+
+- Every requirement must contain at least one of `capability`, `state`,
+  `conditions`, or `consume`.
+- In v1, `stationRequirements` require `requiredLinkedObjectKey` to name an
+  object with a `station` section.
+- `capability` must be exposed by the linked station; `state` must equal its
+  current state.
+- A v1 condition is a station scalar comparison: `source: "station"`,
+  `kind: "value"`, a value `key`, and `operator` `eq`, `gte`, or `lte`.
+- Each `consume` entry names a resource declared by the linked station and has
+  `amount > 0`. It is consumed only after finalization validation passes, in
+  the same atomic cycle completion as craft inputs, stamina, and output.
+
+Requirements are validated read-only before a cycle begins and again when it
+finishes. Fuel needed merely to keep a campfire `burning` is autonomous: it is
+not a craft consumption unless explicitly listed in `consume`.
+
+Operator, terrain/tile, and nearby-object requirements are reserved for future
+providers. Do not place those condition sources in production content yet.
+
 ## Common Validation Failures
 
 - `inputs` empty / `outputs` empty
 - both `itemKey` and `itemTag` set in one input
 - unknown item key in input or output
 - unknown `requiredLinkedObjectKey`
+- station requirement without a linked station object
+- unknown station resource in `consume`
+- unsupported station condition operator
 - `ticksRequired == 0`
 - total `qualityWeight == 0`
-

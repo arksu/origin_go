@@ -180,6 +180,9 @@ func applyDefaults(obj *ObjectDef) {
 			}
 		}
 	}
+	if obj.Station != nil {
+		normalizeStationDef(obj.Station)
+	}
 
 	if len(obj.Behaviors) == 0 {
 		obj.BehaviorOrder = nil
@@ -212,6 +215,9 @@ func validateObject(obj *ObjectDef, filePath string, behaviors contracts.Behavio
 			Key:      obj.Key,
 			Message:  "name is required",
 		}
+	}
+	if err := validateStationDef(obj, filePath); err != nil {
+		return err
 	}
 
 	// Validate collider
@@ -391,4 +397,111 @@ func validateObject(obj *ObjectDef, filePath string, behaviors contracts.Behavio
 	}
 
 	return nil
+}
+
+func normalizeStationDef(station *StationDef) {
+	if station == nil {
+		return
+	}
+	station.Capabilities = normalizeStationStrings(station.Capabilities)
+	station.States = normalizeStationStrings(station.States)
+	station.InitialState = strings.TrimSpace(station.InitialState)
+	for key, value := range station.Values {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == key {
+			continue
+		}
+		delete(station.Values, key)
+		station.Values[trimmedKey] = value
+	}
+	for i := range station.Resources {
+		station.Resources[i].Key = strings.TrimSpace(station.Resources[i].Key)
+	}
+	for i := range station.AutonomousConsumption {
+		consumption := &station.AutonomousConsumption[i]
+		consumption.ResourceKey = strings.TrimSpace(consumption.ResourceKey)
+		consumption.RequiredState = strings.TrimSpace(consumption.RequiredState)
+		consumption.StateWhenDepleted = strings.TrimSpace(consumption.StateWhenDepleted)
+	}
+}
+
+func normalizeStationStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func validateStationDef(obj *ObjectDef, filePath string) error {
+	station := obj.Station
+	if station == nil {
+		return nil
+	}
+	if len(station.Capabilities) == 0 {
+		return stationLoadError(filePath, obj, "station.capabilities must not be empty")
+	}
+	if len(station.States) == 0 {
+		return stationLoadError(filePath, obj, "station.states must not be empty")
+	}
+	states := make(map[string]struct{}, len(station.States))
+	for _, state := range station.States {
+		states[state] = struct{}{}
+	}
+	if station.InitialState == "" {
+		return stationLoadError(filePath, obj, "station.initialState is required")
+	}
+	if _, exists := states[station.InitialState]; !exists {
+		return stationLoadError(filePath, obj, "station.initialState must be listed in station.states")
+	}
+	for key := range station.Values {
+		if key == "" {
+			return stationLoadError(filePath, obj, "station.values contains an empty key")
+		}
+	}
+	resources := make(map[string]struct{}, len(station.Resources))
+	for i, resource := range station.Resources {
+		if resource.Key == "" {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.resources[%d].key is required", i))
+		}
+		if resource.Amount == 0 {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.resources[%d].amount must be > 0", i))
+		}
+		if _, exists := resources[resource.Key]; exists {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.resources[%d].key duplicate %q", i, resource.Key))
+		}
+		resources[resource.Key] = struct{}{}
+	}
+	for i, consumption := range station.AutonomousConsumption {
+		if consumption.ResourceKey == "" {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.autonomousConsumption[%d].resourceKey is required", i))
+		}
+		if _, exists := resources[consumption.ResourceKey]; !exists {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.autonomousConsumption[%d].resourceKey unknown: %s", i, consumption.ResourceKey))
+		}
+		if consumption.AmountPerTick == 0 {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.autonomousConsumption[%d].amountPerTick must be > 0", i))
+		}
+		if _, exists := states[consumption.RequiredState]; !exists {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.autonomousConsumption[%d].requiredState must be listed in station.states", i))
+		}
+		if _, exists := states[consumption.StateWhenDepleted]; !exists {
+			return stationLoadError(filePath, obj, fmt.Sprintf("station.autonomousConsumption[%d].stateWhenDepleted must be listed in station.states", i))
+		}
+	}
+	return nil
+}
+
+func stationLoadError(filePath string, obj *ObjectDef, message string) *LoadError {
+	return &LoadError{FilePath: filePath, DefID: obj.DefID, Key: obj.Key, Message: message}
 }

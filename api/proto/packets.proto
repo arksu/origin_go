@@ -659,12 +659,35 @@ message CraftOutputDef {
   uint32 count = 2;
 }
 
+message CraftStationConditionDef {
+  string source = 1;
+  string kind = 2;
+  string key = 3;
+  string operator = 4;
+  double value = 5;
+}
+
+message CraftStationResourceConsumptionDef {
+  string resource_key = 1;
+  uint32 amount = 2;
+}
+
+message CraftStationRequirementDef {
+  string capability = 1;
+  optional string state = 2;
+  repeated CraftStationConditionDef conditions = 3;
+  repeated CraftStationResourceConsumptionDef consume = 4;
+}
+
 message CraftRequirementFlags {
   bool has_required_linked_object = 1;
   bool has_inputs = 2;
   bool has_stamina = 3;
   bool has_output_space = 4;
   bool can_start_now = 5;
+  bool has_station_requirements = 6;
+  bool station_requirements_met = 7;
+  optional string station_failure_code = 8;
 }
 
 message CraftRecipeEntry {
@@ -679,6 +702,7 @@ message CraftRecipeEntry {
   optional string required_linked_object_key = 9;
   string quality_formula = 10;
   CraftRequirementFlags flags = 11;
+  repeated CraftStationRequirementDef station_requirements = 12;
 }
 
 message S2C_CraftList {

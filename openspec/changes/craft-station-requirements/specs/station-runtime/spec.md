@@ -43,6 +43,20 @@ The authoritative station state at the start and completion of a craft cycle MUS
 - **WHEN** a meat-cooking cycle starts while the campfire is burning and the campfire extinguishes before cycle completion
 - **THEN** the completion check MUST observe the non-burning state and the craft MUST NOT produce meat
 
+### Requirement: Station runtime state is durable
+
+The authoritative station state, scalar values, and station-local resource quantities MUST survive world-object persistence, chunk unload/reload, and server restart. Any station mutation that changes durable state MUST mark the owning world object for persistence through the existing object-state lifecycle.
+
+#### Scenario: Fueled station survives a chunk reload
+
+- **WHEN** a station has consumed part of its fuel and its owning chunk is persisted and activated again
+- **THEN** the restored station MUST expose the same state, values, and remaining fuel that were saved
+
+#### Scenario: Craft consumption marks station state dirty
+
+- **WHEN** a successful craft completion consumes a station-local resource
+- **THEN** the owning world object's persistent state MUST be marked dirty before the chunk persistence pass
+
 ### Requirement: Station resource keys are validated
 
 Station definitions and station requirements MUST reject empty resource keys, non-positive quantities, and references to unsupported resource value forms. Invalid station data MUST fail validation before it can enter gameplay.

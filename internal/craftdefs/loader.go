@@ -151,6 +151,9 @@ func applyDefaults(c *CraftDef) {
 	for i := range c.Outputs {
 		c.Outputs[i].ItemKey = strings.TrimSpace(c.Outputs[i].ItemKey)
 	}
+	for i := range c.StationRequirements {
+		normalizeStationRequirement(&c.StationRequirements[i])
+	}
 	if c.QualityFormula == "" {
 		c.QualityFormula = QualityFormulaWeightedAverageFloor
 	}
@@ -216,9 +219,16 @@ func validateCraft(c *CraftDef, filePath string) error {
 		}
 	}
 	if c.RequiredLinkedObject != "" {
-		if _, ok := objectdefs.Global().GetByKey(c.RequiredLinkedObject); !ok {
+		objects := objectdefs.Global()
+		if objects == nil {
+			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: "object definitions must be loaded before validating requiredLinkedObjectKey"}
+		}
+		if _, ok := objects.GetByKey(c.RequiredLinkedObject); !ok {
 			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: fmt.Sprintf("requiredLinkedObjectKey unknown: %s", c.RequiredLinkedObject)}
 		}
+	}
+	if err := validateStationRequirements(c, filePath); err != nil {
+		return err
 	}
 	switch c.QualityFormula {
 	case QualityFormulaWeightedAverageFloor:
@@ -227,6 +237,91 @@ func validateCraft(c *CraftDef, filePath string) error {
 		// Allow future custom formula ids now; runtime may reject unsupported formulas.
 	}
 	return nil
+}
+
+func normalizeStationRequirement(requirement *StationRequirement) {
+	if requirement == nil {
+		return
+	}
+	requirement.Capability = strings.TrimSpace(requirement.Capability)
+	requirement.State = strings.TrimSpace(requirement.State)
+	for i := range requirement.Conditions {
+		condition := &requirement.Conditions[i]
+		condition.Source = strings.TrimSpace(condition.Source)
+		condition.Kind = strings.TrimSpace(condition.Kind)
+		condition.Key = strings.TrimSpace(condition.Key)
+		condition.Operator = strings.TrimSpace(condition.Operator)
+	}
+	for i := range requirement.Consume {
+		requirement.Consume[i].ResourceKey = strings.TrimSpace(requirement.Consume[i].ResourceKey)
+	}
+}
+
+func validateStationRequirements(c *CraftDef, filePath string) error {
+	if len(c.StationRequirements) == 0 {
+		return nil
+	}
+
+	var linkedStationResources map[string]struct{}
+	if c.RequiredLinkedObject != "" {
+		objects := objectdefs.Global()
+		if objects == nil {
+			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: "object definitions must be loaded before validating stationRequirements"}
+		}
+		linkedObject, _ := objects.GetByKey(c.RequiredLinkedObject)
+		if linkedObject == nil || linkedObject.Station == nil {
+			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: "stationRequirements require requiredLinkedObjectKey to reference a station"}
+		}
+		linkedStationResources = make(map[string]struct{}, len(linkedObject.Station.Resources))
+		for _, resource := range linkedObject.Station.Resources {
+			linkedStationResources[resource.Key] = struct{}{}
+		}
+	}
+
+	for requirementIndex, requirement := range c.StationRequirements {
+		if requirement.Capability == "" && requirement.State == "" && len(requirement.Conditions) == 0 && len(requirement.Consume) == 0 {
+			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: fmt.Sprintf("stationRequirements[%d] must not be empty", requirementIndex)}
+		}
+		for conditionIndex, condition := range requirement.Conditions {
+			if condition.Source == "" {
+				return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("conditions[%d].source is required", conditionIndex))
+			}
+			if condition.Kind == "" {
+				return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("conditions[%d].kind is required", conditionIndex))
+			}
+			if condition.Key == "" {
+				return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("conditions[%d].key is required", conditionIndex))
+			}
+			if condition.Operator == "" {
+				return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("conditions[%d].operator is required", conditionIndex))
+			}
+			if condition.Source == "station" && condition.Kind == "value" {
+				switch condition.Operator {
+				case "eq", "gte", "lte":
+				default:
+					return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("conditions[%d].operator unsupported for station value: %s", conditionIndex, condition.Operator))
+				}
+			}
+		}
+		for consumeIndex, consumption := range requirement.Consume {
+			if consumption.ResourceKey == "" {
+				return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("consume[%d].resourceKey is required", consumeIndex))
+			}
+			if consumption.Amount == 0 {
+				return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("consume[%d].amount must be > 0", consumeIndex))
+			}
+			if linkedStationResources != nil {
+				if _, exists := linkedStationResources[consumption.ResourceKey]; !exists {
+					return stationRequirementLoadError(filePath, c, requirementIndex, fmt.Sprintf("consume[%d].resourceKey unknown for required linked object: %s", consumeIndex, consumption.ResourceKey))
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func stationRequirementLoadError(filePath string, craft *CraftDef, requirementIndex int, message string) *LoadError {
+	return &LoadError{FilePath: filePath, DefID: craft.DefID, Key: craft.Key, Message: fmt.Sprintf("stationRequirements[%d].%s", requirementIndex, message)}
 }
 
 func normalizeStringSet(values []string) []string {

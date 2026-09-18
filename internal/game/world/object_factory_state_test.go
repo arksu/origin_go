@@ -81,6 +81,37 @@ func TestSerializePersistentObjectState_Take(t *testing.T) {
 	}
 }
 
+func TestSerializePersistentObjectState_StationRoundTrip(t *testing.T) {
+	station := &components.StationState{
+		CurrentState: "burning",
+		Values:       map[string]float64{"temperature": 800},
+		Resources:    map[string]uint32{"fuel": 3, "thread": 2},
+	}
+	payload, hasPayload, err := serializePersistentObjectState(components.ObjectInternalState{}, station)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasPayload {
+		t.Fatal("expected station payload")
+	}
+
+	factory := &ObjectFactory{}
+	state, err := factory.DeserializeObjectState(&repository.Object{
+		TypeID: 1,
+		Data:   pqtype.NullRawMessage{RawMessage: payload, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("unexpected deserialize error: %v", err)
+	}
+	runtime, ok := state.(*components.RuntimeObjectState)
+	if !ok || runtime.Station == nil {
+		t.Fatal("expected restored station state")
+	}
+	if runtime.Station.CurrentState != "burning" || runtime.Station.Resources["fuel"] != 3 || runtime.Station.Values["temperature"] != 800 {
+		t.Fatalf("unexpected restored station: %#v", runtime.Station)
+	}
+}
+
 func TestDeserializeObjectState_Tree(t *testing.T) {
 	factory := &ObjectFactory{}
 	raw := &repository.Object{

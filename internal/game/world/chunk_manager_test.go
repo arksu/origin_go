@@ -5,6 +5,7 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sqlc-dev/pqtype"
 	"go.uber.org/zap"
 )
 
@@ -435,5 +437,83 @@ func TestChunkManager_DeactivateChunkInternal_TracksOnlyDirtyRawObjects(t *testi
 	}
 	if _, ok := dirtyIDs[cleanEntityID]; ok {
 		t.Fatalf("clean object id %d must not be marked dirty", cleanEntityID)
+	}
+}
+
+func TestChunkManager_StationStateSurvivesDeactivateAndReactivate(t *testing.T) {
+	previousRegistry := objectdefs.Global()
+	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousRegistry) })
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
+		DefID:    9201,
+		Key:      "campfire",
+		Name:     "Campfire",
+		IsStatic: true,
+		Station: &objectdefs.StationDef{
+			Capabilities: []string{"cooking"},
+			States:       []string{"unlit", "burning"},
+			InitialState: "unlit",
+			Values:       map[string]float64{"temperature": 20},
+			Resources:    []objectdefs.StationResourceDef{{Key: "fuel", Amount: 3}},
+			AutonomousConsumption: []objectdefs.StationAutonomousConsumption{{
+				ResourceKey:       "fuel",
+				AmountPerTick:     1,
+				RequiredState:     "burning",
+				StateWhenDepleted: "unlit",
+			}},
+		},
+	}}))
+
+	cm := newTestChunkManager()
+	defer cm.Stop()
+	cm.world.AddSystem(systems.NewStationSystem(nil))
+
+	coord := types.ChunkCoord{X: 12, Y: 12}
+	chunk := core.NewChunk(coord, 1, 0, 128)
+	chunk.SetState(types.ChunkStatePreloaded)
+	chunk.SetRawObjects([]*repository.Object{{
+		ID:     9201,
+		TypeID: 9201,
+		Region: 1,
+		X:      12,
+		Y:      13,
+		Layer:  0,
+		ChunkX: coord.X,
+		ChunkY: coord.Y,
+		Data:   pqtype.NullRawMessage{RawMessage: []byte(`{"v":1,"station":{"current_state":"burning","values":{"temperature":800},"resources":{"fuel":3}}}`), Valid: true},
+	}})
+
+	if err := cm.activateChunkInternal(coord, chunk); err != nil {
+		t.Fatalf("activate chunk: %v", err)
+	}
+	handle := cm.world.GetHandleByEntityID(types.EntityID(9201))
+	station, ok := ecs.GetComponent[components.StationState](cm.world, handle)
+	if !ok || station.CurrentState != "burning" || station.Resources["fuel"] != 3 || station.Values["temperature"] != 800 {
+		t.Fatalf("station was not restored: %#v", station)
+	}
+
+	cm.world.Update(0)
+	internalState, ok := ecs.GetComponent[components.ObjectInternalState](cm.world, handle)
+	if !ok || !internalState.IsDirty {
+		t.Fatal("autonomous station mutation did not mark object dirty")
+	}
+
+	if err := cm.deactivateChunkInternal(chunk); err != nil {
+		t.Fatalf("deactivate chunk: %v", err)
+	}
+	if len(chunk.GetRawObjects()) != 1 {
+		t.Fatalf("expected one persisted object, got %d", len(chunk.GetRawObjects()))
+	}
+
+	if err := cm.activateChunkInternal(coord, chunk); err != nil {
+		t.Fatalf("reactivate chunk: %v", err)
+	}
+	restoredHandle := cm.world.GetHandleByEntityID(types.EntityID(9201))
+	restored, ok := ecs.GetComponent[components.StationState](cm.world, restoredHandle)
+	if !ok || restored.CurrentState != "burning" || restored.Resources["fuel"] != 2 || restored.Values["temperature"] != 800 {
+		t.Fatalf("station did not survive reload: %#v", restored)
+	}
+	restoredInternalState, ok := ecs.GetComponent[components.ObjectInternalState](cm.world, restoredHandle)
+	if !ok || restoredInternalState.IsDirty {
+		t.Fatal("restored station should be clean until its next mutation")
 	}
 }
