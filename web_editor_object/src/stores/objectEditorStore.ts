@@ -260,6 +260,28 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     markChanged({ skipDiff: true })
   }
 
+  function setSelectedLayerPreviewFrameIndex(layerIndex: number, index: number): void {
+    if (selectedLayerIndex.value !== layerIndex) return
+    const key = `${selectedFileName.value}::${selectedObjectPath.value}::${layerIndex}`
+    frameSelectionByLayer.value[key] = Math.max(0, index)
+  }
+
+  function getSelectedFrameOffset(): number[] {
+    const layer = selectedLayer.value
+    const frame = layer?.frames?.[selectedLayerFrameIndex.value]
+    if (!frame || !Array.isArray(frame.offset)) return [0, 0]
+    return [Number(frame.offset[0] ?? 0), Number(frame.offset[1] ?? 0)]
+  }
+
+  function setSelectedFrameOffsetAxis(axis: 0 | 1, value: number): void {
+    const layer = selectedLayer.value
+    const frame = layer?.frames?.[selectedLayerFrameIndex.value]
+    if (!frame) throw new Error('No animation frame selected')
+    if (!Array.isArray(frame.offset)) frame.offset = [0, 0]
+    frame.offset[axis] = Number(value)
+    markChanged({ skipDiff: true })
+  }
+
   function requireSelectedResource(): ResourceDefLike {
     const resource = selectedResource.value
     if (!resource) throw new Error('Selected node is not a resource object (missing layers)')
@@ -295,12 +317,26 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
   function nudgeSelectedLayer(dx: number, dy: number): void {
     const layer = selectedLayer.value
     if (!layer) return
-    if (Array.isArray(layer.frames)) return // frames editing deferred
     if (layer.spine) return
     const offset = ensureSelectedLayerOffset()
     offset[0] = Number(offset[0] ?? 0) + dx
     offset[1] = Number(offset[1] ?? 0) + dy
     markChanged({ skipDiff: true })
+  }
+
+  function setSelectedLayerFps(value: number): void {
+    const layer = selectedLayer.value
+    if (!layer || !Array.isArray(layer.frames)) throw new Error('Selected layer is not an animation')
+    if (!Number.isFinite(value) || value < 0) throw new Error('FPS must be a non-negative number')
+    layer.fps = Number(value)
+    markChanged()
+  }
+
+  function setSelectedLayerLoop(value: boolean): void {
+    const layer = selectedLayer.value
+    if (!layer || !Array.isArray(layer.frames)) throw new Error('Selected layer is not an animation')
+    layer.loop = Boolean(value)
+    markChanged()
   }
 
   function setSelectedLayerZ(value: number): void {
@@ -741,6 +777,11 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     selectObjectPath,
     selectLayer,
     setSelectedLayerFrameIndex,
+    setSelectedLayerPreviewFrameIndex,
+    getSelectedFrameOffset,
+    setSelectedFrameOffsetAxis,
+    setSelectedLayerFps,
+    setSelectedLayerLoop,
     setRootOffsetAxis,
     setSelectedLayerOffsetAxis,
     nudgeSelectedLayer,

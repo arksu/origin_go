@@ -64,8 +64,8 @@
       "static": true,
       "components": {
         "collider": {
-          "w": 20,
-          "h": 20
+          "w": 10,
+          "h": 10
         }
       },
       "resource": "campfire",

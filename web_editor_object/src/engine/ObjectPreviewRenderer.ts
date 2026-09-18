@@ -38,6 +38,8 @@ export class ObjectPreviewRenderer {
   private overlay = new Graphics()
   private renderedLayers: RenderedLayer[] = []
   private animatedFrameLayers: AnimatedFrameLayer[] = []
+  private pausedAnimationLayers = new Set<number>()
+  private pausedFrameIndices = new Map<number, number>()
   private scale = 4
   private panX = 0
   private panY = 0
@@ -49,6 +51,7 @@ export class ObjectPreviewRenderer {
   private dragStartClientY = 0
   private onLayerClickCb: ((layerIndex: number) => void) | null = null
   private onLayerDragCb: ((layerIndex: number, dx: number, dy: number) => void) | null = null
+  private onFrameChangeCb: ((layerIndex: number, frameIndex: number) => void) | null = null
   private boundDown = (e: PointerEvent) => this.onPointerDown(e)
   private boundMove = (e: PointerEvent) => this.onPointerMove(e)
   private boundUp = () => this.onPointerUp()
@@ -97,8 +100,42 @@ export class ObjectPreviewRenderer {
     this.onLayerDragCb = cb
   }
 
+  setOnFrameChange(cb: (layerIndex: number, frameIndex: number) => void): void {
+    this.onFrameChangeCb = cb
+  }
+
   setDragEnabled(enabled: boolean): void {
     this.dragEnabled = enabled
+  }
+
+  playLayerAnimation(layerIndex: number): void {
+    this.pausedAnimationLayers.delete(layerIndex)
+    this.pausedFrameIndices.delete(layerIndex)
+  }
+
+  pauseLayerAnimation(layerIndex: number): void {
+    const frameLayer = this.animatedFrameLayers.find((item) => item.layerIndex === layerIndex)
+    if (frameLayer) {
+      this.pausedFrameIndices.set(layerIndex, frameLayer.currentFrame)
+    }
+    this.pausedAnimationLayers.add(layerIndex)
+  }
+
+  nextLayerAnimationFrame(layerIndex: number): void {
+    const frameLayer = this.animatedFrameLayers.find((item) => item.layerIndex === layerIndex)
+    if (!frameLayer) return
+
+    this.pausedAnimationLayers.add(layerIndex)
+    frameLayer.currentFrame = (frameLayer.currentFrame + 1) % frameLayer.frameCount
+    this.pausedFrameIndices.set(layerIndex, frameLayer.currentFrame)
+    this.onFrameChangeCb?.(layerIndex, frameLayer.currentFrame)
+    frameLayer.sprite.texture = frameLayer.textures[frameLayer.currentFrame] ?? Texture.WHITE
+    const [x, y] = this.computeLayerPosition(frameLayer.resource, frameLayer.layer, [
+      Number(frameLayer.frameOffsets[frameLayer.currentFrame]?.[0] ?? 0),
+      Number(frameLayer.frameOffsets[frameLayer.currentFrame]?.[1] ?? 0),
+    ])
+    frameLayer.sprite.position.set(x, y)
+    this.drawSelection()
   }
 
   resize(width: number, height: number): void {
@@ -141,6 +178,9 @@ export class ObjectPreviewRenderer {
         }
         rendered.object.zIndex = rendered.zIndex
         this.world.addChild(rendered.object)
+        if (rendered.animated) {
+          this.onFrameChangeCb?.(rendered.animated.layerIndex, rendered.animated.currentFrame)
+        }
       } catch (error) {
         console.warn('[ObjectPreviewRenderer] Failed to build layer', i, error)
         const fallback = this.buildPlaceholder(resource, layer, i, 0xff00ff)
@@ -175,8 +215,9 @@ export class ObjectPreviewRenderer {
       const textures = await Promise.all(
         layer.frames.map((frame) => this.loadTexture(`/assets/game/${frame.img}`)),
       )
-      const frame = layer.frames[0]!
-      const sprite = new Sprite(textures[0] ?? Texture.WHITE)
+      const initialFrameIndex = this.pausedFrameIndices.get(layerIndex) ?? 0
+      const frame = layer.frames[initialFrameIndex] ?? layer.frames[0]!
+      const sprite = new Sprite(textures[initialFrameIndex] ?? Texture.WHITE)
       const [x, y] = this.computeLayerPosition(resource, layer, [
         Number(frame.offset?.[0] ?? 0),
         Number(frame.offset?.[1] ?? 0),
@@ -203,7 +244,7 @@ export class ObjectPreviewRenderer {
           fps,
           loop: layer.loop !== false,
           groupKey: `${fps}:${layer.frames.length}`,
-          currentFrame: 0,
+          currentFrame: this.pausedFrameIndices.get(layerIndex) ?? 0,
         },
       }
     }
@@ -357,12 +398,14 @@ export class ObjectPreviewRenderer {
     let selectionChanged = false
 
     for (const frameLayer of this.animatedFrameLayers) {
+      if (this.pausedAnimationLayers.has(frameLayer.layerIndex)) continue
       const nextFrame = this.computeAnimationFrame(frameLayer, nowMs, sharedSteps)
       if (nextFrame === frameLayer.currentFrame) {
         continue
       }
 
       frameLayer.currentFrame = nextFrame
+      this.onFrameChangeCb?.(frameLayer.layerIndex, nextFrame)
       frameLayer.sprite.texture = frameLayer.textures[nextFrame] ?? Texture.WHITE
       const [x, y] = this.computeLayerPosition(frameLayer.resource, frameLayer.layer, [
         Number(frameLayer.frameOffsets[nextFrame]?.[0] ?? 0),
@@ -467,7 +510,7 @@ export class ObjectPreviewRenderer {
     if (picked.layerIndex !== this.selectedLayerIndex) return
     this.onLayerClickCb?.(picked.layerIndex)
     if (!this.dragEnabled) return
-    if (picked.kind !== 'img') return
+    if (picked.kind !== 'img' && picked.kind !== 'frames') return
     this.draggingLayerIndex = picked.layerIndex
     this.dragStartClientX = e.clientX
     this.dragStartClientY = e.clientY
