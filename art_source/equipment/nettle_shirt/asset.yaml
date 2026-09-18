@@ -36,13 +36,13 @@
   "bindings": {},
   "budgets": {
     "trianglesByLod": {"0": 10000},
-    "textureDimensions": {"width": 1024, "height": 1024},
+    "textureDimensions": {"width": 128, "height": 128},
     "totalPublishedBytes": 5000000,
     "boneInfluences": 4,
     "bones": 50
   },
   "optimization": {
     "meshCompression": "meshopt",
-    "texture": {"codec": "uastc", "quality": 2, "width": 1024, "height": 1024, "mipmaps": true}
+    "texture": {"codec": "uastc", "quality": 2, "width": 128, "height": 128, "mipmaps": true}
   }
 }

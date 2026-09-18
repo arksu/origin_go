@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import math
 import struct
 import sys
 from pathlib import Path
@@ -186,6 +187,49 @@ def texture_metadata(document, binary, directory):
     return textures
 
 
+def normalize_skin_weights(recipe):
+    """Make export-time skin data comply with the recipe without saving the source."""
+    rig_spec = recipe['rig']
+    if rig_spec is None:
+        return
+    rig = bpy.data.objects.get(rig_spec['object'])
+    if rig is None or rig.type != 'ARMATURE':
+        # validate_source reports the missing or invalid rig with the normal contract error.
+        return
+    collection = bpy.data.collections.get('EXPORT')
+    if collection is None:
+        return
+    bone_names = set(rig.data.bones.keys())
+    max_influences = recipe['budgets']['boneInfluences']
+    for obj in collection.all_objects:
+        if obj.type != 'MESH' or not any(modifier.type == 'ARMATURE' and modifier.object == rig for modifier in obj.modifiers):
+            continue
+        groups = {group.index: group for group in obj.vertex_groups if group.name in bone_names}
+        for vertex in obj.data.vertices:
+            influences = []
+            for assignment in vertex.groups:
+                group = groups.get(assignment.group)
+                if group is not None and math.isfinite(assignment.weight) and assignment.weight > 0:
+                    influences.append((assignment.weight, group))
+            # A vertex without a usable rig-bone assignment has no safe inferred bone.
+            # Leave it for source validation to reject rather than silently deforming it.
+            if not influences:
+                continue
+            influences.sort(key=lambda entry: (-entry[0], entry[1].name))
+            retained = influences[:max_influences]
+            total = sum(weight for weight, _ in retained)
+            if total <= 0:
+                continue
+            # The exporter receives a disposable Blender session. Rewriting every rig
+            # assignment here prevents the glTF exporter from choosing a different subset.
+            for assignment in vertex.groups:
+                group = groups.get(assignment.group)
+                if group is not None:
+                    group.remove([vertex.index])
+            for weight, group in retained:
+                group.add([vertex.index], weight / total, 'REPLACE')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--request', required=True)
@@ -198,6 +242,7 @@ def main():
     recipe, source, dependencies = validate_request(request, output)
     inputs = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in {source, *dependencies}}
     bpy.ops.wm.open_mainfile(filepath=str(source), load_ui=False, use_scripts=False)
+    normalize_skin_weights(recipe)
     objects, rig = validate_source(recipe, dependencies)
     # A fresh scene prevents saved scene/world/collection visibility and timeline settings
     # from choosing model content. Only validated objects enter evaluation/export.

@@ -89,13 +89,25 @@ test('socket local matrix includes Blender bone-parent tail offset', async () =>
   assert.ok(Math.abs(socket.localMatrix[14] + 0.75) < 1e-6)
 })
 
-test('model evaluates static modifiers and budgeted skin influences', async () => {
+test('model evaluates static modifiers', async () => {
   const fixture = await createFixture('world_object', { modifier: true })
   const result = await runExport(fixture.recipe, fixture.directory('export'))
   assert.ok(result.model.accessors[result.model.meshes[0].primitives[0].indices].count > 3)
+})
+
+test('exporter normalizes excessive skin influences in memory without changing source', async () => {
   const skinned = await createFixture('character', { tooManyInfluences: true })
   skinned.recipe.budgets.boneInfluences = 1
-  await assert.rejects(runExport(skinned.recipe, skinned.directory('export')), /weights/i)
+  const sourceHash = await skinned.sourceHash()
+  const result = await runExport(skinned.recipe, skinned.directory('export'))
+  assert.equal(await skinned.sourceHash(), sourceHash)
+  const modelBytes = await readFile(join(skinned.root, 'export/raw/model.glb'))
+  const primitive = result.model.meshes[0].primitives[0]
+  const weights = accessorValues(modelBytes, primitive.attributes.WEIGHTS_0)
+  for (const vertex of weights) {
+    assert.ok(Math.abs(vertex.reduce((sum, weight) => sum + weight, 0) - 1) < 1e-6)
+    assert.equal(vertex.filter(weight => weight > 1e-6).length, 1)
+  }
 })
 
 for (const [options, message] of [[{ mask: ['root'] }, /mask/], [{ mask: ['unknown'] }, /mask/],
