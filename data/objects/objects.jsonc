@@ -58,6 +58,40 @@
       "behaviors": {}
     },
     {
+      "defId": 16,
+      "key": "campfire",
+      "name": "Campfire",
+      "static": true,
+      "components": {
+        "collider": {
+          "w": 20,
+          "h": 20
+        }
+      },
+      "resource": "campfire",
+      "station": {
+        "capabilities": ["cooking"],
+        "states": ["unlit", "burning"],
+        "initialState": "burning",
+        "values": {
+          "temperature": 650
+        },
+        "resources": [
+          {"key": "fuel", "amount": 10},
+          {"key": "thread", "amount": 3}
+        ],
+        "autonomousConsumption": [
+          {
+            "resourceKey": "fuel",
+            "amountPerTick": 1,
+            "requiredState": "burning",
+            "stateWhenDepleted": "unlit"
+          }
+        ]
+      },
+      "behaviors": {}
+    },
+    {
       "defId": 15,
       "key": "player_death",
       "name": "Player Death",

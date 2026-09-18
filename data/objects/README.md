@@ -33,6 +33,7 @@ Files in this folder are loaded by `internal/objectdefs`.
 - `hp`
 - `resource`
 - `appearance` (conditional visual variants)
+- `station` (autonomous station configuration)
 - `components`
   - `collider`
   - `inventory`
@@ -58,6 +59,44 @@ If `components.inventory[]` is present:
 Loader default:
 - `kind = "grid"` if omitted
 
+## Station
+
+`station` configures an object whose mutable state exists independently of any
+craft operation. It is appropriate for a campfire burning fuel, a furnace
+heating up, or a charged device discharging over time.
+
+```jsonc
+"station": {
+  "capabilities": ["cooking"],
+  "states": ["unlit", "burning"],
+  "initialState": "unlit",
+  "values": { "temperature": 20 },
+  "resources": [
+    { "key": "fuel", "amount": 10 },
+    { "key": "thread", "amount": 3 }
+  ],
+  "autonomousConsumption": [
+    {
+      "resourceKey": "fuel",
+      "amountPerTick": 1,
+      "requiredState": "burning",
+      "stateWhenDepleted": "unlit"
+    }
+  ]
+}
+```
+
+- `capabilities` and `states` are non-empty, unique string lists.
+- `initialState` must be one of `states`.
+- `values` is an optional map of named scalar values.
+- Each `resources` entry has a unique non-empty `key` and `amount > 0`.
+- Each `autonomousConsumption` rule references a declared resource and listed
+  states; `amountPerTick > 0`.
+
+The server persists the station's current state, values, and remaining
+resources. Capabilities and autonomous rules stay in the object definition.
+Autonomous consumption is owned by the station runtime, not by crafting.
+
 ## Behaviors (Advanced / Copy Existing Examples)
 
 `behaviors` is a map of behavior key -> config object.
@@ -81,6 +120,7 @@ Examples in this folder:
 Objects are referenced by:
 - `builds.objectKey`
 - `crafts.requiredLinkedObjectKey`
+- `crafts.stationRequirements`
 - world spawning/admin tools/runtime systems
 
 Changing an object key can break builds/crafts and code paths. Prefer adding new objects instead of renaming existing keys.
@@ -93,4 +133,3 @@ Changing an object key can break builds/crafts and code paths. Prefer adding new
 - collider/inventory dimensions are positive when used
 - behavior keys are valid (copy from known working examples)
 - no trailing commas / no unknown fields
-

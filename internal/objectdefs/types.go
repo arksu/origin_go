@@ -13,6 +13,7 @@ type ObjectDef struct {
 	Components                *Components                `json:"components,omitempty"`
 	Resource                  string                     `json:"resource,omitempty"`
 	Appearance                []Appearance               `json:"appearance,omitempty"`
+	Station                   *StationDef                `json:"station,omitempty"`
 	Behaviors                 map[string]json.RawMessage `json:"behaviors,omitempty"`
 
 	// resolved at load time
@@ -58,6 +59,29 @@ type AppearanceWhen struct {
 	Flags []string `json:"flags,omitempty"`
 }
 
+// StationDef configures a world object that can satisfy crafting station requirements.
+// Mutable station data is created per entity at runtime; this type is immutable content.
+type StationDef struct {
+	Capabilities          []string                       `json:"capabilities"`
+	States                []string                       `json:"states"`
+	InitialState          string                         `json:"initialState"`
+	Values                map[string]float64             `json:"values,omitempty"`
+	Resources             []StationResourceDef           `json:"resources,omitempty"`
+	AutonomousConsumption []StationAutonomousConsumption `json:"autonomousConsumption,omitempty"`
+}
+
+type StationResourceDef struct {
+	Key    string `json:"key"`
+	Amount uint32 `json:"amount"`
+}
+
+type StationAutonomousConsumption struct {
+	ResourceKey       string `json:"resourceKey"`
+	AmountPerTick     uint32 `json:"amountPerTick"`
+	RequiredState     string `json:"requiredState"`
+	StateWhenDepleted string `json:"stateWhenDepleted"`
+}
+
 // TreeBehaviorConfig contains numeric/tree-specific config only.
 // Behavior logic itself is implemented in code.
 type TreeBehaviorConfig struct {
@@ -66,13 +90,13 @@ type TreeBehaviorConfig struct {
 }
 
 type TreeStageConfig struct {
-	ChopPointsTotal   int              `json:"chopPointsTotal"`
-	StageDuration     int              `json:"stageDurationTicks"`
-	AllowChop         bool             `json:"allowChop"`
-	SpawnChopObject   []string         `json:"spawnChopObject,omitempty"`
-	SpawnChopItem     []string         `json:"spawnChopItem,omitempty"`
-	Take              []TakeConfig     `json:"take,omitempty"`
-	TransformToDefKey string           `json:"transformToDefKey,omitempty"`
+	ChopPointsTotal   int          `json:"chopPointsTotal"`
+	StageDuration     int          `json:"stageDurationTicks"`
+	AllowChop         bool         `json:"allowChop"`
+	SpawnChopObject   []string     `json:"spawnChopObject,omitempty"`
+	SpawnChopItem     []string     `json:"spawnChopItem,omitempty"`
+	Take              []TakeConfig `json:"take,omitempty"`
+	TransformToDefKey string       `json:"transformToDefKey,omitempty"`
 }
 
 type TakeConfig struct {

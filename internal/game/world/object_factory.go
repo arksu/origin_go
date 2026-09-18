@@ -837,7 +837,12 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 	// For dropped items object.data is reserved for dropped metadata (handled below).
 	if info.TypeID != constt.DroppedItemTypeID {
 		if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h); hasState {
-			stateJSON, hasPayload, err := serializePersistentObjectState(internalState)
+			stationState, hasStationState := ecs.GetComponent[components.StationState](w, h)
+			var stationSnapshot *components.StationState
+			if hasStationState {
+				stationSnapshot = &stationState
+			}
+			stateJSON, hasPayload, err := serializePersistentObjectState(internalState, stationSnapshot)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal object state for %d: %w", externalID.ID, err)
 			}
@@ -887,12 +892,13 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 		return nil, fmt.Errorf("unsupported object state version %d", envelope.Version)
 	}
 
-	if len(envelope.Behaviors) == 0 {
+	if len(envelope.Behaviors) == 0 && envelope.Station == nil {
 		return nil, nil
 	}
 
 	runtimeState := &components.RuntimeObjectState{
 		Behaviors: make(map[string]any, len(envelope.Behaviors)),
+		Station:   envelope.Station,
 	}
 
 	for behaviorKey, rawBehaviorState := range envelope.Behaviors {
@@ -931,6 +937,43 @@ func (f *ObjectFactory) RestoreDerivedComponentsFromState(w *ecs.World, h types.
 		return
 	}
 	f.restoreBuildSiteColliderFromState(w, h)
+	f.restoreStationStateFromState(w, h)
+}
+
+func (f *ObjectFactory) restoreStationStateFromState(w *ecs.World, h types.Handle) {
+	stationState, hasStationState := ecs.GetComponent[components.StationState](w, h)
+	if !hasStationState {
+		return
+	}
+	internalState, hasInternalState := ecs.GetComponent[components.ObjectInternalState](w, h)
+	if !hasInternalState {
+		return
+	}
+	runtimeState, hasRuntimeState := components.GetRuntimeObjectState(internalState)
+	if !hasRuntimeState || runtimeState.Station == nil {
+		return
+	}
+	persisted := runtimeState.Station
+	stationState.CurrentState = persisted.CurrentState
+	stationState.Values = cloneStationValues(persisted.Values)
+	stationState.Resources = cloneStationResources(persisted.Resources)
+	ecs.AddComponent(w, h, stationState)
+}
+
+func cloneStationValues(values map[string]float64) map[string]float64 {
+	cloned := make(map[string]float64, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneStationResources(resources map[string]uint32) map[string]uint32 {
+	cloned := make(map[string]uint32, len(resources))
+	for key, amount := range resources {
+		cloned[key] = amount
+	}
+	return cloned
 }
 
 func (f *ObjectFactory) restoreBuildSiteColliderFromState(w *ecs.World, h types.Handle) {
@@ -972,40 +1015,56 @@ func (f *ObjectFactory) restoreBuildSiteColliderFromState(w *ecs.World, h types.
 	ecs.AddComponent(w, h, objectdefs.BuildColliderComponent(resultDef.Components.Collider))
 }
 
-func serializePersistentObjectState(internalState components.ObjectInternalState) ([]byte, bool, error) {
-	runtimeState, ok := components.GetRuntimeObjectState(internalState)
-	if !ok || len(runtimeState.Behaviors) == 0 {
+func serializePersistentObjectState(internalState components.ObjectInternalState, stationStates ...*components.StationState) ([]byte, bool, error) {
+	runtimeState, hasRuntimeState := components.GetRuntimeObjectState(internalState)
+	var stationState *components.StationState
+	if len(stationStates) > 0 {
+		stationState = stationStates[0]
+	}
+	if (!hasRuntimeState || len(runtimeState.Behaviors) == 0) && stationState == nil {
 		return nil, false, nil
 	}
 
 	envelope := components.ObjectStateEnvelope{
 		Version:   1,
-		Behaviors: make(map[string]json.RawMessage, len(runtimeState.Behaviors)),
+		Behaviors: make(map[string]json.RawMessage),
+	}
+	if hasRuntimeState {
+		envelope.Behaviors = make(map[string]json.RawMessage, len(runtimeState.Behaviors))
+	}
+	if stationState != nil {
+		envelope.Station = &components.StationPersistentState{
+			CurrentState: stationState.CurrentState,
+			Values:       cloneStationValues(stationState.Values),
+			Resources:    cloneStationResources(stationState.Resources),
+		}
 	}
 
-	for behaviorKey, rawState := range runtimeState.Behaviors {
-		if behaviorKey == "" || rawState == nil {
-			continue
-		}
+	if hasRuntimeState {
+		for behaviorKey, rawState := range runtimeState.Behaviors {
+			if behaviorKey == "" || rawState == nil {
+				continue
+			}
 
-		var (
-			payload []byte
-			err     error
-		)
+			var (
+				payload []byte
+				err     error
+			)
 
-		switch state := rawState.(type) {
-		case json.RawMessage:
-			payload = append([]byte(nil), state...)
-		default:
-			payload, err = json.Marshal(state)
+			switch state := rawState.(type) {
+			case json.RawMessage:
+				payload = append([]byte(nil), state...)
+			default:
+				payload, err = json.Marshal(state)
+			}
+			if err != nil {
+				return nil, false, fmt.Errorf("failed to marshal behavior %s state: %w", behaviorKey, err)
+			}
+			envelope.Behaviors[behaviorKey] = payload
 		}
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to marshal behavior %s state: %w", behaviorKey, err)
-		}
-		envelope.Behaviors[behaviorKey] = payload
 	}
 
-	if len(envelope.Behaviors) == 0 {
+	if len(envelope.Behaviors) == 0 && envelope.Station == nil {
 		return nil, false, nil
 	}
 

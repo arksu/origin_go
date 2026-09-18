@@ -250,6 +250,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
+	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
 	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))

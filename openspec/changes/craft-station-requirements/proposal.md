@@ -7,6 +7,7 @@ Crafting currently validates a linked object by its object key, but cannot expre
 ## What Changes
 
 - Add an autonomous station runtime model for state, capabilities, scalar values, and station-local resources.
+- Persist station state, values, and local resources through chunk unload/reload and server restart.
 - Add an extensible requirement evaluator that can validate station-local conditions in v1 and later add operator, terrain, and nearby-object providers without changing crafting orchestration.
 - Extend craft definitions with station requirements and per-cycle station consumptions.
 - Evaluate requirements twice for every cycle: before the cycle starts and again when it completes.
@@ -20,7 +21,7 @@ Crafting currently validates a linked object by its object key, but cannot expre
 ### New Capabilities
 
 - `station-runtime`: Autonomous world-object station state, capabilities, local resources, and state updates.
-- `craft-station-requirements`: Declarative station requirements, extensible evaluation providers, two-phase cycle validation, and atomic completion.
+- `craft-station-requirements`: Declarative station requirements, extensible evaluation providers, start and finalization validation, and atomic cycle completion.
 
 ### Modified Capabilities
 

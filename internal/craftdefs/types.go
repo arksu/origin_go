@@ -17,6 +17,26 @@ type CraftOutput struct {
 	Count   uint32 `json:"count"`
 }
 
+type StationRequirement struct {
+	Capability string                       `json:"capability,omitempty"`
+	State      string                       `json:"state,omitempty"`
+	Conditions []StationCondition           `json:"conditions,omitempty"`
+	Consume    []StationResourceConsumption `json:"consume,omitempty"`
+}
+
+type StationCondition struct {
+	Source   string  `json:"source"`
+	Kind     string  `json:"kind"`
+	Key      string  `json:"key"`
+	Operator string  `json:"operator"`
+	Value    float64 `json:"value"`
+}
+
+type StationResourceConsumption struct {
+	ResourceKey string `json:"resourceKey"`
+	Amount      uint32 `json:"amount"`
+}
+
 type CraftDef struct {
 	DefID int    `json:"defId"`
 	Key   string `json:"key"`
@@ -28,9 +48,10 @@ type CraftDef struct {
 	StaminaCost   float64 `json:"staminaCost"`
 	TicksRequired uint32  `json:"ticksRequired"`
 
-	RequiredSkills       []string `json:"requiredSkills,omitempty"`
-	RequiredDiscovery    []string `json:"requiredDiscovery,omitempty"`
-	RequiredLinkedObject string   `json:"requiredLinkedObjectKey,omitempty"`
+	RequiredSkills       []string             `json:"requiredSkills,omitempty"`
+	RequiredDiscovery    []string             `json:"requiredDiscovery,omitempty"`
+	RequiredLinkedObject string               `json:"requiredLinkedObjectKey,omitempty"`
+	StationRequirements  []StationRequirement `json:"stationRequirements,omitempty"`
 
 	// QualityFormula selects result quality computation strategy.
 	// Default is weighted average floor; special crafts may use custom strategies later.

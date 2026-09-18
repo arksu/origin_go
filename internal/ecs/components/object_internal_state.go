@@ -20,10 +20,20 @@ type ObjectInternalState struct {
 type ObjectStateEnvelope struct {
 	Version   int                        `json:"v"`
 	Behaviors map[string]json.RawMessage `json:"behaviors,omitempty"`
+	Station   *StationPersistentState    `json:"station,omitempty"`
 }
 
 type RuntimeObjectState struct {
 	Behaviors map[string]any
+	Station   *StationPersistentState
+}
+
+// StationPersistentState contains only mutable station data. Capabilities and
+// autonomous rules remain in the immutable object definition.
+type StationPersistentState struct {
+	CurrentState string             `json:"current_state"`
+	Values       map[string]float64 `json:"values,omitempty"`
+	Resources    map[string]uint32  `json:"resources,omitempty"`
 }
 
 type TreeBehaviorState struct {

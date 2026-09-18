@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 
 	"origin/internal/characterattrs"
@@ -16,6 +17,7 @@ import (
 	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
+	"origin/internal/game/stationreq"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
@@ -33,11 +35,12 @@ type craftRuntimeSender interface {
 }
 
 type CraftingService struct {
-	world    *ecs.World
-	eventBus *eventbus.EventBus
-	invExec  *inventory.InventoryExecutor
-	sender   craftRuntimeSender
-	logger   *zap.Logger
+	world               *ecs.World
+	eventBus            *eventbus.EventBus
+	invExec             *inventory.InventoryExecutor
+	sender              craftRuntimeSender
+	logger              *zap.Logger
+	stationRequirements *stationreq.Evaluator
 }
 
 func NewCraftingService(
@@ -51,15 +54,17 @@ func NewCraftingService(
 		logger = zap.NewNop()
 	}
 	s := &CraftingService{
-		world:    world,
-		eventBus: eventBus,
-		invExec:  invExec,
-		sender:   sender,
-		logger:   logger,
+		world:               world,
+		eventBus:            eventBus,
+		invExec:             invExec,
+		sender:              sender,
+		logger:              logger,
+		stationRequirements: stationreq.NewEvaluator(),
 	}
 	if eventBus != nil {
 		eventBus.SubscribeSync(ecs.TopicGameplayLinkCreated, eventbus.PriorityLow, s.onLinkStateChanged)
 		eventBus.SubscribeSync(ecs.TopicGameplayLinkBroken, eventbus.PriorityLow, s.onLinkStateChanged)
+		eventBus.SubscribeSync(ecs.TopicGameplayStationStateChanged, eventbus.PriorityLow, s.onStationStateChanged)
 	}
 	return s
 }
@@ -118,6 +123,10 @@ func (s *CraftingService) startCraft(
 	targetID, targetHandle, hasLinkObj := s.resolveRequiredLinkedObject(w, playerID, craft)
 	if craft.RequiredLinkedObject != "" && !hasLinkObj {
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_REQUIRES_LINKED_OBJECT")
+		return
+	}
+	if !s.evaluateStationRequirements(w, playerID, targetID, craft).Passed {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_STATION_REQUIREMENTS_NOT_MET")
 		return
 	}
 	if !s.hasCraftStamina(w, playerHandle, craft.StaminaCost) {
@@ -191,6 +200,12 @@ func (s *CraftingService) HandleCraftCycleComplete(
 			return contracts.BehaviorCycleDecisionCanceled
 		}
 	}
+	stationRequirements := s.evaluateStationRequirements(w, playerID, action.TargetID, craft)
+	if !stationRequirements.Passed {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_STATION_REQUIREMENTS_NOT_MET")
+		s.SendCraftListSnapshot(w, playerID, playerHandle)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
 	if s.invExec == nil {
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_UNAVAILABLE")
 		return contracts.BehaviorCycleDecisionCanceled
@@ -206,43 +221,59 @@ func (s *CraftingService) HandleCraftCycleComplete(
 		s.SendCraftListSnapshot(w, playerID, playerHandle)
 		return contracts.BehaviorCycleDecisionCanceled
 	}
-	consume := s.invExec.ConsumeCraftInputs(w, playerID, playerHandle, craft)
-	if consume.Overflow {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_QUALITY_OVERFLOW")
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-	if !consume.Success {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_MISSING_INPUTS")
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-	if !behaviors.ConsumePlayerLongActionStamina(w, playerHandle, craft.StaminaCost) {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "LOW_STAMINA")
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-
 	quality := s.computeCraftQuality(craft, preview.QualityWeighted, preview.QualityWeightSum)
 	if quality == nil {
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_QUALITY_FORMULA_UNSUPPORTED")
 		s.SendCraftListSnapshot(w, playerID, playerHandle)
 		return contracts.BehaviorCycleDecisionCanceled
 	}
+	if !s.hasCraftStamina(w, playerHandle, craft.StaminaCost) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "LOW_STAMINA")
+		s.SendCraftListSnapshot(w, playerID, playerHandle)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+	if !s.invExec.CanFitCraftOutputsOneCycle(w, playerID, playerHandle, craft, *quality) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_NO_SPACE")
+		s.SendCraftListSnapshot(w, playerID, playerHandle)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	stationHandle := action.TargetHandle
+	if stationHandle == types.InvalidHandle || !w.Alive(stationHandle) {
+		stationHandle = w.GetHandleByEntityID(action.TargetID)
+	}
+	snapshot := captureCraftCycleSnapshot(w, playerHandle, stationHandle)
+	rollback := func(severity netproto.AlertSeverity, reasonCode string) contracts.BehaviorCycleDecision {
+		snapshot.restore(w, playerHandle, stationHandle)
+		s.sendMiniAlert(playerID, severity, reasonCode)
+		s.SendCraftListSnapshot(w, playerID, playerHandle)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
+	consume := s.invExec.ConsumeCraftInputs(w, playerID, playerHandle, craft)
+	if consume.Overflow {
+		return rollback(netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_QUALITY_OVERFLOW")
+	}
+	if !consume.Success {
+		return rollback(netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_MISSING_INPUTS")
+	}
+	if !behaviors.ConsumePlayerLongActionStamina(w, playerHandle, craft.StaminaCost) {
+		return rollback(netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "LOW_STAMINA")
+	}
+	if !consumeStationResources(w, stationHandle, stationRequirements.Consumptions) {
+		return rollback(netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_STATION_REQUIREMENTS_NOT_MET")
+	}
 
 	updated := consume.UpdatedContainers
 	var discoveryLP int64
 	stopAfterCycle := false
 	for _, out := range craft.Outputs {
-		give := s.invExec.GiveCraftOutputOrDrop(w, playerID, playerHandle, out.ItemKey, out.Count, *quality)
-		if !give.Success {
-			return contracts.BehaviorCycleDecisionCanceled
+		give := s.invExec.GiveItem(w, playerID, playerHandle, out.ItemKey, out.Count, *quality)
+		if give == nil || !give.Success || give.GrantedCount != out.Count {
+			return rollback(netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_OUTPUT_CREATION_FAILED")
 		}
 		updated = mergeCraftUpdatedContainers(updated, give.UpdatedContainers)
 		discoveryLP += give.DiscoveryLPGained
-		if give.AnyDropped {
-			stopAfterCycle = true
-		}
 	}
 
 	if len(updated) > 0 {
@@ -267,7 +298,7 @@ func (s *CraftingService) HandleCraftCycleComplete(
 	shouldStop := stopAfterCycle || activeCraft.StopAfterCurrentCycle || nextRemaining == 0
 	if shouldStop {
 		ecs.RemoveComponent[components.ActiveCraft](w, playerHandle)
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
+		s.refreshCraftSnapshotsAfterCompletion(w, playerID, playerHandle, action.TargetID)
 		return contracts.BehaviorCycleDecisionComplete
 	}
 
@@ -276,7 +307,7 @@ func (s *CraftingService) HandleCraftCycleComplete(
 		ac.StopAfterCurrentCycle = stopAfterCycle
 		return true
 	})
-	s.SendCraftListSnapshot(w, playerID, playerHandle)
+	s.refreshCraftSnapshotsAfterCompletion(w, playerID, playerHandle, action.TargetID)
 	return contracts.BehaviorCycleDecisionContinue
 }
 
@@ -333,27 +364,36 @@ func (s *CraftingService) buildCraftList(w *ecs.World, playerID types.EntityID, 
 			continue
 		}
 		flags := &netproto.CraftRequirementFlags{}
+		stationID := types.EntityID(0)
 		if craft.RequiredLinkedObject == "" {
 			flags.HasRequiredLinkedObject = true
 		} else {
-			_, _, flags.HasRequiredLinkedObject = s.resolveRequiredLinkedObject(w, playerID, craft)
+			stationID, _, flags.HasRequiredLinkedObject = s.resolveRequiredLinkedObject(w, playerID, craft)
+		}
+		stationEvaluation := s.evaluateStationRequirements(w, playerID, stationID, craft)
+		flags.HasStationRequirements = len(craft.StationRequirements) > 0
+		flags.StationRequirementsMet = !flags.HasStationRequirements || stationEvaluation.Passed
+		if flags.HasStationRequirements && !stationEvaluation.Passed {
+			failureCode := stationEvaluation.FailureCode
+			flags.StationFailureCode = &failureCode
 		}
 		flags.HasInputs = hasInvExec && s.invExec.HasCraftInputs(w, playerID, playerHandle, craft)
 		flags.HasStamina = s.hasCraftStamina(w, playerHandle, craft.StaminaCost)
 		flags.HasOutputSpace = hasInvExec && s.invExec.CanFitCraftOutputsOneCycle(w, playerID, playerHandle, craft, 1)
-		flags.CanStartNow = flags.HasRequiredLinkedObject && flags.HasInputs && flags.HasStamina && flags.HasOutputSpace
+		flags.CanStartNow = flags.HasRequiredLinkedObject && flags.StationRequirementsMet && flags.HasInputs && flags.HasStamina && flags.HasOutputSpace
 
 		entry := &netproto.CraftRecipeEntry{
-			CraftKey:          craft.Key,
-			Name:              craft.Name,
-			StaminaCost:       craft.StaminaCost,
-			TicksRequired:     craft.TicksRequired,
-			RequiredSkills:    append([]string(nil), craft.RequiredSkills...),
-			RequiredDiscovery: append([]string(nil), craft.RequiredDiscovery...),
-			QualityFormula:    craft.QualityFormula,
-			Flags:             flags,
-			Inputs:            make([]*netproto.CraftInputDef, 0, len(craft.Inputs)),
-			Outputs:           make([]*netproto.CraftOutputDef, 0, len(craft.Outputs)),
+			CraftKey:            craft.Key,
+			Name:                craft.Name,
+			StaminaCost:         craft.StaminaCost,
+			TicksRequired:       craft.TicksRequired,
+			RequiredSkills:      append([]string(nil), craft.RequiredSkills...),
+			RequiredDiscovery:   append([]string(nil), craft.RequiredDiscovery...),
+			QualityFormula:      craft.QualityFormula,
+			Flags:               flags,
+			Inputs:              make([]*netproto.CraftInputDef, 0, len(craft.Inputs)),
+			Outputs:             make([]*netproto.CraftOutputDef, 0, len(craft.Outputs)),
+			StationRequirements: buildCraftStationRequirements(craft.StationRequirements),
 		}
 		if craft.RequiredLinkedObject != "" {
 			key := craft.RequiredLinkedObject
@@ -385,6 +425,42 @@ func (s *CraftingService) buildCraftList(w *ecs.World, playerID types.EntityID, 
 	return out
 }
 
+func buildCraftStationRequirements(requirements []craftdefs.StationRequirement) []*netproto.CraftStationRequirementDef {
+	if len(requirements) == 0 {
+		return nil
+	}
+
+	out := make([]*netproto.CraftStationRequirementDef, 0, len(requirements))
+	for _, requirement := range requirements {
+		entry := &netproto.CraftStationRequirementDef{
+			Capability: requirement.Capability,
+			Conditions: make([]*netproto.CraftStationConditionDef, 0, len(requirement.Conditions)),
+			Consume:    make([]*netproto.CraftStationResourceConsumptionDef, 0, len(requirement.Consume)),
+		}
+		if requirement.State != "" {
+			state := requirement.State
+			entry.State = &state
+		}
+		for _, condition := range requirement.Conditions {
+			entry.Conditions = append(entry.Conditions, &netproto.CraftStationConditionDef{
+				Source:   condition.Source,
+				Kind:     condition.Kind,
+				Key:      condition.Key,
+				Operator: condition.Operator,
+				Value:    condition.Value,
+			})
+		}
+		for _, consumption := range requirement.Consume {
+			entry.Consume = append(entry.Consume, &netproto.CraftStationResourceConsumptionDef{
+				ResourceKey: consumption.ResourceKey,
+				Amount:      consumption.Amount,
+			})
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
 func (s *CraftingService) isCraftVisible(w *ecs.World, playerHandle types.Handle, craft *craftdefs.CraftDef) bool {
 	if w == nil || playerHandle == types.InvalidHandle || craft == nil {
 		return false
@@ -399,6 +475,155 @@ func (s *CraftingService) isCraftVisible(w *ecs.World, playerHandle types.Handle
 	if !containsAllStrings(profile.Discovery, craft.RequiredDiscovery) {
 		return false
 	}
+	return true
+}
+
+func (s *CraftingService) evaluateStationRequirements(
+	w *ecs.World,
+	playerID types.EntityID,
+	stationID types.EntityID,
+	craft *craftdefs.CraftDef,
+) stationreq.Evaluation {
+	if craft == nil || len(craft.StationRequirements) == 0 {
+		return stationreq.Evaluation{Passed: true}
+	}
+	if s == nil || s.stationRequirements == nil {
+		return stationreq.Evaluation{}
+	}
+	return s.stationRequirements.Evaluate(stationreq.Context{
+		World:     w,
+		ActorID:   playerID,
+		StationID: stationID,
+	}, craft.StationRequirements)
+}
+
+type craftCycleSnapshot struct {
+	inventoryOwner    components.InventoryOwner
+	hasInventoryOwner bool
+	inventories       map[types.Handle]components.InventoryContainer
+
+	profile     components.CharacterProfile
+	hasProfile  bool
+	stats       components.EntityStats
+	hasStats    bool
+	movement    components.Movement
+	hasMovement bool
+
+	station         components.StationState
+	hasStation      bool
+	stationInternal components.ObjectInternalState
+	hasInternal     bool
+}
+
+func captureCraftCycleSnapshot(w *ecs.World, playerHandle, stationHandle types.Handle) craftCycleSnapshot {
+	snapshot := craftCycleSnapshot{inventories: make(map[types.Handle]components.InventoryContainer)}
+	if w == nil {
+		return snapshot
+	}
+	if owner, ok := ecs.GetComponent[components.InventoryOwner](w, playerHandle); ok {
+		snapshot.hasInventoryOwner = true
+		snapshot.inventoryOwner = owner
+		snapshot.inventoryOwner.Inventories = append([]components.InventoryLink(nil), owner.Inventories...)
+		for _, link := range owner.Inventories {
+			container, exists := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
+			if !exists {
+				continue
+			}
+			container.Items = append([]components.InvItem(nil), container.Items...)
+			snapshot.inventories[link.Handle] = container
+		}
+	}
+	if profile, ok := ecs.GetComponent[components.CharacterProfile](w, playerHandle); ok {
+		snapshot.hasProfile = true
+		snapshot.profile = profile
+		snapshot.profile.Skills = append([]string(nil), profile.Skills...)
+		snapshot.profile.Discovery = append([]string(nil), profile.Discovery...)
+	}
+	if stats, ok := ecs.GetComponent[components.EntityStats](w, playerHandle); ok {
+		snapshot.hasStats = true
+		snapshot.stats = stats
+	}
+	if movement, ok := ecs.GetComponent[components.Movement](w, playerHandle); ok {
+		snapshot.hasMovement = true
+		snapshot.movement = movement
+	}
+	if station, ok := ecs.GetComponent[components.StationState](w, stationHandle); ok {
+		snapshot.hasStation = true
+		snapshot.station = station.Snapshot()
+	}
+	if internal, ok := ecs.GetComponent[components.ObjectInternalState](w, stationHandle); ok {
+		snapshot.hasInternal = true
+		snapshot.stationInternal = internal
+	}
+	return snapshot
+}
+
+func (s craftCycleSnapshot) restore(w *ecs.World, playerHandle, stationHandle types.Handle) {
+	if w == nil {
+		return
+	}
+	if s.hasInventoryOwner {
+		if currentOwner, ok := ecs.GetComponent[components.InventoryOwner](w, playerHandle); ok {
+			for _, link := range currentOwner.Inventories {
+				if _, existed := s.inventories[link.Handle]; existed {
+					continue
+				}
+				ecs.GetResource[ecs.InventoryRefIndex](w).Remove(link.Kind, link.OwnerID, link.Key)
+				if w.Alive(link.Handle) {
+					w.Despawn(link.Handle)
+				}
+			}
+		}
+		ecs.AddComponent(w, playerHandle, s.inventoryOwner)
+		for handle, container := range s.inventories {
+			if w.Alive(handle) {
+				ecs.AddComponent(w, handle, container)
+			}
+		}
+	}
+	if s.hasProfile {
+		ecs.AddComponent(w, playerHandle, s.profile)
+	}
+	if s.hasStats {
+		ecs.AddComponent(w, playerHandle, s.stats)
+	}
+	if s.hasMovement {
+		ecs.AddComponent(w, playerHandle, s.movement)
+	}
+	if s.hasStation && w.Alive(stationHandle) {
+		ecs.AddComponent(w, stationHandle, s.station)
+	}
+	if s.hasInternal && w.Alive(stationHandle) {
+		ecs.AddComponent(w, stationHandle, s.stationInternal)
+	}
+}
+
+func consumeStationResources(w *ecs.World, stationHandle types.Handle, consumptions map[string]uint32) bool {
+	if len(consumptions) == 0 {
+		return true
+	}
+	if w == nil || stationHandle == types.InvalidHandle || !w.Alive(stationHandle) {
+		return false
+	}
+	station, exists := ecs.GetComponent[components.StationState](w, stationHandle)
+	if !exists {
+		return false
+	}
+	for resourceKey, amount := range consumptions {
+		if amount == 0 || station.Resources[resourceKey] < amount {
+			return false
+		}
+	}
+	ecs.MutateComponent[components.StationState](w, stationHandle, func(state *components.StationState) bool {
+		for resourceKey, amount := range consumptions {
+			state.Resources[resourceKey] -= amount
+		}
+		return true
+	})
+	ecs.MutateComponent[components.ObjectInternalState](w, stationHandle, func(state *components.ObjectInternalState) bool {
+		state.IsDirty = true
+		return true
+	})
 	return true
 }
 
@@ -544,6 +769,48 @@ func (s *CraftingService) onLinkStateChanged(_ context.Context, event eventbus.E
 		}
 	}
 	return nil
+}
+
+func (s *CraftingService) onStationStateChanged(_ context.Context, event eventbus.Event) error {
+	ev, ok := event.(*ecs.StationStateChangedEvent)
+	if !ok || s == nil || s.world == nil || ev.Layer != s.world.Layer {
+		return nil
+	}
+	s.sendCraftListSnapshotsToLinkedPlayers(s.world, ev.StationID, 0)
+	return nil
+}
+
+func (s *CraftingService) refreshCraftSnapshotsAfterCompletion(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	stationID types.EntityID,
+) {
+	s.SendCraftListSnapshot(w, playerID, playerHandle)
+	s.sendCraftListSnapshotsToLinkedPlayers(w, stationID, playerID)
+}
+
+func (s *CraftingService) sendCraftListSnapshotsToLinkedPlayers(w *ecs.World, stationID, skipPlayerID types.EntityID) {
+	if s == nil || w == nil || w != s.world || stationID == 0 {
+		return
+	}
+	players := ecs.GetResource[ecs.LinkState](w).PlayersByTarget[stationID]
+	if len(players) == 0 {
+		return
+	}
+	playerIDs := make([]types.EntityID, 0, len(players))
+	for playerID := range players {
+		if playerID != skipPlayerID {
+			playerIDs = append(playerIDs, playerID)
+		}
+	}
+	slices.Sort(playerIDs)
+	for _, playerID := range playerIDs {
+		handle := w.GetHandleByEntityID(playerID)
+		if handle != types.InvalidHandle {
+			s.SendCraftListSnapshot(w, playerID, handle)
+		}
+	}
 }
 
 func mergeCraftUpdatedContainers(

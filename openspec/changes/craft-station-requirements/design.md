@@ -29,7 +29,7 @@ See `proposal.md` for the motivation and scope. The current server already has a
 
 Station configuration belongs in a typed station section of the object definition rather than an unvalidated entry in the generic behavior map. Object loading validates capabilities, states, resource keys, and numeric ranges. When a station object is spawned, its configured station data initializes a station runtime component on that entity.
 
-The runtime component is authoritative for current state and local values. A station system updates it from elapsed game time and station rules. Crafting reads the component but does not update it except through an explicit station-resource commit declared by the recipe.
+The runtime component is authoritative for current state and local values. A station system updates it from elapsed game time and station rules. Crafting reads the component but does not update it except through an explicit station-resource commit declared by the recipe. Its durable projection is serialized through the existing `ObjectInternalState` object-state envelope and rehydrated when an object is activated. Every station mutation marks that envelope dirty so the existing chunk persistence lifecycle owns saving it.
 
 This keeps static configuration separate from mutable entity state and follows the existing object-definition plus ECS-component pattern. A generic behavior-map approach was rejected because it would defer schema errors and force unrelated systems to decode raw JSON.
 
@@ -45,9 +45,9 @@ The evaluator owns a registry of source providers. The v1 station provider handl
 
 The context includes the world, actor, linked station, and bounded evaluation metadata such as visited entities and depth. Nested evaluation is therefore possible without making the crafting service know how spatial or dependency checks work. The evaluator must reject unsupported providers and detect recursive dependency chains rather than silently passing them.
 
-### 4. Make cycle completion a two-phase logical transaction
+### 4. Validate at cycle boundaries, then complete atomically
 
-At cycle start, the crafting service evaluates station requirements and existing craft preconditions without mutation, then creates the active cyclic action. At cycle completion, it evaluates station requirements again, rechecks inventory and output capacity, computes the output, and commits all mutations as one logical operation.
+At cycle start, the crafting service performs read-only start validation of station requirements and existing craft preconditions, then creates the active cyclic action. At cycle completion, it performs read-only finalization validation of station requirements, inventory, and output capacity, computes the output, and commits all mutations as one logical operation.
 
 The completion path must not call independent mutating operations in an order that can leave a partial result. It should first build a complete commit plan, then apply station-resource consumption, input consumption, stamina consumption, and output creation under the shard's serialized update. If any precondition fails, it returns a failure before applying mutations.
 
@@ -67,15 +67,16 @@ The server remains authoritative for requirement evaluation and cycle completion
 - **[Risk]** Existing inventory helpers may mutate inputs and outputs separately. **Mitigation:** introduce a craft completion plan/commit boundary and test failure injection to prove no partial completion.
 - **[Risk]** Generic conditions can become an untyped expression language. **Mitigation:** keep v1 condition kinds explicit and validated; add providers by source rather than accepting arbitrary scripts.
 - **[Risk]** Nested nearby-station requirements can form cycles. **Mitigation:** carry visited entity IDs and a maximum evaluation depth from the first evaluator call.
-- **[Risk]** Station state may need persistence across chunk unloads or server restart. **Mitigation:** keep runtime state attached to the world-object state boundary and make persistence integration an explicit follow-up if current object persistence cannot yet serialize station data.
+- **[Risk]** A runtime component and persisted object state can drift. **Mitigation:** make the station runtime component the authoritative in-memory state and centralize all mutation and object-state serialization/rehydration in station helpers; every durable mutation marks `ObjectInternalState` dirty.
 - **[Risk]** Exposing every internal station value to the client can create a large protocol surface. **Mitigation:** send normalized requirement descriptions and stable availability/failure codes, not the entire runtime component.
 
 ## Migration Plan
 
 1. Add the new station and requirement definitions with empty/default values so existing objects and recipes remain valid.
-2. Keep current recipes working through `requiredLinkedObjectKey`; migrate individual station recipes only after the runtime and evaluator tests pass.
-3. Roll out station runtime updates and craft completion commit behind the existing server feature path; recipes without station requirements continue on the existing behavior.
-4. If rollout must be reverted, disable station-requiring recipes and retain the compatibility path for recipes that use only the existing linked-object field.
+2. Extend the existing object-state codec to persist and restore station runtime state while accepting older object-state envelopes with no station payload.
+3. Keep current recipes working through `requiredLinkedObjectKey`; migrate individual station recipes only after the runtime and evaluator tests pass.
+4. Roll out station runtime updates and craft completion commit behind the existing server feature path; recipes without station requirements continue on the existing behavior.
+5. If rollout must be reverted, disable station-requiring recipes and retain the compatibility path for recipes that use only the existing linked-object field; persisted station payloads remain inert and backward compatible.
 
 ## Open Questions
 
