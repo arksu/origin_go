@@ -81,10 +81,22 @@ def validate_request(request, output):
     return recipe, source, paths
 
 
+def is_bundled_asset_library(path):
+    local_resource_root = bpy.utils.resource_path('LOCAL')
+    if not local_resource_root:
+        return False
+    bundled_assets = (Path(local_resource_root) / 'datafiles' / 'assets').resolve()
+    return bundled_assets.is_dir() and path.is_relative_to(bundled_assets)
+
+
 def validate_dependencies(allowed_paths):
     for library in bpy.data.libraries:
         path = Path(bpy.path.abspath(library.filepath)).resolve()
-        require(path in allowed_paths and path.is_file(), f'undeclared library dependency: {library.filepath}')
+        # Blender can attach read-only built-in asset libraries (for example sculpt
+        # brushes) while opening a source. They are part of the installed tool, not
+        # inputs that should be declared in an asset recipe.
+        require((path in allowed_paths and path.is_file()) or is_bundled_asset_library(path),
+                f'undeclared library dependency: {library.filepath}')
     for image in bpy.data.images:
         if image.name in {'Render Result', 'Viewer Node'}:
             continue
