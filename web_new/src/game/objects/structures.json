@@ -17,20 +17,52 @@
       {
         "frames": [
           {
-            "img": "obj/campfire/flame/frame_1.png"
+            "img": "obj/campfire/flame/frame_1.png",
+            "offset": [
+              0,
+              2
+            ]
           },
           {
             "img": "obj/campfire/flame/frame_3.png",
             "offset": [
-              10,
-              10
+              11,
+              12
             ]
           },
           {
             "img": "obj/campfire/flame/frame_2.png",
             "offset": [
               5,
-              7
+              9
+            ]
+          },
+          {
+            "img": "obj/campfire/flame/frame_5.png",
+            "offset": [
+              24,
+              27
+            ]
+          },
+          {
+            "img": "obj/campfire/flame/frame_4.png",
+            "offset": [
+              22,
+              22
+            ]
+          },
+          {
+            "img": "obj/campfire/flame/frame_6.png",
+            "offset": [
+              23,
+              20
+            ]
+          },
+          {
+            "img": "obj/campfire/flame/frame_7.png",
+            "offset": [
+              25,
+              18
             ]
           }
         ],
@@ -41,6 +73,14 @@
           -3
         ],
         "z": 1
+      },
+      {
+        "img": "obj/campfire/campfire_.png",
+        "offset": [
+          10,
+          35
+        ],
+        "shadow": true
       }
     ]
   },

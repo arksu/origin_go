@@ -68,6 +68,17 @@
         "w": 1,
         "h": 1
       }
+    },
+    {
+      "defId": 3010,
+      "key": "ash",
+      "name": "Ash",
+      "resource": "items/ash.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
     }
   ]
 }

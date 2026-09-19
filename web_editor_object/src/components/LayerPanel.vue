@@ -46,6 +46,30 @@
               <span v-if="layer.shadow" class="tag shadow">shadow</span>
             </div>
             <div class="layer-meta">{{ layerPathLabel(layer) }}</div>
+            <div v-if="Array.isArray(layer.frames)" class="frame-tree" @click.stop>
+              <button class="small-btn frame-toggle" @click="toggleFrames(idx)">
+                {{ isFramesExpanded(idx) ? 'Collapse' : 'Expand' }}
+              </button>
+              <ul v-if="isFramesExpanded(idx)" class="frame-list">
+                <li
+                  v-for="(frame, frameIdx) in layer.frames"
+                  :key="frameIdx"
+                  class="frame-item"
+                  :class="{ active: idx === store.selectedLayerIndex && frameIdx === store.selectedLayerFrameIndex }"
+                  draggable="true"
+                  @click="selectFrameLayer(idx, frameIdx)"
+                  @dragstart="onFrameDragStart(frameIdx, $event)"
+                  @dragover.prevent
+                  @drop="onFrameDrop(idx, frameIdx)"
+                  @dragend="draggedFrameIndex = null"
+                >
+                  <span class="drag-handle">☷</span>
+                  <span>[{{ frameIdx }}]</span>
+                  <img :src="`/assets/game/${frame.img}`" :alt="frame.img" />
+                  <span class="frame-name">{{ frame.img }}</span>
+                </li>
+              </ul>
+            </div>
           </li>
         </ul>
       </div>
@@ -153,6 +177,8 @@ import ImagePicker from '@/components/ImagePicker.vue'
 
 const store = useObjectEditorStore()
 const pickerOpen = ref(false)
+const collapsedAnimationLayers = ref(new Set<number>())
+const draggedFrameIndex = ref<number | null>(null)
 
 const rootOffset = computed(() => store.getSelectedRootOffset())
 const layerOffset = computed(() => store.getSelectedLayerOffset())
@@ -163,6 +189,37 @@ const previewSrc = computed(() => {
   const img = store.selectedLayer?.img
   return img ? `/assets/game/${img}` : ''
 })
+
+function isFramesExpanded(layerIndex: number): boolean {
+  return !collapsedAnimationLayers.value.has(layerIndex)
+}
+
+function toggleFrames(layerIndex: number): void {
+  const next = new Set(collapsedAnimationLayers.value)
+  if (next.has(layerIndex)) next.delete(layerIndex)
+  else next.add(layerIndex)
+  collapsedAnimationLayers.value = next
+}
+
+function selectFrameLayer(layerIndex: number, frameIndex: number): void {
+  store.selectLayer(layerIndex)
+  store.setSelectedLayerFrameIndex(frameIndex)
+}
+
+function onFrameDragStart(frameIndex: number, event: DragEvent): void {
+  draggedFrameIndex.value = frameIndex
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(frameIndex))
+  }
+}
+
+function onFrameDrop(layerIndex: number, toIndex: number): void {
+  const fromIndex = draggedFrameIndex.value
+  draggedFrameIndex.value = null
+  if (store.selectedLayerIndex !== layerIndex || fromIndex == null) return
+  store.reorderSelectedLayerFrame(fromIndex, toIndex)
+}
 
 function parseInputNumber(event: Event): number | null {
   const value = Number((event.target as HTMLInputElement).value)
@@ -348,6 +405,66 @@ h4 {
   color: #8b8b8b;
   margin-top: 2px;
   word-break: break-all;
+}
+
+.frame-tree {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #333;
+}
+
+.frame-toggle {
+  margin-bottom: 4px;
+}
+
+.frame-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.frame-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px 4px;
+  border: 1px solid #3b3b3b;
+  border-radius: 3px;
+  background: #1f1f1f;
+  color: #aaa;
+  font-size: 11px;
+  cursor: grab;
+}
+
+.frame-item:active {
+  cursor: grabbing;
+}
+
+.frame-item.active {
+  border-color: #28c76f;
+  color: #ddd;
+}
+
+.frame-item img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  flex: 0 0 auto;
+}
+
+.drag-handle {
+  color: #777;
+}
+
+.frame-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tag.shadow {
