@@ -258,17 +258,28 @@ func (p *DroppedItemPersisterDB) deleteObjectWithPlayerInventories(
 		zap.Uint64("entity_id", uint64(entityID)))
 
 	return p.db.WithTx(ctx, func(q *repository.Queries) error {
-		if _, err := q.SoftDeleteObject(ctx, repository.SoftDeleteObjectParams{
-			Region: region,
-			ID:     int64(entityID),
-		}); err != nil {
-			return fmt.Errorf("soft-delete object: %w", err)
-		}
-		if err := q.DeleteInventoriesByOwner(ctx, int64(entityID)); err != nil {
-			return fmt.Errorf("delete object inventories: %w", err)
+		if err := deleteObjectRows(ctx, q, region, entityID, len(inventories) == 0); err != nil {
+			return err
 		}
 		return persistPlayerInventorySnapshots(ctx, q, inventories)
 	})
+}
+
+type objectDeletionQueries interface {
+	SoftDeleteObject(context.Context, repository.SoftDeleteObjectParams) (int64, error)
+	DeleteInventoriesByOwner(context.Context, int64) error
+}
+
+func deleteObjectRows(ctx context.Context, q objectDeletionQueries, region int, entityID types.EntityID, allowMissing bool) error {
+	// Chunk-owned objects may not have reached their first save yet. Still delete
+	// their inventory rows, but require an existing object for atomic pickups.
+	if _, err := q.SoftDeleteObject(ctx, repository.SoftDeleteObjectParams{Region: region, ID: int64(entityID)}); err != nil && !(allowMissing && errors.Is(err, sql.ErrNoRows)) {
+		return fmt.Errorf("soft-delete object: %w", err)
+	}
+	if err := q.DeleteInventoriesByOwner(ctx, int64(entityID)); err != nil {
+		return fmt.Errorf("delete object inventories: %w", err)
+	}
+	return nil
 }
 
 // UpdateObjectData persists a metadata migration detected during chunk load.
