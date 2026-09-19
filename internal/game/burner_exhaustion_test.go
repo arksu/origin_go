@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	constt "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -104,6 +105,10 @@ func TestBurnerExhaustionCreatesDurableAshAtSourceLocation(t *testing.T) {
 	dropped, ok := ecs.GetComponent[components.DroppedItem](w, result.DroppedHandle)
 	require.True(t, ok)
 	require.Equal(t, types.EntityID(901), dropped.ContainedItemID)
+	container, ok := ecs.GetComponent[components.InventoryContainer](w, result.ContainerHandle)
+	require.True(t, ok)
+	require.Len(t, container.Items, 1)
+	require.Equal(t, uint32(7), container.Items[0].Quality)
 	transform, ok := ecs.GetComponent[components.Transform](w, result.DroppedHandle)
 	require.True(t, ok)
 	require.Equal(t, float64(101), transform.X)
@@ -146,6 +151,11 @@ func TestBurnerExhaustionPersistsAshBeforeRemovingSource(t *testing.T) {
 	dropped, ok := ecs.GetComponent[components.DroppedItem](w, droppedHandle)
 	require.True(t, ok)
 	require.Equal(t, types.EntityID(901), dropped.ContainedItemID)
+	containerHandle, found := ecs.GetResource[ecs.InventoryRefIndex](w).Lookup(constt.InventoryDroppedItem, types.EntityID(901), 0)
+	require.True(t, found)
+	container, ok := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+	require.True(t, ok)
+	require.Equal(t, uint32(0), container.Items[0].Quality)
 }
 
 func TestBurnerExhaustionLeavesSourceWhenAshPersistenceFails(t *testing.T) {

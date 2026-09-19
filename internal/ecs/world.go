@@ -161,6 +161,9 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 	InitResource(w, PendingAdminTeleport{
 		Entries: make(map[types.EntityID]struct{}, 4),
 	})
+	InitResource(w, PendingAdminObjectInfo{
+		Entries: make(map[types.EntityID]struct{}, 4),
+	})
 	InitResource(w, OpenedWindowsState{
 		ByPlayer: make(map[types.EntityID]map[string]struct{}, 64),
 	})
@@ -449,8 +452,8 @@ func (w *World) SetStorage(componentID ComponentID, storage any) {
 	w.storages[componentID] = storage
 }
 
-// GetOrCreateStorage returns existing storage or creates new one
-// Single-threaded - no lock needed
+// GetOrCreateStorage returns existing storage or creates new one.
+// Requires exclusive world access, even when used only to look up a component.
 func GetOrCreateStorage[T Component](w *World) *ComponentStorage[T] {
 	componentID := GetComponentID[T]()
 
@@ -476,10 +479,15 @@ func AddComponent[T Component](w *World, h types.Handle, component T) {
 	w.updateEntityArchetype(h, oldMask, newMask)
 }
 
-// GetComponent retrieves a component from an entity
+// GetComponent retrieves a component without creating storage for absent types.
+// Safe for concurrent readers while world mutations are excluded by the caller.
 func GetComponent[T Component](w *World, h types.Handle) (T, bool) {
-	storage := GetOrCreateStorage[T](w)
-	return storage.Get(h)
+	storage := w.GetStorage(GetComponentID[T]())
+	if storage == nil {
+		var zero T
+		return zero, false
+	}
+	return storage.(*ComponentStorage[T]).Get(h)
 }
 
 // RemoveComponent removes a component from an entity
@@ -515,8 +523,9 @@ func WithComponent[T Component](w *World, h types.Handle, fn func(*T)) bool {
 	return storage.WithPtr(h, fn)
 }
 
-// HasComponent checks if an entity has a component
+// HasComponent checks for a component without creating storage for absent types.
+// Safe for concurrent readers while world mutations are excluded by the caller.
 func HasComponent[T Component](w *World, h types.Handle) bool {
-	storage := GetOrCreateStorage[T](w)
-	return storage.Has(h)
+	storage := w.GetStorage(GetComponentID[T]())
+	return storage != nil && storage.(*ComponentStorage[T]).Has(h)
 }

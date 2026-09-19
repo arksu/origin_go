@@ -38,6 +38,34 @@ func TestBurnerBehaviorInitializesRuntimeStateOnSpawn(t *testing.T) {
 	require.Equal(t, int64(1540), burner.NextFuelBurnAtRuntimeSecond)
 }
 
+func TestBurnerBehaviorInitializesRuntimeStateOnTransform(t *testing.T) {
+	w := ecs.NewWorld(nil, 0)
+	ecs.SetResource(w, ecs.TimeState{RuntimeSecondsTotal: 364686})
+	h := w.Spawn(1, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.ObjectInternalState{}) })
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
+		DefID: 1,
+		BurnerConfig: &objectdefs.BurnerBehaviorConfig{
+			FuelCapacity:   5,
+			SecondsPerFuel: 10,
+			InitialFuel:    5,
+		},
+	}}))
+
+	require.NoError(t, (burnerBehavior{}).InitObject(&contracts.BehaviorObjectInitContext{
+		World:      w,
+		Handle:     h,
+		EntityID:   1,
+		EntityType: 1,
+		Reason:     contracts.ObjectBehaviorInitReasonTransform,
+	}))
+
+	state, _ := ecs.GetComponent[components.ObjectInternalState](w, h)
+	burner, ok := components.GetBehaviorState[components.BurnerBehaviorState](state, "burner")
+	require.True(t, ok)
+	require.Equal(t, uint32(5), burner.Fuel)
+	require.Equal(t, int64(364696), burner.NextFuelBurnAtRuntimeSecond)
+}
+
 func TestBurnerBehaviorRestoresMissingLegacyStateWithoutOverwritingPersistedState(t *testing.T) {
 	w := ecs.NewWorld(nil, 0)
 	ecs.SetResource(w, ecs.TimeState{RuntimeSecondsTotal: 100})

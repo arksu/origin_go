@@ -651,6 +651,7 @@ func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.E
 	ecs.GetResource[ecs.OpenedWindowsState](w).ClearPlayer(playerID)
 	ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
 	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
 
 	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
 	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)

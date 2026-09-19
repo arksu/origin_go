@@ -590,9 +590,21 @@ func (s *BuildService) computeCompletedBuildObjectQuality(
 	buildDef *builddefs.BuildDef,
 	buildState *components.BuildBehaviorState,
 ) (uint32, bool) {
-	_ = buildDef
-	_ = buildState
-	// Keep completion quality computation behind one seam so future content-driven
-	// formulas can be added without changing the build cycle/transform flow.
-	return 0, false
+	if buildDef == nil || buildDef.ObjectKey != "campfire" || buildState == nil {
+		return 0, false
+	}
+
+	var qualityTotal uint64
+	var branchCount uint64
+	for _, input := range buildState.Items {
+		if input.ItemKey != "branch" || input.BuildCount == 0 {
+			continue
+		}
+		qualityTotal += uint64(input.BuildQualityTotal)
+		branchCount += uint64(input.BuildCount)
+	}
+	if branchCount == 0 {
+		return 0, false
+	}
+	return uint32(qualityTotal / branchCount), true
 }
