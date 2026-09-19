@@ -8,6 +8,7 @@
     "build": "npm run proto && vue-tsc --build && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --build --force",
+    "test:map-click": "node scripts/test-map-click.mjs",
     "test:character-visual": "node scripts/test-character-visual.mjs",
     "test:asset-pipeline": "node scripts/test-asset-pipeline.mjs",
     "validate-objects": "node scripts/validate-object-schema.mjs",

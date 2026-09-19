@@ -114,8 +114,7 @@ See `MoveController.ts` AGENTS.md for details.
 
 **PlayerCommandController.ts** (singleton):
 - Converts input to `C2S_PlayerAction` messages
-- `MoveTo(x, y)` for ground clicks
-- `MoveToEntity(entityId)` for object clicks
+- `MapClick(x, y, targetEntityId)` for ordinary primary map clicks; zero target for ground
 - `Interact(entityId)` for pickup or context requests
 - `SelectContextAction(entityId, actionId)` after menu selection
 
@@ -124,7 +123,7 @@ See `MoveController.ts` AGENTS.md for details.
 - `Render.ts` maps RMB click on object to `sendInteract(entityId)`.
 - Touch long-press maps to the same context request, so the desktop and mobile
   builds share one interaction model.
-- Primary click/tap on a dropped item sends an explicit pickup interaction;
+- Primary click/tap on a dropped item sends a map click;
   the server queues movement and completes the pickup on arrival.
 - Context menu UI is Vue-side (`GameView.vue`) and store-driven (`gameStore.contextMenu`).
 - Render layer never decides available actions; it only emits input intent.

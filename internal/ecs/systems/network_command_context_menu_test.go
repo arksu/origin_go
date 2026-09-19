@@ -28,19 +28,30 @@ type testContextActionResolver struct {
 }
 
 type testAdminObjectInfoHandler struct {
-	playerID types.EntityID
-	targetID types.EntityID
-	calls    int
+	playerID        types.EntityID
+	targetID        types.EntityID
+	calls           int
+	destroyPlayerID types.EntityID
+	destroyTargetID types.EntityID
+	destroyCalls    int
+	coordinateCalls int
+	clickX, clickY  float64
 }
 
 func (h *testAdminObjectInfoHandler) HandleCommand(*ecs.World, types.EntityID, types.Handle, string) bool {
 	return false
 }
 
-func (h *testAdminObjectInfoHandler) ExecutePendingSpawn(*ecs.World, types.EntityID, types.Handle, float64, float64) {
+func (h *testAdminObjectInfoHandler) ExecutePendingSpawn(_ *ecs.World, _ types.EntityID, _ types.Handle, x, y float64) {
+	h.coordinateCalls++
+	h.clickX = x
+	h.clickY = y
 }
 
-func (h *testAdminObjectInfoHandler) ExecutePendingTeleport(*ecs.World, types.EntityID, types.Handle, float64, float64) {
+func (h *testAdminObjectInfoHandler) ExecutePendingTeleport(_ *ecs.World, _ types.EntityID, _ types.Handle, x, y float64) {
+	h.coordinateCalls++
+	h.clickX = x
+	h.clickY = y
 }
 
 func (h *testAdminObjectInfoHandler) ExecutePendingObjectInfo(_ *ecs.World, playerID, targetID types.EntityID) {
@@ -49,7 +60,13 @@ func (h *testAdminObjectInfoHandler) ExecutePendingObjectInfo(_ *ecs.World, play
 	h.calls++
 }
 
-func TestNetworkCommandSystem_InfoInspectionConsumesInteractionAndGroundClick(t *testing.T) {
+func (h *testAdminObjectInfoHandler) ExecutePendingDestroy(_ *ecs.World, playerID, targetID types.EntityID) {
+	h.destroyPlayerID = playerID
+	h.destroyTargetID = targetID
+	h.destroyCalls++
+}
+
+func TestNetworkCommandSystem_InfoInspectionConsumesMapClickAndGroundClick(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	const (
 		playerID = types.EntityID(701)
@@ -67,18 +84,18 @@ func TestNetworkCommandSystem_InfoInspectionConsumesInteractionAndGroundClick(t 
 	system.SetAdminHandler(admin)
 	ecs.GetResource[ecs.PendingAdminObjectInfo](world).Set(playerID)
 
-	system.handleInteract(world, playerHandle, &network.PlayerCommand{
+	system.handleMapClick(world, playerHandle, &network.PlayerCommand{
 		CharacterID: playerID,
-		Payload:     &netproto.Interact{EntityId: uint64(targetID)},
+		Payload:     &netproto.MapClick{X: 12, Y: 23, TargetEntityId: uint64(targetID)},
 	})
 	if admin.calls != 1 || admin.playerID != playerID || admin.targetID != targetID {
 		t.Fatalf("expected inspected interaction (%d, %d), got calls=%d player=%d target=%d", playerID, targetID, admin.calls, admin.playerID, admin.targetID)
 	}
 
 	ecs.GetResource[ecs.PendingAdminObjectInfo](world).Set(playerID)
-	system.handleMoveTo(world, playerHandle, &network.PlayerCommand{
+	system.handleMapClick(world, playerHandle, &network.PlayerCommand{
 		CharacterID: playerID,
-		Payload:     &netproto.MoveTo{X: 42, Y: 99},
+		Payload:     &netproto.MapClick{X: 42, Y: 99},
 	})
 	if admin.calls != 2 || admin.targetID != 0 {
 		t.Fatalf("expected ground click to inspect target 0, got calls=%d target=%d", admin.calls, admin.targetID)
@@ -89,6 +106,42 @@ func TestNetworkCommandSystem_InfoInspectionConsumesInteractionAndGroundClick(t 
 	}
 	if movement.TargetX != 0 || movement.TargetY != 0 {
 		t.Fatalf("expected ground click not to move player, got target=(%g,%g)", movement.TargetX, movement.TargetY)
+	}
+}
+
+func TestNetworkCommandSystem_DestroyConsumesMapClickAndGroundClick(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	const (
+		playerID = types.EntityID(703)
+		targetID = types.EntityID(704)
+	)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
+	})
+	world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Collider{HalfWidth: 1, HalfHeight: 1, Layer: 1, Mask: 1})
+	})
+
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	admin := &testAdminObjectInfoHandler{}
+	system.SetAdminHandler(admin)
+	ecs.GetResource[ecs.PendingAdminDestroy](world).Set(playerID)
+
+	system.handleMapClick(world, playerHandle, &network.PlayerCommand{
+		CharacterID: playerID,
+		Payload:     &netproto.MapClick{X: 12, Y: 23, TargetEntityId: uint64(targetID)},
+	})
+	if admin.destroyCalls != 1 || admin.destroyPlayerID != playerID || admin.destroyTargetID != targetID {
+		t.Fatalf("expected destroy interaction (%d, %d), got calls=%d player=%d target=%d", playerID, targetID, admin.destroyCalls, admin.destroyPlayerID, admin.destroyTargetID)
+	}
+
+	ecs.GetResource[ecs.PendingAdminDestroy](world).Set(playerID)
+	system.handleMapClick(world, playerHandle, &network.PlayerCommand{
+		CharacterID: playerID,
+		Payload:     &netproto.MapClick{X: 42, Y: 99},
+	})
+	if admin.destroyCalls != 2 || admin.destroyTargetID != 0 {
+		t.Fatalf("expected ground click to destroy target 0, got calls=%d target=%d", admin.destroyCalls, admin.destroyTargetID)
 	}
 }
 

@@ -320,7 +320,7 @@ Context interactions are now behavior-driven and server-authoritative:
     - timeout (`game.interaction_pending_timeout`, default `15s`)
     - movement stop without link
     - target/player despawn
-    - new movement command (`MoveTo`/`MoveToEntity`)
+    - new movement intent from `MapClick`
     - `LinkBroken`
 
 ### Duplicate Action IDs

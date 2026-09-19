@@ -66,7 +66,7 @@ make load-test
 
 ### login-move
 Все этапы `login-only` плюс:
-8. Цикл движения: каждые `period` секунд отправка `C2S_PlayerAction.MoveTo`
+8. Цикл движения: каждые `period` секунд отправка `C2S_PlayerAction.MapClick`
 9. Обработка `S2C_ObjectMove` для обновления позиции
 
 ## Примеры использования

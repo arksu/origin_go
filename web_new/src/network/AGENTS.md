@@ -231,7 +231,7 @@ async function connectToGame(wsToken: string) {
 // 4. Send player action
 gameConnection.send({
   playerAction: proto.C2S_PlayerAction.create({
-    moveTo: { x: 1000, y: 2000 },
+    mapClick: { x: 1000, y: 2000, targetEntityId: 0 },
     modifiers: 1, // SHIFT
   })
 })

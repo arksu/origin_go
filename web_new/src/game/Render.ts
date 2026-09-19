@@ -12,7 +12,6 @@ import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostContro
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
-import { proto } from '@/network/proto/packets.js'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
@@ -44,7 +43,6 @@ export class Render {
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
 
   private onClickCallback: ((event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void) | null = null
-  private adminObjectInfoSelectionArmed = false
 
   private canvas: HTMLCanvasElement | null = null
   private lastPointerScreen: ScreenPoint | null = null
@@ -137,24 +135,9 @@ export class Render {
       if (event.button === 0) {
         gameStore.closeContextMenu()
 
-        if (this.adminObjectInfoSelectionArmed) {
-          this.adminObjectInfoSelectionArmed = false
-          const clickedEntity = this.objectManager.getEntityAtScreen(
-            event.screenX,
-            event.screenY,
-            this.screenToWorld.bind(this),
-          )
-          if (clickedEntity) {
-            playerCommandController.sendInteract(clickedEntity.entityId)
-          } else {
-            playerCommandController.sendMoveTo(this.lastClickWorld.x, this.lastClickWorld.y, event.modifiers)
-          }
-          return
-        }
-
         // A dropped item is always the primary-click target. Do this before
         // build/lift callbacks so the same rule holds for mouse and touch.
-        if (this.tryQueueDroppedItemPickup(event.screenX, event.screenY)) {
+        if (this.trySendDroppedItemMapClick(event.screenX, event.screenY, event.modifiers)) {
           return
         }
       }
@@ -185,9 +168,10 @@ export class Render {
             gameStore.allocOpId(),
           )
         } else {
-          playerCommandController.sendMoveTo(
+          playerCommandController.sendMapClick(
             this.lastClickWorld.x,
             this.lastClickWorld.y,
+            this.objectManager.getEntityAtScreen(event.screenX, event.screenY, this.screenToWorld.bind(this))?.entityId ?? 0,
             event.modifiers
           )
         }
@@ -258,7 +242,7 @@ export class Render {
     }
   }
 
-  private tryQueueDroppedItemPickup(screenX: number, screenY: number): boolean {
+  private trySendDroppedItemMapClick(screenX: number, screenY: number, modifiers: number): boolean {
     const clickedEntity = this.objectManager.getEntityAtScreen(
       screenX,
       screenY,
@@ -268,7 +252,7 @@ export class Render {
       return false
     }
 
-    playerCommandController.sendInteract(clickedEntity.entityId, proto.InteractionType.PICKUP)
+    playerCommandController.sendMapClick(this.lastClickWorld.x, this.lastClickWorld.y, clickedEntity.entityId, modifiers)
     return true
   }
 
@@ -623,14 +607,6 @@ export class Render {
 
   onPointerClick(callback: (event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void): void {
     this.onClickCallback = callback
-  }
-
-  armAdminObjectInfoSelection(): void {
-    this.adminObjectInfoSelectionArmed = true
-  }
-
-  cancelAdminObjectInfoSelection(): void {
-    this.adminObjectInfoSelectionArmed = false
   }
 
   armBuildGhost(options: ArmBuildGhostOptions): void {

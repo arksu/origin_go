@@ -60,6 +60,7 @@ type AdminCommandHandler interface {
 	ExecutePendingSpawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
 	ExecutePendingTeleport(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
 	ExecutePendingObjectInfo(w *ecs.World, playerID, targetID types.EntityID)
+	ExecutePendingDestroy(w *ecs.World, playerID, targetID types.EntityID)
 }
 
 // InventoryOpResult represents the result of an inventory operation
@@ -289,10 +290,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 
 	// Route to command handlers
 	switch cmd.CommandType {
-	case network.CmdMoveTo:
-		s.handleMoveTo(w, handle, cmd)
-	case network.CmdMoveToEntity:
-		s.handleMoveToEntity(w, handle, cmd)
+	case network.CmdMapClick:
+		s.handleMapClick(w, handle, cmd)
 	case network.CmdSetMovementMode:
 		s.handleSetMovementMode(w, handle, cmd)
 	case network.CmdInteract:
@@ -452,32 +451,20 @@ func (s *NetworkCommandSystem) handleCloseWindow(w *ecs.World, _ types.Handle, c
 	ecs.GetResource[ecs.OpenedWindowsState](w).Close(cmd.CharacterID, name)
 }
 
-func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	// Type assert payload
-	moveTo, ok := cmd.Payload.(*netproto.MoveTo)
-	if !ok {
-		s.logger.Error("Invalid payload type for MoveTo",
-			zap.Uint64("client_id", cmd.ClientID))
+func (s *NetworkCommandSystem) handleMapClick(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	click, ok := cmd.Payload.(*netproto.MapClick)
+	if !ok || click == nil {
+		s.logger.Error("Invalid payload type for MapClick", zap.Uint64("client_id", cmd.ClientID))
 		return
 	}
-
-	// Check for pending admin spawn — intercept click as spawn target
-	if s.adminHandler != nil {
-		pendingInfo := ecs.GetResource[ecs.PendingAdminObjectInfo](w)
-		if pendingInfo.Get(cmd.CharacterID) {
-			s.adminHandler.ExecutePendingObjectInfo(w, cmd.CharacterID, 0)
-			return
-		}
-
-		pendingTeleport := ecs.GetResource[ecs.PendingAdminTeleport](w)
-		if pendingTeleport.Get(cmd.CharacterID) {
-			s.adminHandler.ExecutePendingTeleport(w, cmd.CharacterID, playerHandle, float64(moveTo.X), float64(moveTo.Y))
-			return
-		}
-
-		pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
-		if _, hasPending := pending.Get(cmd.CharacterID); hasPending {
-			s.adminHandler.ExecutePendingSpawn(w, cmd.CharacterID, playerHandle, float64(moveTo.X), float64(moveTo.Y))
+	if s.consumeAdminMapClick(w, playerHandle, cmd.CharacterID, click) {
+		return
+	}
+	targetID := types.EntityID(click.TargetEntityId)
+	targetHandle := w.GetHandleByEntityID(targetID)
+	if targetID != 0 && w.Alive(targetHandle) {
+		if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped {
+			s.handlePickupInteract(w, playerHandle, cmd.CharacterID, targetID, targetHandle)
 			return
 		}
 	}
@@ -507,120 +494,8 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 
 	// Set movement target
 	ecs.WithComponent(w, playerHandle, func(mov *components.Movement) {
-		mov.SetTargetPoint(int(moveTo.X), int(moveTo.Y))
+		mov.SetTargetPoint(int(click.X), int(click.Y))
 	})
-}
-
-func (s *NetworkCommandSystem) handleMoveToEntity(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	// Type assert payload
-	moveToEntity, ok := cmd.Payload.(*netproto.MoveToEntity)
-	if !ok {
-		s.logger.Error("Invalid payload type for MoveToEntity",
-			zap.Uint64("client_id", cmd.ClientID))
-		return
-	}
-
-	// Check for pending admin spawn — use target entity's position as spawn target
-	if s.adminHandler != nil {
-		pendingTeleport := ecs.GetResource[ecs.PendingAdminTeleport](w)
-		if pendingTeleport.Get(cmd.CharacterID) {
-			targetEntityID := types.EntityID(moveToEntity.EntityId)
-			targetHandle := w.GetHandleByEntityID(targetEntityID)
-			if targetHandle != types.InvalidHandle && w.Alive(targetHandle) {
-				if t, hasT := ecs.GetComponent[components.Transform](w, targetHandle); hasT {
-					s.adminHandler.ExecutePendingTeleport(w, cmd.CharacterID, playerHandle, t.X, t.Y)
-					return
-				}
-			}
-			// Target entity invalid — clear pending and let normal flow continue
-			pendingTeleport.Clear(cmd.CharacterID)
-		}
-
-		pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
-		if _, hasPending := pending.Get(cmd.CharacterID); hasPending {
-			targetEntityID := types.EntityID(moveToEntity.EntityId)
-			targetHandle := w.GetHandleByEntityID(targetEntityID)
-			if targetHandle != types.InvalidHandle && w.Alive(targetHandle) {
-				if t, hasT := ecs.GetComponent[components.Transform](w, targetHandle); hasT {
-					s.adminHandler.ExecutePendingSpawn(w, cmd.CharacterID, playerHandle, t.X, t.Y)
-					return
-				}
-			}
-			// Target entity invalid — clear pending and let normal flow continue
-			pending.Clear(cmd.CharacterID)
-		}
-	}
-
-	// Clear any previous pending interaction
-	s.clearPendingInteractionIntents(w, playerHandle, cmd.CharacterID)
-
-	// Validate target entity exists
-	targetEntityID := types.EntityID(moveToEntity.EntityId)
-	targetHandle := w.GetHandleByEntityID(targetEntityID)
-	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
-		s.logger.Debug("MoveToEntity: target entity not found",
-			zap.Uint64("client_id", cmd.ClientID),
-			zap.Uint64("target_entity_id", moveToEntity.EntityId))
-		return
-	}
-
-	// Get movement component, check stunned
-	mov, ok := ecs.GetComponent[components.Movement](w, playerHandle)
-	if !ok {
-		return
-	}
-	if mov.State == constt.StateStunned {
-		return
-	}
-	if !s.enforceMovementModeByStamina(w, playerHandle) {
-		return
-	}
-
-	// Get target position
-	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
-	if !hasTransform {
-		return
-	}
-
-	_, isDroppedItem := ecs.GetComponent[components.DroppedItem](w, targetHandle)
-	isCollidingWithTarget := lastCollidedEntityForHandle(w, playerHandle) == targetEntityID
-	isLinkedToTarget := false
-	if link, hasLink := ecs.GetResource[ecs.LinkState](w).GetLink(cmd.CharacterID); hasLink && link.TargetID == targetEntityID {
-		isLinkedToTarget = true
-	}
-
-	// If the player is already in contact (or already linked) with the same world object,
-	// re-click should not restart path-following. Keep interaction intent only.
-	if moveToEntity.AutoInteract && !isDroppedItem && (isCollidingWithTarget || isLinkedToTarget) {
-		s.stopMovementAndEmit(w, playerHandle)
-		s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
-		return
-	}
-
-	// Set movement target to entity handle (MovementSystem will track live position)
-	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
-		m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
-	})
-
-	// If autoInteract, determine interaction type and set PendingInteraction
-	if moveToEntity.AutoInteract {
-		if isDroppedItem {
-			ecs.AddComponent(w, playerHandle, components.PendingInteraction{
-				TargetEntityID: targetEntityID,
-				TargetHandle:   targetHandle,
-				Type:           netproto.InteractionType_PICKUP,
-				Range:          constt.DroppedPickupRadius,
-			})
-		} else {
-			// For non-dropped world objects autoInteract means explicit link intent.
-			s.setLinkIntent(w, cmd.CharacterID, targetEntityID, targetHandle)
-		}
-	}
-
-	s.logger.Debug("MoveToEntity action",
-		zap.Uint64("client_id", cmd.ClientID),
-		zap.Uint64("target_entity_id", moveToEntity.EntityId),
-		zap.Bool("auto_interact", moveToEntity.AutoInteract))
 }
 
 func (s *NetworkCommandSystem) handleSetMovementMode(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
@@ -744,10 +619,6 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 	}
 
 	targetEntityID := types.EntityID(interact.EntityId)
-	if s.adminHandler != nil && ecs.GetResource[ecs.PendingAdminObjectInfo](w).Get(cmd.CharacterID) {
-		s.adminHandler.ExecutePendingObjectInfo(w, cmd.CharacterID, targetEntityID)
-		return
-	}
 	targetHandle := w.GetHandleByEntityID(targetEntityID)
 	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
 		s.logger.Debug("Interact: target entity not found",

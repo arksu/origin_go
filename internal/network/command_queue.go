@@ -13,8 +13,8 @@ import (
 type CommandType uint16
 
 const (
-	CmdMoveTo CommandType = iota + 1
-	CmdMoveToEntity
+	CmdMapClick CommandType = iota + 1
+	_ // Retired entity-movement command; preserve other command IDs.
 	CmdSetMovementMode
 	CmdInteract
 	CmdSelectContextAction

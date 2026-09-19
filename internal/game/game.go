@@ -281,12 +281,9 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 	var payload any
 
 	switch act := action.Action.(type) {
-	case *netproto.C2S_PlayerAction_MoveTo:
-		cmdType = network.CmdMoveTo
-		payload = act.MoveTo
-	case *netproto.C2S_PlayerAction_MoveToEntity:
-		cmdType = network.CmdMoveToEntity
-		payload = act.MoveToEntity
+	case *netproto.C2S_PlayerAction_MapClick:
+		cmdType = network.CmdMapClick
+		payload = act.MapClick
 	case *netproto.C2S_PlayerAction_Interact:
 		cmdType = network.CmdInteract
 		payload = act.Interact
@@ -847,6 +844,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				shard.mu.Lock()
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
 				ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(playerEntityID)
+				ecs.ClearPendingAdminClicks(shard.world, playerEntityID)
 				if playerHandle != types.InvalidHandle && shard.liftService != nil {
 					_ = shard.liftService.ForceDropCarryAtPlayerPosition(shard.world, playerEntityID, playerHandle, false)
 				}

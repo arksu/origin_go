@@ -2,8 +2,7 @@
  * PlayerCommandController - sends player commands to the server.
  * 
  * Responsibilities:
- * - Send MoveTo commands (click on ground)
- * - Send MoveToEntity commands (click on object)
+ * - Send MapClick input with coordinates and the object under the pointer
  * - Include modifiers (Shift/Ctrl/Alt) with commands
  */
 
@@ -20,7 +19,7 @@ export class PlayerCommandController {
     this.playerId = playerId
   }
 
-  sendMoveTo(x: number, y: number, modifiers: number): void {
+  sendMapClick(x: number, y: number, targetEntityId: number, modifiers: number): void {
     if (DEBUG_MOVEMENT) {
       let currentPos = 'unknown'
       if (this.playerId !== null) {
@@ -30,7 +29,7 @@ export class PlayerCommandController {
         }
       }
 
-      console.log(`[PlayerCommandController] Sending MoveTo:`, {
+      console.log(`[PlayerCommandController] Sending MapClick:`, {
         currentPos,
         target: `(${Math.round(x)}, ${Math.round(y)})`,
         modifiers,
@@ -40,30 +39,10 @@ export class PlayerCommandController {
 
     gameConnection.send({
       playerAction: proto.C2S_PlayerAction.create({
-        moveTo: proto.MoveTo.create({
+        mapClick: proto.MapClick.create({
           x: Math.round(x),
           y: Math.round(y),
-        }),
-        modifiers,
-      }),
-    })
-  }
-
-  sendMoveToEntity(entityId: number, autoInteract: boolean, modifiers: number): void {
-    if (DEBUG_MOVEMENT) {
-      console.log(`[PlayerCommandController] Sending MoveToEntity:`, {
-        entityId,
-        autoInteract,
-        modifiers,
-        timestamp: Date.now(),
-      })
-    }
-
-    gameConnection.send({
-      playerAction: proto.C2S_PlayerAction.create({
-        moveToEntity: proto.MoveToEntity.create({
-          entityId,
-          autoInteract,
+          targetEntityId,
         }),
         modifiers,
       }),

@@ -3,7 +3,7 @@ package ecs
 import "origin/internal/types"
 
 // PendingAdminSpawn tracks pending admin spawn commands per player.
-// When a player issues /spawn, an entry is stored here; the next MoveTo/MoveToEntity
+// When a player issues /spawn, an entry is stored here; the next MapClick
 // click provides target coordinates and triggers the actual spawn.
 type PendingAdminSpawn struct {
 	Entries map[types.EntityID]AdminSpawnEntry
@@ -53,6 +53,24 @@ type PendingAdminObjectInfo struct {
 	Entries map[types.EntityID]struct{}
 }
 
+// PendingAdminDestroy tracks one pending permanent object deletion per administrator.
+type PendingAdminDestroy struct {
+	Entries map[types.EntityID]struct{}
+}
+
+func (p *PendingAdminDestroy) Set(playerID types.EntityID) {
+	p.Entries[playerID] = struct{}{}
+}
+
+func (p *PendingAdminDestroy) Get(playerID types.EntityID) bool {
+	_, ok := p.Entries[playerID]
+	return ok
+}
+
+func (p *PendingAdminDestroy) Clear(playerID types.EntityID) {
+	delete(p.Entries, playerID)
+}
+
 func (p *PendingAdminObjectInfo) Set(playerID types.EntityID) {
 	p.Entries[playerID] = struct{}{}
 }
@@ -64,4 +82,12 @@ func (p *PendingAdminObjectInfo) Get(playerID types.EntityID) bool {
 
 func (p *PendingAdminObjectInfo) Clear(playerID types.EntityID) {
 	delete(p.Entries, playerID)
+}
+
+// ClearPendingAdminClicks prevents selection intent from surviving a session or world transition.
+func ClearPendingAdminClicks(w *World, playerID types.EntityID) {
+	GetResource[PendingAdminSpawn](w).Clear(playerID)
+	GetResource[PendingAdminTeleport](w).Clear(playerID)
+	GetResource[PendingAdminObjectInfo](w).Clear(playerID)
+	GetResource[PendingAdminDestroy](w).Clear(playerID)
 }

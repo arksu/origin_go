@@ -1,6 +1,7 @@
 package game
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -104,6 +105,87 @@ func TestHandleTimeReportsRuntimeSeconds(t *testing.T) {
 	}
 	if got := mockChat.messages[playerID]; got != "runtime_seconds: 364686" {
 		t.Fatalf("unexpected runtime time message: %q", got)
+	}
+}
+
+func TestDestroyCommandArmsObjectSelection(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+
+	playerID := types.EntityID(42)
+	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/destroy"); !handled {
+		t.Fatal("expected /destroy to be recognized")
+	}
+	if got := mockChat.messages[playerID]; got != "Click an object to permanently destroy it and all of its contents." {
+		t.Fatalf("unexpected destroy prompt: %q", got)
+	}
+	if !ecs.GetResource[ecs.PendingAdminDestroy](world).Get(playerID) {
+		t.Fatal("expected /destroy to arm object deletion")
+	}
+}
+
+func TestDestroyCommandDeletesSelectedObjectAndOwnedInventories(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+	handler.SetObjectDeleter(destroyTestObjectDeleter{})
+
+	playerID := types.EntityID(42)
+	targetID := types.EntityID(777)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{Region: 1})
+	})
+	rootInventoryHandle := world.SpawnWithoutExternalID()
+	ecs.AddComponent(world, rootInventoryHandle, components.InventoryContainer{OwnerID: targetID})
+	ecs.GetResource[ecs.InventoryRefIndex](world).Add(_const.InventoryGrid, targetID, 0, rootInventoryHandle)
+	openState := ecs.GetResource[ecs.OpenContainerState](world)
+	openState.SetRootOpened(playerID, targetID)
+	openState.OpenRef(playerID, ecs.InventoryRefKey{Kind: _const.InventoryGrid, OwnerID: targetID})
+
+	handler.HandleCommand(world, playerID, types.InvalidHandle, "/destroy")
+	handler.ExecutePendingDestroy(world, playerID, targetID)
+
+	if world.Alive(targetHandle) {
+		t.Fatal("destroyed object must be removed from ECS")
+	}
+	if world.Alive(rootInventoryHandle) {
+		t.Fatal("destroyed object inventory must be removed from ECS")
+	}
+	if _, found := ecs.GetResource[ecs.InventoryRefIndex](world).Lookup(_const.InventoryGrid, targetID, 0); found {
+		t.Fatal("destroyed object inventory ref must be removed")
+	}
+	if _, opened := openState.GetOpenedRoot(playerID); opened {
+		t.Fatal("destroyed object must be removed from opened-container state")
+	}
+}
+
+type destroyTestObjectDeleter struct{}
+
+func (destroyTestObjectDeleter) DeleteObject(int, types.EntityID) error { return nil }
+
+func TestDestroyCommandKeepsObjectWhenPermanentDeletionIsUnavailable(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+
+	playerID := types.EntityID(42)
+	targetID := types.EntityID(778)
+	targetHandle := world.Spawn(targetID, nil)
+	handler.HandleCommand(world, playerID, types.InvalidHandle, "/destroy")
+	handler.ExecutePendingDestroy(world, playerID, targetID)
+
+	if !world.Alive(targetHandle) {
+		t.Fatal("object must remain when its persistent deletion is unavailable")
+	}
+	if got := mockChat.messages[playerID]; got != "Object destruction is unavailable." {
+		t.Fatalf("unexpected persistence error: %q", got)
 	}
 }
 
@@ -561,4 +643,35 @@ func (m *mockAdminTeleportExecutor) RequestAdminTeleport(
 	m.lastY = targetY
 	m.lastTargetLayer = targetLayer
 	return nil
+}
+
+func TestDestroySelectionLifecycle(t *testing.T) {
+	for _, target := range []types.EntityID{0, 999, 42} {
+		t.Run(strconv.FormatUint(uint64(target), 10), func(t *testing.T) {
+			w := ecs.NewWorldForTesting()
+			chat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+			h := NewChatAdminCommandHandler(nil, nil, chat, nil, nil, nil, nil, nil, nil, zaptest.NewLogger(t))
+			player := w.Spawn(42, nil)
+			ecs.GetResource[ecs.CharacterEntities](w).Add(42, player, time.Now())
+			h.HandleCommand(w, 42, player, "/destroy")
+			h.HandleCommand(w, 43, types.InvalidHandle, "/destroy")
+			h.ExecutePendingDestroy(w, 42, target)
+			if ecs.GetResource[ecs.PendingAdminDestroy](w).Get(42) {
+				t.Fatal("failed selection was not consumed")
+			}
+			if !ecs.GetResource[ecs.PendingAdminDestroy](w).Get(43) {
+				t.Fatal("other selection consumed")
+			}
+			if !w.Alive(player) {
+				t.Fatal("player destroyed")
+			}
+			if chat.messages[42] == "" || strings.Contains(chat.messages[42], "Destroyed object") {
+				t.Fatal("missing error")
+			}
+			h.HandleCommand(w, 43, types.InvalidHandle, "/info")
+			if ecs.GetResource[ecs.PendingAdminDestroy](w).Get(43) || !ecs.GetResource[ecs.PendingAdminObjectInfo](w).Get(43) {
+				t.Fatal("new pending command did not replace destroy")
+			}
+		})
+	}
 }
