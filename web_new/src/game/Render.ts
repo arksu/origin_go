@@ -44,6 +44,7 @@ export class Render {
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
 
   private onClickCallback: ((event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void) | null = null
+  private adminObjectInfoSelectionArmed = false
 
   private canvas: HTMLCanvasElement | null = null
   private lastPointerScreen: ScreenPoint | null = null
@@ -135,6 +136,21 @@ export class Render {
       const gameStore = useGameStore()
       if (event.button === 0) {
         gameStore.closeContextMenu()
+
+        if (this.adminObjectInfoSelectionArmed) {
+          this.adminObjectInfoSelectionArmed = false
+          const clickedEntity = this.objectManager.getEntityAtScreen(
+            event.screenX,
+            event.screenY,
+            this.screenToWorld.bind(this),
+          )
+          if (clickedEntity) {
+            playerCommandController.sendInteract(clickedEntity.entityId)
+          } else {
+            playerCommandController.sendMoveTo(this.lastClickWorld.x, this.lastClickWorld.y, event.modifiers)
+          }
+          return
+        }
 
         // A dropped item is always the primary-click target. Do this before
         // build/lift callbacks so the same rule holds for mouse and touch.
@@ -607,6 +623,14 @@ export class Render {
 
   onPointerClick(callback: (event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void): void {
     this.onClickCallback = callback
+  }
+
+  armAdminObjectInfoSelection(): void {
+    this.adminObjectInfoSelectionArmed = true
+  }
+
+  cancelAdminObjectInfoSelection(): void {
+    this.adminObjectInfoSelectionArmed = false
   }
 
   armBuildGhost(options: ArmBuildGhostOptions): void {

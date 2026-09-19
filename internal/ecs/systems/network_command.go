@@ -59,6 +59,7 @@ type AdminCommandHandler interface {
 	HandleCommand(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, text string) bool
 	ExecutePendingSpawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
 	ExecutePendingTeleport(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
+	ExecutePendingObjectInfo(w *ecs.World, playerID, targetID types.EntityID)
 }
 
 // InventoryOpResult represents the result of an inventory operation
@@ -462,6 +463,12 @@ func (s *NetworkCommandSystem) handleMoveTo(w *ecs.World, playerHandle types.Han
 
 	// Check for pending admin spawn — intercept click as spawn target
 	if s.adminHandler != nil {
+		pendingInfo := ecs.GetResource[ecs.PendingAdminObjectInfo](w)
+		if pendingInfo.Get(cmd.CharacterID) {
+			s.adminHandler.ExecutePendingObjectInfo(w, cmd.CharacterID, 0)
+			return
+		}
+
 		pendingTeleport := ecs.GetResource[ecs.PendingAdminTeleport](w)
 		if pendingTeleport.Get(cmd.CharacterID) {
 			s.adminHandler.ExecutePendingTeleport(w, cmd.CharacterID, playerHandle, float64(moveTo.X), float64(moveTo.Y))
@@ -737,6 +744,10 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 	}
 
 	targetEntityID := types.EntityID(interact.EntityId)
+	if s.adminHandler != nil && ecs.GetResource[ecs.PendingAdminObjectInfo](w).Get(cmd.CharacterID) {
+		s.adminHandler.ExecutePendingObjectInfo(w, cmd.CharacterID, targetEntityID)
+		return
+	}
 	targetHandle := w.GetHandleByEntityID(targetEntityID)
 	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
 		s.logger.Debug("Interact: target entity not found",

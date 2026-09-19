@@ -47,3 +47,21 @@ func (p *PendingAdminTeleport) Get(playerID types.EntityID) bool {
 func (p *PendingAdminTeleport) Clear(playerID types.EntityID) {
 	delete(p.Entries, playerID)
 }
+
+// PendingAdminObjectInfo tracks one pending object inspection per administrator.
+type PendingAdminObjectInfo struct {
+	Entries map[types.EntityID]struct{}
+}
+
+func (p *PendingAdminObjectInfo) Set(playerID types.EntityID) {
+	p.Entries[playerID] = struct{}{}
+}
+
+func (p *PendingAdminObjectInfo) Get(playerID types.EntityID) bool {
+	_, ok := p.Entries[playerID]
+	return ok
+}
+
+func (p *PendingAdminObjectInfo) Clear(playerID types.EntityID) {
+	delete(p.Entries, playerID)
+}

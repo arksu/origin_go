@@ -1,6 +1,7 @@
 package game
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -89,6 +90,23 @@ func TestHandleOnline(t *testing.T) {
 	}
 }
 
+func TestHandleTimeReportsRuntimeSeconds(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	ecs.SetResource(world, ecs.TimeState{RuntimeSecondsTotal: 364686})
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+
+	playerID := types.EntityID(42)
+	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/time"); !handled {
+		t.Fatal("expected /time to be recognized")
+	}
+	if got := mockChat.messages[playerID]; got != "runtime_seconds: 364686" {
+		t.Fatalf("unexpected runtime time message: %q", got)
+	}
+}
+
 func TestHandlePosition(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
@@ -124,6 +142,128 @@ func TestHandlePositionWithoutTransform(t *testing.T) {
 	}
 	if got := mockChat.messages[playerID]; got != "position unavailable" {
 		t.Fatalf("unexpected unavailable-position message: %q", got)
+	}
+}
+
+func TestInfoCommandReportsOnlyMutableRuntimeState(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+
+	playerID := types.EntityID(42)
+	targetID := types.EntityID(777)
+	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.ObjectInternalState{
+			Flags: []string{"lit"},
+			State: &components.RuntimeObjectState{Behaviors: map[string]any{
+				"burner": &components.BurnerBehaviorState{Fuel: 3},
+			}},
+		})
+	})
+	if targetHandle == types.InvalidHandle {
+		t.Fatal("expected test target to spawn")
+	}
+
+	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/info"); !handled {
+		t.Fatal("expected /info to be recognized")
+	}
+	if !ecs.GetResource[ecs.PendingAdminObjectInfo](world).Get(playerID) {
+		t.Fatal("expected /info to arm object inspection")
+	}
+
+	handler.ExecutePendingObjectInfo(world, playerID, targetID)
+
+	report := mockChat.messages[playerID]
+	for _, expected := range []string{`"entity_id":777`, `"burner"`, `"fuel":3`, `"flags":["lit"]`} {
+		if !strings.Contains(report, expected) {
+			t.Fatalf("expected inspection report to contain %q, got %q", expected, report)
+		}
+	}
+	if strings.Contains(report, "fuel_capacity") {
+		t.Fatalf("inspection report must not include template configuration: %q", report)
+	}
+	if ecs.GetResource[ecs.PendingAdminObjectInfo](world).Get(playerID) {
+		t.Fatal("expected inspection to be one-shot")
+	}
+}
+
+func TestInfoCommandReportsLiveStationResourcesWhenBehaviorStateIsAbsent(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+	playerID := types.EntityID(45)
+	targetID := types.EntityID(779)
+
+	world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.ObjectInternalState{State: &components.RuntimeObjectState{}})
+		ecs.AddComponent(w, h, components.StationState{
+			CurrentState: "burning",
+			Values:       map[string]float64{"temperature": 650},
+			Resources:    map[string]uint32{"fuel": 4},
+		})
+	})
+	handler.HandleCommand(world, playerID, types.InvalidHandle, "/info")
+	handler.ExecutePendingObjectInfo(world, playerID, targetID)
+
+	report := mockChat.messages[playerID]
+	for _, expected := range []string{`"station"`, `"current_state":"burning"`, `"fuel":4`, `"temperature":650`} {
+		if !strings.Contains(report, expected) {
+			t.Fatalf("expected live station report to contain %q, got %q", expected, report)
+		}
+	}
+}
+
+func TestInfoCommandRejectsArgumentsAndUnavailableTargets(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+	playerID := types.EntityID(43)
+
+	handler.HandleCommand(world, playerID, types.InvalidHandle, "/info extra")
+	if got := mockChat.messages[playerID]; got != "usage: /info" {
+		t.Fatalf("expected /info usage error, got %q", got)
+	}
+	if ecs.GetResource[ecs.PendingAdminObjectInfo](world).Get(playerID) {
+		t.Fatal("arguments must not arm inspection")
+	}
+
+	handler.HandleCommand(world, playerID, types.InvalidHandle, "/info")
+	handler.ExecutePendingObjectInfo(world, playerID, types.EntityID(999))
+	if got := mockChat.messages[playerID]; got != "Object inspection target is unavailable." {
+		t.Fatalf("expected unavailable target error, got %q", got)
+	}
+	if ecs.GetResource[ecs.PendingAdminObjectInfo](world).Get(playerID) {
+		t.Fatal("unavailable target must consume inspection")
+	}
+}
+
+func TestInfoCommandReportsRuntimeSerializationFailure(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
+	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+	playerID := types.EntityID(44)
+	targetID := types.EntityID(778)
+
+	world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.ObjectInternalState{
+			State: &components.RuntimeObjectState{Behaviors: map[string]any{
+				"invalid": make(chan struct{}),
+			}},
+		})
+	})
+	handler.HandleCommand(world, playerID, types.InvalidHandle, "/info")
+	handler.ExecutePendingObjectInfo(world, playerID, targetID)
+
+	if got := mockChat.messages[playerID]; !strings.Contains(got, "runtime state cannot be serialized") {
+		t.Fatalf("expected serialization error, got %q", got)
 	}
 }
 

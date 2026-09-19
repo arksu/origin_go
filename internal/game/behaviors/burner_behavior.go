@@ -138,7 +138,7 @@ func burnerFuelValue(w *ecs.World, playerID types.EntityID, playerHandle, target
 }
 
 func (burnerBehavior) InitObject(ctx *contracts.BehaviorObjectInitContext) error {
-	if ctx == nil || ctx.World == nil || !ctx.World.Alive(ctx.Handle) || (ctx.Reason != contracts.ObjectBehaviorInitReasonSpawn && ctx.Reason != contracts.ObjectBehaviorInitReasonRestore) {
+	if ctx == nil || ctx.World == nil || !ctx.World.Alive(ctx.Handle) || (ctx.Reason != contracts.ObjectBehaviorInitReasonSpawn && ctx.Reason != contracts.ObjectBehaviorInitReasonRestore && ctx.Reason != contracts.ObjectBehaviorInitReasonTransform) {
 		return nil
 	}
 	def, found := objectdefs.Global().GetByID(int(ctx.EntityType))

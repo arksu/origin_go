@@ -229,6 +229,7 @@ func (s *PlayerTransferService) detachTransferSource(
 	ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(req.PlayerID)
 	ecs.GetResource[ecs.PendingAdminSpawn](shard.world).Clear(req.PlayerID)
 	ecs.GetResource[ecs.PendingAdminTeleport](shard.world).Clear(req.PlayerID)
+	ecs.GetResource[ecs.PendingAdminObjectInfo](shard.world).Clear(req.PlayerID)
 	ecs.RemoveComponent[components.PendingInteraction](shard.world, playerHandle)
 	ecs.RemoveComponent[components.PendingContextAction](shard.world, playerHandle)
 	ecs.RemoveComponent[components.PendingBuildPlacement](shard.world, playerHandle)

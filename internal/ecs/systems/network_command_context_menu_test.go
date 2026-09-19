@@ -27,6 +27,71 @@ type testContextActionResolver struct {
 	actions []ContextAction
 }
 
+type testAdminObjectInfoHandler struct {
+	playerID types.EntityID
+	targetID types.EntityID
+	calls    int
+}
+
+func (h *testAdminObjectInfoHandler) HandleCommand(*ecs.World, types.EntityID, types.Handle, string) bool {
+	return false
+}
+
+func (h *testAdminObjectInfoHandler) ExecutePendingSpawn(*ecs.World, types.EntityID, types.Handle, float64, float64) {
+}
+
+func (h *testAdminObjectInfoHandler) ExecutePendingTeleport(*ecs.World, types.EntityID, types.Handle, float64, float64) {
+}
+
+func (h *testAdminObjectInfoHandler) ExecutePendingObjectInfo(_ *ecs.World, playerID, targetID types.EntityID) {
+	h.playerID = playerID
+	h.targetID = targetID
+	h.calls++
+}
+
+func TestNetworkCommandSystem_InfoInspectionConsumesInteractionAndGroundClick(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	const (
+		playerID = types.EntityID(701)
+		targetID = types.EntityID(702)
+	)
+	playerHandle := world.Spawn(playerID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
+	})
+	world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Collider{HalfWidth: 1, HalfHeight: 1, Layer: 1, Mask: 1})
+	})
+
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	admin := &testAdminObjectInfoHandler{}
+	system.SetAdminHandler(admin)
+	ecs.GetResource[ecs.PendingAdminObjectInfo](world).Set(playerID)
+
+	system.handleInteract(world, playerHandle, &network.PlayerCommand{
+		CharacterID: playerID,
+		Payload:     &netproto.Interact{EntityId: uint64(targetID)},
+	})
+	if admin.calls != 1 || admin.playerID != playerID || admin.targetID != targetID {
+		t.Fatalf("expected inspected interaction (%d, %d), got calls=%d player=%d target=%d", playerID, targetID, admin.calls, admin.playerID, admin.targetID)
+	}
+
+	ecs.GetResource[ecs.PendingAdminObjectInfo](world).Set(playerID)
+	system.handleMoveTo(world, playerHandle, &network.PlayerCommand{
+		CharacterID: playerID,
+		Payload:     &netproto.MoveTo{X: 42, Y: 99},
+	})
+	if admin.calls != 2 || admin.targetID != 0 {
+		t.Fatalf("expected ground click to inspect target 0, got calls=%d target=%d", admin.calls, admin.targetID)
+	}
+	movement, ok := ecs.GetComponent[components.Movement](world, playerHandle)
+	if !ok {
+		t.Fatal("expected player movement component")
+	}
+	if movement.TargetX != 0 || movement.TargetY != 0 {
+		t.Fatalf("expected ground click not to move player, got target=(%g,%g)", movement.TargetX, movement.TargetY)
+	}
+}
+
 func (r testContextActionResolver) ComputeActions(
 	_ *ecs.World,
 	_ types.EntityID,

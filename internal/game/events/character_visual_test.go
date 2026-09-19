@@ -1,6 +1,7 @@
 package events
 
 import (
+	"sync"
 	"testing"
 
 	constt "origin/internal/const"
@@ -13,6 +14,38 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+func TestConcurrentObjectSpawnSnapshotsWithMissingOptionalComponents(t *testing.T) {
+	w := ecs.NewWorldWithCapacity(16, nil, 0)
+	character := w.Spawn(101, nil)
+	ecs.AddComponent(w, character, components.Appearance{Resource: "player"})
+	ecs.AddComponent(w, character, components.EntityInfo{TypeID: 1})
+	ecs.AddComponent(w, character, components.Transform{X: 20, Y: 30})
+	dispatcher := &NetworkVisibilityDispatcher{logger: zap.NewNop()}
+	var worldMu sync.RWMutex
+	var readers sync.WaitGroup
+	start := make(chan struct{})
+	for range 32 {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			<-start
+			// Async visibility callbacks share the shard's read lock.
+			worldMu.RLock()
+			defer worldMu.RUnlock()
+			spawn := dispatcher.buildObjectSpawn(w, 101, character)
+			if spawn == nil || spawn.CharacterVisual == nil || spawn.EntityId != 101 || spawn.CarriedByEntityId != 0 {
+				t.Error("expected a character snapshot with no carried-object state")
+			}
+		}()
+	}
+	close(start)
+	readers.Wait()
+	if w.GetStorage(ecs.GetComponentID[components.Collider]()) != nil ||
+		w.GetStorage(ecs.GetComponentID[components.LiftedObjectState]()) != nil {
+		t.Fatal("spawn snapshots must not create optional component storage")
+	}
+}
 
 func TestObjectSpawnCapturesLatestEquipmentForLateObserver(t *testing.T) {
 	previous := itemdefs.Global()

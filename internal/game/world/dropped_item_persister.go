@@ -2,7 +2,9 @@ package world
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -83,7 +85,9 @@ func (p *DroppedItemPersisterDB) ReplaceObjectWithDroppedItem(record inventory.D
 		if err := persistDroppedItemRecord(ctx, q, record); err != nil {
 			return err
 		}
-		if _, err := q.SoftDeleteObject(ctx, repository.SoftDeleteObjectParams{Region: sourceRegion, ID: int64(sourceID)}); err != nil {
+		// Newly built chunk objects are not written until the chunk saves, so their
+		// replacement source has no DB row to soft-delete yet.
+		if _, err := q.SoftDeleteObject(ctx, repository.SoftDeleteObjectParams{Region: sourceRegion, ID: int64(sourceID)}); err != nil && !isMissingReplacementSource(err) {
 			return fmt.Errorf("soft-delete replacement source: %w", err)
 		}
 		if err := q.DeleteInventoriesByOwner(ctx, int64(sourceID)); err != nil {
@@ -91,6 +95,10 @@ func (p *DroppedItemPersisterDB) ReplaceObjectWithDroppedItem(record inventory.D
 		}
 		return nil
 	})
+}
+
+func isMissingReplacementSource(err error) bool {
+	return errors.Is(err, sql.ErrNoRows)
 }
 
 // PersistDroppedObjectBatchWithPlayerInventories commits a player drop in one

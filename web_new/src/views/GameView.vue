@@ -456,6 +456,9 @@ async function handleRetry() {
 }
 
 function handleChatSend(text: string) {
+  if (text.trim() === '/info') {
+    gameFacade?.armAdminObjectInfoSelection()
+  }
   sendChatMessage(text)
 }
 
@@ -703,6 +706,7 @@ const hotkeys: HotkeyConfig[] = [...DEFAULT_HOTKEYS, ...hotbarNumberHotkeys].map
         chatContainerRef.value?.focusChat()
         break
       case 'Escape':
+        gameFacade?.cancelAdminObjectInfoSelection()
         if (showSettingsWindow.value) {
           showSettingsWindow.value = false
           break

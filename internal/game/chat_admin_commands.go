@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -140,6 +141,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	case "/online":
 		h.handleOnline(w, playerID)
 		return true
+	case "/time":
+		h.handleTime(w, playerID)
+		return true
 	case "/pos":
 		h.handlePosition(w, playerID, playerHandle)
 		return true
@@ -166,6 +170,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 		return true
 	case "/health":
 		h.handleHealthSnapshot(w, playerID, playerHandle)
+		return true
+	case "/info":
+		h.handleObjectInfo(w, playerID, parts[1:])
 		return true
 	case "/revive":
 		h.handleRevive(w, playerID, playerHandle)
@@ -276,6 +283,7 @@ func (h *ChatAdminCommandHandler) handleSpawn(
 
 	// /spawn and /tp click mode are mutually exclusive.
 	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
 
 	pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
 	pending.Set(playerID, ecs.AdminSpawnEntry{
@@ -310,6 +318,7 @@ func (h *ChatAdminCommandHandler) handleTeleport(
 	case 0:
 		// /tp click mode (current layer only)
 		ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
+		ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
 		ecs.GetResource[ecs.PendingAdminTeleport](w).Set(playerID)
 		h.sendSystemMessage(playerID, "Click on the map where you want to teleport.")
 		h.logger.Info("Admin /tp pending click", zap.Uint64("player_id", uint64(playerID)))
@@ -342,6 +351,7 @@ func (h *ChatAdminCommandHandler) handleTeleport(
 		// Any explicit /tp clears deferred states to avoid ambiguous click actions.
 		ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
 		ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+		ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
 
 		if err := h.teleportExecutor.RequestAdminTeleport(playerID, w.Layer, x, y, targetLayer); err != nil {
 			h.sendSystemMessage(playerID, "teleport failed: "+err.Error())
@@ -495,6 +505,86 @@ func (h *ChatAdminCommandHandler) ExecutePendingTeleport(
 	h.sendSystemMessage(playerID, fmt.Sprintf("Teleport requested to (%d, %d).", targetXI, targetYI))
 }
 
+func (h *ChatAdminCommandHandler) handleObjectInfo(w *ecs.World, playerID types.EntityID, args []string) {
+	if len(args) != 0 {
+		h.sendSystemMessage(playerID, "usage: /info")
+		return
+	}
+
+	ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Set(playerID)
+	h.sendSystemMessage(playerID, "Click an object to inspect its current state.")
+}
+
+// ExecutePendingObjectInfo consumes a pending /info command. targetID is zero
+// when the administrator selected empty ground.
+func (h *ChatAdminCommandHandler) ExecutePendingObjectInfo(w *ecs.World, playerID, targetID types.EntityID) {
+	pending := ecs.GetResource[ecs.PendingAdminObjectInfo](w)
+	if !pending.Get(playerID) {
+		return
+	}
+	pending.Clear(playerID)
+
+	if targetID == 0 {
+		h.sendSystemMessage(playerID, "Object inspection requires clicking an object.")
+		return
+	}
+
+	targetHandle := w.GetHandleByEntityID(targetID)
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		h.sendSystemMessage(playerID, "Object inspection target is unavailable.")
+		return
+	}
+
+	internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, targetHandle)
+	if !hasState {
+		h.sendSystemMessage(playerID, fmt.Sprintf("object %d has no mutable runtime state", targetID))
+		return
+	}
+	runtimeState, hasRuntimeState := components.GetRuntimeObjectState(internalState)
+	stationState, hasStationState := ecs.GetComponent[components.StationState](w, targetHandle)
+	if !hasRuntimeState && !hasStationState {
+		h.sendSystemMessage(playerID, fmt.Sprintf("object %d has no mutable runtime state", targetID))
+		return
+	}
+
+	var behaviorStates map[string]any
+	var station *components.StationPersistentState
+	if hasRuntimeState {
+		behaviorStates = runtimeState.Behaviors
+		station = runtimeState.Station
+	}
+	if hasStationState {
+		station = &components.StationPersistentState{
+			CurrentState: stationState.CurrentState,
+			Values:       stationState.Values,
+			Resources:    stationState.Resources,
+		}
+	}
+
+	report, err := json.Marshal(adminObjectRuntimeReport{
+		EntityID:  uint64(targetID),
+		Flags:     internalState.Flags,
+		IsDirty:   internalState.IsDirty,
+		Behaviors: behaviorStates,
+		Station:   station,
+	})
+	if err != nil {
+		h.sendSystemMessage(playerID, fmt.Sprintf("object %d runtime state cannot be serialized: %v", targetID, err))
+		return
+	}
+	h.sendSystemMessage(playerID, string(report))
+}
+
+type adminObjectRuntimeReport struct {
+	EntityID  uint64                             `json:"entity_id"`
+	Flags     []string                           `json:"flags,omitempty"`
+	IsDirty   bool                               `json:"is_dirty"`
+	Behaviors map[string]any                     `json:"behaviors,omitempty"`
+	Station   *components.StationPersistentState `json:"station,omitempty"`
+}
+
 // handleOnline processes: /online - displays current online players count
 func (h *ChatAdminCommandHandler) handleOnline(
 	w *ecs.World,
@@ -509,6 +599,11 @@ func (h *ChatAdminCommandHandler) handleOnline(
 	h.logger.Info("Admin /online executed",
 		zap.Uint64("player_id", uint64(playerID)),
 		zap.Int("online_count", onlineCount))
+}
+
+func (h *ChatAdminCommandHandler) handleTime(w *ecs.World, playerID types.EntityID) {
+	runtimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
+	h.sendSystemMessage(playerID, fmt.Sprintf("runtime_seconds: %d", runtimeSeconds))
 }
 
 // handlePosition processes: /pos - displays the caller's current coordinates.
