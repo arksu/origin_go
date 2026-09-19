@@ -7,8 +7,8 @@ import (
 )
 
 // PendingInteraction stores the intent to auto-interact with a target entity
-// once the player reaches interaction range. Set by MoveToEntity (autoInteract=true)
-// and cleared on any new MoveTo/MoveToEntity or after execution by AutoInteractSystem.
+// once the player reaches interaction range. Set by pickup interactions
+// and cleared by new movement intent or after execution by AutoInteractSystem.
 type PendingInteraction struct {
 	TargetEntityID types.EntityID
 	TargetHandle   types.Handle

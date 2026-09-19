@@ -247,6 +247,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
+	adminHandler.SetObjectDeleter(worldObjectPersistence)
+	adminHandler.SetContainerCloseSender(s)
 	adminHandler.SetLifeDeathFactor(cfg.Game.LifeDeathFactor)
 	adminHandler.SetAllowReviveCommand(strings.EqualFold(cfg.Game.Env, "dev"))
 	s.adminHandler = adminHandler
@@ -649,9 +651,7 @@ func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.E
 	openState.CloseAllForPlayer(playerID)
 
 	ecs.GetResource[ecs.OpenedWindowsState](w).ClearPlayer(playerID)
-	ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
-	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
-	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
+	ecs.ClearPendingAdminClicks(w, playerID)
 
 	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)
 	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)

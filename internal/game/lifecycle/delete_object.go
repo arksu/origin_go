@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"origin/internal/ecs"
+	"origin/internal/ecs/components"
 	"origin/internal/types"
 )
 
@@ -38,19 +39,36 @@ func DeleteObject(
 	return w.Despawn(handle)
 }
 
-// DeleteOwnedInventoryContainers removes all ECS containers registered to ownerID.
-// A container's nested data is represented by containers indexed under item IDs; for
-// a dropped item the root item ID equals ownerID, so all of its runtime inventory data
-// is removed in the same pass.
+// DeleteOwnedInventoryContainers removes all ECS containers owned by an object and
+// recursively removes nested containers owned by its contained items.
 func DeleteOwnedInventoryContainers(w *ecs.World, ownerID types.EntityID) {
 	if w == nil || ownerID == 0 {
 		return
 	}
 
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	for _, containerHandle := range refIndex.RemoveAllByOwner(ownerID) {
-		if w.Alive(containerHandle) {
-			w.Despawn(containerHandle)
+	pendingOwners := []types.EntityID{ownerID}
+	seenOwners := make(map[types.EntityID]struct{}, 4)
+	for len(pendingOwners) > 0 {
+		currentOwnerID := pendingOwners[0]
+		pendingOwners = pendingOwners[1:]
+		if _, seen := seenOwners[currentOwnerID]; seen {
+			continue
+		}
+		seenOwners[currentOwnerID] = struct{}{}
+
+		for _, containerHandle := range refIndex.RemoveAllByOwner(currentOwnerID) {
+			container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
+			if hasContainer {
+				for _, item := range container.Items {
+					if item.ItemID != 0 {
+						pendingOwners = append(pendingOwners, item.ItemID)
+					}
+				}
+			}
+			if w.Alive(containerHandle) {
+				w.Despawn(containerHandle)
+			}
 		}
 	}
 }

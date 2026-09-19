@@ -16,6 +16,7 @@ import (
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
+	"origin/internal/game/lifecycle"
 	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
@@ -53,6 +54,8 @@ type ChatAdminCommandHandler struct {
 	chunkProvider         AdminSpawnChunkProvider
 	visionForcer          AdminVisionForcer
 	teleportExecutor      AdminTeleportExecutor
+	objectDeleter         gameworld.ObjectDeleter
+	containerCloseSender  AdminContainerCloseSender
 	behaviorRegistry      contracts.BehaviorRegistry
 	eventBus              *eventbus.EventBus
 	logger                *zap.Logger
@@ -69,6 +72,10 @@ type AdminAlertSender interface {
 // AdminTeleportExecutor handles full player teleport transfer flow.
 type AdminTeleportExecutor interface {
 	RequestAdminTeleport(playerID types.EntityID, sourceLayer int, targetX, targetY int, targetLayer *int) error
+}
+
+type AdminContainerCloseSender interface {
+	SendContainerClosed(entityID types.EntityID, ref *netproto.InventoryRef)
 }
 
 func NewChatAdminCommandHandler(
@@ -101,6 +108,14 @@ func NewChatAdminCommandHandler(
 
 func (h *ChatAdminCommandHandler) SetTeleportExecutor(executor AdminTeleportExecutor) {
 	h.teleportExecutor = executor
+}
+
+func (h *ChatAdminCommandHandler) SetObjectDeleter(deleter gameworld.ObjectDeleter) {
+	h.objectDeleter = deleter
+}
+
+func (h *ChatAdminCommandHandler) SetContainerCloseSender(sender AdminContainerCloseSender) {
+	h.containerCloseSender = sender
 }
 
 func (h *ChatAdminCommandHandler) SetLifeDeathFactor(value float64) {
@@ -173,6 +188,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 		return true
 	case "/info":
 		h.handleObjectInfo(w, playerID, parts[1:])
+		return true
+	case "/destroy":
+		h.handleDestroy(w, playerID, parts[1:])
 		return true
 	case "/revive":
 		h.handleRevive(w, playerID, playerHandle)
@@ -284,6 +302,7 @@ func (h *ChatAdminCommandHandler) handleSpawn(
 	// /spawn and /tp click mode are mutually exclusive.
 	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
 	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminDestroy](w).Clear(playerID)
 
 	pending := ecs.GetResource[ecs.PendingAdminSpawn](w)
 	pending.Set(playerID, ecs.AdminSpawnEntry{
@@ -319,6 +338,7 @@ func (h *ChatAdminCommandHandler) handleTeleport(
 		// /tp click mode (current layer only)
 		ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
 		ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
+		ecs.GetResource[ecs.PendingAdminDestroy](w).Clear(playerID)
 		ecs.GetResource[ecs.PendingAdminTeleport](w).Set(playerID)
 		h.sendSystemMessage(playerID, "Click on the map where you want to teleport.")
 		h.logger.Info("Admin /tp pending click", zap.Uint64("player_id", uint64(playerID)))
@@ -352,6 +372,7 @@ func (h *ChatAdminCommandHandler) handleTeleport(
 		ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
 		ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
 		ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
+		ecs.GetResource[ecs.PendingAdminDestroy](w).Clear(playerID)
 
 		if err := h.teleportExecutor.RequestAdminTeleport(playerID, w.Layer, x, y, targetLayer); err != nil {
 			h.sendSystemMessage(playerID, "teleport failed: "+err.Error())
@@ -513,8 +534,112 @@ func (h *ChatAdminCommandHandler) handleObjectInfo(w *ecs.World, playerID types.
 
 	ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
 	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminDestroy](w).Clear(playerID)
 	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Set(playerID)
 	h.sendSystemMessage(playerID, "Click an object to inspect its current state.")
+}
+
+func (h *ChatAdminCommandHandler) handleDestroy(w *ecs.World, playerID types.EntityID, args []string) {
+	if len(args) != 0 {
+		h.sendSystemMessage(playerID, "usage: /destroy")
+		return
+	}
+	ecs.GetResource[ecs.PendingAdminSpawn](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Clear(playerID)
+	ecs.GetResource[ecs.PendingAdminDestroy](w).Set(playerID)
+	h.sendSystemMessage(playerID, "Click an object to permanently destroy it and all of its contents.")
+}
+
+// ExecutePendingDestroy consumes a pending /destroy command. targetID is zero
+// when the administrator selected empty ground.
+func (h *ChatAdminCommandHandler) ExecutePendingDestroy(w *ecs.World, playerID, targetID types.EntityID) {
+	pending := ecs.GetResource[ecs.PendingAdminDestroy](w)
+	if !pending.Get(playerID) {
+		return
+	}
+	pending.Clear(playerID)
+
+	if targetID == 0 {
+		h.sendSystemMessage(playerID, "Object destruction requires clicking an object.")
+		return
+	}
+	if _, isCharacter := ecs.GetResource[ecs.CharacterEntities](w).Map[targetID]; isCharacter {
+		h.sendSystemMessage(playerID, "Players cannot be destroyed.")
+		return
+	}
+
+	targetHandle := w.GetHandleByEntityID(targetID)
+	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
+		return
+	}
+	if h.objectDeleter == nil {
+		h.sendSystemMessage(playerID, "Object destruction is unavailable.")
+		return
+	}
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+	if !hasInfo || info.Region <= 0 {
+		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
+		return
+	}
+	if err := h.objectDeleter.DeleteObject(info.Region, targetID); err != nil {
+		h.logger.Error("Admin /destroy failed", zap.Uint64("target_id", uint64(targetID)), zap.Error(err))
+		h.sendSystemMessage(playerID, "Object destruction failed.")
+		return
+	}
+	h.closeDestroyedObjectInventories(w, targetID)
+	h.removeDestroyedObjectFromSpatial(w, targetHandle, targetID, info)
+	if !lifecycle.DeleteObject(w, targetID, targetHandle, lifecycle.DeleteObjectOptions{DeleteOwnedInventories: true}) {
+		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
+		return
+	}
+	h.sendSystemMessage(playerID, fmt.Sprintf("Destroyed object %d.", targetID))
+}
+
+func (h *ChatAdminCommandHandler) closeDestroyedObjectInventories(w *ecs.World, objectID types.EntityID) {
+	openState := ecs.GetResource[ecs.OpenContainerState](w)
+	players := openState.PlayersByRoot[objectID]
+	if len(players) == 0 {
+		return
+	}
+	playerIDs := make([]types.EntityID, 0, len(players))
+	for playerID := range players {
+		playerIDs = append(playerIDs, playerID)
+	}
+	for _, playerID := range playerIDs {
+		for _, ref := range openState.CloseAllForPlayer(playerID) {
+			if h.containerCloseSender == nil {
+				continue
+			}
+			h.containerCloseSender.SendContainerClosed(playerID, &netproto.InventoryRef{
+				Kind:         netproto.InventoryKind(ref.Kind),
+				OwnerId:      uint64(ref.OwnerID),
+				InventoryKey: ref.Key,
+			})
+		}
+	}
+}
+
+func (h *ChatAdminCommandHandler) removeDestroyedObjectFromSpatial(w *ecs.World, handle types.Handle, entityID types.EntityID, info components.EntityInfo) {
+	if h.chunkProvider == nil {
+		return
+	}
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
+	chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, handle)
+	if !hasTransform || !hasChunkRef {
+		return
+	}
+	chunk := h.chunkProvider.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY})
+	if chunk == nil {
+		return
+	}
+	if info.IsStatic {
+		chunk.Spatial().RemoveStatic(handle, int(transform.X), int(transform.Y))
+	} else {
+		chunk.Spatial().RemoveDynamic(handle, int(transform.X), int(transform.Y))
+	}
+	chunk.MarkDeletedObjectID(entityID)
 }
 
 // ExecutePendingObjectInfo consumes a pending /info command. targetID is zero

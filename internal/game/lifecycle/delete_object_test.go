@@ -45,3 +45,33 @@ func TestDeleteObjectRemovesOwnedRootAndNestedContainers(t *testing.T) {
 		t.Fatal("nested inventory ref was not removed")
 	}
 }
+
+func TestDeleteObjectRemovesNestedContainersOwnedByDeletedItems(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	objectID := types.EntityID(501)
+	itemID := types.EntityID(502)
+	objectHandle := w.Spawn(objectID, nil)
+	rootHandle := w.SpawnWithoutExternalID()
+	nestedHandle := w.SpawnWithoutExternalID()
+
+	ecs.AddComponent(w, rootHandle, components.InventoryContainer{
+		OwnerID: objectID,
+		Kind:    constt.InventoryGrid,
+		Items:   []components.InvItem{{ItemID: itemID, TypeID: 1, Quantity: 1}},
+	})
+	ecs.AddComponent(w, nestedHandle, components.InventoryContainer{OwnerID: itemID, Kind: constt.InventoryGrid})
+
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
+	refIndex.Add(constt.InventoryGrid, objectID, 0, rootHandle)
+	refIndex.Add(constt.InventoryGrid, itemID, 0, nestedHandle)
+
+	if !DeleteObject(w, objectID, objectHandle, DeleteObjectOptions{DeleteOwnedInventories: true}) {
+		t.Fatal("DeleteObject returned false")
+	}
+	if w.Alive(nestedHandle) {
+		t.Fatal("nested inventory owned by a deleted item must be despawned")
+	}
+	if _, found := refIndex.Lookup(constt.InventoryGrid, itemID, 0); found {
+		t.Fatal("nested inventory ref must be removed")
+	}
+}

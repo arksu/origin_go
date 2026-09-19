@@ -314,14 +314,10 @@ message ChunkData {
 // ACTIONS
 // ============================================================================
 
-message MoveTo {
+message MapClick {
   int32 x = 1;
   int32 y = 2;
-}
-
-message MoveToEntity {
-  uint64 entity_id = 1;
-  bool auto_interact = 2; // автоматически взаимодействовать при достижении
+  uint64 target_entity_id = 3; // zero for empty ground
 }
 
 message Interact {
@@ -341,9 +337,10 @@ enum InteractionType {
 }
 
 message C2S_PlayerAction {
+  reserved 1, 2;
+  reserved "move_to", "move_to_entity";
   oneof action {
-    MoveTo move_to = 1;
-    MoveToEntity move_to_entity = 2;
+    MapClick map_click = 5;
     Interact interact = 3;
     SelectContextAction select_context_action = 4;
     //    Attack attack = 4;

@@ -63,14 +63,6 @@ export class GameFacade {
     })
   }
 
-  armAdminObjectInfoSelection(): void {
-    this.render?.armAdminObjectInfoSelection()
-  }
-
-  cancelAdminObjectInfoSelection(): void {
-    this.render?.cancelAdminObjectInfoSelection()
-  }
-
   setCamera(x: number, y: number): void {
     this.render?.setCamera(x, y)
   }

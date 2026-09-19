@@ -70,8 +70,8 @@ func NewVirtualClient(cfg *Config, db *persistence.Postgres, pool *AccountPool, 
 	vc.moveMsg = netproto.ClientMessage{
 		Payload: &netproto.ClientMessage_PlayerAction{
 			PlayerAction: &netproto.C2S_PlayerAction{
-				Action: &netproto.C2S_PlayerAction_MoveTo{
-					MoveTo: &netproto.MoveTo{},
+				Action: &netproto.C2S_PlayerAction_MapClick{
+					MapClick: &netproto.MapClick{},
 				},
 			},
 		},
@@ -383,9 +383,9 @@ func (vc *VirtualClient) sendMoveCommand() error {
 
 	vc.moveMsg.Sequence = vc.nextSequence()
 	if payload, ok := vc.moveMsg.Payload.(*netproto.ClientMessage_PlayerAction); ok && payload.PlayerAction != nil {
-		if act, ok := payload.PlayerAction.Action.(*netproto.C2S_PlayerAction_MoveTo); ok && act.MoveTo != nil {
-			act.MoveTo.X = targetX
-			act.MoveTo.Y = targetY
+		if act, ok := payload.PlayerAction.Action.(*netproto.C2S_PlayerAction_MapClick); ok && act.MapClick != nil {
+			act.MapClick.X = targetX
+			act.MapClick.Y = targetY
 		}
 	}
 
