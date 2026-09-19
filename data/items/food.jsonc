@@ -14,6 +14,19 @@
         "w": 1,
         "h": 1
       }
+    },
+    {
+      "defId": 2002,
+      "key": "beef",
+      "name": "Beef",
+      "resource": "items/beef.png",
+      "tags": [
+        "food"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
     }
   ]
 }
