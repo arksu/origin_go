@@ -30,6 +30,8 @@ Add `abilities` to item definitions as a key-to-positive-integer map. A burner c
 
 This permits `fuel`, `coal`, and later types without a global item-class enum or per-object item-key lists. A matching item is consumed in full even when capacity discards some or all of the result; partial consumption would require stack/instance splitting and would violate the agreed interaction rule.
 
+Refuelling is deliberately consumption-first: remove the exact hand item, then mutate and persist burner state. A crash in between may lose the removed item, but no recovery path can apply its fuel twice.
+
 Alternative: one `fuelValue` field with an object-specific allowlist of item keys. This does not represent mutually incompatible fuels or compose multiple abilities.
 
 ### 2. `burner` is a reusable object behavior, with a runtime system for time advancement

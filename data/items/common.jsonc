@@ -8,6 +8,9 @@
       "name": "Branch",
       "discoveryLP": 10,
       "resource": "items/branch.png",
+      "abilities": {
+        "fuel": 1
+      },
       "tags": [],
       "size": {
         "w": 1,

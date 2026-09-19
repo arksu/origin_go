@@ -17,12 +17,13 @@ type ObjectDef struct {
 	Behaviors                 map[string]json.RawMessage `json:"behaviors,omitempty"`
 
 	// resolved at load time
-	IsStatic                       bool                `json:"-"`
-	ContextMenuEvenForOneItemValue bool                `json:"-"`
-	BehaviorOrder                  []string            `json:"-"`
-	BehaviorPriorities             map[string]int      `json:"-"`
-	TreeConfig                     *TreeBehaviorConfig `json:"-"`
-	TakeConfig                     *TakeBehaviorConfig `json:"-"`
+	IsStatic                       bool                  `json:"-"`
+	ContextMenuEvenForOneItemValue bool                  `json:"-"`
+	BehaviorOrder                  []string              `json:"-"`
+	BehaviorPriorities             map[string]int        `json:"-"`
+	TreeConfig                     *TreeBehaviorConfig   `json:"-"`
+	TakeConfig                     *TakeBehaviorConfig   `json:"-"`
+	BurnerConfig                   *BurnerBehaviorConfig `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.
@@ -109,6 +110,13 @@ type TakeConfig struct {
 type TakeBehaviorConfig struct {
 	Priority int          `json:"priority,omitempty"`
 	Items    []TakeConfig `json:"items"`
+}
+type BurnerBehaviorConfig struct {
+	Priority                                  int
+	FuelAbilities                             []string
+	FuelCapacity, SecondsPerFuel, InitialFuel uint32
+	DropItem                                  string
+	Despawn                                   bool
 }
 
 // ObjectsFile represents a JSONC file containing object definitions.

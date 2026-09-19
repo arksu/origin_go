@@ -57,6 +57,12 @@ type BuildBehaviorState struct {
 	Items        []BuildRequiredItemState `json:"items,omitempty"`
 }
 
+type BurnerBehaviorState struct {
+	Fuel                        uint32 `json:"fuel"`
+	NextFuelBurnAtRuntimeSecond int64  `json:"next_fuel_burn_at_runtime_second"`
+	OutcomeCreated              bool   `json:"outcome_created,omitempty"`
+}
+
 type BuildRequiredItemState struct {
 	Slot int `json:"slot,omitempty"`
 

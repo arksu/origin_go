@@ -126,6 +126,10 @@ func NewContextActionService(
 	return s
 }
 
+func (s *ContextActionService) SetInventoryUpdate(fn func(*ecs.World, types.EntityID, types.Handle)) {
+	s.actionDeps.InventoryUpdate = fn
+}
+
 func (s *ContextActionService) SetSoundEventSender(sender soundEventSender) {
 	if s == nil || s.soundEvents == nil {
 		return

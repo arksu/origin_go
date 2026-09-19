@@ -29,7 +29,7 @@ The system SHALL allow a world-object burner to declare an ordered-independent s
 - **THEN** the burner SHALL not consume the item or change its fuel reserve
 
 ### Requirement: Burner sums accepted abilities and consumes the offered item
-For an accepted item, the burner SHALL sum all of that item's positive ability values whose keys are in its accepted fuel-ability set. It SHALL consume the offered item exactly once and add the sum to its reserve, clamped to fuel capacity. The burner SHALL consume an accepted item even when the reserve is already full or the added amount overflows capacity.
+For an accepted item, the burner SHALL sum all of that item's positive ability values whose keys are in its accepted fuel-ability set. It SHALL remove the offered item from hand before adding the sum to its reserve, clamped to fuel capacity. The burner SHALL consume an accepted item even when the reserve is already full or the added amount overflows capacity. If a process failure occurs after removal and before burner persistence, loss of that item is permitted; the system MUST NOT apply its fuel contribution more than once.
 
 #### Scenario: Multiple accepted abilities are summed
 - **WHEN** a burner accepts `fuel` and `peat` and the offered item has `fuel: 1` and `peat: 2`

@@ -113,6 +113,15 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	objectFactory.SetObjectDataUpdater(worldObjectPersistence)
 	// Create vision system first so it can be passed to other systems
 	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, enableVisionStats, logger)
+	burnerExhaustion := &burnerExhaustionHandler{
+		idAllocator:          entityIDManager,
+		replacementPersister: worldObjectPersistence,
+		despawnPersister:     worldObjectPersistence,
+		chunkManager:         s.chunkManager,
+		visionForcer:         visionSystem,
+		logger:               logger,
+	}
+	s.chunkManager.SetRestoredObjectReconciler(burnerExhaustion)
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
@@ -198,6 +207,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		behaviorRegistry,
 		logger,
 	)
+	contextActionService.SetInventoryUpdate(func(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+		s.SendInventorySnapshots(w, playerID, playerHandle)
+	})
 	contextActionService.SetCraftingService(craftingService)
 	contextActionService.SetSoundEventSender(s)
 	s.craftingService = craftingService
@@ -251,6 +263,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
+	s.world.AddSystem(systems.NewBurnerSystem(burnerExhaustion.systemHandler()))
 	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))

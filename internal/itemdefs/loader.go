@@ -237,6 +237,15 @@ func validateItem(item *ItemDef, filePath string) error {
 		}
 	}
 
+	for ability, value := range item.Abilities {
+		if strings.TrimSpace(ability) == "" {
+			return &LoadError{FilePath: filePath, DefID: item.DefID, Key: item.Key, Message: "abilities contains an empty key"}
+		}
+		if value == 0 {
+			return &LoadError{FilePath: filePath, DefID: item.DefID, Key: item.Key, Message: fmt.Sprintf("abilities.%s must be > 0", ability)}
+		}
+	}
+
 	return nil
 }
 

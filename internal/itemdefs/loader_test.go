@@ -113,6 +113,48 @@ func TestLoadFromDirectory_DiscoveryLPOverride(t *testing.T) {
 	assert.Equal(t, int64(77), customLP.DiscoveryLP)
 }
 
+func TestLoadFromDirectory_ItemAbilities(t *testing.T) {
+	dir := t.TempDir()
+
+	json := `{
+		"v": 1,
+		"source": "test",
+		"items": [{
+			"defId": 1001,
+			"key": "fuel_item",
+			"name": "Fuel Item",
+			"tags": [],
+			"size": { "w": 1, "h": 1 },
+			"allowed": { "hand": true, "grid": true, "equipmentSlots": [] },
+			"abilities": { "fuel": 1, "peat": 2 }
+		}]
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.json"), []byte(json), 0644))
+
+	registry, err := LoadFromDirectory(dir, testLogger())
+	require.NoError(t, err)
+	item, found := registry.GetByKey("fuel_item")
+	require.True(t, found)
+	assert.Equal(t, map[string]uint32{"fuel": 1, "peat": 2}, item.Abilities)
+}
+
+func TestLoadFromDirectory_InvalidItemAbilities(t *testing.T) {
+	for name, abilities := range map[string]string{
+		"empty key":  `{"": 1}`,
+		"zero value": `{"fuel": 0}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			json := `{"v":1,"source":"test","items":[{"defId":1001,"key":"test","name":"Test","tags":[],"size":{"w":1,"h":1},"allowed":{"hand":true,"grid":true,"equipmentSlots":[]},"abilities":` + abilities + `}]}`
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "test.json"), []byte(json), 0644))
+
+			_, err := LoadFromDirectory(dir, testLogger())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "abilities")
+		})
+	}
+}
+
 func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {
 	dir := t.TempDir()
 

@@ -312,7 +312,7 @@ func TestStationCraftEndToEndFinalizationAfterAutonomousUpdate(t *testing.T) {
 	}))
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
 		{DefID: 7083, Key: "player", Name: "Player"},
-		{DefID: 7084, Key: "campfire", Name: "Campfire"},
+		{DefID: 7084, Key: "campfire", Name: "Campfire", BurnerConfig: &objectdefs.BurnerBehaviorConfig{SecondsPerFuel: 1}},
 	}))
 	craftdefs.SetGlobalForTesting(craftdefs.NewRegistry([]craftdefs.CraftDef{{
 		DefID:                1,
@@ -367,6 +367,9 @@ func TestStationCraftEndToEndFinalizationAfterAutonomousUpdate(t *testing.T) {
 						ResourceKey: "fuel", AmountPerTick: 1, RequiredState: "burning", StateWhenDepleted: "unlit",
 					}},
 				})
+				ecs.WithComponent(w, h, func(state *components.ObjectInternalState) {
+					components.SetBehaviorState(state, "burner", &components.BurnerBehaviorState{Fuel: test.fuel, NextFuelBurnAtRuntimeSecond: 1})
+				})
 			})
 			ecs.GetResource[ecs.LinkState](world).SetLink(ecs.PlayerLink{
 				PlayerID: playerID, PlayerHandle: playerHandle, TargetID: stationID, TargetHandle: stationHandle,
@@ -385,7 +388,8 @@ func TestStationCraftEndToEndFinalizationAfterAutonomousUpdate(t *testing.T) {
 
 			contextActions := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil, behaviors.MustDefaultRegistry(), zap.NewNop())
 			contextActions.SetCraftingService(crafting)
-			world.AddSystem(ecssystems.NewStationSystem(nil))
+			ecs.SetResource(world, ecs.TimeState{RuntimeSecondsTotal: 1})
+			world.AddSystem(ecssystems.NewBurnerSystem())
 			world.AddSystem(NewCyclicActionSystem(contextActions, nil, zap.NewNop()))
 			world.Update(0)
 
