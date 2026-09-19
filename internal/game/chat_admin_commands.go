@@ -594,6 +594,7 @@ func (h *ChatAdminCommandHandler) ExecutePendingDestroy(w *ecs.World, playerID, 
 		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
 		return
 	}
+	invalidateEntityVisibility(w, info.Layer, targetHandle, targetID, h.eventBus)
 	h.sendSystemMessage(playerID, fmt.Sprintf("Destroyed object %d.", targetID))
 }
 

@@ -98,7 +98,7 @@ func (p *LiftCarryTransferParticipant) CaptureSource(
 		},
 	}
 
-	invalidateVisibilityForTeleport(sourceShard.world, sourceShard.layer, objectHandle, carry.ObjectEntityID, sourceShard.EventBus())
+	invalidateEntityVisibility(sourceShard.world, sourceShard.layer, objectHandle, carry.ObjectEntityID, sourceShard.EventBus())
 	if chunk := sourceShard.chunkManager.GetChunkFast(state.SourceChunk); chunk != nil {
 		chunk.Spatial().RemoveStatic(objectHandle, int(transform.X), int(transform.Y))
 		chunk.Spatial().RemoveDynamic(objectHandle, int(transform.X), int(transform.Y))

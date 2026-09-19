@@ -218,7 +218,7 @@ func (s *PlayerTransferService) detachTransferSource(
 
 	s.game.sendPlayerLeaveWorld(client, req.PlayerID)
 	client.InWorld.Store(false)
-	invalidateVisibilityForTeleport(shard.world, shard.layer, playerHandle, req.PlayerID, shard.EventBus())
+	invalidateEntityVisibility(shard.world, shard.layer, playerHandle, req.PlayerID, shard.EventBus())
 
 	// Reset transient per-player state; carry is preserved only via transfer participants.
 	linkState := ecs.GetResource[ecs.LinkState](shard.world)

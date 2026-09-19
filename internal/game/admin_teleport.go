@@ -129,7 +129,9 @@ func (g *Game) sendTeleportSystemMessageToClient(c *network.Client, text string)
 	c.Send(data)
 }
 
-func invalidateVisibilityForTeleport(
+// invalidateEntityVisibility notifies existing observers without waiting for the
+// periodic vision refresh. Call while holding the world's mutation lock.
+func invalidateEntityVisibility(
 	w *ecs.World,
 	layer int,
 	targetHandle types.Handle,
