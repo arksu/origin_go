@@ -282,6 +282,23 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     markChanged({ skipDiff: true })
   }
 
+  function reorderSelectedLayerFrame(fromIndex: number, toIndex: number): void {
+    const layer = selectedLayer.value
+    if (!layer?.frames) return
+    if (fromIndex < 0 || fromIndex >= layer.frames.length) return
+    if (toIndex < 0 || toIndex >= layer.frames.length || fromIndex === toIndex) return
+
+    const selectedFrame = layer.frames[selectedLayerFrameIndex.value]
+    const [frame] = layer.frames.splice(fromIndex, 1)
+    layer.frames.splice(toIndex, 0, frame!)
+
+    if (selectedFrame) {
+      const key = `${selectedFileName.value}::${selectedObjectPath.value}::${selectedLayerIndex.value}`
+      frameSelectionByLayer.value[key] = layer.frames.indexOf(selectedFrame)
+    }
+    markChanged()
+  }
+
   function requireSelectedResource(): ResourceDefLike {
     const resource = selectedResource.value
     if (!resource) throw new Error('Selected node is not a resource object (missing layers)')
@@ -780,6 +797,7 @@ export const useObjectEditorStore = defineStore('objectEditor', () => {
     setSelectedLayerPreviewFrameIndex,
     getSelectedFrameOffset,
     setSelectedFrameOffsetAxis,
+    reorderSelectedLayerFrame,
     setSelectedLayerFps,
     setSelectedLayerLoop,
     setRootOffsetAxis,
