@@ -2,16 +2,17 @@ package itemdefs
 
 // ItemDef represents a single item definition.
 type ItemDef struct {
-	DefID       int      `json:"defId"`
-	Key         string   `json:"key"`
-	Name        string   `json:"name"`
-	Tags        []string `json:"tags"`
-	Size        Size     `json:"size"`
-	Stack       *Stack   `json:"stack"`
-	Allowed     Allowed  `json:"allowed"`
-	Resource    string   `json:"resource,omitempty"`
-	DiscoveryLP int64    `json:"discoveryLP,omitempty"`
-	Visual      *Visual  `json:"visual,omitempty"`
+	DefID       int               `json:"defId"`
+	Key         string            `json:"key"`
+	Name        string            `json:"name"`
+	Tags        []string          `json:"tags"`
+	Size        Size              `json:"size"`
+	Stack       *Stack            `json:"stack"`
+	Allowed     Allowed           `json:"allowed"`
+	Resource    string            `json:"resource,omitempty"`
+	DiscoveryLP int64             `json:"discoveryLP,omitempty"`
+	Visual      *Visual           `json:"visual,omitempty"`
+	Abilities   map[string]uint32 `json:"abilities,omitempty"`
 
 	// Container describes nested inventory capabilities for this item (e.g. seed bag).
 	// If nil, the item is not a container.

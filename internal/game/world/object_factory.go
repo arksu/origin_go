@@ -921,6 +921,12 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 				return nil, fmt.Errorf("failed to decode build state: %w", err)
 			}
 			runtimeState.Behaviors[behaviorKey] = &buildState
+		case "burner":
+			var burnerState components.BurnerBehaviorState
+			if err := json.Unmarshal(rawBehaviorState, &burnerState); err != nil {
+				return nil, fmt.Errorf("failed to decode burner state: %w", err)
+			}
+			runtimeState.Behaviors[behaviorKey] = &burnerState
 		default:
 			cloned := append([]byte(nil), rawBehaviorState...)
 			runtimeState.Behaviors[behaviorKey] = json.RawMessage(cloned)

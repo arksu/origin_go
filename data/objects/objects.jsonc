@@ -77,19 +77,19 @@
           "temperature": 650
         },
         "resources": [
-          {"key": "fuel", "amount": 10},
+          {"key": "fuel", "amount": 5},
           {"key": "thread", "amount": 3}
-        ],
-        "autonomousConsumption": [
-          {
-            "resourceKey": "fuel",
-            "amountPerTick": 1,
-            "requiredState": "burning",
-            "stateWhenDepleted": "unlit"
-          }
         ]
       },
-      "behaviors": {}
+      "behaviors": {
+        "burner": {
+          "fuelAbilities": ["fuel"],
+          "fuelCapacity": 5,
+          "secondsPerFuel": 10,
+          "initialFuel": 5,
+          "onExhausted": {"dropItem": "ash", "despawn": true}
+        }
+      }
     },
     {
       "defId": 15,

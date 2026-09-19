@@ -30,6 +30,7 @@ type DroppedItemPersisterDB struct {
 var _ ObjectDespawnPersistence = (*DroppedItemPersisterDB)(nil)
 var _ inventory.BatchDroppedItemPersister = (*DroppedItemPersisterDB)(nil)
 var _ inventory.AtomicDroppedItemTransferPersister = (*DroppedItemPersisterDB)(nil)
+var _ inventory.AtomicDroppedObjectReplacementPersister = (*DroppedItemPersisterDB)(nil)
 
 func NewDroppedItemPersisterDB(db *persistence.Postgres, logger *zap.Logger) *DroppedItemPersisterDB {
 	if logger == nil {
@@ -62,6 +63,34 @@ func (p *DroppedItemPersisterDB) PersistDroppedObject(
 // entities: either all units become durable or none do.
 func (p *DroppedItemPersisterDB) PersistDroppedObjectBatch(records []inventory.DroppedItemPersistenceRecord) error {
 	return p.persistDroppedObjectBatch(records, nil)
+}
+
+// ReplaceObjectWithDroppedItem commits a burner-like replacement atomically.
+// A source object can never survive a committed outcome record after a crash.
+func (p *DroppedItemPersisterDB) ReplaceObjectWithDroppedItem(record inventory.DroppedItemPersistenceRecord, sourceRegion int, sourceID types.EntityID) error {
+	if p == nil || p.db == nil {
+		return fmt.Errorf("replace object with dropped item: database is not configured")
+	}
+	if err := validateDroppedItemPersistenceRecord(record); err != nil {
+		return err
+	}
+	if sourceRegion <= 0 || sourceID == 0 {
+		return fmt.Errorf("replace object with dropped item: invalid source")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return p.db.WithTx(ctx, func(q *repository.Queries) error {
+		if err := persistDroppedItemRecord(ctx, q, record); err != nil {
+			return err
+		}
+		if _, err := q.SoftDeleteObject(ctx, repository.SoftDeleteObjectParams{Region: sourceRegion, ID: int64(sourceID)}); err != nil {
+			return fmt.Errorf("soft-delete replacement source: %w", err)
+		}
+		if err := q.DeleteInventoriesByOwner(ctx, int64(sourceID)); err != nil {
+			return fmt.Errorf("delete replacement source inventories: %w", err)
+		}
+		return nil
+	})
 }
 
 // PersistDroppedObjectBatchWithPlayerInventories commits a player drop in one

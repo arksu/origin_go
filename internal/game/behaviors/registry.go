@@ -140,6 +140,7 @@ func DefaultRegistry() (*Registry, error) {
 			buildBehavior{},
 			liftBehavior{},
 			treeBehavior{},
+			burnerBehavior{},
 			takeBehavior{},
 			playerBehavior{},
 			playerDeathBehavior{},

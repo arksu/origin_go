@@ -98,15 +98,16 @@ var (
 )
 
 type ChunkManager struct {
-	cfg              *config.Config
-	db               *persistence.Postgres
-	world            *ecs.World
-	shard            interface{}
-	layer            int
-	region           int
-	objectFactory    *ObjectFactory
-	behaviorRegistry contracts.BehaviorRegistry
-	logger           *zap.Logger
+	cfg               *config.Config
+	db                *persistence.Postgres
+	world             *ecs.World
+	shard             interface{}
+	layer             int
+	region            int
+	objectFactory     *ObjectFactory
+	behaviorRegistry  contracts.BehaviorRegistry
+	restoreReconciler contracts.RestoredObjectReconciler
+	logger            *zap.Logger
 
 	chunks   map[types.ChunkCoord]*core.Chunk
 	chunksMu sync.RWMutex
@@ -137,6 +138,15 @@ type ChunkManager struct {
 	stats ChunkStats
 
 	eventBus *eventbus.EventBus
+}
+
+// SetRestoredObjectReconciler installs a hook that can hide or replace a
+// restored object before it is added to the active chunk's spatial index.
+func (cm *ChunkManager) SetRestoredObjectReconciler(reconciler contracts.RestoredObjectReconciler) {
+	if cm == nil {
+		return
+	}
+	cm.restoreReconciler = reconciler
 }
 
 type loadFuture struct {
@@ -920,6 +930,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		cm.objectFactory.RestoreDerivedComponentsFromState(cm.world, h)
 
 		isStatic := cm.objectFactory.IsStatic(raw)
+		exposeObject := true
 		if info, hasInfo := ecs.GetComponent[components.EntityInfo](cm.world, h); hasInfo && len(info.Behaviors) > 0 {
 			if cm.behaviorRegistry != nil {
 				if initErr := cm.behaviorRegistry.InitObjectBehaviors(&contracts.BehaviorObjectInitContext{
@@ -935,12 +946,20 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 					)
 				}
 			}
-			if state, hasState := ecs.GetComponent[components.ObjectInternalState](cm.world, h); hasState {
-				preRecomputeDirty[h] = state.IsDirty
+			if cm.restoreReconciler != nil {
+				exposeObject = cm.restoreReconciler.ReconcileRestoredObject(cm.world, h)
 			}
-			behaviorHandles = append(behaviorHandles, h)
+			if exposeObject {
+				if state, hasState := ecs.GetComponent[components.ObjectInternalState](cm.world, h); hasState {
+					preRecomputeDirty[h] = state.IsDirty
+				}
+				behaviorHandles = append(behaviorHandles, h)
+			}
 		}
 
+		if !exposeObject || !cm.world.Alive(h) {
+			continue
+		}
 		if isStatic {
 			spatial.AddStatic(h, raw.X, raw.Y)
 		} else {

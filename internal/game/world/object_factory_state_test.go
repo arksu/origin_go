@@ -176,6 +176,20 @@ func TestDeserializeObjectState_Take(t *testing.T) {
 	}
 }
 
+func TestDeserializeObjectState_Burner(t *testing.T) {
+	factory := &ObjectFactory{}
+	raw := &repository.Object{TypeID: 1, Data: pqtype.NullRawMessage{RawMessage: []byte(`{"v":1,"behaviors":{"burner":{"fuel":3,"next_fuel_burn_at_runtime_second":1540}}}`), Valid: true}}
+	state, err := factory.DeserializeObjectState(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	runtime := state.(*components.RuntimeObjectState)
+	burner, ok := runtime.Behaviors["burner"].(*components.BurnerBehaviorState)
+	if !ok || burner.Fuel != 3 || burner.NextFuelBurnAtRuntimeSecond != 1540 {
+		t.Fatalf("unexpected burner state: %#v", runtime.Behaviors["burner"])
+	}
+}
+
 func TestDeserializeObjectState_IgnoresDroppedItem(t *testing.T) {
 	factory := &ObjectFactory{}
 	raw := &repository.Object{

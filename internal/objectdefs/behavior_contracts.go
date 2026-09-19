@@ -53,3 +53,10 @@ func (d *ObjectDef) SetTakeBehaviorConfig(cfg contracts.TakeBehaviorConfig) {
 		Items:    items,
 	}
 }
+
+func (d *ObjectDef) SetBurnerBehaviorConfig(cfg contracts.BurnerBehaviorConfig) {
+	if d == nil {
+		return
+	}
+	d.BurnerConfig = &BurnerBehaviorConfig{Priority: cfg.Priority, FuelAbilities: append([]string(nil), cfg.FuelAbilities...), FuelCapacity: cfg.FuelCapacity, SecondsPerFuel: cfg.SecondsPerFuel, InitialFuel: cfg.InitialFuel, DropItem: cfg.OnExhausted.DropItem, Despawn: cfg.OnExhausted.Despawn}
+}

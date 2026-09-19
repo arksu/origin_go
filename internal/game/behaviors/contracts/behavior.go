@@ -50,10 +50,25 @@ type TakeBehaviorConfig struct {
 	Items    []TakeConfig `json:"items"`
 }
 
+type BurnerBehaviorConfig struct {
+	Priority       int                    `json:"priority,omitempty"`
+	FuelAbilities  []string               `json:"fuelAbilities"`
+	FuelCapacity   uint32                 `json:"fuelCapacity"`
+	SecondsPerFuel uint32                 `json:"secondsPerFuel"`
+	InitialFuel    uint32                 `json:"initialFuel"`
+	OnExhausted    BurnerExhaustionConfig `json:"onExhausted"`
+}
+
+type BurnerExhaustionConfig struct {
+	DropItem string `json:"dropItem"`
+	Despawn  bool   `json:"despawn"`
+}
+
 // BehaviorDefConfigTarget receives validated behavior config mutations.
 type BehaviorDefConfigTarget interface {
 	SetTreeBehaviorConfig(cfg TreeBehaviorConfig)
 	SetTakeBehaviorConfig(cfg TakeBehaviorConfig)
+	SetBurnerBehaviorConfig(cfg BurnerBehaviorConfig)
 }
 
 // BehaviorDefConfigContext is object-definition behavior config input.
@@ -162,6 +177,7 @@ type LiftObjectFn func(
 
 // ExecutionDeps contains shared dependencies for context action execution.
 type ExecutionDeps struct {
+	InventoryUpdate  func(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 	OpenContainer    OpenContainerFn
 	GiveItem         GiveItemFn
 	LiftObject       LiftObjectFn
@@ -318,6 +334,12 @@ type BehaviorObjectInitContext struct {
 // ObjectLifecycleInitializer initializes behavior state for object lifecycle.
 type ObjectLifecycleInitializer interface {
 	InitObject(ctx *BehaviorObjectInitContext) error
+}
+
+// RestoredObjectReconciler decides whether a restored object can be exposed to
+// an active chunk after its behavior state has been initialized.
+type RestoredObjectReconciler interface {
+	ReconcileRestoredObject(w *ecs.World, handle types.Handle) bool
 }
 
 // BehaviorRegistry is the single runtime registry for all behaviors.

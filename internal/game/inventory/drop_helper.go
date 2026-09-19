@@ -62,6 +62,12 @@ type BatchDroppedItemPersister interface {
 	PersistDroppedObjectBatch(records []DroppedItemPersistenceRecord) error
 }
 
+// AtomicDroppedObjectReplacementPersister atomically creates a dropped item
+// while removing its persistent source object.
+type AtomicDroppedObjectReplacementPersister interface {
+	ReplaceObjectWithDroppedItem(record DroppedItemPersistenceRecord, sourceRegion int, sourceID types.EntityID) error
+}
+
 // SpawnDroppedEntity creates a dropped item ECS entity with all required components
 // and its inventory container. Player drops and craft-overflow drops share this
 // logic so their identity, persistence payload, and static-object invariants stay
@@ -175,6 +181,27 @@ func PersistDroppedEntity(
 		record.ChunkX, record.ChunkY,
 		record.ObjectData, record.InventoryData,
 	)
+}
+
+// PersistDroppedEntityReplacement persists a dropped outcome and removes its
+// source in one transaction, so a retry cannot duplicate the outcome item.
+func PersistDroppedEntityReplacement(
+	persister AtomicDroppedObjectReplacementPersister,
+	p SpawnDroppedEntityParams,
+	sourceRegion int,
+	sourceID types.EntityID,
+) error {
+	if persister == nil {
+		return fmt.Errorf("persist dropped replacement %d: persister is not configured", p.DroppedEntityID)
+	}
+	if sourceRegion <= 0 || sourceID == 0 {
+		return fmt.Errorf("persist dropped replacement %d: invalid source", p.DroppedEntityID)
+	}
+	record, err := buildDroppedItemPersistenceRecord(p, nil)
+	if err != nil {
+		return err
+	}
+	return persister.ReplaceObjectWithDroppedItem(record, sourceRegion, sourceID)
 }
 
 // PersistDroppedEntities saves one or more individual dropped items before any

@@ -29,6 +29,10 @@ func TestLoadAllItems(t *testing.T) {
 	assert.Equal(t, 7, seedBag.Container.Size.H)
 	assert.Equal(t, 1, len(seedBag.Container.Rules.AllowTags))
 	assert.Equal(t, "seed", seedBag.Container.Rules.AllowTags[0])
+
+	branch, ok := registry.GetByKey("branch")
+	require.True(t, ok, "branch should be loaded")
+	assert.Equal(t, uint32(1), branch.Abilities["fuel"])
 }
 
 func TestLoadAllItems_RegistersNettleShirtForChestEquipment(t *testing.T) {
