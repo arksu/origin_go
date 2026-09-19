@@ -7351,14 +7351,14 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x04type\x18\x02 \x01(\x0e2\x16.proto.InteractionTypeR\x04type\"O\n" +
 	"\x13SelectContextAction\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x1b\n" +
-	"\taction_id\x18\x02 \x01(\tR\bactionId\"\x90\x02\n" +
+	"\taction_id\x18\x02 \x01(\tR\bactionId\"\xeb\x01\n" +
 	"\x10C2S_PlayerAction\x12.\n" +
 	"\tmap_click\x18\x05 \x01(\v2\x0f.proto.MapClickH\x00R\bmapClick\x12-\n" +
 	"\binteract\x18\x03 \x01(\v2\x0f.proto.InteractH\x00R\binteract\x12P\n" +
 	"\x15select_context_action\x18\x04 \x01(\v2\x1a.proto.SelectContextActionH\x00R\x13selectContextAction\x12\x1c\n" +
 	"\tmodifiers\x18\n" +
 	" \x01(\rR\tmodifiersB\b\n" +
-	"\x06actionJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\amove_toR\x0emove_to_entity\";\n" +
+	"\x06action\";\n" +
 	"\x10C2S_MovementMode\x12'\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x13.proto.MovementModeR\x04mode\"\x8b\x01\n" +
 	"\x0fC2S_ChatMessage\x12\x12\n" +

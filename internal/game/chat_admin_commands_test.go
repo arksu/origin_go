@@ -7,6 +7,7 @@ import (
 	"time"
 
 	_const "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -132,14 +133,19 @@ func TestDestroyCommandDeletesSelectedObjectAndOwnedInventories(t *testing.T) {
 	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
 	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
 	mockChat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
-	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, nil, nil, nil, eventBus, logger)
+	chunk := core.NewChunk(types.ChunkCoord{}, 1, 0, 128)
+	provider := &destroyTestChunkProvider{chunk: chunk}
+	handler := NewChatAdminCommandHandler(nil, nil, mockChat, nil, nil, provider, nil, nil, eventBus, logger)
 	handler.SetObjectDeleter(destroyTestObjectDeleter{})
 
 	playerID := types.EntityID(42)
 	targetID := types.EntityID(777)
 	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
-		ecs.AddComponent(w, h, components.EntityInfo{Region: 1})
+		ecs.AddComponent(w, h, components.EntityInfo{Region: 1, IsStatic: true})
+		ecs.AddComponent(w, h, components.Transform{X: 10, Y: 10})
+		ecs.AddComponent(w, h, components.ChunkRef{})
 	})
+	chunk.Spatial().AddStatic(targetHandle, 10, 10)
 	rootInventoryHandle := world.SpawnWithoutExternalID()
 	ecs.AddComponent(world, rootInventoryHandle, components.InventoryContainer{OwnerID: targetID})
 	ecs.GetResource[ecs.InventoryRefIndex](world).Add(_const.InventoryGrid, targetID, 0, rootInventoryHandle)
@@ -153,6 +159,14 @@ func TestDestroyCommandDeletesSelectedObjectAndOwnedInventories(t *testing.T) {
 	if world.Alive(targetHandle) {
 		t.Fatal("destroyed object must be removed from ECS")
 	}
+	if _, deleted := chunk.GetDeletedObjectIDs()[targetID]; !deleted {
+		t.Fatal("deletion must survive until the next chunk save")
+	}
+	for _, handle := range chunk.GetHandles() {
+		if handle == targetHandle {
+			t.Fatal("deleted object remains eligible for chunk serialization")
+		}
+	}
 	if world.Alive(rootInventoryHandle) {
 		t.Fatal("destroyed object inventory must be removed from ECS")
 	}
@@ -165,6 +179,16 @@ func TestDestroyCommandDeletesSelectedObjectAndOwnedInventories(t *testing.T) {
 }
 
 type destroyTestObjectDeleter struct{}
+
+type destroyTestChunkProvider struct{ chunk *core.Chunk }
+
+func (p *destroyTestChunkProvider) GetEntityActiveChunks(types.EntityID) []*core.Chunk {
+	return []*core.Chunk{p.chunk}
+}
+func (p *destroyTestChunkProvider) GetChunk(types.ChunkCoord) *core.Chunk { return p.chunk }
+func (p *destroyTestChunkProvider) AddStaticToChunkSpatial(handle types.Handle, _, _, x, y int) {
+	p.chunk.Spatial().AddStatic(handle, x, y)
+}
 
 func (destroyTestObjectDeleter) DeleteObject(int, types.EntityID) error { return nil }
 

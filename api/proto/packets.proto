@@ -337,8 +337,6 @@ enum InteractionType {
 }
 
 message C2S_PlayerAction {
-  reserved 1, 2;
-  reserved "move_to", "move_to_entity";
   oneof action {
     MapClick map_click = 5;
     Interact interact = 3;
