@@ -112,11 +112,11 @@ type TakeBehaviorConfig struct {
 	Items    []TakeConfig `json:"items"`
 }
 type BurnerBehaviorConfig struct {
-	Priority                                  int
-	FuelAbilities                             []string
-	FuelCapacity, SecondsPerFuel, InitialFuel uint32
-	DropItem                                  string
-	Despawn                                   bool
+	Priority                                int
+	FuelAbilities                           []string
+	FuelCapacity, TicksPerFuel, InitialFuel uint32
+	DropItem                                string
+	Despawn                                 bool
 }
 
 // ObjectsFile represents a JSONC file containing object definitions.

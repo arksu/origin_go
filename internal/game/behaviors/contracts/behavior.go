@@ -51,12 +51,12 @@ type TakeBehaviorConfig struct {
 }
 
 type BurnerBehaviorConfig struct {
-	Priority       int                    `json:"priority,omitempty"`
-	FuelAbilities  []string               `json:"fuelAbilities"`
-	FuelCapacity   uint32                 `json:"fuelCapacity"`
-	SecondsPerFuel uint32                 `json:"secondsPerFuel"`
-	InitialFuel    uint32                 `json:"initialFuel"`
-	OnExhausted    BurnerExhaustionConfig `json:"onExhausted"`
+	Priority      int                    `json:"priority,omitempty"`
+	FuelAbilities []string               `json:"fuelAbilities"`
+	FuelCapacity  uint32                 `json:"fuelCapacity"`
+	TicksPerFuel  uint32                 `json:"ticksPerFuel"`
+	InitialFuel   uint32                 `json:"initialFuel"`
+	OnExhausted   BurnerExhaustionConfig `json:"onExhausted"`
 }
 
 type BurnerExhaustionConfig struct {
@@ -96,6 +96,8 @@ type BehaviorRuntimeResult struct {
 	State    *components.RuntimeObjectState
 	HasState bool
 	Flags    []string
+	// AppearanceResource overrides flag-based appearance; first behavior in priority order wins.
+	AppearanceResource string
 }
 
 // BehaviorRuntimeContext contains runtime recompute data.
@@ -175,8 +177,9 @@ type LiftObjectFn func(
 	targetHandle types.Handle,
 ) BehaviorResult
 
-// ExecutionDeps contains shared dependencies for context action execution.
+// ExecutionDeps contains shared dependencies for actions and scheduled behaviors.
 type ExecutionDeps struct {
+	ExhaustBurner    func(w *ecs.World, handle types.Handle) bool
 	InventoryUpdate  func(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 	OpenContainer    OpenContainerFn
 	GiveItem         GiveItemFn
@@ -241,6 +244,7 @@ type BehaviorTickContext struct {
 	BehaviorKey  string
 	CurrentTick  uint64
 	CurrentState *components.RuntimeObjectState
+	Deps         *ExecutionDeps
 }
 
 // BehaviorTickResult is a scheduled behavior tick result.

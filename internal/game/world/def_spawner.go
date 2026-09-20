@@ -55,30 +55,7 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 			IsDirty: true,
 		})
 		if def.Station != nil {
-			resources := make(map[string]uint32, len(def.Station.Resources))
-			for _, resource := range def.Station.Resources {
-				resources[resource.Key] = resource.Amount
-			}
-			consumption := make([]components.StationAutonomousConsumption, len(def.Station.AutonomousConsumption))
-			for i, rule := range def.Station.AutonomousConsumption {
-				consumption[i] = components.StationAutonomousConsumption{
-					ResourceKey:       rule.ResourceKey,
-					AmountPerTick:     rule.AmountPerTick,
-					RequiredState:     rule.RequiredState,
-					StateWhenDepleted: rule.StateWhenDepleted,
-				}
-			}
-			values := make(map[string]float64, len(def.Station.Values))
-			for key, value := range def.Station.Values {
-				values[key] = value
-			}
-			ecs.AddComponent(w, h, components.StationState{
-				Capabilities:          append([]string(nil), def.Station.Capabilities...),
-				CurrentState:          def.Station.InitialState,
-				Values:                values,
-				Resources:             resources,
-				AutonomousConsumption: consumption,
-			})
+			ecs.AddComponent(w, h, newStationState(def.Station))
 		}
 	})
 	if handle == types.InvalidHandle || params.InitReason == "" || params.BehaviorRegistry == nil {
@@ -102,4 +79,27 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 		return types.InvalidHandle
 	}
 	return handle
+}
+
+func newStationState(def *objectdefs.StationDef) components.StationState {
+	station := components.StationState{
+		Capabilities:          append([]string(nil), def.Capabilities...),
+		CurrentState:          def.InitialState,
+		Values:                make(map[string]float64, len(def.Values)),
+		Resources:             make(map[string]uint32, len(def.Resources)),
+		AutonomousConsumption: make([]components.StationAutonomousConsumption, len(def.AutonomousConsumption)),
+	}
+	for key, value := range def.Values {
+		station.Values[key] = value
+	}
+	for _, resource := range def.Resources {
+		station.Resources[resource.Key] = resource.Amount
+	}
+	for i, rule := range def.AutonomousConsumption {
+		station.AutonomousConsumption[i] = components.StationAutonomousConsumption{
+			ResourceKey: rule.ResourceKey, AmountPerTick: rule.AmountPerTick,
+			RequiredState: rule.RequiredState, StateWhenDepleted: rule.StateWhenDepleted,
+		}
+	}
+	return station
 }

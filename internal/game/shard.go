@@ -265,13 +265,13 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
-	s.world.AddSystem(systems.NewBurnerSystem(burnerExhaustion.systemHandler()))
 	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))
 	s.world.AddSystem(systems.NewBehaviorTickSystem(logger, systems.BehaviorTickSystemConfig{
 		BudgetPerTick:    cfg.Game.BehaviorTickGlobalBudget,
 		BehaviorRegistry: behaviorRegistry,
+		ExecutionDeps:    &contracts.ExecutionDeps{EventBus: s.eventBus, Logger: logger, ExhaustBurner: burnerExhaustion.exhaust},
 	}))
 	s.world.AddSystem(systems.NewObjectBehaviorSystem(s.eventBus, logger, systems.ObjectBehaviorConfig{
 		BudgetPerTick:       cfg.Game.ObjectBehaviorBudgetPerTick,

@@ -114,6 +114,18 @@ func TransformObjectToDefInPlace(
 
 	ecs.CancelBehaviorTicksByEntityID(w, targetID)
 
+	// Lifecycle hooks must see the destination's station state, just as on spawn.
+	if newDef.Station != nil {
+		ecs.AddComponent(w, targetHandle, newStationState(newDef.Station))
+	} else {
+		ecs.RemoveComponent[components.StationState](w, targetHandle)
+	}
+	ecs.WithComponent(w, targetHandle, func(state *components.ObjectInternalState) {
+		if runtime, ok := components.GetRuntimeObjectState(*state); ok {
+			runtime.Station = nil
+		}
+	})
+
 	if opts.BehaviorRegistry != nil {
 		currentInfo, hasCurrentInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
 		if hasCurrentInfo {

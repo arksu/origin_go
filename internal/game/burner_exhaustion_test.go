@@ -208,7 +208,7 @@ func TestBurnerExhaustionReconcilesExpiredRestoreBeforeExposure(t *testing.T) {
 		ecs.AddComponent(w, h, components.CreateTransform(101, 202, 0))
 		ecs.AddComponent(w, h, components.ChunkRef{CurrentChunkX: 4, CurrentChunkY: 5})
 		ecs.AddComponent(w, h, components.ObjectInternalState{State: &components.RuntimeObjectState{Behaviors: map[string]any{
-			"burner": &components.BurnerBehaviorState{Fuel: 0},
+			"burner": &components.BurnerBehaviorState{Fuel: 0, NextFuelBurnAtTick: 100},
 		}}})
 	})
 	chunk := core.NewChunk(types.ChunkCoord{X: 4, Y: 5}, 0, 0, 128)

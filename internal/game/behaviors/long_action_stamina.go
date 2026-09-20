@@ -16,13 +16,18 @@ func ConsumePlayerLongActionStamina(
 	playerHandle types.Handle,
 	cost float64,
 ) bool {
+	return consumePlayerActionStamina(world, playerHandle, cost, true)
+}
+
+// Exact-cost actions share stat propagation but do not require the long-action reserve.
+func consumePlayerActionStamina(world *ecs.World, playerHandle types.Handle, cost float64, requireReserve bool) bool {
 	if world == nil || playerHandle == types.InvalidHandle || !world.Alive(playerHandle) {
 		return false
 	}
 
 	stats, hasStats := ecs.GetComponent[components.EntityStats](world, playerHandle)
 	if !hasStats {
-		return true
+		return requireReserve
 	}
 
 	con := characterattrs.DefaultValue
@@ -38,7 +43,14 @@ func ConsumePlayerLongActionStamina(
 		statsChanged = true
 	}
 
-	if !entitystats.CanConsumeLongActionStamina(currentStamina, maxStamina, cost) {
+	canPay := currentStamina >= cost
+	if requireReserve {
+		canPay = entitystats.CanConsumeLongActionStamina(currentStamina, maxStamina, cost)
+	}
+	if !canPay {
+		if !requireReserve {
+			return false
+		}
 		if statsChanged {
 			ecs.WithComponent(world, playerHandle, func(entityStats *components.EntityStats) {
 				entityStats.Stamina = currentStamina

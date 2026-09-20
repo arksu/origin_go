@@ -85,7 +85,7 @@
         "burner": {
           "fuelAbilities": ["fuel"],
           "fuelCapacity": 5,
-          "secondsPerFuel": 10,
+          "ticksPerFuel": 100,
           "initialFuel": 5,
           "onExhausted": {"dropItem": "ash", "despawn": true}
         }
