@@ -17,9 +17,9 @@
     },
     {
       "defId": 2002,
-      "key": "beef",
-      "name": "Beef",
-      "resource": "items/beef.png",
+      "key": "raw meat",
+      "name": "Raw meat",
+      "resource": "items/raw_meat.png",
       "tags": [
         "food"
       ],
