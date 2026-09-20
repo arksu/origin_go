@@ -312,7 +312,7 @@ func TestStationCraftEndToEndFinalizationAfterAutonomousUpdate(t *testing.T) {
 	}))
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
 		{DefID: 7083, Key: "player", Name: "Player"},
-		{DefID: 7084, Key: "campfire", Name: "Campfire", BurnerConfig: &objectdefs.BurnerBehaviorConfig{SecondsPerFuel: 1}},
+		{DefID: 7084, Key: "campfire", Name: "Campfire", BurnerConfig: &objectdefs.BurnerBehaviorConfig{TicksPerFuel: 1}},
 	}))
 	craftdefs.SetGlobalForTesting(craftdefs.NewRegistry([]craftdefs.CraftDef{{
 		DefID:                1,
@@ -359,7 +359,7 @@ func TestStationCraftEndToEndFinalizationAfterAutonomousUpdate(t *testing.T) {
 			}}})
 			stationID := types.EntityID(183)
 			stationHandle := world.Spawn(stationID, func(w *ecs.World, h types.Handle) {
-				ecs.AddComponent(w, h, components.EntityInfo{TypeID: 7084})
+				ecs.AddComponent(w, h, components.EntityInfo{TypeID: 7084, Behaviors: []string{"burner"}})
 				ecs.AddComponent(w, h, components.ObjectInternalState{})
 				ecs.AddComponent(w, h, components.StationState{
 					CurrentState: "burning", Resources: map[string]uint32{"fuel": test.fuel, "thread": 1},
@@ -368,7 +368,7 @@ func TestStationCraftEndToEndFinalizationAfterAutonomousUpdate(t *testing.T) {
 					}},
 				})
 				ecs.WithComponent(w, h, func(state *components.ObjectInternalState) {
-					components.SetBehaviorState(state, "burner", &components.BurnerBehaviorState{Fuel: test.fuel, NextFuelBurnAtRuntimeSecond: 1})
+					components.SetBehaviorState(state, "burner", &components.BurnerBehaviorState{Fuel: test.fuel, NextFuelBurnAtTick: 1})
 				})
 			})
 			ecs.GetResource[ecs.LinkState](world).SetLink(ecs.PlayerLink{
@@ -388,8 +388,9 @@ func TestStationCraftEndToEndFinalizationAfterAutonomousUpdate(t *testing.T) {
 
 			contextActions := NewContextActionService(world, nil, nil, nil, nil, nil, nil, nil, nil, behaviors.MustDefaultRegistry(), zap.NewNop())
 			contextActions.SetCraftingService(crafting)
-			ecs.SetResource(world, ecs.TimeState{RuntimeSecondsTotal: 1})
-			world.AddSystem(ecssystems.NewBurnerSystem())
+			ecs.SetResource(world, ecs.TimeState{Tick: 1})
+			ecs.ScheduleBehaviorTick(world, stationID, "burner", 1)
+			world.AddSystem(ecssystems.NewBehaviorTickSystem(nil, ecssystems.BehaviorTickSystemConfig{BehaviorRegistry: behaviors.MustDefaultRegistry()}))
 			world.AddSystem(NewCyclicActionSystem(contextActions, nil, zap.NewNop()))
 			world.Update(0)
 

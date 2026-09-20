@@ -2,7 +2,7 @@
 
 ## Context
 
-See [proposal.md](proposal.md) for motivation and the delta specs for the behavioral contract. The campfire definition currently starts its station as `burning`; burner initialization immediately gives it initial fuel and a server-runtime deadline. The existing `burner` behavior already owns context actions and persisted burner state, while the context-action service already provides target approach, one-cycle progress, cancellation, and completion through `ActiveCyclicAction`.
+See [proposal.md](proposal.md) for motivation and the delta specs for the behavioral contract. The campfire definition already declares `unlit`. The original burner initialization nevertheless armed a seconds-based deadline, and a dedicated ECS system scanned objects to consume fuel. The revised implementation uses the existing scheduled-behavior mechanism. The context-action service provides target approach, one-cycle progress, cancellation, and completion through `ActiveCyclicAction`.
 
 ## Goals / Non-Goals
 
@@ -17,8 +17,8 @@ See [proposal.md](proposal.md) for motivation and the delta specs for the behavi
 **Non-Goals:**
 
 - Adding player-supplied tinder, tool requirements, new sounds, or a relighting flow after fuel exhaustion.
-- Changing fuel capacity, refueling semantics for burning burners, fuel duration, cooking recipes, or the ash outcome.
-- Reinterpreting already persisted active campfires as newly built unlit campfires.
+- Changing fuel capacity, refueling capacity rules, cooking recipes, or the ash outcome.
+- Supporting or migrating seconds-based burner configuration or saves. There are no existing burners, per the user's deployment constraint.
 - Adding per-object visual-resource fields to burner configuration, or allowing burner behavior to branch on a concrete object key such as `campfire`.
 
 ## Decisions
@@ -31,9 +31,15 @@ This keeps ignition adjacent to the stored fuel and its activation deadline. A s
 
 ### Represent an unarmed burner with no fuel deadline
 
-For a newly spawned campfire in the `unlit` station state, burner initialization will persist the configured fuel amount with an unarmed deadline. The burner runtime and restore reconciliation will skip consumption and exhaustion while that deadline is unarmed. On successful ignition, the behavior will set the first deadline from the authoritative server-runtime clock.
+For a newly spawned burner in the `unlit` station state, initialization persists the configured fuel amount with a zero `next_fuel_burn_at_tick` and schedules no callback. On successful ignition, the behavior sets the first deadline to `TimeState.Tick + ticksPerFuel` and schedules itself through `ScheduleBehaviorTick`.
 
-The existing deadline is already durable burner state, so this needs no database or protocol schema migration. Persisted burners with an existing deadline remain active under their previous semantics; a restored legacy object with no burner state follows the current definition only when it is reconstructed.
+Only the tick format is supported. Configuration values are counts of ticks without any seconds-to-ticks conversion; the campfire's configured value is 10 ticks per unit. New-format saves preserve the fuel reserve and absolute tick deadline. Restore catches up by computing elapsed fuel intervals arithmetically, then schedules the next boundary or an exhaustion retry. Inactive objects remain unscheduled.
+
+### Keep fuel advancement inside scheduled burner behavior
+
+Remove `BurnerSystem` and implement `OnScheduledTick` on `burnerBehavior`. A successful fuel callback schedules the next boundary without resetting progress when fuel is added. Exhaustion sets the station to `unlit`, updates appearance, and calls the existing durable exhaustion service through an injected execution dependency. A failed outcome is retried on the next tick; successful completion or despawn removes scheduled work. The service remains responsible for database/drop/despawn operations, while the behavior owns timing and fuel state.
+
+`BehaviorTickSystem` continues using ticks, its existing queue, and its existing budget. Its priority becomes 313, ahead of cyclic action completion at 315, so due fuel transitions processed in that tick are visible to crafting. Other scheduled behaviors continue through the same dispatcher.
 
 ### Complete ignition through one normal target-linked cycle
 
@@ -53,6 +59,8 @@ Whenever burner behavior transitions a station-backed burner between the shared 
 
 The transition will publish the existing entity-appearance event only when the derived resource differs from the current appearance. That event already sends an object-spawn upsert to visible clients, so no protocol message or client state store is added. Client resource data remains responsible for mapping the conventional resource names to visuals; the generic burner behavior is responsible only for deriving and publishing the resource name.
 
+The burner also returns this derived resource from its runtime recompute hook. The shared behavior result supports an optional appearance resource, with the first non-empty result in behavior priority order taking precedence over flag-based definition rules. This keeps subsequent dirty-queue recomputations from reverting an ignited object to its definition's default resource. Spawn and restore initialization derive the same resource before exposure; fuel exhaustion marks behavior state dirty so a surviving object awaiting its exhaustion outcome can render unlit.
+
 ## Risks / Trade-offs
 
 - [An unarmed zero deadline could be treated as overdue] → Guard both runtime burning and restore catch-up so only armed deadlines can consume fuel or trigger exhaustion.
@@ -60,10 +68,11 @@ The transition will publish the existing entity-appearance event only when the d
 - [A burner transition may select a missing client resource] → Require each burner-backed object that uses the shared states to register both `{object}/unlit` and `{object}/burning`; cover the generic derivation with a non-campfire fixture and the campfire resource registration with an integration assertion.
 - [Generic behavior could acquire object-specific exceptions] → Keep the appearance helper limited to the immutable object key and the two shared state values; reject new resource-path fields or concrete object-key branches in burner configuration and tests.
 - [An action may be requested from stale UI state] → Validate unlit/unarmed state at action execution, during cyclic validity checks, and at completion.
-- [Existing saved campfires could lose burning state] → Preserve any persisted burner deadline and station snapshot; only new spawn initialization creates the unarmed state.
+- [Unloaded objects or deferred callbacks could lose elapsed fuel intervals] → Catch up from the persisted tick deadline without per-unit loops, then schedule from the next original boundary.
+- [Exhaustion persistence can fail] → Keep the exhausted burner unlit and schedule an outcome retry for the next tick; do not consume fuel again.
 
 ## Migration Plan
 
-1. Deploy the definition and behavior changes together.
-2. Newly built campfires start unlit and require ignition; existing persisted campfires retain their saved station and burner state.
-3. Roll back by restoring the previous definition and behavior logic; no persisted-data migration is required.
+1. Deploy the tick-based definition and behavior changes together to the world with no existing burners.
+2. Newly built campfires start unlit and require ignition. The new tick-based state survives subsequent unload/reload and restart.
+3. No compatibility reader or migration is included. Rolling back after new burners are saved requires handling that new data explicitly; the old seconds-based implementation cannot read the new schedule correctly.

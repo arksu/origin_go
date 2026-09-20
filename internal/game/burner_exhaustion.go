@@ -7,7 +7,6 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/ecs/systems"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 	"origin/internal/itemdefs"
@@ -155,8 +154,13 @@ func (h *burnerExhaustionHandler) logFailure(operation string, err error) {
 	}
 }
 
-func (h *burnerExhaustionHandler) systemHandler() systems.BurnerExhaustionHandler {
-	return h.handle
+func (h *burnerExhaustionHandler) exhaust(w *ecs.World, handle types.Handle) bool {
+	info, ok := ecs.GetComponent[components.EntityInfo](w, handle)
+	if !ok {
+		return false
+	}
+	def, ok := objectdefs.Global().GetByID(int(info.TypeID))
+	return ok && def.BurnerConfig != nil && h.handle(w, handle, def.BurnerConfig)
 }
 
 func (h *burnerExhaustionHandler) ReconcileRestoredObject(w *ecs.World, handle types.Handle) bool {
@@ -173,7 +177,7 @@ func (h *burnerExhaustionHandler) ReconcileRestoredObject(w *ecs.World, handle t
 		return true
 	}
 	burner, found := components.GetBehaviorState[components.BurnerBehaviorState](state, "burner")
-	if !found || burner == nil || burner.Fuel > 0 || burner.OutcomeCreated {
+	if !found || burner == nil || burner.NextFuelBurnAtTick == 0 || burner.Fuel > 0 || burner.OutcomeCreated {
 		return true
 	}
 	return !h.handle(w, handle, def.BurnerConfig)

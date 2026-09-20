@@ -9,7 +9,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const BehaviorTickSystemPriority = 355
+// Autonomous behavior transitions must precede cyclic action completion (315).
+const BehaviorTickSystemPriority = 313
 
 type BehaviorTickSystem struct {
 	ecs.BaseSystem
@@ -17,11 +18,13 @@ type BehaviorTickSystem struct {
 	behaviorRegistry contracts.BehaviorRegistry
 	budgetPerTick    int
 	processBatch     []ecs.BehaviorTickKey
+	executionDeps    *contracts.ExecutionDeps
 }
 
 type BehaviorTickSystemConfig struct {
 	BudgetPerTick    int
 	BehaviorRegistry contracts.BehaviorRegistry
+	ExecutionDeps    *contracts.ExecutionDeps
 }
 
 func NewBehaviorTickSystem(logger *zap.Logger, cfg BehaviorTickSystemConfig) *BehaviorTickSystem {
@@ -38,6 +41,7 @@ func NewBehaviorTickSystem(logger *zap.Logger, cfg BehaviorTickSystemConfig) *Be
 		behaviorRegistry: cfg.BehaviorRegistry,
 		budgetPerTick:    cfg.BudgetPerTick,
 		processBatch:     make([]ecs.BehaviorTickKey, 0, cfg.BudgetPerTick),
+		executionDeps:    cfg.ExecutionDeps,
 	}
 }
 
@@ -96,6 +100,7 @@ func (s *BehaviorTickSystem) processTickKey(w *ecs.World, currentTick uint64, ti
 		BehaviorKey:  tickKey.BehaviorKey,
 		CurrentTick:  currentTick,
 		CurrentState: runtimeState,
+		Deps:         s.executionDeps,
 	})
 	if err != nil {
 		s.logger.Error("scheduled behavior tick failed",

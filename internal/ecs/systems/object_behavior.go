@@ -188,6 +188,7 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		PrevFlags:  append([]string(nil), currentState.Flags...),
 	}
 	nextFlags := make([]string, 0, len(entityInfo.Behaviors))
+	nextResource := ""
 
 	if r.behaviorRegistry == nil {
 		return
@@ -203,6 +204,9 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 			continue
 		}
 		result := runtimeBehavior.ApplyRuntime(ctx)
+		if nextResource == "" {
+			nextResource = result.AppearanceResource
+		}
 		if result.HasState {
 			nextState = result.State
 			hasNextState = true
@@ -223,7 +227,9 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 	}
 	flagsChanged := !reflect.DeepEqual(currentState.Flags, nextFlags)
 
-	nextResource := objectdefs.ResolveAppearanceResource(def, nextFlags)
+	if nextResource == "" {
+		nextResource = objectdefs.ResolveAppearanceResource(def, nextFlags)
+	}
 	if nextResource == "" {
 		nextResource = def.Resource
 	}

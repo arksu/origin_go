@@ -30,9 +30,9 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef      | Reads from MovedEntities buffer                          |
 | 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character                | Saves character data before despawn                      |
 | 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult         | Processes moved entities                                 |
+| 313      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState    | Runs before cyclic completion; delegates to behaviors    |
 | 320      | AutoInteractSystem    | Executes pending interactions when player reaches target     | Transform, PendingInteraction      | Auto-pickup dropped items on arrival                     |
 | 350      | VisionSystem          | Calculates entity visibility and manages observer state      | Vision, Transform, ChunkRef        | Updates VisibilityState, publishes events                |
-| 355      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState    | Dispatches to behavior scheduled-tick capability         |
 | 360      | ObjectBehaviorSystem  | Recomputes object behavior flags/state/appearance            | ObjectBehaviorDirtyQueue           | Dirty-queue driven, budget-limited                       |
 | 400      | ChunkSystem           | Manages chunk lifecycle and entity migration                 | ChunkRef                           | Handles entity chunk transitions                         |
 | 900      | DropDecaySystem       | Deletes expired dropped items                                 | DroppedItem, TimeState             | Sweeps every 10 game ticks; durable delete happens first |
@@ -227,11 +227,11 @@ ExpireDetachedSystem (250)
     ↓ (saves before despawn)
 TransformUpdateSystem (300)
     ↓ (positions finalized)
+BehaviorTickSystem (313)
+    ↓ (dispatches due behavior transitions before cyclic completion at 315)
 AutoInteractSystem (320)
     ↓ (pickup may despawn entities)
 VisionSystem (350)
-    ↓ (dispatches due scheduled behavior ticks)
-BehaviorTickSystem (355)
     ↓ (updates VisibilityState)
 ObjectBehaviorSystem (360)
     ↓ (applies behavior flags/resource only for dirty objects)
@@ -276,13 +276,14 @@ while a chunk activates, so an expired saved drop never becomes visible.
 - Current primary producer is inventory flow for object root containers.
 - Chunk activation runs behavior lifecycle init for restored objects and then forces behavior recompute for all behavior-bearing objects (no lazy init).
 
-## BehaviorTickSystem (Priority: 355)
+## BehaviorTickSystem (Priority: 313)
 
 **Purpose**: Executes due entries from `BehaviorTickSchedule` and delegates to behavior `OnScheduledTick`.
 
 **Execution Model**:
 
 - Reads current tick from `TimeState.Tick`.
+- Runs before cyclic action completion so due burner exhaustion can invalidate crafting.
 - Pops due keys up to the global per-tick budget.
 - Resolves handle + behavior at execution time (despawned/missing entries are skipped).
 - Calls scheduled-tick behavior capability.

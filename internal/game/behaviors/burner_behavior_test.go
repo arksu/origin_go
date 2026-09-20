@@ -17,7 +17,7 @@ import (
 func TestBurnerBehaviorValidatesAndAppliesConfig(t *testing.T) {
 	def := &objectdefs.ObjectDef{}
 	_, err := (burnerBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{
-		RawConfig: []byte(`{"fuelAbilities":["fuel"],"fuelCapacity":5,"secondsPerFuel":1440,"initialFuel":5,"onExhausted":{"dropItem":"ash","despawn":true}}`),
+		RawConfig: []byte(`{"fuelAbilities":["fuel"],"fuelCapacity":5,"ticksPerFuel":1440,"initialFuel":5,"onExhausted":{"dropItem":"ash","despawn":true}}`),
 		Def:       def,
 	})
 	require.NoError(t, err)
@@ -27,27 +27,27 @@ func TestBurnerBehaviorValidatesAndAppliesConfig(t *testing.T) {
 
 func TestBurnerBehaviorInitializesRuntimeStateOnSpawn(t *testing.T) {
 	w := ecs.NewWorld(nil, 0)
-	ecs.SetResource(w, ecs.TimeState{RuntimeSecondsTotal: 100})
+	ecs.SetResource(w, ecs.TimeState{Tick: 100})
 	h := w.Spawn(1, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.ObjectInternalState{}) })
-	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 1, BurnerConfig: &objectdefs.BurnerBehaviorConfig{FuelCapacity: 5, SecondsPerFuel: 1440, InitialFuel: 5}}}))
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 1, BurnerConfig: &objectdefs.BurnerBehaviorConfig{FuelCapacity: 5, TicksPerFuel: 1440, InitialFuel: 5}}}))
 	require.NoError(t, (burnerBehavior{}).InitObject(&contracts.BehaviorObjectInitContext{World: w, Handle: h, EntityID: 1, EntityType: 1, Reason: contracts.ObjectBehaviorInitReasonSpawn}))
 	state, _ := ecs.GetComponent[components.ObjectInternalState](w, h)
 	burner, ok := components.GetBehaviorState[components.BurnerBehaviorState](state, "burner")
 	require.True(t, ok)
 	require.Equal(t, uint32(5), burner.Fuel)
-	require.Equal(t, int64(1540), burner.NextFuelBurnAtRuntimeSecond)
+	require.Equal(t, uint64(1540), burner.NextFuelBurnAtTick)
 }
 
 func TestBurnerBehaviorInitializesRuntimeStateOnTransform(t *testing.T) {
 	w := ecs.NewWorld(nil, 0)
-	ecs.SetResource(w, ecs.TimeState{RuntimeSecondsTotal: 364686})
+	ecs.SetResource(w, ecs.TimeState{Tick: 364686})
 	h := w.Spawn(1, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.ObjectInternalState{}) })
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
 		DefID: 1,
 		BurnerConfig: &objectdefs.BurnerBehaviorConfig{
-			FuelCapacity:   5,
-			SecondsPerFuel: 10,
-			InitialFuel:    5,
+			FuelCapacity: 5,
+			TicksPerFuel: 10,
+			InitialFuel:  5,
 		},
 	}}))
 
@@ -63,28 +63,28 @@ func TestBurnerBehaviorInitializesRuntimeStateOnTransform(t *testing.T) {
 	burner, ok := components.GetBehaviorState[components.BurnerBehaviorState](state, "burner")
 	require.True(t, ok)
 	require.Equal(t, uint32(5), burner.Fuel)
-	require.Equal(t, int64(364696), burner.NextFuelBurnAtRuntimeSecond)
+	require.Equal(t, uint64(364696), burner.NextFuelBurnAtTick)
 }
 
-func TestBurnerBehaviorRestoresMissingLegacyStateWithoutOverwritingPersistedState(t *testing.T) {
+func TestBurnerBehaviorRestoresPersistedTickState(t *testing.T) {
 	w := ecs.NewWorld(nil, 0)
-	ecs.SetResource(w, ecs.TimeState{RuntimeSecondsTotal: 100})
+	ecs.SetResource(w, ecs.TimeState{Tick: 100})
 	h := w.Spawn(1, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.ObjectInternalState{}) })
-	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 1, BurnerConfig: &objectdefs.BurnerBehaviorConfig{FuelCapacity: 5, SecondsPerFuel: 1440, InitialFuel: 5}}}))
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 1, BurnerConfig: &objectdefs.BurnerBehaviorConfig{FuelCapacity: 5, TicksPerFuel: 1440, InitialFuel: 5}}}))
 	b := burnerBehavior{}
-	require.NoError(t, b.InitObject(&contracts.BehaviorObjectInitContext{World: w, Handle: h, EntityID: 1, EntityType: 1, Reason: contracts.ObjectBehaviorInitReasonRestore}))
+	require.NoError(t, b.InitObject(&contracts.BehaviorObjectInitContext{World: w, Handle: h, EntityID: 1, EntityType: 1, Reason: contracts.ObjectBehaviorInitReasonSpawn}))
 	state, _ := ecs.GetComponent[components.ObjectInternalState](w, h)
 	burner, ok := components.GetBehaviorState[components.BurnerBehaviorState](state, "burner")
 	require.True(t, ok)
-	require.Equal(t, int64(1540), burner.NextFuelBurnAtRuntimeSecond)
-	components.SetBehaviorState(&state, "burner", &components.BurnerBehaviorState{Fuel: 2, NextFuelBurnAtRuntimeSecond: 500})
+	require.Equal(t, uint64(1540), burner.NextFuelBurnAtTick)
+	components.SetBehaviorState(&state, "burner", &components.BurnerBehaviorState{Fuel: 2, NextFuelBurnAtTick: 500})
 	ecs.AddComponent(w, h, state)
-	ecs.SetResource(w, ecs.TimeState{RuntimeSecondsTotal: 600})
+	ecs.SetResource(w, ecs.TimeState{Tick: 600})
 	require.NoError(t, b.InitObject(&contracts.BehaviorObjectInitContext{World: w, Handle: h, EntityID: 1, EntityType: 1, Reason: contracts.ObjectBehaviorInitReasonRestore}))
 	state, _ = ecs.GetComponent[components.ObjectInternalState](w, h)
 	burner, _ = components.GetBehaviorState[components.BurnerBehaviorState](state, "burner")
 	require.Equal(t, uint32(1), burner.Fuel)
-	require.Equal(t, int64(1940), burner.NextFuelBurnAtRuntimeSecond)
+	require.Equal(t, uint64(1940), burner.NextFuelBurnAtTick)
 }
 
 func TestBurnerBehaviorRefuelsFromHandAndCapsOverflow(t *testing.T) {
@@ -100,7 +100,7 @@ func TestBurnerBehaviorRefuelsFromHandAndCapsOverflow(t *testing.T) {
 	target := w.Spawn(11, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.EntityInfo{TypeID: 1})
 		ecs.AddComponent(w, h, components.StationState{CurrentState: "unlit"})
-		ecs.AddComponent(w, h, components.ObjectInternalState{State: &components.RuntimeObjectState{Behaviors: map[string]any{"burner": &components.BurnerBehaviorState{Fuel: 4}}}})
+		ecs.AddComponent(w, h, components.ObjectInternalState{State: &components.RuntimeObjectState{Behaviors: map[string]any{"burner": &components.BurnerBehaviorState{Fuel: 4, NextFuelBurnAtTick: 100}}}})
 	})
 	updates := 0
 	result := (burnerBehavior{}).ExecuteAction(&contracts.BehaviorActionExecuteContext{World: w, PlayerID: 10, PlayerHandle: player, TargetHandle: target, ActionID: "add_fuel", Deps: &contracts.ExecutionDeps{InventoryUpdate: func(*ecs.World, types.EntityID, types.Handle) { updates++ }}})
@@ -111,6 +111,7 @@ func TestBurnerBehaviorRefuelsFromHandAndCapsOverflow(t *testing.T) {
 	require.True(t, state.IsDirty)
 	burner, _ := components.GetBehaviorState[components.BurnerBehaviorState](state, "burner")
 	require.Equal(t, uint32(5), burner.Fuel)
+	require.EqualValues(t, 100, burner.NextFuelBurnAtTick, "refueling preserves the current fuel interval")
 	station, _ := ecs.GetComponent[components.StationState](w, target)
 	require.Equal(t, "burning", station.CurrentState)
 	require.False(t, (burnerBehavior{}).ValidateAction(&contracts.BehaviorActionValidateContext{World: w, PlayerID: 10, PlayerHandle: player, TargetHandle: target, ActionID: "add_fuel"}).OK)
@@ -135,9 +136,17 @@ func TestBurnerBehaviorRejectsIncompatibleHandFuel(t *testing.T) {
 
 func TestBurnerBehaviorRejectsInvalidCapacity(t *testing.T) {
 	_, err := (burnerBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{
-		RawConfig: []byte(`{"fuelAbilities":["fuel"],"fuelCapacity":0,"secondsPerFuel":1440,"initialFuel":0,"onExhausted":{"dropItem":"ash","despawn":true}}`),
+		RawConfig: []byte(`{"fuelAbilities":["fuel"],"fuelCapacity":0,"ticksPerFuel":1440,"initialFuel":0,"onExhausted":{"dropItem":"ash","despawn":true}}`),
 		Def:       &objectdefs.ObjectDef{},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "fuelCapacity")
+}
+
+func TestBurnerBehaviorRejectsZeroTicksPerFuel(t *testing.T) {
+	_, err := (burnerBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{
+		RawConfig: []byte(`{"fuelAbilities":["fuel"],"fuelCapacity":5,"ticksPerFuel":0,"initialFuel":5,"onExhausted":{"dropItem":"ash","despawn":true}}`),
+		Def:       &objectdefs.ObjectDef{},
+	})
+	require.ErrorContains(t, err, "ticksPerFuel")
 }
