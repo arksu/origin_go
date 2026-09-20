@@ -9,6 +9,7 @@ Newly constructed campfires currently become burning immediately and begin consu
 - Create an unlit campfire state after construction that preserves its initial fuel reserve without scheduling fuel consumption.
 - Add the single context action `Light my fire` for an unlit campfire. Selecting it uses the normal target-link and cyclic-action flow.
 - Make ignition complete after one cycle, consume exactly 50 player stamina at successful cycle completion, transition the campfire to `burning`, and start its fuel timer only then.
+- Render station states through the existing appearance-update flow using the client resources `campfire/unlit` and `campfire/burning`.
 - Keep existing refueling, burning, persistence, cooking-station, and ash-exhaustion behavior unchanged after ignition.
 
 ## Capabilities

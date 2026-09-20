@@ -68,11 +68,11 @@
           "h": 10
         }
       },
-      "resource": "campfire",
+      "resource": "campfire/unlit",
       "station": {
         "capabilities": ["cooking"],
         "states": ["unlit", "burning"],
-        "initialState": "burning",
+        "initialState": "unlit",
         "values": {
           "temperature": 650
         },
