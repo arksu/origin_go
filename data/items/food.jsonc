@@ -21,7 +21,252 @@
       "name": "Raw meat",
       "resource": "items/raw_meat.png",
       "tags": [
-        "food"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2003,
+      "key": "beef",
+      "name": "Beef",
+      "resource": "items/beef.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2004,
+      "key": "fox_meat",
+      "name": "Fox meat",
+      "resource": "items/fox_meat.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2005,
+      "key": "rabbit_meat",
+      "name": "Rabbit meat",
+      "resource": "items/rabbit_meat.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2006,
+      "key": "boar_meat",
+      "name": "Boar meat",
+      "resource": "items/boar_meat.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2007,
+      "key": "bear_meat",
+      "name": "Bear meat",
+      "resource": "items/bear_meat.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2008,
+      "key": "raw_deer_meat",
+      "name": "Raw deer meat",
+      "resource": "items/raw_deer_meat.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2009,
+      "key": "raw_mutton",
+      "name": "Raw mutton",
+      "resource": "items/raw_mutton.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2010,
+      "key": "raw_pork",
+      "name": "Raw pork",
+      "resource": "items/raw_pork.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2011,
+      "key": "raw_chicken_meat",
+      "name": "Raw chicken meat",
+      "resource": "items/raw_chicken_meat.png",
+      "tags": [
+        "food", "raw_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2012,
+      "key": "roasted_meat",
+      "name": "Roasted meat",
+      "resource": "items/roasted_meat.png",
+      "tags": [
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2013,
+      "key": "roasted_fox_meat",
+      "name": "Roasted fox meat",
+      "resource": "items/roasted_fox_meat.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2014,
+      "key": "roasted_mutton",
+      "name": "Roasted mutton",
+      "resource": "items/roasted_mutton.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2015,
+      "key": "roasted_rabbit_meat",
+      "name": "Roasted rabbit meat",
+      "resource": "items/roasted_rabbit_meat.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2016,
+      "key": "roasted_boar_meat",
+      "name": "Roasted boar meat",
+      "resource": "items/roasted_boar_meat.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2017,
+      "key": "roasted_beer_meat",
+      "name": "Roasted beer meat",
+      "resource": "items/roasted_beer_meat.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2018,
+      "key": "roast_pork",
+      "name": "Roast pork",
+      "resource": "items/roast_pork.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2019,
+      "key": "roasted_deer_meat",
+      "name": "Roasted deer meat",
+      "resource": "items/roasted_deer_meat.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2020,
+      "key": "roasted_chicken_meat",
+      "name": "Roasted chicken meat",
+      "resource": "items/roasted_chicken_meat.png",
+      "tags": [
+        "food", "roasted_meat"
+      ],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 2021,
+      "key": "roasted_beef",
+      "name": "Roasted beef",
+      "resource": "items/roasted_beef.png",
+      "tags": [
+        "food", "roasted_meat"
       ],
       "size": {
         "w": 1,
