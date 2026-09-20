@@ -12,6 +12,7 @@ See [proposal.md](proposal.md) for motivation and the delta specs for the behavi
 - Reuse the existing burner behavior and cyclic-action lifecycle so no network command or client protocol is introduced.
 - Persist both unlit/unarmed and lit/armed states correctly across object reload and server restart.
 - Notify station consumers after ignition so linked craft availability reflects the burning state.
+- Reuse the existing appearance-update flow so clients render unlit and burning campfires correctly.
 
 **Non-Goals:**
 
@@ -35,7 +36,7 @@ The existing deadline is already durable burner state, so this needs no database
 
 ### Complete ignition through one normal target-linked cycle
 
-Selecting `Light my fire` creates an `ActiveCyclicAction` targeting the campfire and sets the player to the normal interacting state. It uses the established single-cycle duration used by simple target actions (10 ticks), with no repeated cycle. At completion, revalidate that the campfire is still unlit and unarmed, then consume 50 stamina with the shared long-action stamina helper before changing any campfire state.
+Selecting `Light my fire` creates an `ActiveCyclicAction` targeting the campfire and sets the player to the normal interacting state. It uses the established single-cycle duration used by simple target actions (10 ticks), with no repeated cycle. At completion, revalidate that the campfire is still unlit and unarmed, then consume the exact 50-stamina ignition cost before changing any campfire state. Ignition deliberately does not use the shared long-action reserve rule: a player with exactly 50 stamina can pay this explicitly specified cost.
 
 If the cycle is interrupted, the target changes state, or stamina is insufficient at completion, cancel without changing fuel, burner deadline, or station state. Successful completion arms the deadline, changes the station to `burning`, marks the object state dirty, and publishes the existing station-state-changed event so craft availability refreshes.
 
@@ -45,10 +46,15 @@ The campfire station definition will declare `unlit` as its initial state while 
 
 This is sufficient because the current burner-backed object is the campfire, and it avoids configuration that can disagree with station state. If a future burner needs delayed ignition with different rules, it can introduce an explicit configuration extension then.
 
+### Map campfire station state to existing appearance updates
+
+The campfire object definition uses `campfire/unlit` as its default resource. Burner lifecycle initialization retains that resource while the station is unlit, and successful ignition explicitly changes it to `campfire/burning`. The existing entity-appearance event reuses the object-spawn upsert already understood by clients, so no protocol message or client state store is added.
+
 ## Risks / Trade-offs
 
 - [An unarmed zero deadline could be treated as overdue] → Guard both runtime burning and restore catch-up so only armed deadlines can consume fuel or trigger exhaustion.
 - [Station state changes may not refresh dependent craft UI] → Publish the existing station-state-changed event after a successful ignition.
+- [Campfire client state may not refresh] → Update `Appearance.Resource` and publish the existing entity-appearance event after ignition.
 - [An action may be requested from stale UI state] → Validate unlit/unarmed state at action execution, during cyclic validity checks, and at completion.
 - [Existing saved campfires could lose burning state] → Preserve any persisted burner deadline and station snapshot; only new spawn initialization creates the unarmed state.
 

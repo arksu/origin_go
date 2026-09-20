@@ -210,9 +210,9 @@
     },
     {
       "defId": 2017,
-      "key": "roasted_beer_meat",
-      "name": "Roasted beer meat",
-      "resource": "items/roasted_beer_meat.png",
+      "key": "roasted_bear_meat",
+      "name": "Roasted bear meat",
+      "resource": "items/roasted_bear_meat.png",
       "tags": [
         "food", "roasted_meat"
       ],
