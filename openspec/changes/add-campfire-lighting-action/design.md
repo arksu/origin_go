@@ -12,13 +12,14 @@ See [proposal.md](proposal.md) for motivation and the delta specs for the behavi
 - Reuse the existing burner behavior and cyclic-action lifecycle so no network command or client protocol is introduced.
 - Persist both unlit/unarmed and lit/armed states correctly across object reload and server restart.
 - Notify station consumers after ignition so linked craft availability reflects the burning state.
-- Reuse the existing appearance-update flow so clients render unlit and burning campfires correctly.
+- Make every applicable burner transition use one object-agnostic appearance convention so clients render its unlit and burning states correctly.
 
 **Non-Goals:**
 
 - Adding player-supplied tinder, tool requirements, new sounds, or a relighting flow after fuel exhaustion.
 - Changing fuel capacity, refueling semantics for burning burners, fuel duration, cooking recipes, or the ash outcome.
 - Reinterpreting already persisted active campfires as newly built unlit campfires.
+- Adding per-object visual-resource fields to burner configuration, or allowing burner behavior to branch on a concrete object key such as `campfire`.
 
 ## Decisions
 
@@ -46,15 +47,18 @@ The campfire station definition will declare `unlit` as its initial state while 
 
 This is sufficient because the current burner-backed object is the campfire, and it avoids configuration that can disagree with station state. If a future burner needs delayed ignition with different rules, it can introduce an explicit configuration extension then.
 
-### Map campfire station state to existing appearance updates
+### Derive burner appearance resources from common object state
 
-The campfire object definition uses `campfire/unlit` as its default resource. Burner lifecycle initialization retains that resource while the station is unlit, and successful ignition explicitly changes it to `campfire/burning`. The existing entity-appearance event reuses the object-spawn upsert already understood by clients, so no protocol message or client state store is added.
+Whenever burner behavior transitions a station-backed burner between the shared `unlit` and `burning` states, it will update `Appearance.Resource` by composing the immutable object-definition key with that state: `{object}/unlit` or `{object}/burning`. For example, a campfire's client resource data declares `campfire/unlit` and `campfire/burning`, but the behavior never contains either literal or receives either path through its configuration. It needs only the current object's definition key and the common target state.
+
+The transition will publish the existing entity-appearance event only when the derived resource differs from the current appearance. That event already sends an object-spawn upsert to visible clients, so no protocol message or client state store is added. Client resource data remains responsible for mapping the conventional resource names to visuals; the generic burner behavior is responsible only for deriving and publishing the resource name.
 
 ## Risks / Trade-offs
 
 - [An unarmed zero deadline could be treated as overdue] → Guard both runtime burning and restore catch-up so only armed deadlines can consume fuel or trigger exhaustion.
 - [Station state changes may not refresh dependent craft UI] → Publish the existing station-state-changed event after a successful ignition.
-- [Campfire client state may not refresh] → Update `Appearance.Resource` and publish the existing entity-appearance event after ignition.
+- [A burner transition may select a missing client resource] → Require each burner-backed object that uses the shared states to register both `{object}/unlit` and `{object}/burning`; cover the generic derivation with a non-campfire fixture and the campfire resource registration with an integration assertion.
+- [Generic behavior could acquire object-specific exceptions] → Keep the appearance helper limited to the immutable object key and the two shared state values; reject new resource-path fields or concrete object-key branches in burner configuration and tests.
 - [An action may be requested from stale UI state] → Validate unlit/unarmed state at action execution, during cyclic validity checks, and at completion.
 - [Existing saved campfires could lose burning state] → Preserve any persisted burner deadline and station snapshot; only new spawn initialization creates the unarmed state.
 

@@ -13,10 +13,6 @@ The system SHALL create each newly completed campfire in the `unlit` station sta
 - **WHEN** a player targets a newly completed unlit campfire
 - **THEN** the available context-action list SHALL contain exactly `Light my fire`
 
-#### Scenario: Campfire appearance follows station state
-- **WHEN** a campfire is created unlit or successfully ignited
-- **THEN** visible clients SHALL receive the existing appearance update using `campfire/unlit` or `campfire/burning`, respectively
-
 #### Scenario: Unlit campfire does not cook
 - **WHEN** a campfire has been completed but has not been successfully ignited
 - **THEN** a craft requiring a burning cooking station SHALL not be eligible at that campfire

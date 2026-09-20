@@ -1,5 +1,18 @@
 # Spec Delta
 
+## ADDED Requirements
+
+### Requirement: Burner appearance uses common object-state resources
+When burner behavior initializes or changes a station-backed burner's shared `unlit` or `burning` state, the system SHALL set the object's client appearance resource to `{object}/unlit` or `{object}/burning`, respectively, and publish the existing appearance update when that resource changes. `{object}` SHALL be derived from the immutable object-definition key. Burner behavior and burner configuration MUST NOT contain a concrete object key, object-specific resource path, or per-object appearance field for this transition. Each object that uses these shared burner states SHALL register matching client resources under those conventional names.
+
+#### Scenario: Unlit burner receives its conventional resource
+- **WHEN** a newly constructed burner-backed object with definition key `campfire` is in the `unlit` state
+- **THEN** its client appearance resource SHALL be `campfire/unlit`
+
+#### Scenario: Ignition derives the burning resource without object-specific configuration
+- **WHEN** a burner-backed object with definition key `test-hearth` transitions from `unlit` to `burning`
+- **THEN** its client appearance resource SHALL become `test-hearth/burning` and no burner configuration value SHALL supply that resource path
+
 ## MODIFIED Requirements
 
 ### Requirement: Burner duration uses server runtime only
