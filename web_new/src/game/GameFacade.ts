@@ -191,6 +191,14 @@ export class GameFacade {
     this.render?.showChatBalloon(entityId, text)
   }
 
+  showMoveTargetMarker(worldX: number, worldY: number): void {
+    this.render?.showMoveTargetMarker(worldX, worldY)
+  }
+
+  hideMoveTargetMarker(): void {
+    this.render?.hideMoveTargetMarker()
+  }
+
   toggleDebugOverlay(): void {
     this.render?.toggleDebugOverlay()
   }

@@ -127,7 +127,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				}
 
 				var targetX, targetY *int
-				if hasMovement && movement.TargetType == constt.TargetPoint {
+				if hasMovement && s.broadcastMoveTarget(w, &movement) {
 					tx := int(movement.TargetX)
 					ty := int(movement.TargetY)
 					targetX = &tx
@@ -176,6 +176,23 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			ecs.NewObjectMoveBatchEvent(w.Layer, s.moveBatch),
 			eventbus.PriorityMedium,
 		)
+	}
+}
+
+// broadcastMoveTarget reports whether the entity's move target should be sent
+// to clients. Point targets are stable, so they are always sent. Entity
+// targets are withheld while the target itself is moving: the destination
+// changes every tick during a chase, and clients use this field to render a
+// move-target marker.
+func (s *TransformUpdateSystem) broadcastMoveTarget(w *ecs.World, movement *components.Movement) bool {
+	switch movement.TargetType {
+	case constt.TargetPoint:
+		return true
+	case constt.TargetEntity:
+		targetMovement, ok := ecs.GetComponent[components.Movement](w, movement.TargetHandle)
+		return !ok || targetMovement.State != constt.StateMoving
+	default:
+		return false
 	}
 }
 
