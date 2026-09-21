@@ -81,7 +81,11 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				newX := int(finalX)
 				newY := int(finalY)
 
-				// TODO migrate chunks
+				// Move the entry to the final position's cell even when that
+				// position crosses a chunk border: ChunkSystem (400) decides
+				// migration on the final position and removes the entry from
+				// this grid using these same coords. Skipping the update here
+				// would strand the entry at the pre-move cell.
 				if oldX != newX || oldY != newY {
 					chunk.Spatial().UpdateDynamic(h, oldX, oldY, newX, newY)
 				}
