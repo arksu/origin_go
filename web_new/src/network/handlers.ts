@@ -415,12 +415,19 @@ export function registerMessageHandlers(): void {
   messageDispatcher.on('chat', (msg: proto.IS2C_ChatMessage) => {
     console.log('[Game] Chat message:', msg.fromName, msg.text, msg.channel)
 
+    const channel = msg.channel || proto.ChatChannel.CHAT_CHANNEL_LOCAL
+    const text = msg.text || ''
+
     // Add message to store
-    gameStore.addChatMessage(
-      msg.fromName || 'Unknown',
-      msg.text || '',
-      msg.channel || proto.ChatChannel.CHAT_CHANNEL_LOCAL
-    )
+    gameStore.addChatMessage(msg.fromName || 'Unknown', text, channel)
+
+    // Show a speech balloon over the sender for local chat
+    if (channel === proto.ChatChannel.CHAT_CHANNEL_LOCAL) {
+      const senderEntityId = toNumber(msg.fromEntityId || 0)
+      if (senderEntityId > 0) {
+        gameFacade.showChatBalloon(senderEntityId, text)
+      }
+    }
   })
 
   messageDispatcher.on('contextMenu', (msg: proto.IS2C_ContextMenu) => {
