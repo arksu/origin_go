@@ -17,6 +17,7 @@ import { MOVE_MARKER_TEXTURE } from '@/constants/moveMarker'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
+import { NICKNAME_FONT_LOAD_SPEC } from '@/constants/nickname'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
 import { terrainManager } from './terrain'
@@ -93,6 +94,10 @@ export class Render {
 
     this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer, this.actorRenderSettings)
     this.objectManager.setActorRenderer(this.actorRenderer)
+
+    // Canvas text never triggers the CSS webfont download; load the nickname
+    // font explicitly so labels do not silently render in the fallback face.
+    await document.fonts.load(NICKNAME_FONT_LOAD_SPEC).catch(() => {})
 
     // Limit maximum FPS to reduce system load
     this.app.ticker.maxFPS = MAX_FPS

@@ -126,7 +126,7 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 				ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
 					*cr = phantomResult
 				})
-				return
+				continue
 			}
 		}
 
@@ -239,6 +239,11 @@ func (s *CollisionSystem) sweepCollision(
 	currentX := transform.X
 	currentY := transform.Y
 
+	// Fraction of the original per-tick distance still available for sliding.
+	// Each slide hit consumes the traveled share so total displacement can
+	// never exceed the intended per-tick distance.
+	remainingBudget := 1.0
+
 	// Iteration limit for sliding
 	const maxIterations = 3
 
@@ -338,7 +343,7 @@ func (s *CollisionSystem) sweepCollision(
 			parallelX := remainingDX - dotNormal*hitNormalX
 			parallelY := remainingDY - dotNormal*hitNormalY
 
-			// Normalize and apply original speed
+			// Normalize and apply remaining budget in slide direction
 			parallelSpeed := math.Sqrt(parallelX*parallelX + parallelY*parallelY)
 			if parallelSpeed < epsilon {
 				// Moving perpendicular to wall - stop
@@ -356,9 +361,17 @@ func (s *CollisionSystem) sweepCollision(
 				break
 			}
 
-			// Apply original speed to parallel direction
-			remainingDX = (parallelX / parallelSpeed) * originalSpeed
-			remainingDY = (parallelY / parallelSpeed) * originalSpeed
+			// The sweep moved (earliestT - epsilon) of the current remaining
+			// vector; shrink the budget by that share before redirecting.
+			spent := earliestT - epsilon
+			if spent < 0 {
+				spent = 0
+			}
+			remainingBudget *= 1 - spent
+
+			// Apply original speed scaled by the remaining budget
+			remainingDX = (parallelX / parallelSpeed) * originalSpeed * remainingBudget
+			remainingDY = (parallelY / parallelSpeed) * originalSpeed * remainingBudget
 		} else {
 			// No collision - move full distance
 			currentX += remainingDX
