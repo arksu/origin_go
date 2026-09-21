@@ -159,23 +159,62 @@ func TestCollisionSystem_PerpendicularHitStopsAtWall(t *testing.T) {
 	}
 }
 
-// C3 regression: a slide must not push the mover into impassable terrain.
-// The intent path stays on grass while the slide segment would cross into a
-// deep-water tile; the mover has to stop at the last passable point.
+// C3/H1 regression: a slide must not push the mover into impassable terrain,
+// and tile collision must respect the collider box, not just the center.
+// The intent path keeps the box clear of the deep-water tile (col 9, row 10)
+// while the slide segment would push the box edge past its y=120 boundary.
 func TestCollisionSystem_SlideStopsBeforeImpassableTerrain(t *testing.T) {
-	// Deep water at tile col 9, row 10 (world x [108,120), y [120,132)).
-	// Mover clips the wall at y≈118.3 and the slide would land at y≈120.35.
 	paintWater := func(chunk *core.Chunk) {
 		paintTestTile(chunk, 110, 120.5, types.TileDeepWater)
 	}
 	wall := components.Transform{X: 120, Y: 100}
-	result := runCollisionSweep(t, 100, 117.5, 12, 1, []components.Transform{wall}, paintWater)
+	result := runCollisionSweep(t, 100, 112, 12, 2, []components.Transform{wall}, paintWater)
 
-	if result.FinalY >= 120 {
-		t.Fatalf("slide entered impassable terrain: final y %.3f", result.FinalY)
+	// Box-aware stopping: slide ends when the box edge (center+5) reaches
+	// the water line at y=120, i.e. center y ≈ 115.
+	if math.Abs(result.FinalY-115) > 0.05 {
+		t.Fatalf("expected slide to stop with box edge at water line (y≈115), got %.3f", result.FinalY)
 	}
 	if result.FinalX > 110.01 {
 		t.Fatalf("expected stop at wall face, final x %.3f", result.FinalX)
+	}
+	if !result.HasCollision {
+		t.Fatalf("expected collision to be reported")
+	}
+}
+
+// H1 regression: the collider box must not cut diagonally between two blocked
+// tiles even when the destination tile itself is passable.
+func TestCollisionSystem_BoxCannotCutDiagonalCorner(t *testing.T) {
+	// Water at (col 9, row 8) and (col 8, row 9); the diagonal tile
+	// (col 9, row 9) stays grass, so center-only checks would pass through.
+	paint := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 110, 102, types.TileDeepWater)
+		paintTestTile(chunk, 102, 110, types.TileDeepWater)
+	}
+	result := runCollisionSweep(t, 100, 100, 12, 12, nil, paint)
+
+	// Box contact happens at t≈0.25 of the intent: center stops at ≈(103,103).
+	if result.FinalX > 104 || result.FinalY > 104 {
+		t.Fatalf("box cut the diagonal corner: final (%.3f, %.3f)", result.FinalX, result.FinalY)
+	}
+	if !result.HasCollision {
+		t.Fatalf("expected collision to be reported")
+	}
+}
+
+// H1 regression: straight walk into deep water must stop when the box edge
+// reaches the water line, not when the center crosses the tile boundary.
+func TestCollisionSystem_WalkStopsBeforeDeepWater(t *testing.T) {
+	// Deep water tile (col 9, row 8): western edge at x=108.
+	paint := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 110, 102, types.TileDeepWater)
+	}
+	result := runCollisionSweep(t, 100, 100, 12, 0, nil, paint)
+
+	// Box edge (center+5) at 108 means the center stops at ≈103.
+	if math.Abs(result.FinalX-103) > 0.05 {
+		t.Fatalf("expected stop with box edge at water line (x≈103), got %.3f", result.FinalX)
 	}
 	if !result.HasCollision {
 		t.Fatalf("expected collision to be reported")
