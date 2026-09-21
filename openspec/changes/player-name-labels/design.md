@@ -52,7 +52,7 @@ Entity record gains `name`/`nameColor`. In `handlers.ts`, the early-return branc
 
 ### D6: Stacking — nickname owns the anchor, chat balloon floats above it
 
-`ChatBalloonManager.update` anchors the balloon tail at the object's bounds top; when a nickname label exists for the entity, the balloon offsets up by the label height (one constant, since labels are fixed-size text). Nickname keeps `boundsTop`. Alternative (balloon keeps the anchor, label moves) rejected: the balloon is transient and its position would then depend on label existence in both directions.
+`ChatBalloonManager.update` anchors the balloon tail at the object's bounds top; when a nickname label exists for the entity, the balloon offsets up by the label height (one constant, since labels are fixed-size text). Nickname keeps `boundsTop`, lowered by the client's `NICKNAME_Y_OFFSET_PX` (15px) so both sit closer to the head. Alternative (balloon keeps the anchor, label moves) rejected: the balloon is transient and its position would then depend on label existence in both directions.
 
 ## Risks / Trade-offs
 

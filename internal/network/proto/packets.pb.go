@@ -613,6 +613,50 @@ func (ChatChannel) EnumDescriptor() ([]byte, []int) {
 	return file_api_proto_packets_proto_rawDescGZIP(), []int{9}
 }
 
+// Semantic role of a named entity; the client owns the visual palette.
+type NicknameColor int32
+
+const (
+	NicknameColor_NICKNAME_COLOR_DEFAULT NicknameColor = 0 // Reserved for future roles: administrator, NPC, ...
+)
+
+// Enum value maps for NicknameColor.
+var (
+	NicknameColor_name = map[int32]string{
+		0: "NICKNAME_COLOR_DEFAULT",
+	}
+	NicknameColor_value = map[string]int32{
+		"NICKNAME_COLOR_DEFAULT": 0,
+	}
+)
+
+func (x NicknameColor) Enum() *NicknameColor {
+	p := new(NicknameColor)
+	*p = x
+	return p
+}
+
+func (x NicknameColor) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NicknameColor) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_proto_packets_proto_enumTypes[10].Descriptor()
+}
+
+func (NicknameColor) Type() protoreflect.EnumType {
+	return &file_api_proto_packets_proto_enumTypes[10]
+}
+
+func (x NicknameColor) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NicknameColor.Descriptor instead.
+func (NicknameColor) EnumDescriptor() ([]byte, []int) {
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{10}
+}
+
 type AlertSeverity int32
 
 const (
@@ -646,11 +690,11 @@ func (x AlertSeverity) String() string {
 }
 
 func (AlertSeverity) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_proto_packets_proto_enumTypes[10].Descriptor()
+	return file_api_proto_packets_proto_enumTypes[11].Descriptor()
 }
 
 func (AlertSeverity) Type() protoreflect.EnumType {
-	return &file_api_proto_packets_proto_enumTypes[10]
+	return &file_api_proto_packets_proto_enumTypes[11]
 }
 
 func (x AlertSeverity) Number() protoreflect.EnumNumber {
@@ -659,7 +703,7 @@ func (x AlertSeverity) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AlertSeverity.Descriptor instead.
 func (AlertSeverity) EnumDescriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{10}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{11}
 }
 
 type CyclicActionFinishResult int32
@@ -695,11 +739,11 @@ func (x CyclicActionFinishResult) String() string {
 }
 
 func (CyclicActionFinishResult) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_proto_packets_proto_enumTypes[11].Descriptor()
+	return file_api_proto_packets_proto_enumTypes[12].Descriptor()
 }
 
 func (CyclicActionFinishResult) Type() protoreflect.EnumType {
-	return &file_api_proto_packets_proto_enumTypes[11]
+	return &file_api_proto_packets_proto_enumTypes[12]
 }
 
 func (x CyclicActionFinishResult) Number() protoreflect.EnumNumber {
@@ -708,7 +752,7 @@ func (x CyclicActionFinishResult) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CyclicActionFinishResult.Descriptor instead.
 func (CyclicActionFinishResult) EnumDescriptor() ([]byte, []int) {
-	return file_api_proto_packets_proto_rawDescGZIP(), []int{11}
+	return file_api_proto_packets_proto_rawDescGZIP(), []int{12}
 }
 
 // Позиция в мире
@@ -4326,6 +4370,8 @@ type S2C_ObjectSpawn struct {
 	CarriedByEntityId uint64                 `protobuf:"varint,5,opt,name=carried_by_entity_id,json=carriedByEntityId,proto3" json:"carried_by_entity_id,omitempty"` // 0 when not carried
 	CharacterVisual   *CharacterVisualState  `protobuf:"bytes,6,opt,name=character_visual,json=characterVisual,proto3" json:"character_visual,omitempty"`
 	StreamEpoch       uint32                 `protobuf:"varint,7,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"`
+	Name              string                 `protobuf:"bytes,8,opt,name=name,proto3" json:"name,omitempty"` // display name; empty for unnamed entities (objects, items)
+	NameColor         NicknameColor          `protobuf:"varint,9,opt,name=name_color,json=nameColor,proto3,enum=proto.NicknameColor" json:"name_color,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -4407,6 +4453,20 @@ func (x *S2C_ObjectSpawn) GetStreamEpoch() uint32 {
 		return x.StreamEpoch
 	}
 	return 0
+}
+
+func (x *S2C_ObjectSpawn) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *S2C_ObjectSpawn) GetNameColor() NicknameColor {
+	if x != nil {
+		return x.NameColor
+	}
+	return NicknameColor_NICKNAME_COLOR_DEFAULT
 }
 
 type S2C_ObjectDespawn struct {
@@ -7467,7 +7527,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\rS2C_ChunkLoad\x12&\n" +
 	"\x05chunk\x18\x01 \x01(\v2\x10.proto.ChunkDataR\x05chunk\":\n" +
 	"\x0fS2C_ChunkUnload\x12'\n" +
-	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\xbb\x02\n" +
+	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\x84\x03\n" +
 	"\x0fS2C_ObjectSpawn\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x17\n" +
 	"\atype_id\x18\x02 \x01(\rR\x06typeId\x12#\n" +
@@ -7475,7 +7535,10 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\bposition\x18\x04 \x01(\v2\x15.proto.EntityPositionR\bposition\x12/\n" +
 	"\x14carried_by_entity_id\x18\x05 \x01(\x04R\x11carriedByEntityId\x12F\n" +
 	"\x10character_visual\x18\x06 \x01(\v2\x1b.proto.CharacterVisualStateR\x0fcharacterVisual\x12!\n" +
-	"\fstream_epoch\x18\a \x01(\rR\vstreamEpoch\"S\n" +
+	"\fstream_epoch\x18\a \x01(\rR\vstreamEpoch\x12\x12\n" +
+	"\x04name\x18\b \x01(\tR\x04name\x123\n" +
+	"\n" +
+	"name_color\x18\t \x01(\x0e2\x14.proto.NicknameColorR\tnameColor\"S\n" +
 	"\x11S2C_ObjectDespawn\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12!\n" +
 	"\fstream_epoch\x18\x02 \x01(\rR\vstreamEpoch\"\xf3\x01\n" +
@@ -7793,7 +7856,9 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x12CHAT_CHANNEL_LOCAL\x10\x00\x12\x17\n" +
 	"\x13CHAT_CHANNEL_GLOBAL\x10\x01\x12\x18\n" +
 	"\x14CHAT_CHANNEL_PRIVATE\x10\x02\x12\x16\n" +
-	"\x12CHAT_CHANNEL_PARTY\x10\x03*^\n" +
+	"\x12CHAT_CHANNEL_PARTY\x10\x03*+\n" +
+	"\rNicknameColor\x12\x1a\n" +
+	"\x16NICKNAME_COLOR_DEFAULT\x10\x00*^\n" +
 	"\rAlertSeverity\x12\x17\n" +
 	"\x13ALERT_SEVERITY_INFO\x10\x00\x12\x1a\n" +
 	"\x16ALERT_SEVERITY_WARNING\x10\x01\x12\x18\n" +
@@ -7815,7 +7880,7 @@ func file_api_proto_packets_proto_rawDescGZIP() []byte {
 	return file_api_proto_packets_proto_rawDescData
 }
 
-var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
+var file_api_proto_packets_proto_enumTypes = make([]protoimpl.EnumInfo, 13)
 var file_api_proto_packets_proto_msgTypes = make([]protoimpl.MessageInfo, 91)
 var file_api_proto_packets_proto_goTypes = []any{
 	(MovementMode)(0),                          // 0: proto.MovementMode
@@ -7828,229 +7893,231 @@ var file_api_proto_packets_proto_goTypes = []any{
 	(CharacterAttributeKey)(0),                 // 7: proto.CharacterAttributeKey
 	(InteractionType)(0),                       // 8: proto.InteractionType
 	(ChatChannel)(0),                           // 9: proto.ChatChannel
-	(AlertSeverity)(0),                         // 10: proto.AlertSeverity
-	(CyclicActionFinishResult)(0),              // 11: proto.CyclicActionFinishResult
-	(*Position)(nil),                           // 12: proto.Position
-	(*Vector2)(nil),                            // 13: proto.Vector2
-	(*AABB)(nil),                               // 14: proto.AABB
-	(*Timestamp)(nil),                          // 15: proto.Timestamp
-	(*InventoryRef)(nil),                       // 16: proto.InventoryRef
-	(*ItemInstance)(nil),                       // 17: proto.ItemInstance
-	(*GridItem)(nil),                           // 18: proto.GridItem
-	(*InventoryGridState)(nil),                 // 19: proto.InventoryGridState
-	(*EquipmentItem)(nil),                      // 20: proto.EquipmentItem
-	(*InventoryEquipmentState)(nil),            // 21: proto.InventoryEquipmentState
-	(*InventoryHandState)(nil),                 // 22: proto.InventoryHandState
-	(*InventoryState)(nil),                     // 23: proto.InventoryState
-	(*InventoryExpected)(nil),                  // 24: proto.InventoryExpected
-	(*GridPos)(nil),                            // 25: proto.GridPos
-	(*HandPos)(nil),                            // 26: proto.HandPos
-	(*InventoryMoveSpec)(nil),                  // 27: proto.InventoryMoveSpec
-	(*InventoryOp)(nil),                        // 28: proto.InventoryOp
-	(*C2S_InventoryOp)(nil),                    // 29: proto.C2S_InventoryOp
-	(*C2S_OpenContainer)(nil),                  // 30: proto.C2S_OpenContainer
-	(*C2S_CloseContainer)(nil),                 // 31: proto.C2S_CloseContainer
-	(*EntityMovement)(nil),                     // 32: proto.EntityMovement
-	(*EntityPosition)(nil),                     // 33: proto.EntityPosition
-	(*EntityAppearance)(nil),                   // 34: proto.EntityAppearance
-	(*CharacterEquipmentVisual)(nil),           // 35: proto.CharacterEquipmentVisual
-	(*CharacterVisualState)(nil),               // 36: proto.CharacterVisualState
-	(*S2C_CharacterVisual)(nil),                // 37: proto.S2C_CharacterVisual
-	(*ChunkCoord)(nil),                         // 38: proto.ChunkCoord
-	(*ChunkData)(nil),                          // 39: proto.ChunkData
-	(*MapClick)(nil),                           // 40: proto.MapClick
-	(*Interact)(nil),                           // 41: proto.Interact
-	(*SelectContextAction)(nil),                // 42: proto.SelectContextAction
-	(*C2S_PlayerAction)(nil),                   // 43: proto.C2S_PlayerAction
-	(*C2S_MovementMode)(nil),                   // 44: proto.C2S_MovementMode
-	(*C2S_ChatMessage)(nil),                    // 45: proto.C2S_ChatMessage
-	(*C2S_Auth)(nil),                           // 46: proto.C2S_Auth
-	(*C2S_Ping)(nil),                           // 47: proto.C2S_Ping
-	(*C2S_StartCraftOne)(nil),                  // 48: proto.C2S_StartCraftOne
-	(*C2S_StartCraftMany)(nil),                 // 49: proto.C2S_StartCraftMany
-	(*C2S_BuildStart)(nil),                     // 50: proto.C2S_BuildStart
-	(*C2S_BuildProgress)(nil),                  // 51: proto.C2S_BuildProgress
-	(*C2S_BuildTakeBack)(nil),                  // 52: proto.C2S_BuildTakeBack
-	(*C2S_LiftPutDown)(nil),                    // 53: proto.C2S_LiftPutDown
-	(*C2S_OpenWindow)(nil),                     // 54: proto.C2S_OpenWindow
-	(*C2S_CloseWindow)(nil),                    // 55: proto.C2S_CloseWindow
-	(*ClientMessage)(nil),                      // 56: proto.ClientMessage
-	(*S2C_AuthResult)(nil),                     // 57: proto.S2C_AuthResult
-	(*S2C_Pong)(nil),                           // 58: proto.S2C_Pong
-	(*S2C_PlayerEnterWorld)(nil),               // 59: proto.S2C_PlayerEnterWorld
-	(*CharacterAttributeEntry)(nil),            // 60: proto.CharacterAttributeEntry
-	(*CharacterExperience)(nil),                // 61: proto.CharacterExperience
-	(*S2C_CharacterProfile)(nil),               // 62: proto.S2C_CharacterProfile
-	(*S2C_PlayerStats)(nil),                    // 63: proto.S2C_PlayerStats
-	(*S2C_DeathDialog)(nil),                    // 64: proto.S2C_DeathDialog
-	(*S2C_PlayerLeaveWorld)(nil),               // 65: proto.S2C_PlayerLeaveWorld
-	(*S2C_ChunkLoad)(nil),                      // 66: proto.S2C_ChunkLoad
-	(*S2C_ChunkUnload)(nil),                    // 67: proto.S2C_ChunkUnload
-	(*S2C_ObjectSpawn)(nil),                    // 68: proto.S2C_ObjectSpawn
-	(*S2C_ObjectDespawn)(nil),                  // 69: proto.S2C_ObjectDespawn
-	(*S2C_ObjectMove)(nil),                     // 70: proto.S2C_ObjectMove
-	(*S2C_MovementMode)(nil),                   // 71: proto.S2C_MovementMode
-	(*S2C_InventoryOpResult)(nil),              // 72: proto.S2C_InventoryOpResult
-	(*S2C_InventoryUpdate)(nil),                // 73: proto.S2C_InventoryUpdate
-	(*S2C_ContainerOpened)(nil),                // 74: proto.S2C_ContainerOpened
-	(*S2C_ContainerClosed)(nil),                // 75: proto.S2C_ContainerClosed
-	(*ContextMenuAction)(nil),                  // 76: proto.ContextMenuAction
-	(*S2C_ContextMenu)(nil),                    // 77: proto.S2C_ContextMenu
-	(*S2C_MiniAlert)(nil),                      // 78: proto.S2C_MiniAlert
-	(*S2C_CyclicActionProgress)(nil),           // 79: proto.S2C_CyclicActionProgress
-	(*S2C_CyclicActionFinished)(nil),           // 80: proto.S2C_CyclicActionFinished
-	(*CraftInputDef)(nil),                      // 81: proto.CraftInputDef
-	(*CraftOutputDef)(nil),                     // 82: proto.CraftOutputDef
-	(*CraftStationConditionDef)(nil),           // 83: proto.CraftStationConditionDef
-	(*CraftStationResourceConsumptionDef)(nil), // 84: proto.CraftStationResourceConsumptionDef
-	(*CraftStationRequirementDef)(nil),         // 85: proto.CraftStationRequirementDef
-	(*CraftRequirementFlags)(nil),              // 86: proto.CraftRequirementFlags
-	(*CraftRecipeEntry)(nil),                   // 87: proto.CraftRecipeEntry
-	(*S2C_CraftList)(nil),                      // 88: proto.S2C_CraftList
-	(*BuildInputDef)(nil),                      // 89: proto.BuildInputDef
-	(*BuildStateItem)(nil),                     // 90: proto.BuildStateItem
-	(*BuildRecipeEntry)(nil),                   // 91: proto.BuildRecipeEntry
-	(*S2C_BuildList)(nil),                      // 92: proto.S2C_BuildList
-	(*S2C_BuildState)(nil),                     // 93: proto.S2C_BuildState
-	(*S2C_BuildStateClosed)(nil),               // 94: proto.S2C_BuildStateClosed
-	(*S2C_LiftCarryState)(nil),                 // 95: proto.S2C_LiftCarryState
-	(*S2C_Sound)(nil),                          // 96: proto.S2C_Sound
-	(*S2C_ExpGained)(nil),                      // 97: proto.S2C_ExpGained
-	(*S2C_Fx)(nil),                             // 98: proto.S2C_Fx
-	(*S2C_ChatMessage)(nil),                    // 99: proto.S2C_ChatMessage
-	(*S2C_Error)(nil),                          // 100: proto.S2C_Error
-	(*S2C_Warning)(nil),                        // 101: proto.S2C_Warning
-	(*ServerMessage)(nil),                      // 102: proto.ServerMessage
+	(NicknameColor)(0),                         // 10: proto.NicknameColor
+	(AlertSeverity)(0),                         // 11: proto.AlertSeverity
+	(CyclicActionFinishResult)(0),              // 12: proto.CyclicActionFinishResult
+	(*Position)(nil),                           // 13: proto.Position
+	(*Vector2)(nil),                            // 14: proto.Vector2
+	(*AABB)(nil),                               // 15: proto.AABB
+	(*Timestamp)(nil),                          // 16: proto.Timestamp
+	(*InventoryRef)(nil),                       // 17: proto.InventoryRef
+	(*ItemInstance)(nil),                       // 18: proto.ItemInstance
+	(*GridItem)(nil),                           // 19: proto.GridItem
+	(*InventoryGridState)(nil),                 // 20: proto.InventoryGridState
+	(*EquipmentItem)(nil),                      // 21: proto.EquipmentItem
+	(*InventoryEquipmentState)(nil),            // 22: proto.InventoryEquipmentState
+	(*InventoryHandState)(nil),                 // 23: proto.InventoryHandState
+	(*InventoryState)(nil),                     // 24: proto.InventoryState
+	(*InventoryExpected)(nil),                  // 25: proto.InventoryExpected
+	(*GridPos)(nil),                            // 26: proto.GridPos
+	(*HandPos)(nil),                            // 27: proto.HandPos
+	(*InventoryMoveSpec)(nil),                  // 28: proto.InventoryMoveSpec
+	(*InventoryOp)(nil),                        // 29: proto.InventoryOp
+	(*C2S_InventoryOp)(nil),                    // 30: proto.C2S_InventoryOp
+	(*C2S_OpenContainer)(nil),                  // 31: proto.C2S_OpenContainer
+	(*C2S_CloseContainer)(nil),                 // 32: proto.C2S_CloseContainer
+	(*EntityMovement)(nil),                     // 33: proto.EntityMovement
+	(*EntityPosition)(nil),                     // 34: proto.EntityPosition
+	(*EntityAppearance)(nil),                   // 35: proto.EntityAppearance
+	(*CharacterEquipmentVisual)(nil),           // 36: proto.CharacterEquipmentVisual
+	(*CharacterVisualState)(nil),               // 37: proto.CharacterVisualState
+	(*S2C_CharacterVisual)(nil),                // 38: proto.S2C_CharacterVisual
+	(*ChunkCoord)(nil),                         // 39: proto.ChunkCoord
+	(*ChunkData)(nil),                          // 40: proto.ChunkData
+	(*MapClick)(nil),                           // 41: proto.MapClick
+	(*Interact)(nil),                           // 42: proto.Interact
+	(*SelectContextAction)(nil),                // 43: proto.SelectContextAction
+	(*C2S_PlayerAction)(nil),                   // 44: proto.C2S_PlayerAction
+	(*C2S_MovementMode)(nil),                   // 45: proto.C2S_MovementMode
+	(*C2S_ChatMessage)(nil),                    // 46: proto.C2S_ChatMessage
+	(*C2S_Auth)(nil),                           // 47: proto.C2S_Auth
+	(*C2S_Ping)(nil),                           // 48: proto.C2S_Ping
+	(*C2S_StartCraftOne)(nil),                  // 49: proto.C2S_StartCraftOne
+	(*C2S_StartCraftMany)(nil),                 // 50: proto.C2S_StartCraftMany
+	(*C2S_BuildStart)(nil),                     // 51: proto.C2S_BuildStart
+	(*C2S_BuildProgress)(nil),                  // 52: proto.C2S_BuildProgress
+	(*C2S_BuildTakeBack)(nil),                  // 53: proto.C2S_BuildTakeBack
+	(*C2S_LiftPutDown)(nil),                    // 54: proto.C2S_LiftPutDown
+	(*C2S_OpenWindow)(nil),                     // 55: proto.C2S_OpenWindow
+	(*C2S_CloseWindow)(nil),                    // 56: proto.C2S_CloseWindow
+	(*ClientMessage)(nil),                      // 57: proto.ClientMessage
+	(*S2C_AuthResult)(nil),                     // 58: proto.S2C_AuthResult
+	(*S2C_Pong)(nil),                           // 59: proto.S2C_Pong
+	(*S2C_PlayerEnterWorld)(nil),               // 60: proto.S2C_PlayerEnterWorld
+	(*CharacterAttributeEntry)(nil),            // 61: proto.CharacterAttributeEntry
+	(*CharacterExperience)(nil),                // 62: proto.CharacterExperience
+	(*S2C_CharacterProfile)(nil),               // 63: proto.S2C_CharacterProfile
+	(*S2C_PlayerStats)(nil),                    // 64: proto.S2C_PlayerStats
+	(*S2C_DeathDialog)(nil),                    // 65: proto.S2C_DeathDialog
+	(*S2C_PlayerLeaveWorld)(nil),               // 66: proto.S2C_PlayerLeaveWorld
+	(*S2C_ChunkLoad)(nil),                      // 67: proto.S2C_ChunkLoad
+	(*S2C_ChunkUnload)(nil),                    // 68: proto.S2C_ChunkUnload
+	(*S2C_ObjectSpawn)(nil),                    // 69: proto.S2C_ObjectSpawn
+	(*S2C_ObjectDespawn)(nil),                  // 70: proto.S2C_ObjectDespawn
+	(*S2C_ObjectMove)(nil),                     // 71: proto.S2C_ObjectMove
+	(*S2C_MovementMode)(nil),                   // 72: proto.S2C_MovementMode
+	(*S2C_InventoryOpResult)(nil),              // 73: proto.S2C_InventoryOpResult
+	(*S2C_InventoryUpdate)(nil),                // 74: proto.S2C_InventoryUpdate
+	(*S2C_ContainerOpened)(nil),                // 75: proto.S2C_ContainerOpened
+	(*S2C_ContainerClosed)(nil),                // 76: proto.S2C_ContainerClosed
+	(*ContextMenuAction)(nil),                  // 77: proto.ContextMenuAction
+	(*S2C_ContextMenu)(nil),                    // 78: proto.S2C_ContextMenu
+	(*S2C_MiniAlert)(nil),                      // 79: proto.S2C_MiniAlert
+	(*S2C_CyclicActionProgress)(nil),           // 80: proto.S2C_CyclicActionProgress
+	(*S2C_CyclicActionFinished)(nil),           // 81: proto.S2C_CyclicActionFinished
+	(*CraftInputDef)(nil),                      // 82: proto.CraftInputDef
+	(*CraftOutputDef)(nil),                     // 83: proto.CraftOutputDef
+	(*CraftStationConditionDef)(nil),           // 84: proto.CraftStationConditionDef
+	(*CraftStationResourceConsumptionDef)(nil), // 85: proto.CraftStationResourceConsumptionDef
+	(*CraftStationRequirementDef)(nil),         // 86: proto.CraftStationRequirementDef
+	(*CraftRequirementFlags)(nil),              // 87: proto.CraftRequirementFlags
+	(*CraftRecipeEntry)(nil),                   // 88: proto.CraftRecipeEntry
+	(*S2C_CraftList)(nil),                      // 89: proto.S2C_CraftList
+	(*BuildInputDef)(nil),                      // 90: proto.BuildInputDef
+	(*BuildStateItem)(nil),                     // 91: proto.BuildStateItem
+	(*BuildRecipeEntry)(nil),                   // 92: proto.BuildRecipeEntry
+	(*S2C_BuildList)(nil),                      // 93: proto.S2C_BuildList
+	(*S2C_BuildState)(nil),                     // 94: proto.S2C_BuildState
+	(*S2C_BuildStateClosed)(nil),               // 95: proto.S2C_BuildStateClosed
+	(*S2C_LiftCarryState)(nil),                 // 96: proto.S2C_LiftCarryState
+	(*S2C_Sound)(nil),                          // 97: proto.S2C_Sound
+	(*S2C_ExpGained)(nil),                      // 98: proto.S2C_ExpGained
+	(*S2C_Fx)(nil),                             // 99: proto.S2C_Fx
+	(*S2C_ChatMessage)(nil),                    // 100: proto.S2C_ChatMessage
+	(*S2C_Error)(nil),                          // 101: proto.S2C_Error
+	(*S2C_Warning)(nil),                        // 102: proto.S2C_Warning
+	(*ServerMessage)(nil),                      // 103: proto.ServerMessage
 }
 var file_api_proto_packets_proto_depIdxs = []int32{
 	4,   // 0: proto.InventoryRef.kind:type_name -> proto.InventoryKind
-	16,  // 1: proto.ItemInstance.nested_ref:type_name -> proto.InventoryRef
-	17,  // 2: proto.GridItem.item:type_name -> proto.ItemInstance
-	18,  // 3: proto.InventoryGridState.items:type_name -> proto.GridItem
+	17,  // 1: proto.ItemInstance.nested_ref:type_name -> proto.InventoryRef
+	18,  // 2: proto.GridItem.item:type_name -> proto.ItemInstance
+	19,  // 3: proto.InventoryGridState.items:type_name -> proto.GridItem
 	1,   // 4: proto.EquipmentItem.slot:type_name -> proto.EquipSlot
-	17,  // 5: proto.EquipmentItem.item:type_name -> proto.ItemInstance
-	20,  // 6: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
-	17,  // 7: proto.InventoryHandState.item:type_name -> proto.ItemInstance
-	26,  // 8: proto.InventoryHandState.hand_pos:type_name -> proto.HandPos
-	16,  // 9: proto.InventoryState.ref:type_name -> proto.InventoryRef
-	19,  // 10: proto.InventoryState.grid:type_name -> proto.InventoryGridState
-	21,  // 11: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
-	22,  // 12: proto.InventoryState.hand:type_name -> proto.InventoryHandState
-	16,  // 13: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
-	16,  // 14: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
-	16,  // 15: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
-	25,  // 16: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
+	18,  // 5: proto.EquipmentItem.item:type_name -> proto.ItemInstance
+	21,  // 6: proto.InventoryEquipmentState.items:type_name -> proto.EquipmentItem
+	18,  // 7: proto.InventoryHandState.item:type_name -> proto.ItemInstance
+	27,  // 8: proto.InventoryHandState.hand_pos:type_name -> proto.HandPos
+	17,  // 9: proto.InventoryState.ref:type_name -> proto.InventoryRef
+	20,  // 10: proto.InventoryState.grid:type_name -> proto.InventoryGridState
+	22,  // 11: proto.InventoryState.equipment:type_name -> proto.InventoryEquipmentState
+	23,  // 12: proto.InventoryState.hand:type_name -> proto.InventoryHandState
+	17,  // 13: proto.InventoryExpected.ref:type_name -> proto.InventoryRef
+	17,  // 14: proto.InventoryMoveSpec.src:type_name -> proto.InventoryRef
+	17,  // 15: proto.InventoryMoveSpec.dst:type_name -> proto.InventoryRef
+	26,  // 16: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
 	1,   // 17: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
-	26,  // 18: proto.InventoryMoveSpec.hand_pos:type_name -> proto.HandPos
-	24,  // 19: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
-	27,  // 20: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
-	27,  // 21: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
-	28,  // 22: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
-	16,  // 23: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
-	16,  // 24: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
-	12,  // 25: proto.EntityMovement.position:type_name -> proto.Position
-	13,  // 26: proto.EntityMovement.velocity:type_name -> proto.Vector2
+	27,  // 18: proto.InventoryMoveSpec.hand_pos:type_name -> proto.HandPos
+	25,  // 19: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
+	28,  // 20: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
+	28,  // 21: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
+	29,  // 22: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
+	17,  // 23: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
+	17,  // 24: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
+	13,  // 25: proto.EntityMovement.position:type_name -> proto.Position
+	14,  // 26: proto.EntityMovement.velocity:type_name -> proto.Vector2
 	0,   // 27: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
-	13,  // 28: proto.EntityMovement.target_position:type_name -> proto.Vector2
-	12,  // 29: proto.EntityPosition.position:type_name -> proto.Position
-	13,  // 30: proto.EntityPosition.size:type_name -> proto.Vector2
+	14,  // 28: proto.EntityMovement.target_position:type_name -> proto.Vector2
+	13,  // 29: proto.EntityPosition.position:type_name -> proto.Position
+	14,  // 30: proto.EntityPosition.size:type_name -> proto.Vector2
 	1,   // 31: proto.CharacterEquipmentVisual.slot:type_name -> proto.EquipSlot
-	35,  // 32: proto.CharacterVisualState.equipment:type_name -> proto.CharacterEquipmentVisual
-	36,  // 33: proto.S2C_CharacterVisual.state:type_name -> proto.CharacterVisualState
-	38,  // 34: proto.ChunkData.coord:type_name -> proto.ChunkCoord
+	36,  // 32: proto.CharacterVisualState.equipment:type_name -> proto.CharacterEquipmentVisual
+	37,  // 33: proto.S2C_CharacterVisual.state:type_name -> proto.CharacterVisualState
+	39,  // 34: proto.ChunkData.coord:type_name -> proto.ChunkCoord
 	8,   // 35: proto.Interact.type:type_name -> proto.InteractionType
-	40,  // 36: proto.C2S_PlayerAction.map_click:type_name -> proto.MapClick
-	41,  // 37: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
-	42,  // 38: proto.C2S_PlayerAction.select_context_action:type_name -> proto.SelectContextAction
+	41,  // 36: proto.C2S_PlayerAction.map_click:type_name -> proto.MapClick
+	42,  // 37: proto.C2S_PlayerAction.interact:type_name -> proto.Interact
+	43,  // 38: proto.C2S_PlayerAction.select_context_action:type_name -> proto.SelectContextAction
 	0,   // 39: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
 	9,   // 40: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
-	13,  // 41: proto.C2S_BuildStart.pos:type_name -> proto.Vector2
-	13,  // 42: proto.C2S_LiftPutDown.pos:type_name -> proto.Vector2
-	46,  // 43: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
-	47,  // 44: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
-	43,  // 45: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
-	44,  // 46: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
-	29,  // 47: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
-	45,  // 48: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
-	30,  // 49: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
-	31,  // 50: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
-	48,  // 51: proto.ClientMessage.start_craft_one:type_name -> proto.C2S_StartCraftOne
-	49,  // 52: proto.ClientMessage.start_craft_many:type_name -> proto.C2S_StartCraftMany
-	54,  // 53: proto.ClientMessage.open_window:type_name -> proto.C2S_OpenWindow
-	55,  // 54: proto.ClientMessage.close_window:type_name -> proto.C2S_CloseWindow
-	50,  // 55: proto.ClientMessage.build_start:type_name -> proto.C2S_BuildStart
-	51,  // 56: proto.ClientMessage.build_progress:type_name -> proto.C2S_BuildProgress
-	52,  // 57: proto.ClientMessage.build_take_back:type_name -> proto.C2S_BuildTakeBack
-	53,  // 58: proto.ClientMessage.lift_put_down:type_name -> proto.C2S_LiftPutDown
+	14,  // 41: proto.C2S_BuildStart.pos:type_name -> proto.Vector2
+	14,  // 42: proto.C2S_LiftPutDown.pos:type_name -> proto.Vector2
+	47,  // 43: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
+	48,  // 44: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
+	44,  // 45: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
+	45,  // 46: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
+	30,  // 47: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
+	46,  // 48: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
+	31,  // 49: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
+	32,  // 50: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
+	49,  // 51: proto.ClientMessage.start_craft_one:type_name -> proto.C2S_StartCraftOne
+	50,  // 52: proto.ClientMessage.start_craft_many:type_name -> proto.C2S_StartCraftMany
+	55,  // 53: proto.ClientMessage.open_window:type_name -> proto.C2S_OpenWindow
+	56,  // 54: proto.ClientMessage.close_window:type_name -> proto.C2S_CloseWindow
+	51,  // 55: proto.ClientMessage.build_start:type_name -> proto.C2S_BuildStart
+	52,  // 56: proto.ClientMessage.build_progress:type_name -> proto.C2S_BuildProgress
+	53,  // 57: proto.ClientMessage.build_take_back:type_name -> proto.C2S_BuildTakeBack
+	54,  // 58: proto.ClientMessage.lift_put_down:type_name -> proto.C2S_LiftPutDown
 	7,   // 59: proto.CharacterAttributeEntry.key:type_name -> proto.CharacterAttributeKey
-	60,  // 60: proto.S2C_CharacterProfile.attributes:type_name -> proto.CharacterAttributeEntry
-	61,  // 61: proto.S2C_CharacterProfile.exp:type_name -> proto.CharacterExperience
-	39,  // 62: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
-	38,  // 63: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
-	33,  // 64: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
-	36,  // 65: proto.S2C_ObjectSpawn.character_visual:type_name -> proto.CharacterVisualState
-	32,  // 66: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
-	0,   // 67: proto.S2C_MovementMode.movement_mode:type_name -> proto.MovementMode
-	5,   // 68: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
-	23,  // 69: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
-	23,  // 70: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
-	23,  // 71: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
-	16,  // 72: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
-	76,  // 73: proto.S2C_ContextMenu.actions:type_name -> proto.ContextMenuAction
-	10,  // 74: proto.S2C_MiniAlert.severity:type_name -> proto.AlertSeverity
-	11,  // 75: proto.S2C_CyclicActionFinished.result:type_name -> proto.CyclicActionFinishResult
-	83,  // 76: proto.CraftStationRequirementDef.conditions:type_name -> proto.CraftStationConditionDef
-	84,  // 77: proto.CraftStationRequirementDef.consume:type_name -> proto.CraftStationResourceConsumptionDef
-	81,  // 78: proto.CraftRecipeEntry.inputs:type_name -> proto.CraftInputDef
-	82,  // 79: proto.CraftRecipeEntry.outputs:type_name -> proto.CraftOutputDef
-	86,  // 80: proto.CraftRecipeEntry.flags:type_name -> proto.CraftRequirementFlags
-	85,  // 81: proto.CraftRecipeEntry.station_requirements:type_name -> proto.CraftStationRequirementDef
-	87,  // 82: proto.S2C_CraftList.recipes:type_name -> proto.CraftRecipeEntry
-	89,  // 83: proto.BuildRecipeEntry.inputs:type_name -> proto.BuildInputDef
-	91,  // 84: proto.S2C_BuildList.builds:type_name -> proto.BuildRecipeEntry
-	90,  // 85: proto.S2C_BuildState.list:type_name -> proto.BuildStateItem
-	13,  // 86: proto.S2C_Fx.position:type_name -> proto.Vector2
-	9,   // 87: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
-	5,   // 88: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	6,   // 89: proto.S2C_Warning.code:type_name -> proto.WarningCode
-	57,  // 90: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	58,  // 91: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	66,  // 92: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
-	67,  // 93: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
-	59,  // 94: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	65,  // 95: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	68,  // 96: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	69,  // 97: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	70,  // 98: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	71,  // 99: proto.ServerMessage.movement_mode:type_name -> proto.S2C_MovementMode
-	72,  // 100: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
-	73,  // 101: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
-	74,  // 102: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
-	75,  // 103: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
-	99,  // 104: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
-	77,  // 105: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
-	78,  // 106: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
-	79,  // 107: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
-	80,  // 108: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
-	96,  // 109: proto.ServerMessage.sound:type_name -> proto.S2C_Sound
-	62,  // 110: proto.ServerMessage.character_profile:type_name -> proto.S2C_CharacterProfile
-	63,  // 111: proto.ServerMessage.player_stats:type_name -> proto.S2C_PlayerStats
-	97,  // 112: proto.ServerMessage.exp_gained:type_name -> proto.S2C_ExpGained
-	98,  // 113: proto.ServerMessage.fx:type_name -> proto.S2C_Fx
-	88,  // 114: proto.ServerMessage.craft_list:type_name -> proto.S2C_CraftList
-	92,  // 115: proto.ServerMessage.build_list:type_name -> proto.S2C_BuildList
-	93,  // 116: proto.ServerMessage.build_state:type_name -> proto.S2C_BuildState
-	94,  // 117: proto.ServerMessage.build_state_closed:type_name -> proto.S2C_BuildStateClosed
-	95,  // 118: proto.ServerMessage.lift_carry_state:type_name -> proto.S2C_LiftCarryState
-	64,  // 119: proto.ServerMessage.death_dialog:type_name -> proto.S2C_DeathDialog
-	37,  // 120: proto.ServerMessage.character_visual:type_name -> proto.S2C_CharacterVisual
-	100, // 121: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	101, // 122: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
-	123, // [123:123] is the sub-list for method output_type
-	123, // [123:123] is the sub-list for method input_type
-	123, // [123:123] is the sub-list for extension type_name
-	123, // [123:123] is the sub-list for extension extendee
-	0,   // [0:123] is the sub-list for field type_name
+	61,  // 60: proto.S2C_CharacterProfile.attributes:type_name -> proto.CharacterAttributeEntry
+	62,  // 61: proto.S2C_CharacterProfile.exp:type_name -> proto.CharacterExperience
+	40,  // 62: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
+	39,  // 63: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
+	34,  // 64: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
+	37,  // 65: proto.S2C_ObjectSpawn.character_visual:type_name -> proto.CharacterVisualState
+	10,  // 66: proto.S2C_ObjectSpawn.name_color:type_name -> proto.NicknameColor
+	33,  // 67: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
+	0,   // 68: proto.S2C_MovementMode.movement_mode:type_name -> proto.MovementMode
+	5,   // 69: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
+	24,  // 70: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
+	24,  // 71: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
+	24,  // 72: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
+	17,  // 73: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
+	77,  // 74: proto.S2C_ContextMenu.actions:type_name -> proto.ContextMenuAction
+	11,  // 75: proto.S2C_MiniAlert.severity:type_name -> proto.AlertSeverity
+	12,  // 76: proto.S2C_CyclicActionFinished.result:type_name -> proto.CyclicActionFinishResult
+	84,  // 77: proto.CraftStationRequirementDef.conditions:type_name -> proto.CraftStationConditionDef
+	85,  // 78: proto.CraftStationRequirementDef.consume:type_name -> proto.CraftStationResourceConsumptionDef
+	82,  // 79: proto.CraftRecipeEntry.inputs:type_name -> proto.CraftInputDef
+	83,  // 80: proto.CraftRecipeEntry.outputs:type_name -> proto.CraftOutputDef
+	87,  // 81: proto.CraftRecipeEntry.flags:type_name -> proto.CraftRequirementFlags
+	86,  // 82: proto.CraftRecipeEntry.station_requirements:type_name -> proto.CraftStationRequirementDef
+	88,  // 83: proto.S2C_CraftList.recipes:type_name -> proto.CraftRecipeEntry
+	90,  // 84: proto.BuildRecipeEntry.inputs:type_name -> proto.BuildInputDef
+	92,  // 85: proto.S2C_BuildList.builds:type_name -> proto.BuildRecipeEntry
+	91,  // 86: proto.S2C_BuildState.list:type_name -> proto.BuildStateItem
+	14,  // 87: proto.S2C_Fx.position:type_name -> proto.Vector2
+	9,   // 88: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
+	5,   // 89: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	6,   // 90: proto.S2C_Warning.code:type_name -> proto.WarningCode
+	58,  // 91: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	59,  // 92: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	67,  // 93: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	68,  // 94: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	60,  // 95: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	66,  // 96: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	69,  // 97: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	70,  // 98: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	71,  // 99: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	72,  // 100: proto.ServerMessage.movement_mode:type_name -> proto.S2C_MovementMode
+	73,  // 101: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
+	74,  // 102: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
+	75,  // 103: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
+	76,  // 104: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
+	100, // 105: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
+	78,  // 106: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
+	79,  // 107: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
+	80,  // 108: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
+	81,  // 109: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
+	97,  // 110: proto.ServerMessage.sound:type_name -> proto.S2C_Sound
+	63,  // 111: proto.ServerMessage.character_profile:type_name -> proto.S2C_CharacterProfile
+	64,  // 112: proto.ServerMessage.player_stats:type_name -> proto.S2C_PlayerStats
+	98,  // 113: proto.ServerMessage.exp_gained:type_name -> proto.S2C_ExpGained
+	99,  // 114: proto.ServerMessage.fx:type_name -> proto.S2C_Fx
+	89,  // 115: proto.ServerMessage.craft_list:type_name -> proto.S2C_CraftList
+	93,  // 116: proto.ServerMessage.build_list:type_name -> proto.S2C_BuildList
+	94,  // 117: proto.ServerMessage.build_state:type_name -> proto.S2C_BuildState
+	95,  // 118: proto.ServerMessage.build_state_closed:type_name -> proto.S2C_BuildStateClosed
+	96,  // 119: proto.ServerMessage.lift_carry_state:type_name -> proto.S2C_LiftCarryState
+	65,  // 120: proto.ServerMessage.death_dialog:type_name -> proto.S2C_DeathDialog
+	38,  // 121: proto.ServerMessage.character_visual:type_name -> proto.S2C_CharacterVisual
+	101, // 122: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	102, // 123: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
+	124, // [124:124] is the sub-list for method output_type
+	124, // [124:124] is the sub-list for method input_type
+	124, // [124:124] is the sub-list for extension type_name
+	124, // [124:124] is the sub-list for extension extendee
+	0,   // [0:124] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }
@@ -8147,7 +8214,7 @@ func file_api_proto_packets_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_packets_proto_rawDesc), len(file_api_proto_packets_proto_rawDesc)),
-			NumEnums:      12,
+			NumEnums:      13,
 			NumMessages:   91,
 			NumExtensions: 0,
 			NumServices:   0,

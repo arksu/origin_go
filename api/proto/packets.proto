@@ -538,6 +538,12 @@ message S2C_ChunkUnload {
   ChunkCoord coord = 1;
 }
 
+// Semantic role of a named entity; the client owns the visual palette.
+enum NicknameColor {
+  NICKNAME_COLOR_DEFAULT = 0;
+  // Reserved for future roles: administrator, NPC, ...
+}
+
 message S2C_ObjectSpawn {
   uint64 entity_id = 1;
   uint32 type_id = 2; // defId from object definitions
@@ -546,6 +552,8 @@ message S2C_ObjectSpawn {
   uint64 carried_by_entity_id = 5; // 0 when not carried
   CharacterVisualState character_visual = 6;
   uint32 stream_epoch = 7;
+  string name = 8; // display name; empty for unnamed entities (objects, items)
+  NicknameColor name_color = 9;
 }
 
 message S2C_ObjectDespawn {

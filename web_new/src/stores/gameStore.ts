@@ -27,6 +27,8 @@ export interface GameObjectData {
   size: { x: number; y: number }
   movement?: EntityMovement
   characterVisual?: CharacterVisualState
+  name?: string
+  nameColor?: proto.NicknameColor
 }
 
 export interface ChunkData {
@@ -392,6 +394,15 @@ export const useGameStore = defineStore('game', () => {
   // Entity actions
   function spawnEntity(data: GameObjectData) {
     entities.value.set(data.entityId, data)
+  }
+
+  // A respawn of a known entity re-carries its (static) display name; keep the
+  // record current so the label renderer can pick up late color changes.
+  function updateEntityName(entityId: number, name: string, nameColor: proto.NicknameColor) {
+    const entity = entities.value.get(entityId)
+    if (!entity) return
+    entity.name = name
+    entity.nameColor = nameColor
   }
 
   function updateCharacterVisual(entityId: number, state: CharacterVisualState): boolean {
@@ -1129,6 +1140,7 @@ export const useGameStore = defineStore('game', () => {
     loadChunk,
     unloadChunk,
     spawnEntity,
+    updateEntityName,
     updateCharacterVisual,
     despawnEntity,
     updateEntityMovement,

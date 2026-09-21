@@ -171,6 +171,10 @@ export class GameFacade {
     this.render?.setObjectCarryVisualRelation(objectId, carrierId)
   }
 
+  setObjectNickname(entityId: number, name: string, nameColor: number): void {
+    this.render?.setObjectNickname(entityId, name, nameColor)
+  }
+
   clearObjectCarryVisualRelation(objectId: number): void {
     this.render?.clearObjectCarryVisualRelation(objectId)
   }
