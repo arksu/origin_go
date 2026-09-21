@@ -202,12 +202,18 @@ export function registerMessageHandlers(): void {
     const posY = msg.position?.position?.y || 0
     const heading = msg.position?.position?.heading || 0
     const resourcePath = msg.resourcePath || ''
+    const displayName = msg.name || ''
+    const nameColor = msg.nameColor || proto.NicknameColor.NICKNAME_COLOR_DEFAULT
     const carriedByEntityId = toNumber(msg.carriedByEntityId || 0)
 
     const characterVisual = msg.characterVisual ? decodeCharacterVisual(msg.characterVisual) : undefined
     const existing = gameStore.entities.get(entityId)
     if (characterVisual && existing?.characterVisual?.generation === characterVisual.generation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
       if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterEquipment(entityId, characterVisual.equipment)
+      // A respawn of a known entity still re-carries its name: apply it even
+      // though the visual snapshot is unchanged.
+      gameStore.updateEntityName(entityId, displayName, nameColor)
+      gameFacade.setObjectNickname(entityId, displayName, nameColor)
       gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
       return
     }
@@ -219,6 +225,8 @@ export function registerMessageHandlers(): void {
       typeId: msg.typeId || 0,
       resourcePath,
       characterVisual,
+      name: displayName,
+      nameColor,
       position: { x: posX, y: posY },
       size: {
         x: msg.position?.size?.x || 0,
@@ -228,6 +236,7 @@ export function registerMessageHandlers(): void {
 
     gameStore.spawnEntity(objectData)
     gameFacade.spawnObject(objectData)
+    gameFacade.setObjectNickname(entityId, displayName, nameColor)
     if (characterVisual) applyCharacterEquipment(entityId, characterVisual.equipment)
     gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
 

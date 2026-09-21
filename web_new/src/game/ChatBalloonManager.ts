@@ -1,11 +1,13 @@
 import { Container, Graphics, Text } from 'pixi.js'
 import { cameraController } from './CameraController'
 import type { ObjectManager } from './ObjectManager'
+import type { NicknameManager } from './NicknameManager'
 import {
   CHAT_BALLOON_MAX_CHARS,
   CHAT_BALLOON_LIFETIME_MS,
   CHAT_BALLOON_FADEOUT_MS,
 } from '@/constants/chat'
+import { NICKNAME_LABEL_HEIGHT, NICKNAME_Y_OFFSET_PX } from '@/constants/nickname'
 
 // Above every object and FX: object zIndex is TERRAIN_BASE_Z_INDEX + screen y,
 // which grows with the map size, so a fixed very high value is used (see FxManager).
@@ -43,10 +45,14 @@ function nowMs(): number {
  */
 export class ChatBalloonManager {
   private readonly parent: Container
+  private readonly nicknameManager: NicknameManager | null
   private balloons: Map<number, ActiveBalloon> = new Map()
 
-  constructor(parent: Container) {
+  constructor(parent: Container, nicknameManager: NicknameManager | null = null) {
     this.parent = parent
+    // When a nickname label is shown for an entity, the balloon floats above
+    // it instead of overlapping (the nickname owns the object's bounds top).
+    this.nicknameManager = nicknameManager
   }
 
   show(entityId: number, text: string): void {
@@ -114,9 +120,12 @@ export class ChatBalloonManager {
 
       const objectContainer = objectView.getContainer()
       // Anchor the tail tip to the top of the object's visual bounds so the
-      // bubble adapts to tall characters and small props alike.
+      // bubble adapts to tall characters and small props alike, then lift it
+      // above the nickname label when one is shown for this entity. Both the
+      // balloon and the label share the same 15px drop toward the head.
       const boundsTop = objectContainer.getLocalBounds().top
-      balloon.container.position.set(objectContainer.x, objectContainer.y + boundsTop)
+      const nicknameOffset = this.nicknameManager?.has(entityId) ? NICKNAME_LABEL_HEIGHT : 0
+      balloon.container.position.set(objectContainer.x, objectContainer.y + boundsTop + NICKNAME_Y_OFFSET_PX - nicknameOffset)
       balloon.container.scale.set(inverseScale)
       // Mirror culling: a hidden object must not leave a floating balloon.
       balloon.container.visible = objectContainer.visible

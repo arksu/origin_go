@@ -10,6 +10,7 @@ import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
 import { ChatBalloonManager } from './ChatBalloonManager'
+import { NicknameManager } from './NicknameManager'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
@@ -37,6 +38,7 @@ export class Render {
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
   private chatBalloonManager: ChatBalloonManager
+  private nicknameManager: NicknameManager
   private actorRenderer: ActorRenderer | null = null
   private actorRenderSettings: Readonly<ActorRenderSettings>
   private renderErrorNotice: HTMLElement | null = null
@@ -66,7 +68,8 @@ export class Render {
     this.inputController = new InputController()
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
     this.liftGhostController = new LiftGhostController(this.objectsContainer)
-    this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer)
+    this.nicknameManager = new NicknameManager(this.objectsContainer)
+    this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer, this.nicknameManager)
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -268,6 +271,7 @@ export class Render {
     this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
+    this.nicknameManager.update(this.objectManager)
     this.chatBalloonManager.update(this.objectManager)
     try {
       this.actorRenderer?.render()
@@ -571,6 +575,7 @@ export class Render {
 
   despawnObject(entityId: number): void {
     this.objectManager.despawnObject(entityId)
+    this.nicknameManager.remove(entityId)
   }
 
   updateObjectPosition(entityId: number, x: number, y: number): void {
@@ -612,6 +617,11 @@ export class Render {
   showChatBalloon(entityId: number, text: string): void {
     if (!this.objectManager.getObject(entityId)) return
     this.chatBalloonManager.show(entityId, text)
+  }
+
+  setObjectNickname(entityId: number, name: string, nameColor: number): void {
+    if (!this.objectManager.getObject(entityId)) return
+    this.nicknameManager.show(entityId, name, nameColor)
   }
 
   onPointerClick(callback: (event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void): void {
@@ -690,6 +700,7 @@ export class Render {
     this.buildGhostController.cancel()
     this.liftGhostController.cancel()
     this.chatBalloonManager.clear()
+    this.nicknameManager.clear()
     this.objectManager.clear()
     this.chunkManager.clear()
     terrainManager.resetWorld()
@@ -711,6 +722,7 @@ export class Render {
     this.buildGhostController.destroy()
     this.liftGhostController.destroy()
     this.chatBalloonManager.destroy()
+    this.nicknameManager.destroy()
 
     this.chunkManager.destroy()
     this.objectManager.destroy()

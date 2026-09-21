@@ -59,7 +59,7 @@ The client SHALL remove an entity's nickname label when the entity despawns, and
 - **THEN** all nickname labels are cleared and rebuilt only from new spawns
 
 ### Requirement: Chat balloons stack above the nickname
-When a chat balloon and a nickname label are visible for the same entity at the same time, the balloon SHALL be positioned one label-height above the nickname so the two never overlap; the nickname keeps the anchor at the entity's visual top.
+When a chat balloon and a nickname label are visible for the same entity at the same time, the balloon SHALL be positioned one label-height above the nickname so the two never overlap; the nickname keeps its anchor at the entity's visual top, lowered slightly into the visual by a client-side style constant.
 
 #### Scenario: Player chats while labeled
 - **WHEN** a chat balloon is shown for an entity whose nickname label is visible

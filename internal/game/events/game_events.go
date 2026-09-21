@@ -208,8 +208,16 @@ func (d *NetworkVisibilityDispatcher) buildObjectSpawn(w *ecs.World, entityID ty
 		return nil
 	}
 	resource := "unknown"
-	if appearance, ok := ecs.GetComponent[components.Appearance](w, handle); ok && appearance.Resource != "" {
-		resource = appearance.Resource
+	var displayName string
+	nameColor := components.NameColorDefault
+	if appearance, ok := ecs.GetComponent[components.Appearance](w, handle); ok {
+		if appearance.Resource != "" {
+			resource = appearance.Resource
+		}
+		if appearance.Name != nil {
+			displayName = *appearance.Name
+			nameColor = appearance.NameColor
+		}
 	}
 	size := &netproto.Vector2{}
 	if collider, ok := ecs.GetComponent[components.Collider](w, handle); ok {
@@ -222,12 +230,24 @@ func (d *NetworkVisibilityDispatcher) buildObjectSpawn(w *ecs.World, entityID ty
 	}
 	return &netproto.S2C_ObjectSpawn{
 		EntityId: uint64(entityID), TypeId: info.TypeID, ResourcePath: resource,
+		Name: displayName, NameColor: nicknameColorToProto(nameColor),
 		CarriedByEntityId: carryVisualCarrierIDForHandle(w, handle),
 		CharacterVisual:   visual,
 		Position: &netproto.EntityPosition{
 			Position: &netproto.Position{X: int32(transform.X), Y: int32(transform.Y)},
 			Size:     size,
 		},
+	}
+}
+
+// nicknameColorToProto maps the ECS role to the wire enum; unknown future
+// roles degrade to default until the client palette knows them.
+func nicknameColorToProto(c components.NameColor) netproto.NicknameColor {
+	switch c {
+	case components.NameColorDefault:
+		return netproto.NicknameColor_NICKNAME_COLOR_DEFAULT
+	default:
+		return netproto.NicknameColor_NICKNAME_COLOR_DEFAULT
 	}
 }
 
