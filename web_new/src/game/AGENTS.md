@@ -82,6 +82,21 @@ ObjectView
 
 **Z-Sorting**: Objects sorted by Y coordinate every frame when positions change.
 
+### Chat Balloons
+
+```
+ChatBalloonManager (owned by Render)
+    └─ Map<entityId, ActiveBalloon> (PIXI.Container in objectsContainer)
+```
+
+- Local chat (`CHAT_CHANNEL_LOCAL`) shows a timed balloon above the sender object
+  (`network/handlers.ts` → `GameFacade.showChatBalloon`).
+- Balloons use a very high zIndex (above objects and FX) and are counter-scaled
+  by `1/zoom` each frame to keep a constant on-screen size.
+- Text longer than `CHAT_BALLOON_MAX_CHARS` is truncated with `...`
+  (see `constants/chat.ts`); balloons are removed on expiry, object despawn,
+  and `resetWorld()`.
+
 ### Movement Interpolation
 
 ```

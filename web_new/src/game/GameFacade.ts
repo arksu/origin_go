@@ -183,6 +183,10 @@ export class GameFacade {
     this.render?.playFx(entityId, fxKey)
   }
 
+  showChatBalloon(entityId: number, text: string): void {
+    this.render?.showChatBalloon(entityId, text)
+  }
+
   toggleDebugOverlay(): void {
     this.render?.toggleDebugOverlay()
   }

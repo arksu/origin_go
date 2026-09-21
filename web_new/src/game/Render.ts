@@ -9,6 +9,7 @@ import { playerCommandController } from './PlayerCommandController'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
+import { ChatBalloonManager } from './ChatBalloonManager'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
@@ -35,6 +36,7 @@ export class Render {
   private inputController: InputController
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
+  private chatBalloonManager: ChatBalloonManager
   private actorRenderer: ActorRenderer | null = null
   private actorRenderSettings: Readonly<ActorRenderSettings>
   private renderErrorNotice: HTMLElement | null = null
@@ -64,6 +66,7 @@ export class Render {
     this.inputController = new InputController()
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
     this.liftGhostController = new LiftGhostController(this.objectsContainer)
+    this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer)
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -265,6 +268,7 @@ export class Render {
     this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
+    this.chatBalloonManager.update(this.objectManager)
     try {
       this.actorRenderer?.render()
     } catch (error) {
@@ -605,6 +609,11 @@ export class Render {
     })
   }
 
+  showChatBalloon(entityId: number, text: string): void {
+    if (!this.objectManager.getObject(entityId)) return
+    this.chatBalloonManager.show(entityId, text)
+  }
+
   onPointerClick(callback: (event: { screen: ScreenPoint; world: ScreenPoint; button: number }) => boolean | void): void {
     this.onClickCallback = callback
   }
@@ -680,6 +689,7 @@ export class Render {
   resetWorld(): void {
     this.buildGhostController.cancel()
     this.liftGhostController.cancel()
+    this.chatBalloonManager.clear()
     this.objectManager.clear()
     this.chunkManager.clear()
     terrainManager.resetWorld()
@@ -700,6 +710,7 @@ export class Render {
     this.inputController.destroy()
     this.buildGhostController.destroy()
     this.liftGhostController.destroy()
+    this.chatBalloonManager.destroy()
 
     this.chunkManager.destroy()
     this.objectManager.destroy()
