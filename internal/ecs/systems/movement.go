@@ -20,6 +20,13 @@ type MovementSystem struct {
 	chunkManager core.ChunkManager
 	logger       *zap.Logger
 	movingQuery  *ecs.PreparedQuery
+
+	// Cached storages for the hot path: direct sparse-array access instead of
+	// per-call registry lock + map lookup, and no capturing closures on writes.
+	movementStorage    *ecs.ComponentStorage[components.Movement]
+	transformStorage   *ecs.ComponentStorage[components.Transform]
+	entityStatsStorage *ecs.ComponentStorage[components.EntityStats]
+	liftCarryStorage   *ecs.ComponentStorage[components.LiftCarryState]
 }
 
 func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger) *MovementSystem {
@@ -33,10 +40,14 @@ func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger 
 	)
 
 	return &MovementSystem{
-		BaseSystem:   ecs.NewBaseSystem("MovementSystem", 100),
-		chunkManager: chunkManager,
-		logger:       logger,
-		movingQuery:  movingQuery,
+		BaseSystem:         ecs.NewBaseSystem("MovementSystem", 100),
+		chunkManager:       chunkManager,
+		logger:             logger,
+		movingQuery:        movingQuery,
+		movementStorage:    ecs.GetOrCreateStorage[components.Movement](world),
+		transformStorage:   ecs.GetOrCreateStorage[components.Transform](world),
+		entityStatsStorage: ecs.GetOrCreateStorage[components.EntityStats](world),
+		liftCarryStorage:   ecs.GetOrCreateStorage[components.LiftCarryState](world),
 	}
 }
 
@@ -44,7 +55,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
 	// Use prepared query to iterate over entities with Transform and Movement
 	s.movingQuery.ForEach(func(h types.Handle) {
-		movement, ok := ecs.GetComponent[components.Movement](w, h)
+		movement, ok := s.movementStorage.Get(h)
 		if !ok {
 			return
 		}
@@ -53,24 +64,22 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			return
 		}
 
-		transform, ok := ecs.GetComponent[components.Transform](w, h)
+		transform, ok := s.transformStorage.Get(h)
 		if !ok {
 			return
 		}
 
-		if stats, hasStats := ecs.GetComponent[components.EntityStats](w, h); hasStats {
+		if stats, hasStats := s.entityStatsStorage.Get(h); hasStats {
 			maxStamina := entitystats.MaxStaminaFromCon(resolveConForHandle(w, h))
 			clampedStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 			if clampedStamina != stats.Stamina {
-				ecs.WithComponent(w, h, func(entityStats *components.EntityStats) {
-					entityStats.Stamina = clampedStamina
-				})
+				stats.Stamina = clampedStamina
+				s.entityStatsStorage.Set(h, stats)
 				ecs.MarkPlayerStatsDirtyByHandle(w, h, ecs.ResolvePlayerStatsTTLms(w))
 				ecs.UpdateEntityStatsRegenSchedule(w, h, clampedStamina, stats.Energy, maxStamina)
-				stats.Stamina = clampedStamina
 			}
 
-			_, isCarrying := ecs.GetComponent[components.LiftCarryState](w, h)
+			isCarrying := s.liftCarryStorage.Has(h)
 			allowedMode, canMove := entitystats.ResolveAllowedMoveModeWithCarry(
 				movement.Mode,
 				stats.Stamina,
@@ -79,29 +88,25 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				isCarrying,
 			)
 			if !canMove {
-				ecs.WithComponent(w, h, func(m *components.Movement) {
-					m.Mode = constt.Crawl
-					m.ClearTarget()
-				})
+				movement.Mode = constt.Crawl
+				movement.ClearTarget()
+				s.movementStorage.Set(h, movement)
 				ecs.MarkMovementModeDirtyByHandle(w, h)
 				movedEntities.Add(h, transform.X, transform.Y)
 				return
 			}
 			if movement.Mode != allowedMode {
-				ecs.WithComponent(w, h, func(m *components.Movement) {
-					m.Mode = allowedMode
-				})
+				movement.Mode = allowedMode
+				s.movementStorage.Set(h, movement)
 				ecs.MarkMovementModeDirtyByHandle(w, h)
 			}
-			movement.Mode = allowedMode
 		}
 
 		if movement.TargetType == constt.TargetEntity {
-			targetTransform, ok := ecs.GetComponent[components.Transform](w, movement.TargetHandle)
+			targetTransform, ok := s.transformStorage.Get(movement.TargetHandle)
 			if !ok {
-				ecs.WithComponent(w, h, func(m *components.Movement) {
-					m.ClearTarget()
-				})
+				movement.ClearTarget()
+				s.movementStorage.Set(h, movement)
 				movedEntities.Add(h, transform.X, transform.Y)
 				return
 			}
@@ -110,9 +115,8 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		if movement.HasReachedTarget(transform.X, transform.Y) {
-			ecs.WithComponent(w, h, func(m *components.Movement) {
-				m.ClearTarget()
-			})
+			movement.ClearTarget()
+			s.movementStorage.Set(h, movement)
 			movedEntities.Add(h, transform.X, transform.Y)
 			return
 		}
@@ -128,12 +132,10 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			// Clamp step to prevent overshoot oscillation
 			if step >= dist {
 				// Reached target, snap to exact position
-				ecs.WithComponent(w, h, func(t *components.Transform) {
-					t.Direction = math.Atan2(dy, dx)
-				})
-				ecs.WithComponent(w, h, func(m *components.Movement) {
-					m.ClearTarget()
-				})
+				transform.Direction = math.Atan2(dy, dx)
+				s.transformStorage.Set(h, transform)
+				movement.ClearTarget()
+				s.movementStorage.Set(h, movement)
 				// Add to moved entities buffer
 				movedEntities.Add(h, movement.TargetX, movement.TargetY)
 				return
@@ -143,21 +145,17 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			velocityX := (dx / dist) * speed
 			velocityY := (dy / dist) * speed
 
-			ecs.WithComponent(w, h, func(m *components.Movement) {
-				m.VelocityX = velocityX
-				m.VelocityY = velocityY
-				m.TargetX = movement.TargetX
-				m.TargetY = movement.TargetY
-			})
+			movement.VelocityX = velocityX
+			movement.VelocityY = velocityY
+			s.movementStorage.Set(h, movement)
 
 			old := types.Vector2{X: transform.X, Y: transform.Y}
 			newX := transform.X + velocityX*dt
 			newY := transform.Y + velocityY*dt
 
-			ecs.WithComponent(w, h, func(t *components.Transform) {
-				// Direction based on actual velocity vector
-				t.Direction = math.Atan2(velocityY, velocityX)
-			})
+			// Direction based on actual velocity vector
+			transform.Direction = math.Atan2(velocityY, velocityX)
+			s.transformStorage.Set(h, transform)
 			// Add to moved entities buffer
 			movedEntities.Add(h, newX, newY)
 

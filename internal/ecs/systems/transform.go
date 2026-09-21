@@ -20,20 +20,37 @@ type TransformUpdateSystem struct {
 	eventBus     *eventbus.EventBus
 	logger       *zap.Logger
 	moveBatch    []ecs.MoveBatchEntry // reused across ticks
+
+	// Cached storages for the hot path: direct sparse-array access instead of
+	// per-call registry lock + map lookup, and no capturing closures on writes.
+	transformStorage       *ecs.ComponentStorage[components.Transform]
+	collisionResultStorage *ecs.ComponentStorage[components.CollisionResult]
+	movementStorage        *ecs.ComponentStorage[components.Movement]
+	chunkRefStorage        *ecs.ComponentStorage[components.ChunkRef]
+	entityStatsStorage     *ecs.ComponentStorage[components.EntityStats]
+	liftCarryStorage       *ecs.ComponentStorage[components.LiftCarryState]
 }
 
 func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
 	return &TransformUpdateSystem{
-		BaseSystem:   ecs.NewBaseSystem("TransformUpdateSystem", 300),
-		chunkManager: chunkManager,
-		eventBus:     eventBus,
-		logger:       logger,
+		BaseSystem:             ecs.NewBaseSystem("TransformUpdateSystem", 300),
+		chunkManager:           chunkManager,
+		eventBus:               eventBus,
+		logger:                 logger,
+		transformStorage:       ecs.GetOrCreateStorage[components.Transform](world),
+		collisionResultStorage: ecs.GetOrCreateStorage[components.CollisionResult](world),
+		movementStorage:        ecs.GetOrCreateStorage[components.Movement](world),
+		chunkRefStorage:        ecs.GetOrCreateStorage[components.ChunkRef](world),
+		entityStatsStorage:     ecs.GetOrCreateStorage[components.EntityStats](world),
+		liftCarryStorage:       ecs.GetOrCreateStorage[components.LiftCarryState](world),
 	}
 }
 
 func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
 	serverTimeMs := ecs.GetResource[ecs.TimeState](w).UnixMs
+	// Invariant across the whole tick: fetch once, not per moved entity.
+	visState := ecs.GetResource[ecs.VisibilityState](w)
 	s.moveBatch = s.moveBatch[:0]
 
 	// Process entities that moved this frame (from movedEntities buffer)
@@ -43,21 +60,22 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 
-		transform, ok := ecs.GetComponent[components.Transform](w, h)
+		transform, ok := s.transformStorage.Get(h)
 		if !ok {
 			continue
 		}
 
 		// Check for collision result
-		collisionResult, hasCollision := ecs.GetComponent[components.CollisionResult](w, h)
+		collisionResult, hasCollision := s.collisionResultStorage.Get(h)
 
 		var finalX, finalY float64
 		if hasCollision {
 			if collisionResult.PerpendicularOscillation {
 				// stop movement
-				ecs.WithComponent(w, h, func(m *components.Movement) {
+				if m, ok := s.movementStorage.Get(h); ok {
 					m.ClearTarget()
-				})
+					s.movementStorage.Set(h, m)
+				}
 			}
 
 			// Apply collision-adjusted position
@@ -69,7 +87,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		// Get chunk for spatial hash update
-		chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, h)
+		chunkRef, hasChunkRef := s.chunkRefStorage.Get(h)
 		s.applyMovementStaminaTick(w, h, transform.X, transform.Y, finalX, finalY)
 		if hasChunkRef {
 			chunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
@@ -93,15 +111,13 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		// Apply final position to transform
-		ecs.WithComponent(w, h, func(t *components.Transform) {
-			t.X = finalX
-			t.Y = finalY
-		})
+		transform.X = finalX
+		transform.Y = finalY
+		s.transformStorage.Set(h, transform)
 
 		// Accumulate movement data for batch event
 		if entityID, ok := w.GetExternalID(h); ok {
 			// Visibility guard: only include if entity is visible to at least one observer
-			visState := ecs.GetResource[ecs.VisibilityState](w)
 			if visState != nil {
 				observers, hasObservers := visState.ObserversByVisibleTarget[h]
 				if !hasObservers || len(observers) == 0 {
@@ -111,7 +127,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 			// Get movement component for velocity data
 			{
-				movement, hasMovement := ecs.GetComponent[components.Movement](w, h)
+				movement, hasMovement := s.movementStorage.Get(h)
 
 				moveMode := constt.Walk
 				isMoving := false
@@ -125,13 +141,12 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 					velY = int(movement.VelocityY)
 					moveSeq = movement.MoveSeq
 
-					ecs.WithComponent(w, h, func(m *components.Movement) {
-						m.MoveSeq++
-					})
+					movement.MoveSeq++
+					s.movementStorage.Set(h, movement)
 				}
 
 				var targetX, targetY *int
-				if hasMovement && s.broadcastMoveTarget(w, &movement) {
+				if hasMovement && s.broadcastMoveTarget(&movement) {
 					tx := int(movement.TargetX)
 					ty := int(movement.TargetY)
 					targetX = &tx
@@ -159,19 +174,17 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 	saveCollision:
 		// Save collision state for next frame (for oscillation detection)
-		ecs.WithComponent(w, h, func(cr *components.CollisionResult) {
-			// Save current collision position for next frame
-			cr.PrevFinalX = cr.FinalX
-			cr.PrevFinalY = cr.FinalY
-			cr.PrevCollidedWith = cr.CollidedWith
-			// Clear collision result for next frame
-			cr.HasCollision = false
-			cr.CollidedWith = 0
-			cr.CollisionNormalX = 0
-			cr.CollisionNormalY = 0
-			cr.IsPhantom = false
-			cr.PerpendicularOscillation = false
-		})
+		collisionResult.PrevFinalX = collisionResult.FinalX
+		collisionResult.PrevFinalY = collisionResult.FinalY
+		collisionResult.PrevCollidedWith = collisionResult.CollidedWith
+		// Clear collision result for next frame
+		collisionResult.HasCollision = false
+		collisionResult.CollidedWith = 0
+		collisionResult.CollisionNormalX = 0
+		collisionResult.CollisionNormalY = 0
+		collisionResult.IsPhantom = false
+		collisionResult.PerpendicularOscillation = false
+		s.collisionResultStorage.Set(h, collisionResult)
 	}
 
 	// Publish single batch event for all movements this tick
@@ -188,12 +201,12 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 // targets are withheld while the target itself is moving: the destination
 // changes every tick during a chase, and clients use this field to render a
 // move-target marker.
-func (s *TransformUpdateSystem) broadcastMoveTarget(w *ecs.World, movement *components.Movement) bool {
+func (s *TransformUpdateSystem) broadcastMoveTarget(movement *components.Movement) bool {
 	switch movement.TargetType {
 	case constt.TargetPoint:
 		return true
 	case constt.TargetEntity:
-		targetMovement, ok := ecs.GetComponent[components.Movement](w, movement.TargetHandle)
+		targetMovement, ok := s.movementStorage.Get(movement.TargetHandle)
 		return !ok || targetMovement.State != constt.StateMoving
 	default:
 		return false
@@ -208,11 +221,11 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	toX float64,
 	toY float64,
 ) {
-	movement, hasMovement := ecs.GetComponent[components.Movement](w, handle)
+	movement, hasMovement := s.movementStorage.Get(handle)
 	if !hasMovement {
 		return
 	}
-	stats, hasStats := ecs.GetComponent[components.EntityStats](w, handle)
+	stats, hasStats := s.entityStatsStorage.Get(handle)
 	if !hasStats {
 		return
 	}
@@ -245,7 +258,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		}
 	}
 
-	_, isCarrying := ecs.GetComponent[components.LiftCarryState](w, handle)
+	isCarrying := s.liftCarryStorage.Has(handle)
 	allowedMode, canMove := entitystats.ResolveAllowedMoveModeWithCarry(
 		movement.Mode,
 		currentStamina,
@@ -260,20 +273,18 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	}
 
 	if statsChanged {
-		ecs.WithComponent(w, handle, func(entityStats *components.EntityStats) {
-			entityStats.Stamina = currentStamina
-			entityStats.Energy = currentEnergy
-		})
+		stats.Stamina = currentStamina
+		stats.Energy = currentEnergy
+		s.entityStatsStorage.Set(handle, stats)
 		ecs.MarkPlayerStatsDirtyByHandle(w, handle, ecs.ResolvePlayerStatsTTLms(w))
 	}
 
 	if modeChanged || !canMove {
-		ecs.WithComponent(w, handle, func(m *components.Movement) {
-			m.Mode = allowedMode
-			if !canMove && m.State == constt.StateMoving {
-				m.ClearTarget()
-			}
-		})
+		movement.Mode = allowedMode
+		if !canMove && movement.State == constt.StateMoving {
+			movement.ClearTarget()
+		}
+		s.movementStorage.Set(handle, movement)
 		ecs.MarkMovementModeDirtyByHandle(w, handle)
 	}
 
