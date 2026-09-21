@@ -45,6 +45,9 @@ type CraftDef struct {
 	Inputs  []CraftInput  `json:"inputs"`
 	Outputs []CraftOutput `json:"outputs"`
 
+	// A non-nil map makes Outputs preview metadata, including when the map is empty.
+	OutputByInputKey map[string]string `json:"outputByInputKey,omitzero"`
+
 	StaminaCost   float64 `json:"staminaCost"`
 	TicksRequired uint32  `json:"ticksRequired"`
 

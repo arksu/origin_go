@@ -215,7 +215,8 @@ func (ps *PlacementService) FindFreeSpace(
 	container *components.InventoryContainer,
 	itemW, itemH uint8,
 ) (bool, uint8, uint8) {
-	if container.Kind != constt.InventoryGrid {
+	// Guard before unsigned subtraction; oversized items otherwise wrap the search bounds.
+	if container.Kind != constt.InventoryGrid || itemW == 0 || itemH == 0 || itemW > container.Width || itemH > container.Height {
 		return false, 0, 0
 	}
 

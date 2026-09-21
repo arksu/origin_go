@@ -1,6 +1,8 @@
 package inventory
 
 import (
+	"fmt"
+
 	constt "origin/internal/const"
 	"origin/internal/craftdefs"
 	"origin/internal/ecs"
@@ -17,6 +19,41 @@ type CraftConsumeInputsResult struct {
 	UpdatedContainers []*ContainerInfo
 	QualityWeighted   uint64
 	QualityWeightSum  uint64
+	SourceItemKey     string
+	SourceItemID      types.EntityID
+	prepared          []craftPreparedContainer
+}
+
+type craftPreparedContainer struct {
+	handle    types.Handle
+	container components.InventoryContainer
+}
+
+// ResolveCraftOutputs keeps preview metadata out of mapped runtime placement and creation.
+func ResolveCraftOutputs(craft *craftdefs.CraftDef, inputs CraftConsumeInputsResult) ([]craftdefs.CraftOutput, error) {
+	if craft == nil {
+		return nil, fmt.Errorf("craft definition missing")
+	}
+	if craft.OutputByInputKey == nil {
+		return craft.Outputs, nil
+	}
+	if !inputs.Success || inputs.Overflow || inputs.SourceItemKey == "" {
+		return nil, fmt.Errorf("craft source input unavailable")
+	}
+	targetKey, ok := craft.OutputByInputKey[inputs.SourceItemKey]
+	if !ok {
+		return nil, &CraftMapEntryMissingError{SourceItemKey: inputs.SourceItemKey}
+	}
+	if _, ok := itemdefs.Global().GetByKey(targetKey); !ok {
+		return nil, fmt.Errorf("craft mapped target item unknown: %s", targetKey)
+	}
+	return []craftdefs.CraftOutput{{ItemKey: targetKey, Count: 1}}, nil
+}
+
+type CraftMapEntryMissingError struct{ SourceItemKey string }
+
+func (e *CraftMapEntryMissingError) Error() string {
+	return fmt.Sprintf("no mapped output entry for source item %s", e.SourceItemKey)
 }
 
 type CraftGiveOrDropResult struct {
@@ -26,28 +63,11 @@ type CraftGiveOrDropResult struct {
 	AnyDropped        bool
 }
 
-// HasCraftInputs checks whether the player inventory tree (root grids + nested + hand) has all inputs for one cycle.
-func (e *InventoryExecutor) HasCraftInputs(
-	w *ecs.World,
-	playerID types.EntityID,
-	playerHandle types.Handle,
-	craft *craftdefs.CraftDef,
-) bool {
-	preview := e.PreviewCraftInputs(w, playerID, playerHandle, craft)
-	return preview.Success && !preview.Overflow
-}
-
-// CanFitCraftOutputsOneCycle simulates give placement (grid+nested+hand) for all outputs of one craft cycle.
+// CanFitResolvedCraftOutputs simulates give placement (grid+nested+hand) for one cycle's resolved outputs.
 // It intentionally does NOT model world-drop fallback: start-craft precheck requires one full cycle to fit
 // into inventory tree + hand before crafting can begin.
-func (e *InventoryExecutor) CanFitCraftOutputsOneCycle(
-	w *ecs.World,
-	playerID types.EntityID,
-	playerHandle types.Handle,
-	craft *craftdefs.CraftDef,
-	quality uint32,
-) bool {
-	if e == nil || e.service == nil || w == nil || craft == nil {
+func (e *InventoryExecutor) CanFitResolvedCraftOutputs(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, outputs []craftdefs.CraftOutput, quality uint32) bool {
+	if e == nil || e.service == nil || w == nil {
 		return false
 	}
 	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
@@ -69,7 +89,7 @@ func (e *InventoryExecutor) CanFitCraftOutputsOneCycle(
 	gridLinks := orderedGridLinks(owner.Inventories, playerID, defaultGivePlacementPolicy)
 	handLink, hasHand := playerHandLink(owner, playerID)
 
-	for _, out := range craft.Outputs {
+	for _, out := range outputs {
 		itemDef, ok := itemdefs.Global().GetByKey(out.ItemKey)
 		if !ok {
 			return false
@@ -127,32 +147,21 @@ func (e *InventoryExecutor) CanFitCraftOutputsOneCycle(
 	return true
 }
 
-// ConsumeCraftInputs consumes one cycle inputs from player inventories and returns quality aggregation data.
+// PreviewCraftInputs prepares inputs without mutation; commit the result only within the same synchronous cycle.
 func (e *InventoryExecutor) PreviewCraftInputs(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	craft *craftdefs.CraftDef,
 ) CraftConsumeInputsResult {
-	return e.consumeCraftInputsInternal(w, playerID, playerHandle, craft, false)
+	return e.prepareCraftInputs(w, playerID, playerHandle, craft)
 }
 
-// ConsumeCraftInputs consumes one cycle inputs from player inventories and returns quality aggregation data.
-func (e *InventoryExecutor) ConsumeCraftInputs(
+func (e *InventoryExecutor) prepareCraftInputs(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	craft *craftdefs.CraftDef,
-) CraftConsumeInputsResult {
-	return e.consumeCraftInputsInternal(w, playerID, playerHandle, craft, true)
-}
-
-func (e *InventoryExecutor) consumeCraftInputsInternal(
-	w *ecs.World,
-	playerID types.EntityID,
-	playerHandle types.Handle,
-	craft *craftdefs.CraftDef,
-	commit bool,
 ) CraftConsumeInputsResult {
 	result := CraftConsumeInputsResult{}
 	if e == nil || e.service == nil || w == nil || craft == nil {
@@ -203,6 +212,14 @@ func (e *InventoryExecutor) consumeCraftInputsInternal(
 					consumeQty = remaining
 				}
 
+				if consumeQty == 0 {
+					idx++
+					continue
+				}
+				if input.ItemTag != "" && result.SourceItemKey == "" {
+					result.SourceItemKey = def.Key
+					result.SourceItemID = item.ItemID
+				}
 				weightedTerm, ok := mulUint64Checked(uint64(item.Quality), uint64(input.QualityWeight))
 				if !ok {
 					result.Overflow = true
@@ -279,14 +296,34 @@ func (e *InventoryExecutor) consumeCraftInputsInternal(
 	result.QualityWeighted = weightedSum
 	result.QualityWeightSum = weightSum
 
-	if !commit {
-		return result
+	for _, link := range orderedLinks {
+		if _, modified := changed[link.Handle]; modified {
+			result.prepared = append(result.prepared, craftPreparedContainer{handle: link.Handle, container: clones[link.Handle]})
+		}
 	}
+	return result
+}
 
+// CommitPreparedCraftInputs publishes the exact input selection that passed final output validation.
+// Prepared results are single-use and must not be retained across ticks.
+func (e *InventoryExecutor) CommitPreparedCraftInputs(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, prepared *CraftConsumeInputsResult) CraftConsumeInputsResult {
+	if e == nil || w == nil || prepared == nil || !prepared.Success || prepared.Overflow || len(prepared.prepared) == 0 {
+		return CraftConsumeInputsResult{}
+	}
+	for _, entry := range prepared.prepared {
+		current, ok := ecs.GetComponent[components.InventoryContainer](w, entry.handle)
+		if !w.Alive(entry.handle) || !ok || current.Version != entry.container.Version {
+			return CraftConsumeInputsResult{}
+		}
+	}
+	result := *prepared
+	preparedContainers := prepared.prepared
+	prepared.prepared = nil
+	result.prepared = nil
 	updatedOwner, _ := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-	updated := make([]*ContainerInfo, 0, len(changed))
-	for handle := range changed {
-		clone := clones[handle]
+	updated := make([]*ContainerInfo, 0, len(preparedContainers))
+	for _, entry := range preparedContainers {
+		handle, clone := entry.handle, entry.container
 		ecs.MutateComponent[components.InventoryContainer](w, handle, func(c *components.InventoryContainer) bool {
 			c.Items = clone.Items
 			c.HandMouseOffsetX = clone.HandMouseOffsetX

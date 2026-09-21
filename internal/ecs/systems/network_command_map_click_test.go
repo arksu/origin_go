@@ -57,6 +57,82 @@ func TestMapClickOrdinaryMovementAndPickup(t *testing.T) {
 	}
 }
 
+func TestMapClickOnObjectStartsLinkIntentAndLinksOnCollision(t *testing.T) {
+	eb := newTestEventBus(t)
+	defer shutdownTestEventBus(t, eb)
+
+	w := ecs.NewWorldForTesting()
+	player := w.Spawn(1, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 0, Y: 0})
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
+		ecs.AddComponent(w, h, components.CollisionResult{})
+	})
+	w.Spawn(2, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 500, Y: 600})
+		ecs.AddComponent(w, h, components.Collider{HalfWidth: 5, HalfHeight: 5, Layer: 1, Mask: 1})
+	})
+	s := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 505, Y: 600, TargetEntityId: 2}})
+
+	linkState := ecs.GetResource[ecs.LinkState](w)
+	intent, hasIntent := linkState.IntentByPlayer[1]
+	if !hasIntent || intent.TargetID != 2 {
+		t.Fatal("map click on object did not set link intent")
+	}
+	m, _ := ecs.GetComponent[components.Movement](w, player)
+	if m.TargetType != constt.TargetEntity || m.TargetHandle == types.InvalidHandle {
+		t.Fatalf("movement must track the clicked object: %+v", m)
+	}
+	pending, hasPending := ecs.GetComponent[components.PendingContextAction](w, player)
+	if !hasPending || pending.TargetEntityID != 2 || pending.ActionID != "" {
+		t.Fatalf("expected link-only pending entry, got %+v", pending)
+	}
+
+	// Confirmed collision with the target while the intent is live creates the
+	// link. The link-only pending entry is dropped by the LinkCreated
+	// subscribers in the game layer, which execute no action for empty ActionID.
+	ecs.WithComponent(w, player, func(cr *components.CollisionResult) { cr.PrevCollidedWith = 2 })
+	NewLinkSystem(eb, zap.NewNop()).Update(w, 0.05)
+
+	link, ok := linkState.GetLink(1)
+	if !ok || link.TargetID != 2 {
+		t.Fatal("link was not created on collision")
+	}
+	if _, staleIntent := linkState.IntentByPlayer[1]; staleIntent {
+		t.Fatal("intent must be cleared after link creation")
+	}
+}
+
+func TestMapClickGroundClearsObjectLinkIntent(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	player := w.Spawn(1, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 0, Y: 0})
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
+	})
+	w.Spawn(2, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 500, Y: 600})
+		ecs.AddComponent(w, h, components.Collider{HalfWidth: 5, HalfHeight: 5, Layer: 1, Mask: 1})
+	})
+	s := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 505, Y: 600, TargetEntityId: 2}})
+	if _, hasIntent := ecs.GetResource[ecs.LinkState](w).IntentByPlayer[1]; !hasIntent {
+		t.Fatal("precondition failed: object click did not set intent")
+	}
+
+	// A click on empty ground cancels the outstanding link intent.
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 42, Y: 99}})
+	if _, hasIntent := ecs.GetResource[ecs.LinkState](w).IntentByPlayer[1]; hasIntent {
+		t.Fatal("ground click must clear the link intent")
+	}
+	if _, hasPending := ecs.GetComponent[components.PendingContextAction](w, player); hasPending {
+		t.Fatal("ground click must remove the link-only pending entry")
+	}
+	m, _ := ecs.GetComponent[components.Movement](w, player)
+	if m.TargetType != constt.TargetPoint || m.TargetX != 42 || m.TargetY != 99 {
+		t.Fatalf("ground click must move to coordinates: %+v", m)
+	}
+}
+
 func TestInteractDoesNotConsumeAdminSelection(t *testing.T) {
 	w := ecs.NewWorldForTesting()
 	player := w.Spawn(1, nil)

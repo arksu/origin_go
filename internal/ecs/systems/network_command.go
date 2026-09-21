@@ -489,6 +489,18 @@ func (s *NetworkCommandSystem) handleMapClick(w *ecs.World, playerHandle types.H
 		return
 	}
 
+	// A primary click carrying a live collider object requests an explicit link:
+	// approach the object and let LinkSystem establish the link on confirmed
+	// collision, without executing any context action.
+	if targetID != 0 && targetID != cmd.CharacterID && w.Alive(targetHandle) {
+		if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider {
+			if link, hasLink := ecs.GetResource[ecs.LinkState](w).GetLink(cmd.CharacterID); !hasLink || link.TargetID != targetID {
+				s.beginMoveToLink(w, playerHandle, cmd.CharacterID, targetID, targetHandle, "")
+			}
+			return
+		}
+	}
+
 	// Clear pending interaction on any new movement command
 	s.clearPendingInteractionIntents(w, playerHandle, cmd.CharacterID)
 
@@ -720,16 +732,28 @@ func (s *NetworkCommandSystem) startPendingContextAction(
 	targetHandle types.Handle,
 	actionID string,
 ) {
-	if actionID == "" {
-		return
-	}
-
 	if link, hasLink := ecs.GetResource[ecs.LinkState](w).GetLink(playerID); hasLink && link.TargetID == targetEntityID {
 		// Already linked: execute immediately without creating pending state.
 		s.contextActionService.ExecuteAction(w, playerID, playerHandle, targetEntityID, targetHandle, actionID)
 		return
 	}
 
+	s.beginMoveToLink(w, playerHandle, playerID, targetEntityID, targetHandle, actionID)
+}
+
+// beginMoveToLink starts the move->link flow toward the target: it sets a link
+// intent, walks the player to the object, and records a pending entry so the
+// intent is dropped if the player stops without reaching the link. An empty
+// actionID records a link-only intent: LinkCreated establishes the link but
+// executes no context action.
+func (s *NetworkCommandSystem) beginMoveToLink(
+	w *ecs.World,
+	playerHandle types.Handle,
+	playerID types.EntityID,
+	targetEntityID types.EntityID,
+	targetHandle types.Handle,
+	actionID string,
+) {
 	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
 	if !hasTransform {
 		return

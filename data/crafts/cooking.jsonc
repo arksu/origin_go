@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "source": "cooking crafts",
+  "crafts": [
+    {
+      "defId": 4,
+      "key": "roasted_meat",
+      "name": "Roasted meat",
+      "inputs": [
+        {
+          "itemTag": "raw_meat",
+          "count": 1,
+          "qualityWeight": 1
+        }
+      ],
+      "outputs": [
+        {
+          "itemKey": "roasted_meat",
+          "count": 1
+        }
+      ],
+      "outputByInputKey": {
+        "beef": "roasted_beef",
+        "fox_meat": "roasted_fox_meat",
+        "rabbit_meat": "roasted_rabbit_meat",
+        "boar_meat": "roasted_boar_meat",
+        "bear_meat": "roasted_bear_meat",
+        "raw_deer_meat": "roasted_deer_meat",
+        "raw_mutton": "roasted_mutton",
+        "raw_pork": "roast_pork",
+        "raw_chicken_meat": "roasted_chicken_meat"
+      },
+      "staminaCost": 10,
+      "ticksRequired": 10,
+      "stationRequirements": [
+        {
+          "capability": "cooking",
+          "state": "burning"
+        }
+      ]
+    }
+  ]
+}

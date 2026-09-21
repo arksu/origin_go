@@ -58,7 +58,7 @@ For craft-many, resolve anew for each cycle and revalidate station/inputs/output
 
 Treat a craft as needing a linked target when it has either an exact linked-object requirement or nonempty station requirements. Resolve the player's current link in both cases; apply the object-key check only when an exact key exists. Use object cyclic-action targeting for either form. Share target resolution across list, start, active validity, completion, and continuation so flags and execution agree.
 
-Bind the action to its starting station ID. At completion require that the player's current live link still points there, then use the station evaluator for capability/state. A changed/broken link cancels; a replacement burning station does not silently inherit the old cycle. Keep portable crafts and existing exact-key recipes unchanged.
+Bind the action to its starting station ID. At completion require that the player's current live link still points there, then use the station evaluator for capability/state. A changed/broken link cancels; a replacement burning station does not silently inherit the old cycle. Portable crafts without station requirements or exact keys keep their link-free behavior. Exact-key recipes retain their start-time object-key restriction and are bound to the live link like capability-only recipes: unlinking or switching stations mid-cycle cancels them too.
 
 Hardcoding `requiredLinkedObjectKey: "campfire"` was considered but would restrict the requested capability-based recipe. Update catalog documentation to remove its stale exact-key-only claim. The new station spec delta makes the previously unspecified keyless link behavior explicit.
 
@@ -82,7 +82,7 @@ Timing and stamina were not specified. Proposed catalog defaults are `ticksRequi
 - [Preview and consumption drift] → Expose selection from the shared preparation pass and use its staged inputs for commit; test root/nested/hand ordering, multiple matches, stacks, and inventory changes during the timed cycle.
 - [Empty map accidentally behaves like an absent map] → Use presence/nil semantics rather than length and test both empty and omitted maps.
 - [Shared inventory or link changes regress older recipes] → Retain focused fixed-output, exact-key station, portable craft, rollback, and nested-container tests.
-- [Existing catalog integration fixtures may drift] → The inspected integration test expects `campfire_threaded_branch`, while the inspected catalog lacked it. Recheck the current baseline when applying; report unrelated failures separately without restoring old fixtures or changing unrelated content.
+- [Existing catalog integration fixtures may drift] → The integration fixture expected the removed `campfire_threaded_branch` recipe; the fixture was repaired to match the current catalog instead of restoring removed content, and unrelated failures are reported separately.
 - [Recipe balancing defaults need later tuning] → Keep duration and stamina in JSONC and document the chosen values in the implementation summary.
 - [Mixed client/server versions lack exact error text] → Add the field compatibly and deploy updated client assets with the server; reason-code fallback remains usable.
 

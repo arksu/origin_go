@@ -17,12 +17,16 @@ The client SHALL send one `MapClick` action containing integer world coordinates
 - **WHEN** a player primary-clicks empty ground
 - **THEN** the client SHALL send the clicked coordinates with target ID zero
 
-### Requirement: Ordinary map clicks preserve movement and pickup
-Without a pending administrator action, a map click SHALL move the player toward the clicked coordinates, subject to existing movement rules, rather than follow the reported entity. A live dropped-item target SHALL retain normal primary-click pickup behavior. Explicit placement, item-in-hand drop, context interaction, and UI-consumed input SHALL retain their ordinary routing and SHALL NOT emit duplicate gameplay actions.
+### Requirement: Ordinary map clicks preserve movement, pickup, and object linking
+Without a pending administrator action, a map click on empty ground, a stale target, or a target without a collider SHALL move the player toward the clicked coordinates, subject to existing movement rules. A map click reporting a live non-dropped object with a collider SHALL set an explicit link intent, move the player to that object, and the link SHALL be established on confirmed collision without executing any context action; a click on empty ground SHALL cancel any outstanding link intent. A live dropped-item target SHALL retain normal primary-click pickup behavior. Explicit placement, item-in-hand drop, context interaction, and UI-consumed input SHALL retain their ordinary routing and SHALL NOT emit duplicate gameplay actions.
 
-#### Scenario: Object position differs from click position
-- **WHEN** a player clicks a non-dropped object with no pending administrator action
-- **THEN** movement SHALL target the supplied coordinates and SHALL NOT track the object's later movement
+#### Scenario: Object click requests a link
+- **WHEN** a player primary-clicks a live non-dropped object with a collider and no pending administrator action
+- **THEN** the server SHALL set a link intent for that object, the player SHALL move to and link with it on confirmed collision, and no context action SHALL execute from the click alone
+
+#### Scenario: Ground click uses coordinates and clears link intent
+- **WHEN** a player primary-clicks empty ground, a stale target, or a target without a collider
+- **THEN** movement SHALL target the supplied coordinates and any outstanding link intent SHALL be cleared
 
 #### Scenario: Stale ordinary target
 - **WHEN** a normal map click reports a target that no longer exists

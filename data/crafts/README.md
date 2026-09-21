@@ -70,6 +70,7 @@ Validation:
 - `requiredDiscovery` (`[]string`)
 - `requiredLinkedObjectKey` (object key from `data/objects`)
 - `stationRequirements` (requirements for the linked station; v1 station-local only)
+- `outputByInputKey` (optional source item key to output item key map; see below)
 - `qualityFormula` (defaults to `"weighted_avg_floor"`)
 
 Loader normalizes `requiredSkills` / `requiredDiscovery`:
@@ -87,8 +88,8 @@ Loader normalizes `requiredSkills` / `requiredDiscovery`:
 
 ## Station Requirements
 
-A station recipe selects an object with `requiredLinkedObjectKey` and then
-declares the current capability, state, scalar conditions, and explicit
+A station recipe uses the player's current linked object and optionally restricts
+its definition with `requiredLinkedObjectKey`. It declares the current capability, state, scalar conditions, and explicit
 station-local consumptions needed per completed cycle.
 
 ```jsonc
@@ -115,8 +116,9 @@ station-local consumptions needed per completed cycle.
 
 - Every requirement must contain at least one of `capability`, `state`,
   `conditions`, or `consume`.
-- In v1, `stationRequirements` require `requiredLinkedObjectKey` to name an
-  object with a `station` section.
+- `stationRequirements` work without `requiredLinkedObjectKey`; the player must
+  still be linked to a suitable station. When an exact key is provided, it must
+  name an object with a `station` section and remains an additional restriction.
 - `capability` must be exposed by the linked station; `state` must equal its
   current state.
 - A v1 condition is a station scalar comparison: `source: "station"`,
@@ -138,8 +140,51 @@ providers. Do not place those condition sources in production content yet.
 - both `itemKey` and `itemTag` set in one input
 - unknown item key in input or output
 - unknown `requiredLinkedObjectKey`
-- station requirement without a linked station object
+- explicit `requiredLinkedObjectKey` naming an object without station configuration
 - unknown station resource in `consume`
 - unsupported station condition operator
 - `ticksRequired == 0`
 - total `qualityWeight == 0`
+
+## Mapped Outputs (`outputByInputKey`)
+
+A supplied map requires exactly one input row using `itemTag` and `count: 1`.
+Ordinary input validation and quality weights still apply. Each map source and
+target must be a nonblank, existing item key, and each source must have the input
+tag. Keys outside the input tag are rejected when definitions load.
+
+For example, Roasted meat in `cooking.jsonc` uses:
+
+```jsonc
+"inputs": [{ "itemTag": "raw_meat", "count": 1, "qualityWeight": 1 }],
+"outputs": [{ "itemKey": "roasted_meat", "count": 1 }],
+"outputByInputKey": {
+  "beef": "roasted_beef",
+  "raw_pork": "roast_pork"
+},
+"stationRequirements": [{ "capability": "cooking", "state": "burning" }]
+```
+
+This abbreviated example shows two entries; the catalog recipe contains all nine
+meat species. The standard input traversal chooses the first matching source:
+root grids, nested grids, then hand, preserving inventory and item order within
+each group. It does not skip an unmapped source to find a mapped one.
+
+With a supplied map, `outputs` and their counts are **UI preview metadata only**.
+Every successful cycle consumes one source unit and creates one mapped target
+through the standard inventory mechanisms, with standard craft quality. It does
+not change the source item's type in place. The source, map entry, target item,
+and target placement are resolved before consumption. Placement is checked for
+`roasted_beef` when the source is `beef`, and for `roast_pork` when it is
+`raw_pork`, using available space before input removal.
+
+Missing map coverage is allowed at load time, including an empty map. At runtime
+it fails without consuming input, with the distinct message:
+`Roast can't be processed: no info {source_item_key} in roast map`.
+An empty map never falls back to preview outputs. Omit the field entirely for
+ordinary fixed-output recipes.
+
+The Roasted meat preview retains `items/raw_meat` and `items/roasted_meat` icons.
+The recipe uses 10 ticks and 10 stamina per cycle and checks cooking/burning at
+start and completion. An unlit final station cancels without input consumption;
+a broken or switched link also prevents completion against the previous station.

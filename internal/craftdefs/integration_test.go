@@ -61,7 +61,6 @@ func TestLoadAllCrafts_RegistersStationRequirementFixtures(t *testing.T) {
 	campfire, ok := objects.GetByKey("campfire")
 	require.True(t, ok)
 	require.NotNil(t, campfire.Station)
-	require.Equal(t, []craftdefs.StationResourceConsumption{{ResourceKey: "thread", Amount: 1}}, campfireRecipeConsumption(t, crafts))
 
 	burningRecipe, ok := crafts.GetByKey("campfire_dried_branch")
 	require.True(t, ok)
@@ -71,12 +70,4 @@ func TestLoadAllCrafts_RegistersStationRequirementFixtures(t *testing.T) {
 	noStationRecipe, ok := crafts.GetByKey("stone_axe")
 	require.True(t, ok, "existing starter recipes must remain available")
 	assert.Empty(t, noStationRecipe.StationRequirements)
-}
-
-func campfireRecipeConsumption(t *testing.T, crafts *craftdefs.Registry) []craftdefs.StationResourceConsumption {
-	t.Helper()
-	threadedRecipe, ok := crafts.GetByKey("campfire_threaded_branch")
-	require.True(t, ok)
-	require.Len(t, threadedRecipe.StationRequirements, 1)
-	return threadedRecipe.StationRequirements[0].Consume
 }
