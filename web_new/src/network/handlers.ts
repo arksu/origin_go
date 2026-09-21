@@ -459,6 +459,7 @@ export function registerMessageHandlers(): void {
     }
     gameStore.pushMiniAlert({
       reasonCode,
+      message: msg.message || undefined,
       severity: msg.severity ?? proto.AlertSeverity.ALERT_SEVERITY_INFO,
       ttlMs: msg.ttlMs ? Number(msg.ttlMs) : 0,
     })

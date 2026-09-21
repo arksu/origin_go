@@ -207,6 +207,9 @@ func validateCraft(c *CraftDef, filePath string) error {
 	if totalQualityWeight == 0 {
 		return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: "at least one input qualityWeight must be > 0"}
 	}
+	if err := validateOutputByInputKey(c, filePath); err != nil {
+		return err
+	}
 	for i, out := range c.Outputs {
 		if strings.TrimSpace(out.ItemKey) == "" {
 			return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: fmt.Sprintf("outputs[%d].itemKey is required", i)}
@@ -235,6 +238,50 @@ func validateCraft(c *CraftDef, filePath string) error {
 		// ok (default)
 	default:
 		// Allow future custom formula ids now; runtime may reject unsupported formulas.
+	}
+	return nil
+}
+
+func validateOutputByInputKey(c *CraftDef, filePath string) error {
+	if c.OutputByInputKey == nil {
+		return nil
+	}
+	invalid := func(message string) error {
+		return &LoadError{FilePath: filePath, DefID: c.DefID, Key: c.Key, Message: "outputByInputKey: " + message}
+	}
+	if len(c.Inputs) != 1 || c.Inputs[0].ItemTag == "" || c.Inputs[0].ItemKey != "" || c.Inputs[0].Count != 1 {
+		return invalid("requires exactly one input with itemTag and count 1")
+	}
+	sourceKeys := make([]string, 0, len(c.OutputByInputKey))
+	for sourceKey := range c.OutputByInputKey {
+		sourceKeys = append(sourceKeys, sourceKey)
+	}
+	sort.Strings(sourceKeys)
+	for _, sourceKey := range sourceKeys {
+		targetKey := c.OutputByInputKey[sourceKey]
+		if strings.TrimSpace(sourceKey) == "" {
+			return invalid("source key must not be empty")
+		}
+		if strings.TrimSpace(targetKey) == "" {
+			return invalid(fmt.Sprintf("target key for %q must not be empty", sourceKey))
+		}
+		source, ok := itemdefs.Global().GetByKey(sourceKey)
+		if !ok {
+			return invalid(fmt.Sprintf("unknown source item: %s", sourceKey))
+		}
+		if _, ok := itemdefs.Global().GetByKey(targetKey); !ok {
+			return invalid(fmt.Sprintf("unknown target item for %s: %s", sourceKey, targetKey))
+		}
+		hasTag := false
+		for _, tag := range source.Tags {
+			if tag == c.Inputs[0].ItemTag {
+				hasTag = true
+				break
+			}
+		}
+		if !hasTag {
+			return invalid(fmt.Sprintf("source item %s does not have input tag %s", sourceKey, c.Inputs[0].ItemTag))
+		}
 	}
 	return nil
 }

@@ -618,6 +618,7 @@ message S2C_MiniAlert {
   AlertSeverity severity = 1;
   string reason_code = 2;
   uint32 ttl_ms = 3;
+  optional string message = 4;
 }
 
 message S2C_CyclicActionProgress {

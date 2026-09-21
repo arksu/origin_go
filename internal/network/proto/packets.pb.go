@@ -4935,6 +4935,7 @@ type S2C_MiniAlert struct {
 	Severity      AlertSeverity          `protobuf:"varint,1,opt,name=severity,proto3,enum=proto.AlertSeverity" json:"severity,omitempty"`
 	ReasonCode    string                 `protobuf:"bytes,2,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
 	TtlMs         uint32                 `protobuf:"varint,3,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	Message       *string                `protobuf:"bytes,4,opt,name=message,proto3,oneof" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4988,6 +4989,13 @@ func (x *S2C_MiniAlert) GetTtlMs() uint32 {
 		return x.TtlMs
 	}
 	return 0
+}
+
+func (x *S2C_MiniAlert) GetMessage() string {
+	if x != nil && x.Message != nil {
+		return *x.Message
+	}
+	return ""
 }
 
 type S2C_CyclicActionProgress struct {
@@ -7504,12 +7512,15 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x05title\x18\x02 \x01(\tR\x05title\"b\n" +
 	"\x0fS2C_ContextMenu\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x122\n" +
-	"\aactions\x18\x02 \x03(\v2\x18.proto.ContextMenuActionR\aactions\"y\n" +
+	"\aactions\x18\x02 \x03(\v2\x18.proto.ContextMenuActionR\aactions\"\xa4\x01\n" +
 	"\rS2C_MiniAlert\x120\n" +
 	"\bseverity\x18\x01 \x01(\x0e2\x14.proto.AlertSeverityR\bseverity\x12\x1f\n" +
 	"\vreason_code\x18\x02 \x01(\tR\n" +
 	"reasonCode\x12\x15\n" +
-	"\x06ttl_ms\x18\x03 \x01(\rR\x05ttlMs\"\xc8\x01\n" +
+	"\x06ttl_ms\x18\x03 \x01(\rR\x05ttlMs\x12\x1d\n" +
+	"\amessage\x18\x04 \x01(\tH\x00R\amessage\x88\x01\x01B\n" +
+	"\n" +
+	"\b_message\"\xc8\x01\n" +
 	"\x18S2C_CyclicActionProgress\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12(\n" +
 	"\x10target_entity_id\x18\x02 \x01(\x04R\x0etargetEntityId\x12\x1f\n" +
@@ -8086,6 +8097,7 @@ func file_api_proto_packets_proto_init() {
 		(*ClientMessage_LiftPutDown)(nil),
 	}
 	file_api_proto_packets_proto_msgTypes[60].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[66].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[68].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[69].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[73].OneofWrappers = []any{}

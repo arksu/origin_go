@@ -73,13 +73,13 @@
           "capability": "cooking",
           "state": "burning",
           "conditions": [
-            {
-              "source": "station",
-              "kind": "value",
-              "key": "temperature",
-              "operator": "gte",
-              "value": 600
-            }
+            // {
+              // "source": "station",
+              // "kind": "value",
+              // "key": "temperature",
+              // "operator": "gte",
+              // "value": 600
+            // }
           ]
         }
       ]

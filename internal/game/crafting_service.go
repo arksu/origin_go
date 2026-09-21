@@ -2,6 +2,8 @@ package game
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -121,7 +123,7 @@ func (s *CraftingService) startCraft(
 	}
 
 	targetID, targetHandle, hasLinkObj := s.resolveRequiredLinkedObject(w, playerID, craft)
-	if craft.RequiredLinkedObject != "" && !hasLinkObj {
+	if craftNeedsLinkedObject(craft) && !hasLinkObj {
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_REQUIRES_LINKED_OBJECT")
 		return
 	}
@@ -129,26 +131,15 @@ func (s *CraftingService) startCraft(
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_STATION_REQUIREMENTS_NOT_MET")
 		return
 	}
-	if !s.hasCraftStamina(w, playerHandle, craft.StaminaCost) {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "LOW_STAMINA")
-		return
-	}
-	if s.invExec == nil {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_UNAVAILABLE")
-		return
-	}
-	if !s.invExec.HasCraftInputs(w, playerID, playerHandle, craft) {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_MISSING_INPUTS")
-		return
-	}
-	if !s.invExec.CanFitCraftOutputsOneCycle(w, playerID, playerHandle, craft, 1) {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_NO_SPACE")
+	prepared := s.prepareCraftCycle(w, playerID, playerHandle, craft)
+	if prepared.failureCode != "" {
+		s.sendCraftPreparationFailure(playerID, prepared)
 		return
 	}
 
 	nowTick := ecs.GetResource[ecs.TimeState](w).Tick
 	targetKind := components.CyclicActionTargetSelf
-	if craft.RequiredLinkedObject != "" {
+	if craftNeedsLinkedObject(craft) {
 		targetKind = components.CyclicActionTargetObject
 	}
 	ecs.AddComponent(w, playerHandle, components.ActiveCraft{
@@ -195,45 +186,19 @@ func (s *CraftingService) HandleCraftCycleComplete(
 		s.SendCraftListSnapshot(w, playerID, playerHandle)
 		return contracts.BehaviorCycleDecisionComplete
 	}
-	if craft.RequiredLinkedObject != "" {
-		if !s.isActionTargetMatchingRequiredObject(w, action, craft.RequiredLinkedObject) {
-			return contracts.BehaviorCycleDecisionCanceled
-		}
+	if !s.isCraftActionLinkValid(w, playerID, action, craft) {
+		return contracts.BehaviorCycleDecisionCanceled
 	}
+
 	stationRequirements := s.evaluateStationRequirements(w, playerID, action.TargetID, craft)
 	if !stationRequirements.Passed {
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_STATION_REQUIREMENTS_NOT_MET")
 		s.SendCraftListSnapshot(w, playerID, playerHandle)
 		return contracts.BehaviorCycleDecisionCanceled
 	}
-	if s.invExec == nil {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_UNAVAILABLE")
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-	preview := s.invExec.PreviewCraftInputs(w, playerID, playerHandle, craft)
-	if preview.Overflow {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_QUALITY_OVERFLOW")
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-	if !preview.Success {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_MISSING_INPUTS")
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-	quality := s.computeCraftQuality(craft, preview.QualityWeighted, preview.QualityWeightSum)
-	if quality == nil {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_QUALITY_FORMULA_UNSUPPORTED")
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-	if !s.hasCraftStamina(w, playerHandle, craft.StaminaCost) {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "LOW_STAMINA")
-		s.SendCraftListSnapshot(w, playerID, playerHandle)
-		return contracts.BehaviorCycleDecisionCanceled
-	}
-	if !s.invExec.CanFitCraftOutputsOneCycle(w, playerID, playerHandle, craft, *quality) {
-		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "CRAFT_NO_SPACE")
+	prepared := s.prepareCraftCycle(w, playerID, playerHandle, craft)
+	if prepared.failureCode != "" {
+		s.sendCraftPreparationFailure(playerID, prepared)
 		s.SendCraftListSnapshot(w, playerID, playerHandle)
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -250,7 +215,7 @@ func (s *CraftingService) HandleCraftCycleComplete(
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
-	consume := s.invExec.ConsumeCraftInputs(w, playerID, playerHandle, craft)
+	consume := s.invExec.CommitPreparedCraftInputs(w, playerID, playerHandle, &prepared.inputs)
 	if consume.Overflow {
 		return rollback(netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_QUALITY_OVERFLOW")
 	}
@@ -267,8 +232,8 @@ func (s *CraftingService) HandleCraftCycleComplete(
 	updated := consume.UpdatedContainers
 	var discoveryLP int64
 	stopAfterCycle := false
-	for _, out := range craft.Outputs {
-		give := s.invExec.GiveItem(w, playerID, playerHandle, out.ItemKey, out.Count, *quality)
+	for _, out := range prepared.outputs {
+		give := s.invExec.GiveItem(w, playerID, playerHandle, out.ItemKey, out.Count, prepared.quality)
 		if give == nil || !give.Success || give.GrantedCount != out.Count {
 			return rollback(netproto.AlertSeverity_ALERT_SEVERITY_ERROR, "CRAFT_OUTPUT_CREATION_FAILED")
 		}
@@ -307,6 +272,18 @@ func (s *CraftingService) HandleCraftCycleComplete(
 		ac.StopAfterCurrentCycle = stopAfterCycle
 		return true
 	})
+	if !s.isCraftActionLinkValid(w, playerID, action, craft) || !s.evaluateStationRequirements(w, playerID, action.TargetID, craft).Passed {
+		ecs.RemoveComponent[components.ActiveCraft](w, playerHandle)
+		s.refreshCraftSnapshotsAfterCompletion(w, playerID, playerHandle, action.TargetID)
+		return contracts.BehaviorCycleDecisionComplete
+	}
+	next := s.prepareCraftCycle(w, playerID, playerHandle, craft)
+	if next.failureCode != "" {
+		s.sendCraftPreparationFailure(playerID, next)
+		ecs.RemoveComponent[components.ActiveCraft](w, playerHandle)
+		s.refreshCraftSnapshotsAfterCompletion(w, playerID, playerHandle, action.TargetID)
+		return contracts.BehaviorCycleDecisionComplete
+	}
 	s.refreshCraftSnapshotsAfterCompletion(w, playerID, playerHandle, action.TargetID)
 	return contracts.BehaviorCycleDecisionContinue
 }
@@ -331,10 +308,7 @@ func (s *CraftingService) IsActiveCraftStillValid(
 	if !s.isCraftVisible(w, playerHandle, craft) {
 		return false
 	}
-	if craft.RequiredLinkedObject != "" {
-		return s.isActionTargetMatchingRequiredObject(w, action, craft.RequiredLinkedObject)
-	}
-	return true
+	return s.isCraftActionLinkValid(w, playerID, action, craft)
 }
 
 func (s *CraftingService) SendCraftListSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
@@ -364,12 +338,8 @@ func (s *CraftingService) buildCraftList(w *ecs.World, playerID types.EntityID, 
 			continue
 		}
 		flags := &netproto.CraftRequirementFlags{}
-		stationID := types.EntityID(0)
-		if craft.RequiredLinkedObject == "" {
-			flags.HasRequiredLinkedObject = true
-		} else {
-			stationID, _, flags.HasRequiredLinkedObject = s.resolveRequiredLinkedObject(w, playerID, craft)
-		}
+		stationID, _, hasLink := s.resolveRequiredLinkedObject(w, playerID, craft)
+		flags.HasRequiredLinkedObject = hasLink
 		stationEvaluation := s.evaluateStationRequirements(w, playerID, stationID, craft)
 		flags.HasStationRequirements = len(craft.StationRequirements) > 0
 		flags.StationRequirementsMet = !flags.HasStationRequirements || stationEvaluation.Passed
@@ -377,9 +347,15 @@ func (s *CraftingService) buildCraftList(w *ecs.World, playerID types.EntityID, 
 			failureCode := stationEvaluation.FailureCode
 			flags.StationFailureCode = &failureCode
 		}
-		flags.HasInputs = hasInvExec && s.invExec.HasCraftInputs(w, playerID, playerHandle, craft)
+		var inputs inventory.CraftConsumeInputsResult
+		if hasInvExec {
+			inputs = s.invExec.PreviewCraftInputs(w, playerID, playerHandle, craft)
+		}
+		flags.HasInputs = inputs.Success && !inputs.Overflow
 		flags.HasStamina = s.hasCraftStamina(w, playerHandle, craft.StaminaCost)
-		flags.HasOutputSpace = hasInvExec && s.invExec.CanFitCraftOutputsOneCycle(w, playerID, playerHandle, craft, 1)
+		outputs, outputError := inventory.ResolveCraftOutputs(craft, inputs)
+		quality := s.computeCraftQuality(craft, inputs.QualityWeighted, inputs.QualityWeightSum)
+		flags.HasOutputSpace = hasInvExec && outputError == nil && quality != nil && s.invExec.CanFitResolvedCraftOutputs(w, playerID, playerHandle, outputs, *quality)
 		flags.CanStartNow = flags.HasRequiredLinkedObject && flags.StationRequirementsMet && flags.HasInputs && flags.HasStamina && flags.HasOutputSpace
 
 		entry := &netproto.CraftRecipeEntry{
@@ -495,6 +471,67 @@ func (s *CraftingService) evaluateStationRequirements(
 		ActorID:   playerID,
 		StationID: stationID,
 	}, craft.StationRequirements)
+}
+
+type craftCyclePreparation struct {
+	inputs      inventory.CraftConsumeInputsResult
+	outputs     []craftdefs.CraftOutput
+	quality     uint32
+	failureCode string
+	message     string
+}
+
+func (s *CraftingService) prepareCraftCycle(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, craft *craftdefs.CraftDef) craftCyclePreparation {
+	result := craftCyclePreparation{}
+	if s.invExec == nil {
+		result.failureCode = "CRAFT_UNAVAILABLE"
+		return result
+	}
+	result.inputs = s.invExec.PreviewCraftInputs(w, playerID, playerHandle, craft)
+	if result.inputs.Overflow {
+		result.failureCode = "CRAFT_QUALITY_OVERFLOW"
+		return result
+	}
+	if !result.inputs.Success {
+		result.failureCode = "CRAFT_MISSING_INPUTS"
+		return result
+	}
+	var err error
+	result.outputs, err = inventory.ResolveCraftOutputs(craft, result.inputs)
+	if err != nil {
+		var missing *inventory.CraftMapEntryMissingError
+		if errors.As(err, &missing) {
+			result.failureCode = "CRAFT_ROAST_MAP_ENTRY_MISSING"
+			// Roast-specific player text pinned by the roasted-meat spec; the mapped-output mechanism itself stays recipe-agnostic.
+			result.message = fmt.Sprintf("Roast can't be processed: no info %s in roast map", missing.SourceItemKey)
+		} else {
+			result.failureCode = "CRAFT_OUTPUT_INVALID"
+		}
+		return result
+	}
+	quality := s.computeCraftQuality(craft, result.inputs.QualityWeighted, result.inputs.QualityWeightSum)
+	if quality == nil {
+		result.failureCode = "CRAFT_QUALITY_FORMULA_UNSUPPORTED"
+		return result
+	}
+	result.quality = *quality
+	if !s.hasCraftStamina(w, playerHandle, craft.StaminaCost) {
+		result.failureCode = "LOW_STAMINA"
+		return result
+	}
+	if !s.invExec.CanFitResolvedCraftOutputs(w, playerID, playerHandle, result.outputs, result.quality) {
+		result.failureCode = "CRAFT_NO_SPACE"
+	}
+	return result
+}
+
+func (s *CraftingService) sendCraftPreparationFailure(playerID types.EntityID, prepared craftCyclePreparation) {
+	severity := netproto.AlertSeverity_ALERT_SEVERITY_ERROR
+	switch prepared.failureCode {
+	case "CRAFT_MISSING_INPUTS", "LOW_STAMINA", "CRAFT_NO_SPACE":
+		severity = netproto.AlertSeverity_ALERT_SEVERITY_WARNING
+	}
+	s.sendMiniAlert(playerID, severity, prepared.failureCode, prepared.message)
 }
 
 type craftCycleSnapshot struct {
@@ -648,7 +685,7 @@ func (s *CraftingService) resolveRequiredLinkedObject(
 	playerID types.EntityID,
 	craft *craftdefs.CraftDef,
 ) (types.EntityID, types.Handle, bool) {
-	if craft == nil || craft.RequiredLinkedObject == "" {
+	if !craftNeedsLinkedObject(craft) {
 		return 0, types.InvalidHandle, true
 	}
 	linkState := ecs.GetResource[ecs.LinkState](w)
@@ -663,28 +700,22 @@ func (s *CraftingService) resolveRequiredLinkedObject(
 	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
 		return 0, types.InvalidHandle, false
 	}
-	if !s.isHandleObjectKey(w, targetHandle, craft.RequiredLinkedObject) {
+	if craft.RequiredLinkedObject != "" && !s.isHandleObjectKey(w, targetHandle, craft.RequiredLinkedObject) {
 		return 0, types.InvalidHandle, false
 	}
 	return link.TargetID, targetHandle, true
 }
 
-func (s *CraftingService) isActionTargetMatchingRequiredObject(
-	w *ecs.World,
-	action components.ActiveCyclicAction,
-	requiredObjectKey string,
-) bool {
-	if requiredObjectKey == "" {
+func craftNeedsLinkedObject(craft *craftdefs.CraftDef) bool {
+	return craft != nil && (craft.RequiredLinkedObject != "" || len(craft.StationRequirements) > 0)
+}
+
+func (s *CraftingService) isCraftActionLinkValid(w *ecs.World, playerID types.EntityID, action components.ActiveCyclicAction, craft *craftdefs.CraftDef) bool {
+	if !craftNeedsLinkedObject(craft) {
 		return true
 	}
-	targetHandle := action.TargetHandle
-	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
-		targetHandle = w.GetHandleByEntityID(action.TargetID)
-	}
-	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
-		return false
-	}
-	return s.isHandleObjectKey(w, targetHandle, requiredObjectKey)
+	targetID, _, valid := s.resolveRequiredLinkedObject(w, playerID, craft)
+	return valid && targetID == action.TargetID && action.TargetKind == components.CyclicActionTargetObject
 }
 
 func (s *CraftingService) isHandleObjectKey(w *ecs.World, handle types.Handle, requiredObjectKey string) bool {
@@ -738,15 +769,15 @@ func (s *CraftingService) computeCraftQuality(craft *craftdefs.CraftDef, weighte
 	}
 }
 
-func (s *CraftingService) sendMiniAlert(entityID types.EntityID, severity netproto.AlertSeverity, reasonCode string) {
+func (s *CraftingService) sendMiniAlert(entityID types.EntityID, severity netproto.AlertSeverity, reasonCode string, message ...string) {
 	if s == nil || s.sender == nil || reasonCode == "" {
 		return
 	}
-	s.sender.SendMiniAlert(entityID, &netproto.S2C_MiniAlert{
-		Severity:   severity,
-		ReasonCode: reasonCode,
-		TtlMs:      ttlBySeverity(severity),
-	})
+	alert := &netproto.S2C_MiniAlert{Severity: severity, ReasonCode: reasonCode, TtlMs: ttlBySeverity(severity)}
+	if len(message) > 0 && message[0] != "" {
+		alert.Message = &message[0]
+	}
+	s.sender.SendMiniAlert(entityID, alert)
 }
 
 func (s *CraftingService) onLinkStateChanged(_ context.Context, event eventbus.Event) error {
