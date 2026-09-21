@@ -3,6 +3,7 @@ import { cameraController } from './CameraController'
 import type { ObjectManager } from './ObjectManager'
 import {
   NICKNAME_DEFAULT_COLOR,
+  NICKNAME_FONT_FAMILY,
   NICKNAME_FONT_SIZE,
   NICKNAME_OUTLINE_COLOR,
   NICKNAME_OUTLINE_WIDTH,
@@ -50,6 +51,7 @@ export class NicknameManager {
     const text = new Text({
       text: name,
       style: {
+        fontFamily: NICKNAME_FONT_FAMILY,
         fontSize: NICKNAME_FONT_SIZE,
         fill: this.resolveColor(color),
         stroke: { color: NICKNAME_OUTLINE_COLOR, width: NICKNAME_OUTLINE_WIDTH },
