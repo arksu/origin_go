@@ -29,8 +29,6 @@ func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
 	// Process only entities that moved this frame
 	for i := 0; i < movedEntities.Count; i++ {
 		h := movedEntities.Handles[i]
-		newX := movedEntities.IntentX[i]
-		newY := movedEntities.IntentY[i]
 
 		if !w.Alive(h) {
 			continue
@@ -41,35 +39,33 @@ func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 
-		// Calculate current chunk from new position
-		newChunkX := int(newX) / _const.ChunkWorldSize
-		newChunkY := int(newY) / _const.ChunkWorldSize
+		// ChunkSystem runs after TransformUpdateSystem, which already
+		// committed the collision-adjusted final position to the transform.
+		// Migrate on where the entity IS, not where it asked to go: intent
+		// and final diverge whenever collision alters the path near a border.
+		transform, ok := ecs.GetComponent[components.Transform](w, h)
+		if !ok {
+			continue
+		}
+		newChunkX := floorDiv(int(transform.X), _const.ChunkWorldSize)
+		newChunkY := floorDiv(int(transform.Y), _const.ChunkWorldSize)
 
 		// Check if entity needs to migrate to different chunk
 		if newChunkX != chunkRef.CurrentChunkX || newChunkY != chunkRef.CurrentChunkY {
-			s.migrateEntity(w, h, chunkRef, newChunkX, newChunkY)
+			s.migrateEntity(w, h, chunkRef, transform, newChunkX, newChunkY)
 		}
 	}
 }
 
-func (s *ChunkSystem) migrateEntity(w *ecs.World, h types.Handle, chunkRef components.ChunkRef, newChunkX, newChunkY int) {
-	// Get old chunk
-	oldChunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
-	oldChunk := s.chunkManager.GetChunk(oldChunkCoord)
-	if oldChunk != nil && oldChunk.State == types.ChunkStateActive {
-		// Remove entity from old chunk spatial hash
-		transform, ok := ecs.GetComponent[components.Transform](w, h)
-		if ok {
-			entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](w, h)
-			if hasEntityInfo && entityInfo.IsStatic {
-				oldChunk.Spatial().RemoveStatic(h, int(transform.X), int(transform.Y))
-			} else {
-				oldChunk.Spatial().RemoveDynamic(h, int(transform.X), int(transform.Y))
-			}
-		}
-	}
-
-	// Get new chunk
+func (s *ChunkSystem) migrateEntity(
+	w *ecs.World,
+	h types.Handle,
+	chunkRef components.ChunkRef,
+	transform components.Transform,
+	newChunkX, newChunkY int,
+) {
+	// Validate everything before mutating: aborting midway would leave the
+	// spatial registration and ChunkRef inconsistent.
 	newChunkCoord := types.ChunkCoord{X: newChunkX, Y: newChunkY}
 	newChunk := s.chunkManager.GetChunk(newChunkCoord)
 	if newChunk == nil || newChunk.State != types.ChunkStateActive {
@@ -86,18 +82,6 @@ func (s *ChunkSystem) migrateEntity(w *ecs.World, h types.Handle, chunkRef compo
 		return
 	}
 
-	// Add entity to new chunk spatial hash
-	transform, ok := ecs.GetComponent[components.Transform](w, h)
-	if ok {
-		entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](w, h)
-		if hasEntityInfo && entityInfo.IsStatic {
-			newChunk.Spatial().AddStatic(h, int(transform.X), int(transform.Y))
-		} else {
-			newChunk.Spatial().AddDynamic(h, int(transform.X), int(transform.Y))
-		}
-	}
-
-	// Get entity ID for UpdateEntityPosition call
 	entityID, hasEntityID := w.GetExternalID(h)
 	if !hasEntityID {
 		s.logger.Error("Entity missing external ID for chunk migration",
@@ -108,6 +92,29 @@ func (s *ChunkSystem) migrateEntity(w *ecs.World, h types.Handle, chunkRef compo
 		return
 	}
 
+	entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](w, h)
+	isStatic := hasEntityInfo && entityInfo.IsStatic
+
+	// Remove from the old chunk's grid using the final position:
+	// TransformUpdateSystem already moved the entry to this cell (the grid
+	// update there must never be skipped, even on cross-border moves).
+	oldChunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
+	oldChunk := s.chunkManager.GetChunk(oldChunkCoord)
+	if oldChunk != nil && oldChunk.State == types.ChunkStateActive {
+		if isStatic {
+			oldChunk.Spatial().RemoveStatic(h, int(transform.X), int(transform.Y))
+		} else {
+			oldChunk.Spatial().RemoveDynamic(h, int(transform.X), int(transform.Y))
+		}
+	}
+
+	// Add entity to new chunk spatial hash
+	if isStatic {
+		newChunk.Spatial().AddStatic(h, int(transform.X), int(transform.Y))
+	} else {
+		newChunk.Spatial().AddDynamic(h, int(transform.X), int(transform.Y))
+	}
+
 	// Update ChunkRef component
 	ecs.WithComponent(w, h, func(cr *components.ChunkRef) {
 		cr.PrevChunkX = cr.CurrentChunkX
@@ -116,14 +123,6 @@ func (s *ChunkSystem) migrateEntity(w *ecs.World, h types.Handle, chunkRef compo
 		cr.CurrentChunkY = newChunkY
 	})
 
-	// Update entity position in chunk manager
+	// Update entity position in chunk manager (drives AOI and chunk streaming)
 	s.chunkManager.UpdateEntityPosition(entityID, newChunkCoord)
-
-	//s.logger.Debug("Entity migrated between chunks",
-	//	zap.Uint64("handle", uint64(h)),
-	//	zap.Int("from_chunk_x", chunkRef.CurrentChunkX),
-	//	zap.Int("from_chunk_y", chunkRef.CurrentChunkY),
-	//	zap.Int("to_chunk_x", newChunkX),
-	//	zap.Int("to_chunk_y", newChunkY),
-	//)
 }
