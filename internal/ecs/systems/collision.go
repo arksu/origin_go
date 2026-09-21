@@ -308,7 +308,34 @@ func (s *CollisionSystem) sweepCollision(
 
 			// Check if candidate is also moving (dynamic collision)
 			candidateMovement, candidateMoving := s.movementStorage.Get(candidateHandle)
-			if candidateMoving && candidateMovement.State == constt.StateMoving {
+			candidateIsMoving := candidateMoving && candidateMovement.State == constt.StateMoving
+
+			// An already-overlapping pair is a miss for sweptAABB (entryTime
+			// < 0) and would pass through. Resolve it here: deepening movement
+			// hits at t=0, while escaping or tangential movement stays free.
+			if overlapNX, overlapNY, deepening, overlapped := startOverlapNormal(
+				currentX, currentY, entityHalfW, entityHalfH,
+				remainingDX, remainingDY,
+				candidateTransform.X, candidateTransform.Y,
+				candidateCollider.HalfWidth, candidateCollider.HalfHeight,
+			); overlapped {
+				if deepening && earliestT > 0 {
+					earliestT = 0
+					hitNormalX = overlapNX
+					hitNormalY = overlapNY
+					if id, ok := w.GetExternalID(candidateHandle); ok {
+						collidedWith = id
+					}
+					if candidateIsMoving {
+						// For dynamic-dynamic collision: stop completely
+						remainingDX = 0
+						remainingDY = 0
+					}
+				}
+				continue
+			}
+
+			if candidateIsMoving {
 				// Both moving - stop, do not push back
 				t, nx, ny, hit := s.sweptAABB(
 					currentX, currentY, entityHalfW, entityHalfH,
@@ -457,8 +484,9 @@ const maxSweepTiles = 32
 // (dx, dy) against impassable tiles. Returns the center position at the
 // earliest contact (or the untouched destination when clear), the contact
 // normal, and whether movement is blocked. Tiles the box already overlaps are
-// ignored (same rule as object collision), so mode switches and legacy
-// positions can move out of terrain.
+// ignored, so mode switches and legacy positions can move out of terrain.
+// (Object collision is stricter: startOverlapNormal blocks deepening moves
+// there, but still lets overlapped entities escape.)
 func (s *CollisionSystem) checkTileCollision(
 	startX, startY, dx, dy, halfW, halfH float64,
 	chunk *core.Chunk,
@@ -541,6 +569,39 @@ func (s *CollisionSystem) tilePassableAtCoords(
 		return chunk.IsTileSwimmable(localTileX, localTileY, s.chunkSize)
 	}
 	return chunk.IsTilePassable(localTileX, localTileY, s.chunkSize)
+}
+
+// startOverlapNormal reports whether the mover's box already overlaps the
+// candidate at sweep start. sweptAABB rejects such pairs (entryTime < 0), so
+// the candidate loop uses this to resolve overlaps explicitly: deepening
+// movement counts as a hit at t=0, escaping or tangential movement stays free
+// so overlapped entities can always walk out. The normal is the
+// minimum-penetration axis pointing from candidate toward mover; exact
+// contact (penetration 0) is left to the normal sweep, which blocks it at
+// entryTime 0.
+func startOverlapNormal(
+	ax, ay, aHalfW, aHalfH float64,
+	dx, dy float64,
+	bx, by, bHalfW, bHalfH float64,
+) (normalX, normalY float64, deepening, overlapped bool) {
+	penX := aHalfW + bHalfW - math.Abs(ax-bx)
+	penY := aHalfH + bHalfH - math.Abs(ay-by)
+	if penX <= 0 || penY <= 0 {
+		return 0, 0, false, false
+	}
+
+	if penX < penY {
+		normalX = -1
+		if ax > bx {
+			normalX = 1
+		}
+		return normalX, 0, dx*normalX < 0, true
+	}
+	normalY = -1
+	if ay > by {
+		normalY = 1
+	}
+	return 0, normalY, dy*normalY < 0, true
 }
 
 // sweptAABB performs swept AABB collision using Minkowski difference

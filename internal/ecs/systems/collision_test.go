@@ -59,11 +59,18 @@ func paintTestTile(chunk *core.Chunk, worldX, worldY float64, tileID byte) {
 	chunk.Tiles[localY*constt.ChunkSize+localX] = tileID
 }
 
-// runCollisionSweep spawns a mover plus obstacle walls, feeds the intent into
-// MovedEntities and returns the collision result for the mover.
-// Mover and walls use half-extents of 5 (walls 60 tall).
-// Optional paint callbacks run after chunk creation to customize tiles.
-func runCollisionSweep(t *testing.T, moverX, moverY, dx, dy float64, walls []components.Transform, paint ...func(*core.Chunk)) components.CollisionResult {
+// sweepScene bundles a prepared collision world: a grass chunk, a mover with
+// half-extents 5, and obstacle walls with half-extents 5x60. Tests that only
+// need one sweep use runCollisionSweep; tests needing custom candidates or
+// multiple ticks drive the scene directly.
+type sweepScene struct {
+	world  *ecs.World
+	chunk  *core.Chunk
+	system *CollisionSystem
+	mover  types.Handle
+}
+
+func newSweepScene(t *testing.T, moverX, moverY float64, walls []components.Transform, paint ...func(*core.Chunk)) *sweepScene {
 	t.Helper()
 
 	chunk := newTestChunk(types.ChunkCoord{X: 0, Y: 0})
@@ -101,14 +108,60 @@ func runCollisionSweep(t *testing.T, moverX, moverY, dx, dy float64, walls []com
 	}
 
 	system := NewCollisionSystem(world, cm, zap.NewNop(), 0, constt.ChunkWorldSize, 0, constt.ChunkWorldSize, 0)
-	ecs.GetResource[ecs.MovedEntities](world).Add(mover, moverX+dx, moverY+dy)
-	system.Update(world, 0.1)
+	return &sweepScene{world: world, chunk: chunk, system: system, mover: mover}
+}
 
-	result, ok := ecs.GetComponent[components.CollisionResult](world, mover)
+// addMovingCandidate spawns an entity that counts as dynamic for collision
+// (Movement in StateMoving), like a walking player would.
+func (s *sweepScene) addMovingCandidate(id uint64, x, y float64) {
+	handle := s.world.Spawn(types.EntityID(id), func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: x, Y: y})
+		ecs.AddComponent(w, h, components.Collider{
+			HalfWidth:  5,
+			HalfHeight: 60,
+			Layer:      constt.PlayerLayer,
+			Mask:       constt.PlayerMask,
+		})
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateMoving})
+	})
+	s.chunk.Spatial().AddDynamic(handle, int(x), int(y))
+}
+
+// runTick feeds one intent (as a delta from the mover's current position) into
+// MovedEntities and runs the collision system. Between ticks the collision
+// result is applied to the mover's transform, mirroring TransformUpdateSystem,
+// and the buffer is cleared, mirroring ResetSystem.
+func (s *sweepScene) runTick(t *testing.T, dx, dy float64) components.CollisionResult {
+	t.Helper()
+
+	transform, ok := ecs.GetComponent[components.Transform](s.world, s.mover)
+	if !ok {
+		t.Fatalf("expected transform component")
+	}
+	moved := ecs.GetResource[ecs.MovedEntities](s.world)
+	moved.Count = 0
+	moved.Add(s.mover, transform.X+dx, transform.Y+dy)
+	s.system.Update(s.world, 0.1)
+
+	result, ok := ecs.GetComponent[components.CollisionResult](s.world, s.mover)
 	if !ok {
 		t.Fatalf("expected collision result component")
 	}
+	ecs.WithComponent(s.world, s.mover, func(m *components.Transform) {
+		m.X = result.FinalX
+		m.Y = result.FinalY
+	})
 	return result
+}
+
+// runCollisionSweep spawns a mover plus obstacle walls, feeds the intent into
+// MovedEntities and returns the collision result for the mover.
+// Mover and walls use half-extents of 5 (walls 60 tall).
+// Optional paint callbacks run after chunk creation to customize tiles.
+func runCollisionSweep(t *testing.T, moverX, moverY, dx, dy float64, walls []components.Transform, paint ...func(*core.Chunk)) components.CollisionResult {
+	t.Helper()
+	scene := newSweepScene(t, moverX, moverY, walls, paint...)
+	return scene.runTick(t, dx, dy)
 }
 
 // C2 regression: sliding along a wall must stay inside the original per-tick
@@ -218,5 +271,89 @@ func TestCollisionSystem_WalkStopsBeforeDeepWater(t *testing.T) {
 	}
 	if !result.HasCollision {
 		t.Fatalf("expected collision to be reported")
+	}
+}
+
+// H2 regression: a mover already overlapping a static object must not pass
+// through it — deepening movement hits the overlap boundary. Pre-fix the
+// swept test rejected the pair (entryTime < 0) and the mover walked through.
+func TestCollisionSystem_OverlappedMoverCannotDeepenIntoStatic(t *testing.T) {
+	// Wall center 6 units right of the mover: boxes overlap by 4 on x.
+	wall := components.Transform{X: 106, Y: 100}
+	result := runCollisionSweep(t, 100, 100, 12, 0, []components.Transform{wall})
+
+	// The wall face sits at 101; the mover must stay left of it.
+	if result.FinalX > 101 {
+		t.Fatalf("overlapped mover passed through the wall: final x %.3f", result.FinalX)
+	}
+	if !result.HasCollision || result.CollidedWith != 2 {
+		t.Fatalf("expected collision with wall 2, got hasCollision=%v collidedWith=%v",
+			result.HasCollision, result.CollidedWith)
+	}
+}
+
+// H2: overlapped movers must keep a way out — movement away from the object
+// is never blocked. Force-drop and admin-teleport spawns rely on this.
+func TestCollisionSystem_OverlappedMoverEscapesStatic(t *testing.T) {
+	wall := components.Transform{X: 106, Y: 100}
+	result := runCollisionSweep(t, 100, 100, -12, 0, []components.Transform{wall})
+
+	if math.Abs(result.FinalX-88) > 0.01 || math.Abs(result.FinalY-100) > 0.01 {
+		t.Fatalf("expected full escape move to (88, 100), got (%.3f, %.3f)",
+			result.FinalX, result.FinalY)
+	}
+}
+
+// H2: deepening movement into an overlapped object slides along it instead of
+// stopping dead, matching ordinary wall-contact behavior.
+func TestCollisionSystem_OverlappedMoverSlidesAlongStatic(t *testing.T) {
+	wall := components.Transform{X: 106, Y: 100}
+	result := runCollisionSweep(t, 100, 100, 12, 12, []components.Transform{wall})
+
+	if result.FinalX > 101 {
+		t.Fatalf("slide pushed the mover deeper into the wall: final x %.3f", result.FinalX)
+	}
+	if result.FinalY <= 105 {
+		t.Fatalf("expected slide progress along wall, final y %.3f", result.FinalY)
+	}
+}
+
+// H2: deepening movement into an overlapping moving candidate (a walking
+// player) stops completely, matching the existing dynamic-dynamic hard-stop.
+func TestCollisionSystem_OverlappedMovingCandidateStopsMover(t *testing.T) {
+	scene := newSweepScene(t, 100, 100, nil)
+	// Candidate center 6 units right of the mover: boxes overlap by 4 on x.
+	scene.addMovingCandidate(2, 106, 100)
+
+	result := scene.runTick(t, 12, 0)
+
+	if result.FinalX > 101 {
+		t.Fatalf("mover passed through the moving candidate: final x %.3f", result.FinalX)
+	}
+	if !result.HasCollision {
+		t.Fatalf("expected collision to be reported")
+	}
+}
+
+// H2 guard: normal wall contact stops a fraction short of the surface, so the
+// next tick's diagonal push must still slide via the regular sweep. The
+// overlap path must never turn near-contact movement into a hard stop.
+func TestCollisionSystem_EpsilonContactThenDiagonalStillSlides(t *testing.T) {
+	wall := components.Transform{X: 120, Y: 100}
+	scene := newSweepScene(t, 100, 100, []components.Transform{wall})
+
+	first := scene.runTick(t, 12, 0)
+	if !first.HasCollision || first.FinalX > 110.01 {
+		t.Fatalf("expected first tick to stop at wall face, got (%.3f, %.3f)",
+			first.FinalX, first.FinalY)
+	}
+
+	second := scene.runTick(t, 2, 12)
+	if second.FinalX > 110.01 {
+		t.Fatalf("diagonal push pushed the mover deeper into the wall: final x %.3f",
+			second.FinalX)
+	}
+	if second.FinalY <= 105 {
+		t.Fatalf("expected slide progress along wall, final y %.3f", second.FinalY)
 	}
 }
