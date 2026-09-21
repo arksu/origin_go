@@ -11,6 +11,9 @@ import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostCon
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
 import { ChatBalloonManager } from './ChatBalloonManager'
 import { NicknameManager } from './NicknameManager'
+import { MoveMarkerManager } from './MoveMarkerManager'
+import { ResourceLoader } from './ResourceLoader'
+import { MOVE_MARKER_TEXTURE } from '@/constants/moveMarker'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
@@ -39,6 +42,7 @@ export class Render {
   private liftGhostController: LiftGhostController
   private chatBalloonManager: ChatBalloonManager
   private nicknameManager: NicknameManager
+  private moveMarkerManager: MoveMarkerManager | null = null
   private actorRenderer: ActorRenderer | null = null
   private actorRenderSettings: Readonly<ActorRenderSettings>
   private renderErrorNotice: HTMLElement | null = null
@@ -104,6 +108,9 @@ export class Render {
     this.app.stage.addChild(this.objectsContainer)
     this.app.stage.addChild(this.uiContainer)
     this.uiContainer.addChild(this.debugOverlay.getContainer())
+
+    const markerTexture = await ResourceLoader.loadTexture(MOVE_MARKER_TEXTURE)
+    this.moveMarkerManager = new MoveMarkerManager(this.objectsContainer, markerTexture)
 
     setObjectManager(this.objectManager)
     this.debugOverlay.setVisible(this.debugOverlay.isVisible())
@@ -273,6 +280,7 @@ export class Render {
     this.objectManager.update()
     this.nicknameManager.update(this.objectManager)
     this.chatBalloonManager.update(this.objectManager)
+    this.moveMarkerManager?.update()
     try {
       this.actorRenderer?.render()
     } catch (error) {
@@ -619,6 +627,14 @@ export class Render {
     this.chatBalloonManager.show(entityId, text)
   }
 
+  showMoveTargetMarker(worldX: number, worldY: number): void {
+    this.moveMarkerManager?.show(worldX, worldY)
+  }
+
+  hideMoveTargetMarker(): void {
+    this.moveMarkerManager?.hide()
+  }
+
   setObjectNickname(entityId: number, name: string, nameColor: number): void {
     if (!this.objectManager.getObject(entityId)) return
     this.nicknameManager.show(entityId, name, nameColor)
@@ -701,6 +717,7 @@ export class Render {
     this.liftGhostController.cancel()
     this.chatBalloonManager.clear()
     this.nicknameManager.clear()
+    this.moveMarkerManager?.clear()
     this.objectManager.clear()
     this.chunkManager.clear()
     terrainManager.resetWorld()
@@ -723,6 +740,7 @@ export class Render {
     this.liftGhostController.destroy()
     this.chatBalloonManager.destroy()
     this.nicknameManager.destroy()
+    this.moveMarkerManager?.destroy()
 
     this.chunkManager.destroy()
     this.objectManager.destroy()

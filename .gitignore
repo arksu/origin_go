@@ -8,6 +8,7 @@
 *.so
 *.dylib
 *.DS_Store
+.zcode
 .gocache/
 /gameserver
 /mapgen

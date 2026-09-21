@@ -354,6 +354,15 @@ export function registerMessageHandlers(): void {
     // Update player position in store if this is the player entity
     if (entityId === gameStore.playerEntityId) {
       gameStore.updatePlayerPosition(movement.position)
+
+      // The move-target marker mirrors the server: shown at the reported
+      // target, hidden when the server reports none (arrival, stop, teleport).
+      const target = movement.targetPosition
+      if (target) {
+        gameFacade.showMoveTargetMarker(target.x, target.y)
+      } else {
+        gameFacade.hideMoveTargetMarker()
+      }
     }
   })
 
