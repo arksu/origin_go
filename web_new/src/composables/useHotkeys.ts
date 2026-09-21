@@ -12,7 +12,7 @@ export function useHotkeys(hotkeys: HotkeyConfig[]) {
     if (event.altKey) modifiers.push('alt')
 
     // Normalize key to lowercase for comparison
-    let key = event.key.toLowerCase()
+    const key = event.key.toLowerCase()
 
     return {
       key,

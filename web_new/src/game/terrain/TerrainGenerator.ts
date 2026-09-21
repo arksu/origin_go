@@ -14,7 +14,7 @@ export class TerrainGenerator {
       return null
     }
 
-    let baseSeed = getRandomByCoord(tileX, tileY)
+    const baseSeed = getRandomByCoord(tileX, tileY)
 
     for (const variant of this.variants) {
       if (baseSeed % variant.chance === 0) {

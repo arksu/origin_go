@@ -22,4 +22,4 @@
 
 - [x] 4.1 Full server suite: `make test` (or `go test ./...`) passes
 - [ ] 4.2 Full client checks: `npm run type-check` and `npm run lint` pass in `web_new`
-- [ ] 4.3 Manual two-client session: each client sees the other's nickname and its own over every player head; labels track movement and keep constant size on zoom; label hides with culled entity; chat balloon stacks above nickname without overlap; label disappears on despawn (walk apart) and reconnect clears all labels; tree/campfire/item drops show no label
+- [x] 4.3 Manual two-client session: each client sees the other's nickname and its own over every player head; labels track movement and keep constant size on zoom; label hides with culled entity; chat balloon stacks above nickname without overlap; label disappears on despawn (walk apart) and reconnect clears all labels; tree/campfire/item drops show no label
