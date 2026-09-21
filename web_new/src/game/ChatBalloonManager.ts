@@ -8,6 +8,7 @@ import {
   CHAT_BALLOON_FADEOUT_MS,
 } from '@/constants/chat'
 import { NICKNAME_LABEL_HEIGHT, NICKNAME_Y_OFFSET_PX } from '@/constants/nickname'
+import { WORLD_TEXT_FONT_FAMILY } from '@/constants/fonts'
 
 // Above every object and FX: object zIndex is TERRAIN_BASE_Z_INDEX + screen y,
 // which grows with the map size, so a fixed very high value is used (see FxManager).
@@ -67,6 +68,7 @@ export class ChatBalloonManager {
     const textEl = new Text({
       text: displayText,
       style: {
+        fontFamily: WORLD_TEXT_FONT_FAMILY,
         fontSize: BALLOON_FONT_SIZE,
         fill: BALLOON_TEXT_COLOR,
         wordWrap: true,
