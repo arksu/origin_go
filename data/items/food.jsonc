@@ -17,7 +17,7 @@
     },
     {
       "defId": 2002,
-      "key": "raw meat",
+      "key": "raw_meat",
       "name": "Raw meat",
       "resource": "items/raw_meat.png",
       "tags": [

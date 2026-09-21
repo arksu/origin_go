@@ -74,11 +74,10 @@
         "states": ["unlit", "burning"],
         "initialState": "unlit",
         "values": {
-          "temperature": 650
+         // "temperature": 650
         },
         "resources": [
-          {"key": "fuel", "amount": 5},
-          {"key": "thread", "amount": 3}
+         // {"key": "fuel", "amount": 5},
         ]
       },
       "behaviors": {

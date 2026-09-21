@@ -83,39 +83,6 @@
           ]
         }
       ]
-    },
-    {
-      "defId": 4,
-      "key": "campfire_threaded_branch",
-      "name": "Threaded Branch",
-      "inputs": [
-        {
-          "itemKey": "branch",
-          "count": 1,
-          "qualityWeight": 1
-        }
-      ],
-      "outputs": [
-        {
-          "itemKey": "bark",
-          "count": 1
-        }
-      ],
-      "staminaCost": 10,
-      "ticksRequired": 2,
-      "requiredLinkedObjectKey": "campfire",
-      "stationRequirements": [
-        {
-          "capability": "cooking",
-          "state": "burning",
-          "consume": [
-            {
-              "resourceKey": "thread",
-              "amount": 1
-            }
-          ]
-        }
-      ]
     }
   ]
 }
