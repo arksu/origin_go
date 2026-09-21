@@ -38,24 +38,39 @@ func (m *testChunkManager) GetChunkFast(coord types.ChunkCoord) *core.Chunk {
 
 func (m *testChunkManager) UpdateEntityPosition(types.EntityID, types.ChunkCoord) {}
 
-// newTestChunk returns an all-grass (passable) chunk at the given coord.
+// newTestChunk returns a chunk at the given coord filled with grass in its
+// tile array. Bitsets are NOT populated yet; runCollisionSweep finalizes the
+// chunk with a single SetTiles call after all paint callbacks ran, matching
+// the production one-shot load flow.
 func newTestChunk(coord types.ChunkCoord) *core.Chunk {
 	chunk := core.NewChunk(coord, 0, 0, constt.ChunkSize)
-	tiles := make([]byte, constt.ChunkSize*constt.ChunkSize)
-	for i := range tiles {
-		tiles[i] = types.TileGrass
+	for i := range chunk.Tiles {
+		chunk.Tiles[i] = types.TileGrass
 	}
-	chunk.SetTiles(tiles, 0)
 	return chunk
+}
+
+// paintTestTile sets the tile containing the world point to tileID. Must run
+// before the chunk's SetTiles call that populates the passability bitsets.
+func paintTestTile(chunk *core.Chunk, worldX, worldY float64, tileID byte) {
+	tileSize := float64(constt.CoordPerTile)
+	localX := int(math.Floor(worldX/tileSize)) - chunk.Coord.X*constt.ChunkSize
+	localY := int(math.Floor(worldY/tileSize)) - chunk.Coord.Y*constt.ChunkSize
+	chunk.Tiles[localY*constt.ChunkSize+localX] = tileID
 }
 
 // runCollisionSweep spawns a mover plus obstacle walls, feeds the intent into
 // MovedEntities and returns the collision result for the mover.
 // Mover and walls use half-extents of 5 (walls 60 tall).
-func runCollisionSweep(t *testing.T, moverX, moverY, dx, dy float64, walls []components.Transform) components.CollisionResult {
+// Optional paint callbacks run after chunk creation to customize tiles.
+func runCollisionSweep(t *testing.T, moverX, moverY, dx, dy float64, walls []components.Transform, paint ...func(*core.Chunk)) components.CollisionResult {
 	t.Helper()
 
 	chunk := newTestChunk(types.ChunkCoord{X: 0, Y: 0})
+	for _, p := range paint {
+		p(chunk)
+	}
+	chunk.SetTiles(chunk.Tiles, 0)
 	cm := &testChunkManager{chunk: chunk}
 	world := ecs.NewWorldForTesting()
 
@@ -141,5 +156,28 @@ func TestCollisionSystem_PerpendicularHitStopsAtWall(t *testing.T) {
 	}
 	if !result.PerpendicularOscillation {
 		t.Fatalf("expected perpendicular oscillation to be flagged")
+	}
+}
+
+// C3 regression: a slide must not push the mover into impassable terrain.
+// The intent path stays on grass while the slide segment would cross into a
+// deep-water tile; the mover has to stop at the last passable point.
+func TestCollisionSystem_SlideStopsBeforeImpassableTerrain(t *testing.T) {
+	// Deep water at tile col 9, row 10 (world x [108,120), y [120,132)).
+	// Mover clips the wall at y≈118.3 and the slide would land at y≈120.35.
+	paintWater := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 110, 120.5, types.TileDeepWater)
+	}
+	wall := components.Transform{X: 120, Y: 100}
+	result := runCollisionSweep(t, 100, 117.5, 12, 1, []components.Transform{wall}, paintWater)
+
+	if result.FinalY >= 120 {
+		t.Fatalf("slide entered impassable terrain: final y %.3f", result.FinalY)
+	}
+	if result.FinalX > 110.01 {
+		t.Fatalf("expected stop at wall face, final x %.3f", result.FinalX)
+	}
+	if !result.HasCollision {
+		t.Fatalf("expected collision to be reported")
 	}
 }
