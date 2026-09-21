@@ -252,6 +252,21 @@ func (s *CollisionSystem) sweepCollision(
 			break
 		}
 
+		// Slide segments (iterations after the first) leave the intent path
+		// that the initial tile check validated: stop at the last passable
+		// point before the slide enters impassable terrain.
+		if iter > 0 {
+			slideX, slideY, slideBlocked := s.checkTileCollision(
+				currentX, currentY, remainingDX, remainingDY, chunk, isSwimming,
+			)
+			if slideBlocked {
+				currentX = slideX
+				currentY = slideY
+				result.HasCollision = true
+				break
+			}
+		}
+
 		earliestT := 1.0
 		var hitNormalX, hitNormalY float64
 		var collidedWith types.EntityID
