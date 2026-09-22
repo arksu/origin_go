@@ -2,125 +2,162 @@
 
 ## Purpose
 
-Define server-authoritative gameplay actions that players arm from an actions menu or hotbar: arming is validated by the server, acknowledged by switching a server-owned cursor image, and the next matching map click executes through a per-action handler. Lift and put-down are the first two actions and the reference consumers of the framework.
+Provide server-owned, data-defined gameplay actions accessible from an Actions menu and hotbar. An action may need no target, an object, or a tile; may have skill and equipped-item requirements; and may execute immediately or over game ticks. Lift and put-down are the first player-facing actions.
 
 ## ADDED Requirements
 
-### Requirement: Action definitions are data-driven
-The server SHALL load gameplay action definitions from data files at startup, each declaring an identifier, a display label, a cursor id, a target kind (`object`, `tile`, or `none`), and optional required skill ids. Definitions SHALL be validated on load, and a duplicate identifier or malformed definition SHALL fail startup with a load error naming the file. Adding a new action SHALL NOT require protocol or dispatcher changes — a definition plus an action handler are sufficient.
+### Requirement: Action definitions separate target, requirements, and execution
+
+The server SHALL load action definitions from data files at startup. Each definition SHALL have an ID and label and separate target, requirements, and execution sections. Target kind SHALL be none, object, or tile. An object/tile action MAY specify a cursor and MAY set isRepeatable (default false); a none action SHALL NOT repeat automatically or require a target cursor. Execution duration in ticks and stamina cost SHALL be independent optional non-negative values. Missing duration SHALL execute without a timed cycle; missing stamina cost SHALL charge none.
+
+Requirements SHALL support a list of skill IDs, all of which must be present, and a list of equipped-item requirements. Each equipped-item requirement SHALL name exactly one item key or item tag and one or more equipment slots. Every requirement entry SHALL be satisfied; an item matching the key or tag in any listed slot satisfies that entry. The loader SHALL reject malformed or duplicate definitions with an error naming the file. Every loaded definition SHALL have a registered handler, and every registered handler SHALL have a definition. A new action using an existing target kind SHALL NOT require an action-specific map-click or protocol branch.
 
 #### Scenario: Valid definitions load
-- **WHEN** the server starts with well-formed action definition files including `lift` and `lift_down`
-- **THEN** both actions SHALL be registered with their declared labels, cursor ids, target kinds, and skill requirements
+- **WHEN** the server starts with well-formed lift and lift_down definitions and matching handlers
+- **THEN** both SHALL be registered with their target, requirement, execution, cursor, and repeatability values
 
-#### Scenario: Duplicate identifier fails fast
-- **WHEN** two action definition files declare the same identifier
-- **THEN** server startup SHALL fail with a load error identifying the conflicting file
+#### Scenario: Invalid definition fails startup
+- **WHEN** a definition has a duplicate ID, unknown equipment slot, malformed equipment selector, invalid numeric cost, or no registered handler
+- **THEN** startup SHALL fail with an error that identifies the offending definition file
 
-### Requirement: Action list is provided at enter world
-During the enter-world snapshot the server SHALL send the client the list of all action definitions with their identifier, label, cursor id, target kind, and required skills, in the same manner as the existing craft and build list snapshots.
+#### Scenario: Multiple equipment entries
+- **WHEN** an action requires a tagged tool in either hand and an exact item key on the back
+- **THEN** the requirement SHALL pass only when both entries are satisfied, with either hand accepted for the first entry
 
-#### Scenario: Client receives actions at login
+### Requirement: The server provides action definitions and availability
+
+During enter-world bootstrap the server SHALL send every action definition to the client with its current availability and an unavailable reason when applicable. The server SHALL refresh availability when skills, equipment, carry state, or another supported requirement changes. Availability shown in the client SHALL NOT replace validation by the server at activation or execution.
+
+#### Scenario: Actions arrive on enter world
 - **WHEN** a player enters the world
-- **THEN** the client SHALL receive the action list containing `lift` and `lift_down` before or with the initial game state
+- **THEN** the client SHALL receive lift and lift_down with their current availability, followed by or alongside the authoritative action state
 
-#### Scenario: New definition reaches clients without client changes
-- **WHEN** a future action definition is added to the server data
-- **THEN** the action list delivered to clients SHALL include it with no client-side catalog change
+#### Scenario: Equipment change updates menu
+- **WHEN** a player's equipment change makes an action unavailable
+- **THEN** the server SHALL update its availability and reason in the client's action list
 
-### Requirement: Players arm actions and the server owns the armed state
-The client SHALL request activation by action id. The server SHALL validate on activation that the action exists, that all required skills are satisfied, and that any state condition holds (put-down requires an active carry). On success the server SHALL set the player's armed action and send the active cursor change with the definition's cursor id. On failure the server SHALL reject activation with a mini-alert and SHALL NOT change the armed state or cursor. Activating the currently armed action again SHALL disarm it, and activating a different action SHALL replace the armed action.
+### Requirement: Activation and active state are server-owned
+
+The client SHALL request activation by action ID. The server SHALL validate that the action exists, its skills, equipment, and handler state condition hold, and one execution is affordable before starting it. An unavailable action SHALL produce a mini-alert and SHALL NOT start. A target action SHALL enter a selecting phase with its action ID and optional cursor; a none action SHALL start one execution immediately. The client SHALL receive authoritative action ID, phase, and cursor updates and SHALL NOT infer armed state from the cursor ID.
+
+Activating the same action while selecting SHALL toggle it off. Activating a different action while selecting, approaching, or executing SHALL cancel the old action without charging stamina, stop movement initiated for its target, and then attempt the new action. If the new action cannot start, the server SHALL report the reason and remain idle.
 
 #### Scenario: Arm lift
-- **WHEN** a player activates `lift`
-- **THEN** the server SHALL set the armed action and the client SHALL receive an active cursor change to `lift`
+- **WHEN** a player activates lift while eligible
+- **THEN** the server SHALL enter selecting for lift and send the lift cursor
 
-#### Scenario: Locked action is rejected
-- **WHEN** a player activates an action whose required skills are not all satisfied by their character profile
-- **THEN** the server SHALL reject activation with a mini-alert and the cursor SHALL remain unchanged
+#### Scenario: Action without target
+- **WHEN** a player activates an available none action
+- **THEN** the server SHALL start exactly one execution without entering target selection or showing a target cursor
 
-#### Scenario: Put-down requires carrying
-- **WHEN** a player activates `lift_down` while not carrying an object
-- **THEN** the server SHALL reject activation with a mini-alert and no armed state SHALL be set
+#### Scenario: Switch during a cycle
+- **WHEN** a player activates another action during an active timed cycle or action-owned approach
+- **THEN** the server SHALL cancel the old work without a stamina charge, stop its approach movement, and attempt the new action
 
-#### Scenario: Re-activation toggles off
-- **WHEN** a player activates the action they currently have armed
-- **THEN** the server SHALL clear the armed action and send a cursor reset
+### Requirement: Requirements remain valid throughout execution
 
-### Requirement: Cursor state is server-owned and resettable
-The client SHALL derive its game cursor exclusively from the last active cursor change received: a known cursor id SHALL render the matching image from the client cursor assets, an unknown cursor id SHALL render the standard question-mark cursor (CSS `help`), and an empty cursor id SHALL restore the default cursor. The server MAY send a cursor change or reset at any time — after execution, on cancel or invalidation of the armed action, or on loss of the state an armed action depends on — and the client SHALL always apply it.
+The server SHALL recheck requirements and handler state at target acceptance, while an action is active when relevant state changes, and immediately before successful completion. If a required skill, equipped item, or state condition is lost, the server SHALL cancel the action, stop its action-owned movement, reset its cursor, and charge no stamina. Insufficient stamina SHALL prevent starting or completing an action without producing its effect.
 
-#### Scenario: Unknown cursor id falls back
-- **WHEN** the server sends an active cursor change with an id the client has no image for
-- **THEN** the client SHALL render the standard question-mark cursor
+#### Scenario: Equipped item removed during a cycle
+- **WHEN** a player unequips an item required by an active action
+- **THEN** that action SHALL cancel with no effect or stamina cost and the client SHALL receive an idle action state
 
-#### Scenario: Server resets the cursor
-- **WHEN** the server sends an active cursor change with an empty cursor id
-- **THEN** the client SHALL restore the default cursor
+#### Scenario: Carry loss while put-down is armed
+- **WHEN** a player selecting lift_down loses the carried object
+- **THEN** the server SHALL cancel lift_down and reset its cursor
 
-#### Scenario: State loss disarms
-- **WHEN** a player armed `lift_down` loses the carried object (for example a forced drop)
-- **THEN** the server SHALL clear the armed action and send a cursor reset
+### Requirement: Optional timed execution charges stamina only on success
 
-### Requirement: Armed actions execute through per-action handlers on target click
-A player's armed action SHALL take the map click before ordinary click behavior and SHALL dispatch by the definition's target kind to that action's registered handler; the dispatcher SHALL be generic over action identifiers. For an object-target action, a click on a live object SHALL be offered to the handler, which validates the target against the action; an object the handler rejects SHALL consume the click with a mini-alert and leave the action armed, and a click on empty ground SHALL fall through to ordinary movement while the action stays armed. For a tile-target action, any click SHALL be offered to the handler as a target position. Successful execution SHALL clear the armed action and reset the cursor; target-level validation failure SHALL keep the action armed so the player can retry.
+An action with a positive tick duration SHALL use the existing cyclic-action progress and finish flow after its target is accepted, or immediately after activation for a none action. An action without a tick duration SHALL start its handler without a timed cycle; an existing domain transition MAY complete later. A positive stamina cost SHALL be charged exactly once only after successful completion. Rejection, timeout, cancellation, requirement loss, and failed completion SHALL not charge stamina or leave a partial action effect.
 
-#### Scenario: Armed lift on a liftable object
-- **WHEN** a player with `lift` armed clicks a liftable object
-- **THEN** the lift flow SHALL execute (moving the player to the object first as the existing lift flow requires) and on success the carried state SHALL become active and the cursor SHALL reset
+#### Scenario: Timed action completes
+- **WHEN** an eligible test action has positive ticks and stamina and its handler completes successfully
+- **THEN** the server SHALL emit cycle progress/finish, apply the effect once, and charge the declared stamina once
 
-#### Scenario: Armed lift on a non-liftable object
-- **WHEN** a player with `lift` armed clicks a live object that does not support lifting
-- **THEN** the click SHALL be consumed with a mini-alert, the player SHALL NOT move, and `lift` SHALL remain armed
+#### Scenario: Escape interrupts a timed action
+- **WHEN** a player cancels before the completion tick
+- **THEN** the cycle SHALL end without its effect or stamina cost
 
-#### Scenario: Armed lift on empty ground
-- **WHEN** a player with `lift` armed clicks empty ground
-- **THEN** the player SHALL move toward the clicked coordinates as ordinary behavior and `lift` SHALL remain armed
+#### Scenario: Instant action
+- **WHEN** a test action has no tick duration
+- **THEN** its handler SHALL run without cyclic progress and any declared stamina SHALL be charged only on success
 
-#### Scenario: Armed tile action consumes any click
-- **WHEN** a player with a tile-target action armed clicks anywhere in the world
-- **THEN** the click position SHALL be offered to that action's handler as the target position
+### Requirement: Target clicks are dispatched by target kind
 
-### Requirement: Lift is armed mode-first
-The lift action SHALL no longer appear in object context menus. The only entry points SHALL be the actions menu and hotbar, and execution SHALL reuse the existing lift flow including move-to-object, validation, and the carry state broadcast.
+After a pending administrator click and before ordinary click behavior, the server SHALL offer MapClick to the active target action. The dispatcher SHALL use target kind and SHALL NOT have branches for individual action IDs. An object-target action SHALL consume a click on a live object; an invalid object SHALL produce a mini-alert without movement and leave the action selecting. An object-target action SHALL let a click on empty ground or a stale target use ordinary movement while staying selecting. A tile-target action SHALL consume every map click and pass its coordinates to its handler. A handler rejection SHALL leave the action selecting while its requirements hold.
 
-#### Scenario: Context menu has no lift entry
-- **WHEN** a player opens the context menu on a liftable object
-- **THEN** no lift entry SHALL be offered
+#### Scenario: Non-liftable object
+- **WHEN** a player selecting lift clicks a live object that cannot be lifted
+- **THEN** the server SHALL alert, SHALL NOT move or pick up anything from that click, and SHALL leave lift selecting
 
-#### Scenario: Armed lift results in carrying
-- **WHEN** a player arms `lift`, clicks a liftable object, and the player reaches it
-- **THEN** the object SHALL be lifted exactly as the previous context-menu flow did, including the carry state broadcast
+#### Scenario: Empty ground with object action
+- **WHEN** a player selecting lift clicks empty ground
+- **THEN** ordinary movement SHALL occur and lift SHALL remain selecting
 
-### Requirement: Put-down is manually armed while carrying
-The `lift_down` action SHALL be armed only by explicit player action — the server SHALL NOT arm it automatically after a lift. While armed, the client SHALL show the placement ghost as today; a click executes put-down at the clicked position through the existing placement validation. Successful placement SHALL clear the carry state, clear the armed action, and reset the cursor; a placement rejection SHALL alert the player and keep the action armed.
+#### Scenario: Tile target
+- **WHEN** a player selecting a test tile action clicks an object or empty ground
+- **THEN** the handler SHALL receive the clicked coordinates and ordinary pickup/movement SHALL NOT also run
+
+### Requirement: Completion and repeatability follow the definition
+
+On success, a non-repeatable action SHALL end and reset its cursor. A repeatable object/tile action SHALL return to target selection for another click while its requirements still hold. A none action SHALL end after one execution regardless of repeatability. Both lift and lift_down SHALL be non-repeatable and SHALL have no action-specific tick duration or stamina cost.
+
+#### Scenario: Repeatable target action
+- **WHEN** a test tile action with isRepeatable true completes successfully
+- **THEN** it SHALL return to selecting with its cursor and accept a later target click
+
+#### Scenario: Non-repeatable action
+- **WHEN** lift or lift_down completes successfully
+- **THEN** it SHALL end and the server SHALL send an idle action state with an empty cursor
+
+### Requirement: Escape cancels the action before closing windows
+
+The first Escape while an action is selecting, approaching, or executing SHALL send a cancellation request. The server SHALL clear the action and its action-owned pending work, stop its approach movement, charge no stamina for incomplete work, and send an idle action state with an empty cursor. An open window SHALL remain open on that Escape; a later Escape MAY close it through existing window handling. A server-initiated cancellation or reset SHALL be applied by the client at any time. Known cursor IDs SHALL use client cursor assets, unknown IDs SHALL use CSS help, and an empty ID SHALL restore the default cursor.
+
+#### Scenario: Escape during approach
+- **WHEN** a player presses Escape while moving toward an object selected for an action
+- **THEN** the approach and action SHALL cancel, action-owned movement SHALL stop, and the cursor SHALL reset
+
+#### Scenario: Unknown cursor ID
+- **WHEN** the server sends an active action state with an unknown cursor ID
+- **THEN** the client SHALL render the standard CSS help cursor
+
+### Requirement: Lift and put-down use Actions exclusively
+
+Lift SHALL not appear in an object context menu or start from implicit Interact on an object without a collider. The only player entry points for lift and lift_down SHALL be the Actions menu and hotbar. Armed lift SHALL reuse the existing collider move-to-link path or the no-collider approach path and SHALL complete only when the object is actually carried. Armed lift_down SHALL show the placement ghost while selecting and use the existing placement validation and deferred transition. An invalid target or rejected placement SHALL alert and leave the action selecting while its requirements hold. A successful lift SHALL NOT auto-arm lift_down.
+
+#### Scenario: Collider object is lifted
+- **WHEN** a player selects lift, clicks a liftable collider object, and reaches it
+- **THEN** it SHALL be carried and the non-repeatable lift action SHALL end
+
+#### Scenario: No-collider object is lifted
+- **WHEN** a player selects lift and clicks a liftable object without a collider
+- **THEN** its existing approach and carry rules SHALL run, and ordinary Interact alone SHALL NOT lift it
+
+#### Scenario: Rejected placement
+- **WHEN** a player selecting lift_down clicks an invalid placement position
+- **THEN** the player SHALL receive a mini-alert, remain carrying, and remain selecting lift_down
 
 #### Scenario: Successful placement
-- **WHEN** a player with `lift_down` armed clicks a valid placement position
-- **THEN** the object SHALL be placed, the carry state SHALL end, and the cursor SHALL reset
+- **WHEN** placement completes successfully
+- **THEN** the carry state and action SHALL end and the cursor SHALL reset
 
-#### Scenario: Rejected placement stays armed
-- **WHEN** a player with `lift_down` armed clicks a position the placement rules reject
-- **THEN** the player SHALL receive a mini-alert, remain carrying, and remain armed with the put-down cursor
+### Requirement: Actions menu and hotbar expose the server list
 
-#### Scenario: No auto-arm after lifting
-- **WHEN** a lift succeeds
-- **THEN** the server SHALL NOT arm `lift_down` and the cursor SHALL reset to default until the player arms put-down themselves
+The Actions menu SHALL show every server-provided action by label. An action whose current requirements are unmet SHALL remain visible, marked unavailable with a reason, and SHALL NOT dispatch activation locally. Gameplay action IDs SHALL be pinnable to hotbar slots alongside existing window openers. Menu selection and a pinned slot SHALL send the same activation request. Persisted gameplay IDs SHALL remain intact while the server list is loading; after the list arrives, an ID absent from it SHALL behave as an empty slot and SHALL send nothing.
 
-### Requirement: Hotbar pins gameplay actions
-Hotbar slots SHALL accept gameplay action identifiers in addition to the existing window-opener entries. Activating a hotbar slot holding a gameplay action SHALL send the same activation request as selecting it in the actions menu. A stored assignment referencing an action the server does not provide SHALL be treated as an empty slot.
+#### Scenario: Unavailable action remains visible
+- **WHEN** a player without a carried object opens the Actions menu
+- **THEN** lift_down SHALL appear unavailable with a carry-related reason
 
-#### Scenario: Pinned action arms from hotbar
-- **WHEN** a player activates a hotbar slot pinned to `lift`
-- **THEN** the same activation request SHALL be sent and the action SHALL arm exactly as from the menu
+#### Scenario: Pinned action activates
+- **WHEN** a player activates a hotbar slot pinned to lift
+- **THEN** the client SHALL send the same activation request as the Actions menu
 
-#### Scenario: Stale assignment is inert
-- **WHEN** a stored hotbar assignment references an action id the server no longer provides
-- **THEN** the slot SHALL behave as empty and activating it SHALL send nothing
+#### Scenario: Stored action before list arrives
+- **WHEN** localStorage contains a valid gameplay action ID but the server list has not arrived yet
+- **THEN** loading SHALL NOT delete the ID; after the list arrives it SHALL become usable if the server provides it
 
-### Requirement: Actions menu presents server actions
-The actions menu SHALL list the actions from the server-provided list, using each definition's label and cursor image as its icon. Actions whose state requirement the client can observe as unmet (for example put-down while not carrying) SHALL be shown as unavailable and SHALL NOT dispatch activation locally; the server remains authoritative for all activation validation.
-
-#### Scenario: Put-down unavailable while not carrying
-- **WHEN** a player who is not carrying opens the actions menu
-- **THEN** `lift_down` SHALL be visible but marked unavailable and SHALL NOT be activatable until the player carries something
+#### Scenario: Stale action ID
+- **WHEN** the loaded server list does not provide a stored gameplay action ID
+- **THEN** that hotbar slot SHALL behave as empty and activation SHALL send nothing
