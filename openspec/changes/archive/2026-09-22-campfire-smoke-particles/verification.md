@@ -3,7 +3,7 @@
 - `npm run type-check`: passed. The user approved four pre-existing Spine 4.3 compatibility fixes: `AnimationState.getCurrent(0)` → `getTrack(0)` (three calls), and `Skeleton.setSkinByName(name)` → `setSkin(name)` (one call).
 - `npm run validate-objects`: passed for all seven object-definition files. Temporary fixture runs also confirmed the CLI rejects an unknown smoke parameter and a non-boolean `linger` value.
 - ESLint on every changed JavaScript/TypeScript file: passed.
-- `npm run lint`: still fails with 413 pre-existing errors. Comparison against original source files found zero new findings and removed one `no-explicit-any` error from `FxManager`. No repository-wide lint cleanup was included.
+- `npm run lint`: still fails with 413 pre-existing errors. Comparison against original source files found zero new findings and removed one `no-explicit-any` error from `FxManager`. No repository-wide lint cleanup was included. The later per-effect offset changes also passed focused lint.
 - `openspec validate campfire-smoke-particles --strict`: passed.
 - `git diff --check`: passed.
 
