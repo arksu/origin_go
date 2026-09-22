@@ -34,7 +34,7 @@ map-gen: proto sqlc
 	go run ./cmd/mapgen
 
 # Build the load test runner
-load-test-build:
+build-load-test:
 	go build -trimpath -o load_test ./cmd/load_test
 
 # Run the load test
