@@ -2,6 +2,7 @@ import { Assets, Texture, Sprite, Rectangle } from 'pixi.js'
 import { Spine } from '@esotericsoftware/spine-pixi-v8'
 import objects from './objects'
 import { clearAlphaMaskCache } from './PixelHitTest'
+import type { FxDefinition } from './fx/presets/smoke'
 
 // --- Types matching objects.json structure ---
 
@@ -49,6 +50,7 @@ export type Directions = {
 }
 
 export interface ResourceDef {
+  fx?: FxDefinition
   actor3d?: 'commoner'
   layers: LayerDef[]
   size?: [number, number]
@@ -228,7 +230,7 @@ export class ResourceLoader {
       spineAnim.scale = spineDef.scale
     }
     if (spineDef.skin) {
-      spineAnim.skeleton.setSkinByName(spineDef.skin)
+      spineAnim.skeleton.setSkin(spineDef.skin)
     }
     spineAnim.state.data.defaultMix = 0.25
 

@@ -1,5 +1,7 @@
-import { Container, Sprite, Ticker } from 'pixi.js'
+import { Container, Sprite, Texture, Ticker } from 'pixi.js'
 import { ResourceLoader } from '../ResourceLoader'
+import { ParticleEmitter } from './ParticleEmitter'
+import { smokePreset, type FxDefinition } from './presets/smoke'
 
 export interface FloatingAnimationOptions {
   container: Container
@@ -29,17 +31,27 @@ export class FxManager {
 
   private update(ticker: Ticker): void {
     const delta = ticker.deltaMS
-    const toRemove: any[] = []
-
     for (const fx of this.activeFx) {
       if (!fx.update(delta)) {
-        toRemove.push(fx)
+        this.activeFx.delete(fx)
       }
     }
+  }
 
-    for (const fx of toRemove) {
-      this.activeFx.delete(fx)
-    }
+  async attach(definition: FxDefinition, owner: Container, zIndex = definition.zIndex): Promise<ParticleEmitter | null> {
+    const config = smokePreset(definition)
+    const texture = await ResourceLoader.loadTexture(config.texture)
+    // A state rebuild or chunk unload can finish before the shared texture load.
+    if (owner.destroyed) return null
+    if (texture === Texture.WHITE) throw new Error(`Failed to load particle texture: ${config.texture}`)
+    const emitter = new ParticleEmitter(config, texture, owner, zIndex)
+    this.activeFx.add(emitter)
+    return emitter
+  }
+
+  detach(emitter: ParticleEmitter): void {
+    emitter.detach(emitter.config.linger)
+    if (emitter.container.destroyed) this.activeFx.delete(emitter)
   }
 
   async playFx(options: FloatingAnimationOptions): Promise<void> {

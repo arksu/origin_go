@@ -145,7 +145,7 @@ export class BuildGhostView {
       const anim = this.spineAnimations[spineIdx]
       if (!anim) return
 
-      const current = anim.state.getCurrent(0)?.animation?.name
+      const current = anim.state.getTrack(0)?.animation?.name
       if (current !== animName) {
         anim.state.setAnimation(0, animName, true)
       }
