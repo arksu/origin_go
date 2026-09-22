@@ -8,7 +8,7 @@ Provide server-owned, data-defined gameplay actions accessible from an Actions m
 
 ### Requirement: Action definitions separate target, requirements, and execution
 
-The server SHALL load action definitions from data files at startup. Each definition SHALL have an ID and label and separate target, requirements, and execution sections. Target kind SHALL be none, object, or tile. An object/tile action MAY specify a cursor and MAY set isRepeatable (default false); a none action SHALL NOT repeat automatically or require a target cursor. Execution duration in ticks and stamina cost SHALL be independent optional non-negative values. Missing duration SHALL execute without a timed cycle; missing stamina cost SHALL charge none.
+The server SHALL load action definitions from data files at startup. Each definition SHALL have an ID, label, local menu icon asset path under /assets/, and separate target, requirements, and execution sections. Icon paths SHALL NOT reference external URLs or traverse outside /assets/. Target kind SHALL be none, object, or tile. An object/tile action MAY specify a cursor and MAY set isRepeatable (default false); a none action SHALL NOT repeat automatically or require a target cursor. Execution duration in ticks and stamina cost SHALL be independent optional non-negative values. Missing duration SHALL execute without a timed cycle; missing stamina cost SHALL charge none.
 
 Requirements SHALL support a list of skill IDs, all of which must be present, and a list of equipped-item requirements. Each equipped-item requirement SHALL name exactly one item key or item tag and one or more equipment slots. Every requirement entry SHALL be satisfied; an item matching the key or tag in any listed slot satisfies that entry. The loader SHALL reject malformed or duplicate definitions with an error naming the file. Every loaded definition SHALL have a registered handler, and every registered handler SHALL have a definition. A new action using an existing target kind SHALL NOT require an action-specific map-click or protocol branch.
 
@@ -144,7 +144,9 @@ Lift SHALL not appear in an object context menu or start from implicit Interact 
 
 ### Requirement: Actions menu and hotbar expose the server list
 
-The Actions menu SHALL show every server-provided action by label. An action whose current requirements are unmet SHALL remain visible, marked unavailable with a reason, and SHALL NOT dispatch activation locally. Gameplay action IDs SHALL be pinnable to hotbar slots alongside existing window openers. Menu selection and a pinned slot SHALL send the same activation request. Persisted gameplay IDs SHALL remain intact while the server list is loading; after the list arrives, an ID absent from it SHALL behave as an empty slot and SHALL send nothing.
+Clicking the Actions button in the left HUD rail SHALL toggle a compact, non-modal Actions panel beside that button. The panel SHALL show one horizontal row of action icons, in server-list order, without wrapping; it MAY scroll horizontally when needed. Each icon SHALL expose the action label accessibly and show the label on hover or keyboard focus. An action whose requirements are unmet SHALL remain visible as non-activatable and SHALL expose its unavailable state accessibly; it SHALL remain keyboard-focusable so hover/focus can show the reason. The icon for the active action SHALL have a visible and accessible selected state, including when the panel opens after the action was armed.
+
+Selecting an available icon SHALL send the activation request and close the panel. Dragging an icon to a hotbar slot SHALL pin it. Pressing the Actions button again or clicking outside the panel SHALL close it; clicking inside the panel SHALL NOT count as an outside click. Gameplay action IDs SHALL be pinnable to hotbar slots alongside existing window openers. Menu selection and a pinned slot SHALL send the same activation request. Persisted gameplay IDs SHALL remain intact while the server action list is loading; after the list arrives, an ID absent from it SHALL behave as an empty slot and SHALL send nothing.
 
 #### Scenario: Unavailable action remains visible
 - **WHEN** a player without a carried object opens the Actions menu
@@ -161,3 +163,15 @@ The Actions menu SHALL show every server-provided action by label. An action who
 #### Scenario: Stale action ID
 - **WHEN** the loaded server list does not provide a stored gameplay action ID
 - **THEN** that hotbar slot SHALL behave as empty and activation SHALL send nothing
+
+#### Scenario: Actions button toggles the panel
+- **WHEN** the player clicks Actions in the left HUD rail
+- **THEN** the one-row icon panel SHALL open, and another click on Actions or a click outside it SHALL close the panel
+
+#### Scenario: Action icons follow server order and indicate active state
+- **WHEN** the panel is open
+- **THEN** icons SHALL appear left to right in server-list order, and the active action SHALL be visibly selected
+
+#### Scenario: Unavailable icon explains its status
+- **WHEN** an unavailable action icon receives hover or keyboard focus
+- **THEN** its label and unavailability reason SHALL be shown

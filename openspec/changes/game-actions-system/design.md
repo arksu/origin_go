@@ -18,14 +18,14 @@ The server already has CharacterProfile.Skills, an equipment InventoryContainer 
 
 The new internal/actiondefs package loads data/actions/*.json using the established loader/registry pattern. A definition has:
 
-- id and label for identity and presentation;
+- id, label, and a menu icon asset path for identity and presentation;
 - target.kind: object, tile, or none; target.cursor is optional for object/tile and forbidden for none;
 - requirements.skills: skill IDs, all required;
 - requirements.equipment: entries with a non-empty list of known slot names and exactly one itemKey or itemTag. Every entry must match; within one entry, a matching item in any listed slot suffices;
 - execution.ticks and execution.stamina: independent optional non-negative values. Missing/zero ticks means no timed cycle; missing/zero stamina means no stamina charge;
 - isRepeatable: applicable only to object/tile, default false. A none action always executes once.
 
-The loader trims and validates identifiers, skill IDs, slots, item keys/tags, numeric values, and incompatible combinations. Duplicate IDs or malformed definitions fail startup with the filename. Unknown item keys fail startup; tags are validated as non-empty strings. The startup registry check requires a handler for each definition and a definition for each handler. It does not require protocol or map-click-dispatch changes for a new action using an existing target kind. A new target kind or requirement type may need an explicit schema/protocol extension; the design does not promise otherwise.
+The loader trims and validates identifiers, skill IDs, slots, item keys/tags, numeric values, and incompatible combinations. Menu icon paths must be local assets under /assets/ and cannot contain traversal segments or external URLs. Duplicate IDs or malformed definitions fail startup with the filename. Unknown item keys fail startup; tags are validated as non-empty strings. The startup registry check requires a handler for each definition and a definition for each handler. It does not require protocol or map-click-dispatch changes for a new action using an existing target kind. A new target kind or requirement type may need an explicit schema/protocol extension; the design does not promise otherwise.
 
 The v1 files define lift as object-target with cursor lift and lift_down as tile-target with cursor lift_down. Both have isRepeatable false and omit execution ticks/stamina. Lift_down's carry prerequisite is a handler state condition, not a special field in every action definition.
 
@@ -36,7 +36,7 @@ ActionService owns an ECS action state with action ID, phase, and selected targe
 Protocol messages:
 
 - C2S_ActivateAction {action_id} and C2S_CancelAction;
-- S2C_ActionList with each definition's presentation, target, requirement, execution, and repeatability fields plus current availability and a reason code when unavailable;
+- S2C_ActionList with each definition's presentation (including menu icon asset path), target, requirement, execution, and repeatability fields plus current availability and a reason code when unavailable;
 - S2C_ActionStateChanged {action_id, phase, cursor}. Idle uses empty action_id and cursor. The client never infers the action ID from a cursor ID.
 
 The server sends ActionList and the actual current ActionStateChanged in the enter-world snapshot. It resends ActionList when skills, equipment, carry state, or another supported requirement changes. Activation and execution always revalidate on the server; the menu status is informational. The cursor is non-empty only when the definition supplies one; an unknown ID renders CSS help on the client.
@@ -73,7 +73,9 @@ Neither lift definition adds a timed cycle or stamina charge. Their existing app
 
 ## D6: Client menu, cursor, and hotbar
 
-The Actions HUD button opens ActionsMenu, which lists the server's definitions and availability. Unavailable actions remain visible with a reason and cannot be activated locally; the server still validates every request. The menu and hotbar use the same sendActivateAction path. The menu can drag an action to a hotbar slot.
+Clicking the Actions button in the left HUD rail toggles a compact, non-modal panel beside the button. The panel presents one horizontal row of action icons in the order received from the server; it does not wrap, and it can scroll horizontally if the row exceeds the available width. Each icon is an action button with the definition's accessible label. Hovering or keyboard focus shows the label and, when unavailable, the reason. Unavailable icons use aria-disabled, remain keyboard-focusable so the reason can be read, and cannot be activated. The active action's icon is visibly and accessibly selected whether the panel was already open or opens while an action is active.
+
+Selecting an available icon sends sendActivateAction and closes the panel so the next map click can choose a target. Dragging an icon to a hotbar slot pins that action. Clicking the Actions button again or clicking outside the panel closes it. Clicking inside the panel does not count as an outside click. The menu and hotbar use the same activation path; the server still validates every request.
 
 gameStore holds ActionList and the last ActionStateChanged. CursorManager applies the declared cursor image on the game window, uses CSS help for unknown IDs, and restores default on an empty ID. LiftGhostController is visible while lift_down is in selecting phase and carry is active; it does not infer armed state from cursor ID. The local liftPutDownModeActive and direct sendLiftPutDown route are removed.
 
