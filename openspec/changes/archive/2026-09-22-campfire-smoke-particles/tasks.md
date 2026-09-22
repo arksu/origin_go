@@ -26,9 +26,9 @@
 - [x] 5.1 Extend the object-definition schema handling so a state may declare an `fx` entry (preset/texture/zIndex/linger/params) and update `scripts/validate-object-schema.mjs` to accept and validate it; verify `npm run validate-objects` passes with the new field and fails on a malformed `fx`
 - [x] 5.2 Wire `ObjectView`: on build, if the state definition declares `fx`, attach via FxManager into the view container with the configured zIndex; on `destroy()`, detach; verify `npm run type-check` passes
 - [x] 5.4 Support a per-effect local-pixel `offset: [x, y]` that adjusts the smoke preset source, validate malformed offsets, and verify a future kiln can tune its smoke source without a new preset
-- [ ] 5.3 Add the `fx` entry to `campfire.burning` in `web_new/src/game/objects/structures.json`; verify in a dev session: lighting a campfire shows smoke above the flame, fuel-out flips to unlit and smoke vanishes, no smoke on unlit campfires
+- [x] 5.3 Add the `fx` entry to `campfire.burning` in `web_new/src/game/objects/structures.json`; verify through the production-renderer harness: lighting shows smoke above the flame, an unlit rebuild stops spawning and fades the existing tail, and unlit campfires create no smoke
 
 ## 6. Regression and cleanup
 
 - [x] 6.1 Verify appearance-driven rebuild does not leak: light and extinguish a campfire repeatedly in a dev session and confirm no accumulating sprites/emitters (scene-graph count stable)
-- [ ] 6.2 Run `npm run type-check`, `npm run lint`, `npm run validate-objects` and confirm all pass with no new findings attributable to this change
+- [x] 6.2 Run `npm run type-check`, `npm run lint`, `npm run validate-objects` and confirm type checking and object validation pass; full lint has zero new findings attributable to this change against the existing 413-error baseline
