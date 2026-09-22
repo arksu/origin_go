@@ -20,6 +20,9 @@ type CollisionSystem struct {
 	logger       *zap.Logger
 	// Pooled buffer for candidates to avoid allocations
 	candidatesBuffer []types.Handle
+	// Pooled per-sweep prefetch of candidate data (invariant across slide
+	// iterations)
+	sweepCandidates []sweepCandidate
 	// Cached component storages for hot path
 	colliderStorage  *ecs.ComponentStorage[components.Collider]
 	transformStorage *ecs.ComponentStorage[components.Transform]
@@ -46,6 +49,7 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 		chunkManager:     chunkManager,
 		logger:           logger,
 		candidatesBuffer: make([]types.Handle, 0, 128),
+		sweepCandidates:  make([]sweepCandidate, 0, 128),
 		colliderStorage:  colliderStorage,
 		transformStorage: transformStorage,
 		movementStorage:  movementStorage,
@@ -138,6 +142,15 @@ func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
 			*cr = result
 		})
 	}
+}
+
+// sweepCandidate is one spatial-query candidate with its invariant data
+// prefetched once per sweep instead of on every slide iteration.
+type sweepCandidate struct {
+	handle    types.Handle
+	collider  components.Collider
+	transform components.Transform
+	isMoving  bool
 }
 
 // sweepCollision performs swept AABB collision using Minkowski difference
@@ -236,6 +249,52 @@ func (s *CollisionSystem) sweepCollision(
 
 	candidates := s.candidatesBuffer
 
+	// Prefetch the candidate set once for all slide iterations: nothing can
+	// mutate these components mid-sweep (single-threaded tick), and the slide
+	// budget bounds the whole path within the intended distance of the start,
+	// so a candidate farther than intent + both half extents on any axis can
+	// never be touched, not even after a slide redirect.
+	pathBound := originalSpeed*(1+epsilon) + 1.0
+	s.sweepCandidates = s.sweepCandidates[:0]
+	for _, candidateHandle := range candidates {
+		if candidateHandle == entityHandle || !w.Alive(candidateHandle) {
+			continue
+		}
+
+		candidateCollider, ok := s.colliderStorage.Get(candidateHandle)
+		if !ok {
+			continue
+		}
+
+		// Check collision layer mask
+		if collider.Layer&candidateCollider.Mask == 0 && candidateCollider.Layer&collider.Mask == 0 {
+			continue
+		}
+
+		// Skip phantom colliders - they don't block other entities
+		if candidateCollider.Phantom != nil {
+			continue
+		}
+
+		candidateTransform, ok := s.transformStorage.Get(candidateHandle)
+		if !ok {
+			continue
+		}
+
+		if math.Abs(candidateTransform.X-transform.X) > pathBound+entityHalfW+candidateCollider.HalfWidth ||
+			math.Abs(candidateTransform.Y-transform.Y) > pathBound+entityHalfH+candidateCollider.HalfHeight {
+			continue
+		}
+
+		candidateMovement, candidateMoving := s.movementStorage.Get(candidateHandle)
+		s.sweepCandidates = append(s.sweepCandidates, sweepCandidate{
+			handle:    candidateHandle,
+			collider:  candidateCollider,
+			transform: candidateTransform,
+			isMoving:  candidateMoving && candidateMovement.State == constt.StateMoving,
+		})
+	}
+
 	// Remaining movement
 	remainingDX := dx
 	remainingDY := dy
@@ -277,38 +336,8 @@ func (s *CollisionSystem) sweepCollision(
 		var hitNormalX, hitNormalY float64
 		var collidedWith types.EntityID
 
-		for _, candidateHandle := range candidates {
-			if candidateHandle == entityHandle {
-				continue
-			}
-			if !w.Alive(candidateHandle) {
-				continue
-			}
-
-			// Use cached storage for faster component access
-			candidateCollider, ok := s.colliderStorage.Get(candidateHandle)
-			if !ok {
-				continue
-			}
-
-			// Check collision layer mask
-			if collider.Layer&candidateCollider.Mask == 0 && candidateCollider.Layer&collider.Mask == 0 {
-				continue
-			}
-
-			// Skip phantom colliders - they don't block other entities
-			if candidateCollider.Phantom != nil {
-				continue
-			}
-
-			candidateTransform, ok := s.transformStorage.Get(candidateHandle)
-			if !ok {
-				continue
-			}
-
-			// Check if candidate is also moving (dynamic collision)
-			candidateMovement, candidateMoving := s.movementStorage.Get(candidateHandle)
-			candidateIsMoving := candidateMoving && candidateMovement.State == constt.StateMoving
+		for i := range s.sweepCandidates {
+			candidate := &s.sweepCandidates[i]
 
 			// An already-overlapping pair is a miss for sweptAABB (entryTime
 			// < 0) and would pass through. Resolve it here: deepening movement
@@ -316,17 +345,17 @@ func (s *CollisionSystem) sweepCollision(
 			if overlapNX, overlapNY, deepening, overlapped := startOverlapNormal(
 				currentX, currentY, entityHalfW, entityHalfH,
 				remainingDX, remainingDY,
-				candidateTransform.X, candidateTransform.Y,
-				candidateCollider.HalfWidth, candidateCollider.HalfHeight,
+				candidate.transform.X, candidate.transform.Y,
+				candidate.collider.HalfWidth, candidate.collider.HalfHeight,
 			); overlapped {
 				if deepening && earliestT > 0 {
 					earliestT = 0
 					hitNormalX = overlapNX
 					hitNormalY = overlapNY
-					if id, ok := w.GetExternalID(candidateHandle); ok {
+					if id, ok := w.GetExternalID(candidate.handle); ok {
 						collidedWith = id
 					}
-					if candidateIsMoving {
+					if candidate.isMoving {
 						// For dynamic-dynamic collision: stop completely
 						remainingDX = 0
 						remainingDY = 0
@@ -335,19 +364,19 @@ func (s *CollisionSystem) sweepCollision(
 				continue
 			}
 
-			if candidateIsMoving {
+			if candidate.isMoving {
 				// Both moving - stop, do not push back
 				t, nx, ny, hit := s.sweptAABB(
 					currentX, currentY, entityHalfW, entityHalfH,
 					remainingDX, remainingDY,
-					candidateTransform.X, candidateTransform.Y,
-					candidateCollider.HalfWidth, candidateCollider.HalfHeight,
+					candidate.transform.X, candidate.transform.Y,
+					candidate.collider.HalfWidth, candidate.collider.HalfHeight,
 				)
 				if hit && t < earliestT {
 					earliestT = t
 					hitNormalX = nx
 					hitNormalY = ny
-					if id, ok := w.GetExternalID(candidateHandle); ok {
+					if id, ok := w.GetExternalID(candidate.handle); ok {
 						collidedWith = id
 					}
 					// For dynamic-dynamic collision: stop completely
@@ -361,15 +390,15 @@ func (s *CollisionSystem) sweepCollision(
 			t, nx, ny, hit := s.sweptAABB(
 				currentX, currentY, entityHalfW, entityHalfH,
 				remainingDX, remainingDY,
-				candidateTransform.X, candidateTransform.Y,
-				candidateCollider.HalfWidth, candidateCollider.HalfHeight,
+				candidate.transform.X, candidate.transform.Y,
+				candidate.collider.HalfWidth, candidate.collider.HalfHeight,
 			)
 
 			if hit && t < earliestT {
 				earliestT = t
 				hitNormalX = nx
 				hitNormalY = ny
-				if id, ok := w.GetExternalID(candidateHandle); ok {
+				if id, ok := w.GetExternalID(candidate.handle); ok {
 					collidedWith = id
 				}
 			}

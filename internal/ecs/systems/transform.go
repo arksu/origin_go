@@ -29,6 +29,7 @@ type TransformUpdateSystem struct {
 	chunkRefStorage        *ecs.ComponentStorage[components.ChunkRef]
 	entityStatsStorage     *ecs.ComponentStorage[components.EntityStats]
 	liftCarryStorage       *ecs.ComponentStorage[components.LiftCarryState]
+	profileStorage         *ecs.ComponentStorage[components.CharacterProfile]
 }
 
 func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, eventBus *eventbus.EventBus, logger *zap.Logger) *TransformUpdateSystem {
@@ -43,6 +44,7 @@ func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, 
 		chunkRefStorage:        ecs.GetOrCreateStorage[components.ChunkRef](world),
 		entityStatsStorage:     ecs.GetOrCreateStorage[components.EntityStats](world),
 		liftCarryStorage:       ecs.GetOrCreateStorage[components.LiftCarryState](world),
+		profileStorage:         ecs.GetOrCreateStorage[components.CharacterProfile](world),
 	}
 }
 
@@ -213,6 +215,10 @@ func (s *TransformUpdateSystem) broadcastMoveTarget(movement *components.Movemen
 	}
 }
 
+// applyMovementStaminaTick drains stamina for the distance actually moved
+// (post-collision) and downgrades the move mode if the drain crossed a
+// threshold. It must not re-add the handle to MovedEntities: the caller is
+// iterating that buffer and the handle is already in it.
 func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	w *ecs.World,
 	handle types.Handle,
@@ -230,8 +236,8 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		return
 	}
 
-	con := resolveConForHandle(w, handle)
-	maxStamina := entitystats.MaxStaminaFromCon(con)
+	capability := resolveMovementCapability(s.profileStorage, handle)
+	maxStamina := capability.maxStamina
 	currentStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 	statsChanged := currentStamina != stats.Stamina
 	currentEnergy := stats.Energy
@@ -248,7 +254,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		if entitystats.MovementCostNeedsTileContext() {
 			tile = s.resolveMovementTileContext(fromX, fromY)
 		}
-		cost := entitystats.ResolveMovementStaminaCostPerTick(movement.Mode, con, tile)
+		cost := entitystats.ResolveMovementStaminaCostPerTick(movement.Mode, capability.con, tile)
 		if cost > 0 {
 			nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
 			if nextStamina != currentStamina {
@@ -267,10 +273,6 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		isCarrying,
 	)
 	modeChanged := movement.Mode != allowedMode
-	forceStopped := false
-	if !canMove && movement.State == constt.StateMoving {
-		forceStopped = true
-	}
 
 	if statsChanged {
 		stats.Stamina = currentStamina
@@ -288,9 +290,6 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		ecs.MarkMovementModeDirtyByHandle(w, handle)
 	}
 
-	if forceStopped && !moved {
-		ecs.GetResource[ecs.MovedEntities](w).Add(handle, toX, toY)
-	}
 	if statsChanged {
 		ecs.UpdateEntityStatsRegenSchedule(w, handle, currentStamina, currentEnergy, maxStamina)
 	}
