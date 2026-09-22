@@ -27,6 +27,7 @@ type MovementSystem struct {
 	transformStorage   *ecs.ComponentStorage[components.Transform]
 	entityStatsStorage *ecs.ComponentStorage[components.EntityStats]
 	liftCarryStorage   *ecs.ComponentStorage[components.LiftCarryState]
+	profileStorage     *ecs.ComponentStorage[components.CharacterProfile]
 }
 
 func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger *zap.Logger) *MovementSystem {
@@ -48,6 +49,7 @@ func NewMovementSystem(world *ecs.World, chunkManager core.ChunkManager, logger 
 		transformStorage:   ecs.GetOrCreateStorage[components.Transform](world),
 		entityStatsStorage: ecs.GetOrCreateStorage[components.EntityStats](world),
 		liftCarryStorage:   ecs.GetOrCreateStorage[components.LiftCarryState](world),
+		profileStorage:     ecs.GetOrCreateStorage[components.CharacterProfile](world),
 	}
 }
 
@@ -70,7 +72,8 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		if stats, hasStats := s.entityStatsStorage.Get(h); hasStats {
-			maxStamina := entitystats.MaxStaminaFromCon(resolveConForHandle(w, h))
+			capability := resolveMovementCapability(s.profileStorage, h)
+			maxStamina := capability.maxStamina
 			clampedStamina := entitystats.ClampStamina(stats.Stamina, maxStamina)
 			if clampedStamina != stats.Stamina {
 				stats.Stamina = clampedStamina

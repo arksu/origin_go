@@ -28,6 +28,17 @@ type pipelineMover struct {
 // concurrently moving entities, including the per-moved-entity component
 // access overhead the systems pay.
 func BenchmarkMovementPipeline(b *testing.B) {
+	runPipelineBench(b, 0)
+}
+
+// BenchmarkMovementPipelineDense adds static pillars inside every mover's
+// swept corridor so the collision candidate loop, hit handling and slide
+// iterations run each tick, as they would around built structures.
+func BenchmarkMovementPipelineDense(b *testing.B) {
+	runPipelineBench(b, 3)
+}
+
+func runPipelineBench(b *testing.B, pillarsPerMover int) {
 	const moverCount = 200
 	const targetX = 10000 // far beyond one tick's step; movers reset each iteration
 
@@ -72,6 +83,31 @@ func BenchmarkMovementPipeline(b *testing.B) {
 			movement: movement,
 			stats:    components.EntityStats{Stamina: 100, Energy: 100},
 		})
+	}
+
+	// Place static pillars across each mover's swept corridor so collisions
+	// and slides happen every tick. The reset restarts movers from the same
+	// spot, giving a stable steady state.
+	for i := range movers {
+		m := &movers[i]
+		for k := 0; k < pillarsPerMover; k++ {
+			pillarX := m.startX + 10 + float64(k)*3
+			pillarY := m.startY - 6
+			if k%2 == 1 {
+				pillarY = m.startY + 6
+			}
+			pillarID := types.EntityID(100000 + i*pillarsPerMover + k)
+			pillar := world.Spawn(pillarID, func(w *ecs.World, h types.Handle) {
+				ecs.AddComponent(w, h, components.Transform{X: pillarX, Y: pillarY})
+				ecs.AddComponent(w, h, components.Collider{
+					HalfWidth:  3,
+					HalfHeight: 3,
+					Layer:      constt.PlayerLayer,
+					Mask:       constt.PlayerMask,
+				})
+			})
+			chunk.Spatial().AddStatic(pillar, int(pillarX), int(pillarY))
+		}
 	}
 
 	// Make every mover visible to one observer so the movement-batch block in
