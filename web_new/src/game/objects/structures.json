@@ -26,6 +26,21 @@
       ]
     },
     "burning": {
+      "fx": {
+        "preset": "smoke",
+        "texture": "fx/smoke_puff.png",
+        "zIndex": 2,
+        "linger": true,
+        "offset": [0, 18],
+        "params": {
+          "density": 1,
+          "riseSpeed": 1,
+          "tint": 10132122,
+          "puffSize": 1,
+          "sway": 1,
+          "windResponse": [0.6, 1.4]
+        }
+      },
       "offset": [
         32,
         63

@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { validateFxDefinition } from '../src/game/fx/validateDefinition.js'
 
 const OBJECTS_DIR = path.resolve(process.cwd(), 'src/game/objects')
 
@@ -88,6 +89,13 @@ function validateAnimatedLayer(layer, context, errors) {
 }
 
 function validateResource(resource, context, errors) {
+  if (resource.fx !== undefined) {
+    try {
+      validateFxDefinition(resource.fx)
+    } catch (error) {
+      errors.push(`${context}: ${error.message}`)
+    }
+  }
   if (resource.actor3d != null && resource.actor3d !== 'commoner') {
     errors.push(`${context}: unsupported actor3d model: ${resource.actor3d}`)
   }

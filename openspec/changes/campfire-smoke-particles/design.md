@@ -48,7 +48,7 @@ The `fx` field sits on the state definition, symmetric with the existing `layers
 
 ### D4: Lifecycle via the existing FxManager contract
 
-An emitter is an `activeFx` entry. `stop()` stops spawning and lets live particles finish before self-removal (the same semantic Factorio gives smoke). The `linger` flag on the effect definition decides what happens when the owning view is destroyed: default `false` — emitter and particles vanish with the view (a destroyed sprite can't render anyway); `true` — the emitter is reparented to the scene and fades out its live particles. ObjectView `destroy()` calls FxManager detach for any emitter it owns.
+An emitter is an `activeFx` entry. `stop()` stops spawning and lets live particles finish before self-removal (the same semantic Factorio gives smoke). The `linger` flag on the effect definition decides what happens when the owning view is destroyed: the generic engine defaults to `false`, while the smoke preset defaults to `true` so a campfire or future kiln changes naturally to unlit without popping existing puffs. A smoke definition can explicitly set `linger: false` when an instant removal is required. With `linger: true`, the emitter is reparented to the scene and fades out its live particles. ObjectView `destroy()` calls FxManager detach for any emitter it owns.
 
 ### D5: Wind is a static constant
 
@@ -76,7 +76,8 @@ Ranges are `[min, max]` (Phaser-style EmitterOp convention); over-life propertie
   "preset": "smoke",
   "texture": "fx/smoke_puff.png",
   "zIndex": 2,
-  "linger": false,
+  "linger": true,
+  "offset": [0, 0],                 // local-pixel adjustment from the preset source
   "params": {                       // preset knobs → expanded to engine config
     "density": 1.0,
     "riseSpeed": 1.0,
@@ -88,7 +89,7 @@ Ranges are `[min, max]` (Phaser-style EmitterOp convention); over-life propertie
 }
 ```
 
-Engine config (produced by the preset, never hand-written in defs) covers: spawn position/shape + spread, emission rate, `maxParticles` cap, particle `lifetime` range, `speed` + `angle` ranges, buoyancy acceleration, drag, wind response, `scale {start, end}`, `alpha {start, peak, end, fadeInMs}`, `tint` (single or random pick), `rotation`/`spin` ranges.
+The state-level `offset: [x, y]` adjusts the preset's spawn source in object-local pixels. It uses the same coordinate convention as visual layer offsets, so a future kiln can tune its smoke source independently without duplicating the smoke preset. Engine config (produced by the preset, never hand-written in defs) covers: spawn position/shape + spread, emission rate, `maxParticles` cap, particle `lifetime` range, `speed` + `angle` ranges, buoyancy acceleration, drag, wind response, `scale {start, end}`, `alpha {start, peak, end, fadeInMs}`, `tint` (single or random pick), `rotation`/`spin` ranges.
 
 ## Risks / Trade-offs
 

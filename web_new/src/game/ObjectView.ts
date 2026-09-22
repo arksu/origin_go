@@ -23,6 +23,8 @@ import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
 import type { ActorHandle, ActorRenderer } from './actors/ActorRenderer'
 import { ACTOR_RENDER } from './actors/config'
 import type { EquippedVisual } from '../types/characterVisual'
+import { fxManager } from './fx/FxManager'
+import type { ParticleEmitter } from './fx/ParticleEmitter'
 
 interface AnimatedFrameLayer {
   layer: LayerDef
@@ -101,6 +103,7 @@ export class ObjectView {
   private knockedOutPose = false
   private actorHandle: ActorHandle | null = null
   private carrying = false
+  private particleEmitter: ParticleEmitter | null = null
 
   constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer) {
     this.entityId = options.entityId
@@ -191,6 +194,17 @@ export class ObjectView {
 
   private buildLayers(): void {
     if (!this.resDef) return
+    if (this.resDef.fx) {
+      void fxManager.attach(this.resDef.fx, this.container, this.resDef.fx.zIndex).then((emitter) => {
+        if (this.isDestroyed) {
+          if (emitter) fxManager.detach(emitter)
+          return
+        }
+        this.particleEmitter = emitter
+      }).catch((error: unknown) => {
+        console.error(`[ObjectView] Failed to attach effect for ${this.entityId}`, error)
+      })
+    }
     if (this.resDef.actor3d) {
       if (!this.actorRenderer) throw new Error('3D character requires the actor renderer')
       this.buildSpriteLayers()
@@ -500,7 +514,7 @@ export class ObjectView {
       const anim = this.spineAnimations[spineIdx]
       if (!anim) return
 
-      const current = anim.state.getCurrent(0)?.animation?.name
+      const current = anim.state.getTrack(0)?.animation?.name
       if (current !== animName) {
         anim.state.setAnimation(0, animName, true)
       }
@@ -533,7 +547,7 @@ export class ObjectView {
       const anim = this.spineAnimations[spineIdx]
       if (!anim) return
 
-      const current = anim.state.getCurrent(0)?.animation?.name
+      const current = anim.state.getTrack(0)?.animation?.name
       if (current !== animName) {
         anim.state.setAnimation(0, animName, true)
       }
@@ -1107,6 +1121,10 @@ export class ObjectView {
   destroy(): void {
     if (this.isDestroyed) return
     this.isDestroyed = true
+    if (this.particleEmitter) {
+      fxManager.detach(this.particleEmitter)
+      this.particleEmitter = null
+    }
     if (this.actorHandle) {
       this.actorRenderer?.release(this.actorHandle)
       this.actorHandle = null
