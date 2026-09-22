@@ -2,77 +2,86 @@
 
 ## Context
 
-The server already has a target-first action pipeline: behaviors provide context actions per entity (`ContextActionService`, `S2C_ContextMenu`), and execution rides move → link → validate → execute with `PendingContextAction` consumed on `LinkCreated` (`context_action_service.go:357`). `LiftService` owns lift carry: `StartLiftFromContextAction` as the entry, `HandleLiftPutDown` for placement, `S2C_LiftCarryState` as the broadcast. The client holds a local `liftPutDownModeActive` ref driving `LiftGhostController`, then sends `C2S_LiftPutDown`.
+The existing lift entry goes through ContextActionService and a lift behavior provider. The provider must disappear from context menus, and ContextActionService.ExecuteAction resolves only actions still provided by a behavior. Therefore a pending armed lift cannot reuse PendingContextAction as its completion route. LiftService also has a separate implicit Interact path for objects without colliders and an asynchronous PendingLiftTransition for put-down. Both paths must report their final outcome to Actions.
 
-Def-loader and skill-gate precedents exist: `itemdefs`/`builddefs` (types + loader + registry under `internal/`, JSON under `data/`), and craft/build defs carry `RequiredSkills []string` checked via `containsAllStrings` against `CharacterProfile.Skills` (`crafting_service.go:448`). Enter-world list snapshots exist for crafts and builds, queued as jobs (`JobSendCraftListSnapshot`, `game_auth.go:867`). The 12 cursor PNGs in `web_new/public/assets/cursor/` are unused. The next feature, plow, will be a tile-target action with a skill requirement — see proposal.md for motivation.
+The server already has CharacterProfile.Skills, an equipment InventoryContainer indexed by InventoryRefIndex, item keys and tags in itemdefs, and ActiveCyclicAction for tick-based work. The client has an Actions HUD stub, a local put-down mode, a hotbar persisted in localStorage, and cursor PNG assets. S2C_CharacterProfile does not expose skills, so the server must provide menu availability and reasons.
 
-## Goals / Non-Goals
+## Goals and non-goals
 
-**Goals:**
-- One generic armed-action path: arm → server-acked cursor → target click → per-action handler; lift/lift_down are the first consumers.
-- MapClick interception isolated to a single dispatch point so plow's future MapClick field changes don't collide.
-- Cursor state fully server-owned; client renders only what the last packet said.
-- Zero lift_down-specific routing in the dispatcher.
+- One server-owned action lifecycle: activate, optionally select a target, execute immediately or for ticks, then finish, repeat, or cancel.
+- Separate definition sections for target, requirements, and execution. Support object, tile, and none now, with an explicit place to extend the target and requirement schemas later.
+- Make lift and lift_down the only player-facing v1 actions. Test tile and none with test definitions/handlers.
+- Preserve existing lift approach, carry, and placement rules while removing every old lift/put-down entry point.
+- Keep other context actions and existing craft/build actions outside this migration. Plow and new gameplay effects follow later.
 
-**Non-Goals:**
-- No auto-arm of lift_down; no question.png; no skill def registry; no stamina/terrain fields in action defs (plow keeps those in its handler).
-- No move-to-tile-then-execute pending state yet (plow may add it; `ArmedAction` is kept cheap to extend with a target position).
-- No changes to other context actions (teach, take, open, chop…) or to the cyclic action machinery.
+## D1: Action definitions and registry
 
-## Decisions
+The new internal/actiondefs package loads data/actions/*.json using the established loader/registry pattern. A definition has:
 
-### D1: `internal/actiondefs` mirrors the existing def packages
-`types.go` / `loader.go` / `registry.go` + `data/actions/*.json`. Def fields: `id`, `label`, `cursor`, `target_kind` (`object|tile|none`), `required_skills []string`. Duplicate id or malformed file fails startup (same `LoadError` style as itemdefs).
-*Why not a hardcoded Go registry?* Handlers must be Go anyway, but label/cursor/skill tuning is content — keeping it in data matches items/builds/crafts and feeds `S2C_ActionList` without recompiling client catalogs. An action ships as def + handler, enforced by a startup check that every registered handler has a def and vice versa.
+- id and label for identity and presentation;
+- target.kind: object, tile, or none; target.cursor is optional for object/tile and forbidden for none;
+- requirements.skills: skill IDs, all required;
+- requirements.equipment: entries with a non-empty list of known slot names and exactly one itemKey or itemTag. Every entry must match; within one entry, a matching item in any listed slot suffices;
+- execution.ticks and execution.stamina: independent optional non-negative values. Missing/zero ticks means no timed cycle; missing/zero stamina means no stamina charge;
+- isRepeatable: applicable only to object/tile, default false. A none action always executes once.
 
-### D2: `ActionService` owns arming, armed state, and the handler registry
-New `internal/game/action_service.go`. `ArmedAction{ActionID}` is a new ECS component. The handler contract:
+The loader trims and validates identifiers, skill IDs, slots, item keys/tags, numeric values, and incompatible combinations. Duplicate IDs or malformed definitions fail startup with the filename. Unknown item keys fail startup; tags are validated as non-empty strings. The startup registry check requires a handler for each definition and a definition for each handler. It does not require protocol or map-click-dispatch changes for a new action using an existing target kind. A new target kind or requirement type may need an explicit schema/protocol extension; the design does not promise otherwise.
 
-```go
-type ArmedActionHandler interface {
-    // TargetKind comes from the def; the dispatcher fills exactly one of the two.
-    HandleObjectTarget(w, playerID, playerHandle, targetID, targetHandle) (executed bool)
-    HandleTileTarget(w, playerID, playerHandle, position) (executed bool)
-}
-```
+The v1 files define lift as object-target with cursor lift and lift_down as tile-target with cursor lift_down. Both have isRepeatable false and omit execution ticks/stamina. Lift_down's carry prerequisite is a handler state condition, not a special field in every action definition.
 
-- **lift handler** wraps `LiftService`: armed lift + object click reuses the pending pattern — the service sets `PendingContextAction{target, action_id}` and lets the ordinary link-intent movement proceed; on `LinkCreated` it validates and calls the existing lift entry (renamed `StartLift`). `lift_behavior.go` stops implementing `ContextActionProvider` so the context menu no longer offers lift; the behavior's validation logic moves into the handler (or the behavior stays as the validator-only collaborator — implementation detail, tests decide).
-- **lift_down handler** wraps `HandleLiftPutDown` with the clicked position, preserving its placement validation; rejection maps to a mini-alert.
-- Skill check is generic in the service (`containsAllStrings(profile.Skills, def.RequiredSkills)`), not per-handler.
-- Arming clears any pending context action first — one pending thing per player.
+## D2: Authoritative action state and protocol
 
-*Alternative considered:* armed click sends `SelectContextAction` and keeps lift in the behavior system — rejected because it would leave lift enumerated in `ProvideActions` (context menu leakage) or need a second enumeration channel.
+ActionService owns an ECS action state with action ID, phase, and selected target where applicable. Phases are idle, selecting, approaching, and executing. A target action enters selecting on activation; a none action enters executing immediately or completes in the same server turn if untimed. The active state remains authoritative while a deferred lift or timed cycle completes.
 
-### D3: MapClick precedence is a single early branch
-In `network_command.go`'s map-click handling the order stays: (1) admin pending command (existing code untouched), (2) `ActionService.HandleArmedClick(...)` returning *consumed*, (3) ordinary behavior. The dispatcher knows only def target kinds — no action names. This isolates the interception point so the plow change can extend MapClick parsing independently.
+Protocol messages:
 
-### D4: Protocol — three new messages, one removal
-`packets.proto`: `C2S_ActivateAction{action_id}`, `S2C_ActiveCursorChanged{cursor}` (empty = reset), `S2C_ActionList{repeated ActionDefInfo}` with `ActionDefInfo{id, label, cursor, target_kind, required_skills}`. `C2S_LiftPutDown` and its server wiring are removed (superseded by armed tile click); load-test does not use it. Regenerate with `make proto` and `npm run proto` (pbjs/pbts) in `web_new`.
+- C2S_ActivateAction {action_id} and C2S_CancelAction;
+- S2C_ActionList with each definition's presentation, target, requirement, execution, and repeatability fields plus current availability and a reason code when unavailable;
+- S2C_ActionStateChanged {action_id, phase, cursor}. Idle uses empty action_id and cursor. The client never infers the action ID from a cursor ID.
 
-### D5: ActionList rides the enter-world job queue
-Mirror `JobSendCraftListSnapshot`: add `JobSendActionListSnapshot` queued in the auth sequence next to the craft list, delivered through the same snapshot-sender interface pattern (`SendActionListSnapshot`). The server also sends `S2C_ActiveCursorChanged{""}` in the snapshot sequence — always-correct default, and the groundwork for restoring a cursor on mid-session reconnect if armed state ever persists.
+The server sends ActionList and the actual current ActionStateChanged in the enter-world snapshot. It resends ActionList when skills, equipment, carry state, or another supported requirement changes. Activation and execution always revalidate on the server; the menu status is informational. The cursor is non-empty only when the definition supplies one; an unknown ID renders CSS help on the client.
 
-### D6: Client — cursor store + `CursorManager`, catalog with hotspots
-`gameStore.activeCursor: string` set by the new `S2C_ActiveCursorChanged` handler; `CursorManager` watches it and applies `cursor: url(/assets/cursor/<id>.png) <x> <y>, help` on the game-window container. `help` as the CSS-level fallback satisfies the unknown-id → question-mark requirement even when the browser rejects an image. `cursorCatalog.ts` is a static map `id → {path, hotspot}` (hotspots tuned per PNG at implementation; atlas frame dimensions verified then — see Risks). HandOverlay is untouched; it already renders above the cursor. Empty id restores the default cursor.
+C2S_LiftPutDown and its ClientMessage field are retired and reserved. Server and client protocol bindings are regenerated and shipped together.
 
-### D7: Client action ids — widen, don't merge
-`actionCatalog.ts` keeps the closed `ActionId` union for window openers. Gameplay ids are plain strings validated against the server list (`gameStore.actionList`). `HotbarAssignment = ActionId | GameplayActionId | null`; hotbar parsing tolerates stale ids (→ empty slot, per spec). The stub `actions` case in `GameView.vue` opens the new `ActionsMenu.vue`, which lists `gameStore.actionList` entries (label + cursor PNG as icon), renders `lift_down` unavailable while `!liftCarryActive`, and dispatches `sendActivateAction(id)`. Hotbar slot activation and menu selection share that sender. The local `liftPutDownModeActive` ref, its toggle, and the direct `sendLiftPutDown` call are deleted; `LiftGhostController` is driven by "lift_down is armed" store state instead.
+## D3: Selection, execution, and cancellation
 
-### D8: Disarm and state-loss wiring
-`ActionService.Disarm(playerID)` clears the component and sends the cursor reset. Triggered by: successful execution, toggle re-activation, replacement, and carry-state loss for lift_down (`LiftService.clearCarryStateForPlayer` calls an injected disarm hook — interface, not import). Player death/leave-world removes the component with the entity; no packet is needed once the socket is gone, and the next enter-world sends the default cursor.
+Activation validates the definition, requirements, handler state condition, and enough stamina for one execution. Selecting the same already armed action toggles it off. Selecting a different action cancels the previous selection, approach, or cycle without a stamina charge, stops movement started for its target, then attempts the new activation. If the new action is unavailable, the server reports the reason and remains idle. This also applies when the old action was already executing.
 
-## Risks / Trade-offs
+For object/tile actions, a valid target click is consumed. The handler validates the target before starting its domain operation. A rejected target produces a mini-alert and leaves the action in selecting, without starting ordinary movement or pickup. A live object click for an object-target action is consumed even when the object is not liftable; empty ground or a stale target falls through to ordinary movement while the action stays armed. A tile-target action consumes every map click and receives the click coordinates. This version does not add generic move-to-tile behavior; the handler validates whether a position is usable.
 
-- **Lift regression surface** — lift's entry point moves; its core (`LiftService`) must not change. → Only entry wiring changes; existing lift tests are updated to the armed path, and lift context-menu tests are removed with the feature.
-- **MapClick interception regressing ordinary clicks** — link intent, pickup, and admin pending are spec'd behaviors. → Interception is one early-return branch after the admin check; the existing map-click and admin test suites must pass unchanged for the no-armed case.
-- **Cursor PNG size/hotspot quirks** — browsers are picky about cursor image sizes (>32px may be ignored on some platforms). → Verify frame dimensions during implementation; the CSS fallback chain (`..., help`) degrades gracefully if an image is rejected.
-- **Shared `PendingContextAction` between armed and menu flows** — a context-menu selection could be pending when the player arms an action. → Arming clears any pending context action (D2); only one pending intent per player.
-- **Manual put-down costs a menu/hotbar visit per placement** — accepted product decision; the hotbar pin is the fast path.
+An untimed action starts its handler after target acceptance, or immediately on activation for none; a domain handler may complete asynchronously. A timed action creates ActiveCyclicAction after target acceptance (self-target for none) and completes after execution.ticks. CyclicActionSystem must dispatch these actions to ActionService before context-behavior lookup; a none action must not depend on a ContextActionProvider. Requirements, handler conditions, and available stamina are checked at activation, target acceptance/start, during an active action when relevant state changes, and immediately before completion. The completion contract prechecks stamina and lets the handler validate its effect before mutation. Handlers must not change player stamina and must roll back any partial effect on failure. In the same ECS turn, a successful handler commit is followed by one execution.stamina charge. A rejection, cancellation, timeout, target loss, or lost requirement consumes no stamina or leaves a partial effect.
 
-## Migration Plan
+On success, a non-repeatable action becomes idle and resets its cursor. A repeatable target action returns to selecting with its cursor if its requirements still hold; otherwise it becomes idle. A none action always becomes idle after one execution. A target-level failure during approach or execution returns to selecting only while the requirements still hold; otherwise the action is canceled.
 
-Server and client ship together (single repo, dev-stage). No persisted state migration: hotbar localStorage values are either window-opener ids (still valid) or gameplay ids (validated against the live list). Rollback = revert; the removed `C2S_LiftPutDown` is the only wire incompatibility and mixed versions are not a supported deployment.
+Escape sends C2S_CancelAction before any open-window Escape handling. The server clears the action, any action-owned pending target/cycle, and action-initiated movement, and sends idle ActionStateChanged. A further Escape can close a window. State loss or death cancels active Actions; leave-world cleanup removes transient ECS state, and the next snapshot reports idle. The client changes its cursor and ghost only from server state.
 
-## Open Questions
+The action handler contract must distinguish rejected target, accepted/deferred work, success, and failure. A single executed bool cannot represent lift's asynchronous completion or a rejected placement. ActionService owns the generic lifecycle, while handlers own target-specific validation and effects.
 
-- Esc-to-disarm keybinding (client): Esc already closes windows; arming toggles via re-activation covers the spec. Defer the keybinding decision to implementation if it's free; otherwise ship without it.
+## D4: MapClick precedence
+
+NetworkCommandSystem handles MapClick in this order: pending administrator command, ActionService.HandleArmedClick, ordinary pickup/link/movement. The map-click dispatcher is generic over target.kind and has no lift_down branch. Explicit Interact, item-in-hand drop, build placement, and UI-consumed clicks retain their existing routes; they do not produce a duplicate MapClick.
+
+## D5: Complete lift migration
+
+Collider lift uses a new action-owned pending target rather than PendingContextAction. ActionService starts the existing move-to-link behavior, then handles LinkCreated directly, revalidates the target, and calls LiftService.StartLift. It receives a completion/failure outcome and updates the action state. Removing liftBehavior.ProvideActions cannot silently break this route. A click on a non-liftable live object is rejected before movement.
+
+No-collider lift moves the existing phantom-collider and PendingLiftTransition path behind the armed lift handler. The generic Interact route no longer invokes TryStartNoColliderLiftInteract. LiftService reports final success/failure/timeout to ActionService, so the action resets only after success and remains selectable after a target-level failure.
+
+Lift_down's handler passes the clicked position to LiftService without fabricating a C2S_LiftPutDown packet. LiftService keeps its placement validation and deferred transition. Immediate rejection keeps lift_down armed; final successful placement ends it. A later failure or timeout leaves it armed while carry remains valid. Forced carry loss cancels lift_down and resets its cursor. The completion callback and carry-loss callback must produce one terminal state update, even when success clears carry state.
+
+Neither lift definition adds a timed cycle or stamina charge. Their existing approach and placement transitions are still asynchronous domain work, and switching or Escape cancels those transitions and their movement.
+
+## D6: Client menu, cursor, and hotbar
+
+The Actions HUD button opens ActionsMenu, which lists the server's definitions and availability. Unavailable actions remain visible with a reason and cannot be activated locally; the server still validates every request. The menu and hotbar use the same sendActivateAction path. The menu can drag an action to a hotbar slot.
+
+gameStore holds ActionList and the last ActionStateChanged. CursorManager applies the declared cursor image on the game window, uses CSS help for unknown IDs, and restores default on an empty ID. LiftGhostController is visible while lift_down is in selecting phase and carry is active; it does not infer armed state from cursor ID. The local liftPutDownModeActive and direct sendLiftPutDown route are removed.
+
+The hotbar accepts window-opener IDs and server action IDs. Persisted gameplay IDs are preserved while ActionList is pending; after the authoritative list arrives, missing IDs render as empty/inert slots. Normalization must not rewrite localStorage before the list arrives.
+
+## Risks and verification
+
+- Lift has two approach paths and deferred placement: tests must prove success, rejection, timeout, cancellation, and forced carry loss each produce exactly one terminal action state.
+- Action-list availability must refresh when equipment, skills, and carry change; tests must cover a requirement lost while selecting and while a cycle is active.
+- Timed actions need synthetic none, tile, and object handlers to verify cycle completion, optional stamina, cancellation, and repeatability without adding a new gameplay effect.
+- Admin pending MapClick must still outrank Actions, and ordinary clicks must remain unchanged when no action is armed.

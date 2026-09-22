@@ -5,7 +5,7 @@
 ### Requirement: Ordinary map clicks preserve movement, pickup, and object linking
 Without a pending administrator action and without an armed gameplay action, a map click on empty ground, a stale target, or a target without a collider SHALL move the player toward the clicked coordinates, subject to existing movement rules. A map click reporting a live non-dropped object with a collider SHALL set an explicit link intent, move the player to that object, and the link SHALL be established on confirmed collision without executing any context action; a click on empty ground SHALL cancel any outstanding link intent. A live dropped-item target SHALL retain normal primary-click pickup behavior. Explicit placement, item-in-hand drop, context interaction, and UI-consumed input SHALL retain their ordinary routing and SHALL NOT emit duplicate gameplay actions.
 
-An armed gameplay action SHALL take precedence over this ordinary behavior: the click SHALL be dispatched to the armed action's handler before any ordinary movement, link intent, or pickup is initiated, subject to the armed action's own click semantics (object-target actions consume object clicks and fall through to ordinary movement on ground clicks; tile-target actions consume every click).
+An active gameplay action in target-selection phase SHALL take precedence over this ordinary behavior. An object-target action SHALL consume a click on a live object, including one without a collider; a click on empty ground or a stale target SHALL fall through to ordinary movement while the action remains armed. A tile-target action SHALL consume every map click and pass its coordinates to its handler. A consumed click SHALL NOT also trigger ordinary movement, linking, or pickup, though an accepted action may initiate its own approach to the target.
 
 #### Scenario: Object click requests a link
 - **WHEN** a player primary-clicks a live non-dropped object with a collider and no pending administrator action and no armed gameplay action
@@ -26,6 +26,18 @@ An armed gameplay action SHALL take precedence over this ordinary behavior: the 
 #### Scenario: Armed action outranks ordinary routing
 - **WHEN** a player with an armed gameplay action primary-clicks a target that the armed action consumes
 - **THEN** the click SHALL be handled by the armed action and SHALL NOT also initiate movement, link intent, or pickup
+
+#### Scenario: Armed object action handles an object without a collider
+- **WHEN** a player selecting an object-target action primary-clicks a live object without a collider
+- **THEN** the action SHALL receive that object, and ordinary coordinate movement SHALL NOT also run
+
+#### Scenario: Armed object action permits ground movement
+- **WHEN** a player selecting an object-target action primary-clicks empty ground
+- **THEN** ordinary movement SHALL use the clicked coordinates and the action SHALL remain selecting
+
+#### Scenario: Armed tile action consumes a click on an object
+- **WHEN** a player selecting a tile-target action primary-clicks a live dropped item
+- **THEN** the action SHALL receive the click coordinates and ordinary pickup SHALL NOT run
 
 ### Requirement: Administrator click actions are interpreted only by the server
 The server SHALL give one pending administrator click action the highest precedence over both armed gameplay actions and ordinary map-click behavior. `/spawn` and coordinate-less `/tp` SHALL consume click coordinates; `/info` and `/destroy` SHALL consume the target ID. The consumed click SHALL NOT also initiate armed action execution, movement, pickup, or context interaction. The server SHALL preserve current command availability, resolve object targets against the current live world, and reject unavailable or ineligible targets without substituting another object. `/destroy` SHALL preserve deletion of the selected non-player object and all inventory contents through its existing deletion operation.

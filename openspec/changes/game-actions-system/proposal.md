@@ -2,34 +2,36 @@
 
 ## Why
 
-Gameplay actions are fragmented across three unrelated mechanisms: `lift` exists only as a per-target context-menu entry, put-down is a client-local UI mode the server never sees, and the HUD "actions" rail holds only window openers (the Actions button itself is a stub). The next feature on the roadmap — the "plow tile" action, which arms a cursor and targets a tile — needs a generic, server-authoritative action framework to plug into, so the structure must exist before more actions are added ad hoc.
+Gameplay actions need one discoverable entry point and one server-owned execution path. Today lift is a context-menu action, put-down is a client-local mode, and the HUD Actions button is a stub. Future actions may target an object, a tile, or no target, and may have skill, equipment, and other requirements. Adding each case directly to map-click or HUD code would keep fragmenting the system.
 
 ## What Changes
 
-- **Data-driven action definitions** — new `internal/actiondefs` loader + `data/actions/*.json` (mirroring `itemdefs`/`builddefs`): id, label, cursor, target kind (`object` | `tile` | `none`), `required_skills`.
-- **Server-authoritative armed actions** — new `C2S_ActivateAction` request; the server validates skill and state, sets an `ArmedAction` component on the player, and replies with `S2C_ActiveCursorChanged {cursor}`. An empty cursor id is a server-initiated reset and may be sent at any time (execution, cancel, state loss).
-- **Armed target clicks via MapClick interception** — the server's MapClick handler gives a player's armed action precedence over ordinary click behavior and dispatches to a per-action handler registry (no new target packet). `C2S_LiftPutDown` is superseded and removed (**BREAKING** protocol change; server and client ship together).
-- **Lift becomes mode-first only** — `lift` is removed from object context menus; lifting is armed exclusively from the actions menu or hotbar. Put-down (`lift_down`) is armed manually; the server never auto-arms it.
-- **Action list at login** — new `S2C_ActionList` snapshot on enter world (same pattern as `S2C_CraftList`/`S2C_BuildList`).
-- **Skill gating** — `required_skills` on action defs checked against `CharacterProfile.Skills` using the existing `containsAllStrings` pattern from crafts/builds; the server rejects activation of locked actions. Skills remain plain string ids (no skill def registry).
-- **Client cursor system** — new `CursorManager` owning the game-window cursor, driven only by `S2C_ActiveCursorChanged`; a client `cursorCatalog` maps cursor ids to `/assets/cursor/<id>.png` (first consumer of those assets); unknown ids fall back to CSS `cursor: help`, empty id resets to default.
-- **Actions menu + hotbar pinning** — the stub Actions button opens the actions menu listing server-provided actions; the hotbar widens to accept gameplay actions alongside window openers (drag-and-drop, localStorage persistence as today).
-- **Client cleanup** — the local `liftPutDownModeActive` special case in `GameView.vue` is absorbed into the generic armed flow; the placement ghost is shown while `lift_down` is armed.
+- Add internal/actiondefs and data/actions/*.json. Each definition separates identity/presentation, target selection (object, tile, none), requirements, and optional execution duration/stamina cost. Targeted actions may declare a cursor and isRepeatable.
+- Add a server-side ActionService with registered handlers. The server validates requirements and owns selecting, approaching, executing, completion, cancellation, and active cursor state. Adding an action for a supported target kind requires a definition and handler, without an action-specific map-click branch.
+- Provide action definitions and current availability (including a reason for unavailability) to the client on enter world and when relevant state changes. The Actions menu shows all actions and marks unavailable ones with their reason.
+- For object and tile, activating an action enters target selection; an optional cursor appears, and a matching map click chooses the target. For none, activation starts one execution immediately. Without a tick duration, the handler starts without a timed cycle and may complete through an existing deferred domain transition; with a duration, it runs through the existing cyclic-action flow. Optional stamina is charged only on successful completion.
+- isRepeatable applies only to targeted actions. After success, a repeatable action returns to target selection; a non-repeatable action ends. A none action always runs once.
+- Escape cancels the active action before closing an open window, stops movement initiated to reach its target, and resets the cursor. Activating a different action also cancels the current selection, approach, or cycle without a stamina charge, stops action-initiated movement, then starts the new action. Losing a requirement cancels the action in the same way.
+- Move lift and lift_down fully into Actions, including lift of objects without colliders. Remove the lift context-menu and implicit interact paths and the client-local put-down mode. Both definitions are non-repeatable and have no separate tick duration or stamina cost; existing approach, carry, and placement transitions remain their execution mechanics.
+- Allow gameplay actions to be pinned to the existing hotbar. Persisted IDs are checked against the server action list only after that list arrives, so loading does not erase valid pins.
 
-Non-goals: no auto-arm of `lift_down` after lifting; no `question.png` asset; no skill def registry; no migration of dig/mine/fish or plow (plow arrives as a follow-up change consuming this framework).
+The first menu contains lift and lift_down. The tile and none paths are covered with test definitions and handlers; this change does not invent a new player-facing effect for either kind.
 
 ## Capabilities
 
 ### New Capabilities
-- `game-actions`: Data-driven gameplay actions — server-side def loader, arming protocol with server-owned cursor state, MapClick interception dispatch, skill gating, the actions menu, and hotbar pinning, with lift/lift_down as the first two actions.
+
+- game-actions: Data-driven action definitions, requirements, target selection, optional cyclic execution, server-owned action/cursor state, Actions menu, hotbar pinning, and complete migration of lift/put-down.
 
 ### Modified Capabilities
-- `map-click-input`: Ordinary map clicks gain a new precedence layer — a player's armed action consumes map clicks before ordinary movement/pickup/linking behavior (below admin pending commands, which keep top precedence).
+
+- map-click-input: Pending administrator clicks remain highest priority; an armed action gets the next chance to consume a map click before ordinary movement, linking, or pickup.
 
 ## Impact
 
-- **Protocol** (`api/proto/packets.proto`): new `C2S_ActivateAction`, `S2C_ActiveCursorChanged`, `S2C_ActionList` (+ action info message); `C2S_LiftPutDown` removed. Regenerated via `make proto` (Go) and `npm run proto` (client pbjs/pbts).
-- **Server**: new `internal/game/action_service.go` (+ `internal/actiondefs`, `data/actions/`); `internal/ecs/components` gains `ArmedAction`; `internal/ecs/systems/network_command.go` routes the new C2S and intercepts MapClick; `lift_behavior.go` stops providing a context action; `LiftService` gains handler wrappers; enter-world snapshot job for `S2C_ActionList`.
-- **Client** (`web_new`): `game/hud/actionCatalog.ts` widened; new `CursorManager`, `cursorCatalog`, actions menu UI; `ActionsRail.vue`/`GameView.vue`/`useHotbarAssignments.ts` extended; network layer (`index.ts`, `handlers.ts`, `MessageDispatcher.ts`) gains three message types; local lift put-down mode removed.
-- **Data**: new `data/actions/` directory with `lift.json` and `lift_down.json`.
-- **Load test**: unaffected (does not use `C2S_LiftPutDown`).
+- **Protocol** (api/proto/packets.proto): activate/cancel requests, action list with availability, and authoritative action-state updates. C2S_LiftPutDown is retired and its field reserved. Go and client bindings are regenerated together.
+- **Server**: new action definitions, loader, registry, service, ECS state, handler integration, map-click interception, enter-world snapshot, availability refresh, and cancellation hooks. Lift's old context/interact entry points are removed.
+- **Client** (web_new): Actions menu, server-driven cursor and action state, Escape cancellation, gameplay hotbar entries, and removal of local put-down mode.
+- **Data**: lift and lift_down definitions in data/actions/.
+
+Server and client ship together. Other context actions and their content remain outside this migration. Plow and other new gameplay effects are follow-up changes.
