@@ -185,6 +185,9 @@ export const useGameStore = defineStore('game', () => {
   const buildStateList = ref<BuildStateItemState[]>([])
   const liftCarryActive = ref(false)
   const liftCarriedEntityId = ref<number | null>(null)
+  const gameActions = ref<proto.IActionDefinition[]>([])
+  const gameActionListLoaded = ref(false)
+  const gameActionState = ref<proto.IS2C_ActionStateChanged>({ actionId: '', phase: 'idle', cursor: '' })
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
@@ -315,6 +318,7 @@ export const useGameStore = defineStore('game', () => {
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
     closeBuildStateWindow()
+    clearGameActions()
     characterAttributes.value = defaultCharacterAttributes()
     characterExperience.value = defaultCharacterExperience()
     playerStats.value = defaultPlayerStats()
@@ -356,6 +360,7 @@ export const useGameStore = defineStore('game', () => {
     selectedBuildKey.value = ''
     armedBuildKey.value = ''
     closeBuildStateWindow()
+    clearGameActions()
     liftCarryActive.value = false
     liftCarriedEntityId.value = null
     characterAttributes.value = defaultCharacterAttributes()
@@ -376,6 +381,21 @@ export const useGameStore = defineStore('game', () => {
 
   function updatePlayerPosition(position: Position) {
     playerPosition.value = position
+  }
+
+  function clearGameActions() {
+    gameActions.value = []
+    gameActionListLoaded.value = false
+    gameActionState.value = { actionId: '', phase: 'idle', cursor: '' }
+  }
+
+  function setGameActionList(actions: proto.IActionDefinition[]) {
+    gameActions.value = actions
+    gameActionListLoaded.value = true
+  }
+
+  function setGameActionState(state: proto.IS2C_ActionStateChanged) {
+    gameActionState.value = state
   }
 
   // Chunk actions
@@ -1105,6 +1125,9 @@ export const useGameStore = defineStore('game', () => {
     buildStateList,
     liftCarryActive,
     liftCarriedEntityId,
+    gameActions,
+    gameActionListLoaded,
+    gameActionState,
     characterAttributes,
     characterExperience,
     playerStats,
@@ -1173,6 +1196,8 @@ export const useGameStore = defineStore('game', () => {
     closeBuildStateWindow,
     closeBuildStateWindowIfEntity,
     setLiftCarryState,
+    setGameActionList,
+    setGameActionState,
     consumeArmedBuildPlacement,
     setCharacterProfileSnapshot,
     applyExpGained,

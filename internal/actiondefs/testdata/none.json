@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "test_none",
+      "presentation": {"label": "Test none", "menuIcon": "/assets/cursor/lift.png"},
+      "target": {"kind": "none"},
+      "requirements": {},
+      "execution": {"ticks": 2, "stamina": 1}
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"origin/internal/actiondefs"
 	"origin/internal/builddefs"
 	"origin/internal/config"
 	"origin/internal/craftdefs"
@@ -78,6 +79,11 @@ func main() {
 		logger.Fatal("Failed to load item definitions", zap.Error(err))
 	}
 	itemdefs.SetGlobal(itemRegistry)
+	actionRegistry, err := actiondefs.LoadFromDirectory("./data/actions", logger)
+	if err != nil {
+		logger.Fatal("Failed to load action definitions", zap.Error(err))
+	}
+	actiondefs.SetGlobal(actionRegistry)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

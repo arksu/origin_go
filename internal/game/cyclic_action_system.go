@@ -19,10 +19,15 @@ type cyclicActionProgressSender interface {
 type CyclicActionSystem struct {
 	ecs.BaseSystem
 	contextActions *ContextActionService
+	actions        *ActionService
 	progressSender cyclicActionProgressSender
 	logger         *zap.Logger
 	query          *ecs.PreparedQuery
 	handles        []types.Handle
+}
+
+func (s *CyclicActionSystem) SetActionService(service *ActionService) {
+	s.actions = service
 }
 
 func NewCyclicActionSystem(
@@ -44,7 +49,7 @@ func NewCyclicActionSystem(
 
 func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 	_ = dt
-	if s.contextActions == nil {
+	if s.contextActions == nil && s.actions == nil {
 		return
 	}
 
@@ -79,6 +84,15 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 		playerID := playerExternalID.ID
+		if action.BehaviorKey == gameActionCycleBehaviorKey {
+			if s.actions != nil {
+				s.actions.AdvanceCycle(w, playerID, playerHandle, action, s.progressSender)
+			}
+			continue
+		}
+		if s.contextActions == nil {
+			continue
+		}
 
 		if action.CycleDurationTicks == 0 {
 			s.contextActions.cancelActiveCyclicAction(playerID, playerHandle, "invalid_action_state")

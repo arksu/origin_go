@@ -22,10 +22,11 @@ type ActiveCyclicAction struct {
 	TargetID     types.EntityID
 	TargetHandle types.Handle
 
-	CycleDurationTicks uint32
-	CycleElapsedTicks  uint32
-	CycleIndex         uint32
-	StartedTick        uint64
+	CycleDurationTicks      uint32
+	CycleElapsedTicks       uint32
+	CycleIndex              uint32
+	StartedTick             uint64
+	ActionCompletionStarted bool
 }
 
 const ActiveCyclicActionComponentID ecs.ComponentID = 25

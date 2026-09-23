@@ -11,7 +11,6 @@ import (
 	"origin/internal/ecs/systems"
 	"origin/internal/entitystats"
 	"origin/internal/eventbus"
-	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -30,11 +29,23 @@ type liftRuntimeSender interface {
 }
 
 type LiftService struct {
-	world        *ecs.World
-	chunkManager *gameworld.ChunkManager
-	eventBus     *eventbus.EventBus
-	alerts       liftRuntimeSender
-	logger       *zap.Logger
+	world            *ecs.World
+	chunkManager     *gameworld.ChunkManager
+	eventBus         *eventbus.EventBus
+	alerts           liftRuntimeSender
+	logger           *zap.Logger
+	actionCompletion func(*ecs.World, types.EntityID, types.Handle, uint64, bool, string)
+	actionCanCommit  func(*ecs.World, types.EntityID, types.Handle, uint64) bool
+	chunkActive      func(types.ChunkCoord) bool
+	relocateObject   func(*ecs.World, types.Handle, gameworld.RelocateWorldObjectImmediateOptions, float64, float64) bool
+}
+
+func (s *LiftService) SetActionCompletion(callback func(*ecs.World, types.EntityID, types.Handle, uint64, bool, string)) {
+	s.actionCompletion = callback
+}
+
+func (s *LiftService) SetActionCanCommit(callback func(*ecs.World, types.EntityID, types.Handle, uint64) bool) {
+	s.actionCanCommit = callback
 }
 
 var _ systems.LiftCommandService = (*LiftService)(nil)
@@ -51,13 +62,24 @@ func NewLiftService(
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &LiftService{
+	service := &LiftService{
 		world:        world,
 		chunkManager: chunkManager,
 		eventBus:     eventBus,
 		alerts:       alerts,
 		logger:       logger,
 	}
+	service.chunkActive = func(coord types.ChunkCoord) bool {
+		if chunkManager == nil {
+			return false
+		}
+		chunk := chunkManager.GetChunkFast(coord)
+		return chunk != nil && chunk.GetState() == types.ChunkStateActive
+	}
+	service.relocateObject = func(w *ecs.World, handle types.Handle, options gameworld.RelocateWorldObjectImmediateOptions, x, y float64) bool {
+		return gameworld.RelocateWorldObjectImmediate(w, chunkManager, eventBus, handle, options, x, y, logger)
+	}
+	return service
 }
 
 func (s *LiftService) IsPlayerCarrying(w *ecs.World, playerHandle types.Handle) bool {
@@ -72,112 +94,35 @@ func (s *LiftService) SendCarryLockedWarning(playerID types.EntityID) {
 	s.sendWarning(playerID, "LIFT_ACTION_LOCKED")
 }
 
-func (s *LiftService) StartLiftFromContextAction(
+func (s *LiftService) StartLift(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	targetID types.EntityID,
 	targetHandle types.Handle,
-) contracts.BehaviorResult {
+) ActionResult {
 	if s == nil || w == nil || w != s.world {
-		return contracts.BehaviorResult{OK: false}
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
 	}
 	if playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
-		return contracts.BehaviorResult{OK: false}
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
 	}
 	if !s.isLiftableTarget(w, targetHandle) {
-		return contracts.BehaviorResult{OK: false}
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
 	}
 	if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
-		// No-collider pickup is handled via interact special path.
-		return contracts.BehaviorResult{OK: false}
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
 	}
 	if _, ok := ecs.GetComponent[components.LiftCarryState](w, playerHandle); ok {
-		return s.warningResult("LIFT_ALREADY_CARRYING")
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_ALREADY_CARRYING"}
 	}
 	if _, ok := ecs.GetComponent[components.LiftedObjectState](w, targetHandle); ok {
-		return s.warningResult("LIFT_TARGET_ALREADY_CARRIED")
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_TARGET_ALREADY_CARRIED"}
 	}
 	if !s.startCarryingObject(w, playerID, playerHandle, targetID, targetHandle) {
-		return s.warningResult("LIFT_INVALID_TARGET")
+		return ActionResult{Outcome: ActionFailed, Reason: "LIFT_INVALID_TARGET"}
 	}
-	return contracts.BehaviorResult{OK: true}
-}
-
-func (s *LiftService) TryStartNoColliderLiftInteract(
-	w *ecs.World,
-	playerID types.EntityID,
-	playerHandle types.Handle,
-	targetID types.EntityID,
-	targetHandle types.Handle,
-	interactionType netproto.InteractionType,
-) bool {
-	if s == nil || w == nil || w != s.world {
-		return false
-	}
-	if playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
-		return false
-	}
-	if interactionType != netproto.InteractionType_AUTO && interactionType != netproto.InteractionType_OPEN {
-		return false
-	}
-	if !s.isLiftableTarget(w, targetHandle) {
-		return false
-	}
-	if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider {
-		return false
-	}
-	if _, ok := ecs.GetComponent[components.LiftCarryState](w, playerHandle); ok {
-		s.sendWarning(playerID, "LIFT_ALREADY_CARRYING")
-		return true
-	}
-	if _, ok := ecs.GetComponent[components.LiftedObjectState](w, targetHandle); ok {
-		s.sendWarning(playerID, "LIFT_TARGET_ALREADY_CARRIED")
-		return true
-	}
-
-	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](w, playerHandle)
-	_, hasPlayerCollider := ecs.GetComponent[components.Collider](w, playerHandle)
-	playerMov, hasMovement := ecs.GetComponent[components.Movement](w, playerHandle)
-	targetTransform, hasTargetTransform := ecs.GetComponent[components.Transform](w, targetHandle)
-	if !hasPlayerTransform || !hasPlayerCollider || !hasMovement || !hasTargetTransform || playerMov.State == _const.StateStunned {
-		s.sendWarning(playerID, "LIFT_INVALID_TARGET")
-		return true
-	}
-
-	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
-	s.clearPendingInteractionIntents(w, playerID, playerHandle)
-	s.breakActiveLink(w, playerID)
-	if isWithinLiftPickupStopDistance(playerTransform, targetTransform) {
-		if !s.startCarryingObject(w, playerID, playerHandle, targetID, targetHandle) {
-			s.sendWarning(playerID, "LIFT_INVALID_TARGET")
-		}
-		return true
-	}
-
-	ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
-		col.Phantom = &components.PhantomCollider{
-			WorldX:     targetTransform.X,
-			WorldY:     targetTransform.Y,
-			HalfWidth:  liftPointPhantomHalfLen,
-			HalfHeight: liftPointPhantomHalfLen,
-		}
-	})
-	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
-		m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
-	})
-	expireAt := ecs.GetResource[ecs.TimeState](w).UnixMs + liftPendingTTL.Milliseconds()
-	ecs.AddComponent(w, playerHandle, components.PendingLiftTransition{
-		Mode:           components.LiftTransitionModePickupNoCollider,
-		ObjectEntityID: targetID,
-		ObjectHandle:   targetHandle,
-		TargetX:        targetTransform.X,
-		TargetY:        targetTransform.Y,
-		PhantomHalfW:   liftPointPhantomHalfLen,
-		PhantomHalfH:   liftPointPhantomHalfLen,
-		ExpireAtUnixMs: expireAt,
-	})
-	return true
+	return ActionResult{Outcome: ActionSucceeded}
 }
 
 func isWithinLiftPickupStopDistance(player, target components.Transform) bool {
@@ -186,48 +131,41 @@ func isWithinLiftPickupStopDistance(player, target components.Transform) bool {
 	return dx*dx+dy*dy <= _const.StopDistance*_const.StopDistance
 }
 
-func (s *LiftService) HandleLiftPutDown(
+func (s *LiftService) StartPutDownAt(
 	w *ecs.World,
 	playerID types.EntityID,
 	playerHandle types.Handle,
-	msg *netproto.C2S_LiftPutDown,
-) {
-	if s == nil || w == nil || w != s.world || msg == nil || msg.Pos == nil {
-		return
-	}
-	if playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
-		return
+	targetX, targetY float64,
+	generation uint64,
+) ActionResult {
+	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
 
 	carry, ok := ecs.GetComponent[components.LiftCarryState](w, playerHandle)
 	if !ok {
-		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
-	}
-	if types.EntityID(msg.EntityId) == 0 || types.EntityID(msg.EntityId) != carry.ObjectEntityID {
-		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
 	objectHandle, ok := s.resolveCarriedObjectHandle(w, carry)
 	if !ok {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, false)
-		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
 	lifted, hasLifted := ecs.GetComponent[components.LiftedObjectState](w, objectHandle)
 	if !hasLifted {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, false)
-		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
 
-	targetX := float64(msg.Pos.X)
-	targetY := float64(msg.Pos.Y)
 	coord := types.WorldToChunkCoord(int(targetX), int(targetY), _const.ChunkSize, _const.CoordPerTile)
-	chunk := s.chunkManager.GetChunkFast(coord)
-	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
-		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+	if !s.chunkActive(coord) {
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
+	}
+	if _, hasCollider := ecs.GetComponent[components.Collider](w, playerHandle); !hasCollider {
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
+	}
+	if _, hasMovement := ecs.GetComponent[components.Movement](w, playerHandle); !hasMovement {
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
 
 	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
@@ -265,7 +203,9 @@ func (s *LiftService) HandleLiftPutDown(
 		PhantomHalfW:       halfW,
 		PhantomHalfH:       halfH,
 		ExpireAtUnixMs:     expireAt,
+		ActionGeneration:   generation,
 	})
+	return ActionResult{Outcome: ActionApproaching}
 }
 
 func (s *LiftService) FinalizePendingLiftTransition(
@@ -281,7 +221,12 @@ func (s *LiftService) FinalizePendingLiftTransition(
 	if !hasPending {
 		return
 	}
-	if current.Mode != pending.Mode || current.ObjectEntityID != pending.ObjectEntityID {
+	if current.Mode != pending.Mode || current.ObjectEntityID != pending.ObjectEntityID || current.ActionGeneration != pending.ActionGeneration {
+		return
+	}
+	if pending.ActionGeneration != 0 && (s.actionCanCommit == nil || !s.actionCanCommit(w, playerID, playerHandle, pending.ActionGeneration)) {
+		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+		s.finishPendingAction(w, playerID, playerHandle, pending, false, "ACTION_UNAVAILABLE")
 		return
 	}
 
@@ -292,33 +237,40 @@ func (s *LiftService) FinalizePendingLiftTransition(
 			targetHandle = w.GetHandleByEntityID(pending.ObjectEntityID)
 		}
 		if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) || !s.isLiftableTarget(w, targetHandle) {
-			s.CancelPendingLiftTransition(w, playerID, playerHandle)
-			s.sendWarning(playerID, "LIFT_INVALID_TARGET")
+			s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+			s.finishPendingAction(w, playerID, playerHandle, pending, false, "LIFT_INVALID_TARGET")
 			return
 		}
 		if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider {
 			// If collider appeared meanwhile, let the normal path handle future interactions.
-			s.CancelPendingLiftTransition(w, playerID, playerHandle)
+			s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+			s.finishPendingAction(w, playerID, playerHandle, pending, false, "LIFT_INVALID_TARGET")
 			return
 		}
 		if _, ok := ecs.GetComponent[components.LiftCarryState](w, playerHandle); ok {
-			s.CancelPendingLiftTransition(w, playerID, playerHandle)
-			s.sendWarning(playerID, "LIFT_ALREADY_CARRYING")
+			s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+			s.finishPendingAction(w, playerID, playerHandle, pending, false, "LIFT_ALREADY_CARRYING")
 			return
 		}
 		if _, ok := ecs.GetComponent[components.LiftedObjectState](w, targetHandle); ok {
-			s.CancelPendingLiftTransition(w, playerID, playerHandle)
-			s.sendWarning(playerID, "LIFT_TARGET_ALREADY_CARRIED")
+			s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+			s.finishPendingAction(w, playerID, playerHandle, pending, false, "LIFT_TARGET_ALREADY_CARRIED")
 			return
 		}
 		if !s.startCarryingObject(w, playerID, playerHandle, pending.ObjectEntityID, targetHandle) {
-			s.CancelPendingLiftTransition(w, playerID, playerHandle)
-			s.sendWarning(playerID, "LIFT_INVALID_TARGET")
+			s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+			s.finishPendingAction(w, playerID, playerHandle, pending, false, "LIFT_INVALID_TARGET")
 			return
 		}
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+		s.finishPendingAction(w, playerID, playerHandle, pending, true, "")
 	case components.LiftTransitionModePutDown:
-		s.finalizeLiftPutDown(w, playerID, playerHandle, pending)
+		completed := s.finalizeLiftPutDown(w, playerID, playerHandle, pending)
+		if completed {
+			s.finishPendingAction(w, playerID, playerHandle, pending, true, "")
+		} else if pending.ActionGeneration != 0 && s.actionCompletion != nil {
+			s.actionCompletion(w, playerID, playerHandle, pending.ActionGeneration, false, "")
+		}
 	default:
 		s.CancelPendingLiftTransition(w, playerID, playerHandle)
 	}
@@ -329,15 +281,25 @@ func (s *LiftService) CancelPendingLiftTransition(w *ecs.World, playerID types.E
 		return
 	}
 	nowUnixMs := ecs.GetResource[ecs.TimeState](w).UnixMs
-	if pending, ok := ecs.GetComponent[components.PendingLiftTransition](w, playerHandle); ok &&
-		pending.ExpireAtUnixMs > 0 && nowUnixMs >= pending.ExpireAtUnixMs && playerID != 0 {
-		if pending.Mode == components.LiftTransitionModePickupNoCollider {
-			s.sendWarning(playerID, "LIFT_PICKUP_TIMEOUT")
-		} else if pending.Mode == components.LiftTransitionModePutDown {
-			s.sendWarning(playerID, "LIFT_PUTDOWN_TIMEOUT")
-		}
-	}
+	pending, hasPending := ecs.GetComponent[components.PendingLiftTransition](w, playerHandle)
 	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+	if hasPending && pending.ExpireAtUnixMs > 0 && nowUnixMs >= pending.ExpireAtUnixMs && playerID != 0 {
+		reason := "LIFT_PUTDOWN_TIMEOUT"
+		if pending.Mode == components.LiftTransitionModePickupNoCollider {
+			reason = "LIFT_PICKUP_TIMEOUT"
+		}
+		s.finishPendingAction(w, playerID, playerHandle, pending, false, reason)
+	}
+}
+
+func (s *LiftService) finishPendingAction(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, pending components.PendingLiftTransition, success bool, reason string) {
+	if pending.ActionGeneration != 0 && s.actionCompletion != nil {
+		s.actionCompletion(w, playerID, playerHandle, pending.ActionGeneration, success, reason)
+		return
+	}
+	if reason != "" {
+		s.sendWarning(playerID, reason)
+	}
 }
 
 func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, carry components.LiftCarryState) {
@@ -359,10 +321,8 @@ func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID,
 		return
 	}
 
-	gameworld.RelocateWorldObjectImmediate(
+	s.relocateObject(
 		w,
-		s.chunkManager,
-		s.eventBus,
 		objectHandle,
 		gameworld.RelocateWorldObjectImmediateOptions{
 			IsTeleport:        false,
@@ -370,7 +330,6 @@ func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID,
 		},
 		playerTransform.X,
 		playerTransform.Y,
-		s.logger,
 	)
 
 	// Keep cached handle fresh if entity was respawned/re-resolved.
@@ -406,10 +365,8 @@ func (s *LiftService) ForceDropCarryAtPlayerPosition(
 	}
 	s.restoreCarriedObjectRuntime(w, objectHandle)
 	ecs.RemoveComponent[components.LiftedObjectState](w, objectHandle)
-	_ = gameworld.RelocateWorldObjectImmediate(
+	_ = s.relocateObject(
 		w,
-		s.chunkManager,
-		s.eventBus,
 		objectHandle,
 		gameworld.RelocateWorldObjectImmediateOptions{
 			IsTeleport:        false,
@@ -418,7 +375,6 @@ func (s *LiftService) ForceDropCarryAtPlayerPosition(
 		},
 		playerTransform.X,
 		playerTransform.Y,
-		s.logger,
 	)
 	s.clearCarryStateForPlayer(w, playerID, playerHandle, sendCarryState)
 	return true
@@ -429,12 +385,12 @@ func (s *LiftService) finalizeLiftPutDown(
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	pending components.PendingLiftTransition,
-) {
+) bool {
 	carry, hasCarry := ecs.GetComponent[components.LiftCarryState](w, playerHandle)
 	if !hasCarry {
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return false
 	}
 
 	objectHandle, ok := s.resolveCarriedObjectHandle(w, carry)
@@ -442,7 +398,7 @@ func (s *LiftService) finalizeLiftPutDown(
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return false
 	}
 
 	liftedState, ok := ecs.GetComponent[components.LiftedObjectState](w, objectHandle)
@@ -450,25 +406,22 @@ func (s *LiftService) finalizeLiftPutDown(
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return false
 	}
 
 	dropX, dropY := liftPutDownTargetPosition(pending)
 
 	coord := types.WorldToChunkCoord(int(dropX), int(dropY), _const.ChunkSize, _const.CoordPerTile)
-	chunk := s.chunkManager.GetChunkFast(coord)
-	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
+	if !s.chunkActive(coord) {
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return false
 	}
 
 	s.restoreCarriedObjectRuntime(w, objectHandle)
 	ecs.RemoveComponent[components.LiftedObjectState](w, objectHandle)
-	if !gameworld.RelocateWorldObjectImmediate(
+	if !s.relocateObject(
 		w,
-		s.chunkManager,
-		s.eventBus,
 		objectHandle,
 		gameworld.RelocateWorldObjectImmediateOptions{
 			IsTeleport:        false,
@@ -477,19 +430,19 @@ func (s *LiftService) finalizeLiftPutDown(
 		},
 		dropX,
 		dropY,
-		s.logger,
 	) {
 		// Keep carrying on failed placement relocation.
 		ecs.AddComponent(w, objectHandle, liftedState)
 		s.disableCarriedObjectRuntime(w, objectHandle, playerID, playerHandle)
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
-		return
+		return false
 	}
 
 	s.stopPlayerMovementNow(w, playerID, playerHandle)
 	s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
 	s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+	return true
 }
 
 func liftPutDownTargetPosition(pending components.PendingLiftTransition) (float64, float64) {
@@ -535,10 +488,8 @@ func (s *LiftService) startCarryingObject(
 		StartedAtUnixMs: ecs.GetResource[ecs.TimeState](w).UnixMs,
 	})
 
-	if !gameworld.RelocateWorldObjectImmediate(
+	if !s.relocateObject(
 		w,
-		s.chunkManager,
-		s.eventBus,
 		targetHandle,
 		gameworld.RelocateWorldObjectImmediateOptions{
 			IsTeleport:        false,
@@ -547,7 +498,6 @@ func (s *LiftService) startCarryingObject(
 		},
 		playerTransform.X,
 		playerTransform.Y,
-		s.logger,
 	) {
 		// Roll back carry markers if relocation fails.
 		s.restoreCarriedObjectRuntime(w, targetHandle)
@@ -799,13 +749,4 @@ func (s *LiftService) sendWarning(playerID types.EntityID, reasonCode string) {
 		ReasonCode: reasonCode,
 		TtlMs:      1500,
 	})
-}
-
-func (s *LiftService) warningResult(reasonCode string) contracts.BehaviorResult {
-	return contracts.BehaviorResult{
-		OK:          false,
-		UserVisible: true,
-		ReasonCode:  reasonCode,
-		Severity:    contracts.BehaviorAlertSeverityWarning,
-	}
 }

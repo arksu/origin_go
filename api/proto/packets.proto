@@ -409,10 +409,11 @@ message C2S_BuildTakeBack {
   uint32 slot = 2;
 }
 
-message C2S_LiftPutDown {
-  uint64 entity_id = 1;
-  Vector2 pos = 2;
+message C2S_ActivateAction {
+  string action_id = 1;
 }
+
+message C2S_CancelAction {}
 
 message C2S_OpenWindow {
   string name = 1;
@@ -425,6 +426,8 @@ message C2S_CloseWindow {
 // Обёртка для всех клиентских сообщений
 message ClientMessage {
   uint32 sequence = 1; // sequence number для ack
+  reserved 25;
+  reserved "lift_put_down";
   oneof payload {
     C2S_Auth auth = 10;
     C2S_Ping ping = 11;
@@ -441,7 +444,8 @@ message ClientMessage {
     C2S_BuildStart build_start = 22;
     C2S_BuildProgress build_progress = 23;
     C2S_BuildTakeBack build_take_back = 24;
-    C2S_LiftPutDown lift_put_down = 25;
+    C2S_ActivateAction activate_action = 26;
+    C2S_CancelAction cancel_action = 27;
     //    C2S_StopMovement stop_movement = 13;
     //    C2S_Interact interact = 14;
     //    C2S_Attack attack = 15;
@@ -763,6 +767,37 @@ message S2C_LiftCarryState {
   uint64 entity_id = 2;
 }
 
+message ActionEquipmentRequirement {
+  repeated string slots = 1;
+  string item_key = 2;
+  string item_tag = 3;
+}
+
+message ActionDefinition {
+  string id = 1;
+  string label = 2;
+  string menu_icon = 3;
+  string target_kind = 4;
+  string cursor = 5;
+  repeated string required_skills = 6;
+  repeated ActionEquipmentRequirement required_equipment = 7;
+  uint32 ticks = 8;
+  double stamina = 9;
+  bool is_repeatable = 10;
+  bool available = 11;
+  string unavailable_reason = 12;
+}
+
+message S2C_ActionList {
+  repeated ActionDefinition actions = 1;
+}
+
+message S2C_ActionStateChanged {
+  string action_id = 1;
+  string phase = 2;
+  string cursor = 3;
+}
+
 message S2C_Sound {
   string sound_key = 1;
   double x = 2;
@@ -849,6 +884,8 @@ message ServerMessage {
     S2C_LiftCarryState lift_carry_state = 38;
     S2C_DeathDialog death_dialog = 39;
     S2C_CharacterVisual character_visual = 40;
+    S2C_ActionList action_list = 46;
+    S2C_ActionStateChanged action_state_changed = 47;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

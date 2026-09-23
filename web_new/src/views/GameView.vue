@@ -20,20 +20,23 @@ import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import MovementModePanel from '@/components/ui/MovementModePanel.vue'
 import ActionsRail from '@/components/ui/ActionsRail.vue'
+import ActionsMenu from '@/components/ui/ActionsMenu.vue'
 import HotbarPlaceholder from '@/components/ui/HotbarPlaceholder.vue'
 import PortraitWarningBanner from '@/components/ui/PortraitWarningBanner.vue'
 import SettingsWindow from '@/components/ui/SettingsWindow.vue'
-import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack, sendLiftPutDown } from '@/network'
+import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack, sendActivateAction, sendCancelAction } from '@/network'
 import { useInventoryOps } from '@/composables/useInventoryOps'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useHotbarAssignments } from '@/composables/useHotbarAssignments'
+import { useActionsPanel } from '@/composables/useActionsPanel'
 import { useActorRenderSettings, type ActorRenderMode } from '@/composables/useActorRenderSettings'
 import { useRenderDebugSettings } from '@/composables/useRenderDebugSettings'
 import { config as appConfig } from '@/config'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
 import { useAuthStore } from '@/stores/authStore'
-import { getActionLabel, type ActionId } from '@/game/hud/actionCatalog'
+import { getActionLabel, type ActionId, type HotbarActionId } from '@/game/hud/actionCatalog'
+import { cancelActiveActionOnEscape } from '@/game/hud/actionState'
 
 const router = useRouter()
 const gameStore = useGameStore()
@@ -44,9 +47,9 @@ const gameCanvas = ref<HTMLCanvasElement | null>(null)
 const chatContainerRef = ref<InstanceType<typeof ChatContainer>>()
 const canvasInitialized = ref(false)
 const rendererInitializing = ref(true)
-let gameFacade: any = null
-let connectToGame: any = null
-let disconnectFromGame: any = null
+let gameFacade: typeof import('@/game').gameFacade
+let connectToGame: typeof import('@/network').connectToGame
+let disconnectFromGame: typeof import('@/network').disconnectFromGame
 let canvasInitPromise: Promise<boolean> | null = null
 let viewUnmounted = false
 const navigatingAway = ref(false)
@@ -106,7 +109,7 @@ const liftCarriedResourcePath = computed(() => {
   if (!entityId) return ''
   return gameStore.entities.get(entityId)?.resourcePath || ''
 })
-const liftPutDownModeActive = ref(false)
+const { isOpen: actionsMenuOpen, toggle: toggleActionsMenu, close: closeActionsMenu, closeOnOutsidePointer } = useActionsPanel()
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -114,8 +117,8 @@ const showEquipment = computed(() => {
   return visible && hasEquipment
 })
 const deathDialog = computed(() => gameStore.deathDialog)
-const draggingActionId = ref<ActionId | null>(null)
-const touchDraggingActionId = ref<ActionId | null>(null)
+const draggingActionId = ref<HotbarActionId | null>(null)
+const touchDraggingActionId = ref<HotbarActionId | null>(null)
 const touchDragX = ref(0)
 const touchDragY = ref(0)
 const touchHoverSlot = ref<number | null>(null)
@@ -155,7 +158,12 @@ const { assignments: hotbarAssignments, assign: assignHotbarSlot, clear: clearHo
   useHotbarAssignments(accountId, computed(() => gameStore.characterId))
 
 const showPortraitWarning = computed(() => isMobileDevice.value && isPortrait.value && !portraitWarningDismissed.value)
-const touchDragLabel = computed(() => (touchDraggingActionId.value ? getActionLabel(touchDraggingActionId.value) : ''))
+const touchDragLabel = computed(() => {
+  const id = touchDraggingActionId.value
+  if (!id) return ''
+  if (id.startsWith('game:')) return gameStore.gameActions.find(action => action.id === id.slice(5))?.label || ''
+  return getActionLabel(id as ActionId)
+})
 
 function findBuildRecipeByKey(buildKey: string): proto.IBuildRecipeEntry | null {
   const normalized = buildKey.trim()
@@ -193,7 +201,7 @@ function syncLiftGhostFromStore(): void {
     return
   }
 
-  if (!liftPutDownModeActive.value || !gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
+  if (gameStore.gameActionState.actionId !== 'lift_down' || gameStore.gameActionState.phase !== 'selecting' || !gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
     gameFacade.cancelLiftGhost?.()
     return
   }
@@ -202,21 +210,6 @@ function syncLiftGhostFromStore(): void {
     entityId: gameStore.liftCarriedEntityId,
     resourcePath: gameStore.entities.get(gameStore.liftCarriedEntityId)?.resourcePath || '',
   })
-}
-
-function cancelLiftPutDownMode(): void {
-  if (!liftPutDownModeActive.value) return
-  liftPutDownModeActive.value = false
-  gameFacade?.cancelLiftGhost?.()
-}
-
-function toggleLiftPutDownMode(): void {
-  if (!gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
-    cancelLiftPutDownMode()
-    return
-  }
-  liftPutDownModeActive.value = !liftPutDownModeActive.value
-  syncLiftGhostFromStore()
 }
 
 async function initCanvas(): Promise<boolean> {
@@ -231,6 +224,7 @@ async function initCanvas(): Promise<boolean> {
   try {
     await gameFacade.init(gameCanvas.value)
     canvasInitialized.value = true
+    gameFacade.setActionCursor(gameStore.gameActionState.cursor || '')
 
     gameFacade.onPlayerClick(({ screenX, screenY, worldX, worldY, button }: { screenX: number; screenY: number; worldX: number; worldY: number; button: number }) => {
       console.debug('[GameView] Click:', screenX, screenY, 'button=', button)
@@ -239,19 +233,12 @@ async function initCanvas(): Promise<boolean> {
         return false
       }
 
+      if (gameStore.gameActionState.phase === 'selecting') {
+        return false
+      }
+
       const armedBuildKey = (gameStore.armedBuildKey || '').trim()
       if (!armedBuildKey) {
-        const carriedEntityId = gameStore.liftCarriedEntityId
-        if (liftPutDownModeActive.value && gameStore.liftCarryActive && carriedEntityId) {
-          const ghostPos = gameFacade?.getLiftGhostWorldPosition?.()
-          const targetPos = ghostPos || { x: worldX, y: worldY }
-          sendLiftPutDown(carriedEntityId, {
-            x: targetPos.x,
-            y: targetPos.y,
-          })
-          cancelLiftPutDownMode()
-          return true
-        }
         return false
       }
 
@@ -305,14 +292,26 @@ watch(() => gameStore.buildRecipes, () => {
 })
 
 watch(
-  [liftCarryActive, liftCarriedEntityId, liftCarriedResourcePath, liftPutDownModeActive, () => gameStore.entities.size],
+  [liftCarryActive, liftCarriedEntityId, liftCarriedResourcePath, () => gameStore.gameActionState.actionId, () => gameStore.gameActionState.phase, () => gameStore.entities.size],
   () => {
-    if (!gameStore.liftCarryActive) {
-      liftPutDownModeActive.value = false
-    }
     syncLiftGhostFromStore()
   }
 )
+
+watch(() => gameStore.gameActionState.cursor, (cursor) => {
+  gameFacade?.setActionCursor(cursor || '')
+})
+
+watch(() => gameStore.gameActionState.phase, (phase) => {
+  if (phase && phase !== 'idle' && gameStore.armedBuildKey) {
+    gameStore.clearBuildPlacement()
+    gameFacade?.cancelBuildGhost?.()
+  }
+})
+
+function onDocumentPointerDown(event: PointerEvent): void {
+  closeOnOutsidePointer(event.target)
+}
 
 watch([isConnected, worldBootstrapState], ([connected, bootstrap]) => {
   if (!connected) {
@@ -378,6 +377,7 @@ function onMouseMove(e: MouseEvent) {
 }
 
 onMounted(async () => {
+  document.addEventListener('pointerdown', onDocumentPointerDown)
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('resize', onOrientationChange)
   window.matchMedia('(orientation: portrait)').addEventListener('change', onOrientationChange)
@@ -412,6 +412,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
   viewUnmounted = true
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('resize', onOrientationChange)
@@ -546,7 +547,19 @@ function toggleCraftWindow() {
   openCraftWindow()
 }
 
-function executeAction(actionId: ActionId): void {
+function activateGameAction(actionId: string): boolean {
+  if (!gameStore.gameActionListLoaded) return false
+  const action = gameStore.gameActions.find(entry => entry.id === actionId)
+  if (!action?.available) return false
+  sendActivateAction(actionId)
+  return true
+}
+
+function executeAction(actionId: HotbarActionId): void {
+  if (actionId.startsWith('game:')) {
+    activateGameAction(actionId.slice(5))
+    return
+  }
   switch (actionId) {
     case 'craft':
       toggleCraftWindow()
@@ -567,7 +580,7 @@ function executeAction(actionId: ActionId): void {
       showSettingsWindow.value = !showSettingsWindow.value
       return
     case 'actions':
-      console.log('[HUD] Actions action selected (not implemented yet)')
+      toggleActionsMenu()
       return
   }
 }
@@ -576,7 +589,11 @@ function onActionsRailActivate(actionId: ActionId): void {
   executeAction(actionId)
 }
 
-function onActionDragStart(actionId: ActionId): void {
+function onGameActionActivate(actionId: string): void {
+  if (activateGameAction(actionId)) closeActionsMenu()
+}
+
+function onActionDragStart(actionId: HotbarActionId): void {
   draggingActionId.value = actionId
 }
 
@@ -584,7 +601,7 @@ function onActionDragEnd(): void {
   draggingActionId.value = null
 }
 
-function onHotbarDrop(slotIndex: number, actionId: ActionId): void {
+function onHotbarDrop(slotIndex: number, actionId: HotbarActionId): void {
   assignHotbarSlot(slotIndex, actionId)
   draggingActionId.value = null
   touchDraggingActionId.value = null
@@ -623,7 +640,7 @@ function updateTouchHoverSlot(clientX: number, clientY: number): void {
   touchHoverSlot.value = index
 }
 
-function onTouchDragStart(payload: { actionId: ActionId; pointerId: number; clientX: number; clientY: number }): void {
+function onTouchDragStart(payload: { actionId: HotbarActionId; pointerId: number; clientX: number; clientY: number }): void {
   void payload.pointerId
   touchDraggingActionId.value = payload.actionId
   draggingActionId.value = payload.actionId
@@ -703,6 +720,9 @@ const hotkeys: HotkeyConfig[] = [...DEFAULT_HOTKEYS, ...hotbarNumberHotkeys].map
         chatContainerRef.value?.focusChat()
         break
       case 'Escape':
+        if (cancelActiveActionOnEscape(gameStore.gameActionState.phase, sendCancelAction)) {
+          break
+        }
         if (showSettingsWindow.value) {
           showSettingsWindow.value = false
           break
@@ -712,8 +732,8 @@ const hotkeys: HotkeyConfig[] = [...DEFAULT_HOTKEYS, ...hotbarNumberHotkeys].map
           gameFacade?.cancelBuildGhost?.()
           break
         }
-        if (liftPutDownModeActive.value) {
-          cancelLiftPutDownMode()
+        if (actionsMenuOpen.value) {
+          closeActionsMenu()
           break
         }
         chatContainerRef.value?.unfocusChat()
@@ -816,6 +836,8 @@ useHotkeys(hotkeys)
         <div class="hud-top-hotbar">
           <HotbarPlaceholder
             :assignments="hotbarAssignments"
+            :server-actions="gameStore.gameActions"
+            :action-list-loaded="gameStore.gameActionListLoaded"
             :dragging-action-id="draggingActionId"
             :touch-hover-slot="touchHoverSlot"
             @drop="onHotbarDrop"
@@ -832,16 +854,22 @@ useHotkeys(hotkeys)
             @touch-drag-start="onTouchDragStart"
             @touch-drag-move="onTouchDragMove"
             @touch-drag-end="onTouchDragEnd"
-          />
-          <AppButton
-            v-if="liftCarryActive"
-            variant="secondary"
-            size="sm"
-            class="hud-left-rail__lift-button"
-            @click="toggleLiftPutDownMode"
           >
-            {{ liftPutDownModeActive ? 'Cancel' : 'Lift down' }}
-          </AppButton>
+            <template #actions-menu>
+              <ActionsMenu
+                v-if="actionsMenuOpen"
+                :actions="gameStore.gameActions"
+                :active-action-id="gameStore.gameActionState.actionId || ''"
+                :active-phase="gameStore.gameActionState.phase || 'idle'"
+                @activate="onGameActionActivate"
+                @drag-start="onActionDragStart"
+                @drag-end="onActionDragEnd"
+                @touch-drag-start="onTouchDragStart"
+                @touch-drag-move="onTouchDragMove"
+                @touch-drag-end="onTouchDragEnd"
+              />
+            </template>
+          </ActionsRail>
           <AppButton variant="secondary" size="sm" class="hud-left-rail__exit-button" @click="handleBack">Exit</AppButton>
         </div>
 
@@ -1070,7 +1098,6 @@ useHotkeys(hotkeys)
   pointer-events: auto;
 }
 
-.hud-left-rail__lift-button,
 .hud-left-rail__exit-button {
   width: 64px;
 }
@@ -1275,7 +1302,6 @@ useHotkeys(hotkeys)
     gap: 8px;
   }
 
-  .hud-left-rail__lift-button,
   .hud-left-rail__exit-button {
     width: 56px;
     min-height: 34px;
@@ -1298,7 +1324,6 @@ useHotkeys(hotkeys)
     gap: 4px;
   }
 
-  .hud-left-rail__lift-button,
   .hud-left-rail__exit-button {
     width: 46px;
     min-height: 26px;

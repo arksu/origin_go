@@ -226,8 +226,10 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 		g.handleBuildProgress(c, msg.Sequence, payload.BuildProgress)
 	case *netproto.ClientMessage_BuildTakeBack:
 		g.handleBuildTakeBack(c, msg.Sequence, payload.BuildTakeBack)
-	case *netproto.ClientMessage_LiftPutDown:
-		g.handleLiftPutDown(c, msg.Sequence, payload.LiftPutDown)
+	case *netproto.ClientMessage_ActivateAction:
+		g.handleActivateAction(c, msg.Sequence, payload.ActivateAction)
+	case *netproto.ClientMessage_CancelAction:
+		g.handleCancelAction(c, msg.Sequence, payload.CancelAction)
 	case *netproto.ClientMessage_OpenWindow:
 		g.handleOpenWindow(c, msg.Sequence, payload.OpenWindow)
 	case *netproto.ClientMessage_CloseWindow:
@@ -702,13 +704,13 @@ func (g *Game) handleBuildTakeBack(c *network.Client, sequence uint32, msg *netp
 	})
 }
 
-func (g *Game) handleLiftPutDown(c *network.Client, sequence uint32, msg *netproto.C2S_LiftPutDown) {
+func (g *Game) handleActivateAction(c *network.Client, sequence uint32, msg *netproto.C2S_ActivateAction) {
 	if c.CharacterID == 0 {
 		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
 		return
 	}
-	if msg == nil || msg.EntityId == 0 || msg.Pos == nil {
-		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid lift put-down request")
+	if msg == nil || strings.TrimSpace(msg.ActionId) == "" {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Action ID is required")
 		return
 	}
 	shard := g.shardManager.GetShard(c.Layer)
@@ -717,13 +719,28 @@ func (g *Game) handleLiftPutDown(c *network.Client, sequence uint32, msg *netpro
 		return
 	}
 	_ = shard.PlayerInbox().Enqueue(&network.PlayerCommand{
-		ClientID:    c.ID,
-		CharacterID: c.CharacterID,
-		CommandID:   uint64(sequence),
-		CommandType: network.CmdLiftPutDown,
-		Payload:     msg,
-		ReceivedAt:  time.Now(),
-		Layer:       c.Layer,
+		ClientID: c.ID, CharacterID: c.CharacterID, CommandID: uint64(sequence),
+		CommandType: network.CmdActivateAction, Payload: msg, ReceivedAt: time.Now(), Layer: c.Layer,
+	})
+}
+
+func (g *Game) handleCancelAction(c *network.Client, sequence uint32, msg *netproto.C2S_CancelAction) {
+	if c.CharacterID == 0 {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
+		return
+	}
+	if msg == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Invalid cancel request")
+		return
+	}
+	shard := g.shardManager.GetShard(c.Layer)
+	if shard == nil {
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Invalid shard")
+		return
+	}
+	_ = shard.PlayerInbox().Enqueue(&network.PlayerCommand{
+		ClientID: c.ID, CharacterID: c.CharacterID, CommandID: uint64(sequence),
+		CommandType: network.CmdCancelAction, Payload: msg, ReceivedAt: time.Now(), Layer: c.Layer,
 	})
 }
 
@@ -843,6 +860,10 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 				shard.mu.Lock()
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
+				if shard.actionService != nil {
+					shard.actionService.Cancel(shard.world, playerEntityID, playerHandle)
+					shard.actionService.ForgetPlayer(playerEntityID)
+				}
 				ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(playerEntityID)
 				ecs.ClearPendingAdminClicks(shard.world, playerEntityID)
 				if playerHandle != types.InvalidHandle && shard.liftService != nil {

@@ -169,21 +169,12 @@ type GiveItemFn func(
 	quality uint32,
 ) GiveItemOutcome
 
-type LiftObjectFn func(
-	w *ecs.World,
-	playerID types.EntityID,
-	playerHandle types.Handle,
-	targetID types.EntityID,
-	targetHandle types.Handle,
-) BehaviorResult
-
 // ExecutionDeps contains shared dependencies for actions and scheduled behaviors.
 type ExecutionDeps struct {
 	ExhaustBurner    func(w *ecs.World, handle types.Handle) bool
 	InventoryUpdate  func(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 	OpenContainer    OpenContainerFn
 	GiveItem         GiveItemFn
-	LiftObject       LiftObjectFn
 	EventBus         *eventbus.EventBus
 	Chunks           TreeChunkProvider
 	IDAllocator      EntityIDAllocator

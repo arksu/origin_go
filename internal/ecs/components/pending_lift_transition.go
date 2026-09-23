@@ -27,7 +27,8 @@ type PendingLiftTransition struct {
 	PhantomHalfW       float64
 	PhantomHalfH       float64
 
-	ExpireAtUnixMs int64
+	ExpireAtUnixMs   int64
+	ActionGeneration uint64
 }
 
 const PendingLiftTransitionComponentID ecs.ComponentID = 32
@@ -35,4 +36,3 @@ const PendingLiftTransitionComponentID ecs.ComponentID = 32
 func init() {
 	ecs.RegisterComponent[PendingLiftTransition](PendingLiftTransitionComponentID)
 }
-

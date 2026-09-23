@@ -199,3 +199,100 @@ func TestMapClickCoordinateCommandsUseClickNotObjectPosition(t *testing.T) {
 		})
 	}
 }
+
+type testActionClickRouter struct {
+	consume       bool
+	calls         int
+	targetID      types.EntityID
+	x, y          float64
+	lists, states int
+}
+
+func (*testActionClickRouter) Activate(*ecs.World, types.EntityID, types.Handle, string) {}
+func (*testActionClickRouter) Cancel(*ecs.World, types.EntityID, types.Handle)           {}
+func (router *testActionClickRouter) SendList(*ecs.World, types.EntityID, types.Handle) {
+	router.lists++
+}
+func (router *testActionClickRouter) SendState(*ecs.World, types.EntityID, types.Handle) {
+	router.states++
+}
+func (router *testActionClickRouter) HandleArmedClick(_ *ecs.World, _ types.EntityID, _ types.Handle, targetID types.EntityID, _ types.Handle, x, y float64) bool {
+	router.calls++
+	router.targetID, router.x, router.y = targetID, x, y
+	return router.consume
+}
+
+func TestMapClickActionRoutingPrecedesPickupAndMovement(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	player := w.Spawn(1, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{})
+		ecs.AddComponent(w, h, components.Movement{})
+	})
+	w.Spawn(2, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 100, Y: 100})
+		ecs.AddComponent(w, h, components.DroppedItem{})
+	})
+	router := &testActionClickRouter{consume: true}
+	s := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	s.SetActionService(router)
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 42, Y: 99, TargetEntityId: 2}})
+	if router.calls != 1 || router.targetID != 2 || router.x != 42 || router.y != 99 {
+		t.Fatalf("action did not receive map click: %#v", router)
+	}
+	if _, pickup := ecs.GetComponent[components.PendingInteraction](w, player); pickup {
+		t.Fatal("consumed action click also picked up item")
+	}
+	movement, _ := ecs.GetComponent[components.Movement](w, player)
+	if movement.TargetX != 0 || movement.TargetY != 0 {
+		t.Fatal("consumed action click also moved")
+	}
+
+	router.consume = false
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 50, Y: 60, TargetEntityId: 999}})
+	movement, _ = ecs.GetComponent[components.Movement](w, player)
+	if movement.TargetX != 50 || movement.TargetY != 60 {
+		t.Fatal("unconsumed stale click did not move")
+	}
+}
+
+func TestMapClickAdminPrecedesArmedAction(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	player := w.Spawn(1, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.Movement{}) })
+	w.Spawn(2, nil)
+	router := &testActionClickRouter{consume: true}
+	admin := &testAdminObjectInfoHandler{}
+	s := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	s.SetActionService(router)
+	s.SetAdminHandler(admin)
+	ecs.GetResource[ecs.PendingAdminDestroy](w).Set(1)
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 42, Y: 99, TargetEntityId: 2}})
+	if admin.destroyCalls != 1 || router.calls != 0 {
+		t.Fatal("armed action intercepted administrator click")
+	}
+}
+
+func TestInteractWithoutColliderCannotStartLift(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	player := w.Spawn(1, nil)
+	w.Spawn(2, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{Behaviors: []string{"lift"}})
+		ecs.AddComponent(w, h, components.Transform{X: 100, Y: 100})
+	})
+	s := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	s.handleInteract(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.Interact{EntityId: 2}})
+	if _, pending := ecs.GetComponent[components.PendingLiftTransition](w, player); pending {
+		t.Fatal("ordinary Interact started lift")
+	}
+}
+
+func TestActionSnapshotJobSendsListAndState(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	player := w.Spawn(1, nil)
+	router := &testActionClickRouter{}
+	s := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	s.SetActionService(router)
+	s.processServerJob(w, &network.ServerJob{JobType: network.JobSendActionSnapshot, TargetID: 1, Payload: &network.ActionSnapshotJobPayload{Handle: player}})
+	if router.lists != 1 || router.states != 1 {
+		t.Fatalf("snapshot did not send list and state: %#v", router)
+	}
+}

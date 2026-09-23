@@ -14,7 +14,7 @@ type CommandType uint16
 
 const (
 	CmdMapClick CommandType = iota + 1
-	_ // Retired entity-movement command; preserve other command IDs.
+	_                       // Retired entity-movement command; preserve other command IDs.
 	CmdSetMovementMode
 	CmdInteract
 	CmdSelectContextAction
@@ -27,9 +27,11 @@ const (
 	CmdStartBuild
 	CmdBuildProgress
 	CmdBuildTakeBack
-	CmdLiftPutDown
+	_ // Retired lift_put_down command ID.
 	CmdOpenWindow
 	CmdCloseWindow
+	CmdActivateAction
+	CmdCancelAction
 )
 
 // PlayerCommand represents an intent from a client to be processed by ECS
@@ -57,6 +59,7 @@ const (
 	JobSendMovementModeSnapshot
 	JobSendCraftListSnapshot
 	JobSendBuildListSnapshot
+	JobSendActionSnapshot
 )
 
 // ServerJob represents an internal job to be processed by ECS
@@ -96,6 +99,10 @@ type CraftListSnapshotJobPayload struct {
 
 // BuildListSnapshotJobPayload is the payload for JobSendBuildListSnapshot.
 type BuildListSnapshotJobPayload struct {
+	Handle types.Handle
+}
+
+type ActionSnapshotJobPayload struct {
 	Handle types.Handle
 }
 

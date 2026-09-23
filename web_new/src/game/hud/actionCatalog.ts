@@ -1,6 +1,7 @@
 export type ActionId = 'settings' | 'actions' | 'craft' | 'build' | 'stats' | 'inventory' | 'equip'
+export type HotbarActionId = ActionId | `game:${string}`
 
-export type HotbarAssignment = ActionId | null
+export type HotbarAssignment = HotbarActionId | null
 export type HotbarState = [
   HotbarAssignment,
   HotbarAssignment,
@@ -35,6 +36,14 @@ const ACTION_IDS = new Set<ActionId>(ACTION_CATALOG.map((entry) => entry.id))
 
 export function isActionId(value: string): value is ActionId {
   return ACTION_IDS.has(value as ActionId)
+}
+
+export function isHotbarActionId(value: string): value is HotbarActionId {
+  return isActionId(value) || /^game:[a-z][a-z0-9_]*$/.test(value)
+}
+
+export function gameActionHotbarId(actionId: string): `game:${string}` {
+  return `game:${actionId}`
 }
 
 export function getActionLabel(actionId: ActionId): string {

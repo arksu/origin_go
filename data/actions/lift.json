@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "lift",
+      "presentation": {
+        "label": "Lift",
+        "menuIcon": "/assets/cursor/lift.png"
+      },
+      "target": {
+        "kind": "object",
+        "cursor": "lift"
+      },
+      "requirements": {},
+      "execution": {},
+      "isRepeatable": false
+    }
+  ]
+}
