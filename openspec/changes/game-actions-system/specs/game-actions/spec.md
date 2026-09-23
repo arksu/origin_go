@@ -8,16 +8,16 @@ Provide server-owned, data-defined gameplay actions accessible from an Actions m
 
 ### Requirement: Action definitions separate target, requirements, and execution
 
-The server SHALL load action definitions from data files at startup. Each definition SHALL have an ID, label, local menu icon asset path under /assets/, and separate target, requirements, and execution sections. Icon paths SHALL NOT reference external URLs or traverse outside /assets/. Target kind SHALL be none, object, or tile. An object/tile action MAY specify a cursor and MAY set isRepeatable (default false); a none action SHALL NOT repeat automatically or require a target cursor. Execution duration in ticks and stamina cost SHALL be independent optional non-negative values. Missing duration SHALL execute without a timed cycle; missing stamina cost SHALL charge none.
+The server SHALL load action definitions from data files at startup. Each definition SHALL have an ID, label, local menu icon asset path under /assets/, and separate target, requirements, and execution sections. Icon paths SHALL NOT reference external URLs or traverse outside /assets/. Target kind SHALL be none, object, or tile. An object/tile action MAY specify a cursor and MAY set isRepeatable (default false); a none action SHALL NOT declare a target cursor or isRepeatable and SHALL NOT repeat automatically. Execution duration in ticks and stamina cost SHALL be independent optional non-negative values. Missing duration SHALL execute without a timed cycle; missing stamina cost SHALL charge none.
 
-Requirements SHALL support a list of skill IDs, all of which must be present, and a list of equipped-item requirements. Each equipped-item requirement SHALL name exactly one item key or item tag and one or more equipment slots. Every requirement entry SHALL be satisfied; an item matching the key or tag in any listed slot satisfies that entry. The loader SHALL reject malformed or duplicate definitions with an error naming the file. Every loaded definition SHALL have a registered handler, and every registered handler SHALL have a definition. A new action using an existing target kind SHALL NOT require an action-specific map-click or protocol branch.
+Requirements SHALL support a list of skill IDs, all of which must be present, and a list of equipped-item requirements. Each equipped-item requirement SHALL name exactly one item key or item tag and one or more equipment slots. Every requirement entry SHALL be satisfied; an item matching the key or tag in any listed slot satisfies that entry. The loader SHALL reject malformed or duplicate definitions, including a cursor or isRepeatable on a none action, with an error naming the file. Every loaded definition SHALL have a registered handler, and every registered handler SHALL have a definition. A new action using an existing target kind SHALL NOT require an action-specific map-click or protocol branch.
 
 #### Scenario: Valid definitions load
 - **WHEN** the server starts with well-formed lift and lift_down definitions and matching handlers
 - **THEN** both SHALL be registered with their target, requirement, execution, cursor, and repeatability values
 
 #### Scenario: Invalid definition fails startup
-- **WHEN** a definition has a duplicate ID, unknown equipment slot, malformed equipment selector, invalid numeric cost, or no registered handler
+- **WHEN** a definition has a duplicate ID, unknown equipment slot, malformed equipment selector, invalid numeric cost, isRepeatable or a cursor on a none action, or no registered handler
 - **THEN** startup SHALL fail with an error that identifies the offending definition file
 
 #### Scenario: Multiple equipment entries
@@ -100,7 +100,7 @@ After a pending administrator click and before ordinary click behavior, the serv
 
 ### Requirement: Completion and repeatability follow the definition
 
-On success, a non-repeatable action SHALL end and reset its cursor. A repeatable object/tile action SHALL return to target selection for another click while its requirements still hold. A none action SHALL end after one execution regardless of repeatability. Both lift and lift_down SHALL be non-repeatable and SHALL have no action-specific tick duration or stamina cost.
+On success, a non-repeatable action SHALL end and reset its cursor. A repeatable object/tile action SHALL return to target selection for another click while its requirements still hold. A none action SHALL end after one execution. Both lift and lift_down SHALL be non-repeatable and SHALL have no action-specific tick duration or stamina cost.
 
 #### Scenario: Repeatable target action
 - **WHEN** a test tile action with isRepeatable true completes successfully

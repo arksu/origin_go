@@ -23,7 +23,7 @@ The new internal/actiondefs package loads data/actions/*.json using the establis
 - requirements.skills: skill IDs, all required;
 - requirements.equipment: entries with a non-empty list of known slot names and exactly one itemKey or itemTag. Every entry must match; within one entry, a matching item in any listed slot suffices;
 - execution.ticks and execution.stamina: independent optional non-negative values. Missing/zero ticks means no timed cycle; missing/zero stamina means no stamina charge;
-- isRepeatable: applicable only to object/tile, default false. A none action always executes once.
+- isRepeatable: may be set only on object/tile definitions, default false; the loader rejects it on a none action, which always executes once.
 
 The loader trims and validates identifiers, skill IDs, slots, item keys/tags, numeric values, and incompatible combinations. Menu icon paths must be local assets under /assets/ and cannot contain traversal segments or external URLs. Duplicate IDs or malformed definitions fail startup with the filename. Unknown item keys fail startup; tags are validated as non-empty strings. The startup registry check requires a handler for each definition and a definition for each handler. It does not require protocol or map-click-dispatch changes for a new action using an existing target kind. A new target kind or requirement type may need an explicit schema/protocol extension; the design does not promise otherwise.
 
@@ -41,7 +41,7 @@ Protocol messages:
 
 The server sends ActionList and the actual current ActionStateChanged in the enter-world snapshot. It resends ActionList when skills, equipment, carry state, or another supported requirement changes. Activation and execution always revalidate on the server; the menu status is informational. The cursor is non-empty only when the definition supplies one; an unknown ID renders CSS help on the client.
 
-C2S_LiftPutDown and its ClientMessage field are retired and reserved. Server and client protocol bindings are regenerated and shipped together.
+C2S_LiftPutDown and its ClientMessage field are retired and reserved only after the lift migration removes the message's last server reference; the protocol task adds the new messages without touching it. Server and client protocol bindings are regenerated and shipped together.
 
 ## D3: Selection, execution, and cancellation
 
@@ -63,7 +63,7 @@ NetworkCommandSystem handles MapClick in this order: pending administrator comma
 
 ## D5: Complete lift migration
 
-Collider lift uses a new action-owned pending target rather than PendingContextAction. ActionService starts the existing move-to-link behavior, then handles LinkCreated directly, revalidates the target, and calls LiftService.StartLift. It receives a completion/failure outcome and updates the action state. Removing liftBehavior.ProvideActions cannot silently break this route. A click on a non-liftable live object is rejected before movement.
+Collider lift uses a new action-owned pending target rather than PendingContextAction. ActionService starts the existing move-to-link behavior, then handles LinkCreated directly, revalidates the target, and calls a new LiftService.StartLift entry point; the context-coupled StartLiftFromContextAction is removed with the context path. It receives a completion/failure outcome and updates the action state. Removing liftBehavior.ProvideActions cannot silently break this route. A click on a non-liftable live object is rejected before movement.
 
 No-collider lift moves the existing phantom-collider and PendingLiftTransition path behind the armed lift handler. The generic Interact route no longer invokes TryStartNoColliderLiftInteract. LiftService reports final success/failure/timeout to ActionService, so the action resets only after success and remains selectable after a target-level failure.
 
