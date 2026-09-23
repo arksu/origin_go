@@ -147,6 +147,14 @@ export function registerMessageHandlers(): void {
     gameStore.setLiftCarryState(msg)
   })
 
+  messageDispatcher.on('actionList', (msg: proto.IS2C_ActionList) => {
+    gameStore.setGameActionList(msg.actions || [])
+  })
+
+  messageDispatcher.on('actionStateChanged', (msg: proto.IS2C_ActionStateChanged) => {
+    gameStore.setGameActionState(msg)
+  })
+
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
     console.log('[Handlers] S2C_ExpGained received:', {
       entityId: toNumber(msg.entityId || 0),

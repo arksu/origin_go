@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
+	"origin/internal/actiondefs"
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
@@ -60,6 +61,7 @@ type Shard struct {
 	craftingService *CraftingService
 	buildService    *BuildService
 	liftService     *LiftService
+	actionService   *ActionService
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -237,13 +239,29 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger,
 	)
 	s.liftService = liftService
-	contextActionService.SetLiftService(liftService)
+	definitions := actiondefs.Global()
+	if definitions == nil {
+		logger.Fatal("Action definitions were not loaded before shard startup")
+	}
+	actionService, actionErr := NewActionService(s.world, definitions, map[string]ActionHandler{
+		"lift":      &liftActionHandler{lift: liftService, commands: networkCmdSystem},
+		"lift_down": &liftDownActionHandler{lift: liftService},
+	}, s)
+	if actionErr != nil {
+		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
+	}
+	s.actionService = actionService
+	actionService.SetApproachTimeout(cfg.Game.InteractionPendingTimeout)
+	actionService.SubscribeEvents(s.eventBus)
+	liftService.SetActionCompletion(actionService.Complete)
+	liftService.SetActionCanCommit(actionService.CanCommit)
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 	networkCmdSystem.SetContextActionService(contextActionService)
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetCraftCommandService(craftingService)
 	networkCmdSystem.SetBuildCommandService(buildService)
 	networkCmdSystem.SetLiftCommandService(liftService)
+	networkCmdSystem.SetActionService(actionService)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
@@ -265,7 +283,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
-	s.world.AddSystem(NewCyclicActionSystem(contextActionService, s, logger))
+	s.world.AddSystem(NewActionValidationSystem(s.world, actionService))
+	cyclicActions := NewCyclicActionSystem(contextActionService, s, logger)
+	cyclicActions.SetActionService(actionService)
+	s.world.AddSystem(cyclicActions)
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))
 	s.world.AddSystem(systems.NewBehaviorTickSystem(logger, systems.BehaviorTickSystemConfig{
@@ -643,6 +664,10 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 }
 
 func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+	if s.actionService != nil {
+		s.actionService.Cancel(w, playerID, playerHandle)
+		s.actionService.ForgetPlayer(playerID)
+	}
 	linkState := ecs.GetResource[ecs.LinkState](w)
 	linkState.ClearIntent(playerID)
 	linkState.RemoveLink(playerID)
@@ -1281,6 +1306,35 @@ func (s *Shard) SendLiftCarryState(entityID types.EntityID, msg *netproto.S2C_Li
 		return
 	}
 	client.Send(data)
+}
+
+func (s *Shard) SendActionList(entityID types.EntityID, list *netproto.S2C_ActionList) {
+	if list == nil {
+		return
+	}
+	s.sendActionMessage(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_ActionList{ActionList: list}})
+}
+
+func (s *Shard) SendActionStateChanged(entityID types.EntityID, state *netproto.S2C_ActionStateChanged) {
+	if state == nil {
+		return
+	}
+	s.sendActionMessage(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_ActionStateChanged{ActionStateChanged: state}})
+}
+
+func (s *Shard) sendActionMessage(entityID types.EntityID, message *netproto.ServerMessage) {
+	s.ClientsMu.RLock()
+	client := s.Clients[entityID]
+	s.ClientsMu.RUnlock()
+	if client == nil {
+		return
+	}
+	encoded, err := proto.Marshal(message)
+	if err != nil {
+		s.logger.Error("Failed to marshal action message", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+		return
+	}
+	client.Send(encoded)
 }
 
 // SendFx sends a visual effect trigger to a client.

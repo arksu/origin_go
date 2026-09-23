@@ -173,7 +173,7 @@ export class Render {
         const hand = gameStore.handState
         const handInv = gameStore.handInventoryState
 
-        if (hand?.item && handInv?.ref && handInv.revision != null) {
+        if (hand?.item && handInv?.ref && handInv.revision != null && gameStore.gameActionState.phase !== 'selecting') {
           playerCommandController.sendDropToWorld(
             handInv.ref,
             Number(handInv.revision),

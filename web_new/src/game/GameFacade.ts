@@ -1,4 +1,5 @@
 import { Render } from './Render'
+import { CursorManager } from './CursorManager'
 import { playerCommandController } from './PlayerCommandController'
 import type { DebugInfo, ScreenPoint } from './types'
 import type { ArmBuildGhostOptions } from './BuildGhostController'
@@ -9,6 +10,7 @@ import { config } from '@/config'
 
 export class GameFacade {
   private render: Render | null = null
+  private cursorManager = new CursorManager()
   private initialized: boolean = false
   private actorRenderSettings: Readonly<ActorRenderSettings> = DEFAULT_ACTOR_RENDER_SETTINGS
   private renderDebugEnabled = config.DEBUG
@@ -21,10 +23,12 @@ export class GameFacade {
     this.render = new Render(this.actorRenderSettings)
     this.render.setDebugOverlayVisible(this.renderDebugEnabled)
     await this.render.init(canvas)
+    this.cursorManager.attach(canvas, this.render.getApp().renderer.events)
     this.initialized = true
   }
 
   destroy(): void {
+    this.cursorManager.detach()
     if (this.render) {
       this.render.destroy()
       this.render = null
@@ -34,6 +38,10 @@ export class GameFacade {
 
   isInitialized(): boolean {
     return this.initialized
+  }
+
+  setActionCursor(cursorId: string): void {
+    this.cursorManager.set(cursorId)
   }
 
   /** Can be set before init; the future Settings UI will call this method. */

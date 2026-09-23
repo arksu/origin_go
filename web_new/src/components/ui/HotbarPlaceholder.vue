@@ -4,22 +4,27 @@ import {
   getActionIconPath,
   getActionLabel,
   getActionShortLabel,
-  isActionId,
-  type ActionId,
+  isHotbarActionId,
+  type HotbarActionId,
   type HotbarState,
 } from '@/game/hud/actionCatalog'
+import type { proto } from '@/network/proto/packets.js'
 
 const props = withDefaults(defineProps<{
   assignments: HotbarState
-  draggingActionId?: ActionId | null
+  draggingActionId?: HotbarActionId | null
   touchHoverSlot?: number | null
+  serverActions?: proto.IActionDefinition[]
+  actionListLoaded?: boolean
 }>(), {
   draggingActionId: null,
   touchHoverSlot: null,
+  serverActions: () => [],
+  actionListLoaded: false,
 })
 
 const emit = defineEmits<{
-  drop: [slotIndex: number, actionId: ActionId]
+  drop: [slotIndex: number, actionId: HotbarActionId]
   clear: [slotIndex: number]
   activate: [slotIndex: number]
 }>()
@@ -34,11 +39,33 @@ const tooltipVisible = ref(false)
 const leftGroupSlots = computed(() => [0, 1, 2, 3, 4])
 const rightGroupSlots = computed(() => [5, 6, 7, 8, 9])
 
-function parseActionIdFromDataTransfer(event: DragEvent): ActionId | null {
+function parseActionIdFromDataTransfer(event: DragEvent): HotbarActionId | null {
   const actionRaw = event.dataTransfer?.getData('application/x-origin-action-id')
     || event.dataTransfer?.getData('text/plain')
     || ''
-  return isActionId(actionRaw) ? actionRaw : null
+  return isHotbarActionId(actionRaw) ? actionRaw : null
+}
+
+function serverAction(id: HotbarActionId): proto.IActionDefinition | undefined {
+  if (!id.startsWith('game:')) return undefined
+  return props.serverActions.find(action => action.id === id.slice(5))
+}
+
+function slotLabel(id: HotbarActionId): string {
+  if (!id.startsWith('game:')) return getActionLabel(id as Parameters<typeof getActionLabel>[0])
+  return serverAction(id)?.label || (props.actionListLoaded ? 'Unavailable action' : 'Loading action')
+}
+
+function slotIcon(id: HotbarActionId): string {
+  return id.startsWith('game:') ? (serverAction(id)?.menuIcon || '') : getActionIconPath(id as Parameters<typeof getActionIconPath>[0])
+}
+
+function slotShortLabel(id: HotbarActionId): string {
+  return id.startsWith('game:') ? (serverAction(id)?.label || '').slice(0, 3).toUpperCase() : getActionShortLabel(id as Parameters<typeof getActionShortLabel>[0])
+}
+
+function slotVisible(id: HotbarActionId | null | undefined): boolean {
+  return !!id && (!id.startsWith('game:') || !!serverAction(id))
 }
 
 function onDrop(event: DragEvent, slotIndex: number): void {
@@ -55,7 +82,7 @@ function onActivate(slotIndex: number): void {
     longPressTriggered.value = false
     return
   }
-  emit('activate', slotIndex)
+  if (slotVisible(props.assignments[slotIndex])) emit('activate', slotIndex)
 }
 
 function clearLongPressTimer(): void {
@@ -78,7 +105,7 @@ function hideTooltip(): void {
 
 function onSlotPointerDown(event: PointerEvent, slotIndex: number): void {
   const actionId = props.assignments[slotIndex]
-  if (!actionId) {
+  if (!slotVisible(actionId)) {
     hideTooltip()
     return
   }
@@ -109,11 +136,11 @@ function slotTooltip(slotIndex: number): string {
   if (!actionId) {
     return `Hotbar slot ${slotIndex + 1} (empty)`
   }
-  return `Hotbar slot ${slotIndex + 1}: ${getActionLabel(actionId)}`
+  return `Hotbar slot ${slotIndex + 1}: ${slotLabel(actionId)}`
 }
 
 function onSlotPointerEnter(event: PointerEvent, slotIndex: number): void {
-  if (!props.assignments[slotIndex]) {
+  if (!slotVisible(props.assignments[slotIndex])) {
     hideTooltip()
     return
   }
@@ -124,7 +151,7 @@ function onSlotPointerEnter(event: PointerEvent, slotIndex: number): void {
 }
 
 function onSlotPointerMove(event: PointerEvent, slotIndex: number): void {
-  if (!props.assignments[slotIndex]) {
+  if (!slotVisible(props.assignments[slotIndex])) {
     hideTooltip()
     return
   }
@@ -165,14 +192,14 @@ function onSlotPointerLeave(): void {
         @pointercancel="onSlotPointerUp"
       >
         <span class="hotbar__slot-index">{{ slotIndex + 1 }}</span>
-        <template v-if="assignments[slotIndex]">
+        <template v-if="slotVisible(assignments[slotIndex])">
           <img
             class="hotbar__slot-icon"
-            :src="getActionIconPath(assignments[slotIndex]!)"
-            :alt="getActionShortLabel(assignments[slotIndex]!)"
+            :src="slotIcon(assignments[slotIndex]!)"
+            :alt="slotShortLabel(assignments[slotIndex]!)"
             draggable="false"
           >
-          <span class="hotbar__slot-label">{{ getActionShortLabel(assignments[slotIndex]!) }}</span>
+          <span class="hotbar__slot-label">{{ slotShortLabel(assignments[slotIndex]!) }}</span>
         </template>
       </button>
     </div>
@@ -200,14 +227,14 @@ function onSlotPointerLeave(): void {
         @pointercancel="onSlotPointerUp"
       >
         <span class="hotbar__slot-index">{{ slotIndex === 9 ? '0' : slotIndex + 1 }}</span>
-        <template v-if="assignments[slotIndex]">
+        <template v-if="slotVisible(assignments[slotIndex])">
           <img
             class="hotbar__slot-icon"
-            :src="getActionIconPath(assignments[slotIndex]!)"
-            :alt="getActionShortLabel(assignments[slotIndex]!)"
+            :src="slotIcon(assignments[slotIndex]!)"
+            :alt="slotShortLabel(assignments[slotIndex]!)"
             draggable="false"
           >
-          <span class="hotbar__slot-label">{{ getActionShortLabel(assignments[slotIndex]!) }}</span>
+          <span class="hotbar__slot-label">{{ slotShortLabel(assignments[slotIndex]!) }}</span>
         </template>
       </button>
     </div>

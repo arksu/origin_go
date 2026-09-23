@@ -156,26 +156,28 @@ function onPointerLeave(): void {
 
 <template>
   <nav class="actions-rail" aria-label="Actions rail">
-    <button
-      v-for="entry in ACTION_CATALOG"
-      :key="entry.id"
-      class="actions-rail__button"
-      type="button"
-      draggable="true"
-      :aria-label="entry.label"
-      @click="onButtonClick(entry.id)"
-      @dragstart="onDragStart($event, entry.id)"
-      @dragend="onDragEnd"
-      @pointerenter="onPointerEnter($event, entry.label)"
-      @pointerleave="onPointerLeave"
-      @pointerdown="onPointerDown($event, entry.id)"
-      @pointermove="onPointerMove($event, entry.label)"
-      @pointerup="onPointerUp($event, entry.id)"
-      @pointercancel="onPointerUp($event, entry.id)"
-    >
-      <img class="actions-rail__icon" :src="entry.iconPath" :alt="entry.label" draggable="false">
-      <span class="actions-rail__fallback">{{ entry.shortLabel }}</span>
-    </button>
+    <div v-for="entry in ACTION_CATALOG" :key="entry.id" class="actions-rail__item">
+      <button
+        class="actions-rail__button"
+        type="button"
+        draggable="true"
+        :aria-label="entry.label"
+        :data-actions-toggle="entry.id === 'actions' ? '' : undefined"
+        @click="onButtonClick(entry.id)"
+        @dragstart="onDragStart($event, entry.id)"
+        @dragend="onDragEnd"
+        @pointerenter="onPointerEnter($event, entry.label)"
+        @pointerleave="onPointerLeave"
+        @pointerdown="onPointerDown($event, entry.id)"
+        @pointermove="onPointerMove($event, entry.label)"
+        @pointerup="onPointerUp($event, entry.id)"
+        @pointercancel="onPointerUp($event, entry.id)"
+      >
+        <img class="actions-rail__icon" :src="entry.iconPath" :alt="entry.label" draggable="false">
+        <span class="actions-rail__fallback">{{ entry.shortLabel }}</span>
+      </button>
+      <slot v-if="entry.id === 'actions'" name="actions-menu" />
+    </div>
     <div
       v-if="tooltipVisible"
       class="actions-rail__tooltip"
@@ -208,6 +210,10 @@ function onPointerLeave(): void {
   letter-spacing: 0.04em;
   cursor: pointer;
   user-select: none;
+}
+
+.actions-rail__item {
+  position: relative;
 }
 
 .actions-rail__icon {

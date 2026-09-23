@@ -1,8 +1,8 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import {
   emptyHotbarState,
-  isActionId,
-  type ActionId,
+  isHotbarActionId,
+  type HotbarActionId,
   type HotbarAssignment,
   type HotbarState,
 } from '@/game/hud/actionCatalog'
@@ -31,7 +31,7 @@ function parseHotbarState(raw: string | null): HotbarState {
       if (typeof item !== 'string') {
         return null
       }
-      return isActionId(item) ? item : null
+      return isHotbarActionId(item) ? item : null
     })
 
     return [
@@ -70,7 +70,7 @@ export function useHotbarAssignments(accountId: Ref<string>, characterId: Ref<nu
     localStorage.setItem(storageKey.value, serializeHotbarState(assignments.value))
   }
 
-  function assign(slotIndex: number, actionId: ActionId): void {
+  function assign(slotIndex: number, actionId: HotbarActionId): void {
     if (slotIndex < 0 || slotIndex >= 10) {
       return
     }

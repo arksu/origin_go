@@ -1,0 +1,187 @@
+import assert from 'node:assert/strict'
+import { build } from 'esbuild'
+import { compileScript, parse } from '@vue/compiler-sfc'
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRenderer, h, nextTick, provide, ref, ssrContextKey } from 'vue'
+
+const rootDirectory = fileURLToPath(new URL('..', import.meta.url))
+const temporaryRoot = join(rootDirectory, 'node_modules', '.tmp')
+await mkdir(temporaryRoot, { recursive: true })
+const directory = await mkdtemp(join(temporaryRoot, 'actions-'))
+const outfile = join(directory, 'components.mjs')
+await build({
+  stdin: {
+    contents: `export { default as ActionsMenu } from './src/components/ui/ActionsMenu.vue';
+export { default as Hotbar } from './src/components/ui/HotbarPlaceholder.vue';
+export { useHotbarAssignments } from './src/composables/useHotbarAssignments.ts';
+export { useActionsPanel } from './src/composables/useActionsPanel.ts';
+export { actionCursorCss } from './src/game/cursorCatalog.ts';
+export { cancelActiveActionOnEscape } from './src/game/hud/actionState.ts';
+export { CursorManager } from './src/game/CursorManager.ts';`,
+    resolveDir: rootDirectory,
+    sourcefile: 'actions-test.ts',
+    loader: 'ts',
+  },
+  outfile,
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  packages: 'external',
+  alias: { '@': join(rootDirectory, 'src') },
+  plugins: [{
+    name: 'vue-inline-template',
+    setup(pluginBuild) {
+      pluginBuild.onLoad({ filter: /\.vue$/ }, async args => {
+        const source = await readFile(args.path, 'utf8')
+        const { descriptor } = parse(source, { filename: args.path })
+        const script = compileScript(descriptor, { id: 'actions-test', inlineTemplate: true })
+        return { contents: script.content, loader: 'ts', resolveDir: dirname(args.path) }
+      })
+    },
+  }],
+})
+
+function withSsrContext(render) {
+  return { setup() { provide(ssrContextKey, { modules: new Set() }); return render } }
+}
+
+function hostNode(type, text = '') {
+  return { type, text, props: {}, children: [], parent: null }
+}
+
+const teleportTarget = hostNode('body')
+
+const renderer = createRenderer({
+  createElement: type => hostNode(type),
+  createText: text => hostNode('#text', text),
+  createComment: text => hostNode('#comment', text),
+  setText: (node, text) => { node.text = text },
+  setElementText: (node, text) => { node.children = [hostNode('#text', text)] },
+  patchProp: (node, key, _oldValue, value) => { node.props[key] = value },
+  insert: (node, parent, anchor = null) => {
+    if (node.parent) node.parent.children.splice(node.parent.children.indexOf(node), 1)
+    node.parent = parent
+    const index = anchor ? parent.children.indexOf(anchor) : -1
+    if (index < 0) parent.children.push(node)
+    else parent.children.splice(index, 0, node)
+  },
+  remove: node => {
+    if (node.parent) node.parent.children.splice(node.parent.children.indexOf(node), 1)
+    node.parent = null
+  },
+  parentNode: node => node.parent,
+  nextSibling: node => {
+    if (!node.parent) return null
+    return node.parent.children[node.parent.children.indexOf(node) + 1] || null
+  },
+  querySelector: selector => selector === 'body' ? teleportTarget : null,
+})
+
+function descendants(node, type) {
+  return [node, ...node.children.flatMap(child => descendants(child, type))].filter(child => child.type === type)
+}
+
+try {
+  const { ActionsMenu, Hotbar, useHotbarAssignments, useActionsPanel, actionCursorCss, cancelActiveActionOnEscape, CursorManager } = await import(pathToFileURL(outfile).href)
+
+  let cancels = 0
+  let windowCloses = 0
+  if (!cancelActiveActionOnEscape('approaching', () => { cancels++ })) windowCloses++
+  assert.equal(cancels, 1)
+  assert.equal(windowCloses, 0)
+  if (!cancelActiveActionOnEscape('idle', () => { cancels++ })) windowCloses++
+  assert.equal(cancels, 1)
+  assert.equal(windowCloses, 1)
+
+  const panel = useActionsPanel()
+  panel.toggle()
+  assert.equal(panel.isOpen.value, true)
+  panel.closeOnOutsidePointer({ closest: () => ({}) })
+  assert.equal(panel.isOpen.value, true)
+  panel.closeOnOutsidePointer({ closest: () => null })
+  assert.equal(panel.isOpen.value, false)
+  panel.toggle()
+  panel.toggle()
+  assert.equal(panel.isOpen.value, false)
+
+  const events = []
+  const root = hostNode('root')
+  const actions = [
+    { id: 'lift', label: 'Lift', menuIcon: '/assets/cursor/lift.png', available: true },
+    { id: 'lift_down', label: 'Lift down', menuIcon: '/assets/cursor/lift_down.png', available: false, unavailableReason: 'LIFT_NOT_CARRYING' },
+  ]
+  renderer.createApp(withSsrContext(() => h(ActionsMenu, {
+    actions, activeActionId: 'lift', activePhase: 'selecting',
+    onActivate: id => events.push(['activate', id]),
+    onDragStart: id => events.push(['drag', id]),
+    onTouchDragStart: payload => events.push(['touch', payload.actionId]),
+    onTouchDragEnd: () => events.push(['touchEnd']),
+  }))).mount(root)
+  await nextTick()
+  const buttons = descendants(root, 'button')
+  assert.deepEqual(buttons.map(button => button.props['aria-label']), ['Lift', 'Lift down: Carry an object first'])
+  assert.equal(buttons[0].props['aria-pressed'], true)
+  assert.equal(buttons[1].props['aria-disabled'], true)
+  assert(descendants(buttons[1], '#text').some(node => node.text.includes('Carry an object first')))
+  buttons[1].props.onClick()
+  assert.equal(events.length, 0)
+  buttons[0].props.onClick()
+  assert.deepEqual(events.pop(), ['activate', 'lift'])
+  const transferred = new Map()
+  buttons[0].props.onDragstart({ dataTransfer: { setData: (type, value) => transferred.set(type, value) } })
+  assert.equal(transferred.get('application/x-origin-action-id'), 'game:lift')
+  assert.deepEqual(events.pop(), ['drag', 'game:lift'])
+  buttons[0].props.onPointerdown({ pointerType: 'touch', pointerId: 9, clientX: 0, clientY: 0, currentTarget: { setPointerCapture() {} } })
+  buttons[0].props.onPointermove({ pointerId: 9, clientX: 20, clientY: 0 })
+  buttons[0].props.onPointerup({ pointerId: 9, clientX: 20, clientY: 0 })
+  assert(events.some(event => event[0] === 'touch' && event[1] === 'game:lift'))
+  assert(events.some(event => event[0] === 'touchEnd'))
+
+  const storage = new Map([['hotbar_assignments_v1:account:7', JSON.stringify(['game:lift', 'game:retired', 'inventory', null, null, null, null, null, null, null])]])
+  globalThis.localStorage = {
+    getItem: key => storage.get(key) || null,
+    setItem: (key, value) => storage.set(key, value),
+  }
+  const assignments = useHotbarAssignments(ref('account'), ref(7))
+  assert.equal(assignments.get(0), 'game:lift')
+  assert.equal(assignments.get(1), 'game:retired')
+  assert.match(storage.get('hotbar_assignments_v1:account:7'), /game:retired/)
+
+  const hotbarRoot = hostNode('root')
+  const activated = []
+  const drops = []
+  renderer.createApp(withSsrContext(() => h(Hotbar, {
+    assignments: assignments.assignments.value, serverActions: actions, actionListLoaded: true,
+    onActivate: slot => activated.push(slot),
+    onDrop: (slot, id) => drops.push([slot, id]),
+  }))).mount(hotbarRoot)
+  await nextTick()
+  const slots = descendants(hotbarRoot, 'button')
+  assert.equal(descendants(slots[0], 'img')[0].props.src, '/assets/cursor/lift.png')
+  assert.equal(descendants(slots[1], 'img').length, 0)
+  slots[0].props.onClick()
+  slots[1].props.onClick()
+  assert.deepEqual(activated, [0])
+  slots[2].props.onDrop({ preventDefault() {}, dataTransfer: { getData: type => transferred.get(type) || '' } })
+  assert.deepEqual(drops, [[2, 'game:lift']])
+
+  assert.equal(actionCursorCss(''), 'default')
+  assert.equal(actionCursorCss('unknown'), 'help')
+  assert.match(actionCursorCss('lift_down'), /lift_down\.png/)
+  const canvas = { style: { cursor: '' } }
+  const pixiEvents = { cursorStyles: { default: 'inherit', pointer: 'pointer' }, rootBoundary: { cursor: 'pointer' } }
+  const cursor = new CursorManager()
+  cursor.attach(canvas, pixiEvents)
+  cursor.set('lift')
+  assert.match(canvas.style.cursor, /lift\.png/)
+  assert.match(pixiEvents.cursorStyles.pointer, /lift\.png/)
+  cursor.set('unknown')
+  assert.equal(pixiEvents.cursorStyles.pointer, 'help')
+  cursor.detach()
+  assert.equal(pixiEvents.cursorStyles.pointer, 'pointer')
+  console.log('Action menu, drag, hotbar persistence, and cursor tests passed')
+} finally {
+  await rm(directory, { recursive: true, force: true })
+}

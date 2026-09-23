@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "lift_down",
+      "presentation": {
+        "label": "Lift down",
+        "menuIcon": "/assets/cursor/lift_down.png"
+      },
+      "target": {
+        "kind": "tile",
+        "cursor": "lift_down"
+      },
+      "requirements": {},
+      "execution": {},
+      "isRepeatable": false
+    }
+  ]
+}

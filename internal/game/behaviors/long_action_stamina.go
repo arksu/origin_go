@@ -19,6 +19,11 @@ func ConsumePlayerLongActionStamina(
 	return consumePlayerActionStamina(world, playerHandle, cost, true)
 }
 
+// ConsumePlayerActionStamina charges an exact action cost after a successful effect.
+func ConsumePlayerActionStamina(world *ecs.World, playerHandle types.Handle, cost float64) bool {
+	return consumePlayerActionStamina(world, playerHandle, cost, false)
+}
+
 // Exact-cost actions share stat propagation but do not require the long-action reserve.
 func consumePlayerActionStamina(world *ecs.World, playerHandle types.Handle, cost float64, requireReserve bool) bool {
 	if world == nil || playerHandle == types.InvalidHandle || !world.Alive(playerHandle) {

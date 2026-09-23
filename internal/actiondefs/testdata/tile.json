@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "test_tile",
+      "presentation": {"label": "Test tile", "menuIcon": "/assets/cursor/lift_down.png"},
+      "target": {"kind": "tile", "cursor": "lift_down"},
+      "requirements": {},
+      "execution": {"ticks": 2},
+      "isRepeatable": true
+    }
+  ]
+}

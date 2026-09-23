@@ -137,10 +137,16 @@ type BuildCommandService interface {
 }
 
 type LiftCommandService interface {
-	HandleLiftPutDown(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, msg *netproto.C2S_LiftPutDown)
-	TryStartNoColliderLiftInteract(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle, interactionType netproto.InteractionType) bool
 	IsPlayerCarrying(w *ecs.World, playerHandle types.Handle) bool
 	SendCarryLockedWarning(playerID types.EntityID)
+}
+
+type ActionCommandService interface {
+	Activate(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string)
+	Cancel(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
+	HandleArmedClick(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle, x, y float64) bool
+	SendList(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
+	SendState(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 }
 
 type NetworkCommandSystem struct {
@@ -169,6 +175,7 @@ type NetworkCommandSystem struct {
 	craftCommandService  CraftCommandService
 	buildCommandService  BuildCommandService
 	liftCommandService   LiftCommandService
+	actionService        ActionCommandService
 	contextPendingTTL    time.Duration
 
 	// Reusable buffers to avoid allocations
@@ -239,6 +246,10 @@ func (s *NetworkCommandSystem) SetBuildCommandService(service BuildCommandServic
 
 func (s *NetworkCommandSystem) SetLiftCommandService(service LiftCommandService) {
 	s.liftCommandService = service
+}
+
+func (s *NetworkCommandSystem) SetActionService(service ActionCommandService) {
+	s.actionService = service
 }
 
 func (s *NetworkCommandSystem) SetContextPendingTTL(ttl time.Duration) {
@@ -316,8 +327,14 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleBuildProgress(w, handle, cmd)
 	case network.CmdBuildTakeBack:
 		s.handleBuildTakeBack(w, handle, cmd)
-	case network.CmdLiftPutDown:
-		s.handleLiftPutDown(w, handle, cmd)
+	case network.CmdActivateAction:
+		if request, ok := cmd.Payload.(*netproto.C2S_ActivateAction); ok && request != nil && s.actionService != nil {
+			s.actionService.Activate(w, cmd.CharacterID, handle, request.ActionId)
+		}
+	case network.CmdCancelAction:
+		if s.actionService != nil {
+			s.actionService.Cancel(w, cmd.CharacterID, handle)
+		}
 	case network.CmdOpenWindow:
 		s.handleOpenWindow(w, handle, cmd)
 	case network.CmdCloseWindow:
@@ -407,18 +424,6 @@ func (s *NetworkCommandSystem) handleBuildTakeBack(w *ecs.World, playerHandle ty
 	s.buildCommandService.HandleBuildTakeBack(w, cmd.CharacterID, playerHandle, msg)
 }
 
-func (s *NetworkCommandSystem) handleLiftPutDown(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	msg, ok := cmd.Payload.(*netproto.C2S_LiftPutDown)
-	if !ok || msg == nil {
-		s.logger.Error("Invalid payload type for LiftPutDown", zap.Uint64("client_id", cmd.ClientID))
-		return
-	}
-	if s.liftCommandService == nil {
-		return
-	}
-	s.liftCommandService.HandleLiftPutDown(w, cmd.CharacterID, playerHandle, msg)
-}
-
 func (s *NetworkCommandSystem) handleOpenWindow(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
 	msg, ok := cmd.Payload.(*netproto.C2S_OpenWindow)
 	if !ok || msg == nil {
@@ -462,6 +467,9 @@ func (s *NetworkCommandSystem) handleMapClick(w *ecs.World, playerHandle types.H
 	}
 	targetID := types.EntityID(click.TargetEntityId)
 	targetHandle := w.GetHandleByEntityID(targetID)
+	if s.actionService != nil && s.actionService.HandleArmedClick(w, cmd.CharacterID, playerHandle, targetID, targetHandle, float64(click.X), float64(click.Y)) {
+		return
+	}
 	if targetID != 0 && w.Alive(targetHandle) {
 		if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped {
 			s.handlePickupInteract(w, playerHandle, cmd.CharacterID, targetID, targetHandle)
@@ -646,10 +654,6 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 	}
 
 	if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
-		if s.liftCommandService != nil &&
-			s.liftCommandService.TryStartNoColliderLiftInteract(w, cmd.CharacterID, playerHandle, targetEntityID, targetHandle, interact.Type) {
-			return
-		}
 		return
 	}
 	if s.contextActionService == nil {
@@ -754,25 +758,8 @@ func (s *NetworkCommandSystem) beginMoveToLink(
 	targetHandle types.Handle,
 	actionID string,
 ) {
-	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
-	if !hasTransform {
+	if !s.beginMoveToLinkIntent(w, playerHandle, playerID, targetEntityID, targetHandle) {
 		return
-	}
-
-	mov, hasMov := ecs.GetComponent[components.Movement](w, playerHandle)
-	if !hasMov || mov.State == constt.StateStunned {
-		return
-	}
-
-	s.clearPendingInteractionIntents(w, playerHandle, playerID)
-	s.setLinkIntent(w, playerID, targetEntityID, targetHandle)
-
-	if lastCollidedEntityForHandle(w, playerHandle) == targetEntityID {
-		s.stopMovementAndEmit(w, playerHandle)
-	} else {
-		ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
-			m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
-		})
 	}
 
 	ttlMs := s.contextPendingTTL.Milliseconds()
@@ -787,6 +774,42 @@ func (s *NetworkCommandSystem) beginMoveToLink(
 		ActionID:       actionID,
 		ExpireAtUnixMs: expireAt,
 	})
+}
+
+// BeginActionMoveToLink shares the ordinary approach mechanics without creating a context action.
+func (s *NetworkCommandSystem) BeginActionMoveToLink(w *ecs.World, playerHandle types.Handle, playerID, targetID types.EntityID, targetHandle types.Handle) bool {
+	return s.beginMoveToLinkIntent(w, playerHandle, playerID, targetID, targetHandle)
+}
+
+func (s *NetworkCommandSystem) beginMoveToLinkIntent(
+	w *ecs.World,
+	playerHandle types.Handle,
+	playerID types.EntityID,
+	targetEntityID types.EntityID,
+	targetHandle types.Handle,
+) bool {
+	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
+	if !hasTransform {
+		return false
+	}
+
+	mov, hasMov := ecs.GetComponent[components.Movement](w, playerHandle)
+	if !hasMov || mov.State == constt.StateStunned {
+		return false
+	}
+
+	s.clearPendingInteractionIntents(w, playerHandle, playerID)
+	s.setLinkIntent(w, playerID, targetEntityID, targetHandle)
+
+	if lastCollidedEntityForHandle(w, playerHandle) == targetEntityID {
+		s.stopMovementAndEmit(w, playerHandle)
+	} else {
+		ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
+			m.SetTargetHandle(targetHandle, int(targetTransform.X), int(targetTransform.Y))
+		})
+	}
+
+	return true
 }
 
 // StartPendingContextActionFromServer reuses the normal move->link->execute flow for server-triggered actions.
@@ -1278,6 +1301,11 @@ func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.Serve
 		s.handleCraftListSnapshotJob(w, job)
 	case network.JobSendBuildListSnapshot:
 		s.handleBuildListSnapshotJob(w, job)
+	case network.JobSendActionSnapshot:
+		if payload, ok := job.Payload.(*network.ActionSnapshotJobPayload); ok && payload != nil && w.Alive(payload.Handle) && s.actionService != nil {
+			s.actionService.SendList(w, job.TargetID, payload.Handle)
+			s.actionService.SendState(w, job.TargetID, payload.Handle)
+		}
 	default:
 		s.logger.Warn("Unknown server job type", zap.Uint16("job_type", job.JobType))
 	}
