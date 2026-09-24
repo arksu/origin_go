@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import type { proto } from '@/network/proto/packets.js'
 import { gameActionHotbarId, type HotbarActionId } from '@/game/hud/actionCatalog'
-import { actionUnavailableReason } from '@/game/hud/actionReasons'
 
 defineProps<{
   actions: proto.IActionDefinition[]
@@ -31,7 +30,7 @@ function onClick(action: proto.IActionDefinition): void {
     suppressClick.value = false
     return
   }
-  if (action.available) emit('activate', action.id || '')
+  if (action.id) emit('activate', action.id)
 }
 
 function onDragStart(event: DragEvent, action: proto.IActionDefinition): void {
@@ -83,11 +82,10 @@ function onPointerUp(event: PointerEvent): void {
       :key="action.id || ''"
       type="button"
       class="actions-menu__action"
-      :class="{ 'actions-menu__action--active': action.id === activeActionId && activePhase !== 'idle', 'actions-menu__action--unavailable': !action.available }"
-      :aria-label="action.available ? action.label || action.id || '' : `${action.label || action.id}: ${actionUnavailableReason(action.unavailableReason)}`"
-      :aria-disabled="!action.available"
+      :class="{ 'actions-menu__action--active': action.id === activeActionId && activePhase !== 'idle' }"
+      :aria-label="action.label || action.id || ''"
       :aria-pressed="action.id === activeActionId && activePhase !== 'idle'"
-      :title="action.available ? action.label || '' : `${action.label}: ${actionUnavailableReason(action.unavailableReason)}`"
+      :title="action.label || action.id || ''"
       draggable="true"
       @click="onClick(action)"
       @dragstart="onDragStart($event, action)"
@@ -99,7 +97,6 @@ function onPointerUp(event: PointerEvent): void {
     >
       <img :src="action.menuIcon || ''" :alt="action.label || ''" draggable="false">
       <span>{{ action.label }}</span>
-      <span v-if="!action.available" class="actions-menu__reason">{{ actionUnavailableReason(action.unavailableReason) }}</span>
     </button>
   </div>
 </template>
@@ -138,11 +135,6 @@ function onPointerUp(event: PointerEvent): void {
   touch-action: none;
 }
 
-.actions-menu__reason {
-  font-size: 9px;
-  line-height: 1.1;
-}
-
 .actions-menu__action img {
   width: 36px;
   height: 36px;
@@ -152,10 +144,5 @@ function onPointerUp(event: PointerEvent): void {
 .actions-menu__action--active {
   border-color: #55c4ff;
   box-shadow: inset 0 0 0 1px #55c4ff;
-}
-
-.actions-menu__action--unavailable {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 </style>

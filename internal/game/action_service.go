@@ -3,7 +3,6 @@ package game
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"origin/internal/actiondefs"
@@ -96,7 +95,6 @@ type ActionService struct {
 	handlers        map[string]ActionHandler
 	sender          actionSender
 	nextGeneration  uint64
-	availability    map[types.EntityID]string
 	approachTimeout time.Duration
 }
 
@@ -114,7 +112,7 @@ func NewActionService(world *ecs.World, definitions *actiondefs.Registry, handle
 	if err := definitions.ValidateHandlers(handlerIDs); err != nil {
 		return nil, err
 	}
-	return &ActionService{world: world, definitions: definitions, handlers: handlers, sender: sender, availability: make(map[types.EntityID]string), approachTimeout: 15 * time.Second}, nil
+	return &ActionService{world: world, definitions: definitions, handlers: handlers, sender: sender, approachTimeout: 15 * time.Second}, nil
 }
 
 func (service *ActionService) SetApproachTimeout(timeout time.Duration) {
@@ -145,7 +143,7 @@ func (service *ActionService) SendState(world *ecs.World, playerID types.EntityI
 	}
 }
 
-func (service *ActionService) SendList(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+func (service *ActionService) SendList(playerID types.EntityID) {
 	if service == nil || service.sender == nil {
 		return
 	}
@@ -157,26 +155,15 @@ func (service *ActionService) SendList(world *ecs.World, playerID types.EntityID
 				Slots: append([]string(nil), requirement.Slots...), ItemKey: requirement.ItemKey, ItemTag: requirement.ItemTag,
 			})
 		}
-		reason := service.UnavailableReason(world, playerID, playerHandle, definition)
 		list.Actions = append(list.Actions, &netproto.ActionDefinition{
 			Id: definition.ID, Label: definition.Presentation.Label, MenuIcon: definition.Presentation.MenuIcon,
 			TargetKind: string(definition.Target.Kind), Cursor: definition.Target.Cursor,
 			RequiredSkills: append([]string(nil), definition.Requirements.Skills...), RequiredEquipment: requirements,
 			Ticks: uint32(definition.Execution.Ticks), Stamina: definition.Execution.Stamina,
-			IsRepeatable: definition.Repeatable(), Available: reason == "", UnavailableReason: reason,
+			IsRepeatable: definition.Repeatable(),
 		})
 	}
-	service.availability[playerID] = service.availabilitySignature(world, playerID, playerHandle)
 	service.sender.SendActionList(playerID, list)
-}
-
-func (service *ActionService) availabilitySignature(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) string {
-	var signature strings.Builder
-	for _, definition := range service.definitions.All() {
-		reason := service.UnavailableReason(world, playerID, playerHandle, definition)
-		fmt.Fprintf(&signature, "%d:%s", len(reason), reason)
-	}
-	return signature.String()
 }
 
 func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
@@ -184,24 +171,17 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 		return
 	}
 	active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)
-	if exists {
-		definition, found := service.definitions.Get(active.ActionID)
-		if active.Phase == components.GameActionApproaching && active.ExpireAtUnixMs > 0 && ecs.GetResource[ecs.TimeState](world).UnixMs >= active.ExpireAtUnixMs {
-			service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_TARGET_TIMEOUT")
-		} else if !found || service.UnavailableReason(world, playerID, playerHandle, definition) != "" {
-			service.Cancel(world, playerID, playerHandle)
-		} else if active.TargetID != 0 && !world.Alive(world.GetHandleByEntityID(active.TargetID)) {
-			service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
-		}
+	if !exists {
+		return
 	}
-	signature := service.availabilitySignature(world, playerID, playerHandle)
-	if service.availability[playerID] != signature {
-		service.SendList(world, playerID, playerHandle)
+	definition, found := service.definitions.Get(active.ActionID)
+	if active.Phase == components.GameActionApproaching && active.ExpireAtUnixMs > 0 && ecs.GetResource[ecs.TimeState](world).UnixMs >= active.ExpireAtUnixMs {
+		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_TARGET_TIMEOUT")
+	} else if !found || service.UnavailableReason(world, playerID, playerHandle, definition) != "" {
+		service.Cancel(world, playerID, playerHandle)
+	} else if active.TargetID != 0 && !world.Alive(world.GetHandleByEntityID(active.TargetID)) {
+		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
 	}
-}
-
-func (service *ActionService) ForgetPlayer(playerID types.EntityID) {
-	delete(service.availability, playerID)
 }
 
 func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) {
@@ -221,7 +201,6 @@ func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID
 	}
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
 		service.alert(playerID, reason)
-		service.SendList(world, playerID, playerHandle)
 		return
 	}
 	service.nextGeneration++

@@ -219,7 +219,7 @@ func (router *testActionClickRouter) Cancel(w *ecs.World, _ types.EntityID, play
 	}
 	ecs.RemoveComponent[components.ActiveGameAction](w, player)
 }
-func (router *testActionClickRouter) SendList(*ecs.World, types.EntityID, types.Handle) {
+func (router *testActionClickRouter) SendList(types.EntityID) {
 	router.lists++
 }
 func (router *testActionClickRouter) SendState(*ecs.World, types.EntityID, types.Handle) {

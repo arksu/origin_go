@@ -145,7 +145,7 @@ type ActionCommandService interface {
 	Activate(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string)
 	Cancel(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 	HandleArmedClick(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle, x, y float64) bool
-	SendList(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
+	SendList(playerID types.EntityID)
 	SendState(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 }
 
@@ -1308,7 +1308,7 @@ func (s *NetworkCommandSystem) processServerJob(w *ecs.World, job *network.Serve
 		s.handleBuildListSnapshotJob(w, job)
 	case network.JobSendActionSnapshot:
 		if payload, ok := job.Payload.(*network.ActionSnapshotJobPayload); ok && payload != nil && w.Alive(payload.Handle) && s.actionService != nil {
-			s.actionService.SendList(w, job.TargetID, payload.Handle)
+			s.actionService.SendList(job.TargetID)
 			s.actionService.SendState(w, job.TargetID, payload.Handle)
 		}
 	default:

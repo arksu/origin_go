@@ -1,3 +1,5 @@
+import type { proto } from '@/network/proto/packets.js'
+
 export type ActionId = 'settings' | 'actions' | 'craft' | 'build' | 'stats' | 'inventory' | 'equip'
 export type HotbarActionId = ActionId | `game:${string}`
 
@@ -44,6 +46,12 @@ export function isHotbarActionId(value: string): value is HotbarActionId {
 
 export function gameActionHotbarId(actionId: string): `game:${string}` {
   return `game:${actionId}`
+}
+
+export function requestGameAction(actionId: string, actions: readonly proto.IActionDefinition[], listLoaded: boolean, send: (id: string) => void): boolean {
+  if (!listLoaded || !actions.some(action => action.id === actionId)) return false
+  send(actionId)
+  return true
 }
 
 export function getActionLabel(actionId: ActionId): string {
