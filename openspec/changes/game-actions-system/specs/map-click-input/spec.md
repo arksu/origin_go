@@ -3,9 +3,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Ordinary map clicks preserve movement, pickup, and object linking
-Without a pending administrator action and without an armed gameplay action, a map click on empty ground, a stale target, or a target without a collider SHALL move the player toward the clicked coordinates, subject to existing movement rules. A map click reporting a live non-dropped object with a collider SHALL set an explicit link intent, move the player to that object, and the link SHALL be established on confirmed collision without executing any context action; a click on empty ground SHALL cancel any outstanding link intent. A live dropped-item target SHALL retain normal primary-click pickup behavior. Explicit placement, item-in-hand drop, context interaction, and UI-consumed input SHALL retain their ordinary routing and SHALL NOT emit duplicate gameplay actions.
+Without a pending administrator action and without an armed gameplay action, a map click on empty ground, a stale target, or a target without a collider SHALL move the player toward the clicked coordinates, subject to existing movement rules. A map click reporting a live non-dropped object with a collider SHALL set an explicit link intent, move the player to that object, and the link SHALL be established on confirmed collision without executing any context action; a click on empty ground SHALL cancel any outstanding link intent. A live dropped-item target SHALL retain normal primary-click pickup behavior. Explicit placement, context interaction, and UI-consumed input SHALL retain their ordinary routing and SHALL NOT emit duplicate gameplay actions. Item-in-hand drop SHALL retain its ordinary client routing when no gameplay action is selecting a target.
 
 An active gameplay action in target-selection phase SHALL take precedence over this ordinary behavior. An object-target action SHALL consume a click on a live object, including one without a collider; a click on empty ground or a stale target SHALL fall through to ordinary movement while the action remains armed. A tile-target action SHALL consume every map click and pass its coordinates to its handler. A consumed click SHALL NOT also trigger ordinary movement, linking, or pickup, though an accepted action may initiate its own approach to the target.
+
+While any gameplay action is selecting a target, a primary click that reaches map input SHALL send MapClick instead of item-in-hand drop, regardless of target kind or whether the server will consume the click. If an object-target action lets an empty-ground or stale-target click fall through, the server SHALL perform ordinary map-click movement and SHALL NOT drop the held item. If a MapClick reaches ordinary routing while an action is approaching, the server SHALL cancel that action, its pending effect, and its approach movement without a stamina charge before routing the new click. The new click SHALL then run its ordinary pickup, link, or movement behavior exactly once. Administrator-consumed clicks SHALL leave the gameplay action unchanged.
 
 #### Scenario: Object click requests a link
 - **WHEN** a player primary-clicks a live non-dropped object with a collider and no pending administrator action and no armed gameplay action
@@ -38,6 +40,14 @@ An active gameplay action in target-selection phase SHALL take precedence over t
 #### Scenario: Armed tile action consumes a click on an object
 - **WHEN** a player selecting a tile-target action primary-clicks a live dropped item
 - **THEN** the action SHALL receive the click coordinates and ordinary pickup SHALL NOT run
+
+#### Scenario: Held item does not override armed action
+- **WHEN** a player holds an item and primary-clicks the map while selecting any object- or tile-target action
+- **THEN** the client SHALL send MapClick and SHALL NOT send item-in-hand drop; an unconsumed object-target click on empty ground SHALL move normally without dropping the item
+
+#### Scenario: Ordinary click replaces an approach
+- **WHEN** a player clicks another object or empty ground while an action is approaching its previous target
+- **THEN** the server SHALL cancel the old action and its pending effect before starting the new ordinary link or movement, and a late old-target callback SHALL NOT apply the canceled effect
 
 ### Requirement: Administrator click actions are interpreted only by the server
 The server SHALL give one pending administrator click action the highest precedence over both armed gameplay actions and ordinary map-click behavior. `/spawn` and coordinate-less `/tp` SHALL consume click coordinates; `/info` and `/destroy` SHALL consume the target ID. The consumed click SHALL NOT also initiate armed action execution, movement, pickup, or context interaction. The server SHALL preserve current command availability, resolve object targets against the current live world, and reject unavailable or ineligible targets without substituting another object. `/destroy` SHALL preserve deletion of the selected non-player object and all inventory contents through its existing deletion operation.

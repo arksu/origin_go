@@ -467,8 +467,13 @@ func (s *NetworkCommandSystem) handleMapClick(w *ecs.World, playerHandle types.H
 	}
 	targetID := types.EntityID(click.TargetEntityId)
 	targetHandle := w.GetHandleByEntityID(targetID)
-	if s.actionService != nil && s.actionService.HandleArmedClick(w, cmd.CharacterID, playerHandle, targetID, targetHandle, float64(click.X), float64(click.Y)) {
-		return
+	if s.actionService != nil {
+		if s.actionService.HandleArmedClick(w, cmd.CharacterID, playerHandle, targetID, targetHandle, float64(click.X), float64(click.Y)) {
+			return
+		}
+		if active, exists := ecs.GetComponent[components.ActiveGameAction](w, playerHandle); exists && active.Phase == components.GameActionApproaching {
+			s.actionService.Cancel(w, cmd.CharacterID, playerHandle)
+		}
 	}
 	if targetID != 0 && w.Alive(targetHandle) {
 		if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped {
