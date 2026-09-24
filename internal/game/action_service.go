@@ -229,7 +229,9 @@ func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID
 	if definition.Target.Kind == actiondefs.TargetNone {
 		active.Phase = components.GameActionExecuting
 		ecs.AddComponent(world, playerHandle, active)
-		service.SendState(world, playerID, playerHandle)
+		if definition.Execution.Ticks > 0 {
+			service.SendState(world, playerID, playerHandle)
+		}
 		service.beginExecution(world, playerID, playerHandle, definition, active, ActionTarget{})
 		return
 	}
@@ -274,7 +276,9 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 	active.TargetID, active.TargetHandle, active.TargetX, active.TargetY = target.ObjectID, target.ObjectHandle, target.X, target.Y
 	active.Phase = components.GameActionExecuting
 	ecs.AddComponent(world, playerHandle, active)
-	service.SendState(world, playerID, playerHandle)
+	if definition.Execution.Ticks > 0 {
+		service.SendState(world, playerID, playerHandle)
+	}
 	service.beginExecution(world, playerID, playerHandle, definition, active, target)
 	return true
 }

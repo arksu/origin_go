@@ -40,6 +40,8 @@ During enter-world bootstrap the server SHALL send every action definition to th
 
 The client SHALL request activation by action ID. The server SHALL validate that the action exists, its skills, equipment, and handler state condition hold, and one execution is affordable before starting it. An unavailable action SHALL produce a mini-alert and SHALL NOT start. A target action SHALL enter a selecting phase with its action ID and optional cursor; a none action SHALL start one execution immediately. The client SHALL receive authoritative action ID, phase, and cursor updates and SHALL NOT infer armed state from the cursor ID.
 
+For an untimed action whose handler transitions synchronously, the server SHALL send the resulting stable phase without first sending a transient executing state. A timed action SHALL send executing when its cycle starts.
+
 Activating the same action while selecting SHALL toggle it off. Activating a different action while selecting, approaching, or executing SHALL cancel the old action without charging stamina, stop movement initiated for its target, and then attempt the new action. If the new action cannot start, the server SHALL report the reason and remain idle.
 
 #### Scenario: Arm lift
@@ -49,6 +51,10 @@ Activating the same action while selecting SHALL toggle it off. Activating a dif
 #### Scenario: Action without target
 - **WHEN** a player activates an available none action
 - **THEN** the server SHALL start exactly one execution without entering target selection or showing a target cursor
+
+#### Scenario: Untimed approach does not send a transient state
+- **WHEN** an untimed targeted action accepts a click and immediately starts an approach
+- **THEN** the server SHALL send approaching without first sending executing for that click
 
 #### Scenario: Switch during a cycle
 - **WHEN** a player activates another action during an active timed cycle or action-owned approach

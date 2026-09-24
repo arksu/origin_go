@@ -206,10 +206,19 @@ type testActionClickRouter struct {
 	targetID      types.EntityID
 	x, y          float64
 	lists, states int
+	cancelCalls   int
+	cancelTargetX float64
+	cancelTargetY float64
 }
 
 func (*testActionClickRouter) Activate(*ecs.World, types.EntityID, types.Handle, string) {}
-func (*testActionClickRouter) Cancel(*ecs.World, types.EntityID, types.Handle)           {}
+func (router *testActionClickRouter) Cancel(w *ecs.World, _ types.EntityID, player types.Handle) {
+	router.cancelCalls++
+	if movement, exists := ecs.GetComponent[components.Movement](w, player); exists {
+		router.cancelTargetX, router.cancelTargetY = movement.TargetX, movement.TargetY
+	}
+	ecs.RemoveComponent[components.ActiveGameAction](w, player)
+}
 func (router *testActionClickRouter) SendList(*ecs.World, types.EntityID, types.Handle) {
 	router.lists++
 }
@@ -248,16 +257,60 @@ func TestMapClickActionRoutingPrecedesPickupAndMovement(t *testing.T) {
 	}
 
 	router.consume = false
+	ecs.AddComponent(w, player, components.ActiveGameAction{Phase: components.GameActionSelecting})
 	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 50, Y: 60, TargetEntityId: 999}})
 	movement, _ = ecs.GetComponent[components.Movement](w, player)
-	if movement.TargetX != 50 || movement.TargetY != 60 {
-		t.Fatal("unconsumed stale click did not move")
+	active, armed := ecs.GetComponent[components.ActiveGameAction](w, player)
+	if movement.TargetX != 50 || movement.TargetY != 60 || router.cancelCalls != 0 || !armed || active.Phase != components.GameActionSelecting {
+		t.Fatal("unconsumed stale click did not move while preserving selection")
+	}
+}
+
+func TestMapClickCancelsApproachBeforeOrdinaryRouting(t *testing.T) {
+	for _, targetKind := range []string{"ground", "object"} {
+		t.Run(targetKind, func(t *testing.T) {
+			w := ecs.NewWorldForTesting()
+			player := w.Spawn(1, func(w *ecs.World, h types.Handle) {
+				ecs.AddComponent(w, h, components.Transform{})
+				ecs.AddComponent(w, h, components.Movement{})
+				ecs.AddComponent(w, h, components.ActiveGameAction{Phase: components.GameActionApproaching})
+			})
+			ecs.WithComponent(w, player, func(movement *components.Movement) { movement.SetTargetPoint(10, 20) })
+			targetID := uint64(0)
+			if targetKind == "object" {
+				targetID = 2
+				w.Spawn(2, func(w *ecs.World, h types.Handle) {
+					ecs.AddComponent(w, h, components.Transform{X: 50, Y: 60})
+					ecs.AddComponent(w, h, components.Collider{HalfWidth: 5, HalfHeight: 5, Layer: 1, Mask: 1})
+				})
+			}
+			router := &testActionClickRouter{}
+			system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+			system.SetActionService(router)
+			system.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 50, Y: 60, TargetEntityId: targetID}})
+			if router.cancelCalls != 1 || router.cancelTargetX != 10 || router.cancelTargetY != 20 {
+				t.Fatalf("old approach was not canceled before routing: %#v", router)
+			}
+			movement, _ := ecs.GetComponent[components.Movement](w, player)
+			if targetKind == "ground" && (movement.TargetType != constt.TargetPoint || movement.TargetX != 50 || movement.TargetY != 60) {
+				t.Fatalf("new ground click did not move: %#v", movement)
+			}
+			if targetKind == "object" {
+				intent, exists := ecs.GetResource[ecs.LinkState](w).IntentByPlayer[1]
+				if !exists || intent.TargetID != 2 || movement.TargetType != constt.TargetEntity {
+					t.Fatalf("new object click did not start link: intent=%#v movement=%#v", intent, movement)
+				}
+			}
+		})
 	}
 }
 
 func TestMapClickAdminPrecedesArmedAction(t *testing.T) {
 	w := ecs.NewWorldForTesting()
-	player := w.Spawn(1, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.Movement{}) })
+	player := w.Spawn(1, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Movement{})
+		ecs.AddComponent(w, h, components.ActiveGameAction{Phase: components.GameActionApproaching})
+	})
 	w.Spawn(2, nil)
 	router := &testActionClickRouter{consume: true}
 	admin := &testAdminObjectInfoHandler{}
@@ -266,7 +319,7 @@ func TestMapClickAdminPrecedesArmedAction(t *testing.T) {
 	s.SetAdminHandler(admin)
 	ecs.GetResource[ecs.PendingAdminDestroy](w).Set(1)
 	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{X: 42, Y: 99, TargetEntityId: 2}})
-	if admin.destroyCalls != 1 || router.calls != 0 {
+	if admin.destroyCalls != 1 || router.calls != 0 || router.cancelCalls != 0 {
 		t.Fatal("armed action intercepted administrator click")
 	}
 }

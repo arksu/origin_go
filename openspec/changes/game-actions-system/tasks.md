@@ -35,5 +35,6 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Run go test ./..., go build ./..., client type-check/lint, and relevant client tests. Fix fallout from protocol and lift entry-point removal.
-- [ ] 5.2 Exercise end-to-end scenarios: menu availability and reason refresh; arm lift from menu and hotbar; collider and no-collider lift; put-down ghost, valid and rejected placement; Escape before an open window closes; switch during approach/cycle; forced carry loss; unknown cursor fallback; admin /destroy precedence; and ordinary map clicks with no active action. Record test or manual evidence for each.
+- [x] 5.1 Run go test ./..., go build ./..., client type-check/lint, and relevant client tests. Fix fallout from protocol and lift entry-point removal.
+- [x] 5.2 Exercise end-to-end scenarios: menu availability and reason refresh; arm lift from menu and hotbar; collider and no-collider lift; put-down ghost, valid and rejected placement; Escape before an open window closes; switch during approach/cycle; forced carry loss; unknown cursor fallback; admin /destroy precedence; and ordinary map clicks with no active action. Record test or manual evidence for each.
+- [x] 5.3 Remove transient executing packets for untimed actions, cancel an approach before routing a new ordinary map click, and specify that any selecting action suppresses item-in-hand drop. Cover packet and click ordering with regression tests.

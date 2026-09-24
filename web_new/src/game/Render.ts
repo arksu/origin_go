@@ -173,6 +173,8 @@ export class Render {
         const hand = gameStore.handState
         const handInv = gameStore.handInventoryState
 
+        // Target selection needs MapClick even with an item in hand; the server decides
+        // whether that click executes the action or follows ordinary map routing.
         if (hand?.item && handInv?.ref && handInv.revision != null && gameStore.gameActionState.phase !== 'selecting') {
           playerCommandController.sendDropToWorld(
             handInv.ref,

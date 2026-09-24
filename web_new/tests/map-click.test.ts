@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { Render } from '../src/game/Render'
+import type { PointerClickEvent } from '../src/game/InputController'
 import { playerCommandController } from '../src/game/PlayerCommandController'
 import { gameConnection } from '../src/network/GameConnection'
 import { proto } from '../src/network/proto/packets.js'
@@ -14,11 +15,11 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
   const originalSend = gameConnection.send
   gameConnection.send = packet => { packets.push(packet) }
   try {
-    let click: (event: any) => void = () => { throw new Error('input not registered') }
+    let click: (event: PointerClickEvent) => void = () => { throw new Error('input not registered') }
     let target: { entityId: number; typeId: number } | null = null
     let toolConsumes = false
     // Exercise the actual Render input callback without allocating a WebGL renderer.
-    const render = Object.create(Render.prototype) as any
+    const render = Object.create(Render.prototype) as Record<string, unknown> & { setupInputController(): void }
     render.canvas = {}
     render.inputController = {
       init() {}, onClick(handler: typeof click) { click = handler },
@@ -58,6 +59,28 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
     assert.equal(Number(packets[0]!.playerAction!.interact!.entityId), 777)
     assert.equal(packets[0]!.playerAction!.mapClick, null)
     assert.equal(useGameStore().contextMenu, null)
+
+    const gameStore = useGameStore()
+    gameStore.setPlayerEnterWorld(1, 'Player', 1, 1, 1)
+    gameStore.updateInventory({
+      ref: { kind: proto.InventoryKind.INVENTORY_KIND_HAND, ownerId: 1, inventoryKey: 0 },
+      revision: 1,
+      hand: { item: { itemId: 900 } },
+    })
+    target = null
+    for (const actionId of ['lift', 'lift_down']) {
+      gameStore.setGameActionState({ actionId, phase: 'selecting', cursor: actionId })
+      packets.length = 0
+      click(event)
+      assert.equal(packets.length, 1)
+      assert.ok(packets[0]!.playerAction?.mapClick, `${actionId} must take the map click even with an item in hand`)
+      assert.equal(packets[0]!.inventoryOp, undefined)
+    }
+    gameStore.setGameActionState({ actionId: '', phase: 'idle', cursor: '' })
+    packets.length = 0
+    click(event)
+    assert.equal(packets.length, 1)
+    assert.ok(packets[0]!.inventoryOp?.op?.dropToWorld, 'idle click must keep ordinary hand drop')
   } finally { gameConnection.send = originalSend }
 })
 

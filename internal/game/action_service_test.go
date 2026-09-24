@@ -93,8 +93,8 @@ func TestActionServiceSelectionRejectionAndCompletion(t *testing.T) {
 	if got := service.State(world, player); got.Phase != "idle" || got.Cursor != "" || handler.startCount != 1 {
 		t.Fatalf("successful action did not end: %#v", got)
 	}
-	if len(sender.states) < 3 || sender.states[len(sender.states)-1].Phase != "idle" {
-		t.Fatalf("missing authoritative idle state: %#v", sender.states)
+	if len(sender.states) != 2 || sender.states[0].Phase != "selecting" || sender.states[1].Phase != "idle" {
+		t.Fatalf("instant action sent an intermediate state: %#v", sender.states)
 	}
 }
 
@@ -195,6 +195,13 @@ func TestActionTimedAndInstantCosts(t *testing.T) {
 			stats, _ := ecs.GetComponent[components.EntityStats](world, player)
 			if stats.Stamina != test.wantStamina || handler.startCount != 1 || service.State(world, player).Phase != "idle" {
 				t.Fatalf("wrong result: stats=%#v starts=%d state=%#v", stats, handler.startCount, service.State(world, player))
+			}
+			if test.ticks > 0 {
+				if len(sender.states) != 2 || sender.states[0].Phase != "executing" || sender.states[1].Phase != "idle" {
+					t.Fatalf("timed action did not report its cycle state: %#v", sender.states)
+				}
+			} else if len(sender.states) != 1 || sender.states[0].Phase != "idle" {
+				t.Fatalf("instant action sent an intermediate state: %#v", sender.states)
 			}
 			if test.ticks > 0 && (len(sender.progress) != test.ticks || len(sender.finished) != 1) {
 				t.Fatalf("wrong cycle packets: progress=%d finished=%d", len(sender.progress), len(sender.finished))
@@ -387,6 +394,9 @@ func TestActionApproachTimeoutReturnsToSelection(t *testing.T) {
 	}
 	service.Activate(world, 1, player, "test_object")
 	service.HandleArmedClick(world, 1, player, 3, target, 7, 8)
+	if len(sender.states) != 2 || sender.states[0].Phase != "selecting" || sender.states[1].Phase != "approaching" {
+		t.Fatalf("untimed approach sent an intermediate state: %#v", sender.states)
+	}
 	active, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
 	if active.ExpireAtUnixMs <= 0 {
 		t.Fatal("approach has no deadline")

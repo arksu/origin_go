@@ -41,6 +41,8 @@ Protocol messages:
 
 The server sends ActionList and the actual current ActionStateChanged in the enter-world snapshot. It resends ActionList when skills, equipment, carry state, or another supported requirement changes. Activation and execution always revalidate on the server; the menu status is informational. The cursor is non-empty only when the definition supplies one; an unknown ID renders CSS help on the client.
 
+For untimed actions, ActionService records executing internally before calling the handler but sends only the handler's resulting phase when that call transitions synchronously. Timed actions send executing when the cycle starts. This avoids a transient executing packet immediately followed by approaching, selecting, or idle in one server turn.
+
 C2S_LiftPutDown and its ClientMessage field are retired and reserved only after the lift migration removes the message's last server reference; the protocol task adds the new messages without touching it. Server and client protocol bindings are regenerated and shipped together.
 
 ## D3: Selection, execution, and cancellation
@@ -59,7 +61,7 @@ The action handler contract must distinguish rejected target, accepted/deferred 
 
 ## D4: MapClick precedence
 
-NetworkCommandSystem handles MapClick in this order: pending administrator command, ActionService.HandleArmedClick, ordinary pickup/link/movement. The map-click dispatcher is generic over target.kind and has no lift_down branch. Explicit Interact, item-in-hand drop, build placement, and UI-consumed clicks retain their existing routes; they do not produce a duplicate MapClick.
+NetworkCommandSystem handles MapClick in this order: pending administrator command, ActionService.HandleArmedClick, cancellation of any approach superseded by an ordinary MapClick, then ordinary pickup/link/movement. Canceling before ordinary routing clears action-owned pending work and movement before the new click creates its own intent; an administrator-consumed click does not cancel the approach. The map-click dispatcher is generic over target.kind and has no lift_down branch. Explicit Interact, build placement, and UI-consumed clicks retain their existing routes; they do not produce a duplicate MapClick. While any object/tile action is selecting, Render sends MapClick even with an item in hand. If object selection does not consume the click, ordinary server map-click routing runs; the item is not dropped. Outside target selection, item-in-hand drop keeps its existing route.
 
 ## D5: Complete lift migration
 
