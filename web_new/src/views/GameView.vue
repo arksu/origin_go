@@ -35,7 +35,7 @@ import { config as appConfig } from '@/config'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { proto } from '@/network/proto/packets.js'
 import { useAuthStore } from '@/stores/authStore'
-import { getActionLabel, type ActionId, type HotbarActionId } from '@/game/hud/actionCatalog'
+import { getActionLabel, requestGameAction, type ActionId, type HotbarActionId } from '@/game/hud/actionCatalog'
 import { cancelActiveActionOnEscape } from '@/game/hud/actionState'
 
 const router = useRouter()
@@ -109,7 +109,7 @@ const liftCarriedResourcePath = computed(() => {
   if (!entityId) return ''
   return gameStore.entities.get(entityId)?.resourcePath || ''
 })
-const { isOpen: actionsMenuOpen, toggle: toggleActionsMenu, close: closeActionsMenu, closeOnOutsidePointer } = useActionsPanel()
+const { isOpen: actionsMenuOpen, toggle: toggleActionsMenu, close: closeActionsMenu, select: selectActionsMenuAction, closeOnOutsidePointer } = useActionsPanel()
 const playerEquipment = computed(() => gameStore.getPlayerEquipment())
 const showEquipment = computed(() => {
   const visible = gameStore.playerEquipmentVisible
@@ -548,11 +548,7 @@ function toggleCraftWindow() {
 }
 
 function activateGameAction(actionId: string): boolean {
-  if (!gameStore.gameActionListLoaded) return false
-  const action = gameStore.gameActions.find(entry => entry.id === actionId)
-  if (!action?.available) return false
-  sendActivateAction(actionId)
-  return true
+  return requestGameAction(actionId, gameStore.gameActions, gameStore.gameActionListLoaded, sendActivateAction)
 }
 
 function executeAction(actionId: HotbarActionId): void {
@@ -590,7 +586,7 @@ function onActionsRailActivate(actionId: ActionId): void {
 }
 
 function onGameActionActivate(actionId: string): void {
-  if (activateGameAction(actionId)) closeActionsMenu()
+  selectActionsMenuAction(actionId, activateGameAction)
 }
 
 function onActionDragStart(actionId: HotbarActionId): void {

@@ -41,12 +41,18 @@ type testActionHandler struct {
 	status      ActionOutcome
 	canceled    int
 	unavailable string
+	reasonCalls int
+	onValidate  func()
 }
 
 func (handler *testActionHandler) UnavailableReason(*ecs.World, types.EntityID, types.Handle) string {
+	handler.reasonCalls++
 	return handler.unavailable
 }
 func (handler *testActionHandler) ValidateTarget(_ *ecs.World, _ types.EntityID, _ types.Handle, target ActionTarget) string {
+	if handler.onValidate != nil {
+		handler.onValidate()
+	}
 	if target.ObjectID == 2 {
 		return "BAD_TARGET"
 	}
@@ -58,6 +64,32 @@ func (handler *testActionHandler) Start(*ecs.World, types.EntityID, types.Handle
 }
 func (handler *testActionHandler) Cancel(*ecs.World, types.EntityID, types.Handle, components.ActiveGameAction) {
 	handler.canceled++
+}
+
+func TestActionCatalogKeepsRegistryOrderWithoutCheckingRequirements(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	world.Spawn(1, nil)
+	registry := actiondefs.NewRegistry([]actiondefs.Definition{
+		{ID: "second", SourceFile: "second.json", Target: actiondefs.Target{Kind: actiondefs.TargetTile}},
+		{ID: "first", SourceFile: "first.json", Target: actiondefs.Target{Kind: actiondefs.TargetObject}},
+	})
+	second := &testActionHandler{unavailable: "ACTION_UNAVAILABLE"}
+	first := &testActionHandler{unavailable: "ACTION_UNAVAILABLE"}
+	sender := &testActionSender{}
+	service, err := NewActionService(world, registry, map[string]ActionHandler{"second": second, "first": first}, sender)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SendList(1)
+	if len(sender.lists) != 1 || len(sender.lists[0].Actions) != 2 {
+		t.Fatalf("expected one complete catalog: %#v", sender.lists)
+	}
+	if sender.lists[0].Actions[0].Id != "second" || sender.lists[0].Actions[1].Id != "first" {
+		t.Fatalf("catalog order changed: %#v", sender.lists[0].Actions)
+	}
+	if second.reasonCalls != 0 || first.reasonCalls != 0 {
+		t.Fatal("catalog construction checked player requirements")
+	}
 }
 
 func TestActionServiceSelectionRejectionAndCompletion(t *testing.T) {
@@ -98,7 +130,7 @@ func TestActionServiceSelectionRejectionAndCompletion(t *testing.T) {
 	}
 }
 
-func TestActionRequirementsAndAvailabilityRefresh(t *testing.T) {
+func TestActionRequirementsDoNotRefreshCatalog(t *testing.T) {
 	previousItems := itemdefs.Global()
 	t.Cleanup(func() { itemdefs.SetGlobalForTesting(previousItems) })
 	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
@@ -127,9 +159,13 @@ func TestActionRequirementsAndAvailabilityRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.SendList(world, 1, player)
-	if !sender.lists[0].Actions[0].Available {
-		t.Fatal("all requirements are met")
+	service.SendList(1)
+	if len(sender.lists) != 1 || len(sender.lists[0].Actions) != 1 {
+		t.Fatalf("expected one catalog snapshot: %#v", sender.lists)
+	}
+	listed := sender.lists[0].Actions[0]
+	if listed.Id != "test_tile" || listed.Stamina != 3 || len(listed.RequiredSkills) != 1 || len(listed.RequiredEquipment) != 2 {
+		t.Fatalf("catalog omitted definition data: %#v", listed)
 	}
 	service.Activate(world, 1, player, "test_tile")
 	ecs.WithComponent(world, equipment, func(container *components.InventoryContainer) { container.Items = container.Items[:1] })
@@ -137,22 +173,80 @@ func TestActionRequirementsAndAvailabilityRefresh(t *testing.T) {
 	if service.State(world, player).Phase != "idle" {
 		t.Fatal("losing equipment did not cancel the action")
 	}
-	if len(sender.lists) != 2 || sender.lists[1].Actions[0].UnavailableReason != "ACTION_REQUIRES_EQUIPMENT" {
-		t.Fatalf("availability was not refreshed: %#v", sender.lists)
+	if len(sender.lists) != 1 {
+		t.Fatalf("equipment loss refreshed catalog: %#v", sender.lists)
 	}
 	ecs.WithComponent(world, equipment, func(container *components.InventoryContainer) {
 		container.Items = append(container.Items, components.InvItem{TypeID: 102, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_BACK})
 	})
 	ecs.WithComponent(world, player, func(stats *components.EntityStats) { stats.Stamina = 2 })
-	service.Recheck(world, 1, player)
-	if sender.lists[len(sender.lists)-1].Actions[0].UnavailableReason != "LOW_STAMINA" {
-		t.Fatal("insufficient stamina not reported")
+	service.Activate(world, 1, player, "test_tile")
+	if len(sender.alerts) != 1 || sender.alerts[0].ReasonCode != "LOW_STAMINA" {
+		t.Fatalf("insufficient stamina alert: %#v", sender.alerts)
 	}
 	ecs.WithComponent(world, player, func(stats *components.EntityStats) { stats.Stamina = 5 })
 	ecs.WithComponent(world, player, func(profile *components.CharacterProfile) { profile.Skills = nil })
+	service.Activate(world, 1, player, "test_tile")
+	if len(sender.alerts) != 2 || sender.alerts[1].ReasonCode != "ACTION_REQUIRES_SKILL" {
+		t.Fatalf("missing skill alert: %#v", sender.alerts)
+	}
+	if service.State(world, player).Phase != "idle" || len(sender.lists) != 1 {
+		t.Fatal("rejected activation started an action or refreshed catalog")
+	}
+}
+
+func TestActionDirectValidationAtTargetAndCommit(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	player := world.Spawn(1, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.CharacterProfile{Skills: []string{"woodcutting"}})
+		ecs.AddComponent(w, h, components.EntityStats{Stamina: 5})
+	})
+	registry := actiondefs.NewRegistry([]actiondefs.Definition{{
+		ID: "test_tile", SourceFile: "test.json", Target: actiondefs.Target{Kind: actiondefs.TargetTile},
+		Requirements: actiondefs.Requirements{Skills: []string{"woodcutting"}},
+		Execution:    actiondefs.Execution{Stamina: 2},
+	}})
+	handler := &testActionHandler{status: ActionDeferred}
+	sender := &testActionSender{}
+	service, err := NewActionService(world, registry, map[string]ActionHandler{"test_tile": handler}, sender)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setSkill := func(skills []string) {
+		ecs.WithComponent(world, player, func(profile *components.CharacterProfile) { profile.Skills = skills })
+	}
+
+	service.Activate(world, 1, player, "test_tile")
+	setSkill(nil)
+	service.HandleArmedClick(world, 1, player, 0, types.InvalidHandle, 7, 8)
+	if service.State(world, player).Phase != "idle" || handler.startCount != 0 || len(sender.alerts) != 1 || sender.alerts[0].ReasonCode != "ACTION_REQUIRES_SKILL" {
+		t.Fatal("target acceptance did not reject missing skill")
+	}
+
+	setSkill([]string{"woodcutting"})
+	handler.onValidate = func() { setSkill(nil) }
+	service.Activate(world, 1, player, "test_tile")
+	service.HandleArmedClick(world, 1, player, 0, types.InvalidHandle, 7, 8)
+	if service.State(world, player).Phase != "idle" || handler.startCount != 0 || len(sender.alerts) != 2 || sender.alerts[1].ReasonCode != "ACTION_REQUIRES_SKILL" {
+		t.Fatal("handler start did not recheck requirements")
+	}
+
+	setSkill([]string{"woodcutting"})
+	handler.onValidate = nil
+	service.Activate(world, 1, player, "test_tile")
+	service.HandleArmedClick(world, 1, player, 0, types.InvalidHandle, 7, 8)
+	active, exists := ecs.GetComponent[components.ActiveGameAction](world, player)
+	if !exists || active.Phase != components.GameActionExecuting || handler.startCount != 1 {
+		t.Fatal("deferred action did not start")
+	}
+	setSkill(nil)
+	if service.CanCommit(world, 1, player, active.Generation) {
+		t.Fatal("commit accepted lost skill")
+	}
 	service.Recheck(world, 1, player)
-	if sender.lists[len(sender.lists)-1].Actions[0].UnavailableReason != "ACTION_REQUIRES_SKILL" {
-		t.Fatal("skill loss did not refresh availability")
+	stats, _ := ecs.GetComponent[components.EntityStats](world, player)
+	if service.State(world, player).Phase != "idle" || stats.Stamina != 5 {
+		t.Fatal("rejected commit charged stamina or left action active")
 	}
 }
 
@@ -439,14 +533,23 @@ func TestReconnectCannotReuseCanceledActionGeneration(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	player := world.Spawn(1, nil)
 	registry := actiondefs.NewRegistry([]actiondefs.Definition{{ID: "test_tile", SourceFile: "test.json", Target: actiondefs.Target{Kind: actiondefs.TargetTile}}})
-	service, err := NewActionService(world, registry, map[string]ActionHandler{"test_tile": &testActionHandler{status: ActionSucceeded}}, &testActionSender{})
+	sender := &testActionSender{}
+	service, err := NewActionService(world, registry, map[string]ActionHandler{"test_tile": &testActionHandler{status: ActionSucceeded}}, sender)
 	if err != nil {
 		t.Fatal(err)
 	}
+	service.SendList(1)
 	service.Activate(world, 1, player, "test_tile")
 	previous, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
 	service.Cancel(world, 1, player)
-	service.ForgetPlayer(1)
+	service.SendList(1)
+	service.SendState(world, 1, player)
+	if len(sender.lists) != 2 || len(sender.lists[1].Actions) != 1 || sender.lists[1].Actions[0].Id != "test_tile" {
+		t.Fatalf("re-entry did not receive a fresh catalog: %#v", sender.lists)
+	}
+	if sender.states[len(sender.states)-1].Phase != "idle" {
+		t.Fatal("re-entry reused the old action state")
+	}
 	service.Activate(world, 1, player, "test_tile")
 	current, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
 	if current.Generation == previous.Generation {

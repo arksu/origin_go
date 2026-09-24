@@ -862,7 +862,6 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
 				if shard.actionService != nil {
 					shard.actionService.Cancel(shard.world, playerEntityID, playerHandle)
-					shard.actionService.ForgetPlayer(playerEntityID)
 				}
 				ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(playerEntityID)
 				ecs.ClearPendingAdminClicks(shard.world, playerEntityID)

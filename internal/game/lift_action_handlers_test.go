@@ -120,8 +120,12 @@ func TestNoColliderLiftCompletesAndLiftDownPlacementLifecycle(t *testing.T) {
 	world, player, target, lift, actions, sender := newNoColliderLiftActionTest(t)
 	completeNoColliderLift(t, world, player, target, lift, actions)
 	actions.Recheck(world, 1, player)
-	if len(sender.lists) == 0 || sender.lists[len(sender.lists)-1].Actions[0].UnavailableReason != "LIFT_ALREADY_CARRYING" {
-		t.Fatal("carry did not refresh lift availability")
+	if len(sender.lists) != 0 {
+		t.Fatal("carry state refreshed action catalog")
+	}
+	actions.Activate(world, 1, player, "lift")
+	if actions.State(world, player).Phase != "idle" || len(sender.alerts) != 1 || sender.alerts[0].ReasonCode != "LIFT_ALREADY_CARRYING" {
+		t.Fatal("carrying player could activate lift or missed rejection alert")
 	}
 	actions.Activate(world, 1, player, "lift_down")
 	actions.HandleArmedClick(world, 1, player, 0, types.InvalidHandle, 1010, 1010)
@@ -262,14 +266,18 @@ func TestLiftDownForcedCarryLossCancelsSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actions.SendList(world, 1, player)
+	actions.SendList(1)
 	actions.Activate(world, 1, player, "lift_down")
 	ecs.RemoveComponent[components.LiftCarryState](world, player)
 	actions.Recheck(world, 1, player)
 	if state := actions.State(world, player); state.Phase != "idle" || state.Cursor != "" {
 		t.Fatalf("carry loss left action armed: %#v", state)
 	}
-	if len(sender.lists) != 2 || sender.lists[1].Actions[0].UnavailableReason != "LIFT_NOT_CARRYING" {
-		t.Fatal("carry loss did not refresh availability")
+	if len(sender.lists) != 1 {
+		t.Fatal("carry loss refreshed action catalog")
+	}
+	actions.Activate(world, 1, player, "lift_down")
+	if len(sender.alerts) != 1 || sender.alerts[0].ReasonCode != "LIFT_NOT_CARRYING" || len(sender.lists) != 1 {
+		t.Fatal("missing carry rejection alert or unexpected catalog refresh")
 	}
 }

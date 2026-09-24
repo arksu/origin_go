@@ -666,7 +666,6 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
 	if s.actionService != nil {
 		s.actionService.Cancel(w, playerID, playerHandle)
-		s.actionService.ForgetPlayer(playerID)
 	}
 	linkState := ecs.GetResource[ecs.LinkState](w)
 	linkState.ClearIntent(playerID)

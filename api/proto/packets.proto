@@ -784,8 +784,6 @@ message ActionDefinition {
   uint32 ticks = 8;
   double stamina = 9;
   bool is_repeatable = 10;
-  bool available = 11;
-  string unavailable_reason = 12;
 }
 
 message S2C_ActionList {

@@ -11,11 +11,15 @@ export function useActionsPanel() {
     isOpen.value = false
   }
 
+  function select(actionId: string, activate: (id: string) => boolean): void {
+    if (activate(actionId)) close()
+  }
+
   function closeOnOutsidePointer(target: EventTarget | null): void {
     if (!isOpen.value) return
     const element = target as Element | null
     if (!element?.closest?.('[data-actions-menu], [data-actions-toggle]')) close()
   }
 
-  return { isOpen, toggle, close, closeOnOutsidePointer }
+  return { isOpen, toggle, close, select, closeOnOutsidePointer }
 }

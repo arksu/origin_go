@@ -217,7 +217,6 @@ func (s *PlayerTransferService) detachTransferSource(
 	}
 	if shard.actionService != nil {
 		shard.actionService.Cancel(shard.world, req.PlayerID, playerHandle)
-		shard.actionService.ForgetPlayer(req.PlayerID)
 	}
 
 	s.game.sendPlayerLeaveWorld(client, req.PlayerID)

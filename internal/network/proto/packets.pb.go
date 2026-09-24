@@ -6402,8 +6402,6 @@ type ActionDefinition struct {
 	Ticks             uint32                        `protobuf:"varint,8,opt,name=ticks,proto3" json:"ticks,omitempty"`
 	Stamina           float64                       `protobuf:"fixed64,9,opt,name=stamina,proto3" json:"stamina,omitempty"`
 	IsRepeatable      bool                          `protobuf:"varint,10,opt,name=is_repeatable,json=isRepeatable,proto3" json:"is_repeatable,omitempty"`
-	Available         bool                          `protobuf:"varint,11,opt,name=available,proto3" json:"available,omitempty"`
-	UnavailableReason string                        `protobuf:"bytes,12,opt,name=unavailable_reason,json=unavailableReason,proto3" json:"unavailable_reason,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -6506,20 +6504,6 @@ func (x *ActionDefinition) GetIsRepeatable() bool {
 		return x.IsRepeatable
 	}
 	return false
-}
-
-func (x *ActionDefinition) GetAvailable() bool {
-	if x != nil {
-		return x.Available
-	}
-	return false
-}
-
-func (x *ActionDefinition) GetUnavailableReason() string {
-	if x != nil {
-		return x.UnavailableReason
-	}
-	return ""
 }
 
 type S2C_ActionList struct {
@@ -8079,7 +8063,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x1aActionEquipmentRequirement\x12\x14\n" +
 	"\x05slots\x18\x01 \x03(\tR\x05slots\x12\x19\n" +
 	"\bitem_key\x18\x02 \x01(\tR\aitemKey\x12\x19\n" +
-	"\bitem_tag\x18\x03 \x01(\tR\aitemTag\"\xab\x03\n" +
+	"\bitem_tag\x18\x03 \x01(\tR\aitemTag\"\xde\x02\n" +
 	"\x10ActionDefinition\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x1b\n" +
@@ -8092,9 +8076,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x05ticks\x18\b \x01(\rR\x05ticks\x12\x18\n" +
 	"\astamina\x18\t \x01(\x01R\astamina\x12#\n" +
 	"\ris_repeatable\x18\n" +
-	" \x01(\bR\fisRepeatable\x12\x1c\n" +
-	"\tavailable\x18\v \x01(\bR\tavailable\x12-\n" +
-	"\x12unavailable_reason\x18\f \x01(\tR\x11unavailableReason\"C\n" +
+	" \x01(\bR\fisRepeatable\"C\n" +
 	"\x0eS2C_ActionList\x121\n" +
 	"\aactions\x18\x01 \x03(\v2\x17.proto.ActionDefinitionR\aactions\"c\n" +
 	"\x16S2C_ActionStateChanged\x12\x1b\n" +
