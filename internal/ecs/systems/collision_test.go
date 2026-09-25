@@ -127,6 +127,19 @@ func (s *sweepScene) addMovingCandidate(id uint64, x, y float64) {
 	s.chunk.Spatial().AddDynamic(handle, int(x), int(y))
 }
 
+func (s *sweepScene) addStaticCandidate(id uint64, x, y, halfWidth, halfHeight float64) {
+	handle := s.world.Spawn(types.EntityID(id), func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: x, Y: y})
+		ecs.AddComponent(w, h, components.Collider{
+			HalfWidth:  halfWidth,
+			HalfHeight: halfHeight,
+			Layer:      constt.PlayerLayer,
+			Mask:       constt.PlayerMask,
+		})
+	})
+	s.chunk.Spatial().AddStatic(handle, int(x), int(y))
+}
+
 // runTick feeds one intent (as a delta from the mover's current position) into
 // MovedEntities and runs the collision system. Between ticks the collision
 // result is applied to the mover's transform, mirroring TransformUpdateSystem,
@@ -233,6 +246,55 @@ func TestCollisionSystem_SlideStopsBeforeImpassableTerrain(t *testing.T) {
 	}
 	if !result.HasCollision {
 		t.Fatalf("expected collision to be reported")
+	}
+}
+
+func TestCollisionSystem_SlideStopsAtObjectBeforeTile(t *testing.T) {
+	paintWater := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 101, 125, types.TileDeepWater)
+	}
+	scene := newSweepScene(t, 101, 110, []components.Transform{{X: 111, Y: 100}}, paintWater)
+	scene.addStaticCandidate(3, 101, 123, 5, 5)
+
+	result := scene.runTick(t, 6.2, 1.5)
+	if result.FinalY > 113.01 {
+		t.Fatalf("slide passed object before reaching water: final (%.3f, %.3f)", result.FinalX, result.FinalY)
+	}
+	if result.CollidedWith != 3 {
+		t.Fatalf("expected nearer object collision, got %d", result.CollidedWith)
+	}
+}
+
+func TestCollisionSystem_DirectMoveStopsAtObjectBeforeTile(t *testing.T) {
+	paintWater := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 101, 125, types.TileDeepWater)
+	}
+	scene := newSweepScene(t, 101, 110, nil, paintWater)
+	scene.addStaticCandidate(2, 101, 123, 5, 5)
+
+	result := scene.runTick(t, 0, 6.2)
+	if result.FinalY > 113.01 {
+		t.Fatalf("move passed object before reaching water: final y %.3f", result.FinalY)
+	}
+	if result.CollidedWith != 2 {
+		t.Fatalf("expected nearer object collision, got %d", result.CollidedWith)
+	}
+}
+
+func TestCollisionSystem_TileStopsBeforeFartherObject(t *testing.T) {
+	paintWater := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 101, 125, types.TileDeepWater)
+	}
+	scene := newSweepScene(t, 101, 110, nil, paintWater)
+	scene.addStaticCandidate(2, 101, 126, 5, 5)
+
+	result := scene.runTick(t, 0, 6.2)
+	if math.Abs(result.FinalY-115) > 0.05 {
+		t.Fatalf("expected stop at water before object, final y %.3f", result.FinalY)
+	}
+	if !result.HasCollision || result.CollidedWith != 0 {
+		t.Fatalf("expected tile collision before object, got hasCollision=%v collidedWith=%d",
+			result.HasCollision, result.CollidedWith)
 	}
 }
 
