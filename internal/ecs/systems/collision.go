@@ -174,22 +174,13 @@ func (s *CollisionSystem) sweepCollision(
 		return result
 	}
 
-	// Check tile collisions first
+	// Find the terrain contact before comparing it with object contacts.
 	movement, hasMovement := s.movementStorage.Get(entityHandle)
 	isSwimming := hasMovement && movement.Mode == constt.Swim
-	tileStopX, tileStopY, tileNormalX, tileNormalY, tileBlocked := s.checkTileCollision(
+	tileStopX, tileStopY, tileNormalX, tileNormalY, tileHitT, tileBlocked := s.checkTileCollision(
 		transform.X, transform.Y, dx, dy,
 		collider.HalfWidth, collider.HalfHeight, chunk, isSwimming,
 	)
-	if tileBlocked {
-		// Stop at tile collision point
-		result.FinalX = tileStopX
-		result.FinalY = tileStopY
-		result.CollisionNormalX = tileNormalX
-		result.CollisionNormalY = tileNormalY
-		result.HasCollision = true
-		return result
-	}
 
 	// Entity AABB
 	entityHalfW := collider.HalfWidth
@@ -314,22 +305,13 @@ func (s *CollisionSystem) sweepCollision(
 			break
 		}
 
-		// Slide segments (iterations after the first) leave the intent path
-		// that the initial tile check validated: stop at the last passable
-		// point before the slide enters impassable terrain.
+		// The first segment uses the intent's tile sweep above. Slides need
+		// their own sweep because they leave that original path.
 		if iter > 0 {
-			slideX, slideY, slideNormalX, slideNormalY, slideBlocked := s.checkTileCollision(
+			tileStopX, tileStopY, tileNormalX, tileNormalY, tileHitT, tileBlocked = s.checkTileCollision(
 				currentX, currentY, remainingDX, remainingDY,
 				entityHalfW, entityHalfH, chunk, isSwimming,
 			)
-			if slideBlocked {
-				currentX = slideX
-				currentY = slideY
-				result.CollisionNormalX = slideNormalX
-				result.CollisionNormalY = slideNormalY
-				result.HasCollision = true
-				break
-			}
 		}
 
 		earliestT := 1.0
@@ -402,6 +384,22 @@ func (s *CollisionSystem) sweepCollision(
 					collidedWith = id
 				}
 			}
+		}
+
+		// A tile can stop this segment only if it is closer than every object.
+		// Otherwise resolve the object first and recheck the redirected slide.
+		if tileBlocked && tileHitT < earliestT {
+			result.HasCollision = true
+			result.CollisionNormalX = tileNormalX
+			result.CollisionNormalY = tileNormalY
+			if iter == 0 {
+				result.FinalX = tileStopX
+				result.FinalY = tileStopY
+				return result
+			}
+			currentX = tileStopX
+			currentY = tileStopY
+			break
 		}
 
 		if earliestT < 1.0 {
@@ -512,17 +510,17 @@ const maxSweepTiles = 32
 // checkTileCollision sweeps the entity's AABB (halfW/halfH) from start along
 // (dx, dy) against impassable tiles. Returns the center position at the
 // earliest contact (or the untouched destination when clear), the contact
-// normal, and whether movement is blocked. Tiles the box already overlaps are
-// ignored, so mode switches and legacy positions can move out of terrain.
+// normal, hit time, and whether movement is blocked. Tiles the box already
+// overlaps are ignored, so mode switches and legacy positions can move out.
 // (Object collision is stricter: startOverlapNormal blocks deepening moves
 // there, but still lets overlapped entities escape.)
 func (s *CollisionSystem) checkTileCollision(
 	startX, startY, dx, dy, halfW, halfH float64,
 	chunk *core.Chunk,
 	isSwimming bool,
-) (stopX, stopY, normalX, normalY float64, blocked bool) {
+) (stopX, stopY, normalX, normalY, hitT float64, blocked bool) {
 	if math.Abs(dx) < 0.001 && math.Abs(dy) < 0.001 {
-		return startX, startY, 0, 0, false
+		return startX, startY, 0, 0, 1, false
 	}
 
 	tileSize := float64(constt.CoordPerTile)
@@ -536,7 +534,7 @@ func (s *CollisionSystem) checkTileCollision(
 
 	if (maxTileX-minTileX+1)*(maxTileY-minTileY+1) > maxSweepTiles*maxSweepTiles {
 		// Sweep too large to enumerate - skip rather than stall the tick.
-		return startX + dx, startY + dy, 0, 0, false
+		return startX + dx, startY + dy, 0, 0, 1, false
 	}
 
 	earliestT := 1.0
@@ -566,9 +564,9 @@ func (s *CollisionSystem) checkTileCollision(
 	if earliestT < 1.0 {
 		return startX + dx*(earliestT-epsilon),
 			startY + dy*(earliestT-epsilon),
-			hitNormalX, hitNormalY, true
+			hitNormalX, hitNormalY, earliestT, true
 	}
-	return startX + dx, startY + dy, 0, 0, false
+	return startX + dx, startY + dy, 0, 0, 1, false
 }
 
 // tilePassableAtCoords reports whether the tile at integer tile coordinates is
