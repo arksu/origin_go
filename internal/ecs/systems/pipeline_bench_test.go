@@ -57,7 +57,13 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 		movement.Mode = constt.Walk
 		movement.State = constt.StateMoving
 		movement.Speed = 100
-		movement.SetTargetPoint(int(targetX), int(startY))
+		targetY := startY
+		if pillarsPerMover > 0 {
+			// An oblique approach leaves movement along the pillar's face
+			// after contact, exercising the subsequent slide sweep.
+			targetY += (targetX - startX) / 2
+		}
+		movement.SetTargetPoint(int(targetX), int(targetY))
 
 		handle := world.Spawn(types.EntityID(i+1), func(w *ecs.World, h types.Handle) {
 			ecs.AddComponent(w, h, components.Transform{X: startX, Y: startY})
@@ -121,6 +127,24 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 	movementSystem := NewMovementSystem(world, cm, zap.NewNop())
 	collisionSystem := NewCollisionSystem(world, cm, zap.NewNop(), 0, constt.ChunkWorldSize, 0, constt.ChunkWorldSize, 0)
 	transformSystem := NewTransformUpdateSystem(world, cm, eventbus.New(nil), zap.NewNop())
+
+	if pillarsPerMover > 0 {
+		// Validate the workload before timing so a geometry change cannot
+		// silently turn this into a benchmark of perpendicular stops.
+		movementSystem.Update(world, 0.1)
+		collisionSystem.Update(world, 0.1)
+		movedEntities := ecs.GetResource[ecs.MovedEntities](world)
+		if movedEntities.Count != moverCount {
+			b.Fatalf("expected %d dense movers, got %d", moverCount, movedEntities.Count)
+		}
+		for i := 0; i < movedEntities.Count; i++ {
+			result, ok := ecs.GetComponent[components.CollisionResult](world, movedEntities.Handles[i])
+			if !ok || !result.HasCollision || result.PerpendicularOscillation || result.FinalY <= movedEntities.IntentY[i] {
+				b.Fatalf("expected dense mover to slide past its intended Y=%.3f, got %+v", movedEntities.IntentY[i], result)
+			}
+		}
+		transformSystem.Update(world, 0.1)
+	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
