@@ -401,6 +401,41 @@ func TestCollisionSystem_OverlappedMoverEscapesStatic(t *testing.T) {
 	}
 }
 
+func TestCollisionSystem_CoincidentCentersAllowEscape(t *testing.T) {
+	tests := []struct {
+		name                  string
+		halfWidth, halfHeight float64
+		dx, dy                float64
+		moving                bool
+	}{
+		{name: "static_positive_x", halfWidth: 5, halfHeight: 60, dx: 6},
+		{name: "static_negative_x", halfWidth: 5, halfHeight: 60, dx: -6},
+		{name: "static_positive_y", halfWidth: 60, halfHeight: 5, dy: 6},
+		{name: "static_negative_y", halfWidth: 60, halfHeight: 5, dy: -6},
+		{name: "equal_penetration_positive_y", halfWidth: 5, halfHeight: 5, dy: 6},
+		{name: "equal_penetration_negative_y", halfWidth: 5, halfHeight: 5, dy: -6},
+		{name: "moving_positive_x", dx: 6, moving: true},
+		{name: "moving_negative_x", dx: -6, moving: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			scene := newSweepScene(t, 100, 100, nil)
+			if test.moving {
+				scene.addMovingCandidate(2, 100, 100)
+			} else {
+				scene.addStaticCandidate(2, 100, 100, test.halfWidth, test.halfHeight)
+			}
+			result := scene.runTick(t, test.dx, test.dy)
+			if math.Abs(result.FinalX-(100+test.dx)) > 0.01 || math.Abs(result.FinalY-(100+test.dy)) > 0.01 {
+				t.Fatalf("expected full escape move, got (%.3f, %.3f)", result.FinalX, result.FinalY)
+			}
+			if result.HasCollision || result.PerpendicularOscillation {
+				t.Fatalf("escape was incorrectly blocked: %+v", result)
+			}
+		})
+	}
+}
+
 // H2: deepening movement into an overlapped object slides along it instead of
 // stopping dead, matching ordinary wall-contact behavior.
 func TestCollisionSystem_OverlappedMoverSlidesAlongStatic(t *testing.T) {
