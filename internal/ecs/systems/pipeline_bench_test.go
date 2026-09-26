@@ -132,6 +132,13 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 		// before/after comparison of the systems themselves.
 		for j := range movers {
 			m := &movers[j]
+			transform, ok := ecs.GetComponent[components.Transform](world, m.handle)
+			if !ok {
+				b.Fatal("benchmark mover is missing its transform")
+			}
+			// Keep the spatial entry in sync with the reset position so each
+			// tick performs the same cell transitions as the first tick.
+			chunk.Spatial().UpdateDynamic(m.handle, int(transform.X), int(transform.Y), int(m.startX), int(m.startY))
 			ecs.AddComponent(world, m.handle, components.Transform{X: m.startX, Y: m.startY})
 			ecs.AddComponent(world, m.handle, m.movement)
 			ecs.AddComponent(world, m.handle, m.stats)
