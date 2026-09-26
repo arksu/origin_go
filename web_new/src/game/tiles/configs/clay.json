@@ -1,226 +1,226 @@
 {
   "ground": [
     {
-      "img": "tiles/clay/base_1.png",
+      "img": "clay/base_1.png",
       "w": 1
     },
     {
-      "img": "tiles/clay/base_2.png",
+      "img": "clay/base_2.png",
       "w": 1
     },
     {
-      "img": "tiles/clay/base_3.png",
+      "img": "clay/base_3.png",
       "w": 1
     }
   ],
   "borders": [
     [
       {
-        "img": "tiles/clay/b1.png",
+        "img": "clay/b1.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b1_2.png",
+        "img": "clay/b1_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b1_3.png",
+        "img": "clay/b1_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b2.png",
+        "img": "clay/b2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b2_2.png",
+        "img": "clay/b2_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b2_3.png",
+        "img": "clay/b2_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b3.png",
+        "img": "clay/b3.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b3_2.png",
+        "img": "clay/b3_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b3_3.png",
+        "img": "clay/b3_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b4.png",
+        "img": "clay/b4.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b4_2.png",
+        "img": "clay/b4_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b4_3.png",
+        "img": "clay/b4_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b5.png",
+        "img": "clay/b5.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b5_2.png",
+        "img": "clay/b5_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b5_3.png",
+        "img": "clay/b5_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b6.png",
+        "img": "clay/b6.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b6_2.png",
+        "img": "clay/b6_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b6_3.png",
+        "img": "clay/b6_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b7.png",
+        "img": "clay/b7.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b7_2.png",
+        "img": "clay/b7_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b7_3.png",
+        "img": "clay/b7_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b8.png",
+        "img": "clay/b8.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b8_2.png",
+        "img": "clay/b8_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b8_3.png",
+        "img": "clay/b8_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b9.png",
+        "img": "clay/b9.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b9_2.png",
+        "img": "clay/b9_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b9_3.png",
+        "img": "clay/b9_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b10.png",
+        "img": "clay/b10.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b10_2.png",
+        "img": "clay/b10_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b10_3.png",
+        "img": "clay/b10_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b11.png",
+        "img": "clay/b11.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b11_2.png",
+        "img": "clay/b11_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b11_3.png",
+        "img": "clay/b11_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b12.png",
+        "img": "clay/b12.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b12_2.png",
+        "img": "clay/b12_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b12_3.png",
+        "img": "clay/b12_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b13.png",
+        "img": "clay/b13.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b13_2.png",
+        "img": "clay/b13_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b13_3.png",
+        "img": "clay/b13_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b14.png",
+        "img": "clay/b14.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b14_2.png",
+        "img": "clay/b14_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b14_3.png",
+        "img": "clay/b14_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/clay/b15.png",
+        "img": "clay/b15.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b15_2.png",
+        "img": "clay/b15_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/b15_3.png",
+        "img": "clay/b15_3.png",
         "w": 1
       }
     ]
@@ -228,197 +228,197 @@
   "corners": [
     [
       {
-        "img": "tiles/clay/c1.png",
+        "img": "clay/c1.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c1_2.png",
+        "img": "clay/c1_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c1_3.png",
+        "img": "clay/c1_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c2.png",
+        "img": "clay/c2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c2_2.png",
+        "img": "clay/c2_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c2_3.png",
+        "img": "clay/c2_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c3.png",
+        "img": "clay/c3.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c3_2.png",
+        "img": "clay/c3_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c3_3.png",
+        "img": "clay/c3_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c4.png",
+        "img": "clay/c4.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c4_2.png",
+        "img": "clay/c4_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c4_3.png",
+        "img": "clay/c4_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c5.png",
+        "img": "clay/c5.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c5_2.png",
+        "img": "clay/c5_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c5_3.png",
+        "img": "clay/c5_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c6.png",
+        "img": "clay/c6.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c6_2.png",
+        "img": "clay/c6_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c6_3.png",
+        "img": "clay/c6_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c7.png",
+        "img": "clay/c7.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c7_2.png",
+        "img": "clay/c7_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c7_3.png",
+        "img": "clay/c7_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c8.png",
+        "img": "clay/c8.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c8_2.png",
+        "img": "clay/c8_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c8_3.png",
+        "img": "clay/c8_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c9.png",
+        "img": "clay/c9.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c9_2.png",
+        "img": "clay/c9_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c9_3.png",
+        "img": "clay/c9_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c10.png",
+        "img": "clay/c10.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c10_2.png",
+        "img": "clay/c10_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c10_3.png",
+        "img": "clay/c10_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c11.png",
+        "img": "clay/c11.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c11_2.png",
+        "img": "clay/c11_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c11_3.png",
+        "img": "clay/c11_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c12.png",
+        "img": "clay/c12.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c12_2.png",
+        "img": "clay/c12_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c12_3.png",
+        "img": "clay/c12_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c13.png",
+        "img": "clay/c13.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c13_2.png",
+        "img": "clay/c13_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c13_3.png",
+        "img": "clay/c13_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c14.png",
+        "img": "clay/c14.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c14_2.png",
+        "img": "clay/c14_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c14_3.png",
+        "img": "clay/c14_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/clay/c15.png",
+        "img": "clay/c15.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c15_2.png",
+        "img": "clay/c15_2.png",
         "w": 1
       },
       {
-        "img": "tiles/clay/c15_3.png",
+        "img": "clay/c15_3.png",
         "w": 1
       }
     ]

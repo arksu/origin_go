@@ -41,7 +41,7 @@ func TestMapClickOrdinaryMovementAndPickup(t *testing.T) {
 			pending, pickup := ecs.GetComponent[components.PendingInteraction](w, player)
 			switch mode {
 			case "dropped":
-				if !pickup || pending.TargetEntityID != 2 || pending.Type != netproto.InteractionType_PICKUP {
+				if !pickup || pending.TargetEntityID != 2 {
 					t.Fatal("pickup was not queued")
 				}
 			case "stunned":
@@ -133,7 +133,7 @@ func TestMapClickGroundClearsObjectLinkIntent(t *testing.T) {
 	}
 }
 
-func TestInteractDoesNotConsumeAdminSelection(t *testing.T) {
+func TestSecondaryMapClickDoesNotConsumeAdminSelection(t *testing.T) {
 	w := ecs.NewWorldForTesting()
 	player := w.Spawn(1, nil)
 	admin := &testAdminObjectInfoHandler{}
@@ -141,7 +141,7 @@ func TestInteractDoesNotConsumeAdminSelection(t *testing.T) {
 	s.SetAdminHandler(admin)
 	ecs.GetResource[ecs.PendingAdminObjectInfo](w).Set(1)
 	ecs.GetResource[ecs.PendingAdminDestroy](w).Set(1)
-	s.handleInteract(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.Interact{EntityId: 99}})
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, TargetEntityId: 99}})
 	if admin.calls != 0 || admin.destroyCalls != 0 || !ecs.GetResource[ecs.PendingAdminObjectInfo](w).Get(1) || !ecs.GetResource[ecs.PendingAdminDestroy](w).Get(1) {
 		t.Fatal("context interaction consumed selection")
 	}
@@ -201,16 +201,28 @@ func TestMapClickCoordinateCommandsUseClickNotObjectPosition(t *testing.T) {
 }
 
 type testActionClickRouter struct {
-	consume       bool
-	calls         int
-	targetID      types.EntityID
-	x, y          float64
-	lists, states int
-	cancelCalls   int
-	cancelTargetX float64
-	cancelTargetY float64
+	consume             bool
+	calls               int
+	targetID            types.EntityID
+	x, y                float64
+	lists, states       int
+	cancelCalls         int
+	cancelTargetX       float64
+	cancelTargetY       float64
+	directCalls         int
+	directID            string
+	directTarget        types.EntityID
+	directHandle        types.Handle
+	directX, directY    float64
+	activeAtDirectStart bool
 }
 
+func (router *testActionClickRouter) StartTargetedOnce(w *ecs.World, _ types.EntityID, player types.Handle, id string, targetID types.EntityID, targetHandle types.Handle, x, y float64) {
+	router.directCalls++
+	router.directID, router.directTarget, router.directHandle = id, targetID, targetHandle
+	router.directX, router.directY = x, y
+	_, router.activeAtDirectStart = ecs.GetComponent[components.ActiveGameAction](w, player)
+}
 func (*testActionClickRouter) Activate(*ecs.World, types.EntityID, types.Handle, string) {}
 func (router *testActionClickRouter) Cancel(w *ecs.World, _ types.EntityID, player types.Handle) {
 	router.cancelCalls++
@@ -324,7 +336,7 @@ func TestMapClickAdminPrecedesArmedAction(t *testing.T) {
 	}
 }
 
-func TestInteractWithoutColliderCannotStartLift(t *testing.T) {
+func TestSecondaryMapClickWithoutColliderCannotStartLift(t *testing.T) {
 	w := ecs.NewWorldForTesting()
 	player := w.Spawn(1, nil)
 	w.Spawn(2, func(w *ecs.World, h types.Handle) {
@@ -332,9 +344,9 @@ func TestInteractWithoutColliderCannotStartLift(t *testing.T) {
 		ecs.AddComponent(w, h, components.Transform{X: 100, Y: 100})
 	})
 	s := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
-	s.handleInteract(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.Interact{EntityId: 2}})
+	s.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, TargetEntityId: 2}})
 	if _, pending := ecs.GetComponent[components.PendingLiftTransition](w, player); pending {
-		t.Fatal("ordinary Interact started lift")
+		t.Fatal("ordinary secondary click started lift")
 	}
 }
 

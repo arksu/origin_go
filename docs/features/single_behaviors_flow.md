@@ -4,7 +4,7 @@
 Текущая механика открытия контейнеров имеет отдельный flow (`PendingAutoOpen` + `LinkCreated`), а интеракции в целом не масштабируются единообразно. Нужен общий серверный pipeline для всех действий объекта через контекстное меню и behaviors.
 
 ## 2. Goals
-1. Единый вход: ПКМ по объекту всегда запускает вычисление контекстных действий.
+1. Единый вход: secondary `MapClick` по объекту без переноса запускает pickup или вычисление контекстных действий.
 2. Единый execute-flow для всех действий, включая `open`.
 3. Детерминированная агрегация действий из behaviors.
 4. Мобильный-friendly UX ошибок через мини-алерты по центру.
@@ -16,7 +16,7 @@
 
 ## 4. Core Flow
 
-1. Игрок делает ПКМ по объекту.
+1. Игрок делает ПКМ или touch long-press: клиент отправляет secondary `MapClick` с координатами, ID объекта либо нулём и модификаторами. Сервер сначала отменяет активный gameplay action. При переносе world object запускается одна попытка постановки в точку клика; ошибка сохраняет перенос и оставляет idle без armed-экшена. Без переноса клик по dropped item запускает pickup, а пустая земля не начинает движение. Pending admin-команды остаются до LMB.
 2. Сервер выполняет `ComputeContextActions(entity)`:
     - обходит все behaviors в порядке из `def`;
     - каждое behavior смотрит state, валидирует по своему контракту, возвращает actions.
@@ -25,7 +25,7 @@
     - при duplicate `action_id`: `first wins`, пишется `WARN`, инкремент метрики дубликатов.
 4. Развилка:
     - `0 actions`: полный игнор (ничего не отправляем клиенту),
-    - `1 action`: auto-select, сразу execute pipeline,
+    - `1 action`: auto-select и execute pipeline либо меню при `contextMenuEvenForOneItem=true`,
     - `2+ actions`: отправка меню, после выбора execute pipeline.
 5. Execute pipeline:
     - создается pending intent/action;
@@ -40,9 +40,8 @@
 
 1. Для всех действий link обязателен, без исключений.
 2. Таймаут ожидания `LinkCreated` для pending: `15s` (вынести в конфиг).
-3. `PendingInteraction` очищается на:
-    - новый `MoveTo`,
-    - новый `MoveToEntity`,
+3. `PendingContextAction` очищается на:
+    - новый интент движения из primary `MapClick`,
     - `LinkBroken`,
     - despawn target/player,
     - stop movement.
@@ -103,7 +102,7 @@
 
 ## 11. Acceptance Criteria
 
-1. ПКМ всегда проходит через compute actions по behaviors.
+1. Secondary `MapClick` без переноса по collider-объекту проходит через compute actions по behaviors после отмены активного gameplay action.
 2. `0/1/2+` действия обрабатываются строго по правилам (ignore/auto/menu).
 3. Любое исполнение запускается только после `LinkCreated`.
 4. Pending очищается во всех согласованных cancel-path + по timeout 15s.

@@ -19,7 +19,13 @@ export class PlayerCommandController {
     this.playerId = playerId
   }
 
-  sendMapClick(x: number, y: number, targetEntityId: number, modifiers: number): void {
+  sendMapClick(
+    x: number,
+    y: number,
+    targetEntityId: number,
+    modifiers: number,
+    button: proto.MapClickButton = proto.MapClickButton.MAP_CLICK_BUTTON_PRIMARY,
+  ): void {
     if (DEBUG_MOVEMENT) {
       let currentPos = 'unknown'
       if (this.playerId !== null) {
@@ -33,6 +39,7 @@ export class PlayerCommandController {
         currentPos,
         target: `(${Math.round(x)}, ${Math.round(y)})`,
         modifiers,
+        button,
         timestamp: Date.now(),
       })
     }
@@ -43,27 +50,9 @@ export class PlayerCommandController {
           x: Math.round(x),
           y: Math.round(y),
           targetEntityId,
+          button,
         }),
         modifiers,
-      }),
-    })
-  }
-
-  sendInteract(entityId: number, interactionType: proto.InteractionType = proto.InteractionType.AUTO): void {
-    if (DEBUG_MOVEMENT) {
-      console.log(`[PlayerCommandController] Sending Interact:`, {
-        entityId,
-        interactionType,
-        timestamp: Date.now(),
-      })
-    }
-
-    gameConnection.send({
-      playerAction: proto.C2S_PlayerAction.create({
-        interact: proto.Interact.create({
-          entityId,
-          type: interactionType,
-        }),
       }),
     })
   }

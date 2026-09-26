@@ -129,15 +129,16 @@ See `MoveController.ts` AGENTS.md for details.
 
 **PlayerCommandController.ts** (singleton):
 - Converts input to `C2S_PlayerAction` messages
-- `MapClick(x, y, targetEntityId)` for ordinary primary map clicks; zero target for ground
-- `Interact(entityId)` for pickup or context requests
+- `MapClick(x, y, targetEntityId, button)` for primary and secondary map clicks; zero target for ground, omitted button means primary
 - `SelectContextAction(entityId, actionId)` after menu selection
 
 ### Context Interaction (RMB)
 
-- `Render.ts` maps RMB click on object to `sendInteract(entityId)`.
-- Touch long-press maps to the same context request, so the desktop and mobile
-  builds share one interaction model.
+- `Render.ts` sends one secondary `MapClick` for RMB on objects or ground, preserving coordinates and modifiers.
+- Touch long-press uses the same sender and suppresses its release tap.
+- Secondary input cancels the active gameplay action on the server, then requests put-down at the click coordinates when carrying a world object. Without carry it routes pickup/context interaction; ground starts no movement.
+- Failed secondary put-down keeps carry and ends idle; explicit Actions/hotbar lift_down retains retry selection.
+- RMB never sends an inventory hand drop or a separate cancellation request. Pending administrator commands consume primary input only.
 - Primary click/tap on a dropped item sends a map click;
   the server queues movement and completes the pickup on arrival.
 - Context menu UI is Vue-side (`GameView.vue`) and store-driven (`gameStore.contextMenu`).

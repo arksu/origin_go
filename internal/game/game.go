@@ -286,9 +286,6 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 	case *netproto.C2S_PlayerAction_MapClick:
 		cmdType = network.CmdMapClick
 		payload = act.MapClick
-	case *netproto.C2S_PlayerAction_Interact:
-		cmdType = network.CmdInteract
-		payload = act.Interact
 	case *netproto.C2S_PlayerAction_SelectContextAction:
 		cmdType = network.CmdSelectContextAction
 		payload = act.SelectContextAction

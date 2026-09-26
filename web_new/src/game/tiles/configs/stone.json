@@ -1,15 +1,15 @@
 {
   "ground": [
     {
-      "img": "tiles/stone/stone1.png",
+      "img": "stone/stone1.png",
       "w": 1
     },
     {
-      "img": "tiles/stone/stone2.png",
+      "img": "stone/stone2.png",
       "w": 1
     },
     {
-      "img": "tiles/stone/stone3.png",
+      "img": "stone/stone3.png",
       "w": 1
     }
   ],

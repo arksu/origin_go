@@ -21,9 +21,10 @@ import png_codec as pc
 DEFAULT_JSON = "web_new/public/assets/game/tiles.json"
 DEFAULT_PNG = "web_new/public/assets/game/tiles.png"
 DEFAULT_OUT = "art_source/tiles"
-# Frame keys live in atlas groups "tiles/*" and "terrain/*"; the leading
-# "tiles/" duplicates the output dir name, so it is stripped by default.
-DEFAULT_STRIP_PREFIXES = ["tiles/"]
+# Atlas frame keys are the relative paths under art_source/tiles (the legacy
+# "tiles/" group prefix was removed from the game atlas; pass
+# --strip-prefix tiles/ when extracting pre-migration atlases).
+DEFAULT_STRIP_PREFIXES: list = []
 
 
 def frame_region(fr):

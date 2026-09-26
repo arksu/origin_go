@@ -2,7 +2,6 @@ package components
 
 import (
 	"origin/internal/ecs"
-	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
 
@@ -12,7 +11,6 @@ import (
 type PendingInteraction struct {
 	TargetEntityID types.EntityID
 	TargetHandle   types.Handle
-	Type           netproto.InteractionType
 	Range          float64
 }
 

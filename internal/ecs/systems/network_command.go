@@ -144,6 +144,7 @@ type LiftCommandService interface {
 type ActionCommandService interface {
 	Activate(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string)
 	Cancel(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
+	StartTargetedOnce(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string, targetID types.EntityID, targetHandle types.Handle, x, y float64)
 	HandleArmedClick(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle, x, y float64) bool
 	SendList(playerID types.EntityID)
 	SendState(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
@@ -305,8 +306,6 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleMapClick(w, handle, cmd)
 	case network.CmdSetMovementMode:
 		s.handleSetMovementMode(w, handle, cmd)
-	case network.CmdInteract:
-		s.handleInteract(w, handle, cmd)
 	case network.CmdSelectContextAction:
 		s.handleSelectContextAction(w, handle, cmd)
 	case network.CmdChat:
@@ -462,6 +461,15 @@ func (s *NetworkCommandSystem) handleMapClick(w *ecs.World, playerHandle types.H
 		s.logger.Error("Invalid payload type for MapClick", zap.Uint64("client_id", cmd.ClientID))
 		return
 	}
+	switch click.Button {
+	case netproto.MapClickButton_MAP_CLICK_BUTTON_PRIMARY:
+		s.handlePrimaryMapClick(w, playerHandle, cmd, click)
+	case netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY:
+		s.handleSecondaryMapClick(w, playerHandle, cmd.CharacterID, click)
+	}
+}
+
+func (s *NetworkCommandSystem) handlePrimaryMapClick(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand, click *netproto.MapClick) {
 	if s.consumeAdminMapClick(w, playerHandle, cmd.CharacterID, click) {
 		return
 	}
@@ -635,29 +643,29 @@ func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle ty
 	ecs.GetResource[ecs.MovedEntities](w).Add(playerHandle, transform.X, transform.Y)
 }
 
-func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	interact, ok := cmd.Payload.(*netproto.Interact)
-	if !ok {
-		s.logger.Error("Invalid payload type for Interact",
-			zap.Uint64("client_id", cmd.ClientID))
+func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandle types.Handle, playerID types.EntityID, click *netproto.MapClick) {
+	if s.actionService != nil {
+		s.actionService.Cancel(w, playerID, playerHandle)
+	}
+	if s.liftCommandService != nil && s.liftCommandService.IsPlayerCarrying(w, playerHandle) {
+		if s.actionService != nil {
+			s.actionService.StartTargetedOnce(w, playerID, playerHandle, "lift_down", 0, types.InvalidHandle, float64(click.X), float64(click.Y))
+		}
 		return
 	}
-
-	targetEntityID := types.EntityID(interact.EntityId)
-	targetHandle := w.GetHandleByEntityID(targetEntityID)
-	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
-		s.logger.Debug("Interact: target entity not found",
-			zap.Uint64("client_id", cmd.ClientID),
-			zap.Uint64("target_entity_id", interact.EntityId))
+	targetID := types.EntityID(click.TargetEntityId)
+	targetHandle := w.GetHandleByEntityID(targetID)
+	if targetID == 0 || !w.Alive(targetHandle) {
 		return
 	}
-
-	_, isDroppedItem := ecs.GetComponent[components.DroppedItem](w, targetHandle)
-	if isDroppedItem {
-		s.handlePickupInteract(w, playerHandle, cmd.CharacterID, targetEntityID, targetHandle)
+	if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped {
+		s.handlePickupInteract(w, playerHandle, playerID, targetID, targetHandle)
 		return
 	}
+	s.handleContextInteraction(w, playerHandle, playerID, targetID, targetHandle)
+}
 
+func (s *NetworkCommandSystem) handleContextInteraction(w *ecs.World, playerHandle types.Handle, playerID, targetEntityID types.EntityID, targetHandle types.Handle) {
 	if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); !hasCollider {
 		return
 	}
@@ -665,20 +673,20 @@ func (s *NetworkCommandSystem) handleInteract(w *ecs.World, playerHandle types.H
 		return
 	}
 
-	actions := s.computeContextActions(w, cmd.CharacterID, playerHandle, targetEntityID, targetHandle)
+	actions := s.computeContextActions(w, playerID, playerHandle, targetEntityID, targetHandle)
 	switch len(actions) {
 	case 0:
 		// Product rule: no actions => full ignore.
 		return
 	case 1:
 		if s.shouldOpenContextMenuForSingleAction(w, targetHandle) {
-			s.sendContextMenu(cmd.CharacterID, targetEntityID, actions)
+			s.sendContextMenu(playerID, targetEntityID, actions)
 			return
 		}
 		// Fast path: exactly one action is auto-selected.
-		s.startPendingContextAction(w, playerHandle, cmd.CharacterID, targetEntityID, targetHandle, actions[0].ActionID)
+		s.startPendingContextAction(w, playerHandle, playerID, targetEntityID, targetHandle, actions[0].ActionID)
 	default:
-		s.sendContextMenu(cmd.CharacterID, targetEntityID, actions)
+		s.sendContextMenu(playerID, targetEntityID, actions)
 	}
 }
 
@@ -858,7 +866,6 @@ func (s *NetworkCommandSystem) handlePickupInteract(
 		ecs.AddComponent(w, playerHandle, components.PendingInteraction{
 			TargetEntityID: targetEntityID,
 			TargetHandle:   targetHandle,
-			Type:           netproto.InteractionType_PICKUP,
 			Range:          constt.DroppedPickupRadius,
 		})
 		return
@@ -880,7 +887,6 @@ func (s *NetworkCommandSystem) handlePickupInteract(
 	ecs.AddComponent(w, playerHandle, components.PendingInteraction{
 		TargetEntityID: targetEntityID,
 		TargetHandle:   targetHandle,
-		Type:           netproto.InteractionType_PICKUP,
 		Range:          constt.DroppedPickupRadius,
 	})
 }

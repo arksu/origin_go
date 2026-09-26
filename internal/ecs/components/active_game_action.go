@@ -23,6 +23,7 @@ type ActiveGameAction struct {
 	TargetX        float64
 	TargetY        float64
 	MovementOwned  bool
+	DirectAttempt  bool // Direct requests end idle instead of returning to target selection.
 	ExpireAtUnixMs int64
 }
 

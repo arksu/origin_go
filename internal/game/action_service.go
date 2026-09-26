@@ -199,13 +199,8 @@ func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID
 			return
 		}
 	}
-	definition, exists := service.definitions.Get(id)
-	if !exists {
-		service.alert(playerID, "ACTION_UNKNOWN")
-		return
-	}
-	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
-		service.alert(playerID, reason)
+	definition := service.availableDefinition(world, playerID, playerHandle, id)
+	if definition == nil {
 		return
 	}
 	service.nextGeneration++
@@ -224,6 +219,63 @@ func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID
 	service.SendState(world, playerID, playerHandle)
 }
 
+func (service *ActionService) availableDefinition(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) *actiondefs.Definition {
+	definition, exists := service.definitions.Get(id)
+	if !exists {
+		service.alert(playerID, "ACTION_UNKNOWN")
+		return nil
+	}
+	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
+		service.alert(playerID, reason)
+		return nil
+	}
+	return definition
+}
+
+// StartTargetedOnce accepts a server-routed target without arming a selection or retry.
+func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string, targetID types.EntityID, targetHandle types.Handle, x, y float64) {
+	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	service.Cancel(world, playerID, playerHandle)
+	definition := service.availableDefinition(world, playerID, playerHandle, id)
+	if definition == nil {
+		return
+	}
+	target, reason := service.normalizeTarget(world, definition, ActionTarget{ObjectID: targetID, ObjectHandle: targetHandle, X: x, Y: y})
+	if reason == "" {
+		reason = service.handlers[id].ValidateTarget(world, playerID, playerHandle, target)
+	}
+	if reason != "" {
+		service.alert(playerID, reason)
+		return
+	}
+	service.nextGeneration++
+	active := components.ActiveGameAction{ActionID: id, Generation: service.nextGeneration, DirectAttempt: true}
+	service.startTarget(world, playerID, playerHandle, definition, active, target)
+}
+
+func (service *ActionService) normalizeTarget(world *ecs.World, definition *actiondefs.Definition, target ActionTarget) (ActionTarget, string) {
+	switch definition.Target.Kind {
+	case actiondefs.TargetObject:
+		if target.ObjectID == 0 || !world.Alive(target.ObjectHandle) || world.GetHandleByEntityID(target.ObjectID) != target.ObjectHandle {
+			return target, "ACTION_INVALID_TARGET"
+		}
+	case actiondefs.TargetTile:
+		target.ObjectID, target.ObjectHandle = 0, types.InvalidHandle
+		if definition.Target.Approach == actiondefs.ApproachTileCenter {
+			var valid bool
+			target.X, target.Y, valid = tileCenter(target.X, target.Y)
+			if !valid {
+				return target, "ACTION_INVALID_TARGET"
+			}
+		}
+	default:
+		return target, "ACTION_INVALID_TARGET"
+	}
+	return target, ""
+}
+
 func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle, x, y float64) bool {
 	if service == nil || world != service.world {
 		return false
@@ -238,7 +290,7 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 		service.Cancel(world, playerID, playerHandle)
 		return false
 	}
-	if active.Phase != components.GameActionSelecting && !(active.Phase == components.GameActionApproaching && definition.Target.Approach == actiondefs.ApproachTileCenter) {
+	if active.Phase != components.GameActionSelecting && !(active.Phase == components.GameActionApproaching && !active.DirectAttempt && definition.Target.Approach == actiondefs.ApproachTileCenter) {
 		return false
 	}
 	if definition.Target.Kind == actiondefs.TargetObject && (target.ObjectID == 0 || !world.Alive(target.ObjectHandle)) {
@@ -247,17 +299,11 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 	if definition.Target.Kind != actiondefs.TargetObject && definition.Target.Kind != actiondefs.TargetTile {
 		return false
 	}
-	if definition.Target.Kind == actiondefs.TargetTile {
-		target.ObjectID = 0
-		target.ObjectHandle = types.InvalidHandle
-		if definition.Target.Approach == actiondefs.ApproachTileCenter {
-			var valid bool
-			target.X, target.Y, valid = tileCenter(x, y)
-			if !valid {
-				service.alert(playerID, "ACTION_INVALID_TARGET")
-				return true
-			}
-		}
+	var reason string
+	target, reason = service.normalizeTarget(world, definition, target)
+	if reason != "" {
+		service.alert(playerID, reason)
+		return true
 	}
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
 		service.failRequirements(world, playerID, playerHandle, definition, active, reason)
@@ -267,10 +313,15 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 		service.alert(playerID, reason)
 		return true
 	}
+	service.startTarget(world, playerID, playerHandle, definition, active, target)
+	return true
+}
+
+func (service *ActionService) startTarget(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget) {
 	active.TargetID, active.TargetHandle, active.TargetX, active.TargetY = target.ObjectID, target.ObjectHandle, target.X, target.Y
 	if definition.Target.Approach == actiondefs.ApproachTileCenter {
 		service.approachTileCenter(world, playerID, playerHandle, definition, active, target)
-		return true
+		return
 	}
 	active.Phase = components.GameActionExecuting
 	ecs.AddComponent(world, playerHandle, active)
@@ -278,7 +329,6 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 		service.SendState(world, playerID, playerHandle)
 	}
 	service.beginExecution(world, playerID, playerHandle, definition, active, target)
-	return true
 }
 
 func (service *ActionService) beginExecution(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget) {
@@ -352,7 +402,7 @@ func (service *ActionService) Complete(world *ecs.World, playerID types.EntityID
 	if !definition.Repeatable() {
 		canSelect = canSelect && staminaReason(world, playerHandle, definition) == ""
 	}
-	if definition.Target.Kind != actiondefs.TargetNone && (!success || definition.Repeatable()) && canSelect {
+	if !active.DirectAttempt && definition.Target.Kind != actiondefs.TargetNone && (!success || definition.Repeatable()) && canSelect {
 		active.Phase = components.GameActionSelecting
 		active.TargetID, active.TargetHandle = 0, types.InvalidHandle
 		active.TargetX, active.TargetY = 0, 0

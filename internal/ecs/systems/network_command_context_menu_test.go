@@ -166,7 +166,7 @@ func (r testContextActionResolver) ExecuteAction(
 	return true
 }
 
-func TestNetworkCommandSystem_InteractSingleAction_AutoExecWhenDefDisablesSingleMenu(t *testing.T) {
+func TestNetworkCommandSystem_SecondarySingleAction_AutoExecWhenDefDisablesSingleMenu(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	prevRegistry := objectdefs.Global()
 	defer objectdefs.SetGlobalForTesting(prevRegistry)
@@ -201,9 +201,9 @@ func TestNetworkCommandSystem_InteractSingleAction_AutoExecWhenDefDisablesSingle
 		ecs.AddComponent(w, h, components.EntityInfo{TypeID: 101})
 	})
 
-	system.handleInteract(world, playerHandle, &network.PlayerCommand{
+	system.handleMapClick(world, playerHandle, &network.PlayerCommand{
 		CharacterID: playerID,
-		Payload:     &netproto.Interact{EntityId: uint64(targetID)},
+		Payload:     &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, TargetEntityId: uint64(targetID)},
 	})
 
 	if len(menuSender.sent) != 0 {
@@ -224,7 +224,7 @@ func TestNetworkCommandSystem_InteractSingleAction_AutoExecWhenDefDisablesSingle
 	}
 }
 
-func TestNetworkCommandSystem_InteractSingleAction_OpensMenuWhenDefEnablesSingleMenu(t *testing.T) {
+func TestNetworkCommandSystem_SecondarySingleAction_OpensMenuWhenDefEnablesSingleMenu(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	prevRegistry := objectdefs.Global()
 	defer objectdefs.SetGlobalForTesting(prevRegistry)
@@ -259,9 +259,9 @@ func TestNetworkCommandSystem_InteractSingleAction_OpensMenuWhenDefEnablesSingle
 		ecs.AddComponent(w, h, components.EntityInfo{TypeID: 102})
 	})
 
-	system.handleInteract(world, playerHandle, &network.PlayerCommand{
+	system.handleMapClick(world, playerHandle, &network.PlayerCommand{
 		CharacterID: playerID,
-		Payload:     &netproto.Interact{EntityId: uint64(targetID)},
+		Payload:     &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, TargetEntityId: uint64(targetID)},
 	})
 
 	if len(menuSender.sent) != 1 {

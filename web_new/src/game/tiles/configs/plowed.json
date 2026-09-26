@@ -1,19 +1,19 @@
 {
   "ground": [
     {
-      "img": "tiles/plowed/base_1.png",
+      "img": "plowed/base_1.png",
       "w": 1
     },
     {
-      "img": "tiles/plowed/base_2.png",
+      "img": "plowed/base_2.png",
       "w": 1
     },
     {
-      "img": "tiles/plowed/base_3.png",
+      "img": "plowed/base_3.png",
       "w": 1
     },
     {
-      "img": "tiles/plowed/base_4.png",
+      "img": "plowed/base_4.png",
       "w": 1
     }
   ],
