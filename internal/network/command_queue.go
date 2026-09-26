@@ -16,7 +16,7 @@ const (
 	CmdMapClick CommandType = iota + 1
 	_                       // Retired entity-movement command; preserve other command IDs.
 	CmdSetMovementMode
-	CmdInteract
+	_ // Retired Interact command; preserve later command IDs.
 	CmdSelectContextAction
 	CmdChat
 	CmdInventoryOp

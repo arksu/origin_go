@@ -117,23 +117,8 @@ func (s *AutoInteractSystem) Update(w *ecs.World, dt float64) {
 
 	// Execute collected actions outside ForEach (may mutate archetypes)
 	for _, a := range actions {
-		s.executeInteraction(w, a.entityID, a.playerHandle, a.pending)
+		s.executePickup(w, a.entityID, a.playerHandle, a.pending)
 		ecs.RemoveComponent[components.PendingInteraction](w, a.handle)
-	}
-}
-
-func (s *AutoInteractSystem) executeInteraction(
-	w *ecs.World,
-	playerID types.EntityID,
-	playerHandle types.Handle,
-	pending components.PendingInteraction,
-) {
-	switch pending.Type {
-	case netproto.InteractionType_PICKUP:
-		s.executePickup(w, playerID, playerHandle, pending)
-	default:
-		s.logger.Debug("AutoInteract: unsupported interaction type",
-			zap.Int32("type", int32(pending.Type)))
 	}
 }
 

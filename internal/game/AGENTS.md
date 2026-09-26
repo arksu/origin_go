@@ -118,7 +118,7 @@ internal/game/
 ### Context Actions (`context_action_service.go`)
 - **Purpose**: Aggregate and execute context menu actions via unified behavior registry.
 - **Key Responsibilities**:
-  - Compute action list on RMB (`Interact`)
+  - Compute action list on secondary `MapClick` after gameplay-action cancellation, when the player is not carrying a world object
   - Resolve duplicate action IDs with first-wins policy
   - Respect object-def option `contextMenuEvenForOneItem` for single-action RMB behavior
   - Execute selected action only after `LinkCreated`

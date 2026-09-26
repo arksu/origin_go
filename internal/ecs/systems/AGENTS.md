@@ -299,13 +299,15 @@ while a chunk activates, so an expired saved drop never becomes visible.
 
 Context interactions are now behavior-driven and server-authoritative:
 
-1. Client sends `Interact(entity_id)` on RMB.
-2. `NetworkCommandSystem` computes actions via `ContextActionResolver` using behavior order from object `def`.
+1. Client sends secondary `MapClick(x, y, target_entity_id, button)` on RMB or touch long-press, including ground clicks. Unsupported buttons are ignored before any side effects; an omitted button means primary.
+2. `NetworkCommandSystem` cancels the active gameplay action first. Carrying a world object requests one `lift_down` attempt at the click coordinates and consumes the input even on rejection. Failed placement preserves valid carry and ends idle. Without carry, dropped items use pickup; collider objects compute actions via `ContextActionResolver` using behavior order from object `def`. Ground and stale targets start no movement and leave unrelated movement unchanged.
 3. Branching:
     - `0` actions: silent ignore.
     - `1` action: either auto-select/start pending execution OR open `S2C_ContextMenu` when object def has `contextMenuEvenForOneItem=true`.
     - `2+` actions: send `S2C_ContextMenu`.
 4. Execution is triggered only by `LinkCreated` (not direct distance checks in command handler).
+
+Pending administrator commands and armed target dispatch consume primary MapClick only. A direct put-down has a fresh action generation, owns its approach, and can be canceled by Escape or replaced by another click; stale completion cannot change a newer attempt. Explicitly armed lift_down keeps its existing retry selection.
 
 ### Cyclic Action UI Events
 

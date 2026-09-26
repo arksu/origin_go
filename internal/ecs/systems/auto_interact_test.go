@@ -84,3 +84,33 @@ func TestAutoPickupRetriesEmptyHandWhenGridIsFull(t *testing.T) {
 		t.Fatalf("second pickup destination = %v, want hand", executor.destinations[1].Kind)
 	}
 }
+
+func TestAutoPickupRunsOnceAfterArrival(t *testing.T) {
+	world := ecs.NewWorldForTesting()
+	target := world.Spawn(2, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 100, Y: 200})
+	})
+	player := world.Spawn(1, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{})
+		ecs.AddComponent(w, h, components.Movement{State: constt.StateMoving})
+		ecs.AddComponent(w, h, components.PendingInteraction{TargetEntityID: 2, TargetHandle: target, Range: 5})
+	})
+	hand := world.SpawnWithoutExternalID()
+	ecs.AddComponent(world, hand, components.InventoryContainer{OwnerID: 1, Kind: constt.InventoryHand})
+	ecs.GetResource[ecs.InventoryRefIndex](world).Add(constt.InventoryHand, 1, 0, hand)
+	executor := &autoPickupExecutorStub{results: []InventoryOpResult{{Success: true}}}
+	system := NewAutoInteractSystem(executor, nil, nil, nil)
+	system.Update(world, 0)
+	if len(executor.destinations) != 0 {
+		t.Fatal("pickup executed before arrival")
+	}
+	ecs.WithComponent(world, player, func(position *components.Transform) { position.X, position.Y = 100, 200 })
+	system.Update(world, 0)
+	system.Update(world, 0)
+	if len(executor.destinations) != 1 {
+		t.Fatal("arrival must execute pickup exactly once")
+	}
+	if _, pending := ecs.GetComponent[components.PendingInteraction](world, player); pending {
+		t.Fatal("completed pickup left a pending interaction")
+	}
+}

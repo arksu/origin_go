@@ -21,12 +21,13 @@
       LinkType пока: LinkTypeInteraction (подойдет для контейнеров/станков/стройки).
 
 2. **Сформировать интент линка через существующие команды**
-    - `MoveToEntity auto_interact=true` → создает PendingInteraction (тип “OpenContainer”).
+    - Primary `MapClick` по collider-объекту → создает интент линка и `PendingContextAction` с пустым action ID, без открытия контейнера.
+    - Secondary `MapClick` без переноса → вычисляет context actions; auto-select или `SelectContextAction` создаёт `PendingContextAction` с action ID (например, `open`). При переносе secondary-клик вместо этого запускает постановку в точку клика.
     - Интент не создает линк сразу, только ожидание коллизии.
     - `C2S_OpenContainer` → разрешен только при link state, если прилинкованы сразу открываем.
 
-3. **Создание линка в AutoInteractSystem**
-    - При обработке PendingInteraction:
+3. **Создание линка в LinkSystem**
+    - При обработке интента линка:
         - Если CollisionResult.HasCollision и CollidedWith == target → создать линк (разрешая IsPhantom).
         - Открытие контейнера происходит только после успешного линка.
     - Если коллизии нет и игрок не движется — интент можно снять (во избежание зависаний).

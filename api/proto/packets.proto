@@ -314,15 +314,16 @@ message ChunkData {
 // ACTIONS
 // ============================================================================
 
+enum MapClickButton {
+  MAP_CLICK_BUTTON_PRIMARY = 0;
+  MAP_CLICK_BUTTON_SECONDARY = 2;
+}
+
 message MapClick {
   int32 x = 1;
   int32 y = 2;
   uint64 target_entity_id = 3; // zero for empty ground
-}
-
-message Interact {
-  uint64 entity_id = 1;
-  InteractionType type = 2; // optional, сервер сам определит если не указан
+  MapClickButton button = 4;
 }
 
 message SelectContextAction {
@@ -330,20 +331,13 @@ message SelectContextAction {
   string action_id = 2;
 }
 
-enum InteractionType {
-  AUTO = 0; // сервер решает
-  OPEN = 2;
-  PICKUP = 5;
-}
-
 message C2S_PlayerAction {
+  reserved 1, 2, 3;
+  reserved "move_to", "move_to_entity", "interact";
+
   oneof action {
     MapClick map_click = 5;
-    Interact interact = 3;
     SelectContextAction select_context_action = 4;
-    //    Attack attack = 4;
-    //    UseSkill use_skill = 5;
-    //    StopAction stop = 6;
   }
 
   uint32 modifiers = 10; // bitflags: SHIFT=1, CTRL=2, ALT=4

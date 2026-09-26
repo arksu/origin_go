@@ -32,13 +32,14 @@ DEBUG_MOVEMENT: true, // Enable detailed movement logging
 
 ### 1. PlayerCommandController
 - **Когда**: Отправка команд движения
-- **Что**: `MoveTo`, `MoveToEntity`, `Interact`
-- **Данные**: цель, модификаторы, timestamp
+- **Что**: `MapClick` для LMB/RMB, включая пустую землю
+- **Данные**: координаты, кнопка (0 — LMB, 2 — RMB), модификаторы, timestamp
 
 ```
-[PlayerCommandController] Sending MoveTo: {
+[PlayerCommandController] Sending MapClick: {
   target: "(100, 200)",
   modifiers: 0,
+  button: 0,
   timestamp: 1706723456789
 }
 ```
@@ -146,7 +147,7 @@ DEBUG_MOVEMENT: true, // Enable detailed movement logging
 
 ### Сценарий 1: Рывок при начале движения
 ```
-[PlayerCommandController] Sending MoveTo: { target: "(100, 200)" }
+[PlayerCommandController] Sending MapClick: { target: "(100, 200)", button: 0 }
 // ...пауза...
 [MoveController] Keyframe added: { seq: 1, pos: "(100, 200)" }
 [MoveController] Entity 123: { distance: "25.50" } // Большой скачок

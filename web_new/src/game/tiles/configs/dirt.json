@@ -1,226 +1,226 @@
 {
   "ground": [
     {
-      "img": "tiles/dirt/base_1.png",
+      "img": "dirt/base_1.png",
       "w": 1
     },
     {
-      "img": "tiles/dirt/base_2.png",
+      "img": "dirt/base_2.png",
       "w": 1
     },
     {
-      "img": "tiles/dirt/base_3.png",
+      "img": "dirt/base_3.png",
       "w": 1
     }
   ],
   "borders": [
     [
       {
-        "img": "tiles/dirt/b1.png",
+        "img": "dirt/b1.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b1_2.png",
+        "img": "dirt/b1_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b1_3.png",
+        "img": "dirt/b1_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b2.png",
+        "img": "dirt/b2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b2_2.png",
+        "img": "dirt/b2_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b2_3.png",
+        "img": "dirt/b2_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b3.png",
+        "img": "dirt/b3.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b3_2.png",
+        "img": "dirt/b3_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b3_3.png",
+        "img": "dirt/b3_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b4.png",
+        "img": "dirt/b4.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b4_2.png",
+        "img": "dirt/b4_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b4_3.png",
+        "img": "dirt/b4_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b5.png",
+        "img": "dirt/b5.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b5_2.png",
+        "img": "dirt/b5_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b5_3.png",
+        "img": "dirt/b5_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b6.png",
+        "img": "dirt/b6.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b6_2.png",
+        "img": "dirt/b6_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b6_3.png",
+        "img": "dirt/b6_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b7.png",
+        "img": "dirt/b7.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b7_2.png",
+        "img": "dirt/b7_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b7_3.png",
+        "img": "dirt/b7_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b8.png",
+        "img": "dirt/b8.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b8_2.png",
+        "img": "dirt/b8_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b8_3.png",
+        "img": "dirt/b8_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b9.png",
+        "img": "dirt/b9.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b9_2.png",
+        "img": "dirt/b9_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b9_3.png",
+        "img": "dirt/b9_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b10.png",
+        "img": "dirt/b10.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b10_2.png",
+        "img": "dirt/b10_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b10_3.png",
+        "img": "dirt/b10_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b11.png",
+        "img": "dirt/b11.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b11_2.png",
+        "img": "dirt/b11_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b11_3.png",
+        "img": "dirt/b11_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b12.png",
+        "img": "dirt/b12.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b12_2.png",
+        "img": "dirt/b12_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b12_3.png",
+        "img": "dirt/b12_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b13.png",
+        "img": "dirt/b13.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b13_2.png",
+        "img": "dirt/b13_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b13_3.png",
+        "img": "dirt/b13_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b14.png",
+        "img": "dirt/b14.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b14_2.png",
+        "img": "dirt/b14_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b14_3.png",
+        "img": "dirt/b14_3.png",
         "w": 1
       }
     ],
     [
       {
-        "img": "tiles/dirt/b15.png",
+        "img": "dirt/b15.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b15_2.png",
+        "img": "dirt/b15_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/b15_3.png",
+        "img": "dirt/b15_3.png",
         "w": 1
       }
     ]
@@ -228,197 +228,197 @@
   "corners": [
     [
       {
-        "img": "tiles/dirt/c1.png",
+        "img": "dirt/c1.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c1_2.png",
+        "img": "dirt/c1_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c1_3.png",
+        "img": "dirt/c1_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c2.png",
+        "img": "dirt/c2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c2_2.png",
+        "img": "dirt/c2_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c2_3.png",
+        "img": "dirt/c2_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c3.png",
+        "img": "dirt/c3.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c3_2.png",
+        "img": "dirt/c3_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c3_3.png",
+        "img": "dirt/c3_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c4.png",
+        "img": "dirt/c4.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c4_2.png",
+        "img": "dirt/c4_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c4_3.png",
+        "img": "dirt/c4_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c5.png",
+        "img": "dirt/c5.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c5_2.png",
+        "img": "dirt/c5_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c5_3.png",
+        "img": "dirt/c5_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c6.png",
+        "img": "dirt/c6.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c6_2.png",
+        "img": "dirt/c6_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c6_3.png",
+        "img": "dirt/c6_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c7.png",
+        "img": "dirt/c7.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c7_2.png",
+        "img": "dirt/c7_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c7_3.png",
+        "img": "dirt/c7_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c8.png",
+        "img": "dirt/c8.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c8_2.png",
+        "img": "dirt/c8_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c8_3.png",
+        "img": "dirt/c8_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c9.png",
+        "img": "dirt/c9.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c9_2.png",
+        "img": "dirt/c9_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c9_3.png",
+        "img": "dirt/c9_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c10.png",
+        "img": "dirt/c10.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c10_2.png",
+        "img": "dirt/c10_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c10_3.png",
+        "img": "dirt/c10_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c11.png",
+        "img": "dirt/c11.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c11_2.png",
+        "img": "dirt/c11_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c11_3.png",
+        "img": "dirt/c11_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c12.png",
+        "img": "dirt/c12.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c12_2.png",
+        "img": "dirt/c12_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c12_3.png",
+        "img": "dirt/c12_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c13.png",
+        "img": "dirt/c13.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c13_2.png",
+        "img": "dirt/c13_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c13_3.png",
+        "img": "dirt/c13_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c14.png",
+        "img": "dirt/c14.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c14_2.png",
+        "img": "dirt/c14_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c14_3.png",
+        "img": "dirt/c14_3.png",
         "w": 1
       }
     ], [
       {
-        "img": "tiles/dirt/c15.png",
+        "img": "dirt/c15.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c15_2.png",
+        "img": "dirt/c15_2.png",
         "w": 1
       },
       {
-        "img": "tiles/dirt/c15_3.png",
+        "img": "dirt/c15_3.png",
         "w": 1
       }
     ]

@@ -16,6 +16,7 @@ import { ResourceLoader } from './ResourceLoader'
 import { MOVE_MARKER_TEXTURE } from '@/constants/moveMarker'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
+import { proto } from '@/network/proto/packets.js'
 import { DROP_ITEM_TYPE_ID, MAX_FPS } from '@/constants/render'
 import { cullingController } from './culling'
 import { cacheMetrics } from './cache'
@@ -141,7 +142,7 @@ export class Render {
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
 
       if (event.button === 2) {
-        this.handleContextInteraction(event.screenX, event.screenY)
+        this.handleSecondaryMapClick(event.screenX, event.screenY, event.modifiers)
         return
       }
 
@@ -198,7 +199,7 @@ export class Render {
     })
 
     this.inputController.onLongPress((event) => {
-      this.handleContextInteraction(event.screenX, event.screenY)
+      this.handleSecondaryMapClick(event.screenX, event.screenY, event.modifiers)
     })
 
     this.inputController.onDragStart((button) => {
@@ -233,7 +234,7 @@ export class Render {
     })
   }
 
-  private handleContextInteraction(screenX: number, screenY: number): void {
+  private handleSecondaryMapClick(screenX: number, screenY: number, modifiers: number): void {
     this.lastClickScreen = { x: screenX, y: screenY }
     this.lastPointerScreen = { x: screenX, y: screenY }
     this.lastClickWorld = this.screenToWorld(screenX, screenY)
@@ -255,10 +256,14 @@ export class Render {
       screenY,
       this.screenToWorld.bind(this),
     )
-    if (clickedEntity !== null) {
-      gameStore.closeContextMenu()
-      playerCommandController.sendInteract(clickedEntity.entityId)
-    }
+    gameStore.closeContextMenu()
+    playerCommandController.sendMapClick(
+      this.lastClickWorld.x,
+      this.lastClickWorld.y,
+      clickedEntity?.entityId ?? 0,
+      modifiers,
+      proto.MapClickButton.MAP_CLICK_BUTTON_SECONDARY,
+    )
   }
 
   private trySendDroppedItemMapClick(screenX: number, screenY: number, modifiers: number): boolean {

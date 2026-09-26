@@ -53,17 +53,28 @@ export class VertexBuffer {
 
     const index = this._count * 8
 
-    this._vertex[index] = x
-    this._vertex[index + 1] = y
+    // Tile atlas frames may be trimmed: texture.uvs covers only the trimmed
+    // content rect, which sits at trim.x/y inside the full tile sprite (same
+    // contract as Pixi's updateQuadBounds for Sprite). Map the quad onto the
+    // content rect so overlays are neither stretched nor displaced; frame
+    // rotation is already baked into the uvs corner order.
+    const trim = t.trim
+    const qx = trim ? x + trim.x : x
+    const qy = trim ? y + trim.y : y
+    const qw = trim ? trim.width : w
+    const qh = trim ? trim.height : h
 
-    this._vertex[index + 2] = x + w
-    this._vertex[index + 3] = y
+    this._vertex[index] = qx
+    this._vertex[index + 1] = qy
 
-    this._vertex[index + 4] = x + w
-    this._vertex[index + 5] = y + h
+    this._vertex[index + 2] = qx + qw
+    this._vertex[index + 3] = qy
 
-    this._vertex[index + 6] = x
-    this._vertex[index + 7] = y + h
+    this._vertex[index + 4] = qx + qw
+    this._vertex[index + 5] = qy + qh
+
+    this._vertex[index + 6] = qx
+    this._vertex[index + 7] = qy + qh
 
     const uvs = t.uvs
     this._uv[index] = uvs.x0
