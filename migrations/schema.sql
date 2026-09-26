@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS chunk
     x             INT    NOT NULL,       -- chunk x coordinate
     y             INT    NOT NULL,       -- chunk y coordinate
     layer         INT    NOT NULL,       -- ground layer
-    version       INT         DEFAULT 1, -- для оптимистичных блокировок
+    version       INT    NOT NULL DEFAULT 0, -- tile content version
     last_tick     BIGINT NOT NULL,
     last_saved_at TIMESTAMPTZ DEFAULT now(),
     tiles_data    BYTEA  NOT NULL,

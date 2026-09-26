@@ -25,6 +25,7 @@ type ActionTarget struct {
 func (service *ActionService) SubscribeEvents(bus *eventbus.EventBus) {
 	if service != nil && bus != nil {
 		bus.SubscribeSync(ecs.TopicGameplayLinkCreated, eventbus.PriorityHigh, service.onLinkCreated)
+		bus.SubscribeSync(ecs.TopicGameplayPointMovementStopped, eventbus.PriorityHigh, service.onPointMovementStopped)
 	}
 }
 
@@ -177,8 +178,12 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 	definition, found := service.definitions.Get(active.ActionID)
 	if active.Phase == components.GameActionApproaching && active.ExpireAtUnixMs > 0 && ecs.GetResource[ecs.TimeState](world).UnixMs >= active.ExpireAtUnixMs {
 		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_TARGET_TIMEOUT")
-	} else if !found || service.UnavailableReason(world, playerID, playerHandle, definition) != "" {
+	} else if !found || service.nonStaminaReason(world, playerID, playerHandle, definition) != "" {
 		service.Cancel(world, playerID, playerHandle)
+	} else if reason := staminaReason(world, playerHandle, definition); reason != "" {
+		if active.Phase != components.GameActionSelecting || !definition.Repeatable() {
+			service.failRequirements(world, playerID, playerHandle, definition, active, reason)
+		}
 	} else if active.TargetID != 0 && !world.Alive(world.GetHandleByEntityID(active.TargetID)) {
 		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
 	}
@@ -224,13 +229,16 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 		return false
 	}
 	active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)
-	if !exists || active.Phase != components.GameActionSelecting {
+	if !exists {
 		return false
 	}
 	target := ActionTarget{ObjectID: targetID, ObjectHandle: targetHandle, X: x, Y: y}
 	definition, exists := service.definitions.Get(active.ActionID)
 	if !exists {
 		service.Cancel(world, playerID, playerHandle)
+		return false
+	}
+	if active.Phase != components.GameActionSelecting && !(active.Phase == components.GameActionApproaching && definition.Target.Approach == actiondefs.ApproachTileCenter) {
 		return false
 	}
 	if definition.Target.Kind == actiondefs.TargetObject && (target.ObjectID == 0 || !world.Alive(target.ObjectHandle)) {
@@ -242,10 +250,17 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 	if definition.Target.Kind == actiondefs.TargetTile {
 		target.ObjectID = 0
 		target.ObjectHandle = types.InvalidHandle
+		if definition.Target.Approach == actiondefs.ApproachTileCenter {
+			var valid bool
+			target.X, target.Y, valid = tileCenter(x, y)
+			if !valid {
+				service.alert(playerID, "ACTION_INVALID_TARGET")
+				return true
+			}
+		}
 	}
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
-		service.Cancel(world, playerID, playerHandle)
-		service.alert(playerID, reason)
+		service.failRequirements(world, playerID, playerHandle, definition, active, reason)
 		return true
 	}
 	if reason := service.handlers[definition.ID].ValidateTarget(world, playerID, playerHandle, target); reason != "" {
@@ -253,6 +268,10 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 		return true
 	}
 	active.TargetID, active.TargetHandle, active.TargetX, active.TargetY = target.ObjectID, target.ObjectHandle, target.X, target.Y
+	if definition.Target.Approach == actiondefs.ApproachTileCenter {
+		service.approachTileCenter(world, playerID, playerHandle, definition, active, target)
+		return true
+	}
 	active.Phase = components.GameActionExecuting
 	ecs.AddComponent(world, playerHandle, active)
 	if definition.Execution.Ticks > 0 {
@@ -280,8 +299,7 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 
 func (service *ActionService) executeHandler(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget) {
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
-		service.Cancel(world, playerID, playerHandle)
-		service.alert(playerID, reason)
+		service.failRequirements(world, playerID, playerHandle, definition, active, reason)
 		return
 	}
 	result := service.handlers[definition.ID].Start(world, playerID, playerHandle, target, active.Generation)
@@ -319,9 +337,7 @@ func (service *ActionService) Complete(world *ecs.World, playerID types.EntityID
 	}
 	if success {
 		if !service.chargeStamina(world, playerHandle, definition.Execution.Stamina) {
-			service.Cancel(world, playerID, playerHandle)
-			service.alert(playerID, "LOW_STAMINA")
-			return
+			success, reason = false, "LOW_STAMINA"
 		}
 	}
 	if !success && reason != "" {
@@ -332,7 +348,11 @@ func (service *ActionService) Complete(world *ecs.World, playerID types.EntityID
 	}
 	service.stopOwnedMovement(world, playerID, playerHandle, active)
 	service.clearCycle(world, playerID, playerHandle, success, reason)
-	if definition.Target.Kind != actiondefs.TargetNone && (!success || definition.Repeatable()) && service.UnavailableReason(world, playerID, playerHandle, definition) == "" {
+	canSelect := service.nonStaminaReason(world, playerID, playerHandle, definition) == ""
+	if !definition.Repeatable() {
+		canSelect = canSelect && staminaReason(world, playerHandle, definition) == ""
+	}
+	if definition.Target.Kind != actiondefs.TargetNone && (!success || definition.Repeatable()) && canSelect {
 		active.Phase = components.GameActionSelecting
 		active.TargetID, active.TargetHandle = 0, types.InvalidHandle
 		active.TargetX, active.TargetY = 0, 0
@@ -344,6 +364,19 @@ func (service *ActionService) Complete(world *ecs.World, playerID types.EntityID
 	}
 	ecs.RemoveComponent[components.ActiveGameAction](world, playerHandle)
 	service.SendState(world, playerID, playerHandle)
+}
+
+func (service *ActionService) failRequirements(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, reason string) {
+	if reason == "LOW_STAMINA" && definition.Repeatable() && definition.Target.Kind != actiondefs.TargetNone {
+		if active.Phase == components.GameActionSelecting {
+			service.alert(playerID, reason)
+		} else {
+			service.Complete(world, playerID, playerHandle, active.Generation, false, reason)
+		}
+		return
+	}
+	service.Cancel(world, playerID, playerHandle)
+	service.alert(playerID, reason)
 }
 
 // CanCommit is called immediately before a deferred handler changes the world.
@@ -385,7 +418,7 @@ func (service *ActionService) stopOwnedMovement(world *ecs.World, playerID types
 		linkState.ClearIntent(playerID)
 	}
 	ecs.WithComponent(world, playerHandle, func(movement *components.Movement) {
-		if movement.TargetHandle == active.TargetHandle || (active.TargetHandle == types.InvalidHandle && movement.TargetX == active.TargetX && movement.TargetY == active.TargetY) {
+		if (active.TargetHandle != types.InvalidHandle && movement.TargetHandle == active.TargetHandle) || (active.TargetHandle == types.InvalidHandle && movement.TargetX == active.TargetX && movement.TargetY == active.TargetY) {
 			movement.ClearTarget()
 		}
 	})

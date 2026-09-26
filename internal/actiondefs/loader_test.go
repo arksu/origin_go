@@ -83,16 +83,38 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 2 {
-		t.Fatalf("expected only lift and lift_down, got %d", len(registry.All()))
+	if len(registry.All()) != 3 {
+		t.Fatalf("expected lift, lift_down and plow_tile, got %d", len(registry.All()))
 	}
-	if err := registry.ValidateHandlers([]string{"lift", "lift_down"}); err != nil {
+	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"lift", "lift_down"} {
 		definition, exists := registry.Get(id)
-		if !exists || definition.Repeatable() || definition.Execution.Ticks != 0 || definition.Execution.Stamina != 0 {
+		if !exists || definition.Repeatable() || definition.Execution.Ticks != 0 || definition.Execution.Stamina != 0 || definition.Target.Approach != "" {
 			t.Fatalf("invalid production action %q: %#v", id, definition)
 		}
+	}
+	plow, _ := registry.Get("plow_tile")
+	if plow.Target.Kind != TargetTile || plow.Target.Approach != ApproachTileCenter || plow.Target.Cursor != "dig" ||
+		!plow.Repeatable() || plow.Execution.Ticks != 20 || plow.Execution.Stamina != 250 ||
+		len(plow.Requirements.Skills) != 0 || len(plow.Requirements.Equipment) != 0 {
+		t.Fatalf("invalid plow definition: %#v", plow)
+	}
+}
+
+func TestTileCenterApproachValidation(t *testing.T) {
+	for _, kind := range []TargetKind{TargetNone, TargetObject, TargetTile} {
+		t.Run(string(kind), func(t *testing.T) {
+			definition := Definition{ID: "test", Presentation: Presentation{Label: "Test", MenuIcon: "/assets/test.png"}, Target: Target{Kind: kind, Approach: ApproachTileCenter}}
+			err := validateDefinition(&definition)
+			if (err == nil) != (kind == TargetTile) {
+				t.Fatalf("unexpected approach validation: %v", err)
+			}
+		})
+	}
+	definition := Definition{ID: "test", Presentation: Presentation{Label: "Test", MenuIcon: "/assets/test.png"}, Target: Target{Kind: TargetTile, Approach: "unknown"}}
+	if err := validateDefinition(&definition); err == nil {
+		t.Fatal("unknown approach accepted")
 	}
 }

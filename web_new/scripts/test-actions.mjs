@@ -204,6 +204,7 @@ try {
 
   assert.equal(actionCursorCss(''), 'default')
   assert.equal(actionCursorCss('unknown'), 'help')
+  assert.match(actionCursorCss('dig'), /dig\.png/)
   assert.match(actionCursorCss('lift_down'), /lift_down\.png/)
   const canvas = { style: { cursor: '' } }
   const pixiEvents = { cursorStyles: { default: 'inherit', pointer: 'pointer' }, rootBoundary: { cursor: 'pointer' } }

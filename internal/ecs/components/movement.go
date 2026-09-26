@@ -32,6 +32,11 @@ type Movement struct {
 
 	// Movement sequence number (monotonically increasing per entity, wrap ok)
 	MoveSeq uint32
+
+	// A point stop is confirmed only after collision resolution applies the position.
+	PointStopPending bool
+	PointStopX       float64
+	PointStopY       float64
 }
 
 const MovementComponentID ecs.ComponentID = 12
@@ -54,6 +59,7 @@ func (m *Movement) HasReachedTarget(currentX, currentY float64) bool {
 }
 
 func (m *Movement) ClearTarget() {
+	m.PointStopPending = false
 	m.TargetType = constt.TargetNone
 	m.TargetHandle = types.InvalidHandle
 	m.VelocityX = 0
@@ -61,7 +67,16 @@ func (m *Movement) ClearTarget() {
 	m.State = constt.StateIdle
 }
 
+func (m *Movement) StopAtPointTarget() {
+	pointTarget := m.TargetType == constt.TargetPoint
+	targetX, targetY := m.TargetX, m.TargetY
+	m.ClearTarget()
+	m.PointStopPending = pointTarget
+	m.PointStopX, m.PointStopY = targetX, targetY
+}
+
 func (m *Movement) SetTargetPoint(x, y int) {
+	m.PointStopPending = false
 	m.TargetType = constt.TargetPoint
 	m.TargetX = float64(x)
 	m.TargetY = float64(y)
@@ -70,6 +85,7 @@ func (m *Movement) SetTargetPoint(x, y int) {
 }
 
 func (m *Movement) SetTargetHandle(handle types.Handle, x, y int) {
+	m.PointStopPending = false
 	m.TargetType = constt.TargetEntity
 	m.TargetHandle = handle
 	m.TargetX = float64(x)

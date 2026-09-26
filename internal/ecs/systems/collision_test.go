@@ -40,7 +40,7 @@ func (m *testChunkManager) UpdateEntityPosition(types.EntityID, types.ChunkCoord
 
 // newTestChunk returns a chunk at the given coord filled with grass in its
 // tile array. Bitsets are NOT populated yet; runCollisionSweep finalizes the
-// chunk with a single SetTiles call after all paint callbacks ran, matching
+// chunk with a single RestoreTiles call after all paint callbacks ran, matching
 // the production one-shot load flow.
 func newTestChunk(coord types.ChunkCoord) *core.Chunk {
 	chunk := core.NewChunk(coord, 0, 0, constt.ChunkSize)
@@ -51,7 +51,7 @@ func newTestChunk(coord types.ChunkCoord) *core.Chunk {
 }
 
 // paintTestTile sets the tile containing the world point to tileID. Must run
-// before the chunk's SetTiles call that populates the passability bitsets.
+// before the chunk's RestoreTiles call that populates the passability bitsets.
 func paintTestTile(chunk *core.Chunk, worldX, worldY float64, tileID byte) {
 	tileSize := float64(constt.CoordPerTile)
 	localX := int(math.Floor(worldX/tileSize)) - chunk.Coord.X*constt.ChunkSize
@@ -77,7 +77,7 @@ func newSweepScene(t *testing.T, moverX, moverY float64, walls []components.Tran
 	for _, p := range paint {
 		p(chunk)
 	}
-	chunk.SetTiles(chunk.Tiles, 0)
+	chunk.RestoreTiles(chunk.Tiles, 0, 0)
 	cm := &testChunkManager{chunk: chunk}
 	world := ecs.NewWorldForTesting()
 

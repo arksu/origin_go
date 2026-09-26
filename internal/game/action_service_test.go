@@ -37,12 +37,13 @@ func (sender *testActionSender) SendCyclicActionProgress(_ types.EntityID, progr
 }
 
 type testActionHandler struct {
-	startCount  int
-	status      ActionOutcome
-	canceled    int
-	unavailable string
-	reasonCalls int
-	onValidate  func()
+	startCount   int
+	status       ActionOutcome
+	canceled     int
+	unavailable  string
+	reasonCalls  int
+	onValidate   func()
+	targetReason func(ActionTarget) string
 }
 
 func (handler *testActionHandler) UnavailableReason(*ecs.World, types.EntityID, types.Handle) string {
@@ -52,6 +53,9 @@ func (handler *testActionHandler) UnavailableReason(*ecs.World, types.EntityID, 
 func (handler *testActionHandler) ValidateTarget(_ *ecs.World, _ types.EntityID, _ types.Handle, target ActionTarget) string {
 	if handler.onValidate != nil {
 		handler.onValidate()
+	}
+	if handler.targetReason != nil {
+		return handler.targetReason(target)
 	}
 	if target.ObjectID == 2 {
 		return "BAD_TARGET"

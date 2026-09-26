@@ -2,7 +2,7 @@ package core
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/persistence"
@@ -32,6 +32,7 @@ type Chunk struct {
 	Version  uint32 // версия чанка (инкрементируется при изменении тайлов)
 
 	tilesDirty bool
+	chunkSize  int
 
 	isPassable  []uint64
 	isSwimmable []uint64
@@ -61,6 +62,7 @@ func NewChunk(coord types.ChunkCoord, region int, layer int, chunkSize int) *Chu
 		Region:                region,
 		Layer:                 layer,
 		State:                 types.ChunkStateUnloaded,
+		chunkSize:             chunkSize,
 		Tiles:                 make([]byte, totalTiles),
 		isPassable:            make([]uint64, bitsetSize),
 		isSwimmable:           make([]uint64, bitsetSize),
@@ -292,14 +294,49 @@ func (c *Chunk) Spatial() *SpatialHashGrid {
 	return c.spatial
 }
 
-func (c *Chunk) SetTiles(tiles []byte, lastTick uint64) {
+// RestoreTiles installs persisted content without creating a new edit/version.
+func (c *Chunk) RestoreTiles(tiles []byte, lastTick uint64, version uint32) error {
 	c.mu.Lock()
-	c.Tiles = tiles
+	defer c.mu.Unlock()
+	if len(tiles) != c.chunkSize*c.chunkSize {
+		return fmt.Errorf("chunk %v: expected %d tiles, got %d", c.Coord, c.chunkSize*c.chunkSize, len(tiles))
+	}
+	c.Tiles = append([]byte(nil), tiles...)
 	c.LastTick = lastTick
-	c.Version++ // инкрементируем версию при изменении тайлов
-	c.tilesDirty = true
+	c.Version = version
+	c.tilesDirty = false
 	c.populateTileBitsets()
-	c.mu.Unlock()
+	return nil
+}
+
+// SetTile is the runtime content mutation point. False means no tile was changed.
+func (c *Chunk) SetTile(localX, localY int, tileID byte) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if localX < 0 || localY < 0 || localX >= c.chunkSize || localY >= c.chunkSize {
+		return false
+	}
+	index := localY*c.chunkSize + localX
+	if index >= len(c.Tiles) || c.Tiles[index] == tileID {
+		return false
+	}
+	c.Tiles[index] = tileID
+	c.writeBit(c.isPassable, index, types.IsTilePassable(tileID))
+	c.writeBit(c.isSwimmable, index, types.IsTileSwimmable(tileID))
+	c.Version++
+	c.tilesDirty = true
+	return true
+}
+
+type TileSnapshot struct {
+	Tiles   []byte
+	Version uint32
+}
+
+func (c *Chunk) SnapshotTiles() TileSnapshot {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return TileSnapshot{Tiles: append([]byte(nil), c.Tiles...), Version: c.Version}
 }
 
 func (c *Chunk) TilesDirty() bool {
@@ -343,6 +380,8 @@ func (c *Chunk) IsDirty(world *ecs.World) bool {
 }
 
 func (c *Chunk) populateTileBitsets() {
+	clear(c.isPassable)
+	clear(c.isSwimmable)
 	for i, tileID := range c.Tiles {
 		if types.IsTilePassable(tileID) {
 			c.setBit(c.isPassable, i)
@@ -350,6 +389,14 @@ func (c *Chunk) populateTileBitsets() {
 		if types.IsTileSwimmable(tileID) {
 			c.setBit(c.isSwimmable, i)
 		}
+	}
+}
+
+func (c *Chunk) writeBit(bitset []uint64, index int, value bool) {
+	mask := uint64(1) << uint(index%64)
+	bitset[index/64] &^= mask
+	if value {
+		bitset[index/64] |= mask
 	}
 }
 
@@ -427,20 +474,12 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 
 	coord := c.Coord
 
-	c.mu.RLock()
-	saveTiles := c.tilesDirty
-	var tiles []byte
-	if saveTiles {
-		tiles = make([]byte, len(c.Tiles))
-		copy(tiles, c.Tiles)
-	}
-	lastTick := c.LastTick
+	saveTiles := c.TilesDirty()
 	totalHandles := c.GetHandles()
 	rawObjects := c.GetRawObjects()
 	rawInventoriesByOwner := c.GetRawInventoriesByOwner()
 	rawDirtyObjectIDs := c.GetRawDirtyObjectIDs()
 	pendingDeletedObjectIDs := c.GetDeletedObjectIDs()
-	c.mu.RUnlock()
 
 	// Determine dirty objects to save
 	var objectsToSave []*repository.Object
@@ -523,23 +562,12 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		if entityCount == 0 {
 			entityCount = len(rawObjects)
 		}
-		err := db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
-			Region:      c.Region,
-			X:           coord.X,
-			Y:           coord.Y,
-			Layer:       c.Layer,
-			TilesData:   tiles,
-			LastTick:    int64(lastTick),
-			EntityCount: sql.NullInt32{Int32: int32(entityCount), Valid: true},
-		})
-		if err != nil {
+		if err := c.saveTiles(ctx, db.Queries(), entityCount); err != nil {
 			logger.Error("failed to save chunk tiles",
 				zap.Int("chunk_x", coord.X),
 				zap.Int("chunk_y", coord.Y),
 				zap.Error(err),
 			)
-		} else {
-			c.ClearTilesDirty()
 		}
 	}
 
@@ -642,9 +670,14 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 		Y:      c.Coord.Y,
 		Layer:  layer,
 	})
-	if err == nil {
-		c.SetTiles(tilesData.TilesData, uint64(tilesData.LastTick))
-		c.ClearTilesDirty()
+	if err != nil {
+		return fmt.Errorf("load chunk %v: %w", c.Coord, err)
+	}
+	if tilesData.Version < 0 {
+		return fmt.Errorf("chunk %v has negative version %d", c.Coord, tilesData.Version)
+	}
+	if err := c.RestoreTiles(tilesData.TilesData, uint64(tilesData.LastTick), uint32(tilesData.Version)); err != nil {
+		return err
 	}
 
 	objects, err := db.Queries().GetObjectsByChunk(ctx, repository.GetObjectsByChunkParams{

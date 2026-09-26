@@ -452,6 +452,16 @@ export class Chunk {
 
   private destroySubchunks(): void {
     for (const subchunk of this.subchunks) {
+      // Mesh.destroy does not release owned geometry or shader resources in Pixi v8.
+      for (const child of [...subchunk.children]) {
+        if (child instanceof Mesh) {
+          const geometry = child.geometry
+          const shader = child.shader
+          child.destroy()
+          geometry.destroy(true)
+          shader?.destroy(false)
+        }
+      }
       subchunk.destroy({ children: true })
     }
     this.subchunks = []

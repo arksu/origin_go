@@ -8,36 +8,47 @@ import (
 )
 
 const (
-	TopicGameplayAll                 = "gameplay.*"
-	TopicGameplayCombat              = "gameplay.combat.*"
-	TopicGameplayCombatDamage        = "gameplay.combat.damage_dealt"
-	TopicGameplayCombatDeath         = "gameplay.combat.death"
-	TopicGameplayCombatHeal          = "gameplay.combat.heal"
-	TopicGameplayMovement            = "gameplay.movement.*"
-	TopicGameplayMovementMoveBatch   = "gameplay.movement.move_batch"
-	TopicGameplayMovementTeleport    = "gameplay.movement.teleport"
-	TopicGameplayPlayerEnterWorld    = "gameplay.player.enter_world"
-	TopicGameplayEntity              = "gameplay.entity.*"
-	TopicGameplayEntitySpawn         = "gameplay.entity.spawn"
-	TopicGameplayEntityDespawn       = "gameplay.entity.despawn"
-	TopicGameplayEntityUpdate        = "gameplay.entity.update"
-	TopicGameplayEntityAppearance    = "gameplay.entity.appearance_changed"
-	TopicGameplayLink                = "gameplay.link.*"
-	TopicGameplayLinkCreated         = "gameplay.link.created"
-	TopicGameplayLinkBroken          = "gameplay.link.broken"
-	TopicGameplayStation             = "gameplay.station.*"
-	TopicGameplayStationStateChanged = "gameplay.station.state_changed"
-	TopicGameplayChunk               = "gameplay.chunk.*"
-	TopicGameplayChunkLoad           = "gameplay.chunk.load"
-	TopicGameplayChunkUnload         = "gameplay.chunk.unload"
-	TopicSystemAll                   = "system.*"
-	TopicSystemTick                  = "system.tick"
-	TopicSystemShutdown              = "system.shutdown"
-	TopicNetworkAll                  = "network.*"
-	TopicNetworkConnect              = "network.connect"
-	TopicNetworkDisconnect           = "network.disconnect"
-	TopicNetworkMessage              = "network.message"
+	TopicGameplayAll                  = "gameplay.*"
+	TopicGameplayCombat               = "gameplay.combat.*"
+	TopicGameplayCombatDamage         = "gameplay.combat.damage_dealt"
+	TopicGameplayCombatDeath          = "gameplay.combat.death"
+	TopicGameplayCombatHeal           = "gameplay.combat.heal"
+	TopicGameplayMovement             = "gameplay.movement.*"
+	TopicGameplayMovementMoveBatch    = "gameplay.movement.move_batch"
+	TopicGameplayMovementTeleport     = "gameplay.movement.teleport"
+	TopicGameplayPointMovementStopped = "gameplay.movement.point_stopped"
+	TopicGameplayPlayerEnterWorld     = "gameplay.player.enter_world"
+	TopicGameplayEntity               = "gameplay.entity.*"
+	TopicGameplayEntitySpawn          = "gameplay.entity.spawn"
+	TopicGameplayEntityDespawn        = "gameplay.entity.despawn"
+	TopicGameplayEntityUpdate         = "gameplay.entity.update"
+	TopicGameplayEntityAppearance     = "gameplay.entity.appearance_changed"
+	TopicGameplayLink                 = "gameplay.link.*"
+	TopicGameplayLinkCreated          = "gameplay.link.created"
+	TopicGameplayLinkBroken           = "gameplay.link.broken"
+	TopicGameplayStation              = "gameplay.station.*"
+	TopicGameplayStationStateChanged  = "gameplay.station.state_changed"
+	TopicGameplayChunk                = "gameplay.chunk.*"
+	TopicGameplayChunkLoad            = "gameplay.chunk.load"
+	TopicGameplayChunkUnload          = "gameplay.chunk.unload"
+	TopicSystemAll                    = "system.*"
+	TopicSystemTick                   = "system.tick"
+	TopicSystemShutdown               = "system.shutdown"
+	TopicNetworkAll                   = "network.*"
+	TopicNetworkConnect               = "network.connect"
+	TopicNetworkDisconnect            = "network.disconnect"
+	TopicNetworkMessage               = "network.message"
 )
+
+// PointMovementStoppedEvent carries the collision-resolved position, not the intended step.
+type PointMovementStoppedEvent struct {
+	Layer            int
+	EntityID         types.EntityID
+	X, Y             float64
+	TargetX, TargetY float64
+}
+
+func (e *PointMovementStoppedEvent) Topic() string { return TopicGameplayPointMovementStopped }
 
 // EntitySpawnEvent represents when an entity becomes visible to an observer
 type EntitySpawnEvent struct {
@@ -117,11 +128,12 @@ type ChunkLoadEvent struct {
 	Tiles     []byte
 	Epoch     uint32
 	Version   uint32 // версия чанка
+	EventSeq  uint64
 }
 
 func (e *ChunkLoadEvent) Topic() string { return e.topic }
 
-func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int, tiles []byte, epoch uint32, version uint32) *ChunkLoadEvent {
+func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int, tiles []byte, epoch uint32, version uint32, eventSeq uint64) *ChunkLoadEvent {
 	return &ChunkLoadEvent{
 		topic:     TopicGameplayChunkLoad,
 		Timestamp: time.Now(),
@@ -132,6 +144,7 @@ func NewChunkLoadEvent(entityID types.EntityID, x, y, layer int, tiles []byte, e
 		Tiles:     tiles,
 		Epoch:     epoch,
 		Version:   version,
+		EventSeq:  eventSeq,
 	}
 }
 
@@ -144,11 +157,12 @@ type ChunkUnloadEvent struct {
 	Y         int
 	Layer     int
 	Epoch     uint32
+	EventSeq  uint64
 }
 
 func (e *ChunkUnloadEvent) Topic() string { return e.topic }
 
-func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int, epoch uint32) *ChunkUnloadEvent {
+func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int, epoch uint32, eventSeq uint64) *ChunkUnloadEvent {
 	return &ChunkUnloadEvent{
 		topic:     TopicGameplayChunkUnload,
 		Timestamp: time.Now(),
@@ -157,6 +171,7 @@ func NewChunkUnloadEvent(entityID types.EntityID, x, y, layer int, epoch uint32)
 		Y:         y,
 		Layer:     layer,
 		Epoch:     epoch,
+		EventSeq:  eventSeq,
 	}
 }
 

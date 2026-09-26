@@ -92,7 +92,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			)
 			if !canMove {
 				movement.Mode = constt.Crawl
-				movement.ClearTarget()
+				movement.StopAtPointTarget()
 				s.movementStorage.Set(h, movement)
 				ecs.MarkMovementModeDirtyByHandle(w, h)
 				movedEntities.Add(h, transform.X, transform.Y)
@@ -118,7 +118,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		if movement.HasReachedTarget(transform.X, transform.Y) {
-			movement.ClearTarget()
+			movement.StopAtPointTarget()
 			s.movementStorage.Set(h, movement)
 			movedEntities.Add(h, transform.X, transform.Y)
 			return
@@ -137,7 +137,7 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				// Reached target, snap to exact position
 				transform.Direction = math.Atan2(dy, dx)
 				s.transformStorage.Set(h, transform)
-				movement.ClearTarget()
+				movement.StopAtPointTarget()
 				s.movementStorage.Set(h, movement)
 				// Add to moved entities buffer
 				movedEntities.Add(h, movement.TargetX, movement.TargetY)

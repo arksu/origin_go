@@ -4320,6 +4320,8 @@ func (x *S2C_PlayerLeaveWorld) GetEntityId() uint64 {
 type S2C_ChunkLoad struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Chunk         *ChunkData             `protobuf:"bytes,1,opt,name=chunk,proto3" json:"chunk,omitempty"`
+	StreamEpoch   uint32                 `protobuf:"varint,2,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"`
+	EventSeq      uint64                 `protobuf:"varint,3,opt,name=event_seq,json=eventSeq,proto3" json:"event_seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4361,9 +4363,25 @@ func (x *S2C_ChunkLoad) GetChunk() *ChunkData {
 	return nil
 }
 
+func (x *S2C_ChunkLoad) GetStreamEpoch() uint32 {
+	if x != nil {
+		return x.StreamEpoch
+	}
+	return 0
+}
+
+func (x *S2C_ChunkLoad) GetEventSeq() uint64 {
+	if x != nil {
+		return x.EventSeq
+	}
+	return 0
+}
+
 type S2C_ChunkUnload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Coord         *ChunkCoord            `protobuf:"bytes,1,opt,name=coord,proto3" json:"coord,omitempty"`
+	StreamEpoch   uint32                 `protobuf:"varint,2,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"`
+	EventSeq      uint64                 `protobuf:"varint,3,opt,name=event_seq,json=eventSeq,proto3" json:"event_seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4403,6 +4421,20 @@ func (x *S2C_ChunkUnload) GetCoord() *ChunkCoord {
 		return x.Coord
 	}
 	return nil
+}
+
+func (x *S2C_ChunkUnload) GetStreamEpoch() uint32 {
+	if x != nil {
+		return x.StreamEpoch
+	}
+	return 0
+}
+
+func (x *S2C_ChunkUnload) GetEventSeq() uint64 {
+	if x != nil {
+		return x.EventSeq
+	}
+	return 0
 }
 
 type S2C_ObjectSpawn struct {
@@ -7880,11 +7912,15 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"3\n" +
 	"\x14S2C_PlayerLeaveWorld\x12\x1b\n" +
-	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"7\n" +
+	"\tentity_id\x18\x01 \x01(\x04R\bentityId\"w\n" +
 	"\rS2C_ChunkLoad\x12&\n" +
-	"\x05chunk\x18\x01 \x01(\v2\x10.proto.ChunkDataR\x05chunk\":\n" +
+	"\x05chunk\x18\x01 \x01(\v2\x10.proto.ChunkDataR\x05chunk\x12!\n" +
+	"\fstream_epoch\x18\x02 \x01(\rR\vstreamEpoch\x12\x1b\n" +
+	"\tevent_seq\x18\x03 \x01(\x04R\beventSeq\"z\n" +
 	"\x0fS2C_ChunkUnload\x12'\n" +
-	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\"\x84\x03\n" +
+	"\x05coord\x18\x01 \x01(\v2\x11.proto.ChunkCoordR\x05coord\x12!\n" +
+	"\fstream_epoch\x18\x02 \x01(\rR\vstreamEpoch\x12\x1b\n" +
+	"\tevent_seq\x18\x03 \x01(\x04R\beventSeq\"\x84\x03\n" +
 	"\x0fS2C_ObjectSpawn\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x04R\bentityId\x12\x17\n" +
 	"\atype_id\x18\x02 \x01(\rR\x06typeId\x12#\n" +

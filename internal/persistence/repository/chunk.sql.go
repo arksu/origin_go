@@ -105,15 +105,16 @@ func (q *Queries) TruncateChunks(ctx context.Context) error {
 	return err
 }
 
-const upsertChunk = `-- name: UpsertChunk :exec
-INSERT INTO chunk (region, x, y, layer, tiles_data, last_tick, entity_count, last_saved_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+const upsertChunk = `-- name: UpsertChunk :execrows
+INSERT INTO chunk (region, x, y, layer, tiles_data, last_tick, entity_count, version, last_saved_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
 ON CONFLICT (region, x, y, layer) DO UPDATE SET
     tiles_data = EXCLUDED.tiles_data,
     last_tick = EXCLUDED.last_tick,
     entity_count = EXCLUDED.entity_count,
-    version = chunk.version + 1,
+    version = EXCLUDED.version,
     last_saved_at = NOW()
+WHERE EXCLUDED.version >= chunk.version
 `
 
 type UpsertChunkParams struct {
@@ -124,10 +125,11 @@ type UpsertChunkParams struct {
 	TilesData   []byte        `json:"tiles_data"`
 	LastTick    int64         `json:"last_tick"`
 	EntityCount sql.NullInt32 `json:"entity_count"`
+	Version     int           `json:"version"`
 }
 
-func (q *Queries) UpsertChunk(ctx context.Context, arg UpsertChunkParams) error {
-	_, err := q.db.ExecContext(ctx, upsertChunk,
+func (q *Queries) UpsertChunk(ctx context.Context, arg UpsertChunkParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, upsertChunk,
 		arg.Region,
 		arg.X,
 		arg.Y,
@@ -135,6 +137,10 @@ func (q *Queries) UpsertChunk(ctx context.Context, arg UpsertChunkParams) error 
 		arg.TilesData,
 		arg.LastTick,
 		arg.EntityCount,
+		arg.Version,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

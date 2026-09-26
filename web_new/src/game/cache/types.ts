@@ -1,23 +1,4 @@
-import type { Container, MeshGeometry } from 'pixi.js'
-import type { AABB } from '../culling/AABB'
-
-/**
- * CPU geometry data for a subchunk (positions, uvs, indices)
- */
-export interface SubchunkCpuGeometry {
-  positions: Float32Array
-  uvs: Float32Array
-  indices: Uint32Array
-}
-
-/**
- * GPU resources for a subchunk
- */
-export interface SubchunkGpuResources {
-  geometry: MeshGeometry
-  container: Container
-  bounds: AABB
-}
+import type { ChunkEventIdentity } from '../../network/ChunkStreamGuard'
 
 /**
  * Cached chunk entry with all levels of data
@@ -32,17 +13,11 @@ export interface CachedChunk {
   // Tile data
   tiles: Uint8Array
 
-  // CPU geometry per subchunk
-  cpu: Map<string, SubchunkCpuGeometry>
-
-  // GPU resources per subchunk (optional, level C cache)
-  gpu?: Map<string, SubchunkGpuResources>
-
   // Border/corner data for terrain exclusion
   hasBordersOrCorners: boolean[][]
 
   // Neighbor state for border refresh
-  neighborsMask: number // Bitmask of known neighbors (8 bits for 8 directions)
+  neighborVersions: Map<string, number>
   needsBorderRefresh: boolean
 
   // Size tracking
@@ -52,7 +27,8 @@ export interface CachedChunk {
 
   // Timestamps
   createdAt: number
-  lastUsedAt: number
+  // null means active; retention begins only on unload.
+  retainedAt: number | null
 }
 
 /**
@@ -69,6 +45,8 @@ export interface BuildTask {
   distanceToCamera: number
   createdAt: number
   isBorderRefresh: boolean
+  identity: ChunkEventIdentity
+  worldGeneration: number
 }
 
 /**

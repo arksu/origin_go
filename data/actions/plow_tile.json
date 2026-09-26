@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "plow_tile",
+      "presentation": {
+        "label": "Plow tile",
+        "menuIcon": "/assets/cursor/dig.png"
+      },
+      "target": {
+        "kind": "tile",
+        "cursor": "dig",
+        "approach": "tile_center"
+      },
+      "requirements": {},
+      "execution": { "ticks": 20, "stamina": 250 },
+      "isRepeatable": true
+    }
+  ]
+}

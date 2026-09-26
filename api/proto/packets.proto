@@ -536,10 +536,14 @@ message S2C_PlayerLeaveWorld {
 
 message S2C_ChunkLoad {
   ChunkData chunk = 1;
+  uint32 stream_epoch = 2;
+  uint64 event_seq = 3;
 }
 
 message S2C_ChunkUnload {
   ChunkCoord coord = 1;
+  uint32 stream_epoch = 2;
+  uint64 event_seq = 3;
 }
 
 // Semantic role of a named entity; the client owns the visual palette.
