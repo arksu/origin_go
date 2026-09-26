@@ -336,6 +336,41 @@ func TestCollisionSystem_WalkStopsBeforeDeepWater(t *testing.T) {
 	}
 }
 
+func TestCollisionSystem_InitialTerrainOverlap(t *testing.T) {
+	for _, scenario := range []struct {
+		name         string
+		startX       float64
+		startY       float64
+		dx, dy       float64
+		finalX       float64
+		finalY       float64
+		hasCollision bool
+	}{
+		{"deepening", 105, 102, 6, 0, 105, 102, true},
+		{"diagonal deepening", 105, 102, 3, 3, 105, 102, true},
+		{"escaping", 105, 102, -6, 0, 99, 102, false},
+		{"along shoreline across tile seam", 105, 102, 0, 6, 105, 108, false},
+		{"deepening at internal seam", 110, 108, 6, 0, 110, 108, true},
+		{"escaping at internal seam", 110, 108, -6, 0, 104, 108, false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			scene := newSweepScene(t, scenario.startX, scenario.startY, nil, func(chunk *core.Chunk) {
+				paintTestTile(chunk, 110, 102, types.TileDeepWater)
+				paintTestTile(chunk, 110, 114, types.TileDeepWater)
+			})
+			ecs.AddComponent(scene.world, scene.mover, components.Movement{Mode: constt.Walk})
+			result := scene.runTick(t, scenario.dx, scenario.dy)
+			if math.Abs(result.FinalX-scenario.finalX) > 0.01 || math.Abs(result.FinalY-scenario.finalY) > 0.01 {
+				t.Fatalf("expected (%.3f, %.3f), got (%.3f, %.3f)",
+					scenario.finalX, scenario.finalY, result.FinalX, result.FinalY)
+			}
+			if result.HasCollision != scenario.hasCollision {
+				t.Fatalf("expected hasCollision=%v, got %v", scenario.hasCollision, result.HasCollision)
+			}
+		})
+	}
+}
+
 // H2 regression: a mover already overlapping a static object must not pass
 // through it — deepening movement hits the overlap boundary. Pre-fix the
 // swept test rejected the pair (entryTime < 0) and the mover walked through.
