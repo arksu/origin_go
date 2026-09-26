@@ -33,12 +33,14 @@ export class PixelActorPass {
         depth: { value: this.source.depthTexture },
         pixel: { value: new Vector2(1 / size, 1 / size) },
         hovered: { value: false },
+        waterlineRow: { value: -1 },
       },
       vertexShader: 'varying vec2 pixelUV; void main() { pixelUV = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: `
         uniform sampler2D source, depth;
         uniform vec2 pixel;
         uniform bool hovered;
+        uniform float waterlineRow;
         varying vec2 pixelUV;
         void consider(vec3 candidate, vec3 color, inout vec3 closest, inout float distance) {
           vec3 difference = candidate - color;
@@ -63,6 +65,11 @@ export class PixelActorPass {
           return vec4(best.rgb / weight, best.a);
         }
         void main() {
+          // Cut the finished silhouette, including hover outlines, before Pixi picking.
+          if (waterlineRow >= 0.0 && floor(pixelUV.y / pixel.y) >= waterlineRow) {
+            gl_FragColor = vec4(0.0);
+            return;
+          }
           // Pixi interprets row zero as the top; flip once before the GPU copy.
           vec2 uv = vec2(pixelUV.x, 1.0 - pixelUV.y);
           vec4 center = sampleCell(uv);
@@ -146,8 +153,9 @@ export class PixelActorPass {
     this.scene.add(new Mesh(this.geometry, this.material))
   }
 
-  render(renderer: WebGLRenderer, hovered: boolean): void {
+  render(renderer: WebGLRenderer, hovered: boolean, waterlineRow = -1): void {
     this.material.uniforms.hovered!.value = hovered
+    this.material.uniforms.waterlineRow!.value = waterlineRow
     renderer.setRenderTarget(this.output)
     renderer.render(this.scene, this.camera)
   }

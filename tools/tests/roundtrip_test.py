@@ -23,6 +23,7 @@ PACK = os.path.join(TOOLS, "pack_texturepacker_atlas.py")
 EXTRACT = os.path.join(TOOLS, "extract_texturepacker_atlas.py")
 
 sys.path.insert(0, TOOLS)
+import png_codec as pc
 
 
 def md5(path):
@@ -33,14 +34,20 @@ def md5(path):
     return h.hexdigest()
 
 
-def tree_md5(root_dir):
+def tree_pixel_md5(root_dir):
     items = []
     for base, _dirs, files in os.walk(root_dir):
         for name in sorted(files):
             if name.startswith("."):
                 continue
             p = os.path.join(base, name)
-            items.append((os.path.relpath(p, root_dir), md5(p)))
+            width, height, pixels = pc.decode_rgba_png(p)
+            # PNG encoders can produce different bytes for identical pixels.
+            digest = hashlib.md5()
+            digest.update(width.to_bytes(4, "big"))
+            digest.update(height.to_bytes(4, "big"))
+            digest.update(pixels)
+            items.append((os.path.relpath(p, root_dir), digest.hexdigest()))
     return sorted(items)
 
 
@@ -57,7 +64,7 @@ def main():
 
     fixtures = os.path.join(tempfile.mkdtemp(prefix="atlas-fixtures-"))
     run(["python3", os.path.join(HERE, "gen_fixtures.py"), fixtures])
-    src_files = tree_md5(fixtures)
+    src_files = tree_pixel_md5(fixtures)
     assert src_files, "no fixtures generated"
 
     tmp = tempfile.mkdtemp(prefix="atlas-roundtrip-")
@@ -93,7 +100,7 @@ def main():
                 extract_flags = ["--strip-prefix", "tiles/"]
             out_dir = os.path.join(out, "unpacked")
             run(["python3", EXTRACT, atlas_json, atlas_png, out_dir] + extract_flags)
-            assert tree_md5(out_dir) == src_files, f"roundtrip mismatch for {flags}"
+            assert tree_pixel_md5(out_dir) == src_files, f"roundtrip mismatch for {flags}"
 
             # no aliases ever; full field set always
             data = json.load(open(atlas_json))
@@ -117,8 +124,8 @@ def main():
             run(["python3", EXTRACT, atlas, sheet, out_dir])
             # art_source/tiles may also contain user-added sprites not yet in
             # the atlas — compare only what the extractor produces.
-            golden = tree_md5(out_dir)
-            reference = dict(tree_md5(os.path.join(ROOT, "art_source/tiles")))
+            golden = tree_pixel_md5(out_dir)
+            reference = dict(tree_pixel_md5(os.path.join(ROOT, "art_source/tiles")))
             assert golden, "regression produced no files"
             for rel, digest in golden:
                 assert reference.get(rel) == digest, f"regression mismatch: {rel}"

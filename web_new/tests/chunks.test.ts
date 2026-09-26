@@ -73,6 +73,27 @@ function flushBorders(manager: ChunkManager) {
   while (buildQueue.hasPendingTasks()) manager.update()
 }
 
+test('world tile lookup uses active payloads across negative coordinates, reload and cached unload', async (t) => {
+  const manager = await managerFixture(t)
+  const first = tiles()
+  first[15] = 3
+  manager.loadChunk(-1, -1, first, 1, identity(1))
+  assert.equal(manager.getTileTypeAtWorld(-0.01, -0.01), 3)
+  assert.equal(manager.getTileTypeAtWorld(-12, -12), 3)
+  assert.equal(manager.getTileTypeAtWorld(-48, -48), 35)
+  assert.equal(manager.getTileTypeAtWorld(0, 0), undefined)
+  assert.equal(manager.getTileTypeAtWorld(NaN, 0), undefined)
+  manager.unloadChunk(-1, -1, identity(2))
+  assert.ok(manager.getChunk(-1, -1), 'the graphical cache retains this chunk')
+  assert.equal(manager.getTileTypeAtWorld(-1, -1), undefined, 'cached water must not outlive its active payload')
+  const replacement = tiles()
+  replacement[15] = 1
+  manager.loadChunk(-1, -1, replacement, 2, identity(3))
+  assert.equal(manager.getTileTypeAtWorld(-1, -1), 1, 'replacement tile is visible immediately')
+  manager.clear()
+  assert.equal(manager.getTileTypeAtWorld(-1, -1), undefined)
+})
+
 test('wire sequence ordering is lossless, per coordinate, and survives unload', () => {
   const guard = new ChunkStreamGuard()
   guard.reset(1)

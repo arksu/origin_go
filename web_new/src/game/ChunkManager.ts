@@ -1,7 +1,7 @@
 import { Container, Assets, Spritesheet } from 'pixi.js'
 import { Chunk } from './Chunk'
 import { initTileSets } from './tiles/tileSetLoader'
-import { setWorldParams, getChunkSize } from './tiles/Tile'
+import { setWorldParams, getChunkSize, getCoordPerTile } from './tiles/Tile'
 import { terrainManager } from './terrain'
 import { cullingController } from './culling'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
@@ -264,6 +264,21 @@ export class ChunkManager {
   }
 
   getChunk(x: number, y: number): Chunk | undefined { return this.chunks.get(`${x},${y}`) }
+
+  getTileTypeAtWorld(worldX: number, worldY: number): number | undefined {
+    if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return undefined
+    const tileX = Math.floor(worldX / getCoordPerTile())
+    const tileY = Math.floor(worldY / getCoordPerTile())
+    const chunkSize = getChunkSize()
+    const chunkX = Math.floor(tileX / chunkSize)
+    const chunkY = Math.floor(tileY / chunkSize)
+    // Cached meshes survive unload; only active payloads describe the current world.
+    const payload = this.activeChunks.get(`${chunkX},${chunkY}`)
+    const localX = tileX - chunkX * chunkSize
+    const localY = tileY - chunkY * chunkSize
+    return payload?.tiles[localY * chunkSize + localX]
+  }
+
   getLoadedChunksCount(): number { return this.activeChunks.size }
 
   clear(): void {

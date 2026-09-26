@@ -1,7 +1,8 @@
 # Atlas tools (stdlib-only, no PIL/ImageMagick on this machine)
 
 Pair of scripts for TexturePacker JSON-hash atlases compatible with the game
-engine (PixiJS v8 `Spritesheet`, see `web_new/src/game/ChunkManager.ts`).
+engine (PixiJS v8 `Spritesheet`, see `web_new/src/game/ChunkManager.ts`). The
+project-level overview lives in the [main README](../README.md#2d-tile-atlas-texturepacker).
 
 ## Extract an atlas into individual PNGs
 

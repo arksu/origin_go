@@ -22,6 +22,9 @@ import {
 import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
 import type { ActorHandle, ActorRenderer } from './actors/ActorRenderer'
 import { ACTOR_RENDER } from './actors/config'
+import { ShallowWaterVisual } from './actors/ShallowWaterVisual'
+import { SHALLOW_WATER } from './actors/shallowWaterConfig'
+import { TILE_SHALLOW_WATER } from './tiles/tileIds'
 import type { EquippedVisual } from '../types/characterVisual'
 import { fxManager } from './fx/FxManager'
 import type { ParticleEmitter } from './fx/ParticleEmitter'
@@ -103,10 +106,11 @@ export class ObjectView {
   private knockedOutPose = false
   private knockedOutShadow: Graphics | null = null
   private actorHandle: ActorHandle | null = null
+  private shallowWater: ShallowWaterVisual | null = null
   private carrying = false
   private particleEmitter: ParticleEmitter | null = null
 
-  constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer) {
+  constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer, private readonly rippleTexture?: Texture) {
     this.entityId = options.entityId
     this.typeId = options.typeId
     this.position = options.position
@@ -213,6 +217,10 @@ export class ObjectView {
       const handle = this.actorRenderer.create()
       this.actorHandle = handle
       this.container.addChild(handle.sprite)
+      if (this.rippleTexture) {
+        this.shallowWater = new ShallowWaterVisual(this.rippleTexture)
+        this.container.addChild(this.shallowWater.sprite)
+      }
       this.setInteractive(handle.sprite)
       void handle.actor.ready.then(() => this.syncActor()).catch((error: unknown) => {
         console.error(`[ObjectView] 3D character ${this.entityId} failed`, error)
@@ -262,7 +270,7 @@ export class ObjectView {
       sprite.roundPixels = true
       if (layer.shadow) {
         this.shadowSprites.push(sprite)
-        sprite.visible = !this.shadowSuppressed && !this.knockedOutPose
+        this.syncShadows()
       }
       if (layer.interactive) {
         this.setInteractive(sprite)
@@ -288,7 +296,7 @@ export class ObjectView {
       }
       if (layer.shadow) {
         this.shadowSprites.push(spr)
-        spr.visible = !this.shadowSuppressed && !this.knockedOutPose
+        this.syncShadows()
       }
       if (layer.interactive) {
         this.setInteractive(spr)
@@ -333,7 +341,7 @@ export class ObjectView {
         }
         if (layer.shadow) {
           this.shadowSprites.push(spr)
-          spr.visible = !this.shadowSuppressed && !this.knockedOutPose
+          this.syncShadows()
         }
         if (layer.interactive) {
           this.setInteractive(spr)
@@ -361,7 +369,7 @@ export class ObjectView {
 
       if (layer.shadow) {
         this.shadowSprites.push(sprite)
-        sprite.visible = !this.shadowSuppressed && !this.knockedOutPose
+        this.syncShadows()
       }
       if (layer.interactive) {
         this.setInteractive(sprite)
@@ -593,7 +601,7 @@ export class ObjectView {
     if (this.actorHandle) {
       const cosine = Math.cos(this.container.rotation)
       const sine = Math.sin(this.container.rotation)
-      const anchorY = this.knockedOutPose ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY
+      const anchorY = this.knockedOutPose ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY - this.actorHandle.immersionPx
       for (const localX of [-ACTOR_RENDER.anchorX, ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorX]) {
         for (const localY of [-anchorY, ACTOR_RENDER.cellSize - anchorY]) {
           minX = Math.min(minX, cx + localX * cosine - localY * sine)
@@ -601,6 +609,10 @@ export class ObjectView {
           minY = Math.min(minY, cy + localX * sine + localY * cosine)
           maxY = Math.max(maxY, cy + localX * sine + localY * cosine)
         }
+      }
+      if (this.shallowWater?.sprite.visible) {
+        const extent = SHALLOW_WATER.rippleHeight * (1 + SHALLOW_WATER.pulseScale)
+        maxY = Math.max(maxY, cy + extent)
       }
     }
     // Baked feet extend below the ground anchor; include the entire frame even
@@ -1024,7 +1036,7 @@ export class ObjectView {
       return
     }
     this.shadowSuppressed = suppressed
-    this.syncKnockedOutShadow()
+    this.syncShadows()
   }
 
   setKnockedOutPose(enabled: boolean): void {
@@ -1037,19 +1049,32 @@ export class ObjectView {
       this.onStopped()
     }
     this.syncActor()
-    this.syncKnockedOutShadow()
+    this.syncShadows()
     this.updateBoundsGraphics()
   }
 
-  private syncKnockedOutShadow(): void {
+  private syncShadows(): void {
     if (this.actorHandle && this.knockedOutPose && !this.knockedOutShadow) {
       this.knockedOutShadow = new Graphics().ellipse(3, 4, 46, 8).fill({ color: 0x17201b, alpha: .3 })
       this.knockedOutShadow.zIndex = -1
       this.knockedOutShadow.eventMode = 'none'
       this.container.addChild(this.knockedOutShadow)
     }
-    if (this.knockedOutShadow) this.knockedOutShadow.visible = this.knockedOutPose && !this.shadowSuppressed
-    for (const shadow of this.shadowSprites) shadow.visible = !this.knockedOutPose && !this.shadowSuppressed
+    const submerged = (this.actorHandle?.immersionPx ?? 0) > 0
+    if (this.knockedOutShadow) this.knockedOutShadow.visible = this.knockedOutPose && !this.shadowSuppressed && !submerged
+    for (const shadow of this.shadowSprites) shadow.visible = !this.knockedOutPose && !this.shadowSuppressed && !submerged
+  }
+
+  updateShallowWater(tileType: number | undefined, nowMs: number): boolean {
+    if (!this.actorHandle || !this.shallowWater) return false
+    const excluded = this.knockedOutPose || this.interactionSuppressed || tileType === undefined
+    this.shallowWater.update(tileType === TILE_SHALLOW_WATER && !excluded, this.isWalking, this.walkDistanceTiles, nowMs, excluded)
+    const immersionPx = this.shallowWater.immersionPx
+    if (this.actorHandle.immersionPx === immersionPx) return false
+    this.actorHandle.immersionPx = immersionPx
+    this.actorHandle.actor.invalidateRender()
+    this.syncShadows()
+    return true
   }
 
   private syncActor(): void {
@@ -1070,7 +1095,7 @@ export class ObjectView {
     this.syncActor()
   }
 
-  getCarryOffsetPx(fallback: number): number { return this.actorHandle ? 94 : fallback }
+  getCarryOffsetPx(fallback: number): number { return this.actorHandle ? 94 - this.actorHandle.immersionPx : fallback }
 
   setActorPriority(priority: boolean): void {
     if (this.actorHandle) this.actorHandle.priority = priority

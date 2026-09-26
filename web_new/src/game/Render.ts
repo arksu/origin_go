@@ -95,6 +95,7 @@ export class Render {
 
     this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer, this.actorRenderSettings)
     this.objectManager.setActorRenderer(this.actorRenderer)
+    await this.objectManager.initShallowWater((x, y) => this.chunkManager.getTileTypeAtWorld(x, y))
 
     // Limit maximum FPS to reduce system load
     this.app.ticker.maxFPS = MAX_FPS
@@ -282,13 +283,13 @@ export class Render {
 
   private update(): void {
     this.updateMovement()
-    this.objectManager.syncActiveCarryVisuals(CARRIED_OBJECT_OFFSET_PX)
     this.updateCamera()
     this.updateBuildGhost()
     this.updateLiftGhost()
     this.updateChunkBuilds()
     this.updateCulling()
     this.objectManager.update()
+    this.objectManager.syncActiveCarryVisuals(CARRIED_OBJECT_OFFSET_PX)
     this.nicknameManager.update(this.objectManager)
     this.chatBalloonManager.update(this.objectManager)
     this.moveMarkerManager?.update()
