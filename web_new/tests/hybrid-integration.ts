@@ -6,7 +6,7 @@ import { Application, Container, Sprite, Texture, WebGLRenderer } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer } from '../src/game/actors/ActorRenderer'
-import { COMMONER_ASSET_ID, DEFAULT_EQUIPMENT } from '../src/game/actors/config'
+import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_EQUIPMENT } from '../src/game/actors/config'
 import { setWorldParams } from '../src/game/tiles/Tile'
 import { coordScreen2Game } from '../src/game/utils/coordConvert'
 
@@ -155,9 +155,46 @@ async function main() {
   for (let frame = 0; frame < 6; frame++) render()
   check(hash() === idle, 'Releasing a carried prop must restore ordinary idle')
   manager.setKnockedOutPose(101, true)
-  check(view.computeScreenBounds().minX <= -116, 'Culling must include the rotated KO image')
+  const knockedOut = hash()
+  check(knockedOut !== idle && view.getContainer().rotation === 0, 'KO must change the 3D body while leaving the ground container upright')
+  const koView = view as unknown as { actorHandle: ActorHandle; shadowSprites: Sprite[]; knockedOutShadow: Container }
+  check(koView.knockedOutShadow.visible && koView.shadowSprites.every((shadow) => !shadow.visible), 'KO must replace the standing cast shadow with ground contact')
+  view.setShadowSuppressed(true)
+  check(!koView.knockedOutShadow.visible, 'Shadow suppression must include the lying contact shadow')
+  view.setShadowSuppressed(false)
+  check(koView.knockedOutShadow.visible, 'Lying contact shadow must return when suppression ends')
+  const koPixels = pixels()
+  let minX = 128, maxX = 0, minY = 128, maxY = 0
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+    if (!koPixels[(y * 128 + x) * 4 + 3]) continue
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y)
+  }
+  check(maxX - minX > (maxY - minY) * 2, 'KO silhouette must lie horizontally on the ground')
+  check(minX > 0 && maxX < 127 && minY > 0 && maxY < 127, 'Lying body must fit entirely inside its texture')
+  const bounds = view.computeScreenBounds()
+  check(bounds.minX <= -ACTOR_RENDER.anchorX && bounds.maxX >= ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorX &&
+    bounds.maxY >= ACTOR_RENDER.cellSize - ACTOR_RENDER.knockedOutAnchorY, 'Culling must include the ground-centered KO frame')
+  const hitX = Math.floor((minX + maxX) / 2), hitY = Math.floor((minY + maxY) / 2)
+  check(koPixels[(hitY * 128 + hitX) * 4 + 3], 'KO picking fixture must land inside the torso')
+  check(view.hitTestRmbScreenPoint(120 + (hitX - ACTOR_RENDER.anchorX) * 2,
+    250 + (hitY - ACTOR_RENDER.knockedOutAnchorY) * 2, coordScreen2Game), 'Lying torso must use the new picking anchor')
+  check(!view.hitTestRmbScreenPoint(120, 50, coordScreen2Game), 'Empty space above a knocked out body must not consume clicks')
+  for (const mode of ['hybrid3d', 'baked8'] as const) {
+    renderer.setSettings({ mode })
+    koView.actorHandle.actor.walking = true
+    koView.actorHandle.actor.carrying = true
+    koView.actorHandle.actor.stopProgress = .5
+    check(hash(false) === knockedOut, `3D knockout must override pending gait and carry directly in ${mode}`)
+    for (let direction = 0; direction < 8; direction++) {
+      view.onMoved(direction, cycleDistanceTiles * 12 * .25)
+      check(hash() === knockedOut, `KO must suppress locomotion and preserve the horizontal body in ${mode}, heading ${direction}`)
+    }
+  }
   manager.setKnockedOutPose(101, false)
-  pass('Server carry relation / universal hands / carry walk / release / KO culling')
+  check(hash() === idle && playerSprite.y === -ACTOR_RENDER.anchorY, 'Recovery must restore the exact standing body and anchor')
+  check(!koView.knockedOutShadow.visible && koView.shadowSprites.every((shadow) => shadow.visible), 'Recovery must restore the standing shadow')
+  pass('Server carry relation / universal hands / carry walk / release / 3D KO / ground picking / recovery')
 
   view.getContainer().renderable = false
   render()

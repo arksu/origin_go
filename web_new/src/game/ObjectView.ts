@@ -101,6 +101,7 @@ export class ObjectView {
   private hoverBorderSignature = ''
   private shadowSuppressed = false
   private knockedOutPose = false
+  private knockedOutShadow: Graphics | null = null
   private actorHandle: ActorHandle | null = null
   private carrying = false
   private particleEmitter: ParticleEmitter | null = null
@@ -261,7 +262,7 @@ export class ObjectView {
       sprite.roundPixels = true
       if (layer.shadow) {
         this.shadowSprites.push(sprite)
-        sprite.visible = !this.shadowSuppressed
+        sprite.visible = !this.shadowSuppressed && !this.knockedOutPose
       }
       if (layer.interactive) {
         this.setInteractive(sprite)
@@ -287,7 +288,7 @@ export class ObjectView {
       }
       if (layer.shadow) {
         this.shadowSprites.push(spr)
-        spr.visible = !this.shadowSuppressed
+        spr.visible = !this.shadowSuppressed && !this.knockedOutPose
       }
       if (layer.interactive) {
         this.setInteractive(spr)
@@ -332,7 +333,7 @@ export class ObjectView {
         }
         if (layer.shadow) {
           this.shadowSprites.push(spr)
-          spr.visible = !this.shadowSuppressed
+          spr.visible = !this.shadowSuppressed && !this.knockedOutPose
         }
         if (layer.interactive) {
           this.setInteractive(spr)
@@ -360,7 +361,7 @@ export class ObjectView {
 
       if (layer.shadow) {
         this.shadowSprites.push(sprite)
-        sprite.visible = !this.shadowSuppressed
+        sprite.visible = !this.shadowSuppressed && !this.knockedOutPose
       }
       if (layer.interactive) {
         this.setInteractive(sprite)
@@ -592,8 +593,9 @@ export class ObjectView {
     if (this.actorHandle) {
       const cosine = Math.cos(this.container.rotation)
       const sine = Math.sin(this.container.rotation)
+      const anchorY = this.knockedOutPose ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY
       for (const localX of [-ACTOR_RENDER.anchorX, ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorX]) {
-        for (const localY of [-ACTOR_RENDER.anchorY, ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorY]) {
+        for (const localY of [-anchorY, ACTOR_RENDER.cellSize - anchorY]) {
           minX = Math.min(minX, cx + localX * cosine - localY * sine)
           maxX = Math.max(maxX, cx + localX * cosine - localY * sine)
           minY = Math.min(minY, cy + localX * sine + localY * cosine)
@@ -1022,9 +1024,7 @@ export class ObjectView {
       return
     }
     this.shadowSuppressed = suppressed
-    for (const spr of this.shadowSprites) {
-      spr.visible = !suppressed
-    }
+    this.syncKnockedOutShadow()
   }
 
   setKnockedOutPose(enabled: boolean): void {
@@ -1033,12 +1033,23 @@ export class ObjectView {
     }
     this.knockedOutPose = enabled
 
-    // Temporary KO visualization until we have a dedicated lying-body asset/animation.
-    this.container.rotation = enabled ? -Math.PI * 0.5 : 0
     if (enabled) {
       this.onStopped()
     }
+    this.syncActor()
+    this.syncKnockedOutShadow()
     this.updateBoundsGraphics()
+  }
+
+  private syncKnockedOutShadow(): void {
+    if (this.actorHandle && this.knockedOutPose && !this.knockedOutShadow) {
+      this.knockedOutShadow = new Graphics().ellipse(3, 4, 46, 8).fill({ color: 0x17201b, alpha: .3 })
+      this.knockedOutShadow.zIndex = -1
+      this.knockedOutShadow.eventMode = 'none'
+      this.container.addChild(this.knockedOutShadow)
+    }
+    if (this.knockedOutShadow) this.knockedOutShadow.visible = this.knockedOutPose && !this.shadowSuppressed
+    for (const shadow of this.shadowSprites) shadow.visible = !this.knockedOutPose && !this.shadowSuppressed
   }
 
   private syncActor(): void {
@@ -1050,6 +1061,7 @@ export class ObjectView {
     actor.stopProgress = this.stopProgress
     actor.distanceTiles = this.walkDistanceTiles
     actor.carrying = this.carrying && !this.knockedOutPose
+    actor.knockedOut = this.knockedOutPose
     actor.hovered = this.isHovered
   }
 
