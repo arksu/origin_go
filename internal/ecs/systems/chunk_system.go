@@ -1,6 +1,8 @@
 package systems
 
 import (
+	"math"
+
 	_const "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
@@ -47,8 +49,10 @@ func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
 		if !ok {
 			continue
 		}
-		newChunkX := floorDiv(int(transform.X), _const.ChunkWorldSize)
-		newChunkY := floorDiv(int(transform.Y), _const.ChunkWorldSize)
+		// Floor before converting to int so negative fractional positions
+		// belong to the chunk on the negative side of a border.
+		newChunkX := int(math.Floor(transform.X / float64(_const.ChunkWorldSize)))
+		newChunkY := int(math.Floor(transform.Y / float64(_const.ChunkWorldSize)))
 
 		// Check if entity needs to migrate to different chunk
 		if newChunkX != chunkRef.CurrentChunkX || newChunkY != chunkRef.CurrentChunkY {
