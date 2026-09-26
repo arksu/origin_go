@@ -140,6 +140,33 @@ and failure recovery, see [the full Blender asset workflow](docs/assets/README.m
 Run `tools/assets setup` once after checkout to download and verify the locked
 KTX encoder into the project-local tool cache. Builds themselves remain offline.
 
+### 2D tile atlas (TexturePacker)
+
+Editable sprite sources live in `art_source/tiles/` — one PNG per sprite, the
+relative path is the atlas frame key (`bog/b1.png`, `terrain/heath/…`). Rebuild
+the game atlas (`web_new/public/assets/game/tiles.json` + `tiles.png`) after
+editing sprites:
+
+```bash
+python3 tools/pack_texturepacker_atlas.py \
+    art_source/tiles \
+    web_new/public/assets/game/tiles.json \
+    web_new/public/assets/game/tiles.png
+```
+
+To split an atlas back into individual sprites (defaults reproduce
+`art_source/tiles`):
+
+```bash
+python3 tools/extract_texturepacker_atlas.py
+```
+
+Both tools are pure Python stdlib, deterministic, and self-verifying (every
+frame is pixel-checked against the atlas). The output is compatible with the
+PixiJS v8 Spritesheet loader, including `rotated` (90° CW) and `trimmed`
+frames; `aliases` are never emitted. Flags, engine conventions and tests are
+documented in [`tools/README.md`](tools/README.md).
+
 ### Local build workflow (Makefile)
 
 Core targets:

@@ -16,6 +16,46 @@ import { actorYawForScreenAngle } from '../src/game/actors/facing'
 import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
 import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
 import type { EquipmentDefinition } from '../src/game/actors/equipment'
+import { Texture } from 'pixi.js'
+import { ShallowWaterVisual } from '../src/game/actors/ShallowWaterVisual'
+import { SHALLOW_WATER } from '../src/game/actors/shallowWaterConfig'
+
+test('waterline reverses smoothly and clears unknown terrain without destroying the shared texture', () => {
+  const effect = new ShallowWaterVisual(Texture.EMPTY)
+  const halfwayMs = SHALLOW_WATER.transitionMs / 2
+  const reverseMs = halfwayMs + SHALLOW_WATER.transitionMs / 4
+  const submergedMs = reverseMs + SHALLOW_WATER.transitionMs
+  effect.update(false, false, 0, 0)
+  effect.update(true, true, .1, halfwayMs)
+  assert.equal(effect.immersionPx, Math.round(SHALLOW_WATER.immersionPx / 2))
+  const partialAlpha = effect.sprite.alpha
+  effect.update(false, false, 0, reverseMs)
+  assert.ok(effect.immersionPx > 0 && effect.immersionPx < SHALLOW_WATER.immersionPx / 2)
+  assert.ok(effect.sprite.alpha < partialAlpha)
+  effect.update(true, false, 0, submergedMs)
+  assert.equal(effect.immersionPx, SHALLOW_WATER.immersionPx)
+  assert.equal(effect.sprite.eventMode, 'none')
+  effect.update(false, false, 0, submergedMs + 1, true)
+  assert.equal(effect.immersionPx, 0)
+  assert.equal(effect.sprite.visible, false)
+  effect.sprite.destroy()
+  assert.equal(Texture.EMPTY.destroyed, false)
+})
+
+test('idle ripples settle without advancing their distance phase or moving the waterline', () => {
+  const effect = new ShallowWaterVisual(Texture.EMPTY)
+  effect.update(true, true, 0, 0)
+  effect.update(true, true, SHALLOW_WATER.pulseDistanceTiles / 4, 300)
+  assert.ok(effect.sprite.width > SHALLOW_WATER.rippleWidth)
+  effect.update(true, false, 0, 600)
+  assert.equal(effect.sprite.width, SHALLOW_WATER.rippleWidth)
+  assert.equal(effect.sprite.height, SHALLOW_WATER.rippleHeight)
+  assert.equal(effect.sprite.alpha, SHALLOW_WATER.idleAlpha)
+  assert.equal(effect.sprite.y, 0)
+  effect.update(true, false, 0, 1600)
+  assert.equal(effect.sprite.alpha, SHALLOW_WATER.idleAlpha)
+  effect.sprite.destroy()
+})
 
 function visual(revision: string, generation = '0:4294967297') {
   return decodeCharacterVisual(proto.CharacterVisualState.fromObject({ generation, revision,

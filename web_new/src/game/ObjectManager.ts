@@ -1,9 +1,10 @@
-import { Container } from 'pixi.js'
+import { Container, type Texture } from 'pixi.js'
 import { ObjectView, type ObjectViewOptions } from './ObjectView'
 import { cullingController } from './culling'
 import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
 import { DEBUG_SHOW_OBJECT_BOUNDS } from '@/constants/game'
 import type { ActorRenderer } from './actors/ActorRenderer'
+import { loadShallowWaterTexture } from './actors/ShallowWaterVisual'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
@@ -23,8 +24,15 @@ export class ObjectManager {
   private hoveredEntityId: number | null = null
   private actorRenderer: ActorRenderer | undefined
   private playerEntityId: number | null = null
+  private rippleTexture: Texture | undefined
+  private tileTypeLookup: ((x: number, y: number) => number | undefined) | undefined
 
   setActorRenderer(renderer: ActorRenderer | undefined): void { this.actorRenderer = renderer }
+
+  async initShallowWater(lookup: (x: number, y: number) => number | undefined): Promise<void> {
+    this.rippleTexture = await loadShallowWaterTexture()
+    this.tileTypeLookup = lookup
+  }
 
   setPlayerEntityId(entityId: number | null): void {
     this.playerEntityId = entityId
@@ -49,7 +57,7 @@ export class ObjectManager {
       this.despawnObject(options.entityId)
     }
 
-    const objectView = new ObjectView(options, this.actorRenderer)
+    const objectView = new ObjectView(options, this.actorRenderer, this.rippleTexture)
     objectView.setCarrying((this.carriedObjectsByCarrier.get(options.entityId)?.size ?? 0) > 0)
     objectView.setActorPriority(options.entityId === this.playerEntityId)
     objectView.setKnockedOutPose(this.knockedOutObjectIds.has(options.entityId))
@@ -373,15 +381,20 @@ export class ObjectManager {
    * Update all objects (called every frame).
    * Performs Z-sorting if needed.
    */
-  update(): void {
+  update(nowMs = performance.now()): void {
     if (this.animatedObjectIds.size > 0) {
-      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
       const staleAnimatedIds: number[] = []
       for (const entityId of this.animatedObjectIds) {
         const objectView = this.objects.get(entityId)
         if (!objectView) {
           staleAnimatedIds.push(entityId)
           continue
+        }
+        if (this.tileTypeLookup) {
+          const position = objectView.getPosition()
+          if (objectView.updateShallowWater(this.tileTypeLookup(position.x, position.y), nowMs)) {
+            cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
+          }
         }
         objectView.updateAnimation(nowMs)
       }

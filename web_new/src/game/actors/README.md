@@ -75,6 +75,17 @@ Run `npm run dev` from `web_new`, then open:
   culling, LOD and context restoration.
 - Movement and terminal-deceleration regressions now run against live actors in the integration page.
 - `/tests/axe-review.html`: ordinary grip binding in both hands, movement and carry.
+- `/tests/shallow-water.html`: eight dry/submerged directions, walk/carry,
+  1/30 actor scenes and waterline GPU/picking/context-restoration checks.
+
+Shallow-water tiles lower the body sprite according to `shallowWaterConfig.ts` and cut the
+finished silhouette at the ground anchor in `PixelActorPass`. A shared 80 × 40
+ripple texture draws below the body, so visible legs occlude the crests; its pulse follows walking distance and
+settles when stopped. `shallowWaterConfig.ts` owns the tuning. The world container
+and sorting anchor stay fixed, ground shadows disappear, and carried props follow
+the lowered hands. Unknown terrain, carried characters and the KO pose immediately
+clear the standing water effect. The approved source and reproducible PNG export
+are in `art_source/fx/shallow_water/`.
 
 The game requires hybrid rendering and WebGL2. Baked character atlases and the
 comparison/fallback path have been removed. Initialization errors propagate to

@@ -2,13 +2,15 @@ import type { ActorHandle } from '../src/game/actors/ActorRenderer'
 import { verifyMovementStopping } from './movement-stop'
 import { verifyScreenFacing } from './screen-facing'
 import { verifyCharacterEquipment, verifyStoneAxe } from './character-equipment'
-import { Application, Container, Sprite, Texture, WebGLRenderer } from 'pixi.js'
+import { Application, Assets, Container, Sprite, Texture, WebGLRenderer } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer } from '../src/game/actors/ActorRenderer'
 import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_EQUIPMENT } from '../src/game/actors/config'
 import { setWorldParams } from '../src/game/tiles/Tile'
 import { coordScreen2Game } from '../src/game/utils/coordConvert'
+import { SHALLOW_WATER } from '../src/game/actors/shallowWaterConfig'
+import { TILE_GRASS, TILE_SHALLOW_WATER } from '../src/game/tiles/tileIds'
 
 const result = document.querySelector<HTMLPreElement>('#result')!
 const checks: string[] = []
@@ -36,6 +38,8 @@ async function main() {
   app.stage.addChild(world)
   manager.setParentContainer(world)
   manager.setActorRenderer(renderer)
+  let surfaceTile: number | undefined = TILE_GRASS
+  await manager.initShallowWater(() => surfaceTile)
   manager.setPlayerEntityId(101)
   setWorldParams(12, 128)
   const options = { typeId: 1, resourcePath: 'player', position: { x: 0, y: 0 }, size: { x: 4, y: 4 } }
@@ -252,6 +256,84 @@ async function main() {
   pass('Screen sectors / actual ObjectManager displacement / zoom / inverse camera projection / boundary hysteresis')
   await verifyMovementStopping(manager)
   pass('Live actor / server stop / deceleration / 8 directions / 30–144 FPS / restart / teleport / KO')
+  manager.updateObjectPosition(101, 0, 0, false, 3, 0)
+  view.setKnockedOutPose(false)
+  view.setCarrying(false)
+  const faceWaterActor = (direction: number) => {
+    manager.updateObjectPosition(101, 0, 0, false, 3, 0)
+    const angle = (direction - 1) * Math.PI / 4
+    const delta = coordScreen2Game(Math.cos(angle) * 2, Math.sin(angle) * 2)
+    manager.updateObjectPosition(101, delta.x, delta.y, true, direction, Math.hypot(delta.x, delta.y))
+    manager.updateObjectPosition(101, 0, 0, false, direction, 0)
+  }
+  faceWaterActor(3)
+  let waterTime = performance.now()
+  const waterFrame = (elapsed = 100) => {
+    manager.update(waterTime += elapsed)
+    manager.syncActiveCarryVisuals(94)
+    render(false)
+  }
+  for (let frame = 0; frame < 8; frame++) waterFrame()
+  const dryPixels = pixels(false)
+  const waterHandle = (view as unknown as { actorHandle: ActorHandle }).actorHandle
+  const ripple = view.getContainer().children.find(child => child instanceof Sprite && child.texture === Assets.get(SHALLOW_WATER.textureURL)) as Sprite
+  surfaceTile = TILE_SHALLOW_WATER
+  waterFrame(SHALLOW_WATER.transitionMs / 2)
+  check(waterHandle.immersionPx > 0 && waterHandle.immersionPx < SHALLOW_WATER.immersionPx, 'Entry must transition smoothly')
+  waterFrame(SHALLOW_WATER.transitionMs)
+  check(waterHandle.immersionPx === SHALLOW_WATER.immersionPx && ripple.visible && ripple.eventMode === 'none', 'Knee depth and noninteractive overlay must settle')
+  check(playerSprite.y === -ACTOR_RENDER.anchorY + SHALLOW_WATER.immersionPx, 'Body must move down without moving its world anchor')
+  for (let direction = 0; direction < 8; direction++) {
+    faceWaterActor(direction)
+    waterFrame(600)
+    const values = pixels(false)
+    const cutoff = (ACTOR_RENDER.anchorY - SHALLOW_WATER.immersionPx) * ACTOR_RENDER.cellSize * 4
+    check(values.slice(0, cutoff).some((value, index) => index % 4 === 3 && value === 255), 'Visible torso must survive in every direction')
+    for (let index = cutoff + 3; index < values.length; index += 4) check(values[index] === 0, 'Every submerged pixel must be clipped')
+  }
+  view.setHovered(true)
+  waterFrame()
+  const highlightedWater = pixels(false)
+  const cutoff = (ACTOR_RENDER.anchorY - SHALLOW_WATER.immersionPx) * ACTOR_RENDER.cellSize * 4
+  for (let index = cutoff + 3; index < highlightedWater.length; index += 4) check(highlightedWater[index] === 0, 'Hover must not restore underwater outlines')
+  view.setHovered(false)
+  waterFrame()
+  const belowWater = view.getContainer().toGlobal({ x: 0, y: 10 })
+  check(!view.hitTestRmbScreenPoint(belowWater.x, belowWater.y, coordScreen2Game), 'Clipped legs must not capture clicks')
+  const stationaryRevision = waterHandle.actor.revision
+  waterFrame(1000)
+  check(waterHandle.actor.revision === stationaryRevision, 'Idle ripples must retain the cached body frame')
+  faceWaterActor(3)
+  waterFrame(600)
+  surfaceTile = undefined
+  waterFrame(1)
+  check(Number(waterHandle.immersionPx) === 0 && !ripple.visible, 'Unknown terrain must clear the effect')
+  waterFrame(600)
+  const restoredPixels = pixels(false)
+  check(restoredPixels.every((value, index) => value === dryPixels[index]), 'Leaving water must restore the exact dry frame')
+  surfaceTile = TILE_SHALLOW_WATER
+  waterFrame(SHALLOW_WATER.transitionMs)
+  manager.setCarryVisualRelation(201, 101)
+  waterFrame(600)
+  check(manager.getObject(201)!.getContainer().y === view.getContainer().y - (94 - SHALLOW_WATER.immersionPx), 'Carried prop must follow submerged hands')
+  manager.clearCarryVisualRelation(201)
+  view.setKnockedOutPose(true)
+  waterFrame(1)
+  check(Number(waterHandle.immersionPx) === 0 && !ripple.visible, 'KO must bypass the standing waterline')
+  view.setKnockedOutPose(false)
+  waterFrame(600)
+  const wetBeforeRestore = pixels(false)
+  const waterExtension = (app.renderer as WebGLRenderer).gl.getExtension('WEBGL_lose_context')!
+  const waterLost = new Promise<void>(resolve => app.canvas.addEventListener('webglcontextlost', () => resolve(), { once: true }))
+  waterExtension.loseContext()
+  await waterLost
+  await new Promise<void>(resolve => window.setTimeout(resolve, 100))
+  const waterRestored = new Promise<void>(resolve => app.canvas.addEventListener('webglcontextrestored', () => resolve(), { once: true }))
+  waterExtension.restoreContext()
+  await Promise.race([waterRestored, new Promise((_, reject) => window.setTimeout(() => reject(new Error('Water context restoration timed out')), 8000))])
+  waterFrame(600)
+  check(pixels(false).every((value, index) => value === wetBeforeRestore[index]), 'Context restore must preserve the exact clipped body')
+  pass('Shallow water / eight facings / smooth stationary entry / GPU crop and hover / picking / cache / carry / KO / context restore')
   manager.despawnObject(201)
   manager.despawnObject(101)
   renderer.destroy()

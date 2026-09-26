@@ -23,6 +23,18 @@
     {
       "img": "wald/base_6.png",
       "w": 1
+    },
+    {
+      "img": "wald/base_7.png",
+      "w": 1
+    },
+    {
+      "img": "wald/base_8.png",
+      "w": 1
+    },
+    {
+      "img": "wald/base_9.png",
+      "w": 1
     }
   ],
   "borders": [

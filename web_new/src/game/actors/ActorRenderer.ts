@@ -13,6 +13,7 @@ export interface ActorHandle {
   priority: boolean
   released: boolean
   anchorY: number
+  immersionPx: number
 }
 
 /** All character rendering shares the game's GL context; images stay on the GPU. */
@@ -80,7 +81,7 @@ export class ActorRenderer {
     const sprite = new Sprite(Texture.EMPTY)
     sprite.position.set(-ACTOR_RENDER.anchorX, -ACTOR_RENDER.anchorY)
     sprite.roundPixels = true
-    const handle: ActorHandle = { actor, sprite, anchorY: ACTOR_RENDER.anchorY, lastRenderMs: -Infinity, renderedRevision: -1, priority: false, released: false }
+    const handle: ActorHandle = { actor, sprite, anchorY: ACTOR_RENDER.anchorY, immersionPx: 0, lastRenderMs: -Infinity, renderedRevision: -1, priority: false, released: false }
     this.actors.add(handle)
     return handle
   }
@@ -116,7 +117,7 @@ export class ActorRenderer {
     let clearColor: Float32Array | null = null
     try {
       for (const handle of this.actors) {
-        const anchorY = handle.actor.knockedOut ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY
+        const anchorY = handle.actor.knockedOut ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY - handle.immersionPx
         handle.sprite.y += handle.anchorY - anchorY
         handle.anchorY = anchorY
         const visible = handle.sprite.parent?.visible && handle.sprite.parent?.renderable
@@ -152,7 +153,7 @@ export class ActorRenderer {
         this.camera.lookAt(0, cameraHeight, 0)
         this.renderer.setRenderTarget(this.pass.source)
         this.renderer.render(this.scene, this.camera)
-        this.pass.render(this.renderer, handle.actor.hovered)
+        this.pass.render(this.renderer, handle.actor.hovered, handle.immersionPx > 0 && !handle.actor.knockedOut ? anchorY : -1)
         this.scene.remove(handle.actor.root)
         this.copyOutput(handle.sprite.texture)
         handle.lastRenderMs = now
