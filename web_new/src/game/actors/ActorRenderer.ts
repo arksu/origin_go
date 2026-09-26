@@ -12,6 +12,7 @@ export interface ActorHandle {
   renderedRevision: number
   priority: boolean
   released: boolean
+  anchorY: number
 }
 
 /** All character rendering shares the game's GL context; images stay on the GPU. */
@@ -79,7 +80,7 @@ export class ActorRenderer {
     const sprite = new Sprite(Texture.EMPTY)
     sprite.position.set(-ACTOR_RENDER.anchorX, -ACTOR_RENDER.anchorY)
     sprite.roundPixels = true
-    const handle: ActorHandle = { actor, sprite, lastRenderMs: -Infinity, renderedRevision: -1, priority: false, released: false }
+    const handle: ActorHandle = { actor, sprite, anchorY: ACTOR_RENDER.anchorY, lastRenderMs: -Infinity, renderedRevision: -1, priority: false, released: false }
     this.actors.add(handle)
     return handle
   }
@@ -115,6 +116,9 @@ export class ActorRenderer {
     let clearColor: Float32Array | null = null
     try {
       for (const handle of this.actors) {
+        const anchorY = handle.actor.knockedOut ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY
+        handle.sprite.y += handle.anchorY - anchorY
+        handle.anchorY = anchorY
         const visible = handle.sprite.parent?.visible && handle.sprite.parent?.renderable
         if (!visible) {
           if (handle.sprite.texture !== Texture.EMPTY) {
@@ -143,6 +147,9 @@ export class ActorRenderer {
           touched = true
         }
         this.scene.add(handle.actor.root)
+        const cameraHeight = handle.actor.knockedOut ? 0 : ACTOR_RENDER.cameraHeight
+        this.camera.position.y = cameraHeight + 6 * Math.sin(ACTOR_RENDER.cameraElevation)
+        this.camera.lookAt(0, cameraHeight, 0)
         this.renderer.setRenderTarget(this.pass.source)
         this.renderer.render(this.scene, this.camera)
         this.pass.render(this.renderer, handle.actor.hovered)
@@ -176,8 +183,8 @@ export class ActorRenderer {
   }
 
   hitTest(handle: ActorHandle, localX: number, localY: number): boolean {
-    const column = Math.floor(localX + ACTOR_RENDER.anchorX)
-    const row = Math.floor(localY + ACTOR_RENDER.anchorY)
+    const column = Math.floor(localX - handle.sprite.x)
+    const row = Math.floor(localY - handle.sprite.y)
     if (column < 0 || row < 0 || column >= ACTOR_RENDER.cellSize || row >= ACTOR_RENDER.cellSize || handle.sprite.texture === Texture.EMPTY || this.lost) return false
     const gl = this.pixi.gl as WebGL2RenderingContext
     // A single pixel is read only on an interaction, never to transport frames.

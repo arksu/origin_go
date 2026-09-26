@@ -43,6 +43,14 @@ excluding driver overhead, asset buffers and per-instance skeleton resources.
 
 ## Reproduce and inspect
 
+Knocked out characters use a separate runtime 3D state: the idle skeleton lies
+face up with the head to screen left, centered at the entity's ground position.
+This state immediately suppresses gait blending, carry poses and equipment arm
+layers. Its ground-centered camera frame is shared by rendering, picking and
+culling; ObjectView supplies a low horizontal contact shadow. Recovery restores
+ordinary facing, equipment poses and the standing frame. This is a static lying
+pose; no fall or get-up transition clip is authored yet.
+
 The maintained workflow is [Blender asset workflow](../../../../docs/assets/README.md).
 Edit the canonical `source.blend`, save, then run `tools/assets build` from the
 repository root. Production builds run isolated headless Blender exports and

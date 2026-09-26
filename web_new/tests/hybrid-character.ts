@@ -96,13 +96,18 @@ async function main() {
       if (!handle.actor.isReady) continue
       handle.actor.walking = state.value.endsWith('walk')
       handle.actor.carrying = state.value.startsWith('carry')
+      handle.actor.knockedOut = state.value === 'knocked_out'
       if (handle.actor.walking) handle.actor.distanceTiles += delta / 960 * handle.actor.cycleDistanceTiles * Number(speed.value)
       const angle = screenFacingAngle(handle.actor.direction)
       const travel = handle.actor.walking ? ((handle.actor.distanceTiles / handle.actor.cycleDistanceTiles) % 1) * 32 - 16 : 0
       const offsetX = Math.cos(angle) * travel
       const offsetY = Math.sin(angle) * travel
-      handle.sprite.position.set(-ACTOR_RENDER.anchorX + offsetX, -ACTOR_RENDER.anchorY + offsetY)
-      shadows.get(handle)!.position.set(offsetX, offsetY)
+      handle.sprite.position.set(-ACTOR_RENDER.anchorX + offsetX, -handle.anchorY + offsetY)
+      const shadow = shadows.get(handle)!
+      shadow.clear()
+      if (handle.actor.knockedOut) shadow.ellipse(3, 4, 46, 8).fill({ color: '#17201b', alpha: .3 })
+      else shadow.ellipse(0, 0, 15, 5).fill({ color: '#17201b', alpha: .45 })
+      shadow.position.set(offsetX, offsetY)
     }
     try { renderer.render(now) } catch (error) { failure = error }
     if (now - lastReport > 500) {

@@ -27,6 +27,7 @@ export class ActorInstance {
   walking = false
   stopProgress: number | undefined
   carrying = false
+  knockedOut = false
   hovered = false
   error: Error | null = null
   private model: Object3D | null = null
@@ -297,14 +298,15 @@ export class ActorInstance {
 
   updatePose(now = performance.now(), settings: ActorRenderSettings = DEFAULT_ACTOR_RENDER_SETTINGS): boolean {
     if (!this.mixer || this.destroyed) return false
-    const continuousPhase = this.walking ? ((this.distanceTiles / this.walkCycleDistance) % 1 + 1) % 1 : 0
+    const carrying = this.carrying && !this.knockedOut
+    const continuousPhase = this.walking && !this.knockedOut ? ((this.distanceTiles / this.walkCycleDistance) % 1 + 1) % 1 : 0
     const phase = settings.mode === 'baked8' ? Math.floor(continuousPhase * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : continuousPhase
     const bakedMode = settings.mode === 'baked8'
-    const holdingBakedWalkFrame = bakedMode && this.stopProgress !== undefined && this.stopProgress < 1
-    const visualWalking = holdingBakedWalkFrame || (this.walking && !(bakedMode && this.stopProgress === 1))
+    const holdingBakedWalkFrame = !this.knockedOut && bakedMode && this.stopProgress !== undefined && this.stopProgress < 1
+    const visualWalking = !this.knockedOut && (holdingBakedWalkFrame || (this.walking && !(bakedMode && this.stopProgress === 1)))
     const renderedPhase = holdingBakedWalkFrame ? this.walkPhase : phase
     const facingChanged = this.updateFacing(now, settings)
-    const name = `${this.carrying ? 'carry_' : ''}${visualWalking ? 'walk' : 'idle'}`
+    const name = this.knockedOut ? 'knocked_out' : `${carrying ? 'carry_' : ''}${visualWalking ? 'walk' : 'idle'}`
     const blendDuration = this.walkTarget === 0 ? ACTOR_RENDER.locomotionStopMs : ACTOR_RENDER.locomotionBlendMs
     const progress = Math.max(0, Math.min(1, (now - this.walkBlendStarted) / blendDuration))
     if (!bakedMode && this.stopStartWeight === undefined) {
@@ -312,7 +314,13 @@ export class ActorInstance {
       if (progress === 1) this.walkBlendFrom = this.walkTarget
     }
     const target = visualWalking ? 1 : 0
-    if (bakedMode) {
+    if (this.knockedOut) {
+      // Knockout must cancel a pending gait blend immediately, including a buffered stop.
+      this.stopStartWeight = undefined
+      this.walkWeight = this.walkBlendFrom = this.walkTarget = 0
+      this.walkPhase = this.walkPhaseOffset = 0
+      this.walkBlendStarted = now
+    } else if (bakedMode) {
       this.stopStartWeight = undefined
       if (visualWalking) {
         this.walkWeight = 1
@@ -340,15 +348,22 @@ export class ActorInstance {
     }
     if (this.stopProgress === undefined) this.stopStartWeight = undefined
     // Baked8 holds one authored pose through position settling instead of blending it at display rate.
-    if (this.walking && !holdingBakedWalkFrame) this.walkPhase = ((phase + this.walkPhaseOffset) % 1 + 1) % 1
+    if (visualWalking && !holdingBakedWalkFrame) this.walkPhase = ((phase + this.walkPhaseOffset) % 1 + 1) % 1
     const key = `${settings.mode}/${name}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}`
-    if (!facingChanged && key === this.lastPose && (this.carrying || !this.armLayers?.transitioning)) return false
+    if (!facingChanged && key === this.lastPose && (this.knockedOut || carrying || !this.armLayers?.transitioning)) return false
     const state = `${settings.mode}/${name}/${this.hovered}`
     if (state !== this.lastPoseState) this.immediateRender = true
     this.lastPose = key
     this.lastPoseState = state
-    this.root.rotation.y = actorYawForScreenAngle(this.facingAngle)
-    if (!this.carrying && this.armLayers) {
+    if (this.knockedOut) {
+      // Rotate the body in world space: face up, head left, centered over its ground position.
+      this.root.rotation.set(-Math.PI / 2, 0, Math.PI / 2)
+      this.root.position.set(ACTOR_RENDER.knockedOutBodyCenter, ACTOR_RENDER.knockedOutGroundHeight, 0)
+    } else {
+      this.root.rotation.set(0, actorYawForScreenAngle(this.facingAngle), 0)
+      this.root.position.set(0, 0, 0)
+    }
+    if (!this.knockedOut && !carrying && this.armLayers) {
       for (const side of ['left', 'right'] as const) {
         const profile = this.armProfiles[side]
         if (!profile) continue
@@ -359,7 +374,7 @@ export class ActorInstance {
       }
     }
     for (const action of this.actions.values()) action.stop()
-    const prefix = this.carrying ? 'carry_' : ''
+    const prefix = carrying ? 'carry_' : ''
     for (const [clip, weight, sample] of [
       [`${prefix}idle`, 1 - this.walkWeight, 0],
       [`${prefix}walk`, this.walkWeight, this.walkPhase],
@@ -371,9 +386,9 @@ export class ActorInstance {
       action.time = sample * action.getClip().duration
     }
     this.mixer.update(0)
-    if (!this.carrying) this.armLayers?.apply(now)
+    if (!this.knockedOut && !carrying) this.armLayers?.apply(now)
     for (const [slot, piece] of this.equipment) {
-      piece.root.visible = !(this.carrying && armForSlot(slot))
+      piece.root.visible = !(carrying && armForSlot(slot))
       for (const mesh of piece.meshes) {
         if (!mesh.morphTargetInfluences || !mesh.morphTargetDictionary) continue
         mesh.morphTargetInfluences.fill(0)

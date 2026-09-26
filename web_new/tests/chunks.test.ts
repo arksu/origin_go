@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
-import { Assets, DOMAdapter, Mesh, Texture, type Spritesheet } from 'pixi.js'
+import { Assets, DOMAdapter, Mesh, Rectangle, Texture, TextureSource, type Spritesheet } from 'pixi.js'
+import { VertexBuffer } from '../src/game/utils/VertexBuffer'
 import { Chunk } from '../src/game/Chunk'
 import { ChunkManager } from '../src/game/ChunkManager'
 import { terrainManager } from '../src/game/terrain'
@@ -20,6 +21,36 @@ DOMAdapter.set({ ...DOMAdapter.get(), createCanvas: () => ({ getContext: () => n
 const sheet = { textures: new Proxy({}, { get: () => Texture.EMPTY }), textureSource: Texture.EMPTY.source } as Spritesheet
 const tiles = () => new Uint8Array(16).fill(35)
 const identity = (seq: number, epoch = 1) => ({ streamEpoch: epoch, eventSeq: BigInt(seq) })
+
+test('atlas trimming preserves the full tile scale and rotated UV corners', () => {
+  const source = new TextureSource({ width: 2048, height: 2048 })
+  for (const rotate of [0, 2]) {
+    const texture = new Texture({
+      source,
+      frame: new Rectangle(100, 200, rotate ? 20 : 18, rotate ? 18 : 20),
+      orig: new Rectangle(0, 0, 63, 32),
+      trim: new Rectangle(22, 4, 18, 20),
+      rotate,
+    })
+    const buffer = new VertexBuffer(1)
+    buffer.addVertex(10, 20, 64, 48, texture)
+    buffer.finish()
+
+    // Cropping an atlas frame must leave its pixels at the same positions
+    // they had when the original 63x32 canvas was drawn as a 64x48 tile.
+    const left = 10 + 22 * 64 / 63
+    const right = 10 + 40 * 64 / 63
+    assert.deepEqual(Array.from(buffer.vertex), Array.from(new Float32Array([
+      left, 26, right, 26, right, 56, left, 56,
+    ])))
+    const uv = texture.uvs
+    assert.deepEqual(Array.from(buffer.uv), Array.from(new Float32Array([
+      uv.x0, uv.y0, uv.x1, uv.y1, uv.x2, uv.y2, uv.x3, uv.y3,
+    ])))
+    texture.destroy()
+  }
+  source.destroy()
+})
 
 async function managerFixture(t: TestContext) {
   t.mock.method(Assets, 'load', async () => sheet)
