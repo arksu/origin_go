@@ -75,7 +75,9 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			if collisionResult.PerpendicularOscillation {
 				// stop movement
 				if m, ok := s.movementStorage.Get(h); ok {
-					m.ClearTarget()
+					if !m.PointStopPending {
+						m.StopAtPointTarget()
+					}
 					s.movementStorage.Set(h, m)
 				}
 			}
@@ -116,6 +118,18 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 		transform.X = finalX
 		transform.Y = finalY
 		s.transformStorage.Set(h, transform)
+		if movement, exists := s.movementStorage.Get(h); exists && movement.PointStopPending {
+			movement.PointStopPending = false
+			s.movementStorage.Set(h, movement)
+			if entityID, found := w.GetExternalID(h); found && s.eventBus != nil {
+				if err := s.eventBus.PublishSync(&ecs.PointMovementStoppedEvent{
+					Layer: w.Layer, EntityID: entityID, X: finalX, Y: finalY,
+					TargetX: movement.PointStopX, TargetY: movement.PointStopY,
+				}); err != nil {
+					s.logger.Error("point movement stop dispatch failed", zap.Error(err))
+				}
+			}
+		}
 
 		// Accumulate movement data for batch event
 		if entityID, ok := w.GetExternalID(h); ok {
@@ -284,7 +298,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 	if modeChanged || !canMove {
 		movement.Mode = allowedMode
 		if !canMove && movement.State == constt.StateMoving {
-			movement.ClearTarget()
+			movement.StopAtPointTarget()
 		}
 		s.movementStorage.Set(handle, movement)
 		ecs.MarkMovementModeDirtyByHandle(w, handle)

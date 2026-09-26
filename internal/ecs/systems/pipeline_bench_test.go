@@ -43,7 +43,7 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 	const targetX = 10000 // far beyond one tick's step; movers reset each iteration
 
 	chunk := newTestChunk(types.ChunkCoord{X: 0, Y: 0})
-	chunk.SetTiles(chunk.Tiles, 0)
+	chunk.RestoreTiles(chunk.Tiles, 0, 0)
 	cm := &testChunkManager{chunk: chunk}
 	world := ecs.NewWorldForTesting()
 

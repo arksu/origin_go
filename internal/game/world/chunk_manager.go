@@ -33,10 +33,16 @@ type loadRequest struct {
 }
 
 type saveRequest struct {
-	coord   types.ChunkCoord
-	chunk   *core.Chunk
-	version uint64 // Версия чанка на момент eviction
+	coord types.ChunkCoord
+	chunk *core.Chunk
 }
+
+type saveRetry struct {
+	chunk *core.Chunk
+	due   time.Time
+}
+
+const chunkSaveRetryDelay = time.Second
 
 type ChunkStats struct {
 	ActiveCount    int64
@@ -56,6 +62,7 @@ type EntityAOI struct {
 	PreloadChunks       map[types.ChunkCoord]struct{}
 	SendChunkLoadEvents bool
 	StreamEpoch         uint32
+	NextChunkEventSeq   uint64
 }
 
 func newEntityAOI(entityID types.EntityID, center types.ChunkCoord, sendChunkLoadEvents bool) *EntityAOI {
@@ -108,6 +115,14 @@ type ChunkManager struct {
 	behaviorRegistry  contracts.BehaviorRegistry
 	restoreReconciler contracts.RestoredObjectReconciler
 	logger            *zap.Logger
+
+	// Serializes AOI transitions, tile mutations, and snapshot/event creation,
+	// including initial enabling outside the shard tick. Never held during DB I/O.
+	streamMu    sync.Mutex
+	readyMu     sync.Mutex
+	readyChunks map[types.ChunkCoord]struct{}
+	retryMu     sync.Mutex
+	saveRetries map[types.ChunkCoord]saveRetry
 
 	chunks   map[types.ChunkCoord]*core.Chunk
 	chunksMu sync.RWMutex
@@ -178,6 +193,8 @@ func NewChunkManager(
 		objectFactory:    objectFactory,
 		behaviorRegistry: behaviorRegistry,
 		logger:           logger.Named("chunk_manager"),
+		readyChunks:      make(map[types.ChunkCoord]struct{}),
+		saveRetries:      make(map[types.ChunkCoord]saveRetry),
 		chunks:           make(map[types.ChunkCoord]*core.Chunk),
 		loadQueue:        make(chan loadRequest, 512),
 		saveQueue:        make(chan saveRequest, 512),
@@ -204,12 +221,16 @@ func NewChunkManager(
 		cm.wg.Add(1)
 		go cm.saveWorker()
 	}
+	cm.wg.Add(1)
+	go cm.saveRetryWorker()
 
 	return cm
 }
 
 // RegisterEntity registers an entity for AOI tracking
 func (cm *ChunkManager) RegisterEntity(entityID types.EntityID, worldX, worldY int, sendChunkLoadEvents bool) {
+	cm.streamMu.Lock()
+	defer cm.streamMu.Unlock()
 	center := types.WorldToChunkCoord(worldX, worldY, _const.ChunkSize, _const.CoordPerTile)
 
 	cm.aoiMu.Lock()
@@ -238,6 +259,8 @@ func (cm *ChunkManager) GetEntityEpoch(entityID types.EntityID) uint32 {
 
 // EnableChunkLoadEvents enables chunk load events for an entity
 func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uint32) {
+	cm.streamMu.Lock()
+	defer cm.streamMu.Unlock()
 	cm.aoiMu.Lock()
 	defer cm.aoiMu.Unlock()
 
@@ -248,6 +271,9 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uin
 
 	// Enable chunk events and trigger initial load events
 	aoi.SendChunkLoadEvents = true
+	if aoi.StreamEpoch != epoch {
+		aoi.NextChunkEventSeq = 0
+	}
 	aoi.StreamEpoch = epoch
 
 	// Get current active chunks and send load events for them
@@ -260,15 +286,7 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uin
 			coord := types.ChunkCoord{X: center.X + dx, Y: center.Y + dy}
 			if cm.isWithinWorldBounds(coord) {
 				if _, isActive := aoi.ActiveChunks[coord]; isActive {
-					// Get chunk data to include tiles in the event
-					chunk := cm.GetChunkFast(coord)
-					var tiles []byte
-					var version uint32
-					if chunk != nil {
-						tiles = append([]byte(nil), chunk.Tiles...) // Create copy of tiles
-						version = chunk.Version
-					}
-					cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch, version), eventbus.PriorityMedium)
+					cm.publishChunkLoad(aoi, coord)
 				}
 			}
 		}
@@ -283,6 +301,8 @@ func (cm *ChunkManager) UnregisterEntity(entityID types.EntityID) {
 // UnregisterEntities removes multiple entities from AOI tracking and
 // recalculates chunk states once for the whole batch.
 func (cm *ChunkManager) UnregisterEntities(entityIDs []types.EntityID) {
+	cm.streamMu.Lock()
+	defer cm.streamMu.Unlock()
 	if len(entityIDs) == 0 {
 		return
 	}
@@ -325,6 +345,8 @@ func (cm *ChunkManager) UnregisterEntities(entityIDs []types.EntityID) {
 
 // UpdateEntityPosition updates AOI for an entity when it moves to a new chunk
 func (cm *ChunkManager) UpdateEntityPosition(entityID types.EntityID, newCenter types.ChunkCoord) {
+	cm.streamMu.Lock()
+	defer cm.streamMu.Unlock()
 	cm.aoiMu.Lock()
 	aoi, exists := cm.entityAOIs[entityID]
 	if !exists {
@@ -444,26 +466,15 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 
 	cm.recalculateChunkStates()
 
-	// Get client's stream epoch for event validation
-	epoch := cm.GetEntityEpoch(entityID)
-
 	// Publish chunk events for network layer only if enabled
 	// Send deactivate first to free client memory, then activate
 	if sendChunkLoadEvents {
 		for _, coord := range toDeactivate {
-			cm.eventBus.PublishAsync(ecs.NewChunkUnloadEvent(entityID, coord.X, coord.Y, cm.layer, epoch), eventbus.PriorityMedium)
+			cm.publishChunkUnload(aoi, coord)
 		}
 
 		for _, coord := range toActivate {
-			// Get chunk data to include tiles in the event
-			chunk := cm.GetChunkFast(coord)
-			var tiles []byte
-			var version uint32
-			if chunk != nil {
-				tiles = append([]byte(nil), chunk.Tiles...) // Create copy of tiles
-				version = chunk.Version
-			}
-			cm.eventBus.PublishAsync(ecs.NewChunkLoadEvent(entityID, coord.X, coord.Y, cm.layer, tiles, epoch, version), eventbus.PriorityMedium)
+			cm.publishChunkLoad(aoi, coord)
 		}
 	}
 }
@@ -632,14 +643,16 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 		chunk = core.NewChunk(coord, cm.region, cm.layer, _const.ChunkSize)
 		cm.chunks[coord] = chunk
 	}
-	cm.chunksMu.Unlock()
-
 	state := chunk.GetState()
-
 	if state != types.ChunkStateUnloaded {
-		cm.completeFuture(coord)
+		cm.chunksMu.Unlock()
+		if state != types.ChunkStateLoading {
+			cm.completeFuture(coord)
+		}
 		return
 	}
+	chunk.SetState(types.ChunkStateLoading)
+	cm.chunksMu.Unlock()
 
 	if err := chunk.LoadFromDB(cm.db, cm.region, cm.layer, cm.logger); err != nil {
 		cm.logger.Error("failed to load chunk from database",
@@ -652,6 +665,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 		return
 	}
 
+	cm.streamMu.Lock()
 	cm.interestMu.RLock()
 	interest, hasInterest := cm.chunkInterests[coord]
 	hasAnyInterest := hasInterest && !interest.isEmpty()
@@ -664,6 +678,10 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 		chunk.SetState(types.ChunkStateInactive)
 		cm.lruCache.Add(coord, chunk)
 	}
+	cm.streamMu.Unlock()
+	cm.readyMu.Lock()
+	cm.readyChunks[coord] = struct{}{}
+	cm.readyMu.Unlock()
 
 	cm.completeFuture(coord)
 }
@@ -693,12 +711,11 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	select {
 	case cm.saveQueue <- saveRequest{coord: coord, chunk: chunk}:
 	default:
-		cm.logger.Warn("save queue full, saving synchronously",
+		cm.logger.Warn("save queue full, scheduling retry",
 			zap.Int("chunk_x", coord.X),
 			zap.Int("chunk_y", coord.Y),
 		)
-		// Синхронное сохранение с проверкой актуальности
-		cm.safeSaveAndRemove(coord, chunk)
+		cm.scheduleSaveRetry(coord, chunk)
 	}
 }
 
@@ -717,7 +734,7 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 		return
 	}
 
-	if chunk.State != types.ChunkStateInactive {
+	if chunk.GetState() != types.ChunkStateInactive || cm.GetChunkFast(coord) != chunk {
 		return
 	}
 
@@ -726,7 +743,9 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 		chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
 	}
 
-	// Удаляем из памяти с финальными проверками
+	// Serialize the final checks with AOI changes and new tile edits.
+	cm.streamMu.Lock()
+	defer cm.streamMu.Unlock()
 	cm.chunksMu.Lock()
 	currentChunk := cm.chunks[coord]
 
@@ -737,8 +756,12 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 		stillNotInterested := !hasInterest || interest.isEmpty()
 		cm.interestMu.RUnlock()
 
-		if stillNotInterested && chunk.State == types.ChunkStateInactive {
-			delete(cm.chunks, coord)
+		if stillNotInterested && chunk.GetState() == types.ChunkStateInactive {
+			if chunk.IsDirty(cm.world) {
+				cm.scheduleSaveRetry(coord, chunk)
+			} else {
+				delete(cm.chunks, coord)
+			}
 		}
 	}
 	cm.chunksMu.Unlock()
@@ -1215,6 +1238,26 @@ func (cm *ChunkManager) Stats() ChunkStats {
 }
 
 func (cm *ChunkManager) Update(dt float64) {
+	cm.readyMu.Lock()
+	if len(cm.readyChunks) == 0 {
+		cm.readyMu.Unlock()
+		return
+	}
+	ready := cm.readyChunks
+	cm.readyChunks = make(map[types.ChunkCoord]struct{})
+	cm.readyMu.Unlock()
+	cm.streamMu.Lock()
+	defer cm.streamMu.Unlock()
+	cm.recalculateChunkStates()
+	cm.aoiMu.RLock()
+	defer cm.aoiMu.RUnlock()
+	for _, aoi := range cm.entityAOIs {
+		for coord := range ready {
+			if _, active := aoi.ActiveChunks[coord]; active {
+				cm.publishChunkLoad(aoi, coord)
+			}
+		}
+	}
 }
 
 func (cm *ChunkManager) Stop() {

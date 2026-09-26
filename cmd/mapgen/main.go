@@ -399,16 +399,21 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 		}
 	}
 
-	if err := g.db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
+	affected, err := g.db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
 		Region:      g.region,
 		X:           chunkX,
 		Y:           chunkY,
 		Layer:       0,
 		TilesData:   tiles,
 		LastTick:    0,
+		Version:     0,
 		EntityCount: sql.NullInt32{Int32: int32(len(entities)), Valid: true},
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("upsert chunk: %w", err)
+	}
+	if affected != 1 {
+		return fmt.Errorf("upsert chunk: expected one affected row, got %d", affected)
 	}
 
 	for _, entity := range entities {

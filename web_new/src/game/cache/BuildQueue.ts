@@ -38,7 +38,7 @@ export class BuildQueue {
   /**
    * Enqueue a build task. Replaces existing task for same chunk.
    */
-  enqueue(task: BuildTask): void {
+  enqueue(task: BuildTask): boolean {
     // Remove existing task for this chunk
     const existing = this.tasksByKey.get(task.chunkKey)
     if (existing) {
@@ -49,19 +49,20 @@ export class BuildQueue {
     // Drop if queue is full and this is low priority
     if (this.queue.length >= BUILD_QUEUE_MAX_LENGTH) {
       if (task.priority >= BuildPriority.P2_DISTANT) {
-        return // Drop distant chunks when queue is full
+        return false // Drop distant chunks when queue is full
       }
       // Remove lowest priority task
       const lowestPriority = this.queue[this.queue.length - 1]
       if (lowestPriority && lowestPriority.priority > task.priority) {
         this.remove(lowestPriority.chunkKey)
       } else {
-        return // Can't fit this task
+        return false // Can't fit this task
       }
     }
 
     this.tasksByKey.set(task.chunkKey, task)
     this.insertSorted(task)
+    return true
   }
 
   /**
@@ -178,7 +179,8 @@ export class BuildQueue {
       }
 
       // For other priorities, check budget
-      if (estimatedTime + avgBuildTime > budgetMs) {
+      // A full border rebuild can exceed the budget; still make progress each frame.
+      if (tasks.length > 0 && estimatedTime + avgBuildTime > budgetMs) {
         break
       }
 

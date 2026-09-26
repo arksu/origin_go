@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "type-check": "vue-tsc --build --force",
     "test:map-click": "node scripts/test-map-click.mjs",
+    "test:chunks": "node scripts/test-chunks.mjs",
     "test:actions": "node scripts/test-actions.mjs",
     "test:character-visual": "node scripts/test-character-visual.mjs",
     "test:asset-pipeline": "node scripts/test-asset-pipeline.mjs",

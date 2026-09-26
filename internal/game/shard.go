@@ -246,6 +246,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	actionService, actionErr := NewActionService(s.world, definitions, map[string]ActionHandler{
 		"lift":      &liftActionHandler{lift: liftService, commands: networkCmdSystem},
 		"lift_down": &liftDownActionHandler{lift: liftService},
+		"plow_tile": &plowTileActionHandler{terrain: s.chunkManager},
 	}, s)
 	if actionErr != nil {
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
@@ -362,8 +363,8 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	// Add lock wait timing
 	s.world.AddExternalTiming("ShardLockWait", lockWait)
 
-	// ChunkManager does work via systems, not in Update()
-	// Measure actual chunk work through ChunkSystem timing
+	// Complete asynchronous loads on the shard thread before gameplay uses them.
+	s.chunkManager.Update(ts.Delta)
 
 	s.world.Update(ts.Delta)
 

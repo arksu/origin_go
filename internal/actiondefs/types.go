@@ -14,9 +14,12 @@ type Presentation struct {
 }
 
 type Target struct {
-	Kind   TargetKind `json:"kind"`
-	Cursor string     `json:"cursor,omitempty"`
+	Kind     TargetKind `json:"kind"`
+	Cursor   string     `json:"cursor,omitempty"`
+	Approach string     `json:"approach,omitempty"`
 }
+
+const ApproachTileCenter = "tile_center"
 
 type EquipmentRequirement struct {
 	Slots   []string `json:"slots"`

@@ -4,7 +4,7 @@
 
 // LRU Cache limits
 export const CACHE_MAX_ENTRIES = 64
-export const CACHE_TTL_MS = 180_000 // 4 minutes
+export const CACHE_TTL_MS = 180_000 // 3 minutes
 
 // TTL sweep interval
 export const CACHE_SWEEP_INTERVAL_MS = 10_000 // 10 seconds

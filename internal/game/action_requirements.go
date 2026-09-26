@@ -14,6 +14,13 @@ import (
 )
 
 func (service *ActionService) UnavailableReason(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition) string {
+	if reason := service.nonStaminaReason(world, playerID, playerHandle, definition); reason != "" {
+		return reason
+	}
+	return staminaReason(world, playerHandle, definition)
+}
+
+func (service *ActionService) nonStaminaReason(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition) string {
 	if service == nil || world == nil || definition == nil || !world.Alive(playerHandle) {
 		return "ACTION_UNAVAILABLE"
 	}
@@ -44,6 +51,10 @@ func requirementsReason(world *ecs.World, playerID types.EntityID, playerHandle 
 			return "ACTION_REQUIRES_EQUIPMENT"
 		}
 	}
+	return ""
+}
+
+func staminaReason(world *ecs.World, playerHandle types.Handle, definition *actiondefs.Definition) string {
 	if definition.Execution.Stamina > 0 {
 		stats, exists := ecs.GetComponent[components.EntityStats](world, playerHandle)
 		if !exists || stats.Stamina < definition.Execution.Stamina {

@@ -1,4 +1,5 @@
 import { Render } from './Render'
+import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
 import { CursorManager } from './CursorManager'
 import { playerCommandController } from './PlayerCommandController'
 import type { DebugInfo, ScreenPoint } from './types'
@@ -151,12 +152,12 @@ export class GameFacade {
     await this.render.setCharacterEquipment(entityId, items)
   }
 
-  loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
-    this.render?.loadChunk(x, y, tiles, version)
+  loadChunk(x: number, y: number, tiles: Uint8Array, version: number, identity: ChunkEventIdentity): void {
+    this.render?.loadChunk(x, y, tiles, version, identity)
   }
 
-  unloadChunk(x: number, y: number): void {
-    this.render?.unloadChunk(x, y)
+  unloadChunk(x: number, y: number, identity: ChunkEventIdentity): void {
+    this.render?.unloadChunk(x, y, identity)
   }
 
   spawnObject(options: { entityId: number; typeId: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {

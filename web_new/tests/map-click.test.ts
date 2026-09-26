@@ -68,13 +68,21 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
       hand: { item: { itemId: 900 } },
     })
     target = null
-    for (const actionId of ['lift', 'lift_down']) {
-      gameStore.setGameActionState({ actionId, phase: 'selecting', cursor: actionId })
-      packets.length = 0
-      click(event)
-      assert.equal(packets.length, 1)
-      assert.ok(packets[0]!.playerAction?.mapClick, `${actionId} must take the map click even with an item in hand`)
-      assert.equal(packets[0]!.inventoryOp, undefined)
+    gameStore.setGameActionList([
+      { id: 'lift', targetKind: 'object' },
+      { id: 'lift_down', targetKind: 'tile' },
+      { id: 'plow_tile', targetKind: 'tile' },
+    ])
+    for (const actionId of ['lift', 'lift_down', 'plow_tile']) {
+      for (const phase of ['selecting', 'approaching', 'executing']) {
+        gameStore.setGameActionState({ actionId, phase, cursor: phase === 'selecting' ? 'dig' : '' })
+        packets.length = 0
+        click(event)
+        assert.equal(packets.length, 1)
+        assert.ok(packets[0]!.playerAction?.mapClick, `${actionId} must take the map click even with an item in hand`)
+        assert.equal(packets[0]!.inventoryOp, undefined)
+        assert.equal(Number(gameStore.handState?.item?.itemId), 900, 'target click must keep held item')
+      }
     }
     gameStore.setGameActionState({ actionId: '', phase: 'idle', cursor: '' })
     packets.length = 0

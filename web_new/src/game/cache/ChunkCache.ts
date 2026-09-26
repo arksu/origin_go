@@ -1,225 +1,116 @@
-import type { CachedChunk, CacheMetrics, SubchunkGpuResources } from './types'
+import type { CachedChunk, CacheMetrics } from './types'
 import { CACHE_MAX_ENTRIES, CACHE_TTL_MS, CACHE_SWEEP_INTERVAL_MS } from '@/constants/cache'
 
-/**
- * LRU cache for chunk data with TTL support.
- * Stores tiles, CPU geometry, and optionally GPU resources.
- */
+/** Metadata for ready Chunk instances; ChunkManager owns and disposes their graphics. */
 export class ChunkCache {
-  private cache: Map<string, CachedChunk> = new Map()
+  private cache = new Map<string, CachedChunk>()
+  private hidden = new Map<string, number>()
   private sweepIntervalId: ReturnType<typeof setInterval> | null = null
+  private dispose: (key: string) => void = () => {}
+  private hits = 0
+  private misses = 0
+  private evictionsLru = 0
+  private evictionsTtl = 0
 
-  // Metrics
-  private _hits = 0
-  private _misses = 0
-  private _evictionsLru = 0
-  private _evictionsTtl = 0
-  private _evictionsVersionMismatch = 0
-
-  constructor() {
-    this.startSweep()
+  setDisposer(dispose: (key: string) => void): void {
+    this.dispose = dispose
+    if (!this.sweepIntervalId) {
+      this.sweepIntervalId = setInterval(() => this.sweep(), CACHE_SWEEP_INTERVAL_MS)
+    }
   }
 
-  /**
-   * Get a cached chunk by key. Updates lastUsedAt on hit.
-   */
   get(key: string): CachedChunk | undefined {
     const entry = this.cache.get(key)
-    if (entry) {
-      entry.lastUsedAt = performance.now()
-      this._hits++
-      // Move to end for LRU (Map maintains insertion order)
-      this.cache.delete(key)
-      this.cache.set(key, entry)
-      return entry
-    }
-    this._misses++
-    return undefined
+    if (entry) this.hits++
+    else this.misses++
+    return entry
   }
 
-  /**
-   * Check if cache has entry with matching version.
-   */
-  hasValidEntry(key: string, version: number): boolean {
-    const entry = this.cache.get(key)
-    if (!entry) return false
-    if (entry.version !== version) {
-      this._evictionsVersionMismatch++
-      this.evict(key)
-      return false
-    }
-    return true
-  }
+  // Neighbor checks must not extend hidden retention or change LRU order.
+  peek(key: string): CachedChunk | undefined { return this.cache.get(key) }
 
-  /**
-   * Store a chunk in cache. Evicts LRU entries if at capacity.
-   */
   set(chunk: CachedChunk): void {
-    // If already exists, remove first to update position
-    if (this.cache.has(chunk.key)) {
-      this.cache.delete(chunk.key)
-    }
-
-    // Evict LRU entries if at capacity
-    while (this.cache.size >= CACHE_MAX_ENTRIES) {
-      const oldestKey = this.cache.keys().next().value
-      if (oldestKey) {
-        this.evict(oldestKey)
-        this._evictionsLru++
-      }
-    }
-
     this.cache.set(chunk.key, chunk)
+    this.markActive(chunk.key)
   }
 
-  /**
-   * Remove a chunk from cache and destroy its GPU resources.
-   */
-  evict(key: string): void {
+  markActive(key: string): void {
     const entry = this.cache.get(key)
-    if (!entry) return
+    if (entry) entry.retainedAt = null
+    this.hidden.delete(key)
+  }
 
-    // Destroy GPU resources if present
-    if (entry.gpu) {
-      this.destroyGpuResources(entry.gpu)
-      entry.gpu = undefined
+  retain(key: string): void {
+    const entry = this.cache.get(key)
+    if (!entry || this.hidden.has(key)) return
+    entry.retainedAt = performance.now()
+    this.hidden.set(key, entry.retainedAt)
+    while (this.hidden.size > CACHE_MAX_ENTRIES) {
+      const oldest = this.hidden.keys().next().value
+      if (oldest == null) break
+      this.evictionsLru++
+      this.evict(oldest)
     }
+  }
 
+  // Used by the owner's single disposal path and before replacing a built version.
+  forget(key: string): void {
     this.cache.delete(key)
+    this.hidden.delete(key)
   }
 
-  /**
-   * Clear all entries and destroy all GPU resources.
-   */
+  evict(key: string): void {
+    if (!this.cache.has(key)) return
+    this.forget(key)
+    this.dispose(key)
+  }
+
   clear(): void {
-    for (const entry of this.cache.values()) {
-      if (entry.gpu) {
-        this.destroyGpuResources(entry.gpu)
+    for (const key of [...this.cache.keys()]) this.evict(key)
+  }
+
+  sweep(now = performance.now()): void {
+    for (const [key, retainedAt] of [...this.hidden]) {
+      if (now - retainedAt >= CACHE_TTL_MS) {
+        this.evictionsTtl++
+        this.evict(key)
       }
     }
-    this.cache.clear()
   }
 
-  /**
-   * Destroy GPU resources for a chunk.
-   */
-  private destroyGpuResources(gpu: Map<string, SubchunkGpuResources>): void {
-    for (const resources of gpu.values()) {
-      resources.geometry.destroy()
-      resources.container.destroy({ children: true })
-    }
-    gpu.clear()
-  }
-
-  /**
-   * Start periodic TTL sweep.
-   */
-  private startSweep(): void {
-    if (this.sweepIntervalId) return
-    this.sweepIntervalId = setInterval(() => this.sweep(), CACHE_SWEEP_INTERVAL_MS)
-  }
-
-  /**
-   * Stop periodic TTL sweep.
-   */
-  stopSweep(): void {
-    if (this.sweepIntervalId) {
-      clearInterval(this.sweepIntervalId)
-      this.sweepIntervalId = null
-    }
-  }
-
-  /**
-   * Remove entries older than TTL.
-   */
-  private sweep(): void {
-    const now = performance.now()
-    const keysToEvict: string[] = []
-
-    for (const [key, entry] of this.cache) {
-      if (now - entry.lastUsedAt > CACHE_TTL_MS) {
-        keysToEvict.push(key)
-      }
-    }
-
-    for (const key of keysToEvict) {
-      this.evict(key)
-      this._evictionsTtl++
-    }
-  }
-
-  /**
-   * Get total bytes used by cache.
-   */
-  getTotalBytes(): number {
-    let total = 0
-    for (const entry of this.cache.values()) {
-      total += entry.tilesBytes + entry.cpuBytes + entry.gpuBytes
-    }
-    return total
-  }
-
-  /**
-   * Get cache metrics for debugging.
-   */
   getMetrics(): Partial<CacheMetrics> {
-    const total = this._hits + this._misses
-    let bytesTiles = 0
-    let bytesCpu = 0
-    let bytesGpu = 0
-
+    let bytesTiles = 0, bytesCpu = 0, bytesGpu = 0
     for (const entry of this.cache.values()) {
       bytesTiles += entry.tilesBytes
       bytesCpu += entry.cpuBytes
       bytesGpu += entry.gpuBytes
     }
-
+    const total = this.hits + this.misses
     return {
-      entries: this.cache.size,
-      hits: this._hits,
-      misses: this._misses,
-      hitRate: total > 0 ? this._hits / total : 0,
-      bytesTotal: bytesTiles + bytesCpu + bytesGpu,
-      bytesTiles,
-      bytesCpu,
-      bytesGpu,
-      evictionsLru: this._evictionsLru,
-      evictionsTtl: this._evictionsTtl,
-      evictionsVersionMismatch: this._evictionsVersionMismatch,
+      entries: this.cache.size, hits: this.hits, misses: this.misses,
+      hitRate: total ? this.hits / total : 0,
+      bytesTotal: bytesTiles + bytesCpu + bytesGpu, bytesTiles, bytesCpu, bytesGpu,
+      evictionsLru: this.evictionsLru, evictionsTtl: this.evictionsTtl, evictionsVersionMismatch: 0,
     }
   }
 
-  /**
-   * Reset metrics counters.
-   */
+  getTotalBytes(): number { return this.getMetrics().bytesTotal ?? 0 }
+  keys(): IterableIterator<string> { return this.cache.keys() }
+  get size(): number { return this.cache.size }
+
   resetMetrics(): void {
-    this._hits = 0
-    this._misses = 0
-    this._evictionsLru = 0
-    this._evictionsTtl = 0
-    this._evictionsVersionMismatch = 0
+    this.hits = this.misses = this.evictionsLru = this.evictionsTtl = 0
   }
 
-  /**
-   * Get all cached chunk keys.
-   */
-  keys(): IterableIterator<string> {
-    return this.cache.keys()
+  stopSweep(): void {
+    if (this.sweepIntervalId) clearInterval(this.sweepIntervalId)
+    this.sweepIntervalId = null
   }
 
-  /**
-   * Get cache size.
-   */
-  get size(): number {
-    return this.cache.size
-  }
-
-  /**
-   * Destroy cache and cleanup.
-   */
   destroy(): void {
     this.stopSweep()
     this.clear()
+    this.dispose = () => {}
   }
 }
 

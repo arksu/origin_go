@@ -5,6 +5,9 @@ import { gameFacade, moveController, playerCommandController, soundManager } fro
 import { DEBUG_MOVEMENT } from '@/constants/game'
 import { distanceAttenuation, SoundAttenuationModel } from '@/game/soundAttenuation'
 import { decodeCharacterVisual } from '@/types/characterVisual'
+import { ChunkStreamGuard } from './ChunkStreamGuard'
+
+const chunkStream = new ChunkStreamGuard()
 
 function toNumber(value: number | Long): number {
   if (typeof value === 'number') return value
@@ -20,6 +23,7 @@ function distance2D(ax: number, ay: number, bx: number, by: number): number {
 const SOUND_ATTENUATION_MODEL = SoundAttenuationModel.Smoothstep
 
 function clearClientWorldState(): void {
+  chunkStream.reset(0)
   const gameStore = useGameStore()
   gameStore.setPlayerLeaveWorld()
   gameFacade.setPlayerEntityId(null)
@@ -41,6 +45,7 @@ export function registerMessageHandlers(): void {
     const coordPerTile = msg.coordPerTile || 32
     const chunkSize = msg.chunkSize || 128
     const streamEpoch = msg.streamEpoch || 0
+    chunkStream.reset(streamEpoch)
     const tickRate = msg.tickRate || 10 // Default to 10 ticks/sec
 
     console.log(`[Handlers] playerEnterWorld: coordPerTile=${coordPerTile}, chunkSize=${chunkSize}, streamEpoch=${streamEpoch}, tickRate=${tickRate}`)
@@ -187,8 +192,10 @@ export function registerMessageHandlers(): void {
       console.log(`[Handlers] chunkLoad: x=${x}, y=${y}, tiles.length=${tiles.length}`)
 
       const version = msg.chunk.version || 0
+      const identity = chunkStream.accept(x, y, msg.streamEpoch, msg.eventSeq, version)
+      if (!identity || msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
       gameStore.loadChunk(x, y, tiles, version)
-      gameFacade.loadChunk(x, y, tiles, version)
+      gameFacade.loadChunk(x, y, tiles, version, identity)
       gameStore.markBootstrapFirstChunkLoaded()
     }
   })
@@ -197,9 +204,11 @@ export function registerMessageHandlers(): void {
     if (msg.coord) {
       const x = msg.coord.x || 0
       const y = msg.coord.y || 0
+      const identity = chunkStream.accept(x, y, msg.streamEpoch, msg.eventSeq)
+      if (!identity || msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
       console.log(`[Handlers] chunkUnload: x=${x}, y=${y}`)
       gameStore.unloadChunk(x, y)
-      gameFacade.unloadChunk(x, y)
+      gameFacade.unloadChunk(x, y, identity)
     }
   })
 

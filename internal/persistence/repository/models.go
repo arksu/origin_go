@@ -97,7 +97,7 @@ type Chunk struct {
 	X           int           `json:"x"`
 	Y           int           `json:"y"`
 	Layer       int           `json:"layer"`
-	Version     sql.NullInt32 `json:"version"`
+	Version     int           `json:"version"`
 	LastTick    int64         `json:"last_tick"`
 	LastSavedAt sql.NullTime  `json:"last_saved_at"`
 	TilesData   []byte        `json:"tiles_data"`

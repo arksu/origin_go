@@ -30,7 +30,7 @@ func newMigrationChunkManager(coords ...types.ChunkCoord) *migrationChunkManager
 	m := &migrationChunkManager{chunks: make(map[types.ChunkCoord]*core.Chunk, len(coords))}
 	for _, coord := range coords {
 		chunk := newTestChunk(coord)
-		chunk.SetTiles(chunk.Tiles, 0)
+		chunk.RestoreTiles(chunk.Tiles, 0, 0)
 		// Migration validates chunk state; test chunks must look active.
 		chunk.SetState(types.ChunkStateActive)
 		m.chunks[coord] = chunk

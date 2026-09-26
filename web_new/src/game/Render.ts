@@ -26,6 +26,7 @@ import { clearAlphaMaskCache } from './PixelHitTest'
 import { ActorRenderer } from './actors/ActorRenderer'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import type { EquippedVisual } from '../types/characterVisual'
+import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
 
@@ -173,9 +174,12 @@ export class Render {
         const hand = gameStore.handState
         const handInv = gameStore.handInventoryState
 
-        // Target selection needs MapClick even with an item in hand; the server decides
-        // whether that click executes the action or follows ordinary map routing.
-        if (hand?.item && handInv?.ref && handInv.revision != null && gameStore.gameActionState.phase !== 'selecting') {
+        const actionState = gameStore.gameActionState
+        const action = gameStore.gameActions.find(entry => entry.id === actionState.actionId)
+        const activeTargetAction = ['selecting', 'approaching', 'executing'].includes(actionState.phase ?? '')
+          && (action?.targetKind === 'tile' || action?.targetKind === 'object')
+        // Authoritative targeting stays active while its visual cursor is hidden.
+        if (hand?.item && handInv?.ref && handInv.revision != null && !activeTargetAction) {
           playerCommandController.sendDropToWorld(
             handInv.ref,
             Number(handInv.revision),
@@ -571,12 +575,12 @@ export class Render {
     await view.setActorEquipment(items)
   }
 
-  loadChunk(x: number, y: number, tiles: Uint8Array, version: number = 0): void {
-    this.chunkManager.loadChunk(x, y, tiles, version)
+  loadChunk(x: number, y: number, tiles: Uint8Array, version: number, identity: ChunkEventIdentity): void {
+    this.chunkManager.loadChunk(x, y, tiles, version, identity)
   }
 
-  unloadChunk(x: number, y: number): void {
-    this.chunkManager.unloadChunk(x, y)
+  unloadChunk(x: number, y: number, identity: ChunkEventIdentity): void {
+    this.chunkManager.unloadChunk(x, y, identity)
   }
 
   spawnObject(options: { entityId: number; typeId: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {

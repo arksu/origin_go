@@ -26,8 +26,7 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 		return
 	}
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
-		service.Cancel(world, playerID, playerHandle)
-		service.alert(playerID, reason)
+		service.failRequirements(world, playerID, playerHandle, definition, active, reason)
 		return
 	}
 	if definition.Target.Kind == actiondefs.TargetObject && !world.Alive(active.TargetHandle) {
@@ -51,6 +50,10 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 	cycle.ActionCompletionStarted = true
 	ecs.AddComponent(world, playerHandle, cycle)
 	target := ActionTarget{ObjectID: active.TargetID, ObjectHandle: active.TargetHandle, X: active.TargetX, Y: active.TargetY}
+	if definition.Target.Approach == actiondefs.ApproachTileCenter && !atTileCenter(world, playerHandle, target.X, target.Y) {
+		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
+		return
+	}
 	if reason := service.handlers[definition.ID].ValidateTarget(world, playerID, playerHandle, target); reason != "" {
 		service.Complete(world, playerID, playerHandle, active.Generation, false, reason)
 		return

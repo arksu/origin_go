@@ -386,6 +386,7 @@ func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e e
 	msg := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_ChunkUnload{
 			ChunkUnload: &netproto.S2C_ChunkUnload{
+				StreamEpoch: event.Epoch, EventSeq: event.EventSeq,
 				Coord: &netproto.ChunkCoord{
 					X: int32(event.X),
 					Y: int32(event.Y),
@@ -406,7 +407,9 @@ func (d *NetworkVisibilityDispatcher) handleChunkUnload(ctx context.Context, e e
 		return nil
 	}
 
-	client.Send(data)
+	if event.EventSeq != 0 && client.InWorld.Load() && event.Epoch == client.StreamEpoch.Load() {
+		client.SendChunkVisibility(data)
+	}
 	shard.ClientsMu.RUnlock()
 
 	return nil
@@ -447,6 +450,7 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 	msg := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_ChunkLoad{
 			ChunkLoad: &netproto.S2C_ChunkLoad{
+				StreamEpoch: event.Epoch, EventSeq: event.EventSeq,
 				Chunk: &netproto.ChunkData{
 					Coord: &netproto.ChunkCoord{
 						X: int32(event.X),
@@ -472,8 +476,8 @@ func (d *NetworkVisibilityDispatcher) handleChunkLoad(ctx context.Context, e eve
 	}
 
 	shard.ClientsMu.RLock()
-	if client, exists := shard.Clients[event.EntityID]; exists {
-		client.Send(data)
+	if client, exists := shard.Clients[event.EntityID]; exists && event.EventSeq != 0 && client.InWorld.Load() && event.Epoch == client.StreamEpoch.Load() {
+		client.SendChunkVisibility(data)
 	}
 	shard.ClientsMu.RUnlock()
 

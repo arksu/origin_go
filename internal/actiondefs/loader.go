@@ -132,6 +132,9 @@ func validateDefinition(definition *Definition) error {
 	if definition.Target.Cursor != "" && !identifierPattern.MatchString(definition.Target.Cursor) {
 		return fmt.Errorf("target.cursor must be a lowercase identifier")
 	}
+	if definition.Target.Approach != "" && (definition.Target.Approach != ApproachTileCenter || definition.Target.Kind != TargetTile) {
+		return fmt.Errorf("target.approach must be tile_center on a tile target")
+	}
 	if definition.Execution.Ticks < 0 || definition.Execution.Stamina < 0 || math.IsNaN(definition.Execution.Stamina) || math.IsInf(definition.Execution.Stamina, 0) {
 		return fmt.Errorf("execution ticks and stamina must be finite and non-negative")
 	}
