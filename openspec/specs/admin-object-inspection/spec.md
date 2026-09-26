@@ -18,7 +18,7 @@ The system MUST recognize `/info` as an administrator command with no arguments 
 - **THEN** the system SHALL report the command usage and SHALL NOT arm inspection
 
 ### Requirement: One-shot object selection reports authoritative runtime state
-While inspection is armed on the server, the next ordinary primary map click on a currently visible object MUST select that object's entity through `MapClick.target_entity_id` rather than performing normal movement, pickup, or object interaction. The client MUST send ordinary map-click input without recognizing administrator command text or entering a selection mode. The server MUST resolve the entity against the authoritative live world before reporting its state. Explicit `Interact` actions MUST NOT consume pending inspection.
+While inspection is armed on the server, the next ordinary primary map click on a currently visible object MUST select that object's entity through `MapClick.target_entity_id` rather than performing normal movement, pickup, or object interaction. The client MUST send ordinary map-click input without recognizing administrator command text or entering a selection mode. The server MUST resolve the entity against the authoritative live world before reporting its state. Secondary MapClick MUST NOT consume pending inspection and SHALL use secondary routing after canceling any active gameplay action.
 
 #### Scenario: Burner fuel is reported
 - **WHEN** an administrator arms inspection and selects a live campfire with burner fuel remaining
@@ -33,8 +33,12 @@ While inspection is armed on the server, the next ordinary primary map click on 
 - **THEN** the client SHALL send its ordinary map-click action and only the server SHALL interpret that click as inspection
 
 #### Scenario: Explicit interaction leaves inspection pending
-- **WHEN** an administrator awaiting inspection sends `Interact` through normal context interaction
-- **THEN** ordinary interaction SHALL proceed and inspection SHALL remain pending for a map click
+- **WHEN** an administrator awaiting inspection sends secondary MapClick through normal context interaction
+- **THEN** secondary routing SHALL proceed after canceling any active gameplay action, and inspection SHALL remain pending for a primary map click
+
+#### Scenario: Secondary ground click leaves inspection pending
+- **WHEN** an administrator awaiting inspection secondary-clicks empty ground without a carried object
+- **THEN** any active gameplay action SHALL cancel, no new movement SHALL start, and inspection SHALL remain pending
 
 ### Requirement: Inspection report excludes immutable template data
 The inspection report MUST identify the selected entity and present its mutable object runtime state, including behavior-owned state and other current object parameters. It MUST NOT include fields read from the immutable object definition template solely for the report.
