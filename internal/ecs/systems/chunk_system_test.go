@@ -325,3 +325,50 @@ func TestChunkSystem_NegativeCoordsStayInTheirChunk(t *testing.T) {
 		t.Fatalf("mover spatial entry missing from its own chunk grid")
 	}
 }
+
+func TestChunkSystem_FractionalNegativeBorderMigration(t *testing.T) {
+	chunkSize := float64(constt.ChunkWorldSize)
+	tests := []struct {
+		name                 string
+		start, final         float64
+		oldChunk, finalChunk int
+	}{
+		{"zero_border", 0.5, -0.5, 0, -1},
+		{"negative_border", -chunkSize + 0.5, -chunkSize - 0.5, -1, -2},
+		{"exact_negative_border", -chunkSize - 0.5, -chunkSize, -2, -1},
+	}
+	for _, axis := range []string{"x", "y"} {
+		for _, test := range tests {
+			t.Run(axis+"/"+test.name, func(t *testing.T) {
+				startX, startY := test.start, 100.0
+				finalX, finalY := test.final, 100.0
+				oldCoord := types.ChunkCoord{X: test.oldChunk}
+				finalCoord := types.ChunkCoord{X: test.finalChunk}
+				if axis == "y" {
+					startX, startY = startY, startX
+					finalX, finalY = finalY, finalX
+					oldCoord = types.ChunkCoord{Y: test.oldChunk}
+					finalCoord = types.ChunkCoord{Y: test.finalChunk}
+				}
+				cm := newMigrationChunkManager(oldCoord, finalCoord)
+				scene := newMigrationScene(t, cm, startX, startY, oldCoord)
+				scene.runTick(finalX, finalY, finalX, finalY)
+
+				ref := chunkRefOf(t, scene.world, scene.mover)
+				if ref.CurrentChunkX != finalCoord.X || ref.CurrentChunkY != finalCoord.Y ||
+					ref.PrevChunkX != oldCoord.X || ref.PrevChunkY != oldCoord.Y {
+					t.Fatalf("expected migration from %v to %v, got %+v", oldCoord, finalCoord, ref)
+				}
+				if len(cm.updates) != 1 || cm.updates[0].entityID != 1 || cm.updates[0].coord != finalCoord {
+					t.Fatalf("expected one AOI update to %v, got %+v", finalCoord, cm.updates)
+				}
+				if handleCount(cm.chunk(oldCoord).Spatial().GetAllHandles(), scene.mover) != 0 {
+					t.Fatal("stale spatial entry left in old chunk")
+				}
+				if handleCount(cm.chunk(finalCoord).Spatial().GetAllHandles(), scene.mover) != 1 {
+					t.Fatal("expected exactly one spatial entry in final chunk")
+				}
+			})
+		}
+	}
+}
