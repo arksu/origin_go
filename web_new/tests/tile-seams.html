@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Стыки тайлов</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #14231b; color: #e0eadc; font: 14px system-ui, sans-serif; }
+    header { flex-shrink: 0; padding: 18px 24px 12px; border-bottom: 1px solid #3c5141; }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    p { margin: 6px 0; color: #b7cbb4; }
+    #controls { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 16px 0 12px; align-items: end; }
+    label { display: grid; gap: 5px; font-size: 12px; color: #b7cbb4; }
+    select, button, input[type="color"] { min-height: 36px; padding: 6px 10px; border: 1px solid #58715b; border-radius: 5px; background: #223b2a; color: #edf4e9; font: 14px system-ui; }
+    button { cursor: pointer; }
+    button:hover { background: #34563a; }
+    :focus-visible { outline: 2px solid #b7d88a; outline-offset: 3px; }
+    :disabled { opacity: .45; }
+    .checkbox { display: flex; gap: 7px; align-items: center; min-height: 36px; }
+    #status { min-height: 22px; color: #d1e4c1; }
+    #preview { position: relative; flex: 1; width: 100%; min-height: 320px; overflow: hidden; background: #163722; }
+    canvas { display: block; image-rendering: pixelated; cursor: grab; touch-action: none; }
+    canvas.dragging { cursor: grabbing; }
+    footer { flex-shrink: 0; padding: 10px 24px; }
+    #inspect { min-height: 22px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    #error { color: #ffc4ad; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Стыки тайлов</h1>
+    <p>Перетаскивайте поле мышью. Колесо меняет масштаб. Текстуры берутся из текущего атласа клиента.</p>
+    <fieldset id="controls" disabled style="border: 0; padding: 0;">
+      <label>Целевой тип<select id="target"></select></label>
+      <label>Направление наложения
+        <select id="direction">
+          <option value="all">Все соседние типы</option>
+          <option value="target-over">Целевой поверх соседнего</option>
+          <option value="neighbor-over">Соседний поверх целевого</option>
+        </select>
+      </label>
+      <label>Соседний тип<select id="neighbor"></select></label>
+      <label>Рисунок поля
+        <select id="pattern">
+          <option value="solid">Только целевой</option>
+          <option value="target-island">Целевой участок среди соседнего</option>
+          <option value="neighbor-island">Соседний участок среди целевого</option>
+          <option value="split-x">Прямая граница по X</option>
+          <option value="split-y">Прямая граница по Y</option>
+          <option value="stripes">Полосы</option>
+          <option value="checkerboard">Шахматка участков</option>
+          <option value="single-cells">Одиночные соседние тайлы</option>
+          <option value="three-way">Стык трёх типов</option>
+        </select>
+      </label>
+      <label>Третий тип<select id="third"></select></label>
+      <label>Размер поля
+        <select id="size"><option value="16">16 × 16</option><option value="32" selected>32 × 32</option><option value="48">48 × 48</option><option value="64">64 × 64</option></select>
+      </label>
+      <label>Масштаб
+        <select id="zoom"><option value="0.25">25%</option><option value="0.5">50%</option><option value="1" selected>100%</option><option value="2">200%</option><option value="3">300%</option><option value="4">400%</option><option value="6">600%</option></select>
+      </label>
+      <label>Фон<input id="background" type="color" value="#163722"></label>
+      <label class="checkbox"><input id="grid" type="checkbox"> Сетка тайлов</label>
+      <label class="checkbox"><input id="chunks" type="checkbox"> Границы чанков</label>
+      <button id="shuffle" type="button">Другой расклад вариантов</button>
+      <button id="fit" type="button">Показать всё поле</button>
+      <button id="center" type="button">В центр</button>
+    </fieldset>
+    <p id="status" role="status">Загрузка атласа…</p>
+    <p>Края типа с меньшим ID накладываются поверх типа с большим ID. Масштаб 100% и выше удобен для проверки пиксельных стыков.</p>
+  </header>
+  <main id="preview" aria-label="Поле для просмотра стыков тайлов"></main>
+  <footer><div id="inspect">Наведите мышь на тайл, чтобы увидеть его тип и вариант текстуры.</div><pre id="error" role="alert"></pre></footer>
+  <script type="module" src="./tile-seams.ts"></script>
+</body>
+</html>
