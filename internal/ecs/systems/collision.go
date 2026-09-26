@@ -510,10 +510,8 @@ const maxSweepTiles = 32
 // checkTileCollision sweeps the entity's AABB (halfW/halfH) from start along
 // (dx, dy) against impassable tiles. Returns the center position at the
 // earliest contact (or the untouched destination when clear), the contact
-// normal, hit time, and whether movement is blocked. Tiles the box already
-// overlaps are ignored, so mode switches and legacy positions can move out.
-// (Object collision is stricter: startOverlapNormal blocks deepening moves
-// there, but still lets overlapped entities escape.)
+// normal, hit time, and whether movement is blocked. Initial overlaps block
+// deepening moves while allowing escape and movement along the terrain edge.
 func (s *CollisionSystem) checkTileCollision(
 	startX, startY, dx, dy, halfW, halfH float64,
 	chunk *core.Chunk,
@@ -546,14 +544,22 @@ func (s *CollisionSystem) checkTileCollision(
 				continue
 			}
 
-			t, nx, ny, hit := s.sweptAABB(
-				startX, startY, halfW, halfH,
-				dx, dy,
-				float64(tileX)*tileSize+tileHalf,
-				float64(tileY)*tileSize+tileHalf,
-				tileHalf, tileHalf,
+			tileCenterX := float64(tileX)*tileSize + tileHalf
+			tileCenterY := float64(tileY)*tileSize + tileHalf
+			nx, ny, deepening, overlapped := s.startTileOverlapNormal(
+				startX, startY, halfW, halfH, dx, dy,
+				tileX, tileY, chunk, isSwimming,
 			)
-			if hit && t < earliestT {
+			t, hit := 0.0, deepening
+			if !overlapped {
+				t, nx, ny, hit = s.sweptAABB(
+					startX, startY, halfW, halfH, dx, dy,
+					tileCenterX, tileCenterY, tileHalf, tileHalf,
+				)
+			}
+			// Adjacent blocked tiles form one obstacle. Their internal faces
+			// must not stop an overlapped body moving along the shoreline.
+			if hit && t < earliestT && s.tilePassableAtCoords(tileX+int(nx), tileY+int(ny), chunk, isSwimming) {
 				earliestT = t
 				hitNormalX = nx
 				hitNormalY = ny
@@ -562,11 +568,50 @@ func (s *CollisionSystem) checkTileCollision(
 	}
 
 	if earliestT < 1.0 {
-		return startX + dx*(earliestT-epsilon),
-			startY + dy*(earliestT-epsilon),
+		travelT := math.Max(0, earliestT-epsilon)
+		return startX + dx*travelT,
+			startY + dy*travelT,
 			hitNormalX, hitNormalY, earliestT, true
 	}
 	return startX + dx, startY + dy, 0, 0, 1, false
+}
+
+// Initial terrain overlaps use the nearest exposed face. Internal tile faces
+// cannot define an escape direction because they lead into the same obstacle.
+func (s *CollisionSystem) startTileOverlapNormal(
+	startX, startY, halfW, halfH, dx, dy float64,
+	tileX, tileY int, chunk *core.Chunk, isSwimming bool,
+) (normalX, normalY float64, deepening, overlapped bool) {
+	tileSize := float64(constt.CoordPerTile)
+	tileHalf := tileSize / 2
+	tileCenterX := float64(tileX)*tileSize + tileHalf
+	tileCenterY := float64(tileY)*tileSize + tileHalf
+	_, _, _, overlapped = startOverlapNormal(startX, startY, halfW, halfH, dx, dy,
+		tileCenterX, tileCenterY, tileHalf, tileHalf)
+	if !overlapped {
+		return 0, 0, false, false
+	}
+
+	faces := [...]struct {
+		normalX, normalY int
+		exitDistance     float64
+	}{
+		{-1, 0, startX - (tileCenterX - tileHalf - halfW)},
+		{1, 0, tileCenterX + tileHalf + halfW - startX},
+		{0, -1, startY - (tileCenterY - tileHalf - halfH)},
+		{0, 1, tileCenterY + tileHalf + halfH - startY},
+	}
+	nearestDistance := math.Inf(1)
+	for _, face := range faces {
+		if face.exitDistance < nearestDistance && s.tilePassableAtCoords(
+			tileX+face.normalX, tileY+face.normalY, chunk, isSwimming,
+		) {
+			nearestDistance = face.exitDistance
+			normalX = float64(face.normalX)
+			normalY = float64(face.normalY)
+		}
+	}
+	return normalX, normalY, dx*normalX+dy*normalY < 0, true
 }
 
 // tilePassableAtCoords reports whether the tile at integer tile coordinates is
