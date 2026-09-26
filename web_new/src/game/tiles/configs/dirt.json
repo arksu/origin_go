@@ -11,6 +11,30 @@
     {
       "img": "dirt/base_3.png",
       "w": 1
+    },
+    {
+      "img": "dirt/base_4.png",
+      "w": 1
+    },
+    {
+      "img": "dirt/base_5.png",
+      "w": 1
+    },
+    {
+      "img": "dirt/base_6.png",
+      "w": 1
+    },
+    {
+      "img": "dirt/base_7.png",
+      "w": 1
+    },
+    {
+      "img": "dirt/base_8.png",
+      "w": 1
+    },
+    {
+      "img": "dirt/base_9.png",
+      "w": 1
     }
   ],
   "borders": [
