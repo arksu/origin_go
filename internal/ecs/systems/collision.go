@@ -650,7 +650,8 @@ func (s *CollisionSystem) tilePassableAtCoords(
 // so overlapped entities can always walk out. The normal is the
 // minimum-penetration axis pointing from candidate toward mover; exact
 // contact (penetration 0) is left to the normal sweep, which blocks it at
-// entryTime 0.
+// entryTime 0. Coincident centers on the chosen axis allow escape in either
+// direction because neither direction increases penetration.
 func startOverlapNormal(
 	ax, ay, aHalfW, aHalfH float64,
 	dx, dy float64,
@@ -667,13 +668,13 @@ func startOverlapNormal(
 		if ax > bx {
 			normalX = 1
 		}
-		return normalX, 0, dx*normalX < 0, true
+		return normalX, 0, ax != bx && dx*normalX < 0, true
 	}
 	normalY = -1
 	if ay > by {
 		normalY = 1
 	}
-	return 0, normalY, dy*normalY < 0, true
+	return 0, normalY, ay != by && dy*normalY < 0, true
 }
 
 // sweptAABB performs swept AABB collision using Minkowski difference
