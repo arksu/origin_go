@@ -1,5 +1,7 @@
 export const SHALLOW_WATER = {
-  textureURL: '/assets/game/fx/shallow_water/ripples.png',
+  textureURL: '/assets/game/fx/shallow_water/ripples.json',
+  frameCount: 5,
+  framesPerSecond: 5,
   immersionPx: 29,
   transitionMs: 300,
   rippleWidth: 80,

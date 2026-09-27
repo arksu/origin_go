@@ -2,7 +2,7 @@ import type { ActorHandle } from '../src/game/actors/ActorRenderer'
 import { verifyMovementStopping } from './movement-stop'
 import { verifyScreenFacing } from './screen-facing'
 import { verifyCharacterEquipment, verifyStoneAxe } from './character-equipment'
-import { Application, Assets, Container, Sprite, Texture, WebGLRenderer } from 'pixi.js'
+import { Application, Assets, Container, Sprite, Texture, WebGLRenderer, type Spritesheet } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer } from '../src/game/actors/ActorRenderer'
@@ -276,7 +276,8 @@ async function main() {
   for (let frame = 0; frame < 8; frame++) waterFrame()
   const dryPixels = pixels(false)
   const waterHandle = (view as unknown as { actorHandle: ActorHandle }).actorHandle
-  const ripple = view.getContainer().children.find(child => child instanceof Sprite && child.texture === Assets.get(SHALLOW_WATER.textureURL)) as Sprite
+  const rippleTextures = Assets.get<Spritesheet>(SHALLOW_WATER.textureURL).animations.ripples!
+  const ripple = view.getContainer().children.find(child => child instanceof Sprite && rippleTextures.includes(child.texture)) as Sprite
   surfaceTile = TILE_SHALLOW_WATER
   waterFrame(SHALLOW_WATER.transitionMs / 2)
   check(waterHandle.immersionPx > 0 && waterHandle.immersionPx < SHALLOW_WATER.immersionPx, 'Entry must transition smoothly')

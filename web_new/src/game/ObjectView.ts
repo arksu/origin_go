@@ -110,7 +110,7 @@ export class ObjectView {
   private carrying = false
   private particleEmitter: ParticleEmitter | null = null
 
-  constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer, private readonly rippleTexture?: Texture) {
+  constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer, private readonly rippleTextures?: readonly Texture[]) {
     this.entityId = options.entityId
     this.typeId = options.typeId
     this.position = options.position
@@ -217,8 +217,8 @@ export class ObjectView {
       const handle = this.actorRenderer.create()
       this.actorHandle = handle
       this.container.addChild(handle.sprite)
-      if (this.rippleTexture) {
-        this.shallowWater = new ShallowWaterVisual(this.rippleTexture)
+      if (this.rippleTextures) {
+        this.shallowWater = new ShallowWaterVisual(this.rippleTextures)
         this.container.addChild(this.shallowWater.sprite)
       }
       this.setInteractive(handle.sprite)

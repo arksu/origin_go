@@ -79,9 +79,11 @@ Run `npm run dev` from `web_new`, then open:
   1/30 actor scenes and waterline GPU/picking/context-restoration checks.
 
 Shallow-water tiles lower the body sprite according to `shallowWaterConfig.ts` and cut the
-finished silhouette at the ground anchor in `PixelActorPass`. A shared 80 × 40
-ripple texture draws below the body, so visible legs occlude the crests; its pulse follows walking distance and
-settles when stopped. `shallowWaterConfig.ts` owns the tuning. The world container
+finished silhouette at the ground anchor in `PixelActorPass`. Five 80 × 40 ripple
+frames share a 400 × 40 atlas and loop at 5 FPS below the body, so visible legs
+occlude the crests. Frame changes also run while idle, without invalidating the
+cached body render. The scale pulse follows walking distance and settles when
+stopped. `shallowWaterConfig.ts` owns the frame rate and other tuning. The world container
 and sorting anchor stay fixed, ground shadows disappear, and carried props follow
 the lowered hands. Unknown terrain, carried characters and the KO pose immediately
 clear the standing water effect. The approved source and reproducible PNG export

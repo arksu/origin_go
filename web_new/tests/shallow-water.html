@@ -10,12 +10,16 @@ pre { white-space: pre-wrap; }
 button { margin: 8px 8px 8px 0; padding: 8px 16px; }
 .texture-review { display: flex; gap: 16px; }
 .texture-review figure { margin: 0; }
-.texture-review img { display: block; width: 240px; height: 120px; image-rendering: pixelated; }
-.texture-review .green { background: #243c24; }
-.texture-review .water { background: #084869; }
+.texture-review .ripple-preview { width: 240px; height: 120px; image-rendering: pixelated;
+  background-image: url('/assets/game/fx/shallow_water/ripples-strip.png');
+  background-repeat: no-repeat; background-size: 1200px 120px;
+  animation: ripple-frames 1s steps(5) infinite; }
+@keyframes ripple-frames { to { background-position: -1200px 0; } }
+.texture-review .green { background-color: #243c24; }
+.texture-review .water { background-color: #084869; }
 </style>
 <h1>Мелководье · реальный игровой рендер</h1>
-<p>Восемь направлений: на берегу и в воде до середины колена. Верхний ряд — берег, нижний — мелководье.</p>
+<p>Восемь направлений: на берегу и в воде до середины колена. Верхний ряд — берег, нижний — мелководье. Рябь: пять кадров, 5 FPS.</p>
 <div id="preview"></div>
 <button id="walk">Ходьба / остановка</button>
 <button id="carry">Переноска / обычная поза</button>
@@ -23,8 +27,8 @@ button { margin: 8px 8px 8px 0; padding: 8px 16px; }
 <pre id="result">Проверяем…</pre>
 <pre id="metrics"></pre>
 <div class="texture-review" aria-label="Проверка прозрачных краёв текстуры">
-<figure><img class="green" src="/assets/game/fx/shallow_water/ripples.png" alt="Рябь на тёмно-зелёном фоне"><figcaption>Прозрачные края на зелёном</figcaption></figure>
-<figure><img class="water" src="/assets/game/fx/shallow_water/ripples.png" alt="Рябь на синем фоне воды"><figcaption>Плотность волн на воде</figcaption></figure>
+<figure><div class="green ripple-preview" role="img" aria-label="Анимация ряби на тёмно-зелёном фоне"></div><figcaption>Зелёный · 5 FPS</figcaption></figure>
+<figure><div class="water ripple-preview" role="img" aria-label="Анимация ряби на синем фоне воды"></div><figcaption>Вода · 5 FPS</figcaption></figure>
 </div>
 <script type="module" src="/tests/shallow-water.ts"></script>
 </html>

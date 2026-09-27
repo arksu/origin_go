@@ -1,0 +1,22 @@
+[
+  {
+    "file": "frame-01.png",
+    "origin": "approved variant 1"
+  },
+  {
+    "file": "frame-02.png",
+    "origin": "generated intermediate frame"
+  },
+  {
+    "file": "frame-03.png",
+    "origin": "approved variant 4"
+  },
+  {
+    "file": "frame-04.png",
+    "origin": "generated outward echo frame"
+  },
+  {
+    "file": "frame-05.png",
+    "origin": "generated loop closing frame"
+  }
+]
