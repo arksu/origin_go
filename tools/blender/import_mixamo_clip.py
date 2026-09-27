@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 
 import bpy
-from mathutils import Quaternion, Vector
+from mathutils import Vector
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from retarget_clip import bake_stationary_clip
 
 
 def main():
@@ -73,32 +76,8 @@ def main():
         samples.append({name: (target.matrix_world.inverted() @ donor.matrix_world @
                               donor.pose.bones[donor_name].matrix).to_quaternion() @ offsets[name]
                         for name, donor_name in bone_map.items()})
-    previous = bpy.data.actions.get(recipe['action'])
-    if previous:
-        bpy.data.actions.remove(previous)
-    action = bpy.data.actions.new(recipe['action'])
-    action.use_fake_user = True
-    target.animation_data.action = action
-    ground = recipe['ground_bones']
-    ground_height = min(target.data.bones[name].head_local.z for name in ground)
-    for index, desired in enumerate(samples, start=1):
-        for bone in target.pose.bones:
-            bone.matrix_basis.identity()
-            parent_rest = rest[bone.parent.name] if bone.parent else Quaternion()
-            parent_pose = desired[bone.parent.name] if bone.parent else Quaternion()
-            bone.rotation_mode = 'QUATERNION'
-            bone.rotation_quaternion = ((parent_rest.inverted() @ rest[bone.name]).inverted() @
-                                        parent_pose.inverted() @ desired[bone.name])
-        bpy.context.view_layer.update()
-        # Stationary clips preserve the supporting foot despite different leg lengths.
-        root = recipe['root_bone']
-        target.pose.bones[root].location = rest[root].inverted() @ Vector((
-            0, 0, ground_height - min(target.pose.bones[name].head.z for name in ground)))
-        for bone in target.pose.bones:
-            bone.keyframe_insert('rotation_quaternion', frame=index, group=bone.name)
-            bone.keyframe_insert('location', frame=index, group=bone.name)
-    if tuple(action.frame_range) != (1, end - start + 1):
-        raise ValueError('Baked action does not match the requested inclusive range')
+    action = bake_stationary_clip(target, recipe['action'], samples,
+                                  recipe['root_bone'], recipe['ground_bones'])
     target.animation_data.action = original_action
     if original_slot:
         target.animation_data.action_slot = original_slot

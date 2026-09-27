@@ -1,0 +1,236 @@
+{
+  "source": "../../source.blend",
+  "donor": "branch_gathering.npz",
+  "rig": "commoner_rig",
+  "action": "pick_up",
+  "range": {
+    "start": 0,
+    "end": 149
+  },
+  "fps": 30,
+  "joint_count": 77,
+  "source_to_target": [
+    [
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      -1
+    ],
+    [
+      0,
+      1,
+      0
+    ]
+  ],
+  "root_bone": "pelvis",
+  "ground_bones": [
+    "foot.l",
+    "foot.r"
+  ],
+  "bones": {
+    "pelvis": {
+      "name": "Hips",
+      "joint": 0,
+      "tip_joint": 1,
+      "rest_direction": [
+        -0.00013727,
+        0.05003763,
+        -0.00053727
+      ]
+    },
+    "spine": {
+      "name": "Spine1",
+      "joint": 1,
+      "tip_joint": 2,
+      "rest_direction": [
+        -0.0,
+        0.07125301,
+        -0.00029825
+      ]
+    },
+    "chest": {
+      "name": "Chest",
+      "joint": 3,
+      "tip_joint": 4,
+      "rest_direction": [
+        -0.00181677,
+        0.26311295,
+        -0.0055334799999999995
+      ]
+    },
+    "head": {
+      "name": "Head",
+      "joint": 6,
+      "tip_joint": 7,
+      "rest_direction": [
+        3.598e-05,
+        0.16065403,
+        -0.018353790000000002
+      ]
+    },
+    "clavicle.l": {
+      "name": "LeftShoulder",
+      "joint": 11,
+      "tip_joint": 12,
+      "rest_direction": [
+        0.14919846,
+        2e-08,
+        -0.05502326
+      ]
+    },
+    "upper_arm.l": {
+      "name": "LeftArm",
+      "joint": 12,
+      "tip_joint": 13,
+      "rest_direction": [
+        0.28739307000000003,
+        0.0,
+        -2.588e-05
+      ]
+    },
+    "forearm.l": {
+      "name": "LeftForeArm",
+      "joint": 13,
+      "tip_joint": 14,
+      "rest_direction": [
+        0.27093981,
+        -1e-08,
+        2.6090000000000003e-05
+      ]
+    },
+    "hand.l": {
+      "name": "LeftHand",
+      "joint": 14,
+      "tip_joint": 24,
+      "rest_direction": [
+        0.03163495,
+        0.00240981,
+        0.01000332
+      ]
+    },
+    "thigh.l": {
+      "name": "LeftLeg",
+      "joint": 67,
+      "tip_joint": 68,
+      "rest_direction": [
+        -1e-08,
+        -0.43221752,
+        -0.00802913
+      ]
+    },
+    "shin.l": {
+      "name": "LeftShin",
+      "joint": 68,
+      "tip_joint": 69,
+      "rest_direction": [
+        1e-08,
+        -0.42155094,
+        -0.03481523
+      ]
+    },
+    "foot.l": {
+      "name": "LeftFoot",
+      "joint": 69,
+      "tip_joint": 70,
+      "rest_direction": [
+        0.0,
+        -0.05059472,
+        0.13231529
+      ]
+    },
+    "toes.l": {
+      "name": "LeftToeBase",
+      "joint": 70,
+      "tip_joint": 71,
+      "rest_direction": [
+        -9.607e-05,
+        -0.016476189999999998,
+        0.06513017
+      ]
+    },
+    "clavicle.r": {
+      "name": "RightShoulder",
+      "joint": 39,
+      "tip_joint": 40,
+      "rest_direction": [
+        -0.15037196,
+        1.2000000000000002e-07,
+        -0.05545604
+      ]
+    },
+    "upper_arm.r": {
+      "name": "RightArm",
+      "joint": 40,
+      "tip_joint": 41,
+      "rest_direction": [
+        -0.28736639,
+        2e-08,
+        -2.597e-05
+      ]
+    },
+    "forearm.r": {
+      "name": "RightForeArm",
+      "joint": 41,
+      "tip_joint": 42,
+      "rest_direction": [
+        -0.27133619,
+        -0.0,
+        2.613e-05
+      ]
+    },
+    "hand.r": {
+      "name": "RightHand",
+      "joint": 42,
+      "tip_joint": 52,
+      "rest_direction": [
+        -0.03168106,
+        0.00246593,
+        0.010010300000000001
+      ]
+    },
+    "thigh.r": {
+      "name": "RightLeg",
+      "joint": 72,
+      "tip_joint": 73,
+      "rest_direction": [
+        1e-08,
+        -0.43362206000000003,
+        -0.00805556
+      ]
+    },
+    "shin.r": {
+      "name": "RightShin",
+      "joint": 73,
+      "tip_joint": 74,
+      "rest_direction": [
+        2e-08,
+        -0.42117393,
+        -0.03478398
+      ]
+    },
+    "foot.r": {
+      "name": "RightFoot",
+      "joint": 74,
+      "tip_joint": 75,
+      "rest_direction": [
+        -0.0,
+        -0.050796089999999995,
+        0.13284196
+      ]
+    },
+    "toes.r": {
+      "name": "RightToeBase",
+      "joint": 75,
+      "tip_joint": 76,
+      "rest_direction": [
+        9.532e-05,
+        -0.016343780000000002,
+        0.06460591
+      ]
+    }
+  }
+}

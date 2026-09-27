@@ -1,4 +1,9 @@
-# Branch gathering motion
+# Branch gathering motion (previous source)
+
+Superseded on 2026-09-27 by the user-provided
+[Kimodo motion](../kimodo/branch_gathering.md). This source and recipe remain
+available for reference; rerunning the commands below restores the earlier clip
+and requires resetting its asset recipe range to 1–104.
 
 `picking_up_object.fbx` preserves the user-provided Mixamo **Picking Up Object**
 file, supplied on 2026-09-27 as `Picking Up Object.fbx`.
@@ -22,7 +27,7 @@ To repeat the import and publication:
 tools/assets build character/male_commoner --animations --clip pick_up
 ```
 
-`data/action_animations/tree.json` binds `tree/take_branch` to this clip through
+`data/action_animations/tree.json` binds `tree/take_branch` to `pick_up` through
 the common action timeline. `unbind_equipment_slots` detaches both hand models
 only for visual playback, including blends and terminal holds. Actual equipment
 is retained and current models return after playback. Variant selection permits
