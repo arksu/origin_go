@@ -23,6 +23,10 @@ func tileCenter(x, y float64) (float64, float64, bool) {
 	return math.Floor(x/size)*size + size/2, math.Floor(y/size)*size + size/2, true
 }
 
+func tileCoordinates(target ActionTarget) (int, int) {
+	return int(math.Floor(target.X / constt.CoordPerTile)), int(math.Floor(target.Y / constt.CoordPerTile))
+}
+
 func withinArrivalTolerance(x, y, targetX, targetY float64) bool {
 	dx, dy := targetX-x, targetY-y
 	return dx*dx+dy*dy <= constt.StopDistance*constt.StopDistance

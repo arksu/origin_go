@@ -130,78 +130,12 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
 	craftingService := NewCraftingService(s.world, s.eventBus, inventoryExecutor, s, logger)
+	giveItem := newPlayerGiveItemAdapter(inventoryExecutor, s)
 	contextActionService := NewContextActionService(
 		s.world,
 		s.eventBus,
 		openContainerService,
-		func(
-			w *ecs.World,
-			playerID types.EntityID,
-			playerHandle types.Handle,
-			itemKey string,
-			count uint32,
-			quality uint32,
-		) contracts.GiveItemOutcome {
-			if inventoryExecutor == nil {
-				return contracts.GiveItemOutcome{Success: false, Message: "inventory executor unavailable"}
-			}
-			result := inventoryExecutor.GiveItem(w, playerID, playerHandle, itemKey, count, quality)
-			if result == nil {
-				return contracts.GiveItemOutcome{Success: false, Message: "nil give result"}
-			}
-			if result.Success && len(result.UpdatedContainers) > 0 {
-				states := inventoryExecutor.ConvertContainersToStates(w, result.UpdatedContainers)
-				updated := make([]*netproto.InventoryState, 0, len(states))
-				for _, state := range states {
-					updated = append(updated, systems.BuildInventoryStateProto(state))
-				}
-				if len(updated) > 0 {
-					s.SendInventoryOpResult(playerID, &netproto.S2C_InventoryOpResult{
-						OpId:    0,
-						Success: true,
-						Updated: updated,
-					})
-				}
-			}
-			if result.Success && result.DiscoveryLPGained > 0 {
-				lp := result.DiscoveryLPGained
-				s.SendExpGained(playerID, &netproto.S2C_ExpGained{
-					EntityId: uint64(playerID),
-					Lp:       &lp,
-				})
-
-				// Send Fx and Sound for LP gain
-				fxKey := "exp_gain"
-
-				var posX, posY float64
-				ecs.WithComponent(w, playerHandle, func(t *components.Transform) {
-					posX = t.X
-					posY = t.Y
-				})
-
-				s.SendFx(playerID, &netproto.S2C_Fx{
-					FxKey: fxKey,
-					Position: &netproto.Vector2{
-						X: int32(posX),
-						Y: int32(posY),
-					},
-				})
-
-				s.SendSound(playerID, &netproto.S2C_Sound{
-					SoundKey:        fxKey,
-					X:               posX,
-					Y:               posY,
-					MaxHearDistance: 80.0,
-				})
-			}
-			return contracts.GiveItemOutcome{
-				Success:      result.Success,
-				AnyDropped:   false,
-				PlacedInHand: result.PlacedInHand,
-				GrantedCount: result.GrantedCount,
-				Message:      result.Message,
-			}
-		},
+		giveItem,
 		s,
 		s,
 		visionSystem,
@@ -248,6 +182,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		"lift":      &liftActionHandler{lift: liftService, commands: networkCmdSystem},
 		"lift_down": &liftDownActionHandler{lift: liftService},
 		"plow_tile": &plowTileActionHandler{terrain: s.chunkManager},
+		"dig":       &digTileActionHandler{terrain: s.chunkManager, giveItem: giveItem},
 	}, s)
 	if actionErr != nil {
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))

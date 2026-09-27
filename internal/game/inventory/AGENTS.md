@@ -22,6 +22,7 @@ Key design goals:
   inventory flow must mark object behavior dirty (`ecs.MarkObjectBehaviorDirty`) so runtime appearance/flags are recomputed by `ObjectBehaviorSystem`.
 - Content rules for nested containers are global by parent item, not player-only:
   validation must work identically whether nested inventory is in player inventory, world container, equipment, or future station containers.
+- For new player-directed item generation, use `InventoryExecutor.GiveItem`. It tries player root grids, eligible nested grids, then a free hand. It returns `GrantedCount`, `PlacedInHand`, updated containers, and discovery LP; it never creates a ground item as a capacity fallback. When all destinations are full, it grants nothing. Callers must send returned inventory/discovery updates and decide whether to stop an ongoing action. The shard shares that wiring through `internal/game/player_give_item.go`.
 
 ## Package Structure
 
@@ -434,6 +435,8 @@ case network.CmdInventoryOp:
 - `HasCraftInputs(...)` / `PreviewCraftInputs(...)` / `ConsumeCraftInputs(...)`
 - `CanFitCraftOutputsOneCycle(...)` (strict pre-start fit check; does not model drop fallback)
 - `GiveCraftOutputOrDrop(...)` (standard give path first, then drop-to-world fallback)
+
+`GiveCraftOutputOrDrop` is specific to crafting's world-drop fallback. Digging and other no-drop rewards use `GiveItem` and handle capacity failure explicitly.
 
 Craft input matching rules:
 - Exact `itemKey` inputs are allocated first

@@ -13,6 +13,10 @@ internal/game/
 ├── game.go              # Main game logic and game loop
 ├── game_auth.go          # Player authentication and spawning
 ├── crafting_service.go    # Craft list visibility + craft runtime integration
+├── action_service.go      # Server-owned gameplay actions and repeat lifecycle
+├── action_cycle.go        # Timed menu-action progress and completion
+├── dig_tile_action.go     # Terrain-to-item digging handler
+├── player_give_item.go    # Shared player item-grant adapter and notifications
 ├── shard.go              # Individual shard management
 ├── shard_manager.go      # Multi-shard coordination
 ├── errors.go             # Common error definitions
@@ -127,6 +131,15 @@ internal/game/
   - Manage cyclic action terminal events (`S2C_CyclicActionFinished`)
   - Delegate cyclic cycle completion to behavior cyclic capability
 - **Key Types**: `ContextActionService`
+
+### Gameplay Actions (`action_service.go`, `action_cycle.go`)
+
+- Definitions live in `data/actions/` and are loaded through `internal/actiondefs`. `ActionService` consumes the registry, while `shard.go` registers one handler per action ID. The registry requires an exact definition-to-handler match.
+- `isRepeatable` controls whether a finished target attempt returns to selection. `execution.repeat: true` continues successful timed cycles on the accepted target without another click. The flags are independent; `plow_tile` uses click-per-attempt selection, while `dig` repeats execution and becomes idle when it stops.
+- `execution.repeat: true` requires an object or tile target and a positive tick duration. A successful terminal handler result (`StopAfterCycle`) keeps that cycle's effect and stamina charge, then ends the sequence without starting another cycle.
+- Timed menu cycles retain their action generation and target. Before applying an effect, check the current cycle, generation, requirements, target, and actual tile-center position. Cancellation and stale completions must not grant items or charge stamina for an unfinished cycle.
+- `dig_tile_action.go` maps Grass→soil, Shallow Water→clay, Mountain→stone, and Sand→sand. It re-reads terrain before each Q10 grant and never modifies the tile. The 20-tick cycle costs exactly 300 stamina only after a successful grant.
+- Player-directed generated items use the shared `player_give_item.go` adapter backed by `InventoryExecutor.GiveItem`; its outcome reports hand fallback and it sends inventory and discovery updates. Digging stops after a successful hand grant or a failed grant. A failed grant costs no action stamina.
 
 ### Crafting (`crafting_service.go`)
 - **Purpose**: Data-driven crafting runtime integrated with cyclic actions and inventory.

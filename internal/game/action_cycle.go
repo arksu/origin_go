@@ -12,8 +12,12 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 	if service == nil || world != service.world || cycle.BehaviorKey != gameActionCycleBehaviorKey {
 		return
 	}
+	current, hasCycle := ecs.GetComponent[components.ActiveCyclicAction](world, playerHandle)
+	if !hasCycle || current != cycle {
+		return
+	}
 	active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)
-	if !exists || active.ActionID != cycle.ActionID || (active.Phase != components.GameActionExecuting && !cycle.ActionCompletionStarted) {
+	if !exists || active.ActionID != cycle.ActionID || active.Generation != cycle.ActionGeneration || (active.Phase != components.GameActionExecuting && !cycle.ActionCompletionStarted) {
 		service.clearCycle(world, playerID, playerHandle, false, "ACTION_CANCELED")
 		return
 	}

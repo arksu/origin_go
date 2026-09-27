@@ -83,10 +83,10 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 3 {
-		t.Fatalf("expected lift, lift_down and plow_tile, got %d", len(registry.All()))
+	if len(registry.All()) != 4 {
+		t.Fatalf("expected lift, lift_down, plow_tile and dig, got %d", len(registry.All()))
 	}
-	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile"}); err != nil {
+	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile", "dig"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"lift", "lift_down"} {
@@ -97,9 +97,15 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 	}
 	plow, _ := registry.Get("plow_tile")
 	if plow.Target.Kind != TargetTile || plow.Target.Approach != ApproachTileCenter || plow.Target.Cursor != "dig" ||
-		!plow.Repeatable() || plow.Execution.Ticks != 20 || plow.Execution.Stamina != 250 ||
+		!plow.Repeatable() || plow.Execution.Repeat || plow.Execution.Ticks != 20 || plow.Execution.Stamina != 250 ||
 		len(plow.Requirements.Skills) != 0 || len(plow.Requirements.Equipment) != 0 {
 		t.Fatalf("invalid plow definition: %#v", plow)
+	}
+	dig, _ := registry.Get("dig")
+	if dig.Target.Kind != TargetTile || dig.Target.Approach != ApproachTileCenter || dig.Target.Cursor != "dig" ||
+		dig.Repeatable() || !dig.Execution.Repeat || dig.Execution.Ticks != 20 || dig.Execution.Stamina != 300 ||
+		len(dig.Requirements.Skills) != 0 || len(dig.Requirements.Equipment) != 0 {
+		t.Fatalf("invalid dig definition: %#v", dig)
 	}
 }
 
@@ -116,5 +122,41 @@ func TestTileCenterApproachValidation(t *testing.T) {
 	definition := Definition{ID: "test", Presentation: Presentation{Label: "Test", MenuIcon: "/assets/test.png"}, Target: Target{Kind: TargetTile, Approach: "unknown"}}
 	if err := validateDefinition(&definition); err == nil {
 		t.Fatal("unknown approach accepted")
+	}
+}
+
+func TestExecutionRepeatValidation(t *testing.T) {
+	base := `{"v":1,"actions":[{"id":"repeat_test","presentation":{"label":"Repeat test","menuIcon":"/assets/cursor/dig.png"},"target":{"kind":"tile","cursor":"dig"},"requirements":{},"execution":{"ticks":4,"stamina":2}}]}`
+	tests := []struct {
+		name       string
+		contents   string
+		wantRepeat bool
+		wantError  bool
+	}{
+		{name: "omitted", contents: base},
+		{name: "false", contents: strings.Replace(base, `"stamina":2`, `"stamina":2,"repeat":false`, 1)},
+		{name: "true", contents: strings.Replace(base, `"stamina":2`, `"stamina":2,"repeat":true`, 1), wantRepeat: true},
+		{name: "targetless", contents: strings.Replace(strings.Replace(base, `"kind":"tile","cursor":"dig"`, `"kind":"none"`, 1), `"stamina":2`, `"stamina":2,"repeat":true`, 1), wantError: true},
+		{name: "instant", contents: strings.Replace(strings.Replace(base, `"ticks":4`, `"ticks":0`, 1), `"stamina":2`, `"stamina":2,"repeat":true`, 1), wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			writeActionFile(t, directory, "repeat.json", test.contents)
+			registry, err := LoadFromDirectory(directory, zap.NewNop())
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "repeat.json") || !strings.Contains(err.Error(), "execution.repeat") {
+					t.Fatalf("expected file-named execution.repeat error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			definition, found := registry.Get("repeat_test")
+			if !found || definition.Execution.Repeat != test.wantRepeat {
+				t.Fatalf("unexpected repeat setting: %#v", definition)
+			}
+		})
 	}
 }

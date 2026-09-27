@@ -1,6 +1,7 @@
 package itemdefs
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -43,4 +44,19 @@ func TestLoadAllItems_RegistersNettleShirtForChestEquipment(t *testing.T) {
 	nettleShirt, ok := registry.GetByKey("nettle_shirt")
 	require.True(t, ok, "nettle_shirt should be loaded")
 	assert.Equal(t, []string{"chest"}, nettleShirt.Allowed.EquipmentSlots)
+}
+
+func TestLoadAllItems_DigResourcesExist(t *testing.T) {
+	registry, err := LoadFromDirectory(filepath.Join("..", "..", "data", "items"), zap.NewNop())
+	require.NoError(t, err)
+
+	for _, key := range []string{"soil", "clay", "stone", "sand"} {
+		definition, exists := registry.GetByKey(key)
+		require.True(t, exists, "missing item %s", key)
+		assert.Equal(t, "items/"+key+".png", definition.Resource)
+		assert.Equal(t, 1, definition.Size.W)
+		assert.Equal(t, 1, definition.Size.H)
+		_, err := os.Stat(filepath.Join("..", "..", "web_new", "public", "assets", "game", definition.Resource))
+		require.NoError(t, err, "missing image for %s", key)
+	}
 }
