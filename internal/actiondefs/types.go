@@ -35,6 +35,7 @@ type Requirements struct {
 type Execution struct {
 	Ticks   int     `json:"ticks,omitempty"`
 	Stamina float64 `json:"stamina,omitempty"`
+	Repeat  bool    `json:"repeat,omitempty"`
 }
 
 type Definition struct {

@@ -74,8 +74,9 @@ const (
 )
 
 type ActionResult struct {
-	Outcome ActionOutcome
-	Reason  string
+	Outcome        ActionOutcome
+	Reason         string
+	StopAfterCycle bool
 }
 
 type ActionHandler interface {
@@ -340,10 +341,10 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 			kind = components.CyclicActionTargetObject
 		}
 		cyclicaction.Start(world, playerHandle, components.ActiveCyclicAction{
-			BehaviorKey: gameActionCycleBehaviorKey, ActionID: definition.ID,
+			BehaviorKey: gameActionCycleBehaviorKey, ActionID: definition.ID, ActionGeneration: active.Generation,
 			TargetKind: kind, TargetID: target.ObjectID, TargetHandle: target.ObjectHandle,
 			HasTargetPosition: definition.Target.Kind == actiondefs.TargetTile, TargetX: target.X, TargetY: target.Y,
-			CycleDurationTicks: uint32(definition.Execution.Ticks), StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
+			CycleDurationTicks: uint32(definition.Execution.Ticks), CycleIndex: 1, StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
 		}, actionanimationdefs.Source{Kind: "menu", ID: definition.ID})
 		return
 	}
@@ -358,7 +359,11 @@ func (service *ActionService) executeHandler(world *ecs.World, playerID types.En
 	result := service.handlers[definition.ID].Start(world, playerID, playerHandle, target, active.Generation)
 	switch result.Outcome {
 	case ActionSucceeded:
-		service.Complete(world, playerID, playerHandle, active.Generation, true, "")
+		if definition.Execution.Repeat {
+			service.completeRepeatingCycle(world, playerID, playerHandle, definition, active, target, result.StopAfterCycle)
+		} else {
+			service.Complete(world, playerID, playerHandle, active.Generation, true, "")
+		}
 	case ActionRejected, ActionFailed:
 		service.Complete(world, playerID, playerHandle, active.Generation, false, result.Reason)
 	case ActionApproaching, ActionDeferred:
@@ -393,6 +398,34 @@ func (service *ActionService) Complete(world *ecs.World, playerID types.EntityID
 			success, reason = false, "LOW_STAMINA"
 		}
 	}
+	service.finishAction(world, playerID, playerHandle, definition, active, success, reason)
+}
+
+func (service *ActionService) completeRepeatingCycle(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget, stopAfterCycle bool) {
+	current, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)
+	cycle, hasCycle := ecs.GetComponent[components.ActiveCyclicAction](world, playerHandle)
+	if !exists || !hasCycle || current != active || cycle.ActionGeneration != active.Generation || !cycle.ActionCompletionStarted {
+		return
+	}
+	if !service.chargeStamina(world, playerHandle, definition.Execution.Stamina) {
+		service.finishAction(world, playerID, playerHandle, definition, active, false, "LOW_STAMINA")
+		return
+	}
+	if stopAfterCycle || service.UnavailableReason(world, playerID, playerHandle, definition) != "" ||
+		definition.Target.Approach == actiondefs.ApproachTileCenter && !atTileCenter(world, playerHandle, target.X, target.Y) ||
+		service.handlers[definition.ID].ValidateTarget(world, playerID, playerHandle, target) != "" {
+		service.finishAction(world, playerID, playerHandle, definition, active, true, "")
+		return
+	}
+	cycle.CycleElapsedTicks = 0
+	cycle.CycleIndex++
+	cycle.StartedTick = ecs.GetResource[ecs.TimeState](world).Tick
+	cycle.ActionCompletionStarted = false
+	ecs.AddComponent(world, playerHandle, cycle)
+	cyclicaction.Continue(world, playerHandle)
+}
+
+func (service *ActionService) finishAction(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, success bool, reason string) {
 	if !success && reason != "" {
 		service.alert(playerID, reason)
 	}
@@ -405,7 +438,8 @@ func (service *ActionService) Complete(world *ecs.World, playerID types.EntityID
 	if !definition.Repeatable() {
 		canSelect = canSelect && staminaReason(world, playerHandle, definition) == ""
 	}
-	if !active.DirectAttempt && definition.Target.Kind != actiondefs.TargetNone && (!success || definition.Repeatable()) && canSelect {
+	selectAgain := definition.Repeatable() || !success && !definition.Execution.Repeat
+	if !active.DirectAttempt && definition.Target.Kind != actiondefs.TargetNone && selectAgain && canSelect {
 		active.Phase = components.GameActionSelecting
 		active.TargetID, active.TargetHandle = 0, types.InvalidHandle
 		active.TargetX, active.TargetY = 0, 0

@@ -367,6 +367,10 @@ minimalDef := itemdefs.ItemDef{
 
 ## Integration with Other Packages
 
+### Dig Materials
+
+`data/items/common.jsonc` defines `soil` (3011), `clay` (3012), and `sand` (3013); `stone` (3008) already exists. Their resources are `items/<key>.png` under `web_new/public/assets/game/`. Digging creates one item at quality 10 through the standard player grant path; a later quality mechanic may replace that fixed value. Keep definition IDs unique and verify every resource path when changing these entries.
+
 ### Inventory System
 
 The inventory system uses `itemdefs` for:

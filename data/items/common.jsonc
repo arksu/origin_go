@@ -82,6 +82,39 @@
         "w": 1,
         "h": 1
       }
+    },
+    {
+      "defId": 3011,
+      "key": "soil",
+      "name": "Soil",
+      "resource": "items/soil.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 3012,
+      "key": "clay",
+      "name": "Clay",
+      "resource": "items/clay.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 3013,
+      "key": "sand",
+      "name": "Sand",
+      "resource": "items/sand.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
     }
   ]
 }

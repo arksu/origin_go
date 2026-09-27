@@ -138,6 +138,9 @@ func validateDefinition(definition *Definition) error {
 	if definition.Execution.Ticks < 0 || definition.Execution.Stamina < 0 || math.IsNaN(definition.Execution.Stamina) || math.IsInf(definition.Execution.Stamina, 0) {
 		return fmt.Errorf("execution ticks and stamina must be finite and non-negative")
 	}
+	if definition.Execution.Repeat && (definition.Execution.Ticks == 0 || definition.Target.Kind == TargetNone) {
+		return fmt.Errorf("execution.repeat requires a timed object or tile target")
+	}
 	for index, skill := range definition.Requirements.Skills {
 		skill = strings.TrimSpace(skill)
 		if !identifierPattern.MatchString(skill) {

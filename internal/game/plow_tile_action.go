@@ -1,9 +1,6 @@
 package game
 
 import (
-	"math"
-
-	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/types"
@@ -20,12 +17,8 @@ func (handler *plowTileActionHandler) UnavailableReason(*ecs.World, types.Entity
 	return ""
 }
 
-func plowTileCoordinates(target ActionTarget) (int, int) {
-	return int(math.Floor(target.X / constt.CoordPerTile)), int(math.Floor(target.Y / constt.CoordPerTile))
-}
-
 func (handler *plowTileActionHandler) ValidateTarget(_ *ecs.World, _ types.EntityID, _ types.Handle, target ActionTarget) string {
-	tileX, tileY := plowTileCoordinates(target)
+	tileX, tileY := tileCoordinates(target)
 	tileID, found := handler.terrain.GetTileID(tileX, tileY)
 	if !found {
 		return "ACTION_INVALID_TARGET"
@@ -42,7 +35,7 @@ func (handler *plowTileActionHandler) Start(world *ecs.World, playerID types.Ent
 	if reason := handler.ValidateTarget(world, playerID, player, target); reason != "" {
 		return ActionResult{Outcome: ActionFailed, Reason: reason}
 	}
-	tileX, tileY := plowTileCoordinates(target)
+	tileX, tileY := tileCoordinates(target)
 	if !handler.terrain.SetTile(tileX, tileY, types.TilePlowed) {
 		return ActionResult{Outcome: ActionFailed, Reason: "ACTION_INVALID_TARGET"}
 	}
