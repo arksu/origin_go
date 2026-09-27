@@ -30,14 +30,15 @@ type Preview struct {
 }
 
 type Definition struct {
-	Key         string    `json:"key"`
-	Source      Source    `json:"source"`
-	Actor       string    `json:"actor"`
-	Variants    []Variant `json:"variants"`
-	Eligibility []string  `json:"eligibility"`
-	Facing      string    `json:"facing"`
-	BlendMs     float64   `json:"blend_ms"`
-	Frame       Frame     `json:"frame"`
-	Preview     *Preview  `json:"preview,omitempty"`
-	SourceFile  string    `json:"-"`
+	Key                  string    `json:"key"`
+	Source               Source    `json:"source"`
+	Actor                string    `json:"actor"`
+	Variants             []Variant `json:"variants"`
+	Eligibility          []string  `json:"eligibility"`
+	Facing               string    `json:"facing"`
+	BlendMs              float64   `json:"blend_ms"`
+	Frame                Frame     `json:"frame"`
+	UnbindEquipmentSlots []string  `json:"unbind_equipment_slots,omitempty"`
+	Preview              *Preview  `json:"preview,omitempty"`
+	SourceFile           string    `json:"-"`
 }

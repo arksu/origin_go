@@ -183,7 +183,7 @@ export class ActorInstance {
     this.equipment.clear()
     replacements.forEach((piece, slot) => {
       this.equipment.set(slot, piece)
-      piece.parent.add(piece.root)
+      this.updateEquipmentAttachment(slot, piece)
     })
     this.requestedEquipment = desired
     this.equipmentReady = true
@@ -243,6 +243,12 @@ export class ActorInstance {
     if (quaternion) root.quaternion.set(...quaternion)
     else root.rotation.set(...rotation)
     root.scale.setScalar(scale)
+  }
+
+  private updateEquipmentAttachment(slot: EquipmentSlot, piece: EquipmentInstance): void {
+    // Retain the loaded object and local attachment transform while the clip owns the slot.
+    if (this.actionPlayer.unboundEquipmentSlots.has(slot)) piece.root.removeFromParent()
+    else if (piece.root.parent !== piece.parent) piece.parent.add(piece.root)
   }
 
   private disposeEquipment(piece: EquipmentInstance): void {
@@ -364,7 +370,7 @@ export class ActorInstance {
     // Baked8 holds one authored pose through position settling instead of blending it at display rate.
     if (visualWalking && !holdingBakedWalkFrame) this.walkPhase = ((phase + this.walkPhaseOffset) % 1 + 1) % 1
     const frame = this.outputFrame
-    const actionIdentity = `${this.actionPlayer.samples.map(sample => sample.clip).join(',')}/${frame.width}/${frame.height}/${frame.origin_x}/${frame.origin_y}`
+    const actionIdentity = `${this.actionPlayer.samples.map(sample => sample.clip).join(',')}/${frame.width}/${frame.height}/${frame.origin_x}/${frame.origin_y}/${[...this.actionPlayer.unboundEquipmentSlots].sort().join(',')}`
     const actionPose = this.actionPlayer.samples.map(sample => `${sample.clip}:${sample.phase}:${sample.weight}`).join(',')
     const key = `${settings.mode}/${name}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}/${actionPose}/${actionIdentity}`
     if (!facingChanged && key === this.lastPose && (this.knockedOut || carrying || !this.armLayers?.transitioning)) return false
@@ -406,6 +412,7 @@ export class ActorInstance {
     if (!this.knockedOut && !carrying) this.armLayers?.apply(now)
     if (!this.knockedOut) this.actionLayers?.apply(this.actionPlayer.samples, bakedMode, ACTOR_RENDER.actionSamples)
     for (const [slot, piece] of this.equipment) {
+      this.updateEquipmentAttachment(slot, piece)
       piece.root.visible = !(carrying && armForSlot(slot))
       for (const mesh of piece.meshes) {
         if (!mesh.morphTargetInfluences || !mesh.morphTargetDictionary) continue
@@ -438,13 +445,25 @@ export class ActorInstance {
     return this.knockedOut ? { width: ACTOR_RENDER.cellSize, height: ACTOR_RENDER.cellSize, origin_x: ACTOR_RENDER.anchorX, origin_y: ACTOR_RENDER.knockedOutAnchorY } : this.actionPlayer.frame
   }
 
+  releaseGPUResources(): void {
+    // Per-instance skin textures also hold disposal listeners from the old context.
+    for (const skin of this.skins.values()) {
+      skin.texture.dispose()
+      skin.skeleton.boneTexture?.dispose()
+    }
+  }
+
   setLowDetail(enabled: boolean): void {
     if (this.lowDetail === enabled || !this.model) return
     this.lowDetail = enabled
-    this.model.traverse((object) => {
+    const updateLod = (object: Object3D) => {
       if (object.userData.lod === 0) object.visible = !enabled
       if (object.userData.lod === 1) object.visible = enabled
-    })
+    }
+    this.model.traverse(updateLod)
+    for (const piece of this.equipment.values()) {
+      if (!piece.root.parent) piece.root.traverse(updateLod)
+    }
     this.immediateRender = true
     this.revision++
   }

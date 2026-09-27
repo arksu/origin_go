@@ -210,3 +210,63 @@ test('ObjectView forwards latest state after asynchronous readiness, cancellatio
   assert.equal(inputPhases.length, count, 'destroyed view cannot consume a late result')
   assert.equal(ACTOR_RENDER.cellSize, baseFrame.width)
 })
+
+
+test('unbind slots follow displayed layers through entry, terminal holds, repeats and overlapping blends', () => {
+  const player = new ActionAnimationPlayer(baseFrame)
+  player.configure(catalog, first.actor)
+  const slots = () => [...player.unboundEquipmentSlots].sort()
+  const hands = [...first.unbind_equipment_slots!].sort()
+  player.update(context, 0)
+  assert.deepEqual(slots(), [])
+  player.setInput({ key: first.key, phase: .4, facingAngle: 1 })
+  player.update(context, 0)
+  assert.equal(player.samples.length, 0, 'blend starts at zero weight')
+  assert.deepEqual(slots(), hands, 'detach before the first contributing pose')
+  player.update(context, 120)
+  player.setInput({ key: first.key, phase: 1, facingAngle: 1 })
+  player.update(context, 10000)
+  assert.deepEqual(slots(), hands, 'the confirmed endpoint continues to own its slots')
+  player.setInput({ key: first.key, phase: 0, facingAngle: 1 })
+  player.update(context, 10001)
+  assert.deepEqual(slots(), hands, 'successor cycles must not flash equipment')
+  player.setInput({ key: second.key, phase: .5 })
+  player.update(context, 11000)
+  assert.deepEqual(slots(), [...hands, ...second.unbind_equipment_slots!].sort())
+  player.update(context, 11000 + first.blend_ms)
+  assert.deepEqual(slots(), second.unbind_equipment_slots)
+  player.setInput(null)
+  player.update(context, 12000)
+  assert.deepEqual(slots(), second.unbind_equipment_slots, 'retain unbind during blend out')
+  player.update(context, 12000 + second.blend_ms)
+  assert.deepEqual(slots(), [])
+})
+
+test('unbind defaults, zero-duration blending, eligibility and unknown states preserve ordinary presentation', () => {
+  const { unbind_equipment_slots: ignored, ...legacy } = second
+  void ignored
+  for (const definition of [legacy, { ...second, unbind_equipment_slots: [] }]) {
+    const player = new ActionAnimationPlayer(baseFrame)
+    player.configure({ [definition.key]: definition }, definition.actor)
+    player.setInput({ key: definition.key, phase: .5 })
+    player.update(context, 0); player.update(context, 1000)
+    assert.equal(player.unboundEquipmentSlots.size, 0)
+  }
+  const player = new ActionAnimationPlayer(baseFrame, () => {})
+  player.configure({ [first.key]: { ...first, blend_ms: 0 } }, first.actor)
+  for (const suppressed of [{ ...context, stationary: false }, { ...context, carrying: true }, { ...context, knockedOut: true }]) {
+    player.setInput({ key: first.key, phase: .6, facingAngle: 1 })
+    player.update(suppressed, 0)
+    assert.equal(player.unboundEquipmentSlots.size, 0)
+    player.update(context, 1)
+    assert.deepEqual([...player.unboundEquipmentSlots], first.unbind_equipment_slots)
+    player.update(suppressed, 2)
+    assert.equal(player.unboundEquipmentSlots.size, 0)
+  }
+  player.setInput({ key: 'unknown', phase: .5 })
+  player.update(context, 3)
+  assert.equal(player.unboundEquipmentSlots.size, 0)
+  player.setInput(null)
+  player.update(context, 4)
+  assert.equal(player.unboundEquipmentSlots.size, 0)
+})

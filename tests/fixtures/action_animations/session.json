@@ -1,0 +1,24 @@
+{
+  "binding_file": "data/action_animations/tree.json",
+  "target_object": "tree_birch",
+  "target_type": 1,
+  "equipment_item": "stone_axe",
+  "equipment_def_id": 1002,
+  "origin": {
+    "x": 5000,
+    "y": 5000
+  },
+  "target": {
+    "x": 5024,
+    "y": 5000
+  },
+  "near": {
+    "x": 5000,
+    "y": 5040
+  },
+  "far": {
+    "x": 10000,
+    "y": 10000
+  },
+  "target_ready_delay_ms": 31000
+}

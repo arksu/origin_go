@@ -17,5 +17,21 @@
       "duration_ms": 2000,
       "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }]
     }
+  },
+  {
+    "key": "tree_take_branch",
+    "source": { "kind": "context", "namespace": "tree", "id": "take_branch" },
+    "actor": "character/male_commoner",
+    "variants": [{ "clip": "pick_up", "equipment": [] }],
+    "eligibility": ["stationary", "not_carrying", "not_knocked_out"],
+    "facing": "target",
+    "blend_ms": 120,
+    "frame": { "width": 192, "height": 224, "origin_x": 96, "origin_y": 180 },
+    "unbind_equipment_slots": ["left_hand", "right_hand"],
+    "preview": {
+      "label": "Сбор ветки",
+      "duration_ms": 1000,
+      "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }]
+    }
   }]
 }

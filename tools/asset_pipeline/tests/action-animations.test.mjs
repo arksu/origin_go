@@ -60,6 +60,7 @@ test('def-only command publishes the two bindings without exporting or changing 
   const projection = JSON.parse(await readArtifact(fixture.publicRoot, catalog.actionAnimations))
   assert.deepEqual(projection.bindings.map(binding => binding.key), definitions.map(binding => binding.key))
   assert.ok(projection.bindings.every(binding => !('source' in binding)))
+  assert.deepEqual(projection.bindings.map(binding => binding.unbind_equipment_slots), definitions.map(binding => binding.unbind_equipment_slots))
   assert.equal(await runCli(['publish-action-animations', 'all'], { stderr: () => {} }), 1)
 })
 

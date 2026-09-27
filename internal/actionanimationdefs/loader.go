@@ -125,6 +125,13 @@ func validate(binding *Definition) error {
 			return fmt.Errorf("variants[%d].equipment: %w", index, err)
 		}
 	}
+	seenSlots := map[string]bool{}
+	for index, slot := range binding.UnbindEquipmentSlots {
+		if !validEquipmentSlot(slot) || seenSlots[slot] {
+			return fmt.Errorf("unbind_equipment_slots[%d]: unknown or duplicate slot %q", index, slot)
+		}
+		seenSlots[slot] = true
+	}
 	if binding.Eligibility == nil {
 		return fmt.Errorf("eligibility must be an array")
 	}
@@ -195,9 +202,7 @@ func validateEquipment(equipment []Equipment) error {
 	}
 	seen := map[string]bool{}
 	for index, item := range equipment {
-		switch item.Slot {
-		case "head", "chest", "legs", "feet", "left_hand", "right_hand", "back", "neck", "ring1", "ring2":
-		default:
+		if !validEquipmentSlot(item.Slot) {
 			return fmt.Errorf("[%d].slot is unknown: %q", index, item.Slot)
 		}
 		if seen[item.Slot] {
@@ -209,4 +214,13 @@ func validateEquipment(equipment []Equipment) error {
 		}
 	}
 	return nil
+}
+
+func validEquipmentSlot(slot string) bool {
+	switch slot {
+	case "head", "chest", "legs", "feet", "left_hand", "right_hand", "back", "neck", "ring1", "ring2":
+		return true
+	default:
+		return false
+	}
 }

@@ -13,6 +13,7 @@ export interface ActionAnimationDefinition {
   facing: 'preserve' | 'target'
   blend_ms: number
   frame: ActionAnimationFrame
+  unbind_equipment_slots?: EquipmentSlot[]
   preview?: { label: string; duration_ms: number; equipment: ActionAnimationEquipment[] }
 }
 export interface ActionAnimationBinding extends ActionAnimationDefinition { source: ActionAnimationSource }
@@ -54,7 +55,7 @@ function equipment(value: unknown, label: string): ActionAnimationEquipment[] {
 }
 
 function parseBinding(value: unknown, label: string, withSource: boolean): ActionAnimationDefinition | ActionAnimationBinding {
-  const item = object(value, label, ['key', 'actor', 'variants', 'eligibility', 'facing', 'blend_ms', 'frame', 'preview', ...(withSource ? ['source'] : [])])
+  const item = object(value, label, ['key', 'actor', 'variants', 'eligibility', 'facing', 'blend_ms', 'frame', 'preview', 'unbind_equipment_slots', ...(withSource ? ['source'] : [])])
   const variants = array(item.variants, `${label}.variants`).map((raw, index) => {
     const field = `${label}.variants[${index}]`, variant = object(raw, field, ['clip', 'equipment'])
     return { clip: string(variant.clip, `${field}.clip`), equipment: equipment(variant.equipment, `${field}.equipment`) }
@@ -73,6 +74,11 @@ function parseBinding(value: unknown, label: string, withSource: boolean): Actio
     key: string(item.key, `${label}.key`), actor: string(item.actor, `${label}.actor`, /^character\/[a-zA-Z0-9_-]{1,128}$/),
     variants, eligibility: eligibility as ActionAnimationEligibility[], facing: item.facing,
     blend_ms: number(item.blend_ms ?? 0, `${label}.blend_ms`, 0), frame,
+  }
+  if (item.unbind_equipment_slots !== undefined) {
+    const slots = array(item.unbind_equipment_slots, `${label}.unbind_equipment_slots`)
+    if (slots.some(slot => typeof slot !== 'string' || !SLOTS.has(slot)) || new Set(slots).size !== slots.length) throw new Error(`${label}.unbind_equipment_slots: unknown or duplicate slot`)
+    result.unbind_equipment_slots = slots as EquipmentSlot[]
   }
   if (item.preview !== undefined) {
     const preview = object(item.preview, `${label}.preview`, ['label', 'duration_ms', 'equipment'])

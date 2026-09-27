@@ -15,6 +15,7 @@ import { COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSet
 import { actorYawForScreenAngle } from '../src/game/actors/facing'
 import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
 import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
+import type { ActionAnimationDefinition } from '../src/types/actionAnimationDefs'
 import type { EquipmentDefinition } from '../src/game/actors/equipment'
 import { Texture } from 'pixi.js'
 import { ShallowWaterVisual } from '../src/game/actors/ShallowWaterVisual'
@@ -220,7 +221,8 @@ function prop() {
 }
 
 class FixtureCache {
-  get catalog() { return Promise.resolve({ manifests: {}, actionAnimations: {}, equipment: catalog }) }
+  actionAnimations: Record<string, ActionAnimationDefinition> = {}
+  get catalog() { return Promise.resolve({ manifests: {}, actionAnimations: this.actionAnimations, equipment: catalog }) }
   readonly assets = new Map<string, ActorBundle>()
   readonly pending = new Map<string, Promise<ActorBundle>>()
   readonly references = new Map<string, number>()
@@ -251,10 +253,12 @@ const catalog: Record<string, EquipmentDefinition> = {
   deferred: { kind: 'deferred' },
 }
 
-async function fixtureActor() {
+async function fixtureActor(actionAnimations: Record<string, ActionAnimationDefinition> = {}) {
   const cache = new FixtureCache()
+  cache.actionAnimations = actionAnimations
   const rig = fixtureRig()
-  cache.assets.set(COMMONER_ASSET_ID, gltf(rig.scene, rig.animations))
+  const bundle = gltf(rig.scene, rig.animations)
+  cache.assets.set(COMMONER_ASSET_ID, { ...bundle, manifest: { ...bundle.manifest, id: COMMONER_ASSET_ID } })
   cache.assets.set(axeURL, prop())
   cache.assets.set(shieldURL, prop())
   const actor = new ActorInstance(cache)
@@ -594,4 +598,116 @@ test('actor readiness failure releases its acquired model lease', async () => {
   assert.equal(actor.isReady, false)
   assert.equal(cache.liveReferences, 0)
   actor.destroy()
+})
+
+
+const visualUnbind: ActionAnimationDefinition = {
+  key: 'test_visual_unbind', actor: COMMONER_ASSET_ID,
+  variants: [{ clip: 'hold', equipment: [{ slot: 'right_hand', visual_key: 'stone_axe' }] }],
+  eligibility: ['stationary', 'not_carrying'], facing: 'preserve', blend_ms: 120,
+  frame: { width: 128, height: 128, origin_x: 64, origin_y: 116 },
+  unbind_equipment_slots: ['right_hand'],
+}
+
+test('visual unbind retains the same equipment object, transform, selection and lease until rebind', async () => {
+  const { actor, cache } = await fixtureActor({ [visualUnbind.key]: visualUnbind })
+  try {
+    const equipped = [{ slot: 'right_hand' as const, visualKey: 'stone_axe' }, { slot: 'left_hand' as const, visualKey: 'shield' }]
+    await actor.setEquipment(equipped)
+    const right = actor.root.getObjectByName('grip_r')!, left = actor.root.getObjectByName('forearm_l')!
+    const piece = right.children[0]!, other = left.children[0]!
+    const transform = piece.matrix.toArray(), calls = cache.calls.length, references = cache.liveReferences
+    const now = performance.now() + 1000
+    actor.updatePose(now); actor.acknowledgeRender()
+    actor.setActionAnimation({ key: visualUnbind.key, phase: .5 })
+    assert.equal(actor.updatePose(now), true, 'entry with identical base frame must invalidate the render')
+    assert.equal(actor.needsImmediateRender, true)
+    assert.equal(piece.parent, null)
+    assert.equal(other.parent, left)
+    assert.deepEqual(actor.equippedVisuals, equipped, 'selection still sees authoritative equipment')
+    actor.updatePose(now + 120)
+    actor.setActionAnimation({ key: visualUnbind.key, phase: 1 })
+    actor.updatePose(now + 10000)
+    assert.equal(piece.parent, null)
+    actor.setActionAnimation({ key: visualUnbind.key, phase: 0 })
+    actor.updatePose(now + 10001)
+    assert.equal(piece.parent, null)
+    actor.setActionAnimation(null)
+    actor.updatePose(now + 10100)
+    assert.equal(piece.parent, null)
+    actor.updatePose(now + 10220)
+    assert.equal(right.children[0], piece)
+    assert.deepEqual(piece.matrix.toArray(), transform)
+    assert.equal(cache.calls.length, calls, 'rebind must not acquire the asset again')
+    assert.equal(cache.liveReferences, references)
+  } finally { actor.destroy() }
+  assert.equal(cache.liveReferences, 0)
+})
+
+test('late equipment, swaps and cancellation use the current unbind state without reviving replaced objects', async () => {
+  const definition = { ...visualUnbind, variants: [{ clip: 'hold', equipment: [] }], blend_ms: 0,
+    unbind_equipment_slots: ['left_hand' as const, 'right_hand' as const] }
+  const { actor, cache } = await fixtureActor({ [definition.key]: definition })
+  try {
+    await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }])
+    const right = actor.root.getObjectByName('grip_r')!, left = actor.root.getObjectByName('forearm_l')!
+    const old = right.children[0]!
+    actor.setActionAnimation({ key: definition.key, phase: .4 })
+    actor.updatePose()
+    let finish!: (asset: ActorBundle) => void
+    cache.pending.set(shieldURL, new Promise(resolve => { finish = resolve }))
+    const loading = actor.setEquipment([{ slot: 'left_hand', visualKey: 'shield' }])
+    actor.updatePose()
+    assert.equal(old.parent, null)
+    finish(prop()); await loading
+    assert.equal(left.children.length, 0, 'late new equipment must remain detached')
+    assert.equal(cache.references.get(axeURL), 0, 'replaced detached equipment is released')
+    assert.equal(cache.references.get(shieldURL), 1)
+    actor.setActionAnimation(null); actor.updatePose()
+    assert.equal(left.children.length, 1)
+    assert.equal(right.children.length, 0)
+    assert.equal(old.parent, null)
+    const current = left.children[0]!
+    actor.setActionAnimation({ key: definition.key, phase: .7 }); actor.updatePose()
+    assert.equal(current.parent, null)
+    cache.pending.set(shieldURL, new Promise(resolve => { finish = resolve }))
+    const afterCancel = actor.setEquipment([{ slot: 'left_hand', visualKey: 'shield' }])
+    actor.setActionAnimation(null); actor.updatePose()
+    finish(prop()); await afterCancel
+    assert.equal(left.children.length, 1, 'canceled unbind must not affect a later load')
+    assert.notEqual(left.children[0], current)
+    assert.equal(current.parent, null)
+  } finally { actor.destroy() }
+  assert.equal(cache.liveReferences, 0)
+})
+
+test('detached equipment honors LOD, carry, knockout and destruction during a pending replacement', async () => {
+  const definition = { ...visualUnbind, variants: [{ clip: 'hold', equipment: [] }], blend_ms: 0 }
+  const { actor, cache } = await fixtureActor({ [definition.key]: definition })
+  const sourceMesh = cache.assets.get(axeURL)!.scene.getObjectByName('test_prop')!
+  sourceMesh.userData.lod = 0
+  await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }])
+  const right = actor.root.getObjectByName('grip_r')!, piece = right.children[0]!
+  actor.setActionAnimation({ key: definition.key, phase: .5 }); actor.updatePose()
+  actor.setLowDetail(true)
+  assert.equal(piece.getObjectByName('test_prop')!.visible, false)
+  actor.setLowDetail(false)
+  assert.equal(piece.getObjectByName('test_prop')!.visible, true)
+  actor.carrying = true; actor.updatePose()
+  assert.equal(piece.parent, right)
+  assert.equal(piece.visible, false, 'carry visibility still wins after rebind')
+  actor.carrying = false; actor.updatePose()
+  assert.equal(piece.parent, null)
+  actor.knockedOut = true; actor.updatePose()
+  assert.equal(piece.parent, right)
+  actor.knockedOut = false; actor.updatePose()
+  assert.equal(piece.parent, null)
+  let finish!: (asset: ActorBundle) => void
+  cache.pending.set(shieldURL, new Promise(resolve => { finish = resolve }))
+  const loading = actor.setEquipment([{ slot: 'left_hand', visualKey: 'shield' }])
+  actor.destroy()
+  finish(prop()); await loading
+  assert.equal(cache.liveReferences, 0)
+  assert.equal(piece.parent, null)
+  assert.equal(actor.root.children.length, 0)
 })

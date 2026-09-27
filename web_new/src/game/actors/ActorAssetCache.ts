@@ -213,6 +213,16 @@ export class ActorAssetCache {
   }
   get loadedCount(): number { return [...this.entries.values()].filter(entry => entry.asset).length }
 
+  releaseGPUResources(): void {
+    // Remove disposal listeners from the lost context before Three creates new maps.
+    // Keep decoded geometry and images so live and detached equipment can upload again.
+    const loaded = [...this.entries.values()].flatMap(entry => entry.asset ? [entry.asset] : [])
+    const owned = resources(loaded)
+    for (const entry of this.textures.values()) if (entry.asset) owned.textures.add(entry.asset)
+    owned.geometries.forEach(geometry => geometry.dispose())
+    owned.textures.forEach(texture => texture.dispose())
+  }
+
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
