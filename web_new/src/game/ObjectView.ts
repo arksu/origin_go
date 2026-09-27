@@ -21,11 +21,11 @@ import {
 } from '@/constants/render'
 import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
 import type { ActorHandle, ActorRenderer } from './actors/ActorRenderer'
-import { ACTOR_RENDER } from './actors/config'
 import { ShallowWaterVisual } from './actors/ShallowWaterVisual'
 import { SHALLOW_WATER } from './actors/shallowWaterConfig'
 import { TILE_SHALLOW_WATER } from './tiles/tileIds'
 import type { EquippedVisual } from '../types/characterVisual'
+import { actionAnimationPhase, type CharacterActionAnimationState } from '../types/actionAnimation'
 import { fxManager } from './fx/FxManager'
 import type { ParticleEmitter } from './fx/ParticleEmitter'
 
@@ -54,6 +54,7 @@ export interface ObjectViewOptions {
   resourcePath: string
   position: { x: number; y: number }
   size: { x: number; y: number }
+  actionAnimation?: CharacterActionAnimationState
 }
 
 /**
@@ -108,6 +109,8 @@ export class ObjectView {
   private actorHandle: ActorHandle | null = null
   private shallowWater: ShallowWaterVisual | null = null
   private carrying = false
+  private actionAnimation: CharacterActionAnimationState | null = null
+  private actionFrameKey = ''
   private particleEmitter: ParticleEmitter | null = null
 
   constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer, private readonly rippleTextures?: readonly Texture[]) {
@@ -115,6 +118,7 @@ export class ObjectView {
     this.typeId = options.typeId
     this.position = options.position
     this.size = options.size
+    this.actionAnimation = options.actionAnimation ?? null
 
     this.container = new Container()
     this.container.sortableChildren = true
@@ -601,11 +605,16 @@ export class ObjectView {
     if (this.actorHandle) {
       const cosine = Math.cos(this.container.rotation)
       const sine = Math.sin(this.container.rotation)
-      const frameHeight = this.actorHandle.actor.usesChopFrame || this.actorHandle.sprite.texture.height > ACTOR_RENDER.cellSize ? ACTOR_RENDER.chopFrameHeight : ACTOR_RENDER.cellSize
-      const frameWidth = frameHeight > ACTOR_RENDER.cellSize ? ACTOR_RENDER.chopFrameWidth : ACTOR_RENDER.cellSize
-      const anchorY = this.knockedOutPose ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY + (frameHeight > ACTOR_RENDER.cellSize ? ACTOR_RENDER.chopFrameTop : 0) - this.actorHandle.immersionPx
-      for (const localX of [-frameWidth / 2, frameWidth / 2]) {
-        for (const localY of [-anchorY, frameHeight - anchorY]) {
+      const frame = this.actorHandle.actor.outputFrame
+      const anchorY = frame.origin_y - this.actorHandle.immersionPx
+      // A throttled renderer may still display the preceding frame this tick.
+      const sprite = this.actorHandle.sprite
+      const left = Math.min(-frame.origin_x, sprite.x)
+      const right = Math.max(frame.width - frame.origin_x, sprite.x + sprite.texture.width)
+      const top = Math.min(-anchorY, sprite.y)
+      const bottom = Math.max(frame.height - anchorY, sprite.y + sprite.texture.height)
+      for (const localX of [left, right]) {
+        for (const localY of [top, bottom]) {
           minX = Math.min(minX, cx + localX * cosine - localY * sine)
           maxX = Math.max(maxX, cx + localX * cosine - localY * sine)
           minY = Math.min(minY, cy + localX * sine + localY * cosine)
@@ -1090,6 +1099,29 @@ export class ObjectView {
     actor.carrying = this.carrying && !this.knockedOutPose
     actor.knockedOut = this.knockedOutPose
     actor.hovered = this.isHovered
+  }
+
+  setActionAnimation(state: CharacterActionAnimationState | null): void {
+    if (!this.isDestroyed) this.actionAnimation = state
+  }
+
+  updateActionAnimation(nowMs: number, serverNowMs: number): boolean {
+    if (!this.actorHandle || this.isDestroyed) return false
+    const actor = this.actorHandle.actor
+    const state = this.actionAnimation
+    const target = state?.targetPosition
+    actor.setActionAnimation(state?.animationKey ? {
+      key: state.animationKey,
+      phase: actionAnimationPhase(state, serverNowMs),
+      facingAngle: target ? screenFacingAngleFromDisplacement(target.x - this.position.x, target.y - this.position.y) ?? undefined : undefined,
+    } : null)
+    actor.prepareActionAnimation(nowMs)
+    const frame = actor.outputFrame
+    const sprite = this.actorHandle.sprite
+    const key = `${frame.width}/${frame.height}/${frame.origin_x}/${frame.origin_y}/${sprite.x}/${sprite.y}/${sprite.texture.width}/${sprite.texture.height}`
+    if (key === this.actionFrameKey) return false
+    this.actionFrameKey = key
+    return true
   }
 
   setCarrying(enabled: boolean): void {

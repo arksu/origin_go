@@ -50,6 +50,7 @@ tools/assets build equipment/stone_axe
 tools/assets build character/male_commoner --animations --clip walk
 tools/assets build character/male_commoner --animations
 tools/assets build all
+tools/assets publish-action-animations
 tools/assets validate all
 tools/assets verify-reproducible all
 ```
@@ -67,6 +68,16 @@ after a build; running actor instances do not hot-reload their asset snapshot.
 Validation checks sources and current published artifacts without publishing.
 Reproducibility compares two clean exports without switching the runtime catalog.
 Stage logs and reports are retained under ignored `build/asset-pipeline/`.
+
+## Action presentation definitions
+
+`data/action_animations/*.json` declares generic source-to-animation bindings.
+`tools/assets publish-action-animations` validates those defs against existing
+manifests and atomically publishes their immutable client projection. It does not
+run Blender or edit saved sources. Full/partial builds validate the effective
+merged catalog as well. Reload the browser and restart the server when deploying
+def changes. See [shared action animations](../features/action-animation-sync.md)
+for the schema, timing contract and extension/rollback procedure.
 
 ## Review
 

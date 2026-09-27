@@ -4,6 +4,7 @@ import { proto } from '@/network/proto/packets.js'
 import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERVAL_MS, CHAT_MAX_MESSAGES } from '@/constants/chat'
 import type { ConnectionState, ConnectionError } from '@/network/types'
 import { isNewerCharacterVisual, type CharacterVisualState } from '@/types/characterVisual'
+import { acceptActionAnimation, type CharacterActionAnimationState } from '@/types/actionAnimation'
 
 export interface Position {
   x: number
@@ -27,6 +28,7 @@ export interface GameObjectData {
   size: { x: number; y: number }
   movement?: EntityMovement
   characterVisual?: CharacterVisualState
+  actionAnimation?: CharacterActionAnimationState
   name?: string
   nameColor?: proto.NicknameColor
 }
@@ -432,6 +434,18 @@ export const useGameStore = defineStore('game', () => {
     if (!entity?.characterVisual || !isNewerCharacterVisual(entity.characterVisual, state)) return false
     entity.characterVisual = state
     return true
+  }
+
+  function updateActionAnimation(entityId: number, state: CharacterActionAnimationState): boolean {
+    const entity = entities.value.get(entityId)
+    if (!entity || !acceptActionAnimation(entity.actionAnimation, state, entity.characterVisual?.generation)) return false
+    entity.actionAnimation = state
+    return true
+  }
+
+  function clearActionAnimation(entityId: number): void {
+    const entity = entities.value.get(entityId)
+    if (entity) delete entity.actionAnimation
   }
 
   function despawnEntity(entityId: number) {
@@ -1165,6 +1179,8 @@ export const useGameStore = defineStore('game', () => {
     spawnEntity,
     updateEntityName,
     updateCharacterVisual,
+    updateActionAnimation,
+    clearActionAnimation,
     despawnEntity,
     updateEntityMovement,
     setPlayerMoveMode,

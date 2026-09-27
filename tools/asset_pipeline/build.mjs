@@ -7,6 +7,7 @@ import { inspectToolchain } from './toolchain.ts'
 import { optimizeExport } from './optimize.mjs'
 import { canonicalJSON, sha256, validateArtifacts, measureArtifacts, compareBuilds } from './report.mjs'
 import { artifactPath, publishCatalog, readArtifact, readCatalog, withPublishLock } from './publish.mjs'
+import { loadActionAnimationDefinitions } from './action-animations.mjs'
 
 const pipelineDirectory = fileURLToPath(new URL('./', import.meta.url))
 export const defaultRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -223,6 +224,7 @@ export async function buildAssets({ root = defaultRoot, target, animations = fal
   const publicRoot = await realpath(join(root, 'web_new/public'))
   return withPublishLock(publicRoot, async () => {
     const previousCatalog = await readCatalog(publicRoot)
+    const actionAnimationDefinitions = await loadActionAnimationDefinitions(root)
     const context = await prepare(root, target, toolPaths, log)
     context.target = target
     const published = animations ? await publishedForPartial(context, publicRoot, previousCatalog, clip) : null
@@ -232,7 +234,7 @@ export async function buildAssets({ root = defaultRoot, target, animations = fal
         retainPublishedModel(bundle, published.get(bundle.manifest.id), publicRoot, context.recipes.get(bundle.manifest.id)), log)
     }
     await checkInputs(context)
-    const catalog = await stage(context.staging, target, 'publication', () => publishCatalog({ publicRoot, previousCatalog, manifests }), log)
+    const catalog = await stage(context.staging, target, 'publication', () => publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions }), log)
     report(log, `publication ${join(publicRoot, 'assets/game/asset-catalog.json')} complete (${manifests.length} assets)`)
     // Publication is committed. A scratch cleanup problem must not report a failed build.
     await rm(context.staging, { recursive: true }).catch(error => { process.stderr.write(`Build committed; staging cleanup failed: ${error.message}\n`) })

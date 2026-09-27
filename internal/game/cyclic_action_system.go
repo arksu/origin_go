@@ -1,6 +1,7 @@
 package game
 
 import (
+	"origin/internal/cyclicaction"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
@@ -137,6 +138,7 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 				active.CycleIndex++
 				active.StartedTick = nowTick
 			})
+			cyclicaction.Continue(w, playerHandle)
 		case contracts.BehaviorCycleDecisionComplete, contracts.BehaviorCycleDecisionCanceled:
 			if decision == contracts.BehaviorCycleDecisionComplete {
 				s.contextActions.completeActiveCyclicAction(playerID, playerHandle)

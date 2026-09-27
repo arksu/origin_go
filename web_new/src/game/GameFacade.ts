@@ -6,6 +6,8 @@ import type { DebugInfo, ScreenPoint } from './types'
 import type { ArmBuildGhostOptions } from './BuildGhostController'
 import type { ArmLiftGhostOptions } from './LiftGhostController'
 import type { EquippedVisual } from '../types/characterVisual'
+import type { CharacterActionAnimationState } from '../types/actionAnimation'
+import type { ObjectViewOptions } from './ObjectView'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import { config } from '@/config'
 
@@ -160,7 +162,11 @@ export class GameFacade {
     this.render?.unloadChunk(x, y, identity)
   }
 
-  spawnObject(options: { entityId: number; typeId: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {
+  setActionAnimation(entityId: number, state: CharacterActionAnimationState | null): void {
+    this.render?.setActionAnimation(entityId, state)
+  }
+
+  spawnObject(options: ObjectViewOptions): void {
     this.render?.spawnObject(options)
   }
 

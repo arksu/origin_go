@@ -11,9 +11,10 @@ const directory = await mkdtemp(join(temporaryRoot, 'character-visual-'))
 try {
   const outfile = join(directory, 'tests.mjs')
   await build({
-    entryPoints: [join(root, 'tests/character-visual.test.ts')], outfile,
+    entryPoints: [join(root, process.argv[2] ?? 'tests/character-visual.test.ts')], outfile,
     bundle: true, platform: 'node', format: 'esm', external: ['three', 'three/*', 'vue', 'pinia'],
-    banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
+    banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url); globalThis.requestAnimationFrame = () => 0; globalThis.cancelAnimationFrame = () => {};' },
+    define: { 'import.meta.env': '{}', '__APP_VERSION__': '"test"', '__BUILD_TIME__': '"test"', '__COMMIT_HASH__': '"test"' },
     alias: { '@': join(root, 'src') }, sourcemap: 'inline',
   })
   const result = spawnSync(process.execPath, ['--test', outfile], { stdio: 'inherit' })

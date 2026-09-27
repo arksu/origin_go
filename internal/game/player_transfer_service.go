@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"origin/internal/cyclicaction"
 
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -235,7 +236,7 @@ func (s *PlayerTransferService) detachTransferSource(
 	ecs.RemoveComponent[components.PendingContextAction](shard.world, playerHandle)
 	ecs.RemoveComponent[components.PendingBuildPlacement](shard.world, playerHandle)
 	ecs.RemoveComponent[components.PendingLiftTransition](shard.world, playerHandle)
-	ecs.RemoveComponent[components.ActiveCyclicAction](shard.world, playerHandle)
+	cyclicaction.Clear(shard.world, playerHandle)
 	ecs.RemoveComponent[components.ActiveCraft](shard.world, playerHandle)
 	ecs.WithComponent(shard.world, playerHandle, func(col *components.Collider) {
 		col.Phantom = nil

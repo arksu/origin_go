@@ -10,6 +10,7 @@ import { ActorAssetCache } from '../src/game/actors/ActorAssetCache'
 import { parseActorManifest, loadActorCatalog, validateAssetURL, type ActorManifest } from '../src/game/actors/ActorAssetCatalog'
 import { bindClips } from '../src/game/actors/ActorClipBinding'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
+import { parseActionAnimationFile } from '../src/types/actionAnimationDefs'
 
 declare const ASSET_TEST_ROOT: string
 const hash = 'a'.repeat(64)
@@ -33,6 +34,43 @@ function makeRig(name: string) {
   }
   return model
 }
+
+test('optional action catalog validates shared definitions, ordered variants and references', async () => {
+  const bindings = parseActionAnimationFile(JSON.parse(await readFile(`${ASSET_TEST_ROOT}/../tests/fixtures/action_animations/bindings.json`, 'utf8')), 'fixture')
+  const projection = { v: 1, bindings: bindings.map(({ source: _source, ...presentation }) => presentation) }
+  const base = compatibleClipManifests()
+  base.id = bindings[0]!.actor
+  for (const binding of bindings) for (const variant of binding.variants) base.clips[variant.clip] = { ...base.clips.idle! }
+  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+  const manifests: Record<string, unknown> = { [base.id]: base }
+  for (const required of bindings.flatMap(binding => binding.variants.flatMap(variant => variant.equipment))) {
+    const id = `equipment/${required.visual_key}`
+    manifests[id] = { ...base, id, kind: 'equipment', rigHash: null, clips: {}, equipmentSlots: [],
+      bindings: { [required.slot]: { slot: required.slot, socket: 'grip_l', grip: 'grip', gripInverse: identity, gripMatrix: identity, policy: { kind: 'ordinary' } },
+        ...((manifests[id] as ActorManifest | undefined)?.bindings ?? {}) } }
+  }
+  const resources = new Map<string, unknown>()
+  const assets = Object.fromEntries(Object.entries(manifests).map(([id, manifest], index) => {
+    const sha256 = String(index + 1).repeat(64), reference = { sha256, bytes: 1, url: `/assets/game/test/${sha256}.json` }
+    resources.set(reference.url, manifest)
+    return [id, reference]
+  }))
+  const actionAnimations = { sha256: hash, bytes: 1, url: `/assets/game/test/${hash}.json` }
+  resources.set(actionAnimations.url, projection)
+  let snapshot: Record<string, unknown> = { schema: 1, assets, actionAnimations }
+  const load = () => loadActorCatalog('/assets/game/asset-catalog.json', async input => Response.json(String(input).endsWith('asset-catalog.json') ? snapshot : resources.get(String(input))))
+  const catalog = await load()
+  assert.deepEqual(catalog.actionAnimations[bindings[0]!.key]!.variants, bindings[0]!.variants)
+  assert.equal(Object.keys(catalog.actionAnimations).length, 2)
+  projection.bindings[0]!.variants.reverse()
+  assert.deepEqual((await load()).actionAnimations[bindings[0]!.key]!.variants, projection.bindings[0]!.variants)
+  projection.bindings[0]!.variants[0]!.clip = 'absent'
+  await assert.rejects(load(), /clip/)
+  snapshot = { schema: 1, assets }
+  assert.deepEqual((await load()).actionAnimations, {})
+  snapshot = { schema: 1, assets, actionAnimations: { url: 'invalid' } }
+  await assert.rejects(load(), /URL|artifact/)
+})
 function makeWalkClip(donor: Group) {
   return [new AnimationClip('walk', 1, [new VectorKeyframeTrack(`${donor.getObjectByName('pelvis')!.name}.position`, [0, 1], [0, 0, 0, 0, .2, 0])])]
 }

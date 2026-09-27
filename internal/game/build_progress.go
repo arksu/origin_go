@@ -1,6 +1,8 @@
 package game
 
 import (
+	"origin/internal/actionanimationdefs"
+	"origin/internal/cyclicaction"
 	"slices"
 	"strings"
 
@@ -146,7 +148,7 @@ func (s *BuildService) startBuildCyclicAction(
 	}
 
 	nowTick := ecs.GetResource[ecs.TimeState](w).Tick
-	ecs.AddComponent(w, playerHandle, components.ActiveCyclicAction{
+	cyclicaction.Start(w, playerHandle, components.ActiveCyclicAction{
 		ActionID:           buildSyntheticActionID,
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           ctx.targetID,
@@ -155,7 +157,7 @@ func (s *BuildService) startBuildCyclicAction(
 		CycleElapsedTicks:  0,
 		CycleIndex:         1,
 		StartedTick:        nowTick,
-	})
+	}, actionanimationdefs.Source{Kind: "build", ID: ctx.buildDef.Key})
 	ecs.MutateComponent[components.Movement](w, playerHandle, func(m *components.Movement) bool {
 		if m.State == constt.StateInteracting {
 			return false

@@ -4,6 +4,7 @@ import { hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { canonicalJSON, sha256 } from './report.mjs'
+import { parseActionAnimationProjection, validateActionAnimationAssets, validateAnimationUniqueness } from '../../web_new/src/types/actionAnimationDefs.ts'
 
 const catalogFile = publicRoot => join(publicRoot, 'assets/game/asset-catalog.json')
 const assetID = /^(character|equipment|world_object)\/[a-z0-9][a-z0-9_-]*$/
@@ -51,6 +52,7 @@ function validateCatalog(publicRoot, catalog) {
     if (!assetID.test(id)) throw new Error(`Invalid catalog asset ID: ${id}`)
     artifactPath(publicRoot, artifact)
   }
+  if (catalog.actionAnimations !== undefined) artifactPath(publicRoot, catalog.actionAnimations)
 }
 
 async function withOwnershipGuard(lockPath, deadline, callback) {
@@ -143,7 +145,7 @@ async function installImmutable(publicRoot, artifact, bytes) {
 
 // Caller holds withPublishLock across reading previousCatalog and this switch.
 // A bundle contains deterministic manifest JSON plus staged {source, artifact} files.
-export async function publishCatalog({ publicRoot, previousCatalog, manifests }) {
+export async function publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions }) {
   validateCatalog(publicRoot, previousCatalog)
   const assets = { ...previousCatalog.assets }
   const owners = new Map(Object.entries(assets).map(([id, artifact]) => [dirname(artifact.url), id]))
@@ -172,6 +174,26 @@ export async function publishCatalog({ publicRoot, previousCatalog, manifests })
     assets[manifest.id] = artifact
   }
   const catalog = { schema: 1, assets }
+  if (actionAnimationDefinitions !== undefined || previousCatalog.actionAnimations !== undefined) {
+    const definitions = actionAnimationDefinitions ?? parseActionAnimationProjection(
+      JSON.parse(await readArtifact(publicRoot, previousCatalog.actionAnimations)), 'published action animations')
+    validateAnimationUniqueness(definitions, 'action animation publication')
+    const effectiveManifests = Object.fromEntries(await Promise.all(Object.entries(assets).map(async ([id, reference]) => {
+      const manifest = JSON.parse(await readArtifact(publicRoot, reference))
+      if (manifest.id !== id) throw new Error(`Manifest ID mismatch: ${id}`)
+      for (const artifact of [manifest.model, ...(manifest.textures ?? []), ...Object.values(manifest.clips ?? {}).map(clip => clip.artifact), ...(manifest.metadata ? [manifest.metadata] : [])]) {
+        await readArtifact(publicRoot, artifact)
+      }
+      return [id, manifest]
+    })))
+    validateActionAnimationAssets(definitions, effectiveManifests, 'action animation publication')
+    const bindings = definitions.map(({ source, ...presentation }) => presentation)
+    // Also validate the exact projection that clients will load.
+    parseActionAnimationProjection({ v: 1, bindings }, 'action animation projection')
+    const bytes = Buffer.from(`${canonicalJSON({ v: 1, bindings })}\n`), hash = sha256(bytes)
+    catalog.actionAnimations = { url: `/assets/game/action_animations/${hash}.json`, sha256: hash, bytes: bytes.length }
+    await installImmutable(publicRoot, catalog.actionAnimations, bytes)
+  }
   const path = catalogFile(publicRoot)
   await safeDirectory(publicRoot, dirname(path))
   const candidate = join(dirname(path), `.catalog-${randomUUID()}.json`)

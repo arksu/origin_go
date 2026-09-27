@@ -18,9 +18,12 @@ type ActiveCyclicAction struct {
 	CycleSoundKey    string
 	CompleteSoundKey string
 
-	TargetKind   CyclicActionTargetKind
-	TargetID     types.EntityID
-	TargetHandle types.Handle
+	TargetKind        CyclicActionTargetKind
+	TargetID          types.EntityID
+	TargetHandle      types.Handle
+	HasTargetPosition bool
+	TargetX           float64
+	TargetY           float64
 
 	CycleDurationTicks      uint32
 	CycleElapsedTicks       uint32

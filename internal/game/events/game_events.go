@@ -4,6 +4,7 @@ import (
 	"context"
 	"origin/internal/charactervisual"
 	constt "origin/internal/const"
+	"origin/internal/cyclicaction"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -228,11 +229,17 @@ func (d *NetworkVisibilityDispatcher) buildObjectSpawn(w *ecs.World, entityID ty
 		d.logger.Error("Unable to build spawn visual", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
 		return nil
 	}
+	animation, err := cyclicaction.Snapshot(w, handle)
+	if err != nil {
+		d.logger.Error("Unable to build spawn action animation", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+		return nil
+	}
 	return &netproto.S2C_ObjectSpawn{
 		EntityId: uint64(entityID), TypeId: info.TypeID, ResourcePath: resource,
 		Name: displayName, NameColor: nicknameColorToProto(nameColor),
 		CarriedByEntityId: carryVisualCarrierIDForHandle(w, handle),
 		CharacterVisual:   visual,
+		ActionAnimation:   animation,
 		Position: &netproto.EntityPosition{
 			Position: &netproto.Position{X: int32(transform.X), Y: int32(transform.Y)},
 			Size:     size,
@@ -272,7 +279,11 @@ func (d *NetworkVisibilityDispatcher) sendObjectSpawn(w *ecs.World, shard *game.
 		d.logger.Error("Unable to encode ObjectSpawn", zap.Error(err))
 		return
 	}
-	client.Send(encoded)
+	if spawn.ActionAnimation != nil {
+		client.SendCritical(encoded)
+	} else {
+		client.Send(encoded)
+	}
 }
 
 func (d *NetworkVisibilityDispatcher) handleEntityDespawn(ctx context.Context, e eventbus.Event) error {

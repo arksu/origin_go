@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"origin/internal/actionanimationdefs"
 	"origin/internal/actiondefs"
 	"origin/internal/builddefs"
 	"origin/internal/config"
@@ -84,6 +85,11 @@ func main() {
 		logger.Fatal("Failed to load action definitions", zap.Error(err))
 	}
 	actiondefs.SetGlobal(actionRegistry)
+	animationRegistry, err := actionanimationdefs.LoadFromDirectory("./data/action_animations", logger)
+	if err != nil {
+		logger.Fatal("Failed to load action animation definitions", zap.Error(err))
+	}
+	actionanimationdefs.SetGlobal(animationRegistry)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

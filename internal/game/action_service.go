@@ -3,6 +3,8 @@ package game
 import (
 	"context"
 	"fmt"
+	"origin/internal/actionanimationdefs"
+	"origin/internal/cyclicaction"
 	"time"
 
 	"origin/internal/actiondefs"
@@ -337,11 +339,12 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 		if definition.Target.Kind == actiondefs.TargetObject {
 			kind = components.CyclicActionTargetObject
 		}
-		ecs.AddComponent(world, playerHandle, components.ActiveCyclicAction{
+		cyclicaction.Start(world, playerHandle, components.ActiveCyclicAction{
 			BehaviorKey: gameActionCycleBehaviorKey, ActionID: definition.ID,
 			TargetKind: kind, TargetID: target.ObjectID, TargetHandle: target.ObjectHandle,
+			HasTargetPosition: definition.Target.Kind == actiondefs.TargetTile, TargetX: target.X, TargetY: target.Y,
 			CycleDurationTicks: uint32(definition.Execution.Ticks), StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
-		})
+		}, actionanimationdefs.Source{Kind: "menu", ID: definition.ID})
 		return
 	}
 	service.executeHandler(world, playerID, playerHandle, definition, active, target)
@@ -479,7 +482,7 @@ func (service *ActionService) clearCycle(world *ecs.World, playerID types.Entity
 	if !exists || cycle.BehaviorKey != gameActionCycleBehaviorKey {
 		return
 	}
-	ecs.RemoveComponent[components.ActiveCyclicAction](world, playerHandle)
+	cyclicaction.Clear(world, playerHandle)
 	if service.sender == nil {
 		return
 	}

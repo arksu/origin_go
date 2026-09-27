@@ -2,6 +2,7 @@ package behaviors
 
 import (
 	"fmt"
+	"origin/internal/cyclicaction"
 	"strings"
 
 	constt "origin/internal/const"
@@ -184,7 +185,7 @@ func (takeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 	}
 
 	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
-	ecs.AddComponent(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
+	cyclicaction.StartContext(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
 		BehaviorKey:        takeBehaviorKey,
 		ActionID:           actionID,
 		TargetKind:         components.CyclicActionTargetObject,

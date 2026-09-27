@@ -5,6 +5,7 @@ import { gameFacade, moveController, playerCommandController, soundManager } fro
 import { DEBUG_MOVEMENT } from '@/constants/game'
 import { distanceAttenuation, SoundAttenuationModel } from '@/game/soundAttenuation'
 import { decodeCharacterVisual } from '@/types/characterVisual'
+import { decodeActionAnimation } from '@/types/actionAnimation'
 import { ChunkStreamGuard } from './ChunkStreamGuard'
 
 const chunkStream = new ChunkStreamGuard()
@@ -224,9 +225,17 @@ export function registerMessageHandlers(): void {
     const carriedByEntityId = toNumber(msg.carriedByEntityId || 0)
 
     const characterVisual = msg.characterVisual ? decodeCharacterVisual(msg.characterVisual) : undefined
+    const actionAnimation = msg.actionAnimation ? decodeActionAnimation(msg.actionAnimation) : undefined
+    if (actionAnimation && actionAnimation.generation !== characterVisual?.generation) throw new Error('Spawn action animation incarnation mismatch')
     const existing = gameStore.entities.get(entityId)
     if (characterVisual && existing?.characterVisual?.generation === characterVisual.generation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
       if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterEquipment(entityId, characterVisual.equipment)
+      if (actionAnimation) {
+        if (gameStore.updateActionAnimation(entityId, actionAnimation)) gameFacade.setActionAnimation(entityId, actionAnimation)
+      } else {
+        gameStore.clearActionAnimation(entityId)
+        gameFacade.setActionAnimation(entityId, null)
+      }
       // A respawn of a known entity still re-carries its name: apply it even
       // though the visual snapshot is unchanged.
       gameStore.updateEntityName(entityId, displayName, nameColor)
@@ -242,6 +251,7 @@ export function registerMessageHandlers(): void {
       typeId: msg.typeId || 0,
       resourcePath,
       characterVisual,
+      actionAnimation,
       name: displayName,
       nameColor,
       position: { x: posX, y: posY },
@@ -283,6 +293,13 @@ export function registerMessageHandlers(): void {
     const entityId = toNumber(msg.entityId || 0)
     const state = decodeCharacterVisual(msg.state)
     if (gameStore.updateCharacterVisual(entityId, state)) applyCharacterEquipment(entityId, state.equipment)
+  })
+
+  messageDispatcher.on('characterActionAnimation', (msg: proto.IS2C_CharacterActionAnimation) => {
+    if (!msg.state || msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
+    const entityId = toNumber(msg.entityId || 0)
+    const state = decodeActionAnimation(msg.state)
+    if (gameStore.updateActionAnimation(entityId, state)) gameFacade.setActionAnimation(entityId, state)
   })
 
   messageDispatcher.on('objectDespawn', (msg: proto.IS2C_ObjectDespawn) => {

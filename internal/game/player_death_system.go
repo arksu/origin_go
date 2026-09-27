@@ -3,6 +3,7 @@ package game
 import (
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
+	"origin/internal/cyclicaction"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/entityhealth"
@@ -223,7 +224,7 @@ func applyStunnedStateAndClearActions(w *ecs.World, handle types.Handle) bool {
 	ecs.RemoveComponent[components.PendingContextAction](w, handle)
 	ecs.RemoveComponent[components.PendingBuildPlacement](w, handle)
 	ecs.RemoveComponent[components.PendingLiftTransition](w, handle)
-	ecs.RemoveComponent[components.ActiveCyclicAction](w, handle)
+	cyclicaction.Clear(w, handle)
 	ecs.RemoveComponent[components.ActiveCraft](w, handle)
 	return changed
 }

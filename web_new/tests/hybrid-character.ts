@@ -3,13 +3,17 @@ import { coordScreen2Game } from '../src/game/utils/coordConvert'
 import { Application, Container, Graphics, Sprite, Text, WebGLRenderer } from 'pixi.js'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer, type ActorHandle } from '../src/game/actors/ActorRenderer'
+import type { ActionAnimationDefinition, ActionAnimationVariant } from '../src/types/actionAnimationDefs'
+import type { EquippedVisual } from '../src/types/characterVisual'
 
 const result = document.querySelector<HTMLPreElement>('#result')!
 const state = document.querySelector<HTMLSelectElement>('#state')!
 const count = document.querySelector<HTMLSelectElement>('#count')!
 const speed = document.querySelector<HTMLInputElement>('#speed')!
-const chopPlay = document.querySelector<HTMLInputElement>('#chop-play')!
-const chopFrame = document.querySelector<HTMLInputElement>('#chop-frame')!
+const actionPlay = document.querySelector<HTMLInputElement>('#action-play')!
+const actionPhase = document.querySelector<HTMLInputElement>('#action-phase')!
+const actionDuration = document.querySelector<HTMLInputElement>('#action-duration')!
+const choices = new Map<string, { binding: ActionAnimationDefinition; variant: ActionAnimationVariant }>()
 const initialState = new URLSearchParams(window.location.search).get('state')
 if (initialState && [...state.options].some(option => option.value === initialState)) state.value = initialState
 const frames: number[] = []
@@ -23,6 +27,15 @@ async function main() {
   await app.init({ width: Math.min(1080, window.innerWidth - 48), height: 730, background: '#334132', antialias: false, resolution: 1, preference: 'webgl' })
   document.querySelector('#preview')!.append(app.canvas)
   const renderer = new ActorRenderer(app.renderer as WebGLRenderer)
+  const catalog = await renderer.cache.catalog
+  for (const binding of Object.values(catalog.actionAnimations)) {
+    for (const [index, variant] of binding.variants.entries()) {
+      const id = `action/${choices.size}`
+      choices.set(id, { binding, variant })
+      state.add(new Option(`${binding.preview?.label ?? binding.key} / ${index + 1}`, id))
+    }
+  }
+  if (initialState && [...state.options].some(option => option.value === initialState)) state.value = initialState
   app.ticker.maxFPS = 30
   const world = new Container()
   app.stage.addChild(world)
@@ -36,11 +49,13 @@ async function main() {
 
   async function applyState() {
     actionStart = performance.now()
-    for (const handle of handles) {
-      const chopping = state.value.startsWith('chop_')
-      await handle.actor.setEquipment(chopping ? [{ slot: state.value === 'chop_l' ? 'left_hand' : 'right_hand', visualKey: 'stone_axe' }] : [])
-      handle.actor.setChopCycle(chopping ? { startMs: actionStart, durationMs: 2000 } : null)
+    const choice = choices.get(state.value)
+    if (choice) actionDuration.value = String(choice.binding.preview?.duration_ms ?? 2000)
+    const equipment = new Map<string, EquippedVisual>()
+    for (const item of [...(choice?.binding.preview?.equipment ?? []), ...(choice?.variant.equipment ?? [])]) {
+      equipment.set(item.slot, { slot: item.slot, visualKey: item.visual_key })
     }
+    await Promise.all(handles.map(handle => handle.actor.setEquipment([...equipment.values()])))
   }
   state.addEventListener('change', () => { void applyState().catch(error => { failure = error }) })
 
@@ -112,15 +127,15 @@ async function main() {
       handle.actor.walking = state.value.endsWith('walk')
       handle.actor.carrying = state.value.startsWith('carry')
       handle.actor.knockedOut = state.value === 'knocked_out'
-      if (state.value.startsWith('chop_') && !chopPlay.checked) {
-        handle.actor.setChopCycle({ startMs: now - Number(chopFrame.value) / 69 * 2000, durationMs: 2000 })
-      }
+      const choice = choices.get(state.value)
+      const duration = Number(actionDuration.value)
+      const phase = actionPlay.checked && Number.isFinite(duration) && duration > 0 ? ((now - actionStart) % duration) / duration : Number(actionPhase.value)
+      handle.actor.setActionAnimation(choice ? { key: choice.binding.key, phase, facingAngle: screenFacingAngle(handle.actor.direction) } : null)
       if (handle.actor.walking) handle.actor.distanceTiles += delta / 960 * handle.actor.cycleDistanceTiles * Number(speed.value)
       const angle = screenFacingAngle(handle.actor.direction)
       const travel = handle.actor.walking ? ((handle.actor.distanceTiles / handle.actor.cycleDistanceTiles) % 1) * 32 - 16 : 0
       const offsetX = Math.cos(angle) * travel
       const offsetY = Math.sin(angle) * travel
-      handle.sprite.position.set(-handle.anchorX + offsetX, -handle.anchorY + offsetY)
       const shadow = shadows.get(handle)!
       shadow.clear()
       if (handle.actor.knockedOut) shadow.ellipse(3, 4, 46, 8).fill({ color: '#17201b', alpha: .3 })
@@ -128,6 +143,10 @@ async function main() {
       shadow.position.set(offsetX, offsetY)
     }
     try { renderer.render(now) } catch (error) { failure = error }
+    for (const handle of handles) {
+      const offset = shadows.get(handle)!.position
+      handle.sprite.position.set(-handle.actor.outputFrame.origin_x + offset.x, -handle.anchorY + offset.y)
+    }
     if (now - lastReport > 500) {
       const ordered = [...frames].sort((first, second) => first - second)
       const average = frames.reduce((sum, value) => sum + value, 0) / frames.length

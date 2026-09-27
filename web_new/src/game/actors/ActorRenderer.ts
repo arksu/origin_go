@@ -20,7 +20,7 @@ export interface ActorHandle {
 export class ActorRenderer {
   readonly cache: ActorAssetCache
   private readonly renderer: WebGLRenderer
-  private readonly pass = new PixelActorPass()
+  private pass = new PixelActorPass()
   private readonly scene = new Scene()
   private readonly camera: OrthographicCamera
   private readonly actors = new Set<ActorHandle>()
@@ -99,12 +99,21 @@ export class ActorRenderer {
     return 1000 / fps
   }
 
-  private allocateOutput(): Texture | null {
-    const pooled = this.outputs.pop()
-    if (pooled) return pooled
-    const allocated = [...this.actors].filter((handle) => handle.sprite.texture !== Texture.EMPTY).length
-    if (allocated >= ACTOR_RENDER.maxOutputSlots) return null
-    return new Texture({ source: new TextureSource({ width: ACTOR_RENDER.cellSize, height: ACTOR_RENDER.cellSize,
+  private get outputTextures(): Texture[] {
+    return [...this.outputs, ...[...this.actors].map(handle => handle.sprite.texture).filter(texture => texture !== Texture.EMPTY)]
+  }
+
+  private allocateOutput(width: number, height: number): Texture | null {
+    const index = this.outputs.findIndex(texture => texture.width === width && texture.height === height)
+    if (index >= 0) return this.outputs.splice(index, 1)[0]!
+    // Recycle an unused size before creating another GPU allocation.
+    this.outputs.pop()?.destroy(true)
+    while (this.outputs.length && this.outputTextures.reduce((sum, texture) => sum + texture.width * texture.height * 4, width * height * 4) > ACTOR_RENDER.maxResidentBytes) {
+      this.outputs.pop()!.destroy(true)
+    }
+    const textures = this.outputTextures
+    if (textures.length >= ACTOR_RENDER.maxOutputSlots || textures.reduce((sum, texture) => sum + texture.width * texture.height * 4, width * height * 4) > ACTOR_RENDER.maxResidentBytes) return null
+    return new Texture({ source: new TextureSource({ width, height,
       scaleMode: 'nearest', alphaMode: 'premultiplied-alpha', autoGenerateMipmaps: false, autoGarbageCollect: false }) })
   }
 
@@ -117,9 +126,6 @@ export class ActorRenderer {
     let clearColor: Float32Array | null = null
     try {
       for (const handle of this.actors) {
-        const anchorY = handle.actor.knockedOut ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY - handle.immersionPx
-        handle.sprite.y += handle.anchorY - anchorY
-        handle.anchorY = anchorY
         const visible = handle.sprite.parent?.visible && handle.sprite.parent?.renderable
         if (!visible) {
           if (handle.sprite.texture !== Texture.EMPTY) {
@@ -137,8 +143,13 @@ export class ActorRenderer {
         if (handle.renderedRevision === handle.actor.revision) continue
         const immediate = handle.actor.needsImmediateRender && this.settings.renderStationaryChangesImmediately
         if (!immediate && handle.renderedRevision >= 0 && now - handle.lastRenderMs < this.updateIntervalMs(handle)) continue
+        const frame = handle.actor.outputFrame
+        if (handle.sprite.texture !== Texture.EMPTY && (handle.sprite.texture.width !== frame.width || handle.sprite.texture.height !== frame.height)) {
+          this.outputs.push(handle.sprite.texture)
+          handle.sprite.texture = Texture.EMPTY
+        }
         if (handle.sprite.texture === Texture.EMPTY) {
-          const texture = this.allocateOutput()
+          const texture = this.allocateOutput(frame.width, frame.height)
           if (!texture) continue
           handle.sprite.texture = texture
         }
@@ -148,6 +159,18 @@ export class ActorRenderer {
           touched = true
         }
         this.scene.add(handle.actor.root)
+        const anchorY = frame.origin_y - (handle.actor.knockedOut ? 0 : handle.immersionPx)
+        handle.anchorY = anchorY
+        handle.sprite.position.set(-frame.origin_x, -anchorY)
+        this.pass.setSize(frame.width, frame.height)
+        // Extra pixels extend the view; they never zoom the actor or move its feet.
+        const unitsPerPixel = ACTOR_RENDER.orthoHeight / ACTOR_RENDER.cellSize
+        const baseOriginY = handle.actor.knockedOut ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY
+        this.camera.left = -ACTOR_RENDER.orthoHeight / 2 - (frame.origin_x - ACTOR_RENDER.anchorX) * unitsPerPixel
+        this.camera.right = this.camera.left + frame.width * unitsPerPixel
+        this.camera.top = ACTOR_RENDER.orthoHeight / 2 + (frame.origin_y - baseOriginY) * unitsPerPixel
+        this.camera.bottom = this.camera.top - frame.height * unitsPerPixel
+        this.camera.updateProjectionMatrix()
         const cameraHeight = handle.actor.knockedOut ? 0 : ACTOR_RENDER.cameraHeight
         this.camera.position.y = cameraHeight + 6 * Math.sin(ACTOR_RENDER.cameraElevation)
         this.camera.lookAt(0, cameraHeight, 0)
@@ -179,14 +202,14 @@ export class ActorRenderer {
     const destination = this.pixi.texture.getGlSource(texture.source)
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, destination.texture)
-    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, ACTOR_RENDER.cellSize, ACTOR_RENDER.cellSize)
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, texture.width, texture.height)
     this.renderer.resetState()
   }
 
   hitTest(handle: ActorHandle, localX: number, localY: number): boolean {
     const column = Math.floor(localX - handle.sprite.x)
     const row = Math.floor(localY - handle.sprite.y)
-    if (column < 0 || row < 0 || column >= ACTOR_RENDER.cellSize || row >= ACTOR_RENDER.cellSize || handle.sprite.texture === Texture.EMPTY || this.lost) return false
+    if (column < 0 || row < 0 || column >= handle.sprite.texture.width || row >= handle.sprite.texture.height || handle.sprite.texture === Texture.EMPTY || this.lost) return false
     const gl = this.pixi.gl as WebGL2RenderingContext
     // A single pixel is read only on an interaction, never to transport frames.
     const texture = this.pixi.texture.getGlSource(handle.sprite.texture.source)
@@ -208,9 +231,16 @@ export class ActorRenderer {
     handle.actor.destroy()
   }
 
-  private readonly onContextLost = (event: Event): void => { event.preventDefault(); this.lost = true }
+  private readonly onContextLost = (event: Event): void => {
+    event.preventDefault()
+    this.lost = true
+    // Remove disposal listeners tied to the lost context before Three installs
+    // its new resource maps. Otherwise a later resize disposes stale GL handles.
+    this.pass.destroy()
+  }
   private readonly beforeThreeContextRestore = (): void => { this.pixi.resetState() }
   private readonly onContextRestored = (): void => {
+    this.pass = new PixelActorPass()
     // Three rebuilds its background from the shared context's alpha attribute.
     // Pixi's opaque canvas must not make our offscreen character frames opaque.
     this.renderer.setClearColor(0, 0)
@@ -225,7 +255,7 @@ export class ActorRenderer {
     return { actors: this.actors.size, updated: this.renderedThisFrame, cpuMs: this.renderMs,
       triangles: this.renderer.info.render.triangles, drawCalls: this.renderer.info.render.calls,
       assetBytes: this.cache.residentBytes, assets: this.cache.loadedCount,
-      outputBytes: (this.outputs.length + [...this.actors].filter((handle) => handle.sprite.texture !== Texture.EMPTY).length) * ACTOR_RENDER.cellSize ** 2 * 4 }
+      outputBytes: this.outputTextures.reduce((sum, texture) => sum + texture.width * texture.height * 4, 0) }
   }
 
   get hasUpdatedPoses(): boolean { return this.renderedThisFrame > 0 }

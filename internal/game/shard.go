@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
+	"origin/internal/cyclicaction"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/entityhealth"
@@ -307,6 +308,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewEntityStatsRegenSystem())
 	s.world.AddSystem(systems.NewPlayerStatsPushSystem(s))
 	s.world.AddSystem(systems.NewCharacterVisualSystem(s, logger))
+	s.world.AddSystem(systems.NewActionAnimationSystem(s, logger))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
 	s.world.AddSystem(NewPlayerDeathSystem(s, PlayerDeathSystemConfig{
 		LifeDeathFactor:                 cfg.Game.LifeDeathFactor,
@@ -682,7 +684,7 @@ func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.E
 	ecs.RemoveComponent[components.PendingContextAction](w, playerHandle)
 	ecs.RemoveComponent[components.PendingBuildPlacement](w, playerHandle)
 	ecs.RemoveComponent[components.PendingLiftTransition](w, playerHandle)
-	ecs.RemoveComponent[components.ActiveCyclicAction](w, playerHandle)
+	cyclicaction.Clear(w, playerHandle)
 	ecs.RemoveComponent[components.ActiveCraft](w, playerHandle)
 	ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
 		col.Phantom = nil

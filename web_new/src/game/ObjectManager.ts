@@ -1,3 +1,4 @@
+import type { CharacterActionAnimationState } from '../types/actionAnimation'
 import { Container, type Texture } from 'pixi.js'
 import { ObjectView, type ObjectViewOptions } from './ObjectView'
 import { cullingController } from './culling'
@@ -381,7 +382,11 @@ export class ObjectManager {
    * Update all objects (called every frame).
    * Performs Z-sorting if needed.
    */
-  update(nowMs = performance.now()): void {
+  setActionAnimation(entityId: number, state: CharacterActionAnimationState | null): void {
+    this.objects.get(entityId)?.setActionAnimation(state)
+  }
+
+  update(nowMs = performance.now(), serverNowMs = Date.now()): void {
     if (this.animatedObjectIds.size > 0) {
       const staleAnimatedIds: number[] = []
       for (const entityId of this.animatedObjectIds) {
@@ -397,6 +402,9 @@ export class ObjectManager {
           }
         }
         objectView.updateAnimation(nowMs)
+        if (objectView.updateActionAnimation(nowMs, serverNowMs)) {
+          cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
+        }
       }
       for (const entityId of staleAnimatedIds) {
         this.animatedObjectIds.delete(entityId)
