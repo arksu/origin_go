@@ -336,6 +336,48 @@ func TestCollisionSystem_WalkStopsBeforeDeepWater(t *testing.T) {
 	}
 }
 
+// Regression: a mover jammed against deep water must get PerpendicularOscillation
+// flagged so TransformUpdateSystem stops the movement and clients receive
+// is_moving=false. Pre-fix the tile branch early-returned and skipped the
+// no-progress detection, leaving the entity walking in place at the shoreline.
+func TestCollisionSystem_DeepWaterJamFlagsStop(t *testing.T) {
+	// Deep water tile (col 9, row 8): western edge at x=108; box edge
+	// (center+5) touches it once the center reaches x≈103.
+	paint := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 110, 102, types.TileDeepWater)
+	}
+	scene := newSweepScene(t, 100, 100, nil, paint)
+
+	first := scene.runTick(t, 12, 0)
+	if first.PerpendicularOscillation {
+		t.Fatal("approach tick still making progress must not be flagged as jammed")
+	}
+	second := scene.runTick(t, 12, 0)
+	if !second.PerpendicularOscillation {
+		t.Fatal("expected jam tick against deep water to be flagged")
+	}
+	if math.Abs(second.FinalX-103) > 0.05 {
+		t.Fatalf("expected mover held at water line (x≈103), got %.3f", second.FinalX)
+	}
+}
+
+// A diagonal approach that still makes progress toward the target must not be
+// flagged: the mover keeps moving along the shoreline until the intent becomes
+// perpendicular to it, and only then stops.
+func TestCollisionSystem_DiagonalShorelineApproachKeepsMoving(t *testing.T) {
+	paint := func(chunk *core.Chunk) {
+		paintTestTile(chunk, 110, 102, types.TileDeepWater)
+	}
+	result := runCollisionSweep(t, 100, 104, 8, 4, nil, paint)
+
+	if !result.HasCollision {
+		t.Fatal("expected the box to contact deep water mid-step")
+	}
+	if result.PerpendicularOscillation {
+		t.Fatal("mid-step contact with progress must not stop movement")
+	}
+}
+
 func TestCollisionSystem_InitialTerrainOverlap(t *testing.T) {
 	for _, scenario := range []struct {
 		name         string

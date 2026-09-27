@@ -388,15 +388,15 @@ func (s *CollisionSystem) sweepCollision(
 
 		// A tile can stop this segment only if it is closer than every object.
 		// Otherwise resolve the object first and recheck the redirected slide.
+		// Both iterations must fall through to the post-loop tail: its
+		// no-progress check flags PerpendicularOscillation, which is what
+		// stops movement (broadcast as is_moving=false) when an entity jams
+		// against impassable terrain such as deep water. An early return here
+		// used to skip that check and left jammed entities moving forever.
 		if tileBlocked && tileHitT < earliestT {
 			result.HasCollision = true
 			result.CollisionNormalX = tileNormalX
 			result.CollisionNormalY = tileNormalY
-			if iter == 0 {
-				result.FinalX = tileStopX
-				result.FinalY = tileStopY
-				return result
-			}
 			currentX = tileStopX
 			currentY = tileStopY
 			break
