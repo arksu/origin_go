@@ -31,6 +31,26 @@
     {
       "img": "leaf/base_8.png",
       "w": 1
+    },
+    {
+      "img": "leaf/base_9.png",
+      "w": 1
+    },
+    {
+      "img": "leaf/base_10.png",
+      "w": 1
+    },
+    {
+      "img": "leaf/base_11.png",
+      "w": 1
+    },
+    {
+      "img": "leaf/base_12.png",
+      "w": 1
+    },
+    {
+      "img": "leaf/base_13.png",
+      "w": 1
     }
   ],
   "borders": [

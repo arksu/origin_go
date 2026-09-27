@@ -19,6 +19,26 @@
     {
       "img": "fen/base_5.png",
       "w": 1
+    },
+    {
+      "img": "fen/base_6.png",
+      "w": 1
+    },
+    {
+      "img": "fen/base_7.png",
+      "w": 1
+    },
+    {
+      "img": "fen/base_8.png",
+      "w": 1
+    },
+    {
+      "img": "fen/base_9.png",
+      "w": 1
+    },
+    {
+      "img": "fen/base_10.png",
+      "w": 1
     }
   ],
   "borders": [
