@@ -2,6 +2,7 @@ import type { ActorHandle } from '../src/game/actors/ActorRenderer'
 import { verifyMovementStopping } from './movement-stop'
 import { verifyScreenFacing } from './screen-facing'
 import { verifyCharacterEquipment, verifyStoneAxe } from './character-equipment'
+import { verifyTreeChop } from './tree-chop'
 import { Application, Assets, Container, Sprite, Texture, WebGLRenderer, type Spritesheet } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
@@ -64,7 +65,7 @@ async function main() {
   for (let attempt = 0; attempt < 300 && sprite.texture === Texture.EMPTY; attempt++) { render(); await paint() }
   check(sprite.texture !== Texture.EMPTY && sprite.texture.width === 128, 'GLB must become a live 128-pixel GPU texture')
   check(renderer.metrics.actors === 1 && manager.getObjectCount() === 1, 'Despawn during loading must release its instance')
-  check(renderer.metrics.assets === 9, 'Default actor must share one model and eight standalone animations')
+  check(renderer.metrics.assets === 11, 'Default actor must share one model and ten standalone animations')
   pass('Production ObjectView / async move, stop, despawn / shared model and standalone animation artifacts')
 
   const playerSprite = sprite
@@ -335,6 +336,8 @@ async function main() {
   waterFrame(600)
   check(pixels(false).every((value, index) => value === wetBeforeRestore[index]), 'Context restore must preserve the exact clipped body')
   pass('Shallow water / eight facings / smooth stationary entry / GPU crop and hover / picking / cache / carry / KO / context restore')
+  await verifyTreeChop(app, renderer, waterHandle)
+  pass('Mixamo chop / both hands / eight facings / full swing silhouette / ground anchor / cancel / shared GL state')
   manager.despawnObject(201)
   manager.despawnObject(101)
   renderer.destroy()

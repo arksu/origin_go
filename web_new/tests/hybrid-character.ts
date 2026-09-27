@@ -3,12 +3,15 @@ import { coordScreen2Game } from '../src/game/utils/coordConvert'
 import { Application, Container, Graphics, Sprite, Text, WebGLRenderer } from 'pixi.js'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer, type ActorHandle } from '../src/game/actors/ActorRenderer'
-import { ACTOR_RENDER } from '../src/game/actors/config'
 
 const result = document.querySelector<HTMLPreElement>('#result')!
 const state = document.querySelector<HTMLSelectElement>('#state')!
 const count = document.querySelector<HTMLSelectElement>('#count')!
 const speed = document.querySelector<HTMLInputElement>('#speed')!
+const chopPlay = document.querySelector<HTMLInputElement>('#chop-play')!
+const chopFrame = document.querySelector<HTMLInputElement>('#chop-frame')!
+const initialState = new URLSearchParams(window.location.search).get('state')
+if (initialState && [...state.options].some(option => option.value === initialState)) state.value = initialState
 const frames: number[] = []
 const handles: ActorHandle[] = []
 const shadows = new Map<ActorHandle, Graphics>()
@@ -17,7 +20,7 @@ const indices = [3, 2, 1, 0, 7, 6, 5, 4]
 
 async function main() {
   const app = new Application()
-  await app.init({ width: Math.min(1080, window.innerWidth - 48), height: 590, background: '#334132', antialias: false, resolution: 1, preference: 'webgl' })
+  await app.init({ width: Math.min(1080, window.innerWidth - 48), height: 730, background: '#334132', antialias: false, resolution: 1, preference: 'webgl' })
   document.querySelector('#preview')!.append(app.canvas)
   const renderer = new ActorRenderer(app.renderer as WebGLRenderer)
   app.ticker.maxFPS = 30
@@ -29,6 +32,17 @@ async function main() {
   let generation = 0
   let lastReport = 0
   let failure: unknown = null
+  let actionStart = performance.now()
+
+  async function applyState() {
+    actionStart = performance.now()
+    for (const handle of handles) {
+      const chopping = state.value.startsWith('chop_')
+      await handle.actor.setEquipment(chopping ? [{ slot: state.value === 'chop_l' ? 'left_hand' : 'right_hand', visualKey: 'stone_axe' }] : [])
+      handle.actor.setChopCycle(chopping ? { startMs: actionStart, durationMs: 2000 } : null)
+    }
+  }
+  state.addEventListener('change', () => { void applyState().catch(error => { failure = error }) })
 
   async function populate() {
     const ownGeneration = ++generation
@@ -43,7 +57,7 @@ async function main() {
     const spacing = (app.screen.width - 32) / columns
     for (let index = 0; index < number; index++) {
       const container = new Container()
-      container.position.set(16 + spacing * (index % columns) + spacing / 2, (number > 8 ? 145 : 248) + Math.floor(index / columns) * (number > 8 ? 160 : 264))
+      container.position.set(16 + spacing * (index % columns) + spacing / 2, (number > 8 ? 185 : 360) + Math.floor(index / columns) * (number > 8 ? 160 : 330))
       container.scale.set(scale)
       const shadow = new Graphics().ellipse(0, 0, 15, 5).fill({ color: '#17201b', alpha: .45 })
       const angle = screenFacingAngle(indices[index % 8]!)
@@ -71,6 +85,7 @@ async function main() {
     }
     await Promise.all(handles.map((handle) => handle.actor.ready))
     if (ownGeneration !== generation) return
+    await applyState()
   }
   count.addEventListener('change', () => { void populate().catch((error) => { failure = error }) })
   app.canvas.addEventListener('pointermove', (event) => {
@@ -97,12 +112,15 @@ async function main() {
       handle.actor.walking = state.value.endsWith('walk')
       handle.actor.carrying = state.value.startsWith('carry')
       handle.actor.knockedOut = state.value === 'knocked_out'
+      if (state.value.startsWith('chop_') && !chopPlay.checked) {
+        handle.actor.setChopCycle({ startMs: now - Number(chopFrame.value) / 69 * 2000, durationMs: 2000 })
+      }
       if (handle.actor.walking) handle.actor.distanceTiles += delta / 960 * handle.actor.cycleDistanceTiles * Number(speed.value)
       const angle = screenFacingAngle(handle.actor.direction)
       const travel = handle.actor.walking ? ((handle.actor.distanceTiles / handle.actor.cycleDistanceTiles) % 1) * 32 - 16 : 0
       const offsetX = Math.cos(angle) * travel
       const offsetY = Math.sin(angle) * travel
-      handle.sprite.position.set(-ACTOR_RENDER.anchorX + offsetX, -handle.anchorY + offsetY)
+      handle.sprite.position.set(-handle.anchorX + offsetX, -handle.anchorY + offsetY)
       const shadow = shadows.get(handle)!
       shadow.clear()
       if (handle.actor.knockedOut) shadow.ellipse(3, 4, 46, 8).fill({ color: '#17201b', alpha: .3 })

@@ -11,9 +11,11 @@
 </style></head>
 <body><main><h1>Персонаж • realtime 3D → пиксель арт</h1><p>Восемь экранных направлений. Луч под ногами показывает траекторию; точка — направление движения. В конце отрезка цикл начинается заново.</p>
 <div class="controls">
-<label>Состояние <select id="state"><option value="idle">Покой</option><option value="walk">Ходьба</option><option value="carry_idle">Переноска / покой</option><option value="carry_walk">Переноска / ходьба</option><option value="knocked_out">Knocked out / лёжа</option></select></label>
+<label>Состояние <select id="state"><option value="idle">Покой</option><option value="walk">Ходьба</option><option value="chop_r">Рубка / правая рука</option><option value="chop_l">Рубка / левая рука</option><option value="carry_idle">Переноска / покой</option><option value="carry_walk">Переноска / ходьба</option><option value="knocked_out">Knocked out / лёжа</option></select></label>
 <label>Персонажей <select id="count"><option>8</option><option>1</option><option>30</option></select></label>
 <label>Скорость <input id="speed" type="range" min="0" max="3" value="1" step="0.05"></label>
+<label><input id="chop-play" type="checkbox" checked>Проигрывать рубку</label>
+<label>Кадр рубки <input id="chop-frame" type="range" min="0" max="68" value="24" step="1"></label>
 <span>Повязка и пояс — часть модели Meshy</span>
 <button id="context">Потеря / восстановление контекста</button>
 </div><div id="preview"></div><pre id="result">Загрузка…</pre></main>
