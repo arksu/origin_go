@@ -34,7 +34,7 @@ FPS and duration. Preview metadata uses 1000 ms (10 ticks at the default 10 Hz)
 and never sets gameplay duration. Restart the server with these defs and reload
 clients with the matching catalog after deployment.
 
-Preview: `/tests/hybrid-character.html?state=action/2`, select `Сбор ветки`.
+Preview: `/tests/hybrid-character.html`, select `Сбор ветки`.
 Real equipment retention/rebind checks:
 `/tests/equipment-unbind.html?binding=tree_take_branch`.
 The generic `/tests/hybrid-integration.html` checks all bindings, eight headings,

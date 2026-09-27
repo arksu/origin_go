@@ -1,0 +1,133 @@
+{
+  "v": 1,
+  "bindings": [
+    {
+      "key": "craft_stone_axe",
+      "source": {
+        "kind": "craft",
+        "id": "stone_axe"
+      },
+      "actor": "character/male_commoner",
+      "variants": [
+        {
+          "clip": "craft",
+          "equipment": []
+        }
+      ],
+      "eligibility": [
+        "stationary",
+        "not_carrying",
+        "not_knocked_out"
+      ],
+      "facing": "preserve",
+      "blend_ms": 120,
+      "frame": {
+        "width": 160,
+        "height": 192,
+        "origin_x": 80,
+        "origin_y": 148
+      },
+      "preview": {
+        "label": "Крафт — Каменный топор",
+        "duration_ms": 2000,
+        "equipment": []
+      }
+    },
+    {
+      "key": "craft_nettle_shirt",
+      "source": {
+        "kind": "craft",
+        "id": "nettle_shirt"
+      },
+      "actor": "character/male_commoner",
+      "variants": [
+        {
+          "clip": "craft",
+          "equipment": []
+        }
+      ],
+      "eligibility": [
+        "stationary",
+        "not_carrying",
+        "not_knocked_out"
+      ],
+      "facing": "preserve",
+      "blend_ms": 120,
+      "frame": {
+        "width": 160,
+        "height": 192,
+        "origin_x": 80,
+        "origin_y": 148
+      },
+      "preview": {
+        "label": "Крафт — Рубаха",
+        "duration_ms": 2000,
+        "equipment": []
+      }
+    },
+    {
+      "key": "craft_campfire_dried_branch",
+      "source": {
+        "kind": "craft",
+        "id": "campfire_dried_branch"
+      },
+      "actor": "character/male_commoner",
+      "variants": [
+        {
+          "clip": "craft",
+          "equipment": []
+        }
+      ],
+      "eligibility": [
+        "stationary",
+        "not_carrying",
+        "not_knocked_out"
+      ],
+      "facing": "preserve",
+      "blend_ms": 120,
+      "frame": {
+        "width": 160,
+        "height": 192,
+        "origin_x": 80,
+        "origin_y": 148
+      },
+      "preview": {
+        "label": "Крафт — Сушка ветки",
+        "duration_ms": 2000,
+        "equipment": []
+      }
+    },
+    {
+      "key": "craft_roasted_meat",
+      "source": {
+        "kind": "craft",
+        "id": "roasted_meat"
+      },
+      "actor": "character/male_commoner",
+      "variants": [
+        {
+          "clip": "craft",
+          "equipment": []
+        }
+      ],
+      "eligibility": [
+        "stationary",
+        "not_carrying",
+        "not_knocked_out"
+      ],
+      "facing": "preserve",
+      "blend_ms": 120,
+      "frame": {
+        "width": 160,
+        "height": 192,
+        "origin_x": 80,
+        "origin_y": 148
+      },
+      "preview": {
+        "label": "Крафт — Жарка мяса",
+        "duration_ms": 2000,
+        "equipment": []
+      }
+    }
+  ]
+}

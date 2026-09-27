@@ -144,6 +144,16 @@
       "loop": true,
       "playback": "time"
     },
+    "craft": {
+      "action": "craft",
+      "range": {
+        "start": 1,
+        "end": 531
+      },
+      "fps": 30,
+      "loop": false,
+      "playback": "time"
+    },
     "pick_up": {
       "action": "pick_up",
       "range": {
