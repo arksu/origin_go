@@ -65,7 +65,8 @@ async function main() {
   for (let attempt = 0; attempt < 300 && sprite.texture === Texture.EMPTY; attempt++) { render(); await paint() }
   check(sprite.texture !== Texture.EMPTY && sprite.texture.width === 128, 'GLB must become a live 128-pixel GPU texture')
   check(renderer.metrics.actors === 1 && manager.getObjectCount() === 1, 'Despawn during loading must release its instance')
-  check(renderer.metrics.assets === 11, 'Default actor must share one model and ten standalone animations')
+  check(renderer.metrics.assets === 1 + Object.keys(catalog.manifests[COMMONER_ASSET_ID]!.clips).length,
+    'Default actor must share one model and the catalog-declared standalone animations')
   pass('Production ObjectView / async move, stop, despawn / shared model and standalone animation artifacts')
 
   const playerSprite = sprite

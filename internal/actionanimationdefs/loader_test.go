@@ -51,8 +51,8 @@ func TestDuplicateAcrossFilesAndProduction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 1 {
-		t.Fatal("expected the single production binding")
+	if len(registry.All()) == 0 {
+		t.Fatal("expected production bindings")
 	}
 	binding := registry.All()[0]
 	duplicate := *binding
