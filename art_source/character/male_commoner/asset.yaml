@@ -143,6 +143,16 @@
       "fps": 30,
       "loop": true,
       "playback": "time"
+    },
+    "pick_up": {
+      "action": "pick_up",
+      "range": {
+        "start": 1,
+        "end": 104
+      },
+      "fps": 30,
+      "loop": false,
+      "playback": "time"
     }
   },
   "bindings": {},

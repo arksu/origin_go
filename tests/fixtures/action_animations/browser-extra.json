@@ -1,0 +1,55 @@
+{
+  "v": 1,
+  "bindings": [
+    {
+      "key": "preview_secondary",
+      "source": {
+        "kind": "menu",
+        "id": "sample_secondary"
+      },
+      "actor": "character/male_commoner",
+      "variants": [
+        {
+          "clip": "carry_idle",
+          "equipment": []
+        }
+      ],
+      "eligibility": [
+        "stationary",
+        "not_carrying",
+        "not_knocked_out"
+      ],
+      "facing": "preserve",
+      "blend_ms": 80,
+      "frame": {
+        "width": 160,
+        "height": 192,
+        "origin_x": 80,
+        "origin_y": 144
+      },
+      "preview": {
+        "label": "Дополнительный тестовый цикл",
+        "duration_ms": 1300,
+        "equipment": [
+          {
+            "slot": "left_hand",
+            "visual_key": "stone_axe"
+          },
+          {
+            "slot": "right_hand",
+            "visual_key": "stone_axe"
+          },
+          {
+            "slot": "chest",
+            "visual_key": "nettle_shirt"
+          }
+        ]
+      },
+      "unbind_equipment_slots": [
+        "left_hand",
+        "right_hand",
+        "chest"
+      ]
+    }
+  ]
+}

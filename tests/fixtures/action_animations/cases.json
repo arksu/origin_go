@@ -1,0 +1,2284 @@
+[
+  {
+    "name": "two bindings",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "empty catalog",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": []
+    }
+  },
+  {
+    "name": "unknown version",
+    "valid": false,
+    "input": {
+      "v": 2,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown field",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ],
+      "unexpected": true
+    }
+  },
+  {
+    "name": "unknown binding field",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unexpected": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown source",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "other",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "bad key",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "../escape",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "bad actor",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "https://asset",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "empty variants",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid predicate",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "other"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate predicate",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "stationary"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown slot",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "other",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "bad visual",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "../escape"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "bad clip",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "../escape",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "negative blend",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": -1,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "null blend",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": null,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid facing",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "other",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "oversized frame",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 1025,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "fractional frame",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 12.5,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid origin",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 193,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "negative duration",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 0,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate key",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        },
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate source",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        },
+        {
+          "key": "different",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind both hands",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ]
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind non-hand slots",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "chest",
+            "head",
+            "back"
+          ]
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind empty list",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": []
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind unknown slot",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "not_a_slot"
+          ]
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind duplicate slot",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "left_hand"
+          ]
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind string",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": "left_hand"
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind object",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": {}
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind null",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": null
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind null entry",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            null
+          ]
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unbind numeric entry",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            7
+          ]
+        },
+        {
+          "key": "another_cycle",
+          "source": {
+            "kind": "craft",
+            "id": "another_recipe"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "another_clip",
+              "equipment": []
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "preserve",
+          "blend_ms": 70,
+          "frame": {
+            "width": 160,
+            "height": 192,
+            "origin_x": 80,
+            "origin_y": 140
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "back"
+          ]
+        }
+      ]
+    }
+  }
+]

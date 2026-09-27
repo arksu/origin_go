@@ -13,7 +13,9 @@ recipes/manifests own the referenced clips and equipment attachments.
    or `StartContext`. Untimed actions need separate gameplay work.
 2. Add a version 1 binding following `data/action_animations/README.md`. Declare
    actor, ordered variants/equipment predicates, eligibility, facing, blend and
-   frame. Optional preview metadata supplies label, equipment and example cycle
+   frame. Optional `unbind_equipment_slots` visually detaches the listed slot models
+   while an action layer is displayed, including its blend-out and terminal hold.
+   Optional preview metadata supplies label, equipment and example cycle
    duration; it never controls server timing.
 3. Run `tools/assets publish-action-animations`. This uses existing immutable
    assets, validates the merged catalog and atomically publishes a client
@@ -129,3 +131,21 @@ protocol bindings together, or remove the binding from defs and republish/restar
 to disable presentation. Preserve the authored animation sources and immutable
 clip assets. Never replace hashed artifacts in place or restore specialized
 per-action APIs as an extension mechanism.
+
+## Equipment unbind verification
+
+Shared definition fixtures cover omission, empty lists, hand and non-hand slots,
+and invalid slot lists in both Go and TypeScript. Actor tests cover object/lease
+preservation, selection against actual equipment, repeats, overlapping blends,
+asynchronous replacement, cancellation, carry, knockout, LOD and destruction.
+
+For a published binding with unrestricted variants and preview equipment wholly
+covered by its unbind list, open `/tests/equipment-unbind.html?binding=<key>`.
+The test supports both facing policies and reads the chosen clip and equipment
+from the catalog. For a review with rigid and skinned equipment together,
+temporarily publish `tests/fixtures/action_animations/browser-extra.json` alongside the local defs,
+then open `/tests/equipment-unbind.html`. It compares an equipped actor with a
+bare reference at the same action phase in all eight directions, covering rigid
+attachments and a skinned garment, render throttling, picking and context
+restoration. Restore the previous catalog and remove the temporary def after
+review. The generic runtime never reads the fixture directly.

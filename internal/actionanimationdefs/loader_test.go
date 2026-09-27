@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -51,8 +52,8 @@ func TestDuplicateAcrossFilesAndProduction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 1 {
-		t.Fatal("expected the single production binding")
+	if len(registry.All()) == 0 {
+		t.Fatal("expected production bindings")
 	}
 	binding := registry.All()[0]
 	duplicate := *binding
@@ -62,5 +63,29 @@ func TestDuplicateAcrossFilesAndProduction(t *testing.T) {
 	}
 	if _, ok := registry.Resolve(Source{Kind: "menu", ID: "unmapped"}); ok {
 		t.Fatal("unmapped selector matched")
+	}
+}
+
+func TestOptionalUnbindSlotsSurviveDefinitionRoundTrip(t *testing.T) {
+	contents, err := os.ReadFile("../../tests/fixtures/action_animations/bindings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definitions, err := Parse(contents, "fixture.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, definition := range definitions {
+		encoded, err := json.Marshal(map[string]any{"v": 1, "bindings": []Definition{definition}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		reloaded, err := Parse(encoded, "roundtrip.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(reloaded[0].UnbindEquipmentSlots, definition.UnbindEquipmentSlots) {
+			t.Fatal("unbind slots changed during round trip")
+		}
 	}
 }

@@ -1,5 +1,5 @@
 import type { ActionAnimationDefinition, ActionAnimationFrame, ActionAnimationVariant } from '../../types/actionAnimationDefs'
-import type { EquippedVisual } from '../../types/characterVisual'
+import type { EquippedVisual, EquipmentSlot } from '../../types/characterVisual'
 
 export interface ActionAnimationInput { key: string; phase: number; facingAngle?: number }
 export interface ActionPresentationContext {
@@ -31,6 +31,7 @@ export class ActionAnimationPlayer {
   private currentFrame: ActionAnimationFrame
   private currentSamples: ActionPoseSample[] = []
   private currentFacing: number | undefined
+  private readonly currentUnboundSlots = new Set<EquipmentSlot>()
 
   constructor(private readonly baseFrame: ActionAnimationFrame, private readonly report: (message: string) => void = console.error) {
     this.currentFrame = baseFrame
@@ -88,7 +89,10 @@ export class ActionAnimationPlayer {
     this.currentSamples = [...this.layers.values()].filter(layer => layer.weight > 0).map(layer => ({ clip: layer.variant.clip, phase: layer.phase, weight: layer.weight }))
     let left = -this.baseFrame.origin_x, top = -this.baseFrame.origin_y
     let right = this.baseFrame.width + left, bottom = this.baseFrame.height + top
+    this.currentUnboundSlots.clear()
     for (const layer of this.layers.values()) {
+      // Include entry at zero weight and outgoing blends; terminal holds retain the layer.
+      for (const slot of layer.definition.unbind_equipment_slots ?? []) this.currentUnboundSlots.add(slot)
       const frame = layer.definition.frame
       left = Math.min(left, -frame.origin_x); top = Math.min(top, -frame.origin_y)
       right = Math.max(right, frame.width - frame.origin_x); bottom = Math.max(bottom, frame.height - frame.origin_y)
@@ -96,6 +100,7 @@ export class ActionAnimationPlayer {
     this.currentFrame = { width: right - left, height: bottom - top, origin_x: -left, origin_y: -top }
   }
 
+  get unboundEquipmentSlots(): ReadonlySet<EquipmentSlot> { return this.currentUnboundSlots }
   get frame(): ActionAnimationFrame { return this.currentFrame }
   get samples(): readonly ActionPoseSample[] { return this.currentSamples }
   get facingAngle(): number | undefined { return this.currentFacing }

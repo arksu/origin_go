@@ -234,6 +234,8 @@ export class ActorRenderer {
   private readonly onContextLost = (event: Event): void => {
     event.preventDefault()
     this.lost = true
+    this.cache.releaseGPUResources()
+    for (const handle of this.actors) handle.actor.releaseGPUResources()
     // Remove disposal listeners tied to the lost context before Three installs
     // its new resource maps. Otherwise a later resize disposes stale GL handles.
     this.pass.destroy()

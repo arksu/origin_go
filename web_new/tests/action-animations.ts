@@ -20,6 +20,7 @@ export async function verifyActionAnimations(app: Application, renderer: ActorRe
     for (const binding of Object.values(catalog.actionAnimations)) {
       for (const variant of binding.variants) {
         await actor.setEquipment(variant.equipment.map(item => ({ slot: item.slot, visualKey: item.visual_key })))
+        checkGL(`equipment update ${binding.key}/${variant.clip}`)
         for (let direction = 0; direction < 8; direction++) {
           actor.direction = direction
           for (let sample = 0; sample <= 32; sample++) {
