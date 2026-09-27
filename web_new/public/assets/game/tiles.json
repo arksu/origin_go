@@ -37679,6 +37679,306 @@
     "w": 63,
     "h": 32
    }
+  },
+  "moor/base_13.png": {
+   "frame": {
+    "x": 1289,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "moor/base_14.png": {
+   "frame": {
+    "x": 1352,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "moor/base_15.png": {
+   "frame": {
+    "x": 1415,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "moor/base_16.png": {
+   "frame": {
+    "x": 1478,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "moor/base_17.png": {
+   "frame": {
+    "x": 1541,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "fen/base_6.png": {
+   "frame": {
+    "x": 1604,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "fen/base_7.png": {
+   "frame": {
+    "x": 1667,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "fen/base_8.png": {
+   "frame": {
+    "x": 1730,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "fen/base_9.png": {
+   "frame": {
+    "x": 1793,
+    "y": 352,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "fen/base_10.png": {
+   "frame": {
+    "x": 1919,
+    "y": 375,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "leaf/base_9.png": {
+   "frame": {
+    "x": 1982,
+    "y": 379,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "leaf/base_10.png": {
+   "frame": {
+    "x": 1856,
+    "y": 383,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "leaf/base_11.png": {
+   "frame": {
+    "x": 1085,
+    "y": 384,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "leaf/base_12.png": {
+   "frame": {
+    "x": 1148,
+    "y": 384,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
+  },
+  "leaf/base_13.png": {
+   "frame": {
+    "x": 1211,
+    "y": 384,
+    "w": 63,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 63,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 63,
+    "h": 32
+   }
   }
  },
  "meta": {

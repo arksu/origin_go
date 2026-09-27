@@ -47,6 +47,26 @@
     {
       "img": "moor/base_12.png",
       "w": 1
+    },
+    {
+      "img": "moor/base_13.png",
+      "w": 1
+    },
+    {
+      "img": "moor/base_14.png",
+      "w": 1
+    },
+    {
+      "img": "moor/base_15.png",
+      "w": 1
+    },
+    {
+      "img": "moor/base_16.png",
+      "w": 1
+    },
+    {
+      "img": "moor/base_17.png",
+      "w": 1
     }
   ],
   "borders": [
