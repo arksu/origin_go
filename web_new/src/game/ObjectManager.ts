@@ -4,7 +4,7 @@ import { cullingController } from './culling'
 import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
 import { DEBUG_SHOW_OBJECT_BOUNDS } from '@/constants/game'
 import type { ActorRenderer } from './actors/ActorRenderer'
-import { loadShallowWaterTexture } from './actors/ShallowWaterVisual'
+import { loadShallowWaterTextures } from './actors/ShallowWaterVisual'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
@@ -24,13 +24,13 @@ export class ObjectManager {
   private hoveredEntityId: number | null = null
   private actorRenderer: ActorRenderer | undefined
   private playerEntityId: number | null = null
-  private rippleTexture: Texture | undefined
+  private rippleTextures: readonly Texture[] | undefined
   private tileTypeLookup: ((x: number, y: number) => number | undefined) | undefined
 
   setActorRenderer(renderer: ActorRenderer | undefined): void { this.actorRenderer = renderer }
 
   async initShallowWater(lookup: (x: number, y: number) => number | undefined): Promise<void> {
-    this.rippleTexture = await loadShallowWaterTexture()
+    this.rippleTextures = await loadShallowWaterTextures()
     this.tileTypeLookup = lookup
   }
 
@@ -57,7 +57,7 @@ export class ObjectManager {
       this.despawnObject(options.entityId)
     }
 
-    const objectView = new ObjectView(options, this.actorRenderer, this.rippleTexture)
+    const objectView = new ObjectView(options, this.actorRenderer, this.rippleTextures)
     objectView.setCarrying((this.carriedObjectsByCarrier.get(options.entityId)?.size ?? 0) > 0)
     objectView.setActorPriority(options.entityId === this.playerEntityId)
     objectView.setKnockedOutPose(this.knockedOutObjectIds.has(options.entityId))

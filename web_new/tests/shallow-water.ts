@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Sprite, Text, WebGLRenderer } from 'pixi.js'
+import { Application, Assets, Container, Graphics, Sprite, Text, WebGLRenderer, type Spritesheet } from 'pixi.js'
 import { ActorRenderer, type ActorHandle } from '../src/game/actors/ActorRenderer'
 import { ACTOR_RENDER } from '../src/game/actors/config'
 import { SHALLOW_WATER } from '../src/game/actors/shallowWaterConfig'
@@ -60,7 +60,8 @@ async function main() {
   }
   const handle = (view: ObjectView) => (view as unknown as { actorHandle: ActorHandle }).actorHandle
   const body = (view: ObjectView) => handle(view).sprite
-  const ripple = (view: ObjectView) => view.getContainer().children.find(child => child instanceof Sprite && child.texture === Assets.get(SHALLOW_WATER.textureURL)) as Sprite
+  const rippleTextures = Assets.get<Spritesheet>(SHALLOW_WATER.textureURL).animations.ripples!
+  const ripple = (view: ObjectView) => view.getContainer().children.find(child => child instanceof Sprite && rippleTextures.includes(child.texture)) as Sprite
   let now = performance.now()
   function frame(elapsed = 100) {
     now += elapsed
@@ -130,7 +131,12 @@ async function main() {
   frame()
   const wetPixels = extract(submerged)
   const frozenRevision = handle(submerged).actor.revision
-  for (let index = 0; index < 5; index++) frame()
+  const seenRippleFrames = new Set()
+  for (let index = 0; index < SHALLOW_WATER.frameCount; index++) {
+    seenRippleFrames.add(ripple(submerged).texture)
+    frame(1000 / SHALLOW_WATER.framesPerSecond)
+  }
+  check(seenRippleFrames.size === SHALLOW_WATER.frameCount, 'The loaded atlas must animate all five frames while stationary')
   check(handle(submerged).actor.revision === frozenRevision, 'Stationary ripples must reuse the cached actor frame')
   setTile(submerged, TILE_GRASS)
   frame(SHALLOW_WATER.transitionMs)
@@ -175,7 +181,7 @@ async function main() {
   const afterRestore = extract(submerged)
   check(afterRestore.every((value, index) => value === wetPixels[index]), 'Context restoration must preserve the exact clipped frame')
   manager.despawnObject(100)
-  report.textContent = 'ALL CHECKS PASSED\n8 facings · stationary entry/exit · binary GPU clipping · hover/picking · frame cache · chunk unload/reload · carry · KO · context restore'
+  report.textContent = 'ALL CHECKS PASSED\n5-frame ripples at 5 FPS · 8 facings · stationary entry/exit · binary GPU clipping · hover/picking · frame cache · chunk unload/reload · carry · KO · context restore'
   let walking = false
   let carrying = false
   let sceneCount = 16

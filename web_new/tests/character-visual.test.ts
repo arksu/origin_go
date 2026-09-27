@@ -21,7 +21,7 @@ import { ShallowWaterVisual } from '../src/game/actors/ShallowWaterVisual'
 import { SHALLOW_WATER } from '../src/game/actors/shallowWaterConfig'
 
 test('waterline reverses smoothly and clears unknown terrain without destroying the shared texture', () => {
-  const effect = new ShallowWaterVisual(Texture.EMPTY)
+  const effect = new ShallowWaterVisual([Texture.EMPTY])
   const halfwayMs = SHALLOW_WATER.transitionMs / 2
   const reverseMs = halfwayMs + SHALLOW_WATER.transitionMs / 4
   const submergedMs = reverseMs + SHALLOW_WATER.transitionMs
@@ -43,7 +43,7 @@ test('waterline reverses smoothly and clears unknown terrain without destroying 
 })
 
 test('idle ripples settle without advancing their distance phase or moving the waterline', () => {
-  const effect = new ShallowWaterVisual(Texture.EMPTY)
+  const effect = new ShallowWaterVisual([Texture.EMPTY])
   effect.update(true, true, 0, 0)
   effect.update(true, true, SHALLOW_WATER.pulseDistanceTiles / 4, 300)
   assert.ok(effect.sprite.width > SHALLOW_WATER.rippleWidth)
@@ -55,6 +55,21 @@ test('idle ripples settle without advancing their distance phase or moving the w
   effect.update(true, false, 0, 1600)
   assert.equal(effect.sprite.alpha, SHALLOW_WATER.idleAlpha)
   effect.sprite.destroy()
+})
+
+test('ripple frames advance at 5 FPS while stationary, loop, and reset without destroying shared textures', () => {
+  const textures = Array.from({ length: 5 }, () => new Texture({ source: Texture.EMPTY.source }))
+  const effect = new ShallowWaterVisual(textures)
+  for (const [nowMs, frameIndex] of [[0, 0], [199, 0], [200, 1], [399, 1], [400, 2], [600, 3], [800, 4], [999, 4], [1000, 0]] as const) {
+    effect.update(true, false, 0, nowMs)
+    assert.equal(effect.sprite.texture, textures[frameIndex], `Frame at ${nowMs}ms`)
+  }
+  effect.update(false, false, 0, 1001, true)
+  assert.equal(effect.sprite.texture, textures[0])
+  assert.equal(effect.sprite.visible, false)
+  effect.sprite.destroy()
+  assert.ok(textures.every(texture => !texture.destroyed))
+  for (const texture of textures) texture.destroy()
 })
 
 function visual(revision: string, generation = '0:4294967297') {

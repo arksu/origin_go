@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Четыре варианта ряби — выбор текстуры</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 24px; background: #162429; color: #dce5d6; font: 14px system-ui, sans-serif; }
+main { max-width: 920px; margin: auto; }
+h1 { font-size: 22px; margin: 0 0 8px; }
+h2 { font-size: 17px; margin: 0 0 8px; }
+p { margin: 0 0 16px; line-height: 1.45; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+article { padding: 16px; background: #1c2f35; border: 1px solid #425259; border-radius: 8px; }
+article p { min-height: 40px; }
+.large { display: grid; place-items: center; height: 150px; background: #084869; }
+.large img { width: 280px; height: 140px; max-width: 100%; object-fit: contain; }
+img { display: block; image-rendering: pixelated; }
+.native { display: flex; justify-content: space-around; padding-top: 12px; }
+figure { margin: 0; }
+.native img { width: 80px; height: 40px; }
+.green { background: #243c24; }
+.water { background: #084869; }
+figcaption { margin-top: 4px; font-size: 12px; color: #afc2cb; }
+footer { margin-top: 16px; color: #afc2cb; }
+@media(max-width:560px) { .grid { grid-template-columns: 1fr; } }
+</style>
+<main>
+<h1>Четыре варианта ряби</h1>
+<p>Выбраны варианты 1 и 4. Вместе с тремя новыми кадрами они подключены как анимация 5 FPS. <a href="/tests/shallow-water.html">Посмотреть в игровом рендере</a>. Сверху — увеличенный вид; снизу — игровой размер 80×40 на зелёном и синем фоне.</p>
+<div class="grid">
+<article><h2>1 · Мелкая рябь</h2><p>Короткие волны рядом с внутренним кольцом, чуть более неровные края гребней.</p><div class="large"><img src="/assets/review/shallow-water/candidates-2026-09-26/variant-01.png" alt="Вариант 1: мелкая рябь"></div><div class="native"><figure><img class="green" src="/assets/review/shallow-water/candidates-2026-09-26/variant-01.png" alt="Вариант 1 на зелёном"><figcaption>Зелёный · 1×</figcaption></figure><figure><img class="water" src="/assets/review/shallow-water/candidates-2026-09-26/variant-01.png" alt="Вариант 1 на воде"><figcaption>Вода · 1×</figcaption></figure></div></article>
+<article><h2>2 · Немного пены</h2><p>Редкие маленькие светлые акценты на гребнях, без сплошной полосы пены.</p><div class="large"><img src="/assets/review/shallow-water/candidates-2026-09-26/variant-02.png" alt="Вариант 2: немного пены"></div><div class="native"><figure><img class="green" src="/assets/review/shallow-water/candidates-2026-09-26/variant-02.png" alt="Вариант 2 на зелёном"><figcaption>Зелёный · 1×</figcaption></figure><figure><img class="water" src="/assets/review/shallow-water/candidates-2026-09-26/variant-02.png" alt="Вариант 2 на воде"><figcaption>Вода · 1×</figcaption></figure></div></article>
+<article><h2>3 · Капли и пузырьки</h2><p>Небольшие капли и пузырьки у боковых дуг; кольца сохраняют прежнюю толщину.</p><div class="large"><img src="/assets/review/shallow-water/candidates-2026-09-26/variant-03.png" alt="Вариант 3: капли и пузырьки"></div><div class="native"><figure><img class="green" src="/assets/review/shallow-water/candidates-2026-09-26/variant-03.png" alt="Вариант 3 на зелёном"><figcaption>Зелёный · 1×</figcaption></figure><figure><img class="water" src="/assets/review/shallow-water/candidates-2026-09-26/variant-03.png" alt="Вариант 3 на воде"><figcaption>Вода · 1×</figcaption></figure></div></article>
+<article><h2>4 · Дополнительные дуги</h2><p>Больше коротких прерывистых дуг между кольцами и у внешнего края.</p><div class="large"><img src="/assets/review/shallow-water/candidates-2026-09-26/variant-04.png" alt="Вариант 4: дополнительные дуги"></div><div class="native"><figure><img class="green" src="/assets/review/shallow-water/candidates-2026-09-26/variant-04.png" alt="Вариант 4 на зелёном"><figcaption>Зелёный · 1×</figcaption></figure><figure><img class="water" src="/assets/review/shallow-water/candidates-2026-09-26/variant-04.png" alt="Вариант 4 на воде"><figcaption>Вода · 1×</figcaption></figure></div></article>
+</div>
+<footer>Варианты 1 и 4 утверждены и включены в пятикадровую анимацию.</footer>
+</main>
+</html>

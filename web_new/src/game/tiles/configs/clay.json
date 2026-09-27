@@ -11,6 +11,26 @@
     {
       "img": "clay/base_3.png",
       "w": 1
+    },
+    {
+      "img": "clay/base_4.png",
+      "w": 1
+    },
+    {
+      "img": "clay/base_5.png",
+      "w": 1
+    },
+    {
+      "img": "clay/base_6.png",
+      "w": 1
+    },
+    {
+      "img": "clay/base_7.png",
+      "w": 1
+    },
+    {
+      "img": "clay/base_8.png",
+      "w": 1
     }
   ],
   "borders": [
