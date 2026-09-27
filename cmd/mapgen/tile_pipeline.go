@@ -1,8 +1,19 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"image"
+	"time"
+)
+
+type TerrainTimings struct {
+	Elevation, Rivers, Ground, Main, Cleanup, Secondary, Satellites, Hydrology time.Duration
+}
 
 type TerrainPrecompute struct {
+	Timings                                           TerrainTimings
+	MainPatches, SecondaryPatches, Islets, IsletTiles int
+
 	WidthTiles        int
 	HeightTiles       int
 	Elevation         []float32
@@ -14,6 +25,9 @@ type TerrainPrecompute struct {
 }
 
 func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFields) (*TerrainPrecompute, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
 	widthTiles, heightTiles, err := opts.WorldTileDimensions()
 	if err != nil {
 		return nil, err
@@ -23,6 +37,8 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 		return nil, fmt.Errorf("tile count overflow: %w", err)
 	}
 
+	timings := TerrainTimings{}
+	started := time.Now()
 	elevation := make([]float32, tileCount)
 	parallelForRows(heightTiles, opts.Threads, func(y int) {
 		for x := 0; x < widthTiles; x++ {
@@ -31,6 +47,8 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 		}
 	})
 
+	timings.Elevation = time.Since(started)
+	started = time.Now()
 	var riverClass []RiverClass
 	riverSources := 0
 	if opts.River.Enabled {
@@ -42,23 +60,41 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 		riverSources = riverNetwork.SourceCount
 	}
 
+	timings.Rivers = time.Since(started)
+	started = time.Now()
 	baseTiles := make([]byte, tileCount)
-	macroLayout := buildBiomeMacroLayout(widthTiles, heightTiles, opts.Seed, opts.Biome)
+
 	parallelForRows(heightTiles, opts.Threads, func(y int) {
 		for x := 0; x < widthTiles; x++ {
 			idx := tileIndex(x, y, widthTiles)
 			elevationValue := float64(elevation[idx])
 			signals := fields.BiomeSignals(x, y, opts.Biome)
-			family := macroLayout.familyAt(x, y, opts.Seed, opts.Biome)
-			baseTiles[idx] = classifyBaseTileFromBiome(elevationValue, signals, family, opts.Biome, opts.Seed, x, y)
+
+			baseTiles[idx] = classifyBiomeGround(elevationValue, signals, opts.Biome, opts.Seed, x, y)
 		}
 	})
-	if opts.Biome.Enabled {
-		smoothBiomeTiles(baseTiles, widthTiles, heightTiles, opts.Biome.SmoothingPasses)
-		removeTinyBiomePatches(baseTiles, widthTiles, heightTiles, opts.Biome.MinPatchTiles)
-		smoothBiomeEdges(baseTiles, widthTiles, heightTiles, maxInt(1, opts.Biome.SmoothingPasses))
-		cleanBiomeBorderArtifacts(baseTiles, widthTiles, heightTiles, maxInt(1, opts.Biome.SmoothingPasses))
+
+	timings.Ground = time.Since(started)
+	mainCount, secondaryCount, islets, isletTiles := 0, 0, 0, 0
+	if opts.Biome.Enabled && opts.Biome.BlobEnabled {
+		locked := buildBiomeStructuralMask(baseTiles, elevation, riverClass, opts.River.Enabled)
+		painter := blobPainter{tiles: baseTiles, locked: locked, world: image.Rect(0, 0, widthTiles, heightTiles), seed: opts.Seed, opts: opts.Biome, signals: func(column, row int) BiomeSignals { return fields.BiomeSignals(column, row, opts.Biome) }}
+		started = time.Now()
+		patches := painter.mainPatches()
+		mainCount = len(patches)
+		painter.paintMain(patches)
+		timings.Main = time.Since(started)
+		started = time.Now()
+		cleanupBlobBiomes(baseTiles, locked, widthTiles, heightTiles, opts.Biome)
+		timings.Cleanup = time.Since(started)
+		started = time.Now()
+		secondaryCount = painter.paintSecondary()
+		timings.Secondary = time.Since(started)
+		started = time.Now()
+		islets, isletTiles = painter.paintIslets(patches)
+		timings.Satellites = time.Since(started)
 	}
+	started = time.Now()
 
 	tiles := make([]byte, tileCount)
 	parallelForRows(heightTiles, opts.Threads, func(y int) {
@@ -74,6 +110,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 	})
 	applyShorelineSand(tiles, baseTiles, riverClass, elevation, widthTiles, heightTiles, opts.Seed)
 
+	timings.Hydrology = time.Since(started)
 	riverShallowTiles := 0
 	riverDeepTiles := 0
 	if opts.River.Enabled && len(riverClass) == tileCount {
@@ -91,6 +128,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 	}
 
 	return &TerrainPrecompute{
+		Timings: timings, MainPatches: mainCount, SecondaryPatches: secondaryCount, Islets: islets, IsletTiles: isletTiles,
 		WidthTiles:        widthTiles,
 		HeightTiles:       heightTiles,
 		Elevation:         elevation,

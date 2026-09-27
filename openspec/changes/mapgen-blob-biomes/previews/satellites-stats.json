@@ -1,0 +1,21 @@
+{
+  "crop_bounds": {
+    "Min": {
+      "X": 5346,
+      "Y": 1039
+    },
+    "Max": {
+      "X": 5442,
+      "Y": 1135
+    }
+  },
+  "focus": {
+    "X": 5394,
+    "Y": 1087
+  },
+  "focus_size": 15,
+  "max_component": 15,
+  "min_component": 1,
+  "surviving_added_tiles": 37753,
+  "surviving_components": 5211
+}

@@ -1,0 +1,321 @@
+{
+  "seed": 314159,
+  "resources": {
+    "seed": 314159,
+    "elapsed_seconds": 10.04811916700055,
+    "peak_rss_bytes": 1177993216,
+    "user_seconds": 13.633137,
+    "system_seconds": 0.22877899999999998
+  },
+  "generation": {
+    "phase_timings": {
+      "Elevation": 33325250,
+      "Rivers": 464442541,
+      "Ground": 234008166,
+      "Main": 764473625,
+      "Cleanup": 4803227167,
+      "Secondary": 525311125,
+      "Satellites": 689239167,
+      "Hydrology": 553642166
+    },
+    "main_patches": 525,
+    "secondary_patches": 2486,
+    "islets": 5479,
+    "islet_tiles": 38774,
+    "width_tiles": 6400,
+    "height_tiles": 6400,
+    "river_sources": 111,
+    "river_shallow_tiles": 956346,
+    "river_deep_tiles": 1786449
+  },
+  "palette_statistics": [
+    {
+      "Name": "deepwater",
+      "Tiles": 1832353,
+      "Coverage": 4.47351806640625,
+      "Components": 13156,
+      "Min": 1,
+      "Median": 13,
+      "Max": 1112,
+      "Small15": 7009,
+      "Focus": {
+        "X": 1797,
+        "Y": 2308
+      },
+      "SmallFocus": {
+        "X": 6087,
+        "Y": 6398
+      }
+    },
+    {
+      "Name": "water",
+      "Tiles": 4474412,
+      "Coverage": 10.923857421875,
+      "Components": 6724,
+      "Min": 1,
+      "Median": 554,
+      "Max": 6903,
+      "Small15": 450,
+      "Focus": {
+        "X": 5275,
+        "Y": 4216
+      },
+      "SmallFocus": {
+        "X": 5854,
+        "Y": 6399
+      }
+    },
+    {
+      "Name": "river_deep",
+      "Tiles": 2143941,
+      "Coverage": 5.23423095703125,
+      "Components": 101,
+      "Min": 151,
+      "Median": 1042,
+      "Max": 1406999,
+      "Small15": 0,
+      "Focus": {
+        "X": 4978,
+        "Y": 1450
+      },
+      "SmallFocus": {
+        "X": 0,
+        "Y": 0
+      }
+    },
+    {
+      "Name": "river_shallow",
+      "Tiles": 1141609,
+      "Coverage": 2.78713134765625,
+      "Components": 3556,
+      "Min": 1,
+      "Median": 2,
+      "Max": 72529,
+      "Small15": 3349,
+      "Focus": {
+        "X": 4320,
+        "Y": 5026
+      },
+      "SmallFocus": {
+        "X": 5967,
+        "Y": 5626
+      }
+    },
+    {
+      "Name": "sand",
+      "Tiles": 184321,
+      "Coverage": 0.45000244140625,
+      "Components": 6925,
+      "Min": 1,
+      "Median": 12,
+      "Max": 2349,
+      "Small15": 4328,
+      "Focus": {
+        "X": 5180,
+        "Y": 4282
+      },
+      "SmallFocus": {
+        "X": 6156,
+        "Y": 6399
+      }
+    },
+    {
+      "Name": "pine",
+      "Tiles": 3872614,
+      "Coverage": 9.4546240234375,
+      "Components": 2998,
+      "Min": 1,
+      "Median": 4,
+      "Max": 120411,
+      "Small15": 2558,
+      "Focus": {
+        "X": 4369,
+        "Y": 5957
+      },
+      "SmallFocus": {
+        "X": 4824,
+        "Y": 6399
+      }
+    },
+    {
+      "Name": "leaf",
+      "Tiles": 6531061,
+      "Coverage": 15.94497314453125,
+      "Components": 4931,
+      "Min": 1,
+      "Median": 4,
+      "Max": 249667,
+      "Small15": 4217,
+      "Focus": {
+        "X": 4980,
+        "Y": 3198
+      },
+      "SmallFocus": {
+        "X": 4335,
+        "Y": 6399
+      }
+    },
+    {
+      "Name": "thicket",
+      "Tiles": 554382,
+      "Coverage": 1.3534716796875,
+      "Components": 2282,
+      "Min": 1,
+      "Median": 192,
+      "Max": 1779,
+      "Small15": 422,
+      "Focus": {
+        "X": 1150,
+        "Y": 2666
+      },
+      "SmallFocus": {
+        "X": 5663,
+        "Y": 6362
+      }
+    },
+    {
+      "Name": "grass",
+      "Tiles": 15203040,
+      "Coverage": 37.116796875,
+      "Components": 2521,
+      "Min": 1,
+      "Median": 2,
+      "Max": 1783272,
+      "Small15": 1606,
+      "Focus": {
+        "X": 2355,
+        "Y": 4862
+      },
+      "SmallFocus": {
+        "X": 2737,
+        "Y": 6399
+      }
+    },
+    {
+      "Name": "heath",
+      "Tiles": 1255694,
+      "Coverage": 3.0656591796875,
+      "Components": 836,
+      "Min": 1,
+      "Median": 8,
+      "Max": 55971,
+      "Small15": 668,
+      "Focus": {
+        "X": 1580,
+        "Y": 3905
+      },
+      "SmallFocus": {
+        "X": 838,
+        "Y": 6362
+      }
+    },
+    {
+      "Name": "moor",
+      "Tiles": 799931,
+      "Coverage": 1.95295654296875,
+      "Components": 681,
+      "Min": 1,
+      "Median": 9,
+      "Max": 34444,
+      "Small15": 526,
+      "Focus": {
+        "X": 1036,
+        "Y": 3454
+      },
+      "SmallFocus": {
+        "X": 5370,
+        "Y": 6395
+      }
+    },
+    {
+      "Name": "swamp",
+      "Tiles": 1922649,
+      "Coverage": 4.69396728515625,
+      "Components": 938,
+      "Min": 1,
+      "Median": 9,
+      "Max": 74338,
+      "Small15": 751,
+      "Focus": {
+        "X": 3718,
+        "Y": 5620
+      },
+      "SmallFocus": {
+        "X": 4574,
+        "Y": 6377
+      }
+    },
+    {
+      "Name": "clay",
+      "Tiles": 28498,
+      "Coverage": 0.0695751953125,
+      "Components": 188,
+      "Min": 1,
+      "Median": 142,
+      "Max": 561,
+      "Small15": 27,
+      "Focus": {
+        "X": 3654,
+        "Y": 4239
+      },
+      "SmallFocus": {
+        "X": 4036,
+        "Y": 5793
+      }
+    },
+    {
+      "Name": "dirt",
+      "Tiles": 139285,
+      "Coverage": 0.34005126953125,
+      "Components": 745,
+      "Min": 1,
+      "Median": 153,
+      "Max": 1792,
+      "Small15": 123,
+      "Focus": {
+        "X": 3072,
+        "Y": 3863
+      },
+      "SmallFocus": {
+        "X": 2012,
+        "Y": 6397
+      }
+    },
+    {
+      "Name": "stone",
+      "Tiles": 175613,
+      "Coverage": 0.42874267578125,
+      "Components": 112621,
+      "Min": 1,
+      "Median": 1,
+      "Max": 20,
+      "Small15": 112612,
+      "Focus": {
+        "X": 5147,
+        "Y": 2256
+      },
+      "SmallFocus": {
+        "X": 5009,
+        "Y": 6399
+      }
+    },
+    {
+      "Name": "mountain",
+      "Tiles": 700597,
+      "Coverage": 1.71044189453125,
+      "Components": 12889,
+      "Min": 1,
+      "Median": 2,
+      "Max": 1433,
+      "Small15": 8426,
+      "Focus": {
+        "X": 6281,
+        "Y": 2379
+      },
+      "SmallFocus": {
+        "X": 5010,
+        "Y": 6399
+      }
+    }
+  ]
+}

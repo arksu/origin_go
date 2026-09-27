@@ -41,7 +41,8 @@ func LoadMapgenOptionsFromYAML(path string, defaults MapgenOptions) (MapgenOptio
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 
-	var cfg mapgenConfigFile
+	biomeDefaults := defaults.Biome
+	cfg := mapgenConfigFile{Biomes: &biomeDefaults}
 	if err := decoder.Decode(&cfg); err != nil {
 		return MapgenOptions{}, "", fmt.Errorf("decode gen config %q: %w", resolvedPath, err)
 	}
