@@ -12,296 +12,6 @@ type BiomeSignals struct {
 	Wetness         float64
 }
 
-type biomeFamily uint8
-
-const (
-	biomeFamilyForest biomeFamily = iota
-	biomeFamilyGrassland
-	biomeFamilyWetland
-	biomeFamilyHeathMoor
-	biomeFamilyMountain
-)
-
-const (
-	biomeMacroShuffleSalt = uint64(0xA77B159C2D4E5F11)
-	biomeBlendSalt        = uint64(0xC984E2A58A77DD21)
-	biomeVariantSalt      = uint64(0xDEADBEEF1248AA55)
-	biomeEdgeNoiseSalt    = uint64(0x1B6F2D7E89AC55D3)
-	biomeWarpXSalt        = uint64(0x9C1245AA7E31D095)
-	biomeWarpYSalt        = uint64(0xB77A6D4E1F89C213)
-	biomeSelectorSalt     = uint64(0xE31F55A9CC7284D0)
-)
-
-type biomeMacroLayout struct {
-	gridX      int
-	gridY      int
-	cellWidth  int
-	cellHeight int
-	width      int
-	height     int
-	blendWidth float64
-	points     []biomeMacroPoint
-}
-
-type biomeMacroPoint struct {
-	X      float64
-	Y      float64
-	Family biomeFamily
-}
-
-func buildBiomeMacroLayout(width, height int, seed int64, opts BiomeOptions) biomeMacroLayout {
-	if !opts.Enabled || opts.RegionCount <= 1 {
-		return biomeMacroLayout{
-			gridX:      1,
-			gridY:      1,
-			cellWidth:  maxInt(1, width),
-			cellHeight: maxInt(1, height),
-			width:      maxInt(1, width),
-			height:     maxInt(1, height),
-			blendWidth: 0,
-			points: []biomeMacroPoint{
-				{
-					X:      float64(width) * 0.5,
-					Y:      float64(height) * 0.5,
-					Family: biomeFamilyGrassland,
-				},
-			},
-		}
-	}
-
-	aspect := float64(width) / float64(maxInt(1, height))
-	gridX := int(math.Round(math.Sqrt(float64(opts.RegionCount) * aspect)))
-	gridX = maxInt(1, gridX)
-	gridY := int(math.Ceil(float64(opts.RegionCount) / float64(gridX)))
-	gridY = maxInt(1, gridY)
-
-	cellWidth := int(math.Ceil(float64(width) / float64(gridX)))
-	cellHeight := int(math.Ceil(float64(height) / float64(gridY)))
-	cellWidth = maxInt(1, cellWidth)
-	cellHeight = maxInt(1, cellHeight)
-
-	cellCount := gridX * gridY
-	families := assignMacroFamilies(cellCount, seed, opts)
-
-	points := make([]biomeMacroPoint, 0, cellCount)
-	jitterXMax := minInt(opts.RegionJitter, maxInt(0, cellWidth/2-2))
-	jitterYMax := minInt(opts.RegionJitter, maxInt(0, cellHeight/2-2))
-	for gy := 0; gy < gridY; gy++ {
-		for gx := 0; gx < gridX; gx++ {
-			idx := gy*gridX + gx
-
-			baseX := float64(gx*cellWidth) + float64(cellWidth)*0.5
-			baseY := float64(gy*cellHeight) + float64(cellHeight)*0.5
-
-			jitterX := 0.0
-			jitterY := 0.0
-			if jitterXMax > 0 {
-				jitterX = (coordHash01(seed, gx, gy, biomeBlendSalt^0x1111) - 0.5) * 2 * float64(jitterXMax)
-			}
-			if jitterYMax > 0 {
-				jitterY = (coordHash01(seed, gy, gx, biomeBlendSalt^0x2222) - 0.5) * 2 * float64(jitterYMax)
-			}
-
-			pointX := clampFloat(baseX+jitterX, 0, float64(maxInt(0, width-1)))
-			pointY := clampFloat(baseY+jitterY, 0, float64(maxInt(0, height-1)))
-			points = append(points, biomeMacroPoint{
-				X:      pointX,
-				Y:      pointY,
-				Family: families[idx],
-			})
-		}
-	}
-
-	return biomeMacroLayout{
-		gridX:      gridX,
-		gridY:      gridY,
-		cellWidth:  cellWidth,
-		cellHeight: cellHeight,
-		width:      width,
-		height:     height,
-		blendWidth: float64(maxInt(0, opts.BlendWidth)),
-		points:     points,
-	}
-}
-
-func assignMacroFamilies(cellCount int, seed int64, opts BiomeOptions) []biomeFamily {
-	if cellCount <= 0 {
-		return []biomeFamily{biomeFamilyGrassland}
-	}
-
-	forest := int(math.Floor(opts.ForestShare * float64(cellCount)))
-	grass := int(math.Floor(opts.GrasslandShare * float64(cellCount)))
-	wetland := int(math.Floor(opts.WetlandShare * float64(cellCount)))
-	heathMoor := int(math.Floor(opts.HeathMoorShare * float64(cellCount)))
-	mountain := int(math.Floor(opts.MountainShare * float64(cellCount)))
-
-	assigned := forest + grass + wetland + heathMoor + mountain
-	if assigned > cellCount {
-		assigned = cellCount
-	}
-	grass += cellCount - assigned
-
-	families := make([]biomeFamily, 0, cellCount)
-	appendN := func(family biomeFamily, n int) {
-		for i := 0; i < n; i++ {
-			families = append(families, family)
-		}
-	}
-	appendN(biomeFamilyForest, forest)
-	appendN(biomeFamilyGrassland, grass)
-	appendN(biomeFamilyWetland, wetland)
-	appendN(biomeFamilyHeathMoor, heathMoor)
-	appendN(biomeFamilyMountain, mountain)
-	for len(families) < cellCount {
-		families = append(families, biomeFamilyGrassland)
-	}
-	for i := len(families) - 1; i > 0; i-- {
-		r := coordHash01(seed, i, len(families), biomeMacroShuffleSalt)
-		j := int(math.Floor(r * float64(i+1)))
-		families[i], families[j] = families[j], families[i]
-	}
-	return families
-}
-
-func (m biomeMacroLayout) familyAt(x, y int, seed int64, opts BiomeOptions) biomeFamily {
-	if len(m.points) == 0 {
-		return biomeFamilyGrassland
-	}
-
-	queryX := float64(x)
-	queryY := float64(y)
-
-	cellMinSize := float64(maxInt(1, minInt(m.cellWidth, m.cellHeight)))
-	blendWidth := m.blendWidth
-	if blendWidth <= 0 {
-		blendWidth = cellMinSize * 0.25
-	}
-
-	// Domain-warp the macro lookup so Voronoi borders curve instead of
-	// forming straight cell-edge artifacts.
-	warpStrength := cellMinSize*0.34 + float64(opts.RegionJitter)*0.16 + blendWidth*0.10
-	if opts.DomainWarpStrength > 0 {
-		warpStrength += math.Min(opts.DomainWarpStrength, cellMinSize) * 0.30
-	}
-	maxWarp := cellMinSize*0.95 + blendWidth*0.55 + 24
-	warpStrength = clampFloat(warpStrength, 0, maxWarp)
-	if warpStrength > 0 {
-		longScale := maxFloat64(64.0, cellMinSize*1.65)
-		shortScale := maxFloat64(20.0, cellMinSize*0.72)
-
-		warpLongX := smoothHashNoise2D(seed, queryX+137.3, queryY-53.7, longScale, biomeWarpXSalt)
-		warpLongY := smoothHashNoise2D(seed, queryX-92.1, queryY+118.4, longScale, biomeWarpYSalt)
-		warpShortX := smoothHashNoise2D(seed, queryX-29.2, queryY+79.5, shortScale, biomeWarpXSalt^biomeBlendSalt)
-		warpShortY := smoothHashNoise2D(seed, queryX+63.7, queryY-41.6, shortScale, biomeWarpYSalt^biomeBlendSalt)
-
-		warpX := ((warpLongX-0.5)*0.68 + (warpShortX-0.5)*0.32) * 2 * warpStrength
-		warpY := ((warpLongY-0.5)*0.68 + (warpShortY-0.5)*0.32) * 2 * warpStrength
-
-		if m.width > 0 {
-			queryX = clampFloat(queryX+warpX, 0, float64(m.width-1))
-		} else {
-			queryX += warpX
-		}
-		if m.height > 0 {
-			queryY = clampFloat(queryY+warpY, 0, float64(m.height-1))
-		} else {
-			queryY += warpY
-		}
-	}
-
-	centerGX := minInt(maxInt(0, int(queryX)/m.cellWidth), m.gridX-1)
-	centerGY := minInt(maxInt(0, int(queryY)/m.cellHeight), m.gridY-1)
-
-	searchRadius := 1
-	if cellMinSize > 0 {
-		padding := blendWidth + warpStrength*0.6
-		searchRadius += int(math.Ceil(padding / cellMinSize))
-	}
-	searchRadius = minInt(3, maxInt(1, searchRadius))
-
-	nearestDist2 := math.MaxFloat64
-	secondDist2 := math.MaxFloat64
-	nearestFamily := biomeFamilyGrassland
-	secondFamily := biomeFamilyGrassland
-
-	for gy := centerGY - searchRadius; gy <= centerGY+searchRadius; gy++ {
-		if gy < 0 || gy >= m.gridY {
-			continue
-		}
-		for gx := centerGX - searchRadius; gx <= centerGX+searchRadius; gx++ {
-			if gx < 0 || gx >= m.gridX {
-				continue
-			}
-			idx := gy*m.gridX + gx
-			if idx < 0 || idx >= len(m.points) {
-				continue
-			}
-			point := m.points[idx]
-			dx := queryX - point.X
-			dy := queryY - point.Y
-			dist2 := dx*dx + dy*dy
-			if dist2 < nearestDist2 {
-				secondDist2 = nearestDist2
-				secondFamily = nearestFamily
-				nearestDist2 = dist2
-				nearestFamily = point.Family
-			} else if dist2 < secondDist2 {
-				secondDist2 = dist2
-				secondFamily = point.Family
-			}
-		}
-	}
-
-	if nearestFamily == secondFamily {
-		return nearestFamily
-	}
-
-	nearestDist := math.Sqrt(nearestDist2)
-	secondDist := math.Sqrt(secondDist2)
-	if secondDist <= nearestDist {
-		return nearestFamily
-	}
-
-	// Approximate distance to Voronoi boundary between nearest and second site.
-	boundaryDistance := (secondDist - nearestDist) * 0.5
-	if blendWidth <= 0 {
-		blendWidth = cellMinSize * 0.25
-	}
-	if blendWidth <= 0 || boundaryDistance >= blendWidth*1.35 {
-		return nearestFamily
-	}
-
-	edgePrimaryScale := maxFloat64(18.0, blendWidth*0.72)
-	edgeSecondaryScale := maxFloat64(8.0, blendWidth*0.28)
-	if opts.RegionJitter > 0 {
-		edgePrimaryScale = maxFloat64(14.0, edgePrimaryScale-float64(opts.RegionJitter)*0.03)
-	}
-
-	edgeNoiseLarge := smoothHashNoise2D(seed, queryX, queryY, edgePrimaryScale, biomeEdgeNoiseSalt)
-	edgeNoiseSmall := smoothHashNoise2D(seed, queryX+43.5, queryY-27.1, edgeSecondaryScale, biomeEdgeNoiseSalt^0x5A5A)
-	edgeNoise := edgeNoiseLarge*0.65 + edgeNoiseSmall*0.35
-	warpedBoundaryDistance := boundaryDistance + (edgeNoise-0.5)*blendWidth*1.55
-
-	if warpedBoundaryDistance >= blendWidth {
-		return nearestFamily
-	}
-	if warpedBoundaryDistance <= -blendWidth {
-		return secondFamily
-	}
-
-	transition := 0.5 - warpedBoundaryDistance/(2*blendWidth)
-	transition = clampFloat(transition, 0, 1)
-	transition = transition * transition * (3 - 2*transition)
-
-	selectorScale := maxFloat64(10.0, blendWidth*0.30)
-	selector := smoothHashNoise2D(seed, queryX+11.4, queryY-19.8, selectorScale, biomeSelectorSalt)
-	if selector < transition {
-		return secondFamily
-	}
-
-	return nearestFamily
-}
-
 func clampFloat(value, minValue, maxValue float64) float64 {
 	if value < minValue {
 		return minValue
@@ -339,80 +49,25 @@ func smoothHashNoise2D(seed int64, x, y, scale float64, salt uint64) float64 {
 	return lerp(uy, row0, row1)
 }
 
-func classifyBaseTileFromBiome(
-	elevation float64,
-	signals BiomeSignals,
-	family biomeFamily,
-	opts BiomeOptions,
-	seed int64,
-	x int,
-	y int,
-) byte {
-	// Inland shoreline sand is handled in a dedicated post-pass so lakes/rivers
-	// do not get a hard sand ring from elevation alone.
-	if signals.Moisture < 0.22 && signals.Temperature > 0.62 && signals.Continentalness > 0.45 {
-		return tileSand
-	}
-	if opts.HNHEnabled && signals.Wetness > 0.68 && coordHash01(seed, x, y, biomeVariantSalt^0x01) < opts.VariantDensity*0.18 {
-		return tileClay
-	}
-
+func classifyBiomeGround(elevation float64, signals BiomeSignals, opts BiomeOptions, seed int64, column, row int) byte {
 	if !opts.Enabled {
 		return classifyBaseTile(elevation, signals.Moisture, signals.Temperature)
 	}
-
+	if signals.Moisture < 0.22 && signals.Temperature > 0.62 && signals.Continentalness > 0.45 {
+		return tileSand
+	}
 	if signals.Ruggedness >= opts.MountainRuggedThreshold {
-		if coordHash01(seed, x, y, biomeVariantSalt^0x02) < 0.2 {
+		const stoneSalt = uint64(0xDEADBEEF1248AA55) ^ 0x02
+		// Coherent outcrops preserve the massif's visual continuity at tile scale.
+		if smoothHashNoise2D(seed, float64(column), float64(row), opts.MountainStoneScale, stoneSalt) < 0.2 {
 			return tileStone
 		}
 		return tileMountain
 	}
-
-	switch family {
-	case biomeFamilyForest:
-		if opts.HNHEnabled && coordHash01(seed, x, y, biomeVariantSalt^0x03) < opts.VariantDensity*0.18 && signals.Moisture > 0.62 {
-			return tileThicket
-		}
-		if signals.Temperature < 0.45 {
-			return tileForestPine
-		}
-		return tileForestLeaf
-	case biomeFamilyWetland:
-		if signals.Wetness > 0.55 || signals.Moisture > 0.72 {
-			return tileSwamp
-		}
-		if coordHash01(seed, x, y, biomeVariantSalt^0x04) < 0.35 {
-			return tileClay
-		}
-		return tileDirt
-	case biomeFamilyHeathMoor:
-		if signals.Moisture < 0.36 || signals.Temperature < 0.42 {
-			return tileMoor
-		}
-		return tileHeath
-	case biomeFamilyMountain:
-		if opts.HNHEnabled && coordHash01(seed, x, y, biomeVariantSalt^0x05) < opts.VariantDensity*0.22 {
-			return tileStone
-		}
-		return tileMountain
-	default:
-		if opts.HNHEnabled {
-			v := coordHash01(seed, x, y, biomeVariantSalt^0x06)
-			if signals.Moisture < 0.30 && v < opts.VariantDensity*0.18 {
-				return tileHeath
-			}
-			if signals.Moisture > 0.64 && v < opts.VariantDensity*0.10 {
-				return tileForestLeaf
-			}
-			if v < opts.VariantDensity*0.09 {
-				return tileDirt
-			}
-		}
-		return tileGrass
-	}
+	return tileGrass
 }
 
-func smoothBiomeTiles(tiles []byte, width, height, passes int) {
+func smoothBiomeTiles(tiles []byte, locked []bool, width, height, passes int) {
 	if passes <= 0 || len(tiles) == 0 {
 		return
 	}
@@ -423,8 +78,8 @@ func smoothBiomeTiles(tiles []byte, width, height, passes int) {
 		{-1, 1}, {0, 1}, {1, 1},
 	}
 
+	next := make([]byte, len(tiles))
 	for pass := 0; pass < passes; pass++ {
-		next := make([]byte, len(tiles))
 		copy(next, tiles)
 
 		var counts [256]int
@@ -434,7 +89,7 @@ func smoothBiomeTiles(tiles []byte, width, height, passes int) {
 			for x := 0; x < width; x++ {
 				idx := tileIndex(x, y, width)
 				current := tiles[idx]
-				if isLockedCoastTile(current) {
+				if locked[idx] {
 					continue
 				}
 
@@ -448,8 +103,9 @@ func smoothBiomeTiles(tiles []byte, width, height, passes int) {
 					if nx < 0 || ny < 0 || nx >= width || ny >= height {
 						continue
 					}
-					nTile := tiles[tileIndex(nx, ny, width)]
-					if isLockedCoastTile(nTile) {
+					neighborIndex := tileIndex(nx, ny, width)
+					nTile := tiles[neighborIndex]
+					if locked[neighborIndex] {
 						continue
 					}
 					cIndex := int(nTile)
@@ -476,7 +132,7 @@ func smoothBiomeTiles(tiles []byte, width, height, passes int) {
 	}
 }
 
-func smoothBiomeEdges(tiles []byte, width, height, passes int) {
+func smoothBiomeEdges(tiles []byte, locked []bool, width, height, passes int) {
 	if passes <= 0 || len(tiles) == 0 {
 		return
 	}
@@ -491,15 +147,15 @@ func smoothBiomeEdges(tiles []byte, width, height, passes int) {
 	var counts [256]int
 	touched := make([]int, 0, 8)
 
+	next := make([]byte, len(tiles))
 	for pass := 0; pass < passes; pass++ {
-		next := make([]byte, len(tiles))
 		copy(next, tiles)
 
 		for y := 0; y < height; y++ {
 			for x := 0; x < width; x++ {
 				idx := tileIndex(x, y, width)
 				current := tiles[idx]
-				if isLockedCoastTile(current) {
+				if locked[idx] {
 					continue
 				}
 
@@ -510,8 +166,9 @@ func smoothBiomeEdges(tiles []byte, width, height, passes int) {
 					if nx < 0 || ny < 0 || nx >= width || ny >= height {
 						continue
 					}
-					nTile := tiles[tileIndex(nx, ny, width)]
-					if nTile == current {
+					neighborIndex := tileIndex(nx, ny, width)
+					nTile := tiles[neighborIndex]
+					if !locked[neighborIndex] && nTile == current {
 						sameOrth++
 					}
 				}
@@ -529,8 +186,9 @@ func smoothBiomeEdges(tiles []byte, width, height, passes int) {
 					if nx < 0 || ny < 0 || nx >= width || ny >= height {
 						continue
 					}
-					nTile := tiles[tileIndex(nx, ny, width)]
-					if isLockedCoastTile(nTile) {
+					neighborIndex := tileIndex(nx, ny, width)
+					nTile := tiles[neighborIndex]
+					if locked[neighborIndex] {
 						continue
 					}
 					cIndex := int(nTile)
@@ -564,7 +222,7 @@ func smoothBiomeEdges(tiles []byte, width, height, passes int) {
 	}
 }
 
-func cleanBiomeBorderArtifacts(tiles []byte, width, height, passes int) {
+func cleanBiomeBorderArtifacts(tiles []byte, locked []bool, width, height, passes int) {
 	if passes <= 0 || len(tiles) == 0 {
 		return
 	}
@@ -578,15 +236,15 @@ func cleanBiomeBorderArtifacts(tiles []byte, width, height, passes int) {
 	var counts [256]int
 	touched := make([]int, 0, 8)
 
+	next := make([]byte, len(tiles))
 	for pass := 0; pass < passes; pass++ {
-		next := make([]byte, len(tiles))
 		copy(next, tiles)
 
 		for y := 0; y < height; y++ {
 			for x := 0; x < width; x++ {
 				idx := tileIndex(x, y, width)
 				current := tiles[idx]
-				if isLockedCoastTile(current) {
+				if locked[idx] {
 					continue
 				}
 
@@ -601,11 +259,12 @@ func cleanBiomeBorderArtifacts(tiles []byte, width, height, passes int) {
 					if nx < 0 || ny < 0 || nx >= width || ny >= height {
 						continue
 					}
-					nTile := tiles[tileIndex(nx, ny, width)]
-					if isLockedCoastTile(nTile) {
+					neighborIndex := tileIndex(nx, ny, width)
+					nTile := tiles[neighborIndex]
+					if locked[neighborIndex] {
 						continue
 					}
-					if nTile == current {
+					if !locked[neighborIndex] && nTile == current {
 						sameCount++
 					}
 					cIndex := int(nTile)
@@ -634,14 +293,14 @@ func cleanBiomeBorderArtifacts(tiles []byte, width, height, passes int) {
 	}
 }
 
-func removeTinyBiomePatches(tiles []byte, width, height, minPatchTiles int) {
+func removeTinyBiomePatches(tiles []byte, locked []bool, width, height, minPatchTiles int) {
 	if minPatchTiles <= 1 || len(tiles) == 0 {
 		return
 	}
 
 	visited := make([]bool, len(tiles))
-	component := make([]int, 0, minPatchTiles)
-	queue := make([]int, 0, minPatchTiles)
+	// A full-capacity queue bounds allocation and also stores the component.
+	queue := make([]int, 0, len(tiles))
 	dirs := [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
 
 	for idx := range tiles {
@@ -649,19 +308,17 @@ func removeTinyBiomePatches(tiles []byte, width, height, minPatchTiles int) {
 			continue
 		}
 		tile := tiles[idx]
-		if isLockedCoastTile(tile) {
+		if locked[idx] {
 			visited[idx] = true
 			continue
 		}
 
-		component = component[:0]
 		queue = queue[:0]
 		queue = append(queue, idx)
 		visited[idx] = true
 
 		for head := 0; head < len(queue); head++ {
 			current := queue[head]
-			component = append(component, current)
 			cx := current % width
 			cy := current / width
 
@@ -675,7 +332,7 @@ func removeTinyBiomePatches(tiles []byte, width, height, minPatchTiles int) {
 				if visited[nIdx] {
 					continue
 				}
-				if tiles[nIdx] != tile || isLockedCoastTile(tiles[nIdx]) {
+				if tiles[nIdx] != tile || locked[nIdx] {
 					continue
 				}
 				visited[nIdx] = true
@@ -683,20 +340,20 @@ func removeTinyBiomePatches(tiles []byte, width, height, minPatchTiles int) {
 			}
 		}
 
-		if len(component) >= minPatchTiles {
+		if len(queue) >= minPatchTiles {
 			continue
 		}
 
-		replacement := dominantNeighborTile(component, tiles, width, height, tile)
-		for _, cIdx := range component {
+		replacement := dominantNeighborTile(queue, tiles, locked, width, height, tile)
+		for _, cIdx := range queue {
 			tiles[cIdx] = replacement
 		}
 	}
 }
 
-func dominantNeighborTile(component []int, tiles []byte, width, height int, oldTile byte) byte {
+func dominantNeighborTile(component []int, tiles []byte, locked []bool, width, height int, oldTile byte) byte {
 	var counts [256]int
-	bestTile := byte(tileGrass)
+	bestTile := oldTile
 	bestCount := 0
 	dirs := [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
 
@@ -709,8 +366,9 @@ func dominantNeighborTile(component []int, tiles []byte, width, height int, oldT
 			if nx < 0 || ny < 0 || nx >= width || ny >= height {
 				continue
 			}
-			nTile := tiles[tileIndex(nx, ny, width)]
-			if nTile == oldTile || isLockedCoastTile(nTile) {
+			neighborIndex := tileIndex(nx, ny, width)
+			nTile := tiles[neighborIndex]
+			if nTile == oldTile || locked[neighborIndex] {
 				continue
 			}
 			cIndex := int(nTile)
@@ -725,18 +383,16 @@ func dominantNeighborTile(component []int, tiles []byte, width, height int, oldT
 	return bestTile
 }
 
-func isLockedCoastTile(tile byte) bool {
-	switch tile {
-	case tileWaterDeep, tileWater, tileSand:
-		return true
-	default:
-		return false
-	}
-}
-
 func maxFloat64(a, b float64) float64 {
 	if a > b {
 		return a
 	}
 	return b
+}
+
+func cleanupBlobBiomes(tiles []byte, locked []bool, width, height int, opts BiomeOptions) {
+	smoothBiomeTiles(tiles, locked, width, height, opts.SmoothingPasses)
+	smoothBiomeEdges(tiles, locked, width, height, opts.SmoothingPasses)
+	cleanBiomeBorderArtifacts(tiles, locked, width, height, opts.SmoothingPasses)
+	removeTinyBiomePatches(tiles, locked, width, height, opts.MinPatchTiles)
 }

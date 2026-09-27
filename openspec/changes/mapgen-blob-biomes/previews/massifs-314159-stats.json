@@ -1,0 +1,290 @@
+[
+  {
+    "Name": "deepwater",
+    "Tiles": 1832353,
+    "Coverage": 4.47351806640625,
+    "Components": 13156,
+    "Min": 1,
+    "Median": 13,
+    "Max": 1112,
+    "Small15": 7009,
+    "Focus": {
+      "X": 1797,
+      "Y": 2308
+    },
+    "SmallFocus": {
+      "X": 6087,
+      "Y": 6398
+    }
+  },
+  {
+    "Name": "water",
+    "Tiles": 4474412,
+    "Coverage": 10.923857421875,
+    "Components": 6724,
+    "Min": 1,
+    "Median": 554,
+    "Max": 6903,
+    "Small15": 450,
+    "Focus": {
+      "X": 5275,
+      "Y": 4216
+    },
+    "SmallFocus": {
+      "X": 5854,
+      "Y": 6399
+    }
+  },
+  {
+    "Name": "river_deep",
+    "Tiles": 2143941,
+    "Coverage": 5.23423095703125,
+    "Components": 101,
+    "Min": 151,
+    "Median": 1042,
+    "Max": 1406999,
+    "Small15": 0,
+    "Focus": {
+      "X": 4978,
+      "Y": 1450
+    },
+    "SmallFocus": {
+      "X": 0,
+      "Y": 0
+    }
+  },
+  {
+    "Name": "river_shallow",
+    "Tiles": 1141609,
+    "Coverage": 2.78713134765625,
+    "Components": 3556,
+    "Min": 1,
+    "Median": 2,
+    "Max": 72529,
+    "Small15": 3349,
+    "Focus": {
+      "X": 4320,
+      "Y": 5026
+    },
+    "SmallFocus": {
+      "X": 5967,
+      "Y": 5626
+    }
+  },
+  {
+    "Name": "sand",
+    "Tiles": 180029,
+    "Coverage": 0.43952392578125,
+    "Components": 6409,
+    "Min": 1,
+    "Median": 12,
+    "Max": 2349,
+    "Small15": 3904,
+    "Focus": {
+      "X": 5180,
+      "Y": 4282
+    },
+    "SmallFocus": {
+      "X": 4103,
+      "Y": 6398
+    }
+  },
+  {
+    "Name": "pine",
+    "Tiles": 3868220,
+    "Coverage": 9.443896484375,
+    "Components": 2944,
+    "Min": 1,
+    "Median": 4,
+    "Max": 113491,
+    "Small15": 2514,
+    "Focus": {
+      "X": 4433,
+      "Y": 5992
+    },
+    "SmallFocus": {
+      "X": 4824,
+      "Y": 6399
+    }
+  },
+  {
+    "Name": "leaf",
+    "Tiles": 5948103,
+    "Coverage": 14.52173583984375,
+    "Components": 4350,
+    "Min": 1,
+    "Median": 4,
+    "Max": 189980,
+    "Small15": 3716,
+    "Focus": {
+      "X": 3822,
+      "Y": 533
+    },
+    "SmallFocus": {
+      "X": 4335,
+      "Y": 6399
+    }
+  },
+  {
+    "Name": "thicket",
+    "Tiles": 536703,
+    "Coverage": 1.31031005859375,
+    "Components": 2071,
+    "Min": 1,
+    "Median": 207,
+    "Max": 2095,
+    "Small15": 338,
+    "Focus": {
+      "X": 582,
+      "Y": 1689
+    },
+    "SmallFocus": {
+      "X": 5663,
+      "Y": 6362
+    }
+  },
+  {
+    "Name": "grass",
+    "Tiles": 13887619,
+    "Coverage": 33.90531982421875,
+    "Components": 3444,
+    "Min": 1,
+    "Median": 2,
+    "Max": 1037534,
+    "Small15": 2400,
+    "Focus": {
+      "X": 2000,
+      "Y": 5567
+    },
+    "SmallFocus": {
+      "X": 2737,
+      "Y": 6399
+    }
+  },
+  {
+    "Name": "heath",
+    "Tiles": 1227667,
+    "Coverage": 2.99723388671875,
+    "Components": 781,
+    "Min": 1,
+    "Median": 8,
+    "Max": 57027,
+    "Small15": 621,
+    "Focus": {
+      "X": 1584,
+      "Y": 3906
+    },
+    "SmallFocus": {
+      "X": 722,
+      "Y": 6004
+    }
+  },
+  {
+    "Name": "moor",
+    "Tiles": 780549,
+    "Coverage": 1.90563720703125,
+    "Components": 635,
+    "Min": 1,
+    "Median": 9,
+    "Max": 35264,
+    "Small15": 490,
+    "Focus": {
+      "X": 1031,
+      "Y": 3455
+    },
+    "SmallFocus": {
+      "X": 657,
+      "Y": 6372
+    }
+  },
+  {
+    "Name": "swamp",
+    "Tiles": 1842543,
+    "Coverage": 4.49839599609375,
+    "Components": 872,
+    "Min": 1,
+    "Median": 8,
+    "Max": 75284,
+    "Small15": 706,
+    "Focus": {
+      "X": 3745,
+      "Y": 5590
+    },
+    "SmallFocus": {
+      "X": 4566,
+      "Y": 6385
+    }
+  },
+  {
+    "Name": "clay",
+    "Tiles": 570466,
+    "Coverage": 1.3927392578125,
+    "Components": 831,
+    "Min": 1,
+    "Median": 240,
+    "Max": 7569,
+    "Small15": 304,
+    "Focus": {
+      "X": 1763,
+      "Y": 5986
+    },
+    "SmallFocus": {
+      "X": 1360,
+      "Y": 6399
+    }
+  },
+  {
+    "Name": "dirt",
+    "Tiles": 132205,
+    "Coverage": 0.32276611328125,
+    "Components": 679,
+    "Min": 1,
+    "Median": 161,
+    "Max": 1848,
+    "Small15": 103,
+    "Focus": {
+      "X": 3089,
+      "Y": 3877
+    },
+    "SmallFocus": {
+      "X": 2012,
+      "Y": 6397
+    }
+  },
+  {
+    "Name": "stone",
+    "Tiles": 238322,
+    "Coverage": 0.5818408203125,
+    "Components": 531,
+    "Min": 1,
+    "Median": 268,
+    "Max": 3929,
+    "Small15": 72,
+    "Focus": {
+      "X": 2488,
+      "Y": 4314
+    },
+    "SmallFocus": {
+      "X": 6364,
+      "Y": 6312
+    }
+  },
+  {
+    "Name": "mountain",
+    "Tiles": 2155259,
+    "Coverage": 5.26186279296875,
+    "Components": 283,
+    "Min": 1,
+    "Median": 38,
+    "Max": 92503,
+    "Small15": 132,
+    "Focus": {
+      "X": 615,
+      "Y": 4407
+    },
+    "SmallFocus": {
+      "X": 3390,
+      "Y": 6383
+    }
+  }
+]

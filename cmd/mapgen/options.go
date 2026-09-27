@@ -69,21 +69,59 @@ type RiverOptions struct {
 }
 
 type BiomeOptions struct {
+	BlobEnabled             bool    `yaml:"blob_enabled"`
+	BlobSeedSpacing         int     `yaml:"blob_seed_spacing"`
+	BlobSeedJitter          float64 `yaml:"blob_seed_jitter"`
+	BlobSecondarySpacing    int     `yaml:"blob_secondary_spacing"`
+	BlobSkipWeight          float64 `yaml:"blob_skip_weight"`
+	BlobForestSizeMin       float64 `yaml:"blob_forest_size_min"`
+	BlobForestSizeMax       float64 `yaml:"blob_forest_size_max"`
+	BlobForestWidth         float64 `yaml:"blob_forest_width"`
+	BlobHeathSizeMin        float64 `yaml:"blob_heath_size_min"`
+	BlobHeathSizeMax        float64 `yaml:"blob_heath_size_max"`
+	BlobHeathWidth          float64 `yaml:"blob_heath_width"`
+	BlobMoorSizeMin         float64 `yaml:"blob_moor_size_min"`
+	BlobMoorSizeMax         float64 `yaml:"blob_moor_size_max"`
+	BlobMoorWidth           float64 `yaml:"blob_moor_width"`
+	BlobSwampSizeMin        float64 `yaml:"blob_swamp_size_min"`
+	BlobSwampSizeMax        float64 `yaml:"blob_swamp_size_max"`
+	BlobSwampWidth          float64 `yaml:"blob_swamp_width"`
+	BlobThicketSizeMin      float64 `yaml:"blob_thicket_size_min"`
+	BlobThicketSizeMax      float64 `yaml:"blob_thicket_size_max"`
+	BlobThicketWidth        float64 `yaml:"blob_thicket_width"`
+	BlobDirtSizeMin         float64 `yaml:"blob_dirt_size_min"`
+	BlobDirtSizeMax         float64 `yaml:"blob_dirt_size_max"`
+	BlobDirtWidth           float64 `yaml:"blob_dirt_width"`
+	BlobClaySizeMin         float64 `yaml:"blob_clay_size_min"`
+	BlobClaySizeMax         float64 `yaml:"blob_clay_size_max"`
+	BlobClayWidth           float64 `yaml:"blob_clay_width"`
+	BlobForestWeight        float64 `yaml:"blob_forest_weight"`
+	BlobHeathWeight         float64 `yaml:"blob_heath_weight"`
+	BlobMoorWeight          float64 `yaml:"blob_moor_weight"`
+	BlobSwampWeight         float64 `yaml:"blob_swamp_weight"`
+	BlobThicketDensity      float64 `yaml:"blob_thicket_density"`
+	BlobDirtDensity         float64 `yaml:"blob_dirt_density"`
+	BlobClayDensity         float64 `yaml:"blob_clay_density"`
+	BlobForestColdThreshold float64 `yaml:"blob_forest_cold_threshold"`
+	BlobMoorMoistureMax     float64 `yaml:"blob_moor_moisture_max"`
+	BlobMoorTemperatureMax  float64 `yaml:"blob_moor_temperature_max"`
+	BlobSwampWetnessMin     float64 `yaml:"blob_swamp_wetness_min"`
+	BlobSwampMoistureMin    float64 `yaml:"blob_swamp_moisture_min"`
+	BlobClayWetnessMin      float64 `yaml:"blob_clay_wetness_min"`
+	BlobClayMoistureMin     float64 `yaml:"blob_clay_moisture_min"`
+	BlobRaggedness          float64 `yaml:"blob_raggedness"`
+	BlobIsletChance         float64 `yaml:"blob_islet_chance"`
+	BlobIsletSpacing        int     `yaml:"blob_islet_spacing"`
+	BlobMaxNodes            int     `yaml:"blob_max_nodes"`
+	BlobMaxDepth            int     `yaml:"blob_max_depth"`
+
 	Enabled                 bool    `yaml:"enabled"`
-	HNHEnabled              bool    `yaml:"hnh_enabled"`
-	VariantDensity          float64 `yaml:"hnh_variant_density"`
-	RegionCount             int     `yaml:"hnh_region_count"`
-	RegionJitter            int     `yaml:"hnh_region_jitter"`
-	BlendWidth              int     `yaml:"hnh_blend_width"`
 	SmoothingPasses         int     `yaml:"hnh_smoothing_passes"`
 	MinPatchTiles           int     `yaml:"hnh_min_patch_tiles"`
 	SwampClumpScale         float64 `yaml:"hnh_swamp_clump_scale"`
 	MountainRuggedThreshold float64 `yaml:"hnh_mountain_rugged_threshold"`
-	ForestShare             float64 `yaml:"hnh_forest_share"`
-	GrasslandShare          float64 `yaml:"hnh_grassland_share"`
-	WetlandShare            float64 `yaml:"hnh_wetland_share"`
-	HeathMoorShare          float64 `yaml:"hnh_heath_moor_share"`
-	MountainShare           float64 `yaml:"hnh_mountain_share"`
+	MountainMassifScale     float64 `yaml:"mountain_massif_scale"`
+	MountainStoneScale      float64 `yaml:"mountain_stone_scale"`
 
 	TemperatureScale     float64 `yaml:"temperature_scale"`
 	MoistureScale        float64 `yaml:"moisture_scale"`
@@ -180,21 +218,59 @@ func DefaultMapgenOptions() MapgenOptions {
 			LakeFlowThreshold:      28,
 		},
 		Biome: BiomeOptions{
+			BlobEnabled:             true,
+			BlobSeedSpacing:         260,
+			BlobSeedJitter:          0.45,
+			BlobSecondarySpacing:    48,
+			BlobSkipWeight:          0.45,
+			BlobForestSizeMin:       45,
+			BlobForestSizeMax:       110,
+			BlobForestWidth:         0,
+			BlobHeathSizeMin:        25,
+			BlobHeathSizeMax:        65,
+			BlobHeathWidth:          0,
+			BlobMoorSizeMin:         25,
+			BlobMoorSizeMax:         60,
+			BlobMoorWidth:           0,
+			BlobSwampSizeMin:        35,
+			BlobSwampSizeMax:        85,
+			BlobSwampWidth:          0,
+			BlobThicketSizeMin:      4,
+			BlobThicketSizeMax:      10,
+			BlobThicketWidth:        0,
+			BlobDirtSizeMin:         3,
+			BlobDirtSizeMax:         8,
+			BlobDirtWidth:           0,
+			BlobClaySizeMin:         3,
+			BlobClaySizeMax:         7,
+			BlobClayWidth:           0,
+			BlobForestWeight:        1,
+			BlobHeathWeight:         0.8,
+			BlobMoorWeight:          0.8,
+			BlobSwampWeight:         0.7,
+			BlobThicketDensity:      0.35,
+			BlobDirtDensity:         0.08,
+			BlobClayDensity:         0.05,
+			BlobForestColdThreshold: 0.45,
+			BlobMoorMoistureMax:     0.36,
+			BlobMoorTemperatureMax:  0.42,
+			BlobSwampWetnessMin:     0.55,
+			BlobSwampMoistureMin:    0.72,
+			BlobClayWetnessMin:      0.60,
+			BlobClayMoistureMin:     0.64,
+			BlobRaggedness:          6,
+			BlobIsletChance:         0.25,
+			BlobIsletSpacing:        12,
+			BlobMaxNodes:            64,
+			BlobMaxDepth:            16,
+
 			Enabled:                 true,
-			HNHEnabled:              true,
-			VariantDensity:          0.55,
-			RegionCount:             140,
-			RegionJitter:            220,
-			BlendWidth:              96,
 			SmoothingPasses:         2,
 			MinPatchTiles:           20,
 			SwampClumpScale:         1.0,
 			MountainRuggedThreshold: 0.66,
-			ForestShare:             0.30,
-			GrasslandShare:          0.30,
-			WetlandShare:            0.14,
-			HeathMoorShare:          0.14,
-			MountainShare:           0.12,
+			MountainMassifScale:     512,
+			MountainStoneScale:      32,
 			TemperatureScale:        1.0,
 			MoistureScale:           1.0,
 			ContinentalnessScale:    1.0,
@@ -471,14 +547,8 @@ func (o MapgenOptions) Validate() error {
 		return errors.New("river.lake_flow_threshold must be >= river.flow_shallow_threshold")
 	}
 
-	if o.Biome.RegionCount <= 0 {
-		return errors.New("biomes.hnh_region_count must be > 0")
-	}
-	if o.Biome.RegionJitter < 0 {
-		return errors.New("biomes.hnh_region_jitter must be >= 0")
-	}
-	if o.Biome.BlendWidth < 0 {
-		return errors.New("biomes.hnh_blend_width must be >= 0")
+	if err := o.Biome.validateBlobOptions(); err != nil {
+		return err
 	}
 	if o.Biome.SmoothingPasses < 0 {
 		return errors.New("biomes.hnh_smoothing_passes must be >= 0")
@@ -486,33 +556,17 @@ func (o MapgenOptions) Validate() error {
 	if o.Biome.MinPatchTiles <= 0 {
 		return errors.New("biomes.hnh_min_patch_tiles must be > 0")
 	}
-	if o.Biome.VariantDensity < 0 || o.Biome.VariantDensity > 1 {
-		return errors.New("biomes.hnh_variant_density must be within [0,1]")
-	}
 	if o.Biome.SwampClumpScale <= 0 || o.Biome.SwampClumpScale > 4 {
 		return errors.New("biomes.hnh_swamp_clump_scale must be within (0,4]")
 	}
 	if o.Biome.MountainRuggedThreshold < 0 || o.Biome.MountainRuggedThreshold > 1 {
 		return errors.New("biomes.hnh_mountain_rugged_threshold must be within [0,1]")
 	}
-	if err := validateBiomeShare("biomes.hnh_forest_share", o.Biome.ForestShare); err != nil {
-		return err
+	if o.Biome.MountainMassifScale < 1 || o.Biome.MountainMassifScale > 4096 {
+		return errors.New("biomes.mountain_massif_scale must be within [1,4096] tiles")
 	}
-	if err := validateBiomeShare("biomes.hnh_grassland_share", o.Biome.GrasslandShare); err != nil {
-		return err
-	}
-	if err := validateBiomeShare("biomes.hnh_wetland_share", o.Biome.WetlandShare); err != nil {
-		return err
-	}
-	if err := validateBiomeShare("biomes.hnh_heath_moor_share", o.Biome.HeathMoorShare); err != nil {
-		return err
-	}
-	if err := validateBiomeShare("biomes.hnh_mountain_share", o.Biome.MountainShare); err != nil {
-		return err
-	}
-	landShare := o.Biome.ForestShare + o.Biome.GrasslandShare + o.Biome.WetlandShare + o.Biome.HeathMoorShare + o.Biome.MountainShare
-	if landShare > 1.0 {
-		return errors.New("sum of biome land shares must be <= 1.0")
+	if o.Biome.MountainStoneScale < 1 || o.Biome.MountainStoneScale > o.Biome.MountainMassifScale {
+		return errors.New("biomes.mountain_stone_scale must be within [1,mountain_massif_scale] tiles")
 	}
 	if o.Biome.TemperatureScale <= 0 {
 		return errors.New("biomes.temperature_scale must be > 0")
@@ -558,12 +612,12 @@ func (o MapgenOptions) Validate() error {
 		return errors.New("world tile dimensions must be > 0")
 	}
 
-	tileCount, err := checkedMulUint64(uint64(widthTiles), uint64(heightTiles))
+	_, err = checkedMulUint64(uint64(widthTiles), uint64(heightTiles))
 	if err != nil {
 		return fmt.Errorf("tile count overflow: %w", err)
 	}
 
-	estimatedBytes, err := estimatePrecomputeBytes(tileCount, o.River.Enabled, o.Biome.Enabled)
+	estimatedBytes, err := o.estimateTerrainBytes(widthTiles, heightTiles)
 	if err != nil {
 		return err
 	}
@@ -580,23 +634,16 @@ func (o MapgenOptions) Validate() error {
 	return nil
 }
 
-func validateBiomeShare(name string, value float64) error {
-	if value < 0 || value > 1 {
-		return fmt.Errorf("%s must be within [0,1]", name)
-	}
-	return nil
-}
-
 func estimatePrecomputeBytes(tileCount uint64, riverEnabled, biomeEnabled bool) (uint64, error) {
-	// elevation float32 + final tile byte
-	bytesPerTile := uint64(5)
+	// Elevation float32, base tile byte, and final tile byte are always allocated.
+	bytesPerTile := uint64(6)
 	if riverEnabled {
 		// flow uint32 + river class byte
 		bytesPerTile += 5
 	}
 	if biomeEnabled {
-		// base tile byte + climate fields (temperature, moisture, continentalness, erosion, weirdness, ruggedness)
-		bytesPerTile += 1 + 6*4
+		// Reserve the existing climate/cleanup working-buffer allowance.
+		bytesPerTile += 6 * 4
 	}
 	return checkedMulUint64(tileCount, bytesPerTile)
 }

@@ -59,20 +59,11 @@ river:
 
 biomes:
   enabled: true
-  hnh_enabled: false
-  hnh_variant_density: 0.25
-  hnh_region_count: 96
-  hnh_region_jitter: 180
-  hnh_blend_width: 112
+  blob_enabled: true
   hnh_smoothing_passes: 2
   hnh_min_patch_tiles: 18
   hnh_swamp_clump_scale: 1.0
   hnh_mountain_rugged_threshold: 0.68
-  hnh_forest_share: 0.34
-  hnh_grassland_share: 0.30
-  hnh_wetland_share: 0.08
-  hnh_heath_moor_share: 0.14
-  hnh_mountain_share: 0.14
   temperature_scale: 1.1
   moisture_scale: 1.0
   continentalness_scale: 1.1

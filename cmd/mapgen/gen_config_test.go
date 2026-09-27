@@ -71,20 +71,11 @@ river:
   lake_flow_threshold: 28
 biomes:
   enabled: true
-  hnh_enabled: true
-  hnh_variant_density: 0.55
-  hnh_region_count: 30
-  hnh_region_jitter: 140
-  hnh_blend_width: 70
+  blob_enabled: true
   hnh_smoothing_passes: 2
   hnh_min_patch_tiles: 20
   hnh_swamp_clump_scale: 1.0
   hnh_mountain_rugged_threshold: 0.66
-  hnh_forest_share: 0.30
-  hnh_grassland_share: 0.30
-  hnh_wetland_share: 0.14
-  hnh_heath_moor_share: 0.14
-  hnh_mountain_share: 0.12
   temperature_scale: 1.1
   moisture_scale: 0.9
   continentalness_scale: 1.0

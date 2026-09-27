@@ -70,7 +70,9 @@ func (f *NoiseFields) BiomeSignals(tileX, tileY int, opts BiomeOptions) BiomeSig
 		sampleY*terrainScale*1.1*opts.WeirdnessScale+5000,
 	))
 
-	ruggedness := clamp01((math.Abs(weirdness-0.5)*2*0.6 + (1.0-erosion)*0.7 + continentalness*0.35) / 1.65)
+	// A separate tile-space field gives mountains regional extent without enlarging other biomes.
+	mountainScale := float64(f.coordPerTile) * opts.MountainMassifScale
+	ruggedness := normalizeNoise(f.perlin.Noise2D(sampleX/mountainScale+6000, sampleY/mountainScale+6000))
 	wetness := clamp01((moisture*0.75 + (1.0-continentalness)*0.25) * opts.SwampClumpScale)
 
 	return BiomeSignals{
