@@ -123,6 +123,26 @@
       "loop": true,
       "playback": "distance",
       "cycleDistanceTiles": 1.677975879375
+    },
+    "chop_l": {
+      "action": "chop_l",
+      "range": {
+        "start": 1,
+        "end": 69
+      },
+      "fps": 30,
+      "loop": true,
+      "playback": "time"
+    },
+    "chop_r": {
+      "action": "chop_r",
+      "range": {
+        "start": 1,
+        "end": 69
+      },
+      "fps": 30,
+      "loop": true,
+      "playback": "time"
     }
   },
   "bindings": {},

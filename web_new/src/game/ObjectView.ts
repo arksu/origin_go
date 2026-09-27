@@ -601,9 +601,11 @@ export class ObjectView {
     if (this.actorHandle) {
       const cosine = Math.cos(this.container.rotation)
       const sine = Math.sin(this.container.rotation)
-      const anchorY = this.knockedOutPose ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY - this.actorHandle.immersionPx
-      for (const localX of [-ACTOR_RENDER.anchorX, ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorX]) {
-        for (const localY of [-anchorY, ACTOR_RENDER.cellSize - anchorY]) {
+      const frameHeight = this.actorHandle.actor.usesChopFrame || this.actorHandle.sprite.texture.height > ACTOR_RENDER.cellSize ? ACTOR_RENDER.chopFrameHeight : ACTOR_RENDER.cellSize
+      const frameWidth = frameHeight > ACTOR_RENDER.cellSize ? ACTOR_RENDER.chopFrameWidth : ACTOR_RENDER.cellSize
+      const anchorY = this.knockedOutPose ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY + (frameHeight > ACTOR_RENDER.cellSize ? ACTOR_RENDER.chopFrameTop : 0) - this.actorHandle.immersionPx
+      for (const localX of [-frameWidth / 2, frameWidth / 2]) {
+        for (const localY of [-anchorY, frameHeight - anchorY]) {
           minX = Math.min(minX, cx + localX * cosine - localY * sine)
           maxX = Math.max(maxX, cx + localX * cosine - localY * sine)
           minY = Math.min(minY, cy + localX * sine + localY * cosine)
