@@ -27,6 +27,8 @@ import { clearAlphaMaskCache } from './PixelHitTest'
 import { ActorRenderer } from './actors/ActorRenderer'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import type { EquippedVisual } from '../types/characterVisual'
+import type { CharacterActionAnimationState } from '../types/actionAnimation'
+import type { ObjectViewOptions } from './ObjectView'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
@@ -282,19 +284,20 @@ export class Render {
   }
 
   private update(): void {
+    const now = performance.now()
     this.updateMovement()
     this.updateCamera()
     this.updateBuildGhost()
     this.updateLiftGhost()
     this.updateChunkBuilds()
+    this.objectManager.update(now, timeSync.estimateServerNowMs())
     this.updateCulling()
-    this.objectManager.update()
     this.objectManager.syncActiveCarryVisuals(CARRIED_OBJECT_OFFSET_PX)
     this.nicknameManager.update(this.objectManager)
     this.chatBalloonManager.update(this.objectManager)
     this.moveMarkerManager?.update()
     try {
-      this.actorRenderer?.render()
+      this.actorRenderer?.render(now)
     } catch (error) {
       console.error('[Render] Character rendering failed', error)
       this.app.stop()
@@ -589,7 +592,11 @@ export class Render {
     this.chunkManager.unloadChunk(x, y, identity)
   }
 
-  spawnObject(options: { entityId: number; typeId: number; resourcePath: string; position: { x: number; y: number }; size: { x: number; y: number } }): void {
+  setActionAnimation(entityId: number, state: CharacterActionAnimationState | null): void {
+    this.objectManager.setActionAnimation(entityId, state)
+  }
+
+  spawnObject(options: ObjectViewOptions): void {
     this.objectManager.spawnObject(options)
   }
 

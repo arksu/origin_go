@@ -15,6 +15,7 @@ export const ACTOR_RENDER = {
   knockedOutBodyCenter: 1.94 / 2,
   knockedOutGroundHeight: .19,
   walkSamples: 8,
+  actionSamples: 8,
   locomotionBlendMs: LOCOMOTION_TRANSITION_MS,
   locomotionStopMs: LOCOMOTION_STOP_MS,
   maxResidentBytes: 128 * 1024 * 1024,

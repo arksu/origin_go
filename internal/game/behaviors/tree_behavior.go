@@ -3,6 +3,7 @@ package behaviors
 import (
 	"fmt"
 	"math"
+	"origin/internal/cyclicaction"
 	"strings"
 
 	constt "origin/internal/const"
@@ -427,7 +428,7 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 		cycleSoundKey = ""
 		completeSoundKey = ""
 	}
-	ecs.AddComponent(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
+	cyclicaction.StartContext(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
 		BehaviorKey:        treeBehaviorKey,
 		ActionID:           actionID,
 		CycleSoundKey:      cycleSoundKey,

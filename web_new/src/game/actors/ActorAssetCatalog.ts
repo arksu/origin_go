@@ -1,6 +1,7 @@
 import { Matrix4, Quaternion, Vector3 } from 'three'
 import { EQUIPMENT_SLOT_BY_ID, type EquipmentSlot } from '../../types/characterVisual'
 import type { ArmMotion, EquipmentBinding, EquipmentDefinition, SocketId } from './equipment'
+import { parseActionAnimationProjection, validateActionAnimationAssets, type ActionAnimationDefinition } from '../../types/actionAnimationDefs'
 
 export interface Artifact { url: string; sha256: string; bytes: number }
 export interface ClipManifest {
@@ -29,6 +30,7 @@ export interface ActorManifest {
 export interface ActorCatalog {
   readonly manifests: Readonly<Record<string, ActorManifest>>
   readonly equipment: Readonly<Record<string, EquipmentDefinition>>
+  readonly actionAnimations: Readonly<Record<string, ActionAnimationDefinition>>
 }
 const HASH = /^[a-f0-9]{64}$/
 const SOCKETS: SocketId[] = ['grip_l', 'grip_r', 'forearm_l', 'forearm_r']
@@ -103,6 +105,7 @@ export async function loadActorCatalog(url = '/assets/game/asset-catalog.json', 
   const assets = record(snapshot.assets, 'catalog assets')
   // Validate the complete snapshot before making any referenced requests.
   for (const reference of Object.values(assets)) artifact(reference, 'json')
+  if (snapshot.actionAnimations !== undefined) artifact(snapshot.actionAnimations, 'json')
   const entries = await Promise.all(Object.entries(assets).map(async ([id, reference]) => {
     const manifest = parseActorManifest(await json((reference as Artifact).url, 'force-cache'))
     if (manifest.id !== id) throw new Error(`Catalog manifest id mismatch: ${id}`)
@@ -124,5 +127,9 @@ export async function loadActorCatalog(url = '/assets/game/asset-catalog.json', 
       ? { kind: 'rigid', assetId: id, bindings }
       : { kind: 'skinned', assetId: id, slots: manifest.equipmentSlots }
   }
-  return freeze({ manifests, equipment })
+  const definitions = snapshot.actionAnimations === undefined ? [] : parseActionAnimationProjection(
+    await json((snapshot.actionAnimations as Artifact).url, 'force-cache'), 'action animation catalog')
+  validateActionAnimationAssets(definitions, manifests, 'action animation catalog')
+  const actionAnimations = Object.fromEntries(definitions.map(definition => [definition.key, definition]))
+  return freeze({ manifests, equipment, actionAnimations })
 }

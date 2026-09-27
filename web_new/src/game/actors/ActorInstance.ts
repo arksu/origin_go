@@ -10,6 +10,9 @@ import { ActorSockets } from './ActorSockets'
 import { ActorArmLayers } from './ActorArmLayers'
 import { actorYawForScreenAngle, screenFacingAngle } from './facing'
 import type { EquippedVisual, EquipmentSlot } from '../../types/characterVisual'
+import type { ActionAnimationFrame } from '../../types/actionAnimationDefs'
+import { ActionAnimationPlayer, type ActionAnimationInput } from './ActionAnimationPlayer'
+import { ActorActionLayers } from './ActorActionLayers'
 
 interface EquipmentInstance {
   root: Group
@@ -61,6 +64,9 @@ export class ActorInstance {
   private stopStartWeight: number | undefined
   private walkCycleDistance = 0
   private catalog: Readonly<Record<string, EquipmentDefinition>> = {}
+  private equipmentReady = false
+  private actionLayers: ActorActionLayers | null = null
+  private readonly actionPlayer = new ActionAnimationPlayer({ width: ACTOR_RENDER.cellSize, height: ACTOR_RENDER.cellSize, origin_x: ACTOR_RENDER.anchorX, origin_y: ACTOR_RENDER.anchorY })
 
   constructor(private readonly cache: Pick<ActorAssetCache, 'acquire' | 'catalog'>) {
     this.ready = this.load().catch((error: unknown) => {
@@ -92,13 +98,17 @@ export class ActorInstance {
   }
 
   private async load(): Promise<void> {
-    this.catalog = (await this.cache.catalog).equipment
+    const catalog = await this.cache.catalog
+    this.catalog = catalog.equipment
     if (this.destroyed) return
     const lease = await this.cache.acquire(COMMONER_ASSET_ID)
     if (this.destroyed) { lease.release(); return }
     this.releaseModel = lease.release
     this.model = clone(lease.asset.scene)
     const animations = bindClips(this.model, lease.asset.manifest, lease.asset.animations)
+    this.actionPlayer.configure(catalog.actionAnimations, lease.asset.manifest.id)
+    const actionClips = new Set(Object.values(catalog.actionAnimations).filter(binding => binding.actor === lease.asset.manifest.id).flatMap(binding => binding.variants.map(variant => variant.clip)))
+    this.actionLayers = new ActorActionLayers(this.model, animations, actionClips)
     const walk = lease.asset.manifest.clips.walk
     if (!walk?.cycleDistanceTiles || walk.cycleDistanceTiles <= 0 || !Number.isFinite(walk.cycleDistanceTiles) || lease.asset.manifest.clips.carry_walk?.cycleDistanceTiles !== walk.cycleDistanceTiles) throw new Error('Invalid walk distance metadata')
     this.walkCycleDistance = walk.cycleDistanceTiles
@@ -147,6 +157,7 @@ export class ActorInstance {
     })
     for (const side of ['left', 'right'] as const) this.armLayers.validate(side, poses[side])
     const revision = ++this.equipmentRevision
+    this.equipmentReady = false
     const leases = await Promise.allSettled(renderable.map(({ definition }) => this.cache.acquire(definition.assetId)))
     const acquired = leases.flatMap((lease) => lease.status === 'fulfilled' ? [lease.value] : [])
     const failure = leases.find((lease) => lease.status === 'rejected')
@@ -175,6 +186,7 @@ export class ActorInstance {
       piece.parent.add(piece.root)
     })
     this.requestedEquipment = desired
+    this.equipmentReady = true
     this.armProfiles = profiles
     for (const side of ['left', 'right'] as const) this.armLayers.setPose(side, poses[side])
     this.lastPose = ''
@@ -276,8 +288,9 @@ export class ActorInstance {
   }
 
   private updateFacing(now: number, settings: ActorRenderSettings): boolean {
+    const desiredFacing = this.actionPlayer.facingAngle ?? this.targetFacingAngle
     if (settings.mode === 'baked8') {
-      const direction = ((Math.floor(this.targetFacingAngle / (Math.PI / 4) + .5) + 1) % 8 + 8) % 8
+      const direction = ((Math.floor(desiredFacing / (Math.PI / 4) + .5) + 1) % 8 + 8) % 8
       const next = screenFacingAngle(direction)
       const changed = Math.abs(Math.atan2(Math.sin(next - this.facingAngle), Math.cos(next - this.facingAngle))) > 1e-6
       this.facingDirection = direction
@@ -288,7 +301,7 @@ export class ActorInstance {
     const previousUpdate = this.lastFacingUpdateMs
     this.lastFacingUpdateMs = now
     if (previousUpdate === null) return false
-    const difference = Math.atan2(Math.sin(this.targetFacingAngle - this.facingAngle), Math.cos(this.targetFacingAngle - this.facingAngle))
+    const difference = Math.atan2(Math.sin(desiredFacing - this.facingAngle), Math.cos(desiredFacing - this.facingAngle))
     const maximumStep = Math.PI * Math.max(0, now - previousUpdate) / settings.turnDurationMs
     const step = Math.max(-maximumStep, Math.min(maximumStep, difference))
     if (Math.abs(step) < 1e-6) return false
@@ -298,6 +311,7 @@ export class ActorInstance {
 
   updatePose(now = performance.now(), settings: ActorRenderSettings = DEFAULT_ACTOR_RENDER_SETTINGS): boolean {
     if (!this.mixer || this.destroyed) return false
+    this.prepareActionAnimation(now)
     const carrying = this.carrying && !this.knockedOut
     const continuousPhase = this.walking && !this.knockedOut ? ((this.distanceTiles / this.walkCycleDistance) % 1 + 1) % 1 : 0
     const phase = settings.mode === 'baked8' ? Math.floor(continuousPhase * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : continuousPhase
@@ -349,9 +363,12 @@ export class ActorInstance {
     if (this.stopProgress === undefined) this.stopStartWeight = undefined
     // Baked8 holds one authored pose through position settling instead of blending it at display rate.
     if (visualWalking && !holdingBakedWalkFrame) this.walkPhase = ((phase + this.walkPhaseOffset) % 1 + 1) % 1
-    const key = `${settings.mode}/${name}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}`
+    const frame = this.outputFrame
+    const actionIdentity = `${this.actionPlayer.samples.map(sample => sample.clip).join(',')}/${frame.width}/${frame.height}/${frame.origin_x}/${frame.origin_y}`
+    const actionPose = this.actionPlayer.samples.map(sample => `${sample.clip}:${sample.phase}:${sample.weight}`).join(',')
+    const key = `${settings.mode}/${name}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}/${actionPose}/${actionIdentity}`
     if (!facingChanged && key === this.lastPose && (this.knockedOut || carrying || !this.armLayers?.transitioning)) return false
-    const state = `${settings.mode}/${name}/${this.hovered}`
+    const state = `${settings.mode}/${name}/${this.hovered}/${actionIdentity}`
     if (state !== this.lastPoseState) this.immediateRender = true
     this.lastPose = key
     this.lastPoseState = state
@@ -387,6 +404,7 @@ export class ActorInstance {
     }
     this.mixer.update(0)
     if (!this.knockedOut && !carrying) this.armLayers?.apply(now)
+    if (!this.knockedOut) this.actionLayers?.apply(this.actionPlayer.samples, bakedMode, ACTOR_RENDER.actionSamples)
     for (const [slot, piece] of this.equipment) {
       piece.root.visible = !(carrying && armForSlot(slot))
       for (const mesh of piece.meshes) {
@@ -409,6 +427,17 @@ export class ActorInstance {
   invalidateRender(): void { this.lastPose = ''; this.immediateRender = true }
   get equippedVisuals(): readonly EquippedVisual[] { return this.requestedEquipment }
 
+  setActionAnimation(input: ActionAnimationInput | null): void { this.actionPlayer.setInput(input) }
+
+  prepareActionAnimation(now: number): void {
+    this.actionPlayer.update({ stationary: !this.walking && (this.stopProgress === undefined || this.stopProgress >= 1),
+      carrying: this.carrying, knockedOut: this.knockedOut, equipment: this.requestedEquipment, equipmentReady: this.equipmentReady }, now)
+  }
+
+  get outputFrame(): ActionAnimationFrame {
+    return this.knockedOut ? { width: ACTOR_RENDER.cellSize, height: ACTOR_RENDER.cellSize, origin_x: ACTOR_RENDER.anchorX, origin_y: ACTOR_RENDER.knockedOutAnchorY } : this.actionPlayer.frame
+  }
+
   setLowDetail(enabled: boolean): void {
     if (this.lowDetail === enabled || !this.model) return
     this.lowDetail = enabled
@@ -427,6 +456,7 @@ export class ActorInstance {
     this.equipment.forEach((piece) => this.disposeEquipment(piece))
     this.equipment.clear()
     this.armLayers?.destroy()
+    this.actionLayers?.destroy()
     this.mixer?.stopAllAction()
     if (this.model) this.mixer?.uncacheRoot(this.model)
     this.skins.forEach((skin) => { skin.destroy(); skin.skeleton.dispose() })

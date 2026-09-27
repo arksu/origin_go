@@ -2,6 +2,7 @@ package behaviors
 
 import (
 	"fmt"
+	"origin/internal/cyclicaction"
 	"strings"
 
 	constt "origin/internal/const"
@@ -64,7 +65,7 @@ func (b burnerBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContex
 		return contracts.BehaviorResult{OK: false}
 	}
 	if ctx.ActionID == burnerLightAction {
-		ecs.AddComponent(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
+		cyclicaction.StartContext(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
 			BehaviorKey: b.Key(), ActionID: burnerLightAction,
 			TargetKind: components.CyclicActionTargetObject, TargetID: ctx.TargetID, TargetHandle: ctx.TargetHandle,
 			CycleDurationTicks: burnerLightCycleTicks, CycleIndex: 1,

@@ -1,8 +1,8 @@
 # Hybrid pixel characters
 
 The client renders the approved commoner with Three.js in Pixi's WebGL2 context.
-An orthographic camera and fixed world light produce a 256 × 256 scratch image;
-the GPU pass reduces it to a 128 × 128 transparent frame with palette ramps and
+An orthographic camera and fixed world light produce a supersampled scratch image;
+the GPU pass reduces it to a normally 128 × 128 transparent frame with palette ramps and
 one-native-pixel outlines. The body is approximately 96 pixels tall. Pixi keeps
 the existing world sorting, culling and object ownership. Frame transport uses
 GPU copies; only interaction picking reads a single alpha pixel.
@@ -35,11 +35,32 @@ The universal carry pose does not depend on prop size. Carried world props remai
 
 High detail: 16,000 triangles including the integrated garment; low detail: 5,500.
 Normal-scale actors use high detail; projected scale below 0.8 selects low detail.
-Secondary actors update at most 15 times per second; unchanged poses are reused.
+Secondary actors update at most 20 times per second by default; unchanged poses are reused.
 The player has priority. Offscreen actors return their texture to the pool.
-The pool is capped at 128 outputs (8 MiB RGBA8); 30 outputs use 1.875 MiB.
+The pool is capped at 128 outputs and 128 MiB of RGBA8 pixels. Ordinary 128²
+frames use 8 MiB for 128 outputs; action frames use their actual dimensions.
 Shared scratch color/depth and processed output add approximately 0.563 MiB,
 excluding driver overhead, asset buffers and per-instance skeleton resources.
+
+## Timed actions
+
+`ActorAssetCatalog` loads the optional immutable action definition projection.
+`ActorInstance.setActionAnimation({key, phase, facingAngle})` accepts a normalized
+phase from a network controller or local preview. Ordered clip/equipment variants,
+eligibility, target-facing policy, blend time and output frame all come from defs.
+An isolated full-body sampler blends over ordinary locomotion/equipment layers.
+The actual loaded clip duration scales to the server's tick duration, and phase
+one holds until the next confirmed cycle. There are no per-action runtime APIs.
+
+`outputFrame` owns width, height and ground origin. Rendering, culling, picking,
+pose invalidation and GPU accounting use those metrics. Blending out retains the
+outgoing bounds. Enlarging a frame extends the camera without scaling the body;
+context restoration recreates the scratch targets before further resizes.
+
+The preview enumerates every binding/variant in the same catalog, with a local
+loop/scrub controller and optional def-supplied label/equipment/duration. Sources
+remain intact. Visible impact, sound and gameplay result timing are independent.
+See [the synchronization contract](../../../../docs/features/action-animation-sync.md).
 
 ## Reproduce and inspect
 

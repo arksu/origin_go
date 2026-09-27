@@ -153,6 +153,13 @@ export class PixelActorPass {
     this.scene.add(new Mesh(this.geometry, this.material))
   }
 
+  setSize(width: number, height: number): void {
+    if (this.output.width === width && this.output.height === height) return
+    this.source.setSize(width * ACTOR_RENDER.supersampling, height * ACTOR_RENDER.supersampling)
+    this.output.setSize(width, height)
+    this.material.uniforms.pixel!.value.set(1 / width, 1 / height)
+  }
+
   render(renderer: WebGLRenderer, hovered: boolean, waterlineRow = -1): void {
     this.material.uniforms.hovered!.value = hovered
     this.material.uniforms.waterlineRow!.value = waterlineRow

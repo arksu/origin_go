@@ -81,6 +81,7 @@ export class MessageDispatcher {
     if (message.playerLeaveWorld) return 'playerLeaveWorld'
     if (message.objectSpawn) return 'objectSpawn'
     if (message.characterVisual) return 'characterVisual'
+    if (message.characterActionAnimation) return 'characterActionAnimation'
     if (message.objectDespawn) return 'objectDespawn'
     if (message.objectMove) return 'objectMove'
     if (message.movementMode) return 'movementMode'

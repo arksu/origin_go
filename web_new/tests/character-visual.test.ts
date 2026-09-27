@@ -196,7 +196,7 @@ function fixtureRig() {
   }
   const clip = (name: string, factor: number) => new AnimationClip(name, 1, Object.keys(bones).map((name, index) =>
     new VectorKeyframeTrack(`${name}.position`, [0, 1], [factor * (index + 1), 0, 0, factor * (index + 2), 0, 0])))
-  const animations = [clip('idle', 0), clip('walk', 1), clip('carry_idle', 2), clip('carry_walk', 3), clip('hold', 10), clip('chop_r', 4), clip('chop_l', 5)]
+  const animations = [clip('idle', 0), clip('walk', 1), clip('carry_idle', 2), clip('carry_walk', 3), clip('hold', 10)]
   return { scene, animations, bones }
 }
 
@@ -220,7 +220,7 @@ function prop() {
 }
 
 class FixtureCache {
-  get catalog() { return Promise.resolve({ manifests: {}, equipment: catalog }) }
+  get catalog() { return Promise.resolve({ manifests: {}, actionAnimations: {}, equipment: catalog }) }
   readonly assets = new Map<string, ActorBundle>()
   readonly pending = new Map<string, Promise<ActorBundle>>()
   readonly references = new Map<string, number>()
@@ -261,54 +261,6 @@ async function fixtureActor() {
   await actor.ready
   return { actor, cache }
 }
-
-test('stationary chop samples the whole body on the supplied cycle, selects the axe hand, and returns to idle', async () => {
-  const { actor } = await fixtureActor()
-  await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }])
-  actor.setChopCycle({ startMs: 0, durationMs: 2000 })
-  actor.updatePose(0)
-  actor.updatePose(500)
-  const pelvis = actor.root.getObjectByName('pelvis')!
-  const hand = actor.root.getObjectByName('handr')!
-  assert.equal(pelvis.position.x, 5)
-  assert.ok(hand.position.x < 100, 'equipment idle arm layers cannot overwrite the swing')
-  actor.updatePose(1000)
-  assert.equal(pelvis.position.x, 6)
-  actor.updatePose(2500)
-  assert.equal(pelvis.position.x, 5, 'time repeats every supplied cycle, without movement')
-  await actor.setEquipment([{ slot: 'left_hand', visualKey: 'stone_axe' }])
-  actor.updatePose(2500)
-  assert.equal(pelvis.position.x, 6.25)
-  actor.setChopCycle(null)
-  actor.updatePose(2501)
-  actor.updatePose(2621)
-  assert.equal(pelvis.position.x, 0)
-  assert.throws(() => actor.setChopCycle({ startMs: 0, durationMs: 0 }))
-  actor.destroy()
-})
-
-test('movement, carry, knockout and an unequipped axe suppress the chop pose', async () => {
-  const { actor } = await fixtureActor()
-  await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }])
-  actor.setChopCycle({ startMs: 0, durationMs: 2000 })
-  actor.updatePose(0); actor.updatePose(500)
-  actor.walking = true
-  actor.updatePose(501); actor.updatePose(621)
-  assert.ok(actor.root.getObjectByName('pelvis')!.position.x < 4)
-  actor.walking = false
-  actor.knockedOut = true
-  actor.updatePose(622)
-  assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 0)
-  actor.knockedOut = false
-  actor.carrying = true
-  actor.updatePose(800)
-  assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 2)
-  actor.carrying = false
-  await actor.setEquipment([])
-  actor.updatePose(1000)
-  assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 0)
-  actor.destroy()
-})
 
 test('distance-driven walk samples the 3D clip continuously', async () => {
   const { actor } = await fixtureActor()
@@ -616,7 +568,7 @@ test('ordinary axe carrying preserves the normal arm animation and uses loaded s
   asset.manifest.clips.carry_walk!.cycleDistanceTiles = 2
   cache.assets.set(COMMONER_ASSET_ID, asset)
   cache.assets.set(axeURL, prop())
-  const actor = new ActorInstance({ acquire: cache.acquire.bind(cache), catalog: Promise.resolve({ manifests: {}, equipment: {
+  const actor = new ActorInstance({ acquire: cache.acquire.bind(cache), catalog: Promise.resolve({ manifests: {}, actionAnimations: {}, equipment: {
     stone_axe: { kind: 'rigid', assetId: axeURL, bindings: { right_hand: { socket: 'grip_r', armMotion: { kind: 'ordinary' } } } },
   } }) })
   await actor.ready

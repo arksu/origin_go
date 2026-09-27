@@ -44,19 +44,19 @@ type Server struct {
 }
 
 type Client struct {
-	ID              uint64
-	conn            net.Conn
-	server          *Server
-	logger          *zap.Logger
-	sendCh          chan []byte
-	closeCh         chan struct{}
-	closeOnce       sync.Once
-	writeBuf        *bufio.Writer
-	CharacterID     types.EntityID
-	Layer           int
-	StreamEpoch     atomic.Uint32
-	InWorld         atomic.Bool
-	chunkSendFailed atomic.Bool
+	ID                 uint64
+	conn               net.Conn
+	server             *Server
+	logger             *zap.Logger
+	sendCh             chan []byte
+	closeCh            chan struct{}
+	closeOnce          sync.Once
+	writeBuf           *bufio.Writer
+	CharacterID        types.EntityID
+	Layer              int
+	StreamEpoch        atomic.Uint32
+	InWorld            atomic.Bool
+	criticalSendFailed atomic.Bool
 
 	DeadObserverDeadlineUnixMs atomic.Int64
 }
@@ -328,7 +328,12 @@ func (c *Client) Send(data []byte) {
 
 // Losing a visibility transition leaves the client permanently out of sync.
 func (c *Client) SendChunkVisibility(data []byte) bool {
-	if c.chunkSendFailed.Load() {
+	return c.SendCritical(data)
+}
+
+// SendCritical never silently drops a state transition on a live connection.
+func (c *Client) SendCritical(data []byte) bool {
+	if c.criticalSendFailed.Load() {
 		return false
 	}
 	select {
@@ -337,8 +342,8 @@ func (c *Client) SendChunkVisibility(data []byte) bool {
 	case c.sendCh <- data:
 		return true
 	default:
-		if c.chunkSendFailed.CompareAndSwap(false, true) {
-			c.server.logger.Warn("Chunk visibility send buffer full, closing connection", zap.Uint64("client_id", c.ID))
+		if c.criticalSendFailed.CompareAndSwap(false, true) {
+			c.server.logger.Warn("Critical send buffer full, closing connection", zap.Uint64("client_id", c.ID))
 			// Dispatchers hold ClientsMu; disconnect callbacks may need its write lock.
 			go c.Close()
 		}

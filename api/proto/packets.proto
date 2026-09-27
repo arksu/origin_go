@@ -296,6 +296,24 @@ message S2C_CharacterVisual {
   uint32 stream_epoch = 3;
 }
 
+// Public presentation of one confirmed timed cycle. Empty animation_key is idle.
+message CharacterActionAnimationState {
+  string generation = 1;
+  uint64 revision = 2;
+  string animation_key = 3;
+  uint32 total_ticks = 4;
+  uint32 elapsed_ticks = 5;
+  double tick_duration_ms = 6;
+  int64 server_time_ms = 7;
+  Position target_position = 8;
+}
+
+message S2C_CharacterActionAnimation {
+  uint64 entity_id = 1;
+  CharacterActionAnimationState state = 2;
+  uint32 stream_epoch = 3;
+}
+
 // ============================================================================
 // CHUNK & WORLD
 // ============================================================================
@@ -556,6 +574,7 @@ message S2C_ObjectSpawn {
   uint32 stream_epoch = 7;
   string name = 8; // display name; empty for unnamed entities (objects, items)
   NicknameColor name_color = 9;
+  CharacterActionAnimationState action_animation = 10;
 }
 
 message S2C_ObjectDespawn {
@@ -882,6 +901,7 @@ message ServerMessage {
     S2C_CharacterVisual character_visual = 40;
     S2C_ActionList action_list = 46;
     S2C_ActionStateChanged action_state_changed = 47;
+    S2C_CharacterActionAnimation character_action_animation = 48;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

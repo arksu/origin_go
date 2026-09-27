@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"origin/internal/actionanimationdefs"
+	"origin/internal/cyclicaction"
 	"slices"
 	"strings"
 
@@ -147,7 +149,7 @@ func (s *CraftingService) startCraft(
 		RequestedCycles: cycles,
 		RemainingCycles: cycles,
 	})
-	ecs.AddComponent(w, playerHandle, components.ActiveCyclicAction{
+	cyclicaction.Start(w, playerHandle, components.ActiveCyclicAction{
 		ActionID:           craftSyntheticActionID,
 		TargetKind:         targetKind,
 		TargetID:           targetID,
@@ -156,7 +158,7 @@ func (s *CraftingService) startCraft(
 		CycleElapsedTicks:  0,
 		CycleIndex:         1,
 		StartedTick:        nowTick,
-	})
+	}, actionanimationdefs.Source{Kind: "craft", ID: craft.Key})
 	ecs.MutateComponent[components.Movement](w, playerHandle, func(m *components.Movement) bool {
 		m.State = constt.StateInteracting
 		return true

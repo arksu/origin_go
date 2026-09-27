@@ -81,7 +81,7 @@ messageDispatcher.on('objectMove', (msg) => { /* ... */ })
 - `chunkLoad`, `chunkUnload`
 - `playerEnterWorld`, `playerLeaveWorld`
 - `objectSpawn`, `objectDespawn`, `objectMove`
-- `movementMode`
+- `movementMode`, `characterVisual`, `characterActionAnimation`
 - `inventoryUpdate`, `inventoryOpResult`
 - `containerOpened`, `containerClosed`
 - `chat`, `contextMenu`, `miniAlert`
@@ -163,6 +163,19 @@ registerMessageHandlers()
 | `craftList` | Replace craft recipe list snapshot in `gameStore` |
 | `buildState` | Replace active build-site snapshot (`entityId`, `buildName`, rows`) in `gameStore` |
 | `buildStateClosed` | Close build-state window for the matching target |
+
+### Action animation contract
+
+`objectSpawn.actionAnimation` and `characterActionAnimation` carry the same plain
+state. Decode with `types/actionAnimation.ts`, gate by stream epoch and character
+generation, and compare exact uint64 revisions independently of equipment.
+Equal-revision fresh samples may correct timing only for the same key/duration.
+Missing optional spawn state clears presentation for legacy-server compatibility.
+The canonical store entity owns accepted state; the facade forwards it to the
+current ObjectView. Renderer readiness must never replay a captured old snapshot.
+`TimeSync.estimateServerNowMs()` is sampled once per render update for all actors;
+movement interpolation keeps its existing clock. See
+`docs/features/action-animation-sync.md` for the generic def and phase contract.
 
 ### Character Profile + Craft Contract
 

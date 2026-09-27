@@ -21,6 +21,8 @@ export async function createBuildProject() {
   const publicRoot = join(root, 'web_new/public')
   const directory = join(root, 'art_source/character/test_actor')
   await mkdir(publicRoot, { recursive: true })
+  await mkdir(join(root, 'data/action_animations'), { recursive: true })
+  await writeFile(join(root, 'data/action_animations/empty.json'), JSON.stringify({ v: 1, bindings: [] }))
   await mkdir(directory, { recursive: true })
   const source = join(directory, 'source.blend')
   await copyFile(fixture.source, source)

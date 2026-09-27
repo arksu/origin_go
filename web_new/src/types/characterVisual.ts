@@ -1,10 +1,7 @@
 import type { proto } from '../network/proto/packets'
-
-export const EQUIPMENT_SLOT_BY_ID = {
-  1: 'head', 2: 'chest', 3: 'legs', 4: 'feet', 6: 'left_hand', 7: 'right_hand',
-  8: 'back', 9: 'neck', 10: 'ring1', 11: 'ring2',
-} as const
-export type EquipmentSlot = typeof EQUIPMENT_SLOT_BY_ID[keyof typeof EQUIPMENT_SLOT_BY_ID]
+import { EQUIPMENT_SLOT_BY_ID, type EquipmentSlot } from './equipmentSlots'
+import { decodeGeneration, decodeUint64, compareUint64 } from './networkIdentity'
+export { EQUIPMENT_SLOT_BY_ID, type EquipmentSlot } from './equipmentSlots'
 export interface EquippedVisual { readonly slot: EquipmentSlot; readonly visualKey: string }
 export interface CharacterVisualState {
   readonly generation: string
@@ -14,11 +11,8 @@ export interface CharacterVisualState {
 }
 
 export function decodeCharacterVisual(input: proto.ICharacterVisualState): CharacterVisualState {
-  const generation = input.generation ?? ''
-  if (!/^-?\d+:\d+$/.test(generation) || generation.length > 64) throw new Error('Invalid character visual generation')
-  if (typeof input.revision === 'number' && !Number.isSafeInteger(input.revision)) throw new Error('Unsafe character visual revision')
-  const revision = (input.revision ?? 0).toString()
-  if (!/^(0|[1-9]\d{0,19})$/.test(revision) || (revision.length === 20 && revision > '18446744073709551615')) throw new Error('Invalid character visual revision')
+  const generation = decodeGeneration(input.generation)
+  const revision = decodeUint64(input.revision)
   const equipment: EquippedVisual[] = []
   const slots = new Set<EquipmentSlot>()
   for (const item of input.equipment ?? []) {
@@ -33,5 +27,5 @@ export function decodeCharacterVisual(input: proto.ICharacterVisualState): Chara
 
 export function isNewerCharacterVisual(current: CharacterVisualState, incoming: CharacterVisualState): boolean {
   return incoming.generation === current.generation &&
-    (incoming.revision.length > current.revision.length || (incoming.revision.length === current.revision.length && incoming.revision > current.revision))
+    compareUint64(incoming.revision, current.revision) > 0
 }

@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"origin/internal/cyclicaction"
 	"strconv"
 	"strings"
 
@@ -540,7 +541,7 @@ func (s *ContextActionService) finishActiveCyclicAction(
 		s.emitTargetSound(activeAction.CompleteSoundKey, activeAction.TargetHandle, activeAction.TargetID)
 	}
 	s.sendCyclicActionFinished(playerID, activeAction, result, reasonCode)
-	ecs.RemoveComponent[components.ActiveCyclicAction](s.world, playerHandle)
+	cyclicaction.Clear(s.world, playerHandle)
 	ecs.RemoveComponent[components.ActiveCraft](s.world, playerHandle)
 	ecs.MutateComponent[components.Movement](s.world, playerHandle, func(m *components.Movement) bool {
 		if m.State == constt.StateInteracting {
@@ -748,7 +749,7 @@ func (s *ContextActionService) startTeachCyclicAction(
 		return
 	}
 	nowTick := ecs.GetResource[ecs.TimeState](w).Tick
-	ecs.AddComponent(w, playerHandle, components.ActiveCyclicAction{
+	cyclicaction.StartContext(w, playerHandle, components.ActiveCyclicAction{
 		ActionID:           teachContextActionID,
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           targetID,

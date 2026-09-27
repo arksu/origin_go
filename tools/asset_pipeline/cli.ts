@@ -2,7 +2,7 @@ import { constants } from 'node:fs'
 import { access, realpath, stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 
-export type AssetCommand = 'build' | 'validate' | 'verify-reproducible'
+export type AssetCommand = 'build' | 'validate' | 'verify-reproducible' | 'publish-action-animations'
 
 export interface CliArguments {
   command: AssetCommand
@@ -22,7 +22,7 @@ export interface RunCliOptions {
   stderr?: (message: string) => void
 }
 
-const COMMANDS = new Set<AssetCommand>(['build', 'validate', 'verify-reproducible'])
+const COMMANDS = new Set<AssetCommand>(['build', 'validate', 'verify-reproducible', 'publish-action-animations'])
 const TARGET_PATTERN = /^(character|equipment|world_object)\/[a-z0-9][a-z0-9_-]*$/
 const CLIP_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/
 
@@ -31,6 +31,7 @@ export const HELP_TEXT = `Usage: tools/assets <command> <target> [options]
   tools/assets setup
 
 Commands:
+  publish-action-animations  Publish defs using existing assets (no target or export)
   build                 Build and publish selected assets
   validate              Validate sources and recipes
   verify-reproducible   Compare two clean builds
@@ -59,7 +60,7 @@ Setup errors:
 
 function parseCommand(value: string | undefined): AssetCommand {
   if (!value || !COMMANDS.has(value as AssetCommand)) {
-    throw new Error(`Unsupported command ${value ?? '(missing)'}. Expected build, validate, or verify-reproducible.`)
+    throw new Error(`Unsupported command ${value ?? '(missing)'}. Expected ${[...COMMANDS].join(', ')}.`)
   }
   return value as AssetCommand
 }
@@ -84,6 +85,10 @@ function readExecutableOverride(argv: readonly string[], index: number, flag: st
 
 export function parseArguments(argv: readonly string[]): CliArguments {
   const command = parseCommand(argv[0])
+  if (command === 'publish-action-animations') {
+    if (argv.length !== 1) throw new Error('publish-action-animations takes no target or options')
+    return { command, target: 'all', animations: false, clip: undefined, blender: undefined, toktx: undefined }
+  }
   const target = parseTarget(argv[1])
   let animations = false
   let clip: string | undefined
@@ -130,6 +135,11 @@ export function parseArguments(argv: readonly string[]): CliArguments {
 }
 
 async function dispatchCommand(arguments_: CliArguments, options: RunCliOptions): Promise<void> {
+  if (arguments_.command === 'publish-action-animations') {
+    const { publishActionAnimations } = await import('./action-animations.mjs')
+    await publishActionAnimations(options.root === undefined ? {} : { root: options.root })
+    return
+  }
   const { buildAssets, validateAssets, verifyReproducible, defaultRoot } = await import('./build.mjs')
   const toolPaths = {
     ...(arguments_.blender ? { blender: arguments_.blender } : {}),

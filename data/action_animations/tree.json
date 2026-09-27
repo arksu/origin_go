@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "bindings": [{
+    "key": "tree_chop",
+    "source": { "kind": "context", "namespace": "tree", "id": "chop" },
+    "actor": "character/male_commoner",
+    "variants": [
+      { "clip": "chop_r", "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }] },
+      { "clip": "chop_l", "equipment": [{ "slot": "left_hand", "visual_key": "stone_axe" }] }
+    ],
+    "eligibility": ["stationary", "not_carrying", "not_knocked_out"],
+    "facing": "target",
+    "blend_ms": 120,
+    "frame": { "width": 192, "height": 224, "origin_x": 96, "origin_y": 180 },
+    "preview": {
+      "label": "Рубка дерева",
+      "duration_ms": 2000,
+      "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }]
+    }
+  }]
+}

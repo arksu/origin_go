@@ -2,7 +2,7 @@ import type { ActorHandle } from '../src/game/actors/ActorRenderer'
 import { verifyMovementStopping } from './movement-stop'
 import { verifyScreenFacing } from './screen-facing'
 import { verifyCharacterEquipment, verifyStoneAxe } from './character-equipment'
-import { verifyTreeChop } from './tree-chop'
+import { verifyActionAnimations } from './action-animations'
 import { Application, Assets, Container, Sprite, Texture, WebGLRenderer, type Spritesheet } from 'pixi.js'
 import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
@@ -336,8 +336,8 @@ async function main() {
   waterFrame(600)
   check(pixels(false).every((value, index) => value === wetBeforeRestore[index]), 'Context restore must preserve the exact clipped body')
   pass('Shallow water / eight facings / smooth stationary entry / GPU crop and hover / picking / cache / carry / KO / context restore')
-  await verifyTreeChop(app, renderer, waterHandle)
-  pass('Mixamo chop / both hands / eight facings / full swing silhouette / ground anchor / cancel / shared GL state')
+  await verifyActionAnimations(app, renderer, waterHandle)
+  pass('Catalog actions / all variants / eight facings / complete silhouettes / ground anchor / cancel / shared GL state')
   manager.despawnObject(201)
   manager.despawnObject(101)
   renderer.destroy()

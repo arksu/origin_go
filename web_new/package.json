@@ -11,6 +11,7 @@
     "test:map-click": "node scripts/test-map-click.mjs",
     "test:chunks": "node scripts/test-chunks.mjs",
     "test:actions": "node scripts/test-actions.mjs",
+    "test:action-animations": "node scripts/test-character-visual.mjs tests/action-animations.test.ts",
     "test:character-visual": "node scripts/test-character-visual.mjs",
     "test:asset-pipeline": "node scripts/test-asset-pipeline.mjs",
     "validate-objects": "node scripts/validate-object-schema.mjs",
