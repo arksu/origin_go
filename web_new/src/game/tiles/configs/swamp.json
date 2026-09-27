@@ -19,6 +19,26 @@
     {
       "img": "swamp/base_5.png",
       "w": 1
+    },
+    {
+      "img": "swamp/base_6.png",
+      "w": 1
+    },
+    {
+      "img": "swamp/base_7.png",
+      "w": 1
+    },
+    {
+      "img": "swamp/base_8.png",
+      "w": 1
+    },
+    {
+      "img": "swamp/base_9.png",
+      "w": 1
+    },
+    {
+      "img": "swamp/base_10.png",
+      "w": 1
     }
   ],
   "borders": [
