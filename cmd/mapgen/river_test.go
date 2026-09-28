@@ -576,6 +576,36 @@ func TestBuildDrawPathProducesWindingCurve(t *testing.T) {
 	}
 }
 
+func TestBuildDrawPathWavesPerLinkControlsSinuosity(t *testing.T) {
+	pathSinuosity := func(wavesPerLink float64) float64 {
+		opts := DefaultMapgenOptions().River
+		opts.MeanderStrength = 0.01
+		opts.ShapeSegmentLength = 30
+		opts.ShapeWavesPerLink = wavesPerLink
+		opts.RiverWidthMin = 8
+		opts.RiverWidthMax = 8
+
+		startX, startY := 24, 24
+		targetX, targetY := 224, 168
+		path := buildDrawPath(256, 256, startX, startY, targetX, targetY, 424242, opts)
+
+		straight := math.Hypot(float64(targetX-startX), float64(targetY-startY))
+		length := 0.0
+		for i := 1; i < len(path); i++ {
+			dx := float64(path[i]%256 - path[i-1]%256)
+			dy := float64(path[i]/256 - path[i-1]/256)
+			length += math.Hypot(dx, dy)
+		}
+		return length / straight
+	}
+
+	low := pathSinuosity(2)
+	high := pathSinuosity(7)
+	if high <= low {
+		t.Fatalf("expected higher waves_per_link to increase sinuosity: low=%.3f high=%.3f", low, high)
+	}
+}
+
 func TestDrawLayoutAvoidsTinyIsolatedRiverDots(t *testing.T) {
 	width := 320
 	height := 320

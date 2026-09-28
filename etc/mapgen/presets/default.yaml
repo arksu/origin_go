@@ -26,7 +26,9 @@ river:
   shape_short_meander_bias: 0.0035
   shape_amplitude_scale: 1.0
   shape_frequency_scale: 1.0
-  shape_noise_scale: 0.30
+  shape_octaves: 3 # Количество октав когерентного шума в форме русла; больше — больше мелких изгибов внутри больших излучин.
+  shape_waves_per_link: 3.0 # Базовое число волн первой октавы на длину связи, до множителя shape_frequency_scale.
+  shape_octave_gain: 0.35 # Ослабление амплитуды каждой следующей октавы; длина волны каждой октавы вдвое короче предыдущей.
   shape_along_scale: 0.16
   shape_distance_cap: 0.40
   shape_segment_length: 70

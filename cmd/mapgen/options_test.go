@@ -109,9 +109,21 @@ func TestMapgenOptionsValidateRejectsInvalid(t *testing.T) {
 			},
 		},
 		{
-			name: "river noise scale range",
+			name: "river octaves range",
 			mut: func(opts *MapgenOptions) {
-				opts.River.ShapeNoiseScale = 1.1
+				opts.River.ShapeOctaves = 5
+			},
+		},
+		{
+			name: "river waves per link range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeWavesPerLink = 0
+			},
+		},
+		{
+			name: "river octave gain range",
+			mut: func(opts *MapgenOptions) {
+				opts.River.ShapeOctaveGain = 0.7
 			},
 		},
 		{
