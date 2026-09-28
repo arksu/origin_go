@@ -39,7 +39,9 @@ river:
   shape_short_meander_bias: 0.002
   shape_amplitude_scale: 1
   shape_frequency_scale: 1
-  shape_noise_scale: 0.3
+  shape_octaves: 3
+  shape_waves_per_link: 3.0
+  shape_octave_gain: 0.35
   shape_along_scale: 0.2
   shape_distance_cap: 0.4
   shape_segment_length: 60

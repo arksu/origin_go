@@ -101,13 +101,15 @@ func TestLoadMapgenOptionsPresetsAndRetiredFields(t *testing.T) {
 			t.Fatalf("%s has no new layer", name)
 		}
 	}
-	for _, key := range []string{"hnh_enabled", "hnh_region_count", "hnh_region_jitter", "hnh_blend_width", "hnh_variant_density", "hnh_forest_share", "hnh_grassland_share", "hnh_wetland_share", "hnh_heath_moor_share", "hnh_mountain_share"} {
+	for _, key := range []string{"biomes/hnh_enabled", "biomes/hnh_region_count", "biomes/hnh_region_jitter", "biomes/hnh_blend_width", "biomes/hnh_variant_density", "biomes/hnh_forest_share", "biomes/hnh_grassland_share", "biomes/hnh_wetland_share", "biomes/hnh_heath_moor_share", "biomes/hnh_mountain_share", "river/shape_noise_scale"} {
+		section := strings.SplitN(key, "/", 2)
+		body := "version: 1\n" + section[0] + ":\n  " + section[1] + ": 1\n"
 		path := filepath.Join(t.TempDir(), "retired.yaml")
-		if err := os.WriteFile(path, []byte("version: 1\nbiomes:\n  "+key+": 1\n"), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
 		_, _, err := LoadMapgenOptionsFromYAML(path, DefaultMapgenOptions())
-		if err == nil || !strings.Contains(err.Error(), key) {
+		if err == nil || !strings.Contains(err.Error(), section[1]) {
 			t.Fatalf("%s: %v", key, err)
 		}
 	}

@@ -1999,11 +1999,12 @@ func buildDrawPath(
 	if amplitude < 2 {
 		amplitude = 2
 	}
-	waveCount := (1.25 + coordHash01(seed, startX, startY, riverMeanderSalt)*1.75) * opts.ShapeFrequencyScale
-	if waveCount < 0.25 {
-		waveCount = 0.25
+	wavesPerLink := opts.ShapeWavesPerLink * opts.ShapeFrequencyScale
+	wavesPerLink *= 0.8 + coordHash01(seed, startX, startY, riverMeanderSalt)*0.4
+	if wavesPerLink < 0.25 {
+		wavesPerLink = 0.25
 	}
-	phase := coordHash01(seed, targetX, targetY, lakeLinkJitterSalt) * 2 * math.Pi
+	primaryWavelength := distance / wavesPerLink
 
 	controlX := make([]int, 0, segments+1)
 	controlY := make([]int, 0, segments+1)
@@ -2014,9 +2015,7 @@ func buildDrawPath(
 
 		if i > 0 && i < segments {
 			falloff := math.Sin(math.Pi * t)
-			wave := math.Sin((t*waveCount*2*math.Pi)+phase) * amplitude * falloff
-			noise := (coordHash01(seed+int64(i)*37, int(math.Round(px)), int(math.Round(py)), riverMeanderSalt) - 0.5) * 2 * (amplitude * opts.ShapeNoiseScale) * falloff
-			cross := wave + noise
+			cross := amplitude * falloff * drawPathMeanderOffset(seed, t*distance, primaryWavelength, opts.ShapeOctaves, opts.ShapeOctaveGain)
 			along := (coordHash01(seed+int64(i)*59, int(math.Round(py)), int(math.Round(px)), lakeLinkJitterSalt) - 0.5) * 2 * (amplitude * opts.ShapeAlongScale) * falloff
 			px += perpX*cross + dirX*along
 			py += perpY*cross + dirY*along
@@ -2034,6 +2033,36 @@ func buildDrawPath(
 		path = append(path, tileIndex(targetX, targetY, width))
 	}
 	return path
+}
+
+// drawPathMinWavelength keeps high octaves from aliasing against the control
+// point spacing: shorter wavelengths only add spline jitter, not bends.
+const drawPathMinWavelength = 32.0
+
+// drawPathMeanderOffset returns the normalized cross-track meander offset in
+// [-1, 1] at arc length s along the straight baseline. Coherent multi-octave
+// value noise replaces the previous single sine plus per-point white noise, so
+// bends get varied radius and asymmetric curves while neighbouring control
+// points stay smoothly correlated.
+func drawPathMeanderOffset(seed int64, s float64, primaryWavelength float64, octaves int, gain float64) float64 {
+	wavelength := maxFloat(primaryWavelength, drawPathMinWavelength)
+	sum := 0.0
+	weightTotal := 0.0
+	weight := 1.0
+	for octave := 0; octave < octaves; octave++ {
+		octaveSeed := seed + int64(octave)*7919
+		sum += weight * (smoothHashNoise2D(octaveSeed, s, 0, wavelength, riverMeanderSalt)*2 - 1)
+		weightTotal += weight
+		weight *= gain
+		wavelength /= 2
+		if wavelength < drawPathMinWavelength {
+			break
+		}
+	}
+	if weightTotal <= 0 {
+		return 0
+	}
+	return sum / weightTotal
 }
 
 func rasterizeSmoothControlPath(width int, height int, controlX []int, controlY []int) []int {

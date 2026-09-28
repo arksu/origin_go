@@ -36,7 +36,9 @@ type RiverOptions struct {
 	ShapeShortMeanderBias  float64 `yaml:"shape_short_meander_bias"`
 	ShapeAmplitudeScale    float64 `yaml:"shape_amplitude_scale"`
 	ShapeFrequencyScale    float64 `yaml:"shape_frequency_scale"`
-	ShapeNoiseScale        float64 `yaml:"shape_noise_scale"`
+	ShapeOctaves           int     `yaml:"shape_octaves"`
+	ShapeWavesPerLink      float64 `yaml:"shape_waves_per_link"`
+	ShapeOctaveGain        float64 `yaml:"shape_octave_gain"`
 	ShapeAlongScale        float64 `yaml:"shape_along_scale"`
 	ShapeDistanceCap       float64 `yaml:"shape_distance_cap"`
 	ShapeSegmentLength     int     `yaml:"shape_segment_length"`
@@ -186,7 +188,9 @@ func DefaultMapgenOptions() MapgenOptions {
 			ShapeShortMeanderBias:  0.0035,
 			ShapeAmplitudeScale:    1.0,
 			ShapeFrequencyScale:    1.0,
-			ShapeNoiseScale:        0.30,
+			ShapeOctaves:           3,
+			ShapeWavesPerLink:      3.0,
+			ShapeOctaveGain:        0.35,
 			ShapeAlongScale:        0.16,
 			ShapeDistanceCap:       0.40,
 			ShapeSegmentLength:     70,
@@ -459,8 +463,14 @@ func (o MapgenOptions) Validate() error {
 	if o.River.ShapeFrequencyScale <= 0 || o.River.ShapeFrequencyScale > 3 {
 		return errors.New("river.shape_frequency_scale must be within (0,3]")
 	}
-	if o.River.ShapeNoiseScale < 0 || o.River.ShapeNoiseScale > 1 {
-		return errors.New("river.shape_noise_scale must be within [0,1]")
+	if o.River.ShapeOctaves < 1 || o.River.ShapeOctaves > 4 {
+		return errors.New("river.shape_octaves must be within [1,4]")
+	}
+	if o.River.ShapeWavesPerLink <= 0 || o.River.ShapeWavesPerLink > 12 {
+		return errors.New("river.shape_waves_per_link must be within (0,12]")
+	}
+	if o.River.ShapeOctaveGain < 0.05 || o.River.ShapeOctaveGain > 0.6 {
+		return errors.New("river.shape_octave_gain must be within [0.05,0.6]")
 	}
 	if o.River.ShapeAlongScale < 0 || o.River.ShapeAlongScale > 1 {
 		return errors.New("river.shape_along_scale must be within [0,1]")
