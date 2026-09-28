@@ -529,6 +529,220 @@ func TestChunkManager_DeactivateChunkInternal_TracksOnlyDirtyRawObjects(t *testi
 	}
 }
 
+func TestChunkManager_FailedBuildSurvivesDeactivationAndReactivation(t *testing.T) {
+	previousRegistry := objectdefs.Global()
+	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousRegistry) })
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
+		DefID: 9301, Key: "valid-object", IsStatic: true,
+	}}))
+
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 14, Y: 14}
+	chunk := core.NewChunk(coord, 1, 0, 128)
+	chunk.SetState(types.ChunkStatePreloaded)
+	chunk.SetRawObjects([]*repository.Object{
+		{ID: 9301, TypeID: 9301, Region: 1, X: 10, Y: 10, ChunkX: coord.X, ChunkY: coord.Y},
+		{ID: 9302, TypeID: 9302, Region: 1, X: 11, Y: 10, ChunkX: coord.X, ChunkY: coord.Y},
+	})
+	chunk.SetRawInventoriesByOwner(map[types.EntityID][]repository.Inventory{
+		9302: {{OwnerID: 9302, Kind: int16(constt.InventoryGrid)}},
+	})
+	chunk.SetRawDirtyObjectIDs(map[types.EntityID]struct{}{9302: {}})
+	chunk.MarkRawDataDirty()
+
+	if err := cm.activateChunkInternal(coord, chunk); err != nil {
+		t.Fatalf("activate chunk: %v", err)
+	}
+	if chunk.GetState() != types.ChunkStateActive || len(chunk.GetHandles()) != 1 {
+		t.Fatal("valid object was not activated")
+	}
+	if rawObjects := chunk.GetRawObjects(); len(rawObjects) != 1 || rawObjects[0].ID != 9302 {
+		t.Fatalf("failed object was not retained: %+v", rawObjects)
+	}
+	if got := len(chunk.GetRawInventoriesByOwner()[9302]); got != 1 {
+		t.Fatalf("failed object's inventory rows = %d, want 1", got)
+	}
+	if _, dirty := chunk.GetRawDirtyObjectIDs()[9302]; !dirty {
+		t.Fatal("failed object's pending write was lost")
+	}
+	if _, scheduled := cm.activationRetries[coord]; !scheduled {
+		t.Fatal("failed build did not schedule a retry")
+	}
+
+	if err := cm.deactivateChunkInternal(chunk); err != nil {
+		t.Fatalf("deactivate chunk: %v", err)
+	}
+	if chunk.GetState() != types.ChunkStatePreloaded || len(chunk.GetHandles()) != 0 {
+		t.Fatal("chunk did not deactivate")
+	}
+	if rawObjects := chunk.GetRawObjects(); len(rawObjects) != 2 {
+		t.Fatalf("deactivation lost raw objects: %+v", rawObjects)
+	}
+	if got := len(chunk.GetRawInventoriesByOwner()[9302]); got != 1 {
+		t.Fatalf("deactivation lost failed object's inventory rows: %d", got)
+	}
+	if _, dirty := chunk.GetRawDirtyObjectIDs()[9302]; !dirty {
+		t.Fatal("deactivation lost failed object's pending write")
+	}
+	if _, scheduled := cm.activationRetries[coord]; scheduled {
+		t.Fatal("deactivation retained an active retry")
+	}
+
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
+		{DefID: 9301, Key: "valid-object", IsStatic: true},
+		{DefID: 9302, Key: "repaired-object", IsStatic: true},
+	}))
+	if err := cm.activateChunkInternal(coord, chunk); err != nil {
+		t.Fatalf("reactivate chunk: %v", err)
+	}
+	if len(chunk.GetHandles()) != 2 || len(chunk.GetRawObjects()) != 0 {
+		t.Fatal("reactivation did not build both objects exactly once")
+	}
+	if len(chunk.GetRawInventoriesByOwner()) != 0 {
+		t.Fatal("reactivation retained raw inventory rows after successful build")
+	}
+	recoveredHandle := cm.world.GetHandleByEntityID(9302)
+	internalState, ok := ecs.GetComponent[components.ObjectInternalState](cm.world, recoveredHandle)
+	if !ok || internalState.IsDirty {
+		t.Fatal("restored object should be clean until a runtime mutation")
+	}
+	if _, dirty := chunk.GetRawDirtyObjectIDs()[9302]; !dirty {
+		t.Fatal("reactivation lost the pending raw write")
+	}
+}
+
+func TestChunkManager_RetriesFailedBuildWhileChunkRemainsActive(t *testing.T) {
+	previousRegistry := objectdefs.Global()
+	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousRegistry) })
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry(nil))
+
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 15, Y: 15}
+	chunk := core.NewChunk(coord, 1, 0, 128)
+	chunk.SetState(types.ChunkStatePreloaded)
+	chunk.SetRawObjects([]*repository.Object{{
+		ID: 9303, TypeID: 9303, Region: 1, X: 12, Y: 12, ChunkX: coord.X, ChunkY: coord.Y,
+	}})
+	cm.chunks[coord] = chunk
+	interest := newChunkInterest()
+	interest.activeEntities[1] = struct{}{}
+	cm.chunkInterests[coord] = interest
+
+	if err := cm.activateChunkInternal(coord, chunk); err != nil {
+		t.Fatalf("activate chunk: %v", err)
+	}
+	if len(chunk.GetRawObjects()) != 1 || len(chunk.GetHandles()) != 0 {
+		t.Fatal("failed object did not remain pending in active chunk")
+	}
+	cm.Update(0)
+	if retry := cm.activationRetries[coord]; retry.delay != activationRetryInitialDelay {
+		t.Fatal("activation retried before its backoff expired")
+	}
+
+	retry := cm.activationRetries[coord]
+	retry.due = time.Now().Add(-time.Second)
+	cm.activationRetries[coord] = retry
+	cm.Update(0)
+	if retry := cm.activationRetries[coord]; retry.delay != 2*activationRetryInitialDelay {
+		t.Fatal("repeated build failure did not back off")
+	}
+	if len(chunk.GetRawObjects()) != 1 {
+		t.Fatal("repeated build failure lost the raw object")
+	}
+
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
+		DefID: 9303, Key: "repaired-object", IsStatic: true,
+	}}))
+	retry = cm.activationRetries[coord]
+	retry.due = time.Now().Add(-time.Second)
+	cm.activationRetries[coord] = retry
+	cm.Update(0)
+	if len(chunk.GetRawObjects()) != 0 || len(chunk.GetHandles()) != 1 {
+		t.Fatal("active retry did not restore the object")
+	}
+	if _, scheduled := cm.activationRetries[coord]; scheduled {
+		t.Fatal("successful retry remained scheduled")
+	}
+}
+
+func TestChunkManager_DeactivationDoesNotDuplicateActiveRawCacheEntry(t *testing.T) {
+	previousRegistry := objectdefs.Global()
+	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousRegistry) })
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
+		DefID: 9305, Key: "cached-object", IsStatic: true,
+	}}))
+
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 17, Y: 17}
+	chunk := core.NewChunk(coord, 1, 0, 128)
+	chunk.SetState(types.ChunkStateActive)
+	handle := SpawnEntityFromDef(cm.world, &objectdefs.ObjectDef{DefID: 9305, IsStatic: true}, DefSpawnParams{
+		EntityID: 9305, X: 10, Y: 10, Region: 1,
+	})
+	if handle == types.InvalidHandle {
+		t.Fatal("failed to create active object")
+	}
+	ecs.AddComponent(cm.world, handle, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
+	ecs.WithComponent(cm.world, handle, func(state *components.ObjectInternalState) {
+		state.IsDirty = false
+	})
+	chunk.Spatial().AddStatic(handle, 10, 10)
+	chunk.UpsertRawObject(&repository.Object{
+		ID: 9305, TypeID: 9305, Region: 1, X: 10, Y: 10, ChunkX: coord.X, ChunkY: coord.Y,
+	})
+
+	if err := cm.deactivateChunkInternal(chunk); err != nil {
+		t.Fatalf("deactivate chunk: %v", err)
+	}
+	if rawObjects := chunk.GetRawObjects(); len(rawObjects) != 1 || rawObjects[0].ID != 9305 {
+		t.Fatalf("active object was duplicated in the raw snapshot: %+v", rawObjects)
+	}
+	if _, dirty := chunk.GetRawDirtyObjectIDs()[9305]; !dirty {
+		t.Fatal("deactivation lost the active raw cache entry's pending write")
+	}
+}
+
+func TestChunkManager_ExpiredDroppedItemIsNotRetried(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+	ecs.SetResource(cm.world, ecs.TimeState{RuntimeSecondsTotal: 110})
+	deleter := &recordingObjectDeleter{}
+	cm.objectFactory.SetObjectDeleter(deleter)
+
+	coord := types.ChunkCoord{X: 16, Y: 16}
+	chunk := core.NewChunk(coord, 1, 0, 128)
+	chunk.SetState(types.ChunkStatePreloaded)
+	chunk.SetRawObjects([]*repository.Object{{
+		ID: 9304, TypeID: constt.DroppedItemTypeID, Region: 1,
+		Data: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"has_inventory":true,"contained_item_id":9304,"drop_time":100,"dropper_id":7}`),
+			Valid:      true,
+		},
+	}})
+	chunk.SetRawInventoriesByOwner(map[types.EntityID][]repository.Inventory{
+		9304: {{OwnerID: 9304, Kind: int16(constt.InventoryDroppedItem)}},
+	})
+
+	if err := cm.activateChunkInternal(coord, chunk); err != nil {
+		t.Fatalf("activate chunk: %v", err)
+	}
+	if deleter.calls != 1 || deleter.entityID != 9304 {
+		t.Fatalf("expired item was not deleted: %+v", deleter)
+	}
+	if len(chunk.GetRawObjects()) != 0 || len(chunk.GetRawInventoriesByOwner()) != 0 {
+		t.Fatal("expired item was retained in the raw cache")
+	}
+	if _, scheduled := cm.activationRetries[coord]; scheduled {
+		t.Fatal("expired item scheduled an activation retry")
+	}
+}
+
 func TestChunkManager_DeactivationSerializationFailureKeepsChunkActive(t *testing.T) {
 	previousRegistry := objectdefs.Global()
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousRegistry) })
