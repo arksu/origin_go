@@ -31,6 +31,8 @@ var _ context.Context
 
 type loadRequest struct {
 	coord types.ChunkCoord
+	done  chan struct{}
+	err   error
 }
 
 type saveRequest struct {
@@ -46,13 +48,15 @@ type saveRetry struct {
 const chunkSaveRetryDelay = time.Second
 
 type ChunkStats struct {
-	ActiveCount    int64
-	PreloadedCount int64
-	InactiveCount  int64
-	LoadRequests   int64
-	SaveRequests   int64
-	CacheHits      int64
-	CacheMisses    int64
+	ActiveCount      int64
+	PreloadedCount   int64
+	InactiveCount    int64
+	LoadRequests     int64
+	LoadBackpressure int64
+	PendingLoads     int64
+	SaveRequests     int64
+	CacheHits        int64
+	CacheMisses      int64
 }
 
 // EntityAOI represents Area of Interest for a single entity
@@ -132,11 +136,14 @@ type ChunkManager struct {
 
 	lruCache *lru.LRU[types.ChunkCoord, *core.Chunk]
 
-	loadQueue chan loadRequest
-	saveQueue chan saveRequest
-	stopCh    chan struct{}
-	wg        sync.WaitGroup
-	stopped   int32 // atomic flag to prevent saves after shutdown
+	loadQueue    chan *loadRequest
+	loadMu       sync.Mutex
+	loadRequests map[types.ChunkCoord]*loadRequest
+	pendingLoads []*loadRequest
+	saveQueue    chan saveRequest
+	stopCh       chan struct{}
+	wg           sync.WaitGroup
+	stopped      int32 // atomic flag to prevent saves after shutdown
 
 	// Per-entity AOI tracking
 	entityAOIs map[types.EntityID]*EntityAOI
@@ -150,9 +157,6 @@ type ChunkManager struct {
 	activeChunks   map[types.ChunkCoord]struct{}
 	activeChunksMu sync.RWMutex
 
-	loadFutures   map[types.ChunkCoord]*loadFuture
-	loadFuturesMu sync.Mutex
-
 	stats ChunkStats
 
 	eventBus *eventbus.EventBus
@@ -165,11 +169,6 @@ func (cm *ChunkManager) SetRestoredObjectReconciler(reconciler contracts.Restore
 		return
 	}
 	cm.restoreReconciler = reconciler
-}
-
-type loadFuture struct {
-	done    chan struct{}
-	waiters int
 }
 
 func NewChunkManager(
@@ -200,13 +199,13 @@ func NewChunkManager(
 		deactivationRetries: make(map[types.ChunkCoord]deactivationRetry),
 		saveRetries:         make(map[types.ChunkCoord]saveRetry),
 		chunks:              make(map[types.ChunkCoord]*core.Chunk),
-		loadQueue:           make(chan loadRequest, 512),
+		loadQueue:           make(chan *loadRequest, 512),
+		loadRequests:        make(map[types.ChunkCoord]*loadRequest),
 		saveQueue:           make(chan saveRequest, 512),
 		stopCh:              make(chan struct{}),
 		entityAOIs:          make(map[types.EntityID]*EntityAOI),
 		chunkInterests:      make(map[types.ChunkCoord]*ChunkInterest),
 		activeChunks:        make(map[types.ChunkCoord]struct{}),
-		loadFutures:         make(map[types.ChunkCoord]*loadFuture),
 		eventBus:            eventBus,
 	}
 
@@ -288,7 +287,7 @@ func (cm *ChunkManager) EnableChunkLoadEvents(entityID types.EntityID, epoch uin
 	for dy := -activeRadius; dy <= activeRadius; dy++ {
 		for dx := -activeRadius; dx <= activeRadius; dx++ {
 			coord := types.ChunkCoord{X: center.X + dx, Y: center.Y + dy}
-			if cm.isWithinWorldBounds(coord) {
+			if cm.IsWithinWorldBounds(coord) {
 				if _, isActive := aoi.ActiveChunks[coord]; isActive {
 					cm.publishChunkLoad(aoi, coord)
 				}
@@ -379,7 +378,7 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 	for dy := -activeRadius; dy <= activeRadius; dy++ {
 		for dx := -activeRadius; dx <= activeRadius; dx++ {
 			coord := types.ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
-			if cm.isWithinWorldBounds(coord) {
+			if cm.IsWithinWorldBounds(coord) {
 				newActive[coord] = struct{}{}
 			}
 		}
@@ -389,7 +388,7 @@ func (cm *ChunkManager) updateEntityAOI(entityID types.EntityID, newCenter types
 	for dy := -preloadRadius; dy <= preloadRadius; dy++ {
 		for dx := -preloadRadius; dx <= preloadRadius; dx++ {
 			coord := types.ChunkCoord{X: newCenter.X + dx, Y: newCenter.Y + dy}
-			if cm.isWithinWorldBounds(coord) {
+			if cm.IsWithinWorldBounds(coord) {
 				if _, isActive := newActive[coord]; !isActive {
 					newPreload[coord] = struct{}{}
 				}
@@ -532,7 +531,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 
 		if snapshot.activeCount > 0 {
 			// Should be Active
-			if chunk == nil {
+			if chunk == nil || chunk.GetState() == types.ChunkStateUnloaded {
 				_ = cm.requestLoad(coord)
 			} else {
 				state := chunk.GetState()
@@ -554,7 +553,7 @@ func (cm *ChunkManager) recalculateChunkStates() {
 			}
 		} else if snapshot.preloadCount > 0 {
 			// Should be Preloaded
-			if chunk == nil {
+			if chunk == nil || chunk.GetState() == types.ChunkStateUnloaded {
 				_ = cm.requestLoad(coord)
 			} else {
 				state := chunk.GetState()
@@ -624,7 +623,16 @@ func (cm *ChunkManager) loadWorker() {
 		case <-cm.stopCh:
 			return
 		case req := <-cm.loadQueue:
-			cm.loadChunkFromDB(req.coord)
+			// A worker frees a queue slot before DB I/O; refill it immediately for backlogged loads.
+			cm.loadMu.Lock()
+			cm.dispatchPendingLoadsLocked()
+			cm.loadMu.Unlock()
+
+			req.err = cm.loadChunkFromDB(req.coord)
+			cm.loadMu.Lock()
+			delete(cm.loadRequests, req.coord)
+			close(req.done)
+			cm.loadMu.Unlock()
 		}
 	}
 }
@@ -642,7 +650,7 @@ func (cm *ChunkManager) saveWorker() {
 	}
 }
 
-func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
+func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) error {
 	cm.chunksMu.Lock()
 	chunk, exists := cm.chunks[coord]
 	if !exists {
@@ -652,10 +660,10 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	state := chunk.GetState()
 	if state != types.ChunkStateUnloaded {
 		cm.chunksMu.Unlock()
-		if state != types.ChunkStateLoading {
-			cm.completeFuture(coord)
+		if state == types.ChunkStateLoading {
+			return ErrChunkNotLoaded
 		}
-		return
+		return nil
 	}
 	chunk.SetState(types.ChunkStateLoading)
 	cm.chunksMu.Unlock()
@@ -667,8 +675,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 			zap.Error(err),
 		)
 		chunk.SetState(types.ChunkStateUnloaded)
-		cm.completeFuture(coord)
-		return
+		return err
 	}
 
 	cm.streamMu.Lock()
@@ -689,7 +696,7 @@ func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) {
 	cm.readyChunks[coord] = struct{}{}
 	cm.readyMu.Unlock()
 
-	cm.completeFuture(coord)
+	return nil
 }
 
 func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
@@ -773,8 +780,8 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 	cm.chunksMu.Unlock()
 }
 
-// isWithinWorldBounds checks if a chunk coordinate is within world boundaries
-func (cm *ChunkManager) isWithinWorldBounds(coord types.ChunkCoord) bool {
+// IsWithinWorldBounds checks if a chunk coordinate is within world boundaries.
+func (cm *ChunkManager) IsWithinWorldBounds(coord types.ChunkCoord) bool {
 	minX := cm.cfg.Game.WorldMinXChunks
 	minY := cm.cfg.Game.WorldMinYChunks
 	maxX := minX + cm.cfg.Game.WorldWidthChunks
@@ -784,7 +791,7 @@ func (cm *ChunkManager) isWithinWorldBounds(coord types.ChunkCoord) bool {
 }
 
 func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *core.Chunk {
-	if !cm.isWithinWorldBounds(coord) {
+	if !cm.IsWithinWorldBounds(coord) {
 		return nil
 	}
 
@@ -804,7 +811,7 @@ func (cm *ChunkManager) GetChunk(coord types.ChunkCoord) *core.Chunk {
 // GetChunkFast returns chunk pointer without cache hit/miss stats updates.
 // Intended for hot paths where atomics would dominate profile noise.
 func (cm *ChunkManager) GetChunkFast(coord types.ChunkCoord) *core.Chunk {
-	if !cm.isWithinWorldBounds(coord) {
+	if !cm.IsWithinWorldBounds(coord) {
 		return nil
 	}
 
@@ -815,94 +822,75 @@ func (cm *ChunkManager) GetChunkFast(coord types.ChunkCoord) *core.Chunk {
 }
 
 func (cm *ChunkManager) requestLoad(coord types.ChunkCoord) bool {
+	_, accepted := cm.getOrCreateLoadRequest(coord)
+	return accepted
+}
+
+func (cm *ChunkManager) getOrCreateLoadRequest(coord types.ChunkCoord) (*loadRequest, bool) {
 	atomic.AddInt64(&cm.stats.LoadRequests, 1)
 
-	select {
-	case cm.loadQueue <- loadRequest{coord: coord}:
-		return true
-	default:
-		cm.logger.Warn("load queue full, dropping load request",
-			zap.Int("chunk_x", coord.X),
-			zap.Int("chunk_y", coord.Y),
-		)
-		return false
+	cm.loadMu.Lock()
+	defer cm.loadMu.Unlock()
+	if atomic.LoadInt32(&cm.stopped) != 0 {
+		return nil, false
 	}
+	if req, exists := cm.loadRequests[coord]; exists {
+		return req, true
+	}
+
+	req := &loadRequest{coord: coord, done: make(chan struct{})}
+	cm.loadRequests[coord] = req
+	cm.pendingLoads = append(cm.pendingLoads, req)
+	cm.dispatchPendingLoadsLocked()
+	if len(cm.pendingLoads) > 0 {
+		atomic.AddInt64(&cm.stats.LoadBackpressure, 1)
+	}
+	return req, true
 }
 
-func (cm *ChunkManager) getOrCreateFuture(coord types.ChunkCoord) chan struct{} {
-	cm.loadFuturesMu.Lock()
-	defer cm.loadFuturesMu.Unlock()
-
-	if fut, exists := cm.loadFutures[coord]; exists {
-		fut.waiters++
-		return fut.done
+func (cm *ChunkManager) dispatchPendingLoadsLocked() {
+	for len(cm.pendingLoads) > 0 {
+		select {
+		case cm.loadQueue <- cm.pendingLoads[0]:
+			cm.pendingLoads[0] = nil
+			cm.pendingLoads = cm.pendingLoads[1:]
+		default:
+			return
+		}
 	}
-
-	fut := &loadFuture{done: make(chan struct{}), waiters: 1}
-	cm.loadFutures[coord] = fut
-	return fut.done
-}
-
-func (cm *ChunkManager) completeFuture(coord types.ChunkCoord) {
-	cm.loadFuturesMu.Lock()
-	defer cm.loadFuturesMu.Unlock()
-
-	if fut, exists := cm.loadFutures[coord]; exists {
-		close(fut.done)
-		delete(cm.loadFutures, coord)
-	}
-}
-
-func (cm *ChunkManager) cleanupFuture(coord types.ChunkCoord) {
-	cm.loadFuturesMu.Lock()
-	fut, exists := cm.loadFutures[coord]
-	if !exists {
-		cm.loadFuturesMu.Unlock()
-		return
-	}
-
-	fut.waiters--
-	noWaiters := fut.waiters <= 0
-	cm.loadFuturesMu.Unlock()
-
-	if !noWaiters {
-		return
-	}
-
-	// Avoid lock inversion between chunksMu and loadFuturesMu:
-	// check chunk state outside the futures lock, then confirm-and-delete.
-	chunk := cm.GetChunkFast(coord)
-	if chunk != nil && chunk.GetState() != types.ChunkStateUnloaded {
-		return
-	}
-
-	cm.loadFuturesMu.Lock()
-	if fut2, exists2 := cm.loadFutures[coord]; exists2 && fut2.waiters <= 0 {
-		delete(cm.loadFutures, coord)
-	}
-	cm.loadFuturesMu.Unlock()
 }
 
 func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord types.ChunkCoord) error {
 	chunk := cm.GetChunkFast(coord)
 	if chunk != nil {
 		state := chunk.GetState()
-		if state == types.ChunkStatePreloaded || state == types.ChunkStateActive {
+		if state == types.ChunkStatePreloaded || state == types.ChunkStateActive || state == types.ChunkStateInactive {
 			return nil
 		}
 	}
 
-	done := cm.getOrCreateFuture(coord)
-	_ = cm.requestLoad(coord)
+	req, accepted := cm.getOrCreateLoadRequest(coord)
+	if !accepted {
+		return ErrChunkNotLoaded
+	}
 
 	select {
-	case <-done:
+	case <-req.done:
+		if req.err != nil {
+			return fmt.Errorf("load chunk %v: %w", coord, req.err)
+		}
+		chunk = cm.GetChunkFast(coord)
+		if chunk == nil {
+			return ErrChunkNotLoaded
+		}
+		state := chunk.GetState()
+		if state != types.ChunkStatePreloaded && state != types.ChunkStateActive && state != types.ChunkStateInactive {
+			return ErrChunkNotLoaded
+		}
 		return nil
 	case <-ctx.Done():
-		cm.cleanupFuture(coord)
 		return ctx.Err()
 	case <-cm.stopCh:
-		cm.cleanupFuture(coord)
 		return ErrChunkNotLoaded
 	}
 }
@@ -1135,7 +1123,7 @@ func (cm *ChunkManager) PreloadChunksAround(center types.ChunkCoord) {
 			coord := types.ChunkCoord{X: center.X + dx, Y: center.Y + dy}
 
 			// Skip chunks outside world bounds
-			if !cm.isWithinWorldBounds(coord) {
+			if !cm.IsWithinWorldBounds(coord) {
 				continue
 			}
 
@@ -1239,15 +1227,20 @@ func (cm *ChunkManager) Stats() ChunkStats {
 		}
 	}
 	cm.chunksMu.RUnlock()
+	cm.loadMu.Lock()
+	pendingLoads := int64(len(cm.pendingLoads))
+	cm.loadMu.Unlock()
 
 	return ChunkStats{
-		ActiveCount:    activeCount,
-		PreloadedCount: preloadedCount,
-		InactiveCount:  inactiveCount,
-		LoadRequests:   atomic.LoadInt64(&cm.stats.LoadRequests),
-		SaveRequests:   atomic.LoadInt64(&cm.stats.SaveRequests),
-		CacheHits:      atomic.LoadInt64(&cm.stats.CacheHits),
-		CacheMisses:    atomic.LoadInt64(&cm.stats.CacheMisses),
+		ActiveCount:      activeCount,
+		PreloadedCount:   preloadedCount,
+		InactiveCount:    inactiveCount,
+		LoadRequests:     atomic.LoadInt64(&cm.stats.LoadRequests),
+		LoadBackpressure: atomic.LoadInt64(&cm.stats.LoadBackpressure),
+		PendingLoads:     pendingLoads,
+		SaveRequests:     atomic.LoadInt64(&cm.stats.SaveRequests),
+		CacheHits:        atomic.LoadInt64(&cm.stats.CacheHits),
+		CacheMisses:      atomic.LoadInt64(&cm.stats.CacheMisses),
 	}
 }
 

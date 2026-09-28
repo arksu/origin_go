@@ -12,53 +12,66 @@ import (
 	"go.uber.org/zap"
 )
 
-type ChunkSystem struct {
-	ecs.BaseSystem
-	chunkManager core.ChunkManager
-	logger       *zap.Logger
+type chunkMigrationManager interface {
+	core.ChunkManager
+	IsWithinWorldBounds(coord types.ChunkCoord) bool
 }
 
-func NewChunkSystem(chunkManager core.ChunkManager, logger *zap.Logger) *ChunkSystem {
+type ChunkSystem struct {
+	ecs.BaseSystem
+	chunkManager      chunkMigrationManager
+	logger            *zap.Logger
+	pendingMigrations map[types.Handle]uint64
+	updateTick        uint64
+}
+
+func NewChunkSystem(chunkManager chunkMigrationManager, logger *zap.Logger) *ChunkSystem {
 	return &ChunkSystem{
-		BaseSystem:   ecs.NewBaseSystem("ChunkSystem", 400),
-		chunkManager: chunkManager,
-		logger:       logger,
+		BaseSystem:        ecs.NewBaseSystem("ChunkSystem", 400),
+		chunkManager:      chunkManager,
+		logger:            logger,
+		pendingMigrations: make(map[types.Handle]uint64),
 	}
 }
 
 func (s *ChunkSystem) Update(w *ecs.World, dt float64) {
+	s.updateTick++
 	movedEntities := ecs.GetResource[ecs.MovedEntities](w)
-	// Process only entities that moved this frame
 	for i := 0; i < movedEntities.Count; i++ {
-		h := movedEntities.Handles[i]
+		s.tryMigrateEntity(w, movedEntities.Handles[i])
+	}
 
-		if !w.Alive(h) {
-			continue
-		}
-
-		chunkRef, ok := ecs.GetComponent[components.ChunkRef](w, h)
-		if !ok {
-			continue
-		}
-
-		// ChunkSystem runs after TransformUpdateSystem, which already
-		// committed the collision-adjusted final position to the transform.
-		// Migrate on where the entity IS, not where it asked to go: intent
-		// and final diverge whenever collision alters the path near a border.
-		transform, ok := ecs.GetComponent[components.Transform](w, h)
-		if !ok {
-			continue
-		}
-		// Floor before converting to int so negative fractional positions
-		// belong to the chunk on the negative side of a border.
-		newChunkX := int(math.Floor(transform.X / float64(_const.ChunkWorldSize)))
-		newChunkY := int(math.Floor(transform.Y / float64(_const.ChunkWorldSize)))
-
-		// Check if entity needs to migrate to different chunk
-		if newChunkX != chunkRef.CurrentChunkX || newChunkY != chunkRef.CurrentChunkY {
-			s.migrateEntity(w, h, chunkRef, transform, newChunkX, newChunkY)
+	// A stopped entity no longer appears in MovedEntities, so keep retrying
+	// an aborted migration until its destination becomes active.
+	for h, lastAttemptTick := range s.pendingMigrations {
+		if lastAttemptTick != s.updateTick {
+			s.tryMigrateEntity(w, h)
 		}
 	}
+}
+
+func (s *ChunkSystem) tryMigrateEntity(w *ecs.World, h types.Handle) {
+	if !w.Alive(h) {
+		delete(s.pendingMigrations, h)
+		return
+	}
+	chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, h)
+	transform, hasTransform := ecs.GetComponent[components.Transform](w, h)
+	if !hasChunkRef || !hasTransform {
+		delete(s.pendingMigrations, h)
+		return
+	}
+
+	// TransformUpdateSystem has already committed the collision-adjusted
+	// position; movement intent may differ near a border.
+	// Floor keeps negative fractional positions on the negative side of a border.
+	newChunkX := int(math.Floor(transform.X / float64(_const.ChunkWorldSize)))
+	newChunkY := int(math.Floor(transform.Y / float64(_const.ChunkWorldSize)))
+	if newChunkX == chunkRef.CurrentChunkX && newChunkY == chunkRef.CurrentChunkY {
+		delete(s.pendingMigrations, h)
+		return
+	}
+	s.migrateEntity(w, h, chunkRef, transform, newChunkX, newChunkY)
 }
 
 func (s *ChunkSystem) migrateEntity(
@@ -71,23 +84,36 @@ func (s *ChunkSystem) migrateEntity(
 	// Validate everything before mutating: aborting midway would leave the
 	// spatial registration and ChunkRef inconsistent.
 	newChunkCoord := types.ChunkCoord{X: newChunkX, Y: newChunkY}
-	newChunk := s.chunkManager.GetChunk(newChunkCoord)
-	if newChunk == nil || newChunk.State != types.ChunkStateActive {
-		s.logger.Error("Target chunk not found or not active for entity migration",
+	if !s.chunkManager.IsWithinWorldBounds(newChunkCoord) {
+		delete(s.pendingMigrations, h)
+		s.logger.Error("Entity migration target is outside world bounds",
 			zap.Uint64("handle", uint64(h)),
 			zap.Int("chunk_x", newChunkX),
 			zap.Int("chunk_y", newChunkY),
-			zap.String("chunk_state", func() string {
-				if newChunk == nil {
-					return "nil"
-				}
-				return string(newChunk.State)
-			}()))
+		)
+		return
+	}
+	newChunk := s.chunkManager.GetChunk(newChunkCoord)
+	if newChunk == nil || newChunk.State != types.ChunkStateActive {
+		if _, alreadyPending := s.pendingMigrations[h]; !alreadyPending {
+			s.logger.Warn("Target chunk not found or not active for entity migration",
+				zap.Uint64("handle", uint64(h)),
+				zap.Int("chunk_x", newChunkX),
+				zap.Int("chunk_y", newChunkY),
+				zap.String("chunk_state", func() string {
+					if newChunk == nil {
+						return "nil"
+					}
+					return string(newChunk.State)
+				}()))
+		}
+		s.pendingMigrations[h] = s.updateTick
 		return
 	}
 
 	entityID, hasEntityID := w.GetExternalID(h)
 	if !hasEntityID {
+		delete(s.pendingMigrations, h)
 		s.logger.Error("Entity missing external ID for chunk migration",
 			zap.Uint64("handle", uint64(h)),
 			zap.Int("new_chunk_x", newChunkX),
@@ -129,4 +155,5 @@ func (s *ChunkSystem) migrateEntity(
 
 	// Update entity position in chunk manager (drives AOI and chunk streaming)
 	s.chunkManager.UpdateEntityPosition(entityID, newChunkCoord)
+	delete(s.pendingMigrations, h)
 }
