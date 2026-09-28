@@ -22,20 +22,29 @@ type positionUpdate struct {
 // migrationChunkManager serves a map of active chunks and records
 // UpdateEntityPosition calls, so chunk-migration bookkeeping is assertable.
 type migrationChunkManager struct {
-	chunks  map[types.ChunkCoord]*core.Chunk
-	updates []positionUpdate
+	chunks       map[types.ChunkCoord]*core.Chunk
+	updates      []positionUpdate
+	minChunk     types.ChunkCoord
+	maxChunkExcl types.ChunkCoord
 }
 
 func newMigrationChunkManager(coords ...types.ChunkCoord) *migrationChunkManager {
-	m := &migrationChunkManager{chunks: make(map[types.ChunkCoord]*core.Chunk, len(coords))}
+	m := &migrationChunkManager{
+		chunks:       make(map[types.ChunkCoord]*core.Chunk, len(coords)),
+		minChunk:     types.ChunkCoord{X: -3, Y: -3},
+		maxChunkExcl: types.ChunkCoord{X: 4, Y: 4},
+	}
 	for _, coord := range coords {
-		chunk := newTestChunk(coord)
-		chunk.RestoreTiles(chunk.Tiles, 0, 0)
-		// Migration validates chunk state; test chunks must look active.
-		chunk.SetState(types.ChunkStateActive)
-		m.chunks[coord] = chunk
+		m.addActiveChunk(coord)
 	}
 	return m
+}
+
+func (m *migrationChunkManager) addActiveChunk(coord types.ChunkCoord) {
+	chunk := newTestChunk(coord)
+	chunk.RestoreTiles(chunk.Tiles, 0, 0)
+	chunk.SetState(types.ChunkStateActive)
+	m.chunks[coord] = chunk
 }
 
 func (m *migrationChunkManager) ActiveChunks() []*core.Chunk {
@@ -52,6 +61,11 @@ func (m *migrationChunkManager) GetChunk(coord types.ChunkCoord) *core.Chunk {
 
 func (m *migrationChunkManager) GetChunkFast(coord types.ChunkCoord) *core.Chunk {
 	return m.chunks[coord]
+}
+
+func (m *migrationChunkManager) IsWithinWorldBounds(coord types.ChunkCoord) bool {
+	return coord.X >= m.minChunk.X && coord.X < m.maxChunkExcl.X &&
+		coord.Y >= m.minChunk.Y && coord.Y < m.maxChunkExcl.Y
 }
 
 func (m *migrationChunkManager) UpdateEntityPosition(entityID types.EntityID, newCenter types.ChunkCoord) {
@@ -300,6 +314,60 @@ func TestChunkSystem_InactiveTargetChunkAbortsCleanly(t *testing.T) {
 	grid := querySpatial(t, cm.chunk(types.ChunkCoord{X: 0, Y: 0}), 1536, 90, 1560, 110)
 	if handleCount(grid, scene.mover) != 1 {
 		t.Fatalf("spatial entry vanished during aborted migration")
+	}
+}
+
+func TestChunkSystem_RetriesMigrationAfterTargetLoadsWithoutMovement(t *testing.T) {
+	oldCoord := types.ChunkCoord{X: 0, Y: 0}
+	newCoord := types.ChunkCoord{X: 1, Y: 0}
+	cm := newMigrationChunkManager(oldCoord)
+	scene := newMigrationScene(t, cm, 1500, 100, oldCoord)
+	scene.runTick(1545, 100, 1560, 100)
+	if len(scene.chunkSys.pendingMigrations) != 1 {
+		t.Fatal("aborted migration was not retained for retry")
+	}
+
+	cm.addActiveChunk(newCoord)
+	ecs.GetResource[ecs.MovedEntities](scene.world).Count = 0
+	scene.chunkSys.Update(scene.world, 0.1)
+
+	ref := chunkRefOf(t, scene.world, scene.mover)
+	if ref.CurrentChunkX != newCoord.X || ref.CurrentChunkY != newCoord.Y {
+		t.Fatalf("migration did not retry after target loaded: %+v", ref)
+	}
+	if len(cm.updates) != 1 || cm.updates[0].coord != newCoord {
+		t.Fatalf("expected one AOI update after retry, got %+v", cm.updates)
+	}
+	if len(scene.chunkSys.pendingMigrations) != 0 {
+		t.Fatal("completed migration remained pending")
+	}
+	if found := querySpatial(t, cm.chunk(oldCoord), 1536, 90, 1560, 110); handleCount(found, scene.mover) != 0 {
+		t.Fatal("entity remained in the old chunk grid")
+	}
+	if found := querySpatial(t, cm.chunk(newCoord), 1536, 90, 1560, 110); handleCount(found, scene.mover) != 1 {
+		t.Fatal("entity missing from the new chunk grid")
+	}
+}
+
+func TestChunkSystem_DoesNotRetryMigrationOutsideWorld(t *testing.T) {
+	oldCoord := types.ChunkCoord{X: 0, Y: 0}
+	cm := newMigrationChunkManager(oldCoord)
+	cm.maxChunkExcl.X = 1
+	scene := newMigrationScene(t, cm, 1500, 100, oldCoord)
+	scene.runTick(1545, 100, 1560, 100)
+
+	if len(scene.chunkSys.pendingMigrations) != 0 {
+		t.Fatal("out-of-bounds migration was retained for retry")
+	}
+	ecs.GetResource[ecs.MovedEntities](scene.world).Count = 0
+	for i := 0; i < 3; i++ {
+		scene.chunkSys.Update(scene.world, 0.1)
+	}
+	if len(scene.chunkSys.pendingMigrations) != 0 || len(cm.updates) != 0 {
+		t.Fatalf("out-of-bounds migration retried: pending=%d updates=%+v", len(scene.chunkSys.pendingMigrations), cm.updates)
+	}
+	if ref := chunkRefOf(t, scene.world, scene.mover); ref.CurrentChunkX != oldCoord.X || ref.CurrentChunkY != oldCoord.Y {
+		t.Fatalf("out-of-bounds migration changed chunk ref: %+v", ref)
 	}
 }
 

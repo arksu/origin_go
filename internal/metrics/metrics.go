@@ -16,13 +16,15 @@ type Collector struct {
 	tickRate         *prometheus.Desc
 	avgTickDuration  *prometheus.Desc
 
-	chunkActiveCount    *prometheus.Desc
-	chunkPreloadedCount *prometheus.Desc
-	chunkInactiveCount  *prometheus.Desc
-	chunkLoadRequests   *prometheus.Desc
-	chunkSaveRequests   *prometheus.Desc
-	chunkCacheHits      *prometheus.Desc
-	chunkCacheMisses    *prometheus.Desc
+	chunkActiveCount      *prometheus.Desc
+	chunkPreloadedCount   *prometheus.Desc
+	chunkInactiveCount    *prometheus.Desc
+	chunkLoadRequests     *prometheus.Desc
+	chunkLoadBackpressure *prometheus.Desc
+	chunkPendingLoads     *prometheus.Desc
+	chunkSaveRequests     *prometheus.Desc
+	chunkCacheHits        *prometheus.Desc
+	chunkCacheMisses      *prometheus.Desc
 }
 
 func NewCollector(g *game.Game) *Collector {
@@ -73,6 +75,16 @@ func NewCollector(g *game.Game) *Collector {
 			"Total number of chunk load request attempts",
 			[]string{"layer"}, nil,
 		),
+		chunkLoadBackpressure: prometheus.NewDesc(
+			"game_chunk_load_backpressure_total",
+			"Total number of distinct chunk loads deferred because the load queue was full",
+			[]string{"layer"}, nil,
+		),
+		chunkPendingLoads: prometheus.NewDesc(
+			"game_chunk_pending_loads",
+			"Number of chunk loads waiting for space in the load queue",
+			[]string{"layer"}, nil,
+		),
 		chunkSaveRequests: prometheus.NewDesc(
 			"game_chunk_save_request_attempts_total",
 			"Total number of chunk save request attempts",
@@ -101,6 +113,8 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.chunkPreloadedCount
 	ch <- c.chunkInactiveCount
 	ch <- c.chunkLoadRequests
+	ch <- c.chunkLoadBackpressure
+	ch <- c.chunkPendingLoads
 	ch <- c.chunkSaveRequests
 	ch <- c.chunkCacheHits
 	ch <- c.chunkCacheMisses
@@ -172,6 +186,18 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				c.chunkLoadRequests,
 				prometheus.CounterValue,
 				float64(chunkStats.LoadRequests),
+				layerLabel["layer"],
+			)
+			ch <- prometheus.MustNewConstMetric(
+				c.chunkLoadBackpressure,
+				prometheus.CounterValue,
+				float64(chunkStats.LoadBackpressure),
+				layerLabel["layer"],
+			)
+			ch <- prometheus.MustNewConstMetric(
+				c.chunkPendingLoads,
+				prometheus.GaugeValue,
+				float64(chunkStats.PendingLoads),
 				layerLabel["layer"],
 			)
 			ch <- prometheus.MustNewConstMetric(

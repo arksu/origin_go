@@ -1,6 +1,7 @@
 package world
 
 import (
+	"context"
 	"math"
 	"origin/internal/config"
 	constt "origin/internal/const"
@@ -37,7 +38,12 @@ func newTestConfig() *config.Config {
 }
 
 func newTestChunkManager() *ChunkManager {
+	return newTestChunkManagerWithLoadWorkers(1)
+}
+
+func newTestChunkManagerWithLoadWorkers(loadWorkers int) *ChunkManager {
 	cfg := newTestConfig()
+	cfg.Game.LoadWorkers = loadWorkers
 	world := ecs.NewWorldForTesting()
 	logger := zap.NewNop()
 	objectFactory := NewObjectFactory(nil)
@@ -273,6 +279,87 @@ func TestChunkManager_LoadWithActiveInterestStaysPreloaded(t *testing.T) {
 	}
 	if state := chunk.GetState(); state != types.ChunkStatePreloaded {
 		t.Fatalf("chunk state = %v, want %v", state, types.ChunkStatePreloaded)
+	}
+}
+
+func TestChunkManager_FullLoadQueueRetainsWaitPreloadedRequest(t *testing.T) {
+	cm := newTestChunkManagerWithLoadWorkers(0)
+	defer cm.Stop()
+	cm.loadQueue = make(chan *loadRequest, 1)
+
+	firstCoord := types.ChunkCoord{X: 10, Y: 10}
+	waitCoord := types.ChunkCoord{X: 11, Y: 10}
+	if !cm.requestLoad(firstCoord) {
+		t.Fatal("first load request was rejected")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	waitResult := make(chan error, 1)
+	go func() { waitResult <- cm.WaitPreloaded(ctx, waitCoord) }()
+
+	var queued, pending, distinct int
+	deadline := time.After(3 * time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		cm.loadMu.Lock()
+		queued, pending, distinct = len(cm.loadQueue), len(cm.pendingLoads), len(cm.loadRequests)
+		cm.loadMu.Unlock()
+		if pending == 1 {
+			break
+		}
+		select {
+		case err := <-waitResult:
+			t.Fatalf("WaitPreloaded returned before the backlogged request ran: %v", err)
+		case <-deadline:
+			t.Fatal("WaitPreloaded did not retain the request in the backlog")
+		case <-ticker.C:
+		}
+	}
+	if !cm.requestLoad(waitCoord) {
+		t.Fatal("duplicate load request was rejected")
+	}
+	cm.loadMu.Lock()
+	queued, pending, distinct = len(cm.loadQueue), len(cm.pendingLoads), len(cm.loadRequests)
+	cm.loadMu.Unlock()
+	if queued != 1 || pending != 1 || distinct != 2 {
+		t.Fatalf("queued=%d pending=%d distinct=%d, want 1, 1, 2", queued, pending, distinct)
+	}
+	if stats := cm.Stats(); stats.PendingLoads != 1 || stats.LoadBackpressure != 1 {
+		t.Fatalf("pending loads=%d backpressure=%d, want 1, 1", stats.PendingLoads, stats.LoadBackpressure)
+	}
+
+	cm.wg.Add(1)
+	go cm.loadWorker()
+	select {
+	case err := <-waitResult:
+		if err != nil {
+			t.Fatalf("WaitPreloaded for backlogged chunk: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("WaitPreloaded timed out despite a worker draining the queue")
+	}
+	if chunk := cm.GetChunkFast(waitCoord); chunk == nil || chunk.GetState() != types.ChunkStateInactive {
+		t.Fatalf("backlogged chunk was not loaded: %v", chunk)
+	}
+	if pending := cm.Stats().PendingLoads; pending != 0 {
+		t.Fatalf("pending loads=%d after worker drained queue, want 0", pending)
+	}
+}
+
+func TestChunkManager_RecalculateLoadsUnloadedChunkWithInterest(t *testing.T) {
+	cm := newTestChunkManagerWithLoadWorkers(0)
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 10, Y: 10}
+	cm.chunks[coord] = core.NewChunk(coord, cm.region, cm.layer, constt.ChunkSize)
+	interest := newChunkInterest()
+	interest.activeEntities[1] = struct{}{}
+	cm.chunkInterests[coord] = interest
+
+	cm.recalculateChunkStates()
+	if len(cm.loadQueue) != 1 {
+		t.Fatalf("unloaded chunk with active interest was not queued for loading")
 	}
 }
 
