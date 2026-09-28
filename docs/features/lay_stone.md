@@ -1,12 +1,12 @@
 # Lay Stone (Haven & Hearth) — механика и план порта в origin_go
 
-Референс собран 2026-09-28 (обновление исследования 2026-09-22) по Ring of Brodgar wiki (Paving, Terraforming, Stone Working, Road/Milestone), Fandom Glossary и форуму; порт размечен по актуальному коду. Смежные документы: [farming.md](farming.md) (plow — прямой прецедент), [personal_claim.md](personal_claim.md) (клеймы гейтят decay павинга).
+Референс собран 2026-09-28 (углублённая повторная проходка в тот же день; первичное исследование 2026-09-22) по Ring of Brodgar wiki (Paving, Terraforming, Stone Working, Road/Milestone), Fandom wiki (Terraforming, Paved Ground, Stone Working), Fandom Glossary и форуму; порт размечен по актуальному коду. Смежные документы: [farming.md](farming.md) (plow — прямой прецедент), [personal_claim.md](personal_claim.md) (клеймы гейтят decay павинга).
 
 ## Часть 1. Механика в H&H
 
 ### 1.1 Действие и семья
 
-- **Adventure → Landscaping → Lay Stone Paving**: превращает годный тайл в мощение по курсу **1 Stone = 1 тайл**, без инструмента, таргетинг — клик по тайлу (без drag-покраски). Требует скилл **Stone Working** (200 LP, пререквизит Foraging; открывает Mining и Metal Working).
+- **Adventure → Landscaping → Lay Stone Paving**: превращает годный тайл в мощение по курсу **1 Stone = 1 тайл**, без инструмента; таргетинг — клик по тайлу, drag-покраски нет, но **shift-click при удержании кладёт мощение непрерывно** (дорожка за одно проведение). Требует скилл **Stone Working** (200 LP, пререквизит Foraging; открывает Mining и Metal Working).
 - Семья (все — 1 предмет = 1 тайл):
   - **Lay Brick Paving** — Masonry; цвет кирпича определяется типом глины обжига;
   - **Lay Metal** — Metal Working, 1 бар любого металла (реимплементировано 2016-04-06; в Legacy — 1 наггет);
@@ -17,7 +17,7 @@
 
 ### 1.2 Где можно / нельзя
 
-- **Нельзя**: болота, stoneflats, пляжи, вода (ранняя вики упоминала +3-тайловый береговой буфер), **любые лесные тайлы** (включая выращенные игроком). Лес можно **сначала вспахать** — plowed мощить можно.
+- **Нельзя**: болота, stoneflats, пляжи, hearth-lands, acre clay, снег (первые три — «никогда»; hearth-lands/acre clay/снег — по Fandom «не мощится вовсе, пока тайл не конвертирован»; в origin_go таких тайлов нет, для референса), вода (**+3-тайловый береговой буфер — подтверждают обе вики**), **любые лесные тайлы** (включая выращенные игроком). Лес можно **сначала вспахать** — plowed мощить можно.
 - **Можно**: трава, вспашка, mudflats, горы, вересковые пустоши (плавно проходимые terrain'ы).
 
 ### 1.3 Эффекты мощения
@@ -26,15 +26,15 @@
 - **Стамина**: сниженный дрен при беге/спринте (в glossary связь прямая: чем быстрее движение, тем больше расход).
 - **Terrain creep**: dirt и вспашка со временем зарастают соседним grass/forest; **павинг общий creep блокирует** (рекомендация вики — окаймлять поля лентой павинга/woodchips). Но **tree-driven терраформинг павинг не блокирует**: растущее дерево спавнит лес до 4 тайлов вокруг независимо от мощения; лес без деревьев в радиусе ~9 тайлов деградирует в grassland.
 - **Bats не спавнятся на павинге** (безопасные дороги в шахтах), но и форажаблы там не растут.
-- **Посевы под мощением** дорастают и собираются, но пересаживать нельзя.
+- **Посевы под мощением** дорастают и собираются, но пересаживать нельзя; очистка перед мощением не нужна — мощить тайл с растущими посевами можно сразу.
 - Постройки на незаклеймленном мощении **decay медленнее**. Сам павинг **не защищает территорию** (клайм — отдельная механика).
 
 ### 1.4 Decay — vines (с 2018-05-02, «Hookah Vines»)
 
 - Незаклеймленный павинг, граничащий с natural-тайлом или уже завиненным, может получить decay-hit → на нём появляются **vines**; каждый следующий hit растит их, **4-й hit уничтожает мощение** — тайл становится natural-тайлом соседа. Итог: большие площади гниют **с краёв внутрь**.
 - Не гниют: silver/gold; тайлы под bounding box построек (2018-05-21).
-- Снятие vines: Adventure → Destroy (shift-click с 2018-07-09 стирает все vines тайла).
-- Удаление мощения: **Stomp to Dirt** (native terrain отрастает за несколько дней), Plant Grass; в пещерах/домах — **Dig** (без инструмента, высокий расход энергии).
+- Снятие vines: Adventure → Destroy (shift-click с 2018-07-09 стирает vines **с площади**, не только с одного тайла).
+- Удаление мощения: **Stomp to Dirt** (требует скилл Farming; native terrain отрастает за несколько дней), **Plant Grass** (несколько семян → grassland); в пещерах/домах — **Dig** (без инструмента, по тайлу, дорогой по энергии).
 
 ### 1.5 Roads — смежная, отдельная система
 
@@ -92,8 +92,10 @@
 
 - [Paving — Ring of Brodgar](https://ringofbrodgar.com/wiki/Paving)
 - [Terraforming — Ring of Brodgar](https://ringofbrodgar.com/wiki/Terraforming)
+- [Terraforming — Fandom](https://havenandhearth.fandom.com/wiki/Terraforming)
+- [Paved Ground — Fandom](https://havenandhearth.fandom.com/wiki/Paved_Ground)
 - [Stone Working — Ring of Brodgar](https://ringofbrodgar.com/wiki/Stone_Working)
 - [Road (disambig) / Milestone — Ring of Brodgar](https://ringofbrodgar.com/wiki/Milestone)
 - [Glossary (Speed) — Fandom](https://haven-and-hearth.fandom.com) + [форум: спринт-terrain'ы](https://www.havenandhearth.com/forum/viewtopic.php?f=42&t=69983)
 - [Cart — Fandom](https://havenandhearth.fandom.com/wiki/Cart) (скорость повозок по terrain)
-- Исследование 2026-09-22 (память `hnh-lay-stone-research`): eligibility-тиры, +3-тайловый береговой буфер, vine-детали по Fandom Terraforming (страница с тех пор удалена)
+- Исследование 2026-09-22 (память `hnh-lay-stone-research`): eligibility-тиры, vine-детали. Углублённая проходка 2026-09-28 повторно прочла Fandom Terraforming/Paved Ground (страница доступна) и добавила: shift-click-непрерывное мощение, pave-over-crops, hearth-lands/acre clay/снег в чёрном списке, береговой буфер подтверждён обеими вики.

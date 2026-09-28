@@ -37,11 +37,12 @@ type Chunk struct {
 	isPassable  []uint64
 	isSwimmable []uint64
 
+	// Failed builds remain raw even while other objects in the chunk are active.
 	rawObjects []*repository.Object
-	// rawInventoriesByOwner keeps preloaded/inactive object-owned inventories by owner entity id.
+	// rawInventoriesByOwner includes inventories for failed builds awaiting a retry.
 	rawInventoriesByOwner map[types.EntityID][]repository.Inventory
-	// rawDirtyObjectIDs tracks object IDs changed while chunk was active and then deactivated.
-	// It allows delta persistence for inactive chunks without rewriting all raw objects.
+	// rawDirtyObjectIDs tracks pending writes for raw or restored objects.
+	// It survives activation and deactivation until those objects are saved.
 	rawDirtyObjectIDs map[types.EntityID]struct{}
 	// deletedObjectIDs tracks runtime-despawned object ids that must be soft-deleted in DB
 	// on the next save, even though they no longer exist in the active ECS chunk handles.
@@ -352,9 +353,7 @@ func (c *Chunk) ClearTilesDirty() {
 	c.mu.Unlock()
 }
 
-// IsDirty returns true if tiles have been modified or any active object is dirty.
-// For inactive/preloaded chunks with raw objects, only tilesDirty is checked
-// since raw objects are never mutated in-memory.
+// IsDirty returns true if tiles, raw data, or any active object has changed.
 func (c *Chunk) IsDirty(world *ecs.World) bool {
 	if c.TilesDirty() {
 		return true
@@ -459,7 +458,7 @@ func (c *Chunk) TileID(localTileX, localTileY, chunkSize int) (byte, bool) {
 
 // SaveToDB persists only changed chunk data to the database.
 // Tiles are saved only when tilesDirty is set.
-// For active chunks, only objects with ObjectInternalState.IsDirty are serialized.
+// Active objects and retained raw objects are serialized only when dirty.
 func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
 	Serialize(world *ecs.World, h types.Handle) (*repository.Object, error)
 	SerializeObjectInventories(world *ecs.World, h types.Handle) ([]repository.Inventory, error)
@@ -486,81 +485,113 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	inventoriesToSave := make([]repository.Inventory, 0, 16)
 	deletedObjectIDs := make([]int64, 0, 8)
 	var dirtyHandles []types.Handle
+	activeObjectIDs := make(map[types.EntityID]struct{}, len(totalHandles))
+	saveFailed := false
 
-	if len(totalHandles) > 0 {
-		// Chunk is active - serialize only dirty entities
-		for _, h := range totalHandles {
-			if !world.Alive(h) {
-				continue
-			}
-
-			state, hasState := ecs.GetComponent[components.ObjectInternalState](world, h)
-			if hasState && !state.IsDirty {
-				continue
-			}
-
-			info, ok := ecs.GetComponent[components.EntityInfo](world, h)
-			if !ok {
-				continue
-			}
-
-			obj, err := objectFactory.Serialize(world, h)
-			if err != nil {
-				logger.Error("failed to serialize object",
-					zap.Uint32("type_id", info.TypeID),
-					zap.Error(err),
-				)
-				continue
-			}
-			if obj == nil {
-				// Skip players and other non-persistent entities. If a previously persisted
-				// object now resolves to nil (e.g. empty transient build site), mark it for delete.
-				if extID, hasExtID := ecs.GetComponent[ecs.ExternalID](world, h); hasExtID {
-					deletedObjectIDs = append(deletedObjectIDs, int64(extID.ID))
-					dirtyHandles = append(dirtyHandles, h)
-				}
-				continue
-			}
-			objectsToSave = append(objectsToSave, obj)
-
-			if objectFactory.HasPersistentInventories(info.TypeID, info.Behaviors) {
-				inventories, invErr := objectFactory.SerializeObjectInventories(world, h)
-				if invErr != nil {
-					logger.Error("failed to serialize object inventories",
-						zap.Int64("object_id", obj.ID),
-						zap.Error(invErr),
-					)
-				} else if len(inventories) > 0 {
-					inventoriesToSave = append(inventoriesToSave, inventories...)
-				}
-			}
-
-			dirtyHandles = append(dirtyHandles, h)
+	// Active entities are authoritative when a raw cache entry has the same ID.
+	for _, h := range totalHandles {
+		if !world.Alive(h) {
+			continue
 		}
-	} else {
-		// Chunk is inactive/preloaded - persist only dirty raw objects/inventories.
-		if len(rawDirtyObjectIDs) > 0 {
-			for _, rawObj := range rawObjects {
-				if rawObj == nil {
-					continue
-				}
-				if _, dirty := rawDirtyObjectIDs[types.EntityID(rawObj.ID)]; dirty {
-					objectsToSave = append(objectsToSave, rawObj)
-				}
+		extID, hasExtID := ecs.GetComponent[ecs.ExternalID](world, h)
+		pendingRawWrite := false
+		if hasExtID {
+			activeObjectIDs[extID.ID] = struct{}{}
+			_, pendingRawWrite = rawDirtyObjectIDs[extID.ID]
+		}
+
+		state, hasState := ecs.GetComponent[components.ObjectInternalState](world, h)
+		if hasState && !state.IsDirty && !pendingRawWrite {
+			continue
+		}
+
+		info, ok := ecs.GetComponent[components.EntityInfo](world, h)
+		if !ok {
+			if pendingRawWrite {
+				logger.Error("cannot save pending object without entity info", zap.Uint64("object_id", uint64(extID.ID)))
+				saveFailed = true
 			}
-			for ownerID, rows := range rawInventoriesByOwner {
-				if _, dirty := rawDirtyObjectIDs[ownerID]; !dirty {
-					continue
-				}
-				inventoriesToSave = append(inventoriesToSave, rows...)
+			continue
+		}
+
+		obj, err := objectFactory.Serialize(world, h)
+		if err != nil {
+			logger.Error("failed to serialize object",
+				zap.Uint32("type_id", info.TypeID),
+				zap.Error(err),
+			)
+			saveFailed = true
+			continue
+		}
+		if obj == nil {
+			// Skip players and other non-persistent entities. If a previously persisted
+			// object now resolves to nil (e.g. empty transient build site), mark it for delete.
+			if extID, hasExtID := ecs.GetComponent[ecs.ExternalID](world, h); hasExtID {
+				deletedObjectIDs = append(deletedObjectIDs, int64(extID.ID))
+				dirtyHandles = append(dirtyHandles, h)
 			}
+			continue
+		}
+		objectsToSave = append(objectsToSave, obj)
+
+		if objectFactory.HasPersistentInventories(info.TypeID, info.Behaviors) {
+			inventories, invErr := objectFactory.SerializeObjectInventories(world, h)
+			if invErr != nil {
+				logger.Error("failed to serialize object inventories",
+					zap.Int64("object_id", obj.ID),
+					zap.Error(invErr),
+				)
+				saveFailed = true
+			} else if len(inventories) > 0 {
+				inventoriesToSave = append(inventoriesToSave, inventories...)
+			}
+		}
+		dirtyHandles = append(dirtyHandles, h)
+	}
+
+	// Failed builds remain raw while the chunk is active, so persist their
+	// pending changes even when other objects already have ECS handles.
+	for _, rawObj := range rawObjects {
+		if rawObj == nil {
+			continue
+		}
+		objectID := types.EntityID(rawObj.ID)
+		if _, active := activeObjectIDs[objectID]; active {
+			continue
+		}
+		if _, deleted := pendingDeletedObjectIDs[objectID]; deleted {
+			continue
+		}
+		if _, dirty := rawDirtyObjectIDs[objectID]; dirty {
+			objectsToSave = append(objectsToSave, rawObj)
+		}
+	}
+	for ownerID, rows := range rawInventoriesByOwner {
+		if _, active := activeObjectIDs[ownerID]; active {
+			continue
+		}
+		if _, deleted := pendingDeletedObjectIDs[ownerID]; deleted {
+			continue
+		}
+		if _, dirty := rawDirtyObjectIDs[ownerID]; dirty {
+			inventoriesToSave = append(inventoriesToSave, rows...)
 		}
 	}
 
 	if saveTiles {
 		entityCount := len(totalHandles)
-		if entityCount == 0 {
-			entityCount = len(rawObjects)
+		for _, rawObj := range rawObjects {
+			if rawObj == nil {
+				continue
+			}
+			objectID := types.EntityID(rawObj.ID)
+			if _, active := activeObjectIDs[objectID]; active {
+				continue
+			}
+			if _, deleted := pendingDeletedObjectIDs[objectID]; deleted {
+				continue
+			}
+			entityCount++
 		}
 		if err := c.saveTiles(ctx, db.Queries(), entityCount); err != nil {
 			logger.Error("failed to save chunk tiles",
@@ -576,7 +607,6 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	}
 
 	// Delete objects that became non-persistent (serialize -> nil) before upserts.
-	saveFailed := false
 	if len(deletedObjectIDs) > 0 {
 		for _, objectID := range deletedObjectIDs {
 			if err := db.Queries().DeleteObject(ctx, objectID); err != nil {
@@ -632,7 +662,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 			})
 		}
 	}
-	if !saveFailed && len(totalHandles) == 0 {
+	if !saveFailed {
 		c.ClearRawDataDirty()
 		c.ClearRawDirtyObjectIDs()
 	}
