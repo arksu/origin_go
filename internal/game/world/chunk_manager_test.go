@@ -1,7 +1,9 @@
 package world
 
 import (
+	"math"
 	"origin/internal/config"
+	constt "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -437,6 +439,112 @@ func TestChunkManager_DeactivateChunkInternal_TracksOnlyDirtyRawObjects(t *testi
 	}
 	if _, ok := dirtyIDs[cleanEntityID]; ok {
 		t.Fatalf("clean object id %d must not be marked dirty", cleanEntityID)
+	}
+}
+
+func TestChunkManager_DeactivationSerializationFailureKeepsChunkActive(t *testing.T) {
+	previousRegistry := objectdefs.Global()
+	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousRegistry) })
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry(nil))
+
+	cm := newTestChunkManager()
+	defer cm.Stop()
+
+	coord := types.ChunkCoord{X: 13, Y: 13}
+	chunk := core.NewChunk(coord, 0, 0, 128)
+	chunk.SetState(types.ChunkStateActive)
+	cm.chunks[coord] = chunk
+	cm.chunkInterests[coord] = newChunkInterest()
+	cm.activeChunks[coord] = struct{}{}
+
+	validHandle := cm.world.Spawn(types.EntityID(5001), func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: constt.DroppedItemTypeID, Region: 1, Layer: 0, IsStatic: true})
+		ecs.AddComponent(w, h, components.Transform{X: 10, Y: 10})
+		ecs.AddComponent(w, h, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
+		ecs.AddComponent(w, h, components.ObjectInternalState{IsDirty: true})
+	})
+	chunk.Spatial().AddStatic(validHandle, 10, 10)
+	refIndex := ecs.GetResource[ecs.InventoryRefIndex](cm.world)
+	inventoryHandle := cm.world.SpawnWithoutExternalID()
+	ecs.AddComponent(cm.world, inventoryHandle, components.InventoryContainer{
+		OwnerID: types.EntityID(5001), Kind: constt.InventoryDroppedItem, Key: 0, Version: 1,
+	})
+	refIndex.Add(constt.InventoryDroppedItem, types.EntityID(5001), 0, inventoryHandle)
+
+	invalidHandle := cm.world.Spawn(types.EntityID(5002), func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{TypeID: 201, Region: 1, Layer: 0, IsStatic: true})
+		ecs.AddComponent(w, h, components.Transform{X: 10, Y: 10})
+		ecs.AddComponent(w, h, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
+		ecs.AddComponent(w, h, components.ObjectInternalState{IsDirty: true})
+		ecs.AddComponent(w, h, components.StationState{Values: map[string]float64{"temperature": math.NaN()}})
+	})
+	chunk.Spatial().AddStatic(invalidHandle, 10, 10)
+
+	cm.recalculateChunkStates()
+	if chunk.GetState() != types.ChunkStateActive {
+		t.Fatal("chunk deactivated despite serialization failure")
+	}
+	if !cm.world.Alive(validHandle) || !cm.world.Alive(invalidHandle) {
+		t.Fatal("serialization failure despawned an entity")
+	}
+	if !cm.world.Alive(inventoryHandle) {
+		t.Fatal("serialization failure despawned an owned inventory")
+	}
+	if _, found := refIndex.Lookup(constt.InventoryDroppedItem, types.EntityID(5001), 0); !found {
+		t.Fatal("serialization failure removed an inventory reference")
+	}
+	if len(chunk.GetHandles()) != 2 || len(chunk.GetRawObjects()) != 0 {
+		t.Fatal("serialization failure changed the chunk's active object indexes")
+	}
+	if _, retained := cm.chunkInterests[coord]; !retained {
+		t.Fatal("empty interest was removed before deactivation could be retried")
+	}
+	retry, scheduled := cm.deactivationRetries[coord]
+	if !scheduled || retry.delay != deactivationRetryInitialDelay {
+		t.Fatal("failed deactivation did not schedule an initial retry")
+	}
+
+	retry.due = time.Now().Add(-time.Second)
+	cm.deactivationRetries[coord] = retry
+	cm.Update(0)
+	retry = cm.deactivationRetries[coord]
+	if retry.delay != 2*deactivationRetryInitialDelay {
+		t.Fatal("repeated serialization failure did not back off")
+	}
+
+	ecs.WithComponent(cm.world, invalidHandle, func(station *components.StationState) {
+		station.Values["temperature"] = 20
+	})
+	cm.Update(0)
+	if chunk.GetState() != types.ChunkStateActive {
+		t.Fatal("deactivation retried before its backoff expired")
+	}
+	retry.due = time.Now().Add(-time.Second)
+	cm.deactivationRetries[coord] = retry
+	cm.Update(0)
+	if chunk.GetState() != types.ChunkStateInactive {
+		t.Fatal("quiet server did not retry deactivation after serialization was repaired")
+	}
+	if cm.world.Alive(validHandle) || cm.world.Alive(invalidHandle) {
+		t.Fatal("successful deactivation left ECS entities alive")
+	}
+	if cm.world.Alive(inventoryHandle) {
+		t.Fatal("successful deactivation left an owned inventory alive")
+	}
+	if _, found := refIndex.Lookup(constt.InventoryDroppedItem, types.EntityID(5001), 0); found {
+		t.Fatal("successful deactivation left an inventory reference")
+	}
+	if len(chunk.GetRawInventoriesByOwner()[types.EntityID(5001)]) != 1 {
+		t.Fatal("successful deactivation did not snapshot the owned inventory")
+	}
+	if len(chunk.GetHandles()) != 0 || len(chunk.GetRawObjects()) != 2 {
+		t.Fatal("successful deactivation did not replace handles with raw objects")
+	}
+	if _, retained := cm.chunkInterests[coord]; retained {
+		t.Fatal("empty interest was retained after successful deactivation")
+	}
+	if _, scheduled := cm.deactivationRetries[coord]; scheduled {
+		t.Fatal("retry remained scheduled after successful deactivation")
 	}
 }
 
