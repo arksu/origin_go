@@ -437,7 +437,9 @@ export class ActorInstance {
   setActionAnimation(input: ActionAnimationInput | null): void { this.actionPlayer.setInput(input) }
 
   prepareActionAnimation(now: number): void {
-    this.actionPlayer.update({ stationary: !this.walking && (this.stopProgress === undefined || this.stopProgress >= 1),
+    // The stop ease keeps reporting walking; the server-confirmed stop (stopProgress set)
+    // is enough, otherwise the pose waits out interpolation delay + LOCOMOTION_STOP_MS.
+    this.actionPlayer.update({ stationary: !this.walking || this.stopProgress !== undefined,
       carrying: this.carrying, knockedOut: this.knockedOut, equipment: this.requestedEquipment, equipmentReady: this.equipmentReady }, now)
   }
 
