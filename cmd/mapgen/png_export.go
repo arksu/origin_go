@@ -203,7 +203,7 @@ func tileColor(tile byte, riverClass RiverClass, highlightRivers bool) color.RGB
 	case tileStone:
 		return color.RGBA{R: 132, G: 132, B: 132, A: 255}
 	case tileMountain:
-		return color.RGBA{R: 99, G: 104, B: 109, A: 255}
+		return color.RGBA{R: 0xb0, G: 0xc0, B: 0xc0, A: 255}
 	default:
 		return color.RGBA{R: 255, G: 0, B: 255, A: 255}
 	}
