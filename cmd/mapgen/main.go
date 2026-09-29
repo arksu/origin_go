@@ -43,6 +43,10 @@ func main() {
 	if opts.Seed == 0 {
 		opts.Seed = time.Now().UnixNano()
 	}
+	if opts.RiverPreview {
+		runRiverPreviewServer(logger, opts)
+		return
+	}
 	if opts.PNG.OverviewOnly {
 		runOverviewOnly(logger, opts)
 		return

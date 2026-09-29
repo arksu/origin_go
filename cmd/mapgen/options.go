@@ -150,24 +150,27 @@ type PNGOptions struct {
 }
 
 type MapgenOptions struct {
-	ConfigPath string
-	ChunksX    int
-	ChunksY    int
-	Seed       int64
-	Threads    int
-	River      RiverOptions
-	Biome      BiomeOptions
-	Ecology    EcologyOptions
-	PNG        PNGOptions
+	ConfigPath   string
+	ChunksX      int
+	ChunksY      int
+	Seed         int64
+	Threads      int
+	RiverPreview bool
+	PreviewPort  int
+	River        RiverOptions
+	Biome        BiomeOptions
+	Ecology      EcologyOptions
+	PNG          PNGOptions
 }
 
 func DefaultMapgenOptions() MapgenOptions {
 	return MapgenOptions{
-		ConfigPath: defaultGenConfigPath,
-		ChunksX:    50,
-		ChunksY:    50,
-		Seed:       0,
-		Threads:    4,
+		ConfigPath:  defaultGenConfigPath,
+		ChunksX:     50,
+		ChunksY:     50,
+		Seed:        0,
+		Threads:     4,
+		PreviewPort: 8099,
 		River: RiverOptions{
 			Enabled:                true,
 			LayoutDraw:             true,
@@ -308,6 +311,8 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 		chunksY            = defaults.ChunksY
 		seed               = defaults.Seed
 		threads            = defaults.Threads
+		riverPreview       = defaults.RiverPreview
+		previewPort        = defaults.PreviewPort
 		pngExport          = defaults.PNG.Export
 		pngOverviewOnly    = defaults.PNG.OverviewOnly
 		pngDir             = defaults.PNG.OutputDir
@@ -321,6 +326,8 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 	fs.IntVar(&chunksY, "chunks-y", chunksY, "override chunks in Y direction")
 	fs.Int64Var(&seed, "seed", seed, "override random seed (0 = use current time)")
 	fs.IntVar(&threads, "threads", threads, "override worker thread count")
+	fs.BoolVar(&riverPreview, "river-preview", riverPreview, "start the interactive layer preview HTTP server instead of generating")
+	fs.IntVar(&previewPort, "preview-port", previewPort, "port for -river-preview HTTP server")
 	fs.BoolVar(&pngExport, "png-export", pngExport, "override png export toggle")
 	fs.BoolVar(&pngOverviewOnly, "png-overview-only", pngOverviewOnly, "export only overview.png (implies -png-export=true, skips DB writes)")
 	fs.StringVar(&pngDir, "png-dir", pngDir, "override png output directory")
@@ -353,6 +360,12 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 	}
 	if _, ok := overrides["threads"]; ok {
 		opts.Threads = threads
+	}
+	if _, ok := overrides["river-preview"]; ok {
+		opts.RiverPreview = riverPreview
+	}
+	if _, ok := overrides["preview-port"]; ok {
+		opts.PreviewPort = previewPort
 	}
 	if _, ok := overrides["png-export"]; ok {
 		opts.PNG.Export = pngExport
@@ -401,6 +414,9 @@ func (o MapgenOptions) Validate() error {
 	}
 	if o.Threads <= 0 {
 		return errors.New("threads must be > 0")
+	}
+	if o.PreviewPort < 1 || o.PreviewPort > 65535 {
+		return errors.New("preview-port must be within [1,65535]")
 	}
 	if o.PNG.Scale <= 0 {
 		return errors.New("png-scale must be > 0")
