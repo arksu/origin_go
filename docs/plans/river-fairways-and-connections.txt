@@ -1,0 +1,166 @@
+DEEP FAIRWAYS AND GAMEPLAY CONNECTIONS
+======================================
+2026-09-29 | OPTION B selected, with sparse deep-water tributaries.
+
+NON-NEGOTIABLE
+==============
+Every main river, tributary, and narrow water connector has a continuous
+deep-water fairway. A tributary may be narrower than a main river, but it
+must NEVER become shallow-only or taper below the boat passage clearance.
+A deep tile chain alone is insufficient if the boat cannot fit through it.
+
+The minimum width must come from the intended boat footprint and movement
+rules, not from visual thickness or assumed real-world river discharge.
+The sketches below do not assign a production width in tiles.
+
+Tributaries are allowed but infrequent. Preserve long unbranched stretches
+and irregular spacing between junctions. Control their density separately
+from curve roughness and from narrow connectors needed for player travel.
+Every accepted tributary retains the same deep-fairway passage requirement.
+
+
+1. SAME PLAYABLE NETWORK, ANY OF THE SHAPE STYLES
+================================================
+Whitespace = land. This is an inland map crop, NOT an island.
+# = main river with deep fairway
++ = tributary with deep fairway
+= = narrow water connector with deep fairway
+V = village dock alongside the river
+: = optional LAND portage; explicitly not a water route
+
+                            V3
+                             +
+                            ++
+                    ++++++  +
+                  +++    ++++
+                 ++
+                 +                 #######
+                 +               ###     ##
+                 +               #        ##           ########
+          #######+#              #         #          ##      ###
+         #        #             ##         ##        ##         ##
+         #        ##            #           ###     ##           ##
+         #         #           ##             #####+#             ##
+        ##         ###        ##                  ++               #=##
+      ###            ###    ###                  ++                 ==#####V2
+  V1 ##                ######                   ++                   =
+                                                +              =======
+                                                ++             =       C
+                                                 ++   ++V4    ==
+                                                  +++++:     ==
+                                     ######            :    #=####
+                     ++++          ###    ###          : P###    ####
+                   +++  +         ##        ###        : ##         ###
+                   +    ++       ##           ####     :##            ##
+                   +     +V5     ##              ########              ##
+                   +             ##                                     ##
+                   +             #                                       ##V7
+         ########  +            ##
+      ####      ###+##        ##
+  V6 ##              ####    ##
+                        ######
+
+C marks the eastern deep-water connector between the two main routes.
+P marks an optional portage between the northern branch and southern river.
+Players can sail around through C, or carry the boat at P as a shortcut.
+This is an illustrative layout, not a required ring or prescribed map shape.
+The branch count in this small sketch is not the target production density;
+the selected direction calls for sparse branches across the whole map.
+
+Important distinctions:
+- Main routes and branches are chosen for useful player destinations.
+- A river can join another river directly; a lake is not needed at each join.
+- Connections can form cycles. No simulated watershed has to permit them.
+- There is no world-center source and no mandatory exit toward the border.
+- Rivers do not all have to connect directly to each other.
+- Narrow channels can connect neighboring routes while looking distinct.
+- Portages are explicit opportunities, not excuses for broken fairways.
+- A river endpoint can have an inland pool or dock with boat clearance;
+  it does not have to become a shallow stream or reach an ocean.
+
+Branch density is a separate design control from curve roughness. Increasing
+small-bend detail should not automatically create hundreds of tributaries.
+Use a low tributary budget plus junction spacing, not a branch at every bend
+or lake. Tune the numeric limits in previews; no specific count is selected.
+
+
+2. TILE VIEW: DEEP JUNCTION, NOT A SHALLOW SEAM
+==============================================
+. = land
+s = shallow bank water
+D = deep navigable water
+
+Example only: the branch below is 3 deep tiles across; the main river is 5.
+These numbers illustrate continuity, NOT a chosen minimum boat width.
+
+............ssDDDDDss...........
+............ssDDDDDss...........
+............ssDDDDDss...........
+ssssssssssssssDDDDDss...........
+DDDDDDDDDDDDDDDDDDDss...........
+DDDDDDDDDDDDDDDDDDDss...........
+DDDDDDDDDDDDDDDDDDDss...........
+ssssssssssssssDDDDDss...........
+............ssDDDDDss...........
+............ssDDDDDss...........
+............ssDDDDDss...........
+
+The branch's DEEP core joins the main river's DEEP core.
+Do not leave a shallow ring across the junction or a lake entrance.
+Do not protect only the visual water outline: protect boat clearance.
+
+
+3. WRONG AND RIGHT CROSS-SECTIONS
+==================================
+These are strips across a channel, from one bank to the other.
+
+WRONG: shallow-only tributary
+land ........ssssssssssss........ land
+             no boat fairway
+
+WRONG: visible blue connection with an undersized deep core
+land ........ssssDssss........... land
+                 too narrow if the boat requires more space
+
+RIGHT: protected deep passage with optional shallow margins
+land ........ssDDDDDDDss......... land
+               <--->
+         at least the required boat clearance
+
+A narrow connector can reduce the bank margin or the total river width.
+It cannot reduce the deep passage below the required boat clearance.
+No shallow ford, sand bar, or decorative island may block a required route.
+
+
+4. GENERATION AND ACCEPTANCE CONTRACT
+=====================================
+Generate in this order:
+1. Choose gameplay endpoints, connections, and route roles.
+   Reserve a separate sparse budget and spacing for optional tributaries.
+2. Shape the centerline using Option B's bends within bends.
+3. Sweep a sufficiently wide DEEP corridor along the entire path.
+4. Join deep corridors at confluences, connectors, and lake entrances.
+5. Add optional irregular banks outside the protected deep corridor.
+6. Preserve that corridor through biome, terrain, and shoreline processing.
+7. Validate boat movement on the FINAL tiles, not only the abstract graph.
+
+Validate:
+- Tributaries stay infrequent and spaced apart, with substantial unbranched
+  reaches. Increasing bend detail does not increase tributary frequency.
+- Every generated river segment has deep boat clearance end to end,
+  including tributaries and narrow connectors.
+- Test the actual boat footprint and movement/collision rules, especially
+  at diagonal steps, tight bends, junctions, and entrances to lakes.
+- No route relies on diagonal corner-touching water tiles.
+- Intended village docks and linked water regions remain reachable by boat.
+- No accidental self-intersection or bank pinch creates an unwanted shortcut
+  or blocks the intended route.
+- Portage endpoints are usable land access points and are marked separately
+  from navigable water.
+- The same seed reproduces the same result.
+
+If a proposed bend fails clearance, reshape or widen it; if necessary reject
+and regenerate that route. Never silently downgrade it to shallow water.
+
+These are requirements for the next implementation. The rollback restores
+the previous generator; it is not evidence that these checks already pass.

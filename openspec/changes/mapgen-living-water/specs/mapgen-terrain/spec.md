@@ -1,5 +1,11 @@
 # Spec Delta
 
+> PAUSED / SUPERSEDED (2026-09-29): The user rejected continent/coastal
+> generation and physical drainage for this task. The historical content below
+> is NOT approved for implementation or spec sync. Current shape-only exploration:
+> `docs/plans/river-shape-variants.txt`. Every river, including tributaries and
+> narrow connectors, requires a boat-passable deep fairway. No variant is selected.
+
 ## Purpose
 
 Defines the terrain structure of the offline map generator: how elevation is composed (continents-bold style), how water bodies form and are filtered, how drawn lakes respect terrain, how structural water joins the drawn river network, and how river widths derive from connected volume — all deterministic per seed.

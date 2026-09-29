@@ -1,5 +1,11 @@
 # Design
 
+> PAUSED / SUPERSEDED (2026-09-29): The user rejected continent/coastal
+> generation and physical drainage for this task. The historical content below
+> is NOT approved for implementation or spec sync. Current shape-only exploration:
+> `docs/plans/river-shape-variants.txt`. Every river, including tributaries and
+> narrow connectors, requires a boat-passable deep fairway. No variant is selected.
+
 ## Context
 
 `cmd/mapgen` builds the world in `BuildTerrainPrecompute` (tile_pipeline.go): elevation (single-octave Perlin, `noise_fields.go:24-29`) → drawn river/lake network (`buildDrawLayoutRiverFlow`, which discards elevation: `_ = elevation`, river.go:280) → biome ground + blob patches → `resolveTileType` (elevation thresholds 0.25/0.35 as constants) → shoreline sand. Lake candidates are placed by blue-noise distance only (`canPlaceDrawLake`, river.go:809), carved unconditionally (`carveDrawLakeFootprint`), and every link gets a random width in `[river_width_min, river_width_max]` (`riverWidthForLink`). Measured on the current `hnh.yaml` world: ~6000 water components, largest < 7000 tiles.
