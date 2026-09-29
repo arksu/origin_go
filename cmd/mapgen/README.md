@@ -31,6 +31,30 @@ go run ./cmd/mapgen -river-preview [-gen-config etc/mapgen/presets/hnh.yaml] [-p
 # открыть http://127.0.0.1:8099
 ```
 
+Preset workflow:
+
+- Open `http://127.0.0.1:8099/?preset=hnh.yaml` to load that file's parameters,
+  seed, and world dimensions on page load. Without `preset`, the server's
+  `-gen-config` file is loaded. No file-list dropdown is used.
+- The **Preset file** text input stays synchronized with `?preset=`. Press
+  **Enter** or **Load** to read another file. Editing the path alone does not
+  discard the current controls, so you can type a new filename for a variant.
+- **Save** writes current river parameters, seed, and dimensions to the entered
+  YAML file, creating or overwriting it. Comments and other preset sections are
+  preserved; hidden river settings come from the loaded source preset.
+- Paths are relative to the directory containing the server's `-gen-config`.
+  Absolute/repository-relative paths inside that directory also work. Files must
+  end in `.yaml` or `.yml`; parent directories must already exist. Files outside
+  that directory and symlink save targets are rejected.
+- Saving is manual and atomic; it never regenerates the live world or writes to
+  the game database. Load errors do not silently fall back to another preset.
+
+API: `GET /api/defaults?preset=...`, `POST /api/render` with an optional `preset`
+source, and `POST /api/preset` with the render fields plus target `path`.
+The save endpoint requires same-origin, localhost JSON requests.
+Regression checks: `go test ./cmd/mapgen/...` and
+`node --test cmd/mapgen/preview/index.test.mjs`.
+
 Страница для оперативного подбора параметров: слева панель параметров (строится
 из схемы слоёв), справа результат; колесо — зум к курсору, ЛКМ — пан,
 двойной клик — вписать в экран. Генерируются **только выбранные слои**:
@@ -44,9 +68,62 @@ go run ./cmd/mapgen -river-preview [-gen-config etc/mapgen/presets/hnh.yaml] [-p
 `previewLayers` (preview_server.go) — `schema(base)` (описание групп полей)
 и `render(img, ctx)` (отрисовка в RGBA); UI и API менять не нужно.
 
+## Option B: bends within bends
+
+The H&H preset uses visually natural drawn paths, not simulated drainage.
+Elevation, lake placement, and landmass generation are unchanged; no coastal
+frame or center-to-border flow is added.
+
+New controls in `river:` (zero/omitted preserves legacy behavior):
+
+| Setting | H&H | Meaning |
+| --- | --- | --- |
+| `shape_wavelength_tiles` | 400 | Broad-bend scale before `shape_frequency_scale`; positive enables Option B |
+| `fairway_width_tiles` | 3 | Minimum odd-width square of deep tiles that can travel along every accepted route |
+| `tributary_ratio` | 0.08 | Maximum extra branches as a fraction of accepted main links, rounded down |
+| `tributary_spacing_tiles` | 300 | Minimum separation of tributary junctions from other junctions/inlets |
+| `tributary_length_min/max` | 120 / 360 | Tributary endpoint-distance bounds, in tiles |
+
+`shape_octaves` and `shape_octave_gain` control bends within the large bends.
+H&H currently uses four octaves, gain 0.5, and amplitude scale 1.5 for review.
+`shape_segment_length` limits control spacing; subdivision adapts to fine detail.
+`shape_waves_per_link` applies only to legacy mode (wavelength zero).
+Tributaries are non-recursive, at most one per parent, and can be fewer than
+the budget when routes are crowded. They retain deep water to their ends.
+
+Protected fairways connect across junctions and through lake entrances, and
+stay deep where elevation would otherwise create shallow water. Generation
+validates the final tiles after shoreline processing and fails with the seed,
+route, and position if clearance is broken. At the world edge, clearance is
+measured through the last fully in-bounds placement. This is a generator tile
+contract; it does not claim that a server boat collision model was tested.
+
+The rivers-only preview shares geometry/carving but does not run final terrain
+resolution. Inspect full maps as well as the preview before accepting tuning.
+Logs include `river_routes`: main count, branch budget, accepted branches, and
+rejected branch candidates. Other presets stay in legacy mode.
+
+To restore the previous H&H output, set all six new controls to zero and
+restore `shape_octave_gain: 0.06` and `shape_amplitude_scale: 0.5`.
+Existing world/DB content is not regenerated automatically.
+Use `-png-overview-only` for safe review without DB writes.
+
+Reproduce before/after maps, rivers-only images, and deep-fairway close-ups
+for three full-size seeds without accessing the database:
+
+```bash
+go test ./cmd/mapgen -run '^TestRiverBendsReview$' -count=1 -timeout 15m -v -args \
+  -bends-review-dir "$PWD/map_png/river-bends-review" -bends-review-full
+```
+
+Open `map_png/river-bends-review/README.md` for images and measurements.
+Main-route counts and drawn-water components can change when candidate paths
+are rejected; a validated fairway does not prove the entire world is one
+connected waterway. Review those comparisons before accepting the preset.
+
 ## Полный поток (main.go)
 
-1. `ParseMapgenOptions` — флаги → YAML-пресет → `Validate()` (диапазоны + лимиты памяти 3 GiB).
+1. `ParseMapgenOptions` — флаги → YAML-пресет → `Validate()` (диапазоны + лимиты памяти 6 GiB).
 2. `BuildTerrainPrecompute` — весь мир считается в память (tile_pipeline.go), см. пайплайн ниже.
 3. PNG-экспорт (`png_export.go`): `overview.png` + пофрагментные `chunks/`.
 4. Если не `overview_only`: truncate чанков/объектов региона → пул воркеров →

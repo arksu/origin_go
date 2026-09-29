@@ -22,6 +22,7 @@ type TerrainPrecompute struct {
 	RiverSources      int
 	RiverShallowTiles int
 	RiverDeepTiles    int
+	RiverFairways     *riverFairways
 }
 
 func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFields) (*TerrainPrecompute, error) {
@@ -50,6 +51,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 	timings.Elevation = time.Since(started)
 	started = time.Now()
 	var riverClass []RiverClass
+	var fairways *riverFairways
 	riverSources := 0
 	if opts.River.Enabled {
 		riverNetwork, riverErr := BuildRiverNetwork(elevation, widthTiles, heightTiles, opts.Seed, opts.River)
@@ -58,6 +60,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 		}
 		riverClass = riverNetwork.Class
 		riverSources = riverNetwork.SourceCount
+		fairways = riverNetwork.Fairways
 	}
 
 	timings.Rivers = time.Since(started)
@@ -106,9 +109,17 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 				rc = riverClass[idx]
 			}
 			tiles[idx] = resolveTileType(elevationValue, baseTiles[idx], rc, opts.River.Enabled)
+			if fairways != nil && fairways.Protected[idx] {
+				tiles[idx] = tileWaterDeep
+			}
 		}
 	})
 	applyShorelineSand(tiles, baseTiles, riverClass, elevation, widthTiles, heightTiles, opts.Seed)
+	if err := fairways.validate(widthTiles, heightTiles, opts.River.FairwayWidthTiles, opts.Seed, func(index int) bool {
+		return tiles[index] == tileWaterDeep
+	}); err != nil {
+		return nil, err
+	}
 
 	timings.Hydrology = time.Since(started)
 	riverShallowTiles := 0
@@ -137,6 +148,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 		RiverSources:      riverSources,
 		RiverShallowTiles: riverShallowTiles,
 		RiverDeepTiles:    riverDeepTiles,
+		RiverFairways:     fairways,
 	}, nil
 }
 

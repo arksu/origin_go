@@ -6,10 +6,13 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
 
 func newTestPreviewServer(t *testing.T) *previewServer {
@@ -26,7 +29,22 @@ func newTestPreviewServer(t *testing.T) *previewServer {
 	opts.River.LakeSizeMediumMax = 40
 	opts.River.LakeSizeLargeMin = 48
 	opts.River.LakeSizeLargeMax = 80
-	return newPreviewServer(zap.NewNop(), opts)
+	content, err := yaml.Marshal(mapgenConfigFile{Version: 1,
+		World: &worldConfig{ChunksX: opts.ChunksX, ChunksY: opts.ChunksY, Seed: opts.Seed, Threads: opts.Threads},
+		River: &opts.River, Biomes: &opts.Biome, Ecology: &opts.Ecology, PNG: &opts.PNG})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts.ConfigPath = filepath.Join(t.TempDir(), "test.yaml")
+	if err := os.WriteFile(opts.ConfigPath, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server, err := newPreviewServer(zap.NewNop(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { server.presets.Close() })
+	return server
 }
 
 func previewRequestBody(t *testing.T, body any) *bytes.Reader {
@@ -154,8 +172,9 @@ func TestPreviewDefaultsHandler(t *testing.T) {
 			Name   string `json:"name"`
 			Groups []struct {
 				Fields []struct {
-					Key     string  `json:"key"`
-					Default float64 `json:"default"`
+					Key     string   `json:"key"`
+					Max     *float64 `json:"max"`
+					Default float64  `json:"default"`
 				} `json:"fields"`
 			} `json:"groups"`
 		} `json:"layers"`
@@ -170,14 +189,21 @@ func TestPreviewDefaultsHandler(t *testing.T) {
 		t.Fatalf("expected exactly the rivers layer, got %+v", payload.Layers)
 	}
 	found := false
+	majorCountMaximum := float64(0)
 	for _, group := range payload.Layers[0].Groups {
 		for _, field := range group.Fields {
 			if field.Key == "shape_waves_per_link" && field.Default > 0 {
 				found = true
 			}
+			if field.Key == "major_count" && field.Max != nil {
+				majorCountMaximum = *field.Max
+			}
 		}
 	}
 	if !found {
 		t.Fatal("defaults must expose shape_waves_per_link with a positive default")
+	}
+	if majorCountMaximum != previewMaxMajorRiverCount {
+		t.Fatalf("major_count maximum: got %v want %d", majorCountMaximum, previewMaxMajorRiverCount)
 	}
 }

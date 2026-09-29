@@ -9,9 +9,10 @@ deep-water fairway. A tributary may be narrower than a main river, but it
 must NEVER become shallow-only or taper below the boat passage clearance.
 A deep tile chain alone is insufficient if the boat cannot fit through it.
 
-The minimum width must come from the intended boat footprint and movement
-rules, not from visual thickness or assumed real-world river discharge.
-The sketches below do not assign a production width in tiles.
+The user selected a minimum of 3 deep tiles on 2026-09-29. The generator
+protects a continuous sequence of 3x3 deep-water placements, including bends,
+junctions, lake entrances, and tributary ends. This is configurable and is
+not a claim of runtime boat collision testing.
 
 Tributaries are allowed but infrequent. Preserve long unbranched stretches
 and irregular spacing between junctions. Control their density separately
@@ -90,8 +91,8 @@ or lake. Tune the numeric limits in previews; no specific count is selected.
 s = shallow bank water
 D = deep navigable water
 
-Example only: the branch below is 3 deep tiles across; the main river is 5.
-These numbers illustrate continuity, NOT a chosen minimum boat width.
+The branch below is 3 deep tiles across; the main river is 5.
+The branch matches the chosen minimum; wider main rivers remain allowed.
 
 ............ssDDDDDss...........
 ............ssDDDDDss...........

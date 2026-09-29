@@ -10,6 +10,8 @@ import (
 	"image/color"
 	"image/png"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,8 +25,9 @@ import (
 var previewIndexHTML []byte
 
 const (
-	previewMaxChunks   = 64
-	previewParamRivers = "river"
+	previewMaxChunks          = 64
+	previewParamRivers        = "river"
+	previewMaxMajorRiverCount = 2000
 )
 
 var (
@@ -61,12 +64,17 @@ type previewSizeOption struct {
 }
 
 type defaultsResponse struct {
-	Seed   int64                `json:"seed"`
-	Sizes  []previewSizeOption  `json:"sizes"`
-	Layers []previewLayerSchema `json:"layers"`
+	Preset          string               `json:"preset"`
+	PresetDirectory string               `json:"preset_directory"`
+	ChunksX         int                  `json:"chunks_x"`
+	ChunksY         int                  `json:"chunks_y"`
+	Seed            int64                `json:"seed"`
+	Sizes           []previewSizeOption  `json:"sizes"`
+	Layers          []previewLayerSchema `json:"layers"`
 }
 
 type renderRequest struct {
+	Preset  string                     `json:"preset"`
 	Seed    int64                      `json:"seed"`
 	ChunksX int                        `json:"chunks_x"`
 	ChunksY int                        `json:"chunks_y"`
@@ -92,26 +100,42 @@ type layerRenderer struct {
 }
 
 type previewServer struct {
-	logger *zap.Logger
-	base   MapgenOptions
-	mux    *http.ServeMux
+	logger        *zap.Logger
+	base          MapgenOptions
+	mux           *http.ServeMux
+	presets       *os.Root
+	defaultPreset string
 
 	// Serializes buildPreviewPNG; see the comment there.
 	mu sync.Mutex
 }
 
-func newPreviewServer(logger *zap.Logger, base MapgenOptions) *previewServer {
-	s := &previewServer{logger: logger, base: base}
+func newPreviewServer(logger *zap.Logger, base MapgenOptions) (*previewServer, error) {
+	path, err := resolveConfigPath(base.ConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	presets, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, fmt.Errorf("open preset directory: %w", err)
+	}
+	s := &previewServer{logger: logger, base: base, presets: presets, defaultPreset: filepath.Base(path)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("GET /api/defaults", s.handleDefaults)
 	mux.HandleFunc("POST /api/render", s.handleRender)
+	mux.HandleFunc("POST /api/preset", s.handleSavePreset)
 	s.mux = mux
-	return s
+	return s, nil
 }
 
 func runRiverPreviewServer(logger *zap.Logger, opts MapgenOptions) {
-	s := newPreviewServer(logger, opts)
+	s, err := newPreviewServer(logger, opts)
+	if err != nil {
+		logger.Fatal("preview configuration failed", zap.Error(err))
+		return
+	}
+	defer s.presets.Close()
 	addr := fmt.Sprintf("127.0.0.1:%d", opts.PreviewPort)
 	logger.Info("starting layer preview server", zap.String("address", addr))
 	server := &http.Server{Addr: addr, Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
@@ -125,20 +149,36 @@ func (s *previewServer) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(previewIndexHTML)
 }
 
-func (s *previewServer) handleDefaults(w http.ResponseWriter, _ *http.Request) {
-	response := defaultsResponse{
-		Seed:   s.base.Seed,
-		Sizes:  previewWorldSizes(),
-		Layers: previewLayerSchemas(s.base),
+func (s *previewServer) handleDefaults(w http.ResponseWriter, request *http.Request) {
+	preset := request.URL.Query().Get("preset")
+	if preset == "" {
+		preset = s.defaultPreset
 	}
+	opts, _, path, err := s.loadPreset(preset)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, _, err := resolveChunkDimensions(renderRequest{}, opts); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	response := defaultsResponse{
+		Preset:          path,
+		PresetDirectory: s.presets.Name(),
+		ChunksX:         opts.ChunksX,
+		ChunksY:         opts.ChunksY,
+		Seed:            opts.Seed,
+		Sizes:           previewWorldSizes(),
+		Layers:          previewLayerSchemas(opts),
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *previewServer) handleRender(w http.ResponseWriter, r *http.Request) {
 	var req renderRequest
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
+	if err := decodePreviewRequest(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %v", err))
 		return
 	}
@@ -179,15 +219,15 @@ func (e renderError) Unwrap() error { return e.err }
 // renders the requested layers. It is the single path shared by the HTTP
 // handler and tests.
 func (s *previewServer) buildPreviewPNG(req renderRequest) ([]byte, error) {
-	riverOpts, err := s.resolveRiverOptions(req)
+	base, err := s.requestBase(req.Preset)
+	if err != nil {
+		return nil, err
+	}
+	opts, err := resolvePreviewOptions(req, base)
 	if err != nil {
 		return nil, err
 	}
 	requested, err := resolveRequestedLayers(req.Layers)
-	if err != nil {
-		return nil, err
-	}
-	chunksX, chunksY, err := resolveChunkDimensions(req, s.base)
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +239,9 @@ func (s *previewServer) buildPreviewPNG(req renderRequest) ([]byte, error) {
 
 	ctx := renderContext{
 		Seed:         req.Seed,
-		WidthTiles:   chunksX * _const.ChunkSize,
-		HeightTiles:  chunksY * _const.ChunkSize,
-		RiverOptions: riverOpts,
+		WidthTiles:   opts.ChunksX * _const.ChunkSize,
+		HeightTiles:  opts.ChunksY * _const.ChunkSize,
+		RiverOptions: opts.River,
 	}
 	pngBytes, err := renderLayers(requested, ctx)
 	if err != nil {
@@ -210,33 +250,37 @@ func (s *previewServer) buildPreviewPNG(req renderRequest) ([]byte, error) {
 	return pngBytes, nil
 }
 
-// resolveRiverOptions starts from the preset defaults and strictly overlays
-// the partial params the client sent for each layer.
-func (s *previewServer) resolveRiverOptions(req renderRequest) (RiverOptions, error) {
-	river := s.base.River
-	raw, ok := req.Params[previewParamRivers]
-	if !ok || len(raw) == 0 {
-		river.LayoutDraw = true
-		return river, nil
+func resolvePreviewOptions(req renderRequest, base MapgenOptions) (MapgenOptions, error) {
+	for key := range req.Params {
+		if key != previewParamRivers {
+			return MapgenOptions{}, fmt.Errorf("unknown parameter section %q", key)
+		}
 	}
-
-	dec := yaml.NewDecoder(bytes.NewReader(raw))
-	dec.KnownFields(true)
-	if err := dec.Decode(&river); err != nil {
-		return RiverOptions{}, fmt.Errorf("river params: %w", err)
+	river := base.River
+	raw, ok := req.Params[previewParamRivers]
+	if ok && len(raw) > 0 {
+		dec := yaml.NewDecoder(bytes.NewReader(raw))
+		dec.KnownFields(true)
+		if err := dec.Decode(&river); err != nil {
+			return MapgenOptions{}, fmt.Errorf("river params: %w", err)
+		}
 	}
 	// The elevation-routed layout needs a real elevation field, which the
 	// rivers-only preview does not build.
 	river.LayoutDraw = true
 
-	opts := s.base
+	opts := base
 	opts.River = river
-	opts.ChunksX = req.ChunksX
-	opts.ChunksY = req.ChunksY
-	if err := opts.Validate(); err != nil {
-		return RiverOptions{}, err
+	opts.Seed = req.Seed
+	var err error
+	opts.ChunksX, opts.ChunksY, err = resolveChunkDimensions(req, base)
+	if err != nil {
+		return MapgenOptions{}, err
 	}
-	return river, nil
+	if err := opts.Validate(); err != nil {
+		return MapgenOptions{}, err
+	}
+	return opts, nil
 }
 
 func resolveRequestedLayers(requested []string) ([]layerRenderer, error) {
@@ -374,6 +418,12 @@ func previewLayerSchemas(base MapgenOptions) []previewLayerSchema {
 	return schemas
 }
 
+func legacyRiverWavesField(value float64) previewField {
+	field := floatField("shape_waves_per_link", 0.5, 12, 0.1, value)
+	field.Label = "shape_waves_per_link (legacy; wavelength = 0)"
+	return field
+}
+
 func riversLayerSchema(base MapgenOptions) previewLayerSchema {
 	river := base.River
 	return previewLayerSchema{
@@ -384,7 +434,8 @@ func riversLayerSchema(base MapgenOptions) previewLayerSchema {
 			{
 				Title: "Channel shape",
 				Fields: []previewField{
-					floatField("shape_waves_per_link", 0.5, 12, 0.1, river.ShapeWavesPerLink),
+					intField("shape_wavelength_tiles", 0, 8192, river.ShapeWavelengthTiles),
+					legacyRiverWavesField(river.ShapeWavesPerLink),
 					floatField("shape_frequency_scale", 0.05, 3, 0.05, river.ShapeFrequencyScale),
 					intField("shape_octaves", 1, 4, river.ShapeOctaves),
 					floatField("shape_octave_gain", 0.05, 0.6, 0.01, river.ShapeOctaveGain),
@@ -401,13 +452,17 @@ func riversLayerSchema(base MapgenOptions) previewLayerSchema {
 			{
 				Title: "Network",
 				Fields: []previewField{
-					intField("major_count", 1, 500, river.MajorRiverCount),
+					intField("major_count", 1, previewMaxMajorRiverCount, river.MajorRiverCount),
 					floatField("lake_border_mix", 0, 1, 0.01, river.LakeBorderMix),
 					intField("max_lake_degree", 1, 8, river.MaxLakeDegree),
 					floatField("lake_connect_chance", 0, 1, 0.01, river.LakeConnectChance),
 					intField("lake_connection_limit", 0, 500, river.LakeConnectionLimit),
 					intField("lake_link_min_distance", 0, 5000, river.LakeLinkMinDistance),
 					intField("lake_link_max_distance", 1, 10000, river.LakeLinkMaxDistance),
+					floatField("tributary_ratio", 0, 1, 0.01, river.TributaryRatio),
+					intField("tributary_spacing_tiles", 0, 8192, river.TributarySpacingTiles),
+					intField("tributary_length_min", 0, 8192, river.TributaryLengthMin),
+					intField("tributary_length_max", 0, 8192, river.TributaryLengthMax),
 				},
 			},
 			{
@@ -428,6 +483,7 @@ func riversLayerSchema(base MapgenOptions) previewLayerSchema {
 				Title: "Width & depth",
 				Fields: []previewField{
 					intField("river_width_min", 1, 64, river.RiverWidthMin),
+					intField("fairway_width_tiles", 0, 63, river.FairwayWidthTiles),
 					intField("river_width_max", 1, 64, river.RiverWidthMax),
 					intField("bank_radius", 0, 8, river.BankRadius),
 					intField("flow_shallow_threshold", 1, 200, river.FlowShallowThreshold),
