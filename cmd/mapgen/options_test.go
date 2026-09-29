@@ -5,6 +5,25 @@ import (
 	"testing"
 )
 
+func TestMapgenOptionsPrecomputeMemoryLimit(test *testing.T) {
+	if maxPrecomputeBytes != uint64(6)<<30 {
+		test.Fatal("expected a 6 GiB precompute memory limit")
+	}
+	opts := DefaultMapgenOptions()
+	opts.ChunksX, opts.ChunksY = 70, 70
+	width, height, err := opts.WorldTileDimensions()
+	if err != nil {
+		test.Fatal(err)
+	}
+	estimated, err := opts.estimateTerrainBytes(width, height)
+	if err != nil || estimated <= uint64(3)<<30 || estimated > maxPrecomputeBytes {
+		test.Fatalf("fixture must exceed 3 GiB but fit within 6 GiB: %d, %v", estimated, err)
+	}
+	if err := opts.Validate(); err != nil {
+		test.Fatalf("configuration within doubled memory budget rejected: %v", err)
+	}
+}
+
 func TestMapgenOptionsValidateRejectsInvalid(t *testing.T) {
 	tests := []struct {
 		name string

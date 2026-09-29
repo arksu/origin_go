@@ -36,6 +36,7 @@ type RiverNetwork struct {
 	Flow        []uint32
 	Class       []RiverClass
 	SourceCount int
+	Fairways    *riverFairways
 }
 
 type inlandLake struct {
@@ -145,13 +146,30 @@ func BuildRiverNetwork(
 		return nil, fmt.Errorf("elevation length mismatch: got=%d want=%d", len(elevation), tileCount)
 	}
 
+	if err := opts.validateBends(); err != nil {
+		return nil, err
+	}
+	if opts.FairwayWidthTiles > minInt(width, height) {
+		return nil, fmt.Errorf("fairway width exceeds map dimensions")
+	}
 	if opts.LayoutDraw {
-		flow, sourceCount := buildDrawLayoutRiverFlow(elevation, width, height, seed, opts)
+		var plan *riverFairways
+		if opts.FairwayWidthTiles > 0 {
+			plan = &riverFairways{}
+		}
+		flow, sourceCount := buildDrawLayoutRiverFlow(elevation, width, height, seed, opts, plan)
+		if plan != nil {
+			if err := finishRiverFairways(flow, plan, width, height, seed, opts); err != nil {
+				return nil, err
+			}
+			sourceCount += plan.Tributaries
+		}
 		classMask := buildRiverClassMask(flow, width, height, opts)
 		return &RiverNetwork{
 			Flow:        flow,
 			Class:       classMask,
 			SourceCount: sourceCount,
+			Fairways:    plan,
 		}, nil
 	}
 
@@ -276,6 +294,7 @@ func buildDrawLayoutRiverFlow(
 	height int,
 	seed int64,
 	opts RiverOptions,
+	plan *riverFairways,
 ) ([]uint32, int) {
 	_ = elevation
 	flow := make([]uint32, width*height)
@@ -311,6 +330,7 @@ func buildDrawLayoutRiverFlow(
 		opts,
 		longPathOpts,
 		&lakeInlets,
+		plan,
 	)
 	linksCreated += regionalCreated
 
@@ -330,6 +350,7 @@ func buildDrawLayoutRiverFlow(
 
 		riverWidth := riverWidthForLink(seed, lakes[from].ID, lakes[to].ID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordDrawRiver(plan, path, riverWidth)
 		recordLakeInlet(&lakeInlets, from, startX, startY, riverWidth)
 		recordLakeInlet(&lakeInlets, to, endX, endY, riverWidth)
 		degree[from]++
@@ -358,6 +379,7 @@ func buildDrawLayoutRiverFlow(
 
 		riverWidth := riverWidthForLink(seed, lakes[sourceIdx].ID, 1_000_000+linkID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordDrawRiver(plan, path, riverWidth)
 		recordLakeInlet(&lakeInlets, sourceIdx, startX, startY, riverWidth)
 		degree[sourceIdx]++
 		connected[sourceIdx] = true
@@ -379,6 +401,7 @@ func buildDrawLayoutRiverFlow(
 		seed+9187,
 		opts,
 		&lakeInlets,
+		plan,
 	)
 	linksCreated += shortCreated
 
@@ -386,6 +409,9 @@ func buildDrawLayoutRiverFlow(
 		carveDrawLakeFootprint(flow, width, height, lake, opts)
 	}
 	carveLakeInletChannels(flow, width, height, lakes, lakeInlets, opts)
+	if plan != nil {
+		plan.Lakes, plan.Inlets = lakes, lakeInlets
+	}
 
 	return flow, linksCreated
 }
@@ -1259,6 +1285,7 @@ func connectRegionalLakeBackbone(
 	opts RiverOptions,
 	pathOpts RiverOptions,
 	lakeInlets *[]lakeInlet,
+	plan *riverFairways,
 ) int {
 	if maxLinks <= 0 || len(lakes) < 2 {
 		return 0
@@ -1364,6 +1391,7 @@ func connectRegionalLakeBackbone(
 
 		riverWidth := riverWidthForLink(seed, lakes[fromLake].ID, lakes[toLake].ID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordDrawRiver(plan, path, riverWidth)
 		recordLakeInlet(lakeInlets, fromLake, startX, startY, riverWidth)
 		recordLakeInlet(lakeInlets, toLake, endX, endY, riverWidth)
 		degree[fromLake]++
@@ -1746,6 +1774,7 @@ func connectShortJitterStage(
 	seed int64,
 	opts RiverOptions,
 	lakeInlets *[]lakeInlet,
+	plan *riverFairways,
 ) int {
 	budget := maxInt(0, opts.LakeConnectionLimit)
 	if budget == 0 || len(lakes) < 2 {
@@ -1805,6 +1834,7 @@ func connectShortJitterStage(
 
 			riverWidth := riverWidthForLink(seed, lakes[from].ID, lakes[to].ID, opts)
 			carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+			recordDrawRiver(plan, path, riverWidth)
 			recordLakeInlet(lakeInlets, from, startX, startY, riverWidth)
 			recordLakeInlet(lakeInlets, to, endX, endY, riverWidth)
 			degree[from]++
@@ -1843,6 +1873,7 @@ func connectShortJitterStage(
 
 		riverWidth := riverWidthForLink(seed, lakes[sourceIdx].ID, 2_000_000+shortID, opts)
 		carveRiverCorridor(flow, width, height, path, riverWidth, opts)
+		recordDrawRiver(plan, path, riverWidth)
 		recordLakeInlet(lakeInlets, sourceIdx, startX, startY, riverWidth)
 		degree[sourceIdx]++
 		connected[sourceIdx] = true
@@ -1936,6 +1967,13 @@ func buildDrawPathWithAttempts(
 		if len(path) < minLen {
 			continue
 		}
+		if opts.ShapeWavelengthTiles > 0 {
+			separation := opts.RiverWidthMax + 2*opts.BankRadius
+			allowance := maxInt(6, separation*2)
+			if !riverPathSelfSeparated(path, width, separation) || riverPathTouchesWater(flow, path, width, height, separation/2+1, allowance, allowance, uint32(opts.FlowShallowThreshold)) {
+				continue
+			}
+		}
 		overlap := pathOverlapRatio(flow, path, opts)
 		crowding := pathCrowdingRatio(flow, width, height, path, opts)
 		crossings := pathCrossingCount(flow, width, path, opts)
@@ -1975,6 +2013,9 @@ func buildDrawPath(
 	seed int64,
 	opts RiverOptions,
 ) []int {
+	if opts.ShapeWavelengthTiles > 0 {
+		return buildNestedBendPath(width, height, startX, startY, targetX, targetY, seed, opts)
+	}
 	if startX == targetX && startY == targetY {
 		return []int{tileIndex(startX, startY, width)}
 	}

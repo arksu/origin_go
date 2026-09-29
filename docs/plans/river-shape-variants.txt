@@ -1,14 +1,15 @@
 RIVER SHAPE VARIANTS
 ===================
-2026-09-29 | Selected: OPTION B. Implementation has not started.
+2026-09-29 | OPTION B implemented; rendered appearance accepted by the user.
 
 Confirmed selection
 -------------------
 Use OPTION B - BENDS WITHIN BENDS for natural-looking river paths.
 Allow tributaries, but keep them sparse and irregularly spaced, with long
-unbranched stretches. Every tributary must have a boat-passable deep fairway.
+unbranched stretches. Every tributary must have a deep fairway at least
+3 tiles wide, the minimum selected by the user.
 Tributary frequency is independent of bend detail: more irregular curves
-must not produce more branches. Exact density and spacing need preview tuning.
+must not produce more branches. Current density and spacing are visually accepted.
 Options A and C below remain comparisons, not additional selected features.
 This selection supersedes the earlier "no variant selected" status in the
 paused mapgen-living-water artifacts; their terrain plan remains rejected.
@@ -23,9 +24,9 @@ a continuous deep-water fairway wide enough for boat passage.
 Shallow water is optional bank decoration, never the only water in a river.
 
 The rejected waterways implementation, its preset settings, and preview
-controls have been removed. The previous drawn-river generator is restored.
-This does not certify the old generator's boat clearance. That needs the
-final-tile checks described in river-fairways-and-connections.txt.
+controls have been removed. Option B extends the previous drawn-river layout,
+not a drainage model. Protected footprint checks now validate final tiles;
+this is not a claim of boat-runtime collision testing.
 Existing unrelated terrain water is unchanged; there is no forced sea frame.
 
 How to read the sketches
@@ -173,9 +174,9 @@ No separate C-style hairpin feature is selected. Keep the gameplay network
 independent of path appearance; do not change the landmass or impose drainage.
 
 
-WHAT IS WRONG WITH THE CURRENT SHAPE CONTROLS?
-==============================================
-Source observations, not claims about a new implementation:
+WHAT WAS WRONG WITH THE PREVIOUS SHAPE CONTROLS?
+================================================
+Pre-change source observations that motivated Option B:
 - cmd/mapgen/river.go: buildDrawPath already draws curves without elevation.
   This is the useful starting point; a hydrology replacement is unnecessary.
 - A whole link gets at most 32 control segments. Long links cannot preserve
@@ -205,6 +206,9 @@ IMPLEMENTATION OUTLINE FOR THE SELECTED DESIGN
 5. Review close-ups AND whole-map routes on multiple seeds before accepting.
    Check detours, sparse branch frequency, unintended crossings, and access.
 
-The visual direction is selected. These files record the decision only;
-no replacement generator has been implemented.
+The visual direction is implemented behind explicit H&H preset controls.
+Other presets retain legacy behavior. Open map_png/river-bends-review/README.md
+after the review command in cmd/mapgen/README.md for rendered comparisons.
+Rendered appearance is accepted; these ASCII sketches remain schematic.
+Boat-runtime testing and global connectivity guarantees are separate concerns.
 See river-fairways-and-connections.txt for the shared gameplay requirements.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,18 +38,28 @@ func LoadMapgenOptionsFromYAML(path string, defaults MapgenOptions) (MapgenOptio
 	if err != nil {
 		return MapgenOptions{}, "", fmt.Errorf("read gen config %q: %w", resolvedPath, err)
 	}
+	opts, err := decodeMapgenOptions(content, resolvedPath, defaults)
+	if err != nil {
+		return MapgenOptions{}, "", err
+	}
+	return opts, resolvedPath, err
+}
 
+func decodeMapgenOptions(content []byte, path string, defaults MapgenOptions) (MapgenOptions, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 
 	biomeDefaults := defaults.Biome
 	cfg := mapgenConfigFile{Biomes: &biomeDefaults}
 	if err := decoder.Decode(&cfg); err != nil {
-		return MapgenOptions{}, "", fmt.Errorf("decode gen config %q: %w", resolvedPath, err)
+		return MapgenOptions{}, fmt.Errorf("decode gen config %q: %w", path, err)
+	}
+	if err := decoder.Decode(new(yaml.Node)); err != io.EOF {
+		return MapgenOptions{}, fmt.Errorf("gen config %q must contain a single YAML document", path)
 	}
 
 	if cfg.Version != 1 {
-		return MapgenOptions{}, "", fmt.Errorf("unsupported gen config version %d in %q (expected 1)", cfg.Version, resolvedPath)
+		return MapgenOptions{}, fmt.Errorf("unsupported gen config version %d in %q (expected 1)", cfg.Version, path)
 	}
 
 	opts := defaults
@@ -71,7 +82,7 @@ func LoadMapgenOptionsFromYAML(path string, defaults MapgenOptions) (MapgenOptio
 		opts.PNG = *cfg.PNG
 	}
 
-	return opts, resolvedPath, nil
+	return opts, nil
 }
 
 func resolveConfigPath(path string) (string, error) {

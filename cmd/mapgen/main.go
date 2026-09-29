@@ -202,6 +202,7 @@ func runOverviewOnly(logger *zap.Logger, opts MapgenOptions) {
 		zap.Int("width_tiles", terrain.WidthTiles),
 		zap.Int("height_tiles", terrain.HeightTiles),
 		zap.Int("river_sources", terrain.RiverSources),
+		zap.Any("river_routes", riverRouteStats(terrain.RiverFairways)),
 		zap.Int("river_shallow_tiles", terrain.RiverShallowTiles),
 		zap.Int("river_deep_tiles", terrain.RiverDeepTiles),
 	)
@@ -246,6 +247,7 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 		zap.Int("width_tiles", terrain.WidthTiles),
 		zap.Int("height_tiles", terrain.HeightTiles),
 		zap.Int("river_sources", terrain.RiverSources),
+		zap.Any("river_routes", riverRouteStats(terrain.RiverFairways)),
 		zap.Int("river_shallow_tiles", terrain.RiverShallowTiles),
 		zap.Int("river_deep_tiles", terrain.RiverDeepTiles),
 	)

@@ -10,13 +10,19 @@ import (
 )
 
 const (
-	maxPrecomputeBytes = uint64(3) << 30 // 3 GiB safety cap for terrain precompute buffers
+	maxPrecomputeBytes = uint64(6) << 30 // 6 GiB safety cap for terrain precompute buffers
 	maxOverviewPixels  = uint64(250_000_000)
 )
 
 const defaultGenConfigPath = "etc/mapgen/presets/default.yaml"
 
 type RiverOptions struct {
+	ShapeWavelengthTiles   int     `yaml:"shape_wavelength_tiles"`
+	FairwayWidthTiles      int     `yaml:"fairway_width_tiles"`
+	TributaryRatio         float64 `yaml:"tributary_ratio"`
+	TributarySpacingTiles  int     `yaml:"tributary_spacing_tiles"`
+	TributaryLengthMin     int     `yaml:"tributary_length_min"`
+	TributaryLengthMax     int     `yaml:"tributary_length_max"`
 	Enabled                bool    `yaml:"enabled"`
 	LayoutDraw             bool    `yaml:"layout_draw"`
 	MajorRiverCount        int     `yaml:"major_count"`
@@ -406,6 +412,9 @@ func (o MapgenOptions) WorldTileDimensions() (int, int, error) {
 }
 
 func (o MapgenOptions) Validate() error {
+	if err := o.River.validateBends(); err != nil {
+		return err
+	}
 	if o.ChunksX <= 0 {
 		return errors.New("chunks-x must be > 0")
 	}
@@ -646,6 +655,16 @@ func (o MapgenOptions) Validate() error {
 	estimatedBytes, err := o.estimateTerrainBytes(widthTiles, heightTiles)
 	if err != nil {
 		return err
+	}
+	if o.River.Enabled && o.River.FairwayWidthTiles > 0 {
+		extra, err := estimateRiverBendsBytes(widthTiles, heightTiles, o.River)
+		if err != nil {
+			return err
+		}
+		estimatedBytes, err = checkedAddUint64(estimatedBytes, extra)
+		if err != nil {
+			return err
+		}
 	}
 	if estimatedBytes > maxPrecomputeBytes {
 		return fmt.Errorf("estimated precompute memory %d bytes exceeds limit %d bytes", estimatedBytes, maxPrecomputeBytes)

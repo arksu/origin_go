@@ -41,6 +41,12 @@
     width: 110px; background: var(--control-bg); color: var(--text);
     border: 1px solid var(--panel-border); border-radius: 4px; padding: 3px 6px;
   }
+  #preset { width: 100%; padding: 6px; background: var(--control-bg); color: var(--text); border: 1px solid var(--panel-border); border-radius: 4px; }
+  .hint { color: var(--text-dim); font-size: 12px; overflow-wrap: anywhere; }
+  #presetStatus { min-height: 18px; }
+  #presetStatus.error { color: var(--error); }
+  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+  button:disabled { opacity: 0.5; cursor: default; }
   button {
     background: var(--control-bg); color: var(--text);
     border: 1px solid var(--panel-border); border-radius: 4px; padding: 4px 12px; cursor: pointer;
@@ -100,6 +106,15 @@
   <aside>
     <h1>Mapgen Layer Preview</h1>
     <div class="control-block">
+      <label for="preset">Preset file</label>
+      <input type="text" id="preset" autocomplete="off" spellcheck="false" placeholder="hnh.yaml">
+      <div class="row"><button id="loadPreset" type="button">Load</button><button id="savePreset" type="button" disabled>Save</button></div>
+      <div class="hint">Enter or Load reads the file. Save writes current settings to this path, overwriting it or creating a new variant.</div>
+      <div id="presetDirectory" class="hint"></div>
+      <div id="presetStatus" class="hint" role="status" aria-live="polite"></div>
+    </div>
+    <fieldset id="settings" disabled>
+    <div class="control-block">
       <h2>Run</h2>
       <div class="row" id="layersRow"><label>Layers</label><span id="layersBox"></span></div>
       <div class="row"><label for="seed">Seed</label><input type="number" id="seed"><button id="randomSeed" type="button">Random</button></div>
@@ -108,6 +123,7 @@
       <button id="generate" type="button" class="primary">Generate</button>
     </div>
     <div id="groups"></div>
+    </fieldset>
   </aside>
   <main id="viewport">
     <canvas id="canvas"></canvas>
@@ -122,6 +138,9 @@
 
 const state = {
   schema: null,
+  loadedPreset: null,
+  loadSeq: 0,
+  saving: false,
   seq: 0,
   controller: null,
   img: null,
@@ -130,6 +149,12 @@ const state = {
 };
 
 const els = {
+  preset: document.getElementById("preset"),
+  loadPreset: document.getElementById("loadPreset"),
+  savePreset: document.getElementById("savePreset"),
+  presetDirectory: document.getElementById("presetDirectory"),
+  presetStatus: document.getElementById("presetStatus"),
+  settings: document.getElementById("settings"),
   layersBox: document.getElementById("layersBox"),
   seed: document.getElementById("seed"),
   randomSeed: document.getElementById("randomSeed"),
@@ -149,6 +174,8 @@ function fieldId(layerName, key) {
 }
 
 function buildControls() {
+  els.layersBox.replaceChildren();
+  els.worldSize.replaceChildren();
   for (const layer of state.schema.layers) {
     const check = document.createElement("label");
     check.className = "layer-check";
@@ -161,19 +188,23 @@ function buildControls() {
     els.layersBox.append(check);
   }
 
-  for (const size of state.schema.sizes) {
+  const sizes = state.schema.sizes.map(size => ({ columns: size.chunks, rows: size.chunks }));
+  if (!sizes.some(size => size.columns === state.schema.chunks_x && size.rows === state.schema.chunks_y)) {
+    sizes.push({ columns: state.schema.chunks_x, rows: state.schema.chunks_y });
+  }
+  for (const size of sizes) {
     const option = document.createElement("option");
-    option.value = String(size.chunks);
-    option.textContent = `${size.chunks} chunks (${size.tiles}\u00d7${size.tiles})`;
+    option.value = `${size.columns}x${size.rows}`;
+    option.textContent = `${size.columns}\u00d7${size.rows} chunks (${size.columns * 128}\u00d7${size.rows * 128})`;
     els.worldSize.append(option);
   }
-  const preferred = state.schema.sizes.find(s => s.chunks === 20) || state.schema.sizes[0];
-  els.worldSize.value = String(preferred.chunks);
+  els.worldSize.value = `${state.schema.chunks_x}x${state.schema.chunks_y}`;
 
   els.seed.value = String(state.schema.seed);
 }
 
 function buildGroups() {
+  els.groups.replaceChildren();
   for (const layer of state.schema.layers) {
     const layerTitle = document.createElement("h2");
     layerTitle.textContent = layer.title + " parameters";
@@ -262,8 +293,13 @@ function collectParams() {
       for (const field of group.fields) {
         const input = document.getElementById(fieldId(layer.name, field.key));
         if (field.type === "bool") values[field.key] = input.checked;
-        else if (field.type === "int") values[field.key] = parseInt(input.value, 10);
-        else values[field.key] = parseFloat(input.value);
+        else {
+          const value = Number(input.value);
+          if (input.value.trim() === "" || !Number.isFinite(value) || (field.type === "int" && !Number.isInteger(value))) {
+            throw new Error(`${field.key} must be a valid ${field.type === "int" ? "integer" : "number"}`);
+          }
+          values[field.key] = value;
+        }
       }
     }
     params[layer.param_key] = values;
@@ -271,20 +307,112 @@ function collectParams() {
   return params;
 }
 
+function collectRequest() {
+  const seed = Number(els.seed.value);
+  if (els.seed.value.trim() === "" || !Number.isSafeInteger(seed)) throw new Error("Seed must be a safe integer");
+  const [columns, rows] = els.worldSize.value.split("x").map(Number);
+  return {
+    preset: state.loadedPreset,
+    seed,
+    chunks_x: columns,
+    chunks_y: rows,
+    layers: selectedLayers(),
+    params: collectParams(),
+  };
+}
+
+function syncPresetQuery() {
+  const url = new URL(window.location.href);
+  const preset = els.preset.value.trim();
+  if (preset) url.searchParams.set("preset", preset);
+  else url.searchParams.delete("preset");
+  window.history.replaceState(null, "", url);
+}
+
+function presetMessage(message, error = false) {
+  els.presetStatus.textContent = message;
+  els.presetStatus.classList.toggle("error", error);
+}
+
+async function loadPreset() {
+  if (state.saving) return;
+  const sequence = ++state.loadSeq;
+  clearTimeout(debounceTimer);
+  ++state.seq;
+  if (state.controller) state.controller.abort();
+  els.spinner.hidden = true;
+  els.settings.disabled = true;
+  els.savePreset.disabled = true;
+  syncPresetQuery();
+  presetMessage("Loading preset\u2026");
+  try {
+    const query = new URLSearchParams();
+    if (els.preset.value.trim()) query.set("preset", els.preset.value.trim());
+    const response = await fetch(`/api/defaults?${query}`, { cache: "no-store" });
+    const payload = await response.json();
+    if (sequence !== state.loadSeq) return;
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.schema = payload;
+    state.loadedPreset = payload.preset;
+    els.preset.value = payload.preset;
+    els.presetDirectory.textContent = `Directory: ${payload.preset_directory}`;
+    syncPresetQuery();
+    buildControls();
+    buildGroups();
+    state.fitted = false;
+    els.settings.disabled = false;
+    els.savePreset.disabled = false;
+    presetMessage(`Loaded ${payload.preset}`);
+    hideError();
+    await runRender();
+  } catch (error) {
+    if (sequence === state.loadSeq) presetMessage(String(error), true);
+  }
+}
+
+async function savePreset() {
+  if (state.saving || els.settings.disabled) return;
+  state.saving = true;
+  els.settings.disabled = true;
+  els.savePreset.disabled = true;
+  els.loadPreset.disabled = true;
+  els.preset.disabled = true;
+  try {
+    const path = els.preset.value.trim();
+    if (!path) throw new Error("Preset path must not be empty");
+    const body = { ...collectRequest(), path };
+    presetMessage("Saving preset\u2026");
+    const response = await fetch("/api/preset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    state.loadedPreset = payload.preset;
+    els.preset.value = payload.preset;
+    syncPresetQuery();
+    presetMessage(`Saved ${payload.preset}`);
+  } catch (error) {
+    presetMessage(String(error), true);
+  } finally {
+    state.saving = false;
+    els.settings.disabled = false;
+    els.savePreset.disabled = false;
+    els.loadPreset.disabled = false;
+    els.preset.disabled = false;
+  }
+}
+
 async function runRender() {
+  if (els.settings.disabled) return;
   const mySeq = ++state.seq;
   if (state.controller) state.controller.abort();
   state.controller = new AbortController();
   els.spinner.hidden = false;
   const started = performance.now();
   try {
-    const body = {
-      seed: parseInt(els.seed.value, 10) || 0,
-      chunks_x: parseInt(els.worldSize.value, 10),
-      chunks_y: parseInt(els.worldSize.value, 10),
-      layers: selectedLayers(),
-      params: collectParams(),
-    };
+    const body = collectRequest();
     const res = await fetch("/api/render", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -293,12 +421,14 @@ async function runRender() {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      if (mySeq !== state.seq) return;
       showError(err.error || `HTTP ${res.status}`);
       return;
     }
     const blob = await res.blob();
     const img = await createImageBitmap(blob);
-    if (mySeq !== state.seq) return;
+    if (mySeq !== state.seq) { img.close(); return; }
+    if (state.img) state.img.close();
     state.img = img;
     if (!state.fitted && img.width > 0) { fitView(); state.fitted = true; }
     draw();
@@ -306,7 +436,7 @@ async function runRender() {
     els.status.textContent = `Rendered in ${elapsed} s \u00b7 ${img.width}\u00d7${img.height}`;
     hideError();
   } catch (err) {
-    if (err.name !== "AbortError") showError(String(err));
+    if (mySeq === state.seq && err.name !== "AbortError") showError(String(err));
   } finally {
     if (mySeq === state.seq) els.spinner.hidden = true;
   }
@@ -405,14 +535,25 @@ els.randomSeed.addEventListener("click", () => {
 els.generate.addEventListener("click", () => runRender());
 els.worldSize.addEventListener("change", onChange);
 els.seed.addEventListener("input", onChange);
+els.preset.addEventListener("input", () => {
+  ++state.loadSeq;
+  syncPresetQuery();
+  presetMessage("Enter or Load to read this file; Save to store the current settings here.");
+});
+els.preset.addEventListener("keydown", event => {
+  if (event.key === "Enter") { event.preventDefault(); loadPreset(); }
+});
+els.loadPreset.addEventListener("click", loadPreset);
+els.savePreset.addEventListener("click", savePreset);
+window.addEventListener("popstate", () => {
+  els.preset.value = new URLSearchParams(window.location.search).get("preset") || "";
+  loadPreset();
+});
 
 async function init() {
-  const res = await fetch("/api/defaults");
-  state.schema = await res.json();
-  buildControls();
-  buildGroups();
+  els.preset.value = new URLSearchParams(window.location.search).get("preset") || "";
   resizeCanvas();
-  runRender();
+  await loadPreset();
 }
 
 init();

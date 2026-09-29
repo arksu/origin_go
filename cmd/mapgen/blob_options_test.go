@@ -77,7 +77,7 @@ func TestMapgenOptionsBlobDefaultsAndValidation(t *testing.T) {
 	if err := opts.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	for _, dims := range [][2]int{{10000, 10000}, {math.MaxInt, 2}, {70, 70}} {
+	for _, dims := range [][2]int{{10000, 10000}, {math.MaxInt, 2}, {100, 100}} {
 		opts := defaults
 		opts.ChunksX = dims[0]
 		opts.ChunksY = dims[1]
@@ -86,13 +86,17 @@ func TestMapgenOptionsBlobDefaultsAndValidation(t *testing.T) {
 		}
 	}
 	opts = defaults
+	opts.ChunksX, opts.ChunksY = 70, 70
 	opts.Biome.BlobSeedSpacing = 1
 	if err := opts.Validate(); err == nil {
 		t.Fatal("seed records omitted from memory budget")
 	}
 	opts = defaults
-	opts.ChunksX = 60
-	opts.ChunksY = 60
+	opts.ChunksX = 90
+	opts.ChunksY = 90
+	if err := opts.Validate(); err != nil {
+		t.Fatalf("baseline without oversized shape scratch: %v", err)
+	}
 	opts.Biome.BlobForestSizeMax = 4096
 	opts.Biome.BlobMaxNodes = 256
 	opts.Biome.BlobMaxDepth = 32
