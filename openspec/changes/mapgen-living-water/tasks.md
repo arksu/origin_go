@@ -1,5 +1,11 @@
 # Tasks
 
+> PAUSED / SUPERSEDED (2026-09-29): The user rejected continent/coastal
+> generation and physical drainage for this task. The historical content below
+> is NOT approved for implementation or spec sync. Current shape-only exploration:
+> `docs/plans/river-shape-variants.txt`. Every river, including tributaries and
+> narrow connectors, requires a boat-passable deep fairway. No variant is selected.
+
 ## 1. Configuration (`cmd/mapgen/options.go`, `gen_config.go`)
 
 - [ ] 1.1 Add `ElevationOptions` (enabled, continent/detail feature tiles, continent weight, detail octaves, warp strength tiles, stretch percentiles, deep/shallow thresholds, min water body tiles, anchor min tiles) with continents-bold defaults, wire into `mapgenConfigFile` as a new `elevation:` section; add `river:` keys `lake_max_elevation`, `lake_max_massif`, `width_by_volume` — verify with `go test ./cmd/mapgen/ -run TestLoadMapgenOptions`

@@ -1,0 +1,210 @@
+RIVER SHAPE VARIANTS
+===================
+2026-09-29 | Selected: OPTION B. Implementation has not started.
+
+Confirmed selection
+-------------------
+Use OPTION B - BENDS WITHIN BENDS for natural-looking river paths.
+Allow tributaries, but keep them sparse and irregularly spaced, with long
+unbranched stretches. Every tributary must have a boat-passable deep fairway.
+Tributary frequency is independent of bend detail: more irregular curves
+must not produce more branches. Exact density and spacing need preview tuning.
+Options A and C below remain comparisons, not additional selected features.
+This selection supersedes the earlier "no variant selected" status in the
+paused mapgen-living-water artifacts; their terrain plan remains rejected.
+
+Corrected direction
+-------------------
+Make rivers LOOK natural, not simulate a natural drainage network.
+Choose routes for player travel first; give those routes convincing shapes.
+Do not generate a continent, force a coastal ocean, or drain toward borders.
+Every river, including every tributary and narrow connector, must contain
+a continuous deep-water fairway wide enough for boat passage.
+Shallow water is optional bank decoration, never the only water in a river.
+
+The rejected waterways implementation, its preset settings, and preview
+controls have been removed. The previous drawn-river generator is restored.
+This does not certify the old generator's boat clearance. That needs the
+final-tile checks described in river-fairways-and-connections.txt.
+Existing unrelated terrain water is unchanged; there is no forced sea frame.
+
+How to read the sketches
+------------------------
+These are deliberately schematic ASCII drawings, not generator output.
+Use a monospace font with word wrap off.
+A and B are the SAME two route endpoints in all three options.
+Neither endpoint means source or mouth; there is no flow direction.
+# traces the DEEP FAIRWAY CENTERLINE, not a one-tile-wide river.
+Actual fairway width and shallow banks are separate from these path sketches.
+Whitespace is land. No coast or world-center assumption is involved.
+
+
+OPTION A - BROAD, ASYMMETRIC MEANDERS
+====================================
+Fewer, larger bends; long readable stretches between them.
+Bends vary in radius and spacing instead of repeating a sine wave.
+
+                #########                                   ##
+              ###       ####                         #############
+              #            ##                      ###           ##
+              #             #                     ##              ##
+             ##             ##                    #                #
+             #               #                   ##                 #
+             #               #                   #                  ###
+           ##                #                  #                     ###
+       #####                 #                  #                       ####
+    A###                     #                 ##                          #B
+                             #                 #
+                             #                ##
+                             ##               #
+                              #              ##
+                              ##            ##
+                               ###          #
+                                 ###      ##
+                                   ########
+
+How to build:
+- Place a modest number of bend controls inside a gameplay route corridor.
+- Vary bend size, spacing, and turning strength; fit a smooth curve.
+- Keep endpoints fixed and preserve approach directions at junctions.
+- Carve a protected deep fairway, then add banks around it.
+
+Good: easy navigation, readable routes, relatively small implementation.
+Tradeoff: alone, it can still look too smooth compared with river1.png.
+Best use: calmer stretches and important long-distance travel routes.
+
+
+OPTION B - BENDS WITHIN BENDS (SELECTED)
+======================================
+Large meanders with smaller, uneven deviations inside them.
+Some stretches stay calm; others have more irregular curvature.
+
+                #######                                       ###
+              ###     ##                              #####  ## ###
+             ##        #                            ###   ####    #
+             ##        #####                        #             #
+              #            #                        #            ##
+        ###  ##            ##                       ##           #####
+        # ####              #                   ######               ## ####
+        #                  ##                  ##                     ###  #
+       ##                 ##                   #                           ##
+    A###                  #                    ###                          B
+                          ####                   #
+                             #                   #
+                            ##                  ##
+                           ##               ##  #
+                           ######           #####
+                                #           #
+                                #  ###     ##
+                                #### ## ####
+                                      ###
+                                      ##
+
+How to build:
+- Start with a route's large-scale curve, as in A.
+- Add bounded medium-scale and small-scale displacements along that curve.
+- Use distances along the path, not a fixed number of waves per connection.
+- Sample densely enough to retain those bends without creating tile jitter.
+- Limit curvature and separation so detail cannot pinch the boat fairway.
+- Vary bank width gently without shrinking the protected deep core.
+
+Good: closest proposed path character to the reference's irregular curves.
+Tradeoff: unconstrained noise creates ugly wiggles and accidental joins.
+Best use: the default river style, mixed with A's quieter stretches.
+
+Important: copy the reference's visual irregularity, NOT its countless
+hair-thin streams. Tributaries are occasional additions, not a dense tree.
+In this game, every branch keeps boat-sized deep water through its junction.
+
+
+OPTION C - COMPOUND BENDS AND OCCASIONAL HAIRPINS
+================================================
+Longer quiet reaches interrupted by distinct, deeper looping bends.
+These are bends in one river, not automatic new water connections.
+
+                ###########                              ########
+                #         ###                          ###      ###
+                #            ##                       ##          ##
+                ##            #                       #            #
+                 #####        ##                      ##           #
+                     ###       #                       #           #
+                       ##      #                       ##         ##
+                        #      #                        #       ###
+                       ##      #                       ##      ##
+                     ###       #                     ###       #
+    A#################         #      ################        ##           #B
+                               #   ####                       #           ##
+                               #  ##                          #          ##
+                              ##   ####                       #         ##
+                             ##       ##                      #       ###
+                             #         ##                     #      ##
+                            #           #                     ###   ##
+                           ##           #                       #####
+                           #            #
+                           ###        ###
+                             ###    ###
+                               ######
+
+How to build:
+- Compose varied bend shapes: broad arc, asymmetric S, compound bend,
+  occasional open hairpin. Rotate, scale, and deform them within the route.
+- Blend tangent directions where shapes meet; avoid visible template seams.
+- Reserve enough land between neighboring arms of a bend.
+- Reject shapes that accidentally touch, cross, or become too tight for boats.
+
+Good: memorable locations, meaningful detours, possible portage shortcuts.
+Tradeoff: overuse makes a maze; repeated templates become recognizable.
+Best use: selected exploration areas, not every river segment.
+
+
+COMPARISON
+==========
+                             A              B              C
+Main appearance              Calm curves    Uneven curves  Distinct detours
+Similarity to reference      Partial        Closest        Local features
+Shape-control complexity     Lower          Medium         Higher
+Accidental self-contact risk Lower          Medium         Higher
+Continuous deep fairway      REQUIRED       REQUIRED       REQUIRED
+Physical drainage needed     NO             NO             NO
+Border ocean needed          NO             NO             NO
+
+Selected: B, including its quieter stretches, with sparse deep tributaries.
+No separate C-style hairpin feature is selected. Keep the gameplay network
+independent of path appearance; do not change the landmass or impose drainage.
+
+
+WHAT IS WRONG WITH THE CURRENT SHAPE CONTROLS?
+==============================================
+Source observations, not claims about a new implementation:
+- cmd/mapgen/river.go: buildDrawPath already draws curves without elevation.
+  This is the useful starting point; a hydrology replacement is unnecessary.
+- A whole link gets at most 32 control segments. Long links cannot preserve
+  equally detailed local bends at that cap.
+- The hnh preset's shape_octave_gain is 0.06: successive noise amplitudes
+  are 1, 0.06, 0.0036, ... . Fine-scale structure is strongly suppressed.
+- Wavelength is derived from link length. Different-length connections
+  therefore get different bend scales rather than a consistent local style.
+- A sine envelope suppresses displacement toward each endpoint. Junction
+  approaches need deliberate shaping rather than uniformly fading detail.
+
+These are targeted seams for the selected Option B implementation plan.
+Changing noise parameters alone is a cheap experiment, not proof of a fix.
+
+
+IMPLEMENTATION OUTLINE FOR THE SELECTED DESIGN
+==============================================
+1. Keep the land generator and intended gameplay connections unchanged.
+   Compare selected geometry on the same endpoints and seeds.
+2. Implement Option B's path-shape changes in the drawn-river path.
+   Do not add elevation simulation, runoff, catchments, or coastal masks.
+3. Allow occasional tributaries with a separate low-density budget and
+   minimum junction spacing. Do not add a branch at every bend or lake.
+   Keep long unbranched reaches; tune sparse coverage in whole-map previews.
+4. Carve a protected deep fairway for EVERY river role, then optional banks.
+   Validate actual boat clearance after all tile/shoreline passes.
+5. Review close-ups AND whole-map routes on multiple seeds before accepting.
+   Check detours, sparse branch frequency, unintended crossings, and access.
+
+The visual direction is selected. These files record the decision only;
+no replacement generator has been implemented.
+See river-fairways-and-connections.txt for the shared gameplay requirements.

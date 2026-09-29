@@ -1,5 +1,11 @@
 # Proposal
 
+> PAUSED / SUPERSEDED (2026-09-29): The user rejected continent/coastal
+> generation and physical drainage for this task. The historical content below
+> is NOT approved for implementation or spec sync. Current shape-only exploration:
+> `docs/plans/river-shape-variants.txt`. Every river, including tributaries and
+> narrow connectors, requires a boat-passable deep fairway. No variant is selected.
+
 ## Why
 
 The generated map reads as "not alive": the base water layer is a single-octave Perlin field thresholded per tile, producing ~6000 isolated 1–3 tile ponds scattered uniformly (the largest water body on the whole 6400² map is under 7000 tiles), while the 200 drawn lakes are placed by pure blue-noise distance with no terrain coupling and rivers get a random width. Verified by reading the applied generator and rendering the current `hnh.yaml` world. A prototype of structural elevation (style chosen: **v2 continents-bold**) fixes this in the same render budget.
