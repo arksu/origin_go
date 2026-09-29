@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,8 @@ var previewIndexHTML []byte
 const (
 	previewMaxChunks          = 64
 	previewParamRivers        = "river"
+	previewParamBiomes        = "biomes"
+	previewParamWorld         = "world"
 	previewMaxMajorRiverCount = 2000
 )
 
@@ -37,13 +40,15 @@ var (
 )
 
 type previewField struct {
-	Key     string   `json:"key"`
-	Label   string   `json:"label"`
-	Type    string   `json:"type"` // "float" | "int" | "bool"
-	Min     *float64 `json:"min,omitempty"`
-	Max     *float64 `json:"max,omitempty"`
-	Step    *float64 `json:"step,omitempty"`
-	Default any      `json:"default"`
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"` // "float" | "int" | "bool"
+	Min         *float64 `json:"min,omitempty"`
+	Max         *float64 `json:"max,omitempty"`
+	Step        *float64 `json:"step,omitempty"`
+	Default     any      `json:"default"`
+	Description string   `json:"description,omitempty"`
+	RangeMax    *float64 `json:"range_max,omitempty"`
 }
 
 type previewGroup struct {
@@ -71,6 +76,7 @@ type defaultsResponse struct {
 	Seed            int64                `json:"seed"`
 	Sizes           []previewSizeOption  `json:"sizes"`
 	Layers          []previewLayerSchema `json:"layers"`
+	World           previewLayerSchema   `json:"world"`
 }
 
 type renderRequest struct {
@@ -82,13 +88,11 @@ type renderRequest struct {
 	Params  map[string]json.RawMessage `json:"params"`
 }
 
-// renderContext carries everything a layer renderer needs; new layers read
-// their own options section instead of growing this struct.
 type renderContext struct {
-	Seed         int64
-	WidthTiles   int
-	HeightTiles  int
-	RiverOptions RiverOptions
+	WidthTiles  int
+	HeightTiles int
+	Options     MapgenOptions
+	Terrain     *TerrainPrecompute
 }
 
 type layerRenderer struct {
@@ -171,6 +175,7 @@ func (s *previewServer) handleDefaults(w http.ResponseWriter, request *http.Requ
 		Seed:            opts.Seed,
 		Sizes:           previewWorldSizes(),
 		Layers:          previewLayerSchemas(opts),
+		World:           worldPreviewSchema(opts),
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, response)
@@ -231,6 +236,9 @@ func (s *previewServer) buildPreviewPNG(req renderRequest) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := validatePreviewMemory(opts); err != nil {
+		return nil, err
+	}
 
 	// Renders allocate hundreds of MB and are CPU-bound, so they are
 	// serialized; the UI drops stale responses by sequence number.
@@ -238,10 +246,9 @@ func (s *previewServer) buildPreviewPNG(req renderRequest) ([]byte, error) {
 	defer s.mu.Unlock()
 
 	ctx := renderContext{
-		Seed:         req.Seed,
-		WidthTiles:   opts.ChunksX * _const.ChunkSize,
-		HeightTiles:  opts.ChunksY * _const.ChunkSize,
-		RiverOptions: opts.River,
+		WidthTiles:  opts.ChunksX * _const.ChunkSize,
+		HeightTiles: opts.ChunksY * _const.ChunkSize,
+		Options:     opts,
 	}
 	pngBytes, err := renderLayers(requested, ctx)
 	if err != nil {
@@ -251,26 +258,34 @@ func (s *previewServer) buildPreviewPNG(req renderRequest) ([]byte, error) {
 }
 
 func resolvePreviewOptions(req renderRequest, base MapgenOptions) (MapgenOptions, error) {
+	opts := base
+	world := previewWorldOptions{TerrainScale: base.TerrainScale, PerlinWaterEnabled: base.PerlinWaterEnabled}
+	sections := map[string]any{
+		previewParamRivers: &opts.River,
+		previewParamBiomes: &opts.Biome,
+		previewParamWorld:  &world,
+	}
 	for key := range req.Params {
-		if key != previewParamRivers {
+		if _, known := sections[key]; !known {
 			return MapgenOptions{}, fmt.Errorf("unknown parameter section %q", key)
 		}
 	}
-	river := base.River
-	raw, ok := req.Params[previewParamRivers]
-	if ok && len(raw) > 0 {
+	for _, key := range []string{previewParamRivers, previewParamBiomes, previewParamWorld} {
+		raw, ok := req.Params[key]
+		if !ok {
+			continue
+		}
+		if len(bytes.TrimSpace(raw)) == 0 || bytes.TrimSpace(raw)[0] != '{' {
+			return MapgenOptions{}, fmt.Errorf("%s params must be an object", key)
+		}
 		dec := yaml.NewDecoder(bytes.NewReader(raw))
 		dec.KnownFields(true)
-		if err := dec.Decode(&river); err != nil {
-			return MapgenOptions{}, fmt.Errorf("river params: %w", err)
+		if err := dec.Decode(sections[key]); err != nil {
+			return MapgenOptions{}, fmt.Errorf("%s params: %w", key, err)
 		}
 	}
-	// The elevation-routed layout needs a real elevation field, which the
-	// rivers-only preview does not build.
-	river.LayoutDraw = true
-
-	opts := base
-	opts.River = river
+	opts.TerrainScale = world.TerrainScale
+	opts.PerlinWaterEnabled = world.PerlinWaterEnabled
 	opts.Seed = req.Seed
 	var err error
 	opts.ChunksX, opts.ChunksY, err = resolveChunkDimensions(req, base)
@@ -291,13 +306,23 @@ func resolveRequestedLayers(requested []string) ([]layerRenderer, error) {
 	for _, layer := range previewLayers {
 		byName[layer.name] = layer
 	}
-	chosen := make([]layerRenderer, 0, len(requested))
+	selected := make(map[string]bool, len(requested))
+	available := make([]string, 0, len(previewLayers))
+	for _, layer := range previewLayers {
+		available = append(available, layer.name)
+	}
 	for _, name := range requested {
-		layer, ok := byName[name]
+		_, ok := byName[name]
 		if !ok {
-			return nil, fmt.Errorf("unknown layer %q (available: rivers)", name)
+			return nil, fmt.Errorf("unknown layer %q (available: %s)", name, strings.Join(available, ", "))
 		}
-		chosen = append(chosen, layer)
+		selected[name] = true
+	}
+	chosen := make([]layerRenderer, 0, len(selected))
+	for _, layer := range previewLayers {
+		if selected[layer.name] {
+			chosen = append(chosen, layer)
+		}
 	}
 	return chosen, nil
 }
@@ -320,6 +345,17 @@ func resolveChunkDimensions(req renderRequest, base MapgenOptions) (int, int, er
 // renderLayers paints the paper background and then each requested layer in
 // canonical registry order. Later layers must overdraw earlier ones.
 func renderLayers(layers []layerRenderer, ctx renderContext) ([]byte, error) {
+	for _, layer := range layers {
+		if layer.name == previewParamBiomes || !ctx.Options.River.LayoutDraw {
+			fields := NewNoiseFieldsWithTerrainScale(NewPerlinNoise(ctx.Options.Seed), _const.CoordPerTile, ctx.Options.TerrainScale)
+			terrain, err := BuildTerrainPrecompute(ctx.Options, _const.ChunkSize, fields)
+			if err != nil {
+				return nil, fmt.Errorf("build preview terrain: %w", err)
+			}
+			ctx.Terrain = terrain
+			break
+		}
+	}
 	img := image.NewRGBA(image.Rect(0, 0, ctx.WidthTiles, ctx.HeightTiles))
 	fillColor(img, previewBackgroundColor)
 	for _, layer := range layers {
@@ -334,28 +370,54 @@ func renderLayers(layers []layerRenderer, ctx renderContext) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// renderRiversLayer draws the river class mask. Zero elevation is valid input:
-// the draw layout ignores the elevation field entirely.
 func renderRiversLayer(img *image.RGBA, ctx renderContext) error {
-	elevation := make([]float32, ctx.WidthTiles*ctx.HeightTiles)
-	network, err := BuildRiverNetwork(elevation, ctx.WidthTiles, ctx.HeightTiles, ctx.Seed, ctx.RiverOptions)
-	if err != nil {
-		return fmt.Errorf("build river network: %w", err)
+	if !ctx.Options.River.Enabled {
+		return nil
+	}
+	var classes []RiverClass
+	var fairways *riverFairways
+	if ctx.Terrain != nil {
+		classes, fairways = ctx.Terrain.RiverClass, ctx.Terrain.RiverFairways
+	} else {
+		elevation := make([]float32, ctx.WidthTiles*ctx.HeightTiles)
+		network, err := BuildRiverNetwork(elevation, ctx.WidthTiles, ctx.HeightTiles, ctx.Options.Seed, ctx.Options.River)
+		if err != nil {
+			return fmt.Errorf("build river network: %w", err)
+		}
+		classes, fairways = network.Class, network.Fairways
 	}
 
+	fields := NewNoiseFieldsWithTerrainScale(NewPerlinNoise(ctx.Options.Seed), _const.CoordPerTile, ctx.Options.TerrainScale)
 	stride := img.Stride
 	pix := img.Pix
-	for idx, class := range network.Class {
+	for index, class := range classes {
+		protected := fairways != nil && fairways.Protected[index]
+		if class == riverNone && !protected {
+			continue
+		}
+		var tile byte
+		if ctx.Terrain != nil {
+			tile = ctx.Terrain.Tiles[index]
+		} else {
+			elevation := 1.0
+			if ctx.Options.PerlinWaterEnabled {
+				elevation = float64(float32(fields.Elevation(index%ctx.WidthTiles, index/ctx.WidthTiles)))
+			}
+			tile = resolveTileType(elevation, tileGrass, class, ctx.Options.PerlinWaterEnabled, true)
+			if protected {
+				tile = tileWaterDeep
+			}
+		}
 		var paint *color.RGBA
-		switch class {
-		case riverDeep:
+		switch tile {
+		case tileWaterDeep:
 			paint = &previewDeepColor
-		case riverShallow:
+		case tileWater:
 			paint = &previewShallowColor
 		default:
 			continue
 		}
-		offset := (idx/ctx.WidthTiles)*stride + (idx%ctx.WidthTiles)*4
+		offset := (index/ctx.WidthTiles)*stride + (index%ctx.WidthTiles)*4
 		pix[offset] = paint.R
 		pix[offset+1] = paint.G
 		pix[offset+2] = paint.B
@@ -495,6 +557,11 @@ func riversLayerSchema(base MapgenOptions) previewLayerSchema {
 }
 
 var previewLayers = []layerRenderer{
+	{
+		name:   "biomes",
+		schema: biomesLayerSchema,
+		render: renderBiomesLayer,
+	},
 	{
 		name:   "rivers",
 		schema: riversLayerSchema,

@@ -68,7 +68,11 @@ func TestPreviewPresetLoadAndRenderIsolation(test *testing.T) {
 	if err != nil {
 		test.Fatal(err)
 	}
-	expected, err := renderLayers(previewLayers, renderContext{Seed: 731, WidthTiles: 384, HeightTiles: 512, RiverOptions: opts.River})
+	layers, err := resolveRequestedLayers(request.Layers)
+	if err != nil {
+		test.Fatal(err)
+	}
+	expected, err := renderLayers(layers, renderContext{WidthTiles: 384, HeightTiles: 512, Options: opts})
 	if err != nil || !bytes.Equal(actual, expected) {
 		test.Fatalf("render ignored selected preset: %v", err)
 	}

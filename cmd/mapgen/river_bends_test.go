@@ -417,6 +417,7 @@ func TestRiverBendsElevationIndependent(test *testing.T) {
 
 func TestRiverBendsPreviewAndPresets(test *testing.T) {
 	server := newTestPreviewServer(test)
+	server.base.PerlinWaterEnabled = false
 	server.base.River = bendTestOptions()
 	server.base.River.LakeCount, server.base.River.MajorRiverCount = 15, 10
 	request := renderRequest{Seed: 71, ChunksX: 3, ChunksY: 3, Layers: []string{"rivers"}}
