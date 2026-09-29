@@ -19,6 +19,8 @@ world:
   chunks_y: 8
   seed: 1234
   threads: 3
+  terrain_scale: 0.003
+  perlin_water_enabled: false
 river:
   enabled: true
   layout_draw: true
@@ -108,6 +110,12 @@ png:
 	if opts.ChunksX != 9 || opts.ChunksY != 8 {
 		t.Fatalf("world section not applied: got chunks=(%d,%d)", opts.ChunksX, opts.ChunksY)
 	}
+	if opts.TerrainScale != 0.003 {
+		t.Fatalf("terrain scale not applied: got %v", opts.TerrainScale)
+	}
+	if opts.PerlinWaterEnabled {
+		t.Fatal("Perlin water flag not applied")
+	}
 	if opts.Biome.TemperatureScale != 1.1 {
 		t.Fatalf("biome temperature scale not applied")
 	}
@@ -116,6 +124,39 @@ png:
 	}
 	if resolvedPath == "" {
 		t.Fatalf("resolved path must be set")
+	}
+}
+
+func TestLoadMapgenOptionsTerrainScaleDefaultsWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "legacy.yaml")
+	content := "version: 1\nworld:\n  chunks_x: 9\n  chunks_y: 8\n  seed: 1234\n  threads: 3\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts, _, err := LoadMapgenOptionsFromYAML(path, DefaultMapgenOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.TerrainScale != defaultTerrainScale {
+		t.Fatalf("omitted terrain scale: got %v want %v", opts.TerrainScale, defaultTerrainScale)
+	}
+	if !opts.PerlinWaterEnabled {
+		t.Fatal("omitted Perlin water flag must preserve the enabled default")
+	}
+}
+
+func TestHnHPresetDefinesWorldNoiseSettings(t *testing.T) {
+	opts, _, err := LoadMapgenOptionsFromYAML("../../etc/mapgen/presets/hnh.yaml", DefaultMapgenOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.TerrainScale != 0.002 {
+		t.Fatalf("H&H terrain scale: got %v", opts.TerrainScale)
+	}
+	if opts.PerlinWaterEnabled {
+		t.Fatal("H&H preset must disable Perlin water")
 	}
 }
 

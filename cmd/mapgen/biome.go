@@ -49,9 +49,9 @@ func smoothHashNoise2D(seed int64, x, y, scale float64, salt uint64) float64 {
 	return lerp(uy, row0, row1)
 }
 
-func classifyBiomeGround(elevation float64, signals BiomeSignals, opts BiomeOptions, seed int64, column, row int) byte {
+func classifyBiomeGround(elevation float64, signals BiomeSignals, opts BiomeOptions, perlinWaterEnabled bool, seed int64, column, row int) byte {
 	if !opts.Enabled {
-		return classifyBaseTile(elevation, signals.Moisture, signals.Temperature)
+		return classifyBaseTile(elevation, signals.Moisture, signals.Temperature, perlinWaterEnabled)
 	}
 	if signals.Moisture < 0.22 && signals.Temperature > 0.62 && signals.Continentalness > 0.45 {
 		return tileSand

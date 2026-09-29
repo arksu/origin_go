@@ -89,7 +89,7 @@ func main() {
 		seed:         opts.Seed,
 		objectDefs:   objRegistry,
 		options:      opts,
-		noiseFields:  NewNoiseFields(perlin, _const.CoordPerTile),
+		noiseFields:  NewNoiseFieldsWithTerrainScale(perlin, _const.CoordPerTile, opts.TerrainScale),
 	}
 
 	logger.Info("starting map generation",
@@ -99,6 +99,8 @@ func main() {
 		zap.Int64("seed", opts.Seed),
 		zap.Int("region", cfg.Game.Region),
 		zap.Int("threads", opts.Threads),
+		zap.Float64("terrain_scale", opts.TerrainScale),
+		zap.Bool("perlin_water_enabled", opts.PerlinWaterEnabled),
 		zap.Bool("river_enabled", opts.River.Enabled),
 		zap.Bool("river_layout_draw", opts.River.LayoutDraw),
 		zap.Int("river_major_count", opts.River.MajorRiverCount),
@@ -173,6 +175,8 @@ func runOverviewOnly(logger *zap.Logger, opts MapgenOptions) {
 		zap.Int("chunks_y", opts.ChunksY),
 		zap.Int64("seed", opts.Seed),
 		zap.Int("threads", opts.Threads),
+		zap.Float64("terrain_scale", opts.TerrainScale),
+		zap.Bool("perlin_water_enabled", opts.PerlinWaterEnabled),
 		zap.Bool("river_enabled", opts.River.Enabled),
 		zap.Bool("biome_enabled", opts.Biome.Enabled),
 		zap.Bool("biome_blob_enabled", opts.Biome.BlobEnabled),
@@ -184,7 +188,7 @@ func runOverviewOnly(logger *zap.Logger, opts MapgenOptions) {
 	)
 
 	perlin := NewPerlinNoise(opts.Seed)
-	noiseFields := NewNoiseFields(perlin, _const.CoordPerTile)
+	noiseFields := NewNoiseFieldsWithTerrainScale(perlin, _const.CoordPerTile, opts.TerrainScale)
 	terrain, err := BuildTerrainPrecompute(opts, _const.ChunkSize, noiseFields)
 	if err != nil {
 		logger.Fatal("overview-only precompute failed", zap.Error(err))

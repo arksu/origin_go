@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"math/rand"
 	"testing"
 )
@@ -39,6 +40,18 @@ func TestMapgenOptionsValidateRejectsInvalid(t *testing.T) {
 			name: "threads must be positive",
 			mut: func(opts *MapgenOptions) {
 				opts.Threads = 0
+			},
+		},
+		{
+			name: "terrain scale must be positive",
+			mut: func(opts *MapgenOptions) {
+				opts.TerrainScale = 0
+			},
+		},
+		{
+			name: "terrain scale must be finite",
+			mut: func(opts *MapgenOptions) {
+				opts.TerrainScale = math.NaN()
 			},
 		},
 		{

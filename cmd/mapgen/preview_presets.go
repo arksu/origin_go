@@ -182,7 +182,7 @@ func encodePreviewPreset(content []byte, opts MapgenOptions) ([]byte, error) {
 	updates := struct {
 		World worldConfig  `yaml:"world"`
 		River RiverOptions `yaml:"river"`
-	}{worldConfig{ChunksX: opts.ChunksX, ChunksY: opts.ChunksY, Seed: opts.Seed, Threads: opts.Threads}, opts.River}
+	}{worldConfig{ChunksX: opts.ChunksX, ChunksY: opts.ChunksY, Seed: opts.Seed, Threads: opts.Threads, TerrainScale: opts.TerrainScale, PerlinWaterEnabled: opts.PerlinWaterEnabled}, opts.River}
 	var replacement yaml.Node
 	if err := replacement.Encode(updates); err != nil {
 		return nil, err

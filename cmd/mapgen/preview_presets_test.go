@@ -115,7 +115,7 @@ func TestPreviewPresetSaveRoundTrip(test *testing.T) {
 	if loaded.Seed != 8123 || loaded.ChunksX != 3 || loaded.ChunksY != 4 || loaded.River.ShapeAmplitudeScale != 1.8 || loaded.River.LakeBorderMix != 0 || !loaded.River.LayoutDraw {
 		test.Fatalf("saved values differ: %+v", loaded)
 	}
-	if loaded.Threads != server.base.Threads || loaded.River.SourceChance != server.base.River.SourceChance || loaded.Biome != server.base.Biome || loaded.Ecology != server.base.Ecology || loaded.PNG != server.base.PNG {
+	if loaded.Threads != server.base.Threads || loaded.TerrainScale != server.base.TerrainScale || loaded.PerlinWaterEnabled != server.base.PerlinWaterEnabled || loaded.River.SourceChance != server.base.River.SourceChance || loaded.Biome != server.base.Biome || loaded.Ecology != server.base.Ecology || loaded.PNG != server.base.PNG {
 		test.Fatal("save changed settings outside the preview")
 	}
 	if !bytes.Contains(saved, []byte("# keep this comment")) || !bytes.Contains(saved, []byte("# shape comment")) {

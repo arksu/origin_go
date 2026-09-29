@@ -5,14 +5,14 @@ import (
 	"math/rand"
 )
 
-func buildBiomeStructuralMask(ground []byte, elevation []float32, rivers []RiverClass, riverEnabled bool) []bool {
+func buildBiomeStructuralMask(ground []byte, elevation []float32, rivers []RiverClass, perlinWaterEnabled, riverEnabled bool) []bool {
 	locked := make([]bool, len(ground))
 	for i, tile := range ground {
 		river := riverNone
 		if riverEnabled && len(rivers) == len(ground) {
 			river = rivers[i]
 		}
-		resolved := resolveTileType(float64(elevation[i]), tile, river, riverEnabled)
+		resolved := resolveTileType(float64(elevation[i]), tile, river, perlinWaterEnabled, riverEnabled)
 		locked[i] = resolved == tileWater || resolved == tileWaterDeep || tile == tileMountain || tile == tileStone || tile == tileSand
 	}
 	return locked

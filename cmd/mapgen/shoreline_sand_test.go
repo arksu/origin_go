@@ -36,7 +36,7 @@ func TestApplyShorelineSandRemovesInlandSandRing(t *testing.T) {
 		}
 	}
 
-	applyShorelineSand(tiles, baseTiles, riverClass, elevation, width, height, 1234)
+	applyShorelineSand(tiles, baseTiles, riverClass, elevation, width, height, true, 1234)
 
 	for dy := -1; dy <= 1; dy++ {
 		for dx := -1; dx <= 1; dx++ {
@@ -76,7 +76,7 @@ func TestApplyShorelineSandAddsOccasionalRiverShoreSand(t *testing.T) {
 		riverClass[idx] = riverShallow
 	}
 
-	applyShorelineSand(tiles, baseTiles, riverClass, elevation, width, height, 99)
+	applyShorelineSand(tiles, baseTiles, riverClass, elevation, width, height, true, 99)
 
 	sandCount := 0
 	for _, tile := range tiles {

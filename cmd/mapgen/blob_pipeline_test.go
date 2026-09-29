@@ -88,13 +88,13 @@ func TestBlobPipelineDisabledModesAndProtectedTerrain(t *testing.T) {
 			signals := fields.BiomeSignals(column, row, opts.Biome)
 			elevation := float64(terrain.Elevation[i])
 			if master {
-				ground[i] = classifyBiomeGround(elevation, signals, opts.Biome, opts.Seed, column, row)
+				ground[i] = classifyBiomeGround(elevation, signals, opts.Biome, true, opts.Seed, column, row)
 			} else {
-				ground[i] = classifyBaseTile(elevation, signals.Moisture, signals.Temperature)
+				ground[i] = classifyBaseTile(elevation, signals.Moisture, signals.Temperature, true)
 			}
-			expected[i] = resolveTileType(elevation, ground[i], terrain.RiverClass[i], true)
+			expected[i] = resolveTileType(elevation, ground[i], terrain.RiverClass[i], true, true)
 		}
-		applyShorelineSand(expected, ground, terrain.RiverClass, terrain.Elevation, terrain.WidthTiles, terrain.HeightTiles, opts.Seed)
+		applyShorelineSand(expected, ground, terrain.RiverClass, terrain.Elevation, terrain.WidthTiles, terrain.HeightTiles, true, opts.Seed)
 		if !bytes.Equal(expected, terrain.Tiles) {
 			t.Fatal("disabled mode changed ground/hydrology")
 		}
@@ -102,13 +102,13 @@ func TestBlobPipelineDisabledModesAndProtectedTerrain(t *testing.T) {
 			opts.Biome.BlobEnabled = true
 			opts.Biome.BlobSeedSpacing = 50
 			active := blobBuildTestTerrain(t, opts)
-			locked := buildBiomeStructuralMask(ground, terrain.Elevation, terrain.RiverClass, true)
+			locked := buildBiomeStructuralMask(ground, terrain.Elevation, terrain.RiverClass, true, true)
 			mountainCount, waterCount := 0, 0
 			for i, isLocked := range locked {
 				if !isLocked {
 					continue
 				}
-				resolved := resolveTileType(float64(terrain.Elevation[i]), ground[i], terrain.RiverClass[i], true)
+				resolved := resolveTileType(float64(terrain.Elevation[i]), ground[i], terrain.RiverClass[i], true, true)
 				if resolved == tileWater || resolved == tileWaterDeep {
 					waterCount++
 					if active.Tiles[i] != resolved {

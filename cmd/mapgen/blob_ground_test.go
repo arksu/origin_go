@@ -12,23 +12,23 @@ import (
 func TestBiomeGroundRulesAndFallback(t *testing.T) {
 	opts := DefaultMapgenOptions().Biome
 	signals := BiomeSignals{Moisture: 0.5, Temperature: 0.5, Continentalness: 0.5, Ruggedness: opts.MountainRuggedThreshold - 0.0001, Wetness: 1}
-	if classifyBiomeGround(0.7, signals, opts, 1, 0, 0) != tileGrass {
+	if classifyBiomeGround(0.7, signals, opts, true, 1, 0, 0) != tileGrass {
 		t.Fatal("nonstructural land must be grass")
 	}
 	signals.Moisture = 0.21
 	signals.Temperature = 0.63
-	if classifyBiomeGround(0.7, signals, opts, 1, 0, 0) != tileSand {
+	if classifyBiomeGround(0.7, signals, opts, true, 1, 0, 0) != tileSand {
 		t.Fatal("climate sand missing")
 	}
 	signals.Moisture = 0.22
-	if classifyBiomeGround(0.7, signals, opts, 1, 0, 0) != tileGrass {
+	if classifyBiomeGround(0.7, signals, opts, true, 1, 0, 0) != tileGrass {
 		t.Fatal("sand equality")
 	}
 	signals.Ruggedness = opts.MountainRuggedThreshold
 	counts := map[byte]int{}
 	for row := 0; row < 256; row++ {
 		for column := 0; column < 256; column++ {
-			counts[classifyBiomeGround(0.7, signals, opts, 1, column, row)]++
+			counts[classifyBiomeGround(0.7, signals, opts, true, 1, column, row)]++
 		}
 	}
 	if counts[tileMountain] == 0 || counts[tileStone] == 0 || len(counts) != 2 {
@@ -36,7 +36,7 @@ func TestBiomeGroundRulesAndFallback(t *testing.T) {
 	}
 	opts.Enabled = false
 	for _, elevation := range []float64{0.2, 0.3, 0.4, 0.7} {
-		if got := classifyBiomeGround(elevation, signals, opts, 1, 0, 0); got != classifyBaseTile(elevation, signals.Moisture, signals.Temperature) {
+		if got := classifyBiomeGround(elevation, signals, opts, true, 1, 0, 0); got != classifyBaseTile(elevation, signals.Moisture, signals.Temperature, true) {
 			t.Fatal("fallback changed")
 		}
 	}
@@ -51,7 +51,7 @@ func TestBiomeGroundMountainMassifsAndStoneCoherence(t *testing.T) {
 	for row := 0; row < height; row++ {
 		for column := 0; column < width; column++ {
 			signals := fields.BiomeSignals(column, row, opts)
-			tile := classifyBiomeGround(0.7, signals, opts, 12345, column, row)
+			tile := classifyBiomeGround(0.7, signals, opts, true, 12345, column, row)
 			if tile == tileMountain || tile == tileStone {
 				regions[row*width+column] = 1
 			}
@@ -73,7 +73,7 @@ func TestBiomeGroundMountainMassifsAndStoneCoherence(t *testing.T) {
 	for row := 0; row < 256; row++ {
 		previous := byte(0)
 		for column := 0; column < 256; column++ {
-			tile := classifyBiomeGround(0.7, signals, opts, 12345, column, row)
+			tile := classifyBiomeGround(0.7, signals, opts, true, 12345, column, row)
 			if tile == tileStone {
 				stoneTiles++
 			}

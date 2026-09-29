@@ -12,6 +12,7 @@ func applyShorelineSand(
 	elevation []float32,
 	width int,
 	height int,
+	perlinWaterEnabled bool,
 	seed int64,
 ) {
 	if len(tiles) != width*height || len(baseTiles) != len(tiles) || len(elevation) != len(tiles) {
@@ -25,7 +26,7 @@ func applyShorelineSand(
 			if tiles[idx] != tileSand {
 				continue
 			}
-			hasOcean, hasInland, _ := classifyAdjacentWater(tiles, riverClass, elevation, width, height, x, y)
+			hasOcean, hasInland, _ := classifyAdjacentWater(tiles, riverClass, elevation, width, height, x, y, perlinWaterEnabled)
 			if hasInland && !hasOcean {
 				replacement := baseTiles[idx]
 				if replacement == tileSand || isWaterTileID(replacement) {
@@ -50,7 +51,7 @@ func applyShorelineSand(
 				continue
 			}
 
-			hasOcean, hasInland, hasDeep := classifyAdjacentWater(tiles, riverClass, elevation, width, height, x, y)
+			hasOcean, hasInland, hasDeep := classifyAdjacentWater(tiles, riverClass, elevation, width, height, x, y, perlinWaterEnabled)
 			if !hasOcean && !hasInland {
 				continue
 			}
@@ -112,6 +113,7 @@ func classifyAdjacentWater(
 	height int,
 	x int,
 	y int,
+	perlinWaterEnabled bool,
 ) (hasOcean bool, hasInland bool, hasDeep bool) {
 	dirs := [8][2]int{
 		{-1, -1}, {0, -1}, {1, -1},
@@ -132,7 +134,7 @@ func classifyAdjacentWater(
 		}
 
 		isRiverWater := len(riverClass) == len(tiles) && riverClass[nIdx] != riverNone
-		isOceanWater := !isRiverWater && float64(elevation[nIdx]) < shallowWaterThreshold
+		isOceanWater := perlinWaterEnabled && !isRiverWater && float64(elevation[nIdx]) < shallowWaterThreshold
 		if isOceanWater {
 			hasOcean = true
 		} else {
