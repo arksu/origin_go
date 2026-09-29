@@ -201,7 +201,8 @@ RNG пятна детерминирован: `blobRandom(seed, pass, column, row
 | Хочу изменить | Где |
 |---|---|
 | Доля/пороги воды | константы `deepWaterThreshold`/`shallowWaterThreshold` в noise_fields.go (пока в коде; вынос в YAML — задача change mapgen-living-water) |
-| Масштаб рельефа («размер материков») | `terrainScale` в noise_fields.go (0.002) — единственная частота высот |
+| Масштаб рельефа и озёр Перлина | `world.terrain_scale` (0.002); больше — мельче и чаще детали/озёра, меньше — крупнее и плавнее; это также базовая частота климатических полей |
+| Отключить воду из шума высоты | `world.perlin_water_enabled: false`; рисуемые реки и озёра речной сети остаются |
 | Климатический песок / горы | пороги в biome.go `classifyBiomeGround` + `biomes.hnh_mountain_rugged_threshold`, `mountain_massif_scale`, `mountain_stone_scale` |
 | Частоты климатических полей | `biomes.temperature_scale` … `weirdness_scale`, `domain_warp_strength` (в мировых координатах, 12 ед./тайл) |
 | Состав/площадь биомов | `blob_*_size/_weight/_density`, `blob_skip_weight` в пресете; логика выбора — blob_biomes.go `selectMainBlob`/`selectSecondaryBlob` |

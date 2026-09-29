@@ -16,11 +16,11 @@ func TestBiomeStructuralMaskProtectsUnresolvedWaterAndGround(t *testing.T) {
 	ground := []byte{tileGrass, tileForestLeaf, tileGrass, tileGrass, tileMountain, tileStone, tileSand, tileGrass}
 	elevation := []float32{0.2, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7}
 	rivers := []RiverClass{riverNone, riverDeep, riverShallow, riverDeep, riverNone, riverNone, riverNone, riverNone}
-	locked := buildBiomeStructuralMask(ground, elevation, rivers, true)
+	locked := buildBiomeStructuralMask(ground, elevation, rivers, true, true)
 	if !reflect.DeepEqual(locked, []bool{true, true, true, true, true, true, true, false}) {
 		t.Fatal(locked)
 	}
-	without := buildBiomeStructuralMask(ground, elevation, rivers, false)
+	without := buildBiomeStructuralMask(ground, elevation, rivers, true, false)
 	if without[2] || without[3] || !without[0] {
 		t.Fatal(without)
 	}
@@ -385,7 +385,7 @@ func TestBlobPipelineSmallDetailSurvivesCleanup(t *testing.T) {
 		t.Fatal("partial candidate painting")
 	}
 	// Final hydrology remains authoritative even for an intentional single tile.
-	if resolveTileType(0.7, tileForestLeaf, riverDeep, true) != tileWaterDeep {
+	if resolveTileType(0.7, tileForestLeaf, riverDeep, true, true) != tileWaterDeep {
 		t.Fatal("hydrology lost precedence")
 	}
 }

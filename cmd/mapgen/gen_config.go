@@ -13,10 +13,12 @@ import (
 )
 
 type worldConfig struct {
-	ChunksX int   `yaml:"chunks_x"`
-	ChunksY int   `yaml:"chunks_y"`
-	Seed    int64 `yaml:"seed"`
-	Threads int   `yaml:"threads"`
+	ChunksX            int     `yaml:"chunks_x"`
+	ChunksY            int     `yaml:"chunks_y"`
+	Seed               int64   `yaml:"seed"`
+	Threads            int     `yaml:"threads"`
+	TerrainScale       float64 `yaml:"terrain_scale"`
+	PerlinWaterEnabled bool    `yaml:"perlin_water_enabled"`
 }
 
 type mapgenConfigFile struct {
@@ -50,7 +52,8 @@ func decodeMapgenOptions(content []byte, path string, defaults MapgenOptions) (M
 	decoder.KnownFields(true)
 
 	biomeDefaults := defaults.Biome
-	cfg := mapgenConfigFile{Biomes: &biomeDefaults}
+	worldDefaults := worldConfig{ChunksX: defaults.ChunksX, ChunksY: defaults.ChunksY, Seed: defaults.Seed, Threads: defaults.Threads, TerrainScale: defaults.TerrainScale, PerlinWaterEnabled: defaults.PerlinWaterEnabled}
+	cfg := mapgenConfigFile{World: &worldDefaults, Biomes: &biomeDefaults}
 	if err := decoder.Decode(&cfg); err != nil {
 		return MapgenOptions{}, fmt.Errorf("decode gen config %q: %w", path, err)
 	}
@@ -68,6 +71,8 @@ func decodeMapgenOptions(content []byte, path string, defaults MapgenOptions) (M
 		opts.ChunksY = cfg.World.ChunksY
 		opts.Seed = cfg.World.Seed
 		opts.Threads = cfg.World.Threads
+		opts.TerrainScale = cfg.World.TerrainScale
+		opts.PerlinWaterEnabled = cfg.World.PerlinWaterEnabled
 	}
 	if cfg.River != nil {
 		opts.River = *cfg.River

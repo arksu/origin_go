@@ -73,14 +73,14 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 			elevationValue := float64(elevation[idx])
 			signals := fields.BiomeSignals(x, y, opts.Biome)
 
-			baseTiles[idx] = classifyBiomeGround(elevationValue, signals, opts.Biome, opts.Seed, x, y)
+			baseTiles[idx] = classifyBiomeGround(elevationValue, signals, opts.Biome, opts.PerlinWaterEnabled, opts.Seed, x, y)
 		}
 	})
 
 	timings.Ground = time.Since(started)
 	mainCount, secondaryCount, islets, isletTiles := 0, 0, 0, 0
 	if opts.Biome.Enabled && opts.Biome.BlobEnabled {
-		locked := buildBiomeStructuralMask(baseTiles, elevation, riverClass, opts.River.Enabled)
+		locked := buildBiomeStructuralMask(baseTiles, elevation, riverClass, opts.PerlinWaterEnabled, opts.River.Enabled)
 		painter := blobPainter{tiles: baseTiles, locked: locked, world: image.Rect(0, 0, widthTiles, heightTiles), seed: opts.Seed, opts: opts.Biome, signals: func(column, row int) BiomeSignals { return fields.BiomeSignals(column, row, opts.Biome) }}
 		started = time.Now()
 		patches := painter.mainPatches()
@@ -108,13 +108,13 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 			if opts.River.Enabled && len(riverClass) == tileCount {
 				rc = riverClass[idx]
 			}
-			tiles[idx] = resolveTileType(elevationValue, baseTiles[idx], rc, opts.River.Enabled)
+			tiles[idx] = resolveTileType(elevationValue, baseTiles[idx], rc, opts.PerlinWaterEnabled, opts.River.Enabled)
 			if fairways != nil && fairways.Protected[idx] {
 				tiles[idx] = tileWaterDeep
 			}
 		}
 	})
-	applyShorelineSand(tiles, baseTiles, riverClass, elevation, widthTiles, heightTiles, opts.Seed)
+	applyShorelineSand(tiles, baseTiles, riverClass, elevation, widthTiles, heightTiles, opts.PerlinWaterEnabled, opts.Seed)
 	if err := fairways.validate(widthTiles, heightTiles, opts.River.FairwayWidthTiles, opts.Seed, func(index int) bool {
 		return tiles[index] == tileWaterDeep
 	}); err != nil {
@@ -126,7 +126,7 @@ func BuildTerrainPrecompute(opts MapgenOptions, chunkSize int, fields *NoiseFiel
 	riverDeepTiles := 0
 	if opts.River.Enabled && len(riverClass) == tileCount {
 		for idx := range riverClass {
-			if float64(elevation[idx]) < shallowWaterThreshold {
+			if opts.PerlinWaterEnabled && float64(elevation[idx]) < shallowWaterThreshold {
 				continue
 			}
 			switch riverClass[idx] {
@@ -182,12 +182,14 @@ func parallelForRows(height int, threads int, fn func(y int)) {
 	}
 }
 
-func resolveTileType(elevation float64, baseTile byte, rc RiverClass, riverEnabled bool) byte {
-	if elevation < deepWaterThreshold {
-		return tileWaterDeep
-	}
-	if elevation < shallowWaterThreshold {
-		return tileWater
+func resolveTileType(elevation float64, baseTile byte, rc RiverClass, perlinWaterEnabled, riverEnabled bool) byte {
+	if perlinWaterEnabled {
+		if elevation < deepWaterThreshold {
+			return tileWaterDeep
+		}
+		if elevation < shallowWaterThreshold {
+			return tileWater
+		}
 	}
 
 	if riverEnabled {

@@ -30,7 +30,7 @@ func newTestPreviewServer(t *testing.T) *previewServer {
 	opts.River.LakeSizeLargeMin = 48
 	opts.River.LakeSizeLargeMax = 80
 	content, err := yaml.Marshal(mapgenConfigFile{Version: 1,
-		World: &worldConfig{ChunksX: opts.ChunksX, ChunksY: opts.ChunksY, Seed: opts.Seed, Threads: opts.Threads},
+		World: &worldConfig{ChunksX: opts.ChunksX, ChunksY: opts.ChunksY, Seed: opts.Seed, Threads: opts.Threads, TerrainScale: opts.TerrainScale, PerlinWaterEnabled: opts.PerlinWaterEnabled},
 		River: &opts.River, Biomes: &opts.Biome, Ecology: &opts.Ecology, PNG: &opts.PNG})
 	if err != nil {
 		t.Fatal(err)

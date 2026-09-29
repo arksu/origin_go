@@ -156,27 +156,31 @@ type PNGOptions struct {
 }
 
 type MapgenOptions struct {
-	ConfigPath   string
-	ChunksX      int
-	ChunksY      int
-	Seed         int64
-	Threads      int
-	RiverPreview bool
-	PreviewPort  int
-	River        RiverOptions
-	Biome        BiomeOptions
-	Ecology      EcologyOptions
-	PNG          PNGOptions
+	ConfigPath         string
+	ChunksX            int
+	ChunksY            int
+	Seed               int64
+	Threads            int
+	TerrainScale       float64
+	PerlinWaterEnabled bool
+	RiverPreview       bool
+	PreviewPort        int
+	River              RiverOptions
+	Biome              BiomeOptions
+	Ecology            EcologyOptions
+	PNG                PNGOptions
 }
 
 func DefaultMapgenOptions() MapgenOptions {
 	return MapgenOptions{
-		ConfigPath:  defaultGenConfigPath,
-		ChunksX:     50,
-		ChunksY:     50,
-		Seed:        0,
-		Threads:     4,
-		PreviewPort: 8099,
+		ConfigPath:         defaultGenConfigPath,
+		ChunksX:            50,
+		ChunksY:            50,
+		Seed:               0,
+		Threads:            4,
+		TerrainScale:       defaultTerrainScale,
+		PerlinWaterEnabled: true,
+		PreviewPort:        8099,
 		River: RiverOptions{
 			Enabled:                true,
 			LayoutDraw:             true,
@@ -423,6 +427,9 @@ func (o MapgenOptions) Validate() error {
 	}
 	if o.Threads <= 0 {
 		return errors.New("threads must be > 0")
+	}
+	if math.IsNaN(o.TerrainScale) || math.IsInf(o.TerrainScale, 0) || o.TerrainScale <= 0 {
+		return errors.New("world.terrain_scale must be finite and > 0")
 	}
 	if o.PreviewPort < 1 || o.PreviewPort > 65535 {
 		return errors.New("preview-port must be within [1,65535]")

@@ -51,7 +51,7 @@ func TestRiverBendsReview(test *testing.T) {
 				opts.River.ShapeAmplitudeScale = 0.5
 			}
 			started := time.Now()
-			terrain, err := BuildTerrainPrecompute(opts, 128, NewNoiseFields(NewPerlinNoise(seed), 12))
+			terrain, err := BuildTerrainPrecompute(opts, 128, NewNoiseFieldsWithTerrainScale(NewPerlinNoise(seed), 12, opts.TerrainScale))
 			if err != nil {
 				test.Fatalf("seed %d variant %d: %v", seed, variant, err)
 			}

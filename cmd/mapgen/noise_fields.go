@@ -3,7 +3,7 @@ package main
 import "math"
 
 const (
-	terrainScale          = 0.002
+	defaultTerrainScale   = 0.002
 	deepWaterThreshold    = 0.25
 	shallowWaterThreshold = 0.35
 	sandThreshold         = 0.42
@@ -12,19 +12,25 @@ const (
 type NoiseFields struct {
 	perlin       *PerlinNoise
 	coordPerTile int
+	terrainScale float64
 }
 
 func NewNoiseFields(perlin *PerlinNoise, coordPerTile int) *NoiseFields {
+	return NewNoiseFieldsWithTerrainScale(perlin, coordPerTile, defaultTerrainScale)
+}
+
+func NewNoiseFieldsWithTerrainScale(perlin *PerlinNoise, coordPerTile int, terrainScale float64) *NoiseFields {
 	return &NoiseFields{
 		perlin:       perlin,
 		coordPerTile: coordPerTile,
+		terrainScale: terrainScale,
 	}
 }
 
 func (f *NoiseFields) Elevation(tileX, tileY int) float64 {
 	worldX := float64(tileX * f.coordPerTile)
 	worldY := float64(tileY * f.coordPerTile)
-	elevation := f.perlin.Noise2D(worldX*terrainScale, worldY*terrainScale)
+	elevation := f.perlin.Noise2D(worldX*f.terrainScale, worldY*f.terrainScale)
 	return normalizeNoise(elevation)
 }
 
@@ -32,8 +38,8 @@ func (f *NoiseFields) MoistureTemperature(tileX, tileY int) (float64, float64) {
 	worldX := float64(tileX * f.coordPerTile)
 	worldY := float64(tileY * f.coordPerTile)
 
-	moisture := f.perlin.Noise2D(worldX*terrainScale*0.5+1000, worldY*terrainScale*0.5+1000)
-	temperature := f.perlin.Noise2D(worldX*terrainScale*0.3+2000, worldY*terrainScale*0.3+2000)
+	moisture := f.perlin.Noise2D(worldX*f.terrainScale*0.5+1000, worldY*f.terrainScale*0.5+1000)
+	temperature := f.perlin.Noise2D(worldX*f.terrainScale*0.3+2000, worldY*f.terrainScale*0.3+2000)
 
 	return normalizeNoise(moisture), normalizeNoise(temperature)
 }
@@ -42,7 +48,7 @@ func (f *NoiseFields) BiomeSignals(tileX, tileY int, opts BiomeOptions) BiomeSig
 	worldX := float64(tileX * f.coordPerTile)
 	worldY := float64(tileY * f.coordPerTile)
 
-	warpFreq := terrainScale * 0.08
+	warpFreq := f.terrainScale * 0.08
 	warpX := f.perlin.Noise2D(worldX*warpFreq+4300, worldY*warpFreq+4300)
 	warpY := f.perlin.Noise2D(worldX*warpFreq+5300, worldY*warpFreq+5300)
 
@@ -50,24 +56,24 @@ func (f *NoiseFields) BiomeSignals(tileX, tileY int, opts BiomeOptions) BiomeSig
 	sampleY := worldY + warpY*opts.DomainWarpStrength
 
 	temperature := normalizeNoise(f.perlin.Noise2D(
-		sampleX*terrainScale*0.3*opts.TemperatureScale+2000,
-		sampleY*terrainScale*0.3*opts.TemperatureScale+2000,
+		sampleX*f.terrainScale*0.3*opts.TemperatureScale+2000,
+		sampleY*f.terrainScale*0.3*opts.TemperatureScale+2000,
 	))
 	moisture := normalizeNoise(f.perlin.Noise2D(
-		sampleX*terrainScale*0.5*opts.MoistureScale+1000,
-		sampleY*terrainScale*0.5*opts.MoistureScale+1000,
+		sampleX*f.terrainScale*0.5*opts.MoistureScale+1000,
+		sampleY*f.terrainScale*0.5*opts.MoistureScale+1000,
 	))
 	continentalness := normalizeNoise(f.perlin.Noise2D(
-		sampleX*terrainScale*0.22*opts.ContinentalnessScale+3000,
-		sampleY*terrainScale*0.22*opts.ContinentalnessScale+3000,
+		sampleX*f.terrainScale*0.22*opts.ContinentalnessScale+3000,
+		sampleY*f.terrainScale*0.22*opts.ContinentalnessScale+3000,
 	))
 	erosion := normalizeNoise(f.perlin.Noise2D(
-		sampleX*terrainScale*0.6*opts.ErosionScale+4000,
-		sampleY*terrainScale*0.6*opts.ErosionScale+4000,
+		sampleX*f.terrainScale*0.6*opts.ErosionScale+4000,
+		sampleY*f.terrainScale*0.6*opts.ErosionScale+4000,
 	))
 	weirdness := normalizeNoise(f.perlin.Noise2D(
-		sampleX*terrainScale*1.1*opts.WeirdnessScale+5000,
-		sampleY*terrainScale*1.1*opts.WeirdnessScale+5000,
+		sampleX*f.terrainScale*1.1*opts.WeirdnessScale+5000,
+		sampleY*f.terrainScale*1.1*opts.WeirdnessScale+5000,
 	))
 
 	// A separate tile-space field gives mountains regional extent without enlarging other biomes.
@@ -90,12 +96,14 @@ func normalizeNoise(value float64) float64 {
 	return (value + 1) / 2
 }
 
-func classifyBaseTile(elevation, moisture, temperature float64) byte {
-	if elevation < deepWaterThreshold {
-		return tileWaterDeep
-	}
-	if elevation < shallowWaterThreshold {
-		return tileWater
+func classifyBaseTile(elevation, moisture, temperature float64, perlinWaterEnabled bool) byte {
+	if perlinWaterEnabled {
+		if elevation < deepWaterThreshold {
+			return tileWaterDeep
+		}
+		if elevation < shallowWaterThreshold {
+			return tileWater
+		}
 	}
 
 	// Sand is climate-driven instead of an automatic elevation ring around water.
