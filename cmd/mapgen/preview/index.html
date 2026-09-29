@@ -62,7 +62,7 @@
 
   .field { margin: 7px 0; }
   .field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .field-head label { color: var(--text-dim); }
+  .field-head label { color: var(--text-dim); min-width: 0; overflow-wrap: anywhere; }
   .field-head input[type=number] {
     width: 84px; background: var(--panel-bg); color: var(--text);
     border: 1px solid var(--panel-border); border-radius: 4px; padding: 2px 5px;
@@ -117,6 +117,7 @@
     <div class="control-block">
       <h2>Run</h2>
       <div class="row" id="layersRow"><label>Layers</label><span id="layersBox"></span></div>
+      <div class="hint">Галочки скрывают слои. Параметры enabled меняют генерацию. Скрытые русла остаются защищены от биомов и показаны цветом фона.</div>
       <div class="row"><label for="seed">Seed</label><input type="number" id="seed"><button id="randomSeed" type="button">Random</button></div>
       <div class="row"><label for="worldSize">World size</label><select id="worldSize"></select></div>
       <div class="row"><label for="auto">Auto-regenerate</label><input type="checkbox" id="auto" checked></div>
@@ -203,16 +204,20 @@ function buildControls() {
   els.seed.value = String(state.schema.seed);
 }
 
+function parameterPanels() {
+  return [...(state.schema.world ? [state.schema.world] : []), ...state.schema.layers];
+}
+
 function buildGroups() {
   els.groups.replaceChildren();
-  for (const layer of state.schema.layers) {
+  for (const layer of parameterPanels()) {
     const layerTitle = document.createElement("h2");
     layerTitle.textContent = layer.title + " parameters";
     els.groups.append(layerTitle);
     for (const group of layer.groups) {
       const details = document.createElement("details");
       details.className = "group";
-      if (group.title === "Channel shape") details.open = true;
+      if (group.title === "Channel shape" || group.title === "Включение" || layer.name === "world") details.open = true;
       const summary = document.createElement("summary");
       summary.textContent = group.title;
       const fields = document.createElement("div");
@@ -226,8 +231,12 @@ function buildGroups() {
 
 function buildField(layer, field) {
   const wrap = document.createElement("div");
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = field.description || "";
   if (field.type === "bool") {
-    wrap.className = "field-check";
+    const row = document.createElement("div");
+    row.className = "field-check";
     const input = document.createElement("input");
     input.type = "checkbox";
     input.id = fieldId(layer.name, field.key);
@@ -236,7 +245,8 @@ function buildField(layer, field) {
     const label = document.createElement("label");
     label.htmlFor = input.id;
     label.textContent = field.label;
-    wrap.append(input, label);
+    row.append(input, label);
+    wrap.append(row, hint);
     return wrap;
   }
 
@@ -258,16 +268,21 @@ function buildField(layer, field) {
 
   const range = document.createElement("input");
   range.type = "range";
-  range.min = number.min || "0";
-  range.max = number.max || "100";
   range.step = number.step;
-  range.value = number.value;
+  const syncRange = () => {
+    const value = Number(number.value);
+    if (number.value.trim() === "" || !Number.isFinite(value)) return;
+    range.min = String(Math.min(field.min ?? 0, value));
+    range.max = String(Math.max(field.max ?? field.range_max ?? 100, value));
+    range.value = number.value;
+  };
+  syncRange();
   range.addEventListener("input", () => {
     number.value = range.value;
     onChange();
   });
-  number.addEventListener("input", () => { range.value = number.value; });
-  wrap.append(head, range);
+  number.addEventListener("input", syncRange);
+  wrap.append(head, range, hint);
   return wrap;
 }
 
@@ -287,7 +302,7 @@ function selectedLayers() {
 
 function collectParams() {
   const params = {};
-  for (const layer of state.schema.layers) {
+  for (const layer of parameterPanels()) {
     const values = {};
     for (const group of layer.groups) {
       for (const field of group.fields) {

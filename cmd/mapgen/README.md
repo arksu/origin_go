@@ -39,7 +39,7 @@ Preset workflow:
 - The **Preset file** text input stays synchronized with `?preset=`. Press
   **Enter** or **Load** to read another file. Editing the path alone does not
   discard the current controls, so you can type a new filename for a variant.
-- **Save** writes current river parameters, seed, and dimensions to the entered
+- **Save** writes current river, biome, and world parameters, seed, and dimensions to the entered
   YAML file, creating or overwriting it. Comments and other preset sections are
   preserved; hidden river settings come from the loaded source preset.
 - Paths are relative to the directory containing the server's `-gen-config`.
@@ -57,16 +57,35 @@ Regression checks: `go test ./cmd/mapgen/...` and
 
 Страница для оперативного подбора параметров: слева панель параметров (строится
 из схемы слоёв), справа результат; колесо — зум к курсору, ЛКМ — пан,
-двойной клик — вписать в экран. Генерируются **только выбранные слои**:
+двойной клик — вписать в экран. Доступны слои **Biomes** и **Rivers**:
 `POST /api/render` принимает `{seed, chunks_x, chunks_y, layers, params}`;
-слой `rivers` рендерится одним вызовом `BuildRiverNetwork` по нулевой высоте
-(draw-layout высоту не читает) — без рельефа/биомов/гидрологии, доли секунды.
-Параметры декодируются строго (`KnownFields`) поверх дефолтов пресета и
-проходят `Validate()`.
+`params` содержит секции `river`, `biomes` и `world`. Общая панель `world`
+показывает `terrain_scale` и `perlin_water_enabled`; панель биомов — все 58
+параметров `BiomeOptions`, сгруппированных по назначению, с русскими пояснениями.
+Числовой ввод сохраняет точность и допустимые значения за пределами обычного
+диапазона ползунка. `erosion_scale` и `weirdness_scale` сохраняются, но сейчас
+не влияют на выбор биома.
 
-Добавление нового слоя (например, биомов): добавить запись в реестр
-`previewLayers` (preview_server.go) — `schema(base)` (описание групп полей)
-и `render(img, ctx)` (отрисовка в RGBA); UI и API менять не нужно.
+При выборе Biomes карта считается один раз через `BuildTerrainPrecompute`,
+с теми же правилами биомов, берегов и защиты фарватера, что и полная генерация.
+Затем рисуется земля и вода Перлина в основной палитре, поверх — реки с
+подсветкой глубины. Скрытие Rivers оставляет их места цветом фона: маска рек
+продолжает защищать русла от биомов, размещение пятен не меняется. Галочки слоёв
+управляют только видимостью; YAML-параметры `enabled` управляют генерацией.
+Настройки скрытых слоёв также сохраняются кнопкой Save.
+
+Для Rivers без Biomes сохраняется быстрый путь `BuildRiverNetwork` при
+`layout_draw: true`; высота сэмплируется только под руслами для правильной
+глубины воды Перлина. Режим `layout_draw: false` использует основной пайплайн
+и не переписывается при сохранении. Реки всегда отрисовываются после биомов,
+независимо от порядка имён в запросе. Рендеры выполняются последовательно;
+перед расчётом проверяется бюджет памяти, включая RGBA и PNG-буферы.
+Параметры декодируются строго (`KnownFields`) поверх значений пресета и
+проходят общий `Validate()`, включая зависимости min/max и суммы плотностей.
+
+Реестр `previewLayers` задаёт порядок и рендеры; `preview_biomes.go` описывает
+панели биомов и общих настроек, `preview_terrain.go` — отображение биомов и
+проверку памяти preview.
 
 ## Option B: bends within bends
 

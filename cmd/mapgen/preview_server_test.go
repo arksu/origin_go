@@ -166,33 +166,21 @@ func TestPreviewDefaultsHandler(t *testing.T) {
 		t.Fatalf("defaults: got %d", rec.Code)
 	}
 
-	var payload struct {
-		Seed   int64 `json:"seed"`
-		Layers []struct {
-			Name   string `json:"name"`
-			Groups []struct {
-				Fields []struct {
-					Key     string   `json:"key"`
-					Max     *float64 `json:"max"`
-					Default float64  `json:"default"`
-				} `json:"fields"`
-			} `json:"groups"`
-		} `json:"layers"`
-	}
+	var payload defaultsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode defaults: %v", err)
 	}
 	if payload.Seed != 42 {
 		t.Fatalf("seed default: got %d", payload.Seed)
 	}
-	if len(payload.Layers) != 1 || payload.Layers[0].Name != "rivers" {
-		t.Fatalf("expected exactly the rivers layer, got %+v", payload.Layers)
+	if len(payload.Layers) != 2 || payload.Layers[0].Name != "biomes" || payload.Layers[1].Name != "rivers" {
+		t.Fatalf("expected biomes then rivers, got %+v", payload.Layers)
 	}
 	found := false
 	majorCountMaximum := float64(0)
-	for _, group := range payload.Layers[0].Groups {
+	for _, group := range payload.Layers[1].Groups {
 		for _, field := range group.Fields {
-			if field.Key == "shape_waves_per_link" && field.Default > 0 {
+			if field.Key == "shape_waves_per_link" && field.Default.(float64) > 0 {
 				found = true
 			}
 			if field.Key == "major_count" && field.Max != nil {

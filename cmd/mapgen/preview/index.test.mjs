@@ -10,7 +10,17 @@ function schema(preset, seed = 731, amplitude = 1.7) {
   return {
     preset, preset_directory: "/presets", seed, chunks_x: 3, chunks_y: 4,
     sizes: [{ chunks: 10, tiles: 1280 }],
-    layers: [{ name: "rivers", title: "Rivers", param_key: "river", groups: [{
+    world: { name: "world", title: "World", param_key: "world", groups: [{ title: "Рельеф и вода Перлина", fields: [
+      { key: "terrain_scale", label: "terrain_scale", type: "float", min: 0, range_max: 0.02, step: 0.0001, default: 0.002 },
+      { key: "perlin_water_enabled", label: "perlin_water_enabled", type: "bool", default: false },
+    ] }] },
+    layers: [{ name: "biomes", title: "Biomes", param_key: "biomes", groups: [{ title: "Включение", fields: [
+      { key: "enabled", label: "enabled", type: "bool", default: true },
+      { key: "blob_enabled", label: "blob_enabled", type: "bool", default: true },
+      { key: "blob_raggedness", label: "blob_raggedness", type: "float", min: 0, max: 64, step: 0.1, default: 1 },
+      { key: "hnh_smoothing_passes", label: "hnh_smoothing_passes", type: "int", min: 0, range_max: 10, default: 3 },
+      { key: "temperature_scale", label: "temperature_scale", type: "float", min: 0, range_max: 4, step: 0.01, default: 1 },
+    ] }] }, { name: "rivers", title: "Rivers", param_key: "river", groups: [{
       title: "Channel shape", fields: [{ key: "shape_amplitude_scale", label: "Amplitude", type: "float", min: 0, max: 3, step: 0.1, default: amplitude }],
     }] }],
   };
@@ -37,7 +47,10 @@ async function page(address = "http://127.0.0.1:8107/?preset=variant.yaml&keep=1
     get id() { return this.identifier; }
     append(...children) { this.children.push(...children); }
     replaceChildren(...children) { this.children = children; }
-    addEventListener(name, listener) { this.listeners.set(name, listener); }
+    addEventListener(name, listener) {
+      const previous = this.listeners.get(name);
+      this.listeners.set(name, previous ? event => { previous(event); return listener(event); } : listener);
+    }
     querySelectorAll() { return this.children.flatMap(child => child.children || []).filter(child => child.checked); }
     getContext() { return { fillRect() {}, drawImage() {} }; }
   }
@@ -76,6 +89,11 @@ async function page(address = "http://127.0.0.1:8107/?preset=variant.yaml&keep=1
       }
       assert.equal(url.pathname, "/api/preset");
       const saved = schema(body.path, body.seed, body.params.river.shape_amplitude_scale);
+      for (const panel of [saved.world, ...saved.layers]) {
+        for (const group of panel.groups) {
+          for (const field of group.fields) field.default = body.params[panel.param_key][field.key];
+        }
+      }
       saved.chunks_x = body.chunks_x;
       saved.chunks_y = body.chunks_y;
       presets.set(body.path, saved);
@@ -129,7 +147,7 @@ test("typing a filename syncs the URL without loading or saving; Save creates a 
   await current.run("loadPreset()");
   assert.equal(current.elements.get("seed").value, "999");
   assert.equal(current.elements.get("f_rivers_shape_amplitude_scale").value, "2.4");
-  assert.equal(current.elements.get("layersBox").children.length, 1);
+  assert.equal(current.elements.get("layersBox").children.length, 2);
 });
 
 test("missing presets show an error and disable Save instead of silently falling back", async () => {
@@ -172,4 +190,58 @@ test("typing during a pending load keeps the edited path and query intact", asyn
   assert.equal(current.elements.get("preset").value, "new draft.yaml");
   assert.equal(current.url.searchParams.get("preset"), "new draft.yaml");
   assert.equal(current.elements.get("savePreset").disabled, true);
+});
+
+test("biome and world values load, render, and save even with the biome layer hidden", async () => {
+  const current = await page();
+  assert.equal(current.elements.get("f_biomes_enabled").checked, true);
+  assert.equal(current.elements.get("f_world_perlin_water_enabled").checked, false);
+  assert.equal(current.elements.get("f_world_terrain_scale").value, "0.002");
+  const biomeLayer = current.elements.get("layersBox").children.find(label => label.children[0].value === "biomes").children[0];
+  biomeLayer.checked = false;
+  current.elements.get("f_biomes_blob_enabled").checked = false;
+  current.elements.get("f_biomes_blob_raggedness").value = "0";
+  current.elements.get("f_biomes_hnh_smoothing_passes").value = "0";
+  current.elements.get("f_world_terrain_scale").value = "0.00123";
+  current.elements.get("preset").value = "biomes.yaml";
+  await current.run("runRender()");
+  const rendered = current.requests.filter(request => request.url.pathname === "/api/render").at(-1).body;
+  assert.deepEqual(rendered.layers, ["rivers"]);
+  assert.equal(rendered.params.biomes.enabled, true);
+  assert.equal(rendered.params.biomes.blob_enabled, false);
+  assert.equal(rendered.params.biomes.blob_raggedness, 0);
+  assert.equal(rendered.params.biomes.hnh_smoothing_passes, 0);
+  assert.equal(rendered.params.world.terrain_scale, 0.00123);
+  assert.equal(rendered.params.world.perlin_water_enabled, false);
+  assert.equal(current.requests.filter(request => request.url.pathname === "/api/preset").length, 0);
+  await current.run("savePreset()");
+  const saved = current.requests.find(request => request.url.pathname === "/api/preset").body;
+  assert.deepEqual(saved.params, rendered.params);
+  await current.run("loadPreset()");
+  assert.equal(current.elements.get("f_biomes_blob_enabled").checked, false);
+  assert.equal(current.elements.get("f_biomes_blob_raggedness").value, "0");
+  assert.equal(current.elements.get("f_biomes_hnh_smoothing_passes").value, "0");
+  assert.equal(current.elements.get("f_world_terrain_scale").value, "0.00123");
+});
+
+test("slider ranges include preset values without rounding or clamping numeric inputs", async () => {
+  const current = await page();
+  const preset = current.presets.get("variant.yaml");
+  const fields = preset.layers[0].groups[0].fields;
+  fields.find(field => field.key === "temperature_scale").default = 12.34567;
+  fields.find(field => field.key === "hnh_smoothing_passes").default = 20;
+  await current.run("loadPreset()");
+  assert.equal(current.elements.get("f_biomes_temperature_scale").value, "12.34567");
+  assert.equal(current.elements.get("f_biomes_hnh_smoothing_passes").value, "20");
+  const ranges = current.run(`(() => {
+    const wrap = buildField(state.schema.layers[0], state.schema.layers[0].groups[0].fields.find(field => field.key === "temperature_scale"));
+    const number = wrap.children[0].children[1];
+    const range = wrap.children[1];
+    const initialMaximum = range.max;
+    number.value = "30.123456";
+    number.listeners.get("input")();
+    return [initialMaximum, range.max, number.value];
+  })()`);
+  assert.deepEqual(Array.from(ranges), ["12.34567", "30.123456", "30.123456"]);
+  assert.equal(current.run("collectParams().biomes.temperature_scale"), 30.123456);
 });

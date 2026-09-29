@@ -180,9 +180,10 @@ func encodePreviewPreset(content []byte, opts MapgenOptions) ([]byte, error) {
 		return nil, errors.New("preset must contain a YAML mapping")
 	}
 	updates := struct {
-		World worldConfig  `yaml:"world"`
-		River RiverOptions `yaml:"river"`
-	}{worldConfig{ChunksX: opts.ChunksX, ChunksY: opts.ChunksY, Seed: opts.Seed, Threads: opts.Threads, TerrainScale: opts.TerrainScale, PerlinWaterEnabled: opts.PerlinWaterEnabled}, opts.River}
+		World  worldConfig  `yaml:"world"`
+		River  RiverOptions `yaml:"river"`
+		Biomes BiomeOptions `yaml:"biomes"`
+	}{worldConfig{ChunksX: opts.ChunksX, ChunksY: opts.ChunksY, Seed: opts.Seed, Threads: opts.Threads, TerrainScale: opts.TerrainScale, PerlinWaterEnabled: opts.PerlinWaterEnabled}, opts.River, opts.Biome}
 	var replacement yaml.Node
 	if err := replacement.Encode(updates); err != nil {
 		return nil, err
