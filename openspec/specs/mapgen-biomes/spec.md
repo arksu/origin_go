@@ -112,7 +112,9 @@ Secondary painting SHALL preserve earlier secondary patches and locked terrain. 
 - **THEN** its clay probability becomes a no-op and its dirt probability stays configured
 
 ### Requirement: Structural terrain survives all land operations
-The biome layer SHALL protect water as determined by enabled elevation-water classification, river water as determined by river classification, and base mountain, stone paving, and sand throughout all land painting and cleanup. Protected cells SHALL be excluded from cleanup neighbor voting and component traversal. Final water/river resolution and shoreline sand SHALL retain their existing precedence and behavior outside explicit drawn-lake feature land reservations.
+The biome layer SHALL protect water as determined by enabled elevation-water classification, river water as determined by river classification, and base mountain, stone paving, and sand throughout all land painting and cleanup. Protected cells SHALL be excluded from cleanup neighbor voting and component traversal. Final water/river resolution and shoreline sand SHALL retain their existing precedence and behavior outside explicit drawn-lake feature land reservations and explicitly protected deep river fairways.
+
+When fairway protection is enabled, protected fairway cells SHALL resolve to deep water even where elevation would otherwise select shallow water, and SHALL remain deep through shoreline processing. This exception SHALL NOT alter elevation generation or the precedence of cells outside the protected fairway. With fairway protection disabled, existing resolution behavior SHALL remain unchanged.
 
 Accepted island and peninsula land reservations from the enabled irregular drawn-lake mode SHALL be treated as land for ground classification and biome eligibility even when their underlying elevation would otherwise produce water. Those reservations SHALL remain dry through final water resolution and shoreline processing without changing the underlying elevation or climate fields. Existing mountain, stone, and sand protection SHALL continue to apply within reserved land. Reservations SHALL NOT overlap protected river or lake-navigation footprints; such a conflict SHALL fail validation rather than erasing either feature. Without the lake feature enabled, structural terrain behavior SHALL remain unchanged.
 
@@ -123,6 +125,14 @@ Accepted island and peninsula land reservations from the enabled irregular drawn
 #### Scenario: Water has an unresolved land base
 - **WHEN** a tile is destined to become water but its base buffer still contains a land type
 - **THEN** no biome painting modifies it and it does not influence cleanup votes as land
+
+#### Scenario: Protected fairway overlaps shallow base water
+- **WHEN** an explicitly protected deep river footprint crosses tiles classified as shallow by elevation
+- **THEN** the protected footprint resolves to deep water and stays deep after shoreline processing
+
+#### Scenario: Legacy water precedence remains available
+- **WHEN** fairway protection is disabled
+- **THEN** shallow elevation water retains its existing precedence over river classification
 
 #### Scenario: Reserved island over a Perlin lowland
 - **WHEN** an accepted lake island occupies low-elevation tiles with elevation water enabled
