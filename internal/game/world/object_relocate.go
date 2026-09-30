@@ -28,8 +28,26 @@ func RelocateWorldObjectImmediate(
 	y float64,
 	logger *zap.Logger,
 ) bool {
+	success, entry := RelocateWorldObject(w, chunkManager, handle, opts, x, y, logger)
+	if entry != nil && eb != nil {
+		eb.PublishAsync(ecs.NewObjectMoveBatchEvent(w.Layer, []ecs.MoveBatchEntry{*entry}), eventbus.PriorityMedium)
+	}
+	return success
+}
+
+// RelocateWorldObject applies relocation synchronously and returns an optional movement
+// entry for the caller to publish. A successful unchanged position returns true, nil.
+func RelocateWorldObject(
+	w *ecs.World,
+	chunkManager *ChunkManager,
+	handle types.Handle,
+	opts RelocateWorldObjectImmediateOptions,
+	x float64,
+	y float64,
+	logger *zap.Logger,
+) (bool, *ecs.MoveBatchEntry) {
 	if w == nil || chunkManager == nil || handle == types.InvalidHandle || !w.Alive(handle) {
-		return false
+		return false, nil
 	}
 	if logger == nil {
 		logger = zap.NewNop()
@@ -40,13 +58,13 @@ func RelocateWorldObjectImmediate(
 	chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, handle)
 	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, handle)
 	if !hasEntityID || !hasTransform || !hasChunkRef || !hasInfo {
-		return false
+		return false, nil
 	}
 
 	oldX := transform.X
 	oldY := transform.Y
 	if oldX == x && oldY == y && !opts.ForceReindex {
-		return true
+		return true, nil
 	}
 
 	oldChunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
@@ -57,12 +75,12 @@ func RelocateWorldObjectImmediate(
 	if newChunkCoord != oldChunkCoord {
 		newChunk = chunkManager.GetChunkFast(newChunkCoord)
 		if newChunk == nil || newChunk.GetState() != types.ChunkStateActive {
-			logger.Warn("RelocateWorldObjectImmediate: target chunk not active",
+			logger.Warn("RelocateWorldObject: target chunk not active",
 				zap.Uint64("entity_id", uint64(entityID)),
 				zap.Int("target_chunk_x", newChunkCoord.X),
 				zap.Int("target_chunk_y", newChunkCoord.Y),
 			)
-			return false
+			return false, nil
 		}
 	}
 
@@ -108,21 +126,15 @@ func RelocateWorldObjectImmediate(
 		state.IsDirty = true
 	})
 
-	if eb != nil {
-		serverTimeMs := ecs.GetResource[ecs.TimeState](w).UnixMs
-		heading := transform.Direction
-		eb.PublishAsync(ecs.NewObjectMoveBatchEvent(w.Layer, []ecs.MoveBatchEntry{{
-			EntityID:          entityID,
-			Handle:            handle,
-			CarriedByEntityID: opts.CarriedByEntityID,
-			X:                 newXi,
-			Y:                 newYi,
-			Heading:           heading,
-			IsMoving:          false,
-			ServerTimeMs:      serverTimeMs,
-			IsTeleport:        opts.IsTeleport,
-		}}), eventbus.PriorityMedium)
+	return true, &ecs.MoveBatchEntry{
+		EntityID:          entityID,
+		Handle:            handle,
+		CarriedByEntityID: opts.CarriedByEntityID,
+		X:                 newXi,
+		Y:                 newYi,
+		Heading:           transform.Direction,
+		IsMoving:          false,
+		ServerTimeMs:      ecs.GetResource[ecs.TimeState](w).UnixMs,
+		IsTeleport:        opts.IsTeleport,
 	}
-
-	return true
 }

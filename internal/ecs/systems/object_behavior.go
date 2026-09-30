@@ -253,18 +253,8 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 		ecs.WithComponent(w, h, func(appearance *components.Appearance) {
 			appearance.Resource = nextResource
 		})
-		r.publishAppearanceChanged(w, entityIDComp.ID, h)
+		ecs.PublishEntityAppearanceChanged(w, r.eventBus, entityIDComp.ID, h)
 	}
-}
-
-func (r *objectBehaviorRunner) publishAppearanceChanged(w *ecs.World, targetID types.EntityID, targetHandle types.Handle) {
-	if r.eventBus == nil {
-		return
-	}
-	r.eventBus.PublishAsync(
-		ecs.NewEntityAppearanceChangedEvent(w.Layer, targetID, targetHandle),
-		eventbus.PriorityMedium,
-	)
 }
 
 func uniqueSortedStrings(values []string) []string {

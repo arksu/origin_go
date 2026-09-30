@@ -3,23 +3,15 @@ package systems
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"origin/internal/characterattrs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/persistence"
-	"origin/internal/persistence/repository"
 	"origin/internal/types"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
-)
-
-const (
-	snapshotChannelSize = 1000
-	batchSize           = 100
-	batchTimeout        = 500 * time.Millisecond
 )
 
 // InventorySnapshot represents a serialized inventory container for database storage
@@ -103,38 +95,6 @@ type CharacterSnapshot struct {
 	Inventories []InventorySnapshot
 }
 
-type CharacterSaver struct {
-	db              *persistence.Postgres
-	snapshotChannel chan CharacterSnapshot
-	numWorkers      int
-	logger          *zap.Logger
-	wg              sync.WaitGroup
-	ctx             context.Context
-	cancel          context.CancelFunc
-	inventorySaver  InventorySaverInterface
-}
-
-func NewCharacterSaver(db *persistence.Postgres, numWorkers int, inventorySaver InventorySaverInterface, logger *zap.Logger) *CharacterSaver {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	cs := &CharacterSaver{
-		db:              db,
-		snapshotChannel: make(chan CharacterSnapshot, snapshotChannelSize),
-		numWorkers:      numWorkers,
-		logger:          logger,
-		ctx:             ctx,
-		cancel:          cancel,
-		inventorySaver:  inventorySaver,
-	}
-
-	for i := 0; i < numWorkers; i++ {
-		cs.wg.Add(1)
-		go cs.saveWorker(i)
-	}
-
-	return cs
-}
-
 func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle types.Handle) {
 	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
 	if !hasTransform {
@@ -158,83 +118,31 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 func (s *CharacterSaver) SaveSync(w *ecs.World, entityID types.EntityID, handle types.Handle) error {
 	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
 	if !hasTransform {
-		return nil
+		return fmt.Errorf("save character %d: missing Transform component", entityID)
 	}
 
 	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
 	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
 	if !hasStats {
-		return nil
+		return fmt.Errorf("save character %d: missing EntityStats component", entityID)
 	}
 	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
 	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), characterSaveTimeout)
 	defer cancel()
 
-	params := repository.UpdateCharactersParams{
-		Ids:        []int{int(snapshot.CharacterID)},
-		Xs:         []float64{float64(snapshot.X)},
-		Ys:         []float64{float64(snapshot.Y)},
-		Headings:   []float64{float64(snapshot.Heading)},
-		Staminas:   []float64{snapshot.Stamina},
-		Energies:   []float64{snapshot.Energy},
-		Shps:       []int{int(snapshot.SHP)},
-		Hhps:       []int{int(snapshot.HHP)},
-		Attributes: []string{snapshot.Attributes},
-		Exps:       []string{snapshot.Exp},
-		Skills:     []string{snapshot.Skills},
-		Discovery:  []string{snapshot.Discovery},
+	if !s.enqueueSnapshot(snapshot) {
+		return fmt.Errorf("character saver is stopped")
 	}
-	if err := s.db.Queries().UpdateCharacters(ctx, params); err != nil {
-		return err
-	}
-
-	if len(snapshot.Inventories) == 0 {
-		return nil
-	}
-
-	ownerIDs := make([]int64, 0, len(snapshot.Inventories))
-	kinds := make([]int, 0, len(snapshot.Inventories))
-	inventoryKeys := make([]int, 0, len(snapshot.Inventories))
-	datas := make([]string, 0, len(snapshot.Inventories))
-	versions := make([]int, 0, len(snapshot.Inventories))
-	for _, inv := range snapshot.Inventories {
-		ownerIDs = append(ownerIDs, inv.CharacterID)
-		kinds = append(kinds, int(inv.Kind))
-		inventoryKeys = append(inventoryKeys, int(inv.InventoryKey))
-		datas = append(datas, string(inv.Data))
-		versions = append(versions, inv.Version)
-	}
-
-	return s.db.Queries().UpsertInventories(ctx, repository.UpsertInventoriesParams{
-		OwnerIds:      ownerIDs,
-		Kinds:         kinds,
-		InventoryKeys: inventoryKeys,
-		Datas:         datas,
-		Versions:      versions,
-	})
+	return s.flushPending(ctx, s.queueForCharacter(snapshot.CharacterID), snapshot.CharacterID)
 }
 
 // SaveDetached enqueues a snapshot for detached-entity expiration path.
 // We still persist inventories here to avoid losing recent in-memory changes on detach expiry.
 func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, handle types.Handle) {
-	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
-	if !hasTransform {
-		s.logger.Warn("Character entity missing Transform component",
-			zap.Uint64("entity_id", uint64(entityID)))
-		return
-	}
-
-	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
-	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
-	if !hasStats {
-		return
-	}
-	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
-	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories))
+	s.Save(w, entityID, handle)
 }
 
 func (s *CharacterSaver) buildSnapshot(
@@ -360,16 +268,6 @@ func (s *CharacterSaver) serializeCharacterProfile(w *ecs.World, entityID types.
 	return string(attributesRaw), string(experienceRaw), string(skillsRaw), string(discoveryRaw)
 }
 
-func (s *CharacterSaver) enqueueSnapshot(snapshot CharacterSnapshot) {
-	select {
-	case s.snapshotChannel <- snapshot:
-	default:
-		s.logger.Warn("Character save channel full, dropping snapshot",
-			zap.Int64("character_id", snapshot.CharacterID),
-			zap.Int("channel_size", snapshotChannelSize))
-	}
-}
-
 func normalizeCharacterHeading(direction float64) int16 {
 	// Runtime keeps radians; DB stores integer degrees [0..359].
 	if math.IsNaN(direction) || math.IsInf(direction, 0) {
@@ -383,149 +281,6 @@ func normalizeCharacterHeading(direction float64) int16 {
 	}
 
 	return int16(math.Floor(normalized))
-}
-
-func (s *CharacterSaver) saveWorker(workerID int) {
-	defer s.wg.Done()
-
-	batch := make([]CharacterSnapshot, 0, batchSize)
-	ticker := time.NewTicker(batchTimeout)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			if len(batch) > 0 {
-				// Create a new context for final save to avoid context cancellation
-				ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
-				defer cancel()
-
-				s.flushBatchWithContext(ctx, batch)
-			}
-			return
-
-		case snapshot := <-s.snapshotChannel:
-			batch = append(batch, snapshot)
-			if len(batch) >= batchSize {
-				s.flushBatch(batch)
-				batch = batch[:0]
-			}
-
-		case <-ticker.C:
-			if len(batch) > 0 {
-				s.flushBatch(batch)
-				batch = batch[:0]
-			}
-		}
-	}
-}
-
-func (s *CharacterSaver) flushBatch(batch []CharacterSnapshot) {
-	s.flushBatchWithContext(s.ctx, batch)
-}
-
-func (s *CharacterSaver) flushBatchWithContext(ctx context.Context, batch []CharacterSnapshot) {
-	if len(batch) == 0 {
-		return
-	}
-
-	// Convert batch to arrays for batch update
-	ids := make([]int, len(batch))
-	xs := make([]float64, len(batch))
-	ys := make([]float64, len(batch))
-	headings := make([]float64, len(batch))
-	staminas := make([]float64, len(batch))
-	energies := make([]float64, len(batch))
-	shps := make([]int, len(batch))
-	hhps := make([]int, len(batch))
-	attributes := make([]string, len(batch))
-	exps := make([]string, len(batch))
-	skills := make([]string, len(batch))
-	discovery := make([]string, len(batch))
-
-	for i, snapshot := range batch {
-		ids[i] = int(snapshot.CharacterID)
-		xs[i] = float64(snapshot.X)
-		ys[i] = float64(snapshot.Y)
-		headings[i] = float64(snapshot.Heading)
-		staminas[i] = snapshot.Stamina
-		energies[i] = snapshot.Energy
-		shps[i] = int(snapshot.SHP)
-		hhps[i] = int(snapshot.HHP)
-		attributes[i] = snapshot.Attributes
-		exps[i] = snapshot.Exp
-		skills[i] = snapshot.Skills
-		discovery[i] = snapshot.Discovery
-	}
-
-	params := repository.UpdateCharactersParams{
-		Ids:        ids,
-		Xs:         xs,
-		Ys:         ys,
-		Headings:   headings,
-		Staminas:   staminas,
-		Energies:   energies,
-		Shps:       shps,
-		Hhps:       hhps,
-		Attributes: attributes,
-		Exps:       exps,
-		Skills:     skills,
-		Discovery:  discovery,
-	}
-
-	charUpdateErr := s.db.Queries().UpdateCharacters(ctx, params)
-	if charUpdateErr != nil {
-		s.logger.Error("Failed to execute batch update",
-			zap.Int("batch_size", len(batch)),
-			zap.Any("params", params),
-			zap.Error(charUpdateErr))
-	}
-
-	// Batch upsert all inventories in a single query
-	totalInv := 0
-	for _, snapshot := range batch {
-		totalInv += len(snapshot.Inventories)
-	}
-
-	if totalInv > 0 {
-		ownerIDs := make([]int64, 0, totalInv)
-		kinds := make([]int, 0, totalInv)
-		inventoryKeys := make([]int, 0, totalInv)
-		datas := make([]string, 0, totalInv)
-		versions := make([]int, 0, totalInv)
-
-		for _, snapshot := range batch {
-			for _, inv := range snapshot.Inventories {
-				ownerIDs = append(ownerIDs, inv.CharacterID)
-				kinds = append(kinds, int(inv.Kind))
-				inventoryKeys = append(inventoryKeys, int(inv.InventoryKey))
-				datas = append(datas, string(inv.Data))
-				versions = append(versions, inv.Version)
-			}
-		}
-
-		err := s.db.Queries().UpsertInventories(ctx, repository.UpsertInventoriesParams{
-			OwnerIds:      ownerIDs,
-			Kinds:         kinds,
-			InventoryKeys: inventoryKeys,
-			Datas:         datas,
-			Versions:      versions,
-		})
-		if err != nil {
-			s.logger.Error("Failed to batch upsert inventories",
-				zap.Int("batch_size", len(batch)),
-				zap.Int("inventory_count", totalInv),
-				zap.Error(err))
-		} else if charUpdateErr != nil {
-			s.logger.Warn("Inventories were persisted despite character batch update failure",
-				zap.Int("batch_size", len(batch)),
-				zap.Int("inventory_count", totalInv))
-		} else {
-			// s.logger.Debug("Successfully saved inventories",
-			// 	zap.Int("batch_size", len(batch)),
-			// 	zap.Int("inventory_count", totalInv))
-		}
-	}
 }
 
 // SaveAll saves all characters from CharacterEntities
@@ -542,33 +297,4 @@ func (s *CharacterSaver) SaveAll(w *ecs.World) {
 	}
 
 	s.logger.Info("All characters saved")
-}
-
-func (s *CharacterSaver) Stop() {
-	// Process any remaining snapshots in the channel
-	remaining := make([]CharacterSnapshot, 0)
-	for {
-		select {
-		case snapshot := <-s.snapshotChannel:
-			remaining = append(remaining, snapshot)
-		default:
-			// No more snapshots
-			goto processRemaining
-		}
-	}
-
-processRemaining:
-	if len(remaining) > 0 {
-		// Create a new context for final save to avoid context cancellation
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
-		defer cancel()
-
-		s.flushBatchWithContext(ctx, remaining)
-	}
-
-	// Signal workers to stop and wait for them
-	s.cancel()
-	s.wg.Wait()
-	close(s.snapshotChannel)
-	s.logger.Info("CharacterSaver stopped")
 }

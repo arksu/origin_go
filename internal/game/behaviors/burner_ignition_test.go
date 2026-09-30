@@ -101,7 +101,8 @@ func TestBurnerUnarmedStateSurvivesRestore(t *testing.T) {
 }
 
 func TestBurnerAppearanceAndStationEventsOnlyOnChange(t *testing.T) {
-	w, _, target := newIgnitionTestWorld(t, 50)
+	w, player, target := newIgnitionTestWorld(t, 50)
+	ecs.GetResource[ecs.VisibilityState](w).ObserversByVisibleTarget[target] = map[types.Handle]struct{}{player: {}}
 	bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 1})
 	t.Cleanup(func() { require.NoError(t, bus.Shutdown(context.Background())) })
 	appearances := make(chan types.EntityID, 4)
@@ -127,6 +128,35 @@ func TestBurnerAppearanceAndStationEventsOnlyOnChange(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("missing appearance event")
 		}
+	}
+	require.NoError(t, bus.Shutdown(context.Background()))
+	require.Empty(t, appearances)
+}
+
+func TestBurnerAppearanceUpdatesStateWithoutUnobservedNotification(t *testing.T) {
+	w, player, target := newIgnitionTestWorld(t, 50)
+	bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 1})
+	t.Cleanup(func() { require.NoError(t, bus.Shutdown(context.Background())) })
+	appearances := make(chan eventbus.Event, 1)
+	bus.SubscribeAsync(ecs.TopicGameplayEntityAppearance, eventbus.PriorityMedium, func(_ context.Context, event eventbus.Event) error {
+		appearances <- event
+		return nil
+	})
+	setBurnerStationState(w, target, "burning", &contracts.ExecutionDeps{EventBus: bus})
+	appearance, ok := ecs.GetComponent[components.Appearance](w, target)
+	require.True(t, ok)
+	require.Equal(t, "test-hearth/burning", appearance.Resource)
+	ecs.GetResource[ecs.VisibilityState](w).ObserversByVisibleTarget[target] = map[types.Handle]struct{}{player: {}}
+	flushed := make(chan struct{})
+	bus.SubscribeAsync("test.burner.flush", eventbus.PriorityMedium, func(_ context.Context, _ eventbus.Event) error {
+		close(flushed)
+		return nil
+	})
+	bus.PublishAsync(eventbus.NewEvent("test.burner.flush", nil), eventbus.PriorityMedium)
+	select {
+	case <-flushed:
+	case <-time.After(time.Second):
+		t.Fatal("burner event queue did not drain")
 	}
 	require.NoError(t, bus.Shutdown(context.Background()))
 	require.Empty(t, appearances)

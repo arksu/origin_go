@@ -28,6 +28,9 @@ type Metrics struct {
 	packetsSent     atomic.Int64
 	bytesReceived   atomic.Int64
 	bytesSent       atomic.Int64
+	messagesDecoded atomic.Int64
+	spawnEntries    atomic.Int64
+	moveEntries     atomic.Int64
 
 	errors atomic.Int64
 
@@ -43,13 +46,15 @@ type Metrics struct {
 	sendWriteNs      atomic.Int64
 	sendWriteCount   atomic.Int64
 
-	msgAuthResult   atomic.Int64
-	msgEnterWorld   atomic.Int64
-	msgObjectSpawn  atomic.Int64
-	msgObjectMove   atomic.Int64
-	msgServerError  atomic.Int64
-	msgOther        atomic.Int64
-	msgUnmarshalErr atomic.Int64
+	msgAuthResult       atomic.Int64
+	msgEnterWorld       atomic.Int64
+	msgObjectSpawn      atomic.Int64
+	msgObjectMove       atomic.Int64
+	msgObjectSpawnBatch atomic.Int64
+	msgObjectMoveBatch  atomic.Int64
+	msgServerError      atomic.Int64
+	msgOther            atomic.Int64
+	msgUnmarshalErr     atomic.Int64
 
 	startTime time.Time
 }
@@ -59,6 +64,9 @@ type MetricsSnapshot struct {
 	PacketsReceived int64
 	BytesSent       int64
 	BytesReceived   int64
+	MessagesDecoded int64
+	SpawnEntries    int64
+	MoveEntries     int64
 
 	ReadWaitNs       int64
 	ReadWaitSamples  int64
@@ -71,13 +79,15 @@ type MetricsSnapshot struct {
 	SendWriteNs      int64
 	SendWriteCount   int64
 
-	MsgAuthResult   int64
-	MsgEnterWorld   int64
-	MsgObjectSpawn  int64
-	MsgObjectMove   int64
-	MsgServerError  int64
-	MsgOther        int64
-	MsgUnmarshalErr int64
+	MsgAuthResult       int64
+	MsgEnterWorld       int64
+	MsgObjectSpawn      int64
+	MsgObjectMove       int64
+	MsgObjectSpawnBatch int64
+	MsgObjectMoveBatch  int64
+	MsgServerError      int64
+	MsgOther            int64
+	MsgUnmarshalErr     int64
 }
 
 func NewMetrics() *Metrics {
@@ -183,12 +193,17 @@ func (m *Metrics) RecordSendWrite(d time.Duration) {
 	m.sendWriteCount.Add(1)
 }
 
-func (m *Metrics) RecordMsgAuthResult()  { m.msgAuthResult.Add(1) }
-func (m *Metrics) RecordMsgEnterWorld()  { m.msgEnterWorld.Add(1) }
-func (m *Metrics) RecordMsgObjectSpawn() { m.msgObjectSpawn.Add(1) }
-func (m *Metrics) RecordMsgObjectMove()  { m.msgObjectMove.Add(1) }
-func (m *Metrics) RecordMsgServerError() { m.msgServerError.Add(1) }
-func (m *Metrics) RecordMsgOther()       { m.msgOther.Add(1) }
+func (m *Metrics) RecordMsgAuthResult()       { m.msgAuthResult.Add(1) }
+func (m *Metrics) RecordMsgEnterWorld()       { m.msgEnterWorld.Add(1) }
+func (m *Metrics) RecordMsgObjectSpawn()      { m.msgObjectSpawn.Add(1) }
+func (m *Metrics) RecordMsgObjectMove()       { m.msgObjectMove.Add(1) }
+func (m *Metrics) RecordMsgObjectSpawnBatch() { m.msgObjectSpawnBatch.Add(1) }
+func (m *Metrics) RecordMsgObjectMoveBatch()  { m.msgObjectMoveBatch.Add(1) }
+func (m *Metrics) RecordMessageDecoded()      { m.messagesDecoded.Add(1) }
+func (m *Metrics) RecordSpawnEntry()          { m.spawnEntries.Add(1) }
+func (m *Metrics) RecordMoveEntry()           { m.moveEntries.Add(1) }
+func (m *Metrics) RecordMsgServerError()      { m.msgServerError.Add(1) }
+func (m *Metrics) RecordMsgOther()            { m.msgOther.Add(1) }
 func (m *Metrics) RecordMsgUnmarshalErr() {
 	m.msgUnmarshalErr.Add(1)
 }
@@ -203,6 +218,9 @@ func (m *Metrics) Snapshot() MetricsSnapshot {
 		PacketsReceived: m.packetsReceived.Load(),
 		BytesSent:       m.bytesSent.Load(),
 		BytesReceived:   m.bytesReceived.Load(),
+		MessagesDecoded: m.messagesDecoded.Load(),
+		SpawnEntries:    m.spawnEntries.Load(),
+		MoveEntries:     m.moveEntries.Load(),
 
 		ReadWaitNs:       m.readWaitNs.Load(),
 		ReadWaitSamples:  m.readWaitSamples.Load(),
@@ -215,17 +233,26 @@ func (m *Metrics) Snapshot() MetricsSnapshot {
 		SendWriteNs:      m.sendWriteNs.Load(),
 		SendWriteCount:   m.sendWriteCount.Load(),
 
-		MsgAuthResult:   m.msgAuthResult.Load(),
-		MsgEnterWorld:   m.msgEnterWorld.Load(),
-		MsgObjectSpawn:  m.msgObjectSpawn.Load(),
-		MsgObjectMove:   m.msgObjectMove.Load(),
-		MsgServerError:  m.msgServerError.Load(),
-		MsgOther:        m.msgOther.Load(),
-		MsgUnmarshalErr: m.msgUnmarshalErr.Load(),
+		MsgAuthResult:       m.msgAuthResult.Load(),
+		MsgEnterWorld:       m.msgEnterWorld.Load(),
+		MsgObjectSpawn:      m.msgObjectSpawn.Load(),
+		MsgObjectMove:       m.msgObjectMove.Load(),
+		MsgObjectSpawnBatch: m.msgObjectSpawnBatch.Load(),
+		MsgObjectMoveBatch:  m.msgObjectMoveBatch.Load(),
+		MsgServerError:      m.msgServerError.Load(),
+		MsgOther:            m.msgOther.Load(),
+		MsgUnmarshalErr:     m.msgUnmarshalErr.Load(),
 	}
 }
 
-func (m *Metrics) PrintSummary(logger *zap.Logger) {
+func decodedEntryScope(fullDecode bool) string {
+	if fullDecode {
+		return "full_run"
+	}
+	return "partial_first_100_per_client"
+}
+
+func (m *Metrics) PrintSummary(logger *zap.Logger, fullDecode bool) {
 	duration := time.Since(m.startTime)
 
 	m.mu.Lock()
@@ -256,12 +283,27 @@ func (m *Metrics) PrintSummary(logger *zap.Logger) {
 
 	logger.Info("Movement",
 		zap.Int64("moves_sent", m.movesSent.Load()),
-		zap.Int64("moves_received", m.movesReceived.Load()),
+		zap.Int64("player_move_entries_decoded", m.movesReceived.Load()),
+		zap.String("decoded_entry_scope", decodedEntryScope(fullDecode)),
 	)
 
-	logger.Info("Packets",
+	logger.Info("WebSocket messages",
 		zap.Int64("sent", m.packetsSent.Load()),
 		zap.Int64("received", m.packetsReceived.Load()),
+		zap.Int64("payload_bytes_sent", m.bytesSent.Load()),
+		zap.Int64("payload_bytes_received", m.bytesReceived.Load()),
+	)
+
+	logger.Info("Decoded content",
+		zap.String("decoded_entry_scope", decodedEntryScope(fullDecode)),
+		zap.Int64("messages", m.messagesDecoded.Load()),
+		zap.Int64("spawn_messages", m.msgObjectSpawn.Load()),
+		zap.Int64("spawn_batch_messages", m.msgObjectSpawnBatch.Load()),
+		zap.Int64("spawn_entries", m.spawnEntries.Load()),
+		zap.Int64("move_messages", m.msgObjectMove.Load()),
+		zap.Int64("move_batch_messages", m.msgObjectMoveBatch.Load()),
+		zap.Int64("move_entries", m.moveEntries.Load()),
+		zap.Int64("decode_errors", m.msgUnmarshalErr.Load()),
 	)
 
 	logger.Info("Errors", zap.Int64("total", m.errors.Load()))

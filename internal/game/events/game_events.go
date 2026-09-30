@@ -39,6 +39,7 @@ func NewNetworkVisibilityDispatcher(shardManager *game.ShardManager, logger *zap
 func (d *NetworkVisibilityDispatcher) Subscribe(eventBus *eventbus.EventBus) {
 	eventBus.SubscribeAsync(ecs.TopicGameplayMovementMoveBatch, eventbus.PriorityMedium, d.handleObjectMoveBatch)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntitySpawn, eventbus.PriorityMedium, d.handleEntitySpawn)
+	eventBus.SubscribeAsync(ecs.TopicGameplayEntitySpawnBatch, eventbus.PriorityMedium, d.handleEntitySpawnBatch)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntityDespawn, eventbus.PriorityMedium, d.handleEntityDespawn)
 	eventBus.SubscribeAsync(ecs.TopicGameplayEntityAppearance, eventbus.PriorityMedium, d.handleEntityAppearanceChanged)
 	eventBus.SubscribeAsync(ecs.TopicGameplayChunkUnload, eventbus.PriorityMedium, d.handleChunkUnload)
@@ -88,55 +89,8 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 		return nil
 	}
 
-	// Phase 2: Pre-serialize each unique entity movement once (shared across observers)
-	serializedMoves := make([][]byte, len(batch.Entries))
-	for i := range batch.Entries {
-		entry := &batch.Entries[i]
-
-		movement := &netproto.EntityMovement{
-			Position: &netproto.Position{
-				X:       int32(entry.X),
-				Y:       int32(entry.Y),
-				Heading: float32(entry.Heading),
-			},
-			Velocity: &netproto.Vector2{
-				X: int32(entry.VelocityX),
-				Y: int32(entry.VelocityY),
-			},
-			MoveMode: convertMoveMode(entry.MoveMode),
-			IsMoving: entry.IsMoving,
-		}
-
-		if entry.TargetX != nil && entry.TargetY != nil {
-			movement.TargetPosition = &netproto.Vector2{
-				X: int32(*entry.TargetX),
-				Y: int32(*entry.TargetY),
-			}
-		}
-
-		msg := &netproto.ServerMessage{
-			Payload: &netproto.ServerMessage_ObjectMove{
-				ObjectMove: &netproto.S2C_ObjectMove{
-					EntityId:          uint64(entry.EntityID),
-					Movement:          movement,
-					ServerTimeMs:      entry.ServerTimeMs,
-					MoveSeq:           entry.MoveSeq,
-					IsTeleport:        entry.IsTeleport,
-					CarriedByEntityId: uint64(entry.CarriedByEntityID),
-				},
-			},
-		}
-
-		data, err := proto.Marshal(msg)
-		if err != nil {
-			d.logger.Error("failed to marshal ObjectMove message",
-				zap.Error(err),
-				zap.Int64("entity_id", int64(entry.EntityID)),
-			)
-			continue
-		}
-		serializedMoves[i] = data
-	}
+	// Build shared immutable entries once; each recipient gets its visible subset.
+	encoder := newObjectMoveEncoder(batch.Entries)
 
 	observerEntityIDs := make(map[types.Handle]types.EntityID, len(observerEntries))
 	shard.WithWorldRead(func(w *ecs.World) {
@@ -147,7 +101,7 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 		}
 	})
 
-	// Phase 3: Single ClientsMu lock — send pre-serialized bytes to each observer
+	// Keep one client-map lock across fanout and marshal each visible subset once.
 	shard.ClientsMu.RLock()
 	for observerHandle, entryIndices := range observerEntries {
 		if len(entryIndices) == 0 {
@@ -163,15 +117,116 @@ func (d *NetworkVisibilityDispatcher) handleObjectMoveBatch(ctx context.Context,
 			continue
 		}
 
-		for _, idx := range entryIndices {
-			if data := serializedMoves[idx]; data != nil {
-				client.Send(data)
-			}
+		encoded, err := encoder.marshalVisible(entryIndices)
+		if err != nil {
+			d.logger.Error("Unable to encode object movement", zap.Error(err))
+			continue
 		}
+		client.Send(encoded)
 	}
 	shard.ClientsMu.RUnlock()
 
 	observerEntriesPool.Put(observerEntries)
+	return nil
+}
+
+type objectMoveEncoder struct {
+	moves        []*netproto.S2C_ObjectMove
+	visibleMoves []*netproto.S2C_ObjectMove
+	fullBatch    []byte
+}
+
+func newObjectMoveEncoder(entries []ecs.MoveBatchEntry) *objectMoveEncoder {
+	moves := make([]*netproto.S2C_ObjectMove, len(entries))
+	for index := range entries {
+		moves[index] = buildObjectMove(&entries[index])
+	}
+	return &objectMoveEncoder{moves: moves}
+}
+
+func (encoder *objectMoveEncoder) marshalVisible(indices []int) ([]byte, error) {
+	// Routing appends each index once in event order. A complete subset therefore
+	// has identical bytes for every observer; share them to avoid dense fanout cost.
+	if len(indices) == len(encoder.moves) {
+		if encoder.fullBatch == nil {
+			encoded, err := marshalObjectMoves(encoder.moves)
+			if err != nil {
+				return nil, err
+			}
+			encoder.fullBatch = encoded
+		}
+		return encoder.fullBatch, nil
+	}
+	encoder.visibleMoves = encoder.visibleMoves[:0]
+	for _, index := range indices {
+		encoder.visibleMoves = append(encoder.visibleMoves, encoder.moves[index])
+	}
+	return marshalObjectMoves(encoder.visibleMoves)
+}
+
+func buildObjectMove(entry *ecs.MoveBatchEntry) *netproto.S2C_ObjectMove {
+	movement := &netproto.EntityMovement{
+		Position: &netproto.Position{
+			X:       int32(entry.X),
+			Y:       int32(entry.Y),
+			Heading: float32(entry.Heading),
+		},
+		Velocity: &netproto.Vector2{
+			X: int32(entry.VelocityX),
+			Y: int32(entry.VelocityY),
+		},
+		MoveMode: convertMoveMode(entry.MoveMode),
+		IsMoving: entry.IsMoving,
+	}
+
+	if entry.TargetX != nil && entry.TargetY != nil {
+		movement.TargetPosition = &netproto.Vector2{
+			X: int32(*entry.TargetX),
+			Y: int32(*entry.TargetY),
+		}
+	}
+
+	return &netproto.S2C_ObjectMove{
+		EntityId: uint64(entry.EntityID), Movement: movement,
+		ServerTimeMs: entry.ServerTimeMs, MoveSeq: entry.MoveSeq,
+		IsTeleport: entry.IsTeleport, CarriedByEntityId: uint64(entry.CarriedByEntityID),
+	}
+}
+
+func marshalObjectMoves(moves []*netproto.S2C_ObjectMove) ([]byte, error) {
+	switch len(moves) {
+	case 0:
+		return nil, nil
+	case 1:
+		return proto.Marshal(&netproto.ServerMessage{Payload: &netproto.ServerMessage_ObjectMove{ObjectMove: moves[0]}})
+	default:
+		return proto.Marshal(&netproto.ServerMessage{Payload: &netproto.ServerMessage_ObjectMoveBatch{
+			ObjectMoveBatch: &netproto.S2C_ObjectMoveBatch{Moves: moves},
+		}})
+	}
+}
+
+func (d *NetworkVisibilityDispatcher) handleEntitySpawnBatch(ctx context.Context, e eventbus.Event) error {
+	event, ok := e.(*ecs.EntitySpawnBatchEvent)
+	if !ok {
+		return nil
+	}
+	shard := d.shardManager.GetShard(event.Layer)
+	if shard == nil {
+		return nil
+	}
+	shard.WithWorldRead(func(w *ecs.World) {
+		spawns := make([]*netproto.S2C_ObjectSpawn, 0, len(event.Entries))
+		for _, entry := range event.Entries {
+			if !targetVisibleToObserver(w, event.ObserverID, entry.EntityID) {
+				continue
+			}
+			if spawn := d.buildObjectSpawn(w, entry.EntityID, entry.Handle); spawn != nil {
+				spawns = append(spawns, spawn)
+			}
+		}
+		d.sendObjectSpawns(shard, event.ObserverID, spawns)
+	})
 	return nil
 }
 
@@ -267,19 +322,38 @@ func (d *NetworkVisibilityDispatcher) sendObjectSpawn(w *ecs.World, shard *game.
 	if !visible {
 		return
 	}
+	d.sendObjectSpawns(shard, observerID, []*netproto.S2C_ObjectSpawn{spawn})
+}
+
+// The caller holds the world read lock until the snapshot is enqueued.
+func (d *NetworkVisibilityDispatcher) sendObjectSpawns(shard *game.Shard, observerID types.EntityID, spawns []*netproto.S2C_ObjectSpawn) {
+	if len(spawns) == 0 {
+		return
+	}
 	shard.ClientsMu.RLock()
 	defer shard.ClientsMu.RUnlock()
 	client := shard.Clients[observerID]
 	if client == nil || !client.InWorld.Load() {
 		return
 	}
-	spawn.StreamEpoch = client.StreamEpoch.Load()
-	encoded, err := proto.Marshal(&netproto.ServerMessage{Payload: &netproto.ServerMessage_ObjectSpawn{ObjectSpawn: spawn}})
+	epoch := client.StreamEpoch.Load()
+	critical := false
+	for _, spawn := range spawns {
+		spawn.StreamEpoch = epoch
+		critical = critical || spawn.ActionAnimation != nil
+	}
+	message := &netproto.ServerMessage{}
+	if len(spawns) == 1 {
+		message.Payload = &netproto.ServerMessage_ObjectSpawn{ObjectSpawn: spawns[0]}
+	} else {
+		message.Payload = &netproto.ServerMessage_ObjectSpawnBatch{ObjectSpawnBatch: &netproto.S2C_ObjectSpawnBatch{Spawns: spawns}}
+	}
+	encoded, err := proto.Marshal(message)
 	if err != nil {
-		d.logger.Error("Unable to encode ObjectSpawn", zap.Error(err))
+		d.logger.Error("Unable to encode object spawns", zap.Error(err))
 		return
 	}
-	if spawn.ActionAnimation != nil {
+	if critical {
 		client.SendCritical(encoded)
 	} else {
 		client.Send(encoded)

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"origin/internal/ecs"
 	"origin/internal/game"
 	"sync"
 
@@ -25,11 +26,19 @@ type Collector struct {
 	chunkSaveRequests     *prometheus.Desc
 	chunkCacheHits        *prometheus.Desc
 	chunkCacheMisses      *prometheus.Desc
+	entityCount           *prometheus.Desc
+	entityCapacity        *prometheus.Desc
 }
 
 func NewCollector(g *game.Game) *Collector {
 	return &Collector{
 		game: g,
+		entityCount: prometheus.NewDesc(
+			"game_entity_count", "Allocated ECS entities, including inventory containers", []string{"layer"}, nil,
+		),
+		entityCapacity: prometheus.NewDesc(
+			"game_entity_capacity", "Maximum allocated ECS entities per shard", []string{"layer"}, nil,
+		),
 		connectedClients: prometheus.NewDesc(
 			"game_connected_clients",
 			"Number of connected clients",
@@ -104,6 +113,8 @@ func NewCollector(g *game.Game) *Collector {
 }
 
 func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.entityCount
+	ch <- c.entityCapacity
 	ch <- c.connectedClients
 	ch <- c.totalPlayers
 	ch <- c.currentTick
@@ -163,6 +174,12 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 
 			chunkStats := s.ChunkManager().Stats()
 			layerLabel := prometheus.Labels{"layer": string(rune('0' + l))}
+			var entityCount, entityCapacity int
+			s.WithWorldRead(func(w *ecs.World) {
+				entityCount, entityCapacity = w.EntityCount(), w.EntityCapacity()
+			})
+			ch <- prometheus.MustNewConstMetric(c.entityCount, prometheus.GaugeValue, float64(entityCount), layerLabel["layer"])
+			ch <- prometheus.MustNewConstMetric(c.entityCapacity, prometheus.GaugeValue, float64(entityCapacity), layerLabel["layer"])
 
 			ch <- prometheus.MustNewConstMetric(
 				c.chunkActiveCount,

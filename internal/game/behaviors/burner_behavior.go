@@ -8,7 +8,6 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/itemdefs"
 	"origin/internal/objectdefs"
@@ -212,7 +211,7 @@ func setBurnerStationState(w *ecs.World, handle types.Handle, nextState string, 
 	}
 	entityID, _ := w.GetExternalID(handle)
 	if appearanceChanged {
-		deps.EventBus.PublishAsync(ecs.NewEntityAppearanceChangedEvent(w.Layer, entityID, handle), eventbus.PriorityMedium)
+		ecs.PublishEntityAppearanceChanged(w, deps.EventBus, entityID, handle)
 	}
 	if changed {
 		if err := deps.EventBus.PublishSync(ecs.NewStationStateChangedEvent(w.Layer, entityID, handle)); err != nil {

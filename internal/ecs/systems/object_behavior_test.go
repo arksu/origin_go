@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -8,9 +9,12 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
+
+	"github.com/stretchr/testify/require"
 )
 
 type testRuntimeBehaviorRegistry struct {
@@ -93,12 +97,19 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 	}))
 
 	w := ecs.NewWorldForTesting()
+	bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 1})
+	t.Cleanup(func() { require.NoError(t, bus.Shutdown(context.Background())) })
+	appearances := make(chan *ecs.EntityAppearanceChangedEvent, 4)
+	bus.SubscribeAsync(ecs.TopicGameplayEntityAppearance, eventbus.PriorityMedium, func(_ context.Context, event eventbus.Event) error {
+		appearances <- event.(*ecs.EntityAppearanceChangedEvent)
+		return nil
+	})
 	behaviorRegistry := &testRuntimeBehaviorRegistry{
 		byKey: map[string]contracts.Behavior{
 			"container": testContainerRuntimeBehavior{},
 		},
 	}
-	sys := NewObjectBehaviorSystem(nil, nil, ObjectBehaviorConfig{
+	sys := NewObjectBehaviorSystem(bus, nil, ObjectBehaviorConfig{
 		BudgetPerTick:       512,
 		EnableDebugFallback: false,
 		BehaviorRegistry:    behaviorRegistry,
@@ -158,6 +169,8 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 	if state.IsDirty {
 		t.Fatalf("expected object to remain clean when nothing changed")
 	}
+	observer := w.Spawn(600, nil)
+	ecs.GetResource[ecs.VisibilityState](w).ObserversByVisibleTarget[objectHandle] = map[types.Handle]struct{}{observer: {}}
 
 	ecs.WithComponent(w, containerHandle, func(c *components.InventoryContainer) {
 		c.Items = nil
@@ -175,4 +188,8 @@ func TestObjectBehaviorSystem_ContainerFlagsAndAppearance(t *testing.T) {
 	if appearance.Resource != "obj/box/box.png" {
 		t.Fatalf("unexpected appearance resource after empty: got %q", appearance.Resource)
 	}
+	flushBatchPublicationEvents(t, bus)
+	require.NoError(t, bus.Shutdown(context.Background()))
+	require.Len(t, appearances, 1, "initial recomputation must not enqueue an appearance upsert before visibility")
+	require.Equal(t, objectID, (<-appearances).TargetID)
 }

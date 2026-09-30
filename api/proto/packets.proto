@@ -577,6 +577,10 @@ message S2C_ObjectSpawn {
   CharacterActionAnimationState action_animation = 10;
 }
 
+message S2C_ObjectSpawnBatch {
+  repeated S2C_ObjectSpawn spawns = 1;
+}
+
 message S2C_ObjectDespawn {
   uint64 entity_id = 1;
   uint32 stream_epoch = 2;
@@ -594,6 +598,10 @@ message S2C_ObjectMove {
   // if true: client should snap/reset buffer
   bool is_teleport = 5;
   uint64 carried_by_entity_id = 6; // 0 when not carried
+}
+
+message S2C_ObjectMoveBatch {
+  repeated S2C_ObjectMove moves = 1;
 }
 
 message S2C_MovementMode {
@@ -902,6 +910,8 @@ message ServerMessage {
     S2C_ActionList action_list = 46;
     S2C_ActionStateChanged action_state_changed = 47;
     S2C_CharacterActionAnimation character_action_animation = 48;
+    S2C_ObjectMoveBatch object_move_batch = 49;
+    S2C_ObjectSpawnBatch object_spawn_batch = 50;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

@@ -9,7 +9,6 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
-	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
 	"origin/internal/itemdefs"
@@ -1277,12 +1276,7 @@ func deleteTreeTarget(
 	ecs.CancelBehaviorTicksByEntityID(world, targetID)
 	world.Despawn(targetHandle)
 
-	if deps.EventBus != nil {
-		deps.EventBus.PublishAsync(
-			ecs.NewEntityAppearanceChangedEvent(targetInfo.Layer, targetID, targetHandle),
-			eventbus.PriorityMedium,
-		)
-	}
+	ecs.PublishEntityAppearanceChanged(world, deps.EventBus, targetID, targetHandle)
 }
 
 func resolveLogger(logger *zap.Logger) *zap.Logger {

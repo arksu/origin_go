@@ -99,6 +99,25 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 	if raw.Quality < 0 {
 		return types.InvalidHandle, fmt.Errorf("object %d has invalid quality %d", raw.ID, raw.Quality)
 	}
+	// Restoration runs on the shard thread. Check all required handles before
+	// spawning, so capacity failure cannot discard a persisted inventory tree.
+	required := 1
+	if f.isContainerDefinition(def) {
+		inventoryHandles := 0
+		for _, inventory := range inventories {
+			var state objectInventoryDataV1
+			if json.Unmarshal(inventory.Data, &state) == nil {
+				inventoryHandles += inventoryTreeHandleCount(state)
+			}
+		}
+		if inventoryHandles == 0 {
+			inventoryHandles = len(def.Components.Inventory)
+		}
+		required += inventoryHandles
+	}
+	if err := requireObjectCapacity(w, required); err != nil {
+		return types.InvalidHandle, err
+	}
 
 	h := SpawnEntityFromDef(w, def, DefSpawnParams{
 		EntityID:  types.EntityID(raw.ID),
@@ -205,6 +224,9 @@ func (f *ObjectFactory) buildDroppedItemFromRecords(
 	if err := validateDroppedItemInventoryData(*rootData, types.EntityID(raw.ID)); err != nil {
 		return types.InvalidHandle, fmt.Errorf("dropped item %d: %w", raw.ID, err)
 	}
+	if err := requireObjectCapacity(w, 1+inventoryTreeHandleCount(*rootData)); err != nil {
+		return types.InvalidHandle, err
+	}
 
 	containerHandle := f.spawnContainerTreeFromData(w, types.EntityID(raw.ID), *rootData)
 	if containerHandle == types.InvalidHandle {
@@ -267,11 +289,12 @@ func (f *ObjectFactory) spawnDroppedItemEntity(
 		refIndex.Add(constt.InventoryDroppedItem, entityID, 0, containerHandle)
 	})
 	if h == types.InvalidHandle {
+		spawnErr := fmt.Errorf("%w: %w", ErrEntitySpawnFailed, ecs.ErrEntityCapacityExhausted)
 		if w.Alive(containerHandle) {
 			w.Despawn(containerHandle)
 		}
 		lifecycle.DeleteOwnedInventoryContainers(w, entityID)
-		return types.InvalidHandle, ErrEntitySpawnFailed
+		return types.InvalidHandle, spawnErr
 	}
 
 	return h, nil
@@ -678,6 +701,9 @@ func (f *ObjectFactory) spawnContainerTreeFromData(
 	ownerID types.EntityID,
 	data objectInventoryDataV1,
 ) types.Handle {
+	if requireObjectCapacity(w, inventoryTreeHandleCount(data)) != nil {
+		return types.InvalidHandle
+	}
 	containerHandle := w.SpawnWithoutExternalID()
 	if containerHandle == types.InvalidHandle {
 		return types.InvalidHandle
@@ -725,6 +751,26 @@ func (f *ObjectFactory) spawnContainerTreeFromData(
 
 	ecs.AddComponent(w, containerHandle, container)
 	return containerHandle
+}
+
+func requireObjectCapacity(w *ecs.World, required int) error {
+	if w.EntityCapacity()-w.EntityCount() < required {
+		return fmt.Errorf("%w: %w (active=%d capacity=%d required=%d)",
+			ErrEntitySpawnFailed, ecs.ErrEntityCapacityExhausted, w.EntityCount(), w.EntityCapacity(), required)
+	}
+	return nil
+}
+
+func inventoryTreeHandleCount(state objectInventoryDataV1) int {
+	count := 1
+	for _, item := range state.Items {
+		if item.NestedInventory != nil {
+			if _, exists := itemdefs.Global().GetByID(int(item.TypeID)); exists {
+				count += inventoryTreeHandleCount(*item.NestedInventory)
+			}
+		}
+	}
+	return count
 }
 
 func parseEquipSlot(slot string) netproto.EquipSlot {

@@ -2,37 +2,46 @@
 
 ## 1. Protocol
 
-- [ ] 1.1 Add `S2C_ObjectMoveBatch` (repeated per-entity move entries, `repeated S2C_ObjectMove moves`) and `S2C_ObjectSpawnBatch` (repeated `S2C_ObjectSpawn spawns`, `uint32 stream_epoch`) to `api/proto/packets.proto` in the `ServerMessage` oneof on free field numbers; verify `make` protoc step regenerates `internal/network/proto/packets.pb.go` and `cd web_new && npm run proto` regenerates `src/network/proto/packets.{js,d.ts}` without errors
-- [ ] 1.2 Regenerate both protocol stacks and confirm `go build ./...` and `web_new` `npm run type-check` compile against the new messages
+- [x] 1.1 Add `S2C_ObjectMoveBatch { repeated S2C_ObjectMove moves = 1; }` and `S2C_ObjectSpawnBatch { repeated S2C_ObjectSpawn spawns = 1; }` on free `ServerMessage` oneof fields; verify existing singles/entry fields remain unchanged and field numbers are unused, with no outer spawn epoch or new movement epoch
+- [x] 1.2 Regenerate Go and web protocol stacks through the existing Makefile/proto commands; verify payload-preserving protocol roundtrips, `go build ./...`, and `cd web_new && npm run type-check`
 
-## 2. Server: batch events own their data
+## 2. Event ownership
 
-- [ ] 2.1 Make the move-batch publication stop aliasing the reused scratch buffer: `TransformUpdateSystem` publishes a copy (or a slice that is not truncated next tick) of the movement batch before `PublishAsync`; add a test that fails when the published event's entries are mutated by the next tick (reuse/overwrite of the scratch buffer) and passes with the copy — `go test ./internal/ecs/systems/ -run Transform`
-- [ ] 2.2 Add `EntitySpawnBatchEvent` (observer, target list with handles and entity ids, layer) to `internal/ecs/events.go` that owns its slice; verify `go build ./...`
+- [x] 2.1 Make transform movement publication own its slice instead of aliasing tick-reused scratch; preserve immutable pointed-to values and verify a regression test delays consumption until the next update has overwritten producer scratch (`go test ./internal/ecs/systems/ -run Transform`)
+- [x] 2.2 Add `EntitySpawnBatchEvent` with observer ID, layer, and owned target handle/ID entries; verify source-slice mutation cannot change a published target list (`go test ./internal/ecs/`)
 
-## 3. Server: spawn publication aggregates per observer
+## 3. Suppress redundant appearance events
 
-- [ ] 3.1 `VisionSystem.publishResultEvents` publishes one `EntitySpawnBatchEvent` per observer result (and one despawn path unchanged); same for `ForceUpdateForObserver`; verify `go test ./internal/ecs/systems/ -run Vision`
-- [ ] 3.2 Reattach burst in `internal/game/game_auth.go` replaces its per-entity `NewEntitySpawnEvent` loop with one `EntitySpawnBatchEvent`; verify `go build ./...`
+- [x] 3.1 Introduce a shared visibility-aware network appearance publication guard and use it in object behavior recomputation, object transformation, and direct tree/burner producers: after updating authoritative state, check current observers under the visibility read lock and skip `PublishAsync` when none exist; preserve recomputation, dirty-state handling, and dispatcher visibility rechecks; verify focused tests for zero observers, later visibility with final resource, and existing observers receiving an upsert
 
-## 4. Server: dispatcher sends batch messages
+## 4. Aggregate spawn publication
 
-- [ ] 4.1 `handleObjectMoveBatch` in `internal/game/events/game_events.go` sends each visible observer one `S2C_ObjectMoveBatch` (per-observer marshal with the client's stream epoch where required) instead of N `Send` calls; per-entry single serialization reuse preserved; verify updated `go test ./internal/game/events/`
-- [ ] 4.2 New `handleEntitySpawnBatch`: under one `shard.WithWorldRead`, build entries per target with the existing `buildObjectSpawn` guards (alive, external id match, component presence, snapshot errors skip the entry), visibility re-check per entry, one `ClientsMu` acquisition, `SendCritical` iff any entry carries an action animation else `Send`; verify a new unit test covers entry skip on dead target and the critical/droppable split
-- [ ] 4.3 Appearance-change upsert path (`handleEntityAppearanceChanged`) delivers through the same batch message per observer; verify updated `go test ./internal/game/events/ -run Appearance`
-- [ ] 4.4 Remove single-message `object_spawn`/`object_move` send sites server-side (single spawn handler becomes unused; single-entry move publications keep using the batch event); verify `grep` finds no `ServerMessage_ObjectSpawn{`/`ServerMessage_ObjectMove{` construction outside tests and `go build ./...`
+- [x] 4.1 Publish one nonempty spawn-batch event per `VisionSystem` observer result, including the shared `ForceUpdateForObserver` path; leave despawns unchanged; verify multiple targets, different observer subsets, and empty results (`go test ./internal/ecs/systems/ -run Vision`)
+- [x] 4.2 Replace reattach's per-target spawn publication with one owned event for the snapshot's live targets; verify multiple-target and empty-snapshot reattach coverage (`go test ./internal/game/`)
 
-## 5. Client: batch-aware dispatch
+## 5. Aggregate periodic carry-follow only
 
-- [ ] 5.1 Extract per-entry logic of `objectSpawn`/`objectMove` handlers in `web_new/src/network/handlers.ts` into reusable per-entry functions with per-entry error containment; single-message handlers delegate to them; verify `npm run type-check`
-- [ ] 5.2 Register `objectSpawnBatch`/`objectMoveBatch` in `MessageDispatcher.ts` and add batch handlers: whole-message stream-epoch gate for spawn batches, entry loop calling the per-entry functions, `move_seq`/carry-drop snap semantics per entry; verify `npm run type-check` and a manual dev-run smoke (spawn burst renders, movement smooth, equipment upsert applies)
+- [x] 5.1 Separate shared relocation mutation/entry construction from immediate publication so periodic following can obtain an optional entry; preserve the existing immediate API's success/no-op result, synchronous spatial/chunk/transform/dirty updates, and pickup/drop/transfer callers; verify unchanged position emits no entry, forced reindex still emits, and immediate carry/teleport/sequence/timestamp fields remain unchanged (`go test ./internal/game/world/ ./internal/game/`)
+- [x] 5.2 Have `SyncLiftCarryFollow` return an optional movement entry without publishing it and `LiftCarryFollowSystem` publish one owned nonempty event after its pass; preserve carry cleanup and cached-handle refresh, with no individual duplicate sends; verify several moving carries, stationary carries, and next-update slice ownership (`go test ./internal/ecs/systems/ ./internal/game/`)
 
-## 6. Load test client
+## 6. Dispatch bulk messages while retaining singles
 
-- [ ] 6.1 Add `ObjectSpawnBatch`/`ObjectMoveBatch` cases to `cmd/load_test/virtual_client.go`: per-message and per-entry counters, player position tracking from batch entries; verify `go build ./...` and a short local load run records nonzero batch counters
+- [x] 6.1 Change `handleObjectMoveBatch` to send each observer's visible subset once: no message for zero entries, a single move for one, and `S2C_ObjectMoveBatch` for multiple entries; start with standard per-recipient `proto.Marshal`, preserving entry order/fields and independent link/lift publications; verify disjoint/overlapping observer subsets and mixed single/batch sends (`go test ./internal/game/events/`)
+- [x] 6.2 Implement spawn-batch handling under one `WithWorldRead` scope through enqueue and one `ClientsMu` acquisition: validate each snapshot and visibility, require an in-world client, stamp each entry's epoch, and send zero/single/batch according to valid count; use `SendCritical` if any included entry carries action-animation state; verify dead/mismatched/invisible targets, snapshot failure isolation, empty results, epoch stamping, bootstrap ordering, and critical/noncritical delivery (`go test ./internal/game/events/`)
+- [x] 6.3 Preserve occasional appearance-upsert and single movement send paths; update only assertions affected by bulk delivery and retain visual/name/animation/despawn invariants; verify appearance changes on existing visible objects still deliver (`go test ./internal/game/events/`)
 
-## 7. Regression and full verification
+## 7. Client batch dispatch
 
-- [ ] 7.1 Update existing single-message assertions in `internal/game/events/*_test.go` (character visual, nickname, burner appearance, action animation ordering) to batch equivalents preserving their original invariants (late-observer equipment snapshot, delayed visibility re-check, animation ordering); verify `go test ./internal/...`
-- [ ] 7.2 Add a dispatcher test that one tick with several movers yields exactly one message per observer, and a vision test that one update yields one spawn batch event per observer with one entry per newly visible target; verify `go test ./internal/game/events/ ./internal/ecs/systems/`
-- [ ] 7.3 Run the full verification suite: `go test ./internal/...`, `cd web_new && npm run type-check && npm run lint`, and confirm `openspec validate s2c-packet-batching --strict` passes
+- [x] 7.1 Extract common single-entry spawn/move handlers, retaining spawn epoch checks and current movement-controller/store/carry behavior; verify existing single-message tests preserve stale movement, teleport, and carry-drop snap behavior without introducing new sequence or epoch semantics
+- [x] 7.2 Register both batch types and apply entries in order with per-entry error containment; verify single/batch equivalence, that a bad animation-incarnation entry and a stale-epoch spawn do not stop later valid entries, and that single messages remain accepted; run `cd web_new && npm run type-check && npm run test:character-visual && npm run test:action-animations` plus focused batch-handler tests
+
+## 8. Load validation and serialization cost
+
+- [x] 8.1 Update load-client single/batch decoding, message/byte/entry counters, position tracking, and reporting; add an explicit full-decode validation mode bypassing the 100-message cap while keeping drain mode available with partial entry counters labeled; verify a test exceeding 100 messages and a short full-decode run count later entries and update position (`go test ./cmd/load_test/`)
+- [x] 8.2 Compare standard per-recipient serialization with the current per-entry marshal/fanout baseline using identical entity and observer sets; record CPU time and allocations alongside message/byte/entry counts for sparse and dense fanout, and investigate material regressions before claiming success; verify the measured comparison is recorded, with no custom wire encoding or Prometheus expansion required absent measured need
+
+## 9. End-to-end regression and acceptance
+
+- [x] 9.1 Add a deterministic chunk activation -> Vision -> dispatcher -> outbound-message test with N restored mature trees/filled containers, N > 1: let delivery run after observers are added and assert one spawn message for N valid targets, final resources, each expected ID once, and no delayed restoration upserts; also cover a later-loaded chunk and the forced/reattach burst paths (`go test ./internal/game/... ./internal/ecs/systems/`)
+- [x] 9.2 Verify combined periodic movement delivery through the dispatcher: one ordinary batch plus one carry-follow batch for multiple visible entries, stationary carries produce none, occasional transitions remain independent, and all expected entries arrive; record packet reductions under fixed inputs, including the 100-mover and 100-mover-plus-100-carry scenarios from design.md
+- [x] 9.3 Run `go test ./internal/... ./cmd/load_test/...`, focused race checks for changed async ownership, web type checking and relevant network/visual tests, and the project's lint checks; perform a dev smoke for chunk population, ordinary/carry movement, pickup/drop, reattach, and appearance upserts; verify `openspec validate s2c-packet-batching --strict` and report actual message counts, payload completeness, CPU/allocations, and any unrelated baseline failures separately

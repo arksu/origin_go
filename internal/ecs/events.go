@@ -20,6 +20,7 @@ const (
 	TopicGameplayPlayerEnterWorld     = "gameplay.player.enter_world"
 	TopicGameplayEntity               = "gameplay.entity.*"
 	TopicGameplayEntitySpawn          = "gameplay.entity.spawn"
+	TopicGameplayEntitySpawnBatch     = "gameplay.entity.spawn_batch"
 	TopicGameplayEntityDespawn        = "gameplay.entity.despawn"
 	TopicGameplayEntityUpdate         = "gameplay.entity.update"
 	TopicGameplayEntityAppearance     = "gameplay.entity.appearance_changed"
@@ -70,6 +71,28 @@ func NewEntitySpawnEvent(observerID, targetID types.EntityID, targetHandle types
 		TargetID:     targetID,
 		TargetHandle: targetHandle,
 		Layer:        layer,
+	}
+}
+
+type SpawnBatchEntry struct {
+	EntityID types.EntityID
+	Handle   types.Handle
+}
+
+// EntitySpawnBatchEvent owns its entries because dispatch may outlive the ECS tick.
+type EntitySpawnBatchEvent struct {
+	ObserverID types.EntityID
+	Entries    []SpawnBatchEntry
+	Layer      int
+}
+
+func (e *EntitySpawnBatchEvent) Topic() string { return TopicGameplayEntitySpawnBatch }
+
+func NewEntitySpawnBatchEvent(observerID types.EntityID, entries []SpawnBatchEntry, layer int) *EntitySpawnBatchEvent {
+	return &EntitySpawnBatchEvent{
+		ObserverID: observerID,
+		Entries:    append([]SpawnBatchEntry(nil), entries...),
+		Layer:      layer,
 	}
 }
 
@@ -196,7 +219,7 @@ type MoveBatchEntry struct {
 	IsTeleport        bool
 }
 
-// ObjectMoveBatchEvent carries all movement updates for one tick in a single event.
+// ObjectMoveBatchEvent owns movement updates from one producer publication.
 type ObjectMoveBatchEvent struct {
 	topic   string
 	Layer   int
@@ -206,10 +229,23 @@ type ObjectMoveBatchEvent struct {
 func (e *ObjectMoveBatchEvent) Topic() string { return e.topic }
 
 func NewObjectMoveBatchEvent(layer int, entries []MoveBatchEntry) *ObjectMoveBatchEvent {
+	// Producers reuse scratch buffers on the next tick; async subscribers must
+	// also own the optional target coordinates referenced by each entry.
+	ownedEntries := append([]MoveBatchEntry(nil), entries...)
+	for i := range ownedEntries {
+		if ownedEntries[i].TargetX != nil {
+			coordinate := *ownedEntries[i].TargetX
+			ownedEntries[i].TargetX = &coordinate
+		}
+		if ownedEntries[i].TargetY != nil {
+			coordinate := *ownedEntries[i].TargetY
+			ownedEntries[i].TargetY = &coordinate
+		}
+	}
 	return &ObjectMoveBatchEvent{
 		topic:   TopicGameplayMovementMoveBatch,
 		Layer:   layer,
-		Entries: entries,
+		Entries: ownedEntries,
 	}
 }
 
