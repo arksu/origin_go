@@ -37,7 +37,7 @@ func addRiverTributaries(flow []uint32, plan *riverFairways, width, height int, 
 			fraction := coordHash01(branchSeed, parentID, attempt, lakeLinkJitterSalt)
 			position := margin + int(fraction*float64(len(parent.Path)-2*margin-1))
 			junction := parent.Path[position]
-			if !tributaryJunctionSeparated(junction, junctions, plan.Inlets, width, opts.TributarySpacingTiles) {
+			if !tributaryJunctionSeparated(junction, junctions, plan.Inlets, width, opts.TributarySpacingTiles) || plan.Junctions != nil && !plan.Junctions.separated(junction, maxInt(maxInt(opts.JunctionSpacingTiles, opts.TributarySpacingTiles), riverCorridorMaximumWidth(opts)*2)) {
 				plan.RejectedTributaries++
 				continue
 			}
@@ -55,21 +55,22 @@ func addRiverTributaries(flow []uint32, plan *riverFairways, width, height int, 
 			startColumn, startRow := junction%width, junction/width
 			endColumn := startColumn + int(math.Round(-deltaRow/tangentLength*length*side))
 			endRow := startRow + int(math.Round(deltaColumn/tangentLength*length*side))
-			edgeMargin := opts.RiverWidthMin + opts.BankRadius
+			branchOpts := opts
+			branchOpts.RiverWidthMin = opts.FairwayWidthTiles
+			branchOpts.RiverWidthMax = opts.RiverWidthMin
+			clearance := riverCorridorMaximumWidth(branchOpts)
+			edgeMargin := clearance/2 + 1
 			if endColumn < edgeMargin || endRow < edgeMargin || endColumn >= width-edgeMargin || endRow >= height-edgeMargin {
 				plan.RejectedTributaries++
 				continue
 			}
-			branchOpts := opts
-			branchOpts.RiverWidthMax = opts.RiverWidthMin
 			path := buildNestedBendPath(width, height, startColumn, startRow, endColumn, endRow, branchSeed, branchOpts)
-			clearance := opts.RiverWidthMin + opts.BankRadius*2
 			startAllowance := parent.Width*2 + clearance
-			if len(path) <= startAllowance+opts.FairwayWidthTiles || len(path) < opts.TributaryLengthMin || !riverPathSelfSeparated(path, width, clearance) || riverPathTouchesWater(flow, path, width, height, clearance/2+1, startAllowance, 0, uint32(opts.FlowShallowThreshold)) {
+			if len(path) <= startAllowance+opts.FairwayWidthTiles || len(path) < opts.TributaryLengthMin || !riverPathSelfSeparated(path, width, clearance) || riverPathTouchesWater(flow, path, width, height, clearance/2+1, startAllowance, 0, uint32(opts.FlowShallowThreshold)) || riverPathTouchesLakeLand(plan, path, width, height, clearance/2+1) {
 				plan.RejectedTributaries++
 				continue
 			}
-			carveRiverCorridor(flow, width, height, path, opts.RiverWidthMin, opts)
+			carveRiverCorridor(flow, width, height, path, opts.RiverWidthMin, branchSeed, branchOpts)
 			route := riverRoute{Path: path, Width: opts.RiverWidthMin, Role: "tributary", Parent: parentID}
 			plan.Routes = append(plan.Routes, protectRiverRoute(flow, plan, route, width, height, opts))
 			plan.Tributaries++

@@ -17,63 +17,81 @@ const (
 const defaultGenConfigPath = "etc/mapgen/presets/default.yaml"
 
 type RiverOptions struct {
-	ShapeWavelengthTiles   int     `yaml:"shape_wavelength_tiles"`
-	FairwayWidthTiles      int     `yaml:"fairway_width_tiles"`
-	TributaryRatio         float64 `yaml:"tributary_ratio"`
-	TributarySpacingTiles  int     `yaml:"tributary_spacing_tiles"`
-	TributaryLengthMin     int     `yaml:"tributary_length_min"`
-	TributaryLengthMax     int     `yaml:"tributary_length_max"`
-	Enabled                bool    `yaml:"enabled"`
-	LayoutDraw             bool    `yaml:"layout_draw"`
-	MajorRiverCount        int     `yaml:"major_count"`
-	LakeCount              int     `yaml:"lake_count"`
-	LakeSizeSmallMin       int     `yaml:"lake_size_small_min"`
-	LakeSizeSmallMax       int     `yaml:"lake_size_small_max"`
-	LakeSizeMediumMin      int     `yaml:"lake_size_medium_min"`
-	LakeSizeMediumMax      int     `yaml:"lake_size_medium_max"`
-	LakeSizeLargeMin       int     `yaml:"lake_size_large_min"`
-	LakeSizeLargeMax       int     `yaml:"lake_size_large_max"`
-	LakeSizeMediumChance   float64 `yaml:"lake_size_medium_chance"`
-	LakeSizeLargeChance    float64 `yaml:"lake_size_large_chance"`
-	LakeBorderMix          float64 `yaml:"lake_border_mix"`
-	MaxLakeDegree          int     `yaml:"max_lake_degree"`
-	ShapeLongMeanderScale  float64 `yaml:"shape_long_meander_scale"`
-	ShapeShortMeanderScale float64 `yaml:"shape_short_meander_scale"`
-	ShapeShortMeanderBias  float64 `yaml:"shape_short_meander_bias"`
-	ShapeAmplitudeScale    float64 `yaml:"shape_amplitude_scale"`
-	ShapeFrequencyScale    float64 `yaml:"shape_frequency_scale"`
-	ShapeOctaves           int     `yaml:"shape_octaves"`
-	ShapeWavesPerLink      float64 `yaml:"shape_waves_per_link"`
-	ShapeOctaveGain        float64 `yaml:"shape_octave_gain"`
-	ShapeAlongScale        float64 `yaml:"shape_along_scale"`
-	ShapeDistanceCap       float64 `yaml:"shape_distance_cap"`
-	ShapeSegmentLength     int     `yaml:"shape_segment_length"`
-	SourceElevationMin     float64 `yaml:"source_elevation_min"`
-	SourceChance           float64 `yaml:"source_chance"`
-	MeanderStrength        float64 `yaml:"meander_strength"`
-	VoronoiCellSize        int     `yaml:"voronoi_cell_size"`
-	VoronoiEdgeThreshold   float64 `yaml:"voronoi_edge_threshold"`
-	VoronoiSourceBoost     float64 `yaml:"voronoi_source_boost"`
-	VoronoiBias            float64 `yaml:"voronoi_bias"`
-	SinkLakeChance         float64 `yaml:"sink_lake_chance"`
-	LakeMinSize            int     `yaml:"lake_min_size"`
-	LakeConnectChance      float64 `yaml:"lake_connect_chance"`
-	LakeConnectionLimit    int     `yaml:"lake_connection_limit"`
-	LakeLinkMinDistance    int     `yaml:"lake_link_min_distance"`
-	LakeLinkMaxDistance    int     `yaml:"lake_link_max_distance"`
-	RiverWidthMin          int     `yaml:"river_width_min"`
-	RiverWidthMax          int     `yaml:"river_width_max"`
-	GridEnabled            bool    `yaml:"grid_enabled"`
-	GridSpacing            int     `yaml:"grid_spacing"`
-	GridJitter             int     `yaml:"grid_jitter"`
-	TrunkRiverCount        int     `yaml:"trunk_count"`
-	TrunkSourceElevation   float64 `yaml:"trunk_source_elevation_min"`
-	TrunkMinLength         int     `yaml:"trunk_min_length"`
-	CoastSampleChance      float64 `yaml:"coast_sample_chance"`
-	FlowShallowThreshold   int     `yaml:"flow_shallow_threshold"`
-	FlowDeepThreshold      int     `yaml:"flow_deep_threshold"`
-	BankRadius             int     `yaml:"bank_radius"`
-	LakeFlowThreshold      int     `yaml:"lake_flow_threshold"`
+	LakeIrregularEnabled    bool    `yaml:"lake_irregular_enabled"`
+	LakePeninsulaCountMax   int     `yaml:"lake_peninsula_count_max"`
+	LakePeninsulaDepthRatio float64 `yaml:"lake_peninsula_depth_ratio"`
+	LakeShoreVariationTiles int     `yaml:"lake_shore_variation_tiles"`
+	LakeIslandSmallChance   float64 `yaml:"lake_island_small_chance"`
+	LakeIslandMediumChance  float64 `yaml:"lake_island_medium_chance"`
+	LakeIslandLargeChance   float64 `yaml:"lake_island_large_chance"`
+	LakeIslandSecondChance  float64 `yaml:"lake_island_second_chance"`
+	LakeIslandRadiusMin     int     `yaml:"lake_island_radius_min"`
+	LakeIslandRadiusMax     int     `yaml:"lake_island_radius_max"`
+	LakeShallowWidthMin     int     `yaml:"lake_shallow_width_min"`
+	LakeShallowWidthMax     int     `yaml:"lake_shallow_width_max"`
+	WidthVariationScale     int     `yaml:"width_variation_scale"`
+	ShallowWidthMin         int     `yaml:"shallow_width_min"`
+	ShallowWidthMax         int     `yaml:"shallow_width_max"`
+	ShallowVariationScale   int     `yaml:"shallow_variation_scale"`
+	ShapeWavelengthTiles    int     `yaml:"shape_wavelength_tiles"`
+	FairwayWidthTiles       int     `yaml:"fairway_width_tiles"`
+	TributaryRatio          float64 `yaml:"tributary_ratio"`
+	JunctionChance          float64 `yaml:"junction_chance"`
+	JunctionSpacingTiles    int     `yaml:"junction_spacing_tiles"`
+	TributarySpacingTiles   int     `yaml:"tributary_spacing_tiles"`
+	TributaryLengthMin      int     `yaml:"tributary_length_min"`
+	TributaryLengthMax      int     `yaml:"tributary_length_max"`
+	Enabled                 bool    `yaml:"enabled"`
+	LayoutDraw              bool    `yaml:"layout_draw"`
+	MajorRiverCount         int     `yaml:"major_count"`
+	LakeCount               int     `yaml:"lake_count"`
+	LakeSizeSmallMin        int     `yaml:"lake_size_small_min"`
+	LakeSizeSmallMax        int     `yaml:"lake_size_small_max"`
+	LakeSizeMediumMin       int     `yaml:"lake_size_medium_min"`
+	LakeSizeMediumMax       int     `yaml:"lake_size_medium_max"`
+	LakeSizeLargeMin        int     `yaml:"lake_size_large_min"`
+	LakeSizeLargeMax        int     `yaml:"lake_size_large_max"`
+	LakeSizeMediumChance    float64 `yaml:"lake_size_medium_chance"`
+	LakeSizeLargeChance     float64 `yaml:"lake_size_large_chance"`
+	LakeBorderMix           float64 `yaml:"lake_border_mix"`
+	MaxLakeDegree           int     `yaml:"max_lake_degree"`
+	ShapeLongMeanderScale   float64 `yaml:"shape_long_meander_scale"`
+	ShapeShortMeanderScale  float64 `yaml:"shape_short_meander_scale"`
+	ShapeShortMeanderBias   float64 `yaml:"shape_short_meander_bias"`
+	ShapeAmplitudeScale     float64 `yaml:"shape_amplitude_scale"`
+	ShapeFrequencyScale     float64 `yaml:"shape_frequency_scale"`
+	ShapeOctaves            int     `yaml:"shape_octaves"`
+	ShapeWavesPerLink       float64 `yaml:"shape_waves_per_link"`
+	ShapeOctaveGain         float64 `yaml:"shape_octave_gain"`
+	ShapeAlongScale         float64 `yaml:"shape_along_scale"`
+	ShapeDistanceCap        float64 `yaml:"shape_distance_cap"`
+	ShapeSegmentLength      int     `yaml:"shape_segment_length"`
+	SourceElevationMin      float64 `yaml:"source_elevation_min"`
+	SourceChance            float64 `yaml:"source_chance"`
+	MeanderStrength         float64 `yaml:"meander_strength"`
+	VoronoiCellSize         int     `yaml:"voronoi_cell_size"`
+	VoronoiEdgeThreshold    float64 `yaml:"voronoi_edge_threshold"`
+	VoronoiSourceBoost      float64 `yaml:"voronoi_source_boost"`
+	VoronoiBias             float64 `yaml:"voronoi_bias"`
+	SinkLakeChance          float64 `yaml:"sink_lake_chance"`
+	LakeMinSize             int     `yaml:"lake_min_size"`
+	LakeConnectChance       float64 `yaml:"lake_connect_chance"`
+	LakeConnectionLimit     int     `yaml:"lake_connection_limit"`
+	LakeLinkMinDistance     int     `yaml:"lake_link_min_distance"`
+	LakeLinkMaxDistance     int     `yaml:"lake_link_max_distance"`
+	RiverWidthMin           int     `yaml:"river_width_min"`
+	RiverWidthMax           int     `yaml:"river_width_max"`
+	GridEnabled             bool    `yaml:"grid_enabled"`
+	GridSpacing             int     `yaml:"grid_spacing"`
+	GridJitter              int     `yaml:"grid_jitter"`
+	TrunkRiverCount         int     `yaml:"trunk_count"`
+	TrunkSourceElevation    float64 `yaml:"trunk_source_elevation_min"`
+	TrunkMinLength          int     `yaml:"trunk_min_length"`
+	CoastSampleChance       float64 `yaml:"coast_sample_chance"`
+	FlowShallowThreshold    int     `yaml:"flow_shallow_threshold"`
+	FlowDeepThreshold       int     `yaml:"flow_deep_threshold"`
+	BankRadius              int     `yaml:"bank_radius"`
+	LakeFlowThreshold       int     `yaml:"lake_flow_threshold"`
 }
 
 type BiomeOptions struct {
@@ -182,57 +200,70 @@ func DefaultMapgenOptions() MapgenOptions {
 		PerlinWaterEnabled: true,
 		PreviewPort:        8099,
 		River: RiverOptions{
-			Enabled:                true,
-			LayoutDraw:             true,
-			MajorRiverCount:        34,
-			LakeCount:              220,
-			LakeSizeSmallMin:       10,
-			LakeSizeSmallMax:       30,
-			LakeSizeMediumMin:      36,
-			LakeSizeMediumMax:      88,
-			LakeSizeLargeMin:       96,
-			LakeSizeLargeMax:       240,
-			LakeSizeMediumChance:   0.24,
-			LakeSizeLargeChance:    0.04,
-			LakeBorderMix:          0.32,
-			MaxLakeDegree:          2,
-			ShapeLongMeanderScale:  0.55,
-			ShapeShortMeanderScale: 2.2,
-			ShapeShortMeanderBias:  0.0035,
-			ShapeAmplitudeScale:    1.0,
-			ShapeFrequencyScale:    1.0,
-			ShapeOctaves:           3,
-			ShapeWavesPerLink:      3.0,
-			ShapeOctaveGain:        0.35,
-			ShapeAlongScale:        0.16,
-			ShapeDistanceCap:       0.40,
-			ShapeSegmentLength:     70,
-			SourceElevationMin:     0.55,
-			SourceChance:           0.00015,
-			MeanderStrength:        0.003,
-			VoronoiCellSize:        96,
-			VoronoiEdgeThreshold:   0.14,
-			VoronoiSourceBoost:     0.02,
-			VoronoiBias:            0.01,
-			SinkLakeChance:         0.03,
-			LakeMinSize:            48,
-			LakeConnectChance:      0.72,
-			LakeConnectionLimit:    140,
-			LakeLinkMinDistance:    180,
-			LakeLinkMaxDistance:    1800,
-			RiverWidthMin:          5,
-			RiverWidthMax:          15,
-			GridEnabled:            true,
-			GridSpacing:            760,
-			GridJitter:             64,
-			TrunkRiverCount:        8,
-			TrunkSourceElevation:   0.62,
-			TrunkMinLength:         180,
-			CoastSampleChance:      0.012,
-			FlowShallowThreshold:   6,
-			FlowDeepThreshold:      20,
-			BankRadius:             1,
-			LakeFlowThreshold:      28,
+			LakePeninsulaCountMax:   3,
+			LakePeninsulaDepthRatio: 0.35,
+			LakeShoreVariationTiles: 3,
+			LakeIslandSecondChance:  0.20,
+			LakeIslandRadiusMin:     4,
+			LakeIslandRadiusMax:     12,
+			LakeShallowWidthMin:     1,
+			LakeShallowWidthMax:     5,
+			WidthVariationScale:     160,
+			ShallowWidthMin:         1,
+			ShallowWidthMax:         5,
+			ShallowVariationScale:   64,
+			JunctionSpacingTiles:    180,
+			Enabled:                 true,
+			LayoutDraw:              true,
+			MajorRiverCount:         34,
+			LakeCount:               220,
+			LakeSizeSmallMin:        10,
+			LakeSizeSmallMax:        30,
+			LakeSizeMediumMin:       36,
+			LakeSizeMediumMax:       88,
+			LakeSizeLargeMin:        96,
+			LakeSizeLargeMax:        240,
+			LakeSizeMediumChance:    0.24,
+			LakeSizeLargeChance:     0.04,
+			LakeBorderMix:           0.32,
+			MaxLakeDegree:           2,
+			ShapeLongMeanderScale:   0.55,
+			ShapeShortMeanderScale:  2.2,
+			ShapeShortMeanderBias:   0.0035,
+			ShapeAmplitudeScale:     1.0,
+			ShapeFrequencyScale:     1.0,
+			ShapeOctaves:            3,
+			ShapeWavesPerLink:       3.0,
+			ShapeOctaveGain:         0.35,
+			ShapeAlongScale:         0.16,
+			ShapeDistanceCap:        0.40,
+			ShapeSegmentLength:      70,
+			SourceElevationMin:      0.55,
+			SourceChance:            0.00015,
+			MeanderStrength:         0.003,
+			VoronoiCellSize:         96,
+			VoronoiEdgeThreshold:    0.14,
+			VoronoiSourceBoost:      0.02,
+			VoronoiBias:             0.01,
+			SinkLakeChance:          0.03,
+			LakeMinSize:             48,
+			LakeConnectChance:       0.72,
+			LakeConnectionLimit:     140,
+			LakeLinkMinDistance:     180,
+			LakeLinkMaxDistance:     1800,
+			RiverWidthMin:           5,
+			RiverWidthMax:           15,
+			GridEnabled:             true,
+			GridSpacing:             760,
+			GridJitter:              64,
+			TrunkRiverCount:         8,
+			TrunkSourceElevation:    0.62,
+			TrunkMinLength:          180,
+			CoastSampleChance:       0.012,
+			FlowShallowThreshold:    6,
+			FlowDeepThreshold:       20,
+			BankRadius:              1,
+			LakeFlowThreshold:       28,
 		},
 		Biome: BiomeOptions{
 			BlobEnabled:             true,
