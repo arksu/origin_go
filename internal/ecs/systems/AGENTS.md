@@ -358,6 +358,14 @@ These jobs run on ECS tick thread to avoid concurrent world/component access fro
 8. **Async Processing**: CharacterSaveSystem worker pool prevents database operations from blocking game loop
 9. **Context Isolation**: Separate contexts for shutdown operations prevent cancellation during critical saves
 
+Character persistence keeps the latest complete snapshot per unsaved character.
+Each character always uses the same save queue; background writes and `SaveSync`
+serialize through that queue. Character fields and inventories commit in one
+transaction, with unique inventory keys in each upsert. Failed writes retain
+their snapshots for retry, and shutdown drains the queues with a timeout. The
+pending map is in memory and grows with distinct unsaved characters during a
+database outage; it is not a durable journal across process crashes.
+
 ### Memory Management
 
 1. **MovedEntities Buffer**: Pre-allocated arrays (capacity 256) reused each frame

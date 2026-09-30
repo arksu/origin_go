@@ -156,12 +156,7 @@ func TransformObjectToDefInPlace(
 		}
 	}
 
-	if opts.EventBus != nil {
-		opts.EventBus.PublishAsync(
-			ecs.NewEntityAppearanceChangedEvent(targetInfo.Layer, targetID, targetHandle),
-			eventbus.PriorityMedium,
-		)
-	}
+	ecs.PublishEntityAppearanceChanged(w, opts.EventBus, targetID, targetHandle)
 
 	ecs.MarkObjectBehaviorDirty(w, targetHandle)
 	return true

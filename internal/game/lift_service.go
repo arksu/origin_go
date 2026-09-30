@@ -302,27 +302,28 @@ func (s *LiftService) finishPendingAction(w *ecs.World, playerID types.EntityID,
 	}
 }
 
-func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, carry components.LiftCarryState) {
+func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, carry components.LiftCarryState) *ecs.MoveBatchEntry {
 	if s == nil || w == nil || w != s.world || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
-		return
+		return nil
 	}
 	playerTransform, hasPlayerTransform := ecs.GetComponent[components.Transform](w, playerHandle)
 	if !hasPlayerTransform {
-		return
+		return nil
 	}
 
 	objectHandle, ok := s.resolveCarriedObjectHandle(w, carry)
 	if !ok {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
-		return
+		return nil
 	}
 	if _, ok := ecs.GetComponent[components.LiftedObjectState](w, objectHandle); !ok {
 		s.clearCarryStateForPlayer(w, playerID, playerHandle, true)
-		return
+		return nil
 	}
 
-	s.relocateObject(
+	_, entry := gameworld.RelocateWorldObject(
 		w,
+		s.chunkManager,
 		objectHandle,
 		gameworld.RelocateWorldObjectImmediateOptions{
 			IsTeleport:        false,
@@ -330,6 +331,7 @@ func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID,
 		},
 		playerTransform.X,
 		playerTransform.Y,
+		s.logger,
 	)
 
 	// Keep cached handle fresh if entity was respawned/re-resolved.
@@ -338,6 +340,7 @@ func (s *LiftService) SyncLiftCarryFollow(w *ecs.World, playerID types.EntityID,
 			state.ObjectHandle = objectHandle
 		})
 	}
+	return entry
 }
 
 func (s *LiftService) ForceDropCarryAtPlayerPosition(

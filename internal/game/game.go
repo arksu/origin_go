@@ -905,27 +905,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 								zap.Int("layer", c.Layer),
 							)
 						}
-						// Remove from chunk spatial index before despawning
-						if chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](shard.world, playerHandle); hasChunkRef {
-							if transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, playerHandle); hasTransform {
-								if chunk := shard.chunkManager.GetChunk(types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}); chunk != nil {
-									if entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](shard.world, playerHandle); hasEntityInfo && entityInfo.IsStatic {
-										chunk.Spatial().RemoveStatic(playerHandle, int(transform.X), int(transform.Y))
-									} else {
-										chunk.Spatial().RemoveDynamic(playerHandle, int(transform.X), int(transform.Y))
-									}
-								}
-							}
-						}
-						shard.world.Despawn(playerHandle)
-
-						// Save character data before despawn
-						if shard.characterSaver != nil {
-							shard.characterSaver.Save(shard.world, playerEntityID, playerHandle)
-						}
-
-						// Remove from CharacterEntities
-						ecs.GetResource[ecs.CharacterEntities](shard.world).Remove(playerEntityID)
+						shard.despawnDisconnectedPlayer(playerEntityID, playerHandle)
 					}
 					shard.UnregisterEntityAOI(playerEntityID)
 					shard.mu.Unlock()

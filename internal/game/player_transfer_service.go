@@ -203,6 +203,8 @@ func (s *PlayerTransferService) detachTransferSource(
 			s.logger.Warn("Transfer: SaveSync failed",
 				zap.Uint64("player_id", uint64(req.PlayerID)),
 				zap.Error(err))
+			// A retained source snapshot must not retry after the player moves to another shard.
+			return snapshot, fmt.Errorf("save character before transfer: %w", err)
 		}
 	}
 

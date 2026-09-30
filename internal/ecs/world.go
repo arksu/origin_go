@@ -1,6 +1,7 @@
 package ecs
 
 import (
+	"errors"
 	constt "origin/internal/const"
 	"origin/internal/eventbus"
 	"origin/internal/types"
@@ -12,6 +13,8 @@ import (
 
 // DefaultMaxHandles is the default maximum number of active entities
 const DefaultMaxHandles uint32 = 1 << 20 // 1M entities
+
+var ErrEntityCapacityExhausted = errors.New("entity capacity exhausted")
 
 // EntityLocation tracks where an entity is stored in its archetype
 type EntityLocation struct {
@@ -320,6 +323,11 @@ func (w *World) Alive(h types.Handle) bool {
 // Single-threaded - no lock needed
 func (w *World) EntityCount() int {
 	return len(w.entities)
+}
+
+// EntityCapacity includes gameplay entities and runtime-only inventory containers.
+func (w *World) EntityCapacity() int {
+	return int(w.handles.maxHandles)
 }
 
 // GetMask returns the component mask for an entity

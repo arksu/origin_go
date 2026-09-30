@@ -193,151 +193,9 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 			return
 		}
 
-		ok, handle := shard.TrySpawnPlayer(pos.X, pos.Y, character, func(w *ecs.World, h types.Handle) {
-			playerDef, _ := objectdefs.Global().GetByKey("player")
-			var playerTypeID uint32
-			var playerBehaviors []string
-			if playerDef != nil {
-				playerTypeID = uint32(playerDef.DefID)
-				playerBehaviors = playerDef.CopyBehaviorOrder()
-			}
-			ecs.AddComponent(w, h, components.EntityInfo{
-				TypeID:    playerTypeID,
-				Behaviors: playerBehaviors,
-				IsStatic:  false,
-				Region:    character.Region,
-				Layer:     character.Layer,
-			})
-			ecs.AddComponent(w, h, components.Transform{
-				X:         float64(pos.X),
-				Y:         float64(pos.Y),
-				Direction: headingDegreesToRadians(character.Heading),
-			})
-			ecs.AddComponent(w, h, components.ChunkRef{
-				CurrentChunkX: pos.X / _const.ChunkWorldSize,
-				CurrentChunkY: pos.Y / _const.ChunkWorldSize,
-				PrevChunkX:    pos.X / _const.ChunkWorldSize,
-				PrevChunkY:    pos.Y / _const.ChunkWorldSize,
-			})
-			ecs.AddComponent(w, h, components.Movement{
-				VelocityX:        0,
-				VelocityY:        0,
-				Mode:             _const.Walk,
-				State:            _const.StateIdle,
-				Speed:            _const.PlayerSpeed,
-				TargetType:       _const.TargetNone,
-				TargetX:          0,
-				TargetY:          0,
-				TargetHandle:     types.InvalidHandle,
-				InteractionRange: 5.0,
-			})
-			ecs.AddComponent(w, h, components.Collider{
-				HalfWidth:  _const.PlayerColliderSize / 2,
-				HalfHeight: _const.PlayerColliderSize / 2,
-				Layer:      _const.PlayerLayer,
-				Mask:       _const.PlayerMask,
-			})
-			ecs.AddComponent(w, h, components.CollisionResult{
-				HasCollision: false,
-			})
-			ecs.AddComponent(w, h, components.Appearance{
-				Name:     &character.Name,
-				Resource: "player",
-			})
-			ecs.AddComponent(w, h, components.Vision{
-				Radius: _const.PlayerVisionRadius,
-				Power:  _const.PlayerVisionPower,
-			})
-			ecs.AddComponent(w, h, components.CharacterProfile{
-				Attributes: characterattrs.Clone(normalizedAttributes),
-				Experience: components.CharacterExperience{
-					LP:       profileExperience.LP,
-					Nature:   profileExperience.Nature,
-					Industry: profileExperience.Industry,
-					Combat:   profileExperience.Combat,
-				},
-				Skills:    append([]string(nil), profileSkills...),
-				Discovery: append([]string(nil), profileDiscovery...),
-			})
-			initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
-			ecs.AddComponent(w, h, initialStats)
-			ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp, normalizedAttributes, g.cfg.Game.LifeDeathFactor))
-			ecs.UpdateEntityStatsRegenSchedule(
-				w,
-				h,
-				initialStats.Stamina,
-				initialStats.Energy,
-				entitystats.MaxStaminaFromAttributes(normalizedAttributes),
-			)
-
-			// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
-			visState := ecs.GetResource[ecs.VisibilityState](w)
-			visState.VisibleByObserver[h] = ecs.ObserverVisibility{
-				Known:          make(map[types.Handle]types.EntityID, 32),
-				NextUpdateTime: time.Time{}, // Zero time for immediate update
-			}
-
-			// Load player inventories from database
-			dbInventories, err := g.db.Queries().GetInventoriesByOwner(ctx, character.ID)
-			if err != nil {
-				g.logger.Error("Failed to load inventories from database",
-					zap.Int64("character_id", character.ID),
-					zap.Error(err))
-			} else {
-				// Parse inventories from database format
-				inventoryDataList, parseWarnings := g.inventoryLoader.ParseInventoriesFromDB(dbInventories)
-				if len(parseWarnings) > 0 {
-					g.logger.Warn("Inventory parse warnings",
-						zap.Int64("character_id", character.ID),
-						zap.Strings("warnings", parseWarnings))
-				}
-
-				// Always take inventories from database and enrich with missing defaults by kind+key
-				inventoryDataList = g.enrichWithMissingDefaults(inventoryDataList)
-
-				// Load inventories into ECS
-				loadResult, err := g.inventoryLoader.LoadPlayerInventories(w, playerEntityID, inventoryDataList)
-				if err != nil {
-					g.logger.Error("Failed to load player inventories",
-						zap.Int64("character_id", character.ID),
-						zap.Error(err))
-				} else {
-					if len(loadResult.Warnings) > 0 {
-						g.logger.Warn("Inventory load warnings",
-							zap.Int64("character_id", character.ID),
-							zap.Strings("warnings", loadResult.Warnings))
-					}
-
-					// Create InventoryOwner component with all inventory links (including nested)
-					inventoryLinks := make([]components.InventoryLink, 0, len(loadResult.ContainerHandles))
-					refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-					for _, containerHandle := range loadResult.ContainerHandles {
-						if !w.Alive(containerHandle) {
-							continue
-						}
-						container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
-						if hasContainer {
-							inventoryLinks = append(inventoryLinks, components.InventoryLink{
-								Kind:    container.Kind,
-								Key:     container.Key,
-								OwnerID: container.OwnerID,
-								Handle:  containerHandle,
-							})
-							refIndex.Add(container.Kind, container.OwnerID, container.Key, containerHandle)
-						}
-					}
-					ecs.AddComponent(w, h, components.InventoryOwner{
-						Inventories: inventoryLinks,
-					})
-
-					g.logger.Debug("Player inventories loaded",
-						zap.Int64("character_id", character.ID),
-						zap.Int("containers", len(loadResult.ContainerHandles)),
-						zap.Bool("lost_and_found_used", loadResult.LostAndFoundUsed))
-				}
-			}
-		})
-		if ok {
+		setupFunc := g.buildPlayerSetupFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery)
+		handle, spawnErr := shard.trySpawnPlayerWithPolicy(pos.X, pos.Y, character, setupFunc, SpawnCollisionPolicy{})
+		if handle != types.InvalidHandle {
 			// Register character entity for periodic saving
 			charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
 			nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
@@ -353,6 +211,28 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
 		shard.mu.Unlock()
+		var capacityErr *playerSpawnCapacityError
+		if errors.As(spawnErr, &capacityErr) {
+			g.logger.Error("Player spawn rejected: entity capacity exhausted",
+				zap.Uint64("client_id", c.ID),
+				zap.Int64("character_id", character.ID),
+				zap.Int("active_entities", capacityErr.active),
+				zap.Int("entity_capacity", capacityErr.capacity),
+				zap.Error(spawnErr),
+			)
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: server entity capacity exhausted")
+			return
+		}
+
+		if spawnErr != nil {
+			g.logger.Error("Player spawn rejected: setup failed",
+				zap.Uint64("client_id", c.ID),
+				zap.Int64("character_id", character.ID),
+				zap.Error(spawnErr),
+			)
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: player setup error")
+			return
+		}
 
 		g.logger.Debug("failed to spawn player", zap.Int64("character_id", character.ID), zap.Any("coord", pos))
 	}
@@ -430,8 +310,8 @@ func (g *Game) buildPlayerSetupFunc(
 	profileExperience components.CharacterExperience,
 	profileSkills []string,
 	profileDiscovery []string,
-) func(*ecs.World, types.Handle) {
-	return func(w *ecs.World, h types.Handle) {
+) func(*ecs.World, types.Handle) error {
+	return func(w *ecs.World, h types.Handle) error {
 		playerDef, _ := objectdefs.Global().GetByKey("player")
 		var playerTypeID uint32
 		var playerBehaviors []string
@@ -510,17 +390,17 @@ func (g *Game) buildPlayerSetupFunc(
 
 		// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
 		visState := ecs.GetResource[ecs.VisibilityState](w)
+		visState.Mu.Lock()
 		visState.VisibleByObserver[h] = ecs.ObserverVisibility{
 			Known:          make(map[types.Handle]types.EntityID, 32),
 			NextUpdateTime: time.Time{}, // Zero time for immediate update
 		}
+		visState.Mu.Unlock()
 
 		// Load player inventories from database
 		dbInventories, err := g.db.Queries().GetInventoriesByOwner(ctx, character.ID)
 		if err != nil {
-			g.logger.Error("Failed to load inventories from database",
-				zap.Int64("character_id", character.ID),
-				zap.Error(err))
+			return fmt.Errorf("load player inventories from database: %w", err)
 		} else {
 			// Parse inventories from database format
 			inventoryDataList, parseWarnings := g.inventoryLoader.ParseInventoriesFromDB(dbInventories)
@@ -536,9 +416,7 @@ func (g *Game) buildPlayerSetupFunc(
 			// Load inventories into ECS
 			loadResult, err := g.inventoryLoader.LoadPlayerInventories(w, types.EntityID(character.ID), inventoryDataList)
 			if err != nil {
-				g.logger.Error("Failed to load player inventories",
-					zap.Int64("character_id", character.ID),
-					zap.Error(err))
+				return fmt.Errorf("load player inventories: %w", err)
 			} else {
 				if len(loadResult.Warnings) > 0 {
 					g.logger.Warn("Inventory load warnings",
@@ -574,6 +452,7 @@ func (g *Game) buildPlayerSetupFunc(
 					zap.Bool("lost_and_found_used", loadResult.LostAndFoundUsed))
 			}
 		}
+		return nil
 	}
 }
 
@@ -700,15 +579,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 			zap.Int("visible_count", len(observerVis.Known)),
 		)
 
-		for targetHandle, targetEntityID := range observerVis.Known {
-			if shard.world.Alive(targetHandle) {
-				// Send spawn event for each visible entity
-				shard.PublishEventAsync(
-					ecs.NewEntitySpawnEvent(playerEntityID, targetEntityID, targetHandle, character.Layer),
-					eventbus.PriorityMedium,
-				)
-			}
-		}
+		publishReattachSpawns(shard, playerEntityID, observerVis.Known)
 	}
 
 	g.logger.Info("Player reattached to existing entity",
@@ -721,6 +592,21 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	)
 
 	return true
+}
+
+func publishReattachSpawns(shard *Shard, observerID types.EntityID, known map[types.Handle]types.EntityID) {
+	entries := make([]ecs.SpawnBatchEntry, 0, len(known))
+	for targetHandle, targetID := range known {
+		if shard.world.Alive(targetHandle) {
+			entries = append(entries, ecs.SpawnBatchEntry{EntityID: targetID, Handle: targetHandle})
+		}
+	}
+	if len(entries) > 0 {
+		shard.PublishEventAsync(
+			ecs.NewEntitySpawnBatchEvent(observerID, entries, shard.world.Layer),
+			eventbus.PriorityMedium,
+		)
+	}
 }
 
 func (g *Game) isValidSpawnPos(x, y int) bool {
@@ -818,7 +704,7 @@ func (g *Game) attachClientToWorld(
 	character repository.Character,
 	handle types.Handle,
 ) {
-	if shard == nil || client == nil {
+	if shard == nil || client == nil || handle == types.InvalidHandle {
 		return
 	}
 

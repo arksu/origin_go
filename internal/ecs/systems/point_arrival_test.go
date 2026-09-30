@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"testing"
+	"time"
 
 	"origin/internal/core"
 	"origin/internal/types"
@@ -81,6 +82,7 @@ func TestPointStopBlockedByDeepWaterBroadcastsStop(t *testing.T) {
 		return nil
 	})
 
+	moves := make(chan ecs.MoveBatchEntry, 5)
 	var lastMove *ecs.MoveBatchEntry
 	bus.SubscribeAsync(ecs.TopicGameplayMovementMoveBatch, eventbus.PriorityMedium, func(_ context.Context, event eventbus.Event) error {
 		batch, ok := event.(*ecs.ObjectMoveBatchEvent)
@@ -89,7 +91,7 @@ func TestPointStopBlockedByDeepWaterBroadcastsStop(t *testing.T) {
 		}
 		for i := range batch.Entries {
 			if batch.Entries[i].EntityID == types.EntityID(1) {
-				lastMove = &batch.Entries[i]
+				moves <- batch.Entries[i]
 			}
 		}
 		return nil
@@ -117,6 +119,14 @@ func TestPointStopBlockedByDeepWaterBroadcastsStop(t *testing.T) {
 		move.Update(scene.world, 1)
 		scene.system.Update(scene.world, 1)
 		transform.Update(scene.world, 1)
+		// Wait for this tick's immutable event; shutdown is not a handler barrier
+		// and multiple async workers can deliver adjacent ticks out of order.
+		select {
+		case entry := <-moves:
+			lastMove = &entry
+		case <-time.After(time.Second):
+			t.Fatal("missing movement batch for tick")
+		}
 		m, ok := ecs.GetComponent[components.Movement](scene.world, scene.mover)
 		stopped = ok && m.State == constt.StateIdle
 	}
@@ -124,7 +134,6 @@ func TestPointStopBlockedByDeepWaterBroadcastsStop(t *testing.T) {
 		t.Fatal("movement never stopped against deep water")
 	}
 
-	// Shutdown drains the async queue inline, making batch assertions race-free.
 	if err := bus.Shutdown(context.Background()); err != nil {
 		t.Fatalf("event bus shutdown: %v", err)
 	}

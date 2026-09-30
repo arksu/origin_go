@@ -36,6 +36,7 @@ type Config struct {
 	Period     time.Duration
 	Seed       int64
 	Scenario   string
+	FullDecode bool
 }
 
 func main() {
@@ -54,6 +55,7 @@ func main() {
 		zap.Int("ramp_up", cfg.RampUp),
 		zap.Duration("duration", cfg.Duration),
 		zap.String("scenario", cfg.Scenario),
+		zap.String("decoded_entry_scope", decodedEntryScope(cfg.FullDecode)),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,7 +98,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	metrics.PrintSummary(logger)
+	metrics.PrintSummary(logger, cfg.FullDecode)
 }
 
 func parseFlags() *Config {
@@ -118,6 +120,7 @@ func parseFlags() *Config {
 	periodStr := flag.String("period", "1s", "Movement period")
 	flag.Int64Var(&cfg.Seed, "seed", 0, "Random seed (0 = use current time)")
 	flag.StringVar(&cfg.Scenario, "scenario", "login-move", "Scenario: login-only, login-move")
+	flag.BoolVar(&cfg.FullDecode, "full-decode", false, "Decode all messages and track all entity entries/player positions; default drains after 100 messages per client")
 
 	flag.Parse()
 
@@ -255,6 +258,11 @@ func (r *Runner) startPacketStatsLogger(ctx context.Context) {
 			dEnter := curr.MsgEnterWorld - prev.MsgEnterWorld
 			dSpawn := curr.MsgObjectSpawn - prev.MsgObjectSpawn
 			dMove := curr.MsgObjectMove - prev.MsgObjectMove
+			dSpawnBatch := curr.MsgObjectSpawnBatch - prev.MsgObjectSpawnBatch
+			dMoveBatch := curr.MsgObjectMoveBatch - prev.MsgObjectMoveBatch
+			dSpawnEntries := curr.SpawnEntries - prev.SpawnEntries
+			dMoveEntries := curr.MoveEntries - prev.MoveEntries
+			dDecoded := curr.MessagesDecoded - prev.MessagesDecoded
 			dSrvErr := curr.MsgServerError - prev.MsgServerError
 			dOther := curr.MsgOther - prev.MsgOther
 			dUnmarshalErr := curr.MsgUnmarshalErr - prev.MsgUnmarshalErr
@@ -306,6 +314,12 @@ func (r *Runner) startPacketStatsLogger(ctx context.Context) {
 				zap.Int64("msg_enter_world_5s", dEnter),
 				zap.Int64("msg_object_spawn_5s", dSpawn),
 				zap.Int64("msg_object_move_5s", dMove),
+				zap.Int64("msg_object_spawn_batch_5s", dSpawnBatch),
+				zap.Int64("msg_object_move_batch_5s", dMoveBatch),
+				zap.Int64("messages_decoded_5s", dDecoded),
+				zap.Int64("spawn_entries_decoded_5s", dSpawnEntries),
+				zap.Int64("move_entries_decoded_5s", dMoveEntries),
+				zap.String("decoded_entry_scope", decodedEntryScope(r.cfg.FullDecode)),
 				zap.Int64("msg_error_5s", dSrvErr),
 				zap.Int64("msg_other_5s", dOther),
 				zap.Int64("msg_unmarshal_err_5s", dUnmarshalErr),

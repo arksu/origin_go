@@ -50,6 +50,7 @@ type VirtualClient struct {
 
 	enterWorldCh chan struct{}
 	stopCh       chan struct{}
+	readDone     chan struct{}
 }
 
 func NewVirtualClient(cfg *Config, db *persistence.Postgres, pool *AccountPool, metrics *Metrics, logger *zap.Logger) *VirtualClient {
@@ -122,6 +123,11 @@ func (vc *VirtualClient) cleanup() {
 	close(vc.stopCh)
 	if vc.conn != nil {
 		vc.conn.Close()
+	}
+	// The receive loop flushes its local counters on exit. Final reporting must
+	// wait for that flush as well as the last decoded entity updates.
+	if vc.readDone != nil {
+		<-vc.readDone
 	}
 	vc.accountPool.Release(vc.account)
 }
@@ -305,7 +311,11 @@ func (vc *VirtualClient) connect(ctx context.Context) error {
 	vc.conn = conn
 	vc.logger.Debug("WebSocket connected")
 
-	go vc.readLoop()
+	vc.readDone = make(chan struct{})
+	go func() {
+		defer close(vc.readDone)
+		vc.readLoop()
+	}()
 
 	return nil
 }
@@ -464,15 +474,14 @@ func (vc *VirtualClient) readLoop() {
 			continue
 		}
 
-		if vc.decodedPackets >= decodeLimit {
-			if err := rd.Discard(); err != nil {
+		if !vc.cfg.FullDecode && vc.decodedPackets >= decodeLimit {
+			payloadBytes, err := io.Copy(io.Discard, &rd)
+			if err != nil {
 				vc.logger.Debug("Discard frame error", zap.Error(err))
 				return
 			}
 			localRecvPackets++
-			if hdr.Length > 0 {
-				localRecvBytes += hdr.Length
-			}
+			localRecvBytes += payloadBytes
 			if localRecvPackets >= recvMetricsFlushEvery {
 				flushRecvMetrics()
 			}
@@ -495,9 +504,6 @@ func (vc *VirtualClient) readLoop() {
 		}
 		if sampled {
 			vc.metrics.RecordReadWait(time.Since(readStart))
-		}
-		if vc.decodedPackets >= decodeLimit {
-			continue
 		}
 		vc.decodedPackets++
 		vc.handleMessage(data, sampled)
@@ -526,6 +532,7 @@ func (vc *VirtualClient) handleMessage(data []byte, sampled bool) {
 	if sampled {
 		vc.metrics.RecordUnmarshal(time.Since(unmarshalStart))
 	}
+	vc.metrics.RecordMessageDecoded()
 
 	switch payload := vc.incoming.Payload.(type) {
 	case *netproto.ServerMessage_AuthResult:
@@ -546,19 +553,22 @@ func (vc *VirtualClient) handleMessage(data []byte, sampled bool) {
 
 	case *netproto.ServerMessage_ObjectSpawn:
 		vc.metrics.RecordMsgObjectSpawn()
-		if payload.ObjectSpawn.EntityId == vc.playerEntityID.Load() {
-			vc.playerX.Store(payload.ObjectSpawn.Position.Position.X)
-			vc.playerY.Store(payload.ObjectSpawn.Position.Position.Y)
+		vc.handleObjectSpawn(payload.ObjectSpawn)
+
+	case *netproto.ServerMessage_ObjectSpawnBatch:
+		vc.metrics.RecordMsgObjectSpawnBatch()
+		for _, spawn := range payload.ObjectSpawnBatch.GetSpawns() {
+			vc.handleObjectSpawn(spawn)
 		}
 
 	case *netproto.ServerMessage_ObjectMove:
 		vc.metrics.RecordMsgObjectMove()
-		if payload.ObjectMove.EntityId == vc.playerEntityID.Load() {
-			vc.metrics.RecordMoveReceived()
-			if payload.ObjectMove.Movement != nil && payload.ObjectMove.Movement.Position != nil {
-				vc.playerX.Store(payload.ObjectMove.Movement.Position.X)
-				vc.playerY.Store(payload.ObjectMove.Movement.Position.Y)
-			}
+		vc.handleObjectMove(payload.ObjectMove)
+
+	case *netproto.ServerMessage_ObjectMoveBatch:
+		vc.metrics.RecordMsgObjectMoveBatch()
+		for _, move := range payload.ObjectMoveBatch.GetMoves() {
+			vc.handleObjectMove(move)
 		}
 
 	case *netproto.ServerMessage_Error:
@@ -571,6 +581,31 @@ func (vc *VirtualClient) handleMessage(data []byte, sampled bool) {
 
 	if sampled {
 		vc.metrics.RecordHandle(time.Since(handleStart))
+	}
+}
+
+func (vc *VirtualClient) handleObjectSpawn(spawn *netproto.S2C_ObjectSpawn) {
+	if spawn == nil {
+		return
+	}
+	vc.metrics.RecordSpawnEntry()
+	if position := spawn.GetPosition().GetPosition(); spawn.EntityId == vc.playerEntityID.Load() && position != nil {
+		vc.playerX.Store(position.X)
+		vc.playerY.Store(position.Y)
+	}
+}
+
+func (vc *VirtualClient) handleObjectMove(move *netproto.S2C_ObjectMove) {
+	if move == nil {
+		return
+	}
+	vc.metrics.RecordMoveEntry()
+	if move.EntityId == vc.playerEntityID.Load() {
+		vc.metrics.RecordMoveReceived()
+		if position := move.GetMovement().GetPosition(); position != nil {
+			vc.playerX.Store(position.X)
+			vc.playerY.Store(position.Y)
+		}
 	}
 }
 

@@ -45,7 +45,10 @@ type saveRetry struct {
 	due   time.Time
 }
 
-const chunkSaveRetryDelay = time.Second
+const (
+	chunkSaveRetryDelay           = time.Second
+	activationCapacityLogInterval = 5 * time.Second
+)
 
 type ChunkStats struct {
 	ActiveCount      int64
@@ -120,6 +123,8 @@ type ChunkManager struct {
 	behaviorRegistry  contracts.BehaviorRegistry
 	restoreReconciler contracts.RestoredObjectReconciler
 	logger            *zap.Logger
+	// Activation runs under streamMu; rate-limit capacity warnings across chunks.
+	lastActivationCapacityWarning time.Time
 
 	// Serializes AOI transitions, tile mutations, and snapshot/event creation,
 	// including initial enabling outside the shard tick. Never held during DB I/O.
@@ -925,18 +930,46 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	rawDirtyObjectIDs := chunk.GetRawDirtyObjectIDs()
 	failedRawObjects := make([]*repository.Object, 0)
 	failedRawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory)
+	retainRawObject := func(raw *repository.Object) {
+		objectID := types.EntityID(raw.ID)
+		failedRawObjects = append(failedRawObjects, raw)
+		if inventories, ok := rawInventoriesByOwner[objectID]; ok {
+			failedRawInventoriesByOwner[objectID] = inventories
+		}
+	}
+	deferRemainingObjects := func(start int) {
+		deferredCount := 0
+		for _, pending := range rawObjects[start:] {
+			if state == types.ChunkStateActive && cm.world.Alive(cm.world.GetHandleByEntityID(types.EntityID(pending.ID))) {
+				continue
+			}
+			retainRawObject(pending)
+			deferredCount++
+		}
+		cm.warnActivationCapacity(coord, deferredCount)
+	}
 	spatial := chunk.Spatial()
 	behaviorHandles := make([]types.Handle, 0, len(rawObjects))
 	preRecomputeDirty := make(map[types.Handle]bool, len(rawObjects))
 
-	for _, raw := range rawObjects {
+	for index, raw := range rawObjects {
 		// An active chunk may also hold a raw cache entry for an already live
 		// transferred object. Its ECS entity is authoritative.
 		if state == types.ChunkStateActive && cm.world.Alive(cm.world.GetHandleByEntityID(types.EntityID(raw.ID))) {
 			continue
 		}
+		if cm.world.EntityCount() >= cm.world.EntityCapacity() {
+			// Every remaining allocation would fail until another entity despawns.
+			// Keep the raw snapshots so the normal activation retry can finish later.
+			deferRemainingObjects(index)
+			break
+		}
 		h, err := cm.objectFactory.Build(cm.world, raw, rawInventoriesByOwner[types.EntityID(raw.ID)])
 		if err != nil {
+			if errors.Is(err, ecs.ErrEntityCapacityExhausted) {
+				deferRemainingObjects(index)
+				break
+			}
 			if errors.Is(err, ErrDroppedItemExpired) {
 				cm.logger.Debug("deleted expired dropped item while loading chunk",
 					zap.Int64("object_id", raw.ID))
@@ -948,11 +981,7 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 				zap.Int("type_id", raw.TypeID),
 				zap.Error(err),
 			)
-			objectID := types.EntityID(raw.ID)
-			failedRawObjects = append(failedRawObjects, raw)
-			if inventories, ok := rawInventoriesByOwner[objectID]; ok {
-				failedRawInventoriesByOwner[objectID] = inventories
-			}
+			retainRawObject(raw)
 			continue
 		}
 
@@ -1042,6 +1071,21 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	cm.activeChunksMu.Unlock()
 
 	return nil
+}
+
+func (cm *ChunkManager) warnActivationCapacity(coord types.ChunkCoord, deferredCount int) {
+	now := time.Now()
+	if !cm.lastActivationCapacityWarning.IsZero() && now.Sub(cm.lastActivationCapacityWarning) < activationCapacityLogInterval {
+		return
+	}
+	cm.lastActivationCapacityWarning = now
+	cm.logger.Warn("Chunk activation deferred: insufficient ECS entity capacity",
+		zap.Int("active_entities", cm.world.EntityCount()),
+		zap.Int("entity_capacity", cm.world.EntityCapacity()),
+		zap.Int("deferred_objects", deferredCount),
+		zap.Int("chunk_x", coord.X),
+		zap.Int("chunk_y", coord.Y),
+	)
 }
 
 // deactivateChunkInternal deactivates a chunk by serializing entities to raw objects

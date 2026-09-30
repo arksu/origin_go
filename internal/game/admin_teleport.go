@@ -65,11 +65,16 @@ func (g *Game) spawnTeleportedPlayer(
 	profileExperience, profileSkills, profileDiscovery := loadCharacterProfileData(character, g.logger)
 	pos := spawnPos{X: x, Y: y}
 	setupFn := g.buildPlayerSetupFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery)
-	ok, handle := shard.TrySpawnPlayerWithPolicy(x, y, character, setupFn, SpawnCollisionPolicy{
+	handle, spawnErr := shard.trySpawnPlayerWithPolicy(x, y, character, setupFn, SpawnCollisionPolicy{
 		IgnoreObjectCollision: ignoreObjectCollision,
 	})
-	if !ok || handle == types.InvalidHandle {
+	if handle == types.InvalidHandle {
+		shard.mu.Lock()
 		shard.UnregisterEntityAOI(playerEntityID)
+		shard.mu.Unlock()
+		if spawnErr != nil {
+			return types.InvalidHandle, spawnErr
+		}
 		return types.InvalidHandle, fmt.Errorf("spawn blocked")
 	}
 

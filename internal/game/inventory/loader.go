@@ -41,19 +41,22 @@ func (il *InventoryLoader) LoadPlayerInventories(
 		Warnings:         make([]string, 0),
 	}
 
-	itemIDToHandle := make(map[types.EntityID]types.Handle)
 	allHandles := make([]types.Handle, 0)
 
 	for _, dbInv := range dbInventories {
-		containerHandle, warnings := il.loadInventoryRecursive(
+		_, warnings, err := il.loadInventoryRecursive(
 			world,
 			characterID,
 			dbInv,
-			itemIDToHandle,
 			&allHandles,
 		)
-		if containerHandle != 0 {
-			result.ContainerHandles = append(result.ContainerHandles, containerHandle)
+		if err != nil {
+			// Nothing is indexed until loading succeeds, so rollback must only
+			// release entities allocated by this attempt, not existing inventories.
+			for _, handle := range allHandles {
+				world.Despawn(handle)
+			}
+			return nil, err
 		}
 		result.Warnings = append(result.Warnings, warnings...)
 	}
@@ -68,12 +71,15 @@ func (il *InventoryLoader) loadInventoryRecursive(
 	world *ecs.World,
 	ownerID types.EntityID,
 	dbInv InventoryDataV1,
-	itemIDToHandle map[types.EntityID]types.Handle,
 	allHandles *[]types.Handle,
-) (types.Handle, []string) {
+) (types.Handle, []string, error) {
 	warnings := make([]string, 0)
 
 	containerHandle := world.SpawnWithoutExternalID()
+	if containerHandle == types.InvalidHandle {
+		return types.InvalidHandle, warnings, fmt.Errorf("inventory owner %d kind %d key %d: %w", ownerID, dbInv.Kind, dbInv.Key, ecs.ErrEntityCapacityExhausted)
+	}
+	*allHandles = append(*allHandles, containerHandle)
 
 	container := components.InventoryContainer{
 		OwnerID: ownerID,
@@ -110,15 +116,14 @@ func (il *InventoryLoader) loadInventoryRecursive(
 		container.Items = append(container.Items, invItem)
 
 		if dbItem.NestedInventory != nil {
-			nestedHandle, nestedWarnings := il.loadInventoryRecursive(
+			_, nestedWarnings, err := il.loadInventoryRecursive(
 				world,
 				types.EntityID(dbItem.ItemID),
 				*dbItem.NestedInventory,
-				itemIDToHandle,
 				allHandles,
 			)
-			if nestedHandle != 0 {
-				itemIDToHandle[types.EntityID(dbItem.ItemID)] = nestedHandle
+			if err != nil {
+				return types.InvalidHandle, warnings, err
 			}
 			warnings = append(warnings, nestedWarnings...)
 		}
@@ -126,10 +131,7 @@ func (il *InventoryLoader) loadInventoryRecursive(
 
 	ecs.AddComponent(world, containerHandle, container)
 
-	// Add this handle to the list of all handles
-	*allHandles = append(*allHandles, containerHandle)
-
-	return containerHandle, warnings
+	return containerHandle, warnings, nil
 }
 
 // ParseInventoriesFromDB converts database inventory records to InventoryDataV1 format

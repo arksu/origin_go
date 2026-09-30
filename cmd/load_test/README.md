@@ -45,6 +45,14 @@ make load-test
 - `--ramp-up` - скорость разгона, клиентов/сек (default: 1)
 - `--duration` - длительность теста (default: 60s)
 - `--scenario` - сценарий: `login-only` или `login-move` (default: login-move)
+- `--full-decode` - декодировать сообщения до конца прогона, считать все spawn/move entries и обновлять позицию игрока из одиночных сообщений и батчей (default: false)
+
+По умолчанию клиент декодирует первые 100 сообщений, затем только читает поток.
+Количество WebSocket-сообщений и payload bytes учитывается за весь прогон в обоих
+режимах. В режиме по умолчанию счетчики содержимого и позиция игрока после лимита
+не обновляются; отчеты помечают их `decoded_entry_scope=partial_first_100_per_client`.
+Для проверки полноты доставки и движения используйте `--full-decode`:
+`decoded_entry_scope=full_run`. Ошибки декодирования отдельно видны в `decode_errors`.
 
 ### Движение
 - `--move-radius` - радиус движения в мировых единицах (default: 100)
@@ -67,7 +75,7 @@ make load-test
 ### login-move
 Все этапы `login-only` плюс:
 8. Цикл движения: каждые `period` секунд отправка `C2S_PlayerAction.MapClick`
-9. Обработка `S2C_ObjectMove` для обновления позиции
+9. Обработка одиночных и пакетных spawn/move сообщений для обновления позиции (за весь прогон при `--full-decode`)
 
 ## Примеры использования
 
@@ -98,6 +106,37 @@ make load-test
 ./load_test --clients=30 --seed=12345 --duration=60s
 ```
 
+### Проверка полноты батчинга
+```bash
+./load_test --clients=20 --seed=12345 --duration=30s --full-decode
+```
+
+Сравнивайте `received`, `payload_bytes_received`, `spawn_entries` и `move_entries`
+при одинаковом наборе объектов и наблюдателей. Снижение количества сообщений
+должно сохранять ожидаемое количество доставленных записей. Полное декодирование
+требует больше CPU самого генератора нагрузки, поэтому сравнивайте одинаковые режимы.
+
+## Лимит сущностей сервера
+
+`game.max_entities` (переменная окружения сервера `GAME_MAX_ENTITIES`) по умолчанию
+равен 1 048 576 на слой. В этот лимит входят объекты активных чанков, игроки и
+контейнеры инвентарей, включая вложенные. Распределённые по карте клиенты могут
+активировать почти весь мир, даже если самих игроков относительно мало.
+
+При нехватке handles сервер откладывает восстановление объектов и отклоняет
+вход игрока с `server entity capacity exhausted`; повторные попытки не создают
+по одной ошибке на каждый объект. Сравнивайте метрики `game_entity_count{layer}`
+и `game_entity_capacity{layer}`. Лимит задаётся **серверу**, а не load client, например:
+
+```sh
+GAME_MAX_ENTITIES=1500000 ./gameserver
+```
+
+Выбирайте значение с запасом для активных объектов и инвентарей и с учётом RAM.
+Текущий предел индексов ECS — 2 097 151 handle на слой; большее значение требует
+изменения реализации sparse storage. Увеличение лимита применяется после
+перезапуска сервера.
+
 ## Метрики
 
 По завершении теста выводится сводка:
@@ -107,8 +146,9 @@ make load-test
 Duration total: 1m0.123s
 Login attempts: 30 successes: 30 failures: 0 p50: 45ms p95: 78ms p99: 120ms
 EnterWorld attempts: 30 successes: 30 failures: 0 p50: 89ms p95: 145ms p99: 200ms
-Movement moves_sent: 600 moves_received: 598
-Packets sent: 630 received: 1250
+Movement moves_sent: 600 player_move_entries_decoded: 598 decoded_entry_scope: full_run
+WebSocket messages sent: 630 received: 1250 payload_bytes_sent: 15000 payload_bytes_received: 120000
+Decoded content decoded_entry_scope: full_run messages: 1250 spawn_messages: 1 spawn_batch_messages: 2 spawn_entries: 301 move_messages: 2 move_batch_messages: 600 move_entries: 15000 decode_errors: 0
 Errors total: 0
 ```
 
@@ -116,8 +156,9 @@ Errors total: 0
 
 - **Login**: Авторизация через REST API
 - **EnterWorld**: Вход в игровой мир
-- **Movement**: Отправленные/полученные команды движения
-- **Packets**: Общее количество пакетов
+- **Movement**: Отправленные команды и декодированные записи движения самого игрока
+- **WebSocket messages**: Число сообщений и объем их protobuf payload; не TCP-пакеты и не байты transport overhead
+- **Decoded content**: Отдельные счетчики одиночных сообщений, батчей и записей всех объектов; `decoded_entry_scope` показывает полноту декодирования
 - **Errors**: Число ошибок во время выполнения
 
 ## Архитектура

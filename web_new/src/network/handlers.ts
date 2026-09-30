@@ -15,6 +15,16 @@ function toNumber(value: number | Long): number {
   return value.toNumber()
 }
 
+function applyBatchEntries<T>(type: string, entries: readonly T[], applyEntry: (entry: T) => void): void {
+  for (const entry of entries) {
+    try {
+      applyEntry(entry)
+    } catch (error) {
+      console.error(`[Handlers] Unable to apply ${type} batch entry`, { entry, error })
+    }
+  }
+}
+
 function distance2D(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx
   const dy = ay - by
@@ -213,7 +223,7 @@ export function registerMessageHandlers(): void {
     }
   })
 
-  messageDispatcher.on('objectSpawn', (msg: proto.IS2C_ObjectSpawn) => {
+  function handleObjectSpawn(msg: proto.IS2C_ObjectSpawn): void {
     if (msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
     const entityId = toNumber(msg.entityId!)
     const posX = msg.position?.position?.x || 0
@@ -279,6 +289,11 @@ export function registerMessageHandlers(): void {
       gameFacade.setObjectKnockedOutPose(entityId, gameStore.playerStats.isKnockedOut)
       gameStore.markBootstrapPlayerSpawned()
     }
+  }
+
+  messageDispatcher.on('objectSpawn', handleObjectSpawn)
+  messageDispatcher.on('objectSpawnBatch', (msg: proto.IS2C_ObjectSpawnBatch) => {
+    applyBatchEntries('objectSpawn', msg.spawns || [], handleObjectSpawn)
   })
 
   function applyCharacterEquipment(entityId: number, equipment: import('@/types/characterVisual').CharacterVisualState['equipment']): void {
@@ -311,7 +326,7 @@ export function registerMessageHandlers(): void {
     moveController.removeEntity(entityId)
   })
 
-  messageDispatcher.on('objectMove', (msg: proto.IS2C_ObjectMove) => {
+  function handleObjectMove(msg: proto.IS2C_ObjectMove): void {
     const entityId = toNumber(msg.entityId!)
     const carriedByEntityId = toNumber(msg.carriedByEntityId || 0)
     const previousCarrierId = gameFacade.getObjectCarryVisualCarrierId(entityId)
@@ -398,6 +413,11 @@ export function registerMessageHandlers(): void {
         gameFacade.hideMoveTargetMarker()
       }
     }
+  }
+
+  messageDispatcher.on('objectMove', handleObjectMove)
+  messageDispatcher.on('objectMoveBatch', (msg: proto.IS2C_ObjectMoveBatch) => {
+    applyBatchEntries('objectMove', msg.moves || [], handleObjectMove)
   })
 
   messageDispatcher.on('inventoryUpdate', (msg: proto.IS2C_InventoryUpdate) => {

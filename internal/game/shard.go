@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
@@ -27,6 +28,7 @@ import (
 	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
+	"origin/internal/game/lifecycle"
 	"origin/internal/game/world"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence"
@@ -217,7 +219,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
 	s.world.AddSystem(systems.NewLiftPlacementSystem(s.world, liftService, logger))
 	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
-	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, logger))
+	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, s.eventBus, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
 	s.world.AddSystem(NewActionValidationSystem(s.world, actionService))
@@ -334,16 +336,29 @@ func (s *Shard) Stop() {
 	s.chunkManager.Stop()
 }
 
-func (s *Shard) spawnPlayerLocked(id types.EntityID, x int, y int, setupFunc func(*ecs.World, types.Handle)) types.Handle {
-	handle := s.world.Spawn(id, setupFunc)
+func (s *Shard) spawnPlayerLocked(id types.EntityID, x int, y int, setupFunc func(*ecs.World, types.Handle) error) (types.Handle, error) {
+	handle := s.world.Spawn(id, nil)
+	if handle == types.InvalidHandle {
+		return types.InvalidHandle, s.playerSpawnCapacityError(ecs.ErrEntityCapacityExhausted)
+	}
+	if setupFunc != nil {
+		if err := setupFunc(s.world, handle); err != nil {
+			if errors.Is(err, ecs.ErrEntityCapacityExhausted) {
+				err = s.playerSpawnCapacityError(err)
+			}
+			// Failed setup must never become visible or eligible for character saving.
+			cleanupObserverModeStateForHandle(s.world, handle)
+			s.world.Despawn(handle)
+			return types.InvalidHandle, err
+		}
+	}
 
-	// Publish event when player enters the world
 	s.PublishEventAsync(
 		ecs.NewPlayerEnteredWorldEvent(id, s.layer, x, y),
 		eventbus.PriorityMedium,
 	)
 
-	return handle
+	return handle, nil
 }
 
 func (s *Shard) EventBus() *eventbus.EventBus {
@@ -452,6 +467,25 @@ type SpawnCollisionPolicy struct {
 	IgnoreObjectCollision bool
 }
 
+type playerSpawnCapacityError struct {
+	active   int
+	capacity int
+	cause    error
+}
+
+func (e *playerSpawnCapacityError) Error() string {
+	return fmt.Sprintf("%v: %d/%d handles in use", e.cause, e.active, e.capacity)
+}
+
+func (e *playerSpawnCapacityError) Unwrap() error {
+	return e.cause
+}
+
+// Called under the shard lock, before rolling back the failed player.
+func (s *Shard) playerSpawnCapacityError(cause error) error {
+	return &playerSpawnCapacityError{active: s.world.EntityCount(), capacity: s.world.EntityCapacity(), cause: cause}
+}
+
 func (s *Shard) TrySpawnPlayerWithPolicy(
 	worldX,
 	worldY int,
@@ -459,8 +493,28 @@ func (s *Shard) TrySpawnPlayerWithPolicy(
 	setupFunc func(*ecs.World, types.Handle),
 	policy SpawnCollisionPolicy,
 ) (bool, types.Handle) {
+	handle, _ := s.trySpawnPlayerWithPolicy(worldX, worldY, character, func(w *ecs.World, handle types.Handle) error {
+		if setupFunc != nil {
+			setupFunc(w, handle)
+		}
+		return nil
+	}, policy)
+	return handle != types.InvalidHandle, handle
+}
+
+func (s *Shard) trySpawnPlayerWithPolicy(
+	worldX,
+	worldY int,
+	character repository.Character,
+	setupFunc func(*ecs.World, types.Handle) error,
+	policy SpawnCollisionPolicy,
+) (types.Handle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.world.EntityCount() >= s.world.EntityCapacity() {
+		return types.InvalidHandle, s.playerSpawnCapacityError(ecs.ErrEntityCapacityExhausted)
+	}
 
 	entityID := types.EntityID(character.ID)
 
@@ -478,13 +532,13 @@ func (s *Shard) TrySpawnPlayerWithPolicy(
 
 	chunks := s.chunkManager.GetEntityActiveChunks(entityID)
 	if len(chunks) == 0 {
-		return false, types.InvalidHandle
+		return types.InvalidHandle, nil
 	}
 
 	for tileY := minTileY; tileY <= maxTileY; tileY++ {
 		for tileX := minTileX; tileX <= maxTileX; tileX++ {
 			if !s.chunkManager.IsTilePassable(tileX, tileY) {
-				return false, types.InvalidHandle
+				return types.InvalidHandle, nil
 			}
 		}
 	}
@@ -523,16 +577,19 @@ func (s *Shard) TrySpawnPlayerWithPolicy(
 			objMaxY := int(transform.Y + collider.HalfHeight)
 
 			if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
-				return false, types.InvalidHandle
+				return types.InvalidHandle, nil
 			}
 		}
 	}
 
-	handle := s.spawnPlayerLocked(entityID, worldX, worldY, setupFunc)
+	handle, err := s.spawnPlayerLocked(entityID, worldX, worldY, setupFunc)
+	if err != nil {
+		return types.InvalidHandle, err
+	}
 	if chunk, ok := s.chunkManager.GetEntityChunk(entityID); ok {
 		chunk.Spatial().AddDynamic(handle, worldX, worldY)
 	}
-	return true, handle
+	return handle, nil
 }
 
 func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
@@ -540,7 +597,7 @@ func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 }
 
 // onDetachedEntityExpired is called when a detached entity's TTL expires.
-// It handles per-entity spatial cleanup before despawn.
+// It runs after the character snapshot has captured inventory contents.
 func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
 	if s.liftService != nil {
 		_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, entityID, handle, false)
@@ -558,6 +615,16 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 			}
 		}
 	}
+	lifecycle.DeleteOwnedInventoryContainers(s.world, entityID)
+}
+
+func (s *Shard) despawnDisconnectedPlayer(entityID types.EntityID, handle types.Handle) {
+	if s.characterSaver != nil {
+		s.characterSaver.Save(s.world, entityID, handle)
+	}
+	s.onDetachedEntityExpired(entityID, handle)
+	s.world.Despawn(handle)
+	ecs.GetResource[ecs.CharacterEntities](s.world).Remove(entityID)
 }
 
 // onDetachedEntitiesExpired handles AOI cleanup in one batch after detached despawns.

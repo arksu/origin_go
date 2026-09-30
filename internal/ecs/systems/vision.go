@@ -25,13 +25,6 @@ type visibleEntry struct {
 	EntityID types.EntityID
 }
 
-type spawnEventData struct {
-	observerID   types.EntityID
-	targetID     types.EntityID
-	targetHandle types.Handle
-	layer        int
-}
-
 type despawnEventData struct {
 	observerID types.EntityID
 	targetID   types.EntityID
@@ -45,10 +38,12 @@ type observerJob struct {
 
 type observerResult struct {
 	handle         types.Handle
+	observerID     types.EntityID
+	layer          int
 	newVis         ecs.ObserverVisibility // new state with fresh Known map
 	spawnTargets   []types.Handle
 	despawnTargets []types.Handle
-	spawns         []spawnEventData
+	spawns         []ecs.SpawnBatchEntry
 	despawns       []despawnEventData
 	skipOnly       bool // canSkipUpdate was true — only NextUpdateTime changed
 	skipDirty      bool
@@ -408,10 +403,9 @@ func (s *VisionSystem) commitResult(visState *ecs.VisibilityState, r *observerRe
 
 // publishResultEvents publishes spawn/despawn events for one observer result.
 func (s *VisionSystem) publishResultEvents(r *observerResult) {
-	for i := range r.spawns {
-		sp := &r.spawns[i]
+	if len(r.spawns) > 0 {
 		s.eventBus.PublishAsync(
-			ecs.NewEntitySpawnEvent(sp.observerID, sp.targetID, sp.targetHandle, sp.layer),
+			ecs.NewEntitySpawnBatchEvent(r.observerID, r.spawns, r.layer),
 			eventbus.PriorityMedium,
 		)
 	}
@@ -527,21 +521,17 @@ func (s *VisionSystem) computeObserver(
 
 	var res observerResult
 	res.handle = observerHandle
+	res.observerID = observerID
+	res.layer = w.Layer
 	res.computeStats = stats
 
 	newKnown := make(map[types.Handle]types.EntityID, len(scratch.newVisibleBuf))
 	for _, entry := range scratch.newVisibleBuf {
 		newKnown[entry.Handle] = entry.EntityID
 		if _, wasKnown := oldKnown[entry.Handle]; !wasKnown {
-			layer := 0
-			if info, ok := s.entityInfoStorage.Get(entry.Handle); ok {
-				layer = info.Layer
-			}
-			res.spawns = append(res.spawns, spawnEventData{
-				observerID:   observerID,
-				targetID:     entry.EntityID,
-				targetHandle: entry.Handle,
-				layer:        layer,
+			res.spawns = append(res.spawns, ecs.SpawnBatchEntry{
+				EntityID: entry.EntityID,
+				Handle:   entry.Handle,
 			})
 			res.spawnTargets = append(res.spawnTargets, entry.Handle)
 		}
