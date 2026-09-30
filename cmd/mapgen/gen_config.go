@@ -48,12 +48,16 @@ func LoadMapgenOptionsFromYAML(path string, defaults MapgenOptions) (MapgenOptio
 }
 
 func decodeMapgenOptions(content []byte, path string, defaults MapgenOptions) (MapgenOptions, error) {
+	if err := validateJunctionSpacingInput(content, true); err != nil {
+		return MapgenOptions{}, fmt.Errorf("decode gen config %q: %w", path, err)
+	}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 
 	biomeDefaults := defaults.Biome
+	riverDefaults := defaults.River
 	worldDefaults := worldConfig{ChunksX: defaults.ChunksX, ChunksY: defaults.ChunksY, Seed: defaults.Seed, Threads: defaults.Threads, TerrainScale: defaults.TerrainScale, PerlinWaterEnabled: defaults.PerlinWaterEnabled}
-	cfg := mapgenConfigFile{World: &worldDefaults, Biomes: &biomeDefaults}
+	cfg := mapgenConfigFile{World: &worldDefaults, River: &riverDefaults, Biomes: &biomeDefaults}
 	if err := decoder.Decode(&cfg); err != nil {
 		return MapgenOptions{}, fmt.Errorf("decode gen config %q: %w", path, err)
 	}

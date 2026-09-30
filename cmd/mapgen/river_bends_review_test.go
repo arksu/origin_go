@@ -46,6 +46,7 @@ func TestRiverBendsReview(test *testing.T) {
 			opts := base
 			opts.Seed = seed
 			if variant == 0 {
+				opts.River.LakeIrregularEnabled = false
 				opts.River.ShapeWavelengthTiles, opts.River.FairwayWidthTiles, opts.River.TributaryRatio = 0, 0, 0
 				opts.River.ShapeOctaveGain = 0.06
 				opts.River.ShapeAmplitudeScale = 0.5

@@ -228,7 +228,7 @@ func TestRiverTributariesSparse(test *testing.T) {
 	for index := 0; index < 100; index++ {
 		column, row := 40+(index%10)*170, 70+(index/10)*170
 		path := appendCardinalRiverSegment(nil, width, column, row, column+110, row)
-		carveRiverCorridor(flow, width, height, path, 5, opts)
+		carveRiverCorridor(flow, width, height, path, 5, 12345, opts)
 		plan.Routes = append(plan.Routes, protectRiverRoute(flow, plan, riverRoute{Path: path, Width: 5, Role: "main"}, width, height, opts))
 	}
 	parents := append([]riverRoute(nil), plan.Routes...)

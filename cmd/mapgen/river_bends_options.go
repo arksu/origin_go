@@ -6,6 +6,24 @@ import (
 )
 
 func (opts RiverOptions) validateBends() error {
+	if err := opts.validateJunctionOptions(); err != nil {
+		return err
+	}
+	if err := opts.validateLakeOptions(); err != nil {
+		return err
+	}
+	if opts.WidthVariationScale != 0 && (opts.WidthVariationScale < 16 || opts.WidthVariationScale > 8192) {
+		return fmt.Errorf("river.width_variation_scale must be zero or within [16,8192] tiles")
+	}
+	if opts.ShallowWidthMin < 0 || opts.ShallowWidthMax < opts.ShallowWidthMin || opts.ShallowWidthMax > 32 {
+		return fmt.Errorf("river.shallow_width_min/max must satisfy 0 <= min <= max <= 32 tiles")
+	}
+	if opts.ShallowVariationScale != 0 && (opts.ShallowVariationScale < 16 || opts.ShallowVariationScale > 8192) {
+		return fmt.Errorf("river.shallow_variation_scale must be zero or within [16,8192] tiles")
+	}
+	if opts.ShallowWidthMin != opts.ShallowWidthMax && opts.ShallowVariationScale == 0 {
+		return fmt.Errorf("river.shallow_variation_scale must be positive when shallow widths differ")
+	}
 	if opts.ShapeWavelengthTiles != 0 && (opts.ShapeWavelengthTiles < 64 || opts.ShapeWavelengthTiles > 8192) {
 		return fmt.Errorf("river.shape_wavelength_tiles must be zero or within [64,8192]")
 	}
@@ -93,5 +111,21 @@ func estimateRiverBendsBytes(width, height int, opts RiverOptions) (uint64, erro
 	if err != nil {
 		return 0, err
 	}
-	return checkedAddUint64(routeBytes, scratch)
+	total, err := checkedAddUint64(routeBytes, scratch)
+	if err != nil {
+		return total, err
+	}
+	junctions, err := estimateRiverJunctionBytes(width, height, opts)
+	if err != nil {
+		return 0, err
+	}
+	total, err = checkedAddUint64(total, junctions)
+	if err != nil || !opts.LakeIrregularEnabled {
+		return total, err
+	}
+	lakes, err := estimateLakeGeometryBytes(width, height, opts)
+	if err != nil {
+		return 0, err
+	}
+	return checkedAddUint64(total, lakes)
 }

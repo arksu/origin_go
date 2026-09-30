@@ -21,21 +21,49 @@ type riverFairways struct {
 	RejectedTributaries int
 	Lakes               []drawLake
 	Inlets              []lakeInlet
+	LakeLand            []bool
+	LakeWater           []bool
+	LakeShapes          []*lakeShape
+	LakeStats           lakeGeometryStats
+	Junctions           *riverJunctionState
 }
 
 func riverRouteStats(plan *riverFairways) map[string]int {
 	if plan == nil {
 		return nil
 	}
-	return map[string]int{
+	stats := map[string]int{
 		"main": plan.MainCount, "tributary_budget": plan.TributaryBudget,
 		"tributaries": plan.Tributaries, "rejected_tributary_candidates": plan.RejectedTributaries,
 	}
+	if state := plan.Junctions; state != nil {
+		stats["junction_eligible"], stats["junction_selected"] = state.Eligible, state.Selected
+		stats["junction_placed"], stats["junction_fallbacks"] = len(state.Accepted), state.Fallbacks
+		stats["junction_attempts"], stats["junction_index_entries"] = state.Attempts, state.Entries
+		for reason, count := range state.Rejections {
+			stats["junction_rejected_"+reason] = count
+		}
+	}
+	if len(plan.LakeShapes) > 0 {
+		for class, name := range []string{"small", "medium", "large"} {
+			counts := plan.LakeStats.Classes[class]
+			stats["lake_"+name+"_count"] = counts.Lakes
+			stats["lake_"+name+"_selected"] = counts.Selected
+			stats["lake_"+name+"_requested_islands"] = counts.Requested
+			stats["lake_"+name+"_placed_islands"] = counts.Placed
+			stats["lake_"+name+"_rejected_islands"] = counts.Rejected
+		}
+		stats["lake_peninsulas"], stats["lake_shape_fallbacks"] = plan.LakeStats.Peninsulas, plan.LakeStats.Fallbacks
+	}
+	return stats
 }
 
-func recordDrawRiver(plan *riverFairways, path []int, width int) {
+func recordDrawRiver(plan *riverFairways, path []int, width int, origins ...int) {
 	if plan != nil {
 		plan.Routes = append(plan.Routes, riverRoute{Path: path, Width: width, Role: "main", Parent: -1})
+		if plan.Junctions != nil {
+			plan.Junctions.record(len(plan.Routes)-1, plan.Routes[len(plan.Routes)-1], origins...)
+		}
 	}
 }
 
@@ -58,6 +86,9 @@ func protectRiverRoute(flow []uint32, plan *riverFairways, route riverRoute, wid
 		for offsetRow := -radius; offsetRow <= radius; offsetRow++ {
 			for offsetColumn := -radius; offsetColumn <= radius; offsetColumn++ {
 				protectedIndex := tileIndex(column+offsetColumn, row+offsetRow, width)
+				if plan.isLakeLand(protectedIndex) {
+					continue
+				}
 				plan.Protected[protectedIndex] = true
 				if flow[protectedIndex] < uint32(opts.FlowDeepThreshold) {
 					flow[protectedIndex] = uint32(opts.FlowDeepThreshold)
@@ -73,6 +104,13 @@ func finishRiverFairways(flow []uint32, plan *riverFairways, width, height int, 
 	plan.MainCount = len(plan.Routes)
 	for index, route := range plan.Routes {
 		plan.Routes[index] = protectRiverRoute(flow, plan, route, width, height, opts)
+	}
+	if opts.LakeIrregularEnabled {
+		if err := finishIrregularLakes(flow, plan, width, height, seed, opts); err != nil {
+			return err
+		}
+		addRiverTributaries(flow, plan, width, height, seed, opts)
+		return plan.validate(width, height, opts.FairwayWidthTiles, seed, func(index int) bool { return flow[index] >= uint32(opts.FlowDeepThreshold) })
 	}
 	hubs := make(map[int]int)
 	for _, inlet := range plan.Inlets {
@@ -103,27 +141,44 @@ func (plan *riverFairways) validate(width, height, fairwayWidth int, seed int64,
 	if plan == nil {
 		return nil
 	}
+	if plan.Junctions != nil {
+		if err := plan.Junctions.validateAttachments(plan, seed); err != nil {
+			return err
+		}
+	}
 	radius := fairwayWidth / 2
 	for routeID, route := range plan.Routes {
+		context := fmt.Sprintf("route %d (%s) parent %d", routeID, route.Role, route.Parent)
+		if plan.Junctions != nil {
+			for _, junction := range plan.Junctions.Accepted {
+				origins, ordinary := plan.Junctions.Origins[routeID]
+				if routeID == junction.Route || routeID == junction.Parent || route.Role == "inlet" && route.Parent == plan.Lakes[junction.Source].ID || ordinary && (origins[0] == junction.Source || origins[1] == junction.Source) {
+					context += fmt.Sprintf(" junction branch %d parent %d at (%d,%d)", junction.Route, junction.Parent, junction.Tile%width, junction.Tile/width)
+				}
+			}
+		}
 		if len(route.Path) == 0 {
-			return fmt.Errorf("seed %d route %d (%s) has no fairway placements", seed, routeID, route.Role)
+			return fmt.Errorf("seed %d %s has no fairway placements", seed, context)
 		}
 		for position, index := range route.Path {
 			column, row := index%width, index/width
 			if column < radius || row < radius || column >= width-radius || row >= height-radius {
-				return fmt.Errorf("seed %d route %d (%s) fairway out of bounds at (%d,%d)", seed, routeID, route.Role, column, row)
+				return fmt.Errorf("seed %d %s fairway out of bounds at (%d,%d)", seed, context, column, row)
 			}
 			if position > 0 {
 				previous := route.Path[position-1]
 				if absInt(column-previous%width)+absInt(row-previous/width) != 1 {
-					return fmt.Errorf("seed %d route %d (%s) disconnected fairway at (%d,%d)", seed, routeID, route.Role, column, row)
+					return fmt.Errorf("seed %d %s disconnected fairway at (%d,%d)", seed, context, column, row)
 				}
 			}
 			for offsetRow := -radius; offsetRow <= radius; offsetRow++ {
 				for offsetColumn := -radius; offsetColumn <= radius; offsetColumn++ {
 					footprintIndex := tileIndex(column+offsetColumn, row+offsetRow, width)
+					if plan.isLakeLand(footprintIndex) {
+						return fmt.Errorf("seed %d %s crosses lake land at (%d,%d)", seed, context, column+offsetColumn, row+offsetRow)
+					}
 					if !isDeep(footprintIndex) {
-						return fmt.Errorf("seed %d route %d (%s) broken deep fairway at (%d,%d)", seed, routeID, route.Role, column+offsetColumn, row+offsetRow)
+						return fmt.Errorf("seed %d %s broken deep fairway at (%d,%d)", seed, context, column+offsetColumn, row+offsetRow)
 					}
 				}
 			}

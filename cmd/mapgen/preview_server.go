@@ -278,6 +278,11 @@ func resolvePreviewOptions(req renderRequest, base MapgenOptions) (MapgenOptions
 		if len(bytes.TrimSpace(raw)) == 0 || bytes.TrimSpace(raw)[0] != '{' {
 			return MapgenOptions{}, fmt.Errorf("%s params must be an object", key)
 		}
+		if key == previewParamRivers {
+			if err := validateJunctionSpacingInput(raw, false); err != nil {
+				return MapgenOptions{}, err
+			}
+		}
 		dec := yaml.NewDecoder(bytes.NewReader(raw))
 		dec.KnownFields(true)
 		if err := dec.Decode(sections[key]); err != nil {
@@ -527,6 +532,7 @@ func riversLayerSchema(base MapgenOptions) previewLayerSchema {
 					intField("tributary_length_max", 0, 8192, river.TributaryLengthMax),
 				},
 			},
+			junctionPreviewGroup(river),
 			{
 				Title: "Lakes",
 				Fields: []previewField{
@@ -541,13 +547,18 @@ func riversLayerSchema(base MapgenOptions) previewLayerSchema {
 					intField("lake_size_large_max", 0, 800, river.LakeSizeLargeMax),
 				},
 			},
+			lakeDetailPreviewGroup(river),
 			{
 				Title: "Width & depth",
 				Fields: []previewField{
-					intField("river_width_min", 1, 64, river.RiverWidthMin),
+					describedField(intField("river_width_min", 1, 64, river.RiverWidthMin), "Минимальная глубокая ширина основных рисуемых рек при fairway_width_tiles > 0; у притоков это максимум. В старом режиме — ширина всего коридора."),
 					intField("fairway_width_tiles", 0, 63, river.FairwayWidthTiles),
-					intField("river_width_max", 1, 64, river.RiverWidthMax),
-					intField("bank_radius", 0, 8, river.BankRadius),
+					describedField(intField("river_width_max", 1, 64, river.RiverWidthMax), "Максимальная глубокая ширина основных рисуемых рек с фарватером. Мелководье добавляется снаружи; на поворотах сечения объединяются."),
+					describedField(intField("width_variation_scale", 0, 8192, river.WidthVariationScale), "Масштаб изменения глубокой части вдоль русла, тайлы: 16–8192; 0 — постоянная ширина связи. Для рисуемых рек с fairway_width_tiles > 0."),
+					describedField(intField("shallow_width_min", 0, 32, river.ShallowWidthMin), "Минимальная полоса мелководья с каждого берега, тайлы. Глубокий фарватер сохраняется."),
+					describedField(intField("shallow_width_max", 0, 32, river.ShallowWidthMax), "Максимальная полоса мелководья, тайлы; >= min. Равные min/max — постоянная толщина; оба 0 — без полосы у рек."),
+					describedField(intField("shallow_variation_scale", 0, 8192, river.ShallowVariationScale), "Масштаб независимых изменений берегов, 16–8192 тайлов. 0 допустим при одинаковых shallow_width_min/max."),
+					describedField(intField("bank_radius", 0, 8, river.BankRadius), "Дополнительный радиус старого режима; у рисуемых рек с фарватером ограничен shallow_width_min."),
 					intField("flow_shallow_threshold", 1, 200, river.FlowShallowThreshold),
 					intField("flow_deep_threshold", 2, 400, river.FlowDeepThreshold),
 				},
