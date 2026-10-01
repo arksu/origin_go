@@ -679,12 +679,13 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 	enterWorld := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_PlayerEnterWorld{
 			PlayerEnterWorld: &netproto.S2C_PlayerEnterWorld{
-				EntityId:     uint64(entityID),
-				Name:         character.Name,
-				CoordPerTile: _const.CoordPerTile,
-				ChunkSize:    _const.ChunkSize,
-				TickRate:     uint32(g.cfg.Game.TickRate),
-				StreamEpoch:  c.StreamEpoch.Load(),
+				EntityId:                     uint64(entityID),
+				Name:                         character.Name,
+				CoordPerTile:                 _const.CoordPerTile,
+				ChunkSize:                    _const.ChunkSize,
+				TickRate:                     uint32(g.cfg.Game.TickRate),
+				StreamEpoch:                  c.StreamEpoch.Load(),
+				DirectionalMovementSupported: true,
 			},
 		},
 	}

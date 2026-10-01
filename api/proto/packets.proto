@@ -349,6 +349,13 @@ message SelectContextAction {
   string action_id = 2;
 }
 
+message MoveDirection {
+  float x = 1; // normalized world direction; (0,0) releases keyboard control
+  float y = 2;
+  uint32 input_revision = 3; // nonzero; unchanged holds repeat the same revision
+  uint32 stream_epoch = 4;
+}
+
 message C2S_PlayerAction {
   reserved 1, 2, 3;
   reserved "move_to", "move_to_entity", "interact";
@@ -356,6 +363,7 @@ message C2S_PlayerAction {
   oneof action {
     MapClick map_click = 5;
     SelectContextAction select_context_action = 4;
+    MoveDirection move_direction = 6;
   }
 
   uint32 modifiers = 10; // bitflags: SHIFT=1, CTRL=2, ALT=4
@@ -506,6 +514,7 @@ message S2C_PlayerEnterWorld {
   //  Paperdoll paperdoll = 7;
   //  optional uint64 dragging_entity_id = 8; // если тащим что-то
   uint32 stream_epoch = 9; // для защиты от гонок состояний
+  bool directional_movement_supported = 10;
 }
 
 message CharacterAttributeEntry {

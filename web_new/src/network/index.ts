@@ -105,6 +105,7 @@ export function sendStartCraftOne(craftKey: string): void {
   const normalized = craftKey.trim()
   if (!normalized) return
 
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     startCraftOne: proto.C2S_StartCraftOne.create({
       craftKey: normalized,
@@ -117,6 +118,7 @@ export function sendStartCraftMany(craftKey: string, cycles: number): void {
   if (!normalized) return
 
   const safeCycles = Math.max(1, Math.floor(cycles))
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     startCraftMany: proto.C2S_StartCraftMany.create({
       craftKey: normalized,
@@ -133,6 +135,7 @@ export function sendStartBuild(buildKey: string, pos: { x: number; y: number }):
   const y = Math.trunc(pos.y)
   if (!Number.isFinite(x) || !Number.isFinite(y)) return
 
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     buildStart: proto.C2S_BuildStart.create({
       buildKey: normalized,
@@ -148,6 +151,7 @@ export function sendBuildProgress(entityId: number): void {
   const target = Math.trunc(entityId)
   if (!Number.isFinite(target) || target <= 0) return
 
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     buildProgress: proto.C2S_BuildProgress.create({
       entityId: target,
@@ -171,6 +175,7 @@ export function sendBuildTakeBack(entityId: number, slot: number): void {
 
 export function sendActivateAction(actionId: string): void {
   if (!actionId) return
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     activateAction: proto.C2S_ActivateAction.create({ actionId }),
   })

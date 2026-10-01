@@ -1,7 +1,10 @@
 package systems
 
 import (
+	"context"
+	"math"
 	"testing"
+	"time"
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
@@ -28,17 +31,25 @@ type pipelineMover struct {
 // concurrently moving entities, including the per-moved-entity component
 // access overhead the systems pay.
 func BenchmarkMovementPipeline(b *testing.B) {
-	runPipelineBench(b, 0)
+	runPipelineBench(b, 0, false, false)
 }
 
 // BenchmarkMovementPipelineDense adds static pillars inside every mover's
 // swept corridor so the collision candidate loop, hit handling and slide
 // iterations run each tick, as they would around built structures.
 func BenchmarkMovementPipelineDense(b *testing.B) {
-	runPipelineBench(b, 3)
+	runPipelineBench(b, 3, false, false)
 }
 
-func runPipelineBench(b *testing.B, pillarsPerMover int) {
+func BenchmarkDirectionalMovementPipeline(b *testing.B) {
+	b.Run("active", func(b *testing.B) { runPipelineBench(b, 0, true, false) })
+	b.Run("sliding", func(b *testing.B) { runPipelineBench(b, 3, true, false) })
+	b.Run("blocked", func(b *testing.B) { runPipelineBench(b, 1, true, true) })
+}
+
+func BenchmarkClickMovementPipelineBlocked(b *testing.B) { runPipelineBench(b, 1, false, true) }
+
+func runPipelineBench(b *testing.B, pillarsPerMover int, directional, blocked bool) {
 	const moverCount = 200
 	const targetX = 10000 // far beyond one tick's step; movers reset each iteration
 
@@ -58,12 +69,23 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 		movement.State = constt.StateMoving
 		movement.Speed = 100
 		targetY := startY
-		if pillarsPerMover > 0 {
+		if pillarsPerMover > 0 && !blocked {
 			// An oblique approach leaves movement along the pillar's face
 			// after contact, exercising the subsequent slide sweep.
 			targetY += (targetX - startX) / 2
 		}
 		movement.SetTargetPoint(int(targetX), int(targetY))
+		if directional {
+			dx, dy := float64(targetX)-startX, targetY-startY
+			distance := math.Hypot(dx, dy)
+			movement.SetDirection(dx/distance, dy/distance, 1, time.Time{}.Add(time.Hour))
+			if blocked {
+				movement.State = constt.StateIdle
+				movement.Direction.Blocked = true
+				movement.Direction.BlockedMode = movement.Mode
+				movement.Direction.UpdatePending = false
+			}
+		}
 
 		handle := world.Spawn(types.EntityID(i+1), func(w *ecs.World, h types.Handle) {
 			ecs.AddComponent(w, h, components.Transform{X: startX, Y: startY})
@@ -102,6 +124,10 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 			if k%2 == 1 {
 				pillarY = m.startY + 6
 			}
+			if blocked {
+				pillarX = m.startX + 8
+				pillarY = m.startY
+			}
 			pillarID := types.EntityID(100000 + i*pillarsPerMover + k)
 			pillar := world.Spawn(pillarID, func(w *ecs.World, h types.Handle) {
 				ecs.AddComponent(w, h, components.Transform{X: pillarX, Y: pillarY})
@@ -126,9 +152,15 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 
 	movementSystem := NewMovementSystem(world, cm, zap.NewNop())
 	collisionSystem := NewCollisionSystem(world, cm, zap.NewNop(), 0, constt.ChunkWorldSize, 0, constt.ChunkWorldSize, 0)
-	transformSystem := NewTransformUpdateSystem(world, cm, eventbus.New(nil), zap.NewNop())
+	bus := eventbus.New(nil)
+	b.Cleanup(func() {
+		if err := bus.Shutdown(context.Background()); err != nil {
+			b.Error(err)
+		}
+	})
+	transformSystem := NewTransformUpdateSystem(world, cm, bus, zap.NewNop())
 
-	if pillarsPerMover > 0 {
+	if pillarsPerMover > 0 && !blocked {
 		// Validate the workload before timing so a geometry change cannot
 		// silently turn this into a benchmark of perpendicular stops.
 		movementSystem.Update(world, 0.1)
@@ -146,6 +178,33 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 		transformSystem.Update(world, 0.1)
 	}
 
+	if blocked {
+		for tick := 0; tick < 3; tick++ {
+			ecs.GetResource[ecs.MovedEntities](world).Count = 0
+			if !directional {
+				for _, m := range movers {
+					ecs.AddComponent(world, m.handle, m.movement)
+				}
+			}
+			movementSystem.Update(world, .1)
+			collisionSystem.Update(world, .1)
+			transformSystem.Update(world, .1)
+		}
+		for i := range movers {
+			m := &movers[i]
+			position, _ := ecs.GetComponent[components.Transform](world, m.handle)
+			current, _ := ecs.GetComponent[components.Movement](world, m.handle)
+			if current.State != constt.StateIdle {
+				b.Fatalf("blocked workload still moves: %+v", current)
+			}
+			m.startX, m.startY = position.X, position.Y
+			if directional {
+				m.movement = current
+			}
+		}
+	}
+
+	var packetEntries int
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -171,5 +230,10 @@ func runPipelineBench(b *testing.B, pillarsPerMover int) {
 		movementSystem.Update(world, 0.1)
 		collisionSystem.Update(world, 0.1)
 		transformSystem.Update(world, 0.1)
+		packetEntries += len(transformSystem.moveBatch)
+	}
+	b.ReportMetric(float64(packetEntries)/float64(b.N), "entries/tick")
+	if blocked && directional && packetEntries != 0 {
+		b.Fatal("steady blocked direction broadcasts")
 	}
 }

@@ -67,6 +67,7 @@ export function registerMessageHandlers(): void {
       coordPerTile,
       chunkSize,
       streamEpoch,
+      msg.directionalMovementSupported === true,
     )
     gameStore.markPlayerEnterWorldBootstrap()
 
@@ -336,6 +337,7 @@ export function registerMessageHandlers(): void {
     const serverTimeMs = Number(msg.serverTimeMs || 0)
     const moveSeq = msg.moveSeq || 0
     const isTeleport = msg.isTeleport || false
+    if (isTeleport && entityId === gameStore.playerEntityId) gameFacade.releaseKeyboardMovement()
 
     const x = msg.movement.position?.x || 0
     const y = msg.movement.position?.y || 0

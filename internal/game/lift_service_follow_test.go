@@ -28,7 +28,7 @@ func newLiftFollowTest(t *testing.T) (*ecs.World, *LiftService, *eventbus.EventB
 		return nil
 	})
 	cfg := &config.Config{Game: config.GameConfig{
-		ChunkLRUCapacity: 1, ChunkLRUTTL: 60, WorldWidthChunks: 2, WorldHeightChunks: 2,
+		ChunkLRUCapacity: 1, ChunkLRUTTL: 60, LoadWorkers: 1, WorldWidthChunks: 2, WorldHeightChunks: 2,
 	}}
 	manager := gameworld.NewChunkManager(cfg, nil, w, nil, 0, 1, nil, nil, bus, zap.NewNop())
 	t.Cleanup(manager.Stop)

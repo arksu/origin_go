@@ -60,6 +60,7 @@ const (
 	TargetNone TargetType = iota
 	TargetPoint
 	TargetEntity
+	TargetDirection
 )
 
 type InventoryType uint8

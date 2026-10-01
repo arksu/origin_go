@@ -262,6 +262,9 @@ func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S
 }
 
 func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *netproto.C2S_PlayerAction) {
+	if action == nil {
+		return
+	}
 	if c.CharacterID == 0 {
 		g.logger.Warn("Player action from unauthenticated client", zap.Uint64("client_id", c.ID))
 		c.SendError(netproto.ErrorCode_ERROR_CODE_NOT_AUTHENTICATED, "Not authenticated")
@@ -281,8 +284,17 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 	// Determine command type and payload
 	var cmdType network.CommandType
 	var payload any
+	receivedAt := time.Now()
 
 	switch act := action.Action.(type) {
+	case *netproto.C2S_PlayerAction_MoveDirection:
+		if act == nil || !network.ValidMoveDirection(act.MoveDirection) || !c.InWorld.Load() ||
+			c.StreamEpoch.Load() != act.MoveDirection.StreamEpoch || act.MoveDirection.StreamEpoch == 0 {
+			return
+		}
+		cmdType = network.CmdMoveDirection
+		payload = act.MoveDirection
+		receivedAt = g.clock.WallNow()
 	case *netproto.C2S_PlayerAction_MapClick:
 		cmdType = network.CmdMapClick
 		payload = act.MapClick
@@ -303,7 +315,7 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 		CommandID:   uint64(sequence), // Use sequence from ClientMessage as CommandID
 		CommandType: cmdType,
 		Payload:     payload,
-		ReceivedAt:  time.Now(),
+		ReceivedAt:  receivedAt,
 		Layer:       c.Layer,
 	}
 

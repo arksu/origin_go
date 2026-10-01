@@ -11,12 +11,21 @@ import { sendInventoryOp } from '@/network'
 import { proto } from '@/network/proto/packets.js'
 import { DEBUG_MOVEMENT } from '@/constants/game'
 import { moveController } from './MoveController'
+import { gameFacade } from './GameFacade'
 
 export class PlayerCommandController {
   private playerId: number | null = null
 
   setPlayerId(playerId: number): void {
     this.playerId = playerId
+  }
+
+  sendMoveDirection(x: number, y: number, inputRevision: number, streamEpoch: number): void {
+    gameConnection.send({
+      playerAction: proto.C2S_PlayerAction.create({
+        moveDirection: proto.MoveDirection.create({ x, y, inputRevision, streamEpoch }),
+      }),
+    })
   }
 
   sendMapClick(
@@ -62,6 +71,7 @@ export class PlayerCommandController {
       return
     }
 
+    gameFacade.releaseKeyboardMovement()
     gameConnection.send({
       playerAction: proto.C2S_PlayerAction.create({
         selectContextAction: proto.SelectContextAction.create({

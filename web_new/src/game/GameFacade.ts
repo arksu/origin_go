@@ -138,6 +138,14 @@ export class GameFacade {
     this.render?.resetWorld()
   }
 
+  setKeyboardMovementEnabled(enabled: boolean): void {
+    this.render?.setKeyboardMovementEnabled(this.initialized && enabled)
+  }
+
+  releaseKeyboardMovement(): void {
+    this.render?.releaseKeyboardMovement()
+  }
+
   setWorldParams(coordPerTile: number, chunkSize: number): void {
     this.render?.setWorldParams(coordPerTile, chunkSize)
   }

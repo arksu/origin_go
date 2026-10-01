@@ -170,14 +170,16 @@ type NetworkCommandSystem struct {
 	// Vision system for forcing vision updates after inventory operations
 	visionSystem *VisionSystem
 
-	openContainerService OpenContainerCoordinator
-	contextActionService ContextActionResolver
-	contextMenuSender    ContextMenuSender
-	craftCommandService  CraftCommandService
-	buildCommandService  BuildCommandService
-	liftCommandService   LiftCommandService
-	actionService        ActionCommandService
-	contextPendingTTL    time.Duration
+	openContainerService        OpenContainerCoordinator
+	contextActionService        ContextActionResolver
+	contextMenuSender           ContextMenuSender
+	craftCommandService         CraftCommandService
+	buildCommandService         BuildCommandService
+	liftCommandService          LiftCommandService
+	actionService               ActionCommandService
+	contextPendingTTL           time.Duration
+	directionalSessionValidator func(playerID types.EntityID, clientID uint64, epoch uint32) bool
+	manualMovementCanceler      ManualMovementCanceler
 
 	// Reusable buffers to avoid allocations
 	playerCommands       []*network.PlayerCommand
@@ -302,6 +304,8 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 
 	// Route to command handlers
 	switch cmd.CommandType {
+	case network.CmdMoveDirection:
+		s.handleMoveDirection(w, handle, cmd)
 	case network.CmdMapClick:
 		s.handleMapClick(w, handle, cmd)
 	case network.CmdSetMovementMode:

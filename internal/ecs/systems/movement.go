@@ -62,12 +62,24 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 			return
 		}
 
-		if movement.State != constt.StateMoving {
+		if movement.State != constt.StateMoving && movement.TargetType != constt.TargetDirection && !movement.Direction.UpdatePending {
 			return
 		}
 
 		transform, ok := s.transformStorage.Get(h)
 		if !ok {
+			return
+		}
+
+		if movement.TargetType == constt.TargetDirection &&
+			(!ecs.GetResource[ecs.TimeState](w).Now.Before(movement.Direction.ExpiresAt) || directionalMovementRestricted(w, h, movement)) {
+			movement.ReleaseDirection()
+			s.movementStorage.Set(h, movement)
+		}
+		if movement.State != constt.StateMoving && movement.TargetType != constt.TargetDirection {
+			if movement.Direction.UpdatePending {
+				movedEntities.Add(h, transform.X, transform.Y)
+			}
 			return
 		}
 
@@ -103,6 +115,16 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 				s.movementStorage.Set(h, movement)
 				ecs.MarkMovementModeDirtyByHandle(w, h)
 			}
+		}
+
+		if movement.TargetType == constt.TargetDirection {
+			speed := movement.GetCurrentSpeed()
+			movement.VelocityX = movement.Direction.X * speed
+			movement.VelocityY = movement.Direction.Y * speed
+			movement.State = constt.StateMoving
+			s.movementStorage.Set(h, movement)
+			movedEntities.Add(h, transform.X+movement.VelocityX*dt, transform.Y+movement.VelocityY*dt)
+			return
 		}
 
 		if movement.TargetType == constt.TargetEntity {

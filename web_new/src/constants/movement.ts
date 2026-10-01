@@ -1,0 +1,2 @@
+export const DIRECTION_REFRESH_MS = 200
+export const DIRECTION_INPUT_TTL_MS = 800

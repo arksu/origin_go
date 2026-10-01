@@ -524,6 +524,10 @@ func (s *ContextActionService) cancelActiveCyclicAction(playerID types.EntityID,
 	)
 }
 
+func (s *ContextActionService) CancelForManualMovement(playerID types.EntityID, playerHandle types.Handle) {
+	s.cancelActiveCyclicAction(playerID, playerHandle, "manual_movement")
+}
+
 func (s *ContextActionService) finishActiveCyclicAction(
 	playerID types.EntityID,
 	playerHandle types.Handle,

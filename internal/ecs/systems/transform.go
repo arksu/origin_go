@@ -75,7 +75,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 			if collisionResult.PerpendicularOscillation {
 				// stop movement
 				if m, ok := s.movementStorage.Get(h); ok {
-					if !m.PointStopPending {
+					if !m.PointStopPending && m.TargetType != constt.TargetDirection {
 						m.StopAtPointTarget()
 					}
 					s.movementStorage.Set(h, m)
@@ -92,7 +92,31 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 		// Get chunk for spatial hash update
 		chunkRef, hasChunkRef := s.chunkRefStorage.Get(h)
+		movement, hasMovement := s.movementStorage.Get(h)
+		directional := hasMovement && movement.TargetType == constt.TargetDirection
+		blocked := directional && (finalX-transform.X)*(finalX-transform.X)+(finalY-transform.Y)*(finalY-transform.Y) <= 0.000001
+		if directional {
+			if blocked || dt <= 0 {
+				movement.VelocityX, movement.VelocityY = 0, 0
+				movement.State = constt.StateIdle
+			} else {
+				movement.VelocityX = (finalX - transform.X) / dt
+				movement.VelocityY = (finalY - transform.Y) / dt
+				movement.State = constt.StateMoving
+				transform.Direction = math.Atan2(movement.VelocityY, movement.VelocityX)
+			}
+			s.movementStorage.Set(h, movement)
+		}
 		s.applyMovementStaminaTick(w, h, transform.X, transform.Y, finalX, finalY)
+		suppressBlocked := false
+		if movement, exists := s.movementStorage.Get(h); exists && (directional || movement.Direction.UpdatePending) {
+			suppressBlocked = blocked && movement.Direction.Blocked && !movement.Direction.UpdatePending &&
+				movement.Direction.BlockedMode == movement.Mode && finalX == transform.X && finalY == transform.Y
+			movement.Direction.Blocked = blocked && movement.TargetType == constt.TargetDirection
+			movement.Direction.BlockedMode = movement.Mode
+			movement.Direction.UpdatePending = false
+			s.movementStorage.Set(h, movement)
+		}
 		if hasChunkRef {
 			chunkCoord := types.ChunkCoord{X: chunkRef.CurrentChunkX, Y: chunkRef.CurrentChunkY}
 			chunk := s.chunkManager.GetChunk(chunkCoord)
@@ -133,6 +157,9 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 
 		// Accumulate movement data for batch event
 		if entityID, ok := w.GetExternalID(h); ok {
+			if suppressBlocked {
+				goto saveCollision
+			}
 			// Visibility guard: only include if entity is visible to at least one observer
 			if visState != nil {
 				observers, hasObservers := visState.ObserversByVisibleTarget[h]

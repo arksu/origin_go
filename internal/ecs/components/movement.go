@@ -4,6 +4,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/types"
+	"time"
 )
 
 // Movement represents an entity's movement capabilities and state
@@ -37,6 +38,21 @@ type Movement struct {
 	PointStopPending bool
 	PointStopX       float64
 	PointStopY       float64
+
+	// Direction is ephemeral input ownership, never part of character persistence.
+	Direction DirectionalInput
+}
+
+type DirectionalInput struct {
+	X, Y           float64
+	InputX, InputY float32
+	Revision       uint32
+	ClientID       uint64
+	StreamEpoch    uint32
+	ExpiresAt      time.Time
+	UpdatePending  bool
+	Blocked        bool
+	BlockedMode    constt.MoveMode
 }
 
 const MovementComponentID ecs.ComponentID = 12
@@ -46,6 +62,9 @@ func init() {
 }
 
 func (m *Movement) HasReachedTarget(currentX, currentY float64) bool {
+	if m.TargetType == constt.TargetDirection {
+		return false
+	}
 	if m.TargetType == constt.TargetNone {
 		return true
 	}
@@ -59,12 +78,15 @@ func (m *Movement) HasReachedTarget(currentX, currentY float64) bool {
 }
 
 func (m *Movement) ClearTarget() {
+	m.retireDirection()
 	m.PointStopPending = false
 	m.TargetType = constt.TargetNone
 	m.TargetHandle = types.InvalidHandle
 	m.VelocityX = 0
 	m.VelocityY = 0
-	m.State = constt.StateIdle
+	if m.State != constt.StateStunned {
+		m.State = constt.StateIdle
+	}
 }
 
 func (m *Movement) StopAtPointTarget() {
@@ -76,6 +98,7 @@ func (m *Movement) StopAtPointTarget() {
 }
 
 func (m *Movement) SetTargetPoint(x, y int) {
+	m.retireDirection()
 	m.PointStopPending = false
 	m.TargetType = constt.TargetPoint
 	m.TargetX = float64(x)
@@ -85,11 +108,49 @@ func (m *Movement) SetTargetPoint(x, y int) {
 }
 
 func (m *Movement) SetTargetHandle(handle types.Handle, x, y int) {
+	m.retireDirection()
 	m.PointStopPending = false
 	m.TargetType = constt.TargetEntity
 	m.TargetHandle = handle
 	m.TargetX = float64(x)
 	m.TargetY = float64(y)
+	m.State = constt.StateMoving
+}
+
+func (m *Movement) retireDirection() {
+	if m.TargetType == constt.TargetDirection {
+		m.Direction.UpdatePending = true
+	}
+	m.Direction.X, m.Direction.Y = 0, 0
+	m.Direction.InputX, m.Direction.InputY = 0, 0
+	m.Direction.ExpiresAt = time.Time{}
+	m.Direction.Blocked = false
+}
+
+// ReleaseDirection cannot stop a newer point or entity route.
+func (m *Movement) ReleaseDirection() {
+	if m.TargetType == constt.TargetDirection {
+		m.ClearTarget()
+	}
+}
+
+// ResetDirectionSession is called only after the active connection/epoch is validated.
+func (m *Movement) ResetDirectionSession(clientID uint64, epoch uint32) {
+	m.ReleaseDirection()
+	pending := m.Direction.UpdatePending
+	m.Direction = DirectionalInput{ClientID: clientID, StreamEpoch: epoch, UpdatePending: pending}
+}
+
+func (m *Movement) SetDirection(x, y float64, revision uint32, expiresAt time.Time) {
+	m.PointStopPending = false
+	m.TargetType = constt.TargetDirection
+	m.TargetHandle = types.InvalidHandle
+	m.TargetX, m.TargetY = 0, 0
+	m.Direction.X, m.Direction.Y = x, y
+	m.Direction.Revision = revision
+	m.Direction.ExpiresAt = expiresAt
+	m.Direction.UpdatePending = true
+	m.Direction.Blocked = false
 	m.State = constt.StateMoving
 }
 
