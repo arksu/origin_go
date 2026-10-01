@@ -59,6 +59,12 @@ type PinchStartHandler = () => void
 type PinchMoveHandler = (event: PinchEvent) => void
 type PinchEndHandler = () => void
 type PointerMoveHandler = (screenX: number, screenY: number) => void
+const MOVEMENT_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD'])
+
+function isEditable(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null
+  return !!element && (['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName) || element.isContentEditable === true)
+}
 
 export class InputController {
   private static readonly LONG_PRESS_DELAY_MS = 500
@@ -66,6 +72,21 @@ export class InputController {
   private canvas: HTMLCanvasElement | null = null
 
   private modifiers: number = Modifiers.NONE
+  private keyboardMovementEnabled = false
+  private composing = false
+  private heldKeys = new Set<string>()
+  private suppressedKeys = new Set<string>()
+  private movementX = 0
+  private movementY = 0
+  private onDirectionHandler: ((x: number, y: number) => void) | null = null
+  private boundFocusIn = (event: FocusEvent): void => {
+    if (event.composedPath().some(isEditable)) this.suppressMovementKeys()
+  }
+  private boundCompositionStart = (): void => {
+    this.composing = true
+    this.suppressMovementKeys()
+  }
+  private boundCompositionEnd = (): void => { this.composing = false }
 
   private pointerDownPos: ScreenPoint | null = null
   private pointerDownButton: number = -1
@@ -112,6 +133,7 @@ export class InputController {
   }
 
   init(canvas: HTMLCanvasElement): void {
+    if (this.canvas) this.destroy()
     this.canvas = canvas
     // Route touch gestures (including two-finger pinch) to the game input pipeline.
     this.canvas.style.touchAction = 'none'
@@ -127,6 +149,9 @@ export class InputController {
     window.addEventListener('keyup', this.boundKeyUp)
     window.addEventListener('blur', this.boundBlur)
     document.addEventListener('visibilitychange', this.boundVisibilityChange)
+    document.addEventListener('focusin', this.boundFocusIn)
+    document.addEventListener('compositionstart', this.boundCompositionStart)
+    document.addEventListener('compositionend', this.boundCompositionEnd)
   }
 
   destroy(): void {
@@ -143,9 +168,37 @@ export class InputController {
     window.removeEventListener('keyup', this.boundKeyUp)
     window.removeEventListener('blur', this.boundBlur)
     document.removeEventListener('visibilitychange', this.boundVisibilityChange)
+    document.removeEventListener('focusin', this.boundFocusIn)
+    document.removeEventListener('compositionstart', this.boundCompositionStart)
+    document.removeEventListener('compositionend', this.boundCompositionEnd)
 
     this.canvas = null
     this.resetState()
+    this.keyboardMovementEnabled = false
+  }
+
+  onDirection(handler: (x: number, y: number) => void): void {
+    this.onDirectionHandler = handler
+  }
+
+  setKeyboardMovementEnabled(enabled: boolean): void {
+    if (!enabled) this.suppressMovementKeys()
+    this.keyboardMovementEnabled = enabled
+  }
+
+  suppressMovementKeys(): void {
+    for (const key of this.heldKeys) this.suppressedKeys.add(key)
+    this.emitDirection()
+  }
+
+  private emitDirection(): void {
+    const down = (key: string): number => Number(this.heldKeys.has(key) && !this.suppressedKeys.has(key))
+    const x = down('KeyD') - down('KeyA')
+    const y = down('KeyS') - down('KeyW')
+    if (x === this.movementX && y === this.movementY) return
+    this.movementX = x
+    this.movementY = y
+    this.onDirectionHandler?.(x, y)
   }
 
   onClick(handler: ClickHandler): void {
@@ -348,10 +401,27 @@ export class InputController {
 
   private handleKeyDown(e: KeyboardEvent): void {
     this.updateModifiers(e)
+    if (this.composing || e.isComposing || e.ctrlKey || e.altKey || e.metaKey ||
+      isEditable(document.activeElement) || e.composedPath().some(isEditable)) {
+      this.suppressMovementKeys()
+      return
+    }
+    if (!MOVEMENT_KEYS.has(e.code) || e.repeat) return
+    this.heldKeys.add(e.code)
+    if (!this.keyboardMovementEnabled || document.hidden) {
+      this.suppressedKeys.add(e.code)
+      return
+    }
+    this.suppressedKeys.delete(e.code)
+    e.preventDefault()
+    this.emitDirection()
   }
 
   private handleKeyUp(e: KeyboardEvent): void {
     this.updateModifiers(e)
+    this.heldKeys.delete(e.code)
+    this.suppressedKeys.delete(e.code)
+    this.emitDirection()
   }
 
   private updateModifiers(e: KeyboardEvent): void {
@@ -377,6 +447,8 @@ export class InputController {
   }
 
   private resetState(): void {
+    this.suppressMovementKeys()
+    this.composing = false
     if (this.isDragging && this.pointerDownButton !== -1) {
       this.onDragEndHandler?.(this.pointerDownButton)
     }

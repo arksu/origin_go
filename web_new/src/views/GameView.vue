@@ -158,6 +158,14 @@ const { assignments: hotbarAssignments, assign: assignHotbarSlot, clear: clearHo
   useHotbarAssignments(accountId, computed(() => gameStore.characterId))
 
 const showPortraitWarning = computed(() => isMobileDevice.value && isPortrait.value && !portraitWarningDismissed.value)
+watch(
+  [canvasInitialized, isConnected, worldBootstrapState, () => gameStore.worldParams, deathDialog, showLoadingOverlay],
+  () => {
+    gameFacade?.setKeyboardMovementEnabled(canvasInitialized.value && isConnected.value &&
+      worldBootstrapState.value === 'ready' && !deathDialog.value && !showLoadingOverlay.value)
+  },
+  { flush: 'sync' },
+)
 const touchDragLabel = computed(() => {
   const id = touchDraggingActionId.value
   if (!id) return ''

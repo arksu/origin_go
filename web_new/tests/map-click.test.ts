@@ -22,9 +22,10 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
     let toolConsumes = false
     // Exercise the actual Render input callback without allocating a WebGL renderer.
     const render = Object.create(Render.prototype) as Record<string, unknown> & { setupInputController(): void }
+    render.keyboardMovement = { release() {} }
     render.canvas = {}
     render.inputController = {
-      init() {}, onClick(handler: typeof click) { click = handler },
+      init() {}, onDirection() {}, suppressMovementKeys() {}, onClick(handler: typeof click) { click = handler },
       onLongPress(handler: typeof longPress) { longPress = handler }, onDragStart() {}, onDragMove() {}, onDragEnd() {},
       onZoom() {}, onPinch() {}, onPinchMove() {}, onPointerMove() {}, onWheel() {},
     }
@@ -149,6 +150,7 @@ test('touch long-press sends one secondary packet, suppresses release tap, and m
   const canvas = Object.assign(new EventTarget(), { style: {}, setPointerCapture() {}, releasePointerCapture() {} })
   const input = new InputController()
   const render = Object.create(Render.prototype) as Record<string, unknown> & { setupInputController(): void }
+  render.keyboardMovement = { release() {} }
   render.canvas = canvas
   render.inputController = input
   render.screenToWorld = () => ({ x: 42.4, y: -98.6 })

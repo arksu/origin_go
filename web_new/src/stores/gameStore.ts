@@ -44,6 +44,7 @@ export interface WorldParams {
   coordPerTile: number
   chunkSize: number
   streamEpoch: number
+  directionalMovementSupported: boolean
 }
 
 export interface ChatMessage {
@@ -298,10 +299,11 @@ export const useGameStore = defineStore('game', () => {
     coordPerTile: number,
     chunkSize: number,
     streamEpoch: number,
+    directionalMovementSupported = false,
   ) {
     playerEntityId.value = entityId
     playerName.value = name
-    worldParams.value = { coordPerTile, chunkSize, streamEpoch }
+    worldParams.value = { coordPerTile, chunkSize, streamEpoch, directionalMovementSupported }
 
     // Clear inventories when entering new world
     console.log('[gameStore] Clearing inventories on world enter')

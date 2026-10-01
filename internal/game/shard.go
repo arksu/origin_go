@@ -130,6 +130,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
+	networkCmdSystem.SetDirectionalSessionValidator(s.validDirectionalSession)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
 	craftingService := NewCraftingService(s.world, s.eventBus, inventoryExecutor, s, logger)
 	giveItem := newPlayerGiveItemAdapter(inventoryExecutor, s)
@@ -196,6 +197,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	liftService.SetActionCanCommit(actionService.CanCommit)
 	networkCmdSystem.SetOpenContainerService(openContainerService)
 	networkCmdSystem.SetContextActionService(contextActionService)
+	networkCmdSystem.SetManualMovementCanceler(contextActionService)
 	networkCmdSystem.SetContextMenuSender(s)
 	networkCmdSystem.SetCraftCommandService(craftingService)
 	networkCmdSystem.SetBuildCommandService(buildService)

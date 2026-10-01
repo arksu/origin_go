@@ -20,8 +20,12 @@ import (
 )
 
 func TestPeriodicMovementBatchesDeliverEveryEntry(t *testing.T) {
-	for _, carries := range []bool{false, true} {
-		t.Run(map[bool]string{false: "100_movers", true: "100_movers_and_100_carries"}[carries], func(t *testing.T) {
+	for _, scenario := range []struct {
+		name                 string
+		carries, directional bool
+	}{{"100_movers", false, false}, {"100_movers_and_100_carries", true, false}, {"100_directional_movers", false, true}} {
+		t.Run(scenario.name, func(t *testing.T) {
+			carries := scenario.carries
 			f := newBatchFixture(t)
 			w := f.shard.World()
 			observer := w.Spawn(1, nil)
@@ -36,7 +40,11 @@ func TestPeriodicMovementBatchesDeliverEveryEntry(t *testing.T) {
 				player := w.Spawn(playerID, func(w *ecs.World, h types.Handle) {
 					ecs.AddComponent(w, h, components.Transform{X: position, Y: 100})
 					ecs.AddComponent(w, h, components.CollisionResult{FinalX: position + 1, FinalY: 100})
-					ecs.AddComponent(w, h, components.Movement{State: _const.StateMoving, Mode: _const.Walk, VelocityX: 10, MoveSeq: 3})
+					movement := components.Movement{State: _const.StateMoving, Mode: _const.Walk, VelocityX: 10, MoveSeq: 3}
+					if scenario.directional {
+						movement.SetDirection(1, 0, 1, time.Time{}.Add(time.Second))
+					}
+					ecs.AddComponent(w, h, movement)
 				})
 				players[index] = player
 				moved.Add(player, position, 100)
@@ -102,6 +110,10 @@ func TestPeriodicMovementBatchesDeliverEveryEntry(t *testing.T) {
 						require.Zero(t, entry.MoveSeq)
 					} else {
 						require.EqualValues(t, 3, entry.MoveSeq)
+						if scenario.directional {
+							require.Nil(t, entry.Movement.TargetPosition)
+							require.True(t, entry.Movement.IsMoving)
+						}
 					}
 					require.GreaterOrEqual(t, index, 0)
 					require.Less(t, index, 100)
@@ -115,6 +127,26 @@ func TestPeriodicMovementBatchesDeliverEveryEntry(t *testing.T) {
 			follow.Update(w, 0.1)
 			flushEvents()
 			require.Empty(t, f.drain(t, client, conn), "stationary carries emitted a message")
+			if scenario.directional {
+				for _, player := range players {
+					position, _ := ecs.GetComponent[components.Transform](w, player)
+					ecs.WithComponent(w, player, func(result *components.CollisionResult) { result.FinalX, result.FinalY = position.X, position.Y })
+				}
+				transform.Update(w, .1)
+				flushEvents()
+				stops := f.drain(t, client, conn)
+				require.Len(t, stops, 1)
+				require.Len(t, stops[0].GetObjectMoveBatch().Moves, 100)
+				for _, stop := range stops[0].GetObjectMoveBatch().Moves {
+					require.False(t, stop.Movement.IsMoving)
+					require.Zero(t, stop.Movement.Velocity.X)
+					require.EqualValues(t, 4, stop.MoveSeq)
+				}
+				transform.Update(w, .1)
+				flushEvents()
+				require.Empty(t, f.drain(t, client, conn), "steady blocked direction emitted another packet")
+				t.Log("100 directional movers / one observer: active=1 packet, first stop=1 packet, repeated block=0 packets")
+			}
 			if carries {
 				require.True(t, lift.ForceDropCarryAtPlayerPosition(w, 100, players[0], false))
 				flushEvents()

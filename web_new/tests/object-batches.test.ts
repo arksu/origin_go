@@ -7,6 +7,8 @@ import { registerMessageHandlers } from '../src/network/handlers'
 import { messageDispatcher } from '../src/network/MessageDispatcher'
 import { proto } from '../src/network/proto/packets.js'
 import { useGameStore } from '../src/stores/gameStore'
+import { timeSync } from '../src/network/TimeSync'
+import { LOCOMOTION_STOP_MS } from '../src/game/movementTiming'
 
 function dispatch(packet: proto.IServerMessage): void {
   const encoded = proto.ServerMessage.encode(proto.ServerMessage.create(packet)).finish()
@@ -52,6 +54,45 @@ function setup(t: TestContext) {
   begin()
   return { store, carriers, spawns, names, carryUpdates, targets, clearTargets, errors, begin }
 }
+
+test('directional batches hide the local target and settle both local and remote players at the resolved stop', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 10000 })
+  const { targets, clearTargets, errors } = setup(t)
+  t.mock.method(timeSync, 'estimateServerNowMs', (now: number) => now)
+  t.mock.method(timeSync, 'getInterpolationDelayMs', () => 100)
+  dispatch({ objectSpawnBatch: { spawns: [spawn(17), spawn(18)] } })
+  dispatch({ objectMove: move(17) })
+  assert.equal(targets.mock.callCount(), 1)
+  const send = (sequence: number, moving: boolean) => dispatch({ objectMoveBatch: { moves: [17, 18].map(entityId => move(entityId, {
+    moveSeq: sequence, serverTimeMs: Date.now(), movement: {
+      position: { x: 60, y: -20, heading: 0 }, velocity: { x: moving ? 32 : 0, y: 0 },
+      moveMode: proto.MovementMode.MOVE_MODE_WALK, isMoving: moving,
+    },
+  })) } })
+  send(6, true)
+  assert.equal(clearTargets.mock.callCount(), 1)
+  moveController.update()
+  t.mock.timers.tick(100)
+  send(7, false)
+  for (let frame = 0; frame < (100 + LOCOMOTION_STOP_MS) / 10 + 2; frame++) {
+    t.mock.timers.tick(10)
+    moveController.update()
+  }
+  for (const entityId of [17, 18]) {
+    const position = moveController.getRenderPosition(entityId)!
+    assert.equal(position.x, 60)
+    assert.equal(position.y, -20)
+    assert.equal(position.isMoving, false)
+    assert.equal(position.distanceMoved, 0)
+    assert.equal(moveController.getEntityDebugMetrics(entityId)!.lastMoveSeq, 7)
+  }
+  t.mock.timers.tick(5000)
+  const later = moveController.update()
+  assert.equal(later.get(17)!.x, 60)
+  assert.equal(later.get(18)!.x, 60)
+  assert.equal(targets.mock.callCount(), 1, 'direction must not create a point marker')
+  assert.equal(errors.mock.callCount(), 0)
+})
 
 test('single and batch protocol roundtrips preserve every entry field and uint64 values', () => {
   const spawnEntry = proto.S2C_ObjectSpawn.fromObject({ ...spawn(17), entityId: '18446744073709551615', carriedByEntityId: '9007199254740993',

@@ -6,6 +6,8 @@ import { moveController } from './MoveController'
 import { InputController, Modifiers } from './InputController'
 import { cameraController } from './CameraController'
 import { playerCommandController } from './PlayerCommandController'
+import { KeyboardMovementController } from './KeyboardMovementController'
+import { gameConnection } from '@/network/GameConnection'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
@@ -42,6 +44,7 @@ export class Render {
   private chunkManager: ChunkManager
   private objectManager: ObjectManager
   private inputController: InputController
+  private keyboardMovement: KeyboardMovementController
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
   private chatBalloonManager: ChatBalloonManager
@@ -74,6 +77,11 @@ export class Render {
     this.objectManager = new ObjectManager()
     this.objectManager.setParentContainer(this.objectsContainer)
     this.inputController = new InputController()
+    this.keyboardMovement = new KeyboardMovementController(
+      (x, y, revision, epoch) => playerCommandController.sendMoveDirection(x, y, revision, epoch),
+      () => this.canvas !== null && gameConnection.getState() === 'connected' && useGameStore().worldBootstrapState === 'ready',
+      () => this.inputController.suppressMovementKeys(),
+    )
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
     this.liftGhostController = new LiftGhostController(this.objectsContainer)
     this.nicknameManager = new NicknameManager(this.objectsContainer)
@@ -138,6 +146,7 @@ export class Render {
     if (!this.canvas) return
 
     this.inputController.init(this.canvas)
+    this.inputController.onDirection((x, y) => this.keyboardMovement.setDirection(x, y))
 
     this.inputController.onClick((event) => {
       this.lastClickScreen = { x: event.screenX, y: event.screenY }
@@ -151,6 +160,7 @@ export class Render {
 
       const gameStore = useGameStore()
       if (event.button === 0) {
+        this.releaseKeyboardMovement()
         gameStore.closeContextMenu()
 
         // A dropped item is always the primary-click target. Do this before
@@ -238,6 +248,7 @@ export class Render {
   }
 
   private handleSecondaryMapClick(screenX: number, screenY: number, modifiers: number): void {
+    this.releaseKeyboardMovement()
     this.lastClickScreen = { x: screenX, y: screenY }
     this.lastPointerScreen = { x: screenX, y: screenY }
     this.lastClickWorld = this.screenToWorld(screenX, screenY)
@@ -732,6 +743,8 @@ export class Render {
    * This keeps canvas/input alive between reconnect attempts.
    */
   resetWorld(): void {
+    this.keyboardMovement.reset()
+    this.inputController.setKeyboardMovementEnabled(false)
     this.buildGhostController.cancel()
     this.liftGhostController.cancel()
     this.chatBalloonManager.clear()
@@ -750,6 +763,7 @@ export class Render {
   }
 
   destroy(): void {
+    this.keyboardMovement.destroy()
     this.renderErrorNotice?.remove()
     this.renderErrorNotice = null
     this.app.ticker.stop()
@@ -777,5 +791,16 @@ export class Render {
     this.lastHoverCamX = Number.NaN
     this.lastHoverCamY = Number.NaN
     this.lastHoverZoom = Number.NaN
+  }
+
+  setKeyboardMovementEnabled(enabled: boolean): void {
+    const params = useGameStore().worldParams
+    const accepted = this.keyboardMovement.configure(params?.streamEpoch ?? 0, params?.directionalMovementSupported === true, enabled)
+    this.inputController.setKeyboardMovementEnabled(accepted)
+  }
+
+  releaseKeyboardMovement(): void {
+    this.keyboardMovement.release()
+    this.inputController.suppressMovementKeys()
   }
 }
