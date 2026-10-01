@@ -93,8 +93,18 @@ export class ActorInstance {
     mesh.material = materials.length === 1 ? materials[0]! : materials
     // The world culler owns visibility; the bind-pose sphere clips raised arms.
     mesh.frustumCulled = false
-    if (mesh.userData.lod === 0) mesh.visible = !this.lowDetail
-    if (mesh.userData.lod === 1) mesh.visible = this.lowDetail
+    this.updateLod(mesh, this.lowDetail)
+  }
+
+  private updateLod(object: Object3D, lowDetail: boolean): void {
+    if (object.userData.lod === 0) object.visible = !lowDetail
+    if (object.userData.lod === 1) object.visible = lowDetail
+  }
+
+  private updateEquipmentLod(piece: EquipmentInstance): void {
+    // A single-LOD item must keep its only model when the camera zooms out.
+    const lowDetail = this.lowDetail && piece.meshes.some((mesh) => mesh.userData.lod === 1)
+    piece.root.traverse((object) => this.updateLod(object, lowDetail))
   }
 
   private async load(): Promise<void> {
@@ -222,6 +232,7 @@ export class ActorInstance {
         }
       }
       piece.meshes.forEach((mesh) => this.prepareMesh(mesh))
+      this.updateEquipmentLod(piece)
       return piece
     } catch (error) {
       this.disposeEquipment(piece)
@@ -458,14 +469,8 @@ export class ActorInstance {
   setLowDetail(enabled: boolean): void {
     if (this.lowDetail === enabled || !this.model) return
     this.lowDetail = enabled
-    const updateLod = (object: Object3D) => {
-      if (object.userData.lod === 0) object.visible = !enabled
-      if (object.userData.lod === 1) object.visible = enabled
-    }
-    this.model.traverse(updateLod)
-    for (const piece of this.equipment.values()) {
-      if (!piece.root.parent) piece.root.traverse(updateLod)
-    }
+    this.model.traverse((object) => this.updateLod(object, enabled))
+    for (const piece of this.equipment.values()) this.updateEquipmentLod(piece)
     this.immediateRender = true
     this.revision++
   }
