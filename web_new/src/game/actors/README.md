@@ -35,6 +35,8 @@ The universal carry pose does not depend on prop size. Carried world props remai
 
 High detail: 16,000 triangles including the integrated garment; low detail: 5,500.
 Normal-scale actors use high detail; projected scale below 0.8 selects low detail.
+Equipment switches to low detail only when that item has a low-detail mesh;
+items with only a high-detail model remain visible at every camera zoom.
 Secondary actors update at most 20 times per second by default; unchanged poses are reused.
 The player has priority. Offscreen actors return their texture to the pool.
 The pool is capped at 128 outputs and 128 MiB of RGBA8 pixels. Ordinary 128²

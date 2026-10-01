@@ -681,7 +681,55 @@ test('late equipment, swaps and cancellation use the current unbind state withou
   assert.equal(cache.liveReferences, 0)
 })
 
-test('detached equipment honors LOD, carry, knockout and destruction during a pending replacement', async () => {
+test('equipment without a low-detail model stays visible through zoom changes and loads while zoomed out', async () => {
+  const { actor, cache } = await fixtureActor()
+  try {
+    for (const assetId of [axeURL, shieldURL]) cache.assets.get(assetId)!.scene.getObjectByName('test_prop')!.userData.lod = 0
+    await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }])
+    const right = actor.root.getObjectByName('grip_r')!
+    const mesh = right.getObjectByName('test_prop')!
+    for (const lowDetail of [true, false, true]) {
+      actor.acknowledgeRender()
+      actor.setLowDetail(lowDetail)
+      assert.equal(mesh.visible, true, 'zoom must not hide equipment without a replacement LOD')
+      assert.equal(actor.needsImmediateRender, true)
+    }
+    await actor.setEquipment([{ slot: 'left_hand', visualKey: 'shield' }])
+    assert.equal(right.children.length, 0)
+    const shield = actor.root.getObjectByName('forearm_l')!.getObjectByName('test_prop')!
+    assert.equal(shield.visible, true, 'equipment loaded while zoomed out must be visible immediately')
+    actor.setLowDetail(false)
+    assert.equal(shield.visible, true)
+  } finally { actor.destroy() }
+  assert.equal(cache.liveReferences, 0)
+})
+
+test('equipment selects its own low-detail model while other equipped items retain their only model', async () => {
+  const { actor, cache } = await fixtureActor()
+  try {
+    const axe = cache.assets.get(axeURL)!.scene
+    const high = axe.getObjectByName('test_prop')!
+    high.userData.lod = 0
+    const low = high.clone()
+    low.name = 'test_prop_low'
+    low.userData.lod = 1
+    axe.add(low)
+    cache.assets.get(shieldURL)!.scene.getObjectByName('test_prop')!.userData.lod = 0
+    actor.setLowDetail(true)
+    await actor.setEquipment([{ slot: 'right_hand', visualKey: 'stone_axe' }, { slot: 'left_hand', visualKey: 'shield' }])
+    const right = actor.root.getObjectByName('grip_r')!
+    const shield = actor.root.getObjectByName('forearm_l')!.getObjectByName('test_prop')!
+    for (const lowDetail of [true, false, true]) {
+      actor.setLowDetail(lowDetail)
+      assert.equal(right.getObjectByName('test_prop')!.visible, !lowDetail)
+      assert.equal(right.getObjectByName('test_prop_low')!.visible, lowDetail)
+      assert.equal(shield.visible, true, 'another item having a low-detail model must not hide the shield')
+    }
+  } finally { actor.destroy() }
+  assert.equal(cache.liveReferences, 0)
+})
+
+test('detached equipment retains its only LOD and honors carry, knockout and destruction during a pending replacement', async () => {
   const definition = { ...visualUnbind, variants: [{ clip: 'hold', equipment: [] }], blend_ms: 0 }
   const { actor, cache } = await fixtureActor({ [definition.key]: definition })
   const sourceMesh = cache.assets.get(axeURL)!.scene.getObjectByName('test_prop')!
@@ -690,7 +738,7 @@ test('detached equipment honors LOD, carry, knockout and destruction during a pe
   const right = actor.root.getObjectByName('grip_r')!, piece = right.children[0]!
   actor.setActionAnimation({ key: definition.key, phase: .5 }); actor.updatePose()
   actor.setLowDetail(true)
-  assert.equal(piece.getObjectByName('test_prop')!.visible, false)
+  assert.equal(piece.getObjectByName('test_prop')!.visible, true)
   actor.setLowDetail(false)
   assert.equal(piece.getObjectByName('test_prop')!.visible, true)
   actor.carrying = true; actor.updatePose()
