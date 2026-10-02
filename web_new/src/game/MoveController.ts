@@ -113,6 +113,7 @@ class MoveController {
    * Initialize or reset an entity's movement state.
    */
   initEntity(entityId: number, x: number, y: number, heading: number = 0): void {
+    this.lastRenderPositions.delete(entityId)
     this.entities.set(entityId, {
       entityId,
       streamEpoch: this.globalStreamEpoch,
@@ -137,6 +138,7 @@ class MoveController {
    */
   removeEntity(entityId: number): void {
     this.entities.delete(entityId)
+    this.lastRenderPositions.delete(entityId)
   }
 
   /**
@@ -318,6 +320,13 @@ class MoveController {
    */
   getRenderPosition(entityId: number): RenderPosition | null {
     return this.lastRenderPositions.get(entityId) ?? null
+  }
+
+  getVisualPosition(entityId: number): Pick<RenderPosition, 'x' | 'y' | 'heading'> | null {
+    const state = this.entities.get(entityId)
+    if (!state) return null
+    // Spawn already initializes these fields, before the first interpolation tick.
+    return { x: state.visualX, y: state.visualY, heading: state.visualHeading }
   }
 
   private interpolateEntity(state: EntityMoveState, renderTimeMs: number, clientNowMs: number, deltaMs: number): Omit<RenderPosition, 'distanceMoved'> {
@@ -567,6 +576,7 @@ class MoveController {
    */
   clear(): void {
     this.entities.clear()
+    this.lastRenderPositions.clear()
   }
 
   /**

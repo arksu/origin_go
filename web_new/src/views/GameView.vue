@@ -23,6 +23,7 @@ import ActionsRail from '@/components/ui/ActionsRail.vue'
 import ActionsMenu from '@/components/ui/ActionsMenu.vue'
 import HotbarPlaceholder from '@/components/ui/HotbarPlaceholder.vue'
 import PortraitWarningBanner from '@/components/ui/PortraitWarningBanner.vue'
+import MinimapWindow from '@/components/ui/MinimapWindow.vue'
 import SettingsWindow from '@/components/ui/SettingsWindow.vue'
 import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack, sendActivateAction, sendCancelAction } from '@/network'
 import { useInventoryOps } from '@/composables/useInventoryOps'
@@ -33,6 +34,7 @@ import { useActorRenderSettings, type ActorRenderMode } from '@/composables/useA
 import { useRenderDebugSettings } from '@/composables/useRenderDebugSettings'
 import { config as appConfig } from '@/config'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
+import { MINIMAP_SIZE } from '@/constants/minimap'
 import { proto } from '@/network/proto/packets.js'
 import { useAuthStore } from '@/stores/authStore'
 import { getActionLabel, requestGameAction, type ActionId, type HotbarActionId } from '@/game/hud/actionCatalog'
@@ -836,7 +838,8 @@ useHotkeys(hotkeys)
         <p class="game-loading-overlay__title">Loading world...</p>
         <p v-if="showLoadingSlowHint" class="game-loading-overlay__hint">Still loading, please wait...</p>
       </div>
-      <div class="hud-root">
+      <div class="hud-root" :style="{ '--minimap-default-size': `${MINIMAP_SIZE}px` }">
+        <MinimapWindow v-if="canvasInitialized && isConnected" class="hud-minimap" />
         <div class="hud-top-hotbar">
           <HotbarPlaceholder
             :assignments="hotbarAssignments"
@@ -1079,10 +1082,18 @@ useHotkeys(hotkeys)
 }
 
 .hud-root {
+  --minimap-size: var(--minimap-default-size);
+  --minimap-top: calc(8px + env(safe-area-inset-top));
   position: absolute;
   inset: 0;
   z-index: 120;
   pointer-events: none;
+}
+
+.hud-minimap {
+  position: absolute;
+  top: var(--minimap-top);
+  right: calc(8px + env(safe-area-inset-right));
 }
 
 .hud-top-hotbar {
@@ -1134,6 +1145,11 @@ useHotkeys(hotkeys)
   pointer-events: auto;
   justify-self: end;
   width: min(360px, 100%);
+}
+
+.hud-bottom-right-chat :deep(.chat-history) {
+  // Keep growing chat history below the minimap, even on short viewports.
+  max-height: min(300px, max(0px, calc(100dvh - var(--minimap-top) - var(--minimap-size) - 100px - env(safe-area-inset-bottom))));
 }
 
 .hud-portrait-warning {
@@ -1300,6 +1316,24 @@ useHotkeys(hotkeys)
   color: #a0a0a0;
 }
 
+@media (max-width: 1024px) {
+  .hud-root {
+    --minimap-top: calc(66px + env(safe-area-inset-top));
+  }
+}
+
+@media (max-height: 540px) {
+  .hud-root {
+    --minimap-size: clamp(96px, calc(100dvh - 240px), 160px);
+  }
+}
+
+@media (max-width: 640px) and (min-height: 541px) {
+  .hud-root {
+    --minimap-size: 160px;
+  }
+}
+
 @media (max-width: 900px) {
   .hud-bottom-row {
     grid-template-columns: minmax(180px, 32vw) minmax(180px, 1fr) minmax(220px, 38vw);
@@ -1314,6 +1348,22 @@ useHotkeys(hotkeys)
 
   .hud-bottom-right-chat {
     width: min(300px, 100%);
+  }
+}
+
+@media (max-width: 640px) {
+  .hud-bottom-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .hud-bottom-center-alerts {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .hud-bottom-left-stats,
+  .hud-bottom-right-chat {
+    grid-row: 2;
   }
 }
 

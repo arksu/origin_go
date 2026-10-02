@@ -32,6 +32,9 @@ import type { EquippedVisual } from '../types/characterVisual'
 import type { CharacterActionAnimationState } from '../types/actionAnimation'
 import type { ObjectViewOptions } from './ObjectView'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
+import { MinimapRenderer } from './minimap/MinimapRenderer'
+import type { MinimapPose } from './minimap/types'
+import { getChunkSize, getCoordPerTile } from './tiles/Tile'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
 
@@ -53,6 +56,9 @@ export class Render {
   private actorRenderer: ActorRenderer | null = null
   private actorRenderSettings: Readonly<ActorRenderSettings>
   private renderErrorNotice: HTMLElement | null = null
+  private minimapRenderer: MinimapRenderer | null = null
+  private minimapCanvas: HTMLCanvasElement | null = null
+  private playerEntityId: number | null = null
 
   private lastClickScreen: ScreenPoint = { x: 0, y: 0 }
   private lastClickWorld: ScreenPoint = { x: 0, y: 0 }
@@ -301,6 +307,7 @@ export class Render {
     this.updateBuildGhost()
     this.updateLiftGhost()
     this.updateChunkBuilds()
+    this.updateMinimap()
     this.objectManager.update(now, timeSync.estimateServerNowMs())
     this.updateCulling()
     this.objectManager.syncActiveCarryVisuals(CARRIED_OBJECT_OFFSET_PX)
@@ -440,6 +447,15 @@ export class Render {
         renderPos.isMoving, renderPos.direction, renderPos.distanceMoved, renderPos.stopProgress,
       )
     }
+  }
+
+  private updateMinimap(): void {
+    this.minimapRenderer?.render({
+      player: this.getMinimapPlayerPose(),
+      coordPerTile: getCoordPerTile(),
+      chunkSize: getChunkSize(),
+      getChunk: (x, y) => this.chunkManager.getMinimapChunk(x, y),
+    })
   }
 
   private updateCamera(): void {
@@ -584,7 +600,34 @@ export class Render {
     this.chunkManager.setWorldParams(coordPerTile, chunkSize)
   }
 
+  attachMinimap(canvas: HTMLCanvasElement): void {
+    if (this.minimapCanvas === canvas) return
+    this.minimapRenderer?.destroy()
+    this.minimapRenderer = new MinimapRenderer(canvas)
+    this.minimapCanvas = canvas
+  }
+
+  detachMinimap(canvas: HTMLCanvasElement): void {
+    if (this.minimapCanvas !== canvas) return
+    this.minimapRenderer?.destroy()
+    this.minimapRenderer = null
+    this.minimapCanvas = null
+  }
+
+  setMinimapZoom(zoom: number): void {
+    this.minimapRenderer?.setZoom(zoom)
+  }
+
+  clearMinimap(): void {
+    this.minimapRenderer?.clear()
+  }
+
+  getMinimapPlayerPose(): MinimapPose | null {
+    return this.playerEntityId === null ? null : moveController.getVisualPosition(this.playerEntityId)
+  }
+
   setPlayerEntityId(entityId: number | null): void {
+    this.playerEntityId = entityId
     cameraController.setTargetEntity(entityId)
     this.objectManager.setPlayerEntityId(entityId)
   }
@@ -743,6 +786,8 @@ export class Render {
    * This keeps canvas/input alive between reconnect attempts.
    */
   resetWorld(): void {
+    this.playerEntityId = null
+    this.clearMinimap()
     this.keyboardMovement.reset()
     this.inputController.setKeyboardMovementEnabled(false)
     this.buildGhostController.cancel()
@@ -763,6 +808,8 @@ export class Render {
   }
 
   destroy(): void {
+    if (this.minimapCanvas) this.detachMinimap(this.minimapCanvas)
+    this.playerEntityId = null
     this.keyboardMovement.destroy()
     this.renderErrorNotice?.remove()
     this.renderErrorNotice = null

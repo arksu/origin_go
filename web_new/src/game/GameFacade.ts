@@ -10,6 +10,7 @@ import type { CharacterActionAnimationState } from '../types/actionAnimation'
 import type { ObjectViewOptions } from './ObjectView'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import { config } from '@/config'
+import type { MinimapPose } from './minimap/types'
 
 export class GameFacade {
   private render: Render | null = null
@@ -136,6 +137,26 @@ export class GameFacade {
 
   resetWorld(): void {
     this.render?.resetWorld()
+  }
+
+  attachMinimap(canvas: HTMLCanvasElement): void {
+    this.render?.attachMinimap(canvas)
+  }
+
+  detachMinimap(canvas: HTMLCanvasElement): void {
+    this.render?.detachMinimap(canvas)
+  }
+
+  setMinimapZoom(zoom: number): void {
+    this.render?.setMinimapZoom(zoom)
+  }
+
+  clearMinimap(): void {
+    this.render?.clearMinimap()
+  }
+
+  getMinimapPlayerPose(): MinimapPose | null {
+    return this.render?.getMinimapPlayerPose() ?? null
   }
 
   setKeyboardMovementEnabled(enabled: boolean): void {
