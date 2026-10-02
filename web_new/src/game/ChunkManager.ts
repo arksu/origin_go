@@ -5,6 +5,7 @@ import { setWorldParams, getChunkSize, getCoordPerTile } from './tiles/Tile'
 import { terrainManager } from './terrain'
 import { cullingController } from './culling'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
+import type { MinimapChunk } from './minimap/types'
 import {
   chunkCache, buildQueue, cacheMetrics, BuildPriority,
   type CachedChunk, type BuildTask, BORDER_REFRESH_DELAY_MS,
@@ -264,6 +265,15 @@ export class ChunkManager {
   }
 
   getChunk(x: number, y: number): Chunk | undefined { return this.chunks.get(`${x},${y}`) }
+
+  getMinimapChunk(x: number, y: number): MinimapChunk | undefined {
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return undefined
+    const key = `${x},${y}`
+    // Borrow only for the current draw; peek must not renew hidden retention.
+    const payload = this.activeChunks.get(key) ?? chunkCache.peek(key)
+    if (!payload) return undefined
+    return { x: payload.x, y: payload.y, tiles: payload.tiles, version: payload.version }
+  }
 
   getTileTypeAtWorld(worldX: number, worldY: number): number | undefined {
     if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return undefined

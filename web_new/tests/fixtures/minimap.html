@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minimap · synthetic visual fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 20px; background: #15201d; color: #e2e9d9; font: 14px system-ui, sans-serif; }
+    h1 { margin: 0 0 8px; font-size: 23px; }
+    h2 { margin: 16px 0 8px; font-size: 17px; }
+    p { margin: 6px 0 12px; max-width: 1000px; line-height: 1.45; }
+    button { padding: 6px 10px; border: 1px solid #7e8a6f; border-radius: 4px; background: #263831; color: #e2e9d9; cursor: pointer; }
+    button[aria-pressed="true"] { background: #b8cf9a; color: #172016; }
+    button:focus-visible { outline: 2px solid #f4e5a9; outline-offset: 2px; }
+    fieldset { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 0 10px 8px 0; padding: 8px; border: 1px solid #425343; }
+    legend { color: #c3d0b1; }
+    .overview { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 18px; margin-top: 8px; }
+    figure { margin: 0; }
+    figcaption { margin-top: 5px; font-size: 12px; }
+    canvas { display: block; image-rendering: pixelated; background: repeating-conic-gradient(#182720 0% 25%, #26372d 0% 50%) 0 0 / 16px 16px; outline: 1px solid #708363; }
+    #world { width: 200px; height: 200px; }
+    .state { max-width: 660px; }
+    .operations { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    output, pre { display: block; white-space: pre-wrap; line-height: 1.5; }
+    #diagnostics { max-height: 80px; overflow: auto; font-size: 11px; color: #edc58e; }
+    .materials { display: grid; grid-template-columns: repeat(auto-fill, 120px); gap: 12px; margin-top: 10px; }
+    .materials canvas { width: 96px; height: 96px; }
+    .materials figcaption { max-width: 116px; min-height: 32px; }
+  </style>
+</head>
+<body>
+  <h1>Minimap · synthetic visual fixture</h1>
+  <p>This development-only page uses the production MinimapRenderer and atlas with synthetic borrowed chunks. It does not connect to a game server. Checkerboard means transparent void or unavailable terrain.</p>
+  <fieldset id="zoom-controls"><legend>Zoom · CSS pixels per tile</legend>
+    <button data-zoom="0.5">0.5×</button><button data-zoom="1">1×</button><button data-zoom="2">2×</button><button data-zoom="4">4×</button>
+  </fieldset>
+  <fieldset id="heading-controls"><legend>World heading · terrain remains fixed</legend>
+    <button data-heading="0">East →</button><button data-heading="1">South ↓</button><button data-heading="2">West ←</button><button data-heading="3">North ↑</button>
+  </fieldset>
+  <fieldset id="dpr-controls"><legend>DPR override · fixture only</legend>
+    <button data-dpr="1">DPR 1</button><button data-dpr="2">DPR 2</button><button data-dpr="native">Native DPR</button>
+  </fieldset>
+  <fieldset id="asset-controls"><legend>Atlas loading</legend>
+    <button id="load-atlas">Load real atlas</button><button id="fail-atlas">Force missing manifest</button>
+  </fieldset>
+  <div class="overview">
+    <figure><canvas id="world" width="200" height="200" aria-label="Synthetic world minimap"></canvas><figcaption>World viewport · 200×200 CSS pixels</figcaption></figure>
+    <div class="state">
+      <output id="status" aria-live="polite">Initializing…</output>
+      <div class="operations">
+        <button id="reset-world">Reset world · clear marker and terrain</button>
+        <button id="load-world">Load next layer · same coordinates</button>
+        <button id="remove-chunks">Remove all chunks · keep player</button>
+        <button id="edit-terrain">Replace center chunk with plowed ground</button>
+      </div>
+      <p>Overview: 17 vertical material bands across negative/positive coordinates, a horizontal void band, and one missing chunk. Layer/reset/removal controls affect the overview; reference materials below remain available.</p>
+      <output id="asset-status"></output>
+      <pre id="diagnostics" aria-label="Minimap diagnostics"></pre>
+    </div>
+  </div>
+  <h2>All 17 materials · current zoom, heading, and DPR</h2>
+  <p>Each reference uses the production renderer. Inspect water, forest, all three swamps, and plowed ground at each zoom and DPR.</p>
+  <div id="materials" class="materials"></div>
+  <script type="module" src="/tests/fixtures/minimap.ts"></script>
+</body>
+</html>

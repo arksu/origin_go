@@ -11,6 +11,7 @@
     "test:movement-input": "node scripts/test-character-visual.mjs tests/movement-input.test.ts",
     "test:map-click": "node scripts/test-map-click.mjs",
     "test:chunks": "node scripts/test-chunks.mjs",
+    "test:minimap": "node scripts/test-minimap.mjs && node --test tests/minimap-hud.test.mjs",
     "test:actions": "node scripts/test-actions.mjs",
     "test:action-animations": "node scripts/test-character-visual.mjs tests/action-animations.test.ts",
     "test:character-visual": "node scripts/test-character-visual.mjs",
