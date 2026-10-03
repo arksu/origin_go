@@ -819,6 +819,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 				shard.mu.Lock()
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
+				shard.soundEvents.Detach(playerHandle, c.ID)
 				cleanupObserverModeStateForHandle(shard.world, playerHandle)
 				shard.mu.Unlock()
 
@@ -869,6 +870,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 				shard.mu.Lock()
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
+				shard.soundEvents.Detach(playerHandle, c.ID)
 				if shard.actionService != nil {
 					shard.actionService.Cancel(shard.world, playerEntityID, playerHandle)
 				}

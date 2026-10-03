@@ -115,21 +115,20 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 		if action.CycleElapsedTicks > action.CycleDurationTicks {
 			action.CycleElapsedTicks = action.CycleDurationTicks
 		}
+		advanceActionSoundCues(w, playerHandle, &action, s.contextActions.soundEvents)
+		ecs.AddComponent(w, playerHandle, action)
 
 		s.sendProgress(playerID, action)
 
 		if action.CycleElapsedTicks < action.CycleDurationTicks {
-			ecs.WithComponent(w, playerHandle, func(active *components.ActiveCyclicAction) {
-				active.CycleElapsedTicks = action.CycleElapsedTicks
-			})
 			continue
 		}
 
-		ecs.WithComponent(w, playerHandle, func(active *components.ActiveCyclicAction) {
-			active.CycleElapsedTicks = action.CycleDurationTicks
-		})
-		s.contextActions.emitCycleSound(action)
-
+		var completionPoint soundPoint
+		hasCompletionPoint := false
+		if action.CompleteSoundKey != "" {
+			completionPoint, hasCompletionPoint = actionSoundSourcePoint(w, playerHandle, action, "target")
+		}
 		decision := s.contextActions.handleCyclicCycleComplete(w, playerID, playerHandle, action)
 		switch decision {
 		case contracts.BehaviorCycleDecisionContinue:
@@ -141,6 +140,9 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 			cyclicaction.Continue(w, playerHandle)
 		case contracts.BehaviorCycleDecisionComplete, contracts.BehaviorCycleDecisionCanceled:
 			if decision == contracts.BehaviorCycleDecisionComplete {
+				if hasCompletionPoint && s.contextActions.soundEvents != nil {
+					s.contextActions.soundEvents.EmitPoint(w, completionPoint, action.CompleteSoundKey)
+				}
 				s.contextActions.completeActiveCyclicAction(playerID, playerHandle)
 				continue
 			}

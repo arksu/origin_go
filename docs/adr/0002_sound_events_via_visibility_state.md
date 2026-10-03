@@ -1,8 +1,12 @@
 # ADR 0002: Sound Events через `S2C_Sound` + `VisibilityState`
 
-- Status: Proposed
+- Status: Superseded by [ADR 0006](0006_world_and_local_sound.md)
 - Date: 2026-02-13
 - Owners: Game Server / Game Client
+
+This document is historical. Current behavior is defined by ADR 0006 and the
+[revised sound PRD](../prd/sound_event_spatial_audio_refactor.md): visibility-based
+routing, the fixed radius and end-cycle chop timing below are no longer active.
 
 ## 1. Context
 

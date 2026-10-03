@@ -2,6 +2,7 @@ package world
 
 import (
 	_const "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -14,6 +15,10 @@ type RelocateWorldObjectImmediateOptions struct {
 	IsTeleport        bool
 	ForceReindex      bool
 	CarriedByEntityID types.EntityID
+}
+
+func (manager *ChunkManager) SetPositionObserver(observer core.PositionObserver) {
+	manager.positionObserver = observer
 }
 
 // RelocateWorldObjectImmediate moves a live world object immediately outside the normal
@@ -122,6 +127,9 @@ func RelocateWorldObject(
 		t.X = x
 		t.Y = y
 	})
+	if chunkManager.positionObserver != nil {
+		chunkManager.positionObserver.OnPositionCommitted(handle, x, y)
+	}
 	ecs.WithComponent(w, handle, func(state *components.ObjectInternalState) {
 		state.IsDirty = true
 	})

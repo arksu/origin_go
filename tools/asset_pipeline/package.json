@@ -7,7 +7,7 @@
     "node": "25.8.0"
   },
   "scripts": {
-    "test": "node --test tests/baseline.test.ts tests/catalog.test.ts tests/cli.test.ts tests/toolchain.test.ts tests/publish.test.mjs tests/action-animations.test.mjs",
+    "test": "node --test tests/baseline.test.ts tests/catalog.test.ts tests/cli.test.ts tests/toolchain.test.ts tests/publish.test.mjs tests/action-animations.test.mjs tests/audio-definitions.test.mjs",
     "test:build": "node --test tests/build.test.mjs tests/partial-build.test.mjs tests/reproducibility.test.mjs",
     "test:integration": "node --test tests/integration.test.ts",
     "test:optimize": "node --test tests/optimize.test.mjs",

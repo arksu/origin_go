@@ -14,6 +14,7 @@
     "test:minimap": "node scripts/test-minimap.mjs && node --test tests/minimap-hud.test.mjs",
     "test:actions": "node scripts/test-actions.mjs",
     "test:action-animations": "node scripts/test-character-visual.mjs tests/action-animations.test.ts",
+    "test:sounds": "node scripts/test-character-visual.mjs tests/sounds.test.ts",
     "test:character-visual": "node scripts/test-character-visual.mjs",
     "test:asset-pipeline": "node scripts/test-asset-pipeline.mjs",
     "validate-objects": "node scripts/validate-object-schema.mjs",

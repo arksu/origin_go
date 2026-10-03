@@ -9,7 +9,7 @@ export interface BuildOptions {
   log?: (message: string) => void
 }
 export interface Artifact { url: string; sha256: string; bytes: number }
-export interface PublishedCatalog { schema: 1; assets: Record<string, Artifact>; actionAnimations?: Artifact }
+export interface PublishedCatalog { schema: 1; assets: Record<string, Artifact>; actionAnimations?: Artifact; sounds?: Artifact; locomotionAudio?: Artifact }
 export const defaultRoot: string
 export function buildAssets(options: BuildOptions): Promise<PublishedCatalog>
 export function validateAssets(options: BuildOptions): Promise<PublishedCatalog>

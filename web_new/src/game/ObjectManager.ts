@@ -6,6 +6,7 @@ import { TERRAIN_BASE_Z_INDEX } from '@/constants/terrain'
 import { DEBUG_SHOW_OBJECT_BOUNDS } from '@/constants/game'
 import type { ActorRenderer } from './actors/ActorRenderer'
 import { loadShallowWaterTextures } from './actors/ShallowWaterVisual'
+import { localAudioController } from './audioRuntime'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
@@ -103,6 +104,7 @@ export class ObjectManager {
       return
     }
     this.animatedObjectIds.delete(entityId)
+    localAudioController.remove(entityId)
     this.knockedOutObjectIds.delete(entityId)
 
     // Unregister from culling controller
@@ -129,6 +131,7 @@ export class ObjectManager {
 
     const previousPosition = objectView.getPosition()
     objectView.updatePosition(x, y)
+    if (distanceMoved === 0 && (x !== previousPosition.x || y !== previousPosition.y)) objectView.markAudioDiscontinuity()
 
     if (isMoving !== undefined && direction !== undefined) {
       objectView.setStopProgress(stopProgress)
@@ -387,6 +390,7 @@ export class ObjectManager {
   }
 
   update(nowMs = performance.now(), serverNowMs = Date.now()): void {
+    localAudioController.setListenerPosition(this.playerEntityId === null ? null : this.objects.get(this.playerEntityId)?.getPosition() ?? null)
     if (this.animatedObjectIds.size > 0) {
       const staleAnimatedIds: number[] = []
       for (const entityId of this.animatedObjectIds) {
@@ -405,6 +409,8 @@ export class ObjectManager {
         if (objectView.updateActionAnimation(nowMs, serverNowMs)) {
           cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
         }
+        const audioSnapshot = objectView.localAudioSnapshot()
+        if (audioSnapshot) localAudioController.update(audioSnapshot, nowMs, serverNowMs)
       }
       for (const entityId of staleAnimatedIds) {
         this.animatedObjectIds.delete(entityId)
@@ -466,6 +472,7 @@ export class ObjectManager {
    * Clear all objects.
    */
   clear(): void {
+    localAudioController.reset()
     this.clearHover()
 
     // Unregister all objects from culling

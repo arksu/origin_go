@@ -113,6 +113,7 @@ var (
 )
 
 type ChunkManager struct {
+	positionObserver  core.PositionObserver
 	cfg               *config.Config
 	db                *persistence.Postgres
 	world             *ecs.World

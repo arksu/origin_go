@@ -37,6 +37,7 @@ type DatabaseConfig struct {
 }
 
 type GameConfig struct {
+	Audio                    AudioConfig   `mapstructure:"audio"`
 	Env                      string        `mapstructure:"env"`
 	TickRate                 int           `mapstructure:"tick_rate"`
 	PlayerActiveChunkRadius  int           `mapstructure:"player_active_chunk_radius"`
@@ -123,6 +124,9 @@ func Load(logger *zap.Logger) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
+	if err := cfg.Game.Audio.Validate(); err != nil {
+		return nil, err
+	}
 
 	cfg.Game.Env = strings.ToLower(strings.TrimSpace(cfg.Game.Env))
 	switch cfg.Game.Env {
@@ -180,6 +184,7 @@ func Load(logger *zap.Logger) (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
+	setAudioDefaults(v)
 	// Server defaults
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)

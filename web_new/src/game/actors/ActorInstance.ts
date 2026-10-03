@@ -439,6 +439,8 @@ export class ActorInstance {
   }
 
   get isReady(): boolean { return this.loaded && !this.error }
+  get assetId(): string { return COMMONER_ASSET_ID }
+  isActionAnimationSelected(key: string): boolean { return this.actionPlayer.isSelected(key) }
   get cycleDistanceTiles(): number { return this.walkCycleDistance }
   get needsImmediateRender(): boolean { return this.immediateRender }
   acknowledgeRender(): void { this.immediateRender = false }

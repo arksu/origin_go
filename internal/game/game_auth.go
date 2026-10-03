@@ -564,7 +564,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		posY = int(transform.Y)
 	}
 
-	g.attachClientToWorld(shard, c, playerEntityID, character, handle)
+	g.attachClientToWorldLocked(shard, c, playerEntityID, character, handle)
 
 	// Force immediate visibility update for the reattached observer
 	visState := ecs.GetResource[ecs.VisibilityState](shard.world)
@@ -675,6 +675,12 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 	default:
 	}
 
+	hearing := g.cfg.Game.Audio.BaseHearing
+	freshnessMs := g.cfg.Game.Audio.FreshnessMs
+	if shard != nil && shard.soundEvents != nil {
+		hearing = shard.soundEvents.EffectiveHearing(shard.world.GetHandleByEntityID(entityID))
+		freshnessMs = shard.soundEvents.config.FreshnessMs
+	}
 	// Send enter world after chunks are sent (signals "ready to render")
 	enterWorld := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_PlayerEnterWorld{
@@ -686,6 +692,10 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				TickRate:                     uint32(g.cfg.Game.TickRate),
 				StreamEpoch:                  c.StreamEpoch.Load(),
 				DirectionalMovementSupported: true,
+				Audio: &netproto.S2C_AudioParameters{
+					Hearing:     hearing,
+					FreshnessMs: uint32(freshnessMs),
+				},
 			},
 		},
 	}
@@ -708,6 +718,17 @@ func (g *Game) attachClientToWorld(
 	if shard == nil || client == nil || handle == types.InvalidHandle {
 		return
 	}
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	g.attachClientToWorldLocked(shard, client, playerEntityID, character, handle)
+}
+
+// The caller owns the world lock, including reattachment which also mutates
+// detached-player state. Listener membership is published in that same section.
+func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, playerEntityID types.EntityID, character repository.Character, handle types.Handle) {
+	if !shard.world.Alive(handle) {
+		return
+	}
 
 	shard.PlayerInbox().RemoveClient(client.ID)
 	shard.ClientsMu.Lock()
@@ -719,6 +740,9 @@ func (g *Game) attachClientToWorld(
 	client.StreamEpoch.Add(1)
 	client.InWorld.Store(true)
 	g.sendPlayerEnterWorld(client, playerEntityID, shard, character)
+	if shard.soundEvents != nil && !shard.soundEvents.Attach(shard.world, handle, client.ID, client.StreamEpoch.Load()) {
+		g.logger.Error("Failed to attach world sound listener", zap.Uint64("client_id", client.ID), zap.Uint64("entity_id", uint64(playerEntityID)))
+	}
 	shard.ClientsMu.Unlock()
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, client.StreamEpoch.Load())
 

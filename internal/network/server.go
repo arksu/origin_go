@@ -49,6 +49,7 @@ type Client struct {
 	server             *Server
 	logger             *zap.Logger
 	sendCh             chan []byte
+	audioCh            chan []byte
 	closeCh            chan struct{}
 	closeOnce          sync.Once
 	writeBuf           *bufio.Writer
@@ -198,6 +199,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		server:   s,
 		logger:   s.logger.Named("client").With(zap.Uint64("id", clientID)),
 		sendCh:   make(chan []byte, s.gameCfg.SendChannelBuffer),
+		audioCh:  make(chan []byte, s.gameCfg.Audio.QueueCapacity),
 		closeCh:  make(chan struct{}),
 		writeBuf: bufio.NewWriterSize(conn, 4096),
 	}
@@ -283,38 +285,94 @@ func (c *Client) writeLoop() {
 	defer c.Close()
 
 	for {
-		// Block until at least one message arrives (or shutdown)
+		// Audio never occupies gameplay slots, even when both queues are ready.
 		select {
 		case <-c.closeCh:
 			return
 		case <-c.server.ctx.Done():
 			return
 		case msg := <-c.sendCh:
-			c.conn.SetWriteDeadline(time.Now().Add(c.server.cfg.WriteTimeout))
-
-			// Write first message into buffered writer
-			if err := wsutil.WriteServerBinary(c.writeBuf, msg); err != nil {
+			if err := c.writePendingMessages(msg, nil); err != nil {
 				return
 			}
-
-			// Drain all remaining pending messages (non-blocking)
-		drainLoop:
-			for {
-				select {
-				case msg = <-c.sendCh:
-					if err := wsutil.WriteServerBinary(c.writeBuf, msg); err != nil {
-						return
-					}
-				default:
-					break drainLoop
-				}
-			}
-
-			// Single flush — coalesces all buffered frames into minimal syscalls
-			if err := c.writeBuf.Flush(); err != nil {
+		case audio := <-c.audioCh:
+			if err := c.writePendingMessages(nil, audio); err != nil {
 				return
 			}
 		}
+	}
+}
+
+func (c *Client) writePendingMessages(firstGameplay, pendingAudio []byte) error {
+	if c.shutdownRequested() {
+		return context.Canceled
+	}
+	if err := c.conn.SetWriteDeadline(time.Now().Add(c.server.cfg.WriteTimeout)); err != nil {
+		return err
+	}
+	if firstGameplay != nil {
+		if err := wsutil.WriteServerBinary(c.writeBuf, firstGameplay); err != nil {
+			return err
+		}
+	}
+	for {
+		if c.shutdownRequested() {
+			return context.Canceled
+		}
+		select {
+		case message := <-c.sendCh:
+			if err := wsutil.WriteServerBinary(c.writeBuf, message); err != nil {
+				return err
+			}
+			continue
+		default:
+		}
+		if pendingAudio == nil {
+			select {
+			case pendingAudio = <-c.audioCh:
+				// Gameplay may arrive between selecting audio and writing it.
+				continue
+			default:
+				return c.writeBuf.Flush()
+			}
+		}
+		if c.InWorld.Load() {
+			if err := wsutil.WriteServerBinary(c.writeBuf, pendingAudio); err != nil {
+				return err
+			}
+		}
+		// Send at most one audio batch between gameplay drains.
+		return c.writeBuf.Flush()
+	}
+}
+
+func (c *Client) shutdownRequested() bool {
+	select {
+	case <-c.closeCh:
+		return true
+	default:
+	}
+	return c.server != nil && c.server.ctx != nil && c.server.ctx.Err() != nil
+}
+
+type AudioSendResult uint8
+
+const (
+	AudioSendAccepted AudioSendResult = iota
+	AudioSendFull
+	AudioSendClosed
+)
+
+// SendAudio takes ownership of payload on acceptance; callers must not reuse it.
+func (c *Client) SendAudio(payload []byte) AudioSendResult {
+	if c == nil || !c.InWorld.Load() || c.criticalSendFailed.Load() || c.shutdownRequested() {
+		return AudioSendClosed
+	}
+	select {
+	case c.audioCh <- payload:
+		return AudioSendAccepted
+	default:
+		return AudioSendFull
 	}
 }
 

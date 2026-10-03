@@ -1,0 +1,626 @@
+[
+  {
+    "name": "world and local profiles",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        },
+        {
+          "key": "tree_fall",
+          "mode": "world",
+          "loudness": 1400,
+          "files": [
+            "sound/tree_fall/tree_fall_01.mp3"
+          ],
+          "volume": 0.95,
+          "priority": 30,
+          "max_voices": 8,
+          "max_voices_per_source": 2
+        },
+        {
+          "key": "exp_gain",
+          "mode": "local",
+          "loudness": 80,
+          "files": [
+            "sound/exp_gain.mp3"
+          ],
+          "volume": 0.4,
+          "priority": 20,
+          "max_voices": 2,
+          "max_voices_per_source": 1,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0.8,
+            "shape": 4
+          },
+          "feedback_trigger": "exp_gain"
+        },
+        {
+          "key": "footstep",
+          "mode": "local",
+          "loudness": 120,
+          "volume": 0.35,
+          "files": [
+            "sound/steps/step_01.wav",
+            "sound/steps/step_02.wav",
+            "sound/steps/step_03.wav",
+            "sound/steps/step_04.wav"
+          ],
+          "priority": 0,
+          "max_voices": 12,
+          "max_voices_per_source": 2,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0.8,
+            "shape": 4
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown field",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4,
+          "typo": 1
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown mode",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "remote",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "nonpositive loudness",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 0,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "negative volume",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": -0.1,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing volume",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "path traversal",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/../chop.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "empty files",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate key",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        },
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid shape",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "exp_gain",
+          "mode": "local",
+          "loudness": 80,
+          "files": [
+            "sound/exp_gain.mp3"
+          ],
+          "volume": 0.4,
+          "priority": 20,
+          "max_voices": 2,
+          "max_voices_per_source": 1,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0.8,
+            "shape": 0
+          },
+          "feedback_trigger": "exp_gain"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reversed gains",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "exp_gain",
+          "mode": "local",
+          "loudness": 80,
+          "files": [
+            "sound/exp_gain.mp3"
+          ],
+          "volume": 0.4,
+          "priority": 20,
+          "max_voices": 2,
+          "max_voices_per_source": 1,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0.99,
+            "shape": 4
+          },
+          "feedback_trigger": "exp_gain"
+        }
+      ]
+    }
+  },
+  {
+    "name": "null attenuation",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "exp_gain",
+          "mode": "local",
+          "loudness": 80,
+          "files": [
+            "sound/exp_gain.mp3"
+          ],
+          "volume": 0.4,
+          "priority": 20,
+          "max_voices": 2,
+          "max_voices_per_source": 1,
+          "local_attenuation": null,
+          "feedback_trigger": "exp_gain"
+        }
+      ]
+    }
+  },
+  {
+    "name": "fractional priority",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 0.5,
+          "max_voices": 16,
+          "max_voices_per_source": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "voice overflow",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 17
+        }
+      ]
+    }
+  },
+  {
+    "name": "world feedback",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "chop",
+          "mode": "world",
+          "loudness": 1000,
+          "files": [
+            "sound/chop/chop_01.mp3",
+            "sound/chop/chop_03.mp3",
+            "sound/chop/chop_04.mp3",
+            "sound/chop/chop_05.mp3",
+            "sound/chop/chop_06.mp3",
+            "sound/chop/chop_07.mp3"
+          ],
+          "volume": 0.9,
+          "priority": 10,
+          "max_voices": 16,
+          "max_voices_per_source": 4,
+          "feedback_trigger": "exp_gain"
+        }
+      ]
+    }
+  },
+  {
+    "name": "local near distance",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "footstep",
+          "mode": "local",
+          "loudness": 120,
+          "volume": 0.35,
+          "files": [
+            "sound/steps/step_01.wav",
+            "sound/steps/step_02.wav",
+            "sound/steps/step_03.wav",
+            "sound/steps/step_04.wav"
+          ],
+          "priority": 0,
+          "max_voices": 12,
+          "max_voices_per_source": 2,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0,
+            "shape": 4,
+            "near_distance": 16
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "legacy local attenuation omits near distance",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "footstep",
+          "mode": "local",
+          "loudness": 120,
+          "volume": 0.35,
+          "files": [
+            "sound/steps/step_01.wav",
+            "sound/steps/step_02.wav",
+            "sound/steps/step_03.wav",
+            "sound/steps/step_04.wav"
+          ],
+          "priority": 0,
+          "max_voices": 12,
+          "max_voices_per_source": 2,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0.8,
+            "shape": 4
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "negative local near distance",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "footstep",
+          "mode": "local",
+          "loudness": 120,
+          "volume": 0.35,
+          "files": [
+            "sound/steps/step_01.wav",
+            "sound/steps/step_02.wav",
+            "sound/steps/step_03.wav",
+            "sound/steps/step_04.wav"
+          ],
+          "priority": 0,
+          "max_voices": 12,
+          "max_voices_per_source": 2,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0,
+            "shape": 4,
+            "near_distance": -1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "local near distance equals loudness",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "footstep",
+          "mode": "local",
+          "loudness": 120,
+          "volume": 0.35,
+          "files": [
+            "sound/steps/step_01.wav",
+            "sound/steps/step_02.wav",
+            "sound/steps/step_03.wav",
+            "sound/steps/step_04.wav"
+          ],
+          "priority": 0,
+          "max_voices": 12,
+          "max_voices_per_source": 2,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0,
+            "shape": 4,
+            "near_distance": 120
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "local near distance exceeds loudness",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "footstep",
+          "mode": "local",
+          "loudness": 120,
+          "volume": 0.35,
+          "files": [
+            "sound/steps/step_01.wav",
+            "sound/steps/step_02.wav",
+            "sound/steps/step_03.wav",
+            "sound/steps/step_04.wav"
+          ],
+          "priority": 0,
+          "max_voices": 12,
+          "max_voices_per_source": 2,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0,
+            "shape": 4,
+            "near_distance": 121
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "null local near distance",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "sounds": [
+        {
+          "key": "footstep",
+          "mode": "local",
+          "loudness": 120,
+          "volume": 0.35,
+          "files": [
+            "sound/steps/step_01.wav",
+            "sound/steps/step_02.wav",
+            "sound/steps/step_03.wav",
+            "sound/steps/step_04.wav"
+          ],
+          "priority": 0,
+          "max_voices": 12,
+          "max_voices_per_source": 2,
+          "local_attenuation": {
+            "near_gain": 0.9,
+            "far_gain": 0,
+            "shape": 4,
+            "near_distance": null
+          }
+        }
+      ]
+    }
+  }
+]

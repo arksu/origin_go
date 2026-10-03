@@ -11,6 +11,7 @@ import type { ObjectViewOptions } from './ObjectView'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import { config } from '@/config'
 import type { MinimapPose } from './minimap/types'
+import { localAudioController, worldAudioReceiver } from './audioRuntime'
 
 export class GameFacade {
   private render: Render | null = null
@@ -32,6 +33,8 @@ export class GameFacade {
   }
 
   destroy(): void {
+    worldAudioReceiver.reset()
+    localAudioController.reset()
     this.cursorManager.detach()
     if (this.render) {
       this.render.destroy()
@@ -136,6 +139,8 @@ export class GameFacade {
   }
 
   resetWorld(): void {
+    worldAudioReceiver.reset()
+    localAudioController.reset()
     this.render?.resetWorld()
   }
 

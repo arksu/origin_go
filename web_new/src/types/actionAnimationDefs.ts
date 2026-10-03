@@ -5,6 +5,7 @@ export interface ActionAnimationEquipment { slot: EquipmentSlot; visual_key: str
 export interface ActionAnimationVariant { clip: string; equipment: ActionAnimationEquipment[] }
 export interface ActionAnimationFrame { width: number; height: number; origin_x: number; origin_y: number }
 export type ActionAnimationEligibility = 'stationary' | 'not_carrying' | 'not_knocked_out'
+export interface ActionAnimationSoundCue { id: string; phase: number; sound_key: string; source: 'actor' | 'target' }
 export interface ActionAnimationDefinition {
   key: string
   actor: string
@@ -15,6 +16,7 @@ export interface ActionAnimationDefinition {
   frame: ActionAnimationFrame
   unbind_equipment_slots?: EquipmentSlot[]
   preview?: { label: string; duration_ms: number; equipment: ActionAnimationEquipment[] }
+  sound_cues?: ActionAnimationSoundCue[]
 }
 export interface ActionAnimationBinding extends ActionAnimationDefinition { source: ActionAnimationSource }
 
@@ -55,7 +57,7 @@ function equipment(value: unknown, label: string): ActionAnimationEquipment[] {
 }
 
 function parseBinding(value: unknown, label: string, withSource: boolean): ActionAnimationDefinition | ActionAnimationBinding {
-  const item = object(value, label, ['key', 'actor', 'variants', 'eligibility', 'facing', 'blend_ms', 'frame', 'preview', 'unbind_equipment_slots', ...(withSource ? ['source'] : [])])
+  const item = object(value, label, ['key', 'actor', 'variants', 'eligibility', 'facing', 'blend_ms', 'frame', 'preview', 'unbind_equipment_slots', 'sound_cues', ...(withSource ? ['source'] : [])])
   const variants = array(item.variants, `${label}.variants`).map((raw, index) => {
     const field = `${label}.variants[${index}]`, variant = object(raw, field, ['clip', 'equipment'])
     return { clip: string(variant.clip, `${field}.clip`), equipment: equipment(variant.equipment, `${field}.equipment`) }
@@ -75,6 +77,18 @@ function parseBinding(value: unknown, label: string, withSource: boolean): Actio
     variants, eligibility: eligibility as ActionAnimationEligibility[], facing: item.facing,
     blend_ms: number(item.blend_ms ?? 0, `${label}.blend_ms`, 0), frame,
   }
+  if (item.sound_cues !== undefined) {
+    const cueIDs = new Set<string>()
+    let previousPhase = 0
+    result.sound_cues = array(item.sound_cues, `${label}.sound_cues`).map((raw, index) => {
+      const field = `${label}.sound_cues[${index}]`, cue = object(raw, field, ['id', 'phase', 'sound_key', 'source'])
+      const id = string(cue.id, `${field}.id`), phase = number(cue.phase, `${field}.phase`, Number.MIN_VALUE)
+      if (cueIDs.has(id) || phase <= previousPhase || phase > 1) throw new Error(`${field}: duplicate ID or phase not increasing within (0,1]`)
+      if (cue.source !== 'actor' && cue.source !== 'target') throw new Error(`${field}.source: expected actor or target`)
+      cueIDs.add(id); previousPhase = phase
+      return { id, phase, sound_key: string(cue.sound_key, `${field}.sound_key`), source: cue.source }
+    })
+  }
   if (item.unbind_equipment_slots !== undefined) {
     const slots = array(item.unbind_equipment_slots, `${label}.unbind_equipment_slots`)
     if (slots.some(slot => typeof slot !== 'string' || !SLOTS.has(slot)) || new Set(slots).size !== slots.length) throw new Error(`${label}.unbind_equipment_slots: unknown or duplicate slot`)
@@ -90,10 +104,17 @@ function parseBinding(value: unknown, label: string, withSource: boolean): Actio
   const source = object(item.source, `${label}.source`, ['kind', 'namespace', 'id'])
   const kind = typeof source.kind === 'string' ? source.kind.trim() : ''
   if (!['context', 'menu', 'craft', 'build'].includes(kind)) throw new Error(`${label}.source.kind: unsupported source`)
+  if (kind === 'craft' && result.sound_cues?.some(cue => cue.source === 'target')) throw new Error(`${label}.sound_cues: craft execution has no guaranteed target source`)
   const id = string(typeof source.id === 'string' ? source.id.trim() : source.id, `${label}.source.id`)
   const namespace = source.namespace === undefined ? '' : typeof source.namespace === 'string' ? source.namespace.trim() : source.namespace
   if (namespace !== '') string(namespace, `${label}.source.namespace`)
   return { ...result, source: { kind: kind as ActionAnimationSource['kind'], namespace: namespace as string, id } }
+}
+
+export function validateActionSoundReferences(definitions: readonly ActionAnimationDefinition[], sounds: ReadonlyMap<string, { mode: string }>, label: string): void {
+  for (const binding of definitions) for (const cue of binding.sound_cues ?? []) {
+    if (!sounds.has(cue.sound_key)) throw new Error(`${label}: binding ${binding.key} cue ${cue.id}: missing sound ${cue.sound_key}`)
+  }
 }
 
 export function validateAnimationUniqueness(bindings: readonly (ActionAnimationDefinition | ActionAnimationBinding)[], label: string): void {

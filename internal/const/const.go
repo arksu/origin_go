@@ -23,12 +23,11 @@ const (
 )
 
 const (
-	PlayerVisionRadius     = 600
-	PlayerVisionPower      = 600
-	VisionUpdateInterval   = 3 * time.Second
-	VisionUpdateJitter     = 50 * time.Millisecond
-	VisionPosEpsilon       = 0.01
-	DefaultMaxHearDistance = 200.0
+	PlayerVisionRadius   = 600
+	PlayerVisionPower    = 600
+	VisionUpdateInterval = 3 * time.Second
+	VisionUpdateJitter   = 50 * time.Millisecond
+	VisionPosEpsilon     = 0.01
 )
 
 const StopDistance float64 = 0.2

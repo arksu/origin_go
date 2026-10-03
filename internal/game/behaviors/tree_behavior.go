@@ -31,7 +31,6 @@ const (
 	takeCycleStaminaCost       = 10
 	treeLogsSpawnInitialOffset = 16
 	treeLogsSpawnStepOffset    = 20
-	treeActionSound            = "chop"
 	treeFinishSound            = "tree_fall"
 )
 
@@ -420,17 +419,14 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 
 	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
 	cycleDuration := uint32(treeChopCycleDurationTicks)
-	cycleSoundKey := strings.TrimSpace(treeActionSound)
 	completeSoundKey := strings.TrimSpace(treeFinishSound)
 	if actionID != actionChop {
 		cycleDuration = uint32(takeCycleDurationTicks)
-		cycleSoundKey = ""
 		completeSoundKey = ""
 	}
 	cyclicaction.StartContext(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
 		BehaviorKey:        treeBehaviorKey,
 		ActionID:           actionID,
-		CycleSoundKey:      cycleSoundKey,
 		CompleteSoundKey:   completeSoundKey,
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           ctx.TargetID,

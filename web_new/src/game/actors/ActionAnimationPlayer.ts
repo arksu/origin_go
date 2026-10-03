@@ -31,6 +31,7 @@ export class ActionAnimationPlayer {
   private currentFrame: ActionAnimationFrame
   private currentSamples: ActionPoseSample[] = []
   private currentFacing: number | undefined
+  private selectedAnimationKey: string | undefined
   private readonly currentUnboundSlots = new Set<EquipmentSlot>()
 
   constructor(private readonly baseFrame: ActionAnimationFrame, private readonly report: (message: string) => void = console.error) {
@@ -68,6 +69,7 @@ export class ActionAnimationPlayer {
   update(context: ActionPresentationContext, now: number): void {
     if (context.knockedOut) this.layers.clear()
     const selected = this.selection(context)
+    this.selectedAnimationKey = selected?.definition.key
     const selectedKey = selected ? `${selected.definition.key}/${selected.index}` : null
     for (const [key, layer] of this.layers) {
       const progress = layer.definition.blend_ms === 0 ? 1 : Math.max(0, Math.min(1, (now - layer.startedMs) / layer.definition.blend_ms))
@@ -101,6 +103,7 @@ export class ActionAnimationPlayer {
   }
 
   get unboundEquipmentSlots(): ReadonlySet<EquipmentSlot> { return this.currentUnboundSlots }
+  isSelected(key: string): boolean { return this.selectedAnimationKey === key }
   get frame(): ActionAnimationFrame { return this.currentFrame }
   get samples(): readonly ActionPoseSample[] { return this.currentSamples }
   get facingAngle(): number | undefined { return this.currentFacing }

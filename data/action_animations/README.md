@@ -19,6 +19,7 @@ Each binding declares:
 | `frame` | Integer width/height in 1–1024, pixel `origin_x`/`origin_y` inside bounds (origins default zero) |
 | `unbind_equipment_slots` | Optional array of distinct equipment slots to visually detach while this action pose is displayed; absent/empty leaves attachments unchanged |
 | `preview` | Optional `{label, duration_ms, equipment}` for local preview |
+| `sound_cues` | Optional ordered array of `{id, phase, sound_key, source}`; unique IDs, increasing phases in `(0,1]`, `source` = `actor` or `target` |
 
 Source fields are whitespace-trimmed before exact lookup. A context source uses
 the behavior key as its namespace; synthetic context actions use an empty
@@ -30,8 +31,8 @@ asset keys, not inventory item IDs. Variant ordering declares preference. The
 frame origin is the ground anchor in native output pixels; a larger output does
 not scale the character. Clips must exist in the actor manifest and use its rig.
 
-Defs contain presentation choices only. They do not set gameplay duration,
-stamina, effects, sound timing, or impact markers. The full loaded clip is sampled
+Defs contain presentation choices and sound markers. They do not set gameplay
+duration, stamina or successful effects. The full loaded clip is sampled
 at `phase * clip.duration`; the action duration is `total_ticks * tick_duration_ms`.
 The network controller clamps phase at one until the next confirmed cycle.
 
@@ -39,6 +40,28 @@ Publish with `tools/assets publish-action-animations` using existing manifests.
 Deploy server defs with the matching generated client catalog. Adding a binding
 for a supported source requires def changes and publication only. Tests share
 the positive and negative fixtures under `tests/fixtures/action_animations/`.
+
+## Sound markers
+
+`tree_chop` declares one `chop` cue at phase `0.6`, from the target tree. Its hand
+variants share that marker. The server resolves the profile from `data/sounds/`
+and emits a world cue once per validated cycle at the first tick at or beyond
+the phase (tick 12 of 20). Repeated cycles reset their marker cursor; cancellation
+before the marker prevents the sound. Gameplay effects remain at completion.
+Successful `tree_fall` feedback remains a completion event with a target point
+captured before a terminal effect can remove the tree.
+
+World cues are executed by the server and never duplicated by client animation
+sampling. Local cues are presentation-only and skip markers already passed on
+late entry/loading; backward corrections cannot re-arm a consumed marker in the
+same cycle. An explicitly enabled preview can inspect cues locally. Actor sources
+are available for all execution kinds; craft bindings cannot select a target
+source because crafting has no guaranteed target. Menu targets must also be
+available in their concrete execution definition.
+
+`tools/assets publish-action-animations` publishes the sound, locomotion and
+action catalogs together, checking profile references and existing samples.
+See [sound profiles](../sounds/README.md) and [locomotion audio](../locomotion_audio/README.md).
 
 ## Temporary visual unbind
 

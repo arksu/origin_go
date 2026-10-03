@@ -3,7 +3,7 @@ import { messageDispatcher } from './MessageDispatcher'
 import { useGameStore, type EntityMovement } from '@/stores/gameStore'
 import { gameFacade, moveController, playerCommandController, soundManager } from '@/game'
 import { DEBUG_MOVEMENT } from '@/constants/game'
-import { distanceAttenuation, SoundAttenuationModel } from '@/game/soundAttenuation'
+import { initializeAudio, localAudioController, worldAudioReceiver } from '@/game/audioRuntime'
 import { decodeCharacterVisual } from '@/types/characterVisual'
 import { decodeActionAnimation } from '@/types/actionAnimation'
 import { ChunkStreamGuard } from './ChunkStreamGuard'
@@ -25,14 +25,6 @@ function applyBatchEntries<T>(type: string, entries: readonly T[], applyEntry: (
   }
 }
 
-function distance2D(ax: number, ay: number, bx: number, by: number): number {
-  const dx = ax - bx
-  const dy = ay - by
-  return Math.sqrt((dx * dx) + (dy * dy))
-}
-
-const SOUND_ATTENUATION_MODEL = SoundAttenuationModel.Smoothstep
-
 function clearClientWorldState(): void {
   chunkStream.reset(0)
   const gameStore = useGameStore()
@@ -40,10 +32,13 @@ function clearClientWorldState(): void {
   gameFacade.setPlayerEntityId(null)
   gameFacade.resetWorld()
   moveController.clear()
+  worldAudioReceiver.reset()
+  localAudioController.reset()
 }
 
 export function registerMessageHandlers(): void {
   const gameStore = useGameStore()
+  void initializeAudio().catch((error: unknown) => console.error('[Audio] Catalog initialization failed', error))
 
   messageDispatcher.on('playerEnterWorld', (msg: proto.IS2C_PlayerEnterWorld) => {
     // Each entry is a fresh world, including teleports and future mine layers.
@@ -55,6 +50,8 @@ export function registerMessageHandlers(): void {
     const streamEpoch = msg.streamEpoch || 0
     chunkStream.reset(streamEpoch)
     const tickRate = msg.tickRate || 10 // Default to 10 ticks/sec
+    worldAudioReceiver.configure(streamEpoch, msg.audio)
+    localAudioController.setListener(toNumber(msg.entityId!), worldAudioReceiver.hearing)
 
     console.log(`[Handlers] playerEnterWorld: coordPerTile=${coordPerTile}, chunkSize=${chunkSize}, streamEpoch=${streamEpoch}, tickRate=${tickRate}`)
 
@@ -121,6 +118,7 @@ export function registerMessageHandlers(): void {
 
     if (msg.fxKey) {
       gameFacade.playFx(targetEntityId, msg.fxKey)
+      soundManager.playFeedback(msg.fxKey, targetEntityId)
     }
   })
 
@@ -565,37 +563,11 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('sound', (msg: proto.IS2C_Sound) => {
-    console.log('[Handlers] S2C_Sound received:', {
-      soundKey: msg.soundKey,
-      maxHearDistance: msg.maxHearDistance,
-      x: msg.x,
-      y: msg.y
-    })
+    worldAudioReceiver.legacy(msg)
+  })
 
-    const soundKey = (msg.soundKey || '').trim()
-    if (!soundKey) {
-      return
-    }
-
-    const maxHearDistance = Number(msg.maxHearDistance || 0)
-    const sourceX = Number(msg.x || 0)
-    const sourceY = Number(msg.y || 0)
-    const playerPosition = gameStore.playerPosition
-    const distance = distance2D(playerPosition.x, playerPosition.y, sourceX, sourceY)
-    const attenuation = distanceAttenuation(distance, maxHearDistance, SOUND_ATTENUATION_MODEL)
-    if (attenuation <= 0) {
-      return
-    }
-
-    console.log('[Handlers] sound -> play', {
-      soundKey,
-      sourceX,
-      sourceY,
-      maxHearDistance,
-      distance,
-      attenuation,
-    })
-    soundManager.play(soundKey, attenuation)
+  messageDispatcher.on('soundBatch', (msg: proto.IS2C_SoundBatch) => {
+    worldAudioReceiver.batch(msg)
   })
 
   messageDispatcher.on('error', (msg: proto.IS2C_Error) => {

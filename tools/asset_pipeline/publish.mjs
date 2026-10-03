@@ -4,7 +4,9 @@ import { hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { canonicalJSON, sha256 } from './report.mjs'
-import { parseActionAnimationProjection, validateActionAnimationAssets, validateAnimationUniqueness } from '../../web_new/src/types/actionAnimationDefs.ts'
+import { parseActionAnimationProjection, validateActionAnimationAssets, validateAnimationUniqueness, validateActionSoundReferences } from '../../web_new/src/types/actionAnimationDefs.ts'
+import { parseSoundFile, parseLocomotionAudioFile } from '../../web_new/src/types/soundDefs.ts'
+import { projectLocomotionAudio, validateAudioMedia } from './audio-definitions.mjs'
 
 const catalogFile = publicRoot => join(publicRoot, 'assets/game/asset-catalog.json')
 const assetID = /^(character|equipment|world_object)\/[a-z0-9][a-z0-9_-]*$/
@@ -53,6 +55,8 @@ function validateCatalog(publicRoot, catalog) {
     artifactPath(publicRoot, artifact)
   }
   if (catalog.actionAnimations !== undefined) artifactPath(publicRoot, catalog.actionAnimations)
+  if (catalog.sounds !== undefined) artifactPath(publicRoot, catalog.sounds)
+  if (catalog.locomotionAudio !== undefined) artifactPath(publicRoot, catalog.locomotionAudio)
 }
 
 async function withOwnershipGuard(lockPath, deadline, callback) {
@@ -145,7 +149,7 @@ async function installImmutable(publicRoot, artifact, bytes) {
 
 // Caller holds withPublishLock across reading previousCatalog and this switch.
 // A bundle contains deterministic manifest JSON plus staged {source, artifact} files.
-export async function publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions }) {
+export async function publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions, soundDefinitions, locomotionAudioDefinitions }) {
   validateCatalog(publicRoot, previousCatalog)
   const assets = { ...previousCatalog.assets }
   const owners = new Map(Object.entries(assets).map(([id, artifact]) => [dirname(artifact.url), id]))
@@ -174,19 +178,35 @@ export async function publishCatalog({ publicRoot, previousCatalog, manifests, a
     assets[manifest.id] = artifact
   }
   const catalog = { schema: 1, assets }
+  const hasAudio = soundDefinitions !== undefined || previousCatalog.sounds !== undefined || locomotionAudioDefinitions !== undefined || previousCatalog.locomotionAudio !== undefined
+  const hasActions = actionAnimationDefinitions !== undefined || previousCatalog.actionAnimations !== undefined
+  const effectiveManifests = hasAudio || hasActions ? Object.fromEntries(await Promise.all(Object.entries(assets).map(async ([id, reference]) => {
+    const manifest = JSON.parse(await readArtifact(publicRoot, reference))
+    if (manifest.id !== id) throw new Error(`Manifest ID mismatch: ${id}`)
+    for (const artifact of [manifest.model, ...(manifest.textures ?? []), ...Object.values(manifest.clips ?? {}).map(clip => clip.artifact), ...(manifest.metadata ? [manifest.metadata] : [])]) await readArtifact(publicRoot, artifact)
+    return [id, manifest]
+  }))) : {}
+  let profiles = []
+  if (hasAudio) {
+    if (soundDefinitions === undefined && previousCatalog.sounds === undefined) throw new Error('Audio publication requires sound definitions')
+    if (locomotionAudioDefinitions === undefined && previousCatalog.locomotionAudio === undefined) throw new Error('Audio publication requires locomotion definitions')
+    profiles = parseSoundFile(soundDefinitions === undefined ? JSON.parse(await readArtifact(publicRoot, previousCatalog.sounds)) : { v: 1, sounds: soundDefinitions }, 'sound publication')
+    await validateAudioMedia(publicRoot, profiles)
+    const locomotion = parseLocomotionAudioFile(locomotionAudioDefinitions === undefined ? JSON.parse(await readArtifact(publicRoot, previousCatalog.locomotionAudio)) : { v: 1, bindings: locomotionAudioDefinitions }, 'locomotion audio publication')
+    const bindings = projectLocomotionAudio(locomotion, effectiveManifests, profiles)
+    parseLocomotionAudioFile({ v: 1, bindings }, 'locomotion audio projection')
+    for (const [key, directory, projection] of [['sounds', 'sounds', { v: 1, sounds: profiles }], ['locomotionAudio', 'locomotion_audio', { v: 1, bindings }]]) {
+      const bytes = Buffer.from(`${canonicalJSON(projection)}\n`), hash = sha256(bytes)
+      catalog[key] = { url: `/assets/game/${directory}/${hash}.json`, sha256: hash, bytes: bytes.length }
+      await installImmutable(publicRoot, catalog[key], bytes)
+    }
+  }
   if (actionAnimationDefinitions !== undefined || previousCatalog.actionAnimations !== undefined) {
     const definitions = actionAnimationDefinitions ?? parseActionAnimationProjection(
       JSON.parse(await readArtifact(publicRoot, previousCatalog.actionAnimations)), 'published action animations')
     validateAnimationUniqueness(definitions, 'action animation publication')
-    const effectiveManifests = Object.fromEntries(await Promise.all(Object.entries(assets).map(async ([id, reference]) => {
-      const manifest = JSON.parse(await readArtifact(publicRoot, reference))
-      if (manifest.id !== id) throw new Error(`Manifest ID mismatch: ${id}`)
-      for (const artifact of [manifest.model, ...(manifest.textures ?? []), ...Object.values(manifest.clips ?? {}).map(clip => clip.artifact), ...(manifest.metadata ? [manifest.metadata] : [])]) {
-        await readArtifact(publicRoot, artifact)
-      }
-      return [id, manifest]
-    })))
     validateActionAnimationAssets(definitions, effectiveManifests, 'action animation publication')
+    validateActionSoundReferences(definitions, new Map(profiles.map(profile => [profile.key, profile])), 'action sound publication')
     const bindings = definitions.map(({ source, ...presentation }) => presentation)
     // Also validate the exact projection that clients will load.
     parseActionAnimationProjection({ v: 1, bindings }, 'action animation projection')

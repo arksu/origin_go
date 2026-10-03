@@ -41,6 +41,15 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 	if cycle.CycleElapsedTicks > cycle.CycleDurationTicks {
 		cycle.CycleElapsedTicks = cycle.CycleDurationTicks
 	}
+	target := ActionTarget{ObjectID: active.TargetID, ObjectHandle: active.TargetHandle, X: active.TargetX, Y: active.TargetY}
+	cueReady := actionSoundCueDue(cycle)
+	if cueReady {
+		if reason := service.validateCycleTarget(world, playerID, playerHandle, definition, target); reason != "" {
+			service.Complete(world, playerID, playerHandle, active.Generation, false, reason)
+			return
+		}
+		advanceActionSoundCues(world, playerHandle, &cycle, service.soundEvents)
+	}
 	if progress != nil {
 		progress.SendCyclicActionProgress(playerID, &netproto.S2C_CyclicActionProgress{
 			ActionId: cycle.ActionID, TargetEntityId: uint64(cycle.TargetID),
@@ -53,14 +62,18 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 	}
 	cycle.ActionCompletionStarted = true
 	ecs.AddComponent(world, playerHandle, cycle)
-	target := ActionTarget{ObjectID: active.TargetID, ObjectHandle: active.TargetHandle, X: active.TargetX, Y: active.TargetY}
-	if definition.Target.Approach == actiondefs.ApproachTileCenter && !atTileCenter(world, playerHandle, target.X, target.Y) {
-		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
-		return
-	}
-	if reason := service.handlers[definition.ID].ValidateTarget(world, playerID, playerHandle, target); reason != "" {
-		service.Complete(world, playerID, playerHandle, active.Generation, false, reason)
-		return
+	if !cueReady {
+		if reason := service.validateCycleTarget(world, playerID, playerHandle, definition, target); reason != "" {
+			service.Complete(world, playerID, playerHandle, active.Generation, false, reason)
+			return
+		}
 	}
 	service.executeHandler(world, playerID, playerHandle, definition, active, target)
+}
+
+func (service *ActionService) validateCycleTarget(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, target ActionTarget) string {
+	if definition.Target.Approach == actiondefs.ApproachTileCenter && !atTileCenter(world, playerHandle, target.X, target.Y) {
+		return "ACTION_INVALID_TARGET"
+	}
+	return service.handlers[definition.ID].ValidateTarget(world, playerID, playerHandle, target)
 }

@@ -150,6 +150,27 @@ func validate(binding *Definition) error {
 	if binding.Facing != "preserve" && binding.Facing != "target" {
 		return fmt.Errorf("facing must be preserve or target")
 	}
+	seenCues := make(map[string]bool, len(binding.SoundCues))
+	previousPhase := 0.0
+	for index, cue := range binding.SoundCues {
+		if !namePattern.MatchString(cue.ID) || seenCues[cue.ID] {
+			return fmt.Errorf("sound_cues[%d].id must be a unique portable name", index)
+		}
+		seenCues[cue.ID] = true
+		if !finite(cue.Phase) || cue.Phase <= previousPhase || cue.Phase > 1 {
+			return fmt.Errorf("sound_cues[%d].phase must increase within (0,1]", index)
+		}
+		previousPhase = cue.Phase
+		if !namePattern.MatchString(cue.SoundKey) {
+			return fmt.Errorf("sound_cues[%d].sound_key is invalid", index)
+		}
+		if cue.Source != "actor" && cue.Source != "target" {
+			return fmt.Errorf("sound_cues[%d].source must be actor or target", index)
+		}
+		if cue.Source == "target" && binding.Source.Kind == "craft" {
+			return fmt.Errorf("sound_cues[%d]: craft execution has no guaranteed target source", index)
+		}
+	}
 	if !finite(binding.BlendMs) || binding.BlendMs < 0 {
 		return fmt.Errorf("blend_ms must be finite and nonnegative")
 	}

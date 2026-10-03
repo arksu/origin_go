@@ -163,7 +163,7 @@ The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) regis
 
 Tree config is numeric-only and includes:
 - chop loop: `chopPointsTotal`, `chopCycleDurationTicks`
-- sound keys: `action_sound`, `finish_sound`
+- sound timing/range live in `data/action_animations/` and `data/sounds/`; tree config does not author `action_sound` or `finish_sound`
 - chop outcome: `logsSpawnDefKey`, `logsSpawnCount`, `logsSpawnInitialOffset`, `logsSpawnStepOffset`, `transformToDefKey`
 - growth runtime: `growthStageMax`, `growthStartStage`, `growthStageDurationsTicks`, `allowedChopStages`
 

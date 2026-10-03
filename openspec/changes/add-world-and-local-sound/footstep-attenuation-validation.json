@@ -1,0 +1,87 @@
+{
+  "status": "PASSED",
+  "mode": "footstep-attenuation",
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+  "decodedSampleCount": 12,
+  "profile": {
+    "loudness": 120,
+    "volume": 0.35,
+    "curve": {
+      "near_gain": 0.5,
+      "far_gain": 0,
+      "shape": 4
+    }
+  },
+  "attenuationSamples": [
+    {
+      "distance": 0,
+      "ownSource": true,
+      "gain": 1,
+      "expectedVolume": 0.175,
+      "nativeId": 1015,
+      "nativeVolume": 0.175,
+      "playing": true
+    },
+    {
+      "distance": 0,
+      "ownSource": false,
+      "gain": 0.5,
+      "expectedVolume": 0.0875,
+      "nativeId": 1016,
+      "nativeVolume": 0.0875,
+      "playing": true
+    },
+    {
+      "distance": 30,
+      "ownSource": false,
+      "gain": 0.28466172096330344,
+      "expectedVolume": 0.0498158011685781,
+      "nativeId": 1017,
+      "nativeVolume": 0.0498158011685781,
+      "playing": true
+    },
+    {
+      "distance": 60,
+      "ownSource": false,
+      "gain": 0.15869690275700732,
+      "expectedVolume": 0.027771957982476277,
+      "nativeId": 1018,
+      "nativeVolume": 0.027771957982476277,
+      "playing": true
+    },
+    {
+      "distance": 90,
+      "ownSource": false,
+      "gain": 0.06932344192660694,
+      "expectedVolume": 0.012131602337156214,
+      "nativeId": 1019,
+      "nativeVolume": 0.012131602337156214,
+      "playing": true
+    },
+    {
+      "distance": 119,
+      "ownSource": false,
+      "gain": 0.0020780510074726033,
+      "expectedVolume": 0.00036365892630770556,
+      "nativeId": 1020,
+      "nativeVolume": 0.00036365892630770556,
+      "playing": true
+    },
+    {
+      "distance": 120,
+      "ownSource": false,
+      "gain": 0,
+      "expectedVolume": 0,
+      "nativeVolume": 0,
+      "playing": false
+    }
+  ],
+  "radiusReentry": {
+    "oldContactsReplayed": 0,
+    "genuineContactsPlayed": 1,
+    "nativeId": 1021,
+    "nativeVolume": 0.00036365892630770556
+  },
+  "failures": [],
+  "listening": "Native playback IDs and volumes verified; subjective listening is not claimed."
+}

@@ -2,6 +2,7 @@ package actionanimationdefs
 
 import (
 	"fmt"
+	"origin/internal/sounddefs"
 	"sync"
 )
 
@@ -58,4 +59,24 @@ func (registry *Registry) All() []*Definition {
 		return nil
 	}
 	return append([]*Definition(nil), registry.all...)
+}
+
+// PrepareSoundCues resolves ownership before cycles begin, avoiding registry work per tick.
+func (registry *Registry) PrepareSoundCues(sounds *sounddefs.Registry) error {
+	for _, binding := range registry.all {
+		worldCues, localCues := []SoundCue{}, []SoundCue{}
+		for _, cue := range binding.SoundCues {
+			profile, exists := sounds.Get(cue.SoundKey)
+			if !exists {
+				return fmt.Errorf("%s: binding %s cue %s references missing sound %s", binding.SourceFile, binding.Key, cue.ID, cue.SoundKey)
+			}
+			if profile.Mode == sounddefs.ModeWorld {
+				worldCues = append(worldCues, cue)
+			} else {
+				localCues = append(localCues, cue)
+			}
+		}
+		binding.WorldSoundCues, binding.LocalSoundCues = worldCues, localCues
+	}
+	return nil
 }

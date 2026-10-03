@@ -97,6 +97,7 @@ export class MessageDispatcher {
     if (message.cyclicActionProgress) return 'cyclicActionProgress'
     if (message.cyclicActionFinished) return 'cyclicActionFinished'
     if (message.sound) return 'sound'
+    if (message.soundBatch) return 'soundBatch'
     if (message.fx) return 'fx'
     if (message.craftList) return 'craftList'
     if (message.buildList) return 'buildList'

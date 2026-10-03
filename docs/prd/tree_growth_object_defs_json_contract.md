@@ -4,6 +4,11 @@
 
 Документ фиксирует финальный JSON contract для `behaviors.tree` в `object defs`.
 
+Sound update: `action_sound` and `finish_sound` in the historical contract below
+are obsolete. Current chop timing is authored in `data/action_animations/`, sound
+profiles in `data/sounds/`; successful fall remains completion feedback. See the
+[current sound PRD](sound_event_spatial_audio_refactor.md).
+
 Принятые решения:
 1. Финальный флаг задается как `tree.stageN` (отдельный `tree.stage_final` не используется).
 2. Стадии, где доступен `chop`, задаются явным списком (`allowedChopStages`).
