@@ -4,6 +4,7 @@ import { registerMessageHandlers } from './handlers'
 import { useGameStore } from '@/stores/gameStore'
 import { gameFacade, moveController } from '@/game'
 import { proto } from './proto/packets.js'
+import { getDirectionSector, normalizeAimAngle, type DirectionActionInput } from '@/game/hud/directionAim'
 
 let initialized = false
 
@@ -173,11 +174,21 @@ export function sendBuildTakeBack(entityId: number, slot: number): void {
   })
 }
 
-export function sendActivateAction(actionId: string): void {
+export function sendActivateAction(actionId: string, direction?: DirectionActionInput): void {
   if (!actionId) return
-  gameFacade.releaseKeyboardMovement()
+  if (direction) {
+    const game = useGameStore()
+    if (!game.isInGame || direction.streamEpoch !== game.worldParams?.streamEpoch ||
+        !Number.isInteger(direction.streamEpoch) || direction.streamEpoch <= 0 || direction.streamEpoch > 0xffffffff ||
+        !Number.isFinite(direction.aimAngle) || !getDirectionSector(game.gameActionsById.get(actionId))) return
+  } else {
+    gameFacade.releaseKeyboardMovement()
+  }
   gameConnection.send({
-    activateAction: proto.C2S_ActivateAction.create({ actionId }),
+    activateAction: proto.C2S_ActivateAction.create({
+      actionId,
+      ...(direction ? { aimAngle: normalizeAimAngle(direction.aimAngle), streamEpoch: direction.streamEpoch } : {}),
+    }),
   })
 }
 

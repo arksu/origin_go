@@ -141,6 +141,9 @@ See `MoveController.ts` AGENTS.md for details.
 - RMB never sends an inventory hand drop or a separate cancellation request. Pending administrator commands consume primary input only.
 - Primary click/tap on a dropped item sends a map click;
   the server queues movement and completes the pickup on arrival.
+- Direction aiming is local (`gameStore.directionAim`), separate from server action phases. Actions/hotbar arm it through `useActionPresentation`; `DirectionAimPreview` draws catalog geometry in radians around the visual player position.
+- While aiming, primary input precedes pickup/drop/placement and sends one `ActivateAction` with angle and epoch, then clears selection without releasing WASD. Escape, RMB and touch long-press only cancel local aim; secondary input is consumed without a packet. Ordinary RMB behavior applies again after aim is cleared.
+- World reset, disconnect, renderer destruction, ordinary action activation and build placement clear direction aim. No cooldown or execution is inferred from a confirmation click.
 - Context menu UI is Vue-side (`GameView.vue`) and store-driven (`gameStore.contextMenu`).
 - Render layer never decides available actions; it only emits input intent.
 
