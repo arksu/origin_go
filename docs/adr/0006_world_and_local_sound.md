@@ -16,7 +16,7 @@ Canonical sound profiles separate `world` and `local` modes, reference-distance
 `loudness` and sample `volume`. Hearing is an explicit shared value, initially 1;
 strict eligibility is `d² < (loudness * hearing)²`.
 
-The `tree_chop` animation binding owns phase `0.6` for both hand variants. Existing
+The `tree_chop` animation binding owns phase `0.4` for both hand variants. Existing
 validated cycle advancement executes its world marker once; gameplay effects
 remain at completion. Successful fall feedback uses the point captured before
 effects and survives tree despawn. There is no legacy completion chop path.

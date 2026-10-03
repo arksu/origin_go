@@ -42,15 +42,15 @@ Def loading and publication SHALL reject unsupported schema versions, unknown fi
 
 ### Requirement: The chop marker is authored at sixty percent
 
-The production `tree_chop` animation def SHALL declare a `chop` world sound cue at normalized phase `0.6`, sourced from the target position and shared by its hand variants. The server SHALL emit it at the first validated cycle tick at or beyond that phase. Slight delivery latency SHALL be accepted; client playback SHALL NOT replace server emission with an animation callback.
+The production `tree_chop` animation def SHALL declare a `chop` world sound cue at normalized phase `0.4`, sourced from the target position and shared by its hand variants. The server SHALL emit it at the first validated cycle tick at or beyond that phase. Slight delivery latency SHALL be accepted; client playback SHALL NOT replace server emission with an animation callback.
 
 #### Scenario: A twenty-tick chop cycle advances
-- **WHEN** the active validated chop cycle progresses from eleven to twelve of twenty ticks
+- **WHEN** the active validated chop cycle progresses from seven to eight of twenty ticks
 - **THEN** the server SHALL create one chop sound event at the target position
 
 #### Scenario: The phase lies between server ticks
-- **WHEN** phase `0.6` belongs to a thirteen-tick chop cycle
-- **THEN** the event SHALL be created on tick eight, the first tick at or beyond the authored phase
+- **WHEN** phase `0.4` belongs to a thirteen-tick chop cycle
+- **THEN** the event SHALL be created on tick six, the first tick at or beyond the authored phase
 
 #### Scenario: The performer is invisible to a listener
 - **WHEN** a valid chop cue crosses its marker but an eligible listener has no animation state for the performer
@@ -66,10 +66,10 @@ Cue execution SHALL be tied to the authoritative action incarnation and cycle id
 
 #### Scenario: Chopping repeats
 - **WHEN** a successful chop cycle starts its successor
-- **THEN** the successor SHALL be eligible for one new event at its own phase `0.6`
+- **THEN** the successor SHALL be eligible for one new event at its own phase `0.4`
 
 #### Scenario: Chopping is canceled before the marker
-- **WHEN** the action is canceled before reaching phase `0.6`
+- **WHEN** the action is canceled before reaching phase `0.4`
 - **THEN** no sound event SHALL be produced for that cycle's marker
 
 #### Scenario: Chopping is canceled after the marker
@@ -93,7 +93,7 @@ Authored audio phases SHALL NOT change action validation, tick counts, costs, su
 - **THEN** the character SHALL use existing base presentation, ordinary actions SHALL remain functional, and the local animation preview SHALL remain usable
 
 #### Scenario: The final chopping cycle succeeds
-- **WHEN** the terminal chopping effect succeeds after its phase `0.6` chop cue
+- **WHEN** the terminal chopping effect succeeds after its phase `0.4` chop cue
 - **THEN** one chop cue SHALL have been emitted earlier and successful tree-fall feedback SHALL be produced once from the captured target position, without an extra end-cycle chop sound
 
 #### Scenario: The terminal effect fails
@@ -120,6 +120,6 @@ The server SHALL execute only world-mode animation cues. Client action playback 
 
 ### Requirement: Visual synchronization does not change gameplay or sound timing
 
-**Reason**: The approved chop behavior moves sound emission from cycle completion to an authored animation marker at phase `0.6`; prohibiting markers or preserving old sound timing would contradict that behavior.
+**Reason**: The approved chop behavior moves sound emission from cycle completion to an authored animation marker at phase `0.4`; prohibiting markers or preserving old sound timing would contradict that behavior.
 
 **Migration**: Use the added requirements for authored chop markers, once-per-cycle execution, gameplay timing preservation and separate world/local cue ownership. Keep gameplay effects and full-clip fitting unchanged while removing legacy end-cycle chop emission.

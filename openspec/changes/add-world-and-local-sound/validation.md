@@ -4,11 +4,35 @@ Date: 2026-10-03. Server: Go 1.27.1, darwin/arm64, Apple M1 Pro,
 benchmark GOMAXPROCS 10. Client/tooling: Node 26.10.0; actual in-app Chromium 154.
 These are development-machine results, not a production throughput guarantee.
 
+## Final playtest retune
+
+After further listening, the user retuned the authored definitions; these are
+now the canonical values. The footstep profile is `loudness: 160`,
+`near_gain: 0.9`, `far_gain: 0`, `shape: 4` with no `near_distance`: other
+footsteps fade immediately and continuously — approximately `.798045523` at 8
+units, `.344572177` at 68 and `.285654` at the 80-unit half-radius midpoint —
+reaching zero at the 160-unit radius (hearing 1). The `tree_chop` cue phase is
+`0.4`, so a 20-tick cycle emits at tick 8 and a thirteen-tick cycle at tick 6.
+Optional `near_distance` remains a validated parser feature for profiles that
+need an absolute plateau; the footstep profile does not use it.
+
+Tests pin the authored values: the Go cue/cycle suites expect tick 8/28/40
+emissions and the client sound suite expects the `0.9` fade curve. Re-verified
+after the retune: the combined Go package suite, `test:sounds` (21),
+`test:asset-pipeline` (23), the asset-pipeline suite (123) and both type
+checks. The immutable sound projection is
+`27cfde9962ebf60a4b224342322f05643908577fe1ae2b50c1a22eb27877ac2d` and the
+action-animation projection is
+`577492a34bddcbcda504571592bd0a319e30ec39e96a94c5c5a1642c913fedf2`. The browser
+harness (`tests/audio-browser.ts`) probes the new curve but subjective browser
+listening at several distances should be repeated before rollout; the recorded
+browser outputs below predate the retune.
+
 ## Footstep near-zone correction
 
 The user requested other-player footsteps at 90% gain through 16 absolute
-world-coordinate units, followed by attenuation. The current canonical footstep
-profile authors `near_distance: 16`, `near_gain: 0.9`, `far_gain: 0`, `shape: 4`.
+world-coordinate units, followed by attenuation. That iteration authored
+`near_distance: 16`, `near_gain: 0.9`, `far_gain: 0`, `shape: 4`.
 The near zone stays fixed when hearing changes; the outer radius remains
 `loudness * hearing` (120 at hearing 1). Own-source gain stays 1.
 
@@ -24,7 +48,7 @@ tests, client and pipeline type checks, and Go sound-definition/configuration/
 action-animation-definition tests. Regression coverage includes the inclusive
 16-unit boundary, continuity at both boundaries, absolute near distance under
 hearing scaling, and successive other-character contacts across the plateau.
-The current immutable sound projection is
+The current immutable sound projection for that iteration was
 `d2f632296185f1460ff3e2e3e33b934e1493ed4dde06504622939c48c0e2432f`.
 
 ## Historical first attenuation correction after playtesting
@@ -116,13 +140,13 @@ run database-backed `executeTransfer` end to end.
 
 The authored chop test loads `data/action_animations/tree.json`. With performer
 and tree at `(200,100)` and listener at `(1000,100)`, the visibility maps are empty
-and the listener is 800 units away. A 20-tick cycle sends one chop at tick 12,
-then another at tick 32 after repeat. Effects remain at ticks 20 and 40. Terminal
+and the listener is 800 units away. A 20-tick cycle sends one chop at tick 8,
+then another at tick 28 after repeat. Effects remain at ticks 20 and 40. Terminal
 success despawns the tree before a fall batch is sent from its captured point at
 tick 40. Chop gain is approximately `.104`; fall gain is approximately `.393586`.
 The listener does not need either source object on its client.
 
-Other focused tests cover phase `.6` at tick 8/13 and phase `.14` at 7/50,
+Other focused tests cover phase `.4` at tick 6/13 and phase `.14` at 7/50,
 cancellation before/after contact, duplicate and stale starts, target replacement,
 failed completion, layer/radius exclusion and detached/reused identity guards.
 Source coordinates and queued packet bytes survive source despawn and later

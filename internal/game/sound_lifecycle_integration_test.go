@@ -330,7 +330,7 @@ func TestSoundLifecycleShardFlushesAuthoredChopBeforeCompletion(t *testing.T) {
 	require.Empty(t, ecs.GetResource[ecs.VisibilityState](shard.world).ObserversByVisibleTarget)
 	for tick := uint64(1); tick <= 40; tick++ {
 		shard.Update(ecs.TimeState{Tick: tick, UnixMs: 10000 + int64(tick)*100, TickPeriod: 100 * time.Millisecond, Delta: .1})
-		if tick == 12 || tick == 32 || tick == 40 {
+		if tick == 8 || tick == 28 || tick == 40 {
 			require.Equal(t, uint64(1), shard.soundEvents.LastTick.Messages)
 			packet, payload := readSoundLifecycleEnvelope(t, connection, func(message *netproto.ServerMessage) bool { return message.GetSoundBatch() != nil })
 			batch := packet.GetSoundBatch()

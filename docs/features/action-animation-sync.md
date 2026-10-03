@@ -91,8 +91,8 @@ normalized `phase` in `(0,1]`, a canonical `sound_key`, and `source` (`actor` or
 
 Both hand variants use this marker. The existing cyclic-action system advances
 one shared cue helper after validating the active context or menu cycle. A world
-cue runs at the first tick where `elapsed_ticks / total_ticks >= phase`: tick 12
-of 20, or tick 8 of 13 for phase `0.6`. The installed action keeps its resolved
+cue runs at the first tick where `elapsed_ticks / total_ticks >= phase`: tick 8
+of 20, or tick 6 of 13 for phase `0.4`. The installed action keeps its resolved
 binding and consumed-cue cursor. A confirmed successor resets the cursor;
 duplicate progress or installation cannot re-arm the same cycle. Cancellation
 before the marker suppresses its sound; cancellation afterward leaves the
