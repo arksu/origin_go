@@ -43,10 +43,10 @@ the positive and negative fixtures under `tests/fixtures/action_animations/`.
 
 ## Sound markers
 
-`tree_chop` declares one `chop` cue at phase `0.6`, from the target tree. Its hand
+`tree_chop` declares one `chop` cue at phase `0.4`, from the target tree. Its hand
 variants share that marker. The server resolves the profile from `data/sounds/`
 and emits a world cue once per validated cycle at the first tick at or beyond
-the phase (tick 12 of 20). Repeated cycles reset their marker cursor; cancellation
+the phase (tick 8 of 20). Repeated cycles reset their marker cursor; cancellation
 before the marker prevents the sound. Gameplay effects remain at completion.
 Successful `tree_fall` feedback remains a completion event with a target point
 captured before a terminal effect can remove the tree.

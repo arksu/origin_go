@@ -228,24 +228,25 @@ test('expired loading reservations free bounded capacity before subsequent audio
   assert.equal(fixture.samples[0]!.volumes.get(1), .8 * .5 * .9 * .5)
 })
 
-test('authored footsteps stay at 90% through 16 world units, then fade continuously to silence', () => {
+test('authored footsteps fade continuously from 90% to silence across the radius', () => {
   assert.equal(localDistanceGain(local, 1, 0, true), 1)
-  for (const distance of [0, 1, 8, 15.999, 16]) assert.equal(localDistanceGain(local, 1, distance, false), .9)
-  assert.ok(Math.abs(localDistanceGain(local, 1, 16 + 1e-6, false) - .9) < 1e-7, 'No jump at the near-zone boundary')
-  assert.ok(Math.abs(localDistanceGain(local, 1, 68, false) - .285654424963) < 1e-9)
+  assert.equal(localDistanceGain(local, 1, 0, false), .9)
+  assert.ok(Math.abs(localDistanceGain(local, 1, 68, false) - .34457217715389343) < 1e-9)
   let previousGain = .9
-  for (let distance = 17; distance < 120; distance++) {
+  for (let distance = 1; distance < 160; distance++) {
     const gain = localDistanceGain(local, 1, distance, false)
     assert.ok(gain > 0 && gain < previousGain, `Footsteps must become quieter at distance ${distance}`)
     previousGain = gain
   }
-  assert.ok(localDistanceGain(local, 1, 120 - 1e-6, false) < 1e-8, 'No audible jump at the radius boundary')
-  assert.equal(localDistanceGain(local, 1, 120, false), 0)
-  assert.equal(localDistanceGain(local, 1, 121, false), 0)
-  assert.equal(localDistanceGain(local, 1.5, 16, false), .9)
-  assert.ok(localDistanceGain(local, 1.5, 24, false) < .9, 'Hearing must not scale the absolute near distance')
-  assert.equal(localDistanceGain(local, 1.5, 98, false), localDistanceGain(local, 1, 68, false))
-  assert.equal(localDistanceGain(local, .1, 1, false), 0, 'A collapsed fade interval must not produce a gain')
+  assert.ok(localDistanceGain(local, 1, 160 - 1e-6, false) < 1e-8, 'No audible jump at the radius boundary')
+  assert.equal(localDistanceGain(local, 1, 160, false), 0)
+  assert.equal(localDistanceGain(local, 1, 161, false), 0)
+  assert.equal(localDistanceGain(local, 1.5, 102, false), localDistanceGain(local, 1, 68, false), 'Hearing scales the radius')
+  // near_distance stays a validated authored option for profiles that need an absolute near plateau.
+  const plateau = { ...local, loudness: 120, local_attenuation: { near_distance: 16, near_gain: .9, far_gain: 0, shape: 4 } }
+  for (const distance of [0, 1, 8, 15.999, 16]) assert.equal(localDistanceGain(plateau, 1, distance, false), .9)
+  assert.ok(Math.abs(localDistanceGain(plateau, 1, 68, false) - .285654424963) < 1e-9)
+  assert.equal(localDistanceGain(plateau, .1, 1, false), 0, 'A collapsed fade interval must not produce a gain')
 })
 
 function localFixture() {
@@ -272,16 +273,17 @@ test('other character contacts use current world distance and approach silence b
   const { controller, snapshot, played } = localFixture()
   snapshot.entityId = 2
   controller.update(snapshot, 0, 1000)
-  for (const [index, distance] of [0, 8, 16, 68, 119, 120].entries()) {
+  for (const [index, distance] of [0, 8, 16, 68, 159, 160].entries()) {
     snapshot.position.x = distance
     snapshot.distanceTiles = (index + 1) * .5
     controller.update(snapshot, (index + 1) * 100, 1000 + (index + 1) * 100)
   }
   assert.equal(played.length, 5)
-  assert.deepEqual(played.slice(0, 3).map(event => event.gain), [.9, .9, .9])
-  assert.ok(Math.abs(played[3]!.gain - .285654424963) < 1e-9)
+  assert.equal(played[0]!.gain, .9)
+  assert.ok(Math.abs(played[1]!.gain - .7980455226965595) < 1e-9)
+  assert.ok(Math.abs(played[3]!.gain - .34457217715389343) < 1e-9)
   assert.ok(played[4]!.gain < .005)
-  for (let index = 3; index < played.length; index++) assert.ok(played[index]!.gain < played[index - 1]!.gain)
+  for (let index = 1; index < played.length; index++) assert.ok(played[index]!.gain < played[index - 1]!.gain)
 })
 
 test('stops, snaps, loading, radius entry, clip changes, long gaps and reset rebase footsteps', () => {
@@ -292,7 +294,7 @@ test('stops, snaps, loading, radius entry, clip changes, long gaps and reset reb
     if (transition === 'stop') { snapshot.moving = false; snapshot.distanceTiles = 0 }
     if (transition === 'snap') snapshot.discontinuity = true
     if (transition === 'load') snapshot.ready = false
-    if (transition === 'radius') { snapshot.entityId = 2; snapshot.position.x = 130 }
+    if (transition === 'radius') { snapshot.entityId = 2; snapshot.position.x = 170 }
     if (transition === 'clip') snapshot.clip = 'carry_walk'
     if (transition === 'reset') controller.reset()
     snapshot.distanceTiles = .8; controller.update(snapshot, transition === 'pause' ? 1000 : 200, 1200)

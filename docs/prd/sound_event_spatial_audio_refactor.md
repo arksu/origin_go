@@ -24,7 +24,7 @@ and transfer. There is no hearing component, persisted field or database migrati
 | --- | --- | ---: | ---: | ---: | ---: |
 | chop | world | 1000 | 0.90 | 10 | 16 / 4 |
 | tree_fall | world | 1400 | 0.95 | 30 | 8 / 2 |
-| footstep | local | 120 | 0.35 | 0 | 12 / 2 |
+| footstep | local | 160 | 0.35 | 0 | 12 / 2 |
 | exp_gain | local | 80 | 0.40 | 20 | 2 / 1 |
 
 The world profiles exceed the current 600-unit vision radius. These authored
@@ -35,7 +35,7 @@ No occlusion, cross-layer sound, sound-travel delay or stereo positioning is add
 
 ```mermaid
 flowchart TD
-    A[Validated cyclic action advances] --> B[Animation def sound marker: phase 0.6]
+    A[Validated cyclic action advances] --> B[Animation def sound marker: phase 0.4]
     B --> C[Capture target point; offer world event once]
     C --> D[After world.Update: query listener cells]
     D --> E[Exact distance and hearing; server gain]
@@ -49,8 +49,8 @@ flowchart TD
 ```
 
 `data/action_animations/tree.json` owns the `tree_chop` cue: unique ID,
-`phase: 0.6`, `sound_key: chop`, `source: target`. Both hand variants share it.
-The server emits on the first tick reaching the marker: tick 12/20 or 8/13.
+`phase: 0.4`, `sound_key: chop`, `source: target`. Both hand variants share it.
+The server emits on the first tick reaching the marker: tick 8/20 or 6/13.
 Validation still precedes playback; effects, stamina and finished/progress messages
 retain their completion timing. Each installed action/cycle retains its prepared
 binding and cursor. Duplicate progress or a stale start cannot re-arm it.
@@ -185,12 +185,14 @@ The four step samples are original project-authored WAVs with a reproducible
 For another character inside the radius, use
 `q = log1p(shape*d/R) / log1p(shape)` and
 `gain = near_gain + (far_gain-near_gain)*q`.
-Footstep defaults are near `0.50`, far `0`, shape `4`. Own gain is `1`; other
-gains are `0.50` at zero distance, approximately `0.284662` at quarter radius,
-`0.158697` at half radius and `0.069323` at three-quarter radius. Gain approaches
-zero continuously at the radius; reject at `d >= R`. The earlier `0.90`→`0.80`
-settings were replaced after playtesting: other footsteps were barely quieter
-than own footsteps, and the nonzero far gain caused an abrupt cutoff.
+Footstep defaults are near `0.9`, far `0`, shape `4`. Own gain is `1`; other
+gains are `0.9` at zero distance, approximately `0.512391` at quarter radius,
+`0.285654` at half radius and `0.124781` at three-quarter radius. Gain approaches
+zero continuously at the radius; reject at `d >= R`. Playtesting first replaced
+the initial `0.90`→`0.80` settings (other footsteps were barely quieter than own
+and the nonzero far gain caused an abrupt cutoff) and then an intermediate `0.50`
+curve; the authored profile fades from `0.9` to zero. An optional authored
+`near_distance` can hold `near_gain` flat for the first absolute world units.
 
 Rebase contacts without catch-up after stop/restart, correction snap, teleport,
 loading, visibility/radius entry, gait change, world reset or a presentation gap

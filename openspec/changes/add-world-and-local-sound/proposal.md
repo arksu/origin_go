@@ -8,7 +8,7 @@ Chopping audio currently arrives at cycle completion and only reaches players wh
 
 - Add canonical sound definitions with explicit `world` / `local` delivery, reference-distance `loudness`, separate playback `volume`, assets, attenuation and bounded processing settings; generate server and client views from the same authored definitions.
 - Introduce configurable `base_hearing = 1.0` for every player and compute effective audibility radius as `loudness * hearing`.
-- Author the `chop` cue at normalized phase `0.6` in the `tree_chop` animation binding; emit once per server cycle and preserve gameplay effects at cycle completion.
+- Author the `chop` cue at normalized phase `0.4` in the `tree_chop` animation binding; emit once per server cycle and preserve gameplay effects at cycle completion.
 - Route world sounds by distance through a coarse listener-only spatial index, regardless of performer/source visibility; compute individual attenuation on the server.
 - Batch world sounds per listener at the end of the current tick with explicit propagation-work budgets, bounded audio queues isolated from gameplay messages, stale-event handling and load metrics. Integrate with existing movement/cycle/shard hooks without registering additional ECS systems or adding a dedicated hearing component.
 - Play footsteps entirely on the client using authored locomotion contact cues, existing interpolated movement and logarithmic attenuation for other characters that reaches zero at the footstep radius. Add the currently missing footstep assets as an explicit implementation task.
@@ -23,7 +23,7 @@ Chopping audio currently arrives at cycle completion and only reaches players wh
 
 ### Modified Capabilities
 
-- `character-action-animations`: sound cues become authored animation metadata with strict validation and once-per-cycle execution; public animation timing continues to preserve gameplay while the chop sound moves to phase `0.6`.
+- `character-action-animations`: sound cues become authored animation metadata with strict validation and once-per-cycle execution; public animation timing continues to preserve gameplay while the chop sound moves to phase `0.4`.
 
 ## Impact
 

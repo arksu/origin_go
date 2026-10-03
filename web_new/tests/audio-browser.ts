@@ -56,7 +56,7 @@ async function verify(): Promise<void> {
   assert(Object.keys(profiles).length === 4, 'Expected published world/local profiles')
   const chopBinding = catalog.actionAnimations.tree_chop!
   const handClips = chopBinding.variants.map(variant => variant.clip).sort()
-  assert(handClips.join(',') === 'chop_l,chop_r' && chopBinding.sound_cues?.[0]?.phase === .6, 'Published hand variants lost the shared impact marker')
+  assert(handClips.join(',') === 'chop_l,chop_r' && chopBinding.sound_cues?.[0]?.phase === .4, 'Published hand variants lost the shared impact marker')
   const decoded: Array<{ file: string; seconds: number; channels: number; energy: number }> = []
   const checkedProfiles = attenuationOnly.checked ? { footstep: profiles.footstep! } : profiles
   for (const file of new Set(Object.values(checkedProfiles).flatMap(profile => profile.files))) {
@@ -136,11 +136,11 @@ async function verify(): Promise<void> {
   controller.setListener(1, 1); controller.setListenerPosition({ x: 0, y: 0 })
   const walk = catalog.locomotionAudio!.find(binding => binding.clip === 'walk')!
   const stride = walk.cycle_distance_tiles!
-  const distances = attenuationOnly.checked ? [0, 0, 8, 16, 16.001, 68, 119, 120] : [0, 0, 60, 119]
+  const distances = attenuationOnly.checked ? [0, 0, 8, 68, 80, 159, 160] : [0, 0, 60, 119]
   const snapshots: LocalAudioSnapshot[] = distances.map((distance, index) => ({ entityId: index + 1, actor: walk.actor, position: { x: distance, y: 0 }, ready: true, moving: true, clip: 'walk', distanceTiles: 0, discontinuity: false, action: null }))
   const stepProfile = profiles.footstep!
-  assert(stepProfile.local_attenuation?.near_gain === .9 && stepProfile.local_attenuation.far_gain === 0 && stepProfile.local_attenuation.near_distance === 16,
-    'Published footsteps must hold nearby gain through 16 world units and fade to zero')
+  assert(stepProfile.local_attenuation?.near_gain === .9 && stepProfile.local_attenuation.far_gain === 0 && stepProfile.local_attenuation.near_distance === undefined,
+    'Published footsteps must fade continuously from 90% to zero at the radius')
   const distanceSamples = distances.map((distance, index) => ({ distance, ownSource: index === 0,
     gain: localDistanceGain(stepProfile, 1, distance, index === 0) }))
   const audibleSamples = distanceSamples.filter(sample => sample.gain > 0)
@@ -166,14 +166,15 @@ async function verify(): Promise<void> {
   })
   assert(attenuationSamples[0]!.gain === 1 && attenuationSamples[1]!.gain === .9, 'Own/other distinction was lost')
   if (attenuationOnly.checked) {
-    assert(attenuationSamples.slice(1, 4).every(sample => sample.gain === .9), 'Nearby gain changed before 16 world units')
-    assert(attenuationSamples[4]!.gain < .9 && attenuationSamples[4]!.gain > .8999, 'Fade must begin continuously after 16 world units')
-    assert(Math.abs(attenuationSamples[5]!.gain - .28565442496) < 1e-10, 'Fade midpoint did not use the interval from 16 through 120')
+    assert(Math.abs(attenuationSamples[2]!.gain - .7980455226965595) < 1e-9, 'Fade must begin immediately for the authored curve')
+    assert(Math.abs(attenuationSamples[3]!.gain - .34457217715389343) < 1e-9, 'Mid-fade gain drifted')
+    assert(Math.abs(attenuationSamples[4]!.gain - .28565442496) < 1e-10, 'Fade midpoint did not use the authored log curve')
+    for (let index = 2; index < attenuationSamples.length - 1; index++) assert(attenuationSamples[index]!.gain < attenuationSamples[index - 1]!.gain, 'Footsteps must fade monotonically')
     assert(attenuationSamples.at(-1)!.gain === 0, 'Radius boundary was lost')
-    const entering: LocalAudioSnapshot = { ...snapshots[1]!, entityId: 999, position: { x: 120, y: 0 }, distanceTiles: stride * .3 }
+    const entering: LocalAudioSnapshot = { ...snapshots[1]!, entityId: 999, position: { x: 160, y: 0 }, distanceTiles: stride * .3 }
     const beforeEntry = playEvents.length, playedBeforeEntry = manager.metrics.played
     controller.update(entering, 0, serverNow)
-    entering.position.x = 119; entering.distanceTiles = stride * .99
+    entering.position.x = 159; entering.distanceTiles = stride * .99
     controller.update(entering, 100, serverNow)
     assert(playEvents.length === beforeEntry && manager.metrics.played === playedBeforeEntry, 'Radius entry replayed an old contact')
     entering.distanceTiles = stride * 1.5; controller.update(entering, 200, serverNow)
@@ -181,7 +182,7 @@ async function verify(): Promise<void> {
     const entryPlayback = playEvents.slice(beforeEntry).find(event => event.file.includes('/steps/'))
     assert(entryPlayback && manager.metrics.played === playedBeforeEntry + 1, 'Next real contact after radius entry did not play')
     const nativeVolume = Number(samplesByFile.get(entryPlayback.file)!.volume(entryPlayback.id))
-    const expectedVolume = .5 * stepProfile.volume * localDistanceGain(stepProfile, 1, 119, false)
+    const expectedVolume = .5 * stepProfile.volume * localDistanceGain(stepProfile, 1, 159, false)
     assert(Math.abs(nativeVolume - expectedVolume) < 1e-6, 'Radius re-entry lost the distance gain')
     manager.reset(); samples.forEach(sample => sample.unload()); await context.close()
     assert(failures.length === 0, 'Browser reported runtime/audio errors')

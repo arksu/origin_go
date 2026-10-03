@@ -188,15 +188,15 @@ Local sounds SHALL originate solely from client presentation or existing owner f
 
 ### Requirement: Other footsteps fade continuously with distance
 
-Inside local audibility radius, own-source gain SHALL be `1`. Other-source footstep gain SHALL default to `0.50 × (1 - ln(1 + 4t) / ln(5))`, with `t = distance / effective radius`. Near/far gains and curve shape SHALL be authored validated settings. Footstep gain SHALL approach zero continuously at the effective radius. Outside the radius no new local one-shot SHALL start. Local hearing SHALL use entry-provided hearing and each sound's loudness.
+Inside local audibility radius, own-source gain SHALL be `1`. Other-source footstep gain SHALL default to `0.9 × (1 - ln(1 + 4t) / ln(5))`, with `t = distance / effective radius`. Near/far gains and curve shape SHALL be authored validated settings. Footstep gain SHALL approach zero continuously at the effective radius. Outside the radius no new local one-shot SHALL start. Local hearing SHALL use entry-provided hearing and each sound's loudness.
 
 #### Scenario: Another character is co-located
 - **WHEN** another known character produces an eligible footstep at zero distance
-- **THEN** default distance gain SHALL be `0.50`, distinguishing it from the player's own gain `1`
+- **THEN** default distance gain SHALL be `0.9`, distinguishing it from the player's own gain `1`
 
 #### Scenario: Another character is halfway through local range
 - **WHEN** another character produces a footstep at half its effective radius
-- **THEN** default gain SHALL be approximately `0.159`, before profile and user volume factors
+- **THEN** default gain SHALL be approximately `0.286`, before profile and user volume factors
 
 #### Scenario: Another character approaches the edge of footstep range
 - **WHEN** another character moves toward the effective footstep radius

@@ -21,7 +21,7 @@ func TestPrepareSoundCueOwnershipAndMissingReference(t *testing.T) {
 	if !ok {
 		t.Fatal("missing chop")
 	}
-	if len(chop.WorldSoundCues) != 1 || chop.WorldSoundCues[0].Phase != .6 || chop.WorldSoundCues[0].Source != "target" || len(chop.LocalSoundCues) != 0 {
+	if len(chop.WorldSoundCues) != 1 || chop.WorldSoundCues[0].Phase != .4 || chop.WorldSoundCues[0].Source != "target" || len(chop.LocalSoundCues) != 0 {
 		t.Fatalf("unexpected cues %#v", chop)
 	}
 	changed := *chop
