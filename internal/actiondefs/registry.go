@@ -57,7 +57,7 @@ func (registry *Registry) All() []*Definition {
 	return definitions
 }
 
-// ValidateHandlers prevents a definition from being visible without executable behavior.
+// Definitions can be introduced before their handlers during incremental implementation.
 func (registry *Registry) ValidateHandlers(handlerIDs []string) error {
 	if registry == nil {
 		return fmt.Errorf("action definitions registry is nil")
@@ -70,11 +70,6 @@ func (registry *Registry) ValidateHandlers(handlerIDs []string) error {
 		handlers[id] = struct{}{}
 		if _, exists := registry.byID[id]; !exists {
 			return fmt.Errorf("action handler %q has no definition", id)
-		}
-	}
-	for _, definition := range registry.all {
-		if _, exists := handlers[definition.ID]; !exists {
-			return fmt.Errorf("%s: action %q has no handler", definition.SourceFile, definition.ID)
 		}
 	}
 	return nil

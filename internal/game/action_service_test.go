@@ -1,6 +1,8 @@
 package game
 
 import (
+	"math"
+	"path/filepath"
 	"testing"
 
 	"origin/internal/actiondefs"
@@ -93,6 +95,46 @@ func TestActionCatalogKeepsRegistryOrderWithoutCheckingRequirements(t *testing.T
 	}
 	if second.reasonCalls != 0 || first.reasonCalls != 0 {
 		t.Fatal("catalog construction checked player requirements")
+	}
+}
+
+func TestProductionActionCatalogIncludesUnimplementedAxeActions(t *testing.T) {
+	registry, err := actiondefs.LoadFromDirectory(filepath.Join("..", "..", "data", "actions"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlers := map[string]ActionHandler{
+		"lift": &testActionHandler{}, "lift_down": &testActionHandler{},
+		"plow_tile": &testActionHandler{}, "dig": &testActionHandler{},
+	}
+	sender := &testActionSender{}
+	service, err := NewActionService(ecs.NewWorldForTesting(), registry, handlers, sender)
+	if err != nil {
+		t.Fatalf("production catalog must allow startup before axe handlers exist: %v", err)
+	}
+	// Repeated snapshots must publish loaded radians without modifying the registry.
+	for snapshot := 0; snapshot < 2; snapshot++ {
+		service.SendList(1)
+		list := sender.lists[snapshot]
+		if len(list.Actions) != 6 {
+			t.Fatalf("expected complete production catalog, got %d actions", len(list.Actions))
+		}
+		for _, action := range list.Actions {
+			if action.Id != "axe_sweep" && action.Id != "axe_strike" {
+				if action.Sector != nil {
+					t.Fatalf("ordinary action %q has a sector", action.Id)
+				}
+				continue
+			}
+			if action.TargetKind != "direction" || action.Sector == nil || action.Sector.Range != 18 || action.Sector.SectorAngle != float32(math.Pi/2) ||
+				action.Ticks != 6 || action.Stamina != 60 || action.CooldownMs != 2000 || action.IsRepeatable {
+				t.Fatalf("incorrect axe catalog entry: %v", action)
+			}
+			definition, _ := registry.Get(action.Id)
+			if math.Abs(definition.Sector.Angle-math.Pi/2) > 1e-12 {
+				t.Fatalf("catalog publication changed runtime radians: %#v", definition.Sector)
+			}
+		}
 	}
 }
 

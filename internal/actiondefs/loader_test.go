@@ -1,6 +1,7 @@
 package actiondefs
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,8 @@ import (
 )
 
 const validAction = `{"v":1,"actions":[{"id":"test_action","presentation":{"label":"Test action","menuIcon":"/assets/cursor/lift.png"},"target":{"kind":"object","cursor":"lift"},"requirements":{"skills":["test_skill"],"equipment":[{"slots":["left_hand","right_hand"],"itemTag":"axe"},{"slots":["back"],"itemKey":"test_pack"}]},"execution":{"ticks":4,"stamina":2.5},"isRepeatable":true}]}`
+
+const validCombatAction = `{"v":1,"actions":[{"id":"combat_test","presentation":{"label":"Combat test","menuIcon":"/assets/cursor/atk.png"},"target":{"kind":"direction"},"requirements":{},"execution":{"ticks":6,"recoveryTicks":4,"stamina":60},"cooldown":2000,"isRepeatable":false,"sector":{"range":18,"angleDeg":90},"combat":{"hitMode":"all","damageMultiplier":1.0}}]}`
 
 func writeActionFile(t *testing.T, directory, name, contents string) {
 	t.Helper()
@@ -35,11 +38,14 @@ func TestLoadDefinitionsAndValidateHandlers(t *testing.T) {
 	if err := registry.ValidateHandlers([]string{"test_action"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.ValidateHandlers(nil); err == nil || !strings.Contains(err.Error(), "valid.json") {
-		t.Fatalf("missing handler must identify its definition file, got %v", err)
+	if err := registry.ValidateHandlers(nil); err != nil {
+		t.Fatalf("definition without handler must load during incremental implementation: %v", err)
 	}
 	if err := registry.ValidateHandlers([]string{"test_action", "unknown"}); err == nil || !strings.Contains(err.Error(), "unknown") {
 		t.Fatalf("unmatched handler must fail, got %v", err)
+	}
+	if err := registry.ValidateHandlers([]string{"test_action", "test_action"}); err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("duplicate handler must fail, got %v", err)
 	}
 }
 
@@ -83,8 +89,8 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 4 {
-		t.Fatalf("expected lift, lift_down, plow_tile and dig, got %d", len(registry.All()))
+	if len(registry.All()) != 6 {
+		t.Fatalf("expected four existing actions and two axe actions, got %d", len(registry.All()))
 	}
 	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile", "dig"}); err != nil {
 		t.Fatal(err)
@@ -106,6 +112,139 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 		dig.Repeatable() || !dig.Execution.Repeat || dig.Execution.Ticks != 20 || dig.Execution.Stamina != 300 ||
 		len(dig.Requirements.Skills) != 0 || len(dig.Requirements.Equipment) != 0 {
 		t.Fatalf("invalid dig definition: %#v", dig)
+	}
+	for _, expected := range []struct {
+		id         string
+		hitMode    HitMode
+		multiplier float64
+	}{
+		{id: "axe_sweep", hitMode: HitAll, multiplier: 1},
+		{id: "axe_strike", hitMode: HitNearest, multiplier: 1.5},
+	} {
+		definition, exists := registry.Get(expected.id)
+		if !exists {
+			t.Fatalf("production action %q is missing", expected.id)
+		}
+		if definition.Target.Kind != TargetDirection || definition.Target.Cursor != "" || definition.Target.Approach != "" ||
+			definition.Execution.Ticks != 6 || definition.Execution.RecoveryTicks != 4 || definition.Execution.Stamina != 60 ||
+			definition.Execution.Repeat || definition.Repeatable() || definition.Cooldown != 2000 {
+			t.Fatalf("invalid axe definition %q: %#v", expected.id, definition)
+		}
+		if definition.Sector == nil || definition.Sector.Range != 18 || math.Abs(definition.Sector.Angle-math.Pi/2) > 1e-12 ||
+			definition.Combat == nil || definition.Combat.HitMode != expected.hitMode || definition.Combat.DamageMultiplier != expected.multiplier {
+			t.Fatalf("invalid axe combat parameters %q: sector=%#v combat=%#v", expected.id, definition.Sector, definition.Combat)
+		}
+		if len(definition.Requirements.Skills) != 0 || len(definition.Requirements.Equipment) != 1 {
+			t.Fatalf("invalid axe requirements: %#v", definition.Requirements)
+		}
+		equipment := definition.Requirements.Equipment[0]
+		if equipment.ItemTag != "axe" || equipment.ItemKey != "" || len(equipment.Slots) != 2 ||
+			equipment.Slots[0] != "right_hand" || equipment.Slots[1] != "left_hand" {
+			t.Fatalf("axe must be allowed in either hand: %#v", equipment)
+		}
+	}
+}
+
+func TestCombatDefinitionLoading(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		angleDeg      string
+		wantAngle     float64
+		recoveryTicks string
+	}{
+		{name: "preset", angleDeg: "90", wantAngle: math.Pi / 2, recoveryTicks: "4"},
+		{name: "full circle and no recovery", angleDeg: "360", wantAngle: 2 * math.Pi, recoveryTicks: "0"},
+		{name: "fractional degrees", angleDeg: "22.5", wantAngle: math.Pi / 8, recoveryTicks: "4"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			contents := strings.Replace(validCombatAction, `"angleDeg":90`, `"angleDeg":`+test.angleDeg, 1)
+			contents = strings.Replace(contents, `"recoveryTicks":4`, `"recoveryTicks":`+test.recoveryTicks, 1)
+			writeActionFile(t, directory, "combat.json", contents)
+			registry, err := LoadFromDirectory(directory, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			definition, _ := registry.Get("combat_test")
+			if definition.Sector == nil || math.Abs(definition.Sector.Angle-test.wantAngle) > 1e-12 {
+				t.Fatalf("degrees were not converted to radians: %#v", definition.Sector)
+			}
+			if err := validateDefinition(definition); err != nil {
+				t.Fatal(err)
+			}
+			if math.Abs(definition.Sector.Angle-test.wantAngle) > 1e-12 {
+				t.Fatal("validation converted an already loaded angle again")
+			}
+		})
+	}
+}
+
+func TestInvalidCombatDefinitions(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		original    string
+		replacement string
+	}{
+		{name: "missing sector", original: `,"sector":{"range":18,"angleDeg":90}`},
+		{name: "null sector", original: `"sector":{"range":18,"angleDeg":90}`, replacement: `"sector":null`},
+		{name: "missing combat", original: `,"combat":{"hitMode":"all","damageMultiplier":1.0}`},
+		{name: "null combat", original: `"combat":{"hitMode":"all","damageMultiplier":1.0}`, replacement: `"combat":null`},
+		{name: "ordinary target", original: `"kind":"direction"`, replacement: `"kind":"object"`},
+		{name: "missing windup", original: `"ticks":6,`},
+		{name: "zero windup", original: `"ticks":6`, replacement: `"ticks":0`},
+		{name: "negative windup", original: `"ticks":6`, replacement: `"ticks":-1`},
+		{name: "missing recovery", original: `"recoveryTicks":4,`},
+		{name: "null recovery", original: `"recoveryTicks":4`, replacement: `"recoveryTicks":null`},
+		{name: "negative recovery", original: `"recoveryTicks":4`, replacement: `"recoveryTicks":-1`},
+		{name: "fractional recovery", original: `"recoveryTicks":4`, replacement: `"recoveryTicks":0.5`},
+		{name: "missing range", original: `"range":18,`},
+		{name: "zero range", original: `"range":18`, replacement: `"range":0`},
+		{name: "negative range", original: `"range":18`, replacement: `"range":-1`},
+		{name: "protocol float overflow", original: `"range":18`, replacement: `"range":1e300`},
+		{name: "nonfinite range", original: `"range":18`, replacement: `"range":1e999`},
+		{name: "missing angle", original: `,"angleDeg":90`},
+		{name: "null angle", original: `"angleDeg":90`, replacement: `"angleDeg":null`},
+		{name: "zero angle", original: `"angleDeg":90`, replacement: `"angleDeg":0`},
+		{name: "negative angle", original: `"angleDeg":90`, replacement: `"angleDeg":-1`},
+		{name: "angle exceeds circle", original: `"angleDeg":90`, replacement: `"angleDeg":361`},
+		{name: "missing hit mode", original: `"hitMode":"all",`},
+		{name: "unknown hit mode", original: `"hitMode":"all"`, replacement: `"hitMode":"unknown"`},
+		{name: "missing multiplier", original: `,"damageMultiplier":1.0`},
+		{name: "null multiplier", original: `"damageMultiplier":1.0`, replacement: `"damageMultiplier":null`},
+		{name: "zero multiplier", original: `"damageMultiplier":1.0`, replacement: `"damageMultiplier":0`},
+		{name: "negative multiplier", original: `"damageMultiplier":1.0`, replacement: `"damageMultiplier":-1`},
+		{name: "cursor", original: `"kind":"direction"`, replacement: `"kind":"direction","cursor":"atk"`},
+		{name: "approach", original: `"kind":"direction"`, replacement: `"kind":"direction","approach":"tile_center"`},
+		{name: "execution repeat", original: `"ticks":6`, replacement: `"ticks":6,"repeat":true`},
+		{name: "repeatable", original: `"isRepeatable":false`, replacement: `"isRepeatable":true`},
+		{name: "unknown sector field", original: `"angleDeg":90`, replacement: `"angleDeg":90,"angle":1.5`},
+		{name: "unknown combat field", original: `"hitMode":"all"`, replacement: `"hitMode":"all","baseDamage":6`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			writeActionFile(t, directory, "invalid_combat.json", strings.Replace(validCombatAction, test.original, test.replacement, 1))
+			_, err := LoadFromDirectory(directory, nil)
+			if err == nil || !strings.Contains(err.Error(), "invalid_combat.json") {
+				t.Fatalf("expected a file-identifying error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestOrdinaryActionRejectsCombatFields(t *testing.T) {
+	for _, field := range []string{`"sector":null`, `"combat":null`, `"execution":{"recoveryTicks":0}`} {
+		t.Run(field, func(t *testing.T) {
+			directory := t.TempDir()
+			contents := `{"v":1,"actions":[{"id":"ordinary","presentation":{"label":"Ordinary","menuIcon":"/assets/test.png"},"target":{"kind":"object"},"requirements":{},"execution":{},` + field + `}]}`
+			if strings.HasPrefix(field, `"execution"`) {
+				contents = strings.Replace(contents, `"execution":{},`, "", 1)
+			}
+			writeActionFile(t, directory, "ordinary.json", contents)
+			_, err := LoadFromDirectory(directory, nil)
+			if err == nil || !strings.Contains(err.Error(), "ordinary.json") || !strings.Contains(err.Error(), "ordinary") {
+				t.Fatalf("ordinary action accepted combat fields: %v", err)
+			}
+		})
 	}
 }
 
