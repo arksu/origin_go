@@ -30,7 +30,16 @@ export function useActionPresentation() {
   }
 
   function activate(actionId: string, send: (id: string) => void): boolean {
-    return requestGameAction(actionId, game.gameActions, game.gameActionListLoaded, send, cooldowns.isCoolingDown)
+    let accepted = true
+    const requested = requestGameAction(actionId, game.gameActions, game.gameActionListLoaded, id => {
+      if (game.gameActionsById.get(id)?.targetKind === 'direction') {
+        accepted = game.armDirectionAim(id)
+      } else {
+        game.cancelDirectionAim()
+        send(id)
+      }
+    }, cooldowns.isCoolingDown)
+    return requested && accepted
   }
 
   return { presentation, canActivate, activate }

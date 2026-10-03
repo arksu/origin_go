@@ -6,6 +6,7 @@ import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERV
 import type { ConnectionState, ConnectionError } from '@/network/types'
 import { isNewerCharacterVisual, type CharacterVisualState } from '@/types/characterVisual'
 import { acceptActionAnimation, type CharacterActionAnimationState } from '@/types/actionAnimation'
+import { getDirectionSector, type DirectionAimState } from '@/game/hud/directionAim'
 
 export interface Position {
   x: number
@@ -194,6 +195,7 @@ export const useGameStore = defineStore('game', () => {
   const gameActionsById = computed(() => new Map(gameActions.value.map(action => [action.id || '', action])))
   const gameActionListLoaded = ref(false)
   const gameActionState = ref<proto.IS2C_ActionStateChanged>({ actionId: '', phase: 'idle', cursor: '' })
+  const directionAim = ref<DirectionAimState | null>(null)
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
   const characterExperience = ref<CharacterExperienceState>(defaultCharacterExperience())
   const playerStats = ref<PlayerStatsState>(defaultPlayerStats())
@@ -240,6 +242,7 @@ export const useGameStore = defineStore('game', () => {
   function setConnectionState(state: ConnectionState, error?: ConnectionError) {
     connectionState.value = state
     connectionError.value = error ?? null
+    if (state !== 'connected') cancelDirectionAim()
   }
 
   function syncWorldBootstrapState() {
@@ -391,6 +394,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function clearGameActions() {
+    cancelDirectionAim()
     actionCooldowns.reset()
     gameActions.value = []
     gameActionListLoaded.value = false
@@ -400,6 +404,36 @@ export const useGameStore = defineStore('game', () => {
   function setGameActionList(actions: proto.IActionDefinition[]) {
     gameActions.value = actions
     gameActionListLoaded.value = true
+    getDirectionAimDefinition()
+  }
+
+  function armDirectionAim(actionId: string): boolean {
+    const epoch = worldParams.value?.streamEpoch
+    if (!isInGame.value || !Number.isInteger(epoch) || !epoch || epoch < 0 || epoch > 0xffffffff ||
+        !getDirectionSector(gameActionsById.value.get(actionId))) return false
+    if (directionAim.value?.actionId !== actionId || directionAim.value.streamEpoch !== epoch) {
+      directionAim.value = { actionId, streamEpoch: epoch }
+    }
+    clearBuildPlacement()
+    closeContextMenu()
+    return true
+  }
+
+  function cancelDirectionAim(): boolean {
+    const active = directionAim.value !== null
+    directionAim.value = null
+    return active
+  }
+
+  function getDirectionAimDefinition(): proto.IActionDefinition | null {
+    const aim = directionAim.value
+    if (!aim) return null
+    const definition = gameActionsById.value.get(aim.actionId)
+    if (!isInGame.value || aim.streamEpoch !== worldParams.value?.streamEpoch || !getDirectionSector(definition)) {
+      cancelDirectionAim()
+      return null
+    }
+    return definition ?? null
   }
 
   function setGameActionState(state: proto.IS2C_ActionStateChanged) {
@@ -839,6 +873,7 @@ export const useGameStore = defineStore('game', () => {
   function armBuildPlacement(buildKey: string | null | undefined) {
     const key = (buildKey || '').trim()
     if (!key) return
+    cancelDirectionAim()
     armedBuildKey.value = key
   }
 
@@ -1151,6 +1186,7 @@ export const useGameStore = defineStore('game', () => {
     gameActionsById,
     gameActionListLoaded,
     gameActionState,
+    directionAim,
     characterAttributes,
     characterExperience,
     playerStats,
@@ -1182,6 +1218,9 @@ export const useGameStore = defineStore('game', () => {
     clearLastServerErrorMessage,
     setPlayerEnterWorld,
     setPlayerLeaveWorld,
+    armDirectionAim,
+    cancelDirectionAim,
+    getDirectionAimDefinition,
     updatePlayerPosition,
     loadChunk,
     unloadChunk,

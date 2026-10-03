@@ -21,6 +21,7 @@ export { timeSync } from './src/network/TimeSync.ts';
 export { default as Hotbar } from './src/components/ui/HotbarPlaceholder.vue';
 export { useHotbarAssignments } from './src/composables/useHotbarAssignments.ts';
 export { useActionsPanel } from './src/composables/useActionsPanel.ts';
+export { useActionPresentation } from './src/composables/useActionPresentation.ts';
 export { requestGameAction } from './src/game/hud/actionCatalog.ts';
 export { useGameStore } from './src/stores/gameStore.ts';
 export { proto } from './src/network/proto/packets.js';
@@ -92,7 +93,7 @@ function descendants(node, type) {
 
 let gameStore
 try {
-  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager } = await import(pathToFileURL(outfile).href)
+  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, useActionPresentation, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager } = await import(pathToFileURL(outfile).href)
   setActivePinia(createPinia())
   gameStore = useGameStore()
 
@@ -309,6 +310,41 @@ try {
   assert.equal(overlays(reopenedRoot).length, 0)
   reopenedApp.unmount()
   hotbarApp.unmount()
+
+  // Both UI entry points must arm local direction selection through the same activation path.
+  gameStore.setConnectionState('connected')
+  gameStore.setPlayerEnterWorld(1, 'Player', 12, 100, 7)
+  const directionalActions = [
+    { id: 'axe_sweep', label: 'Axe sweep', menuIcon: '/assets/cursor/atk.png', targetKind: 'direction', sector: { range: 18, sectorAngle: Math.PI / 2 } },
+    { id: 'axe_strike', label: 'Axe strike', menuIcon: '/assets/cursor/atk.png', targetKind: 'direction', sector: { range: 18, sectorAngle: Math.PI / 2 } },
+  ]
+  gameStore.setGameActionList(directionalActions)
+  const aimPresentation = useActionPresentation()
+  const aimRequests = []
+  const activateAim = id => aimPresentation.activate(id, candidate => aimRequests.push(candidate))
+  const aimMenuRoot = hostNode('root')
+  const aimMenuApp = renderer.createApp(withSsrContext(() => h(ActionsMenu, {
+    actions: directionalActions, activeActionId: gameStore.directionAim?.actionId || '', activePhase: gameStore.directionAim ? 'selecting' : 'idle',
+    onActivate: activateAim,
+  })))
+  aimMenuApp.mount(aimMenuRoot)
+  await nextTick()
+  descendants(aimMenuRoot, 'button')[0].props.onClick()
+  assert.deepEqual(gameStore.directionAim, { actionId: 'axe_sweep', streamEpoch: 7 })
+  const aimHotbarRoot = hostNode('root')
+  const aimHotbarApp = renderer.createApp(withSsrContext(() => h(Hotbar, {
+    assignments: ['game:axe_sweep', 'game:axe_strike', null, null, null, null, null, null, null, null],
+    onActivate: slot => activateAim(directionalActions[slot].id),
+  })))
+  aimHotbarApp.mount(aimHotbarRoot)
+  await nextTick()
+  descendants(aimHotbarRoot, 'button')[1].props.onClick()
+  assert.deepEqual(gameStore.directionAim, { actionId: 'axe_strike', streamEpoch: 7 })
+  assert.deepEqual(aimRequests, [])
+  aimMenuApp.unmount()
+  aimHotbarApp.unmount()
+  gameStore.reset()
+
   globalThis.performance = originalPerformance
   delete globalThis.requestAnimationFrame
   delete globalThis.cancelAnimationFrame

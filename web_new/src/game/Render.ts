@@ -11,6 +11,9 @@ import { gameConnection } from '@/network/GameConnection'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
+import { DirectionAimPreview } from './DirectionAimPreview'
+import { getDirectionSector, normalizeAimAngle, resolveDirectionAimAngle, type DirectionAimState } from './hud/directionAim'
+import { sendActivateAction } from '@/network'
 import { ChatBalloonManager } from './ChatBalloonManager'
 import { NicknameManager } from './NicknameManager'
 import { MoveMarkerManager } from './MoveMarkerManager'
@@ -50,6 +53,9 @@ export class Render {
   private keyboardMovement: KeyboardMovementController
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
+  private directionAimPreview: DirectionAimPreview
+  private directionAimSelection: DirectionAimState | null = null
+  private directionAimAngle = 0
   private chatBalloonManager: ChatBalloonManager
   private nicknameManager: NicknameManager
   private moveMarkerManager: MoveMarkerManager | null = null
@@ -90,6 +96,7 @@ export class Render {
     )
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
     this.liftGhostController = new LiftGhostController(this.objectsContainer)
+    this.directionAimPreview = new DirectionAimPreview(this.objectsContainer)
     this.nicknameManager = new NicknameManager(this.objectsContainer)
     this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer, this.nicknameManager)
   }
@@ -159,6 +166,9 @@ export class Render {
       this.lastPointerScreen = { x: event.screenX, y: event.screenY }
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
 
+      // Direction confirmation owns the click, including clicks over dropped items.
+      if (event.button === 0 && this.handleDirectionAimClick(this.lastClickWorld)) return
+
       if (event.button === 2) {
         this.handleSecondaryMapClick(event.screenX, event.screenY, event.modifiers)
         return
@@ -169,8 +179,8 @@ export class Render {
         this.releaseKeyboardMovement()
         gameStore.closeContextMenu()
 
-        // A dropped item is always the primary-click target. Do this before
-        // build/lift callbacks so the same rule holds for mouse and touch.
+        // Outside direction aiming, dropped items precede build/lift callbacks
+        // so mouse and touch use the same pickup route.
         if (this.trySendDroppedItemMapClick(event.screenX, event.screenY, event.modifiers)) {
           return
         }
@@ -254,6 +264,7 @@ export class Render {
   }
 
   private handleSecondaryMapClick(screenX: number, screenY: number, modifiers: number): void {
+    if (this.cancelDirectionAim()) return
     this.releaseKeyboardMovement()
     this.lastClickScreen = { x: screenX, y: screenY }
     this.lastPointerScreen = { x: screenX, y: screenY }
@@ -300,10 +311,57 @@ export class Render {
     return true
   }
 
+  private resolveAimAngle(selection: DirectionAimState, pose: { x: number; y: number; heading: number }, pointer: ScreenPoint | null): number {
+    if (this.directionAimSelection !== selection) {
+      this.directionAimSelection = selection
+      this.directionAimAngle = normalizeAimAngle(pose.heading)
+    }
+    this.directionAimAngle = resolveDirectionAimAngle(pose, pointer, this.directionAimAngle)
+    return this.directionAimAngle
+  }
+
+  private cancelDirectionAim(): boolean {
+    const canceled = useGameStore().cancelDirectionAim()
+    if (!canceled) return false
+    this.directionAimSelection = null
+    this.directionAimPreview.clear()
+    return canceled
+  }
+
+  private handleDirectionAimClick(pointer: ScreenPoint): boolean {
+    const game = useGameStore()
+    const selection = game.directionAim
+    if (!selection) return false
+    const definition = game.getDirectionAimDefinition()
+    const pose = game.playerEntityId === null ? null : moveController.getVisualPosition(game.playerEntityId)
+    const angle = definition && pose ? this.resolveAimAngle(selection, pose, pointer) : null
+    // End selection before sending so another input cannot confirm the same selection.
+    this.cancelDirectionAim()
+    if (angle !== null) sendActivateAction(selection.actionId, { aimAngle: angle, streamEpoch: selection.streamEpoch })
+    return true
+  }
+
+  private updateDirectionAim(): void {
+    const game = useGameStore()
+    const definition = game.getDirectionAimDefinition()
+    const selection = game.directionAim
+    const sector = getDirectionSector(definition ?? undefined)
+    const pose = game.playerEntityId === null ? null : moveController.getVisualPosition(game.playerEntityId)
+    if (!selection || !sector || !pose) {
+      this.directionAimPreview.clear()
+      if (!selection) this.directionAimSelection = null
+      return
+    }
+    const pointer = this.lastPointerScreen ? this.screenToWorld(this.lastPointerScreen.x, this.lastPointerScreen.y) : null
+    const angle = this.resolveAimAngle(selection, pose, pointer)
+    this.directionAimPreview.update(pose, angle, sector, cameraController.getState().zoom)
+  }
+
   private update(): void {
     const now = performance.now()
     this.updateMovement()
     this.updateCamera()
+    this.updateDirectionAim()
     this.updateBuildGhost()
     this.updateLiftGhost()
     this.updateChunkBuilds()
@@ -786,6 +844,9 @@ export class Render {
    * This keeps canvas/input alive between reconnect attempts.
    */
   resetWorld(): void {
+    this.cancelDirectionAim()
+    this.directionAimSelection = null
+    this.directionAimPreview.clear()
     this.playerEntityId = null
     this.clearMinimap()
     this.keyboardMovement.reset()
@@ -808,6 +869,8 @@ export class Render {
   }
 
   destroy(): void {
+    this.cancelDirectionAim()
+    this.directionAimPreview.destroy()
     if (this.minimapCanvas) this.detachMinimap(this.minimapCanvas)
     this.playerEntityId = null
     this.keyboardMovement.destroy()
