@@ -40,7 +40,7 @@ Retain the existing sample paths and volumes. Proposed initial tuning, separate 
 
 Add optional `sound_cues` to action animation bindings: a cue has a stable ID, normalized `phase`, `sound_key` and `source` (`actor` or `target`). First-version action cue phases are `(0,1]`; locomotion contacts are `(0,1)` to avoid duplicate loop-boundary representations. Validate unique IDs, increasing phase order, finite phases, source availability and referenced sound profiles. Absence preserves a binding without audio cues. Prepare mode-specific cue arrays when loading definitions instead of filtering or parsing them each tick.
 
-The `tree_chop` binding authors one world cue at `0.6` with `sound_key=chop` and `source=target`. The phase is shared by its left/right variants. Keep `tree_fall` as successful action-completion feedback rather than a repeated animation cue.
+The `tree_chop` binding authors one world cue at `0.4` with `sound_key=chop` and `source=target`. The phase is shared by its left/right variants. Keep `tree_fall` as successful action-completion feedback rather than a repeated animation cue.
 
 Footsteps belong in separate client locomotion-audio definitions under `data/locomotion_audio/`: bind actor identity and existing locomotion clip keys to authored contact cues, and take stride distance from the actor manifest. Do not pretend walking is an `ActiveCyclicAction` or add a new server action source. Publish these definitions through the existing immutable catalog mechanism, including reference validation against actor clips and local sound profiles.
 

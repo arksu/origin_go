@@ -40,7 +40,7 @@ Def loading and publication SHALL reject unsupported schema versions, unknown fi
 
 ## ADDED Requirements
 
-### Requirement: The chop marker is authored at sixty percent
+### Requirement: The chop marker is authored at forty percent
 
 The production `tree_chop` animation def SHALL declare a `chop` world sound cue at normalized phase `0.4`, sourced from the target position and shared by its hand variants. The server SHALL emit it at the first validated cycle tick at or beyond that phase. Slight delivery latency SHALL be accepted; client playback SHALL NOT replace server emission with an animation callback.
 
