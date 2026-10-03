@@ -106,6 +106,7 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 		snapshot.Client.Layer = req.TargetLayer
 	}
 
+	characterTemplate.ActionCooldowns = snapshot.Character.ActionCooldowns
 	characterSpawn := characterTemplate
 	characterSpawn.Layer = req.TargetLayer
 	characterSpawn.X = req.TargetX
@@ -197,6 +198,12 @@ func (s *PlayerTransferService) detachTransferSource(
 	}
 	snapshot.SourceX = int(transform.X)
 	snapshot.SourceY = int(transform.Y)
+	cooldowns, _ := ecs.GetComponent[components.ActionCooldowns](shard.world, playerHandle)
+	encodedCooldowns, err := cooldowns.MarshalActive(ecs.GetResource[ecs.TimeState](shard.world).UnixMs)
+	if err != nil {
+		return snapshot, fmt.Errorf("capture cooldowns before transfer: %w", err)
+	}
+	snapshot.Character.ActionCooldowns = []byte(encodedCooldowns)
 
 	if shard.characterSaver != nil {
 		if err := shard.characterSaver.SaveSync(shard.world, req.PlayerID, playerHandle); err != nil {

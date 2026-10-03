@@ -79,9 +79,6 @@ func (service *ActionService) beginTileCycle(world *ecs.World, playerID types.En
 	active.Phase = components.GameActionExecuting
 	active.MovementOwned, active.ExpireAtUnixMs = false, 0
 	ecs.AddComponent(world, player, active)
-	if definition.Execution.Ticks > 0 {
-		service.SendState(world, playerID, player)
-	}
 	service.beginExecution(world, playerID, player, definition, active, target)
 }
 

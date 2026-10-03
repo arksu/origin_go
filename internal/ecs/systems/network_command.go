@@ -648,14 +648,14 @@ func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandle types.Handle, playerID types.EntityID, click *netproto.MapClick) {
-	if s.actionService != nil {
-		s.actionService.Cancel(w, playerID, playerHandle)
-	}
 	if s.liftCommandService != nil && s.liftCommandService.IsPlayerCarrying(w, playerHandle) {
 		if s.actionService != nil {
 			s.actionService.StartTargetedOnce(w, playerID, playerHandle, "lift_down", 0, types.InvalidHandle, float64(click.X), float64(click.Y))
 		}
 		return
+	}
+	if s.actionService != nil {
+		s.actionService.Cancel(w, playerID, playerHandle)
 	}
 	targetID := types.EntityID(click.TargetEntityId)
 	targetHandle := w.GetHandleByEntityID(targetID)

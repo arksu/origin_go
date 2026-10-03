@@ -96,7 +96,7 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 		}
 	}
 	plow, _ := registry.Get("plow_tile")
-	if plow.Target.Kind != TargetTile || plow.Target.Approach != ApproachTileCenter || plow.Target.Cursor != "dig" ||
+	if plow.Cooldown == 0 || plow.Target.Kind != TargetTile || plow.Target.Approach != ApproachTileCenter || plow.Target.Cursor != "dig" ||
 		!plow.Repeatable() || plow.Execution.Repeat || plow.Execution.Ticks != 20 || plow.Execution.Stamina != 250 ||
 		len(plow.Requirements.Skills) != 0 || len(plow.Requirements.Equipment) != 0 {
 		t.Fatalf("invalid plow definition: %#v", plow)
@@ -156,6 +156,24 @@ func TestExecutionRepeatValidation(t *testing.T) {
 			definition, found := registry.Get("repeat_test")
 			if !found || definition.Execution.Repeat != test.wantRepeat {
 				t.Fatalf("unexpected repeat setting: %#v", definition)
+			}
+		})
+	}
+}
+
+func TestCooldownDefinitionValidation(t *testing.T) {
+	for _, value := range []string{"0", "2000", "4294967295", "-1", "0.5", "4294967296", "null", "\"2000\""} {
+		t.Run(value, func(t *testing.T) {
+			directory := t.TempDir()
+			contents := `{"v":1,"actions":[{"id":"test","presentation":{"label":"Test","menuIcon":"/assets/test.png"},"target":{"kind":"none"},"requirements":{},"execution":{},"cooldown":` + value + `}]}`
+			writeActionFile(t, directory, "cooldown.json", contents)
+			_, err := LoadFromDirectory(directory, nil)
+			valid := value == "0" || value == "2000" || value == "4294967295"
+			if valid != (err == nil) {
+				t.Fatalf("cooldown %s: %v", value, err)
+			}
+			if err != nil && !strings.Contains(err.Error(), "cooldown.json") {
+				t.Fatalf("error omitted source file: %v", err)
 			}
 		})
 	}

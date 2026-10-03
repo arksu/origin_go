@@ -752,6 +752,7 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 	ecs.RemoveComponent[components.CollisionResult](w, playerHandle)
 	ecs.RemoveComponent[components.Stealth](w, playerHandle)
 	ecs.RemoveComponent[components.CharacterProfile](w, playerHandle)
+	ecs.RemoveComponent[components.ActionCooldowns](w, playerHandle)
 	ecs.RemoveComponent[components.EntityStats](w, playerHandle)
 	ecs.RemoveComponent[components.EntityHealth](w, playerHandle)
 	ecs.RemoveComponent[components.LiftCarryState](w, playerHandle)

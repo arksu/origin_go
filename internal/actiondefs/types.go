@@ -44,6 +44,7 @@ type Definition struct {
 	Target       Target       `json:"target"`
 	Requirements Requirements `json:"requirements"`
 	Execution    Execution    `json:"execution"`
+	Cooldown     uint32       `json:"cooldown,omitempty"`
 	IsRepeatable *bool        `json:"isRepeatable,omitempty"`
 
 	SourceFile string `json:"-"`

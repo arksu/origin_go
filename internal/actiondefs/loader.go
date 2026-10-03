@@ -99,6 +99,9 @@ func loadFile(filename string) ([]Definition, error) {
 				return nil, fmt.Errorf("%s: action %q: %s section is required", filename, definition.ID, section)
 			}
 		}
+		if value, exists := rawFile.Actions[index]["cooldown"]; exists && bytes.Equal(value, []byte("null")) {
+			return nil, fmt.Errorf("%s: action %q: cooldown must be a non-negative integer", filename, definition.ID)
+		}
 		if err := validateDefinition(definition); err != nil {
 			return nil, fmt.Errorf("%s: action %q: %w", filename, definition.ID, err)
 		}

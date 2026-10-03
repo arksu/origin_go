@@ -48,7 +48,7 @@ func TestSecondaryCarryPrecedesEveryTargetAndHasNoFallback(t *testing.T) {
 			system.SetContextMenuSender(menu)
 			system.SetContextActionService(testContextActionResolver{actions: []ContextAction{{ActionID: "one"}, {ActionID: "two"}}})
 			system.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, X: 43, Y: 99, TargetEntityId: targetID}})
-			if router.cancelCalls != 1 || router.calls != 0 || router.directCalls != 1 || router.directID != "lift_down" || router.directX != 43 || router.directY != 99 || router.directTarget != 0 || router.directHandle != types.InvalidHandle || router.activeAtDirectStart {
+			if router.cancelCalls != 0 || router.calls != 0 || router.directCalls != 1 || router.directID != "lift_down" || router.directX != 43 || router.directY != 99 || router.directTarget != 0 || router.directHandle != types.InvalidHandle || !router.activeAtDirectStart {
 				t.Fatalf("incorrect carry routing: %+v", router)
 			}
 			movement, _ := ecs.GetComponent[components.Movement](w, player)
@@ -61,7 +61,7 @@ func TestSecondaryCarryPrecedesEveryTargetAndHasNoFallback(t *testing.T) {
 }
 
 func TestSecondaryCancelsEveryPhaseAndLeavesAdminCommandsPending(t *testing.T) {
-	for _, phase := range []components.GameActionPhase{components.GameActionSelecting, components.GameActionApproaching, components.GameActionExecuting} {
+	for _, phase := range []components.GameActionPhase{components.GameActionSelecting, components.GameActionApproaching, components.GameActionExecuting, components.GameActionCooldownWait} {
 		t.Run(string(phase), func(t *testing.T) {
 			w := ecs.NewWorldForTesting()
 			player := w.Spawn(1, func(w *ecs.World, h types.Handle) {

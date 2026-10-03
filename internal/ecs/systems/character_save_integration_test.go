@@ -182,3 +182,39 @@ func TestCharacterSaverPostgresPeriodicThenDetachedFinalSnapshot(t *testing.T) {
 	saver.Stop()
 	requireCharacterSavePostgresState(t, db, 11, 20, 20)
 }
+
+func TestCharacterSaverPostgresCooldownRoundTripAndMigration(t *testing.T) {
+	db := newCharacterSavePostgres(t)
+	ctx := context.Background()
+	// Exercise the additive migration on this test's isolated, disposable schema.
+	_, err := db.Pool().Exec(ctx, `ALTER TABLE character DROP COLUMN action_cooldowns`)
+	require.NoError(t, err)
+	migration, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "20261003_action_cooldowns.sql"))
+	require.NoError(t, err)
+	statement := strings.ReplaceAll(string(migration), "origin.character", "character")
+	for range 2 {
+		_, err = db.Pool().Exec(ctx, statement)
+		require.NoError(t, err)
+	}
+	character, err := db.Queries().GetCharacter(ctx, 11)
+	require.NoError(t, err)
+	require.JSONEq(t, `{}`, string(character.ActionCooldowns))
+	saver := NewCharacterSaver(db, 0, nil, zap.NewNop())
+	t.Cleanup(saver.Stop)
+	snapshot := characterSaveIntegrationSnapshot(11, 20, 1)
+	snapshot.ActionCooldowns = `{"plow_tile":{"startedAtMs":10000,"expiresAtMs":12000}}`
+	require.True(t, saver.enqueueSnapshot(snapshot))
+	require.NoError(t, saver.flushPending(ctx, saver.queueForCharacter(11), 0))
+	character, err = db.Queries().GetCharacter(ctx, 11)
+	require.NoError(t, err)
+	restored, err := components.UnmarshalActionCooldowns(character.ActionCooldowns)
+	require.NoError(t, err)
+	require.Equal(t, int64(12000), restored.ByAction["plow_tile"].ExpiresAtMs)
+	snapshot.ActionCooldowns, err = restored.MarshalActive(12000)
+	require.NoError(t, err)
+	require.True(t, saver.enqueueSnapshot(snapshot))
+	require.NoError(t, saver.flushPending(ctx, saver.queueForCharacter(11), 0))
+	character, err = db.Queries().GetCharacter(ctx, 11)
+	require.NoError(t, err)
+	require.JSONEq(t, `{}`, string(character.ActionCooldowns))
+}

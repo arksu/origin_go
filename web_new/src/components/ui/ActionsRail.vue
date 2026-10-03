@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ACTION_CATALOG, getActionLabel, type ActionId } from '@/game/hud/actionCatalog'
+import ActionIcon from './ActionIcon.vue'
+import { useActionPresentation } from '@/composables/useActionPresentation'
+import { ACTION_CATALOG, type ActionId } from '@/game/hud/actionCatalog'
 
 const emit = defineEmits<{
   activate: [actionId: ActionId]
@@ -10,6 +12,8 @@ const emit = defineEmits<{
   touchDragMove: [payload: { pointerId: number; clientX: number; clientY: number }]
   touchDragEnd: [payload: { pointerId: number; clientX: number; clientY: number }]
 }>()
+
+const { presentation } = useActionPresentation()
 
 const touchActionId = ref<ActionId | null>(null)
 const touchPointerId = ref<number | null>(null)
@@ -72,7 +76,7 @@ function onPointerDown(event: PointerEvent, actionId: ActionId): void {
   touchStartY.value = event.clientY
   clearTouchTooltipTimer()
   touchTooltipTimer.value = window.setTimeout(() => {
-    showTooltip(getActionLabel(actionId), event.clientX, event.clientY)
+    showTooltip(presentation(actionId).label, event.clientX, event.clientY)
   }, 350)
 }
 
@@ -161,20 +165,20 @@ function onPointerLeave(): void {
         class="actions-rail__button"
         type="button"
         draggable="true"
-        :aria-label="entry.label"
+        :aria-label="presentation(entry.id).label"
         :data-actions-toggle="entry.id === 'actions' ? '' : undefined"
         @click="onButtonClick(entry.id)"
         @dragstart="onDragStart($event, entry.id)"
         @dragend="onDragEnd"
-        @pointerenter="onPointerEnter($event, entry.label)"
+        @pointerenter="onPointerEnter($event, presentation(entry.id).label)"
         @pointerleave="onPointerLeave"
         @pointerdown="onPointerDown($event, entry.id)"
-        @pointermove="onPointerMove($event, entry.label)"
+        @pointermove="onPointerMove($event, presentation(entry.id).label)"
         @pointerup="onPointerUp($event, entry.id)"
         @pointercancel="onPointerUp($event, entry.id)"
       >
-        <img class="actions-rail__icon" :src="entry.iconPath" :alt="entry.label" draggable="false">
-        <span class="actions-rail__fallback">{{ entry.shortLabel }}</span>
+        <ActionIcon class="actions-rail__icon" :action-id="entry.id" />
+        <span class="actions-rail__fallback">{{ presentation(entry.id).shortLabel }}</span>
       </button>
       <slot v-if="entry.id === 'actions'" name="actions-menu" />
     </div>

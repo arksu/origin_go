@@ -58,6 +58,12 @@ func Continue(w *ecs.World, handle types.Handle) {
 	publishCycle(w, handle, cycle, state)
 }
 
+// Pause keeps cycle identity for cancellation/resumption while hiding its animation.
+func Pause(w *ecs.World, handle types.Handle) {
+	state, _ := ecs.GetComponent[components.ActionAnimation](w, handle)
+	clearPresentation(w, handle, state)
+}
+
 func Clear(w *ecs.World, handle types.Handle) {
 	if !w.Alive(handle) {
 		return

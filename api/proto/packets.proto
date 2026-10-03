@@ -824,6 +824,7 @@ message ActionDefinition {
   uint32 ticks = 8;
   double stamina = 9;
   bool is_repeatable = 10;
+  uint32 cooldown_ms = 11;
 }
 
 message S2C_ActionList {
@@ -834,6 +835,14 @@ message S2C_ActionStateChanged {
   string action_id = 1;
   string phase = 2;
   string cursor = 3;
+  repeated ActionCooldown cooldowns = 4;
+  int64 server_time_ms = 5;
+}
+
+message ActionCooldown {
+  string action_id = 1;
+  int64 started_at_ms = 2;
+  int64 expires_at_ms = 3;
 }
 
 message S2C_Sound {

@@ -80,19 +80,20 @@ func (s *CharacterSaveSystem) Stop() {
 }
 
 type CharacterSnapshot struct {
-	CharacterID int64
-	X           int
-	Y           int
-	Heading     int16
-	Stamina     float64
-	Energy      float64
-	SHP         int16
-	HHP         int16
-	Attributes  string
-	Exp         string
-	Skills      string
-	Discovery   string
-	Inventories []InventorySnapshot
+	CharacterID     int64
+	X               int
+	Y               int
+	Heading         int16
+	Stamina         float64
+	Energy          float64
+	SHP             int16
+	HHP             int16
+	Attributes      string
+	Exp             string
+	Skills          string
+	ActionCooldowns string
+	Discovery       string
+	Inventories     []InventorySnapshot
 }
 
 func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle types.Handle) {
@@ -110,7 +111,12 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 	}
 	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	s.enqueueSnapshot(s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories))
+	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories)
+	if err := snapshot.captureActionCooldowns(w, handle); err != nil {
+		s.logger.Error("Failed to serialize action cooldowns", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+		return
+	}
+	s.enqueueSnapshot(snapshot)
 }
 
 // SaveSync persists character snapshot immediately in caller goroutine.
@@ -129,6 +135,9 @@ func (s *CharacterSaver) SaveSync(w *ecs.World, entityID types.EntityID, handle 
 	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
 	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories)
+	if err := snapshot.captureActionCooldowns(w, handle); err != nil {
+		return err
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), characterSaveTimeout)
 	defer cancel()
@@ -297,4 +306,14 @@ func (s *CharacterSaver) SaveAll(w *ecs.World) {
 	}
 
 	s.logger.Info("All characters saved")
+}
+
+func (snapshot *CharacterSnapshot) captureActionCooldowns(w *ecs.World, handle types.Handle) error {
+	cooldowns, _ := ecs.GetComponent[components.ActionCooldowns](w, handle)
+	serialized, err := cooldowns.MarshalActive(ecs.GetResource[ecs.TimeState](w).UnixMs)
+	if err != nil {
+		return fmt.Errorf("save action cooldowns: %w", err)
+	}
+	snapshot.ActionCooldowns = serialized
+	return nil
 }

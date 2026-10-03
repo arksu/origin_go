@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS character
     exp              JSONB        not null, -- {"lp":number, "nature": number, "industry": number, "combat": number}
     skills           JSONB        not null, -- Set[string]
     discovery        JSONB        not null, -- Set[string]
+    action_cooldowns JSONB NOT NULL DEFAULT '{}'::jsonb,
 
     online_time      BIGINT       NOT NULL DEFAULT 0,             -- time in seconds spent in game
     auth_token       VARCHAR(64),                                 -- token used in C2SAuth packet

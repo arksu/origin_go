@@ -48,8 +48,8 @@ export function gameActionHotbarId(actionId: string): `game:${string}` {
   return `game:${actionId}`
 }
 
-export function requestGameAction(actionId: string, actions: readonly proto.IActionDefinition[], listLoaded: boolean, send: (id: string) => void): boolean {
-  if (!listLoaded || !actions.some(action => action.id === actionId)) return false
+export function requestGameAction(actionId: string, actions: readonly proto.IActionDefinition[], listLoaded: boolean, send: (id: string) => void, isCoolingDown: (id: string) => boolean): boolean {
+  if (!listLoaded || !actions.some(action => action.id === actionId) || isCoolingDown(actionId)) return false
   send(actionId)
   return true
 }

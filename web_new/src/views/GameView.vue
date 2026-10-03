@@ -20,6 +20,7 @@ import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
 import PlayerStatsBars from '@/components/ui/PlayerStatsBars.vue'
 import MovementModePanel from '@/components/ui/MovementModePanel.vue'
 import ActionsRail from '@/components/ui/ActionsRail.vue'
+import { useActionPresentation } from '@/composables/useActionPresentation'
 import ActionsMenu from '@/components/ui/ActionsMenu.vue'
 import HotbarPlaceholder from '@/components/ui/HotbarPlaceholder.vue'
 import PortraitWarningBanner from '@/components/ui/PortraitWarningBanner.vue'
@@ -37,7 +38,7 @@ import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { MINIMAP_SIZE } from '@/constants/minimap'
 import { proto } from '@/network/proto/packets.js'
 import { useAuthStore } from '@/stores/authStore'
-import { getActionLabel, requestGameAction, type ActionId, type HotbarActionId } from '@/game/hud/actionCatalog'
+import { type ActionId, type HotbarActionId } from '@/game/hud/actionCatalog'
 import { cancelActiveActionOnEscape } from '@/game/hud/actionState'
 
 const router = useRouter()
@@ -171,8 +172,7 @@ watch(
 const touchDragLabel = computed(() => {
   const id = touchDraggingActionId.value
   if (!id) return ''
-  if (id.startsWith('game:')) return gameStore.gameActions.find(action => action.id === id.slice(5))?.label || ''
-  return getActionLabel(id as ActionId)
+  return actionPresentation.presentation(id).label
 })
 
 function findBuildRecipeByKey(buildKey: string): proto.IBuildRecipeEntry | null {
@@ -557,8 +557,10 @@ function toggleCraftWindow() {
   openCraftWindow()
 }
 
+const actionPresentation = useActionPresentation()
+
 function activateGameAction(actionId: string): boolean {
-  return requestGameAction(actionId, gameStore.gameActions, gameStore.gameActionListLoaded, sendActivateAction)
+  return actionPresentation.activate(actionId, sendActivateAction)
 }
 
 function executeAction(actionId: HotbarActionId): void {
@@ -843,8 +845,6 @@ useHotkeys(hotkeys)
         <div class="hud-top-hotbar">
           <HotbarPlaceholder
             :assignments="hotbarAssignments"
-            :server-actions="gameStore.gameActions"
-            :action-list-loaded="gameStore.gameActionListLoaded"
             :dragging-action-id="draggingActionId"
             :touch-hover-slot="touchHoverSlot"
             @drop="onHotbarDrop"
