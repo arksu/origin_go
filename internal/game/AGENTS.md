@@ -134,7 +134,7 @@ internal/game/
 
 ### Gameplay Actions (`action_service.go`, `action_cycle.go`)
 
-- Definitions live in `data/actions/` and are loaded through `internal/actiondefs`. `ActionService` consumes the registry, while `shard.go` registers one handler per action ID. The registry requires an exact definition-to-handler match.
+- Definitions live in `data/actions/` and are loaded through `internal/actiondefs`. `ActionService` consumes the registry, while `shard.go` registers handlers by action ID. Registered handlers require matching definitions and unique IDs; definitions may be loaded and published before their handlers are implemented. The axe actions currently have definitions only.
 - `isRepeatable` controls whether a finished target attempt returns to selection. `execution.repeat: true` continues successful timed cycles on the accepted target without another click. The flags are independent; `plow_tile` uses click-per-attempt selection, while `dig` repeats execution and becomes idle when it stops.
 - `execution.repeat: true` requires an object or tile target and a positive tick duration. A successful terminal handler result (`StopAfterCycle`) keeps that cycle's effect and stamina charge, then ends the sequence without starting another cycle.
 - Timed menu cycles retain their action generation and target. Before applying an effect, check the current cycle, generation, requirements, target, and actual tile-center position. Cancellation and stale completions must not grant items or charge stamina for an unfinished cycle.

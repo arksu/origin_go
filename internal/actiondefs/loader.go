@@ -23,8 +23,19 @@ import (
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 type definitionFile struct {
-	Version int          `json:"v"`
-	Actions []Definition `json:"actions"`
+	Version int               `json:"v"`
+	Actions []definitionInput `json:"actions"`
+}
+
+// Keep authored degrees out of definitions consumed by runtime code.
+type definitionInput struct {
+	Definition
+	Sector *sectorInput `json:"sector,omitempty"`
+}
+
+type sectorInput struct {
+	Range    float64 `json:"range"`
+	AngleDeg float64 `json:"angleDeg"`
 }
 
 func LoadFromDirectory(directory string, logger *zap.Logger) (*Registry, error) {
@@ -90,8 +101,9 @@ func loadFile(filename string) ([]Definition, error) {
 	if len(file.Actions) == 0 {
 		return nil, fmt.Errorf("%s: actions must not be empty", filename)
 	}
+	definitions := make([]Definition, len(file.Actions))
 	for index := range file.Actions {
-		definition := &file.Actions[index]
+		definition := &file.Actions[index].Definition
 		definition.SourceFile = filename
 		for _, section := range []string{"presentation", "target", "requirements", "execution"} {
 			value, exists := rawFile.Actions[index][section]
@@ -102,11 +114,43 @@ func loadFile(filename string) ([]Definition, error) {
 		if value, exists := rawFile.Actions[index]["cooldown"]; exists && bytes.Equal(value, []byte("null")) {
 			return nil, fmt.Errorf("%s: action %q: cooldown must be a non-negative integer", filename, definition.ID)
 		}
+		if err := loadCombatFields(&file.Actions[index], rawFile.Actions[index]); err != nil {
+			return nil, fmt.Errorf("%s: action %q: %w", filename, definition.ID, err)
+		}
 		if err := validateDefinition(definition); err != nil {
 			return nil, fmt.Errorf("%s: action %q: %w", filename, definition.ID, err)
 		}
+		definitions[index] = *definition
 	}
-	return file.Actions, nil
+	return definitions, nil
+}
+
+func loadCombatFields(input *definitionInput, sections map[string]json.RawMessage) error {
+	var executionFields map[string]json.RawMessage
+	if err := json.Unmarshal(sections["execution"], &executionFields); err != nil {
+		return fmt.Errorf("parse execution fields: %w", err)
+	}
+	recoveryTicks, hasRecoveryTicks := executionFields["recoveryTicks"]
+	_, hasSector := sections["sector"]
+	_, hasCombat := sections["combat"]
+	if input.Target.Kind != TargetDirection {
+		if hasSector || hasCombat || hasRecoveryTicks {
+			return fmt.Errorf("sector, combat and execution.recoveryTicks require a direction target")
+		}
+		return nil
+	}
+	if !hasRecoveryTicks || bytes.Equal(recoveryTicks, []byte("null")) {
+		return fmt.Errorf("execution.recoveryTicks is required for combat")
+	}
+	if input.Sector == nil {
+		return fmt.Errorf("sector is required for combat")
+	}
+	angle := input.Sector.AngleDeg
+	if math.IsNaN(angle) || math.IsInf(angle, 0) || angle <= 0 || angle > 360 {
+		return fmt.Errorf("sector.angleDeg must be finite and in (0, 360]")
+	}
+	input.Definition.Sector = &Sector{Range: input.Sector.Range, Angle: angle * (math.Pi / 180)}
+	return nil
 }
 
 func validateDefinition(definition *Definition) error {
@@ -128,7 +172,7 @@ func validateDefinition(definition *Definition) error {
 		if definition.Target.Cursor != "" || definition.IsRepeatable != nil {
 			return fmt.Errorf("none target cannot declare cursor or isRepeatable")
 		}
-	case TargetObject, TargetTile:
+	case TargetObject, TargetTile, TargetDirection:
 	default:
 		return fmt.Errorf("unknown target kind %q", definition.Target.Kind)
 	}
@@ -137,6 +181,9 @@ func validateDefinition(definition *Definition) error {
 	}
 	if definition.Target.Approach != "" && (definition.Target.Approach != ApproachTileCenter || definition.Target.Kind != TargetTile) {
 		return fmt.Errorf("target.approach must be tile_center on a tile target")
+	}
+	if err := validateCombatDefinition(definition); err != nil {
+		return err
 	}
 	if definition.Execution.Ticks < 0 || definition.Execution.Stamina < 0 || math.IsNaN(definition.Execution.Stamina) || math.IsInf(definition.Execution.Stamina, 0) {
 		return fmt.Errorf("execution ticks and stamina must be finite and non-negative")
@@ -182,6 +229,42 @@ func validateDefinition(definition *Definition) error {
 		} else if !identifierPattern.MatchString(requirement.ItemTag) {
 			return fmt.Errorf("requirements.equipment[%d].itemTag is invalid", index)
 		}
+	}
+	return nil
+}
+
+func validateCombatDefinition(definition *Definition) error {
+	if definition.Target.Kind != TargetDirection {
+		if definition.Sector != nil || definition.Combat != nil || definition.Execution.RecoveryTicks != 0 {
+			return fmt.Errorf("combat fields require a direction target")
+		}
+		return nil
+	}
+	if definition.Sector == nil || definition.Combat == nil {
+		return fmt.Errorf("direction target requires sector and combat")
+	}
+	if definition.Target.Cursor != "" || definition.Target.Approach != "" {
+		return fmt.Errorf("combat cannot declare cursor or approach")
+	}
+	if definition.Execution.Repeat || definition.Repeatable() {
+		return fmt.Errorf("combat cannot repeat")
+	}
+	if definition.Execution.Ticks <= 0 || definition.Execution.RecoveryTicks < 0 {
+		return fmt.Errorf("combat requires positive execution.ticks and non-negative execution.recoveryTicks")
+	}
+	sector := definition.Sector
+	if math.IsNaN(sector.Range) || math.IsInf(sector.Range, 0) || sector.Range <= 0 || sector.Range > math.MaxFloat32 {
+		return fmt.Errorf("sector.range must be positive, finite and fit the protocol float")
+	}
+	if math.IsNaN(sector.Angle) || math.IsInf(sector.Angle, 0) || sector.Angle <= 0 || sector.Angle > 2*math.Pi {
+		return fmt.Errorf("sector angle must be finite and in (0, 2*pi]")
+	}
+	combat := definition.Combat
+	if combat.HitMode != HitAll && combat.HitMode != HitNearest {
+		return fmt.Errorf("combat.hitMode must be all or nearest")
+	}
+	if math.IsNaN(combat.DamageMultiplier) || math.IsInf(combat.DamageMultiplier, 0) || combat.DamageMultiplier <= 0 {
+		return fmt.Errorf("combat.damageMultiplier must be positive and finite")
 	}
 	return nil
 }

@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "axe_sweep",
+      "presentation": {
+        "label": "Axe sweep",
+        "menuIcon": "/assets/cursor/atk.png"
+      },
+      "target": { "kind": "direction" },
+      "requirements": {
+        "equipment": [
+          { "slots": ["right_hand", "left_hand"], "itemTag": "axe" }
+        ]
+      },
+      "execution": { "ticks": 6, "recoveryTicks": 4, "stamina": 60, "repeat": false },
+      "cooldown": 2000,
+      "isRepeatable": false,
+      "sector": { "range": 18, "angleDeg": 90 },
+      "combat": { "hitMode": "all", "damageMultiplier": 1.0 }
+    },
+    {
+      "id": "axe_strike",
+      "presentation": {
+        "label": "Axe strike",
+        "menuIcon": "/assets/cursor/atk.png"
+      },
+      "target": { "kind": "direction" },
+      "requirements": {
+        "equipment": [
+          { "slots": ["right_hand", "left_hand"], "itemTag": "axe" }
+        ]
+      },
+      "execution": { "ticks": 6, "recoveryTicks": 4, "stamina": 60, "repeat": false },
+      "cooldown": 2000,
+      "isRepeatable": false,
+      "sector": { "range": 18, "angleDeg": 90 },
+      "combat": { "hitMode": "nearest", "damageMultiplier": 1.5 }
+    }
+  ]
+}

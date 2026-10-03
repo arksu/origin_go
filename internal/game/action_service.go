@@ -166,13 +166,19 @@ func (service *ActionService) SendList(playerID types.EntityID) {
 				Slots: append([]string(nil), requirement.Slots...), ItemKey: requirement.ItemKey, ItemTag: requirement.ItemTag,
 			})
 		}
-		list.Actions = append(list.Actions, &netproto.ActionDefinition{
+		action := &netproto.ActionDefinition{
 			Id: definition.ID, Label: definition.Presentation.Label, MenuIcon: definition.Presentation.MenuIcon,
 			TargetKind: string(definition.Target.Kind), Cursor: definition.Target.Cursor,
 			RequiredSkills: append([]string(nil), definition.Requirements.Skills...), RequiredEquipment: requirements,
 			Ticks: uint32(definition.Execution.Ticks), Stamina: definition.Execution.Stamina,
 			IsRepeatable: definition.Repeatable(), CooldownMs: definition.Cooldown,
-		})
+		}
+		if definition.Sector != nil {
+			action.Sector = &netproto.ActionSector{
+				Range: float32(definition.Sector.Range), SectorAngle: float32(definition.Sector.Angle),
+			}
+		}
+		list.Actions = append(list.Actions, action)
 	}
 	service.sender.SendActionList(playerID, list)
 }
