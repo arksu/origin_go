@@ -12,7 +12,7 @@ option go_package = "origin/internal/network/proto";
 message Position {
   int32 x = 1;
   int32 y = 2;
-  float heading = 3;
+  float heading = 3; // World direction in radians.
 }
 
 // Вектор направления/скорости
@@ -306,6 +306,8 @@ message CharacterActionAnimationState {
   double tick_duration_ms = 6;
   int64 server_time_ms = 7;
   Position target_position = 8;
+  // Fixed world direction in radians; mutually exclusive with target_position.
+  optional float facing_angle = 9;
 }
 
 message S2C_CharacterActionAnimation {
@@ -431,6 +433,9 @@ message C2S_BuildTakeBack {
 
 message C2S_ActivateAction {
   string action_id = 1;
+  // Required for direction-target actions; presence distinguishes missing aim from zero.
+  optional float aim_angle = 2; // World direction in radians, normalized to [0, 2*pi).
+  uint32 stream_epoch = 3; // Required current world epoch for direction-target actions.
 }
 
 message C2S_CancelAction {}
@@ -813,11 +818,17 @@ message ActionEquipmentRequirement {
   string item_tag = 3;
 }
 
+// Authored angles are converted from degrees when loading definitions.
+message ActionSector {
+  float range = 1; // World units.
+  float sector_angle = 2; // Full sector width in radians, not the half-angle.
+}
+
 message ActionDefinition {
   string id = 1;
   string label = 2;
   string menu_icon = 3;
-  string target_kind = 4;
+  string target_kind = 4; // none, object, tile, or direction.
   string cursor = 5;
   repeated string required_skills = 6;
   repeated ActionEquipmentRequirement required_equipment = 7;
@@ -825,6 +836,7 @@ message ActionDefinition {
   double stamina = 9;
   bool is_repeatable = 10;
   uint32 cooldown_ms = 11;
+  ActionSector sector = 12; // Preview geometry for direction-target axe actions.
 }
 
 message S2C_ActionList {
@@ -843,6 +855,19 @@ message ActionCooldown {
   string action_id = 1;
   int64 started_at_ms = 2;
   int64 expires_at_ms = 3;
+}
+
+message AttackHit {
+  uint64 target_id = 1;
+  double damage = 2; // Damage after armor, before health distribution and clamping.
+}
+
+// One server-resolved strike; empty hits means a miss. Not a health snapshot.
+message S2C_AttackResult {
+  uint32 stream_epoch = 1;
+  uint64 event_id = 2; // Nonzero, unique in this stream; reused for duplicate delivery.
+  uint64 attacker_id = 3;
+  repeated AttackHit hits = 4; // Each hit target appears once, including zero-damage hits.
 }
 
 message S2C_Sound {
@@ -944,6 +969,7 @@ message ServerMessage {
     S2C_ObjectMoveBatch object_move_batch = 49;
     S2C_ObjectSpawnBatch object_spawn_batch = 50;
     S2C_SoundBatch sound_batch = 51;
+    S2C_AttackResult attack_result = 52;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;
