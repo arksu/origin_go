@@ -61,6 +61,13 @@ Server → Network → gameStore → gameFacade → PIXI Render
 - Build-state UI is also server-authoritative (`S2C_BuildState` rows/counters + `buildName` title); client should not recompute build progress locally.
 - Keep anti-spam logic in store/UI (`debounce`, `coalesce`, max visible items), not in Pixi layer.
 
+### Action Icon Rendering
+
+- Every action icon uses `components/ui/ActionIcon.vue` with a canonical `HotbarActionId` (`game:<id>` or a HUD shortcut ID). Size it through its root class; do not render separate action images or cooldown overlays.
+- `useActionPresentation()` resolves labels, icons, availability and cooldown progress from the shared catalog/state. Use its `activate()` path for gameplay activation and `canActivate()` for input checks.
+- `actionCooldownStore` owns the single session animation clock. Icons must never start local timers, CSS duration animations, or infer cooldowns from clicks. Newly mounted copies derive the same angle from server timestamps.
+- Button layout, active borders, tooltips, dragging and slot labels belong to the containing control. Cooldowns set `aria-disabled`; do not disable the DOM button and break dragging or slot clearing.
+
 ### Build UI Rules
 
 - Build recipe list window and build-site state window are separate UI states.

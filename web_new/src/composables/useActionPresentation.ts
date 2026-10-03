@@ -1,0 +1,37 @@
+import { ACTION_CATALOG, requestGameAction, type HotbarActionId } from '@/game/hud/actionCatalog'
+import { useGameStore } from '@/stores/gameStore'
+import { useActionCooldownStore } from '@/stores/actionCooldownStore'
+
+const shortcuts = new Map(ACTION_CATALOG.map(entry => [entry.id as string, entry]))
+
+export function useActionPresentation() {
+  const game = useGameStore()
+  const cooldowns = useActionCooldownStore()
+
+  function presentation(id: HotbarActionId) {
+    const gameplay = id.startsWith('game:')
+    const actionId = gameplay ? id.slice(5) : id
+    const definition = gameplay ? game.gameActionsById.get(actionId) : undefined
+    const shortcut = gameplay ? undefined : shortcuts.get(actionId)
+    const label = definition?.label || shortcut?.label || (game.gameActionListLoaded ? 'Unavailable action' : 'Loading action')
+    const cooldownProgress = gameplay ? cooldowns.progress(actionId) : 1
+    return {
+      label,
+      shortLabel: shortcut?.shortLabel || label.slice(0, 3).toUpperCase(),
+      iconPath: definition?.menuIcon || shortcut?.iconPath || '',
+      available: !!definition || !!shortcut,
+      cooldownProgress,
+      coolingDown: cooldownProgress < 1,
+    }
+  }
+
+  function canActivate(id: HotbarActionId): boolean {
+    return presentation(id).available && (!id.startsWith('game:') || !cooldowns.isCoolingDown(id.slice(5)))
+  }
+
+  function activate(actionId: string, send: (id: string) => void): boolean {
+    return requestGameAction(actionId, game.gameActions, game.gameActionListLoaded, send, cooldowns.isCoolingDown)
+  }
+
+  return { presentation, canActivate, activate }
+}

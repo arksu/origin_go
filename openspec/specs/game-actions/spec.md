@@ -50,7 +50,7 @@ For activation through the Actions menu or hotbar, the client SHALL request acti
 
 For an untimed action whose handler transitions synchronously, the server SHALL send the resulting stable phase without first sending a transient executing state. A timed action SHALL send executing when its cycle starts.
 
-Activating the same action while selecting SHALL toggle it off. Activating a different action while selecting, approaching, or executing SHALL cancel the old action without charging stamina, stop movement initiated for its target, and then attempt the new action. If the new action cannot start, the server SHALL report the reason and remain idle. Once a repeatable target action is armed, temporary lack of stamina SHALL NOT itself disarm it; target attempts SHALL still require enough stamina.
+Activating the same action while selecting SHALL toggle it off. Unless the requested action is still cooling down, activating a different action while selecting, approaching, executing, or waiting for cooldown SHALL cancel the old action without charging stamina, stop movement initiated for its target, and then attempt the new action. If the new action cannot start, the server SHALL report the reason and remain idle. Once a repeatable target action is armed, temporary lack of stamina SHALL NOT itself disarm it; target attempts SHALL still require enough stamina.
 
 #### Scenario: Arm lift
 - **WHEN** a player activates lift while eligible
@@ -392,3 +392,16 @@ When an explicit gameplay-action activation, context-action selection, or craft/
 #### Scenario: Window hotkey
 - **WHEN** the player opens a non-modal inventory or character window without focusing an editable control
 - **THEN** that window hotkey alone SHALL not relinquish keyboard movement
+
+
+### Requirement: Independent persisted action cooldowns
+
+Each menu-action definition MAY declare top-level `cooldown` as a non-negative integer in milliseconds; zero or omission disables cooldown. The server SHALL enforce a separate deadline for each character and action, starting only on successful completion at the same commit point where action costs such as stamina are charged. Selection, approach, execution progress, rejection, failure, and cancellation before completion SHALL NOT start cooldown. Cooldown SHALL block new activation, armed target attempts and direct server-routed attempts without replacing current state.
+
+For automatic execution repeat, every successfully completed cycle SHALL start its own cooldown when its costs are charged. The next cycle SHALL wait for that full cooldown to expire, retaining its target and generation. During `cooldown_wait`, execution animation/progress SHALL be hidden and no stamina SHALL be charged. Resume SHALL revalidate requirements, target and position; cancellation SHALL end the sequence without resumption and retain the completed cycle's cooldown.
+
+Cooldown start and expiry times SHALL be included in ordinary character saves and restored across sessions and orderly restarts. Offline time SHALL count toward expiry. Reattachment SHALL preserve runtime deadlines, and transfer/rollback SHALL carry the current snapshot. Abrupt crashes retain the existing character-save durability guarantees.
+
+### Requirement: Universal action icon presentation
+
+All client action icon locations SHALL use `ActionIcon` and the shared action presentation interface. A single session clock and server-owned timestamps SHALL determine the clockwise dark overlay, clearing from 12 o'clock to reveal the icon. The Actions dropdown, duplicate hotbar assignments and icons mounted during cooldown SHALL show the same proportional progress. No per-icon countdown timer or click-derived cooldown SHALL exist. Cooldown SHALL block mouse, touch and keyboard activation while preserving dragging, tooltips, cancellation and hotbar clearing.

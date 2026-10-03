@@ -110,9 +110,11 @@ func matchesEquipmentSlot(item components.InvItem, slots []string) bool {
 	return false
 }
 
-func (service *ActionService) chargeStamina(world *ecs.World, playerHandle types.Handle, cost float64) bool {
-	if cost == 0 {
-		return true
+func (service *ActionService) chargeActionCosts(world *ecs.World, playerHandle types.Handle, definition *actiondefs.Definition) bool {
+	if cost := definition.Execution.Stamina; cost > 0 && !behaviors.ConsumePlayerActionStamina(world, playerHandle, cost) {
+		return false
 	}
-	return behaviors.ConsumePlayerActionStamina(world, playerHandle, cost)
+	// Cooldown shares the cost commit point so unfinished attempts remain free.
+	service.startCooldown(world, playerHandle, definition)
+	return true
 }

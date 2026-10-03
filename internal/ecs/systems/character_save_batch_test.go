@@ -456,3 +456,27 @@ func TestCharacterSaveWorkersSerializeSameCharacterAndAllowOtherQueue(t *testing
 	require.Nil(t, characterSavePending(t, saver, 10))
 	require.Nil(t, characterSavePending(t, saver, 11))
 }
+
+func TestCharacterSaveCooldownSnapshotsAreOwnedAndClearOnExpiry(t *testing.T) {
+	var writes []repository.UpdateCharactersParams
+	saver := newCharacterSaver(0, characterSaveInventoryFunc(func(interface{}, types.EntityID, types.Handle) []InventorySnapshot { return nil }), zap.NewNop(), func(_ context.Context, chars repository.UpdateCharactersParams, _ repository.UpsertInventoriesParams) error {
+		writes = append(writes, chars)
+		return nil
+	})
+	w, player := newCharacterSaveTestPlayer()
+	clock := ecs.GetResource[ecs.TimeState](w)
+	clock.UnixMs = 10000
+	cooldowns := components.ActionCooldowns{ByAction: map[string]components.ActionCooldown{"plow_tile": {StartedAtMs: 10000, ExpiresAtMs: 12000}}}
+	ecs.AddComponent(w, player, cooldowns)
+	saver.Save(w, 10, player)
+	cooldowns.ByAction["plow_tile"] = components.ActionCooldown{StartedAtMs: 11000, ExpiresAtMs: 13000}
+	require.NoError(t, saver.flushPending(context.Background(), saver.queueForCharacter(10), 0))
+	require.JSONEq(t, `{"plow_tile":{"startedAtMs":10000,"expiresAtMs":12000}}`, writes[0].ActionCooldowns[0])
+	require.NoError(t, saver.SaveSync(w, 10, player))
+	require.JSONEq(t, `{"plow_tile":{"startedAtMs":11000,"expiresAtMs":13000}}`, writes[1].ActionCooldowns[0])
+	clock.UnixMs = 13000
+	saver.SaveDetached(w, 10, player)
+	w.Despawn(player)
+	require.NoError(t, saver.flushPending(context.Background(), saver.queueForCharacter(10), 0))
+	require.JSONEq(t, `{}`, writes[2].ActionCooldowns[0])
+}

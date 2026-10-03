@@ -8,9 +8,10 @@ import (
 type GameActionPhase string
 
 const (
-	GameActionSelecting   GameActionPhase = "selecting"
-	GameActionApproaching GameActionPhase = "approaching"
-	GameActionExecuting   GameActionPhase = "executing"
+	GameActionSelecting    GameActionPhase = "selecting"
+	GameActionApproaching  GameActionPhase = "approaching"
+	GameActionExecuting    GameActionPhase = "executing"
+	GameActionCooldownWait GameActionPhase = "cooldown_wait"
 )
 
 // ActiveGameAction is transient player state; it is never saved with the character.

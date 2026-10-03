@@ -141,6 +141,14 @@ internal/game/
 - `dig_tile_action.go` maps Grass→soil, Shallow Water→clay, Mountain→stone, and Sand→sand. It re-reads terrain before each Q10 grant and never modifies the tile. The 20-tick cycle costs exactly 300 stamina only after a successful grant.
 - Player-directed generated items use the shared `player_give_item.go` adapter backed by `InventoryExecutor.GiveItem`; its outcome reports hand fallback and it sends inventory and discovery updates. Digging stops after a successful hand grant or a failed grant. A failed grant costs no action stamina.
 
+### Action Cooldowns
+
+- `Definition.Cooldown` is optional top-level JSON `cooldown`, in whole milliseconds; zero/omitted disables it. The catalog carries `cooldown_ms`.
+- Admission checks are separate from execution requirements. They run before cancellation/replacement, including direct carry shortcuts, and report `ACTION_ON_COOLDOWN`.
+- Cooldowns start only on successful completion through the shared `chargeActionCosts` commit point, after stamina is charged. Rejected, failed, canceled, or otherwise unfinished attempts start no cooldown. This applies to instant, deferred, and timed actions alike.
+- Every successfully completed automatic cycle starts a full cooldown before the next cycle. `cooldown_wait` retains the completed cycle and generation for terminal cleanup, pauses public animation, and resumes through `Recheck` after target/requirements validation. Waiting costs no stamina and emits no terminal cycle event. Canceling the wait retains the completed cycle's cooldown.
+- `ActionCooldowns` is saved independently of transient active action state. Full state snapshots include unexpired deadlines even while idle. Character saves, reattachment, transfer/rollback and shutdown preserve deadlines; offline time counts toward expiry. Existing asynchronous save durability applies.
+
 ### Crafting (`crafting_service.go`)
 - **Purpose**: Data-driven crafting runtime integrated with cyclic actions and inventory.
 - **Key Responsibilities**:

@@ -15,6 +15,9 @@ const outfile = join(directory, 'components.mjs')
 await build({
   stdin: {
     contents: `export { default as ActionsMenu } from './src/components/ui/ActionsMenu.vue';
+export { default as ActionIcon } from './src/components/ui/ActionIcon.vue';
+export { useActionCooldownStore } from './src/stores/actionCooldownStore.ts';
+export { timeSync } from './src/network/TimeSync.ts';
 export { default as Hotbar } from './src/components/ui/HotbarPlaceholder.vue';
 export { useHotbarAssignments } from './src/composables/useHotbarAssignments.ts';
 export { useActionsPanel } from './src/composables/useActionsPanel.ts';
@@ -89,7 +92,7 @@ function descendants(node, type) {
 
 let gameStore
 try {
-  const { ActionsMenu, Hotbar, useHotbarAssignments, useActionsPanel, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager } = await import(pathToFileURL(outfile).href)
+  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager } = await import(pathToFileURL(outfile).href)
   setActivePinia(createPinia())
   gameStore = useGameStore()
 
@@ -121,16 +124,19 @@ try {
     { id: 'lift', label: 'Lift', menuIcon: '/assets/cursor/lift.png' },
     { id: 'lift_down', label: 'Lift down', menuIcon: '/assets/cursor/lift_down.png' },
   ]
-  renderer.createApp(withSsrContext(() => h(ActionsMenu, {
+  gameStore.setGameActionList(actions)
+  const cooldownStore = useActionCooldownStore()
+  const actionApp = renderer.createApp(withSsrContext(() => h(ActionsMenu, {
     actions, activeActionId: 'lift', activePhase: 'selecting',
     onActivate: id => {
       events.push(['activate', id])
-      panel.select(id, candidate => requestGameAction(candidate, actions, true, sendAction))
+      panel.select(id, candidate => requestGameAction(candidate, actions, true, sendAction, cooldownStore.isCoolingDown))
     },
     onDragStart: id => events.push(['drag', id]),
     onTouchDragStart: payload => events.push(['touch', payload.actionId]),
     onTouchDragEnd: () => events.push(['touchEnd']),
-  }))).mount(root)
+  })))
+  actionApp.mount(root)
   await nextTick()
   const buttons = descendants(root, 'button')
   assert.deepEqual(buttons.map(button => button.props['aria-label']), ['Lift', 'Lift down'])
@@ -173,21 +179,22 @@ try {
   assert.equal(assignments.get(1), 'game:retired')
   assert.equal(assignments.get(2), 'game:lift_down')
   assert.match(storage.get('hotbar_assignments_v1:account:7'), /game:retired/)
-  assert.equal(requestGameAction('lift', actions, false, sendAction), false)
-  assert.equal(requestGameAction('retired', actions, true, sendAction), false)
+  assert.equal(requestGameAction('lift', actions, false, sendAction, cooldownStore.isCoolingDown), false)
+  assert.equal(requestGameAction('retired', actions, true, sendAction, cooldownStore.isCoolingDown), false)
 
   const hotbarRoot = hostNode('root')
   const activated = []
   const drops = []
-  renderer.createApp(withSsrContext(() => h(Hotbar, {
-    assignments: assignments.assignments.value, serverActions: actions, actionListLoaded: true,
+  const hotbarApp = renderer.createApp(withSsrContext(() => h(Hotbar, {
+    assignments: assignments.assignments.value,
     onActivate: slot => {
       activated.push(slot)
       const id = assignments.get(slot)
-      if (id?.startsWith('game:')) requestGameAction(id.slice(5), actions, true, sendAction)
+      if (id?.startsWith('game:')) requestGameAction(id.slice(5), actions, true, sendAction, cooldownStore.isCoolingDown)
     },
     onDrop: (slot, id) => drops.push([slot, id]),
-  }))).mount(hotbarRoot)
+  })))
+  hotbarApp.mount(hotbarRoot)
   await nextTick()
   const slots = descendants(hotbarRoot, 'button')
   assert.equal(descendants(slots[0], 'img')[0].props.src, '/assets/cursor/lift.png')
@@ -217,7 +224,95 @@ try {
   assert.equal(pixiEvents.cursorStyles.pointer, 'help')
   cursor.detach()
   assert.equal(pixiEvents.cursorStyles.pointer, 'pointer')
-  console.log('Action menu, activation, mini-alert, drag, hotbar persistence, and cursor tests passed')
+  // All mounted icons share one RAF and derive their angle from server timestamps.
+  let monotonicMs = 0
+  let nextFrameId = 1
+  const frames = new Map()
+  const originalPerformance = globalThis.performance
+  globalThis.performance = { now: () => monotonicMs }
+  globalThis.requestAnimationFrame = callback => {
+    const id = nextFrameId++
+    frames.set(id, callback)
+    return id
+  }
+  globalThis.cancelAnimationFrame = id => frames.delete(id)
+  const advanceFrame = async ms => {
+    monotonicMs = ms
+    const callbacks = [...frames.values()]
+    frames.clear()
+    for (const callback of callbacks) callback(ms)
+    await nextTick()
+  }
+  const overlays = root => descendants(root, 'span').filter(node => node.props.class === 'action-icon__cooldown')
+  assignments.assign(4, 'game:lift')
+  gameStore.setActionProgress(20, 10)
+  gameStore.setGameActionState({ actionId: 'lift', phase: 'cooldown_wait', serverTimeMs: 10000,
+    cooldowns: [{ actionId: 'lift', startedAtMs: 10000, expiresAtMs: 12000 }] })
+  await nextTick()
+  assert.deepEqual(gameStore.actionProgress, { total: 0, current: 0 })
+  assert.equal(frames.size, 1)
+  assert.equal(overlays(root).length, 1)
+  assert.equal(overlays(hotbarRoot).length, 2)
+  const beforeBlockedClicks = requests.length
+  buttons[0].props.onClick()
+  slots[0].props.onClick()
+  assert.equal(requestGameAction('lift', actions, true, sendAction, cooldownStore.isCoolingDown), false)
+  assert.equal(requests.length, beforeBlockedClicks)
+  assert.equal(buttons[0].props['aria-disabled'], true)
+  assert.equal(slots[0].props['aria-disabled'], true)
+  // A cooldown does not disable assignment or clearing.
+  buttons[0].props.onDragstart({ dataTransfer: { setData: (type, value) => transferred.set(type, value) } })
+  assert.equal(transferred.get('application/x-origin-action-id'), 'game:lift')
+  const lateRoot = hostNode('root')
+  await advanceFrame(1000)
+  const lateApp = renderer.createApp(withSsrContext(() => h(ActionIcon, { actionId: 'game:lift' })))
+  lateApp.mount(lateRoot)
+  await nextTick()
+  for (const icon of [...overlays(root), ...overlays(hotbarRoot), ...overlays(lateRoot)]) {
+    assert.match(icon.props.style.background, /0\.5turn/)
+  }
+  assert.equal(frames.size, 1)
+  lateApp.unmount()
+  assert.equal(frames.size, 1)
+  // Closing/reopening a panel must not restart its cooldown.
+  actionApp.unmount()
+  await advanceFrame(1500)
+  const reopenedRoot = hostNode('root')
+  const reopenedApp = renderer.createApp(withSsrContext(() => h(ActionIcon, { actionId: 'game:lift' })))
+  reopenedApp.mount(reopenedRoot)
+  await nextTick()
+  assert.match(overlays(reopenedRoot)[0].props.style.background, /0\.75turn/)
+  // Input checks remain current while a hidden tab has not run its next frame.
+  monotonicMs = 2000
+  assert.equal(cooldownStore.isCoolingDown('lift'), false)
+  await advanceFrame(2000)
+  assert.equal(overlays(hotbarRoot).length, 0)
+  assert.equal(overlays(reopenedRoot).length, 0)
+  assert.equal(frames.size, 0)
+  // A delayed snapshot uses elapsed time rather than restarting a full duration.
+  gameStore.setGameActionState({ phase: 'idle', serverTimeMs: 11500,
+    cooldowns: [{ actionId: 'lift', startedAtMs: 10000, expiresAtMs: 12000 }] })
+  await nextTick()
+  assert.match(overlays(reopenedRoot)[0].props.style.background, /0\.75turn/)
+  assert.equal(frames.size, 1)
+  // Initialized TimeSync wins over the packet fallback.
+  const originalDateNow = Date.now
+  Date.now = () => 50000
+  timeSync.onPong(50000, 11750)
+  await advanceFrame(2000)
+  assert.equal(cooldownStore.progress('lift'), 0.875)
+  Date.now = originalDateNow
+  timeSync.reset()
+  gameStore.reset()
+  await nextTick()
+  assert.equal(frames.size, 0)
+  assert.equal(overlays(reopenedRoot).length, 0)
+  reopenedApp.unmount()
+  hotbarApp.unmount()
+  globalThis.performance = originalPerformance
+  delete globalThis.requestAnimationFrame
+  delete globalThis.cancelAnimationFrame
+  console.log('Action menu, activation, drag, hotbar, cursor, and synchronized cooldown tests passed')
 } finally {
   gameStore?.reset()
   await rm(directory, { recursive: true, force: true })

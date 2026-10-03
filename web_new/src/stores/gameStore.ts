@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useActionCooldownStore } from '@/stores/actionCooldownStore'
 import { ref, computed } from 'vue'
 import { proto } from '@/network/proto/packets.js'
 import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERVAL_MS, CHAT_MAX_MESSAGES } from '@/constants/chat'
@@ -188,7 +189,9 @@ export const useGameStore = defineStore('game', () => {
   const buildStateList = ref<BuildStateItemState[]>([])
   const liftCarryActive = ref(false)
   const liftCarriedEntityId = ref<number | null>(null)
+  const actionCooldowns = useActionCooldownStore()
   const gameActions = ref<proto.IActionDefinition[]>([])
+  const gameActionsById = computed(() => new Map(gameActions.value.map(action => [action.id || '', action])))
   const gameActionListLoaded = ref(false)
   const gameActionState = ref<proto.IS2C_ActionStateChanged>({ actionId: '', phase: 'idle', cursor: '' })
   const characterAttributes = ref<CharacterAttributeViewItem[]>(defaultCharacterAttributes())
@@ -388,6 +391,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function clearGameActions() {
+    actionCooldowns.reset()
     gameActions.value = []
     gameActionListLoaded.value = false
     gameActionState.value = { actionId: '', phase: 'idle', cursor: '' }
@@ -400,6 +404,8 @@ export const useGameStore = defineStore('game', () => {
 
   function setGameActionState(state: proto.IS2C_ActionStateChanged) {
     gameActionState.value = state
+    actionCooldowns.setSnapshot(state)
+    if (state.phase === 'cooldown_wait') clearActionProgress()
   }
 
   // Chunk actions
@@ -1142,6 +1148,7 @@ export const useGameStore = defineStore('game', () => {
     liftCarryActive,
     liftCarriedEntityId,
     gameActions,
+    gameActionsById,
     gameActionListLoaded,
     gameActionState,
     characterAttributes,

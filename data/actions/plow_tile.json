@@ -3,6 +3,7 @@
   "actions": [
     {
       "id": "plow_tile",
+      "cooldown": 20000,
       "presentation": {
         "label": "Plow tile",
         "menuIcon": "/assets/cursor/dig.png"

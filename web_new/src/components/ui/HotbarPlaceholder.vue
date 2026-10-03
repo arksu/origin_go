@@ -1,26 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import ActionIcon from './ActionIcon.vue'
+import { useActionPresentation } from '@/composables/useActionPresentation'
 import {
-  getActionIconPath,
-  getActionLabel,
-  getActionShortLabel,
   isHotbarActionId,
   type HotbarActionId,
   type HotbarState,
 } from '@/game/hud/actionCatalog'
-import type { proto } from '@/network/proto/packets.js'
 
 const props = withDefaults(defineProps<{
   assignments: HotbarState
   draggingActionId?: HotbarActionId | null
   touchHoverSlot?: number | null
-  serverActions?: proto.IActionDefinition[]
-  actionListLoaded?: boolean
 }>(), {
   draggingActionId: null,
   touchHoverSlot: null,
-  serverActions: () => [],
-  actionListLoaded: false,
 })
 
 const emit = defineEmits<{
@@ -46,26 +40,19 @@ function parseActionIdFromDataTransfer(event: DragEvent): HotbarActionId | null 
   return isHotbarActionId(actionRaw) ? actionRaw : null
 }
 
-function serverAction(id: HotbarActionId): proto.IActionDefinition | undefined {
-  if (!id.startsWith('game:')) return undefined
-  return props.serverActions.find(action => action.id === id.slice(5))
-}
+const { presentation, canActivate } = useActionPresentation()
 
 function slotLabel(id: HotbarActionId): string {
-  if (!id.startsWith('game:')) return getActionLabel(id as Parameters<typeof getActionLabel>[0])
-  return serverAction(id)?.label || (props.actionListLoaded ? 'Unavailable action' : 'Loading action')
-}
-
-function slotIcon(id: HotbarActionId): string {
-  return id.startsWith('game:') ? (serverAction(id)?.menuIcon || '') : getActionIconPath(id as Parameters<typeof getActionIconPath>[0])
-}
-
-function slotShortLabel(id: HotbarActionId): string {
-  return id.startsWith('game:') ? (serverAction(id)?.label || '').slice(0, 3).toUpperCase() : getActionShortLabel(id as Parameters<typeof getActionShortLabel>[0])
+  return presentation(id).label
 }
 
 function slotVisible(id: HotbarActionId | null | undefined): boolean {
-  return !!id && (!id.startsWith('game:') || !!serverAction(id))
+  return !!id && presentation(id).available
+}
+
+function slotCoolingDown(slotIndex: number): boolean {
+  const id = props.assignments[slotIndex]
+  return !!id && presentation(id).coolingDown
 }
 
 function onDrop(event: DragEvent, slotIndex: number): void {
@@ -82,7 +69,8 @@ function onActivate(slotIndex: number): void {
     longPressTriggered.value = false
     return
   }
-  if (slotVisible(props.assignments[slotIndex])) emit('activate', slotIndex)
+  const id = props.assignments[slotIndex]
+  if (id && canActivate(id)) emit('activate', slotIndex)
 }
 
 function clearLongPressTimer(): void {
@@ -179,7 +167,8 @@ function onSlotPointerLeave(): void {
         :class="{ 'hotbar__slot--drop-target': isDropTarget(slotIndex) }"
         type="button"
         :data-hotbar-slot="slotIndex"
-        :aria-label="`Hotbar slot ${slotIndex + 1}`"
+        :aria-label="slotTooltip(slotIndex)"
+        :aria-disabled="slotCoolingDown(slotIndex) || undefined"
         @dragover.prevent
         @drop="onDrop($event, slotIndex)"
         @click="onActivate(slotIndex)"
@@ -193,13 +182,8 @@ function onSlotPointerLeave(): void {
       >
         <span class="hotbar__slot-index">{{ slotIndex + 1 }}</span>
         <template v-if="slotVisible(assignments[slotIndex])">
-          <img
-            class="hotbar__slot-icon"
-            :src="slotIcon(assignments[slotIndex]!)"
-            :alt="slotShortLabel(assignments[slotIndex]!)"
-            draggable="false"
-          >
-          <span class="hotbar__slot-label">{{ slotShortLabel(assignments[slotIndex]!) }}</span>
+          <ActionIcon class="hotbar__slot-icon" :action-id="assignments[slotIndex]!" />
+          <span class="hotbar__slot-label">{{ presentation(assignments[slotIndex]!).shortLabel }}</span>
         </template>
       </button>
     </div>
@@ -214,7 +198,8 @@ function onSlotPointerLeave(): void {
         :class="{ 'hotbar__slot--drop-target': isDropTarget(slotIndex) }"
         type="button"
         :data-hotbar-slot="slotIndex"
-        :aria-label="`Hotbar slot ${slotIndex + 1}`"
+        :aria-label="slotTooltip(slotIndex)"
+        :aria-disabled="slotCoolingDown(slotIndex) || undefined"
         @dragover.prevent
         @drop="onDrop($event, slotIndex)"
         @click="onActivate(slotIndex)"
@@ -228,13 +213,8 @@ function onSlotPointerLeave(): void {
       >
         <span class="hotbar__slot-index">{{ slotIndex === 9 ? '0' : slotIndex + 1 }}</span>
         <template v-if="slotVisible(assignments[slotIndex])">
-          <img
-            class="hotbar__slot-icon"
-            :src="slotIcon(assignments[slotIndex]!)"
-            :alt="slotShortLabel(assignments[slotIndex]!)"
-            draggable="false"
-          >
-          <span class="hotbar__slot-label">{{ slotShortLabel(assignments[slotIndex]!) }}</span>
+          <ActionIcon class="hotbar__slot-icon" :action-id="assignments[slotIndex]!" />
+          <span class="hotbar__slot-label">{{ presentation(assignments[slotIndex]!).shortLabel }}</span>
         </template>
       </button>
     </div>

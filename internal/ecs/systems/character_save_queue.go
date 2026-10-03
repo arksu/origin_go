@@ -207,6 +207,11 @@ func characterSaveParams(batch []*CharacterSnapshot) (repository.UpdateCharacter
 		characters.Exps = append(characters.Exps, snapshot.Exp)
 		characters.Skills = append(characters.Skills, snapshot.Skills)
 		characters.Discovery = append(characters.Discovery, snapshot.Discovery)
+		cooldowns := snapshot.ActionCooldowns
+		if cooldowns == "" {
+			cooldowns = "{}"
+		}
+		characters.ActionCooldowns = append(characters.ActionCooldowns, cooldowns)
 		for _, inventory := range snapshot.Inventories {
 			key := inventoryKey{inventory.CharacterID, inventory.Kind, inventory.InventoryKey}
 			if index, exists := inventoryIndexes[key]; exists {

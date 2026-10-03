@@ -105,6 +105,7 @@ SET
     exp = v.exp,
     skills = v.skills,
     discovery = v.discovery,
+    action_cooldowns = v.action_cooldowns,
     last_save_at = now(),
     updated_at = now()
 FROM (
@@ -120,7 +121,8 @@ FROM (
              unnest(sqlc.arg(attributes)::text[])::jsonb as attributes,
              unnest(sqlc.arg(exps)::text[])::jsonb as exp,
              unnest(sqlc.arg(skills)::text[])::jsonb as skills,
-             unnest(sqlc.arg(discovery)::text[])::jsonb as discovery
+             unnest(sqlc.arg(discovery)::text[])::jsonb as discovery,
+             unnest(sqlc.arg(action_cooldowns)::text[])::jsonb as action_cooldowns
      ) AS v
 WHERE character.id = v.id
   AND character.deleted_at IS NULL;

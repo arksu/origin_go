@@ -312,6 +312,11 @@ func (g *Game) buildPlayerSetupFunc(
 	profileDiscovery []string,
 ) func(*ecs.World, types.Handle) error {
 	return func(w *ecs.World, h types.Handle) error {
+		cooldowns, err := loadCharacterActionCooldowns(character.ActionCooldowns, ecs.GetResource[ecs.TimeState](w).UnixMs)
+		if err != nil {
+			return fmt.Errorf("character %d: %w", character.ID, err)
+		}
+		ecs.AddComponent(w, h, cooldowns)
 		playerDef, _ := objectdefs.Global().GetByKey("player")
 		var playerTypeID uint32
 		var playerBehaviors []string
@@ -512,6 +517,16 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 			zap.Int64("character_id", int64(playerEntityID)),
 		)
 		return false
+	}
+
+	if !ecs.HasComponent[components.ActionCooldowns](shard.world, handle) {
+		cooldowns, err := loadCharacterActionCooldowns(character.ActionCooldowns, ecs.GetResource[ecs.TimeState](shard.world).UnixMs)
+		if err != nil {
+			g.logger.Error("Failed to restore action cooldowns", zap.Int64("character_id", character.ID), zap.Error(err))
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Failed to restore action cooldowns")
+			return true
+		}
+		ecs.AddComponent(shard.world, handle, cooldowns)
 	}
 
 	// Remove from detached map (cancel expiration timer)

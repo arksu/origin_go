@@ -131,19 +131,21 @@ func (service *ActionService) SetSoundEventService(sounds *SoundEventService) {
 }
 
 func (service *ActionService) State(world *ecs.World, playerHandle types.Handle) *netproto.S2C_ActionStateChanged {
+	state := &netproto.S2C_ActionStateChanged{Phase: "idle", ServerTimeMs: ecs.GetResource[ecs.TimeState](world).UnixMs, Cooldowns: service.cooldownSnapshot(world, playerHandle)}
 	active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)
 	if !exists {
-		return &netproto.S2C_ActionStateChanged{Phase: "idle"}
+		return state
 	}
 	definition, found := service.definitions.Get(active.ActionID)
 	if !found {
-		return &netproto.S2C_ActionStateChanged{Phase: "idle"}
+		return state
 	}
 	cursor := ""
 	if active.Phase == components.GameActionSelecting {
 		cursor = definition.Target.Cursor
 	}
-	return &netproto.S2C_ActionStateChanged{ActionId: active.ActionID, Phase: string(active.Phase), Cursor: cursor}
+	state.ActionId, state.Phase, state.Cursor = active.ActionID, string(active.Phase), cursor
+	return state
 }
 
 func (service *ActionService) SendState(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
@@ -169,7 +171,7 @@ func (service *ActionService) SendList(playerID types.EntityID) {
 			TargetKind: string(definition.Target.Kind), Cursor: definition.Target.Cursor,
 			RequiredSkills: append([]string(nil), definition.Requirements.Skills...), RequiredEquipment: requirements,
 			Ticks: uint32(definition.Execution.Ticks), Stamina: definition.Execution.Stamina,
-			IsRepeatable: definition.Repeatable(),
+			IsRepeatable: definition.Repeatable(), CooldownMs: definition.Cooldown,
 		})
 	}
 	service.sender.SendActionList(playerID, list)
@@ -194,11 +196,16 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 		}
 	} else if active.TargetID != 0 && !world.Alive(world.GetHandleByEntityID(active.TargetID)) {
 		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
+	} else if active.Phase == components.GameActionCooldownWait {
+		service.resumeAfterCooldown(world, playerID, playerHandle, definition, active)
 	}
 }
 
 func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) {
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	if service.rejectCooldown(world, playerID, playerHandle, id) {
 		return
 	}
 	if active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle); exists {
@@ -216,9 +223,6 @@ func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID
 	if definition.Target.Kind == actiondefs.TargetNone {
 		active.Phase = components.GameActionExecuting
 		ecs.AddComponent(world, playerHandle, active)
-		if definition.Execution.Ticks > 0 {
-			service.SendState(world, playerID, playerHandle)
-		}
 		service.beginExecution(world, playerID, playerHandle, definition, active, ActionTarget{})
 		return
 	}
@@ -243,6 +247,9 @@ func (service *ActionService) availableDefinition(world *ecs.World, playerID typ
 // StartTargetedOnce accepts a server-routed target without arming a selection or retry.
 func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string, targetID types.EntityID, targetHandle types.Handle, x, y float64) {
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	if service.rejectCooldown(world, playerID, playerHandle, id) {
 		return
 	}
 	service.Cancel(world, playerID, playerHandle)
@@ -307,6 +314,9 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 	if definition.Target.Kind != actiondefs.TargetObject && definition.Target.Kind != actiondefs.TargetTile {
 		return false
 	}
+	if service.rejectCooldown(world, playerID, playerHandle, definition.ID) {
+		return true
+	}
 	var reason string
 	target, reason = service.normalizeTarget(world, definition, target)
 	if reason != "" {
@@ -333,13 +343,13 @@ func (service *ActionService) startTarget(world *ecs.World, playerID types.Entit
 	}
 	active.Phase = components.GameActionExecuting
 	ecs.AddComponent(world, playerHandle, active)
-	if definition.Execution.Ticks > 0 {
-		service.SendState(world, playerID, playerHandle)
-	}
 	service.beginExecution(world, playerID, playerHandle, definition, active, target)
 }
 
 func (service *ActionService) beginExecution(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget) {
+	if service.rejectCooldown(world, playerID, playerHandle, definition.ID) {
+		return
+	}
 	if definition.Execution.Ticks > 0 {
 		kind := components.CyclicActionTargetSelf
 		if definition.Target.Kind == actiondefs.TargetObject {
@@ -351,6 +361,7 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 			HasTargetPosition: definition.Target.Kind == actiondefs.TargetTile, TargetX: target.X, TargetY: target.Y,
 			CycleDurationTicks: uint32(definition.Execution.Ticks), CycleIndex: 1, StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
 		}, actionanimationdefs.Source{Kind: "menu", ID: definition.ID})
+		service.SendState(world, playerID, playerHandle)
 		return
 	}
 	service.executeHandler(world, playerID, playerHandle, definition, active, target)
@@ -359,6 +370,9 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 func (service *ActionService) executeHandler(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget) {
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
 		service.failRequirements(world, playerID, playerHandle, definition, active, reason)
+		return
+	}
+	if service.rejectCooldown(world, playerID, playerHandle, definition.ID) {
 		return
 	}
 	result := service.handlers[definition.ID].Start(world, playerID, playerHandle, target, active.Generation)
@@ -393,13 +407,16 @@ func (service *ActionService) Complete(world *ecs.World, playerID types.EntityID
 	if !exists || active.Generation != generation || active.Phase == components.GameActionSelecting {
 		return
 	}
+	if success && active.Phase == components.GameActionCooldownWait {
+		return
+	}
 	definition, found := service.definitions.Get(active.ActionID)
 	if !found {
 		service.Cancel(world, playerID, playerHandle)
 		return
 	}
 	if success {
-		if !service.chargeStamina(world, playerHandle, definition.Execution.Stamina) {
+		if !service.chargeActionCosts(world, playerHandle, definition) {
 			success, reason = false, "LOW_STAMINA"
 		}
 	}
@@ -412,7 +429,7 @@ func (service *ActionService) completeRepeatingCycle(world *ecs.World, playerID 
 	if !exists || !hasCycle || current != active || cycle.ActionGeneration != active.Generation || !cycle.ActionCompletionStarted {
 		return
 	}
-	if !service.chargeStamina(world, playerHandle, definition.Execution.Stamina) {
+	if !service.chargeActionCosts(world, playerHandle, definition) {
 		service.finishAction(world, playerID, playerHandle, definition, active, false, "LOW_STAMINA")
 		return
 	}
@@ -422,12 +439,14 @@ func (service *ActionService) completeRepeatingCycle(world *ecs.World, playerID 
 		service.finishAction(world, playerID, playerHandle, definition, active, true, "")
 		return
 	}
-	cycle.CycleElapsedTicks = 0
-	cycle.CycleIndex++
-	cycle.StartedTick = ecs.GetResource[ecs.TimeState](world).Tick
-	cycle.ActionCompletionStarted = false
-	ecs.AddComponent(world, playerHandle, cycle)
-	cyclicaction.Continue(world, playerHandle)
+	if service.isOnCooldown(world, playerHandle, definition.ID) {
+		active.Phase = components.GameActionCooldownWait
+		ecs.AddComponent(world, playerHandle, active)
+		cyclicaction.Pause(world, playerHandle)
+		service.SendState(world, playerID, playerHandle)
+		return
+	}
+	service.startNextCycle(world, playerID, playerHandle, definition, active, cycle)
 }
 
 func (service *ActionService) finishAction(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, success bool, reason string) {
@@ -477,11 +496,12 @@ func (service *ActionService) CanCommit(world *ecs.World, playerID types.EntityI
 		return false
 	}
 	active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)
-	if !exists || active.Generation != generation || active.Phase == components.GameActionSelecting {
+	if !exists || active.Generation != generation || (active.Phase == components.GameActionSelecting || active.Phase == components.GameActionCooldownWait) {
 		return false
 	}
 	definition, found := service.definitions.Get(active.ActionID)
-	return found && service.UnavailableReason(world, playerID, playerHandle, definition) == ""
+	return found && service.UnavailableReason(world, playerID, playerHandle, definition) == "" &&
+		!service.isOnCooldown(world, playerHandle, definition.ID)
 }
 
 func (service *ActionService) Cancel(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) {

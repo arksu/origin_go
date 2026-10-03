@@ -100,6 +100,12 @@ func TestPlowWhitelistExactCostAndRepeat(t *testing.T) {
 					t.Fatal("success disarmed plow")
 				}
 				service.HandleArmedClick(world, 1, player, 0, 0, 18, 6)
+				if service.State(world, player).Phase != "selecting" || sender.alerts[len(sender.alerts)-1].ReasonCode != "ACTION_ON_COOLDOWN" {
+					t.Fatal("early retry bypassed the cooldown or disarmed plow")
+				}
+				cooldowns, _ := ecs.GetComponent[components.ActionCooldowns](world, player)
+				ecs.GetResource[ecs.TimeState](world).UnixMs = cooldowns.ByAction["plow_tile"].ExpiresAtMs
+				service.HandleArmedClick(world, 1, player, 0, 0, 18, 6)
 				if service.State(world, player).Phase != "approaching" {
 					t.Fatal("next tile requires reactivation")
 				}
@@ -148,6 +154,9 @@ func TestPlowFailuresHaveNoPartialEffect(t *testing.T) {
 			}
 			if service.State(world, player).Phase != "selecting" || len(sender.alerts) == 0 {
 				t.Fatal("failure did not alert and rearm")
+			}
+			if service.isOnCooldown(world, player, "plow_tile") {
+				t.Fatal("failed plow started cooldown")
 			}
 		})
 	}

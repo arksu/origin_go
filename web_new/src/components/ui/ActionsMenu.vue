@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import ActionIcon from './ActionIcon.vue'
+import { useActionPresentation } from '@/composables/useActionPresentation'
 import type { proto } from '@/network/proto/packets.js'
 import { gameActionHotbarId, type HotbarActionId } from '@/game/hud/actionCatalog'
 
@@ -18,6 +20,8 @@ const emit = defineEmits<{
   touchDragEnd: [payload: { pointerId: number; clientX: number; clientY: number }]
 }>()
 
+const { presentation, canActivate } = useActionPresentation()
+
 const touchPointerId = ref<number | null>(null)
 const touchActionId = ref<HotbarActionId | null>(null)
 const touchStartX = ref(0)
@@ -30,7 +34,7 @@ function onClick(action: proto.IActionDefinition): void {
     suppressClick.value = false
     return
   }
-  if (action.id) emit('activate', action.id)
+  if (action.id && canActivate(gameActionHotbarId(action.id))) emit('activate', action.id)
 }
 
 function onDragStart(event: DragEvent, action: proto.IActionDefinition): void {
@@ -83,9 +87,10 @@ function onPointerUp(event: PointerEvent): void {
       type="button"
       class="actions-menu__action"
       :class="{ 'actions-menu__action--active': action.id === activeActionId && activePhase !== 'idle' }"
-      :aria-label="action.label || action.id || ''"
+      :aria-label="presentation(gameActionHotbarId(action.id || '')).label"
+      :aria-disabled="presentation(gameActionHotbarId(action.id || '')).coolingDown || undefined"
       :aria-pressed="action.id === activeActionId && activePhase !== 'idle'"
-      :title="action.label || action.id || ''"
+      :title="presentation(gameActionHotbarId(action.id || '')).label"
       draggable="true"
       @click="onClick(action)"
       @dragstart="onDragStart($event, action)"
@@ -95,8 +100,8 @@ function onPointerUp(event: PointerEvent): void {
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
     >
-      <img :src="action.menuIcon || ''" :alt="action.label || ''" draggable="false">
-      <span>{{ action.label }}</span>
+      <ActionIcon :action-id="gameActionHotbarId(action.id || '')" />
+      <span>{{ presentation(gameActionHotbarId(action.id || '')).label }}</span>
     </button>
   </div>
 </template>
@@ -135,11 +140,6 @@ function onPointerUp(event: PointerEvent): void {
   touch-action: none;
 }
 
-.actions-menu__action img {
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-}
 
 .actions-menu__action--active {
   border-color: #55c4ff;
