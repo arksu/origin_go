@@ -224,6 +224,7 @@ func (s *PlayerTransferService) detachTransferSource(
 
 	s.game.sendPlayerLeaveWorld(client, req.PlayerID)
 	client.InWorld.Store(false)
+	shard.soundEvents.Detach(playerHandle, client.ID)
 	invalidateEntityVisibility(shard.world, shard.layer, playerHandle, req.PlayerID, shard.EventBus())
 
 	// Reset transient per-player state; carry is preserved only via transfer participants.

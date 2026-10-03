@@ -180,7 +180,7 @@ func TestPlayerSetupFailureRollsBackBeforeEnteringWorld(t *testing.T) {
 
 func connectPlayerSpawnTestClient(t *testing.T) (*network.Client, net.Conn) {
 	t.Helper()
-	server := network.NewServer(&config.NetworkConfig{ReadTimeout: time.Minute, WriteTimeout: time.Second}, &config.GameConfig{SendChannelBuffer: 32}, zap.NewNop())
+	server := network.NewServer(&config.NetworkConfig{ReadTimeout: time.Minute, WriteTimeout: time.Second}, &config.GameConfig{SendChannelBuffer: 32, Audio: config.DefaultAudioConfig()}, zap.NewNop())
 	connected := make(chan *network.Client, 1)
 	server.SetOnConnect(func(client *network.Client) { connected <- client })
 	mux := http.NewServeMux()

@@ -1,206 +1,246 @@
-import sounds, { type SoundDef, type SoundRegistry } from './sounds'
-import { Howl, Howler } from 'howler'
+import { Howl, type HowlOptions } from 'howler'
 import { useAudioSettingsStore } from '@/stores/audioSettingsStore'
+import type { SoundProfile } from '../types/soundDefs'
+import { timeSync } from '@/network/TimeSync'
+import { loadActorCatalog, type ActorCatalog } from './actors/ActorAssetCatalog'
+import { AUDIO_PLAYBACK } from './audioConfig'
 
-function clamp01(value: number): number {
-  if (value < 0) return 0
-  if (value > 1) return 1
-  return value
+export interface SoundSample {
+  state(): string
+  load(): unknown
+  play(): number
+  stop(id?: number): unknown
+  volume(value: number, id: number): unknown
+  once(event: string, callback: (...args: unknown[]) => void, id?: number): unknown
+  off(event: string, callback: (...args: unknown[]) => void, id?: number): unknown
+}
+export interface PlaybackOptions {
+  sourceId?: string | number
+  streamEpoch?: number
+  deadlineServerMs?: number
+  // Local contacts are consumed when samples are unavailable, never queued.
+  waitForLoad?: boolean
+}
+interface Voice {
+  token: number
+  profile: SoundProfile
+  source: string
+  sample: SoundSample
+  options: PlaybackOptions
+  session: number
+  gain: number
+  id?: number
+  loaded?: (...args: unknown[]) => void
+  failed?: (...args: unknown[]) => void
+  finished?: (...args: unknown[]) => void
+  started?: (...args: unknown[]) => void
+  nativeStarted?: boolean
+}
+interface AudioSettings { enabled: boolean; masterVolume: number; sfxVolume: number }
+export interface SoundManagerDependencies {
+  createSample?: (options: HowlOptions) => SoundSample
+  settings?: () => AudioSettings
+  serverNow?: () => number
+  maxVoices?: number
+  diagnostics?: boolean
 }
 
 export class SoundManager {
-  private readonly soundDefs: SoundRegistry = sounds
-  private readonly missingSoundKeys = new Set<string>()
-  private readonly howlBySoundAndFile = new Map<string, Howl>()
-  private readonly roundRobinStateBySoundKey = new Map<string, RoundRobinState>()
+  private profiles: Readonly<Record<string, SoundProfile>> = {}
+  private readonly samples = new Map<string, SoundSample>()
+  private readonly fileCursors = new Map<string, number>()
+  private readonly voices = new Map<number, Voice>()
+  private readonly missingKeys = new Set<string>()
+  private readonly feedbackKeys = new Map<string, string>()
+  private catalogPromise?: Promise<ActorCatalog>
+  private token = 0
+  private session = 0
+  private streamEpoch = 0
+  private readonly createSample: (options: HowlOptions) => SoundSample
+  private readonly settings: () => AudioSettings
+  private readonly serverNow: () => number
+  private readonly maxVoices: number
+  private readonly diagnostics: boolean
+  readonly metrics = { played: 0, invalid: 0, stale: 0, unloadedLocal: 0, voiceLimit: 0, failed: 0 }
 
-  play(soundKey: string, distanceVolumeMultiplier = 1): void {
-    const normalizedKey = soundKey.trim()
-    if (!normalizedKey) return
+  constructor(dependencies: SoundManagerDependencies = {}) {
+    this.createSample = dependencies.createSample ?? (options => new Howl(options) as unknown as SoundSample)
+    this.settings = dependencies.settings ?? (() => useAudioSettingsStore())
+    this.serverNow = dependencies.serverNow ?? (() => timeSync.estimateServerNowMs())
+    this.maxVoices = dependencies.maxVoices ?? AUDIO_PLAYBACK.maxVoices
+    this.diagnostics = dependencies.diagnostics ?? AUDIO_PLAYBACK.diagnostics
+    if (!Number.isSafeInteger(this.maxVoices) || this.maxVoices < 1) throw new Error('Invalid global audio voice budget')
+  }
 
-    console.log('[SoundManager] play requested', {
-      soundKey: normalizedKey,
-      howlerVolume: Howler.volume(),
-      audioState: Howler.ctx?.state,
+  initialize(): Promise<ActorCatalog> {
+    return this.catalogPromise ??= loadActorCatalog().then(catalog => {
+      this.configure(catalog.sounds ?? {})
+      return catalog
     })
+  }
 
-    const soundDef = this.soundDefs[normalizedKey]
-    if (!soundDef) {
-      if (!this.missingSoundKeys.has(normalizedKey)) {
-        this.missingSoundKeys.add(normalizedKey)
-        console.warn(`[SoundManager] Sound key not found: ${normalizedKey}`)
+  configure(profiles: Readonly<Record<string, SoundProfile>>): void {
+    this.reset()
+    this.profiles = profiles
+    this.feedbackKeys.clear()
+    for (const profile of Object.values(profiles)) {
+      if (profile.feedback_trigger) this.feedbackKeys.set(profile.feedback_trigger, profile.key)
+      // Prepare metadata and start fetching before action/contact markers arrive.
+      for (const file of profile.files) this.sample(profile.key, file)
+    }
+  }
+
+  setStreamEpoch(epoch: number): void {
+    this.reset()
+    this.streamEpoch = epoch
+  }
+
+  reset(): void {
+    this.session++
+    for (const voice of [...this.voices.values()]) {
+      if (voice.id !== undefined) voice.sample.stop(voice.id)
+      this.release(voice)
+    }
+  }
+
+  profile(key: string): SoundProfile | undefined { return Object.hasOwn(this.profiles, key) ? this.profiles[key] : undefined }
+  get activeVoices(): number { return this.voices.size }
+  isLoaded(key: string): boolean {
+    const profile = this.profile(key)
+    return !!profile && profile.files.some(file => this.samples.get(`${key}:${file}`)?.state() === 'loaded')
+  }
+
+  playFeedback(trigger: string, ownerId: number): void {
+    const key = this.feedbackKeys.get(trigger)
+    if (key) this.play(key, 1, { sourceId: ownerId })
+  }
+
+  play(key: string, gain = 1, options: PlaybackOptions = {}): boolean {
+    const profile = this.profile(key)
+    if (!profile || !Number.isFinite(gain) || gain < 0 || gain > 1) {
+      this.metrics.invalid++
+      if (!profile && !this.missingKeys.has(key)) {
+        this.missingKeys.add(key)
+        console.warn(`[SoundManager] Unknown sound profile: ${key}`)
       }
-      return
+      return false
     }
-
-    const files = this.validFiles(soundDef)
-    if (files.length === 0) {
-      console.warn(`[SoundManager] No files for sound key: ${normalizedKey}`)
-      return
+    if (gain === 0 || !this.settings().enabled) return false
+    for (const voice of this.voices.values()) {
+      if (!voice.nativeStarted && !this.current(voice)) { this.metrics.stale++; this.release(voice) }
     }
-
-    const audioSettings = useAudioSettingsStore()
-    if (!audioSettings.enabled) {
-      return
+    const source = String(options.sourceId ?? 'unspecified')
+    let profileVoices = 0, sourceVoices = 0
+    for (const voice of this.voices.values()) {
+      if (voice.profile.key === key) {
+        profileVoices++
+        if (voice.source === source) sourceVoices++
+      }
     }
+    if (this.voices.size >= this.maxVoices || profileVoices >= profile.max_voices || sourceVoices >= profile.max_voices_per_source) {
+      this.metrics.voiceLimit++
+      return false
+    }
+    const cursor = this.fileCursors.get(key) ?? 0
+    const file = profile.files[cursor % profile.files.length]!
+    this.fileCursors.set(key, cursor + 1)
+    const sample = this.sample(key, file)
+    // A loaded HTML5 sample can still wait for its native play Promise; quiet cues must not catch up later.
+    const playbackOptions = profile.mode === 'local' && options.deadlineServerMs === undefined
+      ? { ...options, deadlineServerMs: this.serverNow() + AUDIO_PLAYBACK.maxPresentationGapMs }
+      : options
+    const voice: Voice = { token: ++this.token, profile, source, sample, options: playbackOptions, session: this.session, gain }
+    if (!this.current(voice)) { this.metrics.stale++; return false }
+    if (sample.state() !== 'loaded' && !options.waitForLoad) { this.metrics.unloadedLocal++; return false }
+    this.voices.set(voice.token, voice)
+    if (sample.state() === 'loaded') return this.start(voice)
+    voice.loaded = () => this.start(voice)
+    voice.failed = () => { this.metrics.failed++; this.release(voice) }
+    sample.once('load', voice.loaded)
+    sample.once('loaderror', voice.failed)
+    if (sample.state() === 'unloaded') {
+      try { sample.load() }
+      catch (error) { this.metrics.failed++; this.release(voice); console.warn(`[SoundManager] Loading failed: ${key}`, error); return false }
+    }
+    return true
+  }
 
-    const selected = this.nextRoundRobinFile(normalizedKey, files)
-    const selectedFile = selected.file
-    if (!selectedFile) return
+  private current(voice: Voice): boolean {
+    return voice.session === this.session &&
+      (voice.options.streamEpoch === undefined || voice.options.streamEpoch === this.streamEpoch) &&
+      (voice.options.deadlineServerMs === undefined || this.serverNow() <= voice.options.deadlineServerMs)
+  }
 
-    const howl = this.getHowl(normalizedKey, selectedFile)
-    const volume = clamp01(
-      audioSettings.masterVolume *
-      audioSettings.sfxVolume *
-      this.defVolume(soundDef) *
-      clamp01(distanceVolumeMultiplier),
-    )
-    console.log('[SoundManager] play resolved', {
-      soundKey: normalizedKey,
-      selectedFile,
-      selectedIndex: selected.fileIndex,
-      selectedRound: selected.round,
-      distanceVolumeMultiplier,
-      volume,
-      enabled: audioSettings.enabled,
-      masterVolume: audioSettings.masterVolume,
-      sfxVolume: audioSettings.sfxVolume,
-    })
-
+  private start(voice: Voice): boolean {
+    if (!this.voices.has(voice.token)) return false
+    if (!this.current(voice)) { this.metrics.stale++; this.release(voice); return false }
+    const volume = this.playbackVolume(voice)
+    if (volume <= 0) { this.release(voice); return false }
+    this.clearLoadCallbacks(voice)
     try {
-      howl.volume(volume)
-      if (howl.state() === 'unloaded') {
-        howl.load()
+      // Only loaded samples reach play(), so Howler cannot replay stale queued events.
+      const id = voice.sample.play()
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Audio backend returned an invalid playback ID')
+      voice.id = id
+      const started = () => {
+        voice.nativeStarted = true
+        const currentVolume = this.playbackVolume(voice)
+        if (!this.voices.has(voice.token) || !this.current(voice) || currentVolume <= 0) {
+          if (this.voices.has(voice.token) && !this.current(voice)) this.metrics.stale++
+          this.release(voice)
+          voice.sample.stop(id)
+          return
+        }
+        // HTML5 play() may hold Howler's lock until its native Promise resolves.
+        // Reapply by ID after that lock clears instead of trusting its volume queue.
+        voice.sample.volume(currentVolume, id)
       }
-      const soundID = howl.play()
-      console.log('[SoundManager] howl.play called', {
-        soundKey: normalizedKey,
-        soundID,
-        howlState: howl.state(),
-      })
-    } catch (err: unknown) {
-      console.warn(`[SoundManager] Failed to play sound: ${normalizedKey}`, err)
+      voice.started = started
+      voice.sample.once('play', started, id)
+      voice.sample.volume(volume, id)
+      const finished = () => { voice.nativeStarted = true; this.release(voice) }
+      voice.finished = finished
+      voice.sample.once('end', finished, id)
+      voice.sample.once('stop', finished, id)
+      voice.sample.once('playerror', finished, id)
+      this.metrics.played++
+      if (this.diagnostics) console.debug('[SoundManager] playing', { key: voice.profile.key, id, gain: voice.gain, source: voice.source })
+      return true
+    } catch (error) {
+      this.metrics.failed++
+      this.release(voice)
+      console.warn(`[SoundManager] Playback failed: ${voice.profile.key}`, error)
+      return false
     }
   }
 
-  private validFiles(soundDef: SoundDef): string[] {
-    if (!Array.isArray(soundDef.files)) {
-      return []
-    }
-
-    return soundDef.files
-      .map((file) => file.trim())
-      .filter((file) => file.length > 0)
+  private playbackVolume(voice: Voice): number {
+    const settings = this.settings()
+    const volume = settings.masterVolume * settings.sfxVolume * voice.profile.volume * voice.gain
+    return settings.enabled && Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0
   }
 
-  private defVolume(soundDef: SoundDef): number {
-    if (typeof soundDef.volume !== 'number' || Number.isNaN(soundDef.volume)) {
-      return 1
-    }
-    return clamp01(soundDef.volume)
+  private clearLoadCallbacks(voice: Voice): void {
+    if (voice.loaded) voice.sample.off('load', voice.loaded)
+    if (voice.failed) voice.sample.off('loaderror', voice.failed)
+    voice.loaded = undefined; voice.failed = undefined
   }
-
-  private resolveAssetPath(filePath: string): string {
-    if (filePath.startsWith('/') || filePath.startsWith('http://') || filePath.startsWith('https://')) {
-      return filePath
-    }
-    return `/assets/game/${filePath}`
+  private release(voice: Voice): void {
+    this.clearLoadCallbacks(voice)
+    // Keep the one-shot native-start guard through a reset if play() is still pending.
+    if (voice.started && voice.nativeStarted && voice.id !== undefined) voice.sample.off('play', voice.started, voice.id)
+    if (voice.finished && voice.id !== undefined) for (const event of ['end', 'stop', 'playerror']) voice.sample.off(event, voice.finished, voice.id)
+    this.voices.delete(voice.token)
   }
-
-  private getHowl(soundKey: string, filePath: string): Howl {
-    const cacheKey = `${soundKey}:${filePath}`
-    const cached = this.howlBySoundAndFile.get(cacheKey)
-    if (cached) {
-      return cached
+  private sample(key: string, file: string): SoundSample {
+    const identity = `${key}:${file}`
+    let sample = this.samples.get(identity)
+    if (!sample) {
+      sample = this.createSample({ src: [`/assets/game/${file}`], preload: true, html5: true, volume: 0,
+        onloaderror: (_id, error) => { console.warn(`[SoundManager] Cannot load ${file}`, error) } })
+      this.samples.set(identity, sample)
     }
-
-    const howl = new Howl({
-      src: [this.resolveAssetPath(filePath)],
-      preload: true,
-      html5: true,
-      onload: () => {
-        console.log('[SoundManager] howl loaded', { soundKey, filePath })
-      },
-      onplay: (soundID: number) => {
-        console.log('[SoundManager] howl playing', { soundKey, filePath, soundID })
-      },
-      onloaderror: (_, error) => {
-        console.warn('[SoundManager] howl load error', { soundKey, filePath, error })
-      },
-      onplayerror: (soundID, error) => {
-        console.warn('[SoundManager] howl play error', { soundKey, filePath, soundID, error })
-      },
-      onend: (soundID) => {
-        console.log('[SoundManager] howl ended', { soundKey, filePath, soundID })
-      },
-    })
-    this.howlBySoundAndFile.set(cacheKey, howl)
-    return howl
-  }
-
-  private nextRoundRobinFile(soundKey: string, files: string[]): { file: string; fileIndex: number; round: number } {
-    let state = this.roundRobinStateBySoundKey.get(soundKey)
-    if (!state || state.order.length !== files.length) {
-      state = {
-        round: 0,
-        cursor: 0,
-        order: this.buildDeterministicOrder(files.length, soundKey, 0),
-      }
-      this.roundRobinStateBySoundKey.set(soundKey, state)
-    }
-
-    if (state.cursor >= state.order.length) {
-      state.round++
-      state.cursor = 0
-      state.order = this.buildDeterministicOrder(files.length, soundKey, state.round)
-    }
-
-    const fileIndex = state.order[state.cursor] ?? 0
-    state.cursor++
-    return {
-      file: files[fileIndex] ?? '',
-      fileIndex,
-      round: state.round,
-    }
-  }
-
-  private buildDeterministicOrder(length: number, soundKey: string, round: number): number[] {
-    const order = Array.from({ length }, (_, index) => index)
-    let seed = this.seedFromString(`${soundKey}:${round}`)
-
-    for (let index = length - 1; index > 0; index--) {
-      seed = this.nextPseudoRandom(seed)
-      const swapIndex = seed % (index + 1)
-      const current = order[index] ?? 0
-      order[index] = order[swapIndex] ?? 0
-      order[swapIndex] = current
-    }
-
-    return order
-  }
-
-  private seedFromString(input: string): number {
-    let hash = 2166136261
-    for (let index = 0; index < input.length; index++) {
-      hash ^= input.charCodeAt(index)
-      hash = Math.imul(hash, 16777619)
-    }
-    return hash >>> 0
-  }
-
-  private nextPseudoRandom(seed: number): number {
-    let value = seed || 1
-    value ^= value << 13
-    value ^= value >>> 17
-    value ^= value << 5
-    return value >>> 0
+    return sample
   }
 }
-
 export const soundManager = new SoundManager()
-
-interface RoundRobinState {
-  round: number
-  cursor: number
-  order: number[]
-}

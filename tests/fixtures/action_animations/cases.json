@@ -2280,5 +2280,691 @@
         }
       ]
     }
+  },
+  {
+    "name": "sound cue target",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0.6,
+              "sound_key": "chop",
+              "source": "target"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue completion",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 1,
+              "sound_key": "chop",
+              "source": "target"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue empty",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue duplicate ID",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0.6,
+              "sound_key": "chop",
+              "source": "target"
+            },
+            {
+              "id": "impact",
+              "phase": 0.8,
+              "sound_key": "chop",
+              "source": "target"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue duplicate phase",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0.6,
+              "sound_key": "chop",
+              "source": "target"
+            },
+            {
+              "id": "second",
+              "phase": 0.6,
+              "sound_key": "chop",
+              "source": "target"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue zero phase",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0,
+              "sound_key": "chop",
+              "source": "target"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue late phase",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 1.1,
+              "sound_key": "chop",
+              "source": "target"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue unsupported source",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0.6,
+              "sound_key": "chop",
+              "source": "camera"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue unavailable craft target",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "craft",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0.6,
+              "sound_key": "chop",
+              "source": "target"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "sound cue unknown field",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "sample_cycle",
+          "source": {
+            "kind": "context",
+            "namespace": "sample",
+            "id": "perform"
+          },
+          "actor": "character/test_actor",
+          "variants": [
+            {
+              "clip": "sample_a",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            },
+            {
+              "clip": "sample_b",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "test_tool"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "stationary",
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Sample",
+            "duration_ms": 2000,
+            "equipment": []
+          },
+          "unbind_equipment_slots": [
+            "left_hand",
+            "right_hand"
+          ],
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0.6,
+              "sound_key": "chop",
+              "source": "target",
+              "typo": 1
+            }
+          ]
+        }
+      ]
+    }
   }
 ]

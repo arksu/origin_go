@@ -1,6 +1,7 @@
 package components
 
 import (
+	"origin/internal/actionanimationdefs"
 	"origin/internal/ecs"
 	"origin/internal/types"
 )
@@ -16,8 +17,9 @@ type ActiveCyclicAction struct {
 	BehaviorKey      string
 	ActionID         string
 	ActionGeneration uint64
-	CycleSoundKey    string
 	CompleteSoundKey string
+	SoundBinding     *actionanimationdefs.Definition
+	NextSoundCue     int
 
 	TargetKind        CyclicActionTargetKind
 	TargetID          types.EntityID

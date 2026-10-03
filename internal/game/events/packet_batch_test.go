@@ -18,6 +18,7 @@ import (
 	gameworld "origin/internal/game/world"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
+	"origin/internal/sounddefs"
 	"origin/internal/types"
 
 	"github.com/gobwas/ws"
@@ -42,10 +43,15 @@ func newBatchFixture(t *testing.T) *batchFixture {
 	previous := actiondefs.Global()
 	actiondefs.SetGlobalForTesting(actiondefs.NewRegistry([]actiondefs.Definition{{ID: "lift"}, {ID: "lift_down"}, {ID: "plow_tile"}, {ID: "dig"}}))
 	t.Cleanup(func() { actiondefs.SetGlobalForTesting(previous) })
+	previousSounds := sounddefs.Global()
+	sounds, err := sounddefs.NewRegistry(nil)
+	require.NoError(t, err)
+	sounddefs.SetGlobalForTesting(sounds)
+	t.Cleanup(func() { sounddefs.SetGlobalForTesting(previousSounds) })
 	cfg := &config.Config{Game: config.GameConfig{
 		MaxEntities: 2048, MaxLayers: 1, EventBusMinWorkers: 1, EventBusMaxWorkers: 1, WorkerPoolSize: 1,
 		ChunkLRUCapacity: 16, ChunkLRUTTL: 60, LoadWorkers: 1, WorldWidthChunks: 8, WorldHeightChunks: 8,
-		SendChannelBuffer: 1024, CommandQueueSize: 128, PlayerSaveInterval: time.Hour,
+		SendChannelBuffer: 1024, CommandQueueSize: 128, PlayerSaveInterval: time.Hour, Audio: config.DefaultAudioConfig(),
 	}, Network: config.NetworkConfig{ReadTimeout: time.Minute, WriteTimeout: time.Second}}
 	logger := zap.NewNop()
 	manager := game.NewShardManager(cfg, nil, nil, gameworld.NewObjectFactory(nil), nil, false, logger)

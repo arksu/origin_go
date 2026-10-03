@@ -28,6 +28,7 @@ import type { EquippedVisual } from '../types/characterVisual'
 import { actionAnimationPhase, type CharacterActionAnimationState } from '../types/actionAnimation'
 import { fxManager } from './fx/FxManager'
 import type { ParticleEmitter } from './fx/ParticleEmitter'
+import type { LocalAudioSnapshot } from './LocalAudioController'
 
 interface AnimatedFrameLayer {
   layer: LayerDef
@@ -112,6 +113,7 @@ export class ObjectView {
   private actionAnimation: CharacterActionAnimationState | null = null
   private actionFrameKey = ''
   private particleEmitter: ParticleEmitter | null = null
+  private audioDiscontinuity = false
 
   constructor(options: ObjectViewOptions, private readonly actorRenderer?: ActorRenderer, private readonly rippleTextures?: readonly Texture[]) {
     this.entityId = options.entityId
@@ -650,6 +652,21 @@ export class ObjectView {
 
   getPosition(): { x: number; y: number } {
     return { x: this.position.x, y: this.position.y }
+  }
+
+  markAudioDiscontinuity(): void { this.audioDiscontinuity = true }
+
+  localAudioSnapshot(): LocalAudioSnapshot | null {
+    if (!this.actorHandle || this.isDestroyed) return null
+    const snapshot: LocalAudioSnapshot = {
+      entityId: this.entityId, actor: this.actorHandle.actor.assetId, position: this.getPosition(),
+      ready: this.actorHandle.actor.isReady && !this.knockedOutPose && !this.interactionSuppressed,
+      moving: this.isWalking && this.stopProgress === undefined, clip: this.carrying ? 'carry_walk' : 'walk',
+      distanceTiles: this.walkDistanceTiles, discontinuity: this.audioDiscontinuity, action: this.actionAnimation,
+      actionReady: this.actorHandle.actor.isReady && !!this.actionAnimation?.animationKey && this.actorHandle.actor.isActionAnimationSelected(this.actionAnimation.animationKey),
+    }
+    this.audioDiscontinuity = false
+    return snapshot
   }
 
   containsWorldPoint(worldX: number, worldY: number): boolean {

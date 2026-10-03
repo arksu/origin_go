@@ -23,8 +23,14 @@ func Start(w *ecs.World, handle types.Handle, cycle components.ActiveCyclicActio
 	if mapped {
 		key = binding.Key
 	}
+	cycle.SoundBinding = binding
+	cycle.NextSoundCue = 0
 	state, _ := ecs.GetComponent[components.ActionAnimation](w, handle)
 	previous, exists := ecs.GetComponent[components.ActiveCyclicAction](w, handle)
+	// Duplicate installation must not reset progress or re-arm consumed contacts.
+	previous.CycleElapsedTicks = cycle.CycleElapsedTicks
+	previous.ActionCompletionStarted = cycle.ActionCompletionStarted
+	previous.NextSoundCue = 0
 	if exists && previous == cycle && state.Key == key {
 		return
 	}
@@ -47,6 +53,8 @@ func Continue(w *ecs.World, handle types.Handle) {
 	if state.CycleIndex == cycle.CycleIndex && state.StartedTick == cycle.StartedTick && state.TotalTicks == cycle.CycleDurationTicks {
 		return
 	}
+	cycle.NextSoundCue = 0
+	ecs.AddComponent(w, handle, cycle)
 	publishCycle(w, handle, cycle, state)
 }
 

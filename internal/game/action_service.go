@@ -98,6 +98,7 @@ type ActionService struct {
 	definitions     *actiondefs.Registry
 	handlers        map[string]ActionHandler
 	sender          actionSender
+	soundEvents     *SoundEventService
 	nextGeneration  uint64
 	approachTimeout time.Duration
 }
@@ -123,6 +124,10 @@ func (service *ActionService) SetApproachTimeout(timeout time.Duration) {
 	if timeout > 0 {
 		service.approachTimeout = timeout
 	}
+}
+
+func (service *ActionService) SetSoundEventService(sounds *SoundEventService) {
+	service.soundEvents = sounds
 }
 
 func (service *ActionService) State(world *ecs.World, playerHandle types.Handle) *netproto.S2C_ActionStateChanged {

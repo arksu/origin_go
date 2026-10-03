@@ -83,7 +83,6 @@ func NewContextActionService(
 		logger:           logger,
 		alerts:           alerts,
 		cyclicOut:        cyclicOut,
-		soundEvents:      NewSoundEventService(nil, logger),
 		behaviorRegistry: behaviorRegistry,
 		actionDeps: contracts.ExecutionDeps{
 			OpenContainer: func(
@@ -130,11 +129,8 @@ func (s *ContextActionService) SetInventoryUpdate(fn func(*ecs.World, types.Enti
 	s.actionDeps.InventoryUpdate = fn
 }
 
-func (s *ContextActionService) SetSoundEventSender(sender soundEventSender) {
-	if s == nil || s.soundEvents == nil {
-		return
-	}
-	s.soundEvents.SetSender(sender)
+func (s *ContextActionService) SetSoundEventService(service *SoundEventService) {
+	s.soundEvents = service
 }
 
 func (s *ContextActionService) SetCraftingService(crafting *CraftingService) {
@@ -541,9 +537,6 @@ func (s *ContextActionService) finishActiveCyclicAction(
 	if !has || activeAction.BehaviorKey == gameActionCycleBehaviorKey {
 		return
 	}
-	if result == netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_COMPLETED {
-		s.emitTargetSound(activeAction.CompleteSoundKey, activeAction.TargetHandle, activeAction.TargetID)
-	}
 	s.sendCyclicActionFinished(playerID, activeAction, result, reasonCode)
 	cyclicaction.Clear(s.world, playerHandle)
 	ecs.RemoveComponent[components.ActiveCraft](s.world, playerHandle)
@@ -575,33 +568,6 @@ func (s *ContextActionService) sendCyclicActionFinished(
 		finished.ReasonCode = &reasonCode
 	}
 	s.cyclicOut.SendCyclicActionFinished(playerID, finished)
-}
-
-func (s *ContextActionService) emitCycleSound(action components.ActiveCyclicAction) {
-	if action.TargetKind != components.CyclicActionTargetObject {
-		return
-	}
-	s.emitTargetSound(action.CycleSoundKey, action.TargetHandle, action.TargetID)
-}
-
-func (s *ContextActionService) emitTargetSound(
-	soundKey string,
-	targetHandle types.Handle,
-	targetID types.EntityID,
-) {
-	if s == nil || s.world == nil || s.soundEvents == nil {
-		return
-	}
-
-	resolvedTargetHandle := targetHandle
-	if resolvedTargetHandle == types.InvalidHandle || !s.world.Alive(resolvedTargetHandle) {
-		resolvedTargetHandle = s.world.GetHandleByEntityID(targetID)
-	}
-	if resolvedTargetHandle == types.InvalidHandle || !s.world.Alive(resolvedTargetHandle) {
-		return
-	}
-
-	s.soundEvents.EmitForVisibleTarget(s.world, resolvedTargetHandle, soundKey)
 }
 
 func (s *ContextActionService) sendMiniAlert(playerID types.EntityID, severity netproto.AlertSeverity, reasonCode string) {

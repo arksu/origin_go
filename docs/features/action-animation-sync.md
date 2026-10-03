@@ -76,8 +76,42 @@ replay an old network snapshot.
 
 Movement, carry, equipment readiness and def predicates may suppress presentation
 while retaining the authoritative cycle. Resumption uses current phase. KO is a
-global terminal pose priority. No source clip trimming, impact markers, sound
-rescheduling or visible-impact/result alignment is performed.
+global terminal pose priority. Source clips remain untrimmed. The authored sound
+markers described below do not move gameplay results to the displayed impact.
+
+## Sound markers and gameplay completion
+
+Optional `sound_cues` belong to the animation binding and contain a unique `id`,
+normalized `phase` in `(0,1]`, a canonical `sound_key`, and `source` (`actor` or
+`target`). `tree_chop` in `data/action_animations/tree.json` declares:
+
+```json
+{"id":"impact","phase":0.6,"sound_key":"chop","source":"target"}
+```
+
+Both hand variants use this marker. The existing cyclic-action system advances
+one shared cue helper after validating the active context or menu cycle. A world
+cue runs at the first tick where `elapsed_ticks / total_ticks >= phase`: tick 12
+of 20, or tick 8 of 13 for phase `0.6`. The installed action keeps its resolved
+binding and consumed-cue cursor. A confirmed successor resets the cursor;
+duplicate progress or installation cannot re-arm the same cycle. Cancellation
+before the marker suppresses its sound; cancellation afterward leaves the
+already-created point event valid.
+
+World cues enter the shard sound service, which selects listeners by committed
+position and hearing, independently of character/tree visibility. `Shard.Update`
+flushes bounded world batches after `world.Update` in that same tick. Client
+action sampling executes local cues only, so the world chop has one producer.
+Local cues skip passed markers on late entry/loading and retain consumed markers
+across backward phase corrections. The standalone preview remains usable without
+server sound events.
+
+The marker does not execute the action handler, charge stamina, decrement tree
+chop points, or complete the cycle. Those operations and owner progress/finished
+packets retain their existing completion timing. Successful terminal tree-fall
+feedback uses the target point captured before completion effects can transform
+or remove the tree, and emits once only when the behavior returns `complete`.
+A failed or canceled completion emits no fall sound.
 
 ## Rendering and review
 

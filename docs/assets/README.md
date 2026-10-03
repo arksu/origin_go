@@ -79,6 +79,17 @@ merged catalog as well. Reload the browser and restart the server when deploying
 def changes. See [shared action animations](../features/action-animation-sync.md)
 for the schema, timing contract and extension/rollback procedure.
 
+The same command now validates `data/sounds/` and `data/locomotion_audio/`, checks
+all audio samples below `web_new/public/assets/game/`, and switches immutable
+`sounds`, `locomotionAudio` and `actionAnimations` projections atomically. Local
+gait stride is derived from actor clip metadata, while contact phases are authored.
+See [sound schema](../../data/sounds/README.md) and
+[locomotion schema/contact review](../../data/locomotion_audio/README.md).
+Original footstep samples can be regenerated with
+`python3 tools/asset_pipeline/generate-footsteps.py`; their provenance is recorded
+beside the WAVs. An absent sample, unresolved sound cue or incompatible gait clip
+leaves all previous catalog references active.
+
 ## Review
 
 ```sh

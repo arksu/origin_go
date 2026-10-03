@@ -14,6 +14,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
+	"origin/internal/sounddefs"
 	"origin/internal/types"
 	"strings"
 	"sync"
@@ -65,6 +66,7 @@ type Shard struct {
 	buildService    *BuildService
 	liftService     *LiftService
 	actionService   *ActionService
+	soundEvents     *SoundEventService
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -105,7 +107,13 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	})
 
 	behaviorRegistry := behaviors.MustDefaultRegistry()
+	var soundErr error
+	s.soundEvents, soundErr = NewSoundEventService(sounddefs.Global(), cfg.Game.Audio, s)
+	if soundErr != nil {
+		logger.Fatal("Invalid world sound configuration", zap.Error(soundErr))
+	}
 	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
+	s.chunkManager.SetPositionObserver(s.soundEvents)
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
 	worldMinX := float64(cfg.Game.WorldMinXChunks * chunkSize)
@@ -151,7 +159,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		s.SendInventorySnapshots(w, playerID, playerHandle)
 	})
 	contextActionService.SetCraftingService(craftingService)
-	contextActionService.SetSoundEventSender(s)
+	contextActionService.SetSoundEventService(s.soundEvents)
 	s.craftingService = craftingService
 	buildService := NewBuildService(
 		s.world,
@@ -191,6 +199,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
 	}
 	s.actionService = actionService
+	actionService.SetSoundEventService(s.soundEvents)
 	actionService.SetApproachTimeout(cfg.Game.InteractionPendingTimeout)
 	actionService.SubscribeEvents(s.eventBus)
 	liftService.SetActionCompletion(actionService.Complete)
@@ -220,7 +229,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
 	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
 	s.world.AddSystem(systems.NewLiftPlacementSystem(s.world, liftService, logger))
-	s.world.AddSystem(systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger))
+	transformSystem := systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger)
+	transformSystem.SetPositionObserver(s.soundEvents)
+	s.world.AddSystem(transformSystem)
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, s.eventBus, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
@@ -308,6 +319,7 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	s.chunkManager.Update(ts.Delta)
 
 	s.world.Update(ts.Delta)
+	s.soundEvents.Flush(s.world)
 
 	// Add full shard timing (including lock overhead) after world.Update
 	shardDuration := time.Since(shardStart)
@@ -601,6 +613,7 @@ func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 // onDetachedEntityExpired is called when a detached entity's TTL expires.
 // It runs after the character snapshot has captured inventory contents.
 func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
+	s.soundEvents.Detach(handle, 0)
 	if s.liftService != nil {
 		_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, entityID, handle, false)
 	}
@@ -654,6 +667,7 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 
 	ecs.GetResource[ecs.DetachedEntities](w).RemoveDetachedEntity(playerID)
 	if !hasObserverClient {
+		s.soundEvents.Detach(playerHandle, 0)
 		cleanupObserverModeStateForHandle(w, playerHandle)
 		s.UnregisterEntityAOI(playerID)
 	}
@@ -1120,33 +1134,28 @@ func (s *Shard) SendCyclicActionFinished(entityID types.EntityID, finished *netp
 	client.Send(data)
 }
 
-func (s *Shard) SendSound(entityID types.EntityID, sound *netproto.S2C_Sound) {
-	if sound == nil {
-		return
+func (s *Shard) SendSoundBatch(entityID types.EntityID, clientID uint64, batch *netproto.S2C_SoundBatch) soundBatchDelivery {
+	if batch == nil {
+		return soundBatchDelivery{result: network.AudioSendClosed}
 	}
-
 	s.ClientsMu.RLock()
-	client, ok := s.Clients[entityID]
-	s.ClientsMu.RUnlock()
-	if !ok || client == nil {
-		return
+	defer s.ClientsMu.RUnlock()
+	client := s.Clients[entityID]
+	if client == nil || client.ID != clientID || !client.InWorld.Load() || client.StreamEpoch.Load() != batch.StreamEpoch {
+		return soundBatchDelivery{result: network.AudioSendClosed}
 	}
-
-	response := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_Sound{
-			Sound: sound,
-		},
-	}
-
-	data, err := proto.Marshal(response)
+	started := time.Now()
+	encoded, err := proto.Marshal(&netproto.ServerMessage{Payload: &netproto.ServerMessage_SoundBatch{SoundBatch: batch}})
+	elapsed := time.Since(started)
 	if err != nil {
-		s.logger.Error("Failed to marshal sound event",
-			zap.Int64("entity_id", int64(entityID)),
-			zap.Error(err))
-		return
+		s.logger.Error("Failed to marshal sound batch", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+		return soundBatchDelivery{result: network.AudioSendFull, encodeTime: elapsed}
 	}
-
-	client.Send(data)
+	if s.soundEvents != nil && len(encoded) > s.soundEvents.config.MaxBatchBytes {
+		s.logger.Error("Sound batch exceeded encoded byte budget", zap.Int("bytes", len(encoded)))
+		return soundBatchDelivery{result: network.AudioSendFull, encodeTime: elapsed}
+	}
+	return soundBatchDelivery{result: client.SendAudio(encoded), bytes: len(encoded), encodeTime: elapsed}
 }
 
 // SendInventoryUpdate sends inventory updates to a client.

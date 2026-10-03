@@ -515,6 +515,12 @@ message S2C_PlayerEnterWorld {
   //  optional uint64 dragging_entity_id = 8; // если тащим что-то
   uint32 stream_epoch = 9; // для защиты от гонок состояний
   bool directional_movement_supported = 10;
+  S2C_AudioParameters audio = 11;
+}
+
+message S2C_AudioParameters {
+  double hearing = 1;
+  uint32 freshness_ms = 2;
 }
 
 message CharacterAttributeEntry {
@@ -835,6 +841,13 @@ message S2C_Sound {
   double x = 2;
   double y = 3;
   double max_hear_distance = 4;
+  optional float distance_gain = 5;
+}
+
+message S2C_SoundBatch {
+  repeated S2C_Sound sounds = 1;
+  uint32 stream_epoch = 2;
+  int64 server_time_ms = 3;
 }
 
 message S2C_ExpGained {
@@ -921,6 +934,7 @@ message ServerMessage {
     S2C_CharacterActionAnimation character_action_animation = 48;
     S2C_ObjectMoveBatch object_move_batch = 49;
     S2C_ObjectSpawnBatch object_spawn_batch = 50;
+    S2C_SoundBatch sound_batch = 51;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

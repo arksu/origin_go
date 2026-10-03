@@ -2,6 +2,7 @@ import { Matrix4, Quaternion, Vector3 } from 'three'
 import { EQUIPMENT_SLOT_BY_ID, type EquipmentSlot } from '../../types/characterVisual'
 import type { ArmMotion, EquipmentBinding, EquipmentDefinition, SocketId } from './equipment'
 import { parseActionAnimationProjection, validateActionAnimationAssets, type ActionAnimationDefinition } from '../../types/actionAnimationDefs'
+import { parseSoundFile, parseLocomotionAudioFile, type SoundProfile, type LocomotionAudioBinding } from '../../types/soundDefs'
 
 export interface Artifact { url: string; sha256: string; bytes: number }
 export interface ClipManifest {
@@ -31,6 +32,8 @@ export interface ActorCatalog {
   readonly manifests: Readonly<Record<string, ActorManifest>>
   readonly equipment: Readonly<Record<string, EquipmentDefinition>>
   readonly actionAnimations: Readonly<Record<string, ActionAnimationDefinition>>
+  readonly sounds?: Readonly<Record<string, SoundProfile>>
+  readonly locomotionAudio?: readonly LocomotionAudioBinding[]
 }
 const HASH = /^[a-f0-9]{64}$/
 const SOCKETS: SocketId[] = ['grip_l', 'grip_r', 'forearm_l', 'forearm_r']
@@ -106,6 +109,8 @@ export async function loadActorCatalog(url = '/assets/game/asset-catalog.json', 
   // Validate the complete snapshot before making any referenced requests.
   for (const reference of Object.values(assets)) artifact(reference, 'json')
   if (snapshot.actionAnimations !== undefined) artifact(snapshot.actionAnimations, 'json')
+  if (snapshot.sounds !== undefined) artifact(snapshot.sounds, 'json')
+  if (snapshot.locomotionAudio !== undefined) artifact(snapshot.locomotionAudio, 'json')
   const entries = await Promise.all(Object.entries(assets).map(async ([id, reference]) => {
     const manifest = parseActorManifest(await json((reference as Artifact).url, 'force-cache'))
     if (manifest.id !== id) throw new Error(`Catalog manifest id mismatch: ${id}`)
@@ -131,5 +136,16 @@ export async function loadActorCatalog(url = '/assets/game/asset-catalog.json', 
     await json((snapshot.actionAnimations as Artifact).url, 'force-cache'), 'action animation catalog')
   validateActionAnimationAssets(definitions, manifests, 'action animation catalog')
   const actionAnimations = Object.fromEntries(definitions.map(definition => [definition.key, definition]))
-  return freeze({ manifests, equipment, actionAnimations })
+  const profiles = snapshot.sounds === undefined ? [] : parseSoundFile(await json((snapshot.sounds as Artifact).url, 'force-cache'), 'sound catalog')
+  const sounds = Object.fromEntries(profiles.map(profile => [profile.key, profile]))
+  const locomotionAudio = snapshot.locomotionAudio === undefined ? [] : parseLocomotionAudioFile(await json((snapshot.locomotionAudio as Artifact).url, 'force-cache'), 'locomotion audio catalog')
+  for (const definition of definitions) for (const cue of definition.sound_cues ?? []) {
+    if (!Object.hasOwn(sounds, cue.sound_key)) throw new Error(`Binding ${definition.key}: missing sound ${cue.sound_key}`)
+  }
+  for (const binding of locomotionAudio) {
+    const clip = manifests[binding.actor]?.clips[binding.clip]
+    if (!clip || clip.playback !== 'distance' || !clip.loop || binding.cycle_distance_tiles !== clip.cycleDistanceTiles) throw new Error(`Locomotion ${binding.actor}/${binding.clip}: incompatible stride metadata`)
+    for (const contact of binding.contacts) if (sounds[contact.sound_key]?.mode !== 'local') throw new Error(`Locomotion ${binding.actor}/${binding.clip}: missing local sound ${contact.sound_key}`)
+  }
+  return freeze({ manifests, equipment, actionAnimations, sounds, locomotionAudio })
 }

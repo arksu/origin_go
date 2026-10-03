@@ -16,10 +16,11 @@ import (
 
 type TransformUpdateSystem struct {
 	ecs.BaseSystem
-	chunkManager core.ChunkManager
-	eventBus     *eventbus.EventBus
-	logger       *zap.Logger
-	moveBatch    []ecs.MoveBatchEntry // reused across ticks
+	chunkManager     core.ChunkManager
+	eventBus         *eventbus.EventBus
+	logger           *zap.Logger
+	moveBatch        []ecs.MoveBatchEntry // reused across ticks
+	positionObserver core.PositionObserver
 
 	// Cached storages for the hot path: direct sparse-array access instead of
 	// per-call registry lock + map lookup, and no capturing closures on writes.
@@ -46,6 +47,10 @@ func NewTransformUpdateSystem(world *ecs.World, chunkManager core.ChunkManager, 
 		liftCarryStorage:       ecs.GetOrCreateStorage[components.LiftCarryState](world),
 		profileStorage:         ecs.GetOrCreateStorage[components.CharacterProfile](world),
 	}
+}
+
+func (s *TransformUpdateSystem) SetPositionObserver(observer core.PositionObserver) {
+	s.positionObserver = observer
 }
 
 func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
@@ -142,6 +147,9 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 		transform.X = finalX
 		transform.Y = finalY
 		s.transformStorage.Set(h, transform)
+		if s.positionObserver != nil {
+			s.positionObserver.OnPositionCommitted(h, finalX, finalY)
+		}
 		if movement, exists := s.movementStorage.Get(h); exists && movement.PointStopPending {
 			movement.PointStopPending = false
 			s.movementStorage.Set(h, movement)

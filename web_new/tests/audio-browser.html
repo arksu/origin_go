@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Audio integration verification</title></head>
+<body>
+<h1>Audio integration verification</h1>
+<p>This local test uses published catalogs, real audio assets and production playback controllers.</p>
+<label>Captured server fixture <input id="server-fixture" type="file" accept="application/json,.json"></label>
+<label><input id="render-variants" type="checkbox">Render hand and locomotion variants with audio</label>
+<label><input id="attenuation-only" type="checkbox">Verify footsteps attenuation only</label>
+<button id="run" type="button">Run audio verification</button>
+<div id="preview"></div>
+<pre id="results" aria-live="polite">Ready. Click Run to enable browser audio.</pre>
+<script type="module" src="/tests/audio-browser.ts"></script>
+</body>
+</html>

@@ -10,6 +10,7 @@
     ],
     "eligibility": ["stationary", "not_carrying", "not_knocked_out"],
     "facing": "target",
+    "sound_cues": [{ "id": "impact", "phase": 0.4, "sound_key": "chop", "source": "target" }],
     "blend_ms": 120,
     "frame": { "width": 192, "height": 224, "origin_x": 96, "origin_y": 180 },
     "preview": {

@@ -1,0 +1,37 @@
+{
+  "v": 1,
+  "bindings": [
+    {
+      "actor": "character/male_commoner",
+      "clip": "walk",
+      "contacts": [
+        {
+          "id": "right",
+          "phase": 0.4583333333333333,
+          "sound_key": "footstep"
+        },
+        {
+          "id": "left",
+          "phase": 0.9583333333333334,
+          "sound_key": "footstep"
+        }
+      ]
+    },
+    {
+      "actor": "character/male_commoner",
+      "clip": "carry_walk",
+      "contacts": [
+        {
+          "id": "right",
+          "phase": 0.4583333333333333,
+          "sound_key": "footstep"
+        },
+        {
+          "id": "left",
+          "phase": 0.9583333333333334,
+          "sound_key": "footstep"
+        }
+      ]
+    }
+  ]
+}

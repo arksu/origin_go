@@ -31,6 +31,7 @@ import (
 	"origin/internal/objectdefs"
 	"origin/internal/persistence"
 	"origin/internal/restapi"
+	"origin/internal/sounddefs"
 )
 
 func main() {
@@ -85,9 +86,29 @@ func main() {
 		logger.Fatal("Failed to load action definitions", zap.Error(err))
 	}
 	actiondefs.SetGlobal(actionRegistry)
+	soundRegistry, err := sounddefs.LoadFromDirectory("./data/sounds", logger)
+	if err != nil {
+		logger.Fatal("Failed to load sound definitions", zap.Error(err))
+	}
+	if err := soundRegistry.ValidateHearing(cfg.Game.Audio.BaseHearing, cfg.Game.Audio.MaxEffectiveRadius); err != nil {
+		logger.Fatal("Invalid sound hearing configuration", zap.Error(err))
+	}
+	sounddefs.SetGlobal(soundRegistry)
 	animationRegistry, err := actionanimationdefs.LoadFromDirectory("./data/action_animations", logger)
 	if err != nil {
 		logger.Fatal("Failed to load action animation definitions", zap.Error(err))
+	}
+	if err := animationRegistry.PrepareSoundCues(soundRegistry); err != nil {
+		logger.Fatal("Invalid animation sound references", zap.Error(err))
+	}
+	if err := animationRegistry.ValidateMenuSoundTargets(func(actionID string) (string, bool) {
+		definition, exists := actionRegistry.Get(actionID)
+		if !exists {
+			return "", false
+		}
+		return string(definition.Target.Kind), true
+	}); err != nil {
+		logger.Fatal("Invalid animation sound sources", zap.Error(err))
 	}
 	actionanimationdefs.SetGlobal(animationRegistry)
 

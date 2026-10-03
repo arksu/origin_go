@@ -14,7 +14,6 @@ type playerGiveItemSender interface {
 	SendInventoryOpResult(types.EntityID, *netproto.S2C_InventoryOpResult)
 	SendExpGained(types.EntityID, *netproto.S2C_ExpGained)
 	SendFx(types.EntityID, *netproto.S2C_Fx)
-	SendSound(types.EntityID, *netproto.S2C_Sound)
 }
 
 func newPlayerGiveItemAdapter(executor *inventory.InventoryExecutor, sender playerGiveItemSender) contracts.GiveItemFn {
@@ -51,9 +50,6 @@ func newPlayerGiveItemAdapter(executor *inventory.InventoryExecutor, sender play
 			sender.SendFx(playerID, &netproto.S2C_Fx{
 				FxKey:    "exp_gain",
 				Position: &netproto.Vector2{X: int32(posX), Y: int32(posY)},
-			})
-			sender.SendSound(playerID, &netproto.S2C_Sound{
-				SoundKey: "exp_gain", X: posX, Y: posY, MaxHearDistance: 80.0,
 			})
 		}
 		return contracts.GiveItemOutcome{

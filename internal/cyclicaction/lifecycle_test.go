@@ -120,3 +120,47 @@ func TestPublicStateProtocolRoundTrips(t *testing.T) {
 		require.True(t, proto.Equal(spawn, decodedSpawn))
 	}
 }
+
+func TestSoundCueCursorBelongsToInstalledCycle(t *testing.T) {
+	world, handle, definitions := fixture(t)
+	binding, exists := actionanimationdefs.Global().Resolve(definitions[0].Source)
+	require.True(t, exists)
+	binding.WorldSoundCues = []actionanimationdefs.SoundCue{{ID: "impact", Phase: .6, SoundKey: "chop", Source: "actor"}}
+	installation := components.ActiveCyclicAction{CycleDurationTicks: 20, CycleIndex: 1}
+	Start(world, handle, installation, binding.Source)
+	cycle, exists := ecs.GetComponent[components.ActiveCyclicAction](world, handle)
+	require.True(t, exists)
+	require.Same(t, binding, cycle.SoundBinding)
+	ecs.WithComponent(world, handle, func(current *components.ActiveCyclicAction) {
+		current.CycleElapsedTicks = 12
+		current.NextSoundCue = 1
+	})
+	cycle, _ = ecs.GetComponent[components.ActiveCyclicAction](world, handle)
+	before, err := Snapshot(world, handle)
+	require.NoError(t, err)
+	Start(world, handle, cycle, binding.Source)
+	after, err := Snapshot(world, handle)
+	require.NoError(t, err)
+	require.Equal(t, before.Revision, after.Revision)
+	cycle, _ = ecs.GetComponent[components.ActiveCyclicAction](world, handle)
+	require.Equal(t, 1, cycle.NextSoundCue, "duplicate installation must retain consumed cues")
+	Start(world, handle, installation, binding.Source)
+	cycle, _ = ecs.GetComponent[components.ActiveCyclicAction](world, handle)
+	require.Equal(t, uint32(12), cycle.CycleElapsedTicks, "stale installation must retain current progress")
+	require.Equal(t, 1, cycle.NextSoundCue)
+	stillSame, err := Snapshot(world, handle)
+	require.NoError(t, err)
+	require.Equal(t, before.Revision, stillSame.Revision)
+	ecs.WithComponent(world, handle, func(current *components.ActiveCyclicAction) {
+		current.CycleIndex++
+		current.CycleElapsedTicks = 0
+		current.StartedTick++
+	})
+	Continue(world, handle)
+	cycle, _ = ecs.GetComponent[components.ActiveCyclicAction](world, handle)
+	require.Zero(t, cycle.NextSoundCue)
+	ecs.WithComponent(world, handle, func(current *components.ActiveCyclicAction) { current.NextSoundCue = 1 })
+	Continue(world, handle)
+	cycle, _ = ecs.GetComponent[components.ActiveCyclicAction](world, handle)
+	require.Equal(t, 1, cycle.NextSoundCue, "duplicate continuation must not re-arm markers")
+}

@@ -133,7 +133,7 @@ func TestPlayerGiveItemAdapterForwardsDiscoveryNotifications(t *testing.T) {
 	outcome := give(world, 1, player, "branch", 1, 10)
 	if !outcome.Success || outcome.GrantedCount != 1 || outcome.PlacedInHand ||
 		len(notifications.inventory) != 1 || len(notifications.exp) != 1 || notifications.exp[0].GetLp() != 10 ||
-		len(notifications.fx) != 1 || len(notifications.sound) != 1 {
+		len(notifications.fx) != 1 || len(notifications.sound) != 0 {
 		t.Fatalf("adapter lost inventory or discovery updates: outcome=%#v notifications=%#v", outcome, notifications)
 	}
 }

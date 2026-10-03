@@ -1,0 +1,292 @@
+{
+  "status": "PASSED",
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+  "decodedSampleCount": 12,
+  "decoded": [
+    {
+      "file": "sound/chop/chop_01.mp3",
+      "seconds": 0.6037291666666667,
+      "channels": 1,
+      "energy": 328.16193242565595
+    },
+    {
+      "file": "sound/chop/chop_03.mp3",
+      "seconds": 0.5150416666666666,
+      "channels": 1,
+      "energy": 69.79663639734662
+    },
+    {
+      "file": "sound/chop/chop_04.mp3",
+      "seconds": 0.36891666666666667,
+      "channels": 2,
+      "energy": 22.045007623042427
+    },
+    {
+      "file": "sound/chop/chop_05.mp3",
+      "seconds": 0.3403541666666667,
+      "channels": 2,
+      "energy": 79.07617949090522
+    },
+    {
+      "file": "sound/chop/chop_06.mp3",
+      "seconds": 0.3655,
+      "channels": 2,
+      "energy": 29.148712488466003
+    },
+    {
+      "file": "sound/chop/chop_07.mp3",
+      "seconds": 0.713375,
+      "channels": 2,
+      "energy": 207.81234821687073
+    },
+    {
+      "file": "sound/tree_fall/tree_fall_01.mp3",
+      "seconds": 1.5676875,
+      "channels": 2,
+      "energy": 160.72802126419728
+    },
+    {
+      "file": "sound/exp_gain.mp3",
+      "seconds": 4.997333333333334,
+      "channels": 2,
+      "energy": 116.94398462161503
+    },
+    {
+      "file": "sound/steps/step_01.wav",
+      "seconds": 0.16,
+      "channels": 1,
+      "energy": 26.73450437273848
+    },
+    {
+      "file": "sound/steps/step_02.wav",
+      "seconds": 0.16,
+      "channels": 1,
+      "energy": 26.229116901509418
+    },
+    {
+      "file": "sound/steps/step_03.wav",
+      "seconds": 0.16,
+      "channels": 1,
+      "energy": 27.829883831892978
+    },
+    {
+      "file": "sound/steps/step_04.wav",
+      "seconds": 0.16,
+      "channels": 1,
+      "energy": 28.124519265374833
+    }
+  ],
+  "ownNearFar": [
+    {
+      "file": "/assets/game/sound/steps/step_01.wav",
+      "id": 1018,
+      "volume": 0.175,
+      "playing": true
+    },
+    {
+      "file": "/assets/game/sound/steps/step_02.wav",
+      "id": 1019,
+      "volume": 0.1575,
+      "playing": true
+    },
+    {
+      "file": "/assets/game/sound/steps/step_03.wav",
+      "id": 1020,
+      "volume": 0.14555439159649525,
+      "playing": true
+    },
+    {
+      "file": "/assets/game/sound/steps/step_04.wav",
+      "id": 1021,
+      "volume": 0.14007273178526153,
+      "playing": true
+    }
+  ],
+  "sameSampleIndependentVoices": [
+    {
+      "file": "/assets/game/sound/exp_gain.mp3",
+      "id": 1026,
+      "volume": 0.2,
+      "playing": true
+    },
+    {
+      "file": "/assets/game/sound/exp_gain.mp3",
+      "id": 1027,
+      "volume": 0.166,
+      "playing": true
+    }
+  ],
+  "world": {
+    "sourceX": 800,
+    "visibilityRadius": 600,
+    "sourceObjectsKnown": 0,
+    "authoritativeGain": 0.104,
+    "nativeVolume": 0.046800000965595244,
+    "finalFallPlayed": true,
+    "streamDrops": 1,
+    "staleDrops": 1,
+    "localPacketDrops": 1
+  },
+  "chop": {
+    "handClips": [
+      "chop_l",
+      "chop_r"
+    ],
+    "sharedCue": {
+      "id": "impact",
+      "phase": 0.6,
+      "sound_key": "chop",
+      "source": "target"
+    },
+    "poseRenderingChecked": false
+  },
+  "capturedServer": {
+    "expected": {
+      "chop_count": 2,
+      "effects": 2,
+      "fall_count": 1,
+      "outside_visibility": true,
+      "target_alive": false
+    },
+    "sourceObjectsKnown": 0,
+    "playback": [
+      {
+        "tick": 12,
+        "key": "chop",
+        "serverTimeMs": 11200,
+        "gain": 0.10400000214576721,
+        "id": 1015,
+        "volume": 0.046800000965595244,
+        "playing": true
+      },
+      {
+        "tick": 32,
+        "key": "chop",
+        "serverTimeMs": 13200,
+        "gain": 0.10400000214576721,
+        "id": 1016,
+        "volume": 0.046800000965595244,
+        "playing": true
+      },
+      {
+        "tick": 40,
+        "key": "tree_fall",
+        "serverTimeMs": 14000,
+        "gain": 0.39358600974082947,
+        "id": 1017,
+        "volume": 0.186953354626894,
+        "playing": true
+      }
+    ]
+  },
+  "renderedPreview": {
+    "clips": [
+      "chop_r",
+      "chop_l",
+      "walk",
+      "carry_walk"
+    ],
+    "poseSamples": [
+      {
+        "clip": "chop_r",
+        "cycle": 1,
+        "opaquePixels": 2009,
+        "checksum": 607648115
+      },
+      {
+        "clip": "chop_l",
+        "cycle": 1,
+        "opaquePixels": 2005,
+        "checksum": 386537744
+      },
+      {
+        "clip": "walk",
+        "cycle": 1,
+        "opaquePixels": 2116,
+        "checksum": 481859954
+      },
+      {
+        "clip": "carry_walk",
+        "cycle": 1,
+        "opaquePixels": 2159,
+        "checksum": 266298622
+      },
+      {
+        "clip": "chop_r",
+        "cycle": 2,
+        "opaquePixels": 2006,
+        "checksum": 541407424
+      },
+      {
+        "clip": "chop_l",
+        "cycle": 2,
+        "opaquePixels": 2005,
+        "checksum": 373426513
+      },
+      {
+        "clip": "walk",
+        "cycle": 2,
+        "opaquePixels": 2150,
+        "checksum": 920891202
+      },
+      {
+        "clip": "carry_walk",
+        "cycle": 2,
+        "opaquePixels": 2204,
+        "checksum": 878870475
+      }
+    ],
+    "impacts": 2,
+    "admittedSounds": 18,
+    "glError": 0,
+    "locallyTriggeredWorldCues": 0,
+    "localContacts": {
+      "walk": 8,
+      "carry_walk": 8
+    },
+    "localContactsIndependentOfPoseSampling": true
+  },
+  "localDistances": [
+    0,
+    0,
+    60,
+    119
+  ],
+  "locomotion": {
+    "strideTiles": 1.677975879375,
+    "contacts": [
+      {
+        "id": "right",
+        "phase": 0.4583333333333333,
+        "sound_key": "footstep"
+      },
+      {
+        "id": "left",
+        "phase": 0.9583333333333334,
+        "sound_key": "footstep"
+      }
+    ],
+    "walkAndCarryPlayed": true,
+    "transitionAndPauseCatchUp": false
+  },
+  "workload": {
+    "knownCharacters": 200,
+    "frames": 100,
+    "contactUpdates": 20000,
+    "milliseconds": 17.899999998509884,
+    "metrics": {
+      "played": 12,
+      "invalid": 0,
+      "stale": 0,
+      "unloadedLocal": 0,
+      "voiceLimit": 3788,
+      "failed": 0
+    },
+    "activeVoices": 12,
+    "webSocketCreations": 0,
+    "webSocketSendCalls": 0,
+    "extraAudioOrMovementPackets": 0
+  },
+  "failures": [],
+  "listening": "Native browser playback and volumes verified. Subjective listening/tuning requires a human ear; no subjective claim is made."
+}
