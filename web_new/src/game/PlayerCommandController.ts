@@ -6,6 +6,8 @@
  * - Include modifiers (Shift/Ctrl/Alt) with commands
  */
 
+import { useGameStore } from '@/stores/gameStore'
+import { combatAttempt } from '@/types/combat'
 import { gameConnection } from '@/network/GameConnection'
 import { sendInventoryOp } from '@/network'
 import { proto } from '@/network/proto/packets.js'
@@ -53,6 +55,12 @@ export class PlayerCommandController {
       })
     }
 
+    const store = useGameStore()
+    const state = store.gameActionState
+    const definition = store.gameActions.find(action => action.id === state.actionId)
+    const attempt = button === proto.MapClickButton.MAP_CLICK_BUTTON_PRIMARY
+      ? combatAttempt(state, definition, store.worldParams?.combatSupported === true, store.combat)
+      : undefined
     gameConnection.send({
       playerAction: proto.C2S_PlayerAction.create({
         mapClick: proto.MapClick.create({
@@ -60,6 +68,7 @@ export class PlayerCommandController {
           y: Math.round(y),
           targetEntityId,
           button,
+          ...(attempt ? { combatAttempt: proto.CombatAttempt.fromObject(attempt) } : {}),
         }),
         modifiers,
       }),

@@ -331,9 +331,7 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 	case network.CmdBuildTakeBack:
 		s.handleBuildTakeBack(w, handle, cmd)
 	case network.CmdActivateAction:
-		if request, ok := cmd.Payload.(*netproto.C2S_ActivateAction); ok && request != nil && s.actionService != nil {
-			s.actionService.Activate(w, cmd.CharacterID, handle, request.ActionId)
-		}
+		s.handleActionActivation(w, handle, cmd)
 	case network.CmdCancelAction:
 		if s.actionService != nil {
 			s.actionService.Cancel(w, cmd.CharacterID, handle)
@@ -353,6 +351,10 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 }
 
 func (s *NetworkCommandSystem) handleStartCraftOne(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCombatCommitted(w, playerHandle, cmd.CharacterID) {
+		return
+	}
+
 	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
@@ -368,6 +370,10 @@ func (s *NetworkCommandSystem) handleStartCraftOne(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCombatCommitted(w, playerHandle, cmd.CharacterID) {
+		return
+	}
+
 	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
@@ -383,6 +389,10 @@ func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle t
 }
 
 func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCombatCommitted(w, playerHandle, cmd.CharacterID) {
+		return
+	}
+
 	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
@@ -398,6 +408,10 @@ func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types
 }
 
 func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCombatCommitted(w, playerHandle, cmd.CharacterID) {
+		return
+	}
+
 	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
@@ -413,6 +427,10 @@ func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleBuildTakeBack(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
+	if s.rejectIfCombatCommitted(w, playerHandle, cmd.CharacterID) {
+		return
+	}
+
 	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
@@ -465,6 +483,9 @@ func (s *NetworkCommandSystem) handleMapClick(w *ecs.World, playerHandle types.H
 		s.logger.Error("Invalid payload type for MapClick", zap.Uint64("client_id", cmd.ClientID))
 		return
 	}
+	if s.handleCombatAttempt(w, playerHandle, cmd, click) {
+		return
+	}
 	switch click.Button {
 	case netproto.MapClickButton_MAP_CLICK_BUTTON_PRIMARY:
 		s.handlePrimaryMapClick(w, playerHandle, cmd, click)
@@ -475,6 +496,14 @@ func (s *NetworkCommandSystem) handleMapClick(w *ecs.World, playerHandle types.H
 
 func (s *NetworkCommandSystem) handlePrimaryMapClick(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand, click *netproto.MapClick) {
 	if s.consumeAdminMapClick(w, playerHandle, cmd.CharacterID, click) {
+		return
+	}
+	if components.CombatCommitted(w, playerHandle) {
+		movement, exists := ecs.GetComponent[components.Movement](w, playerHandle)
+		if exists && !directionalMovementRestricted(w, playerHandle, movement) && s.enforceMovementModeByStamina(w, playerHandle) {
+			s.clearPendingInteractionIntents(w, playerHandle, cmd.CharacterID)
+			ecs.WithComponent(w, playerHandle, func(current *components.Movement) { current.SetTargetPoint(int(click.X), int(click.Y)) })
+		}
 		return
 	}
 	targetID := types.EntityID(click.TargetEntityId)
@@ -648,6 +677,9 @@ func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandle types.Handle, playerID types.EntityID, click *netproto.MapClick) {
+	if s.rejectIfCombatCommitted(w, playerHandle, playerID) {
+		return
+	}
 	if s.actionService != nil {
 		s.actionService.Cancel(w, playerID, playerHandle)
 	}
@@ -699,6 +731,10 @@ func (s *NetworkCommandSystem) handleSelectContextAction(
 	playerHandle types.Handle,
 	cmd *network.PlayerCommand,
 ) {
+	if s.rejectIfCombatCommitted(w, playerHandle, cmd.CharacterID) {
+		return
+	}
+
 	selectAction, ok := cmd.Payload.(*netproto.SelectContextAction)
 	if !ok {
 		s.logger.Error("Invalid payload type for SelectContextAction",

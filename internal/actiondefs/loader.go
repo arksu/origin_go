@@ -10,8 +10,10 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"origin/internal/game/inventory"
 	"origin/internal/itemdefs"
@@ -102,6 +104,15 @@ func loadFile(filename string) ([]Definition, error) {
 		if err := validateDefinition(definition); err != nil {
 			return nil, fmt.Errorf("%s: action %q: %w", filename, definition.ID, err)
 		}
+		if definition.Execution.Combat != nil {
+			var executionFields map[string]json.RawMessage
+			if err := json.Unmarshal(rawFile.Actions[index]["execution"], &executionFields); err != nil {
+				return nil, fmt.Errorf("%s: action %q: invalid execution: %w", filename, definition.ID, err)
+			}
+			if _, exists := executionFields["ticks"]; exists {
+				return nil, fmt.Errorf("%s: action %q: combat cannot declare execution.ticks", filename, definition.ID)
+			}
+		}
 	}
 	return file.Actions, nil
 }
@@ -125,7 +136,7 @@ func validateDefinition(definition *Definition) error {
 		if definition.Target.Cursor != "" || definition.IsRepeatable != nil {
 			return fmt.Errorf("none target cannot declare cursor or isRepeatable")
 		}
-	case TargetObject, TargetTile:
+	case TargetObject, TargetTile, TargetDirection:
 	default:
 		return fmt.Errorf("unknown target kind %q", definition.Target.Kind)
 	}
@@ -180,7 +191,51 @@ func validateDefinition(definition *Definition) error {
 			return fmt.Errorf("requirements.equipment[%d].itemTag is invalid", index)
 		}
 	}
+	if err := validateCombat(definition); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateCombat(definition *Definition) error {
+	profile := definition.Execution.Combat
+	if profile == nil {
+		if definition.Target.Kind == TargetDirection {
+			return fmt.Errorf("direction target requires execution.combat")
+		}
+		return nil
+	}
+	if definition.Target.Kind != TargetDirection || definition.Target.Approach != "" || definition.Execution.Ticks != 0 || definition.Execution.Repeat || definition.Repeatable() {
+		return fmt.Errorf("combat requires a non-repeatable direction target without approach, ticks, or execution.repeat")
+	}
+	if profile.Selection != SelectionAll && profile.Selection != SelectionNearest {
+		return fmt.Errorf("execution.combat.selection must be all or nearest")
+	}
+	if math.IsNaN(profile.SectorAngleDegrees) || math.IsInf(profile.SectorAngleDegrees, 0) || profile.SectorAngleDegrees <= 0 || profile.SectorAngleDegrees > 180 {
+		return fmt.Errorf("execution.combat.sectorAngleDegrees must be finite and in (0, 180]")
+	}
+	if math.IsNaN(profile.DamageMultiplier) || math.IsInf(profile.DamageMultiplier, 0) || profile.DamageMultiplier < 0 {
+		return fmt.Errorf("execution.combat.damageMultiplier must be finite and non-negative")
+	}
+	const maxMilliseconds = int64(math.MaxInt64) / int64(time.Millisecond)
+	if profile.WindupMs <= 0 || profile.RecoveryMs <= 0 || profile.CooldownMs <= 0 || profile.WindupMs > maxMilliseconds || profile.RecoveryMs > maxMilliseconds-profile.WindupMs || profile.CooldownMs > maxMilliseconds {
+		return fmt.Errorf("execution.combat timing must use positive milliseconds within time.Duration range")
+	}
+	items := itemdefs.Global()
+	if items == nil {
+		return fmt.Errorf("item definitions must load before combat definitions")
+	}
+	for _, requirement := range definition.Requirements.Equipment {
+		if !slices.Contains(requirement.Slots, "right_hand") && !slices.Contains(requirement.Slots, "left_hand") {
+			continue
+		}
+		for _, item := range items.All() {
+			if item.Weapon != nil && ((requirement.ItemKey != "" && item.Key == requirement.ItemKey) || (requirement.ItemTag != "" && slices.Contains(item.Tags, requirement.ItemTag))) {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("combat requires an equipped hand selector referencing a known weapon")
 }
 
 func validIconPath(icon string) bool {

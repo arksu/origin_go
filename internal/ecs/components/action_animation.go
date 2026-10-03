@@ -10,6 +10,7 @@ type ActionAnimation struct {
 	CycleIndex  uint32
 	StartedTick uint64
 	TotalTicks  uint32
+	ExecutionID uint64
 }
 
 const ActionAnimationComponentID ecs.ComponentID = 36

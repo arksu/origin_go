@@ -1,5 +1,6 @@
+import { CombatStateCache } from '@/types/combat'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { proto } from '@/network/proto/packets.js'
 import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERVAL_MS, CHAT_MAX_MESSAGES } from '@/constants/chat'
 import type { ConnectionState, ConnectionError } from '@/network/types'
@@ -45,6 +46,7 @@ export interface WorldParams {
   chunkSize: number
   streamEpoch: number
   directionalMovementSupported: boolean
+  combatSupported?: boolean
 }
 
 export interface ChatMessage {
@@ -188,6 +190,7 @@ export const useGameStore = defineStore('game', () => {
   const buildStateList = ref<BuildStateItemState[]>([])
   const liftCarryActive = ref(false)
   const liftCarriedEntityId = ref<number | null>(null)
+  const combat = reactive(new CombatStateCache())
   const gameActions = ref<proto.IActionDefinition[]>([])
   const gameActionListLoaded = ref(false)
   const gameActionState = ref<proto.IS2C_ActionStateChanged>({ actionId: '', phase: 'idle', cursor: '' })
@@ -300,10 +303,12 @@ export const useGameStore = defineStore('game', () => {
     chunkSize: number,
     streamEpoch: number,
     directionalMovementSupported = false,
+    combatSupported = false,
   ) {
     playerEntityId.value = entityId
     playerName.value = name
-    worldParams.value = { coordPerTile, chunkSize, streamEpoch, directionalMovementSupported }
+    worldParams.value = { coordPerTile, chunkSize, streamEpoch, directionalMovementSupported, combatSupported }
+    combat.reset(streamEpoch)
 
     // Clear inventories when entering new world
     console.log('[gameStore] Clearing inventories on world enter')
@@ -341,6 +346,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function setPlayerLeaveWorld() {
+    combat.reset()
     playerEntityId.value = null
     playerName.value = ''
     worldParams.value = null
@@ -399,6 +405,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function setGameActionState(state: proto.IS2C_ActionStateChanged) {
+    if (state.streamEpoch && state.streamEpoch !== worldParams.value?.streamEpoch) return
     gameActionState.value = state
   }
 
@@ -1141,6 +1148,7 @@ export const useGameStore = defineStore('game', () => {
     buildStateList,
     liftCarryActive,
     liftCarriedEntityId,
+    combat,
     gameActions,
     gameActionListLoaded,
     gameActionState,

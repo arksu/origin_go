@@ -692,6 +692,7 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 				TickRate:                     uint32(g.cfg.Game.TickRate),
 				StreamEpoch:                  c.StreamEpoch.Load(),
 				DirectionalMovementSupported: true,
+				CombatSupported:              g.cfg.Game.CombatTestEnabled,
 				Audio: &netproto.S2C_AudioParameters{
 					Hearing:     hearing,
 					FreshnessMs: uint32(freshnessMs),

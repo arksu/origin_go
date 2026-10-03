@@ -79,14 +79,21 @@ func TestDuplicateDefinitionIdentifiesSecondFile(t *testing.T) {
 }
 
 func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
+	items, err := itemdefs.LoadFromDirectory(filepath.Join("..", "..", "data", "items"), zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(items)
+	t.Cleanup(func() { itemdefs.SetGlobalForTesting(previous) })
 	registry, err := LoadFromDirectory(filepath.Join("..", "..", "data", "actions"), zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 4 {
-		t.Fatalf("expected lift, lift_down, plow_tile and dig, got %d", len(registry.All()))
+	if len(registry.All()) != 6 {
+		t.Fatalf("expected six production actions, got %d", len(registry.All()))
 	}
-	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile", "dig"}); err != nil {
+	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile", "dig", "axe_aoe", "axe_single"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"lift", "lift_down"} {

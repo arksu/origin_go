@@ -233,6 +233,11 @@ func (s *ContextActionService) ExecuteAction(
 	targetHandle types.Handle,
 	actionID string,
 ) bool {
+	if s != nil && w != nil && components.CombatCommitted(w, playerHandle) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "ACTION_BUSY")
+		return true
+	}
+
 	if actionID == teachContextActionID {
 		return s.executeTeachAction(w, playerID, playerHandle, targetID, targetHandle)
 	}
@@ -395,6 +400,10 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if w != nil && components.CombatCommitted(w, playerHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if s.isSyntheticTeachCyclicAction(action) {
 		return s.handleSyntheticTeachCycleComplete(w, playerID, playerHandle, action)
 	}

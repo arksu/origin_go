@@ -30,6 +30,22 @@ func Snapshot(w *ecs.World, handle types.Handle) (*netproto.CharacterActionAnima
 	if presentation.Key == "" {
 		return state, nil
 	}
+	if presentation.ExecutionID != 0 {
+		combat, ok := ecs.GetComponent[components.CombatState](w, handle)
+		if !ok || combat.Execution == nil || combat.Execution.ID != presentation.ExecutionID {
+			return nil, fmt.Errorf("invalid combat animation identity for handle %d", handle)
+		}
+		execution := combat.Execution
+		duration := float64(execution.RecoveryEnd.Sub(execution.StartedAt)) / float64(time.Millisecond)
+		if duration <= 0 {
+			return nil, fmt.Errorf("invalid combat animation duration")
+		}
+		state.AnimationKey, state.ExecutionId = presentation.Key, execution.ID
+		state.DurationMs = duration
+		state.ElapsedMs = math.Max(0, math.Min(duration, float64(timing.Now.Sub(execution.StartedAt))/float64(time.Millisecond)))
+		state.LockedDirection = &netproto.CombatDirection{X: execution.Direction.X, Y: execution.Direction.Y}
+		return state, nil
+	}
 	cycle, active := ecs.GetComponent[components.ActiveCyclicAction](w, handle)
 	if !active || cycle.CycleDurationTicks == 0 || cycle.CycleElapsedTicks > cycle.CycleDurationTicks || timing.TickPeriod <= 0 {
 		return nil, fmt.Errorf("invalid action animation timing for handle %d", handle)

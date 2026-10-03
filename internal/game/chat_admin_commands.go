@@ -46,6 +46,7 @@ type AdminVisionForcer interface {
 // ChatAdminCommandHandler processes admin slash-commands received from chat.
 // Implements systems.AdminCommandHandler.
 type ChatAdminCommandHandler struct {
+	combatRange           *CombatRangeService
 	inventoryExecutor     *inventory.InventoryExecutor
 	inventoryResultSender systems.InventoryResultSender
 	chatDelivery          systems.ChatDeliveryService
@@ -144,6 +145,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	}
 
 	switch parts[0] {
+	case "/combat-range":
+		h.handleCombatRange(w, playerID, playerHandle, parts[1:])
+		return true
 	case "/give":
 		h.handleGive(w, playerID, playerHandle, parts[1:])
 		return true
@@ -206,10 +210,10 @@ func (h *ChatAdminCommandHandler) handleGive(
 	playerID types.EntityID,
 	playerHandle types.Handle,
 	args []string,
-) {
+) bool {
 	if len(args) == 0 {
 		h.sendSystemMessage(playerID, "usage: /give <item_key> [count] [quality]")
-		return
+		return false
 	}
 
 	itemKey := args[0]
@@ -221,7 +225,7 @@ func (h *ChatAdminCommandHandler) handleGive(
 			count = uint32(v)
 		} else {
 			h.sendSystemMessage(playerID, "invalid count: "+args[1])
-			return
+			return false
 		}
 	}
 
@@ -230,7 +234,7 @@ func (h *ChatAdminCommandHandler) handleGive(
 			quality = uint32(v)
 		} else {
 			h.sendSystemMessage(playerID, "invalid quality: "+args[2])
-			return
+			return false
 		}
 	}
 
@@ -241,7 +245,7 @@ func (h *ChatAdminCommandHandler) handleGive(
 			zap.Uint64("player_id", uint64(playerID)),
 			zap.String("item_key", itemKey),
 			zap.String("reason", result.Message))
-		return
+		return false
 	}
 
 	// Send inventory update to client
@@ -268,6 +272,7 @@ func (h *ChatAdminCommandHandler) handleGive(
 		zap.Uint32("count", count),
 		zap.Uint32("quality", quality),
 		zap.String("result", result.Message))
+	return true
 }
 
 // handleSpawn processes: /spawn <object_key> [quality]

@@ -2,6 +2,15 @@ package actionanimationdefs
 
 import "fmt"
 
+func (registry *Registry) ValidateCombatSources(resolve func(string) bool) error {
+	for _, binding := range registry.all {
+		if binding.Source.Kind == "combat" && (binding.Source.Namespace != "" || resolve == nil || !resolve(binding.Source.ID)) {
+			return fmt.Errorf("%s: binding %s references an unavailable combat action", binding.SourceFile, binding.Key)
+		}
+	}
+	return nil
+}
+
 // Menu definitions own their concrete target contract. Resolving it at activation
 // keeps animation definitions independent of action/game package dependencies.
 func (registry *Registry) ValidateMenuSoundTargets(resolveTargetKind func(actionID string) (string, bool)) error {

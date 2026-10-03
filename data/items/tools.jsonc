@@ -6,6 +6,7 @@
       "defId": 1002,
       "key": "stone_axe",
       "name": "Stone Axe",
+	  "weapon": { "baseDamage": 6, "range": 18 },
       "resource": "items/stone_axe.png",
       "tags": [
         "axe"

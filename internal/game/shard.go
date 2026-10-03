@@ -66,6 +66,8 @@ type Shard struct {
 	buildService    *BuildService
 	liftService     *LiftService
 	actionService   *ActionService
+	combatService   *CombatService
+	combatRange     *CombatRangeService
 	soundEvents     *SoundEventService
 
 	Clients   map[types.EntityID]*network.Client
@@ -189,16 +191,27 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	if definitions == nil {
 		logger.Fatal("Action definitions were not loaded before shard startup")
 	}
-	actionService, actionErr := NewActionService(s.world, definitions, map[string]ActionHandler{
+	combatService := NewCombatService(s.world, NewCombatReceivers(s.world, s.chunkManager), cfg.Game.CombatTestEnabled, logger)
+	s.combatService = combatService
+	combatService.OnState = s.publishCombatState
+	combatService.OnResult = s.publishCombatResult
+	handlers := map[string]ActionHandler{
 		"lift":      &liftActionHandler{lift: liftService, commands: networkCmdSystem},
 		"lift_down": &liftDownActionHandler{lift: liftService},
 		"plow_tile": &plowTileActionHandler{terrain: s.chunkManager},
 		"dig":       &digTileActionHandler{terrain: s.chunkManager, giveItem: giveItem},
-	}, s)
+	}
+	for _, definition := range definitions.All() {
+		if definition.Execution.Combat != nil {
+			handlers[definition.ID] = &combatActionHandler{combat: combatService, definition: definition}
+		}
+	}
+	actionService, actionErr := NewActionService(s.world, definitions, handlers, s)
 	if actionErr != nil {
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
 	}
 	s.actionService = actionService
+	actionService.SetCombatService(combatService)
 	actionService.SetSoundEventService(s.soundEvents)
 	actionService.SetApproachTimeout(cfg.Game.InteractionPendingTimeout)
 	actionService.SubscribeEvents(s.eventBus)
@@ -215,6 +228,18 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
+	if cfg.Game.CombatTestEnabled {
+		rangeService, err := NewCombatRangeService(s.world, combatService, s.chunkManager, entityIDManager, "./data/combat_range.json", s.eventBus)
+		if err != nil {
+			logger.Fatal("Invalid combat range configuration", zap.Error(err))
+		}
+		s.combatRange = rangeService
+		rangeService.OnTarget = s.publishCombatTarget
+		rangeService.OnRemove = s.removeCombatFixture
+		adminHandler.combatRange = rangeService
+		combatService.Strength = rangeService.Strength
+		s.world.AddSystem(rangeService)
+	}
 	adminHandler.SetObjectDeleter(worldObjectPersistence)
 	adminHandler.SetContainerCloseSender(s)
 	adminHandler.SetLifeDeathFactor(cfg.Game.LifeDeathFactor)
@@ -236,6 +261,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
 	s.world.AddSystem(NewActionValidationSystem(s.world, actionService))
+	s.world.AddSystem(combatService)
 	cyclicActions := NewCyclicActionSystem(contextActionService, s, logger)
 	cyclicActions.SetActionService(actionService)
 	s.world.AddSystem(cyclicActions)
@@ -613,6 +639,9 @@ func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 // onDetachedEntityExpired is called when a detached entity's TTL expires.
 // It runs after the character snapshot has captured inventory contents.
 func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
+	if s.combatService != nil {
+		s.combatService.Interrupt(handle)
+	}
 	s.soundEvents.Detach(handle, 0)
 	if s.liftService != nil {
 		_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, entityID, handle, false)
@@ -685,6 +714,9 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 }
 
 func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+	if s.combatService != nil {
+		s.combatService.Interrupt(playerHandle)
+	}
 	if s.actionService != nil {
 		s.actionService.Cancel(w, playerID, playerHandle)
 	}
@@ -1344,12 +1376,15 @@ func (s *Shard) sendActionMessage(entityID types.EntityID, message *netproto.Ser
 	if client == nil {
 		return
 	}
+	if state := message.GetActionStateChanged(); state != nil {
+		state.StreamEpoch = client.StreamEpoch.Load()
+	}
 	encoded, err := proto.Marshal(message)
 	if err != nil {
 		s.logger.Error("Failed to marshal action message", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
 		return
 	}
-	client.Send(encoded)
+	client.SendCritical(encoded)
 }
 
 // SendFx sends a visual effect trigger to a client.
@@ -1486,6 +1521,7 @@ func (s *Shard) SendCharacterProfileSnapshot(w *ecs.World, entityID types.Entity
 // SendPlayerStatsSnapshot sends the initial player stats snapshot after enter-world/reattach.
 func (s *Shard) SendPlayerStatsSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) {
 	s.sendPlayerStats(w, entityID, handle, true)
+	s.sendCombatOwner(handle)
 }
 
 // SendPlayerStatsDeltaIfChanged sends player stats only when rounded network values changed.
@@ -1604,7 +1640,7 @@ func (s *Shard) sendMovementMode(w *ecs.World, entityID types.EntityID, handle t
 	}
 
 	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
-	if !updateState.ShouldSendMovementMode(entityID, movement.Mode, force) {
+	if !updateState.ShouldSendMovementMode(entityID, components.EffectiveCombatMoveMode(w, handle, movement.Mode), force) {
 		return false
 	}
 
@@ -1620,7 +1656,7 @@ func (s *Shard) sendMovementMode(w *ecs.World, entityID types.EntityID, handle t
 		Payload: &netproto.ServerMessage_MovementMode{
 			MovementMode: &netproto.S2C_MovementMode{
 				EntityId:     uint64(entityID),
-				MovementMode: moveModeToProto(movement.Mode),
+				MovementMode: moveModeToProto(components.EffectiveCombatMoveMode(w, handle, movement.Mode)),
 			},
 		},
 	}
@@ -1634,7 +1670,7 @@ func (s *Shard) sendMovementMode(w *ecs.World, entityID types.EntityID, handle t
 	}
 
 	client.Send(data)
-	updateState.MarkMovementModeSent(entityID, movement.Mode)
+	updateState.MarkMovementModeSent(entityID, components.EffectiveCombatMoveMode(w, handle, movement.Mode))
 	return true
 }
 

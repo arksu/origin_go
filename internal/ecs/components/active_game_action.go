@@ -11,6 +11,8 @@ const (
 	GameActionSelecting   GameActionPhase = "selecting"
 	GameActionApproaching GameActionPhase = "approaching"
 	GameActionExecuting   GameActionPhase = "executing"
+	GameActionWindup      GameActionPhase = "windup"
+	GameActionRecovery    GameActionPhase = "recovery"
 )
 
 // ActiveGameAction is transient player state; it is never saved with the character.

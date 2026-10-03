@@ -110,6 +110,12 @@ func main() {
 	}); err != nil {
 		logger.Fatal("Invalid animation sound sources", zap.Error(err))
 	}
+	if err := animationRegistry.ValidateCombatSources(func(actionID string) bool {
+		definition, exists := actionRegistry.Get(actionID)
+		return exists && definition.Execution.Combat != nil
+	}); err != nil {
+		logger.Fatal("Invalid combat animation sources", zap.Error(err))
+	}
 	actionanimationdefs.SetGlobal(animationRegistry)
 
 	ctx, cancel := context.WithCancel(context.Background())

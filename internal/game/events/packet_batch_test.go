@@ -208,11 +208,8 @@ func TestSpawnBatchOutboundValidationEpochAndAppearance(t *testing.T) {
 }
 
 func TestSpawnBatchCriticalDeliveryOnFullQueue(t *testing.T) {
-	for _, animated := range []bool{false, true} {
-		name := "ordinary"
-		if animated {
-			name = "animation"
-		}
+	for _, name := range []string{"ordinary", "animation", "combat target", "combat execution"} {
+		animated := name != "ordinary"
 		t.Run(name, func(t *testing.T) {
 			f := newBatchFixture(t)
 			// onConnect runs before the client's write loop. Hold it here so filling
@@ -231,10 +228,16 @@ func TestSpawnBatchCriticalDeliveryOnFullQueue(t *testing.T) {
 			observer := w.Spawn(1, nil)
 			first := spawnBatchTarget(w, 10, "tree")
 			resource := "tree"
-			if animated {
+			if name == "animation" {
 				resource = "player"
 			}
 			second := spawnBatchTarget(w, 11, resource)
+			if name == "combat target" {
+				ecs.AddComponent(w, second, components.CombatTestTarget{HP: .6, MaxHP: 1, Revision: 2, Receiver: true})
+			}
+			if name == "combat execution" {
+				ecs.AddComponent(w, second, components.CombatState{Revision: 2})
+			}
 			visibility := ecs.GetResource[ecs.VisibilityState](w)
 			for _, h := range []types.Handle{first, second} {
 				visibility.ObserversByVisibleTarget[h] = map[types.Handle]struct{}{observer: {}}

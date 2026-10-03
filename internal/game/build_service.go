@@ -122,6 +122,11 @@ func (s *BuildService) HandleStartBuild(
 	playerHandle types.Handle,
 	msg *netproto.C2S_BuildStart,
 ) {
+	if s != nil && w != nil && components.CombatCommitted(w, playerHandle) {
+		s.sendWarning(playerID, "ACTION_BUSY")
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || msg == nil || msg.Pos == nil || playerID == 0 {
 		return
 	}
@@ -203,6 +208,11 @@ func (s *BuildService) HandleBuildProgress(
 	playerHandle types.Handle,
 	msg *netproto.C2S_BuildProgress,
 ) {
+	if s != nil && w != nil && components.CombatCommitted(w, playerHandle) {
+		s.sendWarning(playerID, "ACTION_BUSY")
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || msg == nil || playerID == 0 {
 		return
 	}
@@ -239,6 +249,11 @@ func (s *BuildService) HandleBuildTakeBack(
 	playerHandle types.Handle,
 	msg *netproto.C2S_BuildTakeBack,
 ) {
+	if s != nil && w != nil && components.CombatCommitted(w, playerHandle) {
+		s.sendWarning(playerID, "ACTION_BUSY")
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || msg == nil || playerID == 0 {
 		return
 	}
@@ -389,6 +404,11 @@ func (s *BuildService) FinalizePendingBuildPlacement(
 	playerHandle types.Handle,
 	pending components.PendingBuildPlacement,
 ) {
+	if s != nil && w != nil && components.CombatCommitted(w, playerHandle) {
+		s.sendWarning(playerID, "ACTION_BUSY")
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return
 	}

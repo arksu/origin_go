@@ -37,6 +37,7 @@ type DatabaseConfig struct {
 }
 
 type GameConfig struct {
+	CombatTestEnabled        bool          `mapstructure:"combat_test_enabled"`
 	Audio                    AudioConfig   `mapstructure:"audio"`
 	Env                      string        `mapstructure:"env"`
 	TickRate                 int           `mapstructure:"tick_rate"`
@@ -76,17 +77,17 @@ type GameConfig struct {
 	ChatMaxLen        int `mapstructure:"chat_max_len"`         // Max chat message length (default: 256)
 	ChatMinIntervalMs int `mapstructure:"chat_min_interval_ms"` // Min interval between messages in ms (default: 400)
 
-	InteractionPendingTimeout     time.Duration `mapstructure:"interaction_pending_timeout"`     // Pending context action timeout (default: 15s)
-	ObjectBehaviorBudgetPerTick   int           `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
-	BehaviorTickGlobalBudget      int           `mapstructure:"behavior_tick_global_budget_per_tick"`
-	BehaviorTickCatchupLimit      int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
-	PlayerStatsTTLms              int           `mapstructure:"player_stats_ttl_ms"`
-	StaminaRegenIntervalTicks     int           `mapstructure:"stamina_regen_interval_ticks"`
+	InteractionPendingTimeout   time.Duration `mapstructure:"interaction_pending_timeout"`     // Pending context action timeout (default: 15s)
+	ObjectBehaviorBudgetPerTick int           `mapstructure:"object_behavior_budget_per_tick"` // Max dirty behavior objects processed per tick (default: 512)
+	BehaviorTickGlobalBudget    int           `mapstructure:"behavior_tick_global_budget_per_tick"`
+	BehaviorTickCatchupLimit    int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
+	PlayerStatsTTLms            int           `mapstructure:"player_stats_ttl_ms"`
+	StaminaRegenIntervalTicks   int           `mapstructure:"stamina_regen_interval_ticks"`
 	// LifeDeathFactor is immutable for an existing world, including across restarts.
 	// Change it only after a full world wipe: lowering MHP can permanently clamp saved HHP.
-	LifeDeathFactor               float64       `mapstructure:"life_death_factor"`
-	ShpRegenIntervalTicks         int           `mapstructure:"shp_regen_interval_ticks"`
-	StarvationDamageIntervalTicks int           `mapstructure:"starvation_damage_interval_ticks"`
+	LifeDeathFactor               float64 `mapstructure:"life_death_factor"`
+	ShpRegenIntervalTicks         int     `mapstructure:"shp_regen_interval_ticks"`
+	StarvationDamageIntervalTicks int     `mapstructure:"starvation_damage_interval_ticks"`
 }
 
 type EntityIDConfig struct {
@@ -205,6 +206,7 @@ func setDefaults(v *viper.Viper) {
 
 	// Game defaults
 	v.SetDefault("game.env", "dev")
+	v.SetDefault("game.combat_test_enabled", false)
 	v.SetDefault("game.pprof_enabled", false)
 	v.SetDefault("game.tick_rate", 10)
 	v.SetDefault("game.player_active_chunk_radius", 1)

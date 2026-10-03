@@ -341,3 +341,32 @@ test('destroy and re-init remove keyboard listeners and timers; modal reset requ
     assert.equal(f.packets.length, count)
   }
 })
+
+
+test('combat activation hands off the old hold and permits fresh windup movement', context => {
+  setActivePinia(createPinia())
+  const f = inputFixture(context)
+  context.mock.method(gameFacade, 'releaseKeyboardMovement', () => f.release())
+  const store = useGameStore()
+  store.setPlayerEnterWorld(1, 'combat', 12, 128, 7, true, true)
+  store.setGameActionList([{ id: 'axe_aoe', targetKind: 'direction', combat: {} }])
+  f.key('keydown', 'KeyW')
+  f.packets.length = 0
+  sendActivateAction('axe_aoe')
+  assert.equal(f.packets.length, 2)
+  assert.equal(direction(f.packets[0]).x, 0)
+  assert.equal(f.packets[1]?.activateAction?.streamEpoch, 7)
+  assert.equal(String(f.packets[1]?.activateAction?.requestRevision), '1')
+  f.key('keydown', 'KeyW', { repeat: true })
+  f.key('keyup', 'KeyW')
+  context.mock.timers.tick(200)
+  assert.equal(f.packets.length, 2)
+  store.setGameActionState({ actionId: 'axe_aoe', phase: 'windup', streamEpoch: 7 })
+  f.key('keydown', 'KeyD')
+  assert.notEqual(direction(f.packets.at(-1)).x, 0, 'fresh WASD can move during the committed attack')
+  store.setPlayerEnterWorld(1, 'legacy', 12, 128, 8, true, false)
+  f.packets.length = 0
+  store.setGameActionList([{ id: 'axe_aoe', targetKind: 'direction', combat: {} }])
+  sendActivateAction('axe_aoe')
+  assert.equal(f.packets.some(packet => packet.activateAction), false)
+})

@@ -58,7 +58,7 @@ export class ActionAnimationPlayer {
     const definition = Object.hasOwn(this.definitions, this.input.key) ? this.definitions[this.input.key] : undefined
     if (!definition) { this.issue(`Unknown action animation binding: ${this.input.key}`); return null }
     if (definition.actor !== this.actorId) { this.issue(`Incompatible action animation actor: ${definition.key}`); return null }
-    if (definition.facing === 'target' && this.input.facingAngle === undefined) { this.issue(`Action animation requires a facing target: ${definition.key}`); return null }
+    if (definition.facing !== 'preserve' && this.input.facingAngle === undefined) { this.issue(`Action animation requires a facing target: ${definition.key}`); return null }
     for (const rule of definition.eligibility) {
       if (rule === 'stationary' && !context.stationary || rule === 'not_carrying' && context.carrying || rule === 'not_knocked_out' && context.knockedOut) return null
     }
@@ -87,7 +87,7 @@ export class ActionAnimationPlayer {
       }
       layer.phase = this.input.phase
     }
-    this.currentFacing = selected?.definition.facing === 'target' ? this.input?.facingAngle : undefined
+    this.currentFacing = selected?.definition.facing !== 'preserve' ? this.input?.facingAngle : undefined
     this.currentSamples = [...this.layers.values()].filter(layer => layer.weight > 0).map(layer => ({ clip: layer.variant.clip, phase: layer.phase, weight: layer.weight }))
     let left = -this.baseFrame.origin_x, top = -this.baseFrame.origin_y
     let right = this.baseFrame.width + left, bottom = this.baseFrame.height + top

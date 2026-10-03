@@ -1,0 +1,37 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "axe_aoe",
+      "presentation": {
+        "label": "Axe sweep",
+        "menuIcon": "/assets/game/items/stone_axe.png"
+      },
+      "target": {
+        "kind": "direction"
+      },
+      "requirements": {
+        "equipment": [
+          {
+            "slots": [
+              "right_hand",
+              "left_hand"
+            ],
+            "itemTag": "axe"
+          }
+        ]
+      },
+      "execution": {
+        "stamina": 60,
+        "combat": {
+          "selection": "all",
+          "sectorAngleDegrees": 90,
+          "windupMs": 600,
+          "recoveryMs": 400,
+          "cooldownMs": 2000,
+          "damageMultiplier": 1
+        }
+      }
+    }
+  ]
+}

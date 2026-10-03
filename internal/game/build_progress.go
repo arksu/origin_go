@@ -64,6 +64,10 @@ func (s *BuildService) HandleBuildCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if w != nil && components.CombatCommitted(w, playerHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}

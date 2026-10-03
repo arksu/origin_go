@@ -306,6 +306,10 @@ message CharacterActionAnimationState {
   double tick_duration_ms = 6;
   int64 server_time_ms = 7;
   Position target_position = 8;
+  double elapsed_ms = 9;
+  double duration_ms = 10;
+  CombatDirection locked_direction = 11;
+  uint64 execution_id = 12;
 }
 
 message S2C_CharacterActionAnimation {
@@ -342,6 +346,7 @@ message MapClick {
   int32 y = 2;
   uint64 target_entity_id = 3; // zero for empty ground
   MapClickButton button = 4;
+  CombatAttempt combat_attempt = 5;
 }
 
 message SelectContextAction {
@@ -431,6 +436,8 @@ message C2S_BuildTakeBack {
 
 message C2S_ActivateAction {
   string action_id = 1;
+  uint32 stream_epoch = 2;
+  uint64 request_revision = 3;
 }
 
 message C2S_CancelAction {}
@@ -516,6 +523,7 @@ message S2C_PlayerEnterWorld {
   uint32 stream_epoch = 9; // для защиты от гонок состояний
   bool directional_movement_supported = 10;
   S2C_AudioParameters audio = 11;
+  bool combat_supported = 12;
 }
 
 message S2C_AudioParameters {
@@ -590,6 +598,8 @@ message S2C_ObjectSpawn {
   string name = 8; // display name; empty for unnamed entities (objects, items)
   NicknameColor name_color = 9;
   CharacterActionAnimationState action_animation = 10;
+  CombatExecutionState combat_execution = 11;
+  CombatTargetState combat_target = 12;
 }
 
 message S2C_ObjectSpawnBatch {
@@ -824,6 +834,7 @@ message ActionDefinition {
   uint32 ticks = 8;
   double stamina = 9;
   bool is_repeatable = 10;
+  CombatProfile combat = 11;
 }
 
 message S2C_ActionList {
@@ -834,6 +845,101 @@ message S2C_ActionStateChanged {
   string action_id = 1;
   string phase = 2;
   string cursor = 3;
+  uint64 selection_generation = 4;
+  uint32 stream_epoch = 5;
+  string generation = 6;
+  double combat_range = 7;
+}
+
+message CombatDirection {
+  double x = 1;
+  double y = 2;
+}
+
+message CombatProfile {
+  string selection = 1;
+  double sector_angle_degrees = 2;
+  uint64 windup_ms = 3;
+  uint64 recovery_ms = 4;
+  uint64 cooldown_ms = 5;
+  double damage_multiplier = 6;
+}
+
+message CombatAttempt {
+  string action_id = 1;
+  uint64 selection_generation = 2;
+  uint64 request_revision = 3;
+  uint32 stream_epoch = 4;
+}
+
+message CombatExecutionState {
+  string generation = 1;
+  uint64 revision = 2;
+  uint64 execution_id = 3;
+  string action_id = 4;
+  string phase = 5;
+  CombatDirection locked_direction = 6;
+  double elapsed_ms = 7;
+  double duration_ms = 8;
+  int64 strike_at_ms = 9;
+  int64 recovery_end_ms = 10;
+  int64 server_time_ms = 11;
+  double range = 12;
+  double sector_angle_degrees = 13;
+  uint64 start_event_sequence = 14;
+}
+
+message CombatTargetState {
+  string generation = 1;
+  uint64 revision = 2;
+  double hp = 3;
+  double max_hp = 4;
+  bool depleted = 5;
+}
+
+message CombatCooldown {
+  string action_id = 1;
+  int64 ready_at_ms = 2;
+}
+
+// Owner-only cooldowns are deliberately separate from public execution state.
+message S2C_CombatOwnerState {
+  string generation = 1;
+  uint64 revision = 2;
+  uint32 stream_epoch = 3;
+  repeated CombatCooldown cooldowns = 4;
+  int64 server_time_ms = 5;
+}
+
+message S2C_CombatState {
+  uint64 entity_id = 1;
+  uint32 stream_epoch = 2;
+  CombatExecutionState state = 3;
+}
+
+message CombatHitResult {
+  uint64 event_sequence = 1;
+  uint64 target_id = 2;
+  CombatTargetState target = 3;
+  double raw_damage = 4;
+  double damage = 5;
+}
+
+message S2C_CombatResult {
+  uint64 entity_id = 1;
+  string generation = 2;
+  uint32 stream_epoch = 3;
+  uint64 execution_id = 4;
+  uint64 event_sequence = 5;
+  int64 server_time_ms = 6;
+  bool hit = 7;
+  repeated CombatHitResult hits = 8;
+}
+
+message S2C_CombatTarget {
+  uint64 entity_id = 1;
+  uint32 stream_epoch = 2;
+  CombatTargetState state = 3;
 }
 
 message S2C_Sound {
@@ -935,6 +1041,10 @@ message ServerMessage {
     S2C_ObjectMoveBatch object_move_batch = 49;
     S2C_ObjectSpawnBatch object_spawn_batch = 50;
     S2C_SoundBatch sound_batch = 51;
+    S2C_CombatOwnerState combat_owner_state = 52;
+    S2C_CombatState combat_state = 53;
+    S2C_CombatResult combat_result = 54;
+    S2C_CombatTarget combat_target = 55;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

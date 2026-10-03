@@ -2,11 +2,9 @@ package game
 
 import (
 	"context"
-	"path/filepath"
 	"slices"
 	"testing"
 
-	"go.uber.org/zap"
 	"origin/internal/actiondefs"
 	"origin/internal/characterattrs"
 	constt "origin/internal/const"
@@ -41,10 +39,7 @@ func (recorder *digGiveRecorder) give(_ *ecs.World, _ types.EntityID, _ types.Ha
 
 func newDigTest(t *testing.T, tile byte) (*ecs.World, types.Handle, *ActionService, *testPlowTerrain, *testActionSender, *digGiveRecorder) {
 	t.Helper()
-	registry, err := actiondefs.LoadFromDirectory(filepath.Join("..", "..", "data", "actions"), zap.NewNop())
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := loadProductionActionsForTest(t)
 	definition, found := registry.Get("dig")
 	if !found {
 		t.Fatal("dig action missing")

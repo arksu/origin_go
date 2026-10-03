@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CombatCooldown from './CombatCooldown.vue'
 import { ref } from 'vue'
 import type { proto } from '@/network/proto/packets.js'
 import { gameActionHotbarId, type HotbarActionId } from '@/game/hud/actionCatalog'
@@ -97,6 +98,7 @@ function onPointerUp(event: PointerEvent): void {
     >
       <img :src="action.menuIcon || ''" :alt="action.label || ''" draggable="false">
       <span>{{ action.label }}</span>
+      <CombatCooldown v-if="action.combat && action.id" :action-id="action.id" />
     </button>
   </div>
 </template>
@@ -120,6 +122,7 @@ function onPointerUp(event: PointerEvent): void {
 }
 
 .actions-menu__action {
+  position: relative;
   flex: 0 0 88px;
   display: flex;
   flex-direction: column;

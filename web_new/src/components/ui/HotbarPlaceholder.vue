@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CombatCooldown from './CombatCooldown.vue'
 import { computed, ref } from 'vue'
 import {
   getActionIconPath,
@@ -200,6 +201,7 @@ function onSlotPointerLeave(): void {
             draggable="false"
           >
           <span class="hotbar__slot-label">{{ slotShortLabel(assignments[slotIndex]!) }}</span>
+          <CombatCooldown :action-id="assignments[slotIndex]!" />
         </template>
       </button>
     </div>
@@ -235,6 +237,7 @@ function onSlotPointerLeave(): void {
             draggable="false"
           >
           <span class="hotbar__slot-label">{{ slotShortLabel(assignments[slotIndex]!) }}</span>
+          <CombatCooldown :action-id="assignments[slotIndex]!" />
         </template>
       </button>
     </div>

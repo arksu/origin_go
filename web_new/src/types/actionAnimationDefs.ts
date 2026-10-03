@@ -1,6 +1,6 @@
 import { EQUIPMENT_SLOT_BY_ID, type EquipmentSlot } from './equipmentSlots.ts'
 
-export interface ActionAnimationSource { kind: 'context' | 'menu' | 'craft' | 'build'; namespace?: string; id: string }
+export interface ActionAnimationSource { kind: 'context' | 'menu' | 'craft' | 'build' | 'combat'; namespace?: string; id: string }
 export interface ActionAnimationEquipment { slot: EquipmentSlot; visual_key: string }
 export interface ActionAnimationVariant { clip: string; equipment: ActionAnimationEquipment[] }
 export interface ActionAnimationFrame { width: number; height: number; origin_x: number; origin_y: number }
@@ -11,7 +11,7 @@ export interface ActionAnimationDefinition {
   actor: string
   variants: ActionAnimationVariant[]
   eligibility: ActionAnimationEligibility[]
-  facing: 'preserve' | 'target'
+  facing: 'preserve' | 'target' | 'direction'
   blend_ms: number
   frame: ActionAnimationFrame
   unbind_equipment_slots?: EquipmentSlot[]
@@ -65,7 +65,7 @@ function parseBinding(value: unknown, label: string, withSource: boolean): Actio
   if (!variants.length) throw new Error(`${label}.variants: must not be empty`)
   const eligibility = array(item.eligibility, `${label}.eligibility`)
   if (eligibility.some(predicate => typeof predicate !== 'string' || !ELIGIBILITY.has(predicate)) || new Set(eligibility).size !== eligibility.length) throw new Error(`${label}.eligibility: unknown or duplicate predicate`)
-  if (item.facing !== 'preserve' && item.facing !== 'target') throw new Error(`${label}.facing: expected preserve or target`)
+  if (item.facing !== 'preserve' && item.facing !== 'target' && item.facing !== 'direction') throw new Error(`${label}.facing: expected preserve, target, or direction`)
   const rawFrame = object(item.frame, `${label}.frame`, ['width', 'height', 'origin_x', 'origin_y'])
   const frame = {
     width: number(rawFrame.width, `${label}.frame.width`, 1), height: number(rawFrame.height, `${label}.frame.height`, 1),
@@ -103,8 +103,10 @@ function parseBinding(value: unknown, label: string, withSource: boolean): Actio
   if (!withSource) return result
   const source = object(item.source, `${label}.source`, ['kind', 'namespace', 'id'])
   const kind = typeof source.kind === 'string' ? source.kind.trim() : ''
-  if (!['context', 'menu', 'craft', 'build'].includes(kind)) throw new Error(`${label}.source.kind: unsupported source`)
+  if (!['context', 'menu', 'craft', 'build', 'combat'].includes(kind)) throw new Error(`${label}.source.kind: unsupported source`)
   if (kind === 'craft' && result.sound_cues?.some(cue => cue.source === 'target')) throw new Error(`${label}.sound_cues: craft execution has no guaranteed target source`)
+  if (result.facing === 'direction' && kind !== 'combat') throw new Error(`${label}: direction facing requires a combat source`)
+  if (kind === 'combat' && (result.facing !== 'direction' || result.eligibility.includes('stationary') || result.sound_cues?.length)) throw new Error(`${label}: combat requires direction facing, moving eligibility, and no cycle sound cues`)
   const id = string(typeof source.id === 'string' ? source.id.trim() : source.id, `${label}.source.id`)
   const namespace = source.namespace === undefined ? '' : typeof source.namespace === 'string' ? source.namespace.trim() : source.namespace
   if (namespace !== '') string(namespace, `${label}.source.namespace`)

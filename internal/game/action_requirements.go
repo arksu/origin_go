@@ -17,6 +17,9 @@ func (service *ActionService) UnavailableReason(world *ecs.World, playerID types
 	if reason := service.nonStaminaReason(world, playerID, playerHandle, definition); reason != "" {
 		return reason
 	}
+	if definition.Execution.Combat != nil {
+		return ""
+	}
 	return staminaReason(world, playerHandle, definition)
 }
 

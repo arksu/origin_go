@@ -23,7 +23,7 @@ export async function loadActionAnimationDefinitions(root) {
 }
 
 async function validateMenuSoundTargets(root, definitions) {
-  const bindings = definitions.filter(binding => binding.source.kind === 'menu' && binding.sound_cues?.some(cue => cue.source === 'target'))
+  const bindings = definitions.filter(binding => binding.source.kind === 'combat' || binding.source.kind === 'menu' && binding.sound_cues?.some(cue => cue.source === 'target'))
   if (!bindings.length) return
   const directory = join(root, 'data/actions')
   const entries = await readdir(directory, { withFileTypes: true })
@@ -34,13 +34,18 @@ async function validateMenuSoundTargets(root, definitions) {
     try { file = JSON.parse(await readFile(filename, 'utf8')) } catch (error) { throw new Error(`${filename}: ${error.message}`, { cause: error }) }
     if (file?.v !== 1 || !Array.isArray(file.actions) || !file.actions.length) throw new Error(`${filename}: expected v=1 and nonempty actions`)
     for (const action of file.actions) {
-      if (typeof action?.id !== 'string' || !/^[a-z][a-z0-9_]*$/.test(action.id) || !['none', 'object', 'tile'].includes(action.target?.kind)) throw new Error(`${filename}: invalid action ID or target kind`)
+      if (typeof action?.id !== 'string' || !/^[a-z][a-z0-9_]*$/.test(action.id) || !['none', 'object', 'tile', 'direction'].includes(action.target?.kind)) throw new Error(`${filename}: invalid action ID or target kind`)
       if (targets.has(action.id)) throw new Error(`${filename}: duplicate menu action ${action.id}`)
-      targets.set(action.id, action.target.kind)
+      targets.set(action.id, { kind: action.target.kind, combat: action.execution?.combat != null })
     }
   }
   for (const binding of bindings) {
-    const kind = targets.get(binding.source.id)
+    const target = targets.get(binding.source.id)
+    const kind = target?.kind
+    if (binding.source.kind === 'combat') {
+      if (binding.source.namespace || kind !== 'direction' || !target.combat) throw new Error(`binding ${binding.key}: unavailable combat source`)
+      continue
+    }
     if (kind !== 'object' && kind !== 'tile') throw new Error(`binding ${binding.key}: menu action ${binding.source.id} has no available target sound source (target kind ${kind ?? 'missing'})`)
   }
 }
