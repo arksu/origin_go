@@ -102,6 +102,11 @@ func (s *CraftingService) startCraft(
 	craftKey string,
 	cycles uint32,
 ) {
+	if s != nil && w != nil && components.CombatCommitted(w, playerHandle) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, "ACTION_BUSY")
+		return
+	}
+
 	if s == nil || w == nil || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) || cycles == 0 {
 		return
 	}
@@ -172,6 +177,10 @@ func (s *CraftingService) HandleCraftCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if w != nil && components.CombatCommitted(w, playerHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if s == nil || w == nil || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}

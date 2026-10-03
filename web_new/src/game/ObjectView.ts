@@ -1130,7 +1130,7 @@ export class ObjectView {
     actor.setActionAnimation(state?.animationKey ? {
       key: state.animationKey,
       phase: actionAnimationPhase(state, serverNowMs),
-      facingAngle: target ? screenFacingAngleFromDisplacement(target.x - this.position.x, target.y - this.position.y) ?? undefined : undefined,
+      facingAngle: state.lockedDirection ? screenFacingAngleFromDisplacement(state.lockedDirection.x, state.lockedDirection.y) ?? undefined : target ? screenFacingAngleFromDisplacement(target.x - this.position.x, target.y - this.position.y) ?? undefined : undefined,
     } : null)
     actor.prepareActionAnimation(nowMs)
     const frame = actor.outputFrame

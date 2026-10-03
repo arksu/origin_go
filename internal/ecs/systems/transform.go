@@ -116,9 +116,9 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 		suppressBlocked := false
 		if movement, exists := s.movementStorage.Get(h); exists && (directional || movement.Direction.UpdatePending) {
 			suppressBlocked = blocked && movement.Direction.Blocked && !movement.Direction.UpdatePending &&
-				movement.Direction.BlockedMode == movement.Mode && finalX == transform.X && finalY == transform.Y
+				movement.Direction.BlockedMode == components.EffectiveCombatMoveMode(w, h, movement.Mode) && finalX == transform.X && finalY == transform.Y
 			movement.Direction.Blocked = blocked && movement.TargetType == constt.TargetDirection
-			movement.Direction.BlockedMode = movement.Mode
+			movement.Direction.BlockedMode = components.EffectiveCombatMoveMode(w, h, movement.Mode)
 			movement.Direction.UpdatePending = false
 			s.movementStorage.Set(h, movement)
 		}
@@ -186,7 +186,7 @@ func (s *TransformUpdateSystem) Update(w *ecs.World, dt float64) {
 				var moveSeq uint32
 
 				if hasMovement {
-					moveMode = movement.Mode
+					moveMode = components.EffectiveCombatMoveMode(w, h, movement.Mode)
 					isMoving = movement.State == constt.StateMoving
 					velX = int(movement.VelocityX)
 					velY = int(movement.VelocityY)
@@ -303,7 +303,7 @@ func (s *TransformUpdateSystem) applyMovementStaminaTick(
 		if entitystats.MovementCostNeedsTileContext() {
 			tile = s.resolveMovementTileContext(fromX, fromY)
 		}
-		cost := entitystats.ResolveMovementStaminaCostPerTick(movement.Mode, capability.con, tile)
+		cost := entitystats.ResolveMovementStaminaCostPerTick(components.EffectiveCombatMoveMode(w, handle, movement.Mode), capability.con, tile)
 		if cost > 0 {
 			nextStamina := entitystats.ClampStamina(currentStamina-cost, maxStamina)
 			if nextStamina != currentStamina {

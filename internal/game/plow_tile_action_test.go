@@ -3,10 +3,8 @@ package game
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 
-	"go.uber.org/zap"
 	"origin/internal/actiondefs"
 	"origin/internal/characterattrs"
 	constt "origin/internal/const"
@@ -35,10 +33,7 @@ func (terrain *testPlowTerrain) SetTile(x, y int, tile byte) bool {
 
 func newPlowTest(t *testing.T, tile byte, con int) (*ecs.World, types.Handle, *ActionService, *testPlowTerrain, *testActionSender) {
 	t.Helper()
-	registry, err := actiondefs.LoadFromDirectory(filepath.Join("..", "..", "data", "actions"), zap.NewNop())
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := loadProductionActionsForTest(t)
 	definition, _ := registry.Get("plow_tile")
 	registry = actiondefs.NewRegistry([]actiondefs.Definition{*definition})
 	world := ecs.NewWorldForTesting()

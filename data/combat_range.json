@@ -1,0 +1,17 @@
+{
+  "small": [
+    {"name":"Near","x":10,"y":0,"halfWidth":1,"halfHeight":1,"hp":100},
+    {"name":"Upper","x":13,"y":-7,"halfWidth":1,"halfHeight":1,"hp":100},
+    {"name":"Lower","x":13,"y":7,"halfWidth":1,"halfHeight":1,"hp":100}
+  ],
+  "large": [{"name":"Wide","x":24,"y":0,"halfWidth":8,"halfHeight":4,"hp":100}],
+  "tied": [
+    {"name":"First ID","x":10,"y":-4,"halfWidth":1,"halfHeight":1,"hp":100},
+    {"name":"Second ID","x":10,"y":4,"halfWidth":1,"halfHeight":1,"hp":100}
+  ],
+  "moving": [{"name":"Moving","x":12,"y":0,"halfWidth":1,"halfHeight":1,"hp":100,"amplitudeY":20,"periodMs":2400}],
+  "blocker": [
+    {"name":"Blocker","x":7,"y":0,"halfWidth":1,"halfHeight":5,"hp":0},
+    {"name":"Behind blocker","x":14,"y":0,"halfWidth":1,"halfHeight":1,"hp":100}
+  ]
+}

@@ -67,6 +67,31 @@ func Clear(w *ecs.World, handle types.Handle) {
 	clearPresentation(w, handle, state)
 }
 
+// SyncCombat shares public animation revisions while keeping combat off the
+// legacy cyclic-action payment and completion path.
+func SyncCombat(w *ecs.World, handle types.Handle) {
+	state, _ := ecs.GetComponent[components.ActionAnimation](w, handle)
+	combat, exists := ecs.GetComponent[components.CombatState](w, handle)
+	if !exists || combat.Execution == nil {
+		if state.ExecutionID != 0 {
+			state.ExecutionID = 0
+			clearPresentation(w, handle, state)
+		}
+		return
+	}
+	execution := combat.Execution
+	if state.ExecutionID == execution.ID {
+		return
+	}
+	binding, mapped := actionanimationdefs.Global().Resolve(actionanimationdefs.Source{Kind: "combat", ID: execution.ActionID})
+	if !mapped {
+		return
+	}
+	state.Key, state.ExecutionID = binding.Key, execution.ID
+	state.CycleIndex, state.StartedTick, state.TotalTicks = 0, 0, 0
+	publish(w, handle, state)
+}
+
 func clearPresentation(w *ecs.World, handle types.Handle, state components.ActionAnimation) {
 	if state.Key == "" {
 		return

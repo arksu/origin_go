@@ -45,6 +45,15 @@ If omitted, loader fills:
 
 ## Optional Fields
 
+- `weapon`
+  - `baseDamage`: finite, nonnegative base melee damage
+  - `range`: finite positive distance in world units
+  - example: `"weapon": {"baseDamage": 6, "range": 18}` on stone_axe
+  - omitted metadata means the item is not a combat weapon; instance Quality
+    comes from inventory and must be positive when used for combat
+  - action multipliers, stamina, and timings belong to
+    [action definitions](../actions/README.md), not item metadata
+
 - `stack`
   - `"mode": "none"` or `"stack"`
   - if `"stack"`, then `max >= 2`

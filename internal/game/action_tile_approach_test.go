@@ -2,10 +2,8 @@ package game
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
-	"go.uber.org/zap"
 	"origin/internal/actiondefs"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
@@ -174,10 +172,7 @@ func TestTileArrivalTimeoutAndCompletionPosition(t *testing.T) {
 }
 
 func TestPlowCatalogUsesAbsoluteCost(t *testing.T) {
-	registry, err := actiondefs.LoadFromDirectory(filepath.Join("..", "..", "data", "actions"), zap.NewNop())
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := loadProductionActionsForTest(t)
 	handlers := map[string]ActionHandler{}
 	for _, definition := range registry.All() {
 		handlers[definition.ID] = &testActionHandler{}

@@ -62,6 +62,7 @@ export function registerMessageHandlers(): void {
       chunkSize,
       streamEpoch,
       msg.directionalMovementSupported === true,
+      msg.combatSupported === true,
     )
     gameStore.markPlayerEnterWorldBootstrap()
 
@@ -167,6 +168,11 @@ export function registerMessageHandlers(): void {
     gameStore.setGameActionState(msg)
   })
 
+  messageDispatcher.on('combatState', msg => { if (msg.state) gameStore.combat.execution(msg.entityId, msg.state, msg.streamEpoch ?? 0) })
+  messageDispatcher.on('combatTarget', msg => { if (msg.state) gameStore.combat.target(msg.entityId, msg.state, msg.streamEpoch ?? 0) })
+  messageDispatcher.on('combatOwnerState', msg => { gameStore.combat.owner(msg) })
+  messageDispatcher.on('combatResult', msg => { gameStore.combat.result(msg) })
+
   messageDispatcher.on('expGained', (msg: proto.IS2C_ExpGained) => {
     console.log('[Handlers] S2C_ExpGained received:', {
       entityId: toNumber(msg.entityId || 0),
@@ -233,6 +239,8 @@ export function registerMessageHandlers(): void {
     const characterVisual = msg.characterVisual ? decodeCharacterVisual(msg.characterVisual) : undefined
     const actionAnimation = msg.actionAnimation ? decodeActionAnimation(msg.actionAnimation) : undefined
     if (actionAnimation && actionAnimation.generation !== characterVisual?.generation) throw new Error('Spawn action animation incarnation mismatch')
+    const combatGeneration = msg.combatExecution?.generation || msg.combatTarget?.generation || characterVisual?.generation
+    if (combatGeneration) gameStore.combat.spawn(msg.entityId, combatGeneration, msg.combatExecution, msg.combatTarget)
     const existing = gameStore.entities.get(entityId)
     if (characterVisual && existing?.characterVisual?.generation === characterVisual.generation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
       if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterEquipment(entityId, characterVisual.equipment)
@@ -317,6 +325,7 @@ export function registerMessageHandlers(): void {
     if (msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
     const entityId = toNumber(msg.entityId!)
     // console.log(`[Handlers] objectDespawn: entityId=${entityId}`)
+    gameStore.combat.entities.delete(String(msg.entityId))
     gameStore.despawnEntity(entityId)
     gameFacade.despawnObject(entityId)
     moveController.removeEntity(entityId)

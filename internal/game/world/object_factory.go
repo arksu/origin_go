@@ -829,6 +829,9 @@ func equipSlotToString(slot netproto.EquipSlot) string {
 
 // Serialize converts an ECS entity back to a database object for persistence.
 func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Object, error) {
+	if ecs.HasComponent[components.CombatTestTarget](w, h) {
+		return nil, nil
+	}
 	externalID, ok := ecs.GetComponent[ecs.ExternalID](w, h)
 	if !ok {
 		return nil, ErrEntityNotFound

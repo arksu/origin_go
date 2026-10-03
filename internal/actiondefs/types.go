@@ -3,9 +3,10 @@ package actiondefs
 type TargetKind string
 
 const (
-	TargetNone   TargetKind = "none"
-	TargetObject TargetKind = "object"
-	TargetTile   TargetKind = "tile"
+	TargetNone      TargetKind = "none"
+	TargetObject    TargetKind = "object"
+	TargetTile      TargetKind = "tile"
+	TargetDirection TargetKind = "direction"
 )
 
 type Presentation struct {
@@ -33,10 +34,25 @@ type Requirements struct {
 }
 
 type Execution struct {
-	Ticks   int     `json:"ticks,omitempty"`
-	Stamina float64 `json:"stamina,omitempty"`
-	Repeat  bool    `json:"repeat,omitempty"`
+	Ticks   int            `json:"ticks,omitempty"`
+	Stamina float64        `json:"stamina,omitempty"`
+	Repeat  bool           `json:"repeat,omitempty"`
+	Combat  *CombatProfile `json:"combat,omitempty"`
 }
+
+type CombatProfile struct {
+	Selection          string  `json:"selection"`
+	SectorAngleDegrees float64 `json:"sectorAngleDegrees"`
+	WindupMs           int64   `json:"windupMs"`
+	RecoveryMs         int64   `json:"recoveryMs"`
+	CooldownMs         int64   `json:"cooldownMs"`
+	DamageMultiplier   float64 `json:"damageMultiplier"`
+}
+
+const (
+	SelectionAll     = "all"
+	SelectionNearest = "nearest"
+)
 
 type Definition struct {
 	ID           string       `json:"id"`

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -153,6 +154,11 @@ func loadFile(filePath string) ([]ItemDef, error) {
 }
 
 func validateItem(item *ItemDef, filePath string) error {
+	if weapon := item.Weapon; weapon != nil {
+		if math.IsNaN(weapon.BaseDamage) || math.IsInf(weapon.BaseDamage, 0) || weapon.BaseDamage < 0 || math.IsNaN(weapon.Range) || math.IsInf(weapon.Range, 0) || weapon.Range <= 0 {
+			return &LoadError{FilePath: filePath, DefID: item.DefID, Key: item.Key, Message: "weapon requires finite non-negative baseDamage and positive range"}
+		}
+	}
 	if item.DefID <= 0 {
 		return &LoadError{
 			FilePath: filePath,

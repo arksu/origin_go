@@ -66,6 +66,10 @@ func (s *AutoInteractSystem) Update(w *ecs.World, dt float64) {
 			return
 		}
 
+		if components.CombatCommitted(w, h) {
+			ecs.RemoveComponent[components.PendingInteraction](w, h)
+			return
+		}
 		// Validate target is still alive
 		if !w.Alive(pending.TargetHandle) {
 			ecs.RemoveComponent[components.PendingInteraction](w, h)

@@ -144,6 +144,9 @@ func (s *InventoryOperationService) ExecuteMove(
 	}
 
 	if constt.InventoryKind(moveSpec.Dst.Kind) == constt.InventoryBuild {
+		if components.CombatCommitted(w, playerHandle) {
+			return combatInventoryRejected()
+		}
 		return s.executeMoveToBuild(w, playerID, playerHandle, opID, moveSpec, expected)
 	}
 
@@ -197,6 +200,9 @@ func (s *InventoryOperationService) ExecuteMove(
 	dstEquipSlot := netproto.EquipSlot_EQUIP_SLOT_NONE
 	if moveSpec.DstEquipSlot != nil {
 		dstEquipSlot = *moveSpec.DstEquipSlot
+	}
+	if combatEquipmentLocked(w, srcInfo.Container, srcItem.EquipSlot) || combatEquipmentLocked(w, dstInfo.Container, dstEquipSlot) {
+		return combatInventoryRejected()
 	}
 
 	if err := s.validator.ValidateItemAllowedInContainer(w, srcItem, dstInfo, dstEquipSlot); err != nil {
@@ -259,6 +265,9 @@ func (s *InventoryOperationService) ExecuteMove(
 	}
 
 	// 7. Execute the operation
+	if placementResult.SwapItem != nil && combatEquipmentLocked(w, dstInfo.Container, placementResult.SwapItem.EquipSlot) {
+		return combatInventoryRejected()
+	}
 	sameSrcDst := srcInfo.Handle == dstInfo.Handle
 
 	if placementResult.MergedQuantity > 0 {
@@ -553,6 +562,10 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
 			Message:   "Item not found in source container",
 		}
+	}
+
+	if combatEquipmentLocked(w, srcInfo.Container, srcItem.EquipSlot) {
+		return combatInventoryRejected()
 	}
 
 	// 2. Validate expected versions

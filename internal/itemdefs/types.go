@@ -13,10 +13,16 @@ type ItemDef struct {
 	DiscoveryLP int64             `json:"discoveryLP,omitempty"`
 	Visual      *Visual           `json:"visual,omitempty"`
 	Abilities   map[string]uint32 `json:"abilities,omitempty"`
+	Weapon      *Weapon           `json:"weapon,omitempty"`
 
 	// Container describes nested inventory capabilities for this item (e.g. seed bag).
 	// If nil, the item is not a container.
 	Container *ContainerDef `json:"container,omitempty"`
+}
+
+type Weapon struct {
+	BaseDamage float64 `json:"baseDamage"`
+	Range      float64 `json:"range"`
 }
 
 // Size represents item dimensions in inventory grid.

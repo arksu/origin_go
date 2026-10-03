@@ -150,6 +150,7 @@ Maintain this list as you add new components:
 | 28 | ActiveCraftComponentID          | Runtime craft batch state paired with synthetic cyclic action |
 | 35 | ActiveGameActionComponentID     | Transient server-owned gameplay action state |
 | 36 | ActionAnimationComponentID     | Transient public cycle identity and retained revision |
+| 37 | CombatStateComponentID         | Transient committed execution, cooldowns, activity and request replay state |
 
 `ActiveCyclicAction.ActionGeneration` links a timed menu-action cycle to its `ActiveGameAction.Generation`. Repeating menu actions retain that generation while incrementing `CycleIndex` and resetting elapsed ticks. Compare the supplied cycle with the current component and generation before completion, so a canceled or replaced cycle cannot apply a late effect. Other cyclic action sources may leave `ActionGeneration` at zero.
 
@@ -183,3 +184,5 @@ If you have existing code using auto-assigned IDs:
 - `EnsureRuntimeObjectState(nil)` is fail-fast (`panic`), by design.
 - `SetBehaviorState` / `DeleteBehaviorState` must set `ObjectInternalState.IsDirty = true` implicitly.
 - Persistent storage rule: empty behavior state is written as `NULL` in DB; not as empty JSON envelope.
+
+- ID 38: `CombatTestTarget` — transient range fixture marker and float64 receiver HP.

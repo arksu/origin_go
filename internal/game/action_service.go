@@ -101,6 +101,7 @@ type ActionService struct {
 	soundEvents     *SoundEventService
 	nextGeneration  uint64
 	approachTimeout time.Duration
+	combat          *CombatService
 }
 
 func NewActionService(world *ecs.World, definitions *actiondefs.Registry, handlers map[string]ActionHandler, sender actionSender) (*ActionService, error) {
@@ -133,17 +134,17 @@ func (service *ActionService) SetSoundEventService(sounds *SoundEventService) {
 func (service *ActionService) State(world *ecs.World, playerHandle types.Handle) *netproto.S2C_ActionStateChanged {
 	active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)
 	if !exists {
-		return &netproto.S2C_ActionStateChanged{Phase: "idle"}
+		return service.combatActionState(world, playerHandle, &netproto.S2C_ActionStateChanged{Phase: "idle"})
 	}
 	definition, found := service.definitions.Get(active.ActionID)
 	if !found {
-		return &netproto.S2C_ActionStateChanged{Phase: "idle"}
+		return service.combatActionState(world, playerHandle, &netproto.S2C_ActionStateChanged{Phase: "idle"})
 	}
 	cursor := ""
 	if active.Phase == components.GameActionSelecting {
 		cursor = definition.Target.Cursor
 	}
-	return &netproto.S2C_ActionStateChanged{ActionId: active.ActionID, Phase: string(active.Phase), Cursor: cursor}
+	return service.combatActionState(world, playerHandle, &netproto.S2C_ActionStateChanged{ActionId: active.ActionID, Phase: string(active.Phase), Cursor: cursor})
 }
 
 func (service *ActionService) SendState(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
@@ -170,6 +171,7 @@ func (service *ActionService) SendList(playerID types.EntityID) {
 			RequiredSkills: append([]string(nil), definition.Requirements.Skills...), RequiredEquipment: requirements,
 			Ticks: uint32(definition.Execution.Ticks), Stamina: definition.Execution.Stamina,
 			IsRepeatable: definition.Repeatable(),
+			Combat:       combatProfileMessage(definition.Execution.Combat),
 		})
 	}
 	service.sender.SendActionList(playerID, list)
@@ -184,6 +186,17 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 		return
 	}
 	definition, found := service.definitions.Get(active.ActionID)
+	if found && definition.Execution.Combat != nil {
+		if components.CombatCommitted(world, playerHandle) {
+			state, _ := ecs.GetComponent[components.CombatState](world, playerHandle)
+			if combatActorRestricted(world, playerHandle) || !service.combat.weaponStillValid(playerHandle, state.Execution) {
+				service.combat.Interrupt(playerHandle)
+			}
+		} else if service.nonStaminaReason(world, playerID, playerHandle, definition) != "" {
+			service.Cancel(world, playerID, playerHandle)
+		}
+		return
+	}
 	if active.Phase == components.GameActionApproaching && active.ExpireAtUnixMs > 0 && ecs.GetResource[ecs.TimeState](world).UnixMs >= active.ExpireAtUnixMs {
 		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_TARGET_TIMEOUT")
 	} else if !found || service.nonStaminaReason(world, playerID, playerHandle, definition) != "" {
@@ -199,6 +212,10 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 
 func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) {
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	if service.combat != nil && service.combat.Busy(playerHandle) || service.IsCombatAction(id) && combatConflictingWork(world, playerHandle) {
+		service.alert(playerID, "ACTION_BUSY")
 		return
 	}
 	if active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle); exists {
@@ -243,6 +260,10 @@ func (service *ActionService) availableDefinition(world *ecs.World, playerID typ
 // StartTargetedOnce accepts a server-routed target without arming a selection or retry.
 func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string, targetID types.EntityID, targetHandle types.Handle, x, y float64) {
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	if components.CombatCommitted(world, playerHandle) {
+		service.alert(playerID, "ACTION_BUSY")
 		return
 	}
 	service.Cancel(world, playerID, playerHandle)
@@ -303,6 +324,10 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 	}
 	if definition.Target.Kind == actiondefs.TargetObject && (target.ObjectID == 0 || !world.Alive(target.ObjectHandle)) {
 		return false
+	}
+	if definition.Target.Kind == actiondefs.TargetDirection {
+		service.alert(playerID, "COMBAT_REQUEST_REQUIRED")
+		return true
 	}
 	if definition.Target.Kind != actiondefs.TargetObject && definition.Target.Kind != actiondefs.TargetTile {
 		return false
@@ -486,6 +511,11 @@ func (service *ActionService) CanCommit(world *ecs.World, playerID types.EntityI
 
 func (service *ActionService) Cancel(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	if service.combat != nil && service.combat.Busy(playerHandle) {
+		service.alert(playerID, "ACTION_BUSY")
+		service.SendState(world, playerID, playerHandle)
 		return
 	}
 	active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle)

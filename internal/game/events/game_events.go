@@ -295,6 +295,8 @@ func (d *NetworkVisibilityDispatcher) buildObjectSpawn(w *ecs.World, entityID ty
 		CarriedByEntityId: carryVisualCarrierIDForHandle(w, handle),
 		CharacterVisual:   visual,
 		ActionAnimation:   animation,
+		CombatExecution:   game.CombatExecutionSnapshot(w, handle),
+		CombatTarget:      game.CombatTargetSnapshot(w, handle),
 		Position: &netproto.EntityPosition{
 			Position: &netproto.Position{X: int32(transform.X), Y: int32(transform.Y)},
 			Size:     size,
@@ -340,7 +342,7 @@ func (d *NetworkVisibilityDispatcher) sendObjectSpawns(shard *game.Shard, observ
 	critical := false
 	for _, spawn := range spawns {
 		spawn.StreamEpoch = epoch
-		critical = critical || spawn.ActionAnimation != nil
+		critical = critical || spawn.ActionAnimation != nil || spawn.CombatExecution != nil || spawn.CombatTarget != nil
 	}
 	message := &netproto.ServerMessage{}
 	if len(spawns) == 1 {

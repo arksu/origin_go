@@ -120,7 +120,7 @@ func (s *NetworkCommandSystem) handleMoveDirection(w *ecs.World, handle types.Ha
 }
 
 func (s *NetworkCommandSystem) prepareManualMovement(w *ecs.World, handle types.Handle, playerID types.EntityID) bool {
-	if active, exists := ecs.GetComponent[components.ActiveGameAction](w, handle); exists && active.Phase != components.GameActionSelecting {
+	if active, exists := ecs.GetComponent[components.ActiveGameAction](w, handle); exists && active.Phase != components.GameActionSelecting && !components.CombatCommitted(w, handle) {
 		if s.actionService == nil {
 			return false
 		}

@@ -23,7 +23,8 @@ export { useGameStore } from './src/stores/gameStore.ts';
 export { proto } from './src/network/proto/packets.js';
 export { actionCursorCss } from './src/game/cursorCatalog.ts';
 export { cancelActiveActionOnEscape } from './src/game/hud/actionState.ts';
-export { CursorManager } from './src/game/CursorManager.ts';`,
+export { CursorManager } from './src/game/CursorManager.ts';
+export { timeSync } from './src/network/TimeSync.ts';`,
     resolveDir: rootDirectory,
     sourcefile: 'actions-test.ts',
     loader: 'ts',
@@ -88,8 +89,9 @@ function descendants(node, type) {
 }
 
 let gameStore
+const mountedApps = []
 try {
-  const { ActionsMenu, Hotbar, useHotbarAssignments, useActionsPanel, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager } = await import(pathToFileURL(outfile).href)
+  const { ActionsMenu, Hotbar, useHotbarAssignments, useActionsPanel, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager, timeSync } = await import(pathToFileURL(outfile).href)
   setActivePinia(createPinia())
   gameStore = useGameStore()
 
@@ -101,6 +103,10 @@ try {
   if (!cancelActiveActionOnEscape('idle', () => { cancels++ })) windowCloses++
   assert.equal(cancels, 1)
   assert.equal(windowCloses, 1)
+  for (const phase of ['selecting', 'windup', 'recovery']) {
+    assert.equal(cancelActiveActionOnEscape(phase, () => { cancels++ }), true)
+  }
+  assert.equal(cancels, 4, 'Escape requests cancellation; the server owns combat commitment')
 
   const panel = useActionsPanel()
   panel.toggle()
@@ -121,7 +127,7 @@ try {
     { id: 'lift', label: 'Lift', menuIcon: '/assets/cursor/lift.png' },
     { id: 'lift_down', label: 'Lift down', menuIcon: '/assets/cursor/lift_down.png' },
   ]
-  renderer.createApp(withSsrContext(() => h(ActionsMenu, {
+  const menuApp = renderer.createApp(withSsrContext(() => h(ActionsMenu, {
     actions, activeActionId: 'lift', activePhase: 'selecting',
     onActivate: id => {
       events.push(['activate', id])
@@ -130,7 +136,9 @@ try {
     onDragStart: id => events.push(['drag', id]),
     onTouchDragStart: payload => events.push(['touch', payload.actionId]),
     onTouchDragEnd: () => events.push(['touchEnd']),
-  }))).mount(root)
+  })))
+  mountedApps.push(menuApp)
+  menuApp.mount(root)
   await nextTick()
   const buttons = descendants(root, 'button')
   assert.deepEqual(buttons.map(button => button.props['aria-label']), ['Lift', 'Lift down'])
@@ -163,6 +171,21 @@ try {
   assert(events.some(event => event[0] === 'touch' && event[1] === 'game:lift'))
   assert(events.some(event => event[0] === 'touchEnd'))
 
+  const cooldownRoot = hostNode('root'), combatRequests = []
+  const combatApp = renderer.createApp(withSsrContext(() => h(ActionsMenu, {
+    actions: [{ id: 'axe_aoe', label: 'Axe sweep', combat: {} }], activeActionId: '', activePhase: 'idle',
+    onActivate: id => combatRequests.push(id),
+  })))
+  mountedApps.push(combatApp)
+  combatApp.mount(cooldownRoot)
+  gameStore.combat.cooldowns.set('axe_aoe', timeSync.estimateServerNowMs() + 1500)
+  await nextTick()
+  assert.equal(descendants(cooldownRoot, 'span').some(span => span.props['aria-label'] === 'Cooldown'), true)
+  const combatButton = descendants(cooldownRoot, 'button')[0]
+  assert.equal(combatButton.props.disabled, undefined, 'cooldown must remain informational')
+  combatButton.props.onClick()
+  assert.deepEqual(combatRequests, ['axe_aoe'], 'cooldown cannot block a request to the server')
+
   const storage = new Map([['hotbar_assignments_v1:account:7', JSON.stringify(['game:lift', 'game:retired', 'game:lift_down', null, null, null, null, null, null, null])]])
   globalThis.localStorage = {
     getItem: key => storage.get(key) || null,
@@ -179,7 +202,7 @@ try {
   const hotbarRoot = hostNode('root')
   const activated = []
   const drops = []
-  renderer.createApp(withSsrContext(() => h(Hotbar, {
+  const hotbarApp = renderer.createApp(withSsrContext(() => h(Hotbar, {
     assignments: assignments.assignments.value, serverActions: actions, actionListLoaded: true,
     onActivate: slot => {
       activated.push(slot)
@@ -187,7 +210,9 @@ try {
       if (id?.startsWith('game:')) requestGameAction(id.slice(5), actions, true, sendAction)
     },
     onDrop: (slot, id) => drops.push([slot, id]),
-  }))).mount(hotbarRoot)
+  })))
+  mountedApps.push(hotbarApp)
+  hotbarApp.mount(hotbarRoot)
   await nextTick()
   const slots = descendants(hotbarRoot, 'button')
   assert.equal(descendants(slots[0], 'img')[0].props.src, '/assets/cursor/lift.png')
@@ -219,6 +244,7 @@ try {
   assert.equal(pixiEvents.cursorStyles.pointer, 'pointer')
   console.log('Action menu, activation, mini-alert, drag, hotbar persistence, and cursor tests passed')
 } finally {
+  for (const app of mountedApps) app.unmount()
   gameStore?.reset()
   await rm(directory, { recursive: true, force: true })
 }

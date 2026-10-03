@@ -101,6 +101,10 @@ func (s *LiftService) StartLift(
 	targetID types.EntityID,
 	targetHandle types.Handle,
 ) ActionResult {
+	if w != nil && components.CombatCommitted(w, playerHandle) {
+		return ActionResult{Outcome: ActionRejected, Reason: "ACTION_BUSY"}
+	}
+
 	if s == nil || w == nil || w != s.world {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
 	}
@@ -138,6 +142,10 @@ func (s *LiftService) StartPutDownAt(
 	targetX, targetY float64,
 	generation uint64,
 ) ActionResult {
+	if w != nil && components.CombatCommitted(w, playerHandle) {
+		return ActionResult{Outcome: ActionRejected, Reason: "ACTION_BUSY"}
+	}
+
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
@@ -214,6 +222,10 @@ func (s *LiftService) FinalizePendingLiftTransition(
 	playerHandle types.Handle,
 	pending components.PendingLiftTransition,
 ) {
+	if w != nil && components.CombatCommitted(w, playerHandle) {
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return
 	}

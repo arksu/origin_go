@@ -89,3 +89,19 @@ func TestOptionalUnbindSlotsSurviveDefinitionRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestCombatSourcesResolveExplicitCombatDefinitions(t *testing.T) {
+	registry, err := LoadFromDirectory("../../data/action_animations", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.ValidateCombatSources(func(id string) bool { return id == "axe_aoe" || id == "axe_single" }); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.ValidateCombatSources(func(id string) bool { return id == "axe_aoe" }); err == nil || !strings.Contains(err.Error(), "axe_single") {
+		t.Fatal("missing combat source was accepted", err)
+	}
+	if err := registry.ValidateCombatSources(nil); err == nil {
+		t.Fatal("missing source resolver accepted")
+	}
+}

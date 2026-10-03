@@ -175,9 +175,13 @@ export function sendBuildTakeBack(entityId: number, slot: number): void {
 
 export function sendActivateAction(actionId: string): void {
   if (!actionId) return
+  const store = useGameStore()
+  const definition = store.gameActions.find(action => action.id === actionId)
+  if (definition?.combat && !store.worldParams?.combatSupported) return
+  const identity = definition?.combat ? store.combat.request() : {}
   gameFacade.releaseKeyboardMovement()
   gameConnection.send({
-    activateAction: proto.C2S_ActivateAction.create({ actionId }),
+    activateAction: proto.C2S_ActivateAction.fromObject({ actionId, ...identity }),
   })
 }
 

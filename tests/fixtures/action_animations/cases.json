@@ -2966,5 +2966,450 @@
         }
       ]
     }
+  },
+  {
+    "name": "combat direction without stationary or tree sounds",
+    "valid": true,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "axe_aoe",
+          "source": {
+            "kind": "combat",
+            "id": "axe_aoe"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "direction",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe sweep",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          }
+        },
+        {
+          "key": "axe_single",
+          "source": {
+            "kind": "combat",
+            "id": "axe_single"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "direction",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe strike",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "combat target facing",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "axe_aoe",
+          "source": {
+            "kind": "combat",
+            "id": "axe_aoe"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "target",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe sweep",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          }
+        },
+        {
+          "key": "axe_single",
+          "source": {
+            "kind": "combat",
+            "id": "axe_single"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "direction",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe strike",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "combat stationary",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "axe_aoe",
+          "source": {
+            "kind": "combat",
+            "id": "axe_aoe"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out",
+            "stationary"
+          ],
+          "facing": "direction",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe sweep",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          }
+        },
+        {
+          "key": "axe_single",
+          "source": {
+            "kind": "combat",
+            "id": "axe_single"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "direction",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe strike",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "combat copied tree cues",
+    "valid": false,
+    "input": {
+      "v": 1,
+      "bindings": [
+        {
+          "key": "axe_aoe",
+          "source": {
+            "kind": "combat",
+            "id": "axe_aoe"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "direction",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe sweep",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          },
+          "sound_cues": [
+            {
+              "id": "impact",
+              "phase": 0.6,
+              "sound": "chop",
+              "source": "target"
+            }
+          ]
+        },
+        {
+          "key": "axe_single",
+          "source": {
+            "kind": "combat",
+            "id": "axe_single"
+          },
+          "actor": "character/male_commoner",
+          "variants": [
+            {
+              "clip": "chop_r",
+              "equipment": [
+                {
+                  "slot": "right_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            },
+            {
+              "clip": "chop_l",
+              "equipment": [
+                {
+                  "slot": "left_hand",
+                  "visual_key": "stone_axe"
+                }
+              ]
+            }
+          ],
+          "eligibility": [
+            "not_carrying",
+            "not_knocked_out"
+          ],
+          "facing": "direction",
+          "blend_ms": 120,
+          "frame": {
+            "width": 192,
+            "height": 224,
+            "origin_x": 96,
+            "origin_y": 180
+          },
+          "preview": {
+            "label": "Axe strike",
+            "duration_ms": 1000,
+            "equipment": [
+              {
+                "slot": "right_hand",
+                "visual_key": "stone_axe"
+              }
+            ]
+          }
+        }
+      ]
+    }
   }
 ]

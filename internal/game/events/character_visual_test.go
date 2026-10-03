@@ -1,8 +1,10 @@
 package events
 
 import (
+	"origin/internal/combat"
 	"sync"
 	"testing"
+	"time"
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
@@ -91,4 +93,32 @@ func TestDelayedDespawnChecksCurrentVisibilityAndIncarnation(t *testing.T) {
 	replacement := w.Spawn(102, nil)
 	visibility.ObserversByVisibleTarget[replacement] = map[types.Handle]struct{}{observer: {}}
 	require.True(t, targetVisibleToObserver(w, 101, 102), "old despawn must not erase the replacement")
+}
+
+func TestCombatVisibilityEntryCapturesLatestState(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	target := spawnBatchTarget(w, 101, "boulder")
+	ecs.AddComponent(w, target, components.CombatTestTarget{HP: 100, MaxHP: 100, Revision: 1, Receiver: true})
+	actor := spawnBatchTarget(w, 102, "player")
+	timing := ecs.GetResource[ecs.TimeState](w)
+	timing.Now = time.Unix(100, 0)
+	ecs.AddComponent(w, actor, components.CombatState{Revision: 1, Execution: &components.CombatExecution{ID: 1, ActionID: "axe_aoe", Direction: combat.Point{X: 1}, Weapon: combat.Weapon{Range: 18}, AngleDegrees: 90, StartedAt: timing.Now, StrikeAt: timing.Now.Add(600 * time.Millisecond), RecoveryEnd: timing.Now.Add(time.Second)}})
+	// Vision queues handles, not snapshots. A later dispatcher captures current HP
+	// and progress even if an impact occurred after the visibility event was queued.
+	ecs.WithComponent(w, target, func(state *components.CombatTestTarget) { state.HP = 94; state.Revision = 2 })
+	ecs.WithComponent(w, actor, func(state *components.CombatState) { state.Execution.StrikeResolved = true; state.Revision = 2 })
+	timing.Now = timing.Now.Add(700 * time.Millisecond)
+	timing.UnixMs = 700
+	dispatcher := &NetworkVisibilityDispatcher{logger: zap.NewNop()}
+	snapshot := dispatcher.buildObjectSpawn(w, 101, target)
+	require.Equal(t, float64(94), snapshot.CombatTarget.Hp)
+	require.Equal(t, uint64(2), snapshot.CombatTarget.Revision)
+	execution := dispatcher.buildObjectSpawn(w, 102, actor).CombatExecution
+	require.Equal(t, "recovery", execution.Phase)
+	require.Equal(t, float64(700), execution.ElapsedMs)
+	require.Equal(t, float64(1), execution.LockedDirection.X)
+	w.Despawn(target)
+	replacement := spawnBatchTarget(w, 101, "boulder")
+	require.NotEqual(t, target, replacement)
+	require.Nil(t, dispatcher.buildObjectSpawn(w, 101, target), "late spawn cannot restore removed fixtures")
 }

@@ -12,6 +12,7 @@ import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
 import { ChatBalloonManager } from './ChatBalloonManager'
+import { CombatOverlay } from './CombatOverlay'
 import { NicknameManager } from './NicknameManager'
 import { MoveMarkerManager } from './MoveMarkerManager'
 import { ResourceLoader } from './ResourceLoader'
@@ -41,6 +42,7 @@ const CARRIED_OBJECT_OFFSET_PX = 56
 export class Render {
   private app: Application
   private mapContainer: Container
+  private combatOverlay: CombatOverlay
   private objectsContainer: Container
   private uiContainer: Container
   private debugOverlay: DebugOverlay
@@ -91,6 +93,7 @@ export class Render {
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
     this.liftGhostController = new LiftGhostController(this.objectsContainer)
     this.nicknameManager = new NicknameManager(this.objectsContainer)
+    this.combatOverlay = new CombatOverlay(this.objectsContainer)
     this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer, this.nicknameManager)
   }
 
@@ -196,8 +199,8 @@ export class Render {
 
         const actionState = gameStore.gameActionState
         const action = gameStore.gameActions.find(entry => entry.id === actionState.actionId)
-        const activeTargetAction = ['selecting', 'approaching', 'executing'].includes(actionState.phase ?? '')
-          && (action?.targetKind === 'tile' || action?.targetKind === 'object')
+        const activeTargetAction = ['selecting', 'approaching', 'executing', 'windup', 'recovery'].includes(actionState.phase ?? '')
+          && (action?.targetKind === 'tile' || action?.targetKind === 'object' || action?.targetKind === 'direction')
         // Authoritative targeting stays active while its visual cursor is hidden.
         if (hand?.item && handInv?.ref && handInv.revision != null && !activeTargetAction) {
           playerCommandController.sendDropToWorld(
@@ -311,6 +314,7 @@ export class Render {
     this.objectManager.update(now, timeSync.estimateServerNowMs())
     this.updateCulling()
     this.objectManager.syncActiveCarryVisuals(CARRIED_OBJECT_OFFSET_PX)
+    this.combatOverlay.update(this.objectManager, this.lastPointerScreen ? this.screenToWorld(this.lastPointerScreen.x, this.lastPointerScreen.y) : null, timeSync.estimateServerNowMs())
     this.nicknameManager.update(this.objectManager)
     this.chatBalloonManager.update(this.objectManager)
     this.moveMarkerManager?.update()
@@ -794,6 +798,7 @@ export class Render {
     this.liftGhostController.cancel()
     this.chatBalloonManager.clear()
     this.nicknameManager.clear()
+    this.combatOverlay.clear()
     this.moveMarkerManager?.clear()
     this.objectManager.clear()
     this.chunkManager.clear()
@@ -820,6 +825,7 @@ export class Render {
     this.liftGhostController.destroy()
     this.chatBalloonManager.destroy()
     this.nicknameManager.destroy()
+    this.combatOverlay.destroy()
     this.moveMarkerManager?.destroy()
 
     this.chunkManager.destroy()

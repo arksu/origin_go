@@ -104,7 +104,7 @@ func validate(binding *Definition) error {
 		return fmt.Errorf("actor must reference character/<id>")
 	}
 	switch binding.Source.Kind {
-	case "context", "menu", "craft", "build":
+	case "context", "menu", "craft", "build", "combat":
 	default:
 		return fmt.Errorf("source.kind is unsupported: %q", binding.Source.Kind)
 	}
@@ -147,8 +147,14 @@ func validate(binding *Definition) error {
 		}
 		seen[predicate] = true
 	}
-	if binding.Facing != "preserve" && binding.Facing != "target" {
-		return fmt.Errorf("facing must be preserve or target")
+	if binding.Facing != "preserve" && binding.Facing != "target" && binding.Facing != "direction" {
+		return fmt.Errorf("facing must be preserve, target, or direction")
+	}
+	if binding.Facing == "direction" && binding.Source.Kind != "combat" {
+		return fmt.Errorf("direction facing requires a combat source")
+	}
+	if binding.Source.Kind == "combat" && (binding.Facing != "direction" || seen["stationary"] || len(binding.SoundCues) > 0) {
+		return fmt.Errorf("combat requires direction facing, moving eligibility, and no cycle sound cues")
 	}
 	seenCues := make(map[string]bool, len(binding.SoundCues))
 	previousPhase := 0.0

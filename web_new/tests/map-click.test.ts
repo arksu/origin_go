@@ -69,7 +69,7 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
     assert.equal(useGameStore().contextMenu, null)
 
     const gameStore = useGameStore()
-    gameStore.setPlayerEnterWorld(1, 'Player', 1, 1, 1)
+    gameStore.setPlayerEnterWorld(1, 'Player', 1, 1, 1, true, true)
     gameStore.updateInventory({
       ref: { kind: proto.InventoryKind.INVENTORY_KIND_HAND, ownerId: 1, inventoryKey: 0 },
       revision: 1,
@@ -80,6 +80,7 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
       { id: 'lift', targetKind: 'object' },
       { id: 'lift_down', targetKind: 'tile' },
       { id: 'plow_tile', targetKind: 'tile' },
+      { id: 'axe_aoe', targetKind: 'direction', combat: {} },
     ])
     for (const actionId of ['lift', 'lift_down', 'plow_tile']) {
       for (const phase of ['selecting', 'approaching', 'executing']) {
@@ -91,6 +92,24 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
         assert.equal(packets[0]!.inventoryOp, undefined)
         assert.equal(Number(gameStore.handState?.item?.itemId), 900, 'target click must keep held item')
       }
+    }
+    for (const phase of ['selecting', 'windup', 'recovery']) {
+      gameStore.setGameActionState(proto.S2C_ActionStateChanged.fromObject({ actionId: 'axe_aoe', phase, selectionGeneration: '18446744073709551614', streamEpoch: 1 }))
+      packets.length = 0
+      click(event)
+      assert.equal(packets.length, 1)
+      assert.equal(packets[0]!.inventoryOp, undefined, 'combat cannot drop a held item')
+      const attempt = packets[0]!.playerAction?.mapClick?.combatAttempt
+      assert.equal(!!attempt, phase === 'selecting')
+      if (attempt) assert.equal(String(attempt.selectionGeneration), '18446744073709551614')
+      click(event)
+      assert.equal(packets.length, 2, 'each repeated click has its own request revision')
+      if (attempt) assert.notEqual(String(packets[1]!.playerAction?.mapClick?.combatAttempt?.requestRevision), String(attempt.requestRevision))
+      packets.length = 0
+      click({ ...event, button: 2 })
+      assert.equal(packets.length, 1)
+      assert.equal(packets[0]!.playerAction?.mapClick?.combatAttempt, null)
+      assert.equal(Number(gameStore.handState?.item?.itemId), 900)
     }
     render.buildGhostController = { isActive: () => true }
     render.liftGhostController = { isActive: () => true }
@@ -170,9 +189,14 @@ test('touch long-press sends one secondary packet, suppresses release tap, and m
     assert.equal(packets[0]!.playerAction!.modifiers, 5)
     pointer('pointerup', {})
     assert.equal(packets.length, 1, 'long-press release must not emit another click')
+    const store = useGameStore()
+    store.setPlayerEnterWorld(1, 'Touch', 12, 128, 7, true, true)
+    store.setGameActionList([{ id: 'axe_aoe', targetKind: 'direction', combat: {} }])
+    store.setGameActionState({ actionId: 'axe_aoe', phase: 'selecting', selectionGeneration: 3, streamEpoch: 7 })
     pointer('pointerdown', {})
     pointer('pointerup', {})
     assert.equal(packets.length, 2, 'the next ordinary tap must still work')
+    assert.equal(String(packets[1]!.playerAction?.mapClick?.combatAttempt?.selectionGeneration), '3', 'touch tap commits the armed direction')
     assert.equal(packets[1]!.playerAction!.mapClick!.button, proto.MapClickButton.MAP_CLICK_BUTTON_PRIMARY)
     pointer('pointerdown', { pointerType: 'mouse', button: 1 })
     pointer('pointermove', { pointerType: 'mouse', button: 1, clientX: 100, movementX: 90, movementY: 0 })
@@ -191,6 +215,7 @@ test('touch long-press sends one secondary packet, suppresses release tap, and m
 })
 
 test('map-click sender is independent of chat messages', () => {
+  setActivePinia(createPinia())
   const packets: proto.IClientMessage[] = []
   const originalSend = gameConnection.send
   gameConnection.send = packet => { packets.push(packet) }

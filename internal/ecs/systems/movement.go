@@ -118,7 +118,9 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		if movement.TargetType == constt.TargetDirection {
-			speed := movement.GetCurrentSpeed()
+			effective := movement
+			effective.Mode = components.EffectiveCombatMoveMode(w, h, movement.Mode)
+			speed := effective.GetCurrentSpeed()
 			movement.VelocityX = movement.Direction.X * speed
 			movement.VelocityY = movement.Direction.Y * speed
 			movement.State = constt.StateMoving
@@ -151,7 +153,9 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 		dist := math.Sqrt(dx*dx + dy*dy)
 
 		if dist > 0.001 {
-			speed := movement.GetCurrentSpeed()
+			effective := movement
+			effective.Mode = components.EffectiveCombatMoveMode(w, h, movement.Mode)
+			speed := effective.GetCurrentSpeed()
 			step := speed * dt
 
 			// Clamp step to prevent overshoot oscillation
