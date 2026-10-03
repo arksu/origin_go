@@ -12,6 +12,9 @@ const (
 	regenHungryMul      = 0.001
 )
 
+// MaxHHPFromCon derives the health ceiling from CON and the world's fixed multiplier.
+// Changing lifeDeathFactor requires a full world wipe: a lower ceiling can permanently
+// reduce saved HHP when health is clamped, including when a character logs in after a restart.
 func MaxHHPFromCon(con int, lifeDeathFactor float64) float64 {
 	if con < characterattrs.DefaultValue {
 		con = characterattrs.DefaultValue

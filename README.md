@@ -292,6 +292,18 @@ npm run dev
 - Defaults are defined in `internal/config/config.go`.
 - Environment keys follow dot-to-underscore convention (example: `game.tick_rate` -> `GAME_TICK_RATE`).
 
+Health configuration example (`config.yaml`):
+
+```yaml
+game:
+  # MHP multiplier: default 1.0, allowed range 0.8-1.2.
+  # Fixed for the lifetime of a world. Change only after a full world wipe;
+  # changing it live or across restarts can permanently clamp existing HHP.
+  life_death_factor: 1.0
+```
+
+The same restriction applies to the `GAME_LIFE_DEATH_FACTOR` environment override.
+
 ## Contributing
 
 Contributions of all sizes are useful. If you are not sure where to start, docs updates, small bug fixes, tests, and cleanup PRs are all welcome.

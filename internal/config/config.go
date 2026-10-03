@@ -82,6 +82,8 @@ type GameConfig struct {
 	BehaviorTickCatchupLimit      int           `mapstructure:"behavior_tick_catchup_limit_ticks"`
 	PlayerStatsTTLms              int           `mapstructure:"player_stats_ttl_ms"`
 	StaminaRegenIntervalTicks     int           `mapstructure:"stamina_regen_interval_ticks"`
+	// LifeDeathFactor is immutable for an existing world, including across restarts.
+	// Change it only after a full world wipe: lowering MHP can permanently clamp saved HHP.
 	LifeDeathFactor               float64       `mapstructure:"life_death_factor"`
 	ShpRegenIntervalTicks         int           `mapstructure:"shp_regen_interval_ticks"`
 	StarvationDamageIntervalTicks int           `mapstructure:"starvation_damage_interval_ticks"`
@@ -241,6 +243,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.behavior_tick_catchup_limit_ticks", 2000)
 	v.SetDefault("game.player_stats_ttl_ms", 1000)
 	v.SetDefault("game.stamina_regen_interval_ticks", _const.DefaultStaminaRegenIntervalTicks)
+	// World-lifetime setting; a different value requires a full world wipe, not just a restart.
 	v.SetDefault("game.life_death_factor", 1.0)
 	v.SetDefault("game.shp_regen_interval_ticks", 100)
 	v.SetDefault("game.starvation_damage_interval_ticks", 432000)
