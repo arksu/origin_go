@@ -18,28 +18,28 @@ proto-tools:
 
 # Build the server
 build: proto sqlc
-# CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 ... -gcflags="-m -l"
-	go build -a -installsuffix cgo -trimpath -o gameserver ./cmd/gameserver
+# GOOS=darwin GOARCH=arm64 ... -gcflags="-m -l"
+	CGO_ENABLED=0 go build -a -installsuffix cgo -trimpath -o gameserver ./cmd/gameserver
 
 # Run the server
 run: proto sqlc
-	go run ./cmd/gameserver
+	CGO_ENABLED=0  go run ./cmd/gameserver
 
 # Build the map generator
 map-gen-build: proto sqlc
-	go build -trimpath -o mapgen ./cmd/mapgen
+	CGO_ENABLED=0  go build -trimpath -o mapgen ./cmd/mapgen
 
 # Run the map generator
 map-gen: proto sqlc
-	go run ./cmd/mapgen
+	CGO_ENABLED=0  go run ./cmd/mapgen
 
 # Build the load test runner
 build-load-test:
-	go build -trimpath -o load_test ./cmd/load_test
+	CGO_ENABLED=0  go build -trimpath -o load_test ./cmd/load_test
 
 # Run the load test
 load-test:
-	go run ./cmd/load_test
+	CGO_ENABLED=0  go run ./cmd/load_test
 
 # Clean build artifacts
 clean:
@@ -52,4 +52,4 @@ deps:
 
 # Run all Go tests
 test: proto sqlc
-	go test ./...
+	CGO_ENABLED=0  go test ./...

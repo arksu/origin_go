@@ -1,6 +1,6 @@
 module origin
 
-go 1.25.7
+go 1.27.1
 
 require (
 	github.com/gobwas/ws v1.4.0
