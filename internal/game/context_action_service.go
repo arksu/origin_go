@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"origin/internal/cyclicaction"
+	"origin/internal/playerstate"
 	"strconv"
 	"strings"
 
@@ -233,6 +234,10 @@ func (s *ContextActionService) ExecuteAction(
 	targetHandle types.Handle,
 	actionID string,
 ) bool {
+	if s.RequiresItemMutation(w, playerHandle, targetHandle, actionID) && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, playerstate.ItemsLockedReason)
+		return true
+	}
 	if actionID == teachContextActionID {
 		return s.executeTeachAction(w, playerID, playerHandle, targetID, targetHandle)
 	}
@@ -395,6 +400,10 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if action.MutatesItems && playerstate.ItemsLocked(w, playerHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if s.isSyntheticTeachCyclicAction(action) {
 		return s.handleSyntheticTeachCycleComplete(w, playerID, playerHandle, action)
 	}
@@ -444,6 +453,10 @@ func (s *ContextActionService) isActiveCyclicActionStillValid(
 	if w == nil {
 		return false
 	}
+	if action.MutatesItems && playerstate.ItemsLocked(w, playerHandle) {
+		return false
+	}
+
 	if s.isSyntheticTeachCyclicAction(action) {
 		targetID := action.TargetID
 		targetHandle := action.TargetHandle
@@ -782,4 +795,15 @@ func (s *ContextActionService) handleSyntheticTeachCycleComplete(
 func (s *ContextActionService) sendTeachMiniAlerts(teacherID, learnerID types.EntityID) {
 	s.sendMiniAlert(teacherID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, teachSuccessTeacherReasonCode)
 	s.sendMiniAlert(learnerID, netproto.AlertSeverity_ALERT_SEVERITY_INFO, teachSuccessLearnerReasonCode)
+}
+
+func (s *ContextActionService) RequiresItemMutation(w *ecs.World, playerHandle, targetHandle types.Handle, actionID string) bool {
+	playerID, _ := w.GetExternalID(playerHandle)
+	targetID, _ := w.GetExternalID(targetHandle)
+	behavior, found := s.resolveBehaviorForAction(w, playerID, playerHandle, targetID, targetHandle, actionID)
+	if !found {
+		return false
+	}
+	mutation, ok := behavior.(contracts.ItemMutationAction)
+	return ok && mutation.RequiresItemMutation(actionID)
 }

@@ -18,7 +18,7 @@ export const useActionCooldownStore = defineStore('actionCooldowns', () => {
 
   function serverNow(): number {
     if (timeSync.isInitialized()) return timeSync.estimateServerNowMs()
-    return packetServerMs + performance.now() - packetReceivedMs
+    return packetServerMs > 0 ? packetServerMs + performance.now() - packetReceivedMs : 0
   }
 
   function stopClock(): void {
@@ -69,5 +69,5 @@ export const useActionCooldownStore = defineStore('actionCooldowns', () => {
   }
 
   onScopeDispose(reset)
-  return { cooldowns, nowMs, setSnapshot, isCoolingDown, progress, reset }
+  return { cooldowns, nowMs, serverNow, setSnapshot, isCoolingDown, progress, reset }
 })

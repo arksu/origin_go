@@ -14,6 +14,7 @@ const (
 )
 
 type ActiveCyclicAction struct {
+	MutatesItems     bool
 	BehaviorKey      string
 	ActionID         string
 	ActionGeneration uint64

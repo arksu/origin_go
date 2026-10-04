@@ -9,6 +9,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"github.com/stretchr/testify/require"
@@ -57,6 +58,7 @@ func TestObjectSpawnCapturesLatestEquipmentForLateObserver(t *testing.T) {
 	ecs.AddComponent(w, character, components.EntityInfo{TypeID: 1})
 	ecs.AddComponent(w, character, components.Transform{X: 20, Y: 30})
 	equipment := w.SpawnWithoutExternalID()
+	ecs.AddComponent(w, character, components.EntityHealth{SHP: 3, HHP: 20, IsLying: true, LyingRevision: 1})
 	ecs.AddComponent(w, equipment, components.InventoryContainer{OwnerID: 101, Kind: constt.InventoryEquipment, Version: 4,
 		Items: []components.InvItem{{ItemID: 200, TypeID: 1002, EquipSlot: netproto.EquipSlot_EQUIP_SLOT_RIGHT_HAND}},
 	})
@@ -64,13 +66,17 @@ func TestObjectSpawnCapturesLatestEquipmentForLateObserver(t *testing.T) {
 	dispatcher := &NetworkVisibilityDispatcher{logger: zap.NewNop()}
 	first := dispatcher.buildObjectSpawn(w, 101, character)
 	require.Equal(t, "stone_axe", first.CharacterVisual.Equipment[0].VisualKey)
+	require.True(t, first.CharacterVisual.IsLying)
+	require.Equal(t, uint64(5), first.CharacterVisual.Revision)
 	ecs.MutateComponent[components.InventoryContainer](w, equipment, func(c *components.InventoryContainer) bool {
 		c.Items = nil
 		c.Version++
 		return true
 	})
+	ecs.WithComponent(w, character, func(health *components.EntityHealth) { playerstate.SetLying(health, false) })
 	late := dispatcher.buildObjectSpawn(w, 101, character)
-	require.Equal(t, uint64(5), late.CharacterVisual.Revision)
+	require.Equal(t, uint64(7), late.CharacterVisual.Revision)
+	require.False(t, late.CharacterVisual.IsLying)
 	require.Empty(t, late.CharacterVisual.Equipment)
 	require.Len(t, first.CharacterVisual.Equipment, 1)
 	require.Nil(t, dispatcher.buildObjectSpawn(w, 999, character))

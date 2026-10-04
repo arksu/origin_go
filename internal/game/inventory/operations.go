@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"encoding/json"
+	"origin/internal/playerstate"
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
@@ -113,6 +114,10 @@ func (s *InventoryOperationService) ExecuteOperation(
 	playerHandle types.Handle,
 	op *netproto.InventoryOp,
 ) *OperationResult {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: playerstate.ItemsLockedReason}
+	}
+
 	switch kind := op.Kind.(type) {
 	case *netproto.InventoryOp_Move:
 		return s.ExecuteMove(w, playerID, playerHandle, op.OpId, kind.Move, op.Expected)
@@ -135,6 +140,10 @@ func (s *InventoryOperationService) ExecuteMove(
 	moveSpec *netproto.InventoryMoveSpec,
 	expected []*netproto.InventoryExpected,
 ) *OperationResult {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: playerstate.ItemsLockedReason}
+	}
+
 	if moveSpec == nil || moveSpec.Src == nil || moveSpec.Dst == nil {
 		return &OperationResult{
 			Success:   false,
@@ -514,6 +523,10 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	moveSpec *netproto.InventoryMoveSpec,
 	expected []*netproto.InventoryExpected,
 ) *OperationResult {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: playerstate.ItemsLockedReason}
+	}
+
 	if moveSpec == nil || moveSpec.Src == nil {
 		return &OperationResult{
 			Success:   false,
@@ -832,6 +845,10 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 	droppedEntityID types.EntityID,
 	dstRef *netproto.InventoryRef,
 ) *OperationResult {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: playerstate.ItemsLockedReason}
+	}
+
 	if s.persister == nil {
 		return &OperationResult{
 			Success:   false,

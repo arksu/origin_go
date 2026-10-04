@@ -3,6 +3,7 @@ package game
 import (
 	"origin/internal/actionanimationdefs"
 	"origin/internal/cyclicaction"
+	"origin/internal/playerstate"
 	"slices"
 	"strings"
 
@@ -64,6 +65,11 @@ func (s *BuildService) HandleBuildCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendWarning(playerID, playerstate.ItemsLockedReason)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -149,6 +155,7 @@ func (s *BuildService) startBuildCyclicAction(
 
 	nowTick := ecs.GetResource[ecs.TimeState](w).Tick
 	cyclicaction.Start(w, playerHandle, components.ActiveCyclicAction{
+		MutatesItems:       true,
 		ActionID:           buildSyntheticActionID,
 		TargetKind:         components.CyclicActionTargetObject,
 		TargetID:           ctx.targetID,

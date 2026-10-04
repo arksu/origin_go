@@ -27,7 +27,7 @@ func (f characterSaveInventoryFunc) SerializeInventories(w interface{}, entityID
 func characterSaveTestSnapshot(id int64, value int) CharacterSnapshot {
 	return CharacterSnapshot{
 		CharacterID: id, X: value, Y: value + 1, Heading: int16(value + 2),
-		Stamina: float64(value + 3), Energy: float64(value + 4), SHP: int16(value + 5), HHP: int16(value + 6),
+		Stamina: float64(value + 3), Energy: float64(value + 4), SHP: int32(value + 5), HHP: int32(value + 6),
 		Attributes: fmt.Sprintf(`{"strength":%d}`, value), Exp: fmt.Sprintf(`{"LP":%d}`, value),
 		Skills: fmt.Sprintf(`["skill%d"]`, value), Discovery: fmt.Sprintf(`["discovery%d"]`, value),
 	}

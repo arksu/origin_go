@@ -563,7 +563,7 @@ func TestHandleHealthCommands(t *testing.T) {
 	ecs.WithComponent(world, playerHandle, func(h *components.EntityHealth) {
 		h.SHP = 0
 		h.HHP = 0
-		h.KOUntilTick = 100
+		h.KOUntilUnixMs = 100
 	})
 
 	if handled := handler.HandleCommand(world, playerID, playerHandle, "/revive"); !handled {
@@ -573,12 +573,12 @@ func TestHandleHealthCommands(t *testing.T) {
 	if health.HHP <= 0 || health.SHP <= 0 {
 		t.Fatalf("expected positive HP after /revive, got SHP=%v HHP=%v", health.SHP, health.HHP)
 	}
-	if health.KOUntilTick != 0 {
-		t.Fatalf("expected KO marker cleared after /revive, got KO=%d", health.KOUntilTick)
+	if health.KOUntilUnixMs != 100 {
+		t.Fatalf("revive changed mandatory KO deadline: %d", health.KOUntilUnixMs)
 	}
 	movement, _ := ecs.GetComponent[components.Movement](world, playerHandle)
-	if movement.State == _const.StateStunned {
-		t.Fatalf("expected movement unstunned after /revive")
+	if movement.State != _const.StateStunned {
+		t.Fatalf("revive changed independent stun")
 	}
 
 	if handled := handler.HandleCommand(world, playerID, playerHandle, "/health"); !handled {

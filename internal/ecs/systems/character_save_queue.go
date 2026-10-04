@@ -203,6 +203,7 @@ func characterSaveParams(batch []*CharacterSnapshot) (repository.UpdateCharacter
 		characters.Energies = append(characters.Energies, snapshot.Energy)
 		characters.Shps = append(characters.Shps, int(snapshot.SHP))
 		characters.Hhps = append(characters.Hhps, int(snapshot.HHP))
+		characters.IsLyings = append(characters.IsLyings, snapshot.IsLying)
 		characters.Attributes = append(characters.Attributes, snapshot.Attributes)
 		characters.Exps = append(characters.Exps, snapshot.Exp)
 		characters.Skills = append(characters.Skills, snapshot.Skills)

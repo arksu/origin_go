@@ -11,6 +11,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -46,6 +47,40 @@ type testActionHandler struct {
 	reasonCalls  int
 	onValidate   func()
 	targetReason func(ActionTarget) string
+}
+
+type testItemActionHandler struct{ testActionHandler }
+
+func (*testItemActionHandler) RequiresItemMutation() bool { return true }
+
+func TestLockedItemActionAdmissionPreservesUnrelatedAction(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		world := ecs.NewWorldForTesting()
+		player := world.Spawn(1, func(w *ecs.World, h types.Handle) {
+			ecs.AddComponent(w, h, components.EntityHealth{HHP: 20, SHP: 5, IsLying: true})
+			ecs.AddComponent(w, h, components.Movement{State: constt.StateMoving, TargetType: constt.TargetPoint, TargetX: 42})
+			ecs.AddComponent(w, h, components.ActiveGameAction{ActionID: "ordinary", Phase: components.GameActionApproaching, Generation: 7})
+		})
+		ordinary, item := &testActionHandler{}, &testItemActionHandler{}
+		sender := &testActionSender{}
+		service, err := NewActionService(world, actiondefs.NewRegistry([]actiondefs.Definition{
+			{ID: "ordinary", Target: actiondefs.Target{Kind: actiondefs.TargetTile}},
+			{ID: "item", Target: actiondefs.Target{Kind: actiondefs.TargetTile}},
+		}), map[string]ActionHandler{"ordinary": ordinary, "item": item}, sender)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if direct {
+			service.StartTargetedOnce(world, 1, player, "item", 0, types.InvalidHandle, 42, 0)
+		} else {
+			service.Activate(world, 1, player, "item")
+		}
+		active, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
+		movement, _ := ecs.GetComponent[components.Movement](world, player)
+		if ordinary.canceled != 0 || item.startCount != 0 || active.ActionID != "ordinary" || active.Generation != 7 || movement.TargetX != 42 || len(sender.alerts) != 1 || sender.alerts[0].ReasonCode != playerstate.ItemsLockedReason {
+			t.Fatalf("rejected item action affected prior action: direct=%v active=%+v movement=%+v alerts=%v", direct, active, movement, sender.alerts)
+		}
+	}
 }
 
 func (handler *testActionHandler) UnavailableReason(*ecs.World, types.EntityID, types.Handle) string {

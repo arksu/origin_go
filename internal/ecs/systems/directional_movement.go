@@ -37,7 +37,7 @@ func directionalMovementRestricted(w *ecs.World, handle types.Handle, movement c
 		return true
 	}
 	if health, exists := ecs.GetComponent[components.EntityHealth](w, handle); exists {
-		return health.HHP <= 0 || health.SHP <= 0 || health.KOUntilTick != 0
+		return health.HHP <= 0
 	}
 	return false
 }

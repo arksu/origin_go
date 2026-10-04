@@ -184,7 +184,7 @@ func TestDirectionReceiptDeadlineAndRetirement(t *testing.T) {
 }
 
 func TestDirectionRestrictionsRetireInputWithoutCancelingAction(t *testing.T) {
-	for _, restriction := range []string{"stun", "ko", "stamina"} {
+	for _, restriction := range []string{"stun", "stamina"} {
 		t.Run(restriction, func(t *testing.T) {
 			f := newDirectionalFixture(t)
 			router := &testActionClickRouter{}
@@ -193,8 +193,8 @@ func TestDirectionRestrictionsRetireInputWithoutCancelingAction(t *testing.T) {
 			switch restriction {
 			case "stun":
 				ecs.WithComponent(f.world, f.player, func(m *components.Movement) { m.State = constt.StateStunned })
-			case "ko":
-				ecs.AddComponent(f.world, f.player, components.EntityHealth{HHP: 100, SHP: 0, KOUntilTick: 1})
+			case "death":
+				ecs.AddComponent(f.world, f.player, components.EntityHealth{HHP: 0, SHP: 0})
 			case "stamina":
 				ecs.AddComponent(f.world, f.player, components.EntityStats{Stamina: 0, Energy: 1000})
 			}
@@ -323,8 +323,7 @@ func TestDirectionModesAndRestrictionsMatchClickMovement(t *testing.T) {
 				ecs.WithComponent(f.world, f.player, func(m *components.Movement) { m.State = constt.StateStunned })
 				expected = 0
 			case "ko":
-				ecs.AddComponent(f.world, f.player, components.EntityHealth{HHP: 100, SHP: 0, KOUntilTick: 1})
-				expected = 0
+				ecs.AddComponent(f.world, f.player, components.EntityHealth{HHP: 100, SHP: 0, KOUntilUnixMs: 60_000, IsLying: true})
 			}
 			f.movement.Update(f.world, .1)
 			moves := ecs.GetResource[ecs.MovedEntities](f.world)

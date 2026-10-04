@@ -32,6 +32,7 @@ export class GameConnection {
       this.disconnect()
     }
 
+    timeSync.reset()
     this.authToken = authToken
     this.setState('connecting')
 
@@ -171,6 +172,7 @@ export class GameConnection {
 
   private startPing(): void {
     this.stopPing()
+    this.sendPing()
     this.pingInterval = setInterval(() => {
       this.sendPing()
     }, config.PING_INTERVAL_MS)

@@ -7,6 +7,7 @@ import (
 	"math"
 	"origin/internal/actionanimationdefs"
 	"origin/internal/cyclicaction"
+	"origin/internal/playerstate"
 	"slices"
 	"strings"
 
@@ -102,6 +103,11 @@ func (s *CraftingService) startCraft(
 	craftKey string,
 	cycles uint32,
 ) {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, playerstate.ItemsLockedReason)
+		return
+	}
+
 	if s == nil || w == nil || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) || cycles == 0 {
 		return
 	}
@@ -150,6 +156,7 @@ func (s *CraftingService) startCraft(
 		RemainingCycles: cycles,
 	})
 	cyclicaction.Start(w, playerHandle, components.ActiveCyclicAction{
+		MutatesItems:       true,
 		ActionID:           craftSyntheticActionID,
 		TargetKind:         targetKind,
 		TargetID:           targetID,
@@ -172,6 +179,11 @@ func (s *CraftingService) HandleCraftCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, playerstate.ItemsLockedReason)
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if s == nil || w == nil || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}

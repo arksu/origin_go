@@ -8,6 +8,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 	"strings"
 	"time"
@@ -178,6 +179,7 @@ type NetworkCommandSystem struct {
 	liftCommandService          LiftCommandService
 	actionService               ActionCommandService
 	contextPendingTTL           time.Duration
+	standUpHandler              func(*ecs.World, types.Handle, *network.PlayerCommand)
 	directionalSessionValidator func(playerID types.EntityID, clientID uint64, epoch uint32) bool
 	manualMovementCanceler      ManualMovementCanceler
 
@@ -304,6 +306,10 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 
 	// Route to command handlers
 	switch cmd.CommandType {
+	case network.CmdStandUp:
+		if s.standUpHandler != nil {
+			s.standUpHandler(w, handle, cmd)
+		}
 	case network.CmdMoveDirection:
 		s.handleMoveDirection(w, handle, cmd)
 	case network.CmdMapClick:
@@ -483,6 +489,10 @@ func (s *NetworkCommandSystem) handlePrimaryMapClick(w *ecs.World, playerHandle 
 		if s.actionService.HandleArmedClick(w, cmd.CharacterID, playerHandle, targetID, targetHandle, float64(click.X), float64(click.Y)) {
 			return
 		}
+		if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped && playerstate.ItemsLocked(w, playerHandle) {
+			s.sendItemsLocked(cmd.CharacterID)
+			return
+		}
 		if active, exists := ecs.GetComponent[components.ActiveGameAction](w, playerHandle); exists && active.Phase == components.GameActionApproaching {
 			s.actionService.Cancel(w, cmd.CharacterID, playerHandle)
 		}
@@ -654,11 +664,25 @@ func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandl
 		}
 		return
 	}
+	targetID := types.EntityID(click.TargetEntityId)
+	targetHandle := w.GetHandleByEntityID(targetID)
+	if targetID != 0 && w.Alive(targetHandle) && playerstate.ItemsLocked(w, playerHandle) {
+		_, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle)
+		if dropped {
+			s.sendItemsLocked(playerID)
+			return
+		}
+		if _, hasCollider := ecs.GetComponent[components.Collider](w, targetHandle); hasCollider && s.contextActionService != nil {
+			actions := s.computeContextActions(w, playerID, playerHandle, targetID, targetHandle)
+			if len(actions) == 1 && !s.shouldOpenContextMenuForSingleAction(w, targetHandle) && s.contextActionMutatesItems(w, playerHandle, targetHandle, actions[0].ActionID) {
+				s.sendItemsLocked(playerID)
+				return
+			}
+		}
+	}
 	if s.actionService != nil {
 		s.actionService.Cancel(w, playerID, playerHandle)
 	}
-	targetID := types.EntityID(click.TargetEntityId)
-	targetHandle := w.GetHandleByEntityID(targetID)
 	if targetID == 0 || !w.Alive(targetHandle) {
 		return
 	}
@@ -753,6 +777,11 @@ func (s *NetworkCommandSystem) startPendingContextAction(
 	targetHandle types.Handle,
 	actionID string,
 ) {
+	if s.contextActionMutatesItems(w, playerHandle, targetHandle, actionID) && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendItemsLocked(playerID)
+		return
+	}
+
 	if link, hasLink := ecs.GetResource[ecs.LinkState](w).GetLink(playerID); hasLink && link.TargetID == targetEntityID {
 		// Already linked: execute immediately without creating pending state.
 		s.contextActionService.ExecuteAction(w, playerID, playerHandle, targetEntityID, targetHandle, actionID)
@@ -790,6 +819,7 @@ func (s *NetworkCommandSystem) beginMoveToLink(
 		TargetHandle:   targetHandle,
 		ActionID:       actionID,
 		ExpireAtUnixMs: expireAt,
+		MutatesItems:   s.contextActionMutatesItems(w, playerHandle, targetHandle, actionID),
 	})
 }
 
@@ -852,6 +882,11 @@ func (s *NetworkCommandSystem) handlePickupInteract(
 	targetEntityID types.EntityID,
 	targetHandle types.Handle,
 ) {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		s.sendItemsLocked(playerID)
+		return
+	}
+
 	playerTransform, hasPlayerT := ecs.GetComponent[components.Transform](w, playerHandle)
 	targetTransform, hasTargetT := ecs.GetComponent[components.Transform](w, targetHandle)
 	if !hasPlayerT || !hasTargetT {
@@ -1434,4 +1469,23 @@ func (s *NetworkCommandSystem) Stats() (playerReceived, playerDropped, playerPro
 	pr, pd, pp := s.playerInbox.Stats()
 	sr, sd, sp := s.serverInbox.Stats()
 	return pr, pd, pp, sr, sd, sp
+}
+
+func (s *NetworkCommandSystem) SetStandUpHandler(handler func(*ecs.World, types.Handle, *network.PlayerCommand)) {
+	s.standUpHandler = handler
+}
+
+func (s *NetworkCommandSystem) contextActionMutatesItems(w *ecs.World, playerHandle, targetHandle types.Handle, id string) bool {
+	capability, ok := s.contextActionService.(interface {
+		RequiresItemMutation(*ecs.World, types.Handle, types.Handle, string) bool
+	})
+	return ok && capability.RequiresItemMutation(w, playerHandle, targetHandle, id)
+}
+
+func (s *NetworkCommandSystem) sendItemsLocked(playerID types.EntityID) {
+	if sender, ok := s.inventoryResultSender.(interface {
+		SendMiniAlert(types.EntityID, *netproto.S2C_MiniAlert)
+	}); ok {
+		sender.SendMiniAlert(playerID, &netproto.S2C_MiniAlert{Severity: netproto.AlertSeverity_ALERT_SEVERITY_WARNING, ReasonCode: playerstate.ItemsLockedReason, TtlMs: 3000})
+	}
 }

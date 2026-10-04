@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"fmt"
+	"origin/internal/playerstate"
 
 	constt "origin/internal/const"
 	"origin/internal/craftdefs"
@@ -307,6 +308,10 @@ func (e *InventoryExecutor) prepareCraftInputs(
 // CommitPreparedCraftInputs publishes the exact input selection that passed final output validation.
 // Prepared results are single-use and must not be retained across ticks.
 func (e *InventoryExecutor) CommitPreparedCraftInputs(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, prepared *CraftConsumeInputsResult) CraftConsumeInputsResult {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		return CraftConsumeInputsResult{}
+	}
+
 	if e == nil || w == nil || prepared == nil || !prepared.Success || prepared.Overflow || len(prepared.prepared) == 0 {
 		return CraftConsumeInputsResult{}
 	}
@@ -351,6 +356,10 @@ func (e *InventoryExecutor) GiveCraftOutputOrDrop(
 	count uint32,
 	quality uint32,
 ) CraftGiveOrDropResult {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		return CraftGiveOrDropResult{}
+	}
+
 	result := CraftGiveOrDropResult{Success: true}
 	if e == nil || e.service == nil || w == nil || count == 0 {
 		return result
@@ -384,6 +393,10 @@ func (e *InventoryExecutor) dropCraftOutputAtPlayer(
 	itemKey string,
 	quality uint32,
 ) bool {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		return false
+	}
+
 	itemDef, ok := itemdefs.Global().GetByKey(itemKey)
 	if !ok || e.service == nil || e.service.idAllocator == nil {
 		return false

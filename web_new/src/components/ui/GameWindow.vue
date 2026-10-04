@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 
 interface Props {
   id: number
   title: string
   innerWidth: number
   innerHeight: number
+  closable?: boolean
+  centerOnOpen?: boolean
+  persistPosition?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { closable: true, centerOnOpen: false, persistPosition: true })
 const emit = defineEmits<{
   close: []
 }>()
@@ -39,12 +42,11 @@ const onTouchDrag = function(event: TouchEvent) {
   }
 }
 
-const onTouchDragEnd = function(event: TouchEvent) {
-  console.log(event)
-  document.ontouchmove = null
-  document.ontouchend = null
-  localStorage.setItem('wnd_' + props.id + '_left', '' + left.value)
-  localStorage.setItem('wnd_' + props.id + '_top', '' + top.value)
+const onTouchDragEnd = function() {
+  document.removeEventListener('touchmove', onTouchDrag)
+  document.removeEventListener('touchend', onTouchDragEnd)
+  document.removeEventListener('touchcancel', onTouchDragEnd)
+  savePosition()
 }
 
 const onTouchStart = (event: TouchEvent) => {
@@ -52,8 +54,9 @@ const onTouchStart = (event: TouchEvent) => {
     clientX = event.touches[0].clientX
     clientY = event.touches[0].clientY
     touchId = event.touches[0].identifier
-    document.ontouchmove = onTouchDrag
-    document.ontouchend = onTouchDragEnd
+    document.addEventListener('touchmove', onTouchDrag, { passive: false })
+    document.addEventListener('touchend', onTouchDragEnd)
+    document.addEventListener('touchcancel', onTouchDragEnd)
   }
 }
 
@@ -73,8 +76,7 @@ const onDrag = function(event: MouseEvent) {
 const onDragEnd = function() {
   document.onmousemove = null
   document.onmouseup = null
-  localStorage.setItem('wnd_' + props.id + '_left', '' + left.value)
-  localStorage.setItem('wnd_' + props.id + '_top', '' + top.value)
+  savePosition()
 }
 
 const onMouseDown = (event: MouseEvent) => {
@@ -86,16 +88,37 @@ const onMouseDown = (event: MouseEvent) => {
   }
 }
 
-onMounted(() => {
-  const l = localStorage.getItem('wnd_' + props.id + '_left')
-  if (l) {
-    left.value = +l
-  }
-  const t = localStorage.getItem('wnd_' + props.id + '_top')
-  if (t) {
-    top.value = +t
+function savePosition() {
+  if (!props.persistPosition) return
+  localStorage.setItem('wnd_' + props.id + '_left', '' + left.value)
+  localStorage.setItem('wnd_' + props.id + '_top', '' + top.value)
+}
+
+onMounted(async () => {
+  if (props.centerOnOpen) {
+    await nextTick()
+    const windowElement = draggableTarget.value
+    const container = windowElement?.offsetParent as HTMLElement | null
+    if (windowElement && container) {
+      left.value = Math.max(0, (container.clientWidth - windowElement.offsetWidth) / 2)
+      top.value = Math.max(0, (container.clientHeight - windowElement.offsetHeight) / 2)
+    }
+  } else if (props.persistPosition) {
+    const storedLeft = localStorage.getItem('wnd_' + props.id + '_left')
+    const storedTop = localStorage.getItem('wnd_' + props.id + '_top')
+    if (storedLeft) left.value = +storedLeft
+    if (storedTop) top.value = +storedTop
   }
 })
+
+onUnmounted(() => {
+  if (document.onmousemove === onDrag) document.onmousemove = null
+  if (document.onmouseup === onDragEnd) document.onmouseup = null
+  document.removeEventListener('touchmove', onTouchDrag)
+  document.removeEventListener('touchend', onTouchDragEnd)
+  document.removeEventListener('touchcancel', onTouchDragEnd)
+})
+
 </script>
 
 <template>
@@ -108,11 +131,11 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="close-btn-back">
+    <div v-if="closable" class="close-btn-back">
       <img alt="" src="/assets/img/window_close.png">
     </div>
 
-    <div class="header" @touchstart.prevent.passive="onTouchStart" @mousedown.prevent="onMouseDown">
+    <div class="header" @touchstart.prevent="onTouchStart" @mousedown.prevent="onMouseDown">
       <div class="title">
         <span class="title-text">
           {{ title }}
@@ -120,7 +143,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="close-btn-click">
+    <div v-if="closable" class="close-btn-click">
       <div class="close-btn" @click="emit('close')"></div>
     </div>
   </div>

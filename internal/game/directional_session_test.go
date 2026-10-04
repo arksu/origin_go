@@ -136,8 +136,8 @@ func TestDirectionTransferDetachAndReattachRejectOldHold(t *testing.T) {
 	}
 }
 
-func TestDirectionKnockoutAndDetachCleanupRetireHold(t *testing.T) {
-	for _, knockout := range []bool{false, true} {
+func TestDirectionStunAndDetachCleanupRetireHold(t *testing.T) {
+	for _, stunned := range []bool{false, true} {
 		w := ecs.NewWorldForTesting()
 		player := w.Spawn(1, func(w *ecs.World, h types.Handle) {
 			ecs.AddComponent(w, h, components.Movement{Speed: 32, Mode: constt.Walk})
@@ -145,13 +145,13 @@ func TestDirectionKnockoutAndDetachCleanupRetireHold(t *testing.T) {
 		commands, inbox := directionalTestCommands(w, nil)
 		enqueueTestDirection(t, w, inbox, 1)
 		commands.Update(w, .1)
-		if knockout {
-			applyStunnedStateAndClearActions(w, player)
+		if stunned {
+			ecs.WithComponent(w, player, func(m *components.Movement) { m.ClearTarget(); m.State = constt.StateStunned })
 			movement, _ := ecs.GetComponent[components.Movement](w, player)
 			if movement.State != constt.StateStunned {
 				t.Fatal("cleanup removed stun")
 			}
-			clearStunnedState(w, player)
+			ecs.WithComponent(w, player, func(m *components.Movement) { m.State = constt.StateIdle })
 		} else {
 			systems.StopMovementForDetached(w, player)
 		}

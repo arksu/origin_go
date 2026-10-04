@@ -53,13 +53,14 @@
 
 ## Сравнение с origin_go
 
-Ядро уже совпадает с H&H: SHP/HHP/MHP с `MHP = √CON·25`, KO при SHP≤0, смерть при HHP≤0 ([health.go](/Users/park/projects/origin_go/internal/entityhealth/health.go)), KO = stunned + сброс всех действий, перманентная смерть с конвертацией в объект `player_death`, удалением персонажа из БД и DeathDialog ([player_death_system.go](/Users/park/projects/origin_go/internal/game/player_death_system.go), [shard.go](/Users/park/projects/origin_go/internal/game/shard.go)). Клиент уже рисует позу `knocked_out`.
+В origin_go используются SHP/HHP/MHP с `MHP = √CON·25`, KO при SHP≤0 и смерть при HHP≤0 ([health.go](/Users/park/projects/origin_go/internal/entityhealth/health.go)). Реализованный KO длится обязательные 60 секунд в runtime; затем персонаж остаётся лежать до добровольного подъёма. Поза сохраняется в БД и видна наблюдателям. Немодальное окно находится поверх игровых окон и разрешает ввод за его пределами. KO блокирует только предметные операции инициатора; движение и остальные действия подчиняются прежним правилам. Самостоятельный stun независим. Подробный контракт, рестарт, восстановление и необходимые изменения протокола описаны в [runtime_ko.md](runtime_ko.md).
+
+Перманентная смерть по-прежнему конвертирует сущность в `player_death`, удаляет персонажа из БД и показывает DeathDialog ([player_death_system.go](/Users/park/projects/origin_go/internal/game/player_death_system.go), [shard.go](/Users/park/projects/origin_go/internal/game/shard.go)).
 
 Найденные гэпы относительно H&H:
-1. **KO-состояние невидимо другим игрокам** — `IsKnockedOut` отправляется только владельцу (S2C_PlayerStats), а у H&H поза лежачего — gob-дельта, видимая всем вокруг.
-2. **Нет авто-пробуждения и KO-диалога** — у нас KO персистентен до восстановления SHP (тесты это явно фиксируют), у H&H — ~1 мин и вставание с 1 SHP + опции порт/логаут.
-3. **Нет Knockout Protection / Theft-гейтинга** на атаку и лут лежачих.
-4. **Нет распада трупа→скелета, погребения и системы наследования** (15–45%).
-5. Нет сплита урона на grievous/concussion (у нас soft/hard есть, а вот «раны» и ролл сотрясения при KO — нет).
+1. **Hearth Fire, выход из боя и новая модель урона** остаются отдельными задачами; автоматический подъём не входит в текущий этап.
+2. **Нет Knockout Protection / Theft-гейтинга** на атаку и лут лежачих.
+3. **Нет распада трупа→скелета, погребения и системы наследования** (15–45%).
+4. Нет сплита урона на grievous/concussion (у нас soft/hard есть, а вот «раны» и ролл сотрясения при KO — нет).
 
 Источники: [Ring of Brodgar wiki](https://ringofbrodgar.com/wiki/Hitpoints) (Hitpoints, Murder, Corpse, Grave, Theft, Glossary), [Fandom wiki](https://havenandhearth.fandom.com/wiki/Death), форум H&H: [An Arrow to the Knee](https://www.havenandhearth.com/forum/viewtopic.php?f=39&t=67070) (рework KO/Murder), [Iced Bait](https://www.havenandhearth.com/forum/viewtopic.php?f=39&t=71874) (KO-диалог), [Bring out yer Dead](https://www.havenandhearth.com/forum/viewtopic.php?f=39&t=54573) (наследование), [Combat Guide W16](https://www.havenandhearth.com/forum/viewtopic.php?f=42&t=72160); код: hafen-client, Hurricane, EnderWiggin classic fork, HHSwarm.

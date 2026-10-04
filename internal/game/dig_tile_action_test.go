@@ -15,6 +15,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/entitystats"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -22,6 +23,33 @@ type digGiveCall struct {
 	itemKey string
 	count   uint32
 	quality uint32
+}
+
+func TestDigCycleStartedBeforeKnockoutCannotGiveItemsOrChargeStamina(t *testing.T) {
+	world, player, service, _, sender, recorder := newDigTest(t, types.TileGrass)
+	service.HandleArmedClick(world, 1, player, 0, types.InvalidHandle, 6, 6)
+	statsBefore, _ := ecs.GetComponent[components.EntityStats](world, player)
+	ecs.AddComponent(world, player, components.EntityHealth{HHP: 20, SHP: 3, KOUntilUnixMs: 61000, IsLying: true})
+	cycle, active := ecs.GetComponent[components.ActiveCyclicAction](world, player)
+	if !active || !cycle.MutatesItems {
+		t.Fatal("dig was not marked as an item cycle")
+	}
+	service.AdvanceCycle(world, 1, player, cycle, sender)
+	statsAfter, _ := ecs.GetComponent[components.EntityStats](world, player)
+	if len(recorder.calls) != 0 || statsAfter != statsBefore || len(sender.alerts) == 0 || sender.alerts[len(sender.alerts)-1].ReasonCode != playerstate.ItemsLockedReason {
+		t.Fatalf("dig committed during KO: grants=%v stats=%+v alerts=%v", recorder.calls, statsAfter, sender.alerts)
+	}
+	ecs.WithComponent(world, player, func(health *components.EntityHealth) {
+		health.SHP = 5
+		health.KOUntilUnixMs = 0
+		health.IsLying = false
+	})
+	system := NewCyclicActionSystem(nil, sender, nil)
+	system.SetActionService(service)
+	system.Update(world, .1)
+	if len(recorder.calls) != 0 {
+		t.Fatal("rejected dig resumed after standing")
+	}
 }
 
 type digGiveRecorder struct {

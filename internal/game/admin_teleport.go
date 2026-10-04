@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"origin/internal/characterattrs"
 	"origin/internal/ecs"
+	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
@@ -48,6 +49,7 @@ func (g *Game) spawnTeleportedPlayer(
 	x,
 	y int,
 	ignoreObjectCollision bool,
+	runtimeHealth ...components.EntityHealth,
 ) (types.Handle, error) {
 	if client == nil {
 		return types.InvalidHandle, fmt.Errorf("nil client")
@@ -64,7 +66,7 @@ func (g *Game) spawnTeleportedPlayer(
 	normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
 	profileExperience, profileSkills, profileDiscovery := loadCharacterProfileData(character, g.logger)
 	pos := spawnPos{X: x, Y: y}
-	setupFn := g.buildPlayerSetupFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery)
+	setupFn := g.buildPlayerSetupFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery, runtimeHealth...)
 	handle, spawnErr := shard.trySpawnPlayerWithPolicy(x, y, character, setupFn, SpawnCollisionPolicy{
 		IgnoreObjectCollision: ignoreObjectCollision,
 	})

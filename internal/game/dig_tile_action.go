@@ -4,6 +4,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -54,6 +55,10 @@ func (handler *digTileActionHandler) ValidateTarget(_ *ecs.World, _ types.Entity
 }
 
 func (handler *digTileActionHandler) Start(world *ecs.World, playerID types.EntityID, player types.Handle, target ActionTarget, _ uint64) ActionResult {
+	if playerstate.ItemsLocked(world, player) {
+		return ActionResult{Outcome: ActionRejected, Reason: playerstate.ItemsLockedReason}
+	}
+
 	itemKey, reason := handler.itemForTarget(target)
 	if reason != "" {
 		return ActionResult{Outcome: ActionFailed, Reason: reason}
@@ -70,3 +75,5 @@ func (handler *digTileActionHandler) Start(world *ecs.World, playerID types.Enti
 
 func (*digTileActionHandler) Cancel(*ecs.World, types.EntityID, types.Handle, components.ActiveGameAction) {
 }
+
+func (*digTileActionHandler) RequiresItemMutation() bool { return true }

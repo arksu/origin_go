@@ -86,8 +86,9 @@ type CharacterSnapshot struct {
 	Heading         int16
 	Stamina         float64
 	Energy          float64
-	SHP             int16
-	HHP             int16
+	SHP             int32
+	HHP             int32
+	IsLying         bool
 	Attributes      string
 	Exp             string
 	Skills          string
@@ -109,9 +110,9 @@ func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle type
 	if !hasStats {
 		return
 	}
-	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
+	shpValue, hhpValue, isLying := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories)
+	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, isLying, inventories)
 	if err := snapshot.captureActionCooldowns(w, handle); err != nil {
 		s.logger.Error("Failed to serialize action cooldowns", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
 		return
@@ -132,9 +133,9 @@ func (s *CharacterSaver) SaveSync(w *ecs.World, entityID types.EntityID, handle 
 	if !hasStats {
 		return fmt.Errorf("save character %d: missing EntityStats component", entityID)
 	}
-	shpValue, hhpValue := s.resolveHealthSnapshotValues(w, handle)
+	shpValue, hhpValue, isLying := s.resolveHealthSnapshotValues(w, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, inventories)
+	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, isLying, inventories)
 	if err := snapshot.captureActionCooldowns(w, handle); err != nil {
 		return err
 	}
@@ -163,8 +164,9 @@ func (s *CharacterSaver) buildSnapshot(
 	discoveryRaw string,
 	staminaValue float64,
 	energyValue float64,
-	shpValue int16,
-	hhpValue int16,
+	shpValue int32,
+	hhpValue int32,
+	isLying bool,
 	inventories []InventorySnapshot,
 ) CharacterSnapshot {
 	return CharacterSnapshot{
@@ -176,6 +178,7 @@ func (s *CharacterSaver) buildSnapshot(
 		Energy:      energyValue,
 		SHP:         shpValue,
 		HHP:         hhpValue,
+		IsLying:     isLying,
 		Attributes:  attributesRaw,
 		Exp:         experienceRaw,
 		Skills:      skillsRaw,
@@ -202,21 +205,11 @@ func (s *CharacterSaver) resolveStatsSnapshotValues(w *ecs.World, entityID types
 	return 0, 0, false
 }
 
-func (s *CharacterSaver) resolveHealthSnapshotValues(w *ecs.World, handle types.Handle) (int16, int16) {
+func (s *CharacterSaver) resolveHealthSnapshotValues(w *ecs.World, handle types.Handle) (int32, int32, bool) {
 	if health, hasHealth := ecs.GetComponent[components.EntityHealth](w, handle); hasHealth {
-		return roundAndClampInt16(health.SHP), roundAndClampInt16(health.HHP)
+		return roundHealthForSave(health.SHP), roundHealthForSave(health.HHP), health.IsLying
 	}
-	return 100, 100
-}
-
-func roundAndClampInt16(value float64) int16 {
-	if value <= math.MinInt16 {
-		return math.MinInt16
-	}
-	if value >= math.MaxInt16 {
-		return math.MaxInt16
-	}
-	return int16(math.Round(value))
+	return 100, 100, false
 }
 
 func (s *CharacterSaver) serializeCharacterProfile(w *ecs.World, entityID types.EntityID, handle types.Handle) (string, string, string, string) {
@@ -316,4 +309,8 @@ func (snapshot *CharacterSnapshot) captureActionCooldowns(w *ecs.World, handle t
 	}
 	snapshot.ActionCooldowns = serialized
 	return nil
+}
+
+func roundHealthForSave(value float64) int32 {
+	return int32(math.Round(math.Min(math.Max(value, 0), math.MaxInt32)))
 }

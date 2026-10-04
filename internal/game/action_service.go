@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"origin/internal/actionanimationdefs"
 	"origin/internal/cyclicaction"
+	"origin/internal/playerstate"
 	"time"
 
 	"origin/internal/actiondefs"
@@ -191,6 +192,10 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 	if !exists {
 		return
 	}
+	if service.rejectItemMutation(world, playerID, playerHandle, active.ActionID) {
+		service.Cancel(world, playerID, playerHandle)
+		return
+	}
 	definition, found := service.definitions.Get(active.ActionID)
 	if active.Phase == components.GameActionApproaching && active.ExpireAtUnixMs > 0 && ecs.GetResource[ecs.TimeState](world).UnixMs >= active.ExpireAtUnixMs {
 		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_TARGET_TIMEOUT")
@@ -209,6 +214,9 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 
 func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) {
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	if service.rejectItemMutation(world, playerID, playerHandle, id) {
 		return
 	}
 	if service.rejectCooldown(world, playerID, playerHandle, id) {
@@ -255,6 +263,9 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
 		return
 	}
+	if service.rejectItemMutation(world, playerID, playerHandle, id) {
+		return
+	}
 	if service.rejectCooldown(world, playerID, playerHandle, id) {
 		return
 	}
@@ -274,6 +285,14 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 	service.nextGeneration++
 	active := components.ActiveGameAction{ActionID: id, Generation: service.nextGeneration, DirectAttempt: true}
 	service.startTarget(world, playerID, playerHandle, definition, active, target)
+}
+
+func (service *ActionService) rejectItemMutation(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) bool {
+	if !service.requiresItemMutation(id) || !playerstate.ItemsLocked(world, playerHandle) {
+		return false
+	}
+	service.alert(playerID, playerstate.ItemsLockedReason)
+	return true
 }
 
 func (service *ActionService) normalizeTarget(world *ecs.World, definition *actiondefs.Definition, target ActionTarget) (ActionTarget, string) {
@@ -363,7 +382,8 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 		}
 		cyclicaction.Start(world, playerHandle, components.ActiveCyclicAction{
 			BehaviorKey: gameActionCycleBehaviorKey, ActionID: definition.ID, ActionGeneration: active.Generation,
-			TargetKind: kind, TargetID: target.ObjectID, TargetHandle: target.ObjectHandle,
+			MutatesItems: service.requiresItemMutation(definition.ID),
+			TargetKind:   kind, TargetID: target.ObjectID, TargetHandle: target.ObjectHandle,
 			HasTargetPosition: definition.Target.Kind == actiondefs.TargetTile, TargetX: target.X, TargetY: target.Y,
 			CycleDurationTicks: uint32(definition.Execution.Ticks), CycleIndex: 1, StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
 		}, actionanimationdefs.Source{Kind: "menu", ID: definition.ID})
@@ -374,6 +394,11 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 }
 
 func (service *ActionService) executeHandler(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget) {
+	if service.requiresItemMutation(definition.ID) && playerstate.ItemsLocked(world, playerHandle) {
+		service.Complete(world, playerID, playerHandle, active.Generation, false, playerstate.ItemsLockedReason)
+		return
+	}
+
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
 		service.failRequirements(world, playerID, playerHandle, definition, active, reason)
 		return
@@ -528,6 +553,10 @@ func (service *ActionService) Cancel(world *ecs.World, playerID types.EntityID, 
 }
 
 func (service *ActionService) stopOwnedMovement(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, active components.ActiveGameAction) {
+	// Item cancellation during KO retires the action without stopping its approach.
+	if service.requiresItemMutation(active.ActionID) && playerstate.ItemsLocked(world, playerHandle) {
+		return
+	}
 	if !active.MovementOwned {
 		return
 	}
@@ -568,4 +597,12 @@ func (service *ActionService) alert(playerID types.EntityID, reason string) {
 			Severity: netproto.AlertSeverity_ALERT_SEVERITY_WARNING, ReasonCode: reason, TtlMs: 3000,
 		})
 	}
+}
+
+// Item mutation is an internal handler capability, not a client catalog flag.
+type itemMutationHandler interface{ RequiresItemMutation() bool }
+
+func (service *ActionService) requiresItemMutation(id string) bool {
+	handler, ok := service.handlers[id].(itemMutationHandler)
+	return ok && handler.RequiresItemMutation()
 }

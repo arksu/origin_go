@@ -110,3 +110,24 @@ func TestSnapshotWithoutEquipmentAndNonCharacter(t *testing.T) {
 	require.Zero(t, state.Revision)
 	require.Empty(t, state.Equipment)
 }
+
+func TestPoseAndEquipmentShareExactRevisionWithoutMutatingOnRead(t *testing.T) {
+	w, character, equipment := visualWorld(t)
+	ecs.AddComponent(w, character, components.EntityHealth{SHP: 1, HHP: 20, IsLying: true, LyingRevision: 1})
+	lying, err := Snapshot(w, character)
+	require.NoError(t, err)
+	require.True(t, lying.IsLying)
+	require.Equal(t, uint64(9007199254740994), lying.Revision)
+	again, err := Snapshot(w, character)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(lying, again))
+	ecs.WithComponent(w, character, func(health *components.EntityHealth) { health.IsLying = false; health.LyingRevision++ })
+	standing, err := Snapshot(w, character)
+	require.NoError(t, err)
+	require.False(t, standing.IsLying)
+	require.Equal(t, lying.Revision+1, standing.Revision)
+	ecs.WithComponent(w, equipment, func(container *components.InventoryContainer) { container.Version++ })
+	equipped, err := Snapshot(w, character)
+	require.NoError(t, err)
+	require.Equal(t, standing.Revision+1, equipped.Revision)
+}
