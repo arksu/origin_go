@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"origin/internal/actionanimationdefs"
 	"origin/internal/cyclicaction"
+	"origin/internal/ecs/systems"
 	"origin/internal/playerstate"
 	"time"
 
@@ -23,6 +24,12 @@ type ActionTarget struct {
 	ObjectHandle types.Handle
 	X            float64
 	Y            float64
+	AimAngle     float64
+}
+
+func actionTarget(active components.ActiveGameAction) ActionTarget {
+	return ActionTarget{ObjectID: active.TargetID, ObjectHandle: active.TargetHandle,
+		X: active.TargetX, Y: active.TargetY, AimAngle: active.AimAngle}
 }
 
 func (service *ActionService) SubscribeEvents(bus *eventbus.EventBus) {
@@ -55,7 +62,8 @@ func (service *ActionService) onLinkCreated(_ context.Context, event eventbus.Ev
 		service.Complete(service.world, linked.PlayerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
 		return nil
 	}
-	target := ActionTarget{ObjectID: active.TargetID, ObjectHandle: targetHandle, X: active.TargetX, Y: active.TargetY}
+	target := actionTarget(active)
+	target.ObjectHandle = targetHandle
 	if reason := service.handlers[active.ActionID].ValidateTarget(service.world, linked.PlayerID, playerHandle, target); reason != "" {
 		service.Complete(service.world, linked.PlayerID, playerHandle, active.Generation, false, reason)
 		return nil
@@ -213,8 +221,22 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 }
 
 func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) {
-	if service == nil || world != service.world || !world.Alive(playerHandle) {
+	service.ActivateRequest(world, playerID, playerHandle, &netproto.C2S_ActivateAction{ActionId: id})
+}
+
+func (service *ActionService) ActivateRequest(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, request *netproto.C2S_ActivateAction) {
+	if service == nil || world != service.world || !world.Alive(playerHandle) || request == nil {
 		return
+	}
+	id := request.ActionId
+	target := ActionTarget{}
+	if service.isDirectionAction(id) {
+		angle, valid := normalizeActionAim(request.AimAngle)
+		if !valid {
+			service.alert(playerID, "ACTION_INVALID_TARGET")
+			return
+		}
+		target.AimAngle = angle
 	}
 	if service.rejectIncapacitatedAction(world, playerID, playerHandle, id) {
 		return
@@ -234,6 +256,16 @@ func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID
 	}
 	service.nextGeneration++
 	active := components.ActiveGameAction{ActionID: id, Generation: service.nextGeneration}
+	if definition.Target.Kind == actiondefs.TargetDirection {
+		if reason := service.handlers[id].ValidateTarget(world, playerID, playerHandle, target); reason != "" {
+			service.alert(playerID, reason)
+			return
+		}
+		systems.ClearPlayerInteractionIntents(world, playerHandle, playerID)
+		playerstate.StopMovement(world, playerHandle)
+		service.startTarget(world, playerID, playerHandle, definition, active, target)
+		return
+	}
 	if definition.Target.Kind == actiondefs.TargetNone {
 		active.Phase = components.GameActionExecuting
 		ecs.AddComponent(world, playerHandle, active)
@@ -288,6 +320,10 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 }
 
 func (service *ActionService) rejectIncapacitatedAction(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) bool {
+	if service.isDirectionAction(id) && directionActionUnavailable(world, playerHandle) {
+		service.alert(playerID, "ACTION_UNAVAILABLE")
+		return true
+	}
 	if !playerstate.IsIncapacitated(world, playerHandle) {
 		return false
 	}
@@ -374,6 +410,7 @@ func (service *ActionService) HandleArmedClick(world *ecs.World, playerID types.
 
 func (service *ActionService) startTarget(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction, target ActionTarget) {
 	active.TargetID, active.TargetHandle, active.TargetX, active.TargetY = target.ObjectID, target.ObjectHandle, target.X, target.Y
+	active.AimAngle = target.AimAngle
 	if definition.Target.Approach == actiondefs.ApproachTileCenter {
 		service.approachTileCenter(world, playerID, playerHandle, definition, active, target)
 		return
@@ -416,6 +453,9 @@ func (service *ActionService) executeHandler(world *ecs.World, playerID types.En
 		return
 	}
 	if service.rejectCooldown(world, playerID, playerHandle, definition.ID) {
+		if definition.Target.Kind == actiondefs.TargetDirection {
+			service.Cancel(world, playerID, playerHandle)
+		}
 		return
 	}
 	result := service.handlers[definition.ID].Start(world, playerID, playerHandle, target, active.Generation)
@@ -506,7 +546,7 @@ func (service *ActionService) finishAction(world *ecs.World, playerID types.Enti
 		canSelect = canSelect && staminaReason(world, playerHandle, definition) == ""
 	}
 	selectAgain := definition.Repeatable() || !success && !definition.Execution.Repeat
-	if !active.DirectAttempt && definition.Target.Kind != actiondefs.TargetNone && selectAgain && canSelect {
+	if !active.DirectAttempt && definition.Target.Kind != actiondefs.TargetNone && definition.Target.Kind != actiondefs.TargetDirection && selectAgain && canSelect {
 		active.Phase = components.GameActionSelecting
 		active.TargetID, active.TargetHandle = 0, types.InvalidHandle
 		active.TargetX, active.TargetY = 0, 0

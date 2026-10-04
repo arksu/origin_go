@@ -143,7 +143,8 @@ type LiftCommandService interface {
 }
 
 type ActionCommandService interface {
-	Activate(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string)
+	ActivateRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, request *netproto.C2S_ActivateAction)
+	CancelForPointMovement(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 	Cancel(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 	StartTargetedOnce(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string, targetID types.EntityID, targetHandle types.Handle, x, y float64)
 	HandleArmedClick(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle, x, y float64) bool
@@ -338,7 +339,14 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleBuildTakeBack(w, handle, cmd)
 	case network.CmdActivateAction:
 		if request, ok := cmd.Payload.(*netproto.C2S_ActivateAction); ok && request != nil && s.actionService != nil {
-			s.actionService.Activate(w, cmd.CharacterID, handle, request.ActionId)
+			if request.AimAngle != nil || request.StreamEpoch != 0 {
+				if cmd.Layer != w.Layer || s.directionalSessionValidator == nil ||
+					!s.directionalSessionValidator(cmd.CharacterID, cmd.ClientID, request.StreamEpoch) ||
+					ecs.GetResource[ecs.DetachedEntities](w).IsDetached(cmd.CharacterID) {
+					return
+				}
+			}
+			s.actionService.ActivateRequest(w, cmd.CharacterID, handle, request)
 		}
 	case network.CmdCancelAction:
 		if s.actionService != nil {
@@ -538,6 +546,9 @@ func (s *NetworkCommandSystem) handlePrimaryMapClick(w *ecs.World, playerHandle 
 		}
 	}
 
+	if s.actionService != nil {
+		s.actionService.CancelForPointMovement(w, cmd.CharacterID, playerHandle)
+	}
 	// Clear pending interaction on any new movement command
 	s.clearPendingInteractionIntents(w, playerHandle, cmd.CharacterID)
 
@@ -855,6 +866,9 @@ func (s *NetworkCommandSystem) beginMoveToLinkIntent(
 	if !hasMov || mov.State == constt.StateStunned {
 		return false
 	}
+	if s.actionService != nil {
+		s.actionService.CancelForPointMovement(w, playerID, playerHandle)
+	}
 
 	s.clearPendingInteractionIntents(w, playerHandle, playerID)
 	s.setLinkIntent(w, playerID, targetEntityID, targetHandle)
@@ -925,6 +939,9 @@ func (s *NetworkCommandSystem) handlePickupInteract(
 	mov, hasMov := ecs.GetComponent[components.Movement](w, playerHandle)
 	if !hasMov || mov.State == constt.StateStunned {
 		return
+	}
+	if s.actionService != nil {
+		s.actionService.CancelForPointMovement(w, playerID, playerHandle)
 	}
 
 	ecs.RemoveComponent[components.PendingInteraction](w, playerHandle)

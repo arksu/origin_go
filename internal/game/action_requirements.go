@@ -25,6 +25,9 @@ func (service *ActionService) nonStaminaReason(world *ecs.World, playerID types.
 	if service == nil || world == nil || definition == nil || !world.Alive(playerHandle) {
 		return "ACTION_UNAVAILABLE"
 	}
+	if definition.Target.Kind == actiondefs.TargetDirection && directionActionUnavailable(world, playerHandle) {
+		return "ACTION_UNAVAILABLE"
+	}
 	if service.requiresItemMutation(definition.ID) && playerstate.ItemsLocked(world, playerHandle) {
 		return playerstate.ItemsLockedReason
 	}

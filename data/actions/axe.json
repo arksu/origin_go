@@ -13,7 +13,7 @@
           { "slots": ["right_hand", "left_hand"], "itemTag": "axe" }
         ]
       },
-      "execution": { "ticks": 6, "recoveryTicks": 4, "stamina": 60, "repeat": false },
+      "execution": { "ticks": 6, "stamina": 60, "repeat": false },
       "cooldown": 2000,
       "isRepeatable": false,
       "sector": { "range": 18, "angleDeg": 90 },
@@ -31,7 +31,7 @@
           { "slots": ["right_hand", "left_hand"], "itemTag": "axe" }
         ]
       },
-      "execution": { "ticks": 6, "recoveryTicks": 4, "stamina": 60, "repeat": false },
+      "execution": { "ticks": 6, "stamina": 60, "repeat": false },
       "cooldown": 2000,
       "isRepeatable": false,
       "sector": { "range": 18, "angleDeg": 90 },

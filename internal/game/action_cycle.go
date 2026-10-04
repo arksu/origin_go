@@ -41,7 +41,7 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 	if cycle.CycleElapsedTicks > cycle.CycleDurationTicks {
 		cycle.CycleElapsedTicks = cycle.CycleDurationTicks
 	}
-	target := ActionTarget{ObjectID: active.TargetID, ObjectHandle: active.TargetHandle, X: active.TargetX, Y: active.TargetY}
+	target := actionTarget(active)
 	cueReady := actionSoundCueDue(cycle)
 	if cueReady {
 		if reason := service.validateCycleTarget(world, playerID, playerHandle, definition, target); reason != "" {
@@ -72,6 +72,9 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 }
 
 func (service *ActionService) validateCycleTarget(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition, target ActionTarget) string {
+	if definition.Target.Kind == actiondefs.TargetDirection && !validActionAim(target.AimAngle) {
+		return "ACTION_INVALID_TARGET"
+	}
 	if definition.Target.Approach == actiondefs.ApproachTileCenter && !atTileCenter(world, playerHandle, target.X, target.Y) {
 		return "ACTION_INVALID_TARGET"
 	}

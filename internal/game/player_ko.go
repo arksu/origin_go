@@ -56,7 +56,7 @@ func (s *Shard) HandlePlayerIncapacitated(w *ecs.World, playerID types.EntityID,
 		s.logger.Error("KO link cleanup failed", zap.Uint64("player_id", uint64(playerID)), zap.Error(err))
 	}
 	if active, ok := ecs.GetComponent[components.ActiveGameAction](w, handle); ok && s.actionService != nil &&
-		(s.actionService.requiresItemMutation(active.ActionID) || s.actionService.requiresObjectInteraction(active.ActionID) || active.Phase == components.GameActionApproaching) {
+		(s.actionService.requiresItemMutation(active.ActionID) || s.actionService.requiresObjectInteraction(active.ActionID) || s.actionService.isDirectionAction(active.ActionID) || active.Phase == components.GameActionApproaching) {
 		if s.actionService.requiresItemMutation(active.ActionID) {
 			s.actionService.alert(playerID, playerstate.ItemsLockedReason)
 		}

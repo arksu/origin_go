@@ -223,7 +223,9 @@ func (router *testActionClickRouter) StartTargetedOnce(w *ecs.World, _ types.Ent
 	router.directX, router.directY = x, y
 	_, router.activeAtDirectStart = ecs.GetComponent[components.ActiveGameAction](w, player)
 }
-func (*testActionClickRouter) Activate(*ecs.World, types.EntityID, types.Handle, string) {}
+func (*testActionClickRouter) ActivateRequest(*ecs.World, types.EntityID, types.Handle, *netproto.C2S_ActivateAction) {
+}
+func (*testActionClickRouter) CancelForPointMovement(*ecs.World, types.EntityID, types.Handle) {}
 func (router *testActionClickRouter) Cancel(w *ecs.World, _ types.EntityID, player types.Handle) {
 	router.cancelCalls++
 	if movement, exists := ecs.GetComponent[components.Movement](w, player); exists {
