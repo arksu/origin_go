@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { getInventoryGridExtent, INVENTORY_GRID } from '@/constants/inventoryLayout'
 import { proto } from '@/network/proto/packets.js'
 import { useGameStore } from '@/stores/gameStore'
 import { sendCloseContainer, sendOpenContainer } from '@/network'
@@ -20,6 +21,8 @@ const emit = defineEmits<{
 const gameStore = useGameStore()
 const { pickUpItem, placeItem, placeOrSwapItem, findInventoryState, getPlacePositionFromSlotClick } = useInventoryOps()
 const gridState = computed(() => props.inventory.grid)
+const gridWidth = computed(() => getInventoryGridExtent(gridState.value?.width ?? 0))
+const gridHeight = computed(() => getInventoryGridExtent(gridState.value?.height ?? 0))
 const inventoryRef = computed(() => props.inventory.ref)
 
 const isPlayerRootInventoryRef = (ref: proto.IInventoryRef): boolean => {
@@ -96,16 +99,16 @@ const windowTitle = computed(() => {
   <game-window
     v-if="gridState"
     :id="getWindowId()"
-    :inner-height="gridState.height! * 31"
-    :inner-width="gridState.width! * 31"
+    :inner-height="gridHeight"
+    :inner-width="gridWidth"
     :title="windowTitle"
     @close="onClose"
   >
     <div v-for="y in gridState.height" :key="y">
       <div v-for="x in gridState.width" :key="x">
         <item-slot 
-          :left="16 + (x-1) * 31" 
-          :top="22 + (y-1) * 31" 
+          :left="(x-1) * INVENTORY_GRID.cellPitch"
+          :top="(y-1) * INVENTORY_GRID.cellPitch"
           :x="x-1" 
           :y="y-1"
           @slot-click="onSlotClick"

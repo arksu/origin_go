@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { INVENTORY_GRID } from '@/constants/inventoryLayout'
 interface Props {
   left: number
   top: number
@@ -17,7 +18,7 @@ const onClick = (e: MouseEvent) => {
 </script>
 
 <template>
-  <div :style="`left: ${left}px; top: ${top}px;`"
+  <div :style="{ left: `${left}px`, top: `${top}px`, width: `${INVENTORY_GRID.slotSize}px`, height: `${INVENTORY_GRID.slotSize}px` }"
        class="item-back"
        @click.prevent="onClick">
   </div>
@@ -26,8 +27,7 @@ const onClick = (e: MouseEvent) => {
 <style lang="scss" scoped>
 .item-back {
   position: absolute;
-  width: 32px;
-  height: 32px;
+  box-sizing: border-box;
   background-image: url('/assets/img/inventory_slot.png');
   background-repeat: no-repeat;
   padding-top: 2px;

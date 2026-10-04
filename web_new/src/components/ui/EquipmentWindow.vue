@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { INVENTORY_GRID } from '@/constants/inventoryLayout'
 import { proto } from '@/network/proto/packets.js'
 import { useGameStore } from '@/stores/gameStore'
 import { useInventoryOps } from '@/composables/useInventoryOps'
@@ -92,11 +93,11 @@ function getWindowId() {
 }
 
 function slotLeft(slot: SlotLayout): number {
-  return 16 + slot.x * 31
+  return 16 + slot.x * INVENTORY_GRID.cellPitch
 }
 
 function slotTop(slot: SlotLayout): number {
-  return 22 + slot.y * 31
+  return 22 + slot.y * INVENTORY_GRID.cellPitch
 }
 </script>
 
@@ -123,6 +124,8 @@ function slotTop(slot: SlotLayout): number {
           v-if="slotItemMap.get(slotLayout.slot)?.item"
           :inventory-ref="inventoryRef"
           :item="{ x: slotLayout.x, y: slotLayout.y, instance: slotItemMap.get(slotLayout.slot)!.item! }"
+          :left="slotLeft(slotLayout) + 1"
+          :top="slotTop(slotLayout) + 1"
           @item-click="(_, ox, oy) => onItemClick(slotLayout.slot, slotItemMap.get(slotLayout.slot)!.item!, ox, oy)"
         />
       </div>
