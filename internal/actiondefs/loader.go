@@ -190,8 +190,18 @@ func validateDefinition(definition *Definition) error {
 		}
 		definition.Requirements.Skills[index] = skill
 	}
+	damageSources := 0
 	for index := range definition.Requirements.Equipment {
 		requirement := &definition.Requirements.Equipment[index]
+		if requirement.DamageSource {
+			damageSources++
+			if definition.Combat == nil {
+				return fmt.Errorf("requirements.equipment[%d].damageSource requires a combat action", index)
+			}
+			if damageSources > 1 {
+				return fmt.Errorf("requirements.equipment permits at most one damageSource")
+			}
+		}
 		requirement.ItemKey = strings.TrimSpace(requirement.ItemKey)
 		requirement.ItemTag = strings.TrimSpace(requirement.ItemTag)
 		if (requirement.ItemKey == "") == (requirement.ItemTag == "") {

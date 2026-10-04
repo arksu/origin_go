@@ -28,6 +28,16 @@ Both actions require an item tagged `axe` in either `right_hand` or `left_hand`,
 
 Combat actions cannot declare a cursor, approach, or either repetition flag as true. Combat fields are not accepted on ordinary actions.
 
+## Server equipment parameters
+
+`requirements.equipment[].damageSource` is an optional server-only boolean, defaulting to `false`. The loader rejects multiple marked requirements and markers on noncombat actions. Preparing a melee action requires exactly one marked requirement with an `itemKey` or `itemTag` selector and distinct valid `slots`. Both existing axe actions mark their weapon requirement; the other requirements still control action availability. The marker is not included in protobuf or the client catalog.
+
+The generic equipment resolver selects only equipped items with the `melee` capability that match the source selector and slots. It calculates `Draw` for each candidate using the supplied effective STR, instance Quality, definition base damage and action multiplier. The greatest Draw wins; equal Draw is resolved by the smaller ItemID. Weapon kinds such as axes, swords, knives and pikes use the same calculation; bows have no melee capability unless explicitly defined with one. Equipped items with `armor` contribute independently, including items that also have `melee`.
+
+`internal/game/combat_equipment_catalog.go` prepares an immutable item catalog and melee selectors outside the tick path. Catalogs can be shared across shards; prepared actions belong to their originating catalog. `internal/game/combat_equipment_resolver.go` binds to one World, component storages and InventoryRefIndex and must be called under the owning shard's lock. Recreate it when replacing these resources or definitions. Each call reads current equipment through the index, checks at most ten entries and uses stack arrays without allocations, logging or world queries. Armor is summed in protocol slot order. Missing equipment contributes zero armor; unavailable weapons and corrupted equipment return distinct errors without partial results. Backpack and cursor-hand items do not contribute. Weapon choices, quality and container handles are never cached between calls.
+
+The resolver is ready for handler integration. Damage application, combat handler registration, object destruction and effects remain separate changes.
+
 The preset is a 90-degree sector with range 18, execution 6 ticks (0.6 seconds at the default 10 Hz), stamina cost 60 and independent 2000 ms cooldowns. The sweep multiplier is 1.0, the nearest-target strike multiplier is 1.5. Stamina and cooldown commit on successful execution at 100%, including a miss; unfinished actions cost nothing. Another ready action can start immediately after completion, following `docs/features/combat_final.md`.
 
 The shared action service supports direction-target execution: activation includes an explicit finite `aim_angle` and the current `stream_epoch`, fixes the normalized angle at start, and uses the existing timed cycle and cancellation flow. KO, lying and stun prohibit directed actions. Axe hit geometry and damage handlers remain a separate implementation step.
