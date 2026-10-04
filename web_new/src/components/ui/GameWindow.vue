@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue'
+import { getWindowLayout, WINDOW_SKIN } from '@/constants/windowSkin'
 
 interface Props {
   id: number
@@ -15,6 +16,40 @@ const props = withDefaults(defineProps<Props>(), { closable: true, centerOnOpen:
 const emit = defineEmits<{
   close: []
 }>()
+
+const layout = computed(() => getWindowLayout(props.innerWidth, props.innerHeight))
+const skinStyle: CSSProperties = {
+  '--window-title': `url("${WINDOW_SKIN.title}")`,
+  '--window-close': `url("${WINDOW_SKIN.close}")`,
+  '--window-corner': `${WINDOW_SKIN.corner}px`,
+  '--window-bottom-left-width': `${WINDOW_SKIN.bottomLeftWidth}px`,
+  '--window-horizontal-tile-width': `${WINDOW_SKIN.horizontalTileWidth}px`,
+  '--window-vertical-tile-height': `${WINDOW_SKIN.verticalTileHeight}px`,
+  '--window-left-accent-height': `${WINDOW_SKIN.leftAccentHeight}px`,
+  '--window-panel-inset': `${WINDOW_SKIN.panelInset}px`,
+  '--window-panel-right': `${WINDOW_SKIN.panelRight}px`,
+  '--window-panel-top': `${WINDOW_SKIN.panelTop}px`,
+  '--window-panel-color': WINDOW_SKIN.panelColor,
+  '--window-header-height': `${WINDOW_SKIN.headerHeight}px`,
+  '--window-title-height': `${WINDOW_SKIN.titleHeight}px`,
+  '--window-title-top': `${WINDOW_SKIN.titleTop}px`,
+  '--window-title-left': `${WINDOW_SKIN.titleLeft}px`,
+  '--window-title-line-height': `${WINDOW_SKIN.titleLineHeight}px`,
+  '--window-title-text-top': `${WINDOW_SKIN.titleTextTop}px`,
+  '--window-title-left-cap': `${WINDOW_SKIN.titleLeftCap}px`,
+  '--window-title-right-cap': `${WINDOW_SKIN.titleRightCap}px`,
+  '--window-title-left-slice': WINDOW_SKIN.titleLeftCap * WINDOW_SKIN.density,
+  '--window-title-right-slice': WINDOW_SKIN.titleRightCap * WINDOW_SKIN.density,
+  '--window-title-font-size': `${WINDOW_SKIN.titleFontSize}px`,
+  '--window-title-color': WINDOW_SKIN.titleColor,
+  '--window-close-size': `${WINDOW_SKIN.closeSize}px`,
+  '--window-close-hit-size': `${WINDOW_SKIN.closeHitSize}px`,
+  '--window-close-top': `${WINDOW_SKIN.closeTop}px`,
+  '--window-close-right': `${WINDOW_SKIN.closeRight}px`,
+}
+const titleRight = computed(() => props.closable
+  ? WINDOW_SKIN.closeRight + WINDOW_SKIN.closeHitSize + WINDOW_SKIN.controlGap
+  : WINDOW_SKIN.titleEndInset)
 
 const left = ref(110)
 const top = ref(50)
@@ -37,8 +72,8 @@ const onTouchDrag = function(event: TouchEvent) {
     clientX = event.touches[0]?.clientX || 0
     clientY = event.touches[0]?.clientY || 0
 
-    left.value = (el.offsetLeft - movementX)
-    top.value = (el.offsetTop - movementY)
+    left.value -= movementX
+    top.value -= movementY
   }
 }
 
@@ -69,8 +104,9 @@ const onDrag = function(event: MouseEvent) {
 
   const el = draggableTarget.value
   if (!el) return
-  left.value = (el.offsetLeft - movementX)
-  top.value = (el.offsetTop - movementY)
+  // Several input events can arrive before Vue has updated the DOM position.
+  left.value -= movementX
+  top.value -= movementY
 }
 
 const onDragEnd = function() {
@@ -100,8 +136,8 @@ onMounted(async () => {
     const windowElement = draggableTarget.value
     const container = windowElement?.offsetParent as HTMLElement | null
     if (windowElement && container) {
-      left.value = Math.max(0, (container.clientWidth - windowElement.offsetWidth) / 2)
-      top.value = Math.max(0, (container.clientHeight - windowElement.offsetHeight) / 2)
+      left.value = Math.max(0, Math.round((container.clientWidth - windowElement.offsetWidth) / 2))
+      top.value = Math.max(0, Math.round((container.clientHeight - windowElement.offsetHeight) / 2))
     }
   } else if (props.persistPosition) {
     const storedLeft = localStorage.getItem('wnd_' + props.id + '_left')
@@ -122,30 +158,63 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="draggableTarget" :style="`width: ${innerWidth + 32}px; height: ${innerHeight + 38}px; left: ${left}px; top: ${top}px;`"
-       class="window-container">
+  <div
+    ref="draggableTarget"
+    class="window-container"
+    :style="[skinStyle, { width: `${layout.width}px`, height: `${layout.height}px`, left: `${left}px`, top: `${top}px` }]"
+  >
+    <div class="window-panel" aria-hidden="true"></div>
+    <div class="frame" aria-hidden="true">
+      <div
+        v-for="(texture, part) in WINDOW_SKIN.frameParts"
+        :key="part"
+        :class="['frame-part', `frame-part--${part}`]"
+        :style="{ backgroundImage: `url('${texture}')` }"
+      ></div>
+    </div>
 
-    <div class="frame">
-      <div class="content">
+    <div
+      class="window-interior"
+      :style="{
+        left: `${WINDOW_SKIN.interiorInsets.left}px`, top: `${WINDOW_SKIN.interiorInsets.top}px`,
+        width: `${layout.interiorWidth}px`, height: `${layout.interiorHeight}px`, padding: `${layout.padding}px`,
+      }"
+    >
+      <div class="content" :style="{ width: `${innerWidth}px`, height: `${innerHeight}px` }">
         <slot></slot>
       </div>
     </div>
 
-    <div v-if="closable" class="close-btn-back">
-      <img alt="" src="/assets/img/window_close.png">
-    </div>
-
-    <div class="header" @touchstart.prevent="onTouchStart" @mousedown.prevent="onMouseDown">
+    <div
+      class="header"
+      :title="title"
+      :style="{ paddingRight: `${titleRight}px` }"
+      @touchstart.prevent="onTouchStart"
+      @mousedown.prevent="onMouseDown"
+    >
       <div class="title">
-        <span class="title-text">
-          {{ title }}
-        </span>
+        <span class="title-text">{{ title }}</span>
       </div>
     </div>
 
-    <div v-if="closable" class="close-btn-click">
-      <div class="close-btn" @click="emit('close')"></div>
-    </div>
+    <button
+      v-if="closable"
+      type="button"
+      class="close-btn"
+      :aria-label="`Close ${title}`"
+      :title="`Close ${title}`"
+      @pointerdown.stop
+      @pointerup.stop
+      @mousedown.stop
+      @mouseup.stop
+      @touchstart.stop
+      @touchend.stop
+      @keydown.enter.stop
+      @keydown.space.stop
+      @keyup.enter.stop
+      @keyup.space.stop
+      @click.stop="emit('close')"
+    ></button>
   </div>
 </template>
 
@@ -156,79 +225,146 @@ onUnmounted(() => {
   text-align: center;
   user-select: none;
   pointer-events: auto;
+  box-sizing: border-box;
 }
 
-.header {
+.window-panel {
   position: absolute;
-  width: 100%;
-  height: 25px;
-  cursor: move;
-}
-
-.title {
-  border-left: 18px solid transparent;
-  border-right: 18px solid transparent;
-  border-top: 0 solid transparent;
-  border-bottom: 0 solid transparent;
-  border-image: url('/assets/img/window_title.png') 0 30% 0 30% fill / 0 18px 0 18px;
-  position: relative;
-  height: 22px;
-  display: inline-block;
-}
-
-.title-text {
-  color: #eeee59;
-  font-size: 13px;
-  vertical-align: top;
+  inset: var(--window-panel-top) var(--window-panel-right) var(--window-panel-inset) var(--window-panel-inset);
+  border-radius: 8px;
+  background: var(--window-panel-color);
+  pointer-events: none;
 }
 
 .frame {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 7px;
-  border-width: 0;
-  border-image: url('/assets/img/window_frame.png') 34% fill / 8px repeat repeat;
+  inset: 0;
+  pointer-events: none;
+}
+
+.frame-part {
+  position: absolute;
+  width: var(--window-corner);
+  height: var(--window-corner);
+  background-size: var(--window-corner) var(--window-corner);
+  background-repeat: no-repeat;
+}
+
+.frame-part--top-left { top: 0; left: 0; }
+.frame-part--top-right { top: 0; right: 0; }
+.frame-part--bottom-right { bottom: 0; right: 0; }
+.frame-part--bottom-left {
+  bottom: 0;
+  left: 0;
+  width: var(--window-bottom-left-width);
+  background-size: var(--window-bottom-left-width) var(--window-corner);
+}
+
+.frame-part--top,
+.frame-part--bottom {
+  left: var(--window-corner);
+  right: var(--window-corner);
+  width: auto;
+  background-size: var(--window-horizontal-tile-width) var(--window-corner);
+  background-repeat: repeat-x;
+}
+.frame-part--top { top: 0; }
+.frame-part--bottom { bottom: 0; left: var(--window-bottom-left-width); }
+
+.frame-part--left,
+.frame-part--right {
+  top: var(--window-corner);
+  bottom: var(--window-corner);
+  height: auto;
+  background-size: var(--window-corner) var(--window-vertical-tile-height);
+  background-repeat: repeat-y;
+}
+.frame-part--left { left: 0; }
+.frame-part--right { right: 0; }
+.frame-part--left-accent {
+  top: calc(50% - var(--window-left-accent-height) / 2);
+  left: 0;
+  height: var(--window-left-accent-height);
+  background-size: var(--window-corner) var(--window-left-accent-height);
+}
+
+.window-interior {
+  position: absolute;
+  box-sizing: border-box;
 }
 
 .content {
-  padding: 22px 16px 16px 16px;
-  width: 100%;
-  height: 100%;
+  position: relative;
+  // Keep nested headings and paragraphs from collapsing their margins outside.
+  display: flow-root;
   font-size: 14px;
 }
 
-.close-btn-back {
+.header {
   position: absolute;
-  top: 10px;
+  top: 0;
+  left: 0;
   width: 100%;
+  height: var(--window-header-height);
+  padding: var(--window-title-top) 0 0 var(--window-title-left);
+  display: flex;
+  align-items: flex-start;
+  box-sizing: border-box;
+  cursor: move;
+  touch-action: none;
 }
 
-.close-btn-back img {
-  float: right;
-  margin-right: 3px
+.title {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  height: var(--window-title-height);
+  padding: 0 2px;
+  border: 0 solid transparent;
+  border-left-width: var(--window-title-left-cap);
+  border-right-width: var(--window-title-right-cap);
+  border-image: var(--window-title) 0 var(--window-title-right-slice) 0 var(--window-title-left-slice) fill / 0 var(--window-title-right-cap) 0 var(--window-title-left-cap) stretch;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
-.close-btn-click {
-  text-align: right;
-  position: relative;
-  width: 20%;
-  height: 15px;
-  margin-left: auto;
-  top: 10px;
+.title-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-top: var(--window-title-text-top);
+  line-height: var(--window-title-line-height);
+  font-size: var(--window-title-font-size);
+  color: var(--window-title-color);
+  text-shadow: 0 1px 1px #17120b;
 }
 
 .close-btn {
-  margin-left: auto;
-  float: right;
-  margin-right: 3px;
-  width: 13px;
-  height: 13px;
-  background: transparent no-repeat;
+  position: absolute;
+  top: var(--window-close-top);
+  right: var(--window-close-right);
+  width: var(--window-close-hit-size);
+  height: var(--window-close-hit-size);
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent var(--window-close) center / var(--window-close-size) var(--window-close-size) no-repeat;
+  box-sizing: border-box;
   cursor: pointer;
-}
 
-.close-btn:hover {
-  background-image: url('/assets/img/btn_close_hover.png');
+  &:hover {
+    filter: brightness(1.2);
+  }
+
+  &:active {
+    filter: brightness(0.85);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--window-title-color);
+    outline-offset: 1px;
+  }
 }
 </style>

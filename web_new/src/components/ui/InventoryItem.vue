@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from 'vue'
+import { INVENTORY_GRID } from '@/constants/inventoryLayout'
 import { proto } from '@/network/proto/packets.js'
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
     instance: proto.IItemInstance
   }
   inventoryRef: proto.IInventoryRef
+  left?: number
+  top?: number
 }
 
 const props = defineProps<Props>()
@@ -115,7 +118,7 @@ const onContextmenu = () => {
 <template>
   <div
     class="item-container"
-    :style="`left: ${17 + item.x * 31}px; top: ${23 + item.y * 31}px;`"
+    :style="{ left: `${left ?? INVENTORY_GRID.itemInset + item.x * INVENTORY_GRID.cellPitch}px`, top: `${top ?? INVENTORY_GRID.itemInset + item.y * INVENTORY_GRID.cellPitch}px` }"
     @click.prevent="onClick"
     @contextmenu.prevent.stop="onContextmenu"
     @mouseenter="onMouseEnter"
