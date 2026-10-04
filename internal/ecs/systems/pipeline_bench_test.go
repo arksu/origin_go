@@ -2,11 +2,13 @@ package systems
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
 
 	constt "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -49,7 +51,21 @@ func BenchmarkDirectionalMovementPipeline(b *testing.B) {
 
 func BenchmarkClickMovementPipelineBlocked(b *testing.B) { runPipelineBench(b, 1, false, true) }
 
-func runPipelineBench(b *testing.B, pillarsPerMover int, directional, blocked bool) {
+func BenchmarkMovementPipelineColliderIndex(b *testing.B) {
+	for _, dense := range []bool{false, true} {
+		for _, indexed := range []bool{false, true} {
+			b.Run(fmt.Sprintf("dense=%t/indexed=%t", dense, indexed), func(b *testing.B) {
+				pillars := 0
+				if dense {
+					pillars = 3
+				}
+				runPipelineBench(b, pillars, false, false, indexed)
+			})
+		}
+	}
+}
+
+func runPipelineBench(b *testing.B, pillarsPerMover int, directional, blocked bool, colliderIndexed ...bool) {
 	const moverCount = 200
 	const targetX = 10000 // far beyond one tick's step; movers reset each iteration
 
@@ -57,6 +73,10 @@ func runPipelineBench(b *testing.B, pillarsPerMover int, directional, blocked bo
 	chunk.RestoreTiles(chunk.Tiles, 0, 0)
 	cm := &testChunkManager{chunk: chunk}
 	world := ecs.NewWorldForTesting()
+	var colliderSpatial *core.WorldColliderSpatial
+	if len(colliderIndexed) > 0 && colliderIndexed[0] {
+		colliderSpatial = core.AttachColliderSpatial(world)
+	}
 
 	movers := make([]pipelineMover, 0, moverCount)
 	observer := types.Handle(0)
@@ -159,6 +179,9 @@ func runPipelineBench(b *testing.B, pillarsPerMover int, directional, blocked bo
 		}
 	})
 	transformSystem := NewTransformUpdateSystem(world, cm, bus, zap.NewNop())
+	if colliderSpatial != nil {
+		transformSystem.SetPositionObserver(colliderSpatial)
+	}
 
 	if pillarsPerMover > 0 && !blocked {
 		// Validate the workload before timing so a geometry change cannot

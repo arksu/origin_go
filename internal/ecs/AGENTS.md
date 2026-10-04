@@ -394,6 +394,12 @@ The ECS agent architecture provides:
 
 By following these patterns and best practices, you can build efficient, scalable game systems that handle thousands of entities with predictable sub-millisecond tick times.
 
+## Synchronous Lifecycle Observers
+
+- `World.AddComponentObserver` observes writes through `AddComponent`, `RemoveComponent`, `WithComponent`, and `MutateComponent`. Observers run under the owner lock and must not recursively mutate observed components.
+- Direct storage writes bypass component observers. Position changes committed through cached storages must notify the existing `PositionObserver`; direct Collider writes must explicitly synchronize `core.WorldColliderSpatial`.
+- `World.AddDespawnObserver` runs before components/handles are removed. The collider index uses it to remove memberships for every despawn path, including chunk unload and transfers. Keep existing behavior-tick and resource cleanup intact.
+
 ## Runtime Behavior Recompute
 
 For object runtime behaviors (flags/state/appearance), avoid full-world polling every tick.

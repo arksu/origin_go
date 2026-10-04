@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/cyclicaction"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -71,6 +72,7 @@ type Shard struct {
 	offlineHealth   sync.Map
 	pendingStandUps map[types.EntityID]*network.PlayerCommand
 	soundEvents     *SoundEventService
+	sectorResolver  *SectorResolver
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -111,13 +113,20 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	})
 
 	behaviorRegistry := behaviors.MustDefaultRegistry()
+	colliderSpatial := core.AttachColliderSpatial(s.world)
+	var sectorErr error
+	s.sectorResolver, sectorErr = NewSectorResolver(s.world)
+	if sectorErr != nil {
+		logger.Fatal("Invalid sector resolver", zap.Error(sectorErr))
+	}
 	var soundErr error
 	s.soundEvents, soundErr = NewSoundEventService(sounddefs.Global(), cfg.Game.Audio, s)
 	if soundErr != nil {
 		logger.Fatal("Invalid world sound configuration", zap.Error(soundErr))
 	}
 	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
-	s.chunkManager.SetPositionObserver(s.soundEvents)
+	positionObservers := core.PositionObservers{colliderSpatial, s.soundEvents}
+	s.chunkManager.SetPositionObserver(positionObservers)
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
 	worldMinX := float64(cfg.Game.WorldMinXChunks * chunkSize)
@@ -236,7 +245,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
 	s.world.AddSystem(systems.NewLiftPlacementSystem(s.world, liftService, logger))
 	transformSystem := systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger)
-	transformSystem.SetPositionObserver(s.soundEvents)
+	transformSystem.SetPositionObserver(positionObservers)
 	s.world.AddSystem(transformSystem)
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, s.eventBus, logger))
 	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
