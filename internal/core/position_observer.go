@@ -7,3 +7,12 @@ import "origin/internal/types"
 type PositionObserver interface {
 	OnPositionCommitted(handle types.Handle, positionX, positionY float64)
 }
+
+// PositionObservers preserves every secondary index when a new observer joins.
+type PositionObservers []PositionObserver
+
+func (observers PositionObservers) OnPositionCommitted(handle types.Handle, positionX, positionY float64) {
+	for _, observer := range observers {
+		observer.OnPositionCommitted(handle, positionX, positionY)
+	}
+}

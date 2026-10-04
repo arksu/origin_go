@@ -39,7 +39,9 @@ type World struct {
 	systemsSorted bool
 
 	// Component storages (type-erased, accessed via typed helpers)
-	storages map[ComponentID]any
+	storages           map[ComponentID]any
+	componentObservers [64][]func(types.Handle)
+	despawnObservers   []func(types.Handle)
 
 	// Resources (singleton data shared across systems, keyed by reflect.Type)
 	resources map[reflect.Type]any
@@ -262,6 +264,9 @@ func (w *World) Despawn(h types.Handle) bool {
 	mask, ok := w.entities[h]
 	if !ok {
 		return false
+	}
+	for _, observer := range w.despawnObservers {
+		observer(h)
 	}
 
 	// Get EntityID before removing components
@@ -491,6 +496,7 @@ func AddComponent[T Component](w *World, h types.Handle, component T) {
 	newMask := oldMask
 	newMask.Set(componentID)
 	w.updateEntityArchetype(h, oldMask, newMask)
+	w.notifyComponentObservers(componentID, h)
 }
 
 // GetComponent retrieves a component without creating storage for absent types.
@@ -518,6 +524,7 @@ func RemoveComponent[T Component](w *World, h types.Handle) bool {
 	newMask := oldMask
 	newMask.Clear(componentID)
 	w.updateEntityArchetype(h, oldMask, newMask)
+	w.notifyComponentObservers(componentID, h)
 	return true
 }
 
@@ -526,7 +533,11 @@ func RemoveComponent[T Component](w *World, h types.Handle) bool {
 // The pointer is only valid within the callback scope
 func MutateComponent[T Component](w *World, h types.Handle, fn func(*T) bool) bool {
 	storage := GetOrCreateStorage[T](w)
-	return storage.Mutate(h, fn)
+	result := storage.Mutate(h, fn)
+	if storage.Has(h) {
+		w.notifyComponentObservers(GetComponentID[T](), h)
+	}
+	return result
 }
 
 // WithComponent executes a callback with a pointer to the component for mutation
@@ -534,7 +545,11 @@ func MutateComponent[T Component](w *World, h types.Handle, fn func(*T) bool) bo
 // Returns false if the component doesn't exist
 func WithComponent[T Component](w *World, h types.Handle, fn func(*T)) bool {
 	storage := GetOrCreateStorage[T](w)
-	return storage.WithPtr(h, fn)
+	result := storage.WithPtr(h, fn)
+	if result {
+		w.notifyComponentObservers(GetComponentID[T](), h)
+	}
+	return result
 }
 
 // HasComponent checks for a component without creating storage for absent types.
