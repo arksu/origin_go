@@ -50,11 +50,6 @@ export function sendStandUp(): void {
   gameConnection.send({ playerAction: proto.C2S_PlayerAction.create({ standUp: { streamEpoch } }) })
 }
 
-function itemsLocked(): boolean {
-  const stats = useGameStore().playerStats
-  return stats.isKnockedOut || stats.isLying
-}
-
 export function sendChatMessage(text: string): void {
   if (!text.trim()) return
 
@@ -118,7 +113,7 @@ export function sendStartCraftOne(craftKey: string): void {
   const normalized = craftKey.trim()
   if (!normalized) return
 
-  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     startCraftOne: proto.C2S_StartCraftOne.create({
       craftKey: normalized,
@@ -131,7 +126,7 @@ export function sendStartCraftMany(craftKey: string, cycles: number): void {
   if (!normalized) return
 
   const safeCycles = Math.max(1, Math.floor(cycles))
-  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     startCraftMany: proto.C2S_StartCraftMany.create({
       craftKey: normalized,
@@ -148,7 +143,7 @@ export function sendStartBuild(buildKey: string, pos: { x: number; y: number }):
   const y = Math.trunc(pos.y)
   if (!Number.isFinite(x) || !Number.isFinite(y)) return
 
-  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     buildStart: proto.C2S_BuildStart.create({
       buildKey: normalized,
@@ -164,7 +159,7 @@ export function sendBuildProgress(entityId: number): void {
   const target = Math.trunc(entityId)
   if (!Number.isFinite(target) || target <= 0) return
 
-  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     buildProgress: proto.C2S_BuildProgress.create({
       entityId: target,

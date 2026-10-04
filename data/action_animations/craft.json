@@ -28,7 +28,7 @@
         "origin_y": 148
       },
       "preview": {
-        "label": "Крафт — Каменный топор",
+        "label": "Craft — Stone Axe",
         "duration_ms": 2000,
         "equipment": []
       }
@@ -60,7 +60,7 @@
         "origin_y": 148
       },
       "preview": {
-        "label": "Крафт — Рубаха",
+        "label": "Craft — Nettle Shirt",
         "duration_ms": 2000,
         "equipment": []
       }
@@ -92,7 +92,7 @@
         "origin_y": 148
       },
       "preview": {
-        "label": "Крафт — Сушка ветки",
+        "label": "Craft — Dry Branch",
         "duration_ms": 2000,
         "equipment": []
       }
@@ -124,7 +124,7 @@
         "origin_y": 148
       },
       "preview": {
-        "label": "Крафт — Жарка мяса",
+        "label": "Craft — Roast Meat",
         "duration_ms": 2000,
         "equipment": []
       }

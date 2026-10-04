@@ -13,6 +13,7 @@ import (
 	"origin/internal/eventbus"
 	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -107,6 +108,9 @@ func (s *LiftService) StartLift(
 	if playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
 	}
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		return ActionResult{Outcome: ActionRejected, Reason: "ACTION_UNAVAILABLE"}
+	}
 	if !s.isLiftableTarget(w, targetHandle) {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
 	}
@@ -140,6 +144,9 @@ func (s *LiftService) StartPutDownAt(
 ) ActionResult {
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
+	}
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		return ActionResult{Outcome: ActionRejected, Reason: "ACTION_UNAVAILABLE"}
 	}
 
 	carry, ok := ecs.GetComponent[components.LiftCarryState](w, playerHandle)
@@ -222,6 +229,11 @@ func (s *LiftService) FinalizePendingLiftTransition(
 		return
 	}
 	if current.Mode != pending.Mode || current.ObjectEntityID != pending.ObjectEntityID || current.ActionGeneration != pending.ActionGeneration {
+		return
+	}
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
+		s.finishPendingAction(w, playerID, playerHandle, pending, false, "ACTION_UNAVAILABLE")
 		return
 	}
 	if pending.ActionGeneration != 0 && (s.actionCanCommit == nil || !s.actionCanCommit(w, playerID, playerHandle, pending.ActionGeneration)) {

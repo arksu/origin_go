@@ -5,6 +5,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -83,8 +84,11 @@ func (handler *liftDownActionHandler) Cancel(world *ecs.World, playerID types.En
 }
 
 func (service *LiftService) StartNoColliderLift(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, target ActionTarget, generation uint64) ActionResult {
-	if world != service.world || !world.Alive(playerHandle) || !service.isLiftableTarget(world, target.ObjectHandle) {
+	if service == nil || world == nil || world != service.world || !world.Alive(playerHandle) || !service.isLiftableTarget(world, target.ObjectHandle) {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}
+	}
+	if playerstate.IsIncapacitated(world, playerHandle) {
+		return ActionResult{Outcome: ActionRejected, Reason: "ACTION_UNAVAILABLE"}
 	}
 	if _, collider := ecs.GetComponent[components.Collider](world, target.ObjectHandle); collider {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_INVALID_TARGET"}

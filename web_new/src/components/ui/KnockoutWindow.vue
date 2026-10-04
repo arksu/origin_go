@@ -17,16 +17,16 @@ const secondsLeft = computed(() => sampledTime.value > 0
 </script>
 
 <template>
-  <GameWindow :id="-60" title="Нокаут" :inner-width="280" :inner-height="104"
+  <GameWindow :id="-60" title="Knockout" :inner-width="280" :inner-height="104"
               :closable="false" :center-on-open="true" :persist-position="false">
     <template v-if="game.playerStats.isKnockedOut">
-      <p v-if="secondsLeft === null">Синхронизация времени…</p>
-      <p v-else-if="secondsLeft > 0">Нокаут: {{ secondsLeft }} с</p>
-      <p v-else>Ожидание подтверждения сервера…</p>
+      <p v-if="secondsLeft === null">Synchronizing time…</p>
+      <p v-else-if="secondsLeft > 0">Knockout: {{ secondsLeft }} s</p>
+      <p v-else>Waiting for server confirmation…</p>
     </template>
     <template v-else>
-      <p>Вы лежите.</p>
-      <AppButton :disabled="!game.playerStats.canStandUp" @click="sendStandUp">Встать</AppButton>
+      <p>You are lying down.</p>
+      <AppButton :disabled="!game.playerStats.canStandUp" @click="sendStandUp">Stand Up</AppButton>
     </template>
   </GameWindow>
 </template>

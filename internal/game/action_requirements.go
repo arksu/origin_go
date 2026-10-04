@@ -28,6 +28,9 @@ func (service *ActionService) nonStaminaReason(world *ecs.World, playerID types.
 	if service.requiresItemMutation(definition.ID) && playerstate.ItemsLocked(world, playerHandle) {
 		return playerstate.ItemsLockedReason
 	}
+	if service.requiresObjectInteraction(definition.ID) && playerstate.IsIncapacitated(world, playerHandle) {
+		return "ACTION_UNAVAILABLE"
+	}
 	if reason := requirementsReason(world, playerID, playerHandle, definition); reason != "" {
 		return reason
 	}

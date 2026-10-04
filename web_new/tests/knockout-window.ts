@@ -36,11 +36,11 @@ createApp(defineComponent({ setup() {
   const control = (label: string, action: () => void) => h('button', { onClick: action }, label)
   return () => h('main', [
     h('nav', [
-      control('Срок наступил локально', () => stats(true, true, false, clock.serverNow() - 1)),
-      control('Сервер завершил KO', () => stats(false, true, true)),
+      control('Local timer expired', () => stats(true, true, false, clock.serverNow() - 1)),
+      control('Server completed KO', () => stats(false, true, true)),
       control('Stun', () => stats(false, true, false)),
-      control('Подтвердить подъём', () => stats(false, false, false)),
-      control('Новый KO', () => { game.setDeathDialog(null); stats(true, true, false) }),
+      control('Confirm standing', () => stats(false, false, false)),
+      control('New KO', () => { game.setDeathDialog(null); stats(true, true, false) }),
       control('Resize', () => { width.value = 650; height.value = 450 }),
       control('Touch drag', () => {
         const header = document.querySelector<HTMLElement>('#ko-layer .header')
@@ -51,13 +51,13 @@ createApp(defineComponent({ setup() {
         document.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(position.x + 100, position.y + 30)], bubbles: true, cancelable: true }))
         document.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }))
       }),
-      control('Смерть', () => game.setDeathDialog({ title: 'Смерть', message: 'Вы погибли' })),
+      control('Death', () => game.setDeathDialog({ title: 'Death', message: 'You have died' })),
     ]),
     h('output', `commands=${commands.value}; storage reads=${reads.value}; writes=${writes.value}; escapes=${escapes.value}; clicks=${clicks.value}; keys=${keys.value}; epoch=${game.worldParams?.streamEpoch}; inGame=${game.isInGame}; last=${lastMessage.value}`),
     h('section', { id: 'game', style: { position: 'relative', width: `${width.value}px`, height: `${height.value}px`, background: '#23372b', color: '#eee' } }, [
-      h('input', { id: 'behind-input', 'aria-label': 'Чат за окном', style: { position: 'absolute', left: '12px', bottom: '12px' } }),
-      h('button', { style: { position: 'absolute', right: '12px', bottom: '12px' }, onClick: () => clicks.value++ }, 'Клик за окном'),
-      ordinary.value ? h('div', { style: { position: 'absolute', inset: '0', zIndex: 300, pointerEvents: 'none' } }, [h(GameWindow, { id: 12, title: 'Инвентарь', innerWidth: 180, innerHeight: 70, onClose: () => { ordinary.value = false } }, () => 'Просмотр доступен')]) : null,
+      h('input', { id: 'behind-input', 'aria-label': 'Chat behind the window', style: { position: 'absolute', left: '12px', bottom: '12px' } }),
+      h('button', { style: { position: 'absolute', right: '12px', bottom: '12px' }, onClick: () => clicks.value++ }, 'Click behind the window'),
+      ordinary.value ? h('div', { style: { position: 'absolute', inset: '0', zIndex: 300, pointerEvents: 'none' } }, [h(GameWindow, { id: 12, title: 'Inventory', innerWidth: 180, innerHeight: 70, onClose: () => { ordinary.value = false } }, () => 'Viewing is allowed')]) : null,
       !game.deathDialog && (game.playerStats.isKnockedOut || game.playerStats.isLying) ? h('div', { id: 'ko-layer', style: { position: 'absolute', inset: '0', zIndex: 900, pointerEvents: 'none' } }, [h(KnockoutWindow)]) : null,
       game.deathDialog ? h('div', { style: { position: 'absolute', inset: '0', zIndex: 1000, background: '#171717' } }, game.deathDialog.message) : null,
     ]),

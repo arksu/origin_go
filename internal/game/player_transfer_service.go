@@ -8,6 +8,7 @@ import (
 	"origin/internal/ecs/components"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -191,6 +192,11 @@ func (s *PlayerTransferService) detachTransferSource(
 	playerHandle := shard.world.GetHandleByEntityID(req.PlayerID)
 	if playerHandle == types.InvalidHandle || !shard.world.Alive(playerHandle) {
 		return snapshot, fmt.Errorf("entity not alive")
+	}
+	// A queued teleport must recheck under the world lock before saving, leaving
+	// the world or capturing participants: KO/lying cannot be bypassed by transfer.
+	if playerstate.IsIncapacitated(shard.world, playerHandle) {
+		return snapshot, fmt.Errorf("cannot teleport during KO or while lying")
 	}
 
 	transform, hasTransform := ecs.GetComponent[components.Transform](shard.world, playerHandle)

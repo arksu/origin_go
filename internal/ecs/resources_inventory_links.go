@@ -147,6 +147,10 @@ func BreakLinkForPlayer(w *World, playerID types.EntityID, reason LinkBreakReaso
 		return PlayerLink{}, false, nil
 	}
 	linkState := GetResource[LinkState](w)
+	if reason == LinkBreakKnockedOut {
+		// KO terminates every station/object interaction, including retargeting.
+		linkState.ClearIntent(playerID)
+	}
 	link, removed := linkState.RemoveLink(playerID)
 	if !removed {
 		linkState.ClearIntent(playerID)

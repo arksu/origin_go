@@ -67,6 +67,37 @@ function inputFixture(context: TestContext) {
 
 const direction = (packet: proto.IClientMessage | undefined) => packet!.playerAction!.moveDirection!
 
+test('KO and lying disable WASD until confirmed standing and require a fresh key press', context => {
+  setActivePinia(createPinia())
+  const fixture = inputFixture(context)
+  const game = useGameStore()
+  game.setPlayerEnterWorld(1, 'test', 12, 128, 7, true)
+  const render = Object.create(Render.prototype) as Render
+  Object.assign(render, { inputController: fixture.input, keyboardMovement: fixture.keyboard })
+  render.setKeyboardMovementEnabled(true)
+  fixture.key('keydown', 'KeyW')
+  assert.equal(fixture.packets.length, 1)
+  game.setPlayerStats({ isKnockedOut: true, isLying: true })
+  render.setKeyboardMovementEnabled(true)
+  assert.equal(fixture.packets.length, 2)
+  assert.equal(direction(fixture.packets[1]).x, 0)
+  fixture.key('keydown', 'KeyD')
+  context.mock.timers.tick(1000)
+  assert.equal(fixture.packets.length, 2)
+  game.setPlayerStats({ isKnockedOut: false, isLying: true })
+  render.setKeyboardMovementEnabled(true)
+  fixture.key('keydown', 'KeyW')
+  assert.equal(fixture.packets.length, 2, 'local KO completion must not enable movement')
+  game.setPlayerStats({ isKnockedOut: false, isLying: false })
+  render.setKeyboardMovementEnabled(true)
+  context.mock.timers.tick(1000)
+  assert.equal(fixture.packets.length, 2, 'old held input must not resume')
+  fixture.key('keyup', 'KeyW')
+  fixture.key('keydown', 'KeyW')
+  assert.equal(fixture.packets.length, 3)
+  assert.notEqual(direction(fixture.packets[2]).x, 0)
+})
+
 test('every physical key combination uses screen axes and constant world speed', () => {
   for (const coordPerTile of [12, 32, 64]) {
     setWorldParams(coordPerTile, 128)

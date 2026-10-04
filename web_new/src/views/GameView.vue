@@ -163,10 +163,12 @@ const { assignments: hotbarAssignments, assign: assignHotbarSlot, clear: clearHo
 
 const showPortraitWarning = computed(() => isMobileDevice.value && isPortrait.value && !portraitWarningDismissed.value)
 watch(
-  [canvasInitialized, isConnected, worldBootstrapState, () => gameStore.worldParams, deathDialog, showLoadingOverlay],
+  [canvasInitialized, isConnected, worldBootstrapState, () => gameStore.worldParams, deathDialog, showLoadingOverlay,
+    () => gameStore.playerStats.isKnockedOut, () => gameStore.playerStats.isLying],
   () => {
     gameFacade?.setKeyboardMovementEnabled(canvasInitialized.value && isConnected.value &&
-      worldBootstrapState.value === 'ready' && !deathDialog.value && !showLoadingOverlay.value)
+      worldBootstrapState.value === 'ready' && !deathDialog.value && !showLoadingOverlay.value &&
+      !gameStore.playerStats.isKnockedOut && !gameStore.playerStats.isLying)
   },
   { flush: 'sync' },
 )

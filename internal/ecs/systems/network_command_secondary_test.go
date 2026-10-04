@@ -20,7 +20,7 @@ func (testItemContextResolver) RequiresItemMutation(*ecs.World, types.Handle, ty
 	return true
 }
 
-func TestLockedSecondaryItemAttemptPreservesActionAndMovement(t *testing.T) {
+func TestLockedSecondaryItemAttemptRejectsBeforeReplacingAnotherAction(t *testing.T) {
 	previous := objectdefs.Global()
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 123, Key: "item_source"}}))

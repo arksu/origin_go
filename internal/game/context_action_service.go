@@ -238,6 +238,9 @@ func (s *ContextActionService) ExecuteAction(
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, playerstate.ItemsLockedReason)
 		return true
 	}
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		return true
+	}
 	if actionID == teachContextActionID {
 		return s.executeTeachAction(w, playerID, playerHandle, targetID, targetHandle)
 	}
@@ -400,7 +403,7 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
-	if action.MutatesItems && playerstate.ItemsLocked(w, playerHandle) {
+	if (action.MutatesItems || action.TargetKind == components.CyclicActionTargetObject) && playerstate.IsIncapacitated(w, playerHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
 
@@ -453,7 +456,7 @@ func (s *ContextActionService) isActiveCyclicActionStillValid(
 	if w == nil {
 		return false
 	}
-	if action.MutatesItems && playerstate.ItemsLocked(w, playerHandle) {
+	if (action.MutatesItems || action.TargetKind == components.CyclicActionTargetObject) && playerstate.IsIncapacitated(w, playerHandle) {
 		return false
 	}
 

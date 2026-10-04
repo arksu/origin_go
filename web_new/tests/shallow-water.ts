@@ -71,14 +71,14 @@ async function main() {
     app.render()
     check(pixi.gl.getError() === 0, 'Mixed rendering must not leave a GL error')
   }
-  report.textContent = 'Загружаем модель и анимации…'
+  report.textContent = 'Loading the model and animations…'
   for (let attempt = 0; attempt < 600 && views.some(view => !handle(view).actor.isReady); attempt++) {
     frame()
-    if (attempt % 60 === 0) report.textContent = `Загружаем модель и анимации… ${renderer.metrics.assets} ассетов, кадр ${attempt}`
+    if (attempt % 60 === 0) report.textContent = `Loading the model and animations… ${renderer.metrics.assets} assets, frame ${attempt}`
     await paint()
   }
   check(views.every(view => handle(view).actor.isReady), 'Character assets did not finish loading')
-  report.textContent = 'Проверяем погружение, клики и переноску…'
+  report.textContent = 'Checking immersion, clicks, and carrying…'
   for (let index = 0; index < 6; index++) frame()
   function extract(view: ObjectView) {
     const values = app.renderer.extract.pixels({ target: body(view).texture }).pixels
@@ -172,7 +172,7 @@ async function main() {
   const lost = new Promise<void>(resolve => app.canvas.addEventListener('webglcontextlost', () => resolve(), { once: true }))
   extension!.loseContext()
   await lost
-  report.textContent = 'Проверяем восстановление WebGL-контекста…'
+  report.textContent = 'Checking WebGL context restoration…'
   await new Promise<void>(resolve => window.setTimeout(resolve, 100))
   const recovered = new Promise<void>(resolve => app.canvas.addEventListener('webglcontextrestored', () => resolve(), { once: true }))
   extension!.restoreContext()

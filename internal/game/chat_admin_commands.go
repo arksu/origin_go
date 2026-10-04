@@ -338,6 +338,10 @@ func (h *ChatAdminCommandHandler) handleTeleport(
 	playerID types.EntityID,
 	args []string,
 ) {
+	if playerstate.IsIncapacitated(w, w.GetHandleByEntityID(playerID)) {
+		h.sendSystemMessage(playerID, "cannot teleport during KO or while lying")
+		return
+	}
 	if h.teleportExecutor == nil {
 		h.sendSystemMessage(playerID, "teleport service unavailable")
 		return
@@ -511,7 +515,7 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 func (h *ChatAdminCommandHandler) ExecutePendingTeleport(
 	w *ecs.World,
 	playerID types.EntityID,
-	_ types.Handle,
+	playerHandle types.Handle,
 	targetX, targetY float64,
 ) {
 	pending := ecs.GetResource[ecs.PendingAdminTeleport](w)
@@ -519,6 +523,10 @@ func (h *ChatAdminCommandHandler) ExecutePendingTeleport(
 		return
 	}
 	pending.Clear(playerID)
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		h.sendSystemMessage(playerID, "cannot teleport during KO or while lying")
+		return
+	}
 
 	if h.teleportExecutor == nil {
 		h.sendSystemMessage(playerID, "teleport service unavailable")

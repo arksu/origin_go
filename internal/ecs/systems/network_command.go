@@ -485,12 +485,14 @@ func (s *NetworkCommandSystem) handlePrimaryMapClick(w *ecs.World, playerHandle 
 	}
 	targetID := types.EntityID(click.TargetEntityId)
 	targetHandle := w.GetHandleByEntityID(targetID)
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped {
+			s.sendItemsLocked(cmd.CharacterID)
+		}
+		return
+	}
 	if s.actionService != nil {
 		if s.actionService.HandleArmedClick(w, cmd.CharacterID, playerHandle, targetID, targetHandle, float64(click.X), float64(click.Y)) {
-			return
-		}
-		if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped && playerstate.ItemsLocked(w, playerHandle) {
-			s.sendItemsLocked(cmd.CharacterID)
 			return
 		}
 		if active, exists := ecs.GetComponent[components.ActiveGameAction](w, playerHandle); exists && active.Phase == components.GameActionApproaching {
@@ -658,12 +660,6 @@ func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandle types.Handle, playerID types.EntityID, click *netproto.MapClick) {
-	if s.liftCommandService != nil && s.liftCommandService.IsPlayerCarrying(w, playerHandle) {
-		if s.actionService != nil {
-			s.actionService.StartTargetedOnce(w, playerID, playerHandle, "lift_down", 0, types.InvalidHandle, float64(click.X), float64(click.Y))
-		}
-		return
-	}
 	targetID := types.EntityID(click.TargetEntityId)
 	targetHandle := w.GetHandleByEntityID(targetID)
 	if targetID != 0 && w.Alive(targetHandle) && playerstate.ItemsLocked(w, playerHandle) {
@@ -679,6 +675,15 @@ func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandl
 				return
 			}
 		}
+	}
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		return
+	}
+	if s.liftCommandService != nil && s.liftCommandService.IsPlayerCarrying(w, playerHandle) {
+		if s.actionService != nil {
+			s.actionService.StartTargetedOnce(w, playerID, playerHandle, "lift_down", 0, types.InvalidHandle, float64(click.X), float64(click.Y))
+		}
+		return
 	}
 	if s.actionService != nil {
 		s.actionService.Cancel(w, playerID, playerHandle)
@@ -781,6 +786,9 @@ func (s *NetworkCommandSystem) startPendingContextAction(
 		s.sendItemsLocked(playerID)
 		return
 	}
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		return
+	}
 
 	if link, hasLink := ecs.GetResource[ecs.LinkState](w).GetLink(playerID); hasLink && link.TargetID == targetEntityID {
 		// Already linked: execute immediately without creating pending state.
@@ -835,6 +843,9 @@ func (s *NetworkCommandSystem) beginMoveToLinkIntent(
 	targetEntityID types.EntityID,
 	targetHandle types.Handle,
 ) bool {
+	if playerstate.IsIncapacitated(w, playerHandle) {
+		return false
+	}
 	targetTransform, hasTransform := ecs.GetComponent[components.Transform](w, targetHandle)
 	if !hasTransform {
 		return false

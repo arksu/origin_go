@@ -1,8 +1,10 @@
 package game
 
 import (
+	"go.uber.org/zap"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/ecs/systems"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/playerstate"
@@ -44,22 +46,40 @@ func (s *Shard) ApplyPendingStandUp(w *ecs.World, playerID types.EntityID, handl
 	s.sendPlayerStats(w, playerID, handle, true)
 }
 
-func (s *Shard) HandlePlayerItemsLocked(w *ecs.World, playerID types.EntityID, handle types.Handle) {
-	if active, ok := ecs.GetComponent[components.ActiveGameAction](w, handle); ok && s.actionService != nil && s.actionService.requiresItemMutation(active.ActionID) {
-		s.actionService.alert(playerID, playerstate.ItemsLockedReason)
+func (s *Shard) HandlePlayerIncapacitated(w *ecs.World, playerID types.EntityID, handle types.Handle) {
+	// KO terminates all station/object interactions. Use the normal synchronous
+	// unlink so container, crafting and building subscribers perform their cleanup.
+	// Retargeting and pending approaches must not survive until the player stands.
+	systems.ClearPlayerInteractionIntents(w, handle, playerID)
+	ecs.GetResource[ecs.PendingAdminTeleport](w).Clear(playerID)
+	if _, _, err := ecs.BreakLinkForPlayer(w, playerID, ecs.LinkBreakKnockedOut); err != nil {
+		s.logger.Error("KO link cleanup failed", zap.Uint64("player_id", uint64(playerID)), zap.Error(err))
+	}
+	if active, ok := ecs.GetComponent[components.ActiveGameAction](w, handle); ok && s.actionService != nil &&
+		(s.actionService.requiresItemMutation(active.ActionID) || s.actionService.requiresObjectInteraction(active.ActionID) || active.Phase == components.GameActionApproaching) {
+		if s.actionService.requiresItemMutation(active.ActionID) {
+			s.actionService.alert(playerID, playerstate.ItemsLockedReason)
+		}
 		s.actionService.Cancel(w, playerID, handle)
 	}
-	if active, ok := ecs.GetComponent[components.ActiveCyclicAction](w, handle); ok && active.MutatesItems && s.contextActions != nil {
-		s.contextActions.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, playerstate.ItemsLockedReason)
-		s.contextActions.cancelActiveCyclicAction(playerID, handle, playerstate.ItemsLockedReason)
-	}
-	ecs.RemoveComponent[components.PendingInteraction](w, handle)
-	if pending, ok := ecs.GetComponent[components.PendingContextAction](w, handle); ok && pending.MutatesItems {
-		ecs.RemoveComponent[components.PendingContextAction](w, handle)
+	if active, ok := ecs.GetComponent[components.ActiveCyclicAction](w, handle); ok && (active.MutatesItems || active.TargetKind == components.CyclicActionTargetObject) && s.contextActions != nil {
+		reason := "link_broken"
+		if active.MutatesItems {
+			reason = playerstate.ItemsLockedReason
+			s.contextActions.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, reason)
+		}
+		s.contextActions.cancelActiveCyclicAction(playerID, handle, reason)
 	}
 	if _, pending := ecs.GetComponent[components.PendingBuildPlacement](w, handle); pending && s.buildService != nil {
 		s.buildService.CancelPendingBuildPlacement(w, playerID, handle)
 	}
+	if s.liftService != nil {
+		s.liftService.CancelPendingLiftTransition(w, playerID, handle)
+	} else {
+		ecs.RemoveComponent[components.PendingLiftTransition](w, handle)
+		ecs.WithComponent(w, handle, func(collider *components.Collider) { collider.Phantom = nil })
+	}
+	playerstate.StopMovement(w, handle)
 }
 
 func (s *Shard) currentStandUpConnection(w *ecs.World, playerID types.EntityID, clientID uint64) bool {
