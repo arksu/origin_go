@@ -1,0 +1,386 @@
+{
+  "sample_rate": 44100,
+  "steps_per_minute": 120.0,
+  "options": [
+    {
+      "id": "01-soft-water",
+      "name": "Soft water",
+      "description": "Light splashes with a quiet leather sole contact. A restrained option for ankle-deep water.",
+      "license": "CC0-1.0",
+      "source_url": "https://opengameart.org/content/water-splash-and-sand-footsteps",
+      "sources": [
+        {
+          "author": "Peludo",
+          "url": "https://opengameart.org/content/water-splash-and-sand-footsteps",
+          "license": "CC0-1.0"
+        },
+        {
+          "author": "HaelDB",
+          "url": "https://opengameart.org/content/footsteps-leather-cloth-armor",
+          "license": "CC0-1.0"
+        }
+      ],
+      "recordings": [
+        {
+          "file": "peludo/splash1.wav",
+          "start_seconds": 0.56,
+          "end_seconds": 1.1
+        },
+        {
+          "file": "peludo/splash2.wav",
+          "start_seconds": 0.59,
+          "end_seconds": 1.13
+        }
+      ],
+      "pitch_rates": [
+        0.985,
+        1.015
+      ],
+      "low_pass_hz": 4500,
+      "tail_fade_seconds": 0.08,
+      "footwear_gain": 0.22,
+      "footwear_recordings": [
+        "../footstep_candidates/originals/haeldb/step_lth1.wav",
+        "../footstep_candidates/originals/haeldb/step_lth2.wav"
+      ],
+      "number": 1,
+      "steps": [
+        {
+          "recording": "peludo/splash1.wav",
+          "start_seconds": 0.56,
+          "end_seconds": 1.1,
+          "pitch_rate": 0.985,
+          "file": "01-soft-water/step_01.wav",
+          "sha256": "26c987a64fa99ae0b08f7c333d2fdd2d33d082ff6d3436bafa6442911bfb02a8",
+          "duration_seconds": 0.4964,
+          "peak": 0.4934,
+          "rms_db": -28.97
+        },
+        {
+          "recording": "peludo/splash1.wav",
+          "start_seconds": 0.56,
+          "end_seconds": 1.1,
+          "pitch_rate": 1.015,
+          "file": "01-soft-water/step_02.wav",
+          "sha256": "a59a21d70a12eb93592f08f00d9723101af8a10ee89b140b4afc01202e360292",
+          "duration_seconds": 0.4818,
+          "peak": 0.5084,
+          "rms_db": -28.84
+        },
+        {
+          "recording": "peludo/splash2.wav",
+          "start_seconds": 0.59,
+          "end_seconds": 1.13,
+          "pitch_rate": 0.985,
+          "file": "01-soft-water/step_03.wav",
+          "sha256": "85f68819e279000ed220fc8ad675c7807792111e83319f32a64e2dfb8c0a84e1",
+          "duration_seconds": 0.4435,
+          "peak": 0.7386,
+          "rms_db": -28.48
+        },
+        {
+          "recording": "peludo/splash2.wav",
+          "start_seconds": 0.59,
+          "end_seconds": 1.13,
+          "pitch_rate": 1.015,
+          "file": "01-soft-water/step_04.wav",
+          "sha256": "bab07096d06ddddf76b0d0ac304e8e3401e6f2aff52de514d4764523db3ad2db",
+          "duration_seconds": 0.4305,
+          "peak": 0.7606,
+          "rms_db": -28.35
+        }
+      ],
+      "preview": {
+        "file": "01-soft-water/preview.wav",
+        "sha256": "3f7aef126f750d1cab280cd450fbb579f85f0d6a07cc1f36d849ed6752aa6a33",
+        "duration_seconds": 8.15,
+        "peak": 0.7606,
+        "rms_db": -29.08
+      }
+    },
+    {
+      "id": "02-puddle-boots",
+      "name": "Puddle boots",
+      "description": "Short, defined boot contacts with a compact splash. The clearest footfall rhythm of the four options.",
+      "license": "CC-BY-3.0",
+      "source_url": "https://opengameart.org/content/footsteps-on-different-surfaces",
+      "sources": [
+        {
+          "author": "EminYILDIRIM and swuing; mastered by congusbongus",
+          "url": "https://opengameart.org/content/footsteps-on-different-surfaces",
+          "license": "CC-BY-3.0"
+        }
+      ],
+      "recordings": [
+        {
+          "file": "congusbongus/0.ogg.wav"
+        },
+        {
+          "file": "congusbongus/1.ogg.wav"
+        },
+        {
+          "file": "congusbongus/2.ogg.wav"
+        },
+        {
+          "file": "congusbongus/3.ogg.wav"
+        },
+        {
+          "file": "congusbongus/4.ogg.wav"
+        }
+      ],
+      "tail_fade_seconds": 0.008,
+      "number": 2,
+      "steps": [
+        {
+          "recording": "congusbongus/0.ogg.wav",
+          "pitch_rate": 1,
+          "file": "02-puddle-boots/step_01.wav",
+          "sha256": "d4d2b08da740add0540b507e38dc717e5b457a487bb969bf65e2107841bc89e3",
+          "duration_seconds": 0.2625,
+          "peak": 0.4999,
+          "rms_db": -26.2
+        },
+        {
+          "recording": "congusbongus/1.ogg.wav",
+          "pitch_rate": 1,
+          "file": "02-puddle-boots/step_02.wav",
+          "sha256": "2cc23585c396ed8340d0f6cbfe9cd95e453c0d3532bec40450b0c9cf21b1bdf4",
+          "duration_seconds": 0.2604,
+          "peak": 0.4441,
+          "rms_db": -26.17
+        },
+        {
+          "recording": "congusbongus/2.ogg.wav",
+          "pitch_rate": 1,
+          "file": "02-puddle-boots/step_03.wav",
+          "sha256": "f3cdc13122a7c77e1787f19896c065642aa58ece587b7db818499401ceae9aa2",
+          "duration_seconds": 0.2602,
+          "peak": 0.3601,
+          "rms_db": -26.16
+        },
+        {
+          "recording": "congusbongus/3.ogg.wav",
+          "pitch_rate": 1,
+          "file": "02-puddle-boots/step_04.wav",
+          "sha256": "c69eb9bda084bcca3b1ad5094349b6596a10c5ee94690818d0d409b69ad13d5e",
+          "duration_seconds": 0.2272,
+          "peak": 0.4809,
+          "rms_db": -25.57
+        },
+        {
+          "recording": "congusbongus/4.ogg.wav",
+          "pitch_rate": 1,
+          "file": "02-puddle-boots/step_05.wav",
+          "sha256": "57843c5dc46fd593d84de5e833b0f965f5adafa33f3f7c42416ddbb6726bacd8",
+          "duration_seconds": 0.2403,
+          "peak": 0.455,
+          "rms_db": -25.82
+        }
+      ],
+      "preview": {
+        "file": "02-puddle-boots/preview.wav",
+        "sha256": "8d0b30d6798054f0dd9f82d24008881e8d9ce92b5a006d3ca03c424dc7bfac0d",
+        "duration_seconds": 8.15,
+        "peak": 0.4999,
+        "rms_db": -29.08
+      }
+    },
+    {
+      "id": "03-natural-splashes",
+      "name": "Natural splashes",
+      "description": "Footfalls cut from a field recording of walking through a puddle. Irregular, detailed water movement.",
+      "license": "CC0-1.0",
+      "source_url": "https://freesound.org/people/ChristopherJngs/sounds/861369/",
+      "sources": [
+        {
+          "author": "ChristopherJngs",
+          "url": "https://freesound.org/people/ChristopherJngs/sounds/861369/",
+          "license": "CC0-1.0"
+        }
+      ],
+      "recordings": [
+        {
+          "file": "christopherjngs/shallow-water.wav",
+          "start_seconds": 0.85,
+          "end_seconds": 1.28
+        },
+        {
+          "file": "christopherjngs/shallow-water.wav",
+          "start_seconds": 1.4,
+          "end_seconds": 1.87
+        },
+        {
+          "file": "christopherjngs/shallow-water.wav",
+          "start_seconds": 3.48,
+          "end_seconds": 3.94
+        },
+        {
+          "file": "christopherjngs/shallow-water.wav",
+          "start_seconds": 4.15,
+          "end_seconds": 4.62
+        }
+      ],
+      "tail_fade_seconds": 0.07,
+      "number": 3,
+      "steps": [
+        {
+          "recording": "christopherjngs/shallow-water.wav",
+          "start_seconds": 0.85,
+          "end_seconds": 1.28,
+          "pitch_rate": 1,
+          "file": "03-natural-splashes/step_01.wav",
+          "sha256": "5947216b1d685a6d740183f629aac0967b1ae70f1fec1e99eeacb720f68086f0",
+          "duration_seconds": 0.426,
+          "peak": 0.6007,
+          "rms_db": -28.3
+        },
+        {
+          "recording": "christopherjngs/shallow-water.wav",
+          "start_seconds": 1.4,
+          "end_seconds": 1.87,
+          "pitch_rate": 1,
+          "file": "03-natural-splashes/step_02.wav",
+          "sha256": "bc4ee578593f43ee3507a85445395870d3c663221483e23cf19debc0e6010758",
+          "duration_seconds": 0.4683,
+          "peak": 0.3957,
+          "rms_db": -28.71
+        },
+        {
+          "recording": "christopherjngs/shallow-water.wav",
+          "start_seconds": 3.48,
+          "end_seconds": 3.94,
+          "pitch_rate": 1,
+          "file": "03-natural-splashes/step_03.wav",
+          "sha256": "0a7668a0335f717c7ef199188f8553d649491fea8e82a2a17ec8fecebb0bf9d9",
+          "duration_seconds": 0.448,
+          "peak": 0.285,
+          "rms_db": -28.52
+        },
+        {
+          "recording": "christopherjngs/shallow-water.wav",
+          "start_seconds": 4.15,
+          "end_seconds": 4.62,
+          "pitch_rate": 1,
+          "file": "03-natural-splashes/step_04.wav",
+          "sha256": "a3a6758bfa45b476af99f3f0e656c19a8c4f1fd18f4391fdc9eb804af1e2b320",
+          "duration_seconds": 0.4689,
+          "peak": 0.4463,
+          "rms_db": -28.72
+        }
+      ],
+      "preview": {
+        "file": "03-natural-splashes/preview.wav",
+        "sha256": "1b9b56c2a88e29cc1b64f090333df3d75e5f078521c3e288c1987f2780c598d9",
+        "duration_seconds": 8.15,
+        "peak": 0.6007,
+        "rms_db": -29.08
+      }
+    },
+    {
+      "id": "04-wading-slosh",
+      "name": "Wading slosh",
+      "description": "A fuller splash with a longer watery tail. A more pronounced sense of wading through shallow water.",
+      "license": "CC-BY-3.0",
+      "source_url": "https://opengameart.org/content/water-step-splashes-yo-frankie",
+      "sources": [
+        {
+          "author": "Blender Foundation / Yo Frankie!",
+          "url": "https://opengameart.org/content/water-step-splashes-yo-frankie",
+          "license": "CC-BY-3.0"
+        }
+      ],
+      "recordings": [
+        {
+          "file": "yofrankie/water-left.wav",
+          "start_seconds": 0,
+          "end_seconds": 0.7
+        },
+        {
+          "file": "yofrankie/water-right.wav",
+          "start_seconds": 0,
+          "end_seconds": 0.7
+        }
+      ],
+      "pitch_rates": [
+        0.985,
+        1.015
+      ],
+      "tail_fade_seconds": 0.15,
+      "number": 4,
+      "steps": [
+        {
+          "recording": "yofrankie/water-left.wav",
+          "start_seconds": 0,
+          "end_seconds": 0.7,
+          "pitch_rate": 0.985,
+          "file": "04-wading-slosh/step_01.wav",
+          "sha256": "50b9b613435a54ef059a1dcc26588d7e6200c074569118f83a56b6ea3658e19a",
+          "duration_seconds": 0.7036,
+          "peak": 0.1767,
+          "rms_db": -30.38
+        },
+        {
+          "recording": "yofrankie/water-left.wav",
+          "start_seconds": 0,
+          "end_seconds": 0.7,
+          "pitch_rate": 1.015,
+          "file": "04-wading-slosh/step_02.wav",
+          "sha256": "43c27fdd7b1baebde902b07155dc2b01956aa968c1a900f5a7bcdf53a1cdab5d",
+          "duration_seconds": 0.6828,
+          "peak": 0.1816,
+          "rms_db": -30.25
+        },
+        {
+          "recording": "yofrankie/water-right.wav",
+          "start_seconds": 0,
+          "end_seconds": 0.7,
+          "pitch_rate": 0.985,
+          "file": "04-wading-slosh/step_03.wav",
+          "sha256": "3f13027f0edd8703a027af697bbfdba4bb667aeef3712edf232b7a62409c3776",
+          "duration_seconds": 0.7106,
+          "peak": 0.2428,
+          "rms_db": -30.43
+        },
+        {
+          "recording": "yofrankie/water-right.wav",
+          "start_seconds": 0,
+          "end_seconds": 0.7,
+          "pitch_rate": 1.015,
+          "file": "04-wading-slosh/step_04.wav",
+          "sha256": "927d07a7b51b43a0d999d8a43113145f1ce6b1b2def60a166e8c9967766f0da4",
+          "duration_seconds": 0.6896,
+          "peak": 0.2337,
+          "rms_db": -30.3
+        }
+      ],
+      "preview": {
+        "file": "04-wading-slosh/preview.wav",
+        "sha256": "6ff0283927a80696c01e30c17c99344358dc8922949b0246b3d05b51d1a3315f",
+        "duration_seconds": 8.3606,
+        "peak": 0.2698,
+        "rms_db": -29.08
+      }
+    }
+  ],
+  "original_sha256": {
+    "originals/christopherjngs/shallow-water-hq.mp3": "f9f67010299d84663bdaca507e1a9696fa2e659311c852db3d5e2b8b155c99e3",
+    "originals/christopherjngs/shallow-water.wav": "00234a1ca3e6875fa8babca12f8ab900dd60d3e779766fb35f10c3cbb5103144",
+    "originals/congusbongus/0.ogg": "7a4a2934576d03d765a640df07ad89b70b5a5b17ed7cc4b80c9de4c51da44b10",
+    "originals/congusbongus/0.ogg.wav": "ddb8fc720759ee907eda195145c4eff0685fceb47ebd296c7045e312b8add3e5",
+    "originals/congusbongus/1.ogg": "ed60614c620953220da1b3109e2bf5a6ff863f5aeeaba802f88d05595a9ec919",
+    "originals/congusbongus/1.ogg.wav": "b6b9ecb7a8017626832247a1c6535be8c5e57cb58469245199278a2e740c24ab",
+    "originals/congusbongus/2.ogg": "b5d523ad6246c89c82a633c5a89c859aec3a8c7ac0fd5f3bcf890583fcd2805c",
+    "originals/congusbongus/2.ogg.wav": "3afafb4d379b9154501a338d39c18668fb4284f95f0cb679c08b14ceef0dc63d",
+    "originals/congusbongus/3.ogg": "32986928b63c6915e010dda99519fbe903e330cc1da060caf2dbd71fae81a738",
+    "originals/congusbongus/3.ogg.wav": "bde6404676e2fb5a1c96dd5f815bbde38ca36a8da553252181ea889f530d03b7",
+    "originals/congusbongus/4.ogg": "8c6af00b87cff844ae364735fbd185c7a1eb44939cefb8d02978f4f24ae854cc",
+    "originals/congusbongus/4.ogg.wav": "b37a6a068a3d540d2d0789412d5986b4572bbf08e58a057c268e1c84f8fcf189",
+    "originals/congusbongus/license.txt": "4ce92212722a6b7c5b6003223b2771974707ae2cd1b45103491ae94c707915a8",
+    "originals/peludo/splash1.wav": "e45d466f7e63e5d566f8a822a7a1a3f7d5131319d17ca0436dcc615b251e9277",
+    "originals/peludo/splash2.wav": "ad9472b711666de2d43c3b102d155a5d1118b1fcd0ecd29cb63177256ab63f31",
+    "originals/yofrankie/water-left.flac": "c0f1d087ec1ef2a30b69dec183967a05533e8659f7f05ad248eba75d1de93765",
+    "originals/yofrankie/water-left.wav": "f89141360f6404302fc2acd544a9743e3f1ee8570b38f6ba993a8a66b99c7cac",
+    "originals/yofrankie/water-right.flac": "7713430ceb95f8c65e4869ecdfe543d5a6c0df1f8b934e43370546b6bff15d0a",
+    "originals/yofrankie/water-right.wav": "1b843b1064477b7d31c3f448d644846a1e927d717a5e1a5aab0797545965a68c"
+  }
+}

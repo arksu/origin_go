@@ -16,12 +16,19 @@ import { gameFacade } from '../src/game/GameFacade'
 import { worldAudioReceiver } from '../src/game/audioRuntime'
 import { timeSync } from '../src/network/TimeSync'
 import authoredSounds from '../../data/sounds/actions.json'
+import { locomotionSoundKey, validateFootstepSoundProfiles } from '../src/game/footstepConfig'
+import {
+  TILE_BROADLEAF_FOREST, TILE_CLAY, TILE_CONIFEROUS_FOREST, TILE_DEEP_WATER, TILE_DIRT,
+  TILE_GRASS, TILE_MOUNTAIN, TILE_PLOWED, TILE_SHALLOW_WATER, TILE_STONE_PAVING, TILE_THICKET,
+} from '../src/game/tiles/tileIds'
 
 const world: SoundProfile = { key: 'chop', mode: 'world', loudness: 1000, volume: .9, files: ['sound/chop/chop_01.mp3'], priority: 10, max_voices: 8, max_voices_per_source: 2 }
-const authoredFootstep = parseSoundFile(authoredSounds, 'data/sounds/actions.json').find(profile => profile.key === 'footstep')!
+const authoredProfiles = parseSoundFile(authoredSounds, 'data/sounds/actions.json')
+const authoredFootstep = authoredProfiles.find(profile => profile.key === 'footstep')!
 const local: SoundProfile = { ...authoredFootstep, volume: .6, files: ['sound/footstep/step.wav'], priority: 1, max_voices: 8, max_voices_per_source: 2 }
 const feedback: SoundProfile = { ...local, key: 'exp_gain', volume: .4, feedback_trigger: 'exp_gain' }
-const registry = { chop: world, footstep: local, exp_gain: feedback }
+const surfaceProfiles = Object.fromEntries(authoredProfiles.filter(profile => profile.key.startsWith('footstep_')).map(profile => [profile.key, profile]))
+const registry = { chop: world, footstep: local, exp_gain: feedback, ...surfaceProfiles }
 
 class FakeSample implements SoundSample {
   status = 'loaded'
@@ -267,6 +274,64 @@ test('footsteps follow unwrapped interpolated distance without pose sampling or 
   for (const [distance, time] of [[.5, 100], [1, 200], [1.5, 300], [2, 400]]) { snapshot.distanceTiles = distance!; controller.update(snapshot, time!, 1000 + time!) }
   assert.deepEqual(played.map(event => event.key), ['footstep', 'footstep', 'footstep', 'footstep'])
   assert.ok(played.every(event => event.gain === 1))
+})
+
+test('walk and carry-walk select shared tile sounds and use leather for all unassigned tiles', () => {
+  const cases: Array<[number | undefined, string]> = [
+    [TILE_SHALLOW_WATER, 'footstep_shallow_water'],
+    [TILE_MOUNTAIN, 'footstep_stone'],
+    [TILE_DIRT, 'footstep_gravel'], [TILE_CLAY, 'footstep_gravel'], [TILE_PLOWED, 'footstep_gravel'],
+    [TILE_CONIFEROUS_FOREST, 'footstep_forest_leaves'], [TILE_BROADLEAF_FOREST, 'footstep_forest_leaves'],
+    [TILE_GRASS, 'footstep'], [TILE_STONE_PAVING, 'footstep'], [TILE_THICKET, 'footstep'], [TILE_DEEP_WATER, 'footstep'],
+    [254, 'footstep'], [undefined, 'footstep'],
+  ]
+  for (const clip of ['walk', 'carry_walk']) for (const entityId of [1, 2]) {
+    const { controller, snapshot, played } = localFixture()
+    snapshot.clip = clip; snapshot.entityId = entityId
+    snapshot.position.x = entityId === 1 ? 0 : 80
+    controller.update(snapshot, 0, 1000)
+    for (const [index, [tileType, expectedKey]] of cases.entries()) {
+      snapshot.tileType = tileType
+      snapshot.distanceTiles = (index + 1) * .5
+      controller.update(snapshot, (index + 1) * 100, 1100 + index * 100)
+      assert.equal(played.length, index + 1, `${clip}: each contact must play once`)
+      assert.equal(played[index]!.key, expectedKey)
+      const expectedGain = localDistanceGain(registry[expectedKey as keyof typeof registry]!, 1, snapshot.position.x, entityId === 1)
+      assert.equal(played[index]!.gain, expectedGain)
+    }
+  }
+})
+
+test('changing a tile preserves gait timing and cannot emit a step without a new contact', () => {
+  const { controller, snapshot, played } = localFixture()
+  controller.update(snapshot, 0, 1000)
+  const surfaces: Array<[number | undefined, string]> = [
+    [TILE_MOUNTAIN, 'footstep_stone'], [TILE_DIRT, 'footstep_gravel'], [undefined, 'footstep'],
+    [TILE_SHALLOW_WATER, 'footstep_shallow_water'], [TILE_GRASS, 'footstep'],
+  ]
+  const expectedKeys: string[] = []
+  for (const [index, [tileType, soundKey]] of surfaces.entries()) {
+    snapshot.tileType = tileType
+    controller.update(snapshot, index * 100 + 50, index * 100 + 1050)
+    assert.deepEqual(played.map(event => event.key), expectedKeys, 'Changing surfaces must not emit a contact')
+    snapshot.distanceTiles = (index + 1) * .5
+    controller.update(snapshot, (index + 1) * 100, (index + 1) * 100 + 1000)
+    expectedKeys.push(soundKey)
+    assert.deepEqual(played.map(event => event.key), expectedKeys)
+  }
+  assert.equal(locomotionSoundKey('exp_gain', TILE_MOUNTAIN), 'exp_gain')
+  assert.equal(locomotionSoundKey('exp_gain', TILE_SHALLOW_WATER), 'exp_gain')
+})
+
+test('footstep configuration rejects missing or world-only surface profiles before playback', () => {
+  const profiles = Object.fromEntries(authoredProfiles.map(profile => [profile.key, profile]))
+  validateFootstepSoundProfiles(profiles)
+  for (const key of ['footstep', 'footstep_stone', 'footstep_gravel', 'footstep_forest_leaves', 'footstep_shallow_water']) {
+    const missing = { ...profiles }
+    delete missing[key]
+    assert.throws(() => validateFootstepSoundProfiles(missing), new RegExp(key))
+    assert.throws(() => validateFootstepSoundProfiles({ ...profiles, [key]: { ...profiles[key]!, mode: 'world' } }), new RegExp(key))
+  }
 })
 
 test('other character contacts use current world distance and approach silence before leaving range', () => {

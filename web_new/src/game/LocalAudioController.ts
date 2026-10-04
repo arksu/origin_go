@@ -4,11 +4,13 @@ import type { ActionAnimationDefinition, ActionAnimationSoundCue } from '../type
 import type { LocomotionAudioBinding, SoundProfile } from '../types/soundDefs'
 import type { PlaybackOptions } from './SoundManager'
 import { AUDIO_PLAYBACK } from './audioConfig'
+import { locomotionSoundKey } from './footstepConfig'
 
 export interface LocalAudioSnapshot {
   entityId: number
   actor: string
   position: { x: number; y: number }
+  tileType?: number
   ready: boolean
   moving: boolean
   clip: string
@@ -78,12 +80,13 @@ export class LocalAudioController {
       nowMs - previous.time > AUDIO_PLAYBACK.maxPresentationGapMs || cycle < previous.cycle || cycle - previous.cycle >= 1
     const audible = previous?.audible ?? new Set<string>()
     for (const contact of binding.contacts) {
-      const gain = this.gain(contact.sound_key, snapshot.entityId, snapshot.position), wasAudible = audible.has(contact.id)
+      const soundKey = locomotionSoundKey(contact.sound_key, snapshot.tileType)
+      const gain = this.gain(soundKey, snapshot.entityId, snapshot.position), wasAudible = audible.has(contact.id)
       if (gain > 0) audible.add(contact.id); else audible.delete(contact.id)
       // Entering the radius starts at the current gait, never at an old contact.
       if (rebase || !wasAudible || gain <= 0 || !previous) continue
       const nextContact = Math.floor(previous.cycle - contact.phase) + 1 + contact.phase
-      if (nextContact <= cycle) this.playback.play(contact.sound_key, gain, { sourceId: snapshot.entityId })
+      if (nextContact <= cycle) this.playback.play(soundKey, gain, { sourceId: snapshot.entityId })
     }
     this.locomotion.set(snapshot.entityId, { selector, cycle, time: nowMs, active, audible })
   }

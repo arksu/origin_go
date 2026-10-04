@@ -1,0 +1,386 @@
+{
+  "sample_rate": 44100,
+  "steps_per_minute": 120.0,
+  "options": [
+    {
+      "id": "01-soft-leather",
+      "name": "Soft leather",
+      "description": "Muted footfalls with a little leather movement. A restrained everyday walking sound.",
+      "author": "HaelDB",
+      "source_url": "https://opengameart.org/content/footsteps-leather-cloth-armor",
+      "recordings": [
+        "haeldb/step_lth1.wav",
+        "haeldb/step_lth2.wav",
+        "haeldb/step_lth33.wav",
+        "haeldb/step_lth4.wav"
+      ],
+      "number": 1,
+      "license": "CC0-1.0",
+      "steps": [
+        {
+          "file": "01-soft-leather/step_01.wav",
+          "sha256": "f66c08b50468eb8edcb01827d3f815c82300d4c2be352f35f010b5ee3571734f",
+          "duration_seconds": 0.25,
+          "peak": 0.3524,
+          "rms_db": -25.99,
+          "recording": "haeldb/step_lth1.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "01-soft-leather/step_02.wav",
+          "sha256": "a7a97aef97926aa4f307758b2b151018155ec09d47c64ad59c3ec971c62e5a14",
+          "duration_seconds": 0.1875,
+          "peak": 0.3942,
+          "rms_db": -24.74,
+          "recording": "haeldb/step_lth2.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "01-soft-leather/step_03.wav",
+          "sha256": "8d9064d57e6c4e6eacffd28b5dc965685d9d58abb7821ac2aacb1107d0ab8262",
+          "duration_seconds": 0.25,
+          "peak": 0.3744,
+          "rms_db": -25.99,
+          "recording": "haeldb/step_lth33.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "01-soft-leather/step_04.wav",
+          "sha256": "dd01a30f1bb9ed81c65bcd0651e3c78dc6ce8784741467733373c2af51422a67",
+          "duration_seconds": 0.25,
+          "peak": 0.3913,
+          "rms_db": -25.99,
+          "recording": "haeldb/step_lth4.wav",
+          "pitch_rate": 1
+        }
+      ],
+      "preview": {
+        "file": "01-soft-leather/preview.wav",
+        "sha256": "a322392299452abf0948c2ad2db93339887b6e8bc5a06873c18336a88b6d2c37",
+        "duration_seconds": 8.15,
+        "peak": 0.3942,
+        "rms_db": -29.08
+      }
+    },
+    {
+      "id": "02-grass-sand",
+      "name": "Grass / sand",
+      "description": "Soft ground contact with a light sandy rustle. A natural outdoor walking sound.",
+      "author": "Fantozzi; edited by Iwan Gabovitch (qubodup)",
+      "source_url": "https://opengameart.org/content/fantozzis-footsteps-grasssand-stone",
+      "recordings": [
+        "fantozzi/Fantozzi-SandL1.wav",
+        "fantozzi/Fantozzi-SandR1.wav",
+        "fantozzi/Fantozzi-SandL2.wav",
+        "fantozzi/Fantozzi-SandR2.wav",
+        "fantozzi/Fantozzi-SandL3.wav",
+        "fantozzi/Fantozzi-SandR3.wav"
+      ],
+      "number": 2,
+      "license": "CC0-1.0",
+      "steps": [
+        {
+          "file": "02-grass-sand/step_01.wav",
+          "sha256": "baa9131da5d1fed901cc19c6e8fc8d9bfc5a6eb646bf1336c31cff688d5388db",
+          "duration_seconds": 0.4161,
+          "peak": 0.6364,
+          "rms_db": -28.2,
+          "recording": "fantozzi/Fantozzi-SandL1.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "02-grass-sand/step_02.wav",
+          "sha256": "2e5b35ef07a617ca183432d135795584ce687f0980541716cd6181a09289aa88",
+          "duration_seconds": 0.3993,
+          "peak": 0.7489,
+          "rms_db": -28.02,
+          "recording": "fantozzi/Fantozzi-SandR1.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "02-grass-sand/step_03.wav",
+          "sha256": "38692c52ce520a024324f7d0bbacc63000232bc06f6f49e18e707b241739ad6e",
+          "duration_seconds": 0.3169,
+          "peak": 0.6315,
+          "rms_db": -27.02,
+          "recording": "fantozzi/Fantozzi-SandL2.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "02-grass-sand/step_04.wav",
+          "sha256": "d3f636c14390c555912c3f274bb47ec77a97e86b08e6f3c5c54bd4b316893f9b",
+          "duration_seconds": 0.3203,
+          "peak": 0.7921,
+          "rms_db": -27.07,
+          "recording": "fantozzi/Fantozzi-SandR2.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "02-grass-sand/step_05.wav",
+          "sha256": "2663581f0c436dc7a824af536d14ab2c9b7aee7243e3f9baec32f3b3d764012a",
+          "duration_seconds": 0.299,
+          "peak": 0.85,
+          "rms_db": -26.77,
+          "recording": "fantozzi/Fantozzi-SandL3.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "02-grass-sand/step_06.wav",
+          "sha256": "9dd82a443e7daa73feee1e75f108bcb836f2be09423b195f37ab9251978cacc5",
+          "duration_seconds": 0.3295,
+          "peak": 0.5715,
+          "rms_db": -27.19,
+          "recording": "fantozzi/Fantozzi-SandR3.wav",
+          "pitch_rate": 1
+        }
+      ],
+      "preview": {
+        "file": "02-grass-sand/preview.wav",
+        "sha256": "679a16a4b0cf4d8c529288fe0d8d16b5aba1cf679b857a1b993caa7be4574d6e",
+        "duration_seconds": 8.15,
+        "peak": 0.85,
+        "rms_db": -29.08
+      }
+    },
+    {
+      "id": "03-gravel",
+      "name": "Gravel",
+      "description": "A rough crunch and scrape for stony paths. More textured and noticeable.",
+      "author": "TinyWorlds; recordings from pdsounds.org",
+      "source_url": "https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud",
+      "recordings": [
+        "tinyworlds/gravel.wav"
+      ],
+      "pitch_rates": [
+        0.97,
+        1.0,
+        1.03,
+        1.015
+      ],
+      "number": 3,
+      "license": "CC0-1.0",
+      "steps": [
+        {
+          "file": "03-gravel/step_01.wav",
+          "sha256": "b7ffbb6c6112d1bb0171a3fa080fa01cbffe3f911f9a6d7c243ca12f18086992",
+          "duration_seconds": 0.6874,
+          "peak": 0.6971,
+          "rms_db": -30.38,
+          "recording": "tinyworlds/gravel.wav",
+          "pitch_rate": 0.97
+        },
+        {
+          "file": "03-gravel/step_02.wav",
+          "sha256": "bd8b97a2c5cbf57015608ceced58be719bc85e1b81b4ce5e4e01f97c7c8dd4ce",
+          "duration_seconds": 0.6668,
+          "peak": 0.7141,
+          "rms_db": -30.25,
+          "recording": "tinyworlds/gravel.wav",
+          "pitch_rate": 1.0
+        },
+        {
+          "file": "03-gravel/step_03.wav",
+          "sha256": "f34abd4376b8432f94be232c223548da5f172df4811e4039c4304f4fc33b1577",
+          "duration_seconds": 0.6473,
+          "peak": 0.7011,
+          "rms_db": -30.12,
+          "recording": "tinyworlds/gravel.wav",
+          "pitch_rate": 1.03
+        },
+        {
+          "file": "03-gravel/step_04.wav",
+          "sha256": "45235ee8d6a63096f948636d15b1de3c55dfaee70797a099ef6a90f7d864a3a2",
+          "duration_seconds": 0.6569,
+          "peak": 0.7267,
+          "rms_db": -30.19,
+          "recording": "tinyworlds/gravel.wav",
+          "pitch_rate": 1.015
+        }
+      ],
+      "preview": {
+        "file": "03-gravel/preview.wav",
+        "sha256": "94b4add00c37115b3d0b341f10555e5b33989156b9f4f59714146087e61370a6",
+        "duration_seconds": 8.3374,
+        "peak": 0.7267,
+        "rms_db": -29.2
+      }
+    },
+    {
+      "id": "04-leaves",
+      "name": "Forest leaves",
+      "description": "Dry leafy rustles with soft contact. A forest-floor option with less hard impact.",
+      "author": "TinyWorlds; recordings from pdsounds.org",
+      "source_url": "https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud",
+      "recordings": [
+        "tinyworlds/leaves01.wav",
+        "tinyworlds/leaves02.wav"
+      ],
+      "number": 4,
+      "license": "CC0-1.0",
+      "steps": [
+        {
+          "file": "04-leaves/step_01.wav",
+          "sha256": "a907651bad881ebc03cc9f734e1c1c80a39ec1272bfcc8a90381651d9dc56f9b",
+          "duration_seconds": 0.3841,
+          "peak": 0.5828,
+          "rms_db": -27.86,
+          "recording": "tinyworlds/leaves01.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "04-leaves/step_02.wav",
+          "sha256": "e142601e34afcbc270d42a33f3b68ce37b0cfd6d83a300488c8baa591583b9e7",
+          "duration_seconds": 0.4702,
+          "peak": 0.449,
+          "rms_db": -28.73,
+          "recording": "tinyworlds/leaves02.wav",
+          "pitch_rate": 1
+        }
+      ],
+      "preview": {
+        "file": "04-leaves/preview.wav",
+        "sha256": "fc644347939a4cb921f4688e8b937d5e16d2c703852b4d6f4af5f2ea867b1f80",
+        "duration_seconds": 8.15,
+        "peak": 0.5828,
+        "rms_db": -29.08
+      }
+    },
+    {
+      "id": "05-stone",
+      "name": "Stone",
+      "description": "Firm, dry footfalls for hard ground or paving. A more defined heel contact.",
+      "author": "Fantozzi; edited by Iwan Gabovitch (qubodup)",
+      "source_url": "https://opengameart.org/content/fantozzis-footsteps-grasssand-stone",
+      "recordings": [
+        "fantozzi/Fantozzi-StoneL1.wav",
+        "fantozzi/Fantozzi-StoneR1.wav",
+        "fantozzi/Fantozzi-StoneL2.wav",
+        "fantozzi/Fantozzi-StoneR2.wav",
+        "fantozzi/Fantozzi-StoneL3.wav",
+        "fantozzi/Fantozzi-StoneR3.wav"
+      ],
+      "number": 5,
+      "license": "CC0-1.0",
+      "steps": [
+        {
+          "file": "05-stone/step_01.wav",
+          "sha256": "4781932f2f78f6bd5cb16a662a0be5ed6ef87f482805e7f66bc8b6911c3c2735",
+          "duration_seconds": 0.3485,
+          "peak": 0.4356,
+          "rms_db": -27.43,
+          "recording": "fantozzi/Fantozzi-StoneL1.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "05-stone/step_02.wav",
+          "sha256": "8df1155aba7bed7104f0042bd564d1405b505305721701250dc79a087df402ca",
+          "duration_seconds": 0.3445,
+          "peak": 0.4541,
+          "rms_db": -27.38,
+          "recording": "fantozzi/Fantozzi-StoneR1.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "05-stone/step_03.wav",
+          "sha256": "2539dcd1de07b2d7d7ebb097978ace986298ac4311d2c9e42e8816f391037def",
+          "duration_seconds": 0.3163,
+          "peak": 0.4078,
+          "rms_db": -27.01,
+          "recording": "fantozzi/Fantozzi-StoneL2.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "05-stone/step_04.wav",
+          "sha256": "ca06d7acdf55bd18043d4516fcc2a5adf7157f5c2017e1c080c50126993df206",
+          "duration_seconds": 0.3161,
+          "peak": 0.4125,
+          "rms_db": -27.01,
+          "recording": "fantozzi/Fantozzi-StoneR2.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "05-stone/step_05.wav",
+          "sha256": "e35c7eaad28280b7278dd2d13558025d34fcf8ba2199c008794f1999048ea432",
+          "duration_seconds": 0.3238,
+          "peak": 0.3407,
+          "rms_db": -27.11,
+          "recording": "fantozzi/Fantozzi-StoneL3.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "05-stone/step_06.wav",
+          "sha256": "7afdb25ec391b106e90c07b31c2ff9b68715203e90d52e45241769f8ba13c7f3",
+          "duration_seconds": 0.3392,
+          "peak": 0.3991,
+          "rms_db": -27.31,
+          "recording": "fantozzi/Fantozzi-StoneR3.wav",
+          "pitch_rate": 1
+        }
+      ],
+      "preview": {
+        "file": "05-stone/preview.wav",
+        "sha256": "804105b99065348d0da9f05fa48532f11c636d0a3867f38c4241a556ed0edcb5",
+        "duration_seconds": 8.15,
+        "peak": 0.4541,
+        "rms_db": -29.08
+      }
+    },
+    {
+      "id": "06-wood",
+      "name": "Wood",
+      "description": "Short woody knocks for boards and floors. A rounded, slightly hollow footfall.",
+      "author": "TinyWorlds; recordings from pdsounds.org",
+      "source_url": "https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud",
+      "recordings": [
+        "tinyworlds/wood01.wav",
+        "tinyworlds/wood02.wav",
+        "tinyworlds/wood03.wav"
+      ],
+      "number": 6,
+      "license": "CC0-1.0",
+      "steps": [
+        {
+          "file": "06-wood/step_01.wav",
+          "sha256": "8a4cc4038826f9586471c89c4ebef0bce7e31c3c6a533b02e79841de45fe95a7",
+          "duration_seconds": 0.2402,
+          "peak": 0.3463,
+          "rms_db": -25.82,
+          "recording": "tinyworlds/wood01.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "06-wood/step_02.wav",
+          "sha256": "e10ba7dfa23788e0bf6e78b38c8b39cbbe7a511c9e925ea55a2eef75c4e6557e",
+          "duration_seconds": 0.2366,
+          "peak": 0.2697,
+          "rms_db": -25.75,
+          "recording": "tinyworlds/wood02.wav",
+          "pitch_rate": 1
+        },
+        {
+          "file": "06-wood/step_03.wav",
+          "sha256": "ce0f8e34708da1bcc15a9eb49caca8cfd47e008bb88c2d2495c88af91f81a7b1",
+          "duration_seconds": 0.3179,
+          "peak": 0.4026,
+          "rms_db": -27.03,
+          "recording": "tinyworlds/wood03.wav",
+          "pitch_rate": 1
+        }
+      ],
+      "preview": {
+        "file": "06-wood/preview.wav",
+        "sha256": "6a04cde02b02d1e672fdeae84c18a5ec4fc0e00d53c2e3fc7c446ec979212fbc",
+        "duration_seconds": 8.15,
+        "peak": 0.4026,
+        "rms_db": -29.08
+      }
+    }
+  ],
+  "current": {
+    "file": "current-preview.wav",
+    "sha256": "a322392299452abf0948c2ad2db93339887b6e8bc5a06873c18336a88b6d2c37",
+    "duration_seconds": 8.15,
+    "peak": 0.3942,
+    "rms_db": -29.08
+  }
+}
