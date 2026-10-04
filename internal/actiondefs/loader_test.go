@@ -1,6 +1,7 @@
 package actiondefs
 
 import (
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -11,6 +12,44 @@ import (
 
 	"go.uber.org/zap"
 )
+
+func TestDamageSourceLoading(t *testing.T) {
+	source := `{"slots":["left_hand","right_hand"],"itemTag":"axe","damageSource":true}`
+	for _, test := range []struct {
+		name, contents string
+		valid, marked  bool
+	}{
+		{"marked", strings.Replace(validCombatAction, `"requirements":{}`, `"requirements":{"equipment":[`+source+`]}`, 1), true, true},
+		{"default false", strings.Replace(validCombatAction, `"requirements":{}`, `"requirements":{"equipment":[`+strings.Replace(source, `,"damageSource":true`, "", 1)+`]}`, 1), true, false},
+		{"multiple", strings.Replace(validCombatAction, `"requirements":{}`, `"requirements":{"equipment":[`+source+`,`+source+`]}`, 1), false, false},
+		{"ordinary", strings.Replace(validAction, `"itemTag":"axe"`, `"itemTag":"axe","damageSource":true`, 1), false, false},
+		{"bad selector", strings.Replace(validCombatAction, `"requirements":{}`, `"requirements":{"equipment":[`+strings.Replace(source, `"itemTag":"axe"`, `"itemTag":"axe","itemKey":"test_pack"`, 1)+`]}`, 1), false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{{DefID: 1, Key: "test_pack"}}))
+			directory := t.TempDir()
+			writeActionFile(t, directory, "source.json", test.contents)
+			registry, err := LoadFromDirectory(directory, nil)
+			if !test.valid {
+				if err == nil || !strings.Contains(err.Error(), "source.json") {
+					t.Fatalf("expected file-identifying error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			definition, _ := registry.Get("combat_test")
+			if definition.Requirements.Equipment[0].DamageSource != test.marked {
+				t.Fatal("damage source flag was lost")
+			}
+		})
+	}
+	encoded, err := json.Marshal(EquipmentRequirement{Slots: []string{"head"}, ItemTag: "hat"})
+	if err != nil || strings.Contains(string(encoded), "damageSource") {
+		t.Fatalf("false marker must be omitted: %s, %v", encoded, err)
+	}
+}
 
 const validAction = `{"v":1,"actions":[{"id":"test_action","presentation":{"label":"Test action","menuIcon":"/assets/cursor/lift.png"},"target":{"kind":"object","cursor":"lift"},"requirements":{"skills":["test_skill"],"equipment":[{"slots":["left_hand","right_hand"],"itemTag":"axe"},{"slots":["back"],"itemKey":"test_pack"}]},"execution":{"ticks":4,"stamina":2.5},"isRepeatable":true}]}`
 
@@ -138,7 +177,7 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 			t.Fatalf("invalid axe requirements: %#v", definition.Requirements)
 		}
 		equipment := definition.Requirements.Equipment[0]
-		if equipment.ItemTag != "axe" || equipment.ItemKey != "" || len(equipment.Slots) != 2 ||
+		if !equipment.DamageSource || equipment.ItemTag != "axe" || equipment.ItemKey != "" || len(equipment.Slots) != 2 ||
 			equipment.Slots[0] != "right_hand" || equipment.Slots[1] != "left_hand" {
 			t.Fatalf("axe must be allowed in either hand: %#v", equipment)
 		}

@@ -23,9 +23,10 @@ type Target struct {
 const ApproachTileCenter = "tile_center"
 
 type EquipmentRequirement struct {
-	Slots   []string `json:"slots"`
-	ItemKey string   `json:"itemKey,omitempty"`
-	ItemTag string   `json:"itemTag,omitempty"`
+	Slots        []string `json:"slots"`
+	ItemKey      string   `json:"itemKey,omitempty"`
+	ItemTag      string   `json:"itemTag,omitempty"`
+	DamageSource bool     `json:"damageSource,omitempty"` // Server-only weapon selector.
 }
 
 type Requirements struct {

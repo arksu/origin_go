@@ -10,7 +10,7 @@
       "target": { "kind": "direction" },
       "requirements": {
         "equipment": [
-          { "slots": ["right_hand", "left_hand"], "itemTag": "axe" }
+          { "slots": ["right_hand", "left_hand"], "itemTag": "axe", "damageSource": true }
         ]
       },
       "execution": { "ticks": 6, "stamina": 60, "repeat": false },
@@ -28,7 +28,7 @@
       "target": { "kind": "direction" },
       "requirements": {
         "equipment": [
-          { "slots": ["right_hand", "left_hand"], "itemTag": "axe" }
+          { "slots": ["right_hand", "left_hand"], "itemTag": "axe", "damageSource": true }
         ]
       },
       "execution": { "ticks": 6, "stamina": 60, "repeat": false },
