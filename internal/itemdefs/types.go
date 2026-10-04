@@ -13,10 +13,24 @@ type ItemDef struct {
 	DiscoveryLP int64             `json:"discoveryLP,omitempty"`
 	Visual      *Visual           `json:"visual,omitempty"`
 	Abilities   map[string]uint32 `json:"abilities,omitempty"`
+	Melee       *MeleeDef         `json:"melee,omitempty"`
+	Armor       *ArmorDef         `json:"armor,omitempty"`
 
 	// Container describes nested inventory capabilities for this item (e.g. seed bag).
 	// If nil, the item is not a container.
 	Container *ContainerDef `json:"container,omitempty"`
+}
+
+// MeleeDef provides parameters shared by all kinds of melee weapons.
+// A nil ItemDef.Melee means the item has no melee weapon capability.
+type MeleeDef struct {
+	BaseDamage float64 `json:"baseDamage"`
+}
+
+// ArmorDef provides the item's protection before instance quality scaling.
+// A nil ItemDef.Armor means the item does not contribute armor.
+type ArmorDef struct {
+	BaseArmor float64 `json:"baseArmor"`
 }
 
 // Size represents item dimensions in inventory grid.

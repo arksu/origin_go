@@ -34,6 +34,12 @@ func TestLoadAllItems(t *testing.T) {
 	branch, ok := registry.GetByKey("branch")
 	require.True(t, ok, "branch should be loaded")
 	assert.Equal(t, uint32(1), branch.Abilities["fuel"])
+
+	stoneAxe, ok := registry.GetByKey("stone_axe")
+	require.True(t, ok, "stone_axe should be loaded")
+	require.NotNil(t, stoneAxe.Melee)
+	assert.Equal(t, float64(6), stoneAxe.Melee.BaseDamage)
+	assert.Nil(t, stoneAxe.Armor)
 }
 
 func TestLoadAllItems_RegistersNettleShirtForChestEquipment(t *testing.T) {
@@ -44,6 +50,8 @@ func TestLoadAllItems_RegistersNettleShirtForChestEquipment(t *testing.T) {
 	nettleShirt, ok := registry.GetByKey("nettle_shirt")
 	require.True(t, ok, "nettle_shirt should be loaded")
 	assert.Equal(t, []string{"chest"}, nettleShirt.Allowed.EquipmentSlots)
+	assert.Nil(t, nettleShirt.Melee)
+	assert.Nil(t, nettleShirt.Armor)
 }
 
 func TestLoadAllItems_DigResourcesExist(t *testing.T) {
