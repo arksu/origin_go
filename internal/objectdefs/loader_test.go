@@ -337,6 +337,74 @@ func TestLoadFromDirectory_Success(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 11, player.DefID)
 	assert.False(t, player.IsStatic)
+	assert.Zero(t, player.HP, "player health must not default to object durability")
+}
+
+func TestLoadFromDirectory_InitialHP(t *testing.T) {
+	for _, hp := range []int{1, 100, 1000} {
+		t.Run(fmt.Sprintf("hp_%d", hp), func(t *testing.T) {
+			directory := t.TempDir()
+			writeJSONC(t, directory, "objects.jsonc", fmt.Sprintf(`{
+				"v": 1,
+				"objects": [{"defId": 13, "key": "boulder", "name": "Boulder", "hp": %d, "resource": "boulder"}]
+			}`, hp))
+
+			registry, err := LoadFromDirectory(directory, testBehaviors(t), zap.NewNop())
+			require.NoError(t, err)
+			definition, exists := registry.GetByKey("boulder")
+			require.True(t, exists)
+			assert.Equal(t, hp, definition.HP)
+		})
+	}
+}
+
+func TestLoadFromDirectory_InvalidHP(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		hpField string
+	}{
+		{name: "missing"},
+		{name: "zero", hpField: `,"hp":0`},
+		{name: "negative", hpField: `,"hp":-1`},
+		{name: "null", hpField: `,"hp":null`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			filename := "invalid_hp.jsonc"
+			writeJSONC(t, directory, filename, fmt.Sprintf(`{
+				"v": 1,
+				"objects": [{"defId": 13, "key": "boulder", "name": "Boulder", "resource": "boulder"%s}]
+			}`, test.hpField))
+
+			_, err := LoadFromDirectory(directory, testBehaviors(t), zap.NewNop())
+			require.Error(t, err)
+			var loadError *LoadError
+			require.ErrorAs(t, err, &loadError)
+			assert.Equal(t, filepath.Join(directory, filename), loadError.FilePath)
+			assert.Equal(t, 13, loadError.DefID)
+			assert.Equal(t, "boulder", loadError.Key)
+			assert.Contains(t, err.Error(), "defId=13")
+			assert.Contains(t, err.Error(), "key=boulder")
+			assert.Contains(t, err.Error(), "hp is required and must be a positive integer")
+		})
+	}
+}
+
+func TestLoadFromDirectory_HPRequiresInteger(t *testing.T) {
+	for _, hp := range []string{`1.5`, `"100"`, `true`} {
+		t.Run(hp, func(t *testing.T) {
+			directory := t.TempDir()
+			writeJSONC(t, directory, "objects.jsonc", fmt.Sprintf(`{
+				"v": 1,
+				"objects": [{"defId": 13, "key": "boulder", "name": "Boulder", "hp": %s, "resource": "boulder"}]
+			}`, hp))
+
+			_, err := LoadFromDirectory(directory, testBehaviors(t), zap.NewNop())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), filepath.Join(directory, "objects.jsonc"))
+			assert.Contains(t, err.Error(), "hp")
+		})
+	}
 }
 
 func TestLoadFromDirectory_JSONCComments(t *testing.T) {
@@ -349,6 +417,7 @@ func TestLoadFromDirectory_JSONCComments(t *testing.T) {
 		"objects": [
 			{
 				"defId": 1,
+				"hp": 100,
 				"key": "tree",
 				"name": "Tree",
 				/* block comment */
@@ -377,6 +446,7 @@ func TestLoadFromDirectory_StaticDefault(t *testing.T) {
 		"objects": [
 			{
 				"defId": 1,
+				"hp": 100,
 				"key": "rock",
 				"name": "Rock",
 				"components": { "collider": { "w": 5, "h": 5 } },
@@ -402,6 +472,7 @@ func TestLoadFromDirectory_ContextMenuEvenForOneItemFalse(t *testing.T) {
 		"objects": [
 			{
 				"defId": 1,
+				"hp": 100,
 				"key": "stump",
 				"name": "Stump",
 				"contextMenuEvenForOneItem": false,
@@ -424,11 +495,11 @@ func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {
 
 	writeJSONC(t, dir, "a.jsonc", `{
 		"v": 1, "source": "a",
-		"objects": [{ "defId": 1, "key": "a", "name": "A", "resource": "a.png" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "a", "name": "A", "resource": "a.png" }]
 	}`)
 	writeJSONC(t, dir, "b.jsonc", `{
 		"v": 1, "source": "b",
-		"objects": [{ "defId": 1, "key": "b", "name": "B", "resource": "b.png" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "b", "name": "B", "resource": "b.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -441,11 +512,11 @@ func TestLoadFromDirectory_DuplicateKey(t *testing.T) {
 
 	writeJSONC(t, dir, "a.jsonc", `{
 		"v": 1, "source": "a",
-		"objects": [{ "defId": 1, "key": "same", "name": "Same A", "resource": "a.png" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "same", "name": "Same A", "resource": "a.png" }]
 	}`)
 	writeJSONC(t, dir, "b.jsonc", `{
 		"v": 1, "source": "b",
-		"objects": [{ "defId": 2, "key": "same", "name": "Same B", "resource": "b.png" }]
+		"objects": [{ "defId": 2, "hp": 100, "key": "same", "name": "Same B", "resource": "b.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -458,7 +529,7 @@ func TestLoadFromDirectory_InvalidDefID(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 0, "key": "bad", "name": "Bad", "resource": "bad.png" }]
+		"objects": [{ "defId": 0, "hp": 100, "key": "bad", "name": "Bad", "resource": "bad.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -471,7 +542,7 @@ func TestLoadFromDirectory_MissingKey(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "", "name": "Missing Key", "resource": "x.png" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "", "name": "Missing Key", "resource": "x.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -484,7 +555,7 @@ func TestLoadFromDirectory_MissingName(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "name": "", "resource": "x.png" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "bad", "name": "", "resource": "x.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -497,7 +568,7 @@ func TestLoadFromDirectory_InvalidCollider(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "components": { "collider": { "w": 0, "h": 5 } }, "resource": "x.png" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "bad", "name": "Bad", "components": { "collider": { "w": 0, "h": 5 } }, "resource": "x.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -510,7 +581,7 @@ func TestLoadFromDirectory_InvalidInventory(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "components": { "inventory": [{ "w": 0, "h": 5 }] }, "resource": "x.png" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "bad", "name": "Bad", "components": { "inventory": [{ "w": 0, "h": 5 }] }, "resource": "x.png" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -523,7 +594,7 @@ func TestLoadFromDirectory_InvalidTreeBehaviorConfig(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "resource": "x.png", "behaviors": { "tree": { "unknown": 1 } } }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "bad", "name": "Bad", "resource": "x.png", "behaviors": { "tree": { "unknown": 1 } } }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -539,6 +610,7 @@ func TestLoadFromDirectory_TreeBehaviorRejectsLegacyFlatConfig(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "legacy_tree",
 			"name": "Legacy Tree",
 			"resource": "x.png",
@@ -564,6 +636,7 @@ func TestLoadFromDirectory_TreeBehaviorRequiresStages(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "tree_no_stages",
 			"name": "Tree",
 			"resource": "x.png",
@@ -588,6 +661,7 @@ func TestLoadFromDirectory_TreeBehaviorRejectsInvalidStageDuration(t *testing.T)
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "tree_bad_duration",
 			"name": "Tree",
 			"resource": "x.png",
@@ -627,6 +701,7 @@ func TestLoadFromDirectory_TreeBehaviorTakeRequiresAllFields(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "tree_bad_take_pair",
 			"name": "Tree",
 			"resource": "x.png",
@@ -671,6 +746,7 @@ func TestLoadFromDirectory_TreeBehaviorTakeUnknownItemFails(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "tree_bad_take_key",
 			"name": "Tree",
 			"resource": "x.png",
@@ -716,6 +792,7 @@ func TestLoadFromDirectory_TreeBehaviorTakeDuplicateIDFails(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "tree_bad_take_duplicate",
 			"name": "Tree",
 			"resource": "x.png",
@@ -767,6 +844,7 @@ func TestLoadFromDirectory_TakeBehaviorItemsSuccess(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "boulder",
 			"name": "Boulder",
 			"resource": "x.png",
@@ -801,6 +879,7 @@ func TestLoadFromDirectory_TakeBehaviorItemsRequired(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "boulder_bad_take",
 			"name": "Boulder",
 			"resource": "x.png",
@@ -828,6 +907,7 @@ func TestLoadFromDirectory_TakeBehaviorDuplicateIDFails(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "boulder_bad_take_duplicate",
 			"name": "Boulder",
 			"resource": "x.png",
@@ -870,6 +950,7 @@ func TestLoadFromDirectory_TakeBehaviorMissingNameFails(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "boulder_bad_take_name",
 			"name": "Boulder",
 			"resource": "x.png",
@@ -905,6 +986,7 @@ func TestLoadFromDirectory_TakeBehaviorCountMustBePositive(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "boulder_bad_take_count",
 			"name": "Boulder",
 			"resource": "x.png",
@@ -941,6 +1023,7 @@ func TestLoadFromDirectory_TakeBehaviorUnknownItemFails(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "boulder_bad_take_item",
 			"name": "Boulder",
 			"resource": "x.png",
@@ -972,6 +1055,7 @@ func TestLoadFromDirectory_TreeBehaviorStages(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "tree",
 			"name": "Tree",
 			"resource": "x.png",
@@ -1017,7 +1101,7 @@ func TestLoadFromDirectory_UnknownBehavior(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "name": "Bad", "resource": "x.png", "behaviors": { "nonexistent": {} } }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "bad", "name": "Bad", "resource": "x.png", "behaviors": { "nonexistent": {} } }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -1031,7 +1115,7 @@ func TestLoadFromDirectory_DuplicateAppearanceID(t *testing.T) {
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
 		"objects": [{
-			"defId": 1, "key": "bad", "name": "Bad", "resource": "x.png",
+			"defId": 1, "hp": 100, "key": "bad", "name": "Bad", "resource": "x.png",
 			"appearance": [
 				{ "id": "a", "resource": "a.png" },
 				{ "id": "a", "resource": "b.png" }
@@ -1049,7 +1133,7 @@ func TestLoadFromDirectory_MissingResourceNoAppearance(t *testing.T) {
 
 	writeJSONC(t, dir, "test.jsonc", `{
 		"v": 1, "source": "test",
-		"objects": [{ "defId": 1, "key": "bad", "name": "Bad" }]
+		"objects": [{ "defId": 1, "hp": 100, "key": "bad", "name": "Bad" }]
 	}`)
 
 	_, err := LoadFromDirectory(dir, testBehaviors(t), testLogger())
@@ -1098,6 +1182,7 @@ func TestLoadFromDirectory_BehaviorOrderByPriority(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "ordered",
 			"name": "Ordered",
 			"resource": "ordered.png",
@@ -1126,6 +1211,7 @@ func TestLoadFromDirectory_StationDefinition(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "campfire",
 			"name": "Campfire",
 			"resource": "campfire",
@@ -1170,6 +1256,7 @@ func TestLoadFromDirectory_StationRejectsInvalidResource(t *testing.T) {
 		"source": "test",
 		"objects": [{
 			"defId": 1,
+			"hp": 100,
 			"key": "campfire",
 			"name": "Campfire",
 			"resource": "campfire",

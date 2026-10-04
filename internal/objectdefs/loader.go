@@ -24,6 +24,9 @@ type LoadError struct {
 
 func (e *LoadError) Error() string {
 	if e.DefID != 0 {
+		if e.Key != "" {
+			return fmt.Sprintf("%s: defId=%d key=%s: %s", e.FilePath, e.DefID, e.Key, e.Message)
+		}
 		return fmt.Sprintf("%s: defId=%d: %s", e.FilePath, e.DefID, e.Message)
 	}
 	if e.Key != "" {
@@ -214,6 +217,15 @@ func validateObject(obj *ObjectDef, filePath string, behaviors contracts.Behavio
 			DefID:    obj.DefID,
 			Key:      obj.Key,
 			Message:  "name is required",
+		}
+	}
+	// Players use character SHP/HHP; every other definition needs explicit durability.
+	if obj.Key != "player" && obj.HP <= 0 {
+		return &LoadError{
+			FilePath: filePath,
+			DefID:    obj.DefID,
+			Key:      obj.Key,
+			Message:  "hp is required and must be a positive integer",
 		}
 	}
 	if err := validateStationDef(obj, filePath); err != nil {
