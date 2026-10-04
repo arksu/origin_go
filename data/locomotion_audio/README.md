@@ -12,6 +12,11 @@ stride here. The client uses unwrapped interpolated distance and rebases on
 stops, snaps, late visibility/loading, hearing-range entry, locomotion changes,
 long pauses and reset without replaying missed contacts.
 
+The authored `footstep` contact is the default sound. The client resolves its
+tile override at playback using `web_new/src/game/footstepConfig.ts`; tiles can
+share a profile, and unmapped or unavailable tiles retain the default. Surface
+changes preserve contact timing for both walk and carry-walk.
+
 The commoner `walk` and `carry_walk` contacts were reviewed against their current
 published clips by decoding Meshopt animation channels and evaluating hierarchical
 foot transforms at their 49 source samples. Each cycle is 48 intervals / 0.96 s;

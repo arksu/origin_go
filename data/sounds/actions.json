@@ -54,10 +54,90 @@
       "loudness": 160,
       "volume": 0.35,
       "files": [
-        "sound/steps/step_01.wav",
-        "sound/steps/step_02.wav",
-        "sound/steps/step_03.wav",
-        "sound/steps/step_04.wav"
+        "sound/steps/leather/step_01.wav",
+        "sound/steps/leather/step_02.wav",
+        "sound/steps/leather/step_03.wav",
+        "sound/steps/leather/step_04.wav"
+      ],
+      "priority": 0,
+      "max_voices": 12,
+      "max_voices_per_source": 2,
+      "local_attenuation": {
+        "near_gain": 0.9,
+        "far_gain": 0,
+        "shape": 4
+      }
+    },
+    {
+      "key": "footstep_stone",
+      "mode": "local",
+      "loudness": 160,
+      "volume": 0.35,
+      "files": [
+        "sound/steps/stone/step_01.wav",
+        "sound/steps/stone/step_02.wav",
+        "sound/steps/stone/step_03.wav",
+        "sound/steps/stone/step_04.wav",
+        "sound/steps/stone/step_05.wav",
+        "sound/steps/stone/step_06.wav"
+      ],
+      "priority": 0,
+      "max_voices": 12,
+      "max_voices_per_source": 2,
+      "local_attenuation": {
+        "near_gain": 0.9,
+        "far_gain": 0,
+        "shape": 4
+      }
+    },
+    {
+      "key": "footstep_gravel",
+      "mode": "local",
+      "loudness": 160,
+      "volume": 0.35,
+      "files": [
+        "sound/steps/gravel/step_01.wav",
+        "sound/steps/gravel/step_02.wav",
+        "sound/steps/gravel/step_03.wav",
+        "sound/steps/gravel/step_04.wav"
+      ],
+      "priority": 0,
+      "max_voices": 12,
+      "max_voices_per_source": 2,
+      "local_attenuation": {
+        "near_gain": 0.9,
+        "far_gain": 0,
+        "shape": 4
+      }
+    },
+    {
+      "key": "footstep_forest_leaves",
+      "mode": "local",
+      "loudness": 160,
+      "volume": 0.35,
+      "files": [
+        "sound/steps/forest_leaves/step_01.wav",
+        "sound/steps/forest_leaves/step_02.wav"
+      ],
+      "priority": 0,
+      "max_voices": 12,
+      "max_voices_per_source": 2,
+      "local_attenuation": {
+        "near_gain": 0.9,
+        "far_gain": 0,
+        "shape": 4
+      }
+    },
+    {
+      "key": "footstep_shallow_water",
+      "mode": "local",
+      "loudness": 160,
+      "volume": 0.35,
+      "files": [
+        "sound/steps/shallow_water/step_01.wav",
+        "sound/steps/shallow_water/step_02.wav",
+        "sound/steps/shallow_water/step_03.wav",
+        "sound/steps/shallow_water/step_04.wav"
       ],
       "priority": 0,
       "max_voices": 12,

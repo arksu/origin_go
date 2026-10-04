@@ -5,6 +5,11 @@ import { LocalAudioController, localDistanceGain, type LocalAudioSnapshot } from
 import { WorldAudioReceiver } from '../src/game/WorldAudioReceiver'
 import { proto } from '../src/network/proto/packets'
 import { verifyRenderedVariants } from './audio-browser-render'
+import { validateFootstepSoundProfiles } from '../src/game/footstepConfig'
+import {
+  TILE_BROADLEAF_FOREST, TILE_CLAY, TILE_CONIFEROUS_FOREST,
+  TILE_DIRT, TILE_MOUNTAIN, TILE_PLOWED, TILE_SHALLOW_WATER,
+} from '../src/game/tiles/tileIds'
 
 const results = document.querySelector<HTMLPreElement>('#results')!
 const run = document.querySelector<HTMLButtonElement>('#run')!
@@ -53,7 +58,8 @@ async function verify(): Promise<void> {
   const catalog = await loadActorCatalog()
   const serverFixture = attenuationOnly.checked ? undefined : await readServerFixture()
   const profiles = catalog.sounds!
-  assert(Object.keys(profiles).length === 4, 'Expected published world/local profiles')
+  assert(['chop', 'tree_fall', 'exp_gain'].every(key => profiles[key]), 'Expected published world and feedback profiles')
+  validateFootstepSoundProfiles(profiles)
   const chopBinding = catalog.actionAnimations.tree_chop!
   const handClips = chopBinding.variants.map(variant => variant.clip).sort()
   assert(handClips.join(',') === 'chop_l,chop_r' && chopBinding.sound_cues?.[0]?.phase === .4, 'Published hand variants lost the shared impact marker')
@@ -203,6 +209,29 @@ async function verify(): Promise<void> {
   for (const snapshot of snapshots) { snapshot.distanceTiles = stride * 2; controller.update(snapshot, 1000, serverNow) }
   assert(manager.metrics.played === beforePause, 'Presentation pause replayed missed contacts')
   manager.reset()
+  const surfacePlayback: Array<{ tileType?: number; soundKey: string; file: string }> = []
+  const surfaceCases: Array<[number | undefined, string]> = [
+    [undefined, 'footstep'], [TILE_SHALLOW_WATER, 'footstep_shallow_water'], [TILE_MOUNTAIN, 'footstep_stone'],
+    [TILE_DIRT, 'footstep_gravel'], [TILE_CLAY, 'footstep_gravel'], [TILE_PLOWED, 'footstep_gravel'],
+    [TILE_CONIFEROUS_FOREST, 'footstep_forest_leaves'], [TILE_BROADLEAF_FOREST, 'footstep_forest_leaves'],
+    [254, 'footstep'],
+  ]
+  controller.reset(); controller.setListenerPosition({ x: 0, y: 0 })
+  const surfaceWalker: LocalAudioSnapshot = { ...snapshots[0]!, clip: 'walk', distanceTiles: 0 }
+  controller.update(surfaceWalker, 0, serverNow)
+  for (const [index, [tileType, soundKey]] of surfaceCases.entries()) {
+    manager.reset()
+    const before = playEvents.length
+    surfaceWalker.tileType = tileType
+    surfaceWalker.distanceTiles = stride * (index + 1) * .5
+    controller.update(surfaceWalker, (index + 1) * 100, serverNow)
+    await pause(50)
+    const events = playEvents.slice(before)
+    assert(events.length === 1 && profiles[soundKey]!.files.some(file => events[0]!.file.endsWith(file)),
+      `Tile ${tileType ?? 'unknown'} did not play the selected ${soundKey} recording exactly once`)
+    surfacePlayback.push({ tileType, soundKey, file: events[0]!.file })
+  }
+  manager.reset()
   // Exercise the exact same decoded sample twice with different independent IDs.
   manager.play('exp_gain', 1, { sourceId: 'own' }); manager.play('exp_gain', .83, { sourceId: 'other' })
   await pause(100)
@@ -238,7 +267,7 @@ async function verify(): Promise<void> {
     chop: { handClips, sharedCue: chopBinding.sound_cues![0], poseRenderingChecked: false },
     capturedServer: serverFixture ? { expected: serverFixture.expected, sourceObjectsKnown: 0, playback: producerPlayback } : undefined,
     renderedPreview,
-    localDistances: distances, attenuationSamples,
+    localDistances: distances, attenuationSamples, surfacePlayback,
     locomotion: { strideTiles: stride, contacts: walk.contacts, walkAndCarryPlayed: true, transitionAndPauseCatchUp: false }, workload, failures,
     listening: 'Native browser playback and volumes verified. Subjective listening/tuning requires a human ear; no subjective claim is made.' })
 }

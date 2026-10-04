@@ -32,8 +32,8 @@ export class ObjectManager {
   setActorRenderer(renderer: ActorRenderer | undefined): void { this.actorRenderer = renderer }
 
   async initShallowWater(lookup: (x: number, y: number) => number | undefined): Promise<void> {
-    this.rippleTextures = await loadShallowWaterTextures()
     this.tileTypeLookup = lookup
+    this.rippleTextures = await loadShallowWaterTextures()
   }
 
   setPlayerEntityId(entityId: number | null): void {
@@ -399,18 +399,17 @@ export class ObjectManager {
           staleAnimatedIds.push(entityId)
           continue
         }
-        if (this.tileTypeLookup) {
-          const position = objectView.getPosition()
-          if (objectView.updateShallowWater(this.tileTypeLookup(position.x, position.y), nowMs)) {
-            cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
-          }
+        const position = objectView.getPosition()
+        const tileType = this.tileTypeLookup?.(position.x, position.y)
+        if (objectView.updateShallowWater(tileType, nowMs)) {
+          cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
         }
         objectView.updateAnimation(nowMs)
         if (objectView.updateActionAnimation(nowMs, serverNowMs)) {
           cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
         }
         const audioSnapshot = objectView.localAudioSnapshot()
-        if (audioSnapshot) localAudioController.update(audioSnapshot, nowMs, serverNowMs)
+        if (audioSnapshot) localAudioController.update({ ...audioSnapshot, tileType }, nowMs, serverNowMs)
       }
       for (const entityId of staleAnimatedIds) {
         this.animatedObjectIds.delete(entityId)
