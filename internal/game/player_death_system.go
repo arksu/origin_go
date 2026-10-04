@@ -2,11 +2,10 @@ package game
 
 import (
 	"origin/internal/characterattrs"
-	_const "origin/internal/const"
-	"origin/internal/cyclicaction"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/entityhealth"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -26,7 +25,7 @@ type PlayerDeathHandler interface {
 }
 
 // PlayerDeathSystem executes SHP/HHP runtime transitions:
-// KO on SHP<=0 (persistent until SHP recovers), permanent death on HHP<=0.
+// Independent timed KO on SHP<=0, permanent death on HHP<=0.
 type PlayerDeathSystem struct {
 	ecs.BaseSystem
 	handler PlayerDeathHandler
@@ -95,151 +94,47 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 		energy = stats.Energy
 	}
 
-	dirty := false
-	koStateChanged := false
-	triggerPermanentDeath := false
-
+	before, _ := ecs.GetComponent[components.EntityHealth](w, handle)
 	ecs.WithComponent(w, handle, func(health *components.EntityHealth) {
-		wasKnockedOut := health.KOUntilTick > 0
-
-		nextSHP, nextHHP := entityhealth.ClampHealth(health.SHP, health.HHP, mhp)
-		if nextSHP != health.SHP || nextHHP != health.HHP {
-			health.SHP = nextSHP
-			health.HHP = nextHHP
-			dirty = true
+		health.SHP, health.HHP = entityhealth.ClampHealth(health.SHP, health.HHP, mhp)
+		if health.HHP > 0 && nowTick > 0 && nowTick%s.cfg.StarvationDamageIntervalTicks == 0 && energy < 500 {
+			health.SHP, health.HHP, _, _ = entityhealth.ApplyDamage(health.SHP, health.HHP, mhp, s.cfg.StarvationSoftDamagePerInterval, 0)
 		}
-
-		if health.HHP <= 0 {
-			if health.KOUntilTick != 0 {
-				health.KOUntilTick = 0
-				dirty = true
-			}
-			koStateChanged = wasKnockedOut
-			triggerPermanentDeath = true
-			return
+		// Depletion must be observed before regeneration, but all incoming damage
+		// takes priority over the one-time completion grant.
+		playerstate.ResolveKnockout(health, ecs.GetResource[ecs.TimeState](w).UnixMs)
+		if health.HHP > 0 && nowTick > 0 && nowTick%s.cfg.ShpRegenIntervalTicks == 0 {
+			health.SHP += entityhealth.ResolveSHPRegenPerInterval(mhp, energy)
 		}
-
-		if s.cfg.StarvationDamageIntervalTicks > 0 &&
-			nowTick > 0 &&
-			nowTick%s.cfg.StarvationDamageIntervalTicks == 0 &&
-			energy < 500 {
-			starvedSHP, starvedHHP, _, _ := entityhealth.ApplyDamage(
-				health.SHP,
-				health.HHP,
-				mhp,
-				s.cfg.StarvationSoftDamagePerInterval,
-				0,
-			)
-			if starvedSHP != health.SHP || starvedHHP != health.HHP {
-				health.SHP = starvedSHP
-				health.HHP = starvedHHP
-				dirty = true
-			}
-		}
-
-		if health.HHP > 0 &&
-			s.cfg.ShpRegenIntervalTicks > 0 &&
-			nowTick > 0 &&
-			nowTick%s.cfg.ShpRegenIntervalTicks == 0 {
-			regen := entityhealth.ResolveSHPRegenPerInterval(mhp, energy)
-			if regen > 0 {
-				health.SHP += regen
-				dirty = true
-			}
-		}
-
-		nextSHP, nextHHP = entityhealth.ClampHealth(health.SHP, health.HHP, mhp)
-		if nextSHP != health.SHP || nextHHP != health.HHP {
-			health.SHP = nextSHP
-			health.HHP = nextHHP
-			dirty = true
-		}
-
-		if health.HHP <= 0 {
-			if health.KOUntilTick != 0 {
-				health.KOUntilTick = 0
-				dirty = true
-			}
-			koStateChanged = wasKnockedOut
-			triggerPermanentDeath = true
-			return
-		} else if health.SHP <= 0 {
-			if health.KOUntilTick == 0 {
-				knockedOutAtTick := nowTick
-				if knockedOutAtTick == 0 {
-					knockedOutAtTick = 1
-				}
-				health.KOUntilTick = knockedOutAtTick
-				dirty = true
-			}
-			if applyStunnedStateAndClearActions(w, handle) {
-				dirty = true
-			}
-		} else {
-			if health.KOUntilTick != 0 {
-				health.KOUntilTick = 0
-				dirty = true
-			}
-			if clearStunnedState(w, handle) {
-				dirty = true
-			}
-		}
-
-		isKnockedOut := health.KOUntilTick > 0
-		if isKnockedOut != wasKnockedOut {
-			koStateChanged = true
-		}
+		health.SHP, health.HHP = entityhealth.ClampHealth(health.SHP, health.HHP, mhp)
 	})
-
-	if dirty || koStateChanged {
+	after, _ := ecs.GetComponent[components.EntityHealth](w, handle)
+	if before.IsLying != after.IsLying {
+		ecs.MarkCharacterVisualDirty(w, playerID)
+	}
+	if after.HHP <= 0 {
+		if s.handler != nil {
+			s.handler.HandlePlayerPermanentDeath(w, playerID, handle)
+		}
+		return true
+	}
+	if runtime, ok := s.handler.(interface {
+		HandlePlayerItemsLocked(*ecs.World, types.EntityID, types.Handle)
+		ApplyPendingStandUp(*ecs.World, types.EntityID, types.Handle)
+	}); ok {
+		if playerstate.ItemsLocked(w, handle) {
+			runtime.HandlePlayerItemsLocked(w, playerID, handle)
+		}
+		runtime.ApplyPendingStandUp(w, playerID, handle)
+	}
+	last, sent := ecs.GetResource[ecs.EntityStatsUpdateState](w).GetLastSentPlayerStats(playerID)
+	if before.KOUntilUnixMs != after.KOUntilUnixMs || before.IsLying != after.IsLying ||
+		(sent && last.CanStandUp != playerstate.CanStandUp(w, handle)) {
+		ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	} else if before.SHP != after.SHP || before.HHP != after.HHP {
 		ecs.MarkPlayerStatsDirty(w, playerID, ecs.ResolvePlayerStatsTTLms(w))
 	}
-
-	if !triggerPermanentDeath {
-		return false
-	}
-	if s.handler != nil {
-		s.handler.HandlePlayerPermanentDeath(w, playerID, handle)
-	}
-	return true
-}
-
-func applyStunnedStateAndClearActions(w *ecs.World, handle types.Handle) bool {
-	changed := false
-	ecs.WithComponent(w, handle, func(movement *components.Movement) {
-		if movement.State != _const.StateStunned {
-			movement.State = _const.StateStunned
-			changed = true
-		}
-		if movement.TargetType != _const.TargetNone ||
-			movement.TargetHandle != types.InvalidHandle ||
-			movement.VelocityX != 0 ||
-			movement.VelocityY != 0 {
-			movement.ClearTarget()
-			changed = true
-		}
-	})
-
-	ecs.RemoveComponent[components.PendingInteraction](w, handle)
-	ecs.RemoveComponent[components.PendingContextAction](w, handle)
-	ecs.RemoveComponent[components.PendingBuildPlacement](w, handle)
-	ecs.RemoveComponent[components.PendingLiftTransition](w, handle)
-	cyclicaction.Clear(w, handle)
-	ecs.RemoveComponent[components.ActiveCraft](w, handle)
-	return changed
-}
-
-func clearStunnedState(w *ecs.World, handle types.Handle) bool {
-	changed := false
-	ecs.WithComponent(w, handle, func(movement *components.Movement) {
-		if movement.State == _const.StateStunned {
-			movement.State = _const.StateIdle
-			movement.VelocityX = 0
-			movement.VelocityY = 0
-			changed = true
-		}
-	})
-	return changed
+	return false
 }
 
 func resolveMaxHHPForHandle(w *ecs.World, handle types.Handle, lifeDeathFactor float64) float64 {

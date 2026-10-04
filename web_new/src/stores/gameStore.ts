@@ -102,6 +102,9 @@ export interface PlayerStatsState {
   shp: PlayerResourceStat
   hhp: PlayerResourceStat
   isKnockedOut: boolean
+  koUntilMs: number
+  isLying: boolean
+  canStandUp: boolean
 }
 
 export interface DeathDialogState {
@@ -1010,6 +1013,9 @@ export const useGameStore = defineStore('game', () => {
         max: mhp,
       },
       isKnockedOut: !!snapshot.isKnockedOut,
+      koUntilMs: Math.max(0, Number(snapshot.koUntilMs) || 0),
+      isLying: !!snapshot.isLying,
+      canStandUp: !!snapshot.canStandUp,
     }
   }
 
@@ -1306,6 +1312,9 @@ function defaultPlayerStats(): PlayerStatsState {
     shp: { current: 0, max: 0 },
     hhp: { current: 0, max: 0 },
     isKnockedOut: false,
+    koUntilMs: 0,
+    isLying: false,
+    canStandUp: false,
   }
 }
 

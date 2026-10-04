@@ -43,6 +43,18 @@ export function disconnectFromGame(): void {
   gameConnection.disconnect()
 }
 
+export function sendStandUp(): void {
+  const game = useGameStore()
+  const streamEpoch = game.worldParams?.streamEpoch
+  if (!game.isInGame || !streamEpoch || !game.playerStats.canStandUp) return
+  gameConnection.send({ playerAction: proto.C2S_PlayerAction.create({ standUp: { streamEpoch } }) })
+}
+
+function itemsLocked(): boolean {
+  const stats = useGameStore().playerStats
+  return stats.isKnockedOut || stats.isLying
+}
+
 export function sendChatMessage(text: string): void {
   if (!text.trim()) return
 
@@ -106,7 +118,7 @@ export function sendStartCraftOne(craftKey: string): void {
   const normalized = craftKey.trim()
   if (!normalized) return
 
-  gameFacade.releaseKeyboardMovement()
+  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     startCraftOne: proto.C2S_StartCraftOne.create({
       craftKey: normalized,
@@ -119,7 +131,7 @@ export function sendStartCraftMany(craftKey: string, cycles: number): void {
   if (!normalized) return
 
   const safeCycles = Math.max(1, Math.floor(cycles))
-  gameFacade.releaseKeyboardMovement()
+  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     startCraftMany: proto.C2S_StartCraftMany.create({
       craftKey: normalized,
@@ -136,7 +148,7 @@ export function sendStartBuild(buildKey: string, pos: { x: number; y: number }):
   const y = Math.trunc(pos.y)
   if (!Number.isFinite(x) || !Number.isFinite(y)) return
 
-  gameFacade.releaseKeyboardMovement()
+  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     buildStart: proto.C2S_BuildStart.create({
       buildKey: normalized,
@@ -152,7 +164,7 @@ export function sendBuildProgress(entityId: number): void {
   const target = Math.trunc(entityId)
   if (!Number.isFinite(target) || target <= 0) return
 
-  gameFacade.releaseKeyboardMovement()
+  if (!itemsLocked()) gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     buildProgress: proto.C2S_BuildProgress.create({
       entityId: target,

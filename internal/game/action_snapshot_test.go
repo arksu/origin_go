@@ -16,7 +16,7 @@ func TestEnterWorldQueuesActionSnapshot(t *testing.T) {
 	if len(jobs) == 0 {
 		t.Fatal("enter world queued no snapshots")
 	}
-	last := jobs[len(jobs)-1]
+	last := jobs[0]
 	payload, ok := last.Payload.(*network.ActionSnapshotJobPayload)
 	if last.JobType != network.JobSendActionSnapshot || last.TargetID != 1 || !ok || payload.Handle != player {
 		t.Fatalf("action snapshot missing from enter-world bootstrap: %#v", last)

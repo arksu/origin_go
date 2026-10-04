@@ -96,6 +96,37 @@ func (f *roastFixture) complete(action components.ActiveCyclicAction) contracts.
 	return f.service.HandleCraftCycleComplete(f.world, f.playerID, f.player, action)
 }
 
+func TestKnockoutRejectsCraftAdmissionAndCommitWithoutSideEffects(t *testing.T) {
+	for _, atStart := range []bool{true, false} {
+		f := setupRoastFixture(t, "beef")
+		beforeItems := append([]components.InvItem(nil), f.items()...)
+		beforeStats, _ := ecs.GetComponent[components.EntityStats](f.world, f.player)
+		beforeStation, _ := ecs.GetComponent[components.StationState](f.world, f.station)
+		beforeProfile, _ := ecs.GetComponent[components.CharacterProfile](f.world, f.player)
+		action := components.ActiveCyclicAction{}
+		if !atStart {
+			action = f.start(t, 2)
+			require.True(t, action.MutatesItems)
+		}
+		ecs.AddComponent(f.world, f.player, components.EntityHealth{HHP: 20, IsLying: true, KOUntilUnixMs: 60000})
+		if atStart {
+			f.service.HandleStartCraftOne(f.world, f.playerID, f.player, &netproto.C2S_StartCraftOne{CraftKey: f.recipe.Key})
+			_, exists := ecs.GetComponent[components.ActiveCyclicAction](f.world, f.player)
+			require.False(t, exists)
+		} else {
+			require.Equal(t, contracts.BehaviorCycleDecisionCanceled, f.complete(action))
+		}
+		require.Equal(t, beforeItems, f.items())
+		stats, _ := ecs.GetComponent[components.EntityStats](f.world, f.player)
+		require.Equal(t, beforeStats, stats)
+		station, _ := ecs.GetComponent[components.StationState](f.world, f.station)
+		require.Equal(t, beforeStation, station)
+		profile, _ := ecs.GetComponent[components.CharacterProfile](f.world, f.player)
+		require.Equal(t, beforeProfile, profile)
+		require.Equal(t, "PLAYER_ITEMS_LOCKED", f.sender.alerts[len(f.sender.alerts)-1].ReasonCode)
+	}
+}
+
 func TestRoastedMeatAllSpecies(t *testing.T) {
 	for _, entry := range []struct{ source, target string }{
 		{"beef", "roasted_beef"}, {"fox_meat", "roasted_fox_meat"}, {"rabbit_meat", "roasted_rabbit_meat"}, {"boar_meat", "roasted_boar_meat"}, {"bear_meat", "roasted_bear_meat"}, {"raw_deer_meat", "roasted_deer_meat"}, {"raw_mutton", "roasted_mutton"}, {"raw_pork", "roast_pork"}, {"raw_chicken_meat", "roasted_chicken_meat"},

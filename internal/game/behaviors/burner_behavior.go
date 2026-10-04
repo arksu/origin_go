@@ -3,6 +3,7 @@ package behaviors
 import (
 	"fmt"
 	"origin/internal/cyclicaction"
+	"origin/internal/playerstate"
 	"strings"
 
 	constt "origin/internal/const"
@@ -57,6 +58,10 @@ func (burnerBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContex
 }
 
 func (b burnerBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
+	if ctx != nil && ctx.World != nil && ctx.ActionID == "add_fuel" && playerstate.ItemsLocked(ctx.World, ctx.PlayerHandle) {
+		return contracts.BehaviorResult{UserVisible: true, ReasonCode: playerstate.ItemsLockedReason, Severity: contracts.BehaviorAlertSeverityWarning}
+	}
+
 	if ctx == nil || !b.ValidateAction(&contracts.BehaviorActionValidateContext{
 		World: ctx.World, PlayerID: ctx.PlayerID, PlayerHandle: ctx.PlayerHandle,
 		TargetHandle: ctx.TargetHandle, ActionID: ctx.ActionID, Phase: contracts.BehaviorValidationPhaseExecute,
@@ -420,3 +425,5 @@ func (burnerBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfig
 	ctx.Def.SetBurnerBehaviorConfig(cfg)
 	return cfg.Priority, nil
 }
+
+func (burnerBehavior) RequiresItemMutation(actionID string) bool { return actionID == "add_fuel" }

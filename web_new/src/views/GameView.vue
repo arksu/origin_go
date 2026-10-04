@@ -26,6 +26,7 @@ import HotbarPlaceholder from '@/components/ui/HotbarPlaceholder.vue'
 import PortraitWarningBanner from '@/components/ui/PortraitWarningBanner.vue'
 import MinimapWindow from '@/components/ui/MinimapWindow.vue'
 import SettingsWindow from '@/components/ui/SettingsWindow.vue'
+import KnockoutWindow from '@/components/ui/KnockoutWindow.vue'
 import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack, sendActivateAction, sendCancelAction } from '@/network'
 import { useInventoryOps } from '@/composables/useInventoryOps'
 import { useHotkeys } from '@/composables/useHotkeys'
@@ -823,6 +824,10 @@ useHotkeys(hotkeys)
     <!-- Connected state -->
     <div v-show="isConnected" class="game-canvas-wrapper">
       <canvas ref="gameCanvas" class="game-canvas"></canvas>
+      <div v-if="isConnected && gameStore.isInGame && !deathDialog && (gameStore.playerStats.isKnockedOut || gameStore.playerStats.isLying)" class="game-ko-window">
+        <KnockoutWindow />
+      </div>
+
       <div v-if="deathDialog" class="game-death-dialog-backdrop">
         <div class="game-death-dialog">
           <h2 class="game-death-dialog__title">{{ deathDialog.title }}</h2>
@@ -1171,6 +1176,13 @@ useHotkeys(hotkeys)
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
+  pointer-events: none;
+}
+
+.game-ko-window {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
   pointer-events: none;
 }
 

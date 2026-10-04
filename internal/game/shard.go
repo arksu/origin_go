@@ -14,6 +14,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
+	"origin/internal/playerstate"
 	"origin/internal/sounddefs"
 	"origin/internal/types"
 	"strings"
@@ -66,6 +67,9 @@ type Shard struct {
 	buildService    *BuildService
 	liftService     *LiftService
 	actionService   *ActionService
+	contextActions  *ContextActionService
+	offlineHealth   sync.Map
+	pendingStandUps map[types.EntityID]*network.PlayerCommand
 	soundEvents     *SoundEventService
 
 	Clients   map[types.EntityID]*network.Client
@@ -139,6 +143,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	networkCmdSystem.SetDirectionalSessionValidator(s.validDirectionalSession)
+	networkCmdSystem.SetStandUpHandler(s.queueStandUp)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
 	craftingService := NewCraftingService(s.world, s.eventBus, inventoryExecutor, s, logger)
 	giveItem := newPlayerGiveItemAdapter(inventoryExecutor, s)
@@ -159,6 +164,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		s.SendInventorySnapshots(w, playerID, playerHandle)
 	})
 	contextActionService.SetCraftingService(craftingService)
+	s.contextActions = contextActionService
 	contextActionService.SetSoundEventService(s.soundEvents)
 	s.craftingService = craftingService
 	buildService := NewBuildService(
@@ -613,6 +619,9 @@ func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 // onDetachedEntityExpired is called when a detached entity's TTL expires.
 // It runs after the character snapshot has captured inventory contents.
 func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
+	if health, ok := ecs.GetComponent[components.EntityHealth](s.world, handle); ok {
+		s.offlineHealth.Store(entityID, health)
+	}
 	s.soundEvents.Detach(handle, 0)
 	if s.liftService != nil {
 		_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, entityID, handle, false)
@@ -652,6 +661,8 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 		return
 	}
 
+	s.offlineHealth.Delete(playerID)
+	delete(s.pendingStandUps, playerID)
 	if s.liftService != nil {
 		_ = s.liftService.ForceDropCarryAtPlayerPosition(w, playerID, playerHandle, false)
 	}
@@ -1550,7 +1561,10 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 		snapshot.SHP = entitystats.RoundToUint32(clampedSHP)
 		snapshot.HHP = entitystats.RoundToUint32(clampedHHP)
 		snapshot.MHP = entitystats.RoundToUint32(mhp)
-		snapshot.IsKnockedOut = health.KOUntilTick > 0
+		snapshot.IsKnockedOut = health.KOUntilUnixMs != 0
+		snapshot.KOUntilMs = health.KOUntilUnixMs
+		snapshot.IsLying = health.IsLying
+		snapshot.CanStandUp = playerstate.CanStandUp(w, handle)
 	}
 
 	updateState := ecs.GetResource[ecs.EntityStatsUpdateState](w)
@@ -1577,6 +1591,10 @@ func (s *Shard) sendPlayerStats(w *ecs.World, entityID types.EntityID, handle ty
 				Hhp:          snapshot.HHP,
 				Mhp:          snapshot.MHP,
 				IsKnockedOut: snapshot.IsKnockedOut,
+				KoUntilMs:    snapshot.KOUntilMs,
+				IsLying:      snapshot.IsLying,
+				CanStandUp:   snapshot.CanStandUp,
+				StreamEpoch:  client.StreamEpoch.Load(),
 			},
 		},
 	}

@@ -4,6 +4,7 @@ import { decodeGeneration, decodeUint64, compareUint64 } from './networkIdentity
 export { EQUIPMENT_SLOT_BY_ID, type EquipmentSlot } from './equipmentSlots'
 export interface EquippedVisual { readonly slot: EquipmentSlot; readonly visualKey: string }
 export interface CharacterVisualState {
+  readonly isLying: boolean
   readonly generation: string
   // Decimal strings preserve protobuf uint64 revisions beyond Number.MAX_SAFE_INTEGER.
   readonly revision: string
@@ -22,7 +23,7 @@ export function decodeCharacterVisual(input: proto.ICharacterVisualState): Chara
     slots.add(slot)
     equipment.push({ slot, visualKey })
   }
-  return { generation, revision, equipment }
+  return { generation, revision, equipment, isLying: input.isLying === true }
 }
 
 export function isNewerCharacterVisual(current: CharacterVisualState, incoming: CharacterVisualState): boolean {

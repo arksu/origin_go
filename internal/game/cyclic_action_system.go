@@ -6,6 +6,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
 	netproto "origin/internal/network/proto"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -85,6 +86,18 @@ func (s *CyclicActionSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 		playerID := playerExternalID.ID
+		if action.MutatesItems && playerstate.ItemsLocked(w, playerHandle) {
+			if action.BehaviorKey == gameActionCycleBehaviorKey {
+				if s.actions != nil {
+					s.actions.alert(playerID, playerstate.ItemsLockedReason)
+					s.actions.Cancel(w, playerID, playerHandle)
+				}
+			} else if s.contextActions != nil {
+				s.contextActions.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, playerstate.ItemsLockedReason)
+				s.contextActions.cancelActiveCyclicAction(playerID, playerHandle, playerstate.ItemsLockedReason)
+			}
+			continue
+		}
 		if action.BehaviorKey == gameActionCycleBehaviorKey {
 			if s.actions != nil {
 				s.actions.AdvanceCycle(w, playerID, playerHandle, action, s.progressSender)

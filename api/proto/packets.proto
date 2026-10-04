@@ -286,8 +286,9 @@ message CharacterEquipmentVisual {
 
 message CharacterVisualState {
   string generation = 1; // Runtime entity incarnation, scoped to the current world stream.
-  uint64 revision = 2; // Equipment-container revision; empty equipment is a full snapshot.
+  uint64 revision = 2; // Equipment version plus runtime pose revision; empty equipment is a full snapshot.
   repeated CharacterEquipmentVisual equipment = 3;
+  bool is_lying = 4;
 }
 
 message S2C_CharacterVisual {
@@ -366,9 +367,14 @@ message C2S_PlayerAction {
     MapClick map_click = 5;
     SelectContextAction select_context_action = 4;
     MoveDirection move_direction = 6;
+    StandUp stand_up = 7;
   }
 
   uint32 modifiers = 10; // bitflags: SHIFT=1, CTRL=2, ALT=4
+}
+
+message StandUp {
+  uint32 stream_epoch = 1;
 }
 
 // Движение - отдельный поток для responsive controls
@@ -554,6 +560,10 @@ message S2C_PlayerStats {
   uint32 hhp = 6;
   uint32 mhp = 7;
   bool is_knocked_out = 8;
+  int64 ko_until_ms = 9;
+  bool is_lying = 10;
+  bool can_stand_up = 11;
+  uint32 stream_epoch = 12;
 }
 
 message S2C_DeathDialog {

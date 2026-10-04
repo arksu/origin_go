@@ -66,6 +66,9 @@ type PlayerStatsNetSnapshot struct {
 	HHP          uint32
 	MHP          uint32
 	IsKnockedOut bool
+	KOUntilMs    int64
+	IsLying      bool
+	CanStandUp   bool
 }
 
 type movementModeState struct {
@@ -300,7 +303,8 @@ func (s *EntityStatsUpdateState) ShouldSendPlayerStats(entityID types.EntityID, 
 		last.SHP != next.SHP ||
 		last.HHP != next.HHP ||
 		last.MHP != next.MHP ||
-		last.IsKnockedOut != next.IsKnockedOut
+		last.IsKnockedOut != next.IsKnockedOut ||
+		last.KOUntilMs != next.KOUntilMs || last.IsLying != next.IsLying || last.CanStandUp != next.CanStandUp
 }
 
 func (s *EntityStatsUpdateState) MarkPlayerStatsSent(entityID types.EntityID, snapshot PlayerStatsNetSnapshot, nowUnixMs int64) bool {

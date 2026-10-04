@@ -1,6 +1,7 @@
 package game
 
 import (
+	"origin/internal/playerstate"
 	"slices"
 
 	"origin/internal/actiondefs"
@@ -23,6 +24,9 @@ func (service *ActionService) UnavailableReason(world *ecs.World, playerID types
 func (service *ActionService) nonStaminaReason(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, definition *actiondefs.Definition) string {
 	if service == nil || world == nil || definition == nil || !world.Alive(playerHandle) {
 		return "ACTION_UNAVAILABLE"
+	}
+	if service.requiresItemMutation(definition.ID) && playerstate.ItemsLocked(world, playerHandle) {
+		return playerstate.ItemsLockedReason
 	}
 	if reason := requirementsReason(world, playerID, playerHandle, definition); reason != "" {
 		return reason

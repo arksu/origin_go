@@ -8,6 +8,7 @@ import (
 // PendingContextAction stores a selected context action that must be executed
 // once the player links with the target object.
 type PendingContextAction struct {
+	MutatesItems   bool
 	TargetEntityID types.EntityID
 	TargetHandle   types.Handle
 	ActionID       string

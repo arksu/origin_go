@@ -8,10 +8,50 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
+	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
 
 type testCarryStateService struct{}
+
+type testItemContextResolver struct{ testContextActionResolver }
+
+func (testItemContextResolver) RequiresItemMutation(*ecs.World, types.Handle, types.Handle, string) bool {
+	return true
+}
+
+func TestLockedSecondaryItemAttemptPreservesActionAndMovement(t *testing.T) {
+	previous := objectdefs.Global()
+	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 123, Key: "item_source"}}))
+	for _, dropped := range []bool{false, true} {
+		w := ecs.NewWorldForTesting()
+		player := w.Spawn(1, func(w *ecs.World, h types.Handle) {
+			ecs.AddComponent(w, h, components.EntityHealth{SHP: 5, HHP: 20, IsLying: true})
+			ecs.AddComponent(w, h, components.Movement{State: constt.StateMoving, TargetType: constt.TargetPoint, TargetX: 42})
+			ecs.AddComponent(w, h, components.ActiveGameAction{ActionID: "ordinary", Phase: components.GameActionApproaching})
+		})
+		w.Spawn(2, func(w *ecs.World, h types.Handle) {
+			ecs.AddComponent(w, h, components.EntityInfo{TypeID: 123})
+			ecs.AddComponent(w, h, components.Collider{})
+			if dropped {
+				ecs.AddComponent(w, h, components.DroppedItem{})
+			}
+		})
+		router := &testActionClickRouter{}
+		system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, nil)
+		system.SetActionService(router)
+		system.SetContextActionService(testItemContextResolver{testContextActionResolver{actions: []ContextAction{{ActionID: "take"}}}})
+		system.handleSecondaryMapClick(w, player, 1, &netproto.MapClick{TargetEntityId: 2})
+		_, pendingPickup := ecs.GetComponent[components.PendingInteraction](w, player)
+		_, pendingContext := ecs.GetComponent[components.PendingContextAction](w, player)
+		active, _ := ecs.GetComponent[components.ActiveGameAction](w, player)
+		movement, _ := ecs.GetComponent[components.Movement](w, player)
+		if router.cancelCalls != 0 || active.ActionID != "ordinary" || movement.TargetX != 42 || pendingPickup || pendingContext {
+			t.Fatalf("locked item attempt changed action: dropped=%v movement=%+v", dropped, movement)
+		}
+	}
+}
 
 func (testCarryStateService) IsPlayerCarrying(w *ecs.World, player types.Handle) bool {
 	_, carrying := ecs.GetComponent[components.LiftCarryState](w, player)

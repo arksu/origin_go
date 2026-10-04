@@ -287,6 +287,19 @@ func (g *Game) handlePlayerAction(c *network.Client, sequence uint32, action *ne
 	receivedAt := time.Now()
 
 	switch act := action.Action.(type) {
+	case *netproto.C2S_PlayerAction_StandUp:
+		if act == nil || act.StandUp == nil || !c.InWorld.Load() {
+			return
+		}
+		if !shard.validDirectionalSession(c.CharacterID, c.ID, act.StandUp.StreamEpoch) {
+			// Queue only a refusal: the world thread returns the current snapshot
+			// without allowing an old connection or epoch to mutate the character.
+			if c.StreamEpoch.Load() == act.StandUp.StreamEpoch {
+				return
+			}
+		}
+		cmdType = network.CmdStandUp
+		payload = act.StandUp
 	case *netproto.C2S_PlayerAction_MoveDirection:
 		if act == nil || !network.ValidMoveDirection(act.MoveDirection) || !c.InWorld.Load() ||
 			c.StreamEpoch.Load() != act.MoveDirection.StreamEpoch || act.MoveDirection.StreamEpoch == 0 {

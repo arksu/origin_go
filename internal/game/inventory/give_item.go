@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"fmt"
+	"origin/internal/playerstate"
 
 	constt "origin/internal/const"
 	"origin/internal/ecs"
@@ -51,6 +52,10 @@ func (s *InventoryOperationService) GiveItem(
 	count uint32,
 	quality uint32,
 ) *GiveItemResult {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		return &GiveItemResult{Message: playerstate.ItemsLockedReason}
+	}
+
 	// 1. Lookup item definition
 	itemDef, ok := itemdefs.Global().GetByKey(itemKey)
 	if !ok {
@@ -140,6 +145,10 @@ func (s *InventoryOperationService) GiveItemToHandOnly(
 	count uint32,
 	quality uint32,
 ) *GiveItemResult {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		return &GiveItemResult{Message: playerstate.ItemsLockedReason}
+	}
+
 	itemReg := itemdefs.Global()
 	if itemReg == nil {
 		return &GiveItemResult{Success: false, Message: "item registry unavailable"}

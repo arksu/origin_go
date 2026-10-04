@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"math"
+	"origin/internal/playerstate"
 	"strings"
 	"time"
 
@@ -122,6 +123,11 @@ func (s *BuildService) HandleStartBuild(
 	playerHandle types.Handle,
 	msg *netproto.C2S_BuildStart,
 ) {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendWarning(playerID, playerstate.ItemsLockedReason)
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || msg == nil || msg.Pos == nil || playerID == 0 {
 		return
 	}
@@ -203,6 +209,11 @@ func (s *BuildService) HandleBuildProgress(
 	playerHandle types.Handle,
 	msg *netproto.C2S_BuildProgress,
 ) {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendWarning(playerID, playerstate.ItemsLockedReason)
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || msg == nil || playerID == 0 {
 		return
 	}
@@ -239,6 +250,11 @@ func (s *BuildService) HandleBuildTakeBack(
 	playerHandle types.Handle,
 	msg *netproto.C2S_BuildTakeBack,
 ) {
+	if w != nil && playerstate.ItemsLocked(w, playerHandle) {
+		s.sendWarning(playerID, playerstate.ItemsLockedReason)
+		return
+	}
+
 	if s == nil || w == nil || w != s.world || msg == nil || playerID == 0 {
 		return
 	}
@@ -390,6 +406,12 @@ func (s *BuildService) FinalizePendingBuildPlacement(
 	pending components.PendingBuildPlacement,
 ) {
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+		return
+	}
+
+	if playerstate.ItemsLocked(w, playerHandle) {
+		s.CancelPendingBuildPlacement(w, playerID, playerHandle)
+		s.sendWarning(playerID, playerstate.ItemsLockedReason)
 		return
 	}
 

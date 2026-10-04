@@ -3,6 +3,7 @@ package behaviors
 import (
 	"fmt"
 	"origin/internal/cyclicaction"
+	"origin/internal/playerstate"
 	"strings"
 
 	constt "origin/internal/const"
@@ -161,6 +162,10 @@ func (takeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 		return contracts.BehaviorResult{OK: false}
 	}
 
+	if playerstate.ItemsLocked(ctx.World, ctx.PlayerHandle) {
+		return contracts.BehaviorResult{OK: false, UserVisible: true, ReasonCode: playerstate.ItemsLockedReason, Severity: contracts.BehaviorAlertSeverityWarning}
+	}
+
 	actionID := strings.TrimSpace(ctx.ActionID)
 	if actionID == "" {
 		return contracts.BehaviorResult{OK: false}
@@ -186,6 +191,7 @@ func (takeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 
 	nowTick := ecs.GetResource[ecs.TimeState](ctx.World).Tick
 	cyclicaction.StartContext(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
+		MutatesItems:       true,
 		BehaviorKey:        takeBehaviorKey,
 		ActionID:           actionID,
 		TargetKind:         components.CyclicActionTargetObject,
@@ -205,6 +211,10 @@ func (takeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 }
 
 func (takeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contracts.BehaviorCycleDecision {
+	if ctx != nil && ctx.World != nil && playerstate.ItemsLocked(ctx.World, ctx.PlayerHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if ctx == nil || ctx.World == nil || ctx.TargetHandle == types.InvalidHandle || !ctx.World.Alive(ctx.TargetHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -322,3 +332,5 @@ func takeCountsFromState(world *ecs.World, targetHandle types.Handle) map[string
 	}
 	return takeState.Taken
 }
+
+func (takeBehavior) RequiresItemMutation(actionID string) bool { return true }

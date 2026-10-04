@@ -19,6 +19,7 @@ import (
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 	"time"
 
@@ -310,6 +311,7 @@ func (g *Game) buildPlayerSetupFunc(
 	profileExperience components.CharacterExperience,
 	profileSkills []string,
 	profileDiscovery []string,
+	runtimeHealth ...components.EntityHealth,
 ) func(*ecs.World, types.Handle) error {
 	return func(w *ecs.World, h types.Handle) error {
 		cooldowns, err := loadCharacterActionCooldowns(character.ActionCooldowns, ecs.GetResource[ecs.TimeState](w).UnixMs)
@@ -384,7 +386,8 @@ func (g *Game) buildPlayerSetupFunc(
 		})
 		initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 		ecs.AddComponent(w, h, initialStats)
-		ecs.AddComponent(w, h, buildInitialEntityHealth(character.Shp, character.Hhp, normalizedAttributes, g.cfg.Game.LifeDeathFactor))
+		health := g.resolveLoginHealth(w, character, normalizedAttributes, runtimeHealth)
+		ecs.AddComponent(w, h, health)
 		ecs.UpdateEntityStatsRegenSchedule(
 			w,
 			h,
@@ -476,6 +479,24 @@ func buildInitialEntityStats(
 		Stamina: initialStamina,
 		Energy:  initialEnergy,
 	}
+}
+
+// Runtime values take precedence over a rounded database row, including when a
+// failed spawn retries later. The registry entry is retired only at attachment.
+func (g *Game) resolveLoginHealth(w *ecs.World, character repository.Character, attributes characterattrs.Values, runtimeHealth []components.EntityHealth) components.EntityHealth {
+	health := buildInitialEntityHealth(character.Shp, character.Hhp, attributes, g.cfg.Game.LifeDeathFactor)
+	health.IsLying = character.IsLying
+	if len(runtimeHealth) > 0 {
+		health = runtimeHealth[0]
+	} else if g.shardManager != nil {
+		if shard := g.shardManager.GetShard(character.Layer); shard != nil {
+			if cached, ok := shard.offlineHealth.Load(types.EntityID(character.ID)); ok {
+				health = cached.(components.EntityHealth)
+			}
+		}
+	}
+	playerstate.ResolveKnockout(&health, ecs.GetResource[ecs.TimeState](w).UnixMs)
+	return health
 }
 
 func buildInitialEntityHealth(
@@ -745,6 +766,14 @@ func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, p
 		return
 	}
 
+	ecs.WithComponent(shard.world, handle, func(health *components.EntityHealth) {
+		before := health.IsLying
+		playerstate.ResolveKnockout(health, ecs.GetResource[ecs.TimeState](shard.world).UnixMs)
+		if before != health.IsLying {
+			ecs.MarkCharacterVisualDirty(shard.world, playerEntityID)
+		}
+	})
+	shard.offlineHealth.Delete(playerEntityID)
 	shard.PlayerInbox().RemoveClient(client.ID)
 	shard.ClientsMu.Lock()
 	shard.Clients[playerEntityID] = client
@@ -761,6 +790,10 @@ func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, p
 	shard.ClientsMu.Unlock()
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, client.StreamEpoch.Load())
 
+	if health, exists := ecs.GetComponent[components.EntityHealth](shard.world, handle); exists && health.HHP <= 0 {
+		shard.HandlePlayerPermanentDeath(shard.world, playerEntityID, handle)
+		return
+	}
 	g.enqueuePlayerBootstrapSnapshots(shard, playerEntityID, handle)
 }
 
@@ -769,6 +802,11 @@ func (g *Game) enqueuePlayerBootstrapSnapshots(shard *Shard, playerEntityID type
 		return
 	}
 
+	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
+		JobType:  network.JobSendActionSnapshot,
+		TargetID: playerEntityID,
+		Payload:  &network.ActionSnapshotJobPayload{Handle: handle},
+	})
 	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
 		JobType:  network.JobSendInventorySnapshot,
 		TargetID: playerEntityID,
@@ -799,11 +837,7 @@ func (g *Game) enqueuePlayerBootstrapSnapshots(shard *Shard, playerEntityID type
 		TargetID: playerEntityID,
 		Payload:  &network.BuildListSnapshotJobPayload{Handle: handle},
 	})
-	_ = shard.ServerInbox().Enqueue(&network.ServerJob{
-		JobType:  network.JobSendActionSnapshot,
-		TargetID: playerEntityID,
-		Payload:  &network.ActionSnapshotJobPayload{Handle: handle},
-	})
+
 }
 
 func (g *Game) ensureObserverVisibilityImmediate(w *ecs.World, observerHandle types.Handle) {

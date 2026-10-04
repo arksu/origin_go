@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"origin/internal/cyclicaction"
+	"origin/internal/playerstate"
 	"strings"
 
 	constt "origin/internal/const"
@@ -349,6 +350,10 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 	if ctx == nil || ctx.World == nil {
 		return contracts.BehaviorResult{OK: false}
 	}
+	if playerstate.ItemsLocked(ctx.World, ctx.PlayerHandle) {
+		return contracts.BehaviorResult{OK: false, UserVisible: true, ReasonCode: playerstate.ItemsLockedReason, Severity: contracts.BehaviorAlertSeverityWarning}
+	}
+
 	actionID := strings.TrimSpace(ctx.ActionID)
 	if actionID == "" {
 		return contracts.BehaviorResult{OK: false}
@@ -425,6 +430,7 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 		completeSoundKey = ""
 	}
 	cyclicaction.StartContext(ctx.World, ctx.PlayerHandle, components.ActiveCyclicAction{
+		MutatesItems:       true,
 		BehaviorKey:        treeBehaviorKey,
 		ActionID:           actionID,
 		CompleteSoundKey:   completeSoundKey,
@@ -445,6 +451,10 @@ func (treeBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) c
 }
 
 func (treeBehavior) OnCycleComplete(ctx *contracts.BehaviorCycleContext) contracts.BehaviorCycleDecision {
+	if ctx != nil && ctx.World != nil && playerstate.ItemsLocked(ctx.World, ctx.PlayerHandle) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
+
 	if ctx == nil || ctx.World == nil || ctx.TargetHandle == types.InvalidHandle || !ctx.World.Alive(ctx.TargetHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -1281,3 +1291,5 @@ func resolveLogger(logger *zap.Logger) *zap.Logger {
 	}
 	return logger
 }
+
+func (treeBehavior) RequiresItemMutation(actionID string) bool { return true }

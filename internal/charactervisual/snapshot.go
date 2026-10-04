@@ -27,6 +27,10 @@ func Snapshot(w *ecs.World, handle types.Handle) (*netproto.CharacterVisualState
 		return nil, fmt.Errorf("character visual has no external ID: %d", handle)
 	}
 	state := &netproto.CharacterVisualState{Generation: fmt.Sprintf("%d:%d", w.Layer, handle)}
+	if health, exists := ecs.GetComponent[components.EntityHealth](w, handle); exists {
+		state.IsLying = health.IsLying
+		state.Revision = health.LyingRevision
+	}
 	equipmentHandle, found := ecs.GetResource[ecs.InventoryRefIndex](w).Lookup(constt.InventoryEquipment, ownerID, 0)
 	if !found {
 		return state, nil
@@ -35,7 +39,7 @@ func Snapshot(w *ecs.World, handle types.Handle) (*netproto.CharacterVisualState
 	if !ok || !w.Alive(equipmentHandle) || container.OwnerID != ownerID || container.Kind != constt.InventoryEquipment || container.Key != 0 {
 		return nil, fmt.Errorf("invalid equipment container for character %d", ownerID)
 	}
-	state.Revision = container.Version
+	state.Revision += container.Version
 	seen := make(map[netproto.EquipSlot]bool, len(container.Items))
 	for _, item := range container.Items {
 		if item.EquipSlot == netproto.EquipSlot_EQUIP_SLOT_NONE || netproto.EquipSlot_name[int32(item.EquipSlot)] == "" || seen[item.EquipSlot] {

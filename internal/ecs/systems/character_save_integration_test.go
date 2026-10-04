@@ -99,6 +99,66 @@ func requireCharacterSavePostgresState(t *testing.T, db *persistence.Postgres, i
 	require.Equal(t, version, inventoryVersion)
 }
 
+func TestCharacterSaverPostgresLyingMigrationAndEverySavePath(t *testing.T) {
+	db := newCharacterSavePostgres(t)
+	ctx := context.Background()
+	var schema string
+	require.NoError(t, db.Pool().QueryRow(ctx, "SELECT current_schema()").Scan(&schema))
+	_, err := db.Pool().Exec(ctx, "ALTER TABLE character DROP COLUMN is_lying")
+	require.NoError(t, err)
+	migration, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "20261004_player_lying.sql"))
+	require.NoError(t, err)
+	migrationSQL := strings.ReplaceAll(string(migration), "origin.character", pgx.Identifier{schema, "character"}.Sanitize())
+	for range 2 {
+		_, err = db.Pool().Exec(ctx, migrationSQL)
+		require.NoError(t, err)
+	}
+	loaded, err := db.Queries().GetCharacter(ctx, 11)
+	require.NoError(t, err)
+	require.False(t, loaded.IsLying)
+	for _, mode := range []string{"periodic", "disconnect", "detached_expiry", "transfer_sync", "shutdown"} {
+		for _, value := range []float64{.49, .5, 40000.5} {
+			world := ecs.NewWorldForTesting()
+			handle := world.Spawn(11, func(w *ecs.World, h types.Handle) {
+				ecs.AddComponent(w, h, components.Transform{})
+				ecs.AddComponent(w, h, components.EntityStats{Stamina: 100, Energy: 900})
+				ecs.AddComponent(w, h, components.EntityHealth{SHP: value, HHP: value, IsLying: value != .5, KOUntilUnixMs: 61000})
+			})
+			ecs.GetResource[ecs.CharacterEntities](world).Add(11, handle, time.Time{})
+			ecs.GetResource[ecs.TimeState](world).Now = time.Unix(100, 0)
+			saver := NewCharacterSaver(db, 0, characterSaveInventoryFunc(func(interface{}, types.EntityID, types.Handle) []InventorySnapshot { return nil }), zap.NewNop())
+			switch mode {
+			case "periodic":
+				NewCharacterSaveSystem(saver, time.Minute, zap.NewNop()).Update(world, 0)
+			case "disconnect":
+				saver.Save(world, 11, handle)
+			case "detached_expiry":
+				saver.SaveDetached(world, 11, handle)
+			case "transfer_sync":
+				require.NoError(t, saver.SaveSync(world, 11, handle))
+			case "shutdown":
+				saver.SaveAll(world)
+			}
+			saver.Stop()
+			loaded, err = db.Queries().GetCharacter(ctx, 11)
+			require.NoError(t, err)
+			expected := int32(0)
+			if value == .5 {
+				expected = 1
+			}
+			if value == 40000.5 {
+				expected = 40001
+			}
+			require.EqualValues(t, expected, loaded.Shp, mode)
+			require.EqualValues(t, expected, loaded.Hhp, mode)
+			require.Equal(t, value != .5, loaded.IsLying, mode)
+			exact, _ := ecs.GetComponent[components.EntityHealth](world, handle)
+			require.Equal(t, value, exact.SHP)
+			require.Equal(t, int64(61000), exact.KOUntilUnixMs)
+		}
+	}
+}
+
 func TestCharacterSaverPostgresCoalescesDuplicateAndDistinctSnapshots(t *testing.T) {
 	db := newCharacterSavePostgres(t)
 	saver := NewCharacterSaver(db, 0, nil, zap.NewNop())

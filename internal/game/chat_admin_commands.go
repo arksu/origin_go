@@ -20,6 +20,7 @@ import (
 	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -207,6 +208,15 @@ func (h *ChatAdminCommandHandler) handleGive(
 	playerHandle types.Handle,
 	args []string,
 ) {
+	if playerstate.ItemsLocked(w, playerHandle) {
+		if sender, ok := h.alertSender.(interface {
+			SendMiniAlert(types.EntityID, *netproto.S2C_MiniAlert)
+		}); ok {
+			sender.SendMiniAlert(playerID, &netproto.S2C_MiniAlert{ReasonCode: playerstate.ItemsLockedReason, Severity: netproto.AlertSeverity_ALERT_SEVERITY_WARNING})
+		}
+		return
+	}
+
 	if len(args) == 0 {
 		h.sendSystemMessage(playerID, "usage: /give <item_key> [count] [quality]")
 		return
@@ -884,7 +894,7 @@ func (h *ChatAdminCommandHandler) handleSHP(
 		return
 	}
 
-	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	playerstate.ObserveHealthChange(w, playerID, playerHandle)
 	h.sendSystemMessage(playerID, fmt.Sprintf("SHP set to %.2f", value))
 }
 
@@ -928,7 +938,7 @@ func (h *ChatAdminCommandHandler) handleHHP(
 		return
 	}
 
-	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	playerstate.ObserveHealthChange(w, playerID, playerHandle)
 	h.sendSystemMessage(playerID, fmt.Sprintf("HHP set to %.2f", value))
 }
 
@@ -969,7 +979,7 @@ func (h *ChatAdminCommandHandler) handleDamage(
 		return
 	}
 
-	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	playerstate.ObserveHealthChange(w, playerID, playerHandle)
 	h.sendSystemMessage(playerID, fmt.Sprintf("damage applied: soft=%.2f hard=%.2f", softDamage, hardDamage))
 }
 
@@ -988,18 +998,13 @@ func (h *ChatAdminCommandHandler) handleRevive(
 		mhp := resolveMaxHHPForHandle(w, playerHandle, h.lifeDeathFactor)
 		health.SHP = mhp
 		health.HHP = mhp
-		health.KOUntilTick = 0
 		return true
 	}) {
 		h.sendSystemMessage(playerID, "health component missing")
 		return
 	}
 
-	ecs.WithComponent(w, playerHandle, func(movement *components.Movement) {
-		movement.ClearTarget()
-		movement.State = constt.StateIdle
-	})
-	ecs.MarkPlayerStatsDirty(w, playerID, 0)
+	playerstate.ObserveHealthChange(w, playerID, playerHandle)
 	h.sendSystemMessage(playerID, "revived")
 }
 
@@ -1021,7 +1026,7 @@ func (h *ChatAdminCommandHandler) handleHealthSnapshot(
 			health.SHP,
 			health.HHP,
 			mhp,
-			health.KOUntilTick > 0,
+			health.KOUntilUnixMs > 0,
 		),
 	)
 }

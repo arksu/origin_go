@@ -84,6 +84,7 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('playerStats', (msg: proto.IS2C_PlayerStats) => {
+    if (!gameStore.worldParams || msg.streamEpoch !== gameStore.worldParams.streamEpoch) return
     console.log('[Handlers] playerStats:', {
       stamina: msg.stamina,
       staminaMax: msg.staminaMax,
@@ -95,9 +96,6 @@ export function registerMessageHandlers(): void {
       isKnockedOut: msg.isKnockedOut,
     })
     gameStore.setPlayerStats(msg)
-    if (gameStore.playerEntityId != null) {
-      gameFacade.setObjectKnockedOutPose(gameStore.playerEntityId, !!msg.isKnockedOut)
-    }
   })
 
   messageDispatcher.on('deathDialog', (msg: proto.IS2C_DeathDialog) => {
@@ -235,7 +233,7 @@ export function registerMessageHandlers(): void {
     if (actionAnimation && actionAnimation.generation !== characterVisual?.generation) throw new Error('Spawn action animation incarnation mismatch')
     const existing = gameStore.entities.get(entityId)
     if (characterVisual && existing?.characterVisual?.generation === characterVisual.generation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
-      if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterEquipment(entityId, characterVisual.equipment)
+      if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterVisual(entityId, characterVisual)
       if (actionAnimation) {
         if (gameStore.updateActionAnimation(entityId, actionAnimation)) gameFacade.setActionAnimation(entityId, actionAnimation)
       } else {
@@ -270,7 +268,7 @@ export function registerMessageHandlers(): void {
     gameStore.spawnEntity(objectData)
     gameFacade.spawnObject(objectData)
     gameFacade.setObjectNickname(entityId, displayName, nameColor)
-    if (characterVisual) applyCharacterEquipment(entityId, characterVisual.equipment)
+    if (characterVisual) applyCharacterVisual(entityId, characterVisual)
     gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
 
     // Initialize entity in MoveController for smooth movement
@@ -282,7 +280,6 @@ export function registerMessageHandlers(): void {
       console.log(`[Handlers] Player entity spawned: entityId=${entityId}, pos=(${posX}, ${posY})`)
       gameFacade.setPlayerEntityId(entityId)
       gameFacade.setCamera(posX, posY)
-      gameFacade.setObjectKnockedOutPose(entityId, gameStore.playerStats.isKnockedOut)
       gameStore.markBootstrapPlayerSpawned()
     }
   }
@@ -291,6 +288,11 @@ export function registerMessageHandlers(): void {
   messageDispatcher.on('objectSpawnBatch', (msg: proto.IS2C_ObjectSpawnBatch) => {
     applyBatchEntries('objectSpawn', msg.spawns || [], handleObjectSpawn)
   })
+
+  function applyCharacterVisual(entityId: number, state: import('@/types/characterVisual').CharacterVisualState): void {
+    gameFacade.setObjectKnockedOutPose(entityId, state.isLying)
+    applyCharacterEquipment(entityId, state.equipment)
+  }
 
   function applyCharacterEquipment(entityId: number, equipment: import('@/types/characterVisual').CharacterVisualState['equipment']): void {
     void gameFacade.setCharacterEquipment(entityId, equipment).catch((error: unknown) => {
@@ -303,7 +305,7 @@ export function registerMessageHandlers(): void {
     if (!msg.state || msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
     const entityId = toNumber(msg.entityId || 0)
     const state = decodeCharacterVisual(msg.state)
-    if (gameStore.updateCharacterVisual(entityId, state)) applyCharacterEquipment(entityId, state.equipment)
+    if (gameStore.updateCharacterVisual(entityId, state)) applyCharacterVisual(entityId, state)
   })
 
   messageDispatcher.on('characterActionAnimation', (msg: proto.IS2C_CharacterActionAnimation) => {

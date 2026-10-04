@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS character
     shp              INT          NOT NULL CHECK (shp >= 0),      -- soft health points
     hhp              INT          NOT NULL CHECK (hhp >= 0),      -- hard health points
 
+    is_lying         BOOLEAN      NOT NULL DEFAULT false,
+
     attributes       JSONB        NOT NULL,
     -- experience
     exp              JSONB        not null, -- {"lp":number, "nature": number, "industry": number, "combat": number}

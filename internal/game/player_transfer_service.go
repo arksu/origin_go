@@ -112,7 +112,7 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 	characterSpawn.X = req.TargetX
 	characterSpawn.Y = req.TargetY
 
-	targetHandle, spawnErr := g.spawnTeleportedPlayer(snapshot.Client, targetShard, characterSpawn, req.TargetX, req.TargetY, req.IgnoreObjectCollision)
+	targetHandle, spawnErr := g.spawnTeleportedPlayer(snapshot.Client, targetShard, characterSpawn, req.TargetX, req.TargetY, req.IgnoreObjectCollision, snapshot.Health)
 	if spawnErr != nil {
 		rollbackChar := characterTemplate
 		rollbackChar.Layer = snapshot.SourceLayer
@@ -121,7 +121,7 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 		if snapshot.Client != nil {
 			snapshot.Client.Layer = snapshot.SourceLayer
 		}
-		rollbackHandle, rollbackErr := g.spawnTeleportedPlayer(snapshot.Client, sourceShard, rollbackChar, snapshot.SourceX, snapshot.SourceY, req.IgnoreObjectCollision)
+		rollbackHandle, rollbackErr := g.spawnTeleportedPlayer(snapshot.Client, sourceShard, rollbackChar, snapshot.SourceX, snapshot.SourceY, req.IgnoreObjectCollision, snapshot.Health)
 		if rollbackErr != nil {
 			if snapshot.Client != nil {
 				snapshot.Client.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Teleport failed and rollback failed. Reconnect required.")
@@ -140,6 +140,7 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 		return
 	}
 
+	sourceShard.offlineHealth.Delete(req.PlayerID)
 	s.restoreParticipantsOnTarget(req, targetShard, targetHandle, snapshot.ParticipantStates)
 
 	if err := g.db.Queries().UpdateCharacterPositionAndLayer(g.ctx, repository.UpdateCharacterPositionAndLayerParams{
@@ -196,6 +197,8 @@ func (s *PlayerTransferService) detachTransferSource(
 	if !hasTransform {
 		return snapshot, fmt.Errorf("missing transform")
 	}
+	snapshot.Health, _ = ecs.GetComponent[components.EntityHealth](shard.world, playerHandle)
+	snapshot.Character.IsLying = snapshot.Health.IsLying
 	snapshot.SourceX = int(transform.X)
 	snapshot.SourceY = int(transform.Y)
 	cooldowns, _ := ecs.GetComponent[components.ActionCooldowns](shard.world, playerHandle)
@@ -258,6 +261,7 @@ func (s *PlayerTransferService) detachTransferSource(
 		}
 	}
 
+	shard.offlineHealth.Store(req.PlayerID, snapshot.Health)
 	shard.world.Despawn(playerHandle)
 	ecs.GetResource[ecs.CharacterEntities](shard.world).Remove(req.PlayerID)
 	ecs.GetResource[ecs.DetachedEntities](shard.world).RemoveDetachedEntity(req.PlayerID)

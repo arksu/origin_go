@@ -345,3 +345,6 @@ type BehaviorRegistry interface {
 	ValidateBehaviorKeys(keys []string) error
 	InitObjectBehaviors(ctx *BehaviorObjectInitContext, behaviorKeys []string) error
 }
+
+// ItemMutationAction identifies actions that must be rejected before any effects.
+type ItemMutationAction interface{ RequiresItemMutation(actionID string) bool }

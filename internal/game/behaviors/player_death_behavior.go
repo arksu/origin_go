@@ -10,6 +10,7 @@ import (
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -29,6 +30,8 @@ type unequipCandidate struct {
 	ItemKey   string
 	Quality   uint32
 }
+
+func (playerDeathBehavior) RequiresItemMutation(string) bool { return true }
 
 func (playerDeathBehavior) Key() string { return playerDeathBehaviorKey }
 
@@ -71,6 +74,9 @@ func (playerDeathBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteCon
 		return contracts.BehaviorResult{OK: false}
 	}
 
+	if playerstate.ItemsLocked(ctx.World, ctx.PlayerHandle) {
+		return contracts.BehaviorResult{OK: false, UserVisible: true, ReasonCode: playerstate.ItemsLockedReason, Severity: contracts.BehaviorAlertSeverityWarning}
+	}
 	equipmentHandle, candidates := collectUnequipCandidates(ctx.World, ctx.TargetID)
 	if len(candidates) == 0 {
 		return contracts.BehaviorResult{OK: false}

@@ -83,13 +83,13 @@ func TestCancellationAndDeathCleanupClearPublicState(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			w, handle, bindings := animationFixture(t)
 			binding := bindings[0]
-			cyclicaction.StartContext(w, handle, components.ActiveCyclicAction{BehaviorKey: binding.Source.Namespace, ActionID: binding.Source.ID, TargetKind: components.CyclicActionTargetObject, TargetID: 202, CycleDurationTicks: 20})
+			cyclicaction.StartContext(w, handle, components.ActiveCyclicAction{BehaviorKey: binding.Source.Namespace, ActionID: binding.Source.ID, TargetKind: components.CyclicActionTargetObject, TargetID: 202, CycleDurationTicks: 20, MutatesItems: true})
 			service := NewContextActionService(w, nil, nil, nil, nil, nil, nil, nil, nil, testSingleBehaviorRegistry{}, nil)
 			switch reason {
 			case "link":
 				NewCyclicActionSystem(service, nil, nil).Update(w, .1)
 			case "knockout":
-				applyStunnedStateAndClearActions(w, handle)
+				(&Shard{contextActions: service}).HandlePlayerItemsLocked(w, 101, handle)
 			case "death":
 				(&Shard{}).clearPlayerTransientStateForDeath(w, 101, handle)
 			}
