@@ -126,21 +126,13 @@ func loadFile(filename string) ([]Definition, error) {
 }
 
 func loadCombatFields(input *definitionInput, sections map[string]json.RawMessage) error {
-	var executionFields map[string]json.RawMessage
-	if err := json.Unmarshal(sections["execution"], &executionFields); err != nil {
-		return fmt.Errorf("parse execution fields: %w", err)
-	}
-	recoveryTicks, hasRecoveryTicks := executionFields["recoveryTicks"]
 	_, hasSector := sections["sector"]
 	_, hasCombat := sections["combat"]
 	if input.Target.Kind != TargetDirection {
-		if hasSector || hasCombat || hasRecoveryTicks {
-			return fmt.Errorf("sector, combat and execution.recoveryTicks require a direction target")
+		if hasSector || hasCombat {
+			return fmt.Errorf("sector and combat require a direction target")
 		}
 		return nil
-	}
-	if !hasRecoveryTicks || bytes.Equal(recoveryTicks, []byte("null")) {
-		return fmt.Errorf("execution.recoveryTicks is required for combat")
 	}
 	if input.Sector == nil {
 		return fmt.Errorf("sector is required for combat")
@@ -235,7 +227,7 @@ func validateDefinition(definition *Definition) error {
 
 func validateCombatDefinition(definition *Definition) error {
 	if definition.Target.Kind != TargetDirection {
-		if definition.Sector != nil || definition.Combat != nil || definition.Execution.RecoveryTicks != 0 {
+		if definition.Sector != nil || definition.Combat != nil {
 			return fmt.Errorf("combat fields require a direction target")
 		}
 		return nil
@@ -249,8 +241,8 @@ func validateCombatDefinition(definition *Definition) error {
 	if definition.Execution.Repeat || definition.Repeatable() {
 		return fmt.Errorf("combat cannot repeat")
 	}
-	if definition.Execution.Ticks <= 0 || definition.Execution.RecoveryTicks < 0 {
-		return fmt.Errorf("combat requires positive execution.ticks and non-negative execution.recoveryTicks")
+	if definition.Execution.Ticks <= 0 {
+		return fmt.Errorf("combat requires positive execution.ticks")
 	}
 	sector := definition.Sector
 	if math.IsNaN(sector.Range) || math.IsInf(sector.Range, 0) || sector.Range <= 0 || sector.Range > math.MaxFloat32 {

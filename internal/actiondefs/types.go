@@ -34,10 +34,9 @@ type Requirements struct {
 }
 
 type Execution struct {
-	Ticks         int     `json:"ticks,omitempty"`
-	RecoveryTicks int     `json:"recoveryTicks,omitempty"`
-	Stamina       float64 `json:"stamina,omitempty"`
-	Repeat        bool    `json:"repeat,omitempty"`
+	Ticks   int     `json:"ticks,omitempty"`
+	Stamina float64 `json:"stamina,omitempty"`
+	Repeat  bool    `json:"repeat,omitempty"`
 }
 
 type Sector struct {

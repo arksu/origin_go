@@ -24,9 +24,10 @@ Both actions require an item tagged `axe` in either `right_hand` or `left_hand`,
 - `sector.angleDeg`: full sector width in degrees, greater than 0 and at most 360. The loader converts it once; runtime definitions and the network catalog contain radians only.
 - `combat.hitMode`: `all` selects all eligible targets in the sector; `nearest` selects the nearest eligible target. Selection is server-owned and is not sent in the catalog.
 - `combat.damageMultiplier`: positive finite action multiplier; weapon base damage is not stored in the action.
-- `execution.ticks`: positive windup duration in server ticks, also the future visible strike-animation duration.
-- `execution.recoveryTicks`: explicitly supplied non-negative duration in server ticks; recovery is not sent in the catalog.
+- `execution.ticks`: positive execution duration in server ticks, using the standard action progress bar. There is no recovery phase; the old `execution.recoveryTicks` field is rejected.
 
 Combat actions cannot declare a cursor, approach, or either repetition flag as true. Combat fields are not accepted on ordinary actions.
 
-The preset is a 90-degree sector with range 18, windup 6 ticks, recovery 4 ticks, stamina cost 60 and independent 2000 ms cooldowns. At the default 10 Hz, the durations are 0.6 and 0.4 seconds; changing the tick rate changes these durations. The sweep multiplier is 1.0, the nearest-target strike multiplier is 1.5. The intended combat rule charges stamina and starts cooldown at accepted windup start, as specified in `docs/features/combat_protocol.md`; this iteration only loads and publishes definitions, without implementing that execution rule.
+The preset is a 90-degree sector with range 18, execution 6 ticks (0.6 seconds at the default 10 Hz), stamina cost 60 and independent 2000 ms cooldowns. The sweep multiplier is 1.0, the nearest-target strike multiplier is 1.5. Stamina and cooldown commit on successful execution at 100%, including a miss; unfinished actions cost nothing. Another ready action can start immediately after completion, following `docs/features/combat_final.md`.
+
+The shared action service supports direction-target execution: activation includes an explicit finite `aim_angle` and the current `stream_epoch`, fixes the normalized angle at start, and uses the existing timed cycle and cancellation flow. KO, lying and stun prohibit directed actions. Axe hit geometry and damage handlers remain a separate implementation step.

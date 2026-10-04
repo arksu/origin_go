@@ -55,7 +55,7 @@ func (service *ActionService) cooldownSnapshot(world *ecs.World, player types.Ha
 }
 
 func (service *ActionService) resumeAfterCooldown(world *ecs.World, playerID types.EntityID, player types.Handle, definition *actiondefs.Definition, active components.ActiveGameAction) {
-	target := ActionTarget{ObjectID: active.TargetID, ObjectHandle: active.TargetHandle, X: active.TargetX, Y: active.TargetY}
+	target := actionTarget(active)
 	if reason := service.validateCycleTarget(world, playerID, player, definition, target); reason != "" {
 		service.Complete(world, playerID, player, active.Generation, false, reason)
 		return

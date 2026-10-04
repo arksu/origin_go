@@ -14,7 +14,7 @@ import (
 
 const validAction = `{"v":1,"actions":[{"id":"test_action","presentation":{"label":"Test action","menuIcon":"/assets/cursor/lift.png"},"target":{"kind":"object","cursor":"lift"},"requirements":{"skills":["test_skill"],"equipment":[{"slots":["left_hand","right_hand"],"itemTag":"axe"},{"slots":["back"],"itemKey":"test_pack"}]},"execution":{"ticks":4,"stamina":2.5},"isRepeatable":true}]}`
 
-const validCombatAction = `{"v":1,"actions":[{"id":"combat_test","presentation":{"label":"Combat test","menuIcon":"/assets/cursor/atk.png"},"target":{"kind":"direction"},"requirements":{},"execution":{"ticks":6,"recoveryTicks":4,"stamina":60},"cooldown":2000,"isRepeatable":false,"sector":{"range":18,"angleDeg":90},"combat":{"hitMode":"all","damageMultiplier":1.0}}]}`
+const validCombatAction = `{"v":1,"actions":[{"id":"combat_test","presentation":{"label":"Combat test","menuIcon":"/assets/cursor/atk.png"},"target":{"kind":"direction"},"requirements":{},"execution":{"ticks":6,"stamina":60},"cooldown":2000,"isRepeatable":false,"sector":{"range":18,"angleDeg":90},"combat":{"hitMode":"all","damageMultiplier":1.0}}]}`
 
 func writeActionFile(t *testing.T, directory, name, contents string) {
 	t.Helper()
@@ -126,7 +126,7 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 			t.Fatalf("production action %q is missing", expected.id)
 		}
 		if definition.Target.Kind != TargetDirection || definition.Target.Cursor != "" || definition.Target.Approach != "" ||
-			definition.Execution.Ticks != 6 || definition.Execution.RecoveryTicks != 4 || definition.Execution.Stamina != 60 ||
+			definition.Execution.Ticks != 6 || definition.Execution.Stamina != 60 ||
 			definition.Execution.Repeat || definition.Repeatable() || definition.Cooldown != 2000 {
 			t.Fatalf("invalid axe definition %q: %#v", expected.id, definition)
 		}
@@ -147,19 +147,17 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 
 func TestCombatDefinitionLoading(t *testing.T) {
 	for _, test := range []struct {
-		name          string
-		angleDeg      string
-		wantAngle     float64
-		recoveryTicks string
+		name      string
+		angleDeg  string
+		wantAngle float64
 	}{
-		{name: "preset", angleDeg: "90", wantAngle: math.Pi / 2, recoveryTicks: "4"},
-		{name: "full circle and no recovery", angleDeg: "360", wantAngle: 2 * math.Pi, recoveryTicks: "0"},
-		{name: "fractional degrees", angleDeg: "22.5", wantAngle: math.Pi / 8, recoveryTicks: "4"},
+		{name: "preset", angleDeg: "90", wantAngle: math.Pi / 2},
+		{name: "full circle", angleDeg: "360", wantAngle: 2 * math.Pi},
+		{name: "fractional degrees", angleDeg: "22.5", wantAngle: math.Pi / 8},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			directory := t.TempDir()
 			contents := strings.Replace(validCombatAction, `"angleDeg":90`, `"angleDeg":`+test.angleDeg, 1)
-			contents = strings.Replace(contents, `"recoveryTicks":4`, `"recoveryTicks":`+test.recoveryTicks, 1)
 			writeActionFile(t, directory, "combat.json", contents)
 			registry, err := LoadFromDirectory(directory, nil)
 			if err != nil {
@@ -190,13 +188,10 @@ func TestInvalidCombatDefinitions(t *testing.T) {
 		{name: "missing combat", original: `,"combat":{"hitMode":"all","damageMultiplier":1.0}`},
 		{name: "null combat", original: `"combat":{"hitMode":"all","damageMultiplier":1.0}`, replacement: `"combat":null`},
 		{name: "ordinary target", original: `"kind":"direction"`, replacement: `"kind":"object"`},
-		{name: "missing windup", original: `"ticks":6,`},
-		{name: "zero windup", original: `"ticks":6`, replacement: `"ticks":0`},
-		{name: "negative windup", original: `"ticks":6`, replacement: `"ticks":-1`},
-		{name: "missing recovery", original: `"recoveryTicks":4,`},
-		{name: "null recovery", original: `"recoveryTicks":4`, replacement: `"recoveryTicks":null`},
-		{name: "negative recovery", original: `"recoveryTicks":4`, replacement: `"recoveryTicks":-1`},
-		{name: "fractional recovery", original: `"recoveryTicks":4`, replacement: `"recoveryTicks":0.5`},
+		{name: "missing execution duration", original: `"ticks":6,`},
+		{name: "zero execution duration", original: `"ticks":6`, replacement: `"ticks":0`},
+		{name: "negative execution duration", original: `"ticks":6`, replacement: `"ticks":-1`},
+		{name: "obsolete recovery", original: `"ticks":6`, replacement: `"ticks":6,"recoveryTicks":0`},
 		{name: "missing range", original: `"range":18,`},
 		{name: "zero range", original: `"range":18`, replacement: `"range":0`},
 		{name: "negative range", original: `"range":18`, replacement: `"range":-1`},
