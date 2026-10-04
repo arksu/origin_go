@@ -23,6 +23,7 @@
       "key": "boulder",
       "name": "Boulder",
       "static": true,
+      "hp": 100,
       "components": {
         "collider": {
           "w": 20,
@@ -48,6 +49,7 @@
       "key": "kiln",
       "name": "Kiln",
       "static": true,
+      "hp": 100,
       "components": {
         "collider": {
           "w": 24,
@@ -62,6 +64,7 @@
       "key": "campfire",
       "name": "Campfire",
       "static": true,
+      "hp": 100,
       "components": {
         "collider": {
           "w": 10,
@@ -95,6 +98,7 @@
       "key": "player_death",
       "name": "Player Death",
       "static": true,
+      "hp": 100,
       "components": {
         "collider": {
           "w": 9,
@@ -132,6 +136,7 @@
       "key": "build",
       "name": "Build",
       "static": true,
+      "hp": 100,
       "contextMenuEvenForOneItem": false,
       "components": {},
       "resource": "build",
