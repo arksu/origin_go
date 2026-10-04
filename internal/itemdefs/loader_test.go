@@ -1,6 +1,7 @@
 package itemdefs
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -153,6 +154,151 @@ func TestLoadFromDirectory_InvalidItemAbilities(t *testing.T) {
 			assert.Contains(t, err.Error(), "abilities")
 		})
 	}
+}
+
+func TestLoadFromDirectory_CombatParameters(t *testing.T) {
+	tests := []struct {
+		name       string
+		fields     string
+		baseDamage float64
+		baseArmor  float64
+	}{
+		{name: "existing item"},
+		{name: "null blocks", fields: `,"melee":null,"armor":null`},
+		{name: "melee only", fields: `,"melee":{"baseDamage":6}`, baseDamage: 6},
+		{name: "armor only", fields: `,"armor":{"baseArmor":4}`, baseArmor: 4},
+		{name: "both", fields: `,"melee":{"baseDamage":7.5},"armor":{"baseArmor":8}`, baseDamage: 7.5, baseArmor: 8},
+		{name: "small positive", fields: `,"melee":{"baseDamage":1e-300},"armor":{"baseArmor":1e-300}`, baseDamage: 1e-300, baseArmor: 1e-300},
+		{name: "large finite", fields: `,"melee":{"baseDamage":1e300},"armor":{"baseArmor":1e300}`, baseDamage: 1e300, baseArmor: 1e300},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filePath := writeCombatItemFile(t, tt.fields)
+			registry, err := LoadFromDirectory(filepath.Dir(filePath), zap.NewNop())
+			require.NoError(t, err)
+			item, ok := registry.GetByKey("test_item")
+			require.True(t, ok)
+			if tt.baseDamage == 0 {
+				assert.Nil(t, item.Melee)
+			} else {
+				require.NotNil(t, item.Melee)
+				assert.Equal(t, tt.baseDamage, item.Melee.BaseDamage)
+			}
+			if tt.baseArmor == 0 {
+				assert.Nil(t, item.Armor)
+			} else {
+				require.NotNil(t, item.Armor)
+				assert.Equal(t, tt.baseArmor, item.Armor.BaseArmor)
+			}
+		})
+	}
+}
+
+func TestLoadFromDirectory_InvalidCombatParameters(t *testing.T) {
+	for _, capability := range []struct{ block, field string }{
+		{block: "melee", field: "baseDamage"},
+		{block: "armor", field: "baseArmor"},
+	} {
+		for _, tt := range []struct{ name, value string }{
+			{name: "missing"},
+			{name: "null", value: "null"},
+			{name: "zero", value: "0"},
+			{name: "negative", value: "-1"},
+		} {
+			t.Run(capability.block+"/"+tt.name, func(t *testing.T) {
+				block := "{}"
+				if tt.value != "" {
+					block = `{"` + capability.field + `":` + tt.value + `}`
+				}
+				filePath := writeCombatItemFile(t, `,"`+capability.block+`":`+block)
+				_, err := LoadFromDirectory(filepath.Dir(filePath), zap.NewNop())
+				require.Error(t, err)
+				var loadErr *LoadError
+				require.ErrorAs(t, err, &loadErr)
+				assert.Equal(t, filePath, loadErr.FilePath)
+				assert.Equal(t, 1001, loadErr.DefID)
+				assert.Equal(t, "test_item", loadErr.Key)
+				assert.Contains(t, loadErr.Message, capability.block+"."+capability.field)
+			})
+		}
+	}
+}
+
+func TestLoadFromDirectory_MalformedCombatParameters(t *testing.T) {
+	for _, capability := range []struct{ block, field string }{
+		{block: "melee", field: "baseDamage"},
+		{block: "armor", field: "baseArmor"},
+	} {
+		for _, tt := range []struct{ name, value string }{
+			{name: "string", value: `"6"`},
+			{name: "boolean", value: "true"},
+			{name: "array", value: "[]"},
+			{name: "object", value: "{}"},
+			{name: "overflow", value: "1e309"},
+		} {
+			t.Run(capability.block+"/"+tt.name, func(t *testing.T) {
+				fields := `,"` + capability.block + `":{"` + capability.field + `":` + tt.value + `}`
+				filePath := writeCombatItemFile(t, fields)
+				_, err := LoadFromDirectory(filepath.Dir(filePath), zap.NewNop())
+				require.Error(t, err)
+				var loadErr *LoadError
+				require.ErrorAs(t, err, &loadErr)
+				assert.Equal(t, filePath, loadErr.FilePath)
+				assert.Contains(t, loadErr.Message, "failed to parse JSON")
+				assert.Contains(t, loadErr.Message, capability.field)
+			})
+		}
+		for _, tt := range []struct{ name, block, wantMessage string }{
+			{name: "wrong block type", block: "[]", wantMessage: capability.block},
+			{name: "unknown field", block: `{"` + capability.field + `":6,"unknown":1}`, wantMessage: `unknown field "unknown"`},
+		} {
+			t.Run(capability.block+"/"+tt.name, func(t *testing.T) {
+				filePath := writeCombatItemFile(t, `,"`+capability.block+`":`+tt.block)
+				_, err := LoadFromDirectory(filepath.Dir(filePath), zap.NewNop())
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), filePath)
+				assert.Contains(t, err.Error(), tt.wantMessage)
+			})
+		}
+	}
+}
+
+func TestValidateItem_NonFiniteCombatParameters(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		value float64
+	}{
+		{name: "NaN", value: math.NaN()},
+		{name: "positive infinity", value: math.Inf(1)},
+		{name: "negative infinity", value: math.Inf(-1)},
+	} {
+		for _, block := range []string{"melee", "armor"} {
+			t.Run(block+"/"+tt.name, func(t *testing.T) {
+				item := ItemDef{DefID: 1001, Key: "test_item", Name: "Test Item", Size: Size{W: 1, H: 1}}
+				if block == "melee" {
+					item.Melee = &MeleeDef{BaseDamage: tt.value}
+				} else {
+					item.Armor = &ArmorDef{BaseArmor: tt.value}
+				}
+				err := validateItem(&item, "test.json")
+				require.Error(t, err)
+				var loadErr *LoadError
+				require.ErrorAs(t, err, &loadErr)
+				assert.Equal(t, "test.json", loadErr.FilePath)
+				assert.Equal(t, item.DefID, loadErr.DefID)
+				assert.Equal(t, item.Key, loadErr.Key)
+				assert.Contains(t, loadErr.Message, block+".")
+			})
+		}
+	}
+}
+
+func writeCombatItemFile(t *testing.T, fields string) string {
+	t.Helper()
+	filePath := filepath.Join(t.TempDir(), "combat.jsonc")
+	data := `{"v":1,"source":"test","items":[{"defId":1001,"key":"test_item","name":"Test Item","size":{"w":1,"h":1}` + fields + `}]}`
+	require.NoError(t, os.WriteFile(filePath, []byte(data), 0644))
+	return filePath
 }
 
 func TestLoadFromDirectory_DuplicateDefID(t *testing.T) {

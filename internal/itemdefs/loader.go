@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -234,6 +235,24 @@ func validateItem(item *ItemDef, filePath string) error {
 				Key:      item.Key,
 				Message:  "container.size.h must be >= 1",
 			}
+		}
+	}
+
+	if item.Melee != nil && (item.Melee.BaseDamage <= 0 || math.IsNaN(item.Melee.BaseDamage) || math.IsInf(item.Melee.BaseDamage, 0)) {
+		return &LoadError{
+			FilePath: filePath,
+			DefID:    item.DefID,
+			Key:      item.Key,
+			Message:  "melee.baseDamage must be positive and finite",
+		}
+	}
+
+	if item.Armor != nil && (item.Armor.BaseArmor <= 0 || math.IsNaN(item.Armor.BaseArmor) || math.IsInf(item.Armor.BaseArmor, 0)) {
+		return &LoadError{
+			FilePath: filePath,
+			DefID:    item.DefID,
+			Key:      item.Key,
+			Message:  "armor.baseArmor must be positive and finite",
 		}
 	}
 

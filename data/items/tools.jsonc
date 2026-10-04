@@ -10,6 +10,9 @@
       "tags": [
         "axe"
       ],
+      "melee": {
+        "baseDamage": 6
+      },
       "size": {
         "w": 1,
         "h": 1
