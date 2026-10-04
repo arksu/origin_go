@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <meta charset="utf-8">
-<title>Мелководье — проверка персонажей</title>
+<title>Shallow water — character review</title>
 <style>
 body { background: #162429; color: #dce5d6; font: 14px system-ui, sans-serif; margin: 24px; }
 h1 { font-size: 22px; }
@@ -18,17 +18,17 @@ button { margin: 8px 8px 8px 0; padding: 8px 16px; }
 .texture-review .green { background-color: #243c24; }
 .texture-review .water { background-color: #084869; }
 </style>
-<h1>Мелководье · реальный игровой рендер</h1>
-<p>Восемь направлений: на берегу и в воде до середины колена. Верхний ряд — берег, нижний — мелководье. Рябь: пять кадров, 5 FPS.</p>
+<h1>Shallow water · actual game renderer</h1>
+<p>Eight directions: on shore and knee-deep in water. Top row: shore; bottom row: shallow water. Ripples: five frames at 5 FPS.</p>
 <div id="preview"></div>
-<button id="walk">Ходьба / остановка</button>
-<button id="carry">Переноска / обычная поза</button>
-<label>Сцена: <select id="count"><option value="16">Восемь направлений</option><option value="1">1 персонаж</option><option value="30">30 персонажей</option></select></label>
-<pre id="result">Проверяем…</pre>
+<button id="walk">Walk / stop</button>
+<button id="carry">Carry / normal pose</button>
+<label>Scene: <select id="count"><option value="16">Eight directions</option><option value="1">1 character</option><option value="30">30 characters</option></select></label>
+<pre id="result">Checking…</pre>
 <pre id="metrics"></pre>
-<div class="texture-review" aria-label="Проверка прозрачных краёв текстуры">
-<figure><div class="green ripple-preview" role="img" aria-label="Анимация ряби на тёмно-зелёном фоне"></div><figcaption>Зелёный · 5 FPS</figcaption></figure>
-<figure><div class="water ripple-preview" role="img" aria-label="Анимация ряби на синем фоне воды"></div><figcaption>Вода · 5 FPS</figcaption></figure>
+<div class="texture-review" aria-label="Texture transparency review">
+<figure><div class="green ripple-preview" role="img" aria-label="Ripple animation on a dark green background"></div><figcaption>Green · 5 FPS</figcaption></figure>
+<figure><div class="water ripple-preview" role="img" aria-label="Ripple animation on a blue water background"></div><figcaption>Water · 5 FPS</figcaption></figure>
 </div>
 <script type="module" src="/tests/shallow-water.ts"></script>
 </html>

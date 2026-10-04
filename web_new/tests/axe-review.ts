@@ -29,10 +29,10 @@ async function main() {
     element.onclick = action
     document.querySelector('#controls')!.append(element)
   }
-  button('Ходьба / стойка', () => { walking = !walking })
-  button('Левая / правая', () => { slot = slot === 'right_hand' ? 'left_hand' : 'right_hand'; void equip() })
-  button('Снять / надеть', () => { equipped = !equipped; void equip() })
-  button('Переноска', () => { handles.forEach(handle => { handle.actor.carrying = !handle.actor.carrying }) })
+  button('Walk / stand', () => { walking = !walking })
+  button('Left / right', () => { slot = slot === 'right_hand' ? 'left_hand' : 'right_hand'; void equip() })
+  button('Unequip / equip', () => { equipped = !equipped; void equip() })
+  button('Carry', () => { handles.forEach(handle => { handle.actor.carrying = !handle.actor.carrying }) })
   let distance = 0
   app.ticker.add(ticker => {
     if (walking) distance += ticker.deltaMS / 960 * handles[0]!.actor.cycleDistanceTiles
@@ -43,7 +43,7 @@ async function main() {
     })
     renderer.render(performance.now())
   }, undefined, 50)
-  document.querySelector('#result')!.textContent = '8 направлений • 1200 треугольников • обычный хват из каталога • фаза от пройденного расстояния'
+  document.querySelector('#result')!.textContent = '8 directions • 1200 triangles • standard grip from the catalog • phase driven by distance traveled'
   Object.assign(window, { axeReview: { handles, renderer, app } })
 }
 void main().catch(error => { document.querySelector('#result')!.textContent = String(error); console.error(error) })

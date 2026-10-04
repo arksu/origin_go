@@ -11,6 +11,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -42,7 +43,7 @@ func (service *ActionService) approachTileCenter(world *ecs.World, playerID type
 	ecs.AddComponent(world, player, active)
 	position, hasPosition := ecs.GetComponent[components.Transform](world, player)
 	movement, hasMovement := ecs.GetComponent[components.Movement](world, player)
-	if !hasPosition || !hasMovement || movement.State == constt.StateStunned || movement.Speed <= 0 {
+	if !hasPosition || !hasMovement || movement.State == constt.StateStunned || movement.Speed <= 0 || playerstate.IsIncapacitated(world, player) {
 		service.Complete(world, playerID, player, active.Generation, false, "ACTION_INVALID_TARGET")
 		return
 	}

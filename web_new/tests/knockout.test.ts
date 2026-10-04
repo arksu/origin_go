@@ -121,7 +121,7 @@ test('local and observed poses share the visual gate for epoch, generation, exac
   game.setPlayerLeaveWorld()
 })
 
-test('forbidden craft and build keep keyboard movement and reach the server for an explicit refusal', t => {
+test('forbidden craft and build retire keyboard input and reach the server for an explicit refusal', t => {
   setActivePinia(createPinia())
   const game = useGameStore()
   game.setConnectionState('connected')
@@ -129,7 +129,7 @@ test('forbidden craft and build keep keyboard movement and reach the server for 
   const releases = t.mock.method(gameFacade, 'releaseKeyboardMovement', () => {})
   const sends = t.mock.method(gameConnection, 'send', () => {})
   sendStartCraftOne('branch'); sendStartBuild('campfire', { x: 100, y: 100 })
-  assert.equal(releases.mock.callCount(), 0)
+  assert.equal(releases.mock.callCount(), 2)
   assert.equal(sends.mock.callCount(), 2)
   assert.ok(sends.mock.calls[0]!.arguments[0]!.startCraftOne)
   assert.ok(sends.mock.calls[1]!.arguments[0]!.buildStart)

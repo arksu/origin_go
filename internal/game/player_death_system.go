@@ -118,12 +118,15 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 		}
 		return true
 	}
+	if playerstate.IsIncapacitated(w, handle) {
+		playerstate.StopMovement(w, handle)
+	}
 	if runtime, ok := s.handler.(interface {
-		HandlePlayerItemsLocked(*ecs.World, types.EntityID, types.Handle)
+		HandlePlayerIncapacitated(*ecs.World, types.EntityID, types.Handle)
 		ApplyPendingStandUp(*ecs.World, types.EntityID, types.Handle)
 	}); ok {
 		if playerstate.ItemsLocked(w, handle) {
-			runtime.HandlePlayerItemsLocked(w, playerID, handle)
+			runtime.HandlePlayerIncapacitated(w, playerID, handle)
 		}
 		runtime.ApplyPendingStandUp(w, playerID, handle)
 	}

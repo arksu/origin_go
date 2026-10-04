@@ -4,6 +4,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -16,7 +17,8 @@ const linkMovementEpsilon = 0.001
 // Rules:
 // - link is created only by explicit intent + confirmed collision with target
 // - one player can have only one active link
-// - link breaks strictly on movement, collision switch, relink, or despawn
+// - KO/lying forbid links and terminate all station/object interactions
+// - link also breaks on movement, collision switch, relink, or despawn
 type breakCandidate struct {
 	playerID types.EntityID
 	reason   ecs.LinkBreakReason
@@ -53,6 +55,10 @@ func (s *LinkSystem) processIntents(w *ecs.World, linkState *ecs.LinkState) {
 	for playerID, intent := range linkState.IntentByPlayer {
 		playerHandle := w.GetHandleByEntityID(playerID)
 		if playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
+			linkState.ClearIntent(playerID)
+			continue
+		}
+		if playerstate.IsIncapacitated(w, playerHandle) {
 			linkState.ClearIntent(playerID)
 			continue
 		}
@@ -103,6 +109,10 @@ func (s *LinkSystem) validateActiveLinks(w *ecs.World, linkState *ecs.LinkState)
 			continue
 		}
 		// Handle changed means despawn/respawn happened under same EntityID.
+		if playerstate.IsIncapacitated(w, playerHandle) {
+			s.toBreak = append(s.toBreak, breakCandidate{playerID: playerID, reason: ecs.LinkBreakKnockedOut})
+			continue
+		}
 		if link.PlayerHandle != types.InvalidHandle && playerHandle != link.PlayerHandle {
 			s.toBreak = append(s.toBreak, breakCandidate{playerID: playerID, reason: ecs.LinkBreakDespawn})
 			continue
@@ -238,6 +248,9 @@ func (s *LinkSystem) linkPlayerToTarget(
 }
 
 func (s *LinkSystem) breakLink(w *ecs.World, linkState *ecs.LinkState, playerID types.EntityID, reason ecs.LinkBreakReason) {
+	if reason == ecs.LinkBreakKnockedOut {
+		linkState.ClearIntent(playerID)
+	}
 	link, removed := linkState.RemoveLink(playerID)
 	if !removed {
 		return

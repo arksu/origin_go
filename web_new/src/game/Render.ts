@@ -91,7 +91,11 @@ export class Render {
     this.inputController = new InputController()
     this.keyboardMovement = new KeyboardMovementController(
       (x, y, revision, epoch) => playerCommandController.sendMoveDirection(x, y, revision, epoch),
-      () => this.canvas !== null && gameConnection.getState() === 'connected' && useGameStore().worldBootstrapState === 'ready',
+      () => {
+        const game = useGameStore()
+        return this.canvas !== null && gameConnection.getState() === 'connected' && game.worldBootstrapState === 'ready' &&
+          !game.playerStats.isKnockedOut && !game.playerStats.isLying
+      },
       () => this.inputController.suppressMovementKeys(),
     )
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
@@ -380,7 +384,7 @@ export class Render {
       const notice = document.createElement('div')
       this.renderErrorNotice = notice
       notice.setAttribute('role', 'alert')
-      notice.textContent = 'Не удалось отобразить персонажа. Перезагрузите страницу.'
+      notice.textContent = 'Unable to render the character. Reload the page.'
       notice.style.cssText = 'position:fixed;inset:40% 10% auto;padding:24px;background:#281f1b;color:#fff;z-index:10000;text-align:center'
       this.app.canvas.parentElement?.append(notice)
       return
@@ -904,8 +908,10 @@ export class Render {
   }
 
   setKeyboardMovementEnabled(enabled: boolean): void {
-    const params = useGameStore().worldParams
-    const accepted = this.keyboardMovement.configure(params?.streamEpoch ?? 0, params?.directionalMovementSupported === true, enabled)
+    const game = useGameStore()
+    const params = game.worldParams
+    const accepted = this.keyboardMovement.configure(params?.streamEpoch ?? 0, params?.directionalMovementSupported === true,
+      enabled && !game.playerStats.isKnockedOut && !game.playerStats.isLying)
     this.inputController.setKeyboardMovementEnabled(accepted)
   }
 

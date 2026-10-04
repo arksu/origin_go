@@ -89,7 +89,7 @@ func TestCancellationAndDeathCleanupClearPublicState(t *testing.T) {
 			case "link":
 				NewCyclicActionSystem(service, nil, nil).Update(w, .1)
 			case "knockout":
-				(&Shard{contextActions: service}).HandlePlayerItemsLocked(w, 101, handle)
+				(&Shard{contextActions: service}).HandlePlayerIncapacitated(w, 101, handle)
 			case "death":
 				(&Shard{}).clearPlayerTransientStateForDeath(w, 101, handle)
 			}

@@ -22,6 +22,12 @@ src/
 
 ## Key Architectural Rules
 
+### Client Language
+
+- Use English for every application-provided UI string, including display names, window titles, buttons, tooltips, errors, accessibility labels, and preview/debug pages.
+- Client-visible labels from server definitions or generated asset metadata must be English too; update their source definitions and regenerate the published metadata.
+- Preserve user-provided names and chat in their original language. Do not translate or reject user content to enforce the UI language.
+
 ### 1. Vue-Pixi Separation
 
 **No direct PIXI imports in Vue components.**

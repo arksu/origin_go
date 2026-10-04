@@ -192,7 +192,7 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 	if !exists {
 		return
 	}
-	if service.rejectItemMutation(world, playerID, playerHandle, active.ActionID) {
+	if service.rejectIncapacitatedAction(world, playerID, playerHandle, active.ActionID) {
 		service.Cancel(world, playerID, playerHandle)
 		return
 	}
@@ -216,7 +216,7 @@ func (service *ActionService) Activate(world *ecs.World, playerID types.EntityID
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
 		return
 	}
-	if service.rejectItemMutation(world, playerID, playerHandle, id) {
+	if service.rejectIncapacitatedAction(world, playerID, playerHandle, id) {
 		return
 	}
 	if service.rejectCooldown(world, playerID, playerHandle, id) {
@@ -263,7 +263,7 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
 		return
 	}
-	if service.rejectItemMutation(world, playerID, playerHandle, id) {
+	if service.rejectIncapacitatedAction(world, playerID, playerHandle, id) {
 		return
 	}
 	if service.rejectCooldown(world, playerID, playerHandle, id) {
@@ -287,12 +287,24 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 	service.startTarget(world, playerID, playerHandle, definition, active, target)
 }
 
-func (service *ActionService) rejectItemMutation(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) bool {
-	if !service.requiresItemMutation(id) || !playerstate.ItemsLocked(world, playerHandle) {
+func (service *ActionService) rejectIncapacitatedAction(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) bool {
+	if !playerstate.IsIncapacitated(world, playerHandle) {
 		return false
 	}
-	service.alert(playerID, playerstate.ItemsLockedReason)
-	return true
+	if service.requiresItemMutation(id) {
+		service.alert(playerID, playerstate.ItemsLockedReason)
+		return true
+	}
+	if service.requiresObjectInteraction(id) {
+		service.alert(playerID, "ACTION_UNAVAILABLE")
+		return true
+	}
+	return false
+}
+
+func (service *ActionService) requiresObjectInteraction(id string) bool {
+	definition, found := service.definitions.Get(id)
+	return found && (definition.Target.Kind == actiondefs.TargetObject || definition.Target.Approach == actiondefs.ApproachTileCenter)
 }
 
 func (service *ActionService) normalizeTarget(world *ecs.World, definition *actiondefs.Definition, target ActionTarget) (ActionTarget, string) {
@@ -553,10 +565,6 @@ func (service *ActionService) Cancel(world *ecs.World, playerID types.EntityID, 
 }
 
 func (service *ActionService) stopOwnedMovement(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, active components.ActiveGameAction) {
-	// Item cancellation during KO retires the action without stopping its approach.
-	if service.requiresItemMutation(active.ActionID) && playerstate.ItemsLocked(world, playerHandle) {
-		return
-	}
 	if !active.MovementOwned {
 		return
 	}

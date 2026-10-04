@@ -15,6 +15,12 @@
 - Cache expensive computations when appropriate
 - Use lazy evaluation for large collections
 
+## Client language
+
+- All application-provided text displayed by the client must be in English: names, window titles, buttons, menus, tooltips, status/error messages, accessibility labels, and browser preview/debug controls.
+- Server definitions and generated asset metadata consumed by the client must also use English display names. Change their sources and regenerate outputs through the existing tooling.
+- This rule does not restrict user-provided character names, chat messages, or other user content.
+
 ## 2D tile atlas tooling (`tools/`)
 
 TexturePacker atlas pack/extract for the web client. Full docs: `tools/README.md`.

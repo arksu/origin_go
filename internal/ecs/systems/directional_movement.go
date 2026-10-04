@@ -11,6 +11,7 @@ import (
 	"origin/internal/entitystats"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 )
 
@@ -36,10 +37,7 @@ func directionalMovementRestricted(w *ecs.World, handle types.Handle, movement c
 	if movement.State == constt.StateStunned {
 		return true
 	}
-	if health, exists := ecs.GetComponent[components.EntityHealth](w, handle); exists {
-		return health.HHP <= 0
-	}
-	return false
+	return playerstate.IsIncapacitated(w, handle)
 }
 
 func (s *NetworkCommandSystem) handleMoveDirection(w *ecs.World, handle types.Handle, command *network.PlayerCommand) {

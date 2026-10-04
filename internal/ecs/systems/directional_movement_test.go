@@ -298,7 +298,7 @@ func TestDirectionActionPhasesAndIntentCleanup(t *testing.T) {
 
 func TestDirectionModesAndRestrictionsMatchClickMovement(t *testing.T) {
 	for _, mode := range []constt.MoveMode{constt.Crawl, constt.Walk, constt.Run, constt.FastRun, constt.Swim} {
-		for _, condition := range []string{"normal", "carry", "low-stamina", "overstuffed", "exhausted", "stun", "ko"} {
+		for _, condition := range []string{"normal", "carry", "low-stamina", "overstuffed", "exhausted", "stun", "ko", "lying"} {
 			f := newDirectionalFixture(t)
 			ecs.AddComponent(f.world, f.player, components.EntityStats{Stamina: 1000, Energy: 1000})
 			ecs.WithComponent(f.world, f.player, func(m *components.Movement) { m.Mode = mode })
@@ -324,6 +324,10 @@ func TestDirectionModesAndRestrictionsMatchClickMovement(t *testing.T) {
 				expected = 0
 			case "ko":
 				ecs.AddComponent(f.world, f.player, components.EntityHealth{HHP: 100, SHP: 0, KOUntilUnixMs: 60_000, IsLying: true})
+				expected = 0
+			case "lying":
+				ecs.AddComponent(f.world, f.player, components.EntityHealth{HHP: 100, SHP: 5, IsLying: true})
+				expected = 0
 			}
 			f.movement.Update(f.world, .1)
 			moves := ecs.GetResource[ecs.MovedEntities](f.world)

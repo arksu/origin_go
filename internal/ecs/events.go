@@ -252,10 +252,11 @@ func NewObjectMoveBatchEvent(layer int, entries []MoveBatchEntry) *ObjectMoveBat
 type LinkBreakReason string
 
 const (
-	LinkBreakMoved   LinkBreakReason = "moved"
-	LinkBreakRelink  LinkBreakReason = "relink"
-	LinkBreakDespawn LinkBreakReason = "despawn"
-	LinkBreakClosed  LinkBreakReason = "closed"
+	LinkBreakMoved      LinkBreakReason = "moved"
+	LinkBreakRelink     LinkBreakReason = "relink"
+	LinkBreakDespawn    LinkBreakReason = "despawn"
+	LinkBreakClosed     LinkBreakReason = "closed"
+	LinkBreakKnockedOut LinkBreakReason = "knocked_out"
 )
 
 // LinkCreatedEvent is published synchronously when player-target link is established.

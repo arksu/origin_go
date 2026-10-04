@@ -44,9 +44,26 @@ func ResolveKnockout(health *components.EntityHealth, nowMs int64) {
 	StartKnockout(health, nowMs)
 }
 
-func ItemsLocked(w *ecs.World, handle types.Handle) bool {
+// IsIncapacitated also covers depletion before the health system observes it.
+// KO and the remaining lying pose forbid movement, teleporting and object links.
+func IsIncapacitated(w *ecs.World, handle types.Handle) bool {
 	health, exists := ecs.GetComponent[components.EntityHealth](w, handle)
 	return exists && (health.KOUntilUnixMs != 0 || health.IsLying || health.HHP <= 0 || health.SHP <= 0)
+}
+
+func ItemsLocked(w *ecs.World, handle types.Handle) bool {
+	return IsIncapacitated(w, handle)
+}
+
+func StopMovement(w *ecs.World, handle types.Handle) {
+	ecs.WithComponent(w, handle, func(movement *components.Movement) {
+		if movement.TargetType != constt.TargetNone || movement.State == constt.StateMoving || movement.VelocityX != 0 || movement.VelocityY != 0 {
+			movement.ClearTarget()
+			// Health runs after TransformUpdate; the next movement pass must publish
+			// a stop even for a retired click route. Keep the accepted input revision.
+			movement.Direction.UpdatePending = true
+		}
+	})
 }
 
 func CanStandUp(w *ecs.World, handle types.Handle) bool {
@@ -67,6 +84,9 @@ func ObserveHealthChange(w *ecs.World, playerID types.EntityID, handle types.Han
 		StartKnockout(health, ecs.GetResource[ecs.TimeState](w).UnixMs)
 	})
 	after, _ := ecs.GetComponent[components.EntityHealth](w, handle)
+	if IsIncapacitated(w, handle) {
+		StopMovement(w, handle)
+	}
 	if before.IsLying != after.IsLying {
 		ecs.MarkCharacterVisualDirty(w, playerID)
 	}

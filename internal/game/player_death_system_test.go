@@ -70,8 +70,12 @@ func TestPlayerDeathSystem_KnockoutBoundaryAndIndependentStun(t *testing.T) {
 			t.Fatal("completion grant repeated")
 		}
 		movement, _ := ecs.GetComponent[components.Movement](world, handle)
-		if movement.State != state || movement.TargetType != _const.TargetPoint || movement.TargetX != 42 {
-			t.Fatalf("KO changed movement/stun: %+v", movement)
+		expectedState := _const.StateIdle
+		if stunned {
+			expectedState = _const.StateStunned
+		}
+		if movement.State != expectedState || movement.TargetType != _const.TargetNone {
+			t.Fatalf("KO must stop movement and preserve independent stun: %+v", movement)
 		}
 		ecs.WithComponent(world, handle, func(h *components.EntityHealth) { h.SHP = 0 })
 		system.Update(world, 0)

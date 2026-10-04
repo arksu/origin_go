@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Стыки тайлов</title>
+  <title>Tile seams</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #14231b; color: #e0eadc; font: 14px system-ui, sans-serif; }
@@ -29,50 +29,50 @@
 </head>
 <body>
   <header>
-    <h1>Стыки тайлов</h1>
-    <p>Перетаскивайте поле мышью. Колесо меняет масштаб. Текстуры берутся из текущего атласа клиента.</p>
+    <h1>Tile seams</h1>
+    <p>Drag the field with the mouse. Scroll to zoom. Textures come from the current client atlas.</p>
     <fieldset id="controls" disabled style="border: 0; padding: 0;">
-      <label>Целевой тип<select id="target"></select></label>
-      <label>Направление наложения
+      <label>Target type<select id="target"></select></label>
+      <label>Overlay direction
         <select id="direction">
-          <option value="all">Все соседние типы</option>
-          <option value="target-over">Целевой поверх соседнего</option>
-          <option value="neighbor-over">Соседний поверх целевого</option>
+          <option value="all">All neighboring types</option>
+          <option value="target-over">Target over neighbor</option>
+          <option value="neighbor-over">Neighbor over target</option>
         </select>
       </label>
-      <label>Соседний тип<select id="neighbor"></select></label>
-      <label>Рисунок поля
+      <label>Neighbor type<select id="neighbor"></select></label>
+      <label>Field pattern
         <select id="pattern">
-          <option value="solid">Только целевой</option>
-          <option value="target-island">Целевой участок среди соседнего</option>
-          <option value="neighbor-island">Соседний участок среди целевого</option>
-          <option value="split-x">Прямая граница по X</option>
-          <option value="split-y">Прямая граница по Y</option>
-          <option value="stripes">Полосы</option>
-          <option value="checkerboard">Шахматка участков</option>
-          <option value="single-cells">Одиночные соседние тайлы</option>
-          <option value="three-way">Стык трёх типов</option>
+          <option value="solid">Target only</option>
+          <option value="target-island">Target island in neighbor</option>
+          <option value="neighbor-island">Neighbor island in target</option>
+          <option value="split-x">Straight X boundary</option>
+          <option value="split-y">Straight Y boundary</option>
+          <option value="stripes">Stripes</option>
+          <option value="checkerboard">Checkerboard regions</option>
+          <option value="single-cells">Single neighbor tiles</option>
+          <option value="three-way">Three-way junction</option>
         </select>
       </label>
-      <label>Третий тип<select id="third"></select></label>
-      <label>Размер поля
+      <label>Third type<select id="third"></select></label>
+      <label>Field size
         <select id="size"><option value="16">16 × 16</option><option value="32" selected>32 × 32</option><option value="48">48 × 48</option><option value="64">64 × 64</option></select>
       </label>
-      <label>Масштаб
+      <label>Zoom
         <select id="zoom"><option value="0.25">25%</option><option value="0.5">50%</option><option value="1" selected>100%</option><option value="2">200%</option><option value="3">300%</option><option value="4">400%</option><option value="6">600%</option></select>
       </label>
-      <label>Фон<input id="background" type="color" value="#163722"></label>
-      <label class="checkbox"><input id="grid" type="checkbox"> Сетка тайлов</label>
-      <label class="checkbox"><input id="chunks" type="checkbox"> Границы чанков</label>
-      <button id="shuffle" type="button">Другой расклад вариантов</button>
-      <button id="fit" type="button">Показать всё поле</button>
-      <button id="center" type="button">В центр</button>
+      <label>Background<input id="background" type="color" value="#163722"></label>
+      <label class="checkbox"><input id="grid" type="checkbox"> Tile grid</label>
+      <label class="checkbox"><input id="chunks" type="checkbox"> Chunk boundaries</label>
+      <button id="shuffle" type="button">Shuffle variants</button>
+      <button id="fit" type="button">Fit field</button>
+      <button id="center" type="button">Center</button>
     </fieldset>
-    <p id="status" role="status">Загрузка атласа…</p>
-    <p>Края типа с меньшим ID накладываются поверх типа с большим ID. Масштаб 100% и выше удобен для проверки пиксельных стыков.</p>
+    <p id="status" role="status">Loading atlas…</p>
+    <p>Edges of types with smaller IDs overlay types with larger IDs. Zoom to 100% or more to review pixel seams.</p>
   </header>
-  <main id="preview" aria-label="Поле для просмотра стыков тайлов"></main>
-  <footer><div id="inspect">Наведите мышь на тайл, чтобы увидеть его тип и вариант текстуры.</div><pre id="error" role="alert"></pre></footer>
+  <main id="preview" aria-label="Tile seam preview field"></main>
+  <footer><div id="inspect">Hover over a tile to see its type and texture variant.</div><pre id="error" role="alert"></pre></footer>
   <script type="module" src="./tile-seams.ts"></script>
 </body>
 </html>

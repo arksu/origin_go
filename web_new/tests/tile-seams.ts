@@ -8,23 +8,23 @@ import * as tileIds from '../src/game/tiles/tileIds'
 const CHUNK_SIZE = 16
 const ZOOM_LEVELS = [0.25, 0.5, 1, 2, 3, 4, 6]
 const TILE_NAMES: Record<number, string> = {
-  [tileIds.TILE_DEEP_WATER]: 'Глубокая вода',
-  [tileIds.TILE_SHALLOW_WATER]: 'Мелкая вода',
-  [tileIds.TILE_STONE_PAVING]: 'Каменная мостовая',
-  [tileIds.TILE_PLOWED]: 'Вспаханная земля',
-  [tileIds.TILE_CONIFEROUS_FOREST]: 'Хвойный лес',
-  [tileIds.TILE_BROADLEAF_FOREST]: 'Лиственный лес',
-  [tileIds.TILE_THICKET]: 'Заросли',
-  [tileIds.TILE_GRASS]: 'Трава',
-  [tileIds.TILE_HEATH]: 'Вереск',
-  [tileIds.TILE_MOOR]: 'Пустошь',
-  [tileIds.TILE_SWAMP_1]: 'Болото 1',
-  [tileIds.TILE_SWAMP_2]: 'Болото 2',
-  [tileIds.TILE_SWAMP_3]: 'Болото 3',
-  [tileIds.TILE_DIRT]: 'Грунт',
-  [tileIds.TILE_CLAY]: 'Глина',
-  [tileIds.TILE_SAND]: 'Песок',
-  [tileIds.TILE_MOUNTAIN]: 'Горы',
+  [tileIds.TILE_DEEP_WATER]: 'Deep Water',
+  [tileIds.TILE_SHALLOW_WATER]: 'Shallow Water',
+  [tileIds.TILE_STONE_PAVING]: 'Stone Paving',
+  [tileIds.TILE_PLOWED]: 'Plowed Land',
+  [tileIds.TILE_CONIFEROUS_FOREST]: 'Coniferous Forest',
+  [tileIds.TILE_BROADLEAF_FOREST]: 'Broadleaf Forest',
+  [tileIds.TILE_THICKET]: 'Thicket',
+  [tileIds.TILE_GRASS]: 'Grass',
+  [tileIds.TILE_HEATH]: 'Heath',
+  [tileIds.TILE_MOOR]: 'Moor',
+  [tileIds.TILE_SWAMP_1]: 'Swamp 1',
+  [tileIds.TILE_SWAMP_2]: 'Swamp 2',
+  [tileIds.TILE_SWAMP_3]: 'Swamp 3',
+  [tileIds.TILE_DIRT]: 'Dirt',
+  [tileIds.TILE_CLAY]: 'Clay',
+  [tileIds.TILE_SAND]: 'Sand',
+  [tileIds.TILE_MOUNTAIN]: 'Mountain',
 }
 
 function element<T extends HTMLElement>(id: string): T {
@@ -49,11 +49,11 @@ const preview = element<HTMLElement>('preview')
 const status = element<HTMLElement>('status')
 const inspect = element<HTMLElement>('inspect')
 const errorOutput = element<HTMLElement>('error')
-const tileLabel = (id: number) => `${TILE_NAMES[id] ?? `Тип ${id}`} [${id}]`
+const tileLabel = (id: number) => `${TILE_NAMES[id] ?? `Type ${id}`} [${id}]`
 
 function reportError(error: unknown): void {
   errorOutput.textContent = error instanceof Error ? error.message : String(error)
-  document.title = 'Ошибка — стыки тайлов'
+  document.title = 'Error — tile seams'
   console.error(error)
 }
 
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   initTileSets()
   setWorldParams(32, CHUNK_SIZE)
   const supportedIds = getRegisteredTileIdsBelow(tileIds.TILE_VOID).reverse()
-  if (!supportedIds.length) throw new Error('Клиент не зарегистрировал ни одного типа тайла')
+  if (!supportedIds.length) throw new Error('The client did not register any tile types')
   const app = new Application()
   await app.init({
     width: preview.clientWidth, height: preview.clientHeight, resolution: 1,
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
     const previous = Number(controls.neighbor.value) || tileIds.TILE_SAND
     const direction = controls.direction.value
     controls.neighbor.replaceChildren()
-    for (const [above, label] of [[false, 'Целевой накладывается на эти типы'], [true, 'Эти типы накладываются на целевой']] as const) {
+    for (const [above, label] of [[false, 'Target overlays these types'], [true, 'These types overlay the target']] as const) {
       if (direction === 'target-over' && above || direction === 'neighbor-over' && !above) continue
       const group = document.createElement('optgroup')
       group.label = label
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
     }
     const available = Array.from(controls.neighbor.options).map(option => Number(option.value))
     if (available.includes(previous)) controls.neighbor.value = String(previous)
-    if (!available.length) controls.neighbor.add(new Option('Нет подходящих типов', ''))
+    if (!available.length) controls.neighbor.add(new Option('No matching types', ''))
   }
 
   function sampleType(x: number, y: number): number {
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
       case 'checkerboard': return (Math.floor(x / 4) + Math.floor(y / 4)) % 2 === 0 ? target : neighbor
       case 'single-cells': return x % 4 === 2 && y % 4 === 2 ? neighbor : target
       case 'three-way': return x < center ? target : y < center ? neighbor : Number(controls.third.value)
-      default: throw new Error('Неизвестный рисунок поля')
+      default: throw new Error('Unknown field pattern')
     }
   }
 
@@ -182,8 +182,8 @@ async function main(): Promise<void> {
     if (mixed && noNeighbor) {
       fieldTiles = new Uint8Array()
       grid.clear()
-      status.textContent = 'Для этого направления нет соседних типов. Выберите другое направление или сплошное поле.'
-      inspect.textContent = 'Поле не построено: нет подходящего соседнего типа.'
+      status.textContent = 'No neighboring types are available for this direction. Choose another direction or a solid field.'
+      inspect.textContent = 'Field not built: no matching neighbor type.'
       render()
       return
     }
@@ -216,9 +216,9 @@ async function main(): Promise<void> {
       }
     }
     const order = [...presentIds].sort((first, second) => first - second).map(tileLabel).join(' → ')
-    status.textContent = `${fieldSize} × ${fieldSize} (${fieldTiles.length} тайлов), ${chunks.length} чанков; ${transitionCells} тайлов с переходами. ${presentIds.size > 1 ? `Порядок краёв сверху вниз: ${order}.` : `Сплошное поле: ${tileLabel(target)}.`}`
-    inspect.textContent = 'Наведите мышь на тайл, чтобы увидеть его тип и вариант текстуры.'
-    document.title = `${tileLabel(target)} — стыки тайлов`
+    status.textContent = `${fieldSize} × ${fieldSize} (${fieldTiles.length} tiles), ${chunks.length} chunks; ${transitionCells} transition tiles. ${presentIds.size > 1 ? `Edge order from top to bottom: ${order}.` : `Solid field: ${tileLabel(target)}.`}`
+    inspect.textContent = 'Hover over a tile to see its type and texture variant.'
+    document.title = `${tileLabel(target)} — tile seams`
     drawGrid()
     render()
   }
@@ -233,7 +233,7 @@ async function main(): Promise<void> {
       // selected by at least one seed in this range for the shipped tilesets.
       for (let seed = 0; seed < 256; seed++) {
         const name = array.get(seed)
-        if (name && !spritesheet.textures[name]) throw new Error(`В атласе нет текстуры: ${name} (${tileLabel(id)})`)
+        if (name && !spritesheet.textures[name]) throw new Error(`Texture missing from atlas: ${name} (${tileLabel(id)})`)
       }
     }
   }
@@ -273,11 +273,11 @@ async function main(): Promise<void> {
     const y = globalY - originChunkY * CHUNK_SIZE
     highlight.clear()
     if (x < 0 || y < 0 || x >= fieldSize || y >= fieldSize || !fieldTiles.length) {
-      inspect.textContent = 'За пределами поля'
+      inspect.textContent = 'Outside the field'
     } else {
       const id = fieldTiles[y * fieldSize + x]!
       const texture = getGroundTextureName(id, globalX, globalY)
-      inspect.textContent = `${tileLabel(id)} · координаты (${globalX}, ${globalY}) · ${texture}`
+      inspect.textContent = `${tileLabel(id)} · coordinates (${globalX}, ${globalY}) · ${texture}`
       highlight.poly([...project(x, y), ...project(x + 1, y), ...project(x + 1, y + 1), ...project(x, y + 1)]).stroke({ color: 0xffebac, width: 1 / scene.scale.x, alpha: 0.85 })
     }
     render()

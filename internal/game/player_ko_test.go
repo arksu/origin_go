@@ -73,7 +73,11 @@ func TestStandUpAppliedAfterHealthAndAlwaysAcknowledged(t *testing.T) {
 			require.Equal(t, after.IsLying, stats.IsLying)
 			require.Equal(t, after.KOUntilUnixMs != 0, stats.IsKnockedOut)
 			movement, _ := ecs.GetComponent[components.Movement](world, player)
-			require.Equal(t, constt.TargetPoint, movement.TargetType)
+			if condition == "standing" {
+				require.Equal(t, constt.TargetPoint, movement.TargetType)
+			} else {
+				require.Equal(t, constt.TargetNone, movement.TargetType)
+			}
 			if condition == "stun" {
 				require.Equal(t, constt.StateStunned, movement.State)
 			}
@@ -207,7 +211,7 @@ func TestDetachedExpiryRestoresHealthBeforeSpawnAndFirstOwnerSnapshot(t *testing
 	}
 }
 
-func TestKnockoutRetiresOnlyItemIntentsAndKeepsMovement(t *testing.T) {
+func TestKnockoutRetiresInteractionIntentsAndStopsMovement(t *testing.T) {
 	for _, itemAction := range []bool{false, true} {
 		w := ecs.NewWorldForTesting()
 		movement := components.Movement{State: constt.StateMoving, TargetType: constt.TargetPoint, TargetX: 42}
@@ -226,15 +230,16 @@ func TestKnockoutRetiresOnlyItemIntentsAndKeepsMovement(t *testing.T) {
 		shard := &Shard{world: w, contextActions: contextActions}
 		NewPlayerDeathSystem(shard, PlayerDeathSystemConfig{}).Update(w, 0)
 		currentMovement, _ := ecs.GetComponent[components.Movement](w, player)
-		require.Equal(t, movement, currentMovement)
+		require.Equal(t, constt.TargetNone, currentMovement.TargetType)
+		require.Equal(t, constt.StateIdle, currentMovement.State)
 		_, cyclic := ecs.GetComponent[components.ActiveCyclicAction](w, player)
 		_, pending := ecs.GetComponent[components.PendingContextAction](w, player)
 		require.Equal(t, !itemAction, cyclic)
-		require.Equal(t, !itemAction, pending)
+		require.False(t, pending)
 		_, pickup := ecs.GetComponent[components.PendingInteraction](w, player)
 		require.False(t, pickup)
 		_, lift := ecs.GetComponent[components.PendingLiftTransition](w, player)
-		require.True(t, lift)
+		require.False(t, lift)
 		stats, _ := ecs.GetComponent[components.EntityStats](w, player)
 		require.Equal(t, 150.0, stats.Stamina)
 	}

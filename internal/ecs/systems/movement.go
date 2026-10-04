@@ -4,6 +4,7 @@ import (
 	"math"
 	constt "origin/internal/const"
 	"origin/internal/entitystats"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"origin/internal/core"
@@ -68,6 +69,11 @@ func (s *MovementSystem) Update(w *ecs.World, dt float64) {
 
 		transform, ok := s.transformStorage.Get(h)
 		if !ok {
+			return
+		}
+		if playerstate.IsIncapacitated(w, h) {
+			playerstate.StopMovement(w, h)
+			movedEntities.Add(h, transform.X, transform.Y)
 			return
 		}
 
