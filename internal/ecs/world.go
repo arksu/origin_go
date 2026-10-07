@@ -131,9 +131,9 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		inQueue: make(map[types.Handle]struct{}, 256),
 		head:    0,
 	})
-	InitResource(w, CharacterVisualDirtyQueue{ObjectBehaviorDirtyQueue: ObjectBehaviorDirtyQueue{
-		inQueue: make(map[types.Handle]struct{}, 64),
-	}})
+	InitResource(w, CharacterVisualDirtyQueue{
+		records: make(map[types.Handle]*characterVisualDirtyRecord, 64),
+	})
 	InitResource(w, ActionAnimationDirtyQueue{ObjectBehaviorDirtyQueue: ObjectBehaviorDirtyQueue{
 		inQueue: make(map[types.Handle]struct{}, 64),
 	}})
@@ -146,7 +146,7 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		regenQueue:     make(entityStatsRegenMinHeap, 0, 128),
 		regenLatest:    make(map[types.Handle]entityStatsRegenState, 128),
 		pushQueue:      make(playerStatsPushMinHeap, 0, 128),
-		pushLatest:     make(map[types.EntityID]playerStatsPushState, 256),
+		pushLatest:     make(map[types.EntityID]*playerStatsPushState, 256),
 		lastSentUnixMs: make(map[types.EntityID]int64, 256),
 		lastSentNet:    make(map[types.EntityID]PlayerStatsNetSnapshot, 256),
 		movementMode: movementModeState{
@@ -283,6 +283,7 @@ func (w *World) Despawn(h types.Handle) bool {
 		CancelBehaviorTicksByEntityID(w, targetID)
 	}
 	ForgetEntityStatsState(w, targetID, h)
+	GetResource[CharacterVisualDirtyQueue](w).Forget(h)
 
 	if loc, ok := w.locations[h]; ok {
 		if swappedHandle := loc.archetype.RemoveEntityAt(loc.index); swappedHandle != types.InvalidHandle {
