@@ -34,8 +34,10 @@ CREATE TABLE IF NOT EXISTS character
 
     stamina          NUMERIC      NOT NULL CHECK (stamina >= 0),  -- current stamina
     energy           NUMERIC      not null check ( energy >= 0 ), -- current energy
-    shp              INT          NOT NULL CHECK (shp >= 0),      -- soft health points
-    hhp              INT          NOT NULL CHECK (hhp >= 0),      -- hard health points
+    shp              DOUBLE PRECISION NOT NULL CONSTRAINT character_shp_check
+        CHECK (shp >= 0 AND shp < 'Infinity'::double precision), -- soft health points
+    hhp              DOUBLE PRECISION NOT NULL CONSTRAINT character_hhp_check
+        CHECK (hhp >= 0 AND hhp < 'Infinity'::double precision), -- hard health points
 
     is_lying         BOOLEAN      NOT NULL DEFAULT false,
 

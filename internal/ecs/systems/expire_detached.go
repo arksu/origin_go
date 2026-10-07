@@ -76,7 +76,7 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 
 	// Collect expired entities
 	for entityID, entity := range detachedEntities.Map {
-		if now.After(entity.ExpirationTime) {
+		if now.After(entity.ExpirationTime) && !now.Before(entity.SaveRetryAt) {
 			s.expiredBuffer = append(s.expiredBuffer, entityID)
 		}
 	}
@@ -103,6 +103,13 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 		}
 
 		handle := entity.Handle
+		if !w.Alive(handle) {
+			if characters := ecs.GetResource[ecs.CharacterEntities](w); characters.Map[entityID].Handle == handle {
+				characters.Remove(entityID)
+			}
+			detachedEntities.RemoveDetachedEntity(entityID)
+			continue
+		}
 		detachedDuration := now.Sub(entity.DetachedAt)
 		if detachedDuration > maxDetachedDuration {
 			maxDetachedDuration = detachedDuration
@@ -113,7 +120,16 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 
 		// Save character data before despawn
 		if s.characterSaver != nil {
-			s.characterSaver.SaveDetached(w, entityID, handle)
+			if err := s.characterSaver.SaveDetached(w, entityID, handle); err != nil {
+				entity.SaveRetryAt = now.Add(CharacterSaveCaptureRetryInterval)
+				detachedEntities.Map[entityID] = entity
+				if characters := ecs.GetResource[ecs.CharacterEntities](w); characters.Map[entityID].Handle == handle {
+					characters.RescheduleSave(entityID, entity.SaveRetryAt)
+				}
+				s.logger.Error("Detached character snapshot rejected; retaining entity for retry",
+					zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+				continue
+			}
 		}
 
 		// Call cleanup callback before despawn (for spatial index, AOI, etc.)

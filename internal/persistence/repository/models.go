@@ -48,8 +48,8 @@ type Character struct {
 	Heading         int16           `json:"heading"`
 	Stamina         float64         `json:"stamina"`
 	Energy          float64         `json:"energy"`
-	Shp             int             `json:"shp"`
-	Hhp             int             `json:"hhp"`
+	Shp             float64         `json:"shp"`
+	Hhp             float64         `json:"hhp"`
 	IsLying         bool            `json:"is_lying"`
 	Attributes      json.RawMessage `json:"attributes"`
 	Exp             json.RawMessage `json:"exp"`

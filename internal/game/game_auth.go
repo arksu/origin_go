@@ -386,7 +386,10 @@ func (g *Game) buildPlayerSetupFunc(
 		})
 		initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 		ecs.AddComponent(w, h, initialStats)
-		health := g.resolveLoginHealth(w, character, normalizedAttributes, runtimeHealth)
+		health, err := g.resolveLoginHealth(w, character, normalizedAttributes, runtimeHealth)
+		if err != nil {
+			return fmt.Errorf("load character health: %w", err)
+		}
 		ecs.AddComponent(w, h, health)
 		ecs.UpdateEntityStatsRegenSchedule(
 			w,
@@ -481,11 +484,10 @@ func buildInitialEntityStats(
 	}
 }
 
-// Runtime values take precedence over a rounded database row, including when a
+// Runtime values take precedence over the database row, including when a
 // failed spawn retries later. The registry entry is retired only at attachment.
-func (g *Game) resolveLoginHealth(w *ecs.World, character repository.Character, attributes characterattrs.Values, runtimeHealth []components.EntityHealth) components.EntityHealth {
-	health := buildInitialEntityHealth(character.Shp, character.Hhp, attributes, g.cfg.Game.LifeDeathFactor)
-	health.IsLying = character.IsLying
+func (g *Game) resolveLoginHealth(w *ecs.World, character repository.Character, attributes characterattrs.Values, runtimeHealth []components.EntityHealth) (components.EntityHealth, error) {
+	health := components.EntityHealth{SHP: character.Shp, HHP: character.Hhp, IsLying: character.IsLying}
 	if len(runtimeHealth) > 0 {
 		health = runtimeHealth[0]
 	} else if g.shardManager != nil {
@@ -495,22 +497,30 @@ func (g *Game) resolveLoginHealth(w *ecs.World, character repository.Character, 
 			}
 		}
 	}
+	initial, err := buildInitialEntityHealth(health.SHP, health.HHP, attributes, g.cfg.Game.LifeDeathFactor)
+	if err != nil {
+		return components.EntityHealth{}, err
+	}
+	health.SHP, health.HHP = initial.SHP, initial.HHP
 	playerstate.ResolveKnockout(&health, ecs.GetResource[ecs.TimeState](w).UnixMs)
-	return health
+	return health, nil
 }
 
 func buildInitialEntityHealth(
-	rawSHP int,
-	rawHHP int,
+	rawSHP float64,
+	rawHHP float64,
 	attributes characterattrs.Values,
 	lifeDeathFactor float64,
-) components.EntityHealth {
+) (components.EntityHealth, error) {
+	if err := entityhealth.ValidatePools(rawSHP, rawHHP); err != nil {
+		return components.EntityHealth{}, err
+	}
 	mhp := entityhealth.MaxHHPFromCon(characterattrs.Get(attributes, characterattrs.CON), lifeDeathFactor)
-	shp, hhp := entityhealth.ClampHealth(float64(rawSHP), float64(rawHHP), mhp)
+	shp, hhp := entityhealth.ClampHealth(rawSHP, rawHHP, mhp)
 	return components.EntityHealth{
 		SHP: shp,
 		HHP: hhp,
-	}
+	}, nil
 }
 
 // tryReattachPlayer attempts to reattach a client to an existing detached entity

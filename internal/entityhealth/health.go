@@ -1,10 +1,21 @@
 package entityhealth
 
 import (
+	"errors"
 	"math"
 
 	"origin/internal/characterattrs"
 )
+
+var ErrInvalidPools = errors.New("health pools must be finite and nonnegative")
+
+// ValidatePools checks storage-bound values without modifying or rounding them.
+func ValidatePools(shp, hhp float64) error {
+	if shp < 0 || hhp < 0 || math.IsNaN(shp) || math.IsNaN(hhp) || math.IsInf(shp, 0) || math.IsInf(hhp, 0) {
+		return ErrInvalidPools
+	}
+	return nil
+}
 
 const (
 	baseHHPPerSqrtCon   = 25.0

@@ -279,7 +279,6 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	initialStaminaDBValue := math.Round(initialStamina)
 	initialEnergyDBValue := math.Round(_const.DefaultEnergy)
 	initialMHP := entityhealth.MaxHHPFromCon(characterattrs.DefaultValue, h.gameConfig.LifeDeathFactor)
-	initialMHPDBValue := int(math.Round(initialMHP))
 
 	_, err = h.db.Queries().CreateCharacter(r.Context(), repository.CreateCharacterParams{
 		ID:         int64(id),
@@ -289,8 +288,8 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		Y:          y,
 		Stamina:    initialStaminaDBValue,
 		Energy:     initialEnergyDBValue,
-		Shp:        initialMHPDBValue,
-		Hhp:        initialMHPDBValue,
+		Shp:        initialMHP,
+		Hhp:        initialMHP,
 		Attributes: defaultAttributes,
 		Exp:        defaultExperience,
 		Skills:     defaultSkills,
