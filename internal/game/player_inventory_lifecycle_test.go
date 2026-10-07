@@ -41,6 +41,7 @@ func TestFinalPlayerDisconnectReleasesInventoriesAfterSnapshot(t *testing.T) {
 			player := w.Spawn(playerID, nil)
 			ecs.AddComponent(w, player, components.Transform{X: 100, Y: 200})
 			ecs.AddComponent(w, player, components.EntityStats{Stamina: 100, Energy: 100})
+			ecs.AddComponent(w, player, components.EntityHealth{SHP: 10.25, HHP: 19.6})
 			index := ecs.GetResource[ecs.InventoryRefIndex](w)
 			owned := make([]types.Handle, 0, 5)
 			links := make([]components.InventoryLink, 0, 5)

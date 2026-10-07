@@ -40,8 +40,8 @@ type CreateCharacterParams struct {
 	Y          int             `json:"y"`
 	Stamina    float64         `json:"stamina"`
 	Energy     float64         `json:"energy"`
-	Shp        int             `json:"shp"`
-	Hhp        int             `json:"hhp"`
+	Shp        float64         `json:"shp"`
+	Hhp        float64         `json:"hhp"`
 	Attributes json.RawMessage `json:"attributes"`
 	Exp        json.RawMessage `json:"exp"`
 	Skills     json.RawMessage `json:"skills"`
@@ -426,8 +426,8 @@ FROM (
              unnest($4::float8[]) as heading,
              unnest($5::float8[]) as stamina,
              unnest($6::float8[]) as energy,
-             unnest($7::int[]) as shp,
-             unnest($8::int[]) as hhp,
+             unnest($7::float8[]) as shp,
+             unnest($8::float8[]) as hhp,
              unnest($9::boolean[]) as is_lying,
              unnest($10::text[])::jsonb as attributes,
              unnest($11::text[])::jsonb as exp,
@@ -446,8 +446,8 @@ type UpdateCharactersParams struct {
 	Headings        []float64 `json:"headings"`
 	Staminas        []float64 `json:"staminas"`
 	Energies        []float64 `json:"energies"`
-	Shps            []int     `json:"shps"`
-	Hhps            []int     `json:"hhps"`
+	Shps            []float64 `json:"shps"`
+	Hhps            []float64 `json:"hhps"`
 	IsLyings        []bool    `json:"is_lyings"`
 	Attributes      []string  `json:"attributes"`
 	Exps            []string  `json:"exps"`

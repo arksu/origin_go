@@ -67,3 +67,39 @@ func TestCharacterEntitiesRemoveCancelsPendingSchedule(t *testing.T) {
 		t.Fatalf("expected zero pending saves, got %d", entities.PendingSaveCount())
 	}
 }
+
+func TestCharacterEntitiesRescheduleSavePreservesAcceptedCaptureState(t *testing.T) {
+	t.Parallel()
+
+	base := time.Unix(4_000, 0).UTC()
+	entities := CharacterEntities{Map: make(map[types.EntityID]CharacterEntity)}
+	entityID := types.EntityID(55)
+	entities.Add(entityID, types.Handle(505), base)
+	entities.UpdateSaveTime(entityID, base, base.Add(time.Second))
+	before := entities.Map[entityID]
+	if due := entities.PopDue(base.Add(time.Second), nil); len(due) != 1 {
+		t.Fatalf("expected due capture, got %v", due)
+	}
+
+	retryAt := base.Add(6 * time.Second)
+	entities.RescheduleSave(entityID, retryAt)
+	after := entities.Map[entityID]
+	if after.LastSaveAt != before.LastSaveAt || after.SavesCount != before.SavesCount || after.Handle != before.Handle {
+		t.Fatalf("retry changed accepted capture state: before=%+v after=%+v", before, after)
+	}
+	if after.NextSaveAt != retryAt || entities.PendingSaveCount() != 1 {
+		t.Fatalf("retry not scheduled: entity=%+v pending=%d", after, entities.PendingSaveCount())
+	}
+	if due := entities.PopDue(retryAt.Add(-time.Nanosecond), nil); len(due) != 0 {
+		t.Fatalf("retried before deadline: %v", due)
+	}
+	if due := entities.PopDue(retryAt, nil); len(due) != 1 || due[0] != entityID {
+		t.Fatalf("retry lost after consumed schedule: %v", due)
+	}
+
+	entities.Remove(entityID)
+	entities.RescheduleSave(entityID, retryAt.Add(time.Second))
+	if entities.PendingSaveCount() != 0 || len(entities.Map) != 0 {
+		t.Fatal("retry recreated a removed character")
+	}
+}

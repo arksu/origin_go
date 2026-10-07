@@ -356,10 +356,14 @@ func (s *Shard) Stop() {
 			_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, playerID, h, false)
 		}
 	}
+	if s.characterSaver != nil {
+		if err := s.characterSaver.SaveAll(s.world); err != nil {
+			s.logger.Error("Shutdown character snapshots rejected", zap.Error(err))
+		}
+	}
 	s.mu.Unlock()
 
 	if s.characterSaver != nil {
-		s.characterSaver.SaveAll(s.world)
 		s.characterSaver.Stop()
 	}
 	s.chunkManager.Stop()
@@ -651,13 +655,27 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 	lifecycle.DeleteOwnedInventoryContainers(s.world, entityID)
 }
 
-func (s *Shard) despawnDisconnectedPlayer(entityID types.EntityID, handle types.Handle) {
+func (s *Shard) despawnDisconnectedPlayer(entityID types.EntityID, handle types.Handle) error {
 	if s.characterSaver != nil {
-		s.characterSaver.Save(s.world, entityID, handle)
+		if err := s.characterSaver.Save(s.world, entityID, handle); err != nil {
+			now := ecs.GetResource[ecs.TimeState](s.world).Now
+			detached := ecs.GetResource[ecs.DetachedEntities](s.world)
+			detached.AddDetachedEntity(entityID, handle, now, now)
+			entry := detached.Map[entityID]
+			entry.SaveRetryAt = now.Add(systems.CharacterSaveCaptureRetryInterval)
+			detached.Map[entityID] = entry
+			if characters := ecs.GetResource[ecs.CharacterEntities](s.world); characters.Map[entityID].Handle == handle {
+				characters.RescheduleSave(entityID, entry.SaveRetryAt)
+			}
+			systems.StopMovementForDetached(s.world, handle)
+			ecs.ForgetPlayerStatsState(s.world, entityID)
+			return err
+		}
 	}
 	s.onDetachedEntityExpired(entityID, handle)
 	s.world.Despawn(handle)
 	ecs.GetResource[ecs.CharacterEntities](s.world).Remove(entityID)
+	return nil
 }
 
 // onDetachedEntitiesExpired handles AOI cleanup in one batch after detached despawns.

@@ -27,7 +27,7 @@ func (f characterSaveInventoryFunc) SerializeInventories(w interface{}, entityID
 func characterSaveTestSnapshot(id int64, value int) CharacterSnapshot {
 	return CharacterSnapshot{
 		CharacterID: id, X: value, Y: value + 1, Heading: int16(value + 2),
-		Stamina: float64(value + 3), Energy: float64(value + 4), SHP: int32(value + 5), HHP: int32(value + 6),
+		Stamina: float64(value + 3), Energy: float64(value + 4), SHP: float64(value + 5), HHP: float64(value + 6),
 		Attributes: fmt.Sprintf(`{"strength":%d}`, value), Exp: fmt.Sprintf(`{"LP":%d}`, value),
 		Skills: fmt.Sprintf(`["skill%d"]`, value), Discovery: fmt.Sprintf(`["discovery%d"]`, value),
 	}
@@ -89,8 +89,8 @@ func TestCharacterSaveBatchCoalescesLatestSnapshotAndInventoryKeys(t *testing.T)
 		require.Equal(t, float64(want.Heading), characters.Headings[index])
 		require.Equal(t, want.Stamina, characters.Staminas[index])
 		require.Equal(t, want.Energy, characters.Energies[index])
-		require.Equal(t, int(want.SHP), characters.Shps[index])
-		require.Equal(t, int(want.HHP), characters.Hhps[index])
+		require.Equal(t, want.SHP, characters.Shps[index])
+		require.Equal(t, want.HHP, characters.Hhps[index])
 		require.Equal(t, want.Attributes, characters.Attributes[index])
 		require.Equal(t, want.Exp, characters.Exps[index])
 		require.Equal(t, want.Skills, characters.Skills[index])
@@ -202,6 +202,7 @@ func newCharacterSaveTestPlayer() (*ecs.World, types.Handle) {
 	handle := w.Spawn(10, nil)
 	ecs.AddComponent(w, handle, components.Transform{X: 1, Y: 2})
 	ecs.AddComponent(w, handle, components.EntityStats{Stamina: 80, Energy: 90})
+	ecs.AddComponent(w, handle, components.EntityHealth{SHP: 21.4, HHP: 24.28})
 	return w, handle
 }
 
@@ -250,7 +251,7 @@ func TestCharacterSaveSyncOrdersAfterOlderWrite(t *testing.T) {
 		return nil
 	})
 	w, handle := newCharacterSaveTestPlayer()
-	saver.Save(w, 10, handle)
+	require.NoError(t, saver.Save(w, 10, handle))
 	olderDone := make(chan error, 1)
 	go func() { olderDone <- saver.flushPending(context.Background(), saver.queueForCharacter(10), 0) }()
 	select {
@@ -259,6 +260,7 @@ func TestCharacterSaveSyncOrdersAfterOlderWrite(t *testing.T) {
 		t.Fatal("older write did not start")
 	}
 	ecs.WithComponent(w, handle, func(transform *components.Transform) { transform.X = 20 })
+	ecs.WithComponent(w, handle, func(health *components.EntityHealth) { health.SHP, health.HHP = .25, .49 })
 	syncDone := make(chan error, 1)
 	go func() { syncDone <- saver.SaveSync(w, 10, handle) }()
 	require.Eventually(t, func() bool {
@@ -276,6 +278,10 @@ func TestCharacterSaveSyncOrdersAfterOlderWrite(t *testing.T) {
 	require.Len(t, writes, 2)
 	require.Equal(t, []float64{1}, writes[0].Xs)
 	require.Equal(t, []float64{20}, writes[1].Xs)
+	require.Equal(t, []float64{21.4}, writes[0].Shps)
+	require.Equal(t, []float64{24.28}, writes[0].Hhps)
+	require.Equal(t, []float64{.25}, writes[1].Shps)
+	require.Equal(t, []float64{.49}, writes[1].Hhps)
 	require.Nil(t, characterSavePending(t, saver, 10))
 	require.NoError(t, saver.flushPending(context.Background(), saver.queueForCharacter(10), 0))
 	require.Len(t, writes, 2, "older work must not overwrite successful SaveSync")

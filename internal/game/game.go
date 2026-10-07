@@ -924,6 +924,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 					)
 				} else {
 					// Immediate despawn (DisconnectDelay=0 or entity not found)
+					var captureErr error
 					if playerHandle != types.InvalidHandle {
 						if _, _, err := ecs.BreakLinkForPlayer(shard.world, playerEntityID, ecs.LinkBreakDespawn); err != nil {
 							g.logger.Warn("Failed to publish LinkBroken on disconnect despawn",
@@ -932,16 +933,25 @@ func (g *Game) handleDisconnect(c *network.Client) {
 								zap.Int("layer", c.Layer),
 							)
 						}
-						shard.despawnDisconnectedPlayer(playerEntityID, playerHandle)
+						captureErr = shard.despawnDisconnectedPlayer(playerEntityID, playerHandle)
 					}
-					shard.UnregisterEntityAOI(playerEntityID)
+					if captureErr == nil {
+						shard.UnregisterEntityAOI(playerEntityID)
+					}
 					shard.mu.Unlock()
 
-					g.logger.Debug("Unregistered entity AOI",
-						zap.Uint64("client_id", c.ID),
-						zap.Int64("character_id", int64(c.CharacterID)),
-						zap.Int("layer", c.Layer),
-					)
+					if captureErr != nil {
+						g.logger.Error("Disconnect snapshot rejected; retaining entity for retry",
+							zap.Uint64("client_id", c.ID),
+							zap.Int64("character_id", int64(playerEntityID)),
+							zap.Int("layer", c.Layer), zap.Error(captureErr))
+					} else {
+						g.logger.Debug("Unregistered entity AOI",
+							zap.Uint64("client_id", c.ID),
+							zap.Int64("character_id", int64(c.CharacterID)),
+							zap.Int("layer", c.Layer),
+						)
+					}
 				}
 			}
 

@@ -119,6 +119,13 @@ func TestStandUpRejectsConnectionChangedWhileQueued(t *testing.T) {
 	}
 }
 
+func mustResolveLoginHealth(t *testing.T, game *Game, world *ecs.World, character repository.Character, attributes characterattrs.Values, runtime []components.EntityHealth) components.EntityHealth {
+	t.Helper()
+	health, err := game.resolveLoginHealth(world, character, attributes, runtime)
+	require.NoError(t, err)
+	return health
+}
+
 func TestLoginRuntimeHealthPrecedesDatabaseAndSurvivesFailedSpawn(t *testing.T) {
 	world := ecs.NewWorldForTesting()
 	clock := ecs.GetResource[ecs.TimeState](world)
@@ -128,24 +135,24 @@ func TestLoginRuntimeHealthPrecedesDatabaseAndSurvivesFailedSpawn(t *testing.T) 
 	character := repository.Character{ID: 1, Shp: 20, Hhp: 20}
 	runtime := components.EntityHealth{SHP: .25, HHP: 19.5, KOUntilUnixMs: 61000, IsLying: true, LyingRevision: 3}
 	shard.offlineHealth.Store(types.EntityID(1), runtime)
-	require.Equal(t, runtime, game.resolveLoginHealth(world, character, characterattrs.Default(), nil))
+	require.Equal(t, runtime, mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil))
 	clock.UnixMs = 61000
-	restored := game.resolveLoginHealth(world, character, characterattrs.Default(), nil)
+	restored := mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil)
 	require.Equal(t, 1.0, restored.SHP)
 	require.Equal(t, 19.5, restored.HHP)
 	require.True(t, restored.IsLying)
 	require.Zero(t, restored.KOUntilUnixMs)
-	require.Equal(t, restored, game.resolveLoginHealth(world, character, characterattrs.Default(), nil), "failed spawn lost entry")
+	require.Equal(t, restored, mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil), "failed spawn lost entry")
 	// A transfer or rollback supplies its exact state before any attachment.
 	transfer := components.EntityHealth{SHP: 7.125, HHP: 10.75, IsLying: true, LyingRevision: 5}
-	require.Equal(t, transfer, game.resolveLoginHealth(world, character, characterattrs.Default(), []components.EntityHealth{transfer}))
+	require.Equal(t, transfer, mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), []components.EntityHealth{transfer}))
 	// A restarted process has no runtime deadline; persisted pose is independent.
 	shard.offlineHealth.Delete(types.EntityID(1))
 	character.Shp = 0
 	character.IsLying = true
-	require.Equal(t, int64(121000), game.resolveLoginHealth(world, character, characterattrs.Default(), nil).KOUntilUnixMs)
+	require.Equal(t, int64(121000), mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil).KOUntilUnixMs)
 	character.Shp = 2
-	restarted := game.resolveLoginHealth(world, character, characterattrs.Default(), nil)
+	restarted := mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil)
 	require.True(t, restarted.IsLying)
 	require.Zero(t, restarted.KOUntilUnixMs)
 }
@@ -173,7 +180,7 @@ func TestDetachedExpiryRestoresHealthBeforeSpawnAndFirstOwnerSnapshot(t *testing
 			game := &Game{cfg: shard.cfg, logger: zap.NewNop(), shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}
 			require.NoError(t, shard.PrepareEntityAOI(t.Context(), 10, 200, 200))
 			ok, player := shard.TrySpawnPlayer(200, 200, character, func(w *ecs.World, h types.Handle) {
-				ecs.AddComponent(w, h, game.resolveLoginHealth(w, character, characterattrs.Default(), nil))
+				ecs.AddComponent(w, h, mustResolveLoginHealth(t, game, w, character, characterattrs.Default(), nil))
 				ecs.AddComponent(w, h, components.EntityStats{Stamina: 100, Energy: 900})
 				ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
 			})

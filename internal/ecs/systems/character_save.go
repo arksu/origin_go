@@ -3,15 +3,27 @@ package systems
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"origin/internal/characterattrs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/entityhealth"
 	"origin/internal/types"
 	"time"
 
 	"go.uber.org/zap"
+)
+
+const CharacterSaveCaptureRetryInterval = 5 * time.Second
+
+var (
+	ErrMissingCharacterHealth    = errors.New("save character: missing EntityHealth component")
+	ErrMissingCharacterTransform = errors.New("save character: missing Transform component")
+	ErrMissingCharacterStats     = errors.New("save character: missing EntityStats component")
+	ErrInvalidCharacterHandle    = errors.New("save character: invalid entity handle")
+	ErrCharacterSaverStopped     = errors.New("character saver is stopped")
 )
 
 // InventorySnapshot represents a serialized inventory container for database storage
@@ -66,7 +78,19 @@ func (s *CharacterSaveSystem) Update(w *ecs.World, dt float64) {
 			continue
 		}
 
-		s.saver.Save(w, entityID, charEntity.Handle)
+		if err := s.saver.Save(w, entityID, charEntity.Handle); err != nil {
+			retryAt := now.Add(CharacterSaveCaptureRetryInterval)
+			charEntities.RescheduleSave(entityID, retryAt)
+			// Periodic and final detached capture share the same retry deadline.
+			// Expiry runs later in this tick and must not recapture a rejected state.
+			detached := ecs.GetResource[ecs.DetachedEntities](w)
+			if entity, exists := detached.Map[entityID]; exists && entity.Handle == charEntity.Handle {
+				entity.SaveRetryAt = retryAt
+				detached.Map[entityID] = entity
+			}
+			s.logger.Error("Character snapshot rejected; save rescheduled", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+			continue
+		}
 
 		// Deterministic jitter based on entityID to spread saves (0-10% of interval)
 		jitter := time.Duration(entityID%100) * s.saveInterval / 100
@@ -86,8 +110,8 @@ type CharacterSnapshot struct {
 	Heading         int16
 	Stamina         float64
 	Energy          float64
-	SHP             int32
-	HHP             int32
+	SHP             float64
+	HHP             float64
 	IsLying         bool
 	Attributes      string
 	Exp             string
@@ -97,46 +121,49 @@ type CharacterSnapshot struct {
 	Inventories     []InventorySnapshot
 }
 
-func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle types.Handle) {
+// Save captures an owned snapshot under the shard lock. A nil error means it
+// was accepted by the queue, not that the asynchronous database write completed.
+func (s *CharacterSaver) Save(w *ecs.World, entityID types.EntityID, handle types.Handle) error {
+	snapshot, err := s.captureSnapshot(w, entityID, handle)
+	if err != nil {
+		return err
+	}
+	if !s.enqueueSnapshot(snapshot) {
+		return ErrCharacterSaverStopped
+	}
+	return nil
+}
+
+func (s *CharacterSaver) captureSnapshot(w *ecs.World, entityID types.EntityID, handle types.Handle) (CharacterSnapshot, error) {
+	if w == nil || !w.Alive(handle) {
+		return CharacterSnapshot{}, ErrInvalidCharacterHandle
+	}
+	shpValue, hhpValue, isLying, err := s.resolveHealthSnapshotValues(w, handle)
+	if err != nil {
+		return CharacterSnapshot{}, err
+	}
 	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
 	if !hasTransform {
-		s.logger.Warn("Character entity missing Transform component",
-			zap.Uint64("entity_id", uint64(entityID)))
-		return
+		return CharacterSnapshot{}, ErrMissingCharacterTransform
 	}
-
-	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
 	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
 	if !hasStats {
-		return
+		return CharacterSnapshot{}, ErrMissingCharacterStats
 	}
-	shpValue, hhpValue, isLying := s.resolveHealthSnapshotValues(w, handle)
+	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
 	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
 	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, isLying, inventories)
 	if err := snapshot.captureActionCooldowns(w, handle); err != nil {
-		s.logger.Error("Failed to serialize action cooldowns", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
-		return
+		return CharacterSnapshot{}, err
 	}
-	s.enqueueSnapshot(snapshot)
+	return snapshot, nil
 }
 
 // SaveSync persists character snapshot immediately in caller goroutine.
 // Used by admin teleport before despawn to keep DB state consistent for immediate respawn.
 func (s *CharacterSaver) SaveSync(w *ecs.World, entityID types.EntityID, handle types.Handle) error {
-	transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
-	if !hasTransform {
-		return fmt.Errorf("save character %d: missing Transform component", entityID)
-	}
-
-	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
-	staminaValue, energyValue, hasStats := s.resolveStatsSnapshotValues(w, entityID, handle)
-	if !hasStats {
-		return fmt.Errorf("save character %d: missing EntityStats component", entityID)
-	}
-	shpValue, hhpValue, isLying := s.resolveHealthSnapshotValues(w, handle)
-	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
-	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, isLying, inventories)
-	if err := snapshot.captureActionCooldowns(w, handle); err != nil {
+	snapshot, err := s.captureSnapshot(w, entityID, handle)
+	if err != nil {
 		return err
 	}
 
@@ -144,15 +171,15 @@ func (s *CharacterSaver) SaveSync(w *ecs.World, entityID types.EntityID, handle 
 	defer cancel()
 
 	if !s.enqueueSnapshot(snapshot) {
-		return fmt.Errorf("character saver is stopped")
+		return ErrCharacterSaverStopped
 	}
 	return s.flushPending(ctx, s.queueForCharacter(snapshot.CharacterID), snapshot.CharacterID)
 }
 
 // SaveDetached enqueues a snapshot for detached-entity expiration path.
 // We still persist inventories here to avoid losing recent in-memory changes on detach expiry.
-func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, handle types.Handle) {
-	s.Save(w, entityID, handle)
+func (s *CharacterSaver) SaveDetached(w *ecs.World, entityID types.EntityID, handle types.Handle) error {
+	return s.Save(w, entityID, handle)
 }
 
 func (s *CharacterSaver) buildSnapshot(
@@ -164,8 +191,8 @@ func (s *CharacterSaver) buildSnapshot(
 	discoveryRaw string,
 	staminaValue float64,
 	energyValue float64,
-	shpValue int32,
-	hhpValue int32,
+	shpValue float64,
+	hhpValue float64,
 	isLying bool,
 	inventories []InventorySnapshot,
 ) CharacterSnapshot {
@@ -205,11 +232,14 @@ func (s *CharacterSaver) resolveStatsSnapshotValues(w *ecs.World, entityID types
 	return 0, 0, false
 }
 
-func (s *CharacterSaver) resolveHealthSnapshotValues(w *ecs.World, handle types.Handle) (int32, int32, bool) {
+func (s *CharacterSaver) resolveHealthSnapshotValues(w *ecs.World, handle types.Handle) (float64, float64, bool, error) {
 	if health, hasHealth := ecs.GetComponent[components.EntityHealth](w, handle); hasHealth {
-		return roundHealthForSave(health.SHP), roundHealthForSave(health.HHP), health.IsLying
+		if err := entityhealth.ValidatePools(health.SHP, health.HHP); err != nil {
+			return 0, 0, false, err
+		}
+		return health.SHP, health.HHP, health.IsLying, nil
 	}
-	return 100, 100, false
+	return 0, 0, false, ErrMissingCharacterHealth
 }
 
 func (s *CharacterSaver) serializeCharacterProfile(w *ecs.World, entityID types.EntityID, handle types.Handle) (string, string, string, string) {
@@ -286,19 +316,26 @@ func normalizeCharacterHeading(direction float64) int16 {
 }
 
 // SaveAll saves all characters from CharacterEntities
-func (s *CharacterSaver) SaveAll(w *ecs.World) {
+func (s *CharacterSaver) SaveAll(w *ecs.World) error {
 	characterEntities := ecs.GetResource[ecs.CharacterEntities](w)
 	entityIDs := characterEntities.GetAll()
 
 	s.logger.Info("Saving all characters", zap.Int("count", len(entityIDs)))
 
+	var failures []error
 	for _, entityID := range entityIDs {
 		if charEntity, exists := characterEntities.Map[entityID]; exists {
-			s.Save(w, entityID, charEntity.Handle)
+			if err := s.Save(w, entityID, charEntity.Handle); err != nil {
+				failures = append(failures, fmt.Errorf("character %d: %w", entityID, err))
+			}
 		}
 	}
 
-	s.logger.Info("All characters saved")
+	if len(failures) > 0 {
+		return errors.Join(failures...)
+	}
+	s.logger.Info("All character snapshots accepted")
+	return nil
 }
 
 func (snapshot *CharacterSnapshot) captureActionCooldowns(w *ecs.World, handle types.Handle) error {
@@ -309,8 +346,4 @@ func (snapshot *CharacterSnapshot) captureActionCooldowns(w *ecs.World, handle t
 	}
 	snapshot.ActionCooldowns = serialized
 	return nil
-}
-
-func roundHealthForSave(value float64) int32 {
-	return int32(math.Round(math.Min(math.Max(value, 0), math.MaxInt32)))
 }

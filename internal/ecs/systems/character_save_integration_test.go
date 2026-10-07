@@ -131,26 +131,19 @@ func TestCharacterSaverPostgresLyingMigrationAndEverySavePath(t *testing.T) {
 			case "periodic":
 				NewCharacterSaveSystem(saver, time.Minute, zap.NewNop()).Update(world, 0)
 			case "disconnect":
-				saver.Save(world, 11, handle)
+				require.NoError(t, saver.Save(world, 11, handle))
 			case "detached_expiry":
-				saver.SaveDetached(world, 11, handle)
+				require.NoError(t, saver.SaveDetached(world, 11, handle))
 			case "transfer_sync":
 				require.NoError(t, saver.SaveSync(world, 11, handle))
 			case "shutdown":
-				saver.SaveAll(world)
+				require.NoError(t, saver.SaveAll(world))
 			}
 			saver.Stop()
 			loaded, err = db.Queries().GetCharacter(ctx, 11)
 			require.NoError(t, err)
-			expected := int32(0)
-			if value == .5 {
-				expected = 1
-			}
-			if value == 40000.5 {
-				expected = 40001
-			}
-			require.EqualValues(t, expected, loaded.Shp, mode)
-			require.EqualValues(t, expected, loaded.Hhp, mode)
+			require.Equal(t, value, loaded.Shp, mode)
+			require.Equal(t, value, loaded.Hhp, mode)
 			require.Equal(t, value != .5, loaded.IsLying, mode)
 			exact, _ := ecs.GetComponent[components.EntityHealth](world, handle)
 			require.Equal(t, value, exact.SHP)
@@ -164,12 +157,14 @@ func TestCharacterSaverPostgresCoalescesDuplicateAndDistinctSnapshots(t *testing
 	saver := NewCharacterSaver(db, 0, nil, zap.NewNop())
 	t.Cleanup(saver.Stop)
 	older := characterSaveIntegrationSnapshot(11, 10, 1)
+	older.SHP, older.HHP = .49, .5
 	older.Inventories = append(older.Inventories, InventorySnapshot{
 		CharacterID: 11, Kind: 1, Data: json.RawMessage(`{}`), Version: 1,
 	})
 	require.True(t, saver.enqueueSnapshot(older))
 	require.True(t, saver.enqueueSnapshot(characterSaveIntegrationSnapshot(12, 40, 1)))
 	latest := characterSaveIntegrationSnapshot(11, 20, 3)
+	latest.SHP, latest.HHP = 21.4, 24.28
 	// Repeated root keys can also occur inside a snapshot. Keep the highest
 	// version and the last value on ties before issuing PostgreSQL's UPSERT.
 	latest.Inventories = []InventorySnapshot{
@@ -182,6 +177,7 @@ func TestCharacterSaverPostgresCoalescesDuplicateAndDistinctSnapshots(t *testing
 	require.NoError(t, saver.flushPending(context.Background(), queue, 0))
 	require.Empty(t, queue.pending)
 	requireCharacterSavePostgresState(t, db, 11, 20, 3)
+	requireCharacterSavePostgresHealth(t, db, 11, 21.4, 24.28)
 	requireCharacterSavePostgresState(t, db, 12, 40, 1)
 	var inventoryCount int
 	require.NoError(t, db.Pool().QueryRow(context.Background(), `SELECT count(*) FROM inventory`).Scan(&inventoryCount))
@@ -204,7 +200,9 @@ func TestCharacterSaverPostgresInventoryFailureRollsBackAndRetries(t *testing.T)
 		_, cleanupErr := db.Pool().Exec(ctx, `ALTER TABLE inventory DROP CONSTRAINT IF EXISTS fixture_inventory_failure`)
 		require.NoError(t, cleanupErr)
 	})
-	require.True(t, saver.enqueueSnapshot(characterSaveIntegrationSnapshot(11, 20, 2)))
+	latest := characterSaveIntegrationSnapshot(11, 20, 2)
+	latest.SHP, latest.HHP = 21.4, 24.28
+	require.True(t, saver.enqueueSnapshot(latest))
 	require.True(t, saver.enqueueSnapshot(characterSaveIntegrationSnapshot(12, 40, 2)))
 	err = saver.flushPending(context.Background(), queue, 0)
 	var postgresError *pgconn.PgError
@@ -212,12 +210,14 @@ func TestCharacterSaverPostgresInventoryFailureRollsBackAndRetries(t *testing.T)
 	require.Equal(t, "23514", postgresError.Code)
 	require.Len(t, queue.pending, 2, "failed transaction must retain every pending character")
 	requireCharacterSavePostgresState(t, db, 11, 10, 1)
+	requireCharacterSavePostgresHealth(t, db, 11, 90, 100)
 	requireCharacterSavePostgresState(t, db, 12, 30, 1)
 	_, err = db.Pool().Exec(context.Background(), `ALTER TABLE inventory DROP CONSTRAINT fixture_inventory_failure`)
 	require.NoError(t, err)
 	require.NoError(t, saver.flushPending(context.Background(), queue, 0))
 	require.Empty(t, queue.pending)
 	requireCharacterSavePostgresState(t, db, 11, 20, 2)
+	requireCharacterSavePostgresHealth(t, db, 11, 21.4, 24.28)
 	requireCharacterSavePostgresState(t, db, 12, 40, 2)
 }
 
@@ -235,12 +235,15 @@ func TestCharacterSaverPostgresPeriodicThenDetachedFinalSnapshot(t *testing.T) {
 	handle := world.Spawn(11, nil)
 	ecs.AddComponent(world, handle, components.Transform{X: 10, Y: 11})
 	ecs.AddComponent(world, handle, components.EntityStats{Stamina: 75, Energy: 80})
-	saver.Save(world, 11, handle)
+	ecs.AddComponent(world, handle, components.EntityHealth{SHP: 21.4, HHP: 24.28})
+	require.NoError(t, saver.Save(world, 11, handle))
 	ecs.AddComponent(world, handle, components.Transform{X: 20, Y: 21})
-	saver.SaveDetached(world, 11, handle)
+	ecs.AddComponent(world, handle, components.EntityHealth{SHP: .25, HHP: .49})
+	require.NoError(t, saver.SaveDetached(world, 11, handle))
 	world.Despawn(handle)
 	saver.Stop()
 	requireCharacterSavePostgresState(t, db, 11, 20, 20)
+	requireCharacterSavePostgresHealth(t, db, 11, .25, .49)
 }
 
 func TestCharacterSaverPostgresCooldownRoundTripAndMigration(t *testing.T) {

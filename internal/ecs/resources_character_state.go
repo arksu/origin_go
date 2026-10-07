@@ -16,6 +16,7 @@ type DetachedEntity struct {
 	Handle         types.Handle
 	ExpirationTime time.Time
 	DetachedAt     time.Time
+	SaveRetryAt    time.Time // Snapshot capture retry; independent of disconnect expiry.
 }
 
 // AddDetachedEntity adds an entity to the detached entities map
@@ -120,6 +121,16 @@ func (c *CharacterEntities) UpdateSaveTime(entityID types.EntityID, lastSaveAt, 
 		entity.LastSaveAt = lastSaveAt
 		entity.NextSaveAt = nextSaveAt
 		entity.SavesCount++
+		c.Map[entityID] = entity
+		c.schedule(entityID, nextSaveAt)
+	}
+}
+
+// RescheduleSave retries snapshot capture without counting the rejected attempt
+// as a saved character or changing the last accepted snapshot time.
+func (c *CharacterEntities) RescheduleSave(entityID types.EntityID, nextSaveAt time.Time) {
+	if entity, ok := c.Map[entityID]; ok {
+		entity.NextSaveAt = nextSaveAt
 		c.Map[entityID] = entity
 		c.schedule(entityID, nextSaveAt)
 	}
