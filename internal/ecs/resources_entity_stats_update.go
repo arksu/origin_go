@@ -53,8 +53,10 @@ func (h *entityStatsRegenMinHeap) Pop() any {
 }
 
 type playerStatsPushState struct {
+	EntityID  types.EntityID
+	Handle    types.Handle // InvalidHandle denotes a legacy, unprepared record.
 	DueUnixMs int64
-	Seq       uint64
+	HeapIndex int // -1 when no notification is pending.
 }
 
 type PlayerStatsNetSnapshot struct {
@@ -77,15 +79,9 @@ type movementModeState struct {
 	lastSent     map[types.EntityID]constt.MoveMode
 }
 
-type playerStatsPushHeapItem struct {
-	EntityID  types.EntityID
-	DueUnixMs int64
-	Seq       uint64
-}
-
-type playerStatsPushMinHeap []playerStatsPushHeapItem
-
-func (h playerStatsPushMinHeap) Len() int { return len(h) }
+// Player notifications use a typed indexed heap: scheduling and removing a
+// prepared record do not box values or leave superseded entries behind.
+type playerStatsPushMinHeap []*playerStatsPushState
 
 func (h playerStatsPushMinHeap) Less(i, j int) bool {
 	if h[i].DueUnixMs == h[j].DueUnixMs {
@@ -96,25 +92,64 @@ func (h playerStatsPushMinHeap) Less(i, j int) bool {
 
 func (h playerStatsPushMinHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
+	h[i].HeapIndex = i
+	h[j].HeapIndex = j
 }
 
-func (h *playerStatsPushMinHeap) Push(x any) {
-	item, ok := x.(playerStatsPushHeapItem)
-	if !ok {
-		return
+func (h playerStatsPushMinHeap) up(index int) {
+	for index > 0 {
+		parent := (index - 1) / 2
+		if !h.Less(index, parent) {
+			return
+		}
+		h.Swap(index, parent)
+		index = parent
 	}
-	*h = append(*h, item)
 }
 
-func (h *playerStatsPushMinHeap) Pop() any {
-	old := *h
-	n := len(old)
-	if n == 0 {
-		return nil
+func (h playerStatsPushMinHeap) down(index int) {
+	for {
+		left := 2*index + 1
+		if left >= len(h) {
+			return
+		}
+		child := left
+		if right := left + 1; right < len(h) && h.Less(right, left) {
+			child = right
+		}
+		if !h.Less(child, index) {
+			return
+		}
+		h.Swap(index, child)
+		index = child
 	}
-	item := old[n-1]
-	*h = old[:n-1]
-	return item
+}
+
+func (h *playerStatsPushMinHeap) push(record *playerStatsPushState) {
+	record.HeapIndex = len(*h)
+	*h = append(*h, record)
+	h.up(record.HeapIndex)
+}
+
+func (h *playerStatsPushMinHeap) remove(index int) *playerStatsPushState {
+	queue := *h
+	record := queue[index]
+	lastIndex := len(queue) - 1
+	last := queue[lastIndex]
+	queue[lastIndex] = nil
+	queue = queue[:lastIndex]
+	*h = queue
+	if index < lastIndex {
+		queue[index] = last
+		last.HeapIndex = index
+		if index > 0 && queue.Less(index, (index-1)/2) {
+			queue.up(index)
+		} else {
+			queue.down(index)
+		}
+	}
+	record.HeapIndex = -1
+	return record
 }
 
 // EntityStatsUpdateState tracks scheduled regen ticks and throttled player stats pushes.
@@ -125,8 +160,7 @@ type EntityStatsUpdateState struct {
 	regenSeq    uint64
 
 	pushQueue  playerStatsPushMinHeap
-	pushLatest map[types.EntityID]playerStatsPushState
-	pushSeq    uint64
+	pushLatest map[types.EntityID]*playerStatsPushState
 
 	lastSentUnixMs map[types.EntityID]int64
 	lastSentNet    map[types.EntityID]PlayerStatsNetSnapshot
@@ -210,31 +244,84 @@ func (s *EntityStatsUpdateState) NextAllowedSendUnixMs(entityID types.EntityID, 
 	return nextAllowed
 }
 
+// PreparePlayer binds notification storage to a live generational handle. Call
+// during target setup under the owning shard lock, outside the damage path.
+// Every record reserves one possible heap entry; hits only mutate existing
+// records, including after ForgetPlayer clears disconnected client state.
+func (s *EntityStatsUpdateState) PreparePlayer(entityID types.EntityID, handle types.Handle) bool {
+	if entityID == 0 || handle == types.InvalidHandle {
+		return false
+	}
+	if current := s.pushLatest[entityID]; current != nil && current.Handle != types.InvalidHandle && current.Handle != handle {
+		return false
+	}
+	record := s.ensurePlayerPushRecord(entityID)
+	record.Handle = handle
+	return true
+}
+
+func (s *EntityStatsUpdateState) IsPlayerPrepared(entityID types.EntityID, handle types.Handle) bool {
+	record := s.pushLatest[entityID]
+	return handle != types.InvalidHandle && record != nil && record.Handle == handle
+}
+
+// ReleasePlayer retires only the exact prepared binding, so delayed cleanup
+// cannot release a replacement entity with the same persistence ID.
+func (s *EntityStatsUpdateState) ReleasePlayer(entityID types.EntityID, handle types.Handle) bool {
+	if !s.IsPlayerPrepared(entityID, handle) {
+		return false
+	}
+	s.ForgetPlayer(entityID)
+	delete(s.pushLatest, entityID)
+	return true
+}
+
+func (s *EntityStatsUpdateState) ensurePlayerPushRecord(entityID types.EntityID) *playerStatsPushState {
+	if record := s.pushLatest[entityID]; record != nil {
+		return record
+	}
+	if s.pushLatest == nil {
+		s.pushLatest = make(map[types.EntityID]*playerStatsPushState, 256)
+	}
+	record := &playerStatsPushState{EntityID: entityID, HeapIndex: -1}
+	s.pushLatest[entityID] = record
+	if capacity := cap(s.pushQueue); capacity < len(s.pushLatest) {
+		nextCapacity := max(128, capacity*2, len(s.pushLatest))
+		queue := make(playerStatsPushMinHeap, len(s.pushQueue), nextCapacity)
+		copy(queue, s.pushQueue)
+		s.pushQueue = queue
+	}
+	return record
+}
+
 func (s *EntityStatsUpdateState) MarkPlayerDirty(entityID types.EntityID, nowUnixMs int64, ttlMs uint32) bool {
+	record := s.pushLatest[entityID]
+	if record != nil && record.HeapIndex >= 0 && record.DueUnixMs <= nowUnixMs {
+		// No newly computed deadline can precede now. Keep an already due
+		// notification without reading the sent-state map or touching the heap.
+		return true
+	}
+	return s.markPlayerDirty(entityID, record, nowUnixMs, ttlMs)
+}
+
+func (s *EntityStatsUpdateState) markPlayerDirty(entityID types.EntityID, record *playerStatsPushState, nowUnixMs int64, ttlMs uint32) bool {
 	if entityID == 0 {
 		return false
 	}
-	if s.pushLatest == nil {
-		s.pushLatest = make(map[types.EntityID]playerStatsPushState, 256)
+	if record == nil {
+		record = s.ensurePlayerPushRecord(entityID)
 	}
-	if s.lastSentUnixMs == nil {
-		s.lastSentUnixMs = make(map[types.EntityID]int64, 256)
-	}
-
 	dueUnixMs := s.NextAllowedSendUnixMs(entityID, nowUnixMs, ttlMs)
-	if current, exists := s.pushLatest[entityID]; exists && current.DueUnixMs == dueUnixMs {
-		return true
+	if record.HeapIndex >= 0 {
+		// Ordinary changes must not postpone an already urgent KO/pose push.
+		if record.DueUnixMs > dueUnixMs {
+			record.DueUnixMs = dueUnixMs
+			s.pushQueue.up(record.HeapIndex)
+		}
+	} else {
+		record.DueUnixMs = dueUnixMs
+		s.pushQueue.push(record)
 	}
-	s.pushSeq++
-	s.pushLatest[entityID] = playerStatsPushState{
-		DueUnixMs: dueUnixMs,
-		Seq:       s.pushSeq,
-	}
-	heap.Push(&s.pushQueue, playerStatsPushHeapItem{
-		EntityID:  entityID,
-		DueUnixMs: dueUnixMs,
-		Seq:       s.pushSeq,
-	})
 	return true
 }
 
@@ -245,25 +332,14 @@ func (s *EntityStatsUpdateState) PopDuePlayerStatsPush(nowUnixMs int64, dst []ty
 			break
 		}
 
-		popped := heap.Pop(&s.pushQueue)
-		item, ok := popped.(playerStatsPushHeapItem)
-		if !ok {
-			continue
-		}
-
-		current, exists := s.pushLatest[item.EntityID]
-		if !exists || current.Seq != item.Seq {
-			continue
-		}
-
-		delete(s.pushLatest, item.EntityID)
+		item := s.pushQueue.remove(0)
 		dst = append(dst, item.EntityID)
 	}
 	return dst
 }
 
 func (s *EntityStatsUpdateState) PendingPlayerPushCount() int {
-	return len(s.pushLatest)
+	return len(s.pushQueue)
 }
 
 func (s *EntityStatsUpdateState) MarkPlayerSent(entityID types.EntityID, nowUnixMs int64) bool {
@@ -327,8 +403,12 @@ func (s *EntityStatsUpdateState) ForgetPlayer(entityID types.EntityID) bool {
 		return false
 	}
 	removed := false
-	if len(s.pushLatest) > 0 {
-		if _, exists := s.pushLatest[entityID]; exists {
+	if record := s.pushLatest[entityID]; record != nil {
+		if record.HeapIndex >= 0 {
+			s.pushQueue.remove(record.HeapIndex)
+			removed = true
+		}
+		if record.Handle == types.InvalidHandle {
 			delete(s.pushLatest, entityID)
 			removed = true
 		}
@@ -361,7 +441,14 @@ func (s *EntityStatsUpdateState) ForgetPlayer(entityID types.EntityID) bool {
 }
 
 func (s *EntityStatsUpdateState) ForgetEntity(entityID types.EntityID, handle types.Handle) bool {
-	removed := s.ForgetPlayer(entityID)
+	removed := false
+	if record := s.pushLatest[entityID]; record == nil || record.Handle == types.InvalidHandle || record.Handle == handle {
+		removed = s.ForgetPlayer(entityID)
+		if record != nil {
+			delete(s.pushLatest, entityID)
+			removed = true
+		}
+	}
 	if s.CancelRegen(handle) {
 		removed = true
 	}
