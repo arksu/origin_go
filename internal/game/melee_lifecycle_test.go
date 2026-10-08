@@ -50,16 +50,17 @@ func spawnMeleeLifecyclePlayer(t *testing.T, shard *Shard, id types.EntityID, x,
 
 func assertMeleeLifecyclePrepared(t *testing.T, shard *Shard, id types.EntityID, handle types.Handle) {
 	t.Helper()
-	require.Equal(t, id, shard.creatureDamage.targets[handle])
+	require.True(t, shard.creatureDamage.activity.IsPrepared(handle, id))
 	require.True(t, ecs.GetResource[ecs.EntityStatsUpdateState](shard.world).IsPlayerPrepared(id, handle))
 	require.True(t, ecs.GetResource[ecs.CharacterVisualDirtyQueue](shard.world).IsPrepared(handle))
-	_, err := shard.creatureDamage.Apply(handle, 0)
+	_, err := shard.creatureDamage.prepareDamage(handle, 0)
 	require.NoError(t, err, "the exposed living body must already accept combat")
 }
 
 func assertMeleeLifecycleReleased(t *testing.T, shard *Shard, id types.EntityID, handle types.Handle) {
 	t.Helper()
-	require.NotContains(t, shard.creatureDamage.targets, handle)
+	_, registered := shard.creatureDamage.activity.Identity(handle)
+	require.False(t, registered)
 	require.False(t, ecs.GetResource[ecs.EntityStatsUpdateState](shard.world).IsPlayerPrepared(id, handle))
 	require.False(t, ecs.GetResource[ecs.CharacterVisualDirtyQueue](shard.world).IsPrepared(handle))
 }
@@ -73,7 +74,7 @@ func TestMeleeLifecycleSpawnPreparesBeforePublicationAndAttachment(t *testing.T)
 		entered := event.(*ecs.PlayerEnteredWorldEvent)
 		shard.WithWorldRead(func(world *ecs.World) {
 			handle := world.GetHandleByEntityID(entered.EntityID)
-			preparedOnPublication <- shard.creatureDamage.targets[handle] == entered.EntityID &&
+			preparedOnPublication <- shard.creatureDamage.activity.IsPrepared(handle, entered.EntityID) &&
 				ecs.GetResource[ecs.EntityStatsUpdateState](world).IsPlayerPrepared(entered.EntityID, handle) &&
 				ecs.GetResource[ecs.CharacterVisualDirtyQueue](world).IsPrepared(handle)
 		})
@@ -105,7 +106,7 @@ func TestMeleeLifecycleInvalidSpawnNeverPublishesOrRegisters(t *testing.T) {
 	require.False(t, ok)
 	require.Equal(t, types.InvalidHandle, handle)
 	require.Equal(t, types.InvalidHandle, shard.world.GetHandleByEntityID(10))
-	require.Len(t, shard.creatureDamage.targets, 1, "only the unrelated fixture body stays prepared")
+	require.Equal(t, 1, shard.creatureDamage.activity.PreparedCount(), "only the unrelated fixture body stays prepared")
 	require.Empty(t, ecs.GetResource[ecs.CharacterEntities](shard.world).GetAll())
 	require.Zero(t, shard.chunkManager.GetChunk(types.ChunkCoord{}).Spatial().DynamicCount())
 	flushPlayerSpawnEvents(t, shard.eventBus)
@@ -127,10 +128,10 @@ func TestMeleeLifecycleDetachedReattachPreservesIdempotentRegistration(t *testin
 	detached.AddDetachedEntity(10, player, game.clock.GameNow().Add(time.Minute), game.clock.GameNow())
 	ecs.ForgetPlayerStatsState(shard.world, 10)
 	assertMeleeLifecyclePrepared(t, shard, 10, player)
-	preparedCount := len(shard.creatureDamage.targets)
+	preparedCount := shard.creatureDamage.activity.PreparedCount()
 	require.NoError(t, shard.prepareCreatureCombatTarget(player))
 	require.NoError(t, shard.prepareCreatureCombatTarget(player))
-	require.Len(t, shard.creatureDamage.targets, preparedCount)
+	require.Equal(t, preparedCount, shard.creatureDamage.activity.PreparedCount())
 
 	require.True(t, game.tryReattachPlayer(client, shard, 10, repository.Character{ID: 10}))
 	secondEntry := readSoundLifecycleEntry(t, connection)
@@ -139,7 +140,7 @@ func TestMeleeLifecycleDetachedReattachPreservesIdempotentRegistration(t *testin
 	_, remainsDetached := detached.GetDetachedEntity(10)
 	require.False(t, remainsDetached)
 	require.Equal(t, player, shard.world.GetHandleByEntityID(10))
-	require.Len(t, shard.creatureDamage.targets, preparedCount)
+	require.Equal(t, preparedCount, shard.creatureDamage.activity.PreparedCount())
 	assertMeleeLifecyclePrepared(t, shard, 10, player)
 }
 
@@ -157,7 +158,7 @@ func TestMeleeLifecycleRejectedReattachRetainsBodyAndCacheUntilRetry(t *testing.
 			detached := ecs.GetResource[ecs.DetachedEntities](shard.world)
 			detached.AddDetachedEntity(10, player, game.clock.GameNow().Add(time.Minute), game.clock.GameNow())
 			entry, _ := detached.GetDetachedEntity(10)
-			shard.offlineHealth.Store(types.EntityID(10), health)
+			shard.offlineHealth.Store(types.EntityID(10), playerRuntimeState{Health: health})
 			// A surviving body from before combat initialization may need registration.
 			shard.creatureDamage.releaseTarget(player)
 			if missingHealth {
@@ -177,7 +178,7 @@ func TestMeleeLifecycleRejectedReattachRetainsBodyAndCacheUntilRetry(t *testing.
 			require.Equal(t, entry, actualEntry)
 			cached, exists := shard.offlineHealth.Load(types.EntityID(10))
 			require.True(t, exists)
-			require.Equal(t, health, cached)
+			require.Equal(t, playerRuntimeState{Health: health}, cached)
 			require.Equal(t, player, shard.world.GetHandleByEntityID(10))
 			assertMeleeLifecycleReleased(t, shard, 10, player)
 
@@ -223,22 +224,33 @@ func (*meleeLifecycleTransferParticipant) OnTargetRestoreFailure(*Game, *Shard, 
 }
 
 func TestMeleeLifecycleTransferAndRollbackPrepareNewGeneration(t *testing.T) {
-	for _, rollback := range []bool{false, true} {
-		name := "target_layer"
-		if rollback {
-			name = "rollback_after_target_capacity_failure"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		rollback, closed bool
+	}{
+		{"target_layer", false, false},
+		{"rollback_after_target_capacity_failure", true, false},
+		{"closed_after_source_capture_target", false, true},
+		{"closed_after_source_capture_rollback", true, true},
+	} {
+		rollback := test.rollback
+		t.Run(test.name, func(t *testing.T) {
 			source, game := newSoundLifecycleShard(t, config.DefaultAudioConfig(), 8)
 			installMeleeLifecycleReceiver(t, source)
+			installLogoutLifecycleService(t, source)
 			target, _ := newSoundLifecycleShard(t, config.DefaultAudioConfig(), 3)
 			target.layer, target.world.Layer = 1, 1
 			installMeleeLifecycleReceiver(t, target)
+			installLogoutLifecycleService(t, target)
 			health := components.EntityHealth{SHP: 21.4, HHP: 24.28}
 			player := spawnMeleeLifecyclePlayer(t, source, 10, 200, 100, health)
 			client, connection := connectPlayerSpawnTestClient(t)
 			attachSoundLifecycleClient(t, game, source, client, player)
 			firstEntry := readSoundLifecycleEntry(t, connection)
+			activity := ecs.GetResource[ecs.CombatActivityState](source.world)
+			require.NoError(t, activity.ValidateEvent(player, 10, 10_000))
+			activity.RecordPreparedEvent(player, 10_000)
+			expectedCombat := ecs.CombatState{HasEvent: true, LastCombatEventAtUnixMs: 10_000}
 			transfer := NewPlayerTransferService(game, zap.NewNop())
 			participant := &meleeLifecycleTransferParticipant{t: t}
 			transfer.RegisterParticipant(participant)
@@ -246,31 +258,59 @@ func TestMeleeLifecycleTransferAndRollbackPrepareNewGeneration(t *testing.T) {
 			snapshot, err := transfer.detachTransferSource(req, source, repository.Character{ID: 10})
 			require.NoError(t, err)
 			require.True(t, participant.captured)
-			require.Equal(t, health, snapshot.Health)
+			require.Equal(t, health, snapshot.RuntimeState.Health)
+			require.Equal(t, expectedCombat, snapshot.RuntimeState.CombatState)
+			cached, exists := source.offlineHealth.Load(types.EntityID(10))
+			require.True(t, exists)
+			require.Equal(t, snapshot.RuntimeState, cached)
 			require.False(t, source.world.Alive(player))
 			assertMeleeLifecycleReleased(t, source, 10, player)
 			_, err = source.creatureDamage.Apply(player, 1)
 			require.ErrorIs(t, err, ErrInvalidCreatureTarget)
 			require.False(t, client.InWorld.Load())
+			if test.closed {
+				client.Close()
+			}
 			destination := target
 			if rollback {
 				blocker := target.world.Spawn(99, nil)
 				require.NoError(t, target.PrepareEntityAOI(t.Context(), 10, 200, 100))
-				ok, failed := target.TrySpawnPlayer(200, 100, repository.Character{ID: 10}, meleeLifecycleSetup(target, 200, 100, snapshot.Health))
+				ok, failed := target.TrySpawnPlayer(200, 100, repository.Character{ID: 10}, meleeLifecycleSetup(target, 200, 100, snapshot.RuntimeState.Health))
 				require.False(t, ok)
 				require.Equal(t, types.InvalidHandle, failed)
-				require.Len(t, target.creatureDamage.targets, 1)
+				require.Equal(t, 1, target.creatureDamage.activity.PreparedCount())
 				require.Equal(t, types.InvalidHandle, target.world.GetHandleByEntityID(10))
 				require.True(t, target.world.Despawn(blocker))
 				destination = source
 			}
 			// Both target spawn and rollback use this shared spawnPlayerLocked hook.
-			newPlayer := spawnMeleeLifecyclePlayer(t, destination, 10, snapshot.SourceX, snapshot.SourceY, snapshot.Health)
+			require.NoError(t, destination.PrepareEntityAOI(t.Context(), 10, snapshot.SourceX, snapshot.SourceY))
+			preparedOnPublication := make(chan ecs.CombatState, 1)
+			destination.eventBus.SubscribeAsync(ecs.TopicGameplayPlayerEnterWorld, eventbus.PriorityMedium, func(_ context.Context, event eventbus.Event) error {
+				entered := event.(*ecs.PlayerEnteredWorldEvent)
+				destination.WithWorldRead(func(world *ecs.World) {
+					if entered.EntityID == 10 {
+						current, _ := ecs.GetResource[ecs.CombatActivityState](world).Capture(world.GetHandleByEntityID(10))
+						preparedOnPublication <- current
+					}
+				})
+				return nil
+			})
+			ok, newPlayer := destination.TrySpawnPlayer(snapshot.SourceX, snapshot.SourceY, repository.Character{ID: 10}, func(world *ecs.World, handle types.Handle) {
+				meleeLifecycleSetup(destination, snapshot.SourceX, snapshot.SourceY, snapshot.RuntimeState.Health)(world, handle)
+				require.NoError(t, restorePlayerCombatState(world, handle, 10, snapshot.RuntimeState.CombatState))
+			})
+			require.True(t, ok)
+			select {
+			case actual := <-preparedOnPublication:
+				require.Equal(t, expectedCombat, actual)
+			case <-time.After(time.Second):
+				t.Fatal("restored combat state was not published")
+			}
 			if rollback {
 				require.NotEqual(t, player, newPlayer)
 				assertMeleeLifecycleReleased(t, source, 10, player)
 			}
-			attachSoundLifecycleClient(t, game, destination, client, newPlayer)
 			if rollback {
 				transfer.restoreParticipantsOnRollback(req, destination, newPlayer, snapshot.ParticipantStates)
 				require.True(t, participant.rollback)
@@ -280,12 +320,22 @@ func TestMeleeLifecycleTransferAndRollbackPrepareNewGeneration(t *testing.T) {
 				require.True(t, participant.restored)
 				require.False(t, participant.rollback)
 			}
-			secondEntry := readSoundLifecycleEntry(t, connection)
-			require.Equal(t, firstEntry.StreamEpoch+1, secondEntry.StreamEpoch)
+			if test.closed {
+				require.False(t, game.attachClientToWorld(destination, client, 10, repository.Character{ID: 10}, newPlayer))
+				require.True(t, ecs.GetResource[ecs.DetachedEntities](destination.world).IsDetached(10))
+				require.Empty(t, destination.Clients)
+			} else {
+				attachSoundLifecycleClient(t, game, destination, client, newPlayer)
+				secondEntry := readSoundLifecycleEntry(t, connection)
+				require.Equal(t, firstEntry.StreamEpoch+1, secondEntry.StreamEpoch)
+			}
 			assertMeleeLifecyclePrepared(t, destination, 10, newPlayer)
 			actualHealth, exists := ecs.GetComponent[components.EntityHealth](destination.world, newPlayer)
 			require.True(t, exists)
 			require.Equal(t, health, actualHealth)
+			actualCombat, prepared := ecs.GetResource[ecs.CombatActivityState](destination.world).Capture(newPlayer)
+			require.True(t, prepared)
+			require.Equal(t, expectedCombat, actualCombat)
 			require.True(t, destination.world.Despawn(newPlayer))
 			assertMeleeLifecycleReleased(t, destination, 10, newPlayer)
 		})

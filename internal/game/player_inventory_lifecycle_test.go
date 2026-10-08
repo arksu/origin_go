@@ -78,12 +78,16 @@ func TestFinalPlayerDisconnectReleasesInventoriesAfterSnapshot(t *testing.T) {
 			// No save workers: the test observes synchronous snapshot capture without DB I/O.
 			saver := systems.NewCharacterSaver(nil, 0, recorder, zap.NewNop())
 			shard := &Shard{world: w, characterSaver: saver}
-			if mode == "immediate" {
-				shard.despawnDisconnectedPlayer(playerID, player)
-			} else {
-				ecs.GetResource[ecs.DetachedEntities](w).AddDetachedEntity(playerID, player, now.Add(time.Second), now)
-				system := systems.NewExpireDetachedSystem(zap.NewNop(), saver, shard.onDetachedEntityExpired, nil)
-				ecs.GetResource[ecs.TimeState](w).Now = now
+
+			expiration := now
+			if mode == "detached_expiry" {
+				expiration = now.Add(time.Second)
+			}
+			ecs.GetResource[ecs.DetachedEntities](w).AddDetachedEntity(playerID, player, expiration, now)
+			system := systems.NewExpireDetachedSystem(zap.NewNop(), saver, shard.onDetachedEntityExpired, nil)
+			require.True(t, w.Alive(player), "even zero-delay logout must use queued capture")
+			ecs.GetResource[ecs.TimeState](w).Now = now
+			if mode == "detached_expiry" {
 				system.Update(w, 0)
 				require.True(t, w.Alive(player), "reattachable player must remain alive before expiry")
 				for _, handle := range owned {
@@ -91,8 +95,8 @@ func TestFinalPlayerDisconnectReleasesInventoriesAfterSnapshot(t *testing.T) {
 				}
 				require.Empty(t, recorder.snapshots)
 				ecs.GetResource[ecs.TimeState](w).Now = now.Add(2 * time.Second)
-				system.Update(w, 0)
 			}
+			system.Update(w, 0)
 			require.True(t, recorder.aliveAtSave, "save must precede player despawn")
 			require.True(t, recorder.containersAliveAtSave, "save must precede inventory cleanup at every depth")
 			require.Len(t, recorder.snapshots, 3)

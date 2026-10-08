@@ -11,6 +11,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	gameworld "origin/internal/game/world"
+	"origin/internal/network"
 	"origin/internal/types"
 
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func (r *captureRetryInventoryRecorder) SerializeInventories(world interface{}, 
 	return r.disconnectInventoryRecorder.SerializeInventories(world, id, handle)
 }
 
-func TestImmediateDisconnectRetainsOwnerAndInventoriesAfterCaptureRejection(t *testing.T) {
+func TestZeroDelayQueuedDisconnectRetainsOwnerAndInventoriesAfterCaptureRejection(t *testing.T) {
 	for _, missingHealth := range []bool{false, true} {
 		t.Run(map[bool]string{false: "nonfinite_health", true: "missing_health"}[missingHealth], func(t *testing.T) {
 			world := ecs.NewWorldForTesting()
@@ -52,8 +53,11 @@ func TestImmediateDisconnectRetainsOwnerAndInventoriesAfterCaptureRejection(t *t
 			recorder := &captureRetryInventoryRecorder{disconnectInventoryRecorder: disconnectInventoryRecorder{containerHandles: []types.Handle{container}}}
 			// No workers or DB writes: capture acceptance is the deletion boundary.
 			saver := systems.NewCharacterSaver(nil, 0, recorder, zap.NewNop())
-			shard := &Shard{world: world, characterSaver: saver}
-			require.Error(t, shard.despawnDisconnectedPlayer(10, player))
+			client := &network.Client{ID: 1, CharacterID: 10}
+			shard := &Shard{world: world, characterSaver: saver, logger: zap.NewNop(), Clients: map[types.EntityID]*network.Client{10: client}}
+			require.True(t, shard.detachClientForLogout(client, now, 0))
+			system := systems.NewExpireDetachedSystem(zap.NewNop(), saver, shard.onDetachedEntityExpired, nil)
+			system.Update(world, 0)
 			require.True(t, world.Alive(player))
 			require.True(t, world.Alive(container))
 			require.Equal(t, player, characters.Map[10].Handle)
@@ -75,7 +79,6 @@ func TestImmediateDisconnectRetainsOwnerAndInventoriesAfterCaptureRejection(t *t
 			require.False(t, cached, "rejected capture must not run detach cleanup")
 
 			ecs.AddComponent(world, player, components.EntityHealth{SHP: .49, HHP: 19.6})
-			system := systems.NewExpireDetachedSystem(zap.NewNop(), saver, shard.onDetachedEntityExpired, nil)
 			clock.Now = entry.SaveRetryAt.Add(-time.Nanosecond)
 			system.Update(world, 0)
 			require.True(t, world.Alive(player))

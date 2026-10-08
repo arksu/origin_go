@@ -78,6 +78,8 @@ type Shard struct {
 	objectDamage      *ObjectDamageService
 	creatureDamage    *CreatureDamageService
 	meleeExecution    *MeleeExecutionService
+	playerLogout      *PlayerLogoutService
+	pendingLogoutAOI  map[types.EntityID]struct{}
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -95,18 +97,19 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	}
 
 	s := &Shard{
-		layer:           layer,
-		cfg:             cfg,
-		db:              db,
-		entityIDManager: entityIDManager,
-		logger:          logger,
-		world:           ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities), eb, layer),
-		eventBus:        eb,
-		playerInbox:     network.NewPlayerCommandInbox(queueConfig),
-		serverInbox:     network.NewServerJobInbox(queueConfig),
-		snapshotSender:  snapshotSender,
-		Clients:         make(map[types.EntityID]*network.Client),
-		state:           ShardStateRunning,
+		layer:            layer,
+		cfg:              cfg,
+		db:               db,
+		entityIDManager:  entityIDManager,
+		logger:           logger,
+		world:            ecs.NewWorldWithCapacity(uint32(cfg.Game.MaxEntities), eb, layer),
+		eventBus:         eb,
+		playerInbox:      network.NewPlayerCommandInbox(queueConfig),
+		serverInbox:      network.NewServerJobInbox(queueConfig),
+		snapshotSender:   snapshotSender,
+		Clients:          make(map[types.EntityID]*network.Client),
+		pendingLogoutAOI: make(map[types.EntityID]struct{}),
+		state:            ShardStateRunning,
 	}
 	ecs.SetResource(s.world, ecs.EntityStatsRuntimeConfig{
 		PlayerStatsTTLms:          uint32(cfg.Game.PlayerStatsTTLms),
@@ -173,6 +176,14 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.creatureDamage, combatErr = NewCreatureDamageService(s.world, equipment)
 	if combatErr != nil {
 		logger.Fatal("Invalid creature damage service", zap.Error(combatErr))
+	}
+	combatLogout, logoutErr := NewCombatLogoutPolicy(s.world)
+	if logoutErr != nil {
+		logger.Fatal("Invalid combat logout policy", zap.Error(logoutErr))
+	}
+	s.playerLogout, logoutErr = NewPlayerLogoutService(s.world, NewDisconnectDelayLogoutPolicy(), combatLogout)
+	if logoutErr != nil {
+		logger.Fatal("Invalid player logout service", zap.Error(logoutErr))
 	}
 	s.meleeExecution, combatErr = NewMeleeExecutionService(s.world, equipment, s.sectorResolver, s.creatureDamage, s.objectDamage, attackEvents, s)
 	if combatErr != nil {
@@ -331,7 +342,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		StarvationDamageIntervalTicks:   uint64(cfg.Game.StarvationDamageIntervalTicks),
 		StarvationSoftDamagePerInterval: 10,
 	}))
-	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired))
+	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired, s.playerLogout.Check))
 	s.world.AddSystem(systems.NewDropDecaySystem(worldObjectPersistence, s.chunkManager, logger))
 
 	return s
@@ -449,6 +460,13 @@ func (s *Shard) spawnPlayerLocked(id types.EntityID, x int, y int, setupFunc fun
 		s.world.Despawn(handle)
 		return types.InvalidHandle, err
 	}
+	if s.playerLogout != nil {
+		if err := s.playerLogout.PreparePlayer(handle); err != nil {
+			cleanupObserverModeStateForHandle(s.world, handle)
+			s.world.Despawn(handle)
+			return types.InvalidHandle, err
+		}
+	}
 
 	s.PublishEventAsync(
 		ecs.NewPlayerEnteredWorldEvent(id, s.layer, x, y),
@@ -544,6 +562,12 @@ func (s *Shard) PrepareEntityAOI(ctx context.Context, entityID types.EntityID, c
 		zap.Int("chunks_loaded", len(coords)),
 	)
 	s.mu.Lock()
+	if _, oldLogout := s.pendingLogoutAOI[entityID]; oldLogout {
+		// The old body's deferred batch has not removed its AOI yet. Retire it
+		// before preparing a new reservation, including a different spawn chunk.
+		s.chunkManager.UnregisterEntity(entityID)
+	}
+	delete(s.pendingLogoutAOI, entityID)
 	s.chunkManager.RegisterEntity(entityID, centerWorldX, centerWorldY, false) // Don't send chunk load events during preparation
 	s.mu.Unlock()
 
@@ -696,8 +720,12 @@ func (s *Shard) UnregisterEntityAOI(entityID types.EntityID) {
 // onDetachedEntityExpired is called when a detached entity's TTL expires.
 // It runs after the character snapshot has captured inventory contents.
 func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Handle) {
-	if health, ok := ecs.GetComponent[components.EntityHealth](s.world, handle); ok {
-		s.offlineHealth.Store(entityID, health)
+	if s.pendingLogoutAOI == nil {
+		s.pendingLogoutAOI = make(map[types.EntityID]struct{})
+	}
+	s.pendingLogoutAOI[entityID] = struct{}{}
+	if runtime, ok := s.capturePlayerRuntimeState(handle); ok {
+		s.offlineHealth.Store(entityID, runtime)
 	}
 	s.soundEvents.Detach(handle, 0)
 	if s.liftService != nil {
@@ -719,32 +747,29 @@ func (s *Shard) onDetachedEntityExpired(entityID types.EntityID, handle types.Ha
 	lifecycle.DeleteOwnedInventoryContainers(s.world, entityID)
 }
 
-func (s *Shard) despawnDisconnectedPlayer(entityID types.EntityID, handle types.Handle) error {
-	if s.characterSaver != nil {
-		if err := s.characterSaver.Save(s.world, entityID, handle); err != nil {
-			now := ecs.GetResource[ecs.TimeState](s.world).Now
-			detached := ecs.GetResource[ecs.DetachedEntities](s.world)
-			detached.AddDetachedEntity(entityID, handle, now, now)
-			entry := detached.Map[entityID]
-			entry.SaveRetryAt = now.Add(systems.CharacterSaveCaptureRetryInterval)
-			detached.Map[entityID] = entry
-			if characters := ecs.GetResource[ecs.CharacterEntities](s.world); characters.Map[entityID].Handle == handle {
-				characters.RescheduleSave(entityID, entry.SaveRetryAt)
-			}
-			systems.StopMovementForDetached(s.world, handle)
-			ecs.ForgetPlayerStatsState(s.world, entityID)
-			return err
-		}
-	}
-	s.onDetachedEntityExpired(entityID, handle)
-	s.world.Despawn(handle)
-	ecs.GetResource[ecs.CharacterEntities](s.world).Remove(entityID)
-	return nil
-}
-
 // onDetachedEntitiesExpired handles AOI cleanup in one batch after detached despawns.
 func (s *Shard) onDetachedEntitiesExpired(entityIDs []types.EntityID) {
-	s.chunkManager.UnregisterEntities(entityIDs)
+	var pending [128]types.EntityID
+	count := 0
+	for _, identity := range entityIDs {
+		if _, exists := s.pendingLogoutAOI[identity]; !exists {
+			continue
+		}
+		delete(s.pendingLogoutAOI, identity)
+		handle := s.world.GetHandleByEntityID(identity)
+		if handle != types.InvalidHandle && s.world.Alive(handle) {
+			continue
+		}
+		pending[count] = identity
+		count++
+		if count == len(pending) {
+			s.chunkManager.UnregisterEntities(pending[:count])
+			count = 0
+		}
+	}
+	if count > 0 {
+		s.chunkManager.UnregisterEntities(pending[:count])
+	}
 }
 
 func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {

@@ -12,6 +12,7 @@ import (
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
+	"time"
 )
 
 // RequestAdminTeleport schedules full leave+respawn teleport flow for an admin command.
@@ -51,10 +52,34 @@ func (g *Game) spawnTeleportedPlayer(
 	ignoreObjectCollision bool,
 	runtimeHealth ...components.EntityHealth,
 ) (types.Handle, error) {
+	var runtime *playerRuntimeState
+	if len(runtimeHealth) > 0 {
+		runtime = &playerRuntimeState{Health: runtimeHealth[0]}
+	}
+	return g.spawnTeleportedPlayerWithRuntime(client, shard, character, x, y, ignoreObjectCollision, runtime, false)
+}
+
+func (g *Game) spawnTeleportedPlayerWithRuntime(
+	client *network.Client,
+	shard *Shard,
+	character repository.Character,
+	x, y int,
+	ignoreObjectCollision bool,
+	runtime *playerRuntimeState,
+	deferAttachment bool,
+) (types.Handle, error) {
 	if client == nil {
 		return types.InvalidHandle, fmt.Errorf("nil client")
 	}
-
+	if !deferAttachment {
+		select {
+		case <-client.Done():
+			return types.InvalidHandle, fmt.Errorf("client disconnected")
+		default:
+		}
+	}
+	// After an accepted transfer capture, restoring a vulnerable body and carry
+	// state is independent of whether its connection is still open.
 	ctx, cancel := context.WithTimeout(context.Background(), g.cfg.Game.SpawnTimeout)
 	defer cancel()
 
@@ -66,7 +91,7 @@ func (g *Game) spawnTeleportedPlayer(
 	normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
 	profileExperience, profileSkills, profileDiscovery := loadCharacterProfileData(character, g.logger)
 	pos := spawnPos{X: x, Y: y}
-	setupFn := g.buildPlayerSetupFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery, runtimeHealth...)
+	setupFn := g.buildPlayerSetupWithRuntimeFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery, runtime)
 	handle, spawnErr := shard.trySpawnPlayerWithPolicy(x, y, character, setupFn, SpawnCollisionPolicy{
 		IgnoreObjectCollision: ignoreObjectCollision,
 	})
@@ -80,14 +105,26 @@ func (g *Game) spawnTeleportedPlayer(
 		return types.InvalidHandle, fmt.Errorf("spawn blocked")
 	}
 
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 	charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
 	nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 	charEntities.Add(playerEntityID, handle, nextSaveAt)
 
 	client.Layer = character.Layer
-	g.attachClientToWorld(shard, client, playerEntityID, character, handle)
-	g.ensureObserverVisibilityImmediate(shard.world, handle)
-
+	if deferAttachment {
+		// Transfer participants restore their state before the session is exposed
+		// to disconnect/expiry; the caller completes attachment afterwards.
+		return handle, nil
+	}
+	if g.attachClientToWorldLocked(shard, client, playerEntityID, character, handle) {
+		g.ensureObserverVisibilityImmediate(shard.world, handle)
+	} else {
+		// The restored body remains authoritative even if its connection closes
+		// during setup. Queue logout rather than creating a duplicate rollback.
+		delay := time.Duration(shard.cfg.Game.DisconnectDelay) * time.Second
+		shard.queuePlayerLogoutLocked(playerEntityID, handle, ecs.GetResource[ecs.TimeState](shard.world).Now, delay)
+	}
 	return handle, nil
 }
 

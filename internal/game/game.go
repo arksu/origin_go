@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"origin/internal/ecs"
-	"origin/internal/ecs/components"
+	"origin/internal/ecs/systems"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence"
@@ -852,107 +852,13 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 		if g.getState() == GameStateRunning {
 			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
-				playerEntityID := c.CharacterID
-
 				// Remove client from command queue to clean up rate limiting state
 				shard.PlayerInbox().RemoveClient(c.ID)
 
-				// If another client is already bound to this character, this is a stale disconnect
-				// event from an old socket. Ignore it to avoid detaching/despawning an active player.
-				shard.ClientsMu.RLock()
-				activeClient, hasClient := shard.Clients[playerEntityID]
-				shard.ClientsMu.RUnlock()
-				if hasClient && activeClient != c {
-					g.logger.Info("Ignoring stale disconnect for character with active replacement session",
-						zap.Uint64("client_id", c.ID),
-						zap.Int64("character_id", int64(c.CharacterID)),
-						zap.Uint64("active_client_id", activeClient.ID),
-						zap.Int("layer", c.Layer),
-					)
+				if !shard.detachClientForLogout(c, g.clock.GameNow(), time.Duration(g.cfg.Game.DisconnectDelay)*time.Second) {
 					return
 				}
 
-				// Reset client state and remove from shard's client map
-				c.InWorld.Store(false)
-				c.StreamEpoch.Store(0)
-				shard.ClientsMu.Lock()
-				delete(shard.Clients, playerEntityID)
-				shard.ClientsMu.Unlock()
-
-				disconnectDelay := g.cfg.Game.DisconnectDelay
-
-				shard.mu.Lock()
-				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
-				shard.soundEvents.Detach(playerHandle, c.ID)
-				if shard.actionService != nil {
-					shard.actionService.Cancel(shard.world, playerEntityID, playerHandle)
-				}
-				ecs.GetResource[ecs.OpenedWindowsState](shard.world).ClearPlayer(playerEntityID)
-				ecs.ClearPendingAdminClicks(shard.world, playerEntityID)
-				if playerHandle != types.InvalidHandle && shard.liftService != nil {
-					_ = shard.liftService.ForceDropCarryAtPlayerPosition(shard.world, playerEntityID, playerHandle, false)
-				}
-
-				if disconnectDelay > 0 && playerHandle != types.InvalidHandle {
-					if _, _, err := ecs.BreakLinkForPlayer(shard.world, playerEntityID, ecs.LinkBreakClosed); err != nil {
-						g.logger.Warn("Failed to publish LinkBroken on detach",
-							zap.Error(err),
-							zap.Int64("character_id", int64(playerEntityID)),
-							zap.Int("layer", c.Layer),
-						)
-					}
-					// Detached mode: keep entity in world for DisconnectDelay seconds
-					gameNow := g.clock.GameNow()
-					expirationTime := gameNow.Add(time.Duration(disconnectDelay) * time.Second)
-					ecs.GetResource[ecs.DetachedEntities](shard.world).AddDetachedEntity(playerEntityID, playerHandle, expirationTime, gameNow)
-					ecs.ForgetPlayerStatsState(shard.world, playerEntityID)
-
-					// Stop movement for detached entity
-					ecs.MutateComponent[components.Movement](shard.world, playerHandle, func(m *components.Movement) bool {
-						m.ClearTarget()
-						return true
-					})
-
-					shard.mu.Unlock()
-
-					g.logger.Info("Player detached, entity remains in world",
-						zap.Uint64("client_id", c.ID),
-						zap.Int64("character_id", int64(c.CharacterID)),
-						zap.Int("layer", c.Layer),
-						zap.Int("disconnect_delay_sec", disconnectDelay),
-						zap.Time("expiration_time", expirationTime),
-					)
-				} else {
-					// Immediate despawn (DisconnectDelay=0 or entity not found)
-					var captureErr error
-					if playerHandle != types.InvalidHandle {
-						if _, _, err := ecs.BreakLinkForPlayer(shard.world, playerEntityID, ecs.LinkBreakDespawn); err != nil {
-							g.logger.Warn("Failed to publish LinkBroken on disconnect despawn",
-								zap.Error(err),
-								zap.Int64("character_id", int64(playerEntityID)),
-								zap.Int("layer", c.Layer),
-							)
-						}
-						captureErr = shard.despawnDisconnectedPlayer(playerEntityID, playerHandle)
-					}
-					if captureErr == nil {
-						shard.UnregisterEntityAOI(playerEntityID)
-					}
-					shard.mu.Unlock()
-
-					if captureErr != nil {
-						g.logger.Error("Disconnect snapshot rejected; retaining entity for retry",
-							zap.Uint64("client_id", c.ID),
-							zap.Int64("character_id", int64(playerEntityID)),
-							zap.Int("layer", c.Layer), zap.Error(captureErr))
-					} else {
-						g.logger.Debug("Unregistered entity AOI",
-							zap.Uint64("client_id", c.ID),
-							zap.Int64("character_id", int64(c.CharacterID)),
-							zap.Int("layer", c.Layer),
-						)
-					}
-				}
 			}
 
 			// Set character offline in DB immediately (per requirement)
@@ -965,6 +871,71 @@ func (g *Game) handleDisconnect(c *network.Client) {
 	}
 
 	c.ClearDeadObserverMode()
+}
+
+// detachClientForLogout closes only the current session and schedules its body.
+// Client binding and detached membership change together under the owner lock.
+func (s *Shard) detachClientForLogout(client *network.Client, disconnectedAt time.Time, delay time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	identity := client.CharacterID
+	s.ClientsMu.Lock()
+	active, exists := s.Clients[identity]
+	if exists && active != client {
+		s.ClientsMu.Unlock()
+		s.logger.Info("Ignoring stale disconnect for character with replacement session",
+			zap.Uint64("client_id", client.ID), zap.Uint64("character_id", uint64(identity)))
+		return false
+	}
+	if !exists {
+		// A socket that closes during setup has no ownership of an unbound body.
+		// The setup/transfer owner queues that body after its restoration finishes.
+		client.InWorld.Store(false)
+		client.StreamEpoch.Store(0)
+		s.ClientsMu.Unlock()
+		return true
+	}
+	delete(s.Clients, identity)
+	client.InWorld.Store(false)
+	client.StreamEpoch.Store(0)
+	s.ClientsMu.Unlock()
+
+	handle := s.world.GetHandleByEntityID(identity)
+	if s.soundEvents != nil {
+		s.soundEvents.Detach(handle, client.ID)
+	}
+	if handle == types.InvalidHandle || !s.world.Alive(handle) {
+		s.UnregisterEntityAOI(identity)
+		return true
+	}
+	s.queuePlayerLogoutLocked(identity, handle, disconnectedAt, delay)
+	return true
+}
+
+// queuePlayerLogoutLocked is shared by disconnect and a connection that closes
+// before a newly spawned body can attach. It never removes a live body.
+func (s *Shard) queuePlayerLogoutLocked(identity types.EntityID, handle types.Handle, disconnectedAt time.Time, delay time.Duration) {
+	if detached := ecs.GetResource[ecs.DetachedEntities](s.world); detached.IsDetached(identity) {
+		return // Duplicate callbacks retain the original immutable base deadline.
+	}
+	if s.actionService != nil {
+		s.actionService.Cancel(s.world, identity, handle)
+	}
+	ecs.GetResource[ecs.OpenedWindowsState](s.world).ClearPlayer(identity)
+	ecs.ClearPendingAdminClicks(s.world, identity)
+	if s.liftService != nil {
+		_ = s.liftService.ForceDropCarryAtPlayerPosition(s.world, identity, handle, false)
+	}
+	if _, _, err := ecs.BreakLinkForPlayer(s.world, identity, ecs.LinkBreakClosed); err != nil {
+		s.logger.Warn("Failed to publish LinkBroken on detach", zap.Error(err), zap.Uint64("character_id", uint64(identity)))
+	}
+	if delay < 0 {
+		delay = 0
+	}
+	expiration := disconnectedAt.Add(delay)
+	ecs.GetResource[ecs.DetachedEntities](s.world).AddDetachedEntity(identity, handle, expiration, disconnectedAt)
+	ecs.ForgetPlayerStatsState(s.world, identity)
+	systems.StopMovementForDetached(s.world, handle)
 }
 
 func (g *Game) resetOnlinePlayers() {

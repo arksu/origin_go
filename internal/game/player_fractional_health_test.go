@@ -61,7 +61,7 @@ func TestLoginHealthValidatesChosenSourceWithoutLosingCache(t *testing.T) {
 	game := &Game{cfg: &config.Config{}, shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}
 	character := repository.Character{ID: 1, Shp: math.NaN(), Hhp: math.Inf(1)}
 	cached := components.EntityHealth{SHP: 21.4, HHP: 24.28, IsLying: true, LyingRevision: 7}
-	shard.offlineHealth.Store(types.EntityID(1), cached)
+	shard.offlineHealth.Store(types.EntityID(1), playerRuntimeState{Health: cached})
 	require.Equal(t, cached, mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil))
 	runtime := components.EntityHealth{SHP: .25, HHP: .49}
 	require.Equal(t, runtime, mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), []components.EntityHealth{runtime}))
@@ -70,14 +70,14 @@ func TestLoginHealthValidatesChosenSourceWithoutLosingCache(t *testing.T) {
 	require.ErrorIs(t, err, entityhealth.ErrInvalidPools)
 	value, exists := shard.offlineHealth.Load(types.EntityID(1))
 	require.True(t, exists)
-	require.Equal(t, cached, value)
-	shard.offlineHealth.Store(types.EntityID(1), invalid)
+	require.Equal(t, playerRuntimeState{Health: cached}, value)
+	shard.offlineHealth.Store(types.EntityID(1), playerRuntimeState{Health: invalid})
 	character.Shp, character.Hhp = 21.4, 24.28
 	_, err = game.resolveLoginHealth(world, character, characterattrs.Default(), nil)
 	require.ErrorIs(t, err, entityhealth.ErrInvalidPools, "invalid cache must not fall through to the database")
 	value, exists = shard.offlineHealth.Load(types.EntityID(1))
 	require.True(t, exists)
-	require.Equal(t, invalid, value)
+	require.Equal(t, playerRuntimeState{Health: invalid}, value)
 	shard.offlineHealth.Delete(types.EntityID(1))
 	require.Equal(t, components.EntityHealth{SHP: 21.4, HHP: 24.28}, mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil))
 }
@@ -89,7 +89,7 @@ func TestInvalidLoginHealthRollsBackSpawnBeforeLoadingInventories(t *testing.T) 
 	shard, entered := newPlayerSpawnTestShard(t, 16)
 	character := repository.Character{ID: 10, X: 200, Y: 200, Shp: 21.4, Hhp: 24.28}
 	invalid := components.EntityHealth{SHP: .49, HHP: math.NaN()}
-	shard.offlineHealth.Store(types.EntityID(10), invalid)
+	shard.offlineHealth.Store(types.EntityID(10), playerRuntimeState{Health: invalid})
 	game := &Game{cfg: shard.cfg, logger: zap.NewNop(), shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}
 	require.NoError(t, shard.PrepareEntityAOI(t.Context(), 10, 200, 200))
 	setup := game.buildPlayerSetupFunc(context.Background(), character, spawnPos{X: 200, Y: 200}, characterattrs.Default(), components.CharacterExperience{}, nil, nil)
@@ -102,7 +102,7 @@ func TestInvalidLoginHealthRollsBackSpawnBeforeLoadingInventories(t *testing.T) 
 	require.NotContains(t, ecs.GetResource[ecs.CharacterEntities](shard.world).Map, types.EntityID(10))
 	value, exists := shard.offlineHealth.Load(types.EntityID(10))
 	require.True(t, exists)
-	require.Equal(t, math.Float64bits(invalid.HHP), math.Float64bits(value.(components.EntityHealth).HHP))
+	require.Equal(t, math.Float64bits(invalid.HHP), math.Float64bits(value.(playerRuntimeState).Health.HHP))
 	flushPlayerSpawnEvents(t, shard.eventBus)
 	require.Empty(t, entered)
 	require.Zero(t, shard.chunkManager.GetChunk(types.ChunkCoord{}).Spatial().DynamicCount())
