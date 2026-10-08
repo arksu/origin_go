@@ -98,7 +98,7 @@ if (authStore.isAuthenticated) { /* proceed */ }
 interface Position {
   x: number
   y: number
-  heading: number  // 0-7 for 8 directions
+  heading: number  // server world direction in radians
 }
 
 interface EntityMovement {
@@ -113,7 +113,7 @@ interface GameObjectData {
   entityId: number
   objectType: number      // 1 = player, 6 = resource, etc
   resourcePath: string    // Spine/asset path
-  position: { x: number; y: number }
+  position: { x: number; y: number; heading?: number }
   size: { x: number; y: number }
   movement?: EntityMovement
 }

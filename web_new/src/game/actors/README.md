@@ -123,14 +123,20 @@ the game initialization handler; runtime rendering or model-loading failures sto
 the render loop and show an explicit reload message. Context restoration reapplies
 transparent clears because Three derives its reset default from Pixi's opaque canvas.
 
-Facing uses actual displayed world displacement projected into screen coordinates,
-then eight equal screen sectors with a three-degree boundary dead band. Adjacent
-sector changes must persist for 120 ms and the current facing is held for at least
-250 ms. Sharp turns of two or more sectors and movement starts respond immediately. Zero
-animation-distance corrections do not turn the actor. Model yaw is computed by
-inverting the orthographic camera elevation, so the forward vector projects onto
-the selected screen ray. Camera pan/zoom do not change facing. The review page
-shows these rays and actors moving along them.
+Normal facing comes from server `Position.heading` in world radians, including
+spawn and stationary movement updates. The client projects this heading into
+screen coordinates; visual displacement does not replace it. New models start
+in the supplied direction, and subsequent turns use the existing turn smoothing.
+Target-facing actions temporarily override this base facing on the client. When
+the action finishes or is canceled, the actor turns back to the latest server
+heading, including updates received during the action.
+
+Views without a supplied heading, such as local review fixtures, retain the
+displacement fallback: eight screen sectors with a three-degree boundary dead
+band, 120 ms adjacent-sector persistence and a 250 ms facing hold. Sharp turns
+and movement starts respond immediately. Model yaw inverts the orthographic
+camera elevation so its forward vector projects onto the selected screen ray.
+Camera pan/zoom do not change facing.
 
 ## Historical verification, 2026-09-12
 

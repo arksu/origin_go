@@ -26,7 +26,7 @@ export interface GameObjectData {
   entityId: number
   typeId: number
   resourcePath: string
-  position: { x: number; y: number }
+  position: { x: number; y: number; heading?: number }
   size: { x: number; y: number }
   movement?: EntityMovement
   characterVisual?: CharacterVisualState

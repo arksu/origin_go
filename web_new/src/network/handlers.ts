@@ -238,7 +238,8 @@ export function registerMessageHandlers(): void {
     const entityId = toNumber(msg.entityId!)
     const posX = msg.position?.position?.x || 0
     const posY = msg.position?.position?.y || 0
-    const heading = msg.position?.position?.heading || 0
+    const heading = msg.position?.position?.heading ?? 0
+    if (!Number.isFinite(heading)) throw new Error('Invalid spawn heading')
     const resourcePath = msg.resourcePath || ''
     const displayName = msg.name || ''
     const nameColor = msg.nameColor || proto.NicknameColor.NICKNAME_COLOR_DEFAULT
@@ -249,6 +250,9 @@ export function registerMessageHandlers(): void {
     if (actionAnimation && actionAnimation.generation !== characterVisual?.generation) throw new Error('Spawn action animation incarnation mismatch')
     const existing = gameStore.entities.get(entityId)
     if (characterVisual && existing?.characterVisual?.generation === characterVisual.generation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
+      existing.position.heading = heading
+      moveController.refreshHeading(entityId, heading)
+      gameFacade.setObjectHeading(entityId, heading)
       if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterVisual(entityId, characterVisual)
       if (actionAnimation) {
         if (gameStore.updateActionAnimation(entityId, actionAnimation)) gameFacade.setActionAnimation(entityId, actionAnimation)
@@ -274,7 +278,7 @@ export function registerMessageHandlers(): void {
       actionAnimation,
       name: displayName,
       nameColor,
-      position: { x: posX, y: posY },
+      position: { x: posX, y: posY, heading },
       size: {
         x: msg.position?.size?.x || 0,
         y: msg.position?.size?.y || 0,
@@ -350,11 +354,12 @@ export function registerMessageHandlers(): void {
     const serverTimeMs = Number(msg.serverTimeMs || 0)
     const moveSeq = msg.moveSeq || 0
     const isTeleport = msg.isTeleport || false
-    if (isTeleport && entityId === gameStore.playerEntityId) gameFacade.releaseKeyboardMovement()
 
     const x = msg.movement.position?.x || 0
     const y = msg.movement.position?.y || 0
-    const heading = msg.movement.position?.heading || 0
+    const heading = msg.movement.position?.heading ?? 0
+    if (!Number.isFinite(heading)) throw new Error('Invalid movement heading')
+    if (isTeleport && entityId === gameStore.playerEntityId) gameFacade.releaseKeyboardMovement()
     const vx = msg.movement.velocity?.x || 0
     const vy = msg.movement.velocity?.y || 0
     const isMoving = msg.movement.isMoving || false

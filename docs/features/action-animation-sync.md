@@ -37,7 +37,15 @@ presentation. Broken assets for a known binding fail validation explicitly.
 
 `CharacterActionAnimationState` carries generation, uint64 revision (kept as a
 lossless string in TypeScript), binding key, actual elapsed/total ticks, fractional
-milliseconds per tick, the sampling timestamp and an optional target position.
+milliseconds per tick, the sampling timestamp and an optional target position
+or fixed world-space `facing_angle`. These facing fields are mutually exclusive.
+Directed menu cycles capture their accepted angle at start; character movement
+or later cursor changes do not retarget the animation. The client projects that
+world direction into the isometric actor view. `axe_sweep` and `axe_strike` map
+to the existing right/left-hand chop clips through `data/action_animations/axe.json`.
+Action facing overrides presentation only and does not change server
+`Position.heading`. The client retains base heading updates during the action
+and returns to the latest server heading on completion or cancellation.
 An empty key means idle; idle retains the last revision. The incarnation matches
 the character visual generation. `S2C_CharacterActionAnimation` adds entity ID
 and the recipient's current stream epoch. Player spawn/appearance snapshots
@@ -68,7 +76,7 @@ Critical queue overflow disconnects only the slow recipient asynchronously;
 ordinary noncritical send behavior is unchanged.
 
 Client handlers reject wrong epochs/incarnations, unknown entities, lower
-revisions, stale samples and contradictory equal-revision timing. Equipment and
+revisions, stale samples and contradictory equal-revision timing or fixed direction. Equipment and
 animation revisions are compared independently during appearance refresh. State
 lives in the canonical Pinia entity and latest render-side object. Despawn,
 leave-world and reconnect discard it. Async actor/equipment completion cannot

@@ -1,0 +1,38 @@
+{
+  "v": 1,
+  "bindings": [{
+    "key": "axe_sweep",
+    "source": { "kind": "menu", "id": "axe_sweep" },
+    "actor": "character/male_commoner",
+    "variants": [
+      { "clip": "chop_r", "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }] },
+      { "clip": "chop_l", "equipment": [{ "slot": "left_hand", "visual_key": "stone_axe" }] }
+    ],
+    "eligibility": ["stationary", "not_carrying", "not_knocked_out"],
+    "facing": "target",
+    "blend_ms": 120,
+    "frame": { "width": 192, "height": 224, "origin_x": 96, "origin_y": 180 },
+    "preview": {
+      "label": "Axe Sweep",
+      "duration_ms": 600,
+      "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }]
+    }
+  }, {
+    "key": "axe_strike",
+    "source": { "kind": "menu", "id": "axe_strike" },
+    "actor": "character/male_commoner",
+    "variants": [
+      { "clip": "chop_r", "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }] },
+      { "clip": "chop_l", "equipment": [{ "slot": "left_hand", "visual_key": "stone_axe" }] }
+    ],
+    "eligibility": ["stationary", "not_carrying", "not_knocked_out"],
+    "facing": "target",
+    "blend_ms": 120,
+    "frame": { "width": 192, "height": 224, "origin_x": 96, "origin_y": 180 },
+    "preview": {
+      "label": "Axe Strike",
+      "duration_ms": 600,
+      "equipment": [{ "slot": "right_hand", "visual_key": "stone_axe" }]
+    }
+  }]
+}

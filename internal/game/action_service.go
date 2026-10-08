@@ -444,6 +444,7 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 			MutatesItems: service.requiresItemMutation(definition.ID),
 			TargetKind:   kind, TargetID: target.ObjectID, TargetHandle: target.ObjectHandle,
 			HasTargetPosition: definition.Target.Kind == actiondefs.TargetTile, TargetX: target.X, TargetY: target.Y,
+			HasFacingAngle: definition.Target.Kind == actiondefs.TargetDirection, FacingAngle: target.AimAngle,
 			CycleDurationTicks: uint32(definition.Execution.Ticks), CycleIndex: 1, StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
 		}, actionanimationdefs.Source{Kind: "menu", ID: definition.ID})
 		if activity != nil {

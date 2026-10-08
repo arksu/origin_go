@@ -509,7 +509,7 @@ export class Render {
     for (const [entityId, renderPos] of positions) {
       this.objectManager.updateObjectPosition(
         entityId, renderPos.x, renderPos.y,
-        renderPos.isMoving, renderPos.direction, renderPos.distanceMoved, renderPos.stopProgress, renderPos.moveMode,
+        renderPos.isMoving, renderPos.direction, renderPos.distanceMoved, renderPos.stopProgress, renderPos.moveMode, renderPos.heading,
       )
     }
   }
@@ -746,6 +746,10 @@ export class Render {
 
   updateObjectPosition(entityId: number, x: number, y: number): void {
     this.objectManager.updateObjectPosition(entityId, x, y)
+  }
+
+  setObjectHeading(entityId: number, heading: number): void {
+    this.objectManager.getObject(entityId)?.setHeading(heading)
   }
 
   setObjectKnockedOutPose(entityId: number, knockedOut: boolean): void {

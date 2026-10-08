@@ -26,8 +26,11 @@ type ActiveCyclicAction struct {
 	TargetID          types.EntityID
 	TargetHandle      types.Handle
 	HasTargetPosition bool
+	HasFacingAngle    bool
 	TargetX           float64
 	TargetY           float64
+	// FacingAngle is the fixed world-space direction accepted at cycle start.
+	FacingAngle float64
 
 	CycleDurationTicks      uint32
 	CycleElapsedTicks       uint32

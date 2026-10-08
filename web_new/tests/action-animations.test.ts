@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { test, type TestContext } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { AnimationClip, Bone, Group, VectorKeyframeTrack } from 'three'
 import { Container, DOMAdapter, Graphics, Sprite, Texture } from 'pixi.js'
@@ -19,9 +19,11 @@ import type { ActorRenderer } from '../src/game/actors/ActorRenderer'
 import { ACTOR_RENDER } from '../src/game/actors/config'
 import { NicknameManager } from '../src/game/NicknameManager'
 import { cameraController } from '../src/game/CameraController'
-import type { ObjectManager } from '../src/game/ObjectManager'
+import { ObjectManager } from '../src/game/ObjectManager'
 import { Render } from '../src/game/Render'
 import { NICKNAME_Y_OFFSET_PX } from '../src/constants/nickname'
+import { moveController, type RenderPosition } from '../src/game/MoveController'
+import { screenFacingAngle, screenFacingAngleFromDisplacement } from '../src/game/actors/facing'
 
 const definitions = parseActionAnimationFile(fixture, 'shared fixture')
 const first = definitions[0]!, second = definitions[1]!
@@ -35,6 +37,56 @@ function wire(overrides: WireInput = {}): proto.ICharacterActionAnimationState {
     totalTicks: 20, elapsedTicks: 5, tickDurationMs: 100, serverTimeMs: 10000, targetPosition: { x: 12, y: -20 }, ...overrides })
 }
 function state(overrides: WireInput = {}) { return decodeActionAnimation(wire(overrides)) }
+
+function headingFixture(t: TestContext) {
+  const adapter = DOMAdapter.get()
+  DOMAdapter.set({ ...adapter, createCanvas: () => ({ getContext: () => null }) as unknown as HTMLCanvasElement })
+  t.mock.method(ResourceLoader, 'getResourceDef', () => ({ actor3d: true, layers: [] }))
+  const player = new ActionAnimationPlayer(baseFrame, message => { throw new Error(message) })
+  player.configure(catalog, first.actor)
+  let resolveReady!: () => void
+  let direction = 3, baseFacing = screenFacingAngle(direction)
+  const actor = {
+    ready: new Promise<void>(resolve => { resolveReady = resolve }),
+    get direction() { return direction },
+    set direction(value: number) { direction = value; baseFacing = screenFacingAngle(value) },
+    setFacingAngle: (angle: number) => { baseFacing = angle },
+    setActionAnimation: (input: Parameters<ActionAnimationPlayer['setInput']>[0]) => player.setInput(input),
+    prepareActionAnimation: (now: number) => player.update(context, now),
+    get outputFrame() { return player.frame },
+    setEquipment: async () => {},
+  }
+  const renderer = { create: () => ({ actor, sprite: new Sprite(Texture.EMPTY), immersionPx: 0 }), release: () => {} }
+  const parent = new Container(), manager = new ObjectManager()
+  manager.setParentContainer(parent)
+  manager.setActorRenderer(renderer as unknown as ActorRenderer)
+  const render = Object.assign(Object.create(Render.prototype), { objectManager: manager }) as Render
+  let positions = new Map<number, RenderPosition>()
+  t.mock.method(moveController, 'update', () => positions)
+  t.after(() => { manager.destroy(); parent.destroy(); DOMAdapter.set(adapter) })
+  return {
+    actor, manager, render,
+    resolveReady,
+    spawn(heading: number) {
+      manager.spawnObject({ entityId: 17, typeId: 1, resourcePath: 'player', position: { x: 50, y: 50, heading }, size: { x: 4, y: 4 } })
+      return manager.getObject(17)!
+    },
+    update(heading: number, moving = false) {
+      const position = manager.getObject(17)!.getPosition()
+      positions = new Map([[17, { x: position.x + (moving ? 10 : 0), y: position.y, heading,
+        isMoving: moving, moveMode: 1, direction: 3, distanceMoved: moving ? 10 : 0 }]])
+      ;(render as unknown as { updateMovement(): void }).updateMovement()
+    },
+    get baseFacing() { return baseFacing },
+    get displayedFacing() { return player.facingAngle ?? baseFacing },
+  }
+}
+
+function assertWorldFacing(screenAngle: number, heading: number, message: string): void {
+  const expected = screenFacingAngleFromDisplacement(Math.cos(heading), Math.sin(heading))!
+  const difference = Math.atan2(Math.sin(screenAngle - expected), Math.cos(screenAngle - expected))
+  assert.ok(Math.abs(difference) < 1e-7, message)
+}
 
 test('generic update and spawn preserve uint64, opaque keys, fractional periods and idle', () => {
   for (const animationKey of [first.key, 'future/binding:any', '']) {
@@ -60,6 +112,32 @@ test('decoder rejects malformed active timing, identity and coordinates', () => 
     { animationKey: 'bad key' }, { animationKey: 'a'.repeat(129) },
   ]
   for (const override of invalid) assert.throws(() => decodeActionAnimation({ ...valid, ...override }), JSON.stringify(override))
+})
+
+test('fixed world facing survives the wire, including zero and float-rounded full turns', () => {
+  for (const facingAngle of [0, Math.fround(Math.PI / 3), Math.fround(2 * Math.PI)]) {
+    const value = wire({ targetPosition: null, facingAngle })
+    const received = proto.CharacterActionAnimationState.decode(proto.CharacterActionAnimationState.encode(value).finish())
+    const decoded = decodeActionAnimation(received)
+    assert.equal(decoded.facingAngle, facingAngle)
+    assert.equal(decoded.targetPosition, undefined)
+  }
+  assert.equal(state({ targetPosition: null }).facingAngle, undefined)
+  for (const facingAngle of [-.1, NaN, Infinity, -Infinity, Math.fround(2 * Math.PI) + .000001]) {
+    assert.throws(() => decodeActionAnimation({ ...wire({ targetPosition: null }), facingAngle }), /facing angle/)
+  }
+  assert.throws(() => decodeActionAnimation(wire({ facingAngle: 0 })), /facing angle/, 'fixed angle and target position are mutually exclusive')
+})
+
+test('fixed facing is immutable within a revision but can change in a successor', () => {
+  const current = state({ targetPosition: null, facingAngle: 0 })
+  const progress = state({ targetPosition: null, facingAngle: 0, serverTimeMs: 10100, elapsedTicks: 6 })
+  assert.equal(acceptActionAnimation(current, progress, current.generation), true)
+  for (const facingAngle of [1, undefined]) {
+    assert.throws(() => acceptActionAnimation(current, state({ targetPosition: null, facingAngle, serverTimeMs: 10100 }), current.generation), /Contradictory/)
+  }
+  const successor = state({ targetPosition: null, facingAngle: 1, revision: '9007199254740994', serverTimeMs: 10100 })
+  assert.equal(acceptActionAnimation(current, successor, current.generation), true)
 })
 
 test('phase uses authoritative clock at any render rate, corrects delay, and clamps the endpoint', () => {
@@ -240,6 +318,85 @@ test('ObjectView forwards latest state after asynchronous readiness, cancellatio
   view.updateActionAnimation(1000, 11000)
   assert.equal(inputPhases.length, count, 'destroyed view cannot consume a late result')
   assert.equal(ACTOR_RENDER.cellSize, baseFrame.width)
+})
+
+test('ObjectView projects fixed world facing and keeps it independent of actor movement', t => {
+  DOMAdapter.set({ ...DOMAdapter.get(), createCanvas: () => ({ getContext: () => null }) as unknown as HTMLCanvasElement })
+  t.mock.method(ResourceLoader, 'getResourceDef', () => ({ actor3d: true, layers: [] }))
+  const player = new ActionAnimationPlayer(baseFrame, message => { throw new Error(message) })
+  player.configure(catalog, first.actor)
+  const inputs: Parameters<ActionAnimationPlayer['setInput']>[0][] = []
+  const actor = {
+    ready: Promise.resolve(), setEquipment: async () => {}, setFacingAngle: () => {},
+    setActionAnimation: (input: Parameters<ActionAnimationPlayer['setInput']>[0]) => { inputs.push(input); player.setInput(input) },
+    prepareActionAnimation: (now: number) => player.update(context, now), get outputFrame() { return player.frame },
+  }
+  const renderer = { create: () => ({ actor, sprite: new Sprite(Texture.EMPTY), immersionPx: 0 }), release: () => {} }
+  const view = new ObjectView({ entityId: 17, typeId: 1, resourcePath: 'player', position: { x: 50, y: 50 }, size: { x: 4, y: 4 } }, renderer as unknown as ActorRenderer)
+  t.after(() => view.destroy())
+  for (const [angle, projected] of [[0, Math.atan2(.5, 1)], [Math.PI / 4, Math.PI / 2], [Math.PI / 2, Math.atan2(.5, -1)], [Math.PI, Math.atan2(-.5, -1)], [Math.fround(2 * Math.PI), Math.atan2(.5, 1)]] as const) {
+    view.setActionAnimation(state({ targetPosition: null, facingAngle: Math.fround(angle) }))
+    view.updateActionAnimation(0, 10000)
+    view.updateActionAnimation(120, 10000)
+    assert.ok(Math.abs(inputs.at(-1)!.facingAngle! - projected) < 1e-6)
+    assert.equal(player.samples[0]!.clip, first.variants[0]!.clip, 'target-facing binding accepts fixed-direction input')
+    const facing = inputs.at(-1)!.facingAngle
+    view.updatePosition(200, 400)
+    view.updateActionAnimation(121, 10000)
+    assert.equal(inputs.at(-1)!.facingAngle, facing, 'fixed direction does not turn toward a synthetic world point')
+  }
+  view.updatePosition(50, 50)
+  view.setActionAnimation(state({ targetPosition: { x: 100, y: 100 }, facingAngle: null }))
+  view.updateActionAnimation(122, 10000)
+  assert.equal(inputs.at(-1)!.facingAngle, Math.PI / 2, 'object-target facing retains its existing projection')
+})
+
+test('stationary spawn heading survives deferred readiness and later stationary server updates', async t => {
+  const fixture = headingFixture(t)
+  fixture.spawn(-Math.PI / 2)
+  assertWorldFacing(fixture.baseFacing, -Math.PI / 2, 'spawn must apply its heading before any movement')
+  fixture.update(Math.PI)
+  fixture.resolveReady()
+  await fixture.actor.ready
+  assertWorldFacing(fixture.baseFacing, Math.PI, 'late readiness must preserve the latest stationary heading')
+  fixture.update(0)
+  assertWorldFacing(fixture.baseFacing, 0, 'an explicit zero heading must reach a stationary actor')
+})
+
+test('the render movement path uses server heading even when displayed displacement points elsewhere', async t => {
+  const fixture = headingFixture(t)
+  fixture.spawn(0)
+  fixture.resolveReady()
+  await fixture.actor.ready
+  fixture.update(Math.PI / 2, true)
+  assertWorldFacing(fixture.baseFacing, Math.PI / 2, 'world +x displacement must not replace world +y server heading')
+  assert.deepEqual(fixture.manager.getObject(17)!.getPosition(), { x: 60, y: 50 })
+  fixture.update(-Math.PI / 2)
+  assertWorldFacing(fixture.baseFacing, -Math.PI / 2, 'the subsequent server stop must apply its heading')
+})
+
+test('target-facing action overrides stay local and return to the latest server heading after finish or cancellation', async t => {
+  const fixture = headingFixture(t)
+  const view = fixture.spawn(Math.PI / 2)
+  fixture.resolveReady()
+  await fixture.actor.ready
+  for (const end of ['finished', 'canceled'] as const) {
+    view.setActionAnimation(state({ targetPosition: null, facingAngle: 0 }))
+    view.updateActionAnimation(0, 10000)
+    assertWorldFacing(fixture.displayedFacing, 0, 'the directed action controls presentation while active')
+    fixture.update(Math.PI)
+    view.updateActionAnimation(120, 10120)
+    assertWorldFacing(fixture.displayedFacing, 0, 'stationary server heading must not retarget the active action')
+    assertWorldFacing(fixture.baseFacing, Math.PI, 'the action must still retain the new ordinary heading')
+    if (end === 'finished') {
+      view.setActionAnimation(state({ animationKey: '', revision: '9007199254740994' }))
+    } else {
+      view.setActionAnimation(null)
+    }
+    view.updateActionAnimation(121, 10121)
+    assertWorldFacing(fixture.displayedFacing, Math.PI, `${end} action must resume the latest server heading`)
+    fixture.update(Math.PI / 2)
+  }
 })
 
 test('overhead screen coordinates follow rendered placement, zoom and pan and hide with the entity', () => {

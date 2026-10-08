@@ -330,6 +330,16 @@ class MoveController {
     return { x: state.visualX, y: state.visualY, heading: state.visualHeading }
   }
 
+  // An appearance respawn carries current facing without restarting position interpolation.
+  refreshHeading(entityId: number, heading: number): void {
+    if (!Number.isFinite(heading)) throw new Error('Invalid server heading')
+    const state = this.entities.get(entityId)
+    if (!state) return
+    state.visualHeading = heading
+    // Supersede older facing samples; the position buffer is bounded by MAX_KEYFRAMES.
+    for (const keyframe of state.keyframes) keyframe.heading = heading
+  }
+
   private interpolateEntity(state: EntityMoveState, renderTimeMs: number, clientNowMs: number, deltaMs: number): Omit<RenderPosition, 'distanceMoved'> {
     const keyframes = state.keyframes
 

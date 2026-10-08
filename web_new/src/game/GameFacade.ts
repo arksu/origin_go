@@ -225,6 +225,10 @@ export class GameFacade {
     this.render?.updateObjectPosition(entityId, x, y)
   }
 
+  setObjectHeading(entityId: number, heading: number): void {
+    this.render?.setObjectHeading(entityId, heading)
+  }
+
   setObjectKnockedOutPose(entityId: number, knockedOut: boolean): void {
     this.render?.setObjectKnockedOutPose(entityId, knockedOut)
   }
