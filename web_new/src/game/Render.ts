@@ -16,6 +16,8 @@ import { getDirectionSector, normalizeAimAngle, resolveDirectionAimAngle, type D
 import { sendActivateAction } from '@/network'
 import { ChatBalloonManager } from './ChatBalloonManager'
 import { NicknameManager } from './NicknameManager'
+import { DamageNumberManager } from './DamageNumberManager'
+import type { DamageNumberHit } from './hud/damageNumbers'
 import { MoveMarkerManager } from './MoveMarkerManager'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
@@ -56,6 +58,7 @@ export class Render {
   private directionAimAngle = 0
   private chatBalloonManager: ChatBalloonManager
   private nicknameManager: NicknameManager
+  private damageNumberManager: DamageNumberManager
   private moveMarkerManager: MoveMarkerManager | null = null
   private actorRenderer: ActorRenderer | null = null
   private actorRenderSettings: Readonly<ActorRenderSettings>
@@ -101,6 +104,7 @@ export class Render {
     this.directionAimPreview = new DirectionAimPreview(this.objectsContainer)
     this.nicknameManager = new NicknameManager(this.objectsContainer)
     this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer, this.nicknameManager)
+    this.damageNumberManager = new DamageNumberManager(this.objectsContainer)
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -119,6 +123,7 @@ export class Render {
     })
 
     this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer, this.actorRenderSettings)
+    this.damageNumberManager.installFont()
     this.objectManager.setActorRenderer(this.actorRenderer)
     await this.objectManager.initShallowWater((x, y) => this.chunkManager.getTileTypeAtWorld(x, y))
 
@@ -372,6 +377,7 @@ export class Render {
     this.objectManager.syncActiveCarryVisuals(CARRIED_OBJECT_OFFSET_PX)
     this.nicknameManager.update(this.objectManager)
     this.chatBalloonManager.update(this.objectManager)
+    this.damageNumberManager.update(now, cameraController.getZoom())
     this.moveMarkerManager?.update()
     try {
       this.actorRenderer?.render(now)
@@ -719,13 +725,26 @@ export class Render {
   }
 
   spawnObject(options: ObjectViewOptions): void {
+    this.damageNumberManager.forgetSpawn(options.entityId)
     this.objectManager.spawnObject(options)
   }
 
   despawnObject(entityId: number): void {
+<<<<<<< Updated upstream
     if (entityId === this.playerEntityId) this.moveMarkerManager?.clear()
+=======
+    this.damageNumberManager.rememberDespawn(entityId, this.objectManager, performance.now())
+>>>>>>> Stashed changes
     this.objectManager.despawnObject(entityId)
     this.nicknameManager.remove(entityId)
+  }
+
+  showDamageNumbers(hits: readonly DamageNumberHit[]): void {
+    this.damageNumberManager.show(hits, this.objectManager, performance.now(), cameraController.getZoom())
+  }
+
+  clearDamageNumbers(): void {
+    this.damageNumberManager.clear()
   }
 
   updateObjectPosition(entityId: number, x: number, y: number): void {
@@ -869,6 +888,7 @@ export class Render {
     this.buildGhostController.cancel()
     this.liftGhostController.cancel()
     this.chatBalloonManager.clear()
+    this.damageNumberManager.clear()
     this.nicknameManager.clear()
     this.moveMarkerManager?.clear()
     this.objectManager.clear()
@@ -897,6 +917,7 @@ export class Render {
     this.buildGhostController.destroy()
     this.liftGhostController.destroy()
     this.chatBalloonManager.destroy()
+    this.damageNumberManager.destroy()
     this.nicknameManager.destroy()
     this.moveMarkerManager?.destroy()
 

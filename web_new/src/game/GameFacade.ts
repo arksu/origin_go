@@ -12,6 +12,7 @@ import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRe
 import { config } from '@/config'
 import type { MinimapPose } from './minimap/types'
 import { localAudioController, worldAudioReceiver } from './audioRuntime'
+import type { DamageNumberHit } from './hud/damageNumbers'
 
 export class GameFacade {
   private render: Render | null = null
@@ -210,6 +211,14 @@ export class GameFacade {
 
   despawnObject(entityId: number): void {
     this.render?.despawnObject(entityId)
+  }
+
+  showDamageNumbers(hits: readonly DamageNumberHit[]): void {
+    this.render?.showDamageNumbers(hits)
+  }
+
+  clearDamageNumbers(): void {
+    this.render?.clearDamageNumbers()
   }
 
   updateObjectPosition(entityId: number, x: number, y: number): void {

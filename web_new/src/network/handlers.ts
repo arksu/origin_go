@@ -14,6 +14,7 @@ const attackResults = new AttackResultReceiver()
 
 export function resetAttackResultStream(epoch = 0): void {
   attackResults.reset(epoch)
+  gameFacade.clearDamageNumbers()
 }
 
 function toNumber(value: number | Long): number {
@@ -88,7 +89,10 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('attackResult', (msg: proto.IS2C_AttackResult) => {
-    attackResults.accept(msg)
+    if (!attackResults.accept(msg)) return
+    gameFacade.showDamageNumbers((msg.hits ?? []).map(hit => ({
+      targetId: String(hit.targetId), damage: hit.damage ?? 0,
+    })))
   })
 
   messageDispatcher.on('characterProfile', (msg: proto.IS2C_CharacterProfile) => {

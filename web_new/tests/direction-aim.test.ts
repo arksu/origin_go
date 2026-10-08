@@ -238,9 +238,13 @@ test('renderer reset and destruction clear local selection and preview resources
   f.render.clearMinimap = () => {}
   f.render.chatBalloonManager = { clear() {}, destroy() {} }
   f.render.nicknameManager = { clear() {}, destroy() {} }
+  let damageCleared = 0
+  let damageDestroyed = false
+  f.render.damageNumberManager = { clear() { damageCleared++ }, destroy() { damageDestroyed = true } }
   f.render.chunkManager = { clear() {}, destroy() {} }
   f.presentation.activate('axe_sweep', sendActivateAction)
   f.render.resetWorld()
+  assert.equal(damageCleared, 1)
   assert.equal(f.game.directionAim, null)
   assert.ok(f.previewClears() > 0)
   let previewDestroyed = false
@@ -254,6 +258,7 @@ test('renderer reset and destruction clear local selection and preview resources
   f.render.app = { ticker: { stop() {} }, destroy() {} }
   f.presentation.activate('axe_sweep', sendActivateAction)
   Render.prototype.destroy.call(f.render as unknown as Render)
+  assert.equal(damageDestroyed, true)
   assert.equal(f.game.directionAim, null)
   assert.equal(previewDestroyed, true)
   assert.equal(f.packets.length, 0)

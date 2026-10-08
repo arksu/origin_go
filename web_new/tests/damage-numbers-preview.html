@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Damage numbers rendering fixture</title>
+    <style>
+      body { margin: 0; background: #172d21; color: #f0e6d7; font: 14px Arial, sans-serif; }
+      header { position: absolute; z-index: 1; padding: 16px; background: #162119ee; border-radius: 0 0 12px; max-width: 90%; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      p { margin: 8px 0; }
+      button, select { padding: 7px; margin: 3px; font: inherit; }
+      output { display: block; white-space: pre-wrap; line-height: 1.5; }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Damage numbers — local rendering fixture</h1>
+      <p>No server connection. Uses the production receiver, bitmap atlas and pooled renderer.</p>
+      <button id="hit">Hit</button>
+      <button id="repeat">Four simultaneous hits</button>
+      <button id="fatal">Despawn before result</button>
+      <button id="sweep">512-target sweep</button>
+      <button id="reset">Reset</button>
+      <label>Zoom <select id="zoom"><option>0.12</option><option>0.5</option><option selected>1</option><option>2</option><option>10</option></select></label>
+      <label>Resolution <select id="resolution"><option>1</option><option selected>2</option></select></label>
+      <label>Frame <select id="frame"><option value="live">Live</option><option value="120">120 ms</option><option value="450">450 ms</option><option value="750">750 ms</option><option value="900">900 ms</option></select></label>
+      <button id="measure">Measure update / reuse</button>
+      <button id="snapshot">Save PNG</button>
+      <output id="status">Loading…</output>
+    </header>
+    <script type="module" src="./damage-numbers-preview.ts"></script>
+  </body>
+</html>
