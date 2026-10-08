@@ -458,6 +458,10 @@ func (service *ActionService) executeHandler(world *ecs.World, playerID types.En
 		}
 		return
 	}
+	if completion, ok := service.handlers[definition.ID].(preparedActionCompletion); ok {
+		service.executePreparedCompletion(world, playerID, playerHandle, definition, active, target, completion)
+		return
+	}
 	result := service.handlers[definition.ID].Start(world, playerID, playerHandle, target, active.Generation)
 	switch result.Outcome {
 	case ActionSucceeded:

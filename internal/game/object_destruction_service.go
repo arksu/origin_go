@@ -81,6 +81,9 @@ type ObjectDestructionService struct {
 	world      *ecs.World
 	deps       ObjectDestructionDependencies
 	operations [ObjectDestructionQueueCapacity]objectDestructionOperation
+	freeSlots  [ObjectDestructionQueueCapacity]uint16
+	freeCount  int
+	reserved   map[types.Handle]uint16 // slot + 1; entries are created by preparation.
 	count      int
 	closed     bool
 	sequence   uint64
@@ -90,14 +93,26 @@ type destructionPhase uint8
 
 const (
 	destructionIdle destructionPhase = iota
+	destructionReserved
+	destructionCommitted
 	destructionQueued
 	destructionRunning
 	destructionReady
 )
 
+// Tokens are private and consumed within one shard-locked action. A ticket
+// prevents an aborted or completed token from affecting a reused slot.
+type objectDestructionReservation struct {
+	service *ObjectDestructionService
+	slot    uint16
+	ticket  uint64
+}
+
 type objectDestructionOperation struct {
 	mu                  sync.Mutex
 	service             *ObjectDestructionService
+	slot                uint16
+	ticket              uint64
 	phase               destructionPhase
 	err                 error
 	due                 time.Time
@@ -142,15 +157,18 @@ func NewObjectDestructionService(w *ecs.World, deps ObjectDestructionDependencie
 		ecs.SetResource(w, ecs.ObjectDestructionState{Prepared: make(map[types.Handle]bool), Pending: make(map[types.Handle]bool)})
 	}
 	attachObjectTargetReferences(w)
-	s := &ObjectDestructionService{world: w, deps: deps}
+	s := &ObjectDestructionService{world: w, deps: deps, freeCount: ObjectDestructionQueueCapacity, reserved: make(map[types.Handle]uint16)}
 	for i := range s.operations {
 		s.operations[i].service = s
+		s.operations[i].slot = uint16(i)
+		s.freeSlots[i] = uint16(len(s.operations) - 1 - i)
 		s.operations[i].pinned = make([]types.ChunkCoord, 0, 5)
 	}
 	w.AddDespawnObserver(func(h types.Handle) {
 		state := ecs.GetResource[ecs.ObjectDestructionState](w)
 		delete(state.Prepared, h)
 		delete(state.Pending, h)
+		delete(s.reserved, h)
 	})
 	return s, nil
 }
@@ -168,21 +186,30 @@ func (s *ObjectDestructionService) PrepareTarget(target types.Handle) error {
 	}
 	state.Prepared[target] = true
 	state.Pending[target] = false
+	if _, exists := s.reserved[target]; !exists {
+		s.reserved[target] = 0
+	}
 	return nil
 }
 
-// admit commits only after reserving both an operation slot and source pin.
-// Save-queue backpressure is retried from the retained slot without reverting HP.
-func (s *ObjectDestructionService) admit(target types.Handle) error {
+// reserve retains a slot and source pin without changing gameplay state. All
+// reservations are committed or canceled before releasing the shard lock.
+func (s *ObjectDestructionService) reserve(target types.Handle) (objectDestructionReservation, error) {
 	if s.closed {
-		return ErrObjectDestructionStopped
+		return objectDestructionReservation{}, ErrObjectDestructionStopped
 	}
-	if s.count == len(s.operations) {
-		return ErrObjectDestructionQueueFull
+	if s.freeCount == 0 {
+		return objectDestructionReservation{}, ErrObjectDestructionQueueFull
 	}
 	state := ecs.GetResource[ecs.ObjectDestructionState](s.world)
-	if state.Pending[target] {
-		return ErrObjectDestructionPending
+	if state.Pending[target] || s.reserved[target] != 0 {
+		return objectDestructionReservation{}, ErrObjectDestructionPending
+	}
+	if !state.Prepared[target] {
+		return objectDestructionReservation{}, ErrObjectDamageTargetUnprepared
+	}
+	if s.sequence == math.MaxUint64 {
+		return objectDestructionReservation{}, ErrObjectDestructionOverflow
 	}
 	id, ok := s.world.GetExternalID(target)
 	info, hasInfo := ecs.GetComponent[components.EntityInfo](s.world, target)
@@ -192,41 +219,78 @@ func (s *ObjectDestructionService) admit(target types.Handle) error {
 		math.IsNaN(position.X) || math.IsInf(position.X, 0) || math.IsNaN(position.Y) || math.IsInf(position.Y, 0) ||
 		position.X < float64(s.deps.MinX) || position.X >= float64(s.deps.MaxX) ||
 		position.Y < float64(s.deps.MinY) || position.Y >= float64(s.deps.MaxY) {
-		return ErrObjectDestructionCapture
+		return objectDestructionReservation{}, ErrObjectDestructionCapture
 	}
 	now := ecs.GetResource[ecs.TimeState](s.world)
 	if now.RuntimeSecondsTotal < 0 {
-		return ErrObjectDestructionCapture
+		return objectDestructionReservation{}, ErrObjectDestructionCapture
 	}
 	coord := types.ChunkCoord{X: chunk.CurrentChunkX, Y: chunk.CurrentChunkY}
 	if info.Layer != s.world.Layer || coord != types.WorldToChunkCoord(int(position.X), int(position.Y), constt.ChunkSize, constt.CoordPerTile) {
-		return ErrObjectDestructionCapture
+		return objectDestructionReservation{}, ErrObjectDestructionCapture
 	}
 	if err := s.deps.Chunks.PinPersistence(coord); err != nil {
-		return err
+		return objectDestructionReservation{}, err
 	}
-	var op *objectDestructionOperation
-	for i := range s.operations {
-		s.operations[i].mu.Lock()
-		idle := s.operations[i].phase == destructionIdle
-		s.operations[i].mu.Unlock()
-		if idle {
-			op = &s.operations[i]
-			break
-		}
-	}
+	s.freeCount--
+	slot := s.freeSlots[s.freeCount]
+	op := &s.operations[slot]
 	s.sequence++
+	op.ticket = s.sequence
 	op.target, op.id, op.region, op.layer = target, id, info.Region, info.Layer
 	op.x, op.y, op.source = int(position.X), int(position.Y), coord
 	op.pinned = append(op.pinned[:0], coord)
 	op.seed = uint64(id) ^ s.sequence*0x9e3779b97f4a7c15 ^ uint64(now.UnixMs)
 	op.dropTime, op.due, op.backoff = now.RuntimeSecondsTotal, now.Now, 0
-	op.phase = destructionQueued
+	op.phase = destructionReserved
 	s.count++
-	state.Pending[target] = true
-	ecs.WithComponent(s.world, target, func(hp *components.ObjectInternalState) { hp.HP = 0; hp.IsDirty = true })
-	s.deps.Quarantine(target)
-	return nil
+	s.reserved[target] = slot + 1
+	return objectDestructionReservation{service: s, slot: slot, ticket: op.ticket}, nil
+}
+
+func (s *ObjectDestructionService) reservationOperation(reservation objectDestructionReservation, phase destructionPhase) *objectDestructionOperation {
+	if reservation.service != s || reservation.ticket == 0 || int(reservation.slot) >= len(s.operations) {
+		return nil
+	}
+	op := &s.operations[reservation.slot]
+	op.mu.Lock()
+	defer op.mu.Unlock()
+	if op.ticket != reservation.ticket || op.phase != phase {
+		return nil
+	}
+	return op
+}
+
+func (s *ObjectDestructionService) cancelReservation(reservation objectDestructionReservation) bool {
+	op := s.reservationOperation(reservation, destructionReserved)
+	if op == nil {
+		return false
+	}
+	s.release(op)
+	return true
+}
+
+// commitReservation publishes only pending intent; the receiver writes health.
+// Workers cannot observe the operation until every hit is committed and its
+// quarantine has completed through finalizeReservation.
+func (s *ObjectDestructionService) commitReservation(reservation objectDestructionReservation) bool {
+	op := s.reservationOperation(reservation, destructionReserved)
+	if op == nil {
+		return false
+	}
+	ecs.GetResource[ecs.ObjectDestructionState](s.world).Pending[op.target] = true
+	op.phase = destructionCommitted
+	return true
+}
+
+func (s *ObjectDestructionService) finalizeReservation(reservation objectDestructionReservation) bool {
+	op := s.reservationOperation(reservation, destructionCommitted)
+	if op == nil {
+		return false
+	}
+	s.deps.Quarantine(op.target)
+	op.phase = destructionQueued
+	return true
 }
 
 // Update runs under shard lock before chunk activation. Work is admitted to
@@ -343,6 +407,11 @@ func (s *ObjectDestructionService) release(op *objectDestructionOperation) {
 	op.cursor = destructionLootCursor{}
 	op.page = nil
 	op.pageRead = 0
+	if _, exists := s.reserved[op.target]; exists {
+		s.reserved[op.target] = 0
+	}
+	s.freeSlots[s.freeCount] = op.slot
+	s.freeCount++
 	s.count--
 }
 

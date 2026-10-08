@@ -7,11 +7,13 @@ import (
 
 	"go.uber.org/zap"
 
+	"origin/internal/actiondefs"
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
+	"origin/internal/itemdefs"
 	"origin/internal/persistence"
 )
 
@@ -36,11 +38,17 @@ type ShardManager struct {
 
 	shards map[int]*Shard
 
-	workerPool *WorkerPool
-	eventBus   *eventbus.EventBus
+	workerPool        *WorkerPool
+	eventBus          *eventbus.EventBus
+	combatDefinitions *CombatDefinitions
+	attackEvents      AttackEventSequence
 }
 
 func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, enableVisionStats bool, logger *zap.Logger) *ShardManager {
+	combat, err := NewCombatDefinitions(itemdefs.Global(), actiondefs.Global())
+	if err != nil {
+		logger.Fatal("Invalid combat definitions", zap.Error(err))
+	}
 	ebCfg := &eventbus.Config{
 		MinWorkers: cfg.Game.EventBusMinWorkers,
 		MaxWorkers: cfg.Game.EventBusMaxWorkers,
@@ -65,10 +73,11 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 		shards:            make(map[int]*Shard),
 		workerPool:        NewWorkerPool(cfg.Game.WorkerPoolSize),
 		eventBus:          eventbus.New(ebCfg),
+		combatDefinitions: combat,
 	}
 
 	for layer := 0; layer < cfg.Game.MaxLayers; layer++ {
-		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, snapshotSender, sm.eventBus, enableVisionStats, logger.Named("shard"))
+		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, snapshotSender, sm.eventBus, enableVisionStats, logger.Named("shard"), combat, &sm.attackEvents)
 	}
 
 	return sm

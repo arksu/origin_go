@@ -29,6 +29,16 @@ type CreatureDamageResult struct {
 	EnteredKO, Dead                       bool
 }
 
+// creatureDamageCommit is valid only during the shard-locked operation that
+// prepared it. Calculation owns its snapshots; committing performs no reads
+// that can reject a hit after another target has already been changed.
+type creatureDamageCommit struct {
+	target   types.Handle
+	identity types.EntityID
+	result   CreatureDamageResult
+	now      int64
+}
+
 // CreatureDamageService applies already calculated Draw to a real health target.
 // Construct and prepare under exclusive world access, outside the hit path. Apply
 // requires the owning shard lock and must precede PlayerDeathSystem (priority 470).
@@ -123,44 +133,67 @@ func (service *CreatureDamageService) readTarget(target types.Handle) (types.Ent
 // are sentinels and leave health, movement and notification queues unchanged.
 // Multiple calls are sequential: each sees the preceding call's committed state.
 func (service *CreatureDamageService) Apply(target types.Handle, rawDamage float64) (CreatureDamageResult, error) {
-	identity, before, err := service.readTarget(target)
+	var result CreatureDamageResult
+	identity, now, err := service.calculateDamage(target, rawDamage, &result)
 	if err != nil {
 		return CreatureDamageResult{}, err
+	}
+	service.commitDamageResult(target, identity, now, &result)
+	return result, nil
+}
+
+// prepareDamage validates and calculates without writing health or queues.
+// All prepared hits must be committed before lifecycle cleanup can run.
+func (service *CreatureDamageService) prepareDamage(target types.Handle, rawDamage float64) (creatureDamageCommit, error) {
+	var result CreatureDamageResult
+	identity, now, err := service.calculateDamage(target, rawDamage, &result)
+	if err != nil {
+		return creatureDamageCommit{}, err
+	}
+	return creatureDamageCommit{target: target, identity: identity, result: result, now: now}, nil
+}
+
+// calculateDamage fills caller-owned storage so standalone Apply does not copy
+// a larger coordinator plan through the call boundary.
+func (service *CreatureDamageService) calculateDamage(target types.Handle, rawDamage float64, result *CreatureDamageResult) (types.EntityID, int64, error) {
+	identity, before, err := service.readTarget(target)
+	if err != nil {
+		return 0, 0, err
 	}
 	preparedID, prepared := service.targets[target]
 	if !prepared || preparedID != identity || !service.stats.IsPlayerPrepared(identity, target) || !service.visual.IsPrepared(target) {
-		return CreatureDamageResult{}, ErrCreatureTargetUnprepared
+		return 0, 0, ErrCreatureTargetUnprepared
 	}
 	if rawDamage < 0 || math.IsNaN(rawDamage) || math.IsInf(rawDamage, 0) {
-		return CreatureDamageResult{}, combat.ErrInvalidInput
+		return 0, 0, combat.ErrInvalidInput
 	}
 	now := service.time.UnixMs
 	if now < 0 {
-		return CreatureDamageResult{}, ErrInvalidCreatureDamageTime
+		return 0, 0, ErrInvalidCreatureDamageTime
 	}
 	armor, err := service.equipment.ResolveArmor(target)
 	if err != nil {
-		return CreatureDamageResult{}, err
+		return 0, 0, err
 	}
 	damage, err := combat.DamageAfterArmor(rawDamage, armor)
 	if err != nil {
-		return CreatureDamageResult{}, err
+		return 0, 0, err
 	}
-	result := CreatureDamageResult{Armor: armor, Damage: damage, Before: before, After: before}
+	*result = CreatureDamageResult{Armor: armor, Damage: damage, Before: before, After: before}
 	if damage == 0 {
 		// Zero damage does not advance KO. The existing health pass will resolve
 		// expired deadlines, even when this validated hit is a no-op.
-		return result, nil
+		return identity, now, nil
 	}
 	if result.After.KOUntilUnixMs != 0 && now > result.After.KOUntilUnixMs {
 		if !result.After.IsLying && result.After.LyingRevision == math.MaxUint64 {
-			return CreatureDamageResult{}, ErrInvalidCreatureHealth
+			return 0, 0, ErrInvalidCreatureHealth
 		}
 		playerstate.ResolveKnockout(&result.After, now)
 	}
 	result.SoftDamage, result.HardDamage, err = combat.SplitCreatureDamage(damage, result.After.SHP, result.After.KOUntilUnixMs != 0)
 	if err != nil {
-		return CreatureDamageResult{}, err
+		return 0, 0, err
 	}
 	result.After.SHP, result.After.HHP, _, result.Dead = entityhealth.ApplyDamage(
 		result.After.SHP, result.After.HHP, result.After.HHP, result.SoftDamage, result.HardDamage,
@@ -169,34 +202,45 @@ func (service *CreatureDamageService) Apply(target types.Handle, rawDamage float
 		result.After.KOUntilUnixMs = 0
 	} else if result.After.SHP == 0 && result.After.KOUntilUnixMs == 0 {
 		if now > math.MaxInt64-playerstate.KnockoutDurationMs {
-			return CreatureDamageResult{}, ErrInvalidCreatureDamageTime
+			return 0, 0, ErrInvalidCreatureDamageTime
 		}
 		if !result.After.IsLying && result.After.LyingRevision == math.MaxUint64 {
-			return CreatureDamageResult{}, ErrInvalidCreatureHealth
+			return 0, 0, ErrInvalidCreatureHealth
 		}
 		playerstate.StartKnockout(&result.After, now)
 		result.EnteredKO = true
 	}
-	if !ecs.WithComponent(service.world, target, func(health *components.EntityHealth) { *health = result.After }) {
-		return CreatureDamageResult{}, ErrInvalidCreatureTarget
+	return identity, now, nil
+}
+
+// commitDamage consumes a valid same-lock plan. The coordinator has completed
+// every fallible check and must not run target cleanup between planning and this
+// call. Observer-aware writes preserve the existing notification contract.
+func (service *CreatureDamageService) commitDamage(commit creatureDamageCommit) {
+	service.commitDamageResult(commit.target, commit.identity, commit.now, &commit.result)
+}
+
+func (service *CreatureDamageService) commitDamageResult(target types.Handle, identity types.EntityID, now int64, result *CreatureDamageResult) {
+	if result.Damage == 0 {
+		return
 	}
+	ecs.WithComponent(service.world, target, func(health *components.EntityHealth) { *health = result.After })
 	if result.After.HHP == 0 || result.After.SHP == 0 || result.After.KOUntilUnixMs != 0 || result.After.IsLying {
 		playerstate.StopMovement(service.world, target)
 	}
-	if before.IsLying != result.After.IsLying {
+	if result.Before.IsLying != result.After.IsLying {
 		service.visual.Mark(target)
 	}
-	if before != result.After {
+	if result.Before != result.After {
 		ttl := service.config.PlayerStatsTTLms
 		if ttl == 0 {
 			ttl = ecs.ResolvePlayerStatsTTLms(service.world)
 		}
-		if before.KOUntilUnixMs != result.After.KOUntilUnixMs || before.IsLying != result.After.IsLying || result.Dead {
+		if result.Before.KOUntilUnixMs != result.After.KOUntilUnixMs || result.Before.IsLying != result.After.IsLying || result.Dead {
 			ttl = 0
 		}
 		service.stats.MarkPlayerDirty(identity, now, ttl)
 	}
-	return result, nil
 }
 
 func (service *CreatureDamageService) releaseTarget(target types.Handle) {

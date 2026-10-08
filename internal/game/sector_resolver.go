@@ -1,6 +1,7 @@
 package game
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -14,6 +15,19 @@ import (
 
 const sectorContactEpsilon = 1e-9
 
+const (
+	MeleeMaxQueryCells  = 1024
+	MeleeMaxQueryVisits = 4096
+	MeleeMaxContacts    = 4096
+)
+
+var (
+	ErrInvalidMeleeSector   = errors.New("melee sector: invalid parameters")
+	ErrInvalidMeleeAttacker = errors.New("melee sector: invalid attacker identity or position")
+	ErrInvalidMeleeTarget   = errors.New("melee sector: invalid target identity or bounds")
+	ErrMeleeContactCapacity = errors.New("melee sector: contact capacity exceeded")
+)
+
 type SectorHit struct {
 	Handle   types.Handle
 	EntityID types.EntityID
@@ -23,12 +37,13 @@ type SectorHit struct {
 // SectorResolver returns geometry only. Damage eligibility must be checked
 // before a handler selects the nearest hit or applies damage to all hits.
 type SectorResolver struct {
-	world      *ecs.World
-	index      *core.ColliderSpatialIndex
-	transforms *ecs.ComponentStorage[components.Transform]
-	colliders  *ecs.ComponentStorage[components.Collider]
-	identities *ecs.ComponentStorage[ecs.ExternalID]
-	candidates []types.Handle
+	world             *ecs.World
+	index             *core.ColliderSpatialIndex
+	transforms        *ecs.ComponentStorage[components.Transform]
+	colliders         *ecs.ComponentStorage[components.Collider]
+	identities        *ecs.ComponentStorage[ecs.ExternalID]
+	candidates        []types.Handle
+	boundedCandidates [MeleeMaxQueryVisits]types.Handle
 }
 
 func NewSectorResolver(world *ecs.World) (*SectorResolver, error) {
@@ -80,7 +95,72 @@ func (resolver *SectorResolver) ResolveInto(attacker types.Handle, aimAngle floa
 			destination = append(destination, SectorHit{Handle: handle, EntityID: identity.ID, Distance: math.Sqrt(distanceSquared)})
 		}
 	}
-	slices.SortFunc(destination, func(first, second SectorHit) int {
+	sortSectorHits(destination)
+	return destination, nil
+}
+
+// ResolveBoundedInto performs the combat query without growing scratch or contact
+// buffers. Limits apply before deduplication and geometry; overflow fails the
+// entire query rather than returning a truncated sweep or a misleading nearest.
+func (resolver *SectorResolver) ResolveBoundedInto(attacker types.Handle, aimAngle float64, sector actiondefs.Sector, destination []SectorHit) ([]SectorHit, error) {
+	destination = destination[:0]
+	if resolver == nil || resolver.world == nil || resolver.index == nil || resolver.transforms == nil || resolver.colliders == nil || resolver.identities == nil ||
+		!validActionAim(aimAngle) || math.IsNaN(sector.Range) || math.IsInf(sector.Range, 0) || sector.Range <= 0 ||
+		math.IsNaN(sector.Angle) || math.IsInf(sector.Angle, 0) || sector.Angle <= 0 || sector.Angle > 2*math.Pi {
+		return destination, ErrInvalidMeleeSector
+	}
+	if !resolver.world.Alive(attacker) {
+		return destination, ErrInvalidMeleeAttacker
+	}
+	origin, hasOrigin := resolver.transforms.Get(attacker)
+	identity, hasIdentity := resolver.identities.Get(attacker)
+	if !hasOrigin || !hasIdentity || identity.ID == 0 || resolver.world.GetHandleByEntityID(identity.ID) != attacker ||
+		math.IsNaN(origin.X) || math.IsInf(origin.X, 0) || math.IsNaN(origin.Y) || math.IsInf(origin.Y, 0) {
+		return destination, ErrInvalidMeleeAttacker
+	}
+	radius := sector.Range + sectorContactEpsilon
+	query := core.ColliderBounds{MinX: origin.X - radius, MinY: origin.Y - radius, MaxX: origin.X + radius, MaxY: origin.Y + radius}
+	candidates, err := resolver.index.QueryBoundedInto(query, resolver.boundedCandidates[:0], core.ColliderQueryBudget{
+		MaxCells: MeleeMaxQueryCells, MaxVisits: MeleeMaxQueryVisits,
+	})
+	if err != nil {
+		return destination, err
+	}
+	geometry := makeSectorGeometry(aimAngle, sector.Angle)
+	for _, handle := range candidates {
+		if handle == attacker || !resolver.world.Alive(handle) {
+			continue
+		}
+		targetID, hasID := resolver.identities.Get(handle)
+		// The handle and persistence identity both exclude the attacker, before
+		// geometry or target selection. Malformed duplicate identities cannot hit it.
+		if hasID && targetID.ID == identity.ID {
+			continue
+		}
+		position, hasPosition := resolver.transforms.Get(handle)
+		collider, hasCollider := resolver.colliders.Get(handle)
+		if !hasPosition || !hasCollider || math.IsNaN(position.X) || math.IsInf(position.X, 0) || math.IsNaN(position.Y) || math.IsInf(position.Y, 0) ||
+			math.IsNaN(collider.HalfWidth) || math.IsInf(collider.HalfWidth, 0) || collider.HalfWidth <= 0 ||
+			math.IsNaN(collider.HalfHeight) || math.IsInf(collider.HalfHeight, 0) || collider.HalfHeight <= 0 {
+			return destination[:0], ErrInvalidMeleeTarget
+		}
+		distanceSquared := geometry.distanceSquared(position.X-origin.X, position.Y-origin.Y, collider.HalfWidth, collider.HalfHeight)
+		if distanceSquared <= radius*radius {
+			if !hasID || targetID.ID == 0 || resolver.world.GetHandleByEntityID(targetID.ID) != handle {
+				return destination[:0], ErrInvalidMeleeTarget
+			}
+			if len(destination) == cap(destination) || len(destination) == MeleeMaxContacts {
+				return destination[:0], ErrMeleeContactCapacity
+			}
+			destination = append(destination, SectorHit{Handle: handle, EntityID: targetID.ID, Distance: math.Sqrt(distanceSquared)})
+		}
+	}
+	sortSectorHits(destination)
+	return destination, nil
+}
+
+func sortSectorHits(hits []SectorHit) {
+	slices.SortFunc(hits, func(first, second SectorHit) int {
 		if first.Distance < second.Distance {
 			return -1
 		}
@@ -95,7 +175,6 @@ func (resolver *SectorResolver) ResolveInto(attacker types.Handle, aimAngle floa
 		}
 		return 0
 	})
-	return destination, nil
 }
 
 type sectorPoint struct{ X, Y float64 }

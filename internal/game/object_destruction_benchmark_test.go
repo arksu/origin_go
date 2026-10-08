@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"testing"
 
 	"origin/internal/ecs"
@@ -33,5 +34,38 @@ func BenchmarkObjectDestructionAdmission(b *testing.B) {
 				f.service.release(&f.service.operations[0])
 			}
 		})
+	}
+}
+
+// Reserved slots never reach I/O workers. Compare empty and nearly full queues
+// to guard against restoring a linear scan when selecting an operation slot.
+func BenchmarkObjectDestructionReservation(b *testing.B) {
+	for _, population := range []int{1000, 100000} {
+		for _, occupied := range []int{0, ObjectDestructionQueueCapacity - 1, ObjectDestructionQueueCapacity} {
+			b.Run(fmt.Sprintf("world_%d/occupied_%d", population, occupied), func(b *testing.B) {
+				f := newDestructionServiceFixtureWithCapacity(b, uint32(population+ObjectDestructionQueueCapacity+2))
+				for i := 0; i < occupied; i++ {
+					target := f.targetWithID(b, types.EntityID(i+2))
+					if _, err := f.service.reserve(target); err != nil {
+						b.Fatal(err)
+					}
+				}
+				for i := 0; i < population; i++ {
+					f.w.Spawn(types.EntityID(i+ObjectDestructionQueueCapacity+2), nil)
+				}
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					reservation, err := f.service.reserve(f.target)
+					if occupied == ObjectDestructionQueueCapacity {
+						if err != ErrObjectDestructionQueueFull {
+							b.Fatal(err)
+						}
+					} else if err != nil || !f.service.cancelReservation(reservation) {
+						b.Fatal("reservation failed", err)
+					}
+				}
+			})
+		}
 	}
 }

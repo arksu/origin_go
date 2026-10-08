@@ -86,6 +86,7 @@ messageDispatcher.on('objectMove', (msg) => { /* ... */ })
 - `containerOpened`, `containerClosed`
 - `chat`, `contextMenu`, `miniAlert`
 - `cyclicActionProgress`, `cyclicActionFinished`
+- `attackResult`
 - `sound`, `fx`
 - `characterProfile`, `playerStats`, `expGained`
 - `craftList`
@@ -176,6 +177,15 @@ current ObjectView. Renderer readiness must never replay a captured old snapshot
 `TimeSync.estimateServerNowMs()` is sampled once per render update for all actors;
 movement interpolation keeps its existing clock. See
 `docs/features/action-animation-sync.md` for the generic def and phase contract.
+
+### Combat result contract
+
+- `AttackResultReceiver` consumes combat notifications without changing health,
+  creating unknown entities, or playing FX. It accepts at most 512 unique targets,
+  preserves exact uint64 IDs, and checks finite nonnegative damage. Its monotonic
+  event watermark advances only after validating the full packet. World entry,
+  leave, and connection changes reset it; stale epochs and duplicate/older events
+  are ignored. Every observer receives the full hit list; an empty list is a miss.
 
 ### Character Profile + Craft Contract
 

@@ -7,8 +7,14 @@ import { initializeAudio, localAudioController, worldAudioReceiver } from '@/gam
 import { decodeCharacterVisual } from '@/types/characterVisual'
 import { decodeActionAnimation } from '@/types/actionAnimation'
 import { ChunkStreamGuard } from './ChunkStreamGuard'
+import { AttackResultReceiver } from './AttackResultReceiver'
 
 const chunkStream = new ChunkStreamGuard()
+const attackResults = new AttackResultReceiver()
+
+export function resetAttackResultStream(epoch = 0): void {
+  attackResults.reset(epoch)
+}
 
 function toNumber(value: number | Long): number {
   if (typeof value === 'number') return value
@@ -27,6 +33,7 @@ function applyBatchEntries<T>(type: string, entries: readonly T[], applyEntry: (
 
 function clearClientWorldState(): void {
   chunkStream.reset(0)
+  resetAttackResultStream()
   const gameStore = useGameStore()
   gameStore.setPlayerLeaveWorld()
   gameFacade.setPlayerEntityId(null)
@@ -49,6 +56,7 @@ export function registerMessageHandlers(): void {
     const chunkSize = msg.chunkSize || 128
     const streamEpoch = msg.streamEpoch || 0
     chunkStream.reset(streamEpoch)
+    resetAttackResultStream(streamEpoch)
     const tickRate = msg.tickRate || 10 // Default to 10 ticks/sec
     worldAudioReceiver.configure(streamEpoch, msg.audio)
     localAudioController.setListener(toNumber(msg.entityId!), worldAudioReceiver.hearing)
@@ -77,6 +85,10 @@ export function registerMessageHandlers(): void {
 
   messageDispatcher.on('playerLeaveWorld', () => {
     clearClientWorldState()
+  })
+
+  messageDispatcher.on('attackResult', (msg: proto.IS2C_AttackResult) => {
+    attackResults.accept(msg)
   })
 
   messageDispatcher.on('characterProfile', (msg: proto.IS2C_CharacterProfile) => {

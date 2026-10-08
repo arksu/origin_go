@@ -1,6 +1,6 @@
 import { gameConnection } from './GameConnection'
 import { messageDispatcher } from './MessageDispatcher'
-import { registerMessageHandlers } from './handlers'
+import { registerMessageHandlers, resetAttackResultStream } from './handlers'
 import { useGameStore } from '@/stores/gameStore'
 import { gameFacade, moveController } from '@/game'
 import { proto } from './proto/packets.js'
@@ -25,6 +25,7 @@ export function initNetwork(): void {
   // Sync connection state to store
   gameConnection.onStateChange((state, error) => {
     gameStore.setConnectionState(state, error)
+    if (state !== 'connected') resetAttackResultStream()
 
     if (state === 'disconnected' || state === 'error') {
       gameStore.setPlayerLeaveWorld()

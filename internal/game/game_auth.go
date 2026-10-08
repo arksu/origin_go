@@ -561,6 +561,11 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	}
 
 	// Remove from detached map (cancel expiration timer)
+	if err := shard.prepareCreatureCombatTarget(handle); err != nil {
+		g.logger.Error("Failed to prepare reattached combat target", zap.Error(err))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Failed to restore character health")
+		return true
+	}
 	detachedEntities.RemoveDetachedEntity(playerEntityID)
 
 	// Re-register character entity for periodic saving

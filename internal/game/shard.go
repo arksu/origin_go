@@ -76,6 +76,8 @@ type Shard struct {
 	sectorResolver    *SectorResolver
 	objectDestruction *ObjectDestructionService
 	objectDamage      *ObjectDamageService
+	creatureDamage    *CreatureDamageService
+	meleeExecution    *MeleeExecutionService
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -84,7 +86,7 @@ type Shard struct {
 	mu    sync.RWMutex
 }
 
-func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, eb *eventbus.EventBus, enableVisionStats bool, logger *zap.Logger) *Shard {
+func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDManager *EntityIDManager, objectFactory *world.ObjectFactory, snapshotSender *inventory.SnapshotSender, eb *eventbus.EventBus, enableVisionStats bool, logger *zap.Logger, combat *CombatDefinitions, attackEvents *AttackEventSequence) *Shard {
 	// Initialize command queue config from game config
 	queueConfig := network.CommandQueueConfig{
 		MaxQueueSize:                cfg.Game.CommandQueueSize,
@@ -164,6 +166,18 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddComponentObserver(components.ObjectInternalStateComponentID, prepareDamageTarget)
 	s.world.AddComponentObserver(components.EntityInfoComponentID, prepareDamageTarget)
 	s.world.AddComponentObserver(components.ChunkRefComponentID, prepareDamageTarget)
+	equipment, combatErr := NewCombatEquipmentResolver(s.world, combat.catalog)
+	if combatErr != nil {
+		logger.Fatal("Invalid combat equipment resolver", zap.Error(combatErr))
+	}
+	s.creatureDamage, combatErr = NewCreatureDamageService(s.world, equipment)
+	if combatErr != nil {
+		logger.Fatal("Invalid creature damage service", zap.Error(combatErr))
+	}
+	s.meleeExecution, combatErr = NewMeleeExecutionService(s.world, equipment, s.sectorResolver, s.creatureDamage, s.objectDamage, attackEvents, s)
+	if combatErr != nil {
+		logger.Fatal("Invalid melee execution service", zap.Error(combatErr))
+	}
 	// Create vision system first so it can be passed to other systems
 	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, enableVisionStats, logger)
 	burnerExhaustion := &burnerExhaustionHandler{
@@ -231,12 +245,21 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	if definitions == nil {
 		logger.Fatal("Action definitions were not loaded before shard startup")
 	}
-	actionService, actionErr := NewActionService(s.world, definitions, map[string]ActionHandler{
+	handlers := map[string]ActionHandler{
 		"lift":      &liftActionHandler{lift: liftService, commands: networkCmdSystem},
 		"lift_down": &liftDownActionHandler{lift: liftService},
 		"plow_tile": &plowTileActionHandler{terrain: s.chunkManager},
 		"dig":       &digTileActionHandler{terrain: s.chunkManager, giveItem: giveItem},
-	}, s)
+	}
+	for id, prepared := range combat.actions {
+		definition, _ := definitions.Get(id)
+		handler, err := NewMeleeActionHandler(s.meleeExecution, definition, prepared)
+		if err != nil {
+			logger.Fatal("Invalid melee action handler", zap.String("action", id), zap.Error(err))
+		}
+		handlers[id] = handler
+	}
+	actionService, actionErr := NewActionService(s.world, definitions, handlers, s)
 	if actionErr != nil {
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
 	}
@@ -420,6 +443,11 @@ func (s *Shard) spawnPlayerLocked(id types.EntityID, x int, y int, setupFunc fun
 			s.world.Despawn(handle)
 			return types.InvalidHandle, err
 		}
+	}
+	if err := s.prepareCreatureCombatTarget(handle); err != nil {
+		cleanupObserverModeStateForHandle(s.world, handle)
+		s.world.Despawn(handle)
+		return types.InvalidHandle, err
 	}
 
 	s.PublishEventAsync(

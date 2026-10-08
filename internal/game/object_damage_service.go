@@ -27,6 +27,14 @@ type ObjectDamageResult struct {
 	EnteredDestruction               bool
 }
 
+// objectDamageCommit is a same-lock plan. Fatal plans reserve persistence before
+// any hit in the action is committed; quarantine follows all health writes.
+type objectDamageCommit struct {
+	target      types.Handle
+	result      ObjectDamageResult
+	reservation objectDestructionReservation
+}
+
 // ObjectDamageService receives already calculated Draw without weapon rules.
 // Preparation and Apply require the owning shard lock. Recreate on World changes.
 type ObjectDamageService struct {
@@ -96,33 +104,94 @@ func (s *ObjectDamageService) readTarget(target types.Handle) (components.Object
 // Apply leaves ECS unchanged on rejection. Fatal damage is admitted before the
 // destruction service atomically quarantines its target and commits zero HP.
 func (s *ObjectDamageService) Apply(target types.Handle, rawDamage float64) (ObjectDamageResult, error) {
-	before, err := s.readTarget(target)
-	if err != nil {
+	var result ObjectDamageResult
+	if err := s.calculateDamage(target, rawDamage, &result); err != nil {
 		return ObjectDamageResult{}, err
 	}
+	if !result.EnteredDestruction {
+		if result.Damage != 0 {
+			s.writeDamage(target, result.AfterHP)
+		}
+		return result, nil
+	}
+	commit := objectDamageCommit{target: target, result: result}
+	if err := s.reserveDamage(&commit); err != nil {
+		return ObjectDamageResult{}, err
+	}
+	s.commitDamage(commit)
+	s.finalizeDamage(commit)
+	return commit.result, nil
+}
+
+func (s *ObjectDamageService) prepareDamage(target types.Handle, rawDamage float64) (objectDamageCommit, error) {
+	var result ObjectDamageResult
+	if err := s.calculateDamage(target, rawDamage, &result); err != nil {
+		return objectDamageCommit{}, err
+	}
+	return objectDamageCommit{target: target, result: result}, nil
+}
+
+func (s *ObjectDamageService) calculateDamage(target types.Handle, rawDamage float64, result *ObjectDamageResult) error {
+	before, err := s.readTarget(target)
+	if err != nil {
+		return err
+	}
 	if !s.state.Prepared[target] {
-		return ObjectDamageResult{}, ErrObjectDamageTargetUnprepared
+		return ErrObjectDamageTargetUnprepared
 	}
 	damage, err := combat.DamageAfterArmor(rawDamage, 0)
 	if err != nil {
-		return ObjectDamageResult{}, err
+		return err
 	}
-	result := ObjectDamageResult{Damage: damage, BeforeHP: before.HP, AfterHP: before.HP}
+	*result = ObjectDamageResult{Damage: damage, BeforeHP: before.HP, AfterHP: before.HP}
 	if damage == 0 {
-		return result, nil
-	}
-	if damage >= before.HP {
-		if err := s.destruction.admit(target); err != nil {
-			return ObjectDamageResult{}, err
-		}
+		return nil
+	} else if damage >= before.HP {
 		result.AfterHP = 0
 		result.EnteredDestruction = true
-		return result, nil
+	} else {
+		result.AfterHP = before.HP - damage
 	}
-	result.AfterHP = before.HP - damage
+	return nil
+}
+
+func (s *ObjectDamageService) reserveDamage(commit *objectDamageCommit) error {
+	if !commit.result.EnteredDestruction {
+		return nil
+	}
+	reservation, err := s.destruction.reserve(commit.target)
+	if err != nil {
+		return err
+	}
+	commit.reservation = reservation
+	return nil
+}
+
+func (s *ObjectDamageService) abortDamage(commit objectDamageCommit) {
+	if commit.result.EnteredDestruction {
+		s.destruction.cancelReservation(commit.reservation)
+	}
+}
+
+func (s *ObjectDamageService) commitDamage(commit objectDamageCommit) {
+	if commit.result.Damage == 0 {
+		return
+	}
+	if commit.result.EnteredDestruction && !s.destruction.commitReservation(commit.reservation) {
+		panic("object damage: invalid same-lock reservation")
+	}
+	s.writeDamage(commit.target, commit.result.AfterHP)
+}
+
+func (s *ObjectDamageService) writeDamage(target types.Handle, afterHP float64) {
 	ecs.WithComponent(s.world, target, func(state *components.ObjectInternalState) {
-		state.HP = result.AfterHP
+		state.HP = afterHP
 		state.IsDirty = true
 	})
-	return result, nil
+}
+
+func (s *ObjectDamageService) finalizeDamage(commit objectDamageCommit) {
+	if commit.result.EnteredDestruction && !s.destruction.finalizeReservation(commit.reservation) {
+		panic("object damage: invalid same-lock finalization")
+	}
 }

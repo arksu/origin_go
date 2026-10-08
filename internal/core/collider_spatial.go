@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -43,13 +44,33 @@ type colliderEntry struct {
 	count            uint8
 	members          [4]colliderMembership
 }
+type colliderBucket struct {
+	handles  []types.Handle
+	position int
+}
 type colliderLevel struct {
-	cells map[colliderCell][]types.Handle
+	cells map[colliderCell]colliderBucket
+	// Only live keys occupy the dense prefix; bucket.position enables O(1)
+	// removal. Its retained capacity never increases bounded query work.
+	occupied []colliderCell
 }
 
 type ColliderQueryStats struct {
-	Cells, Candidates int
+	Cells, Candidates, Visits int
 }
+
+// ColliderQueryBudget bounds grid lookups and raw membership visits separately.
+// Visits include duplicate memberships, before candidate deduplication.
+type ColliderQueryBudget struct {
+	MaxCells, MaxVisits int
+}
+
+var (
+	ErrInvalidColliderQuery  = errors.New("collider query: invalid bounds or budget")
+	ErrColliderQueryBudget   = errors.New("collider query: work budget exceeded")
+	ErrColliderQueryCapacity = errors.New("collider query: destination capacity exceeded")
+	ErrColliderQueryStamp    = errors.New("collider query: stamp exhausted")
+)
 
 // ColliderSpatialIndex is owned by the shard world lock. Every collider occupies
 // at most four cells; large objects never enlarge other objects' search radius.
@@ -148,10 +169,11 @@ func (index *ColliderSpatialIndex) upsert(handle types.Handle, bounds ColliderBo
 		entry.level = uint8(level)
 	} else {
 		// Preserve common cells instead of removing and inserting all four.
-		for position := uint8(0); position < entry.count; {
+		// Reverse order also retires newly inserted cells from the dense tail.
+		for position := entry.count; position > 0; {
+			position--
 			cell := entry.members[position].cell
 			if cell.X >= minimum.X && cell.X <= maximum.X && cell.Y >= minimum.Y && cell.Y <= maximum.Y {
-				position++
 				continue
 			}
 			index.removeMember(entry, position)
@@ -159,7 +181,7 @@ func (index *ColliderSpatialIndex) upsert(handle types.Handle, bounds ColliderBo
 	}
 	grid := index.levels[level]
 	if grid == nil {
-		grid = &colliderLevel{cells: make(map[colliderCell][]types.Handle)}
+		grid = &colliderLevel{cells: make(map[colliderCell]colliderBucket)}
 		index.levels[level] = grid
 		index.occupied |= uint64(1) << level
 	}
@@ -177,16 +199,21 @@ func (index *ColliderSpatialIndex) upsert(handle types.Handle, bounds ColliderBo
 			if present {
 				continue
 			}
-			handles := grid.cells[cell]
-			if handles == nil && len(index.freeBuckets) > 0 {
-				last := len(index.freeBuckets) - 1
-				handles = index.freeBuckets[last]
-				index.freeBuckets[last] = nil
-				index.freeBuckets = index.freeBuckets[:last]
+			bucket, exists := grid.cells[cell]
+			if !exists {
+				bucket.position = len(grid.occupied)
+				grid.occupied = append(grid.occupied, cell)
+				if len(index.freeBuckets) > 0 {
+					last := len(index.freeBuckets) - 1
+					bucket.handles = index.freeBuckets[last]
+					index.freeBuckets[last] = nil
+					index.freeBuckets = index.freeBuckets[:last]
+				}
 			}
-			entry.members[entry.count] = colliderMembership{cell, len(handles)}
+			entry.members[entry.count] = colliderMembership{cell, len(bucket.handles)}
 			entry.count++
-			grid.cells[cell] = append(handles, handle)
+			bucket.handles = append(bucket.handles, handle)
+			grid.cells[cell] = bucket
 		}
 	}
 	return nil
@@ -195,7 +222,8 @@ func (index *ColliderSpatialIndex) upsert(handle types.Handle, bounds ColliderBo
 func (index *ColliderSpatialIndex) removeMember(entry *colliderEntry, position uint8) {
 	grid := index.levels[entry.level]
 	member := entry.members[position]
-	handles := grid.cells[member.cell]
+	bucket := grid.cells[member.cell]
+	handles := bucket.handles
 	last := len(handles) - 1
 	if member.slot != last {
 		moved := handles[last]
@@ -209,13 +237,23 @@ func (index *ColliderSpatialIndex) removeMember(entry *colliderEntry, position u
 		}
 	}
 	if last == 0 {
+		lastCell := len(grid.occupied) - 1
+		if bucket.position != lastCell {
+			moved := grid.occupied[lastCell]
+			grid.occupied[bucket.position] = moved
+			movedBucket := grid.cells[moved]
+			movedBucket.position = bucket.position
+			grid.cells[moved] = movedBucket
+		}
+		grid.occupied = grid.occupied[:lastCell]
 		delete(grid.cells, member.cell)
 		// A bounded pool avoids allocation churn without retaining dense peak buckets.
 		if len(index.freeBuckets) < 1024 && cap(handles) <= 16 {
 			index.freeBuckets = append(index.freeBuckets, handles[:0])
 		}
 	} else {
-		grid.cells[member.cell] = handles[:last]
+		bucket.handles = handles[:last]
+		grid.cells[member.cell] = bucket
 	}
 	entry.count--
 	entry.members[position] = entry.members[entry.count]
@@ -266,19 +304,19 @@ func (index *ColliderSpatialIndex) QueryInto(bounds ColliderBounds, destination 
 		if !representable || (float64(maximum.X)-float64(minimum.X)+1)*(float64(maximum.Y)-float64(minimum.Y)+1) > float64(len(grid.cells)) {
 			minCellX, minCellY := math.Floor(bounds.MinX/size), math.Floor(bounds.MinY/size)
 			maxCellX, maxCellY := math.Floor(bounds.MaxX/size), math.Floor(bounds.MaxY/size)
-			for cell, handles := range grid.cells {
+			for cell, bucket := range grid.cells {
 				index.lastQuery.Cells++
 				if float64(cell.X) < minCellX || float64(cell.X) > maxCellX ||
 					float64(cell.Y) < minCellY || float64(cell.Y) > maxCellY {
 					continue
 				}
-				destination = index.appendCandidates(bounds, handles, destination)
+				destination = index.appendCandidates(bounds, bucket.handles, destination)
 			}
 		} else {
 			for cellY := minimum.Y; cellY <= maximum.Y; cellY++ {
 				for cellX := minimum.X; cellX <= maximum.X; cellX++ {
 					index.lastQuery.Cells++
-					destination = index.appendCandidates(bounds, grid.cells[colliderCell{cellX, cellY}], destination)
+					destination = index.appendCandidates(bounds, grid.cells[colliderCell{cellX, cellY}].handles, destination)
 				}
 			}
 		}
@@ -286,8 +324,94 @@ func (index *ColliderSpatialIndex) QueryInto(bounds ColliderBounds, destination 
 	return destination, nil
 }
 
+// QueryBoundedInto appends complete results without growing destination. On error
+// it returns only the original prefix, never a truncated successful query. The
+// index belongs to the calling shard; query stamps are internal scratch state.
+func (index *ColliderSpatialIndex) QueryBoundedInto(bounds ColliderBounds, destination []types.Handle, budget ColliderQueryBudget) ([]types.Handle, error) {
+	initialLength := len(destination)
+	if index == nil {
+		return destination, ErrInvalidColliderQuery
+	}
+	index.lastQuery = ColliderQueryStats{}
+	if !bounds.valid() || budget.MaxCells <= 0 || budget.MaxVisits <= 0 {
+		return destination, ErrInvalidColliderQuery
+	}
+	if index.stamp == math.MaxUint64 {
+		// The unbounded API can reset stamps outside a bounded combat query. Never
+		// turn this exceptionally rare condition into a full index scan here.
+		return destination, ErrColliderQueryStamp
+	}
+	index.stamp++
+	for occupied := index.occupied; occupied != 0; occupied &= occupied - 1 {
+		level := bits.TrailingZeros64(occupied)
+		grid := index.levels[level]
+		size := math.Ldexp(colliderCellSize, level)
+		minimum, maximum, representable := colliderRange(bounds, size)
+		cellCount := (float64(maximum.X) - float64(minimum.X) + 1) * (float64(maximum.Y) - float64(minimum.Y) + 1)
+		if !representable || cellCount > float64(len(grid.cells)) {
+			if len(grid.cells) > budget.MaxCells-index.lastQuery.Cells {
+				return destination[:initialLength], ErrColliderQueryBudget
+			}
+			minCellX, minCellY := math.Floor(bounds.MinX/size), math.Floor(bounds.MinY/size)
+			maxCellX, maxCellY := math.Floor(bounds.MaxX/size), math.Floor(bounds.MaxY/size)
+			// Map iteration can scan historical capacity after churn even with one
+			// live key. Dense occupied keys bound the actual work by MaxCells.
+			for _, cell := range grid.occupied {
+				index.lastQuery.Cells++
+				if float64(cell.X) < minCellX || float64(cell.X) > maxCellX ||
+					float64(cell.Y) < minCellY || float64(cell.Y) > maxCellY {
+					continue
+				}
+				var err error
+				destination, err = index.appendBoundedCandidates(bounds, grid.cells[cell].handles, destination, budget.MaxVisits)
+				if err != nil {
+					return destination[:initialLength], err
+				}
+			}
+		} else {
+			if cellCount > float64(budget.MaxCells-index.lastQuery.Cells) {
+				return destination[:initialLength], ErrColliderQueryBudget
+			}
+			for cellY := minimum.Y; cellY <= maximum.Y; cellY++ {
+				for cellX := minimum.X; cellX <= maximum.X; cellX++ {
+					index.lastQuery.Cells++
+					var err error
+					destination, err = index.appendBoundedCandidates(bounds, grid.cells[colliderCell{cellX, cellY}].handles, destination, budget.MaxVisits)
+					if err != nil {
+						return destination[:initialLength], err
+					}
+				}
+			}
+		}
+	}
+	return destination, nil
+}
+
+func (index *ColliderSpatialIndex) appendBoundedCandidates(bounds ColliderBounds, handles, destination []types.Handle, maxVisits int) ([]types.Handle, error) {
+	for _, handle := range handles {
+		if index.lastQuery.Visits == maxVisits {
+			return destination, ErrColliderQueryBudget
+		}
+		index.lastQuery.Visits++
+		entry := index.entry(handle)
+		if entry == nil || entry.stamp == index.stamp {
+			continue
+		}
+		entry.stamp = index.stamp
+		index.lastQuery.Candidates++
+		if entry.bounds.intersects(bounds) {
+			if len(destination) == cap(destination) {
+				return destination, ErrColliderQueryCapacity
+			}
+			destination = append(destination, handle)
+		}
+	}
+	return destination, nil
+}
+
 func (index *ColliderSpatialIndex) appendCandidates(bounds ColliderBounds, handles, destination []types.Handle) []types.Handle {
 	for _, handle := range handles {
+		index.lastQuery.Visits++
 		entry := index.entry(handle)
 		if entry.stamp == index.stamp {
 			continue
