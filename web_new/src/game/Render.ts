@@ -730,11 +730,8 @@ export class Render {
   }
 
   despawnObject(entityId: number): void {
-<<<<<<< Updated upstream
     if (entityId === this.playerEntityId) this.moveMarkerManager?.clear()
-=======
     this.damageNumberManager.rememberDespawn(entityId, this.objectManager, performance.now())
->>>>>>> Stashed changes
     this.objectManager.despawnObject(entityId)
     this.nicknameManager.remove(entityId)
   }
