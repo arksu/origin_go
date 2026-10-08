@@ -327,7 +327,11 @@ export class ActorInstance {
     }
     const previousUpdate = this.lastFacingUpdateMs
     this.lastFacingUpdateMs = now
-    if (previousUpdate === null) return false
+    if (previousUpdate === null) {
+      // A new model starts in its supplied facing, rather than turning from the default.
+      this.facingAngle = desiredFacing
+      return true
+    }
     const difference = Math.atan2(Math.sin(desiredFacing - this.facingAngle), Math.cos(desiredFacing - this.facingAngle))
     const maximumStep = Math.PI * Math.max(0, now - previousUpdate) / settings.turnDurationMs
     const step = Math.max(-maximumStep, Math.min(maximumStep, difference))

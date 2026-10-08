@@ -42,6 +42,14 @@ func Snapshot(w *ecs.World, handle types.Handle) (*netproto.CharacterActionAnima
 	state.TotalTicks, state.ElapsedTicks = cycle.CycleDurationTicks, cycle.CycleElapsedTicks
 	state.TickDurationMs = float64(timing.TickPeriod) / float64(time.Millisecond)
 	if binding.Facing == "target" {
+		if cycle.HasFacingAngle {
+			if cycle.HasTargetPosition || cycle.TargetKind == components.CyclicActionTargetObject || math.IsNaN(cycle.FacingAngle) || cycle.FacingAngle < 0 || cycle.FacingAngle >= 2*math.Pi {
+				return nil, fmt.Errorf("invalid action animation direction for handle %d", handle)
+			}
+			angle := float32(cycle.FacingAngle)
+			state.FacingAngle = &angle
+			return state, nil
+		}
 		x, y, hasTarget := cycle.TargetX, cycle.TargetY, cycle.HasTargetPosition
 		if !hasTarget && cycle.TargetKind == components.CyclicActionTargetObject && w.Alive(cycle.TargetHandle) {
 			if targetID, ok := w.GetExternalID(cycle.TargetHandle); ok && targetID == cycle.TargetID {

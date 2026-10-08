@@ -26,8 +26,41 @@ func installObjectHealthTestDefinitions(t *testing.T) {
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
 		{DefID: 1, Key: "player"},
 		{DefID: 910, Key: "health_rock", HP: 100},
-		{DefID: 911, Key: "health_box", HP: 100, BehaviorOrder: []string{"container"}, Components: &objectdefs.Components{Inventory: []objectdefs.InventoryDef{{Kind: "grid", W: 2, H: 2}}}},
+		{DefID: 911, Key: "health_box", HP: 100, Behaviors: map[string]json.RawMessage{"container": json.RawMessage(`{}`)}, BehaviorOrder: []string{"container"}, Components: &objectdefs.Components{Inventory: []objectdefs.InventoryDef{{Kind: "grid", W: 2, H: 2}}}},
+		{DefID: 912, Key: "health_high_hp_rock", HP: 250},
 	}))
+}
+
+func TestObjectFactoryNullHealthUsesDefinitionDefault(t *testing.T) {
+	installObjectHealthTestDefinitions(t)
+	factory := NewObjectFactory(nil)
+	for _, test := range []struct {
+		typeID int
+		hp     float64
+	}{{910, 100}, {911, 100}, {912, 250}} {
+		for _, build := range []func(*ecs.World, *repository.Object, []repository.Inventory) (types.Handle, error){factory.Build, factory.BuildForChunk} {
+			w := ecs.NewWorldForTesting()
+			w.AddComponentObserver(components.ObjectInternalStateComponentID, func(observed types.Handle) {
+				state, ok := ecs.GetComponent[components.ObjectInternalState](w, observed)
+				require.True(t, ok)
+				require.True(t, state.HasHP)
+				require.Equal(t, test.hp, state.HP, "observers must see definition HP from the first state write")
+			})
+			raw := &repository.Object{ID: 1, TypeID: test.typeID, Hp: sql.NullFloat64{Float64: math.NaN()}}
+			h, err := build(w, raw, nil)
+			require.NoError(t, err)
+			require.True(t, w.Alive(h))
+			state, ok := ecs.GetComponent[components.ObjectInternalState](w, h)
+			require.True(t, ok)
+			require.True(t, state.HasHP)
+			require.Equal(t, test.hp, state.HP)
+			require.False(t, raw.Hp.Valid, "loading must not backfill the raw database row")
+			require.True(t, math.IsNaN(raw.Hp.Float64), "the unused value in NULL HP must remain untouched")
+			if test.typeID == 911 {
+				require.True(t, ecs.HasComponent[components.InventoryOwner](w, h))
+			}
+		}
+	}
 }
 
 func TestObjectFactoryHealthRoundTrip(t *testing.T) {
@@ -64,15 +97,11 @@ func TestObjectFactoryHealthFailureBeforeSpawnOrInventory(t *testing.T) {
 	w := ecs.NewWorldForTesting()
 	factory := NewObjectFactory(nil)
 	rows := []repository.Inventory{{OwnerID: 1, Data: json.RawMessage(`{"width":2,"height":2,"items":[]}`)}}
-	for _, hp := range []sql.NullFloat64{{}, {Float64: -1, Valid: true}, {Float64: math.NaN(), Valid: true}, {Float64: math.Inf(1), Valid: true}, {Float64: math.Inf(-1), Valid: true}} {
+	for _, hp := range []sql.NullFloat64{{Float64: -1, Valid: true}, {Float64: math.NaN(), Valid: true}, {Float64: math.Inf(1), Valid: true}, {Float64: math.Inf(-1), Valid: true}} {
 		raw := &repository.Object{ID: 1, TypeID: 911, Hp: hp}
 		h, err := factory.Build(w, raw, rows)
 		require.Error(t, err)
-		if hp.Valid {
-			require.ErrorIs(t, err, ErrInvalidObjectHP)
-		} else {
-			require.ErrorIs(t, err, ErrObjectHealthMissing)
-		}
+		require.ErrorIs(t, err, ErrInvalidObjectHP)
 		require.Equal(t, types.InvalidHandle, h)
 		require.Zero(t, w.EntityCount())
 		require.Zero(t, testing.AllocsPerRun(1000, func() { _, _ = factory.Build(w, raw, rows) }), "health validation must precede inventory JSON allocations")

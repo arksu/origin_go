@@ -115,6 +115,11 @@ MoveController (singleton)
 
 See `MoveController.ts` AGENTS.md for details.
 
+Character base facing uses server `Position.heading` in world radians, including
+stationary spawn/updates. Appearance refresh updates heading without resetting
+position interpolation. Client action presentation may temporarily override
+facing; completion/cancellation resumes the latest server heading.
+
 ### Input & Camera
 
 **InputController.ts**:

@@ -24,6 +24,10 @@ go run ./cmd/mapgen -gen-config ... -seed 42 -chunks-x 50 -chunks-y 50 -threads 
   (параллельность по строкам/чанкам на результат не влияет).
 - Мир: `chunks_x/y` × 128 тайлов; пресет hnh — 50×50 чанков = 6400² тайлов.
 
+Generated trees and boulders store `object.hp = NULL`. The server initializes HP
+from the matching object definition on load, without backfilling the database.
+Explicitly saved HP, including zero, is restored unchanged.
+
 ## Интерактивный предпросмотр слоёв (preview_server.go)
 
 ```bash

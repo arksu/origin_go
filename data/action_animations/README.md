@@ -14,7 +14,7 @@ Each binding declares:
 | `variants` | Nonempty ordered list of `{clip, equipment}`; first ready match wins |
 | `equipment` | Array of `{slot, visual_key}` predicates; all must match, empty means unrestricted |
 | `eligibility` | Array of `stationary`, `not_carrying`, `not_knocked_out`; all must hold |
-| `facing` | `preserve` or `target` (requires a cycle target position) |
+| `facing` | `preserve` or `target` (requires a cycle target position or fixed direction) |
 | `blend_ms` | Finite nonnegative blending time; default zero |
 | `frame` | Integer width/height in 1–1024, pixel `origin_x`/`origin_y` inside bounds (origins default zero) |
 | `unbind_equipment_slots` | Optional array of distinct equipment slots to visually detach while this action pose is displayed; absent/empty leaves attachments unchanged |
@@ -35,6 +35,11 @@ Defs contain presentation choices and sound markers. They do not set gameplay
 duration, stamina or successful effects. The full loaded clip is sampled
 at `phase * clip.duration`; the action duration is `total_ticks * tick_duration_ms`.
 The network controller clamps phase at one until the next confirmed cycle.
+
+Directed menu actions publish the accepted world angle through the existing
+`facing_angle` field, without a synthetic target position. `axe_sweep` and
+`axe_strike` both use the `chop_r`/`chop_l` clips in `axe.json`; their full clips
+are sampled over the actual six-tick action, facing its fixed attack direction.
 
 Publish with `tools/assets publish-action-animations` using existing manifests.
 Deploy server defs with the matching generated client catalog. Adding a binding

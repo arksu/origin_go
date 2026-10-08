@@ -55,7 +55,7 @@ export interface ObjectViewOptions {
   entityId: number
   typeId: number
   resourcePath: string
-  position: { x: number; y: number }
+  position: { x: number; y: number; heading?: number }
   size: { x: number; y: number }
   actionAnimation?: CharacterActionAnimationState
 }
@@ -101,6 +101,7 @@ export class ObjectView {
   private readonly facingStabilizer = new FacingStabilizer()
   private lastDir = 3 // south in MoveController direction order
   private actorFacingAngle: number | null = null
+  private serverHeading: number | null = null
   private isDestroyed = false
   private isDroppedItem = false
   private hasSpineLayers = false
@@ -124,6 +125,7 @@ export class ObjectView {
     this.position = options.position
     this.size = options.size
     this.actionAnimation = options.actionAnimation ?? null
+    if (options.position.heading !== undefined) this.setHeading(options.position.heading)
 
     this.container = new Container()
     this.container.sortableChildren = true
@@ -506,6 +508,19 @@ export class ObjectView {
   }
 
   /**
+   * The server heading owns base facing; action animations may override it temporarily.
+   */
+  setHeading(heading: number): void {
+    if (!Number.isFinite(heading)) throw new Error('Invalid server heading')
+    if (this.isDestroyed || this.serverHeading === heading) return
+    this.serverHeading = heading
+    const dx = Math.cos(heading), dy = Math.sin(heading)
+    this.actorFacingAngle = screenFacingAngleFromDisplacement(dx, dy)
+    this.lastDir = facingFromDisplacement(dx, dy, this.lastDir)
+    this.updateAnimation(performance.now())
+  }
+
+  /**
    * Called when the entity is moving in a direction (0-7).
    */
   onMoved(dir: number, distanceMoved = 0, displacement?: { x: number; y: number }): void {
@@ -514,12 +529,12 @@ export class ObjectView {
     if (!Number.isFinite(distanceMoved) || distanceMoved < 0) {
       throw new Error(`Invalid movement distance for entity ${this.entityId}: ${distanceMoved}`)
     }
-    if (this.actorHandle && displacement) {
+    if (this.serverHeading === null && this.actorHandle && displacement) {
       this.actorFacingAngle = screenFacingAngleFromDisplacement(displacement.x, displacement.y)
       if (this.actorFacingAngle !== null) this.actorHandle.actor.setFacingAngle(this.actorFacingAngle)
       const next = facingFromDisplacement(displacement.x, displacement.y, this.lastDir)
       this.lastDir = this.facingStabilizer.update(this.lastDir, next, performance.now(), !this.isWalking)
-    } else {
+    } else if (this.serverHeading === null) {
       this.lastDir = dir
     }
     this.isWalking = true
@@ -530,7 +545,7 @@ export class ObjectView {
 
     this.resDef.layers.forEach((layer, layerIdx) => {
       if (!layer.spine?.dirs) return
-      const animName = layer.spine.dirs['walk']?.[dir]
+      const animName = layer.spine.dirs['walk']?.[this.lastDir]
       if (!animName) return
 
       const spineIdx = this.layerIndexMap.get(layerIdx)
@@ -1142,10 +1157,13 @@ export class ObjectView {
     const actor = this.actorHandle.actor
     const state = this.actionAnimation
     const target = state?.targetPosition
+    const facingAngle = state?.facingAngle !== undefined
+      ? screenFacingAngleFromDisplacement(Math.cos(state.facingAngle), Math.sin(state.facingAngle)) ?? undefined
+      : target ? screenFacingAngleFromDisplacement(target.x - this.position.x, target.y - this.position.y) ?? undefined : undefined
     actor.setActionAnimation(state?.animationKey ? {
       key: state.animationKey,
       phase: actionAnimationPhase(state, serverNowMs),
-      facingAngle: target ? screenFacingAngleFromDisplacement(target.x - this.position.x, target.y - this.position.y) ?? undefined : undefined,
+      facingAngle,
     } : null)
     actor.prepareActionAnimation(nowMs)
     const frame = actor.outputFrame

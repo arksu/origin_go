@@ -134,6 +134,42 @@ test('spawn singles and batches have identical store, animation, name and carry 
   assert.equal(errors.mock.callCount(), 0)
 })
 
+test('spawn heading reaches the renderer and same-incarnation refresh updates heading without resetting movement', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 10000 })
+  const { store, spawns, errors } = setup(t)
+  const headingUpdates = t.mock.method(gameFacade, 'setObjectHeading', () => {})
+  t.mock.method(timeSync, 'estimateServerNowMs', (now: number) => now)
+  t.mock.method(timeSync, 'getInterpolationDelayMs', () => 100)
+  dispatch({ objectSpawn: spawn(17) })
+  assert.equal(spawns.mock.calls[0]!.arguments[0]!.position.heading, 1.25, 'a stationary spawn must carry its server heading to ObjectView')
+  assert.equal(store.entities.get(17)!.position.heading, 1.25)
+  dispatch({ objectMove: move(17) })
+  moveController.update()
+  const before = moveController.getEntityDebugMetrics(17)!
+  assert.ok(before.bufferSize > 0, 'the refresh must exercise an existing interpolation buffer')
+  for (const heading of [Math.fround(Math.PI), 0]) {
+    dispatch({ objectSpawnBatch: { spawns: [spawn(17, {
+      position: { position: { x: 999, y: -999, heading }, size: { x: 8, y: 9 } },
+    })] } })
+    assert.equal(spawns.mock.callCount(), 1, 'same-incarnation refresh must preserve the render object')
+    assert.deepEqual(headingUpdates.mock.calls.at(-1)!.arguments, [17, heading])
+    assert.equal(store.entities.get(17)!.position.heading, heading)
+    const after = moveController.getEntityDebugMetrics(17)!
+    assert.equal(after.bufferSize, before.bufferSize)
+    assert.equal(after.lastMoveSeq, before.lastMoveSeq)
+    assert.equal(after.visualX, before.visualX)
+    assert.equal(after.visualY, before.visualY)
+    assert.equal(after.snapCount, before.snapCount)
+    assert.equal(moveController.getVisualPosition(17)!.heading, heading)
+    assert.equal(moveController.update().get(17)!.heading, heading, 'buffered movement must not restore the older heading next frame')
+  }
+  const updateCount = headingUpdates.mock.callCount()
+  dispatch({ objectSpawn: spawn(17, { streamEpoch: 2, position: { position: { heading: 2 } } }) })
+  assert.equal(headingUpdates.mock.callCount(), updateCount, 'stale-world spawn must not change heading')
+  assert.equal(moveController.getVisualPosition(17)!.heading, 0)
+  assert.equal(errors.mock.callCount(), 0)
+})
+
 test('a bad animation incarnation and stale spawn epoch do not prevent later entries or singles', t => {
   const { store, spawns, errors } = setup(t)
   dispatch({ objectSpawnBatch: { spawns: [

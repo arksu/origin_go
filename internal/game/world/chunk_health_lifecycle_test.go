@@ -9,10 +9,37 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/persistence/repository"
 	"origin/internal/types"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestObjectHealthChunkNullUsesDefaultWithoutDirtying(t *testing.T) {
+	installObjectHealthTestDefinitions(t)
+	cm := newTestChunkManagerWithLoadWorkers(0)
+	defer cm.Stop()
+	chunk := core.NewChunk(types.ChunkCoord{}, 1, 0, 128)
+	chunk.SetState(types.ChunkStatePreloaded)
+	raw := &repository.Object{ID: 9894, TypeID: 912, Region: 1, X: 10, Y: 10}
+	chunk.SetRawObjects([]*repository.Object{raw})
+	cm.chunks[chunk.Coord] = chunk
+	for range 2 {
+		require.NoError(t, cm.activateChunkInternal(chunk.Coord, chunk))
+		h := cm.world.GetHandleByEntityID(types.EntityID(raw.ID))
+		require.True(t, cm.world.Alive(h))
+		state, ok := ecs.GetComponent[components.ObjectInternalState](cm.world, h)
+		require.True(t, ok)
+		require.True(t, state.HasHP)
+		require.Equal(t, 250.0, state.HP)
+		require.False(t, state.IsDirty, "loading definition HP must not schedule a database write")
+		require.False(t, chunk.IsDirty(cm.world))
+		require.False(t, raw.Hp.Valid, "the loaded database row must remain untouched")
+		require.NoError(t, cm.deactivateChunkInternal(chunk))
+		require.False(t, chunk.IsDirty(cm.world))
+		require.Empty(t, chunk.GetRawDirtyObjectIDs(), "unchanged objects must not be saved after deactivation")
+	}
+}
 
 func TestObjectHealthChunkDeactivationFailureAndRetryPreserveInventories(t *testing.T) {
 	installObjectHealthLifecycleDefinitions(t)

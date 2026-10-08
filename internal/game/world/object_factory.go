@@ -108,13 +108,13 @@ func (f *ObjectFactory) build(w *ecs.World, raw *repository.Object, inventories 
 	if !ok {
 		return types.InvalidHandle, fmt.Errorf("%w: type_id=%d", ErrDefNotFound, raw.TypeID)
 	}
-	if def.Key != "player" {
-		if !raw.Hp.Valid {
-			return types.InvalidHandle, ErrObjectHealthMissing
-		}
+	// NULL HP uses the definition default without modifying the database row.
+	var hpOverride *float64
+	if def.Key != "player" && raw.Hp.Valid {
 		if err := ValidateObjectHP(raw.Hp.Float64); err != nil {
 			return types.InvalidHandle, err
 		}
+		hpOverride = &raw.Hp.Float64
 	}
 	if raw.Quality < 0 {
 		return types.InvalidHandle, fmt.Errorf("object %d has invalid quality %d", raw.ID, raw.Quality)
@@ -147,7 +147,7 @@ func (f *ObjectFactory) build(w *ecs.World, raw *repository.Object, inventories 
 		Quality:    uint32(raw.Quality),
 		Region:     raw.Region,
 		Layer:      raw.Layer,
-		HPOverride: &raw.Hp.Float64,
+		HPOverride: hpOverride,
 		// Restored state is applied in chunk activation after deserialization.
 		// Init hook runs there to avoid clobbering persisted behavior state.
 		InitReason: "",

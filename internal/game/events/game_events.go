@@ -296,7 +296,7 @@ func (d *NetworkVisibilityDispatcher) buildObjectSpawn(w *ecs.World, entityID ty
 		CharacterVisual:   visual,
 		ActionAnimation:   animation,
 		Position: &netproto.EntityPosition{
-			Position: &netproto.Position{X: int32(transform.X), Y: int32(transform.Y)},
+			Position: &netproto.Position{X: int32(transform.X), Y: int32(transform.Y), Heading: float32(transform.Direction)},
 			Size:     size,
 		},
 	}

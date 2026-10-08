@@ -123,12 +123,13 @@ export class ObjectManager {
   /**
    * Update object position and movement state.
    */
-  updateObjectPosition(entityId: number, x: number, y: number, isMoving?: boolean, direction?: number, distanceMoved?: number, stopProgress?: number, movementMode?: number): void {
+  updateObjectPosition(entityId: number, x: number, y: number, isMoving?: boolean, direction?: number, distanceMoved?: number, stopProgress?: number, movementMode?: number, heading?: number): void {
     const objectView = this.objects.get(entityId)
     if (!objectView) {
       return
     }
 
+    if (heading !== undefined) objectView.setHeading(heading)
     const previousPosition = objectView.getPosition()
     objectView.updatePosition(x, y)
     if (movementMode !== undefined) objectView.setMovementMode(movementMode)

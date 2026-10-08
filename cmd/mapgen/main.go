@@ -358,6 +358,7 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 
 	tilesPerChunk := g.chunkSize
 	tiles := make([]byte, tilesPerChunk*tilesPerChunk)
+	// Generated objects keep default HP NULL; the server initializes it from defs on load.
 	var entities []repository.UpsertObjectParams
 
 	worldOffsetX := float64(chunkX * g.chunkSize * g.coordPerTile)
@@ -386,7 +387,7 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 					ChunkY:     chunkY,
 					Heading:    sql.NullInt16{Int16: int16(rng.Intn(8)), Valid: true},
 					Quality:    10,
-					Hp:         sql.NullFloat64{Float64: float64(treeDef.HP), Valid: true},
+					Hp:         sql.NullFloat64{},
 					OwnerID:    sql.NullInt64{},
 					CreateTick: 0,
 					LastTick:   0,
@@ -407,7 +408,7 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 					ChunkY:     chunkY,
 					Heading:    sql.NullInt16{Int16: int16(rng.Intn(8)), Valid: true},
 					Quality:    10,
-					Hp:         sql.NullFloat64{Float64: float64(boulderDef.HP), Valid: true},
+					Hp:         sql.NullFloat64{},
 					OwnerID:    sql.NullInt64{},
 					CreateTick: 0,
 					LastTick:   0,

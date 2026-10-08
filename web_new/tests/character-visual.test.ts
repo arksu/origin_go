@@ -12,14 +12,17 @@ import { ActorInstance } from '../src/game/actors/ActorInstance'
 import { ActorArmLayers } from '../src/game/actors/ActorArmLayers'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
 import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
-import { actorYawForScreenAngle } from '../src/game/actors/facing'
+import { actorYawForScreenAngle, screenFacingAngleFromDisplacement } from '../src/game/actors/facing'
 import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
 import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
 import type { ActionAnimationDefinition } from '../src/types/actionAnimationDefs'
 import type { EquipmentDefinition } from '../src/game/actors/equipment'
-import { Texture } from 'pixi.js'
+import { DOMAdapter, Sprite, Texture } from 'pixi.js'
 import { ShallowWaterVisual } from '../src/game/actors/ShallowWaterVisual'
 import { SHALLOW_WATER } from '../src/game/actors/shallowWaterConfig'
+import { ObjectView } from '../src/game/ObjectView'
+import { ResourceLoader } from '../src/game/ResourceLoader'
+import type { ActorRenderer } from '../src/game/actors/ActorRenderer'
 
 test('waterline reverses smoothly and clears unknown terrain without destroying the shared texture', () => {
   const effect = new ShallowWaterVisual([Texture.EMPTY])
@@ -255,7 +258,7 @@ const catalog: Record<string, EquipmentDefinition> = {
   deferred: { kind: 'deferred' },
 }
 
-async function fixtureActor(actionAnimations: Record<string, ActionAnimationDefinition> = {}) {
+async function fixtureActor(actionAnimations: Record<string, ActionAnimationDefinition> = {}, initialFacing?: number) {
   const cache = new FixtureCache()
   cache.actionAnimations = actionAnimations
   const rig = fixtureRig()
@@ -264,6 +267,7 @@ async function fixtureActor(actionAnimations: Record<string, ActionAnimationDefi
   cache.assets.set(axeURL, prop())
   cache.assets.set(shieldURL, prop())
   const actor = new ActorInstance(cache)
+  if (initialFacing !== undefined) actor.setFacingAngle(initialFacing)
   await actor.ready
   return { actor, cache }
 }
@@ -423,6 +427,16 @@ test('baked8 starts immediately and holds its walk frame while position is still
   } finally { actor.destroy() }
 })
 
+test('the first loaded actor pose uses supplied facing without turning from the default', async () => {
+  const screenAngle = screenFacingAngleFromDisplacement(0, -1)!
+  const { actor } = await fixtureActor({}, screenAngle)
+  try {
+    const expected = actorYawForScreenAngle(screenAngle)
+    const difference = Math.atan2(Math.sin(actor.root.rotation.y - expected), Math.cos(actor.root.rotation.y - expected))
+    assert.ok(Math.abs(difference) < 1e-6, 'the first pose must already match spawn heading')
+  } finally { actor.destroy() }
+})
+
 test('hybrid mode turns continuously while baked8 rounds Three.js output to eight angles', async () => {
   const { actor } = await fixtureActor()
   const angularDistance = (first: number, second: number) => Math.abs(Math.atan2(Math.sin(first - second), Math.cos(first - second)))
@@ -436,6 +450,55 @@ test('hybrid mode turns continuously while baked8 rounds Three.js output to eigh
   assert.ok(angularDistance(actor.root.rotation.y, actorYawForScreenAngle(0)) < 1e-6,
     'baked8 must round the current Three.js bake to the nearest eight-direction angle')
   actor.destroy()
+})
+
+test('an action-facing actor returns to the latest server heading after its transient override ends', async t => {
+  const adapter = DOMAdapter.get()
+  DOMAdapter.set({ ...adapter, createCanvas: () => ({ getContext: () => null }) as unknown as HTMLCanvasElement })
+  t.after(() => DOMAdapter.set(adapter))
+  t.mock.method(ResourceLoader, 'getResourceDef', () => ({ actor3d: true, layers: [] }))
+  const definition: ActionAnimationDefinition = {
+    key: 'test_heading_override', actor: COMMONER_ASSET_ID,
+    variants: [{ clip: 'hold', equipment: [] }], eligibility: ['stationary', 'not_carrying'],
+    facing: 'target', blend_ms: 120,
+    frame: { width: 128, height: 128, origin_x: 64, origin_y: 116 },
+  }
+  for (const mode of ['hybrid3d', 'baked8'] as const) {
+    const { actor } = await fixtureActor({ [definition.key]: definition })
+    const renderer = { create: () => ({ actor, sprite: new Sprite(Texture.EMPTY), immersionPx: 0 }), release: () => actor.destroy() }
+    const view = new ObjectView({ entityId: 17, typeId: 1, resourcePath: 'player', position: { x: 50, y: 50, heading: Math.PI / 2 }, size: { x: 4, y: 4 } }, renderer as unknown as ActorRenderer)
+    const settings = { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode }
+    const assertHeading = (heading: number, message: string) => {
+      const screen = screenFacingAngleFromDisplacement(Math.cos(heading), Math.sin(heading))!
+      const presentationAngle = mode === 'baked8' ? Math.round(screen / (Math.PI / 4)) * Math.PI / 4 : screen
+      const expected = actorYawForScreenAngle(presentationAngle)
+      const difference = Math.atan2(Math.sin(actor.root.rotation.y - expected), Math.cos(actor.root.rotation.y - expected))
+      assert.ok(Math.abs(difference) < 1e-6, `${mode}: ${message}`)
+    }
+    try {
+      await actor.ready
+      const now = performance.now() + 1000
+      actor.updatePose(now, settings)
+      actor.updatePose(now + 500, settings)
+      assertHeading(Math.PI / 2, 'spawn must rotate the actual actor to its server heading')
+      view.setActionAnimation({ generation: '0:4294967297', revision: '1', animationKey: definition.key,
+        elapsedTicks: 0, totalTicks: 20, tickDurationMs: 100, serverTimeMs: 10000, facingAngle: 0 })
+      view.updateActionAnimation(now + 600, 10000)
+      actor.updatePose(now + 600, settings)
+      actor.updatePose(now + 1100, settings)
+      assertHeading(0, 'the active action must own the actual actor facing')
+      view.setHeading(Math.PI)
+      view.updateActionAnimation(now + 1200, 10500)
+      actor.updatePose(now + 1200, settings)
+      actor.updatePose(now + 1700, settings)
+      assertHeading(0, 'a new base heading must not alter the action-facing pose')
+      view.setActionAnimation(null)
+      view.updateActionAnimation(now + 1800, 11000)
+      actor.updatePose(now + 1800, settings)
+      actor.updatePose(now + 2300, settings)
+      assertHeading(Math.PI, 'ending the action must rotate back to the latest server heading')
+    } finally { view.destroy() }
+  }
 })
 
 test('sockets retain authored transforms and follow their hand or forearm bone', () => {

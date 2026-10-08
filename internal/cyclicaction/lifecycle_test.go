@@ -3,6 +3,7 @@ package cyclicaction
 import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"math"
 	"origin/internal/actionanimationdefs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -12,6 +13,39 @@ import (
 	"testing"
 	"time"
 )
+
+func TestSnapshotFixedDirection(t *testing.T) {
+	w, handle, definitions := fixture(t)
+	for _, angle := range []float64{0, math.Pi / 2, math.Nextafter(2*math.Pi, 0)} {
+		Start(w, handle, components.ActiveCyclicAction{
+			TargetKind: components.CyclicActionTargetSelf, HasFacingAngle: true, FacingAngle: angle,
+			CycleDurationTicks: 6, CycleIndex: 1,
+		}, definitions[0].Source)
+		state, err := Snapshot(w, handle)
+		require.NoError(t, err)
+		require.NotNil(t, state.FacingAngle, "zero is an explicit direction")
+		require.Equal(t, float32(angle), *state.FacingAngle)
+		require.Nil(t, state.TargetPosition)
+		ecs.AddComponent(w, handle, components.Transform{X: 200, Y: -50, Direction: 180})
+		next, err := Snapshot(w, handle)
+		require.NoError(t, err)
+		require.Equal(t, state.FacingAngle, next.FacingAngle)
+		Clear(w, handle)
+		idle, err := Snapshot(w, handle)
+		require.NoError(t, err)
+		require.Nil(t, idle.FacingAngle)
+	}
+	for _, angle := range []float64{-1, 2 * math.Pi, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		Start(w, handle, components.ActiveCyclicAction{HasFacingAngle: true, FacingAngle: angle, CycleDurationTicks: 6}, definitions[0].Source)
+		state, err := Snapshot(w, handle)
+		require.Error(t, err)
+		require.Nil(t, state)
+	}
+	Start(w, handle, components.ActiveCyclicAction{HasFacingAngle: true, HasTargetPosition: true, CycleDurationTicks: 6}, definitions[0].Source)
+	state, err := Snapshot(w, handle)
+	require.Error(t, err)
+	require.Nil(t, state)
+}
 
 func fixture(t *testing.T) (*ecs.World, types.Handle, []actionanimationdefs.Definition) {
 	t.Helper()

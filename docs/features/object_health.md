@@ -9,10 +9,11 @@ is registered. This prepares object state for the combat stage described in
 are separate changes. HP zero is retained as zero; this component does not
 automatically despawn an object.
 
-Fresh objects receive `float64(def.HP)`. Restoration requires an explicitly
-saved, finite, nonnegative HP, including zero. There is no rounding, definition
-fallback, maximum-HP clamp or integer ceiling. Players retain `EntityHealth`;
-special dropped items and inventory container entities have no object health.
+Fresh objects receive `float64(def.HP)`. Database restoration uses `float64(def.HP)`
+when `object.hp` is NULL; an explicitly saved HP must be finite and nonnegative,
+including zero. Saved values have no rounding, maximum-HP clamp or integer ceiling.
+Players retain `EntityHealth`; special dropped items and inventory container
+entities have no object health.
 `HasHP` distinguishes missing health from a valid zero pool. HP is a typed field
 outside the replaceable behavior state; it is not stored in a map or an interface.
 Definitions and their existing integer initial HP values are unchanged.
@@ -54,9 +55,13 @@ stable-ID rule; it has no registered type or storage.
 
 `object.hp` is nullable `DOUBLE PRECISION` with
 `CHECK (hp >= 0 AND hp < 'Infinity'::double precision)`. The nullable column
-supports special dropped-item rows. Ordinary object restoration rejects NULL
-before spawn or inventory decoding. Generated sqlc records and parameters use
-`sql.NullFloat64`; map generation writes initial HP directly from definitions.
+supports special dropped-item rows and definition defaults for ordinary objects.
+Ordinary object restoration initializes NULL HP from the definition before
+publishing the entity, without modifying the raw row or backfilling the database.
+Generated sqlc records and parameters use `sql.NullFloat64`; map generation leaves
+initial HP NULL. Chunk activation retains clean dirty intent, so loading or
+deactivating an unchanged object does not schedule a database write. Subsequent
+gameplay mutations use the existing save path and persist the current resolved HP.
 
 Factory serialization validates health before JSON serialization, including
 before the transient empty-build-site exclusion. Missing/invalid health returns

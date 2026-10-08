@@ -9,10 +9,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"origin/internal/actionanimationdefs"
 	"origin/internal/actiondefs"
 	"origin/internal/characterattrs"
 	constt "origin/internal/const"
 	"origin/internal/core"
+	"origin/internal/cyclicaction"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -317,6 +319,45 @@ func TestMeleeTimedPresetAndMiss(t *testing.T) {
 	require.Len(t, f.sender.attacks, 1)
 	require.Empty(t, f.sender.attacks[0].hits)
 	require.Equal(t, 50.0, f.health().SHP, "self never receives melee damage")
+}
+
+func TestMeleeChopAnimationUsesAcceptedDirectionAndTimedLifecycle(t *testing.T) {
+	animations, err := actionanimationdefs.LoadFromDirectory("../../data/action_animations", nil)
+	require.NoError(t, err)
+	previous := actionanimationdefs.Global()
+	actionanimationdefs.SetGlobalForTesting(animations)
+	t.Cleanup(func() { actionanimationdefs.SetGlobalForTesting(previous) })
+	for _, id := range []string{"axe_sweep", "axe_strike"} {
+		t.Run(id, func(t *testing.T) {
+			f := newMeleeFixture(t)
+			ecs.AddComponent(f.world, f.owner, components.Appearance{Resource: "player"})
+			ecs.GetResource[ecs.TimeState](f.world).TickPeriod = 100 * time.Millisecond
+			f.start(id, -math.Pi/2)
+			state, err := cyclicaction.Snapshot(f.world, f.owner)
+			require.NoError(t, err)
+			binding, exists := animations.Get(state.AnimationKey)
+			require.True(t, exists)
+			require.Equal(t, []string{"chop_r", "chop_l"}, []string{binding.Variants[0].Clip, binding.Variants[1].Clip})
+			require.NotNil(t, state.FacingAngle)
+			require.InDelta(t, 1.5*math.Pi, *state.FacingAngle, 1e-6)
+			require.Nil(t, state.TargetPosition)
+			require.Equal(t, uint32(6), state.TotalTicks)
+			ecs.WithComponent(f.world, f.owner, func(transform *components.Transform) { transform.X += 10 })
+			for range 5 {
+				f.tick()
+			}
+			next, err := cyclicaction.Snapshot(f.world, f.owner)
+			require.NoError(t, err)
+			require.Equal(t, state.FacingAngle, next.FacingAngle)
+			require.Equal(t, uint32(5), next.ElapsedTicks)
+			f.tick()
+			idle, err := cyclicaction.Snapshot(f.world, f.owner)
+			require.NoError(t, err)
+			require.Empty(t, idle.AnimationKey)
+			require.Nil(t, idle.FacingAngle)
+			require.Len(t, f.sender.attacks, 1)
+		})
+	}
 }
 
 func TestMeleeNearestEligibilityAndDeterminism(t *testing.T) {

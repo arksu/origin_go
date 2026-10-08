@@ -10,6 +10,7 @@ export interface CharacterActionAnimationState {
   readonly tickDurationMs: number
   readonly serverTimeMs: number
   readonly targetPosition?: { readonly x: number; readonly y: number }
+  readonly facingAngle?: number
 }
 
 export function decodeActionAnimation(input: proto.ICharacterActionAnimationState): CharacterActionAnimationState {
@@ -24,11 +25,14 @@ export function decodeActionAnimation(input: proto.ICharacterActionAnimationStat
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isInteger(x) || !Number.isInteger(y) || x < -2147483648 || x > 2147483647 || y < -2147483648 || y > 2147483647 || typeof heading !== 'number' || !Number.isFinite(heading)) throw new Error('Invalid action animation target position')
     targetPosition = { x, y }
   }
+  const facingAngle = input.facingAngle ?? undefined
+  // A normalized server angle can round to a full turn in the protocol float.
+  if (facingAngle !== undefined && (typeof facingAngle !== 'number' || !Number.isFinite(facingAngle) || facingAngle < 0 || facingAngle > Math.fround(2 * Math.PI) || targetPosition !== undefined)) throw new Error('Invalid action animation facing angle')
   const totalTicks = animationKey ? input.totalTicks ?? 0 : 0
   const elapsedTicks = animationKey ? input.elapsedTicks ?? 0 : 0
   const tickDurationMs = animationKey ? input.tickDurationMs ?? 0 : 0
   if (animationKey && (revision === '0' || !Number.isInteger(totalTicks) || totalTicks < 1 || totalTicks > 4294967295 || !Number.isInteger(elapsedTicks) || elapsedTicks < 0 || elapsedTicks > totalTicks || !Number.isFinite(tickDurationMs) || tickDurationMs <= 0 || !Number.isFinite(totalTicks * tickDurationMs) || totalTicks * tickDurationMs > Number.MAX_SAFE_INTEGER)) throw new Error('Invalid action animation timing')
-  return { generation, revision, animationKey, totalTicks, elapsedTicks, tickDurationMs, serverTimeMs, ...(targetPosition ? { targetPosition } : {}) }
+  return { generation, revision, animationKey, totalTicks, elapsedTicks, tickDurationMs, serverTimeMs, ...(targetPosition ? { targetPosition } : {}), ...(facingAngle !== undefined ? { facingAngle } : {}) }
 }
 
 export function acceptActionAnimation(current: CharacterActionAnimationState | undefined, incoming: CharacterActionAnimationState, generation: string | undefined): boolean {
@@ -36,7 +40,7 @@ export function acceptActionAnimation(current: CharacterActionAnimationState | u
   if (!current) return true
   const order = compareUint64(incoming.revision, current.revision)
   if (order !== 0) return order > 0
-  if (incoming.animationKey !== current.animationKey || incoming.totalTicks !== current.totalTicks || incoming.tickDurationMs !== current.tickDurationMs) throw new Error('Contradictory action animation revision')
+  if (incoming.animationKey !== current.animationKey || incoming.totalTicks !== current.totalTicks || incoming.tickDurationMs !== current.tickDurationMs || incoming.facingAngle !== current.facingAngle) throw new Error('Contradictory action animation revision')
   if (incoming.serverTimeMs <= current.serverTimeMs) return false
   if (incoming.elapsedTicks < current.elapsedTicks) throw new Error('Action animation progress regressed within a revision')
   return true
