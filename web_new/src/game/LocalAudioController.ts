@@ -4,7 +4,7 @@ import type { ActionAnimationDefinition, ActionAnimationSoundCue } from '../type
 import type { LocomotionAudioBinding, SoundProfile } from '../types/soundDefs'
 import type { PlaybackOptions } from './SoundManager'
 import { AUDIO_PLAYBACK } from './audioConfig'
-import { locomotionSoundKey } from './footstepConfig'
+import { FOOTSTEP_TILES, locomotionSoundKey, locomotionVolume, validateFootstepTileConfig, type FootstepTileConfig } from './footstepConfig'
 
 export interface LocalAudioSnapshot {
   entityId: number
@@ -46,7 +46,9 @@ export class LocalAudioController {
   private ownerId: number | null = null
   private hearing = 1
   private listener: { x: number; y: number } | null = null
-  constructor(private readonly playback: LocalPlayback) {}
+  constructor(private readonly playback: LocalPlayback, private readonly footstepTiles: FootstepTileConfig = FOOTSTEP_TILES) {
+    validateFootstepTileConfig(footstepTiles)
+  }
 
   configure(bindings: readonly LocomotionAudioBinding[], definitions: Readonly<Record<string, ActionAnimationDefinition>>): void {
     this.reset()
@@ -80,13 +82,16 @@ export class LocalAudioController {
       nowMs - previous.time > AUDIO_PLAYBACK.maxPresentationGapMs || cycle < previous.cycle || cycle - previous.cycle >= 1
     const audible = previous?.audible ?? new Set<string>()
     for (const contact of binding.contacts) {
-      const soundKey = locomotionSoundKey(contact.sound_key, snapshot.tileType)
+      const soundKey = locomotionSoundKey(contact.sound_key, snapshot.tileType, this.footstepTiles)
       const gain = this.gain(soundKey, snapshot.entityId, snapshot.position), wasAudible = audible.has(contact.id)
       if (gain > 0) audible.add(contact.id); else audible.delete(contact.id)
       // Entering the radius starts at the current gait, never at an old contact.
       if (rebase || !wasAudible || gain <= 0 || !previous) continue
       const nextContact = Math.floor(previous.cycle - contact.phase) + 1 + contact.phase
-      if (nextContact <= cycle) this.playback.play(soundKey, gain, { sourceId: snapshot.entityId })
+      if (nextContact <= cycle) this.playback.play(soundKey, gain, {
+        sourceId: snapshot.entityId,
+        localVolume: locomotionVolume(contact.sound_key, snapshot.tileType, this.footstepTiles),
+      })
     }
     this.locomotion.set(snapshot.entityId, { selector, cycle, time: nowMs, active, audible })
   }

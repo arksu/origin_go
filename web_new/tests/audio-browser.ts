@@ -5,7 +5,7 @@ import { LocalAudioController, localDistanceGain, type LocalAudioSnapshot } from
 import { WorldAudioReceiver } from '../src/game/WorldAudioReceiver'
 import { proto } from '../src/network/proto/packets'
 import { verifyRenderedVariants } from './audio-browser-render'
-import { validateFootstepSoundProfiles } from '../src/game/footstepConfig'
+import { FOOTSTEP_TILES, validateFootstepSoundProfiles } from '../src/game/footstepConfig'
 import {
   TILE_BROADLEAF_FOREST, TILE_CLAY, TILE_CONIFEROUS_FOREST,
   TILE_DIRT, TILE_MOUNTAIN, TILE_PLOWED, TILE_SHALLOW_WATER,
@@ -232,6 +232,31 @@ async function verify(): Promise<void> {
     surfacePlayback.push({ tileType, soundKey, file: events[0]!.file })
   }
   manager.reset()
+  const tileVolumePlayback: Array<{ tileType: number; volume: number; nativeVolume: number; played: boolean }> = []
+  const tileVolumes = { ...FOOTSTEP_TILES,
+    [TILE_DIRT]: { soundKey: 'footstep_gravel', volume: .2 },
+    [TILE_CLAY]: { soundKey: 'footstep_gravel', volume: .7 },
+    [TILE_PLOWED]: { soundKey: 'footstep_gravel', volume: 0 },
+  }
+  const volumeController = new LocalAudioController(manager, tileVolumes)
+  volumeController.configure(catalog.locomotionAudio!, catalog.actionAnimations)
+  volumeController.setListener(1, 1); volumeController.setListenerPosition({ x: 0, y: 0 })
+  const volumeWalker: LocalAudioSnapshot = { ...surfaceWalker, distanceTiles: 0 }
+  volumeController.update(volumeWalker, 0, serverNow)
+  const volumeCases: Array<[number, number]> = [[TILE_DIRT, .2], [TILE_CLAY, .7], [TILE_PLOWED, 0], [TILE_DIRT, .2]]
+  for (const [index, [tileType, volume]] of volumeCases.entries()) {
+    manager.reset()
+    const before = playEvents.length
+    volumeWalker.tileType = tileType; volumeWalker.distanceTiles = stride * (index + 1) * .5
+    volumeController.update(volumeWalker, (index + 1) * 100, serverNow)
+    await pause(50)
+    const events = playEvents.slice(before)
+    assert(events.length === (volume === 0 ? 0 : 1), 'Tile mute or contact timing was lost')
+    const nativeVolume = events[0] ? Number(samplesByFile.get(events[0].file)!.volume(events[0].id)) : 0
+    assert(Math.abs(nativeVolume - .5 * volume) < 1e-6, 'Tile volume was multiplied by the shared profile volume or lost at native start')
+    tileVolumePlayback.push({ tileType, volume, nativeVolume, played: events.length > 0 })
+  }
+  manager.reset()
   // Exercise the exact same decoded sample twice with different independent IDs.
   manager.play('exp_gain', 1, { sourceId: 'own' }); manager.play('exp_gain', .83, { sourceId: 'other' })
   await pause(100)
@@ -267,7 +292,7 @@ async function verify(): Promise<void> {
     chop: { handClips, sharedCue: chopBinding.sound_cues![0], poseRenderingChecked: false },
     capturedServer: serverFixture ? { expected: serverFixture.expected, sourceObjectsKnown: 0, playback: producerPlayback } : undefined,
     renderedPreview,
-    localDistances: distances, attenuationSamples, surfacePlayback,
+    localDistances: distances, attenuationSamples, surfacePlayback, tileVolumePlayback,
     locomotion: { strideTiles: stride, contacts: walk.contacts, walkAndCarryPlayed: true, transitionAndPauseCatchUp: false }, workload, failures,
     listening: 'Native browser playback and volumes verified. Subjective listening/tuning requires a human ear; no subjective claim is made.' })
 }

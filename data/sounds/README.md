@@ -54,10 +54,31 @@ CC BY 3.0; see
 
 Tile selection is client presentation configuration in
 [`footstepConfig.ts`](../../web_new/src/game/footstepConfig.ts). Several tile IDs
-can reference the same sound key. Add or remove an entry there to customize a
-tile; an absent entry uses `footstep`. Sound media and playback parameters stay
-in the profiles here. Selection uses each character's current interpolated
-position and does not reset the gait or affect action sound cues.
+can reference the same sound key. `FOOTSTEP_TILES` contains a separate entry for
+each renderable tile, with optional `soundKey` and `volume` fields:
+
+```ts
+[TILE_DIRT]: { soundKey: 'footstep_gravel', volume: 0.2 },
+[TILE_CLAY]: { soundKey: 'footstep_gravel', volume: 0.5 },
+[TILE_GRASS]: { volume: 0.15 },
+```
+
+`volume` is an absolute playback level from `0` (muted) to `1` (full sample level).
+It replaces the profile's volume for that tile; it is not multiplied by it.
+`undefined` or an omitted field inherits the profile volume (currently `0.35`
+for every footstep profile). All tile entries initially inherit that level.
+Omitting `soundKey` uses the default `footstep`, so a tile can customize volume
+while keeping Soft leather. Unknown or unavailable tiles use the default profile
+and its volume.
+
+Final volume is `tile/profile volume × distance gain × master volume × SFX volume`.
+Overrides apply to own and other characters for walk and carry-walk, never to
+action cues or world sounds. Hearing distance, gait tracking and shared profiles
+stay independent of the tile volume. Invalid tile IDs or volumes fail during
+initialization. Selection uses each character's current interpolated position.
+
+Tile settings are bundled with the client: rebuild/reload the client after editing
+them; publishing sound metadata is needed only when the source sound profiles change.
 
 Publish metadata with `tools/assets publish-action-animations`, or publish it with
 a full/partial asset build. The existing publication lock switches `sounds`,
