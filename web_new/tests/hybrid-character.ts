@@ -124,7 +124,8 @@ async function main() {
     previous = now
     for (const handle of handles) {
       if (!handle.actor.isReady) continue
-      handle.actor.walking = state.value.endsWith('walk')
+      handle.actor.walking = ['crawl', 'walk', 'run', 'fast_run', 'carry_walk'].includes(state.value)
+      handle.actor.movementMode = state.value === 'crawl' ? 0 : state.value === 'run' ? 2 : state.value === 'fast_run' ? 3 : 1
       handle.actor.carrying = state.value.startsWith('carry')
       handle.actor.knockedOut = state.value === 'knocked_out'
       const choice = choices.get(state.value)

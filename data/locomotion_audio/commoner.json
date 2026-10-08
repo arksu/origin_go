@@ -32,6 +32,54 @@
           "sound_key": "footstep"
         }
       ]
+    },
+    {
+      "actor": "character/male_commoner",
+      "clip": "crawl",
+      "contacts": [
+        {
+          "id": "left",
+          "phase": 0.20454545454545456,
+          "sound_key": "footstep"
+        },
+        {
+          "id": "right",
+          "phase": 0.7045454545454546,
+          "sound_key": "footstep"
+        }
+      ]
+    },
+    {
+      "actor": "character/male_commoner",
+      "clip": "run",
+      "contacts": [
+        {
+          "id": "left",
+          "phase": 0.3181818181818182,
+          "sound_key": "footstep"
+        },
+        {
+          "id": "right",
+          "phase": 0.8181818181818182,
+          "sound_key": "footstep"
+        }
+      ]
+    },
+    {
+      "actor": "character/male_commoner",
+      "clip": "fast_run",
+      "contacts": [
+        {
+          "id": "left",
+          "phase": 0.3125,
+          "sound_key": "footstep"
+        },
+        {
+          "id": "right",
+          "phase": 0.8125,
+          "sound_key": "footstep"
+        }
+      ]
     }
   ]
 }

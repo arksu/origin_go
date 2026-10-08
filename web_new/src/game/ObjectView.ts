@@ -21,6 +21,7 @@ import {
 } from '@/constants/render'
 import { getSpriteAlphaMask, hitTestSpritePixel } from './PixelHitTest'
 import type { ActorHandle, ActorRenderer } from './actors/ActorRenderer'
+import { ACTOR_RENDER } from './actors/config'
 import { ShallowWaterVisual } from './actors/ShallowWaterVisual'
 import { SHALLOW_WATER } from './actors/shallowWaterConfig'
 import { TILE_SHALLOW_WATER } from './tiles/tileIds'
@@ -29,6 +30,7 @@ import { actionAnimationPhase, type CharacterActionAnimationState } from '../typ
 import { fxManager } from './fx/FxManager'
 import type { ParticleEmitter } from './fx/ParticleEmitter'
 import type { LocalAudioSnapshot } from './LocalAudioController'
+import { locomotionClip } from './actors/locomotion'
 
 interface AnimatedFrameLayer {
   layer: LayerDef
@@ -93,6 +95,7 @@ export class ObjectView {
   private hasFrameAnimation = false
   private animationStartMs = 0
   private isWalking = false
+  private movementMode = 1
   private stopProgress: number | undefined
   private walkDistanceTiles = 0
   private readonly facingStabilizer = new FacingStabilizer()
@@ -148,6 +151,12 @@ export class ObjectView {
 
   getContainer(): Container {
     return this.container
+  }
+
+  getOverheadAnchorY(): number {
+    // Action frames, equipment and debug overlays can change visual bounds.
+    // Character labels keep the ordinary standing-frame anchor throughout.
+    return this.resDef?.actor3d ? -ACTOR_RENDER.anchorY : this.container.getLocalBounds().top
   }
 
   hasAnimatedFrames(): boolean {
@@ -546,6 +555,11 @@ export class ObjectView {
     this.stopProgress = progress
   }
 
+  setMovementMode(mode: number): void {
+    this.movementMode = mode
+    this.syncActor()
+  }
+
   onStopped(): void {
     if (this.isDestroyed || this.isDroppedItem || !this.resDef) return
     this.isWalking = false
@@ -661,7 +675,7 @@ export class ObjectView {
     const snapshot: LocalAudioSnapshot = {
       entityId: this.entityId, actor: this.actorHandle.actor.assetId, position: this.getPosition(),
       ready: this.actorHandle.actor.isReady && !this.knockedOutPose && !this.interactionSuppressed,
-      moving: this.isWalking && this.stopProgress === undefined, clip: this.carrying ? 'carry_walk' : 'walk',
+      moving: this.isWalking && this.stopProgress === undefined, clip: locomotionClip(this.movementMode, this.carrying),
       distanceTiles: this.walkDistanceTiles, discontinuity: this.audioDiscontinuity, action: this.actionAnimation,
       actionReady: this.actorHandle.actor.isReady && !!this.actionAnimation?.animationKey && this.actorHandle.actor.isActionAnimationSelected(this.actionAnimation.animationKey),
     }
@@ -1111,6 +1125,7 @@ export class ObjectView {
     if (this.actorFacingAngle === null) actor.direction = this.lastDir
     else actor.setFacingAngle(this.actorFacingAngle)
     actor.walking = this.isWalking
+    actor.movementMode = this.movementMode
     actor.stopProgress = this.stopProgress
     actor.distanceTiles = this.walkDistanceTiles
     actor.carrying = this.carrying && !this.knockedOutPose

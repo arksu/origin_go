@@ -27,7 +27,9 @@ export { useGameStore } from './src/stores/gameStore.ts';
 export { proto } from './src/network/proto/packets.js';
 export { actionCursorCss } from './src/game/cursorCatalog.ts';
 export { cancelActiveActionOnEscape } from './src/game/hud/actionState.ts';
-export { CursorManager } from './src/game/CursorManager.ts';`,
+export { CursorManager } from './src/game/CursorManager.ts';
+export { default as ActionHourGlass } from './src/components/ui/ActionHourGlass.vue';
+export { gameFacade } from './src/game/GameFacade.ts';`,
     resolveDir: rootDirectory,
     sourcefile: 'actions-test.ts',
     loader: 'ts',
@@ -36,7 +38,10 @@ export { CursorManager } from './src/game/CursorManager.ts';`,
   bundle: true,
   format: 'esm',
   platform: 'node',
-  external: ['vue', 'pinia'],
+  external: ['vue', 'pinia', 'three', 'three/*'],
+  banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url); globalThis.requestAnimationFrame = () => 0; globalThis.cancelAnimationFrame = () => {};' },
+  loader: { '.png': 'dataurl' },
+  define: { 'import.meta.env': '{}', '__APP_VERSION__': '"test"', '__BUILD_TIME__': '"test"', '__COMMIT_HASH__': '"test"' },
   alias: { '@': join(rootDirectory, 'src') },
   plugins: [{
     name: 'vue-inline-template',
@@ -93,7 +98,7 @@ function descendants(node, type) {
 
 let gameStore
 try {
-  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, useActionPresentation, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager } = await import(pathToFileURL(outfile).href)
+  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, useActionPresentation, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager, ActionHourGlass, gameFacade } = await import(pathToFileURL(outfile).href)
   setActivePinia(createPinia())
   gameStore = useGameStore()
 
@@ -345,10 +350,60 @@ try {
   aimHotbarApp.unmount()
   gameStore.reset()
 
+  // Owner progress follows the rendered character, independently of the camera
+  // center and action animation bounds. Only an active indicator owns a RAF.
+  let overheadAnchor = { x: 410, y: 210 }
+  let zoom = 1
+  const originalAnchor = gameFacade.getObjectOverheadScreenPosition
+  const originalZoom = gameFacade.getZoom
+  gameFacade.getObjectOverheadScreenPosition = entityId => {
+    assert.equal(entityId, 1)
+    return overheadAnchor
+  }
+  gameFacade.getZoom = () => zoom
+  const progressRoot = hostNode('root')
+  const progressApp = renderer.createApp(withSsrContext(() => h(ActionHourGlass)))
+  try {
+    progressApp.mount(progressRoot)
+    await nextTick()
+    assert.equal(descendants(progressRoot, 'div').length, 0)
+    assert.equal(frames.size, 0)
+    gameStore.setPlayerEnterWorld(1, 'Player', 12, 100, 7)
+    gameStore.setActionProgress(20, 5)
+    await nextTick()
+    const indicator = () => descendants(progressRoot, 'div').find(node => node.props.class === 'window-container')
+    assert.deepEqual(indicator().props.style, { left: '410px', top: '211px' })
+    assert.equal(descendants(progressRoot, 'div').find(node => node.props.class === 'bar').props.style.width, '25%')
+    assert.equal(frames.size, 1)
+    overheadAnchor = { x: 150, y: 300 }
+    zoom = 2
+    await advanceFrame(2200)
+    assert.deepEqual(indicator().props.style, { left: '150px', top: '328px' })
+    zoom = .5
+    await advanceFrame(2300)
+    assert.deepEqual(indicator().props.style, { left: '150px', top: '287.5px' })
+    overheadAnchor = null
+    await advanceFrame(2400)
+    assert.equal(indicator(), undefined, 'culled or despawned player cannot leave a floating bar')
+    gameStore.clearActionProgress()
+    await nextTick()
+    assert.equal(frames.size, 0)
+    overheadAnchor = { x: 410, y: 210 }
+    gameStore.setActionProgress(20, 10)
+    await nextTick()
+    assert.equal(frames.size, 1)
+  } finally {
+    progressApp.unmount()
+    assert.equal(frames.size, 0)
+    gameFacade.getObjectOverheadScreenPosition = originalAnchor
+    gameFacade.getZoom = originalZoom
+    gameStore.reset()
+  }
+
   globalThis.performance = originalPerformance
   delete globalThis.requestAnimationFrame
   delete globalThis.cancelAnimationFrame
-  console.log('Action menu, activation, drag, hotbar, cursor, and synchronized cooldown tests passed')
+  console.log('Action menu, activation, drag, hotbar, cursor, synchronized cooldown, and overhead progress tests passed')
 } finally {
   gameStore?.reset()
   await rm(directory, { recursive: true, force: true })

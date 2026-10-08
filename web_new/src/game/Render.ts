@@ -17,8 +17,6 @@ import { sendActivateAction } from '@/network'
 import { ChatBalloonManager } from './ChatBalloonManager'
 import { NicknameManager } from './NicknameManager'
 import { MoveMarkerManager } from './MoveMarkerManager'
-import { ResourceLoader } from './ResourceLoader'
-import { MOVE_MARKER_TEXTURE } from '@/constants/moveMarker'
 import { timeSync } from '@/network/TimeSync'
 import { useGameStore } from '@/stores/gameStore'
 import { proto } from '@/network/proto/packets.js'
@@ -139,8 +137,7 @@ export class Render {
     this.app.stage.addChild(this.uiContainer)
     this.uiContainer.addChild(this.debugOverlay.getContainer())
 
-    const markerTexture = await ResourceLoader.loadTexture(MOVE_MARKER_TEXTURE)
-    this.moveMarkerManager = new MoveMarkerManager(this.objectsContainer, markerTexture)
+    this.moveMarkerManager = new MoveMarkerManager(this.objectsContainer)
 
     setObjectManager(this.objectManager)
     this.debugOverlay.setVisible(this.debugOverlay.isVisible())
@@ -506,7 +503,7 @@ export class Render {
     for (const [entityId, renderPos] of positions) {
       this.objectManager.updateObjectPosition(
         entityId, renderPos.x, renderPos.y,
-        renderPos.isMoving, renderPos.direction, renderPos.distanceMoved, renderPos.stopProgress,
+        renderPos.isMoving, renderPos.direction, renderPos.distanceMoved, renderPos.stopProgress, renderPos.moveMode,
       )
     }
   }
@@ -626,6 +623,15 @@ export class Render {
     return { x: screenX, y: screenY }
   }
 
+  getObjectOverheadScreenPosition(entityId: number): ScreenPoint | null {
+    const objectView = this.objectManager.getObject(entityId)
+    if (!objectView) return null
+    const container = objectView.getContainer()
+    if (!container.visible) return null
+    const point = this.objectsContainer.toGlobal({ x: container.x, y: container.y + objectView.getOverheadAnchorY() })
+    return { x: point.x, y: point.y }
+  }
+
   setCamera(x: number, y: number): void {
     cameraController.setPosition(x, y)
   }
@@ -717,6 +723,7 @@ export class Render {
   }
 
   despawnObject(entityId: number): void {
+    if (entityId === this.playerEntityId) this.moveMarkerManager?.clear()
     this.objectManager.despawnObject(entityId)
     this.nicknameManager.remove(entityId)
   }
@@ -764,6 +771,10 @@ export class Render {
 
   showMoveTargetMarker(worldX: number, worldY: number): void {
     this.moveMarkerManager?.show(worldX, worldY)
+  }
+
+  endMoveTargetMarker(): void {
+    this.moveMarkerManager?.endTarget()
   }
 
   hideMoveTargetMarker(): void {

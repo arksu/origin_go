@@ -378,7 +378,7 @@ export function registerMessageHandlers(): void {
     const isCarryDropTransition = previousCarrierId != null && carriedByEntityId === 0
     const effectiveTeleport = isTeleport || isCarryDropTransition
 
-    moveController.onObjectMove(
+    const movementAccepted = moveController.onObjectMove(
       entityId,
       serverTimeMs,
       moveSeq,
@@ -415,13 +415,16 @@ export function registerMessageHandlers(): void {
     if (entityId === gameStore.playerEntityId) {
       gameStore.updatePlayerPosition(movement.position)
 
-      // The move-target marker mirrors the server: shown at the reported
-      // target, hidden when the server reports none (arrival, stop, teleport).
-      const target = movement.targetPosition
-      if (target) {
-        gameFacade.showMoveTargetMarker(target.x, target.y)
-      } else {
-        gameFacade.hideMoveTargetMarker()
+      // Stale packets must not start, replace, or end the target's one-shot ring.
+      if (movementAccepted) {
+        const target = movement.targetPosition
+        if (effectiveTeleport) {
+          gameFacade.hideMoveTargetMarker()
+        } else if (isMoving && target) {
+          gameFacade.showMoveTargetMarker(target.x, target.y)
+        } else {
+          gameFacade.endMoveTargetMarker()
+        }
       }
     }
   }

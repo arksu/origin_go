@@ -1,13 +1,8 @@
-// Ground marker shown where the server targets the local player's move
-// (see MoveMarkerManager). Path is resolved by ResourceLoader relative to
-// /assets/game/.
-export const MOVE_MARKER_TEXTURE = 'move_marker.png'
-
-// The marker pulses smoothly: transparency eases from opaque to transparent
-// and back, taking this interval per direction.
-export const MOVE_MARKER_BLINK_INTERVAL_MS = 700
-
-// Alpha range of the pulse: the marker never becomes fully invisible and
-// never reaches full opacity.
-export const MOVE_MARKER_MIN_ALPHA = 0.3
+// One-shot ground ring for the local player's authoritative movement target.
+export const MOVE_MARKER_DURATION_MS = 700
+export const MOVE_MARKER_COLOR = 0x63caff
 export const MOVE_MARKER_MAX_ALPHA = 0.9
+export const MOVE_MARKER_START_SCALE = 1 / 3
+export const MOVE_MARKER_RADIUS_X = 24
+export const MOVE_MARKER_RADIUS_Y = 12
+export const MOVE_MARKER_STROKE_WIDTH = 3

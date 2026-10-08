@@ -75,6 +75,10 @@ export function parseActorManifest(value: unknown): ActorManifest {
     for (const name of ['idle', 'walk', 'carry_idle', 'carry_walk']) if (!clips[name]) throw new Error(`Required animation missing: ${name}`)
     const walk = clips.walk as ClipManifest; const carry = clips.carry_walk as ClipManifest
     if (walk.playback !== 'distance' || carry.playback !== 'distance' || walk.cycleDistanceTiles !== carry.cycleDistanceTiles || walk.duration !== carry.duration || !walk.loop || !carry.loop) throw new Error('Incompatible carry_walk locomotion metadata')
+    for (const name of ['crawl', 'run', 'fast_run']) {
+      const clip = clips[name] as ClipManifest | undefined
+      if (clip && (clip.playback !== 'distance' || !clip.loop)) throw new Error(`Invalid locomotion metadata: ${name}`)
+    }
   }
   const bindings = record(manifest.bindings, 'bindings')
   for (const [slot, value] of Object.entries(bindings)) {

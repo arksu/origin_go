@@ -123,7 +123,7 @@ export class ObjectManager {
   /**
    * Update object position and movement state.
    */
-  updateObjectPosition(entityId: number, x: number, y: number, isMoving?: boolean, direction?: number, distanceMoved?: number, stopProgress?: number): void {
+  updateObjectPosition(entityId: number, x: number, y: number, isMoving?: boolean, direction?: number, distanceMoved?: number, stopProgress?: number, movementMode?: number): void {
     const objectView = this.objects.get(entityId)
     if (!objectView) {
       return
@@ -131,6 +131,7 @@ export class ObjectManager {
 
     const previousPosition = objectView.getPosition()
     objectView.updatePosition(x, y)
+    if (movementMode !== undefined) objectView.setMovementMode(movementMode)
     if (distanceMoved === 0 && (x !== previousPosition.x || y !== previousPosition.y)) objectView.markAudioDiscontinuity()
 
     if (isMoving !== undefined && direction !== undefined) {

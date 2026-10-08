@@ -57,7 +57,7 @@ export class NicknameManager {
         stroke: { color: NICKNAME_OUTLINE_COLOR, width: NICKNAME_OUTLINE_WIDTH },
       },
     })
-    // Bottom-center sits on the object's visual bounds top.
+    // Bottom-center sits on the object's overhead anchor.
     text.anchor.set(0.5, 1)
 
     const container = new Container()
@@ -90,8 +90,7 @@ export class NicknameManager {
       }
 
       const objectContainer = objectView.getContainer()
-      const boundsTop = objectContainer.getLocalBounds().top
-      label.container.position.set(objectContainer.x, objectContainer.y + boundsTop + NICKNAME_Y_OFFSET_PX)
+      label.container.position.set(objectContainer.x, objectContainer.y + objectView.getOverheadAnchorY() + NICKNAME_Y_OFFSET_PX)
       label.container.scale.set(inverseScale)
       // Mirror culling: a hidden object must not leave a floating label.
       label.container.visible = objectContainer.visible

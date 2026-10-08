@@ -142,7 +142,7 @@ class MoveController {
   }
 
   /**
-   * Process incoming S2C_ObjectMove message.
+   * Process incoming S2C_ObjectMove; return whether its movement was accepted.
    */
   onObjectMove(
     entityId: number,
@@ -156,7 +156,7 @@ class MoveController {
     isMoving: boolean,
     moveMode: number,
     heading: number,
-  ): void {
+  ): boolean {
     let state = this.entities.get(entityId)
 
     // If entity not tracked, initialize it
@@ -188,7 +188,7 @@ class MoveController {
         x, y, vx, vy,
         isMoving, moveMode, heading, moveSeq,
       })
-      return
+      return true
     }
 
     // Check move_seq for out-of-order detection
@@ -198,7 +198,7 @@ class MoveController {
         console.warn(`[MoveController] Out-of-order packet for entity ${entityId}: seq ${moveSeq} <= last ${state.lastMoveSeq}`)
       }
       state.ignoredOutOfOrder++
-      return
+      return false
     }
 
     state.lastMoveSeq = moveSeq
@@ -266,6 +266,7 @@ class MoveController {
 
     // Sort by server time (should already be sorted, but safety)
     state.keyframes.sort((a, b) => a.tServerMs - b.tServerMs)
+    return true
   }
 
   /**

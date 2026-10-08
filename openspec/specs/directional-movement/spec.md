@@ -136,11 +136,11 @@ The client SHALL stop active directional control when focus enters an input, tex
 - **THEN** the game SHALL not start or continue keyboard movement from that shortcut or composition
 
 ### Requirement: Directional motion uses existing presentation and bounded work
-Authoritative direction starts, turns, and stops SHALL use the existing movement stream for both the player and observers. Directional movement SHALL have no destination marker. A blocked held direction SHALL not appear as permanent walking or extrapolate through a wall. Implementations SHALL avoid per-frame network input and unbounded timer, listener, queue, or world-lifecycle accumulation. Existing interpolation and locomotion transition durations SHALL remain unchanged in this change; measured visual latency SHALL be reported separately from server stopping latency.
+Authoritative direction starts, turns, and stops SHALL use the existing movement stream for both the player and observers. Directional movement SHALL NOT create a destination marker; an existing one-shot ring from a prior point route MAY finish fading. A blocked held direction SHALL not appear as permanent walking or extrapolate through a wall. Implementations SHALL avoid per-frame network input and unbounded timer, listener, queue, or world-lifecycle accumulation. Existing interpolation and locomotion transition durations SHALL remain unchanged in this change; measured visual latency SHALL be reported separately from server stopping latency.
 
 #### Scenario: Start from a click route
 - **WHEN** WASD replaces a route with a visible target marker
-- **THEN** the next authoritative directional movement update SHALL omit a destination and the marker SHALL disappear
+- **THEN** the next authoritative directional movement update SHALL omit a destination, create no new ring, and allow the prior ring to finish its one-shot fade
 
 #### Scenario: Player and observer stop
 - **WHEN** directional motion stops or becomes fully blocked
