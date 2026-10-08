@@ -17,7 +17,8 @@ try {
     define: { 'import.meta.env': '{}', '__APP_VERSION__': '"test"', '__BUILD_TIME__': '"test"', '__COMMIT_HASH__': '"test"' },
     alias: { '@': join(root, 'src') }, sourcemap: 'inline',
   })
-  const result = spawnSync(process.execPath, ['--test', outfile], { stdio: 'inherit' })
+  const nodeOptions = process.argv.includes('--expose-gc') ? ['--expose-gc'] : []
+  const result = spawnSync(process.execPath, [...nodeOptions, '--test', outfile], { stdio: 'inherit' })
   if (result.error) throw result.error
   process.exitCode = result.status ?? 1
 } finally {

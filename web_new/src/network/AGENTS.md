@@ -180,12 +180,18 @@ movement interpolation keeps its existing clock. See
 
 ### Combat result contract
 
-- `AttackResultReceiver` consumes combat notifications without changing health,
-  creating unknown entities, or playing FX. It accepts at most 512 unique targets,
+- `AttackResultReceiver` validates combat notifications without changing health
+  or creating unknown entities. It accepts at most 512 unique targets,
   preserves exact uint64 IDs, and checks finite nonnegative damage. Its monotonic
   event watermark advances only after validating the full packet. World entry,
   leave, and connection changes reset it; stale epochs and duplicate/older events
   are ignored. Every observer receives the full hit list; an empty list is a miss.
+- Only accepted full packets reach `GameFacade.showDamageNumbers` with exact
+  decimal target IDs and authoritative damage. The renderer uses existing views
+  or a bounded 2-second despawn-anchor cache; IDs outside the exact numeric render
+  range and unknown targets are skipped. Stream resets clear transient numbers
+  and cached anchors. See `docs/features/damage_numbers.md` for presentation and
+  measurement details.
 
 ### Character Profile + Craft Contract
 
