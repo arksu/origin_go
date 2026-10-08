@@ -198,9 +198,11 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		handle, spawnErr := shard.trySpawnPlayerWithPolicy(pos.X, pos.Y, character, setupFunc, SpawnCollisionPolicy{})
 		if handle != types.InvalidHandle {
 			// Register character entity for periodic saving
+			shard.mu.Lock()
 			charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
 			nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 			charEntities.Add(playerEntityID, handle, nextSaveAt)
+			shard.mu.Unlock()
 
 			character.X = pos.X
 			character.Y = pos.Y
@@ -249,14 +251,15 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	case <-ctx.Done():
 		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
 		shard.mu.Lock()
-		shard.UnregisterEntityAOI(playerEntityID)
+		shard.queuePlayerLogoutLocked(playerEntityID, *playerHandle, ecs.GetResource[ecs.TimeState](shard.world).Now, time.Duration(shard.cfg.Game.DisconnectDelay)*time.Second)
 		shard.mu.Unlock()
 		return
 	default:
 	}
 
-	g.attachClientToWorld(shard, c, playerEntityID, character, *playerHandle)
-	g.ensureObserverVisibilityImmediate(shard.world, *playerHandle)
+	if !g.attachClientToWorld(shard, c, playerEntityID, character, *playerHandle) {
+		return
+	}
 
 	g.logger.Info("Player spawned",
 		zap.Uint64("client_id", c.ID),
@@ -312,6 +315,23 @@ func (g *Game) buildPlayerSetupFunc(
 	profileSkills []string,
 	profileDiscovery []string,
 	runtimeHealth ...components.EntityHealth,
+) func(*ecs.World, types.Handle) error {
+	var runtime *playerRuntimeState
+	if len(runtimeHealth) > 0 {
+		runtime = &playerRuntimeState{Health: runtimeHealth[0]}
+	}
+	return g.buildPlayerSetupWithRuntimeFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery, runtime)
+}
+
+func (g *Game) buildPlayerSetupWithRuntimeFunc(
+	ctx context.Context,
+	character repository.Character,
+	pos spawnPos,
+	normalizedAttributes characterattrs.Values,
+	profileExperience components.CharacterExperience,
+	profileSkills []string,
+	profileDiscovery []string,
+	runtime *playerRuntimeState,
 ) func(*ecs.World, types.Handle) error {
 	return func(w *ecs.World, h types.Handle) error {
 		cooldowns, err := loadCharacterActionCooldowns(character.ActionCooldowns, ecs.GetResource[ecs.TimeState](w).UnixMs)
@@ -386,11 +406,11 @@ func (g *Game) buildPlayerSetupFunc(
 		})
 		initialStats := buildInitialEntityStats(character.Stamina, character.Energy, normalizedAttributes)
 		ecs.AddComponent(w, h, initialStats)
-		health, err := g.resolveLoginHealth(w, character, normalizedAttributes, runtimeHealth)
+		state, err := g.resolveLoginRuntimeState(w, character, normalizedAttributes, runtime)
 		if err != nil {
 			return fmt.Errorf("load character health: %w", err)
 		}
-		ecs.AddComponent(w, h, health)
+		ecs.AddComponent(w, h, state.Health)
 		ecs.UpdateEntityStatsRegenSchedule(
 			w,
 			h,
@@ -463,6 +483,9 @@ func (g *Game) buildPlayerSetupFunc(
 					zap.Bool("lost_and_found_used", loadResult.LostAndFoundUsed))
 			}
 		}
+		if err := restorePlayerCombatState(w, h, types.EntityID(character.ID), state.CombatState); err != nil {
+			return fmt.Errorf("load character combat state: %w", err)
+		}
 		return nil
 	}
 }
@@ -487,23 +510,39 @@ func buildInitialEntityStats(
 // Runtime values take precedence over the database row, including when a
 // failed spawn retries later. The registry entry is retired only at attachment.
 func (g *Game) resolveLoginHealth(w *ecs.World, character repository.Character, attributes characterattrs.Values, runtimeHealth []components.EntityHealth) (components.EntityHealth, error) {
-	health := components.EntityHealth{SHP: character.Shp, HHP: character.Hhp, IsLying: character.IsLying}
+	var runtime *playerRuntimeState
 	if len(runtimeHealth) > 0 {
-		health = runtimeHealth[0]
+		runtime = &playerRuntimeState{Health: runtimeHealth[0]}
+	}
+	state, err := g.resolveLoginRuntimeState(w, character, attributes, runtime)
+	return state.Health, err
+}
+
+func (g *Game) resolveLoginRuntimeState(w *ecs.World, character repository.Character, attributes characterattrs.Values, runtime *playerRuntimeState) (playerRuntimeState, error) {
+	state := playerRuntimeState{Health: components.EntityHealth{SHP: character.Shp, HHP: character.Hhp, IsLying: character.IsLying}}
+	if runtime != nil {
+		state = *runtime
 	} else if g.shardManager != nil {
 		if shard := g.shardManager.GetShard(character.Layer); shard != nil {
-			if cached, ok := shard.offlineHealth.Load(types.EntityID(character.ID)); ok {
-				health = cached.(components.EntityHealth)
+			if cached, exists := shard.offlineHealth.Load(types.EntityID(character.ID)); exists {
+				var valid bool
+				state, valid = cached.(playerRuntimeState)
+				if !valid {
+					return playerRuntimeState{}, ErrInvalidPlayerRuntimeState
+				}
 			}
 		}
 	}
-	initial, err := buildInitialEntityHealth(health.SHP, health.HHP, attributes, g.cfg.Game.LifeDeathFactor)
+	initial, err := buildInitialEntityHealth(state.Health.SHP, state.Health.HHP, attributes, g.cfg.Game.LifeDeathFactor)
 	if err != nil {
-		return components.EntityHealth{}, err
+		return playerRuntimeState{}, err
 	}
-	health.SHP, health.HHP = initial.SHP, initial.HHP
-	playerstate.ResolveKnockout(&health, ecs.GetResource[ecs.TimeState](w).UnixMs)
-	return health, nil
+	if err := ecs.ValidateCombatState(state.CombatState); err != nil {
+		return playerRuntimeState{}, err
+	}
+	state.Health.SHP, state.Health.HHP = initial.SHP, initial.HHP
+	playerstate.ResolveKnockout(&state.Health, ecs.GetResource[ecs.TimeState](w).UnixMs)
+	return state, nil
 }
 
 func buildInitialEntityHealth(
@@ -566,7 +605,13 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Failed to restore character health")
 		return true
 	}
-	detachedEntities.RemoveDetachedEntity(playerEntityID)
+	if shard.playerLogout != nil {
+		if err := shard.playerLogout.PreparePlayer(handle); err != nil {
+			g.logger.Error("Failed to prepare reattached logout state", zap.Error(err))
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Failed to restore character state")
+			return true
+		}
+	}
 
 	// Re-register character entity for periodic saving
 	charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
@@ -606,7 +651,7 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		)
 	}
 
-	detachedDuration := time.Since(detachedEntity.DetachedAt)
+	detachedDuration := ecs.GetResource[ecs.TimeState](shard.world).Now.Sub(detachedEntity.DetachedAt)
 
 	// Get current position from entity
 	var posX, posY int
@@ -615,7 +660,10 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		posY = int(transform.Y)
 	}
 
-	g.attachClientToWorldLocked(shard, c, playerEntityID, character, handle)
+	if !g.attachClientToWorldLocked(shard, c, playerEntityID, character, handle) {
+		return true
+	}
+	detachedEntities.RemoveDetachedEntity(playerEntityID)
 
 	// Force immediate visibility update for the reattached observer
 	visState := ecs.GetResource[ecs.VisibilityState](shard.world)
@@ -765,20 +813,38 @@ func (g *Game) attachClientToWorld(
 	playerEntityID types.EntityID,
 	character repository.Character,
 	handle types.Handle,
-) {
+) bool {
 	if shard == nil || client == nil || handle == types.InvalidHandle {
-		return
+		return false
 	}
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	g.attachClientToWorldLocked(shard, client, playerEntityID, character, handle)
+	if !g.attachClientToWorldLocked(shard, client, playerEntityID, character, handle) {
+		identity, exists := shard.world.GetExternalID(handle)
+		if shard.world.Alive(handle) && exists && identity == playerEntityID {
+			delay := time.Duration(shard.cfg.Game.DisconnectDelay) * time.Second
+			shard.queuePlayerLogoutLocked(playerEntityID, handle, ecs.GetResource[ecs.TimeState](shard.world).Now, delay)
+		}
+		return false
+	}
+	g.ensureObserverVisibilityImmediate(shard.world, handle)
+	return true
 }
 
 // The caller owns the world lock, including reattachment which also mutates
 // detached-player state. Listener membership is published in that same section.
-func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, playerEntityID types.EntityID, character repository.Character, handle types.Handle) {
-	if !shard.world.Alive(handle) {
-		return
+func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, playerEntityID types.EntityID, character repository.Character, handle types.Handle) bool {
+	if client == nil {
+		return false
+	}
+	select {
+	case <-client.Done():
+		return false
+	default:
+	}
+	identity, exists := shard.world.GetExternalID(handle)
+	if !shard.world.Alive(handle) || !exists || identity != playerEntityID {
+		return false
 	}
 
 	ecs.WithComponent(shard.world, handle, func(health *components.EntityHealth) {
@@ -788,7 +854,6 @@ func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, p
 			ecs.MarkCharacterVisualDirty(shard.world, playerEntityID)
 		}
 	})
-	shard.offlineHealth.Delete(playerEntityID)
 	shard.PlayerInbox().RemoveClient(client.ID)
 	shard.ClientsMu.Lock()
 	shard.Clients[playerEntityID] = client
@@ -803,13 +868,15 @@ func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, p
 		g.logger.Error("Failed to attach world sound listener", zap.Uint64("client_id", client.ID), zap.Uint64("entity_id", uint64(playerEntityID)))
 	}
 	shard.ClientsMu.Unlock()
+	shard.offlineHealth.Delete(playerEntityID)
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, client.StreamEpoch.Load())
 
 	if health, exists := ecs.GetComponent[components.EntityHealth](shard.world, handle); exists && health.HHP <= 0 {
 		shard.HandlePlayerPermanentDeath(shard.world, playerEntityID, handle)
-		return
+		return true
 	}
 	g.enqueuePlayerBootstrapSnapshots(shard, playerEntityID, handle)
+	return true
 }
 
 func (g *Game) enqueuePlayerBootstrapSnapshots(shard *Shard, playerEntityID types.EntityID, handle types.Handle) {

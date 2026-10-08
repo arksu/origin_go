@@ -108,6 +108,7 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 	InitResource(w, DetachedEntities{
 		Map: make(map[types.EntityID]DetachedEntity, 64),
 	})
+	InitResource(w, CombatActivityState{})
 	InitResource(w, CharacterEntities{
 		Map: make(map[types.EntityID]CharacterEntity, 64),
 	})

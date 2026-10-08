@@ -73,7 +73,10 @@ and target uniqueness. It accepts only increasing EventIDs, resetting its
 watermark on connection/session or epoch changes. This receiver predicts no
 health, spawns no targets and renders no new hit effects. Protocol details are in
 `combat_protocol.md`. Recovery, ranged attacks, wounds, effective-attribute
-modifiers and persistence of the KO deadline remain separate work.
+modifiers remain separate work. Combat logout uses the shared read-only logout
+policies and indexed due queue described in [player_logout.md](player_logout.md).
+KO deadlines and combat event times remain runtime-only by design; DB-only restore
+starts a new KO for zero SHP and does not restore an active KO for positive SHP.
 
 ## Verification
 

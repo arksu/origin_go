@@ -90,10 +90,7 @@ func (s *CharacterSaveSystem) Update(w *ecs.World, dt float64) {
 			// Periodic and final detached capture share the same retry deadline.
 			// Expiry runs later in this tick and must not recapture a rejected state.
 			detached := ecs.GetResource[ecs.DetachedEntities](w)
-			if entity, exists := detached.Map[entityID]; exists && entity.Handle == charEntity.Handle {
-				entity.SaveRetryAt = retryAt
-				detached.Map[entityID] = entity
-			}
+			detached.SetSaveRetryAt(entityID, charEntity.Handle, retryAt)
 			s.logger.Error("Character snapshot rejected; save rescheduled", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
 			continue
 		}

@@ -208,7 +208,7 @@ func TestMeleePreparationAllocationFailuresAndMiss(t *testing.T) {
 			switch scenario {
 			case "unprepared":
 				target := f.creature(t, 3, 60, 50, false)
-				delete(f.service.targets, target)
+				f.service.activity.Release(target)
 			case "invalid_health":
 				target := f.creature(t, 3, 60, 50, false)
 				ecs.WithComponent(f.world, target, func(h *components.EntityHealth) { h.HHP = math.NaN() })
@@ -582,11 +582,11 @@ func TestMeleeBootstrapAndPreparationLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, shard.prepareCreatureCombatTarget(h))
-	require.Equal(t, types.EntityID(999), f.service.targets[h])
+	require.True(t, f.service.activity.IsPrepared(h, 999))
 	ecs.GetResource[ecs.DetachedEntities](f.world).AddDetachedEntity(999, h, time.Now().Add(time.Hour), time.Now())
-	require.Contains(t, f.service.targets, h)
+	require.True(t, f.service.activity.IsPrepared(h, 999))
 	f.world.Despawn(h)
-	require.NotContains(t, f.service.targets, h)
+	require.False(t, f.service.activity.IsPrepared(h, 999))
 	_, err = shard.spawnPlayerLocked(1000, 70, 50, func(w *ecs.World, h types.Handle) error {
 		ecs.AddComponent(w, h, components.EntityHealth{SHP: math.NaN(), HHP: 20})
 		return nil

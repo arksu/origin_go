@@ -1,7 +1,6 @@
 package game
 
 import (
-	"origin/internal/ecs/components"
 	"origin/internal/network"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
@@ -27,12 +26,12 @@ type PlayerTransferRequest struct {
 }
 
 type PlayerTransferSnapshot struct {
-	Client      *network.Client
-	SourceLayer int
-	SourceX     int
-	SourceY     int
-	Character   repository.Character
-	Health      components.EntityHealth
+	Client       *network.Client
+	SourceLayer  int
+	SourceX      int
+	SourceY      int
+	Character    repository.Character
+	RuntimeState playerRuntimeState
 
 	ParticipantStates map[string]any
 }

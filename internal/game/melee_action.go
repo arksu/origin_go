@@ -64,6 +64,7 @@ type MeleeExecutionService struct {
 	actor        types.Handle
 	actorID      types.EntityID
 	eventID      uint64
+	eventTime    int64
 }
 
 func NewMeleeExecutionService(w *ecs.World, equipment *CombatEquipmentResolver, sectors *SectorResolver,
@@ -113,7 +114,7 @@ func (s *MeleeExecutionService) eligible(hit SectorHit) (bool, bool, error) {
 		if err != nil {
 			return false, false, err
 		}
-		if s.creatures.targets[hit.Handle] != id || !s.creatures.stats.IsPlayerPrepared(id, hit.Handle) || !s.creatures.visual.IsPrepared(hit.Handle) {
+		if !s.creatures.activity.IsPrepared(hit.Handle, id) || !s.creatures.stats.IsPlayerPrepared(id, hit.Handle) || !s.creatures.visual.IsPrepared(hit.Handle) {
 			return false, false, ErrCreatureTargetUnprepared
 		}
 		return true, true, nil
@@ -148,6 +149,10 @@ func (s *MeleeExecutionService) prepare(actor types.Handle, actorID types.Entity
 		return ErrInvalidMeleeExecution
 	}
 	if _, _, err := s.creatures.readTarget(actor); err != nil {
+		return err
+	}
+	s.eventTime = s.creatures.time.UnixMs
+	if err := s.creatures.activity.ValidateEvent(actor, actorID, s.eventTime); err != nil {
 		return err
 	}
 	stats, exists := s.stats.Get(actor)
@@ -220,6 +225,8 @@ func (s *MeleeExecutionService) abort() {
 }
 
 func (s *MeleeExecutionService) commit() {
+	s.creatures.activity.RecordPreparedEvent(s.actor, s.eventTime)
+	s.creatures.detached.RequestRecheck(s.actor, s.creatures.time.Now)
 	for i := 0; i < s.count; i++ {
 		if s.commits[i].creature {
 			s.creatures.commitDamage(s.commits[i].soft)
@@ -246,6 +253,7 @@ func (s *MeleeExecutionService) reset() {
 	clear(s.hits[:s.count])
 	s.contacts = s.contacts[:0]
 	s.active, s.count, s.actor, s.actorID, s.eventID = false, 0, types.InvalidHandle, 0, 0
+	s.eventTime = 0
 }
 
 // MeleeActionHandler contains only definition parameters. Weapon capabilities,

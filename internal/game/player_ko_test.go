@@ -134,7 +134,7 @@ func TestLoginRuntimeHealthPrecedesDatabaseAndSurvivesFailedSpawn(t *testing.T) 
 	game := &Game{cfg: &config.Config{}, shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}
 	character := repository.Character{ID: 1, Shp: 20, Hhp: 20}
 	runtime := components.EntityHealth{SHP: .25, HHP: 19.5, KOUntilUnixMs: 61000, IsLying: true, LyingRevision: 3}
-	shard.offlineHealth.Store(types.EntityID(1), runtime)
+	shard.offlineHealth.Store(types.EntityID(1), playerRuntimeState{Health: runtime})
 	require.Equal(t, runtime, mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil))
 	clock.UnixMs = 61000
 	restored := mustResolveLoginHealth(t, game, world, character, characterattrs.Default(), nil)
@@ -174,7 +174,7 @@ func TestDetachedExpiryRestoresHealthBeforeSpawnAndFirstOwnerSnapshot(t *testing
 			require.False(t, world.Alive(oldPlayer))
 			cached, exists := shard.offlineHealth.Load(types.EntityID(10))
 			require.True(t, exists)
-			require.Equal(t, runtime, cached)
+			require.Equal(t, playerRuntimeState{Health: runtime}, cached)
 			clock.UnixMs = nowMs
 			character := repository.Character{ID: 10, Name: "KO restore", Shp: 20, Hhp: 20}
 			game := &Game{cfg: shard.cfg, logger: zap.NewNop(), shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}

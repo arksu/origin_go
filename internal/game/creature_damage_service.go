@@ -53,7 +53,8 @@ type CreatureDamageService struct {
 	stats      *ecs.EntityStatsUpdateState
 	visual     *ecs.CharacterVisualDirtyQueue
 	config     *ecs.EntityStatsRuntimeConfig
-	targets    map[types.Handle]types.EntityID
+	activity   *ecs.CombatActivityState
+	detached   *ecs.DetachedEntities
 }
 
 func NewCreatureDamageService(world *ecs.World, equipment *CombatEquipmentResolver) (*CreatureDamageService, error) {
@@ -65,7 +66,9 @@ func NewCreatureDamageService(world *ecs.World, equipment *CombatEquipmentResolv
 	stats, hasStats := ecs.TryGetResource[ecs.EntityStatsUpdateState](world)
 	visual, hasVisual := ecs.TryGetResource[ecs.CharacterVisualDirtyQueue](world)
 	config, hasConfig := ecs.TryGetResource[ecs.EntityStatsRuntimeConfig](world)
-	if !hasTime || !hasStats || !hasVisual || !hasConfig {
+	activity, hasActivity := ecs.TryGetResource[ecs.CombatActivityState](world)
+	detached, hasDetached := ecs.TryGetResource[ecs.DetachedEntities](world)
+	if !hasTime || !hasStats || !hasVisual || !hasConfig || !hasActivity || !hasDetached {
 		return nil, ErrInvalidCreatureDamageService
 	}
 	service := &CreatureDamageService{
@@ -73,7 +76,7 @@ func NewCreatureDamageService(world *ecs.World, equipment *CombatEquipmentResolv
 		health:     ecs.GetOrCreateStorage[components.EntityHealth](world),
 		identities: ecs.GetOrCreateStorage[ecs.ExternalID](world),
 		time:       clock, stats: stats, visual: visual, config: config,
-		targets: make(map[types.Handle]types.EntityID),
+		activity: activity, detached: detached,
 	}
 	// StopMovement uses an observer-aware mutation. Ensure even an absent
 	// Movement component cannot cause storage creation on the first KO.
@@ -94,14 +97,16 @@ func (service *CreatureDamageService) PrepareTarget(target types.Handle) error {
 	if err != nil {
 		return err
 	}
-	if previous, exists := service.targets[target]; exists && previous != identity {
+	if previous, exists := service.activity.Identity(target); exists && previous != identity {
 		return ErrInvalidCreatureTarget
 	}
 	if !service.stats.PreparePlayer(identity, target) {
 		return ErrInvalidCreatureTarget
 	}
 	service.visual.Prepare(target)
-	service.targets[target] = identity
+	if !service.activity.Prepare(target, identity) {
+		return ErrInvalidCreatureTarget
+	}
 	return nil
 }
 
@@ -160,16 +165,18 @@ func (service *CreatureDamageService) calculateDamage(target types.Handle, rawDa
 	if err != nil {
 		return 0, 0, err
 	}
-	preparedID, prepared := service.targets[target]
-	if !prepared || preparedID != identity || !service.stats.IsPlayerPrepared(identity, target) || !service.visual.IsPrepared(target) {
+	if !service.stats.IsPlayerPrepared(identity, target) || !service.visual.IsPrepared(target) {
 		return 0, 0, ErrCreatureTargetUnprepared
+	}
+	now := service.time.UnixMs
+	if err := service.activity.ValidateEvent(target, identity, now); err != nil {
+		if err == ecs.ErrCombatActivityUnprepared {
+			return 0, 0, ErrCreatureTargetUnprepared
+		}
+		return 0, 0, ErrInvalidCreatureDamageTime
 	}
 	if rawDamage < 0 || math.IsNaN(rawDamage) || math.IsInf(rawDamage, 0) {
 		return 0, 0, combat.ErrInvalidInput
-	}
-	now := service.time.UnixMs
-	if now < 0 {
-		return 0, 0, ErrInvalidCreatureDamageTime
 	}
 	armor, err := service.equipment.ResolveArmor(target)
 	if err != nil {
@@ -221,6 +228,8 @@ func (service *CreatureDamageService) commitDamage(commit creatureDamageCommit) 
 }
 
 func (service *CreatureDamageService) commitDamageResult(target types.Handle, identity types.EntityID, now int64, result *CreatureDamageResult) {
+	service.activity.RecordPreparedEvent(target, now)
+	service.detached.RequestRecheck(target, service.time.Now)
 	if result.Damage == 0 {
 		return
 	}
@@ -244,11 +253,11 @@ func (service *CreatureDamageService) commitDamageResult(target types.Handle, id
 }
 
 func (service *CreatureDamageService) releaseTarget(target types.Handle) {
-	identity, prepared := service.targets[target]
+	identity, prepared := service.activity.Identity(target)
 	if !prepared {
 		return
 	}
 	service.stats.ReleasePlayer(identity, target)
 	service.visual.Forget(target)
-	delete(service.targets, target)
+	service.activity.Release(target)
 }

@@ -424,6 +424,16 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 	if service.rejectCooldown(world, playerID, playerHandle, definition.ID) {
 		return
 	}
+	var activity *ecs.CombatActivityState
+	var eventTime int64
+	if definition.Combat != nil {
+		activity = ecs.GetResource[ecs.CombatActivityState](world)
+		eventTime = ecs.GetResource[ecs.TimeState](world).UnixMs
+		if err := activity.ValidateEvent(playerHandle, playerID, eventTime); err != nil {
+			service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_FAILED")
+			return
+		}
+	}
 	if definition.Execution.Ticks > 0 {
 		kind := components.CyclicActionTargetSelf
 		if definition.Target.Kind == actiondefs.TargetObject {
@@ -436,8 +446,16 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 			HasTargetPosition: definition.Target.Kind == actiondefs.TargetTile, TargetX: target.X, TargetY: target.Y,
 			CycleDurationTicks: uint32(definition.Execution.Ticks), CycleIndex: 1, StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
 		}, actionanimationdefs.Source{Kind: "menu", ID: definition.ID})
+		if activity != nil {
+			activity.RecordPreparedEvent(playerHandle, eventTime)
+			ecs.GetResource[ecs.DetachedEntities](world).RequestRecheck(playerHandle, ecs.GetResource[ecs.TimeState](world).Now)
+		}
 		service.SendState(world, playerID, playerHandle)
 		return
+	}
+	if activity != nil {
+		activity.RecordPreparedEvent(playerHandle, eventTime)
+		ecs.GetResource[ecs.DetachedEntities](world).RequestRecheck(playerHandle, ecs.GetResource[ecs.TimeState](world).Now)
 	}
 	service.executeHandler(world, playerID, playerHandle, definition, active, target)
 }
