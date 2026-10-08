@@ -71,9 +71,13 @@ func (s *LinkSystem) processIntents(w *ecs.World, linkState *ecs.LinkState) {
 				continue
 			}
 			intent.TargetHandle = targetHandle
-			linkState.IntentByPlayer[playerID] = intent
+			linkState.SetIntent(playerID, intent.TargetID, targetHandle, intent.CreatedAt)
 		}
 
+		if ecs.ObjectDestructionPending(w, targetHandle) {
+			linkState.ClearIntent(playerID)
+			continue
+		}
 		if s.lastCollidedWith(w, playerHandle) != intent.TargetID {
 			continue
 		}
@@ -103,6 +107,10 @@ func (s *LinkSystem) validateActiveLinks(w *ecs.World, linkState *ecs.LinkState)
 	s.toBreak = s.toBreak[:0]
 
 	for playerID, link := range linkState.LinkedByPlayer {
+		if ecs.ObjectDestructionPending(w, link.TargetHandle) {
+			s.toBreak = append(s.toBreak, breakCandidate{playerID: playerID, reason: ecs.LinkBreakDespawn})
+			continue
+		}
 		playerHandle := w.GetHandleByEntityID(playerID)
 		if playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 			s.toBreak = append(s.toBreak, breakCandidate{playerID: playerID, reason: ecs.LinkBreakDespawn})

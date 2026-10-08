@@ -13,6 +13,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/inventory"
 	"origin/internal/game/lifecycle"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
@@ -85,16 +86,35 @@ func (f *ObjectFactory) SetObjectDataUpdater(updater ObjectDataUpdater) {
 
 // Build creates an ECS entity from a raw database object using its definition.
 func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories []repository.Inventory) (types.Handle, error) {
+	return f.build(w, raw, inventories, true)
+}
+
+// BuildForChunk shares Build's parsing and restoration. Expired rows are
+// reported without synchronous deletion, so the chunk persistence workers can
+// delete them before the owning shard releases their raw cache entries.
+func (f *ObjectFactory) BuildForChunk(w *ecs.World, raw *repository.Object, inventories []repository.Inventory) (types.Handle, error) {
+	return f.build(w, raw, inventories, false)
+}
+
+func (f *ObjectFactory) build(w *ecs.World, raw *repository.Object, inventories []repository.Inventory, deleteExpired bool) (types.Handle, error) {
 	if raw.TypeID == constt.DroppedItemTypeID {
 		if len(inventories) > 0 {
-			return f.buildDroppedItemFromRecords(w, raw, inventories)
+			return f.buildDroppedItemFromRecords(w, raw, inventories, deleteExpired)
 		}
-		return f.buildDroppedItem(w, raw)
+		return f.buildDroppedItem(w, raw, deleteExpired)
 	}
 
 	def, ok := objectdefs.Global().GetByID(raw.TypeID)
 	if !ok {
 		return types.InvalidHandle, fmt.Errorf("%w: type_id=%d", ErrDefNotFound, raw.TypeID)
+	}
+	if def.Key != "player" {
+		if !raw.Hp.Valid {
+			return types.InvalidHandle, ErrObjectHealthMissing
+		}
+		if err := ValidateObjectHP(raw.Hp.Float64); err != nil {
+			return types.InvalidHandle, err
+		}
 	}
 	if raw.Quality < 0 {
 		return types.InvalidHandle, fmt.Errorf("object %d has invalid quality %d", raw.ID, raw.Quality)
@@ -120,13 +140,14 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 	}
 
 	h := SpawnEntityFromDef(w, def, DefSpawnParams{
-		EntityID:  types.EntityID(raw.ID),
-		X:         float64(raw.X),
-		Y:         float64(raw.Y),
-		Direction: headingDegreesToRadians(raw.Heading),
-		Quality:   uint32(raw.Quality),
-		Region:    raw.Region,
-		Layer:     raw.Layer,
+		EntityID:   types.EntityID(raw.ID),
+		X:          float64(raw.X),
+		Y:          float64(raw.Y),
+		Direction:  headingDegreesToRadians(raw.Heading),
+		Quality:    uint32(raw.Quality),
+		Region:     raw.Region,
+		Layer:      raw.Layer,
+		HPOverride: &raw.Hp.Float64,
 		// Restored state is applied in chunk activation after deserialization.
 		// Init hook runs there to avoid clobbering persisted behavior state.
 		InitReason: "",
@@ -134,7 +155,6 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 	if h == types.InvalidHandle {
 		return types.InvalidHandle, ErrEntitySpawnFailed
 	}
-
 	// Container object inventory is instantiated only when:
 	// - behavior includes "container"
 	// - definition has components.inventory
@@ -150,7 +170,7 @@ func (f *ObjectFactory) Build(w *ecs.World, raw *repository.Object, inventories 
 
 // buildDroppedItem creates an ECS entity for a dropped item loaded from DB.
 // Item data is loaded from the inventory table (kind=DroppedItem, owner_id=object.id).
-func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object) (types.Handle, error) {
+func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object, deleteExpired bool) (types.Handle, error) {
 	if !raw.Data.Valid {
 		return types.InvalidHandle, fmt.Errorf("dropped item %d has no data", raw.ID)
 	}
@@ -163,7 +183,13 @@ func (f *ObjectFactory) buildDroppedItem(w *ecs.World, raw *repository.Object) (
 	// Check if already expired
 	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 	if components.IsDroppedItemExpired(data.DropTime, nowRuntimeSeconds) {
-		return types.InvalidHandle, f.deleteExpiredDroppedItem(raw)
+		if deleteExpired {
+			return types.InvalidHandle, f.deleteExpiredDroppedItem(raw)
+		}
+		return types.InvalidHandle, ErrDroppedItemExpired
+	}
+	if !deleteExpired && w.EntityCount() >= w.EntityCapacity() {
+		return types.InvalidHandle, ecs.ErrEntityCapacityExhausted
 	}
 
 	// Load inventory from DB via injected loader
@@ -186,6 +212,7 @@ func (f *ObjectFactory) buildDroppedItemFromRecords(
 	w *ecs.World,
 	raw *repository.Object,
 	inventories []repository.Inventory,
+	deleteExpired bool,
 ) (types.Handle, error) {
 	if !raw.Data.Valid {
 		return types.InvalidHandle, fmt.Errorf("dropped item %d has no data", raw.ID)
@@ -198,7 +225,13 @@ func (f *ObjectFactory) buildDroppedItemFromRecords(
 
 	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 	if components.IsDroppedItemExpired(data.DropTime, nowRuntimeSeconds) {
-		return types.InvalidHandle, f.deleteExpiredDroppedItem(raw)
+		if deleteExpired {
+			return types.InvalidHandle, f.deleteExpiredDroppedItem(raw)
+		}
+		return types.InvalidHandle, ErrDroppedItemExpired
+	}
+	if !deleteExpired && w.EntityCount() >= w.EntityCapacity() {
+		return types.InvalidHandle, ecs.ErrEntityCapacityExhausted
 	}
 
 	var rootData *objectInventoryDataV1
@@ -554,25 +587,9 @@ func (f *ObjectFactory) HasPersistentInventories(typeID uint32, behaviors []stri
 	return false
 }
 
-type objectInventoryDataV1 struct {
-	Kind    uint8                 `json:"kind"`
-	Key     uint32                `json:"key"`
-	Width   uint8                 `json:"width,omitempty"`
-	Height  uint8                 `json:"height,omitempty"`
-	Version int                   `json:"v"`
-	Items   []objectInventoryItem `json:"items"`
-}
-
-type objectInventoryItem struct {
-	ItemID          uint64                 `json:"item_id"`
-	TypeID          uint32                 `json:"type_id"`
-	Quality         uint32                 `json:"quality"`
-	Quantity        uint32                 `json:"quantity"`
-	X               uint8                  `json:"x,omitempty"`
-	Y               uint8                  `json:"y,omitempty"`
-	EquipSlot       string                 `json:"equip_slot,omitempty"`
-	NestedInventory *objectInventoryDataV1 `json:"nested_inventory,omitempty"`
-}
+// Object and character persistence use the same complete inventory-tree format.
+type objectInventoryDataV1 = inventory.InventoryDataV1
+type objectInventoryItem = inventory.InventoryItemV1
 
 func (f *ObjectFactory) spawnObjectInventories(
 	w *ecs.World,
@@ -854,12 +871,24 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		return nil, ErrEntityNotFound
 	}
 
+	var hp sql.NullFloat64
+	var internalState components.ObjectInternalState
+	if info.TypeID != constt.DroppedItemTypeID {
+		state, hasState := ecs.GetComponent[components.ObjectInternalState](w, h)
+		if !hasState || !state.HasHP {
+			return nil, ErrObjectHealthMissing
+		}
+		if err := ValidateObjectHP(state.HP); err != nil {
+			return nil, err
+		}
+		hp = sql.NullFloat64{Float64: state.HP, Valid: true}
+		internalState = state
+	}
+
 	if info.TypeID == constt.BuildObjectTypeID {
-		if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h); hasState {
-			if buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey); ok && buildState != nil && buildState.IsEmpty() {
-				// Empty construction sites are transient intentions and must not persist across shutdown/restart.
-				return nil, nil
-			}
+		if buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey); ok && buildState != nil && buildState.IsEmpty() {
+			// Empty construction sites are transient intentions and must not persist across shutdown/restart.
+			return nil, nil
 		}
 	}
 
@@ -873,6 +902,7 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		ChunkX:  chunkRef.CurrentChunkX,
 		ChunkY:  chunkRef.CurrentChunkY,
 		Quality: clampQualityToInt16(info.Quality),
+		Hp:      hp,
 		Heading: sql.NullInt16{
 			Int16: radiansToHeadingDegrees(transform.Direction),
 			Valid: true,
@@ -882,21 +912,19 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 	// Serialize runtime object state for regular world objects.
 	// For dropped items object.data is reserved for dropped metadata (handled below).
 	if info.TypeID != constt.DroppedItemTypeID {
-		if internalState, hasState := ecs.GetComponent[components.ObjectInternalState](w, h); hasState {
-			stationState, hasStationState := ecs.GetComponent[components.StationState](w, h)
-			var stationSnapshot *components.StationState
-			if hasStationState {
-				stationSnapshot = &stationState
-			}
-			stateJSON, hasPayload, err := serializePersistentObjectState(internalState, stationSnapshot)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal object state for %d: %w", externalID.ID, err)
-			}
-			if hasPayload {
-				obj.Data = pqtype.NullRawMessage{RawMessage: stateJSON, Valid: true}
-			} else {
-				obj.Data = pqtype.NullRawMessage{}
-			}
+		stationState, hasStationState := ecs.GetComponent[components.StationState](w, h)
+		var stationSnapshot *components.StationState
+		if hasStationState {
+			stationSnapshot = &stationState
+		}
+		stateJSON, hasPayload, err := serializePersistentObjectState(internalState, stationSnapshot)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal object state for %d: %w", externalID.ID, err)
+		}
+		if hasPayload {
+			obj.Data = pqtype.NullRawMessage{RawMessage: stateJSON, Valid: true}
+		} else {
+			obj.Data = pqtype.NullRawMessage{}
 		}
 	}
 
@@ -1276,70 +1304,7 @@ func (f *ObjectFactory) serializeContainerData(
 	w *ecs.World,
 	container components.InventoryContainer,
 ) (objectInventoryDataV1, error) {
-	data := objectInventoryDataV1{
-		Kind:    uint8(container.Kind),
-		Key:     container.Key,
-		Width:   container.Width,
-		Height:  container.Height,
-		Version: int(container.Version),
-		Items:   make([]objectInventoryItem, 0, len(container.Items)),
-	}
-
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	for _, item := range container.Items {
-		dbItem := objectInventoryItem{
-			ItemID:    uint64(item.ItemID),
-			TypeID:    item.TypeID,
-			Quality:   item.Quality,
-			Quantity:  item.Quantity,
-			X:         item.X,
-			Y:         item.Y,
-			EquipSlot: equipSlotToString(item.EquipSlot),
-		}
-
-		if nestedHandle, found := refIndex.Lookup(constt.InventoryGrid, item.ItemID, 0); found && w.Alive(nestedHandle) {
-			nested, ok := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
-			if ok {
-				nestedData, err := f.serializeContainerDataLevel1(nested)
-				if err != nil {
-					return objectInventoryDataV1{}, err
-				}
-				dbItem.NestedInventory = &nestedData
-			}
-		}
-
-		data.Items = append(data.Items, dbItem)
-	}
-
-	return data, nil
-}
-
-// serializeContainerDataLevel1 serializes nested depth=1 only.
-func (f *ObjectFactory) serializeContainerDataLevel1(
-	container components.InventoryContainer,
-) (objectInventoryDataV1, error) {
-	data := objectInventoryDataV1{
-		Kind:    uint8(container.Kind),
-		Key:     container.Key,
-		Width:   container.Width,
-		Height:  container.Height,
-		Version: int(container.Version),
-		Items:   make([]objectInventoryItem, 0, len(container.Items)),
-	}
-
-	for _, item := range container.Items {
-		data.Items = append(data.Items, objectInventoryItem{
-			ItemID:    uint64(item.ItemID),
-			TypeID:    item.TypeID,
-			Quality:   item.Quality,
-			Quantity:  item.Quantity,
-			X:         item.X,
-			Y:         item.Y,
-			EquipSlot: equipSlotToString(item.EquipSlot),
-		})
-	}
-
-	return data, nil
+	return inventory.SerializeInventoryTree(w, container)
 }
 
 // getPlayerTypeID returns the TypeID for player entities

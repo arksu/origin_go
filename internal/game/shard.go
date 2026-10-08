@@ -12,6 +12,7 @@ import (
 	"origin/internal/ecs/systems"
 	"origin/internal/entityhealth"
 	"origin/internal/entitystats"
+	"origin/internal/itemdefs"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
@@ -60,19 +61,21 @@ type Shard struct {
 	characterSaver *systems.CharacterSaver
 
 	// Command queues for network/ECS separation
-	playerInbox     *network.PlayerCommandInbox
-	serverInbox     *network.ServerJobInbox
-	snapshotSender  *inventory.SnapshotSender
-	adminHandler    *ChatAdminCommandHandler
-	craftingService *CraftingService
-	buildService    *BuildService
-	liftService     *LiftService
-	actionService   *ActionService
-	contextActions  *ContextActionService
-	offlineHealth   sync.Map
-	pendingStandUps map[types.EntityID]*network.PlayerCommand
-	soundEvents     *SoundEventService
-	sectorResolver  *SectorResolver
+	playerInbox       *network.PlayerCommandInbox
+	serverInbox       *network.ServerJobInbox
+	snapshotSender    *inventory.SnapshotSender
+	adminHandler      *ChatAdminCommandHandler
+	craftingService   *CraftingService
+	buildService      *BuildService
+	liftService       *LiftService
+	actionService     *ActionService
+	contextActions    *ContextActionService
+	offlineHealth     sync.Map
+	pendingStandUps   map[types.EntityID]*network.PlayerCommand
+	soundEvents       *SoundEventService
+	sectorResolver    *SectorResolver
+	objectDestruction *ObjectDestructionService
+	objectDamage      *ObjectDamageService
 
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
@@ -137,6 +140,30 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	worldObjectPersistence := world.NewDroppedItemPersisterDB(db, logger)
 	objectFactory.SetObjectDeleter(worldObjectPersistence)
 	objectFactory.SetObjectDataUpdater(worldObjectPersistence)
+	minX, minY, maxX, maxY := s.chunkManager.WorldBounds()
+	var destructionErr error
+	s.objectDestruction, destructionErr = NewObjectDestructionService(s.world, ObjectDestructionDependencies{
+		Chunks: s.chunkManager, Persister: worldObjectPersistence, IDs: entityIDManager,
+		Items: itemdefs.Global(), WithWorldRead: s.WithWorldRead, Quarantine: s.quarantineDestroyedObject,
+		MinX: minX, MinY: minY, MaxX: maxX, MaxY: maxY, Region: cfg.Game.Region, Logger: logger,
+	})
+	if destructionErr != nil {
+		logger.Fatal("Invalid object destruction service", zap.Error(destructionErr))
+	}
+	s.objectDamage, destructionErr = NewObjectDamageService(s.world, s.objectDestruction)
+	if destructionErr != nil {
+		logger.Fatal("Invalid object damage service", zap.Error(destructionErr))
+	}
+	// Admission preparation happens on spawn/setup component changes, never
+	// lazily in Apply. Inventory contents remain live reads at capture time.
+	prepareDamageTarget := func(target types.Handle) {
+		if state := ecs.GetResource[ecs.ObjectDestructionState](s.world); !state.Prepared[target] && !state.Pending[target] {
+			_ = s.objectDamage.PrepareTarget(target)
+		}
+	}
+	s.world.AddComponentObserver(components.ObjectInternalStateComponentID, prepareDamageTarget)
+	s.world.AddComponentObserver(components.EntityInfoComponentID, prepareDamageTarget)
+	s.world.AddComponentObserver(components.ChunkRefComponentID, prepareDamageTarget)
 	// Create vision system first so it can be passed to other systems
 	visionSystem := systems.NewVisionSystem(s.world, s.chunkManager, s.eventBus, enableVisionStats, logger)
 	burnerExhaustion := &burnerExhaustionHandler{
@@ -331,6 +358,9 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	s.world.AddExternalTiming("ShardLockWait", lockWait)
 
 	// Complete asynchronous loads on the shard thread before gameplay uses them.
+	if s.objectDestruction != nil {
+		s.objectDestruction.Update()
+	}
 	s.chunkManager.Update(ts.Delta)
 
 	s.world.Update(ts.Delta)
@@ -344,6 +374,12 @@ func (s *Shard) Update(ts ecs.TimeState) {
 func (s *Shard) Stop() {
 	s.mu.Lock()
 	s.state = ShardStateStopping
+	if s.objectDestruction != nil {
+		s.objectDestruction.StopAdmission()
+	}
+	s.mu.Unlock()
+	s.drainObjectDestruction()
+	s.mu.Lock()
 	if s.liftService != nil {
 		handles := ecs.NewQuery(s.world).
 			With(components.LiftCarryStateComponentID).
@@ -753,6 +789,10 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 		s.logger.Error("player_death object definition not found")
 		return
 	}
+	if def.HP <= 0 {
+		s.logger.Error("player_death object definition has invalid HP")
+		return
+	}
 
 	transform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)
 	chunkRef, hasChunkRef := ecs.GetComponent[components.ChunkRef](w, playerHandle)
@@ -795,7 +835,9 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 	ecs.RemoveComponent[components.EntityHealth](w, playerHandle)
 	ecs.RemoveComponent[components.LiftCarryState](w, playerHandle)
 
-	ecs.AddComponent(w, playerHandle, components.ObjectInternalState{IsDirty: true})
+	ecs.AddComponent(w, playerHandle, components.ObjectInternalState{
+		HP: float64(def.HP), HasHP: true, IsDirty: true,
+	})
 	ecs.MarkObjectBehaviorDirty(w, playerHandle)
 
 	if s.chunkManager != nil {

@@ -65,6 +65,9 @@ func (p *LiftCarryTransferParticipant) CaptureSource(
 		sourceShard.liftService.clearCarryStateForPlayer(sourceShard.world, req.PlayerID, playerHandle, false)
 		return nil, nil
 	}
+	if ecs.ObjectDestructionPending(sourceShard.world, objectHandle) {
+		return nil, ErrObjectDamageTargetDead
+	}
 
 	liftedMeta, hasLifted := ecs.GetComponent[components.LiftedObjectState](sourceShard.world, objectHandle)
 	if !hasLifted {

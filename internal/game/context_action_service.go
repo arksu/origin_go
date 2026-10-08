@@ -157,6 +157,9 @@ func (s *ContextActionService) ComputeActions(
 	targetID types.EntityID,
 	targetHandle types.Handle,
 ) []systems.ContextAction {
+	if ecs.ObjectDestructionPending(w, targetHandle) {
+		return nil
+	}
 	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
 
 	actions := make([]systems.ContextAction, 0, 4)
@@ -234,6 +237,9 @@ func (s *ContextActionService) ExecuteAction(
 	targetHandle types.Handle,
 	actionID string,
 ) bool {
+	if ecs.ObjectDestructionPending(w, targetHandle) {
+		return false
+	}
 	if s.RequiresItemMutation(w, playerHandle, targetHandle, actionID) && playerstate.ItemsLocked(w, playerHandle) {
 		s.sendMiniAlert(playerID, netproto.AlertSeverity_ALERT_SEVERITY_WARNING, playerstate.ItemsLockedReason)
 		return true
@@ -294,6 +300,9 @@ func (s *ContextActionService) ExecuteAction(
 }
 
 func (s *ContextActionService) behaviorOrder(targetHandle types.Handle, w *ecs.World) []string {
+	if ecs.ObjectDestructionPending(w, targetHandle) {
+		return nil
+	}
 	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
 	if !hasInfo {
 		return nil
@@ -403,6 +412,9 @@ func (s *ContextActionService) handleCyclicCycleComplete(
 	playerHandle types.Handle,
 	action components.ActiveCyclicAction,
 ) contracts.BehaviorCycleDecision {
+	if action.TargetKind == components.CyclicActionTargetObject && ecs.ObjectDestructionOwnerPending(w, action.TargetID) {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
 	if (action.MutatesItems || action.TargetKind == components.CyclicActionTargetObject) && playerstate.IsIncapacitated(w, playerHandle) {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
@@ -454,6 +466,9 @@ func (s *ContextActionService) isActiveCyclicActionStillValid(
 	action components.ActiveCyclicAction,
 ) bool {
 	if w == nil {
+		return false
+	}
+	if action.TargetKind == components.CyclicActionTargetObject && ecs.ObjectDestructionOwnerPending(w, action.TargetID) {
 		return false
 	}
 	if (action.MutatesItems || action.TargetKind == components.CyclicActionTargetObject) && playerstate.IsIncapacitated(w, playerHandle) {

@@ -38,3 +38,19 @@ func (q *Queries) UpsertGlobalVarLong(ctx context.Context, arg UpsertGlobalVarLo
 	_, err := q.db.ExecContext(ctx, upsertGlobalVarLong, arg.Name, arg.ValueLong)
 	return err
 }
+
+const upsertGlobalVarLongMax = `-- name: UpsertGlobalVarLongMax :exec
+INSERT INTO global_var (name, value_long)
+VALUES ($1, $2)
+ON CONFLICT (name) DO UPDATE SET value_long = GREATEST(global_var.value_long, EXCLUDED.value_long)
+`
+
+type UpsertGlobalVarLongMaxParams struct {
+	Name      string        `json:"name"`
+	ValueLong sql.NullInt64 `json:"value_long"`
+}
+
+func (q *Queries) UpsertGlobalVarLongMax(ctx context.Context, arg UpsertGlobalVarLongMaxParams) error {
+	_, err := q.db.ExecContext(ctx, upsertGlobalVarLongMax, arg.Name, arg.ValueLong)
+	return err
+}

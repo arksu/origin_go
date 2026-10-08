@@ -261,6 +261,12 @@ func buildDroppedItemPersistenceRecords(entries []DroppedEntityPersistence) ([]D
 	return records, nil
 }
 
+// BuildDroppedItemPersistenceRecord owns the serialized object and inventory
+// payloads for a quantity-one drop, without reading or mutating ECS.
+func BuildDroppedItemPersistenceRecord(p SpawnDroppedEntityParams, nestedInvData *InventoryDataV1) (DroppedItemPersistenceRecord, error) {
+	return buildDroppedItemPersistenceRecord(p, nestedInvData)
+}
+
 func buildDroppedItemPersistenceRecord(
 	p SpawnDroppedEntityParams,
 	nestedInvData *InventoryDataV1,

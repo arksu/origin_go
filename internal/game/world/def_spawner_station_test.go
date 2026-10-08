@@ -13,7 +13,7 @@ import (
 
 func TestSpawnEntityFromDef_InitializesAndRestoresStationState(t *testing.T) {
 	world := ecs.NewWorldForTesting()
-	stationDef := &objectdefs.ObjectDef{
+	stationDef := &objectdefs.ObjectDef{HP: 100,
 		DefID: 1,
 		Key:   "campfire",
 		Name:  "Campfire",
@@ -34,6 +34,7 @@ func TestSpawnEntityFromDef_InitializesAndRestoresStationState(t *testing.T) {
 
 	freshHandle := SpawnEntityFromDef(world, stationDef, DefSpawnParams{EntityID: types.EntityID(1)})
 	require.NotEqual(t, types.InvalidHandle, freshHandle)
+	require.NoError(t, SetObjectHP(world, freshHandle, .49))
 	freshState, ok := ecs.GetComponent[components.StationState](world, freshHandle)
 	require.True(t, ok)
 	require.Equal(t, "unlit", freshState.CurrentState)
@@ -42,7 +43,7 @@ func TestSpawnEntityFromDef_InitializesAndRestoresStationState(t *testing.T) {
 	require.True(t, freshState.HasCapability("cooking"))
 	require.Len(t, freshState.AutonomousConsumption, 1)
 
-	nonStationHandle := SpawnEntityFromDef(world, &objectdefs.ObjectDef{DefID: 2, Key: "rock", Name: "Rock"}, DefSpawnParams{EntityID: types.EntityID(2)})
+	nonStationHandle := SpawnEntityFromDef(world, &objectdefs.ObjectDef{HP: 100, DefID: 2, Key: "rock", Name: "Rock"}, DefSpawnParams{EntityID: types.EntityID(2)})
 	_, hasStationState := ecs.GetComponent[components.StationState](world, nonStationHandle)
 	require.False(t, hasStationState)
 
@@ -63,4 +64,8 @@ func TestSpawnEntityFromDef_InitializesAndRestoresStationState(t *testing.T) {
 	require.Equal(t, uint32(2), restoredState.Resources["fuel"])
 	require.True(t, restoredState.HasCapability("cooking"))
 	require.Len(t, restoredState.AutonomousConsumption, 1)
+	internalState, ok := ecs.GetComponent[components.ObjectInternalState](world, freshHandle)
+	require.True(t, ok)
+	require.True(t, internalState.HasHP)
+	require.Equal(t, .49, internalState.HP)
 }

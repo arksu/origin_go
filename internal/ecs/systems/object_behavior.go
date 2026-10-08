@@ -158,6 +158,9 @@ func (r *objectBehaviorRunner) processHandle(w *ecs.World, h types.Handle) {
 	if h == types.InvalidHandle || !w.Alive(h) {
 		return
 	}
+	if ecs.ObjectDestructionPending(w, h) {
+		return
+	}
 
 	entityIDComp, hasExternalID := ecs.GetComponent[ecs.ExternalID](w, h)
 	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, h)

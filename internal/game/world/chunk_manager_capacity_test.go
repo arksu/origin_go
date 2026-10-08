@@ -1,6 +1,7 @@
 package world
 
 import (
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -38,8 +39,8 @@ func installCapacityObjectDefinitions(t *testing.T) {
 		itemdefs.SetGlobalForTesting(previousItems)
 	})
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{DefID: 9401, Key: "capacity-tree", IsStatic: true},
-		{DefID: 9402, Key: "capacity-container", IsStatic: true,
+		{HP: 100, DefID: 9401, Key: "capacity-tree", IsStatic: true},
+		{HP: 100, DefID: 9402, Key: "capacity-container", IsStatic: true,
 			Behaviors: map[string]json.RawMessage{"container": json.RawMessage(`{}`)}, BehaviorOrder: []string{"container"},
 			Components: &objectdefs.Components{Inventory: []objectdefs.InventoryDef{{Kind: "grid", W: 1, H: 1}}}},
 	}))
@@ -62,11 +63,11 @@ func TestChunkManagerCapacityDefersRawObjectsAndInventoriesUntilRetry(t *testing
 			coord := types.ChunkCoord{}
 			chunk := core.NewChunk(coord, 1, 0, 128)
 			chunk.SetState(types.ChunkStatePreloaded)
-			first := &repository.Object{ID: 9501, TypeID: 9401, Region: 1, X: 10, Y: 10}
-			box := &repository.Object{ID: 9502, TypeID: 9402, Region: 1, X: 20, Y: 10}
+			first := &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: 9501, TypeID: 9401, Region: 1, X: 10, Y: 10}
+			box := &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: 9502, TypeID: 9402, Region: 1, X: 20, Y: 10}
 			pending := []*repository.Object{box}
 			if full {
-				pending = append(pending, &repository.Object{ID: 9503, TypeID: 9401, Region: 1, X: 30, Y: 10})
+				pending = append(pending, &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: 9503, TypeID: 9401, Region: 1, X: 30, Y: 10})
 			}
 			chunk.SetRawObjects(append([]*repository.Object{first}, pending...))
 			inventoryData, err := json.Marshal(objectInventoryDataV1{
@@ -100,12 +101,12 @@ func TestChunkManagerCapacityDefersRawObjectsAndInventoriesUntilRetry(t *testing
 			require.Zero(t, logs.FilterMessage("failed to build object").Len())
 			require.Equal(t, 1, logs.FilterMessage("Chunk activation deferred: insufficient ECS entity capacity").Len())
 
-			// An already-live transfer cache entry must not become a duplicate when
-			// an earlier pending object causes the remaining tail to be deferred.
+			// The untouched tail can retain an already-live transfer cache entry
+			// until it is visited. Its ECS entity remains authoritative throughout.
 			chunk.SetRawObjects(append(append([]*repository.Object(nil), pending...), first))
 			chunk.SetRawDirtyObjectIDs(dirtyIDs)
 			require.NoError(t, cm.activateChunkInternal(coord, chunk))
-			require.Equal(t, pending, chunk.GetRawObjects())
+			require.Equal(t, append(append([]*repository.Object(nil), pending...), first), chunk.GetRawObjects())
 			require.Equal(t, firstHandle, cm.world.GetHandleByEntityID(9501))
 			require.Equal(t, rows, chunk.GetRawInventoriesByOwner()[9502])
 			require.Equal(t, 1, logs.FilterMessage("Chunk activation deferred: insufficient ECS entity capacity").Len())
@@ -153,7 +154,7 @@ func TestChunkManagerCapacityWarningsAreBoundedAcrossChunks(t *testing.T) {
 		chunk.SetState(types.ChunkStatePreloaded)
 		objects := make([]*repository.Object, 300)
 		for objectIndex := range objects {
-			objects[objectIndex] = &repository.Object{ID: int64(index*300 + objectIndex + 1), TypeID: 9401}
+			objects[objectIndex] = &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: int64(index*300 + objectIndex + 1), TypeID: 9401}
 		}
 		chunk.SetRawObjects(objects)
 		require.NoError(t, cm.activateChunkInternal(coord, chunk))
@@ -178,9 +179,9 @@ func TestChunkManagerCapacityHandlingKeepsUnrelatedBuildErrors(t *testing.T) {
 	cm, logs := newCapacityChunkManager(t, 1)
 	chunk := core.NewChunk(types.ChunkCoord{}, 1, 0, 128)
 	chunk.SetState(types.ChunkStatePreloaded)
-	invalid := &repository.Object{ID: 9701, TypeID: 9499}
-	deferred := &repository.Object{ID: 9703, TypeID: 9401}
-	chunk.SetRawObjects([]*repository.Object{invalid, {ID: 9702, TypeID: 9401}, deferred})
+	invalid := &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: 9701, TypeID: 9499}
+	deferred := &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: 9703, TypeID: 9401}
+	chunk.SetRawObjects([]*repository.Object{invalid, {Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: 9702, TypeID: 9401}, deferred})
 	require.NoError(t, cm.activateChunkInternal(chunk.Coord, chunk))
 	require.Equal(t, []*repository.Object{invalid, deferred}, chunk.GetRawObjects())
 	require.Equal(t, 1, logs.FilterMessage("failed to build object").Len())

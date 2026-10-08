@@ -46,7 +46,10 @@ func TransformObjectToDefInPlace(
 	newDef *objectdefs.ObjectDef,
 	opts TransformObjectInPlaceOptions,
 ) bool {
-	if w == nil || targetID == 0 || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) || newDef == nil {
+	if w == nil || targetID == 0 || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) || newDef == nil || newDef.Key == "player" || newDef.HP <= 0 {
+		return false
+	}
+	if ecs.ObjectDestructionPending(w, targetHandle) {
 		return false
 	}
 	logger := opts.Logger
@@ -56,6 +59,9 @@ func TransformObjectToDefInPlace(
 
 	targetInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
 	if !hasInfo {
+		return false
+	}
+	if !ecs.HasComponent[components.ObjectInternalState](w, targetHandle) {
 		return false
 	}
 	previousTypeID := targetInfo.TypeID
@@ -100,6 +106,11 @@ func TransformObjectToDefInPlace(
 	}
 
 	ecs.WithComponent(w, targetHandle, func(state *components.ObjectInternalState) {
+		if previousTypeID != uint32(newDef.DefID) {
+			// Only a real type transition creates the destination's full HP.
+			state.HP = float64(newDef.HP)
+			state.HasHP = true
+		}
 		for _, key := range opts.DeleteBehaviorStateKeys {
 			if key == "" {
 				continue

@@ -19,11 +19,20 @@ type DefSpawnParams struct {
 	InitReason       contracts.ObjectBehaviorInitReason
 	PreviousTypeID   uint32
 	BehaviorRegistry contracts.BehaviorRegistry
+	// HPOverride borrows saved HP for this call only; nil initializes from the definition.
+	HPOverride *float64
 }
 
 func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawnParams) types.Handle {
-	if w == nil || def == nil {
+	if w == nil || def == nil || (def.Key != "player" && def.HP <= 0) {
 		return types.InvalidHandle
+	}
+	hp := float64(def.HP)
+	if def.Key != "player" && params.HPOverride != nil {
+		hp = *params.HPOverride
+		if ValidateObjectHP(hp) != nil {
+			return types.InvalidHandle
+		}
 	}
 
 	handle := w.Spawn(params.EntityID, func(w *ecs.World, h types.Handle) {
@@ -51,9 +60,12 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 			resource = def.Resource
 		}
 		ecs.AddComponent(w, h, components.Appearance{Resource: resource})
-		ecs.AddComponent(w, h, components.ObjectInternalState{
-			IsDirty: true,
-		})
+		state := components.ObjectInternalState{IsDirty: true}
+		if def.Key != "player" {
+			state.HP = hp
+			state.HasHP = true
+		}
+		ecs.AddComponent(w, h, state)
 		if def.Station != nil {
 			ecs.AddComponent(w, h, newStationState(def.Station))
 		}

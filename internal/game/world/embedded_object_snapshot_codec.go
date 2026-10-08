@@ -48,11 +48,6 @@ func (f *ObjectFactory) CaptureWorldObjectSnapshot(w *ecs.World, h types.Handle)
 		return EmbeddedObjectSnapshotV1{}, fmt.Errorf("entity is not snapshot-persistable")
 	}
 
-	inventories, err := f.SerializeObjectInventories(w, h)
-	if err != nil {
-		return EmbeddedObjectSnapshotV1{}, err
-	}
-
 	snapshot := EmbeddedObjectSnapshotV1{
 		Version:  embeddedObjectSnapshotVersion,
 		EntityID: uint64(obj.ID),
@@ -60,6 +55,17 @@ func (f *ObjectFactory) CaptureWorldObjectSnapshot(w *ecs.World, h types.Handle)
 		Region:   obj.Region,
 		Layer:    obj.Layer,
 		Quality:  obj.Quality,
+	}
+	if obj.Hp.Valid {
+		hp := obj.Hp.Float64
+		snapshot.HP = &hp
+	}
+	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+		return EmbeddedObjectSnapshotV1{}, err
+	}
+	inventories, err := f.SerializeObjectInventories(w, h)
+	if err != nil {
+		return EmbeddedObjectSnapshotV1{}, err
 	}
 	if obj.Heading.Valid {
 		v := obj.Heading.Int16
@@ -87,6 +93,9 @@ func SerializeSnapshotToJSON(snapshot EmbeddedObjectSnapshotV1) ([]byte, error) 
 	if snapshot.Version == 0 {
 		snapshot.Version = embeddedObjectSnapshotVersion
 	}
+	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+		return nil, err
+	}
 	return json.Marshal(snapshot)
 }
 
@@ -101,7 +110,23 @@ func DeserializeSnapshotFromJSON(data []byte) (EmbeddedObjectSnapshotV1, error) 
 	if snapshot.Version != embeddedObjectSnapshotVersion {
 		return snapshot, fmt.Errorf("unsupported embedded object snapshot version %d", snapshot.Version)
 	}
+	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+		return EmbeddedObjectSnapshotV1{}, err
+	}
 	return snapshot, nil
+}
+
+func validateEmbeddedObjectHealth(snapshot EmbeddedObjectSnapshotV1) error {
+	if snapshot.TypeID == _const.DroppedItemTypeID {
+		if snapshot.HP != nil {
+			return ErrInvalidObjectHP
+		}
+		return nil
+	}
+	if snapshot.HP == nil {
+		return ErrObjectHealthMissing
+	}
+	return ValidateObjectHP(*snapshot.HP)
 }
 
 func (f *ObjectFactory) SpawnWorldObjectFromSnapshot(
@@ -117,6 +142,9 @@ func (f *ObjectFactory) SpawnWorldObjectFromSnapshot(
 	}
 	if snapshot.EntityID == 0 {
 		return types.InvalidHandle, fmt.Errorf("snapshot entity id is zero")
+	}
+	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+		return types.InvalidHandle, err
 	}
 	if opts.ChunkManager == nil {
 		return types.InvalidHandle, fmt.Errorf("nil chunk manager")
@@ -141,6 +169,9 @@ func (f *ObjectFactory) SpawnWorldObjectFromSnapshot(
 		ChunkX:  coord.X,
 		ChunkY:  coord.Y,
 		Quality: snapshot.Quality,
+	}
+	if snapshot.HP != nil {
+		raw.Hp = sql.NullFloat64{Float64: *snapshot.HP, Valid: true}
 	}
 	if snapshot.Heading != nil {
 		raw.Heading = sql.NullInt16{Int16: *snapshot.Heading, Valid: true}
@@ -182,10 +213,12 @@ func (f *ObjectFactory) SpawnWorldObjectFromSnapshot(
 			zap.Error(stateErr),
 		)
 	}
-	ecs.AddComponent(w, h, components.ObjectInternalState{
-		State:   restoredState,
-		IsDirty: true,
-	})
+	// Preserve restored HP, including zero; create state for dropped items too.
+	state, _ := ecs.GetComponent[components.ObjectInternalState](w, h)
+	state.State = restoredState
+	state.Flags = nil
+	state.IsDirty = true
+	ecs.AddComponent(w, h, state)
 	f.RestoreDerivedComponentsFromState(w, h)
 
 	if info, hasInfo := ecs.GetComponent[components.EntityInfo](w, h); hasInfo && len(info.Behaviors) > 0 && opts.BehaviorRegistry != nil {

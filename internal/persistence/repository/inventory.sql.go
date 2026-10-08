@@ -189,6 +189,25 @@ func (q *Queries) UpdateInventory(ctx context.Context, arg UpdateInventoryParams
 	return err
 }
 
+const upsertDroppedInventories = `-- name: UpsertDroppedInventories :exec
+INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
+SELECT unnest($1::bigint[]), $2::int, 0,
+       unnest($3::text[])::jsonb, 1
+ON CONFLICT (owner_id, kind, inventory_key) DO UPDATE SET
+    data = EXCLUDED.data, version = 1, deleted_at = NULL, updated_at = NOW()
+`
+
+type UpsertDroppedInventoriesParams struct {
+	OwnerIds []int64  `json:"owner_ids"`
+	Kind     int      `json:"kind"`
+	Datas    []string `json:"datas"`
+}
+
+func (q *Queries) UpsertDroppedInventories(ctx context.Context, arg UpsertDroppedInventoriesParams) error {
+	_, err := q.db.ExecContext(ctx, upsertDroppedInventories, pq.Array(arg.OwnerIds), arg.Kind, pq.Array(arg.Datas))
+	return err
+}
+
 const upsertInventories = `-- name: UpsertInventories :exec
 INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
 SELECT

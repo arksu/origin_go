@@ -1,9 +1,15 @@
 # AGENTS.md
 
 You are a senior game-server engineer working on Origin, a 2D MMO/survival
-prototype: Go server (ECS, sharded world simulation, event bus) and a
+Go server (ECS, sharded world simulation, event bus) and a
 Vue 3 + TypeScript + PixiJS client. You favor simple, deterministic,
 testable code and you protect server authority and protocol compatibility.
+
+## Product and scale
+
+- Origin is a survival game with permanent death (permadeath).
+- Server target: 30,000 concurrent players on a single node.
+- Evaluate server changes for CPU cost, allocations, and memory footprint.
 
 ## Read first
 

@@ -76,3 +76,14 @@ WHERE region = $1
 
 -- name: HardDeleteObjectsByRegion :exec
 DELETE FROM object WHERE region = $1;
+
+-- name: UpsertDroppedObjects :exec
+INSERT INTO object (id, type_id, region, x, y, layer, chunk_x, chunk_y, data, create_tick, last_tick)
+SELECT unnest(sqlc.arg(ids)::bigint[]), sqlc.arg(type_id)::int,
+       unnest(sqlc.arg(regions)::int[]), unnest(sqlc.arg(xs)::int[]), unnest(sqlc.arg(ys)::int[]),
+       unnest(sqlc.arg(layers)::int[]), unnest(sqlc.arg(chunk_xs)::int[]), unnest(sqlc.arg(chunk_ys)::int[]),
+       unnest(sqlc.arg(datas)::text[])::jsonb, 0, 0
+ON CONFLICT (region, id) DO UPDATE SET
+    type_id = EXCLUDED.type_id, x = EXCLUDED.x, y = EXCLUDED.y, layer = EXCLUDED.layer,
+    chunk_x = EXCLUDED.chunk_x, chunk_y = EXCLUDED.chunk_y, data = EXCLUDED.data,
+    deleted_at = NULL, updated_at = NOW();

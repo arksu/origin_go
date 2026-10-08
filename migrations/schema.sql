@@ -130,7 +130,8 @@ CREATE TABLE IF NOT EXISTS object
     heading     SMALLINT CHECK (heading >= 0 AND heading < 360),
 
     quality     SMALLINT CHECK (quality >= 0) not null default 10,
-    hp          INT CHECK (hp >= 0),
+    hp          DOUBLE PRECISION CONSTRAINT object_hp_check
+        CHECK (hp >= 0 AND hp < 'Infinity'::double precision),
 
     owner_id    BIGINT,                                 -- кто создал/владеет (для построек)
     data        JSONB,

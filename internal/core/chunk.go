@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -39,6 +40,18 @@ type Chunk struct {
 
 	// Failed builds remain raw even while other objects in the chunk are active.
 	rawObjects []*repository.Object
+	// Absolute positions survive prefix consumption without reindexing the tail.
+	rawObjectIndex map[types.EntityID]int
+	rawObjectBase  int
+	// The next retry starts beyond the last visited span, so retained failures
+	// cannot prevent later durable records from reaching activation.
+	rawActivationCursor int
+	// Freeze each cycle's upper bound: continuous appends must not postpone
+	// retries of the retained head indefinitely.
+	rawActivationEnd int
+	// SQL rows have unique IDs; preserve legacy handling of malformed duplicate
+	// cache inputs without making the ordinary insertion path scan the backlog.
+	rawDuplicateIDs map[types.EntityID]struct{}
 	// rawInventoriesByOwner includes inventories for failed builds awaiting a retry.
 	rawInventoriesByOwner map[types.EntityID][]repository.Inventory
 	// rawDirtyObjectIDs tracks pending writes for raw or restored objects.
@@ -47,8 +60,13 @@ type Chunk struct {
 	// deletedObjectIDs tracks runtime-despawned object ids that must be soft-deleted in DB
 	// on the next save, even though they no longer exist in the active ECS chunk handles.
 	deletedObjectIDs map[types.EntityID]struct{}
-	rawDataDirty     bool
-	spatial          *SpatialHashGrid
+	// A load may finish after a committed replacement was installed by the shard.
+	// Revision and removals fence that older read without discarding other rows.
+	cacheRevision       uint64
+	cacheLoadInFlight   bool
+	committedRemovedIDs map[types.EntityID]struct{}
+	rawDataDirty        bool
+	spatial             *SpatialHashGrid
 
 	mu sync.RWMutex
 }
@@ -68,8 +86,11 @@ func NewChunk(coord types.ChunkCoord, region int, layer int, chunkSize int) *Chu
 		isPassable:            make([]uint64, bitsetSize),
 		isSwimmable:           make([]uint64, bitsetSize),
 		rawInventoriesByOwner: make(map[types.EntityID][]repository.Inventory, 8),
+		rawObjectIndex:        make(map[types.EntityID]int, 8),
+		rawDuplicateIDs:       make(map[types.EntityID]struct{}),
 		rawDirtyObjectIDs:     make(map[types.EntityID]struct{}, 8),
 		deletedObjectIDs:      make(map[types.EntityID]struct{}, 8),
+		committedRemovedIDs:   make(map[types.EntityID]struct{}),
 		spatial:               NewSpatialHashGrid(cellSize),
 	}
 }
@@ -90,10 +111,13 @@ func (c *Chunk) GetState() types.ChunkState {
 func (c *Chunk) SetRawObjects(objects []*repository.Object) {
 	c.mu.Lock()
 	c.rawObjects = objects
+	c.rebuildRawObjectIndexLocked()
 	c.rawDirtyObjectIDs = make(map[types.EntityID]struct{}, 8)
 	c.mu.Unlock()
 }
 
+// GetRawObjects returns a read-only cache view. Durable removals can leave nil
+// slots until bounded activation consumes them; callers must skip those slots.
 func (c *Chunk) GetRawObjects() []*repository.Object {
 	c.mu.RLock()
 	objects := c.rawObjects
@@ -101,10 +125,256 @@ func (c *Chunk) GetRawObjects() []*repository.Object {
 	return objects
 }
 
+// GetRawActivationObjects returns the next suffix to visit and its cache offset.
+// Advancing through suffixes preserves fair retries without moving the backlog.
+// The caller holds the owning shard and chunk persistence gate.
+func (c *Chunk) GetRawActivationObjects() (int, []*repository.Object) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	end := min(c.rawActivationEnd, c.rawObjectBase+len(c.rawObjects))
+	if c.rawActivationCursor < c.rawObjectBase || c.rawActivationCursor >= end {
+		c.rawActivationCursor = c.rawObjectBase
+		end = c.rawObjectBase + len(c.rawObjects)
+		c.rawActivationEnd = end
+	}
+	start := c.rawActivationCursor - c.rawObjectBase
+	return start, c.rawObjects[start : end-c.rawObjectBase]
+}
+
+func (c *Chunk) rebuildRawObjectIndexLocked() {
+	clear(c.rawObjectIndex)
+	clear(c.rawDuplicateIDs)
+	c.rawObjectBase = 0
+	c.rawActivationCursor = 0
+	c.rawActivationEnd = len(c.rawObjects)
+	for i, object := range c.rawObjects {
+		if object == nil {
+			continue
+		}
+		id := types.EntityID(object.ID)
+		if _, exists := c.rawObjectIndex[id]; exists {
+			c.rawDuplicateIDs[id] = struct{}{}
+		} else {
+			c.rawObjectIndex[id] = i
+		}
+	}
+}
+
+func (c *Chunk) rawObjectPositionLocked(id types.EntityID) (int, bool) {
+	if _, duplicate := c.rawDuplicateIDs[id]; duplicate {
+		for i, object := range c.rawObjects {
+			if object != nil && types.EntityID(object.ID) == id {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	absolute, found := c.rawObjectIndex[id]
+	return absolute - c.rawObjectBase, found
+}
+
+// RetainRawActivationPrefix consumes a visited prefix. See RetainRawActivationRange.
+func (c *Chunk) RetainRawActivationPrefix(visited int, retained []*repository.Object) {
+	c.RetainRawActivationRange(0, visited, retained)
+}
+
+// RetainRawActivationRange consumes only a visited span. Failures are packed
+// backwards within that span; neither preceding records nor the unvisited tail
+// are copied or read. The next retry starts after the span, before revisiting
+// failures at the head. retained must be an ordered subset with owned storage.
+// The caller holds the owning shard and chunk persistence gate.
+func (c *Chunk) RetainRawActivationRange(start, visited int, retained []*repository.Object) {
+	if visited == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	retainedIndex := 0
+	end := start + visited
+	for _, object := range c.rawObjects[start:end] {
+		if retainedIndex < len(retained) && object == retained[retainedIndex] {
+			retainedIndex++
+			continue
+		}
+		if object != nil {
+			id := types.EntityID(object.ID)
+			if _, duplicate := c.rawDuplicateIDs[id]; !duplicate {
+				delete(c.rawObjectIndex, id)
+				delete(c.rawInventoriesByOwner, id)
+			}
+		}
+	}
+	consumed := visited - len(retained)
+	retainedStart := start + consumed
+	c.rawActivationCursor = c.rawObjectBase + end
+	if start > 0 && end == len(c.rawObjects) {
+		// At the tail, reclaim successful slots within this span immediately.
+		retainedStart = start
+		copy(c.rawObjects[start:end], retained)
+		clear(c.rawObjects[start+len(retained) : end])
+		c.rawObjects = c.rawObjects[:start+len(retained)]
+	} else {
+		copy(c.rawObjects[retainedStart:end], retained)
+		clear(c.rawObjects[start:retainedStart])
+	}
+	retainedAbsolute := c.rawObjectBase + retainedStart
+	if start == 0 {
+		c.rawObjects = c.rawObjects[consumed:]
+		c.rawObjectBase += consumed
+	}
+	for i, object := range retained {
+		c.rawObjectIndex[types.EntityID(object.ID)] = retainedAbsolute + i
+	}
+	if len(c.rawDuplicateIDs) > 0 {
+		// Duplicate IDs only arise in malformed/manual cache inputs. Keep their
+		// old semantics; production rows retain the bounded prefix path above.
+		c.rebuildRawObjectIndexLocked()
+		for id := range c.rawInventoriesByOwner {
+			if _, remains := c.rawObjectIndex[id]; !remains {
+				delete(c.rawInventoriesByOwner, id)
+			}
+		}
+	}
+	if len(c.rawObjects) == 0 {
+		c.rawObjects = nil
+		c.rawObjectBase = 0
+		c.rawActivationCursor = 0
+		c.rawActivationEnd = 0
+	}
+}
+
+// InsertCommittedObject installs already-durable data without creating dirty intent.
+// The caller transfers ownership of the object and inventory payloads.
+func (c *Chunk) InsertCommittedObject(obj *repository.Object, rows []repository.Inventory) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := types.EntityID(obj.ID)
+	if index, found := c.rawObjectPositionLocked(id); found {
+		c.rawObjects[index] = obj
+	} else {
+		c.rawObjectIndex[id] = c.rawObjectBase + len(c.rawObjects)
+		c.rawObjects = append(c.rawObjects, obj)
+	}
+	c.rawInventoriesByOwner[id] = rows
+	delete(c.rawDirtyObjectIDs, id)
+	delete(c.deletedObjectIDs, id)
+	delete(c.committedRemovedIDs, id)
+	c.cacheRevision++
+}
+
+// RemoveCommittedObject removes caches and pending delete intent after a durable delete.
+func (c *Chunk) RemoveCommittedObject(id types.EntityID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, duplicate := c.rawDuplicateIDs[id]; duplicate {
+		kept := c.rawObjects[:0]
+		for _, object := range c.rawObjects {
+			if object == nil || types.EntityID(object.ID) != id {
+				kept = append(kept, object)
+			}
+		}
+		clear(c.rawObjects[len(kept):])
+		c.rawObjects = kept
+		c.rebuildRawObjectIndexLocked()
+	} else if index, found := c.rawObjectPositionLocked(id); found {
+		c.rawObjects[index] = nil
+		delete(c.rawObjectIndex, id)
+		// One edge slot can be discarded immediately in constant time. Interior
+		// holes are consumed under activation's existing bounded visit budget.
+		if index == 0 {
+			c.rawObjects = c.rawObjects[1:]
+			c.rawObjectBase++
+		} else if index == len(c.rawObjects)-1 {
+			c.rawObjects = c.rawObjects[:index]
+		}
+		if len(c.rawObjects) == 0 {
+			c.rawObjects = nil
+			c.rawObjectBase = 0
+		}
+	}
+	delete(c.rawInventoriesByOwner, id)
+	delete(c.rawDirtyObjectIDs, id)
+	delete(c.deletedObjectIDs, id)
+	if c.cacheLoadInFlight {
+		c.committedRemovedIDs[id] = struct{}{}
+	}
+	c.cacheRevision++
+}
+
+// beginCacheLoad starts the one protected DB read allowed by the persistence
+// gate. Removal fences only need to live until that read completes or fails.
+func (c *Chunk) beginCacheLoad() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cacheLoadInFlight = true
+	clear(c.committedRemovedIDs)
+	return c.cacheRevision
+}
+
+func (c *Chunk) finishCacheLoad() {
+	c.mu.Lock()
+	c.cacheLoadInFlight = false
+	clear(c.committedRemovedIDs)
+	c.mu.Unlock()
+}
+
+// installLoadedObjects merges committed rows installed after the DB read began.
+func (c *Chunk) installLoadedObjects(revision uint64, objects []*repository.Object, inventories map[types.EntityID][]repository.Inventory) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if revision != c.cacheRevision {
+		current := make(map[types.EntityID]*repository.Object, len(c.rawObjects))
+		for _, object := range c.rawObjects {
+			if object != nil {
+				current[types.EntityID(object.ID)] = object
+			}
+		}
+		merged := make([]*repository.Object, 0, len(objects)+len(current))
+		for _, object := range objects {
+			id := types.EntityID(object.ID)
+			if _, removed := c.committedRemovedIDs[id]; removed {
+				delete(inventories, id)
+				continue
+			}
+			if newer, exists := current[id]; exists {
+				merged = append(merged, newer)
+				delete(current, id)
+			} else {
+				merged = append(merged, object)
+			}
+		}
+		// Preserve insertion order for rows absent from the old DB result.
+		for _, object := range c.rawObjects {
+			if object != nil {
+				if _, exists := current[types.EntityID(object.ID)]; exists {
+					merged = append(merged, object)
+				}
+			}
+		}
+		for id, rows := range c.rawInventoriesByOwner {
+			inventories[id] = rows
+		}
+		objects = merged
+	} else {
+		clear(c.committedRemovedIDs)
+	}
+	c.rawObjects = objects
+	c.rebuildRawObjectIndexLocked()
+	c.rawInventoriesByOwner = inventories
+	c.cacheLoadInFlight = false
+	clear(c.committedRemovedIDs)
+}
+
 func (c *Chunk) AddRawObject(obj *repository.Object) {
 	c.mu.Lock()
 	c.rawObjects = append(c.rawObjects, obj)
 	if obj != nil {
+		id := types.EntityID(obj.ID)
+		if _, exists := c.rawObjectIndex[id]; exists {
+			c.rawDuplicateIDs[id] = struct{}{}
+		} else {
+			c.rawObjectIndex[id] = c.rawObjectBase + len(c.rawObjects) - 1
+		}
 		c.rawDirtyObjectIDs[types.EntityID(obj.ID)] = struct{}{}
 		delete(c.deletedObjectIDs, types.EntityID(obj.ID))
 	}
@@ -128,6 +398,7 @@ func (c *Chunk) RemoveRawObjectByID(id types.EntityID) {
 		i--
 	}
 	delete(c.rawDirtyObjectIDs, id)
+	c.rebuildRawObjectIndexLocked()
 	c.rawDataDirty = true
 }
 
@@ -142,16 +413,10 @@ func (c *Chunk) UpsertRawObject(obj *repository.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	replaced := false
-	for i := range c.rawObjects {
-		if c.rawObjects[i] == nil || types.EntityID(c.rawObjects[i].ID) != id {
-			continue
-		}
-		c.rawObjects[i] = obj
-		replaced = true
-		break
-	}
-	if !replaced {
+	if index, found := c.rawObjectPositionLocked(id); found {
+		c.rawObjects[index] = obj
+	} else {
+		c.rawObjectIndex[id] = c.rawObjectBase + len(c.rawObjects)
 		c.rawObjects = append(c.rawObjects, obj)
 	}
 	c.rawDirtyObjectIDs[id] = struct{}{}
@@ -162,6 +427,11 @@ func (c *Chunk) UpsertRawObject(obj *repository.Object) {
 func (c *Chunk) ClearRawObjects() {
 	c.mu.Lock()
 	c.rawObjects = nil
+	clear(c.rawObjectIndex)
+	clear(c.rawDuplicateIDs)
+	c.rawObjectBase = 0
+	c.rawActivationCursor = 0
+	c.rawActivationEnd = 0
 	c.rawDirtyObjectIDs = make(map[types.EntityID]struct{}, 8)
 	c.mu.Unlock()
 }
@@ -459,13 +729,15 @@ func (c *Chunk) TileID(localTileX, localTileY, chunkSize int) (byte, bool) {
 // SaveToDB persists only changed chunk data to the database.
 // Tiles are saved only when tilesDirty is set.
 // Active objects and retained raw objects are serialized only when dirty.
+// Capture and write failures are returned together. Other valid objects are
+// still saved, and persistence intent is retained for retry after any failure.
 func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFactory interface {
 	Serialize(world *ecs.World, h types.Handle) (*repository.Object, error)
 	SerializeObjectInventories(world *ecs.World, h types.Handle) ([]repository.Inventory, error)
 	HasPersistentInventories(typeID uint32, behaviors []string) bool
-}, logger *zap.Logger) {
+}, logger *zap.Logger) error {
 	if db == nil {
-		return
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -486,7 +758,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 	deletedObjectIDs := make([]int64, 0, 8)
 	var dirtyHandles []types.Handle
 	activeObjectIDs := make(map[types.EntityID]struct{}, len(totalHandles))
-	saveFailed := false
+	var saveErr error
 
 	// Active entities are authoritative when a raw cache entry has the same ID.
 	for _, h := range totalHandles {
@@ -507,10 +779,8 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 
 		info, ok := ecs.GetComponent[components.EntityInfo](world, h)
 		if !ok {
-			if pendingRawWrite {
-				logger.Error("cannot save pending object without entity info", zap.Uint64("object_id", uint64(extID.ID)))
-				saveFailed = true
-			}
+			logger.Error("cannot save object without entity info", zap.Uint64("object_id", uint64(extID.ID)))
+			saveErr = errors.Join(saveErr, fmt.Errorf("object handle %v has no entity info", h))
 			continue
 		}
 
@@ -520,7 +790,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				zap.Uint32("type_id", info.TypeID),
 				zap.Error(err),
 			)
-			saveFailed = true
+			saveErr = errors.Join(saveErr, err)
 			continue
 		}
 		if obj == nil {
@@ -541,7 +811,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 					zap.Int64("object_id", obj.ID),
 					zap.Error(invErr),
 				)
-				saveFailed = true
+				saveErr = errors.Join(saveErr, invErr)
 			} else if len(inventories) > 0 {
 				inventoriesToSave = append(inventoriesToSave, inventories...)
 			}
@@ -599,6 +869,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				zap.Int("chunk_y", coord.Y),
 				zap.Error(err),
 			)
+			saveErr = errors.Join(saveErr, err)
 		}
 	}
 
@@ -615,13 +886,13 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 					zap.Any("coord", c.Coord),
 					zap.Error(err),
 				)
-				saveFailed = true
+				saveErr = errors.Join(saveErr, err)
 			}
 		}
 	}
 
 	// Save objects batch
-	// (saveFailed may already be set by delete pass above)
+	// Earlier capture or delete errors do not prevent saving other valid objects.
 	if len(objectsToSave) > 0 {
 		nonNilObjects := make([]*repository.Object, 0, len(objectsToSave))
 		for _, obj := range objectsToSave {
@@ -638,7 +909,7 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 					zap.Any("coord", c.Coord),
 					zap.Error(err),
 				)
-				saveFailed = true
+				saveErr = errors.Join(saveErr, err)
 			}
 		}
 	}
@@ -650,23 +921,19 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 				zap.Any("coord", c.Coord),
 				zap.Error(err),
 			)
-			saveFailed = true
+			saveErr = errors.Join(saveErr, err)
 		}
 	}
 
 	// Clear dirty flags only after successful save; otherwise keep for retry.
-	if !saveFailed {
+	if saveErr == nil {
 		for _, h := range dirtyHandles {
 			ecs.WithComponent(world, h, func(s *components.ObjectInternalState) {
 				s.IsDirty = false
 			})
 		}
-	}
-	if !saveFailed {
 		c.ClearRawDataDirty()
 		c.ClearRawDirtyObjectIDs()
-	}
-	if !saveFailed {
 		c.ClearDeletedObjectIDs()
 	}
 
@@ -680,11 +947,14 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		zap.Int("saved_inventories", len(inventoriesToSave)),
 		zap.Int("tiles_saved", savedTiles),
 	)
+	return saveErr
 }
 
 // LoadFromDB loads chunk data and objects from the database
 func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logger *zap.Logger) error {
 	c.SetState(types.ChunkStateLoading)
+	revision := c.beginCacheLoad()
+	defer c.finishCacheLoad()
 
 	if db == nil {
 		c.SetState(types.ChunkStatePreloaded)
@@ -722,7 +992,7 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 			zap.Int("chunk_y", c.Coord.Y),
 			zap.Error(err),
 		)
-		objects = nil
+		return fmt.Errorf("load objects for chunk %v: %w", c.Coord, err)
 	}
 	logger.Debug("loaded objects", zap.Any("coord", c.Coord), zap.Int("count", len(objects)))
 
@@ -732,7 +1002,6 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 		rawObjects[i] = &objects[i]
 		ownerIDs = append(ownerIDs, objects[i].ID)
 	}
-	c.SetRawObjects(rawObjects)
 
 	rawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory, len(ownerIDs))
 	if len(ownerIDs) > 0 {
@@ -743,6 +1012,7 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 				zap.Int("chunk_y", c.Coord.Y),
 				zap.Error(invErr),
 			)
+			return fmt.Errorf("load inventories for chunk %v: %w", c.Coord, invErr)
 		} else {
 			for _, inv := range inventories {
 				ownerID := types.EntityID(inv.OwnerID)
@@ -750,7 +1020,7 @@ func (c *Chunk) LoadFromDB(db *persistence.Postgres, region int, layer int, logg
 			}
 		}
 	}
-	c.SetRawInventoriesByOwner(rawInventoriesByOwner)
+	c.installLoadedObjects(revision, rawObjects, rawInventoriesByOwner)
 
 	c.SetState(types.ChunkStatePreloaded)
 	return nil
@@ -788,6 +1058,7 @@ func upsertObjectsBatch(ctx context.Context, db *persistence.Postgres, objects [
 	if len(objects) == 0 {
 		return nil
 	}
+	var saveErr error
 	for _, obj := range objects {
 		if obj == nil {
 			continue
@@ -809,10 +1080,10 @@ func upsertObjectsBatch(ctx context.Context, db *persistence.Postgres, objects [
 			CreateTick: obj.CreateTick,
 			LastTick:   obj.LastTick,
 		}); err != nil {
-			return err
+			saveErr = errors.Join(saveErr, err)
 		}
 	}
-	return nil
+	return saveErr
 }
 
 func loadInventoriesByOwners(ctx context.Context, db *persistence.Postgres, ownerIDs []int64) ([]repository.Inventory, error) {

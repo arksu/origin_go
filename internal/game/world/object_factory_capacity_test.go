@@ -1,6 +1,7 @@
 package world
 
 import (
+	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -18,7 +19,7 @@ import (
 func TestObjectFactoryCapacityPreservesWholeInventoryTree(t *testing.T) {
 	previousObjects, previousItems := objectdefs.Global(), itemdefs.Global()
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousObjects); itemdefs.SetGlobalForTesting(previousItems) })
-	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{HP: 100,
 		DefID: 701, Key: "capacity_box", Resource: "box", BehaviorOrder: []string{"container"},
 		Behaviors:  map[string]json.RawMessage{"container": json.RawMessage(`{}`)},
 		Components: &objectdefs.Components{Inventory: []objectdefs.InventoryDef{{Kind: "grid", W: 2, H: 2}}},
@@ -31,7 +32,7 @@ func TestObjectFactoryCapacityPreservesWholeInventoryTree(t *testing.T) {
 			for i := range occupied {
 				occupied[i] = w.Spawn(types.EntityID(i+1), nil)
 			}
-			raw := &repository.Object{ID: 100, TypeID: 701, Quality: 10}
+			raw := &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: 100, TypeID: 701, Quality: 10}
 			inventories := []repository.Inventory{{OwnerID: 100, Kind: int16(constt.InventoryGrid), Version: 1, Data: json.RawMessage(`{"width":2,"height":2,"items":[{"item_id":200,"type_id":900,"quantity":1,"nested_inventory":{"kind":0,"width":1,"height":1,"items":[]}}]}`)}}
 			factory := NewObjectFactory(nil)
 			handle, err := factory.Build(w, raw, inventories)

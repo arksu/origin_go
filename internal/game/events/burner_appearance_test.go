@@ -26,7 +26,7 @@ func TestBurnerBuildAndIgnitionProduceAppearanceUpsertPayloads(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			previous := objectdefs.Global()
 			t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
-			def := objectdefs.ObjectDef{
+			def := objectdefs.ObjectDef{HP: 100,
 				DefID: 16, Key: key, Resource: key + "/unlit", BehaviorOrder: []string{"burner"},
 				Station:      &objectdefs.StationDef{InitialState: "unlit"},
 				BurnerConfig: &objectdefs.BurnerBehaviorConfig{InitialFuel: 5, FuelCapacity: 5, TicksPerFuel: 10},

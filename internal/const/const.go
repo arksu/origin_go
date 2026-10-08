@@ -2,6 +2,9 @@ package _const
 
 import "time"
 
+// DestroyedObjectDropSpread bounds independent X/Y offsets of container loot.
+const DestroyedObjectDropSpread = 10
+
 const (
 	ChunkSize      = 128
 	CoordPerTile   = 12

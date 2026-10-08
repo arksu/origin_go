@@ -41,6 +41,9 @@ func (s *StationSystem) Update(w *ecs.World, dt float64) {
 	})
 
 	for _, handle := range s.handles {
+		if ecs.ObjectDestructionPending(w, handle) {
+			continue
+		}
 		changed := false
 		ecs.MutateComponent[components.StationState](w, handle, func(station *components.StationState) bool {
 			for _, rule := range station.AutonomousConsumption {

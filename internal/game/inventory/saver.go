@@ -3,28 +3,13 @@ package inventory
 import (
 	"encoding/json"
 	"fmt"
-	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
-	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
 )
-
-// findNestedContainer looks up a nested container via InventoryRefIndex (O(1))
-func findNestedContainer(world *ecs.World, itemID types.EntityID) *components.InventoryContainer {
-	handle, found := ecs.GetResource[ecs.InventoryRefIndex](world).Lookup(constt.InventoryGrid, itemID, 0)
-	if !found {
-		return nil
-	}
-	container, ok := ecs.GetComponent[components.InventoryContainer](world, handle)
-	if !ok {
-		return nil
-	}
-	return &container
-}
 
 type InventorySaver struct {
 	logger *zap.Logger
@@ -78,18 +63,18 @@ func (is *InventorySaver) SerializeInventoriesStrict(
 		return result, nil
 	}
 
+	var seenRoots inventoryTreeVisited[ecs.InventoryRefKey]
 	for _, link := range owner.Inventories {
+		if link.OwnerID != characterID {
+			continue // Nested links are embedded beneath their actual root item.
+		}
 		if !world.Alive(link.Handle) {
-			continue
+			return nil, ErrInvalidInventoryTree
 		}
-
 		container, hasContainer := ecs.GetComponent[components.InventoryContainer](world, link.Handle)
-		if !hasContainer {
-			continue
-		}
-
-		if container.OwnerID != characterID {
-			continue
+		if !hasContainer || container.OwnerID != characterID || container.Kind != link.Kind || container.Key != link.Key ||
+			!seenRoots.add(ecs.InventoryRefKey{Kind: link.Kind, OwnerID: link.OwnerID, Key: link.Key}) {
+			return nil, ErrInvalidInventoryTree
 		}
 
 		snapshot, err := is.serializeContainer(world, characterID, container)
@@ -107,35 +92,9 @@ func (is *InventorySaver) serializeContainer(
 	characterID types.EntityID,
 	container components.InventoryContainer,
 ) (systems.InventorySnapshot, error) {
-	items := make([]InventoryItemV1, 0, len(container.Items))
-
-	for _, invItem := range container.Items {
-		dbItem := InventoryItemV1{
-			ItemID:    uint64(invItem.ItemID),
-			TypeID:    invItem.TypeID,
-			Quality:   invItem.Quality,
-			Quantity:  invItem.Quantity,
-			X:         invItem.X,
-			Y:         invItem.Y,
-			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
-		}
-
-		nestedContainer := findNestedContainer(world, invItem.ItemID)
-		if nestedContainer != nil {
-			nestedData := is.serializeNestedInventory(world, *nestedContainer)
-			dbItem.NestedInventory = &nestedData
-		}
-
-		items = append(items, dbItem)
-	}
-
-	invData := InventoryDataV1{
-		Kind:    uint8(container.Kind),
-		Key:     container.Key,
-		Width:   container.Width,
-		Height:  container.Height,
-		Version: int(container.Version),
-		Items:   items,
+	invData, err := SerializeInventoryTree(world, container)
+	if err != nil {
+		return systems.InventorySnapshot{}, err
 	}
 
 	data, err := json.Marshal(invData)
@@ -156,39 +115,4 @@ func (is *InventorySaver) serializeContainer(
 		Data:         data,
 		Version:      int(container.Version),
 	}, nil
-}
-
-// serializeNestedInventory serializes a single-level nested container (no recursion beyond 1 level)
-func (is *InventorySaver) serializeNestedInventory(
-	world *ecs.World,
-	container components.InventoryContainer,
-) InventoryDataV1 {
-	items := make([]InventoryItemV1, 0, len(container.Items))
-
-	for _, invItem := range container.Items {
-		dbItem := InventoryItemV1{
-			ItemID:    uint64(invItem.ItemID),
-			TypeID:    invItem.TypeID,
-			Quality:   invItem.Quality,
-			Quantity:  invItem.Quantity,
-			X:         invItem.X,
-			Y:         invItem.Y,
-			EquipSlot: is.convertEquipSlot(invItem.EquipSlot),
-		}
-		// 1 level of nesting only — no recursive lookup here
-		items = append(items, dbItem)
-	}
-
-	return InventoryDataV1{
-		Kind:    uint8(container.Kind),
-		Key:     container.Key,
-		Width:   container.Width,
-		Height:  container.Height,
-		Version: int(container.Version),
-		Items:   items,
-	}
-}
-
-func (is *InventorySaver) convertEquipSlot(slot netproto.EquipSlot) string {
-	return EquipSlotToString(slot)
 }

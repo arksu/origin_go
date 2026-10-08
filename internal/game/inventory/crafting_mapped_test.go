@@ -26,6 +26,7 @@ func setMappedInventoryRegistry(t *testing.T) {
 		{DefID: 3, Key: "roasted_beef", Size: itemdefs.Size{W: 1, H: 1}},
 		{DefID: 4, Key: "roast_pork", Size: itemdefs.Size{W: 1, H: 1}},
 		{DefID: 5, Key: "roasted_meat", Size: itemdefs.Size{W: 1, H: 1}},
+		{DefID: 6, Key: "bag", Size: itemdefs.Size{W: 1, H: 1}, Container: &itemdefs.ContainerDef{Size: itemdefs.Size{W: 3, H: 1}}},
 	}))
 }
 
@@ -55,6 +56,9 @@ func TestMappedCraftInputOrderAndCommit(t *testing.T) {
 	for index, handle := range []types.Handle{rootFirst, rootSecond, nested, hand} {
 		addItemToContainer(world, handle, components.InvItem{ItemID: types.EntityID(600 + index), TypeID: 1, Quantity: 1, Quality: uint32(30 + index), W: 1, H: 1})
 	}
+	// Nested access requires the real bag item and its registered container.
+	addItemToContainer(world, rootFirst, components.InvItem{ItemID: 5000, TypeID: 6, Quantity: 1, Quality: 10, W: 1, H: 1, X: 2})
+	ecs.GetResource[ecs.InventoryRefIndex](world).Add(constt.InventoryGrid, 5000, 0, nested)
 	// Slice order wins over coordinates and item IDs, and one stack unit is consumed.
 	addItemToContainer(world, rootFirst, components.InvItem{ItemID: 100, TypeID: 2, Quantity: 2, Quality: 77, W: 1, H: 1, X: 1})
 	executor := NewInventoryExecutor(zap.NewNop(), nil, nil, nil, nil)

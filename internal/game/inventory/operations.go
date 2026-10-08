@@ -633,7 +633,19 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	nowRuntimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
 
 	// Serialize nested inventory before removing item (needed for DB persistence)
-	nestedInvData := serializeNestedForDrop(w, itemID)
+	nestedInvData, captureErr := serializeNestedForDrop(w, itemID)
+	if captureErr != nil {
+		return &OperationResult{
+			Success: false, ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message: "Failed to capture container contents",
+		}
+	}
+	if definition, known := itemdefs.Global().GetByID(int(srcItem.TypeID)); known && definition.Container != nil && nestedInvData == nil {
+		return &OperationResult{
+			Success: false, ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+			Message: "Container contents are unavailable",
+		}
+	}
 	if nestedInvData != nil && sourceQuantity != 1 {
 		return &OperationResult{
 			Success:   false,

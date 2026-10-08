@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"sync"
 	"sync/atomic"
@@ -109,13 +110,13 @@ func installChunkBatchDefinitions(t *testing.T) {
 		itemdefs.SetGlobalForTesting(previousItems)
 	})
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{
+		{HP: 100,
 			DefID: 700, Key: "batch_tree", IsStatic: true, Resource: "tree/young", BehaviorOrder: []string{"tree"},
 			Behaviors:  map[string]json.RawMessage{"tree": json.RawMessage(`{}`)},
 			Appearance: []objectdefs.Appearance{{ID: "mature", When: &objectdefs.AppearanceWhen{Flags: []string{"tree.stage2"}}, Resource: "tree/mature"}},
 			TreeConfig: &objectdefs.TreeBehaviorConfig{Stages: []objectdefs.TreeStageConfig{{StageDuration: 10}, {}}},
 		},
-		{
+		{HP: 100,
 			DefID: 701, Key: "batch_box", IsStatic: true, Resource: "box/empty", BehaviorOrder: []string{"container"},
 			Behaviors:  map[string]json.RawMessage{"container": json.RawMessage(`{}`)},
 			Appearance: []objectdefs.Appearance{{ID: "filled", When: &objectdefs.AppearanceWhen{Flags: []string{"container.has_items"}}, Resource: "box/filled"}},
@@ -131,7 +132,7 @@ func restoredChunkBatchObjects(firstID int, coord types.ChunkCoord, positionX, c
 	expected := make(map[uint64]string, count)
 	for index := range count {
 		id := int64(firstID + index)
-		object := &repository.Object{ID: id, TypeID: 700, X: positionX + index%20, Y: 180 + index/20, ChunkX: coord.X, ChunkY: coord.Y, Quality: 10}
+		object := &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true}, ID: id, TypeID: 700, X: positionX + index%20, Y: 180 + index/20, ChunkX: coord.X, ChunkY: coord.Y, Quality: 10}
 		if index%2 == 0 {
 			object.Data = pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(`{"v":1,"behaviors":{"tree":{"stage":2}}}`)}
 			expected[uint64(id)] = "tree/mature"
