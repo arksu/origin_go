@@ -134,6 +134,24 @@ async function main() {
   check(hash() === idle, 'Stopping must restore the standing pose')
   pass('64 skeletal walk poses / distance at 30, 60, 144 FPS / stationary clock / idle')
 
+  const gaitActor = (view as unknown as { actorHandle: ActorHandle }).actorHandle.actor
+  const gaitImages = new Set<number>()
+  for (const [mode, clip] of [[0, 'crawl'], [1, 'walk'], [2, 'run'], [3, 'fast_run']] as const) {
+    const stride = catalog.manifests[COMMONER_ASSET_ID]!.clips[clip]!.cycleDistanceTiles!
+    manager.updateObjectPosition(101, 0, 0, false, 3, 0, undefined, mode)
+    manager.updateObjectPosition(101, 0, 0, true, 3, stride * 12 * .25, undefined, mode)
+    const image = hash()
+    check(gaitActor.movementMode === mode && gaitActor.locomotionClip === clip, `Production movement mode must select ${clip}`)
+    check(gaitActor.cycleDistanceTiles === stride, `${clip} must use its own authored stride`)
+    check(view.localAudioSnapshot()?.clip === clip, `Footsteps must follow ${clip}`)
+    check(hash() === image, `Stationary clock must not advance ${clip}`)
+    gaitImages.add(image)
+  }
+  check(gaitImages.size === 4, 'Published movement modes must render four distinct poses')
+  manager.updateObjectPosition(101, 0, 0, false, 3, 0, undefined, 1)
+  check(hash() === idle, 'Changing movement mode must retain ordinary idle after stopping')
+  pass('Production crawl / walk / run / fast run / authored strides / matching footsteps / stationary clock')
+
   await view.setActorEquipment([{ slot: 'legs', visualKey: 'linen_wrap' }])
   check(hash() === idle, 'Items without a registered 3D visual must preserve the body')
   let rejectedDuplicateSlot = false

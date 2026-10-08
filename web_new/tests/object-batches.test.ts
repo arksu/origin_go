@@ -46,18 +46,19 @@ function setup(t: TestContext) {
     else carriers.set(entityId, carrierId)
   })
   const targets = t.mock.method(gameFacade, 'showMoveTargetMarker', () => {})
+  const endTargets = t.mock.method(gameFacade, 'endMoveTargetMarker', () => {})
   const clearTargets = t.mock.method(gameFacade, 'hideMoveTargetMarker', () => {})
   const errors = t.mock.method(console, 'error', () => {})
   t.mock.method(console, 'log', () => {})
   registerMessageHandlers()
   const begin = () => dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1, coordPerTile: 12, chunkSize: 4, tickRate: 10 } })
   begin()
-  return { store, carriers, spawns, names, carryUpdates, targets, clearTargets, errors, begin }
+  return { store, carriers, spawns, names, carryUpdates, targets, endTargets, clearTargets, errors, begin }
 }
 
-test('directional batches hide the local target and settle both local and remote players at the resolved stop', t => {
+test('directional batches end the local target and settle both local and remote players at the resolved stop', t => {
   t.mock.timers.enable({ apis: ['Date'], now: 10000 })
-  const { targets, clearTargets, errors } = setup(t)
+  const { targets, endTargets, clearTargets, errors } = setup(t)
   t.mock.method(timeSync, 'estimateServerNowMs', (now: number) => now)
   t.mock.method(timeSync, 'getInterpolationDelayMs', () => 100)
   dispatch({ objectSpawnBatch: { spawns: [spawn(17), spawn(18)] } })
@@ -70,7 +71,8 @@ test('directional batches hide the local target and settle both local and remote
     },
   })) } })
   send(6, true)
-  assert.equal(clearTargets.mock.callCount(), 1)
+  assert.equal(endTargets.mock.callCount(), 1)
+  assert.equal(clearTargets.mock.callCount(), 0, 'direction lets the existing ring finish fading')
   moveController.update()
   t.mock.timers.tick(100)
   send(7, false)
@@ -155,7 +157,7 @@ for (const scenario of [
   { name: 'carry drop with default sequence', carriedInitially: true, override: { moveSeq: 0 }, snaps: 1, ignored: 0 },
 ] as const) {
   test(`single and batch ${scenario.name} retain movement, store and carry semantics`, t => {
-    const { store, carriers, carryUpdates, targets, errors, begin } = setup(t)
+    const { store, carriers, carryUpdates, targets, clearTargets, errors, begin } = setup(t)
     const run = (batched: boolean) => {
       begin()
       dispatch({ objectSpawnBatch: { spawns: [spawn(17), spawn(18)] } })
@@ -164,6 +166,7 @@ for (const scenario of [
         movement: { position: { x: 75, y: -40, heading: 2.5 }, velocity: { x: 3, y: -4 },
           moveMode: proto.MovementMode.MOVE_MODE_WALK, isMoving: true, targetPosition: { x: 100, y: -90 } } }), move(18)]
       const carryOffset = carryUpdates.mock.callCount(), targetOffset = targets.mock.callCount()
+      const clearOffset = clearTargets.mock.callCount()
       if (batched) dispatch({ objectMoveBatch: { moves: entries } })
       else for (const entry of entries) dispatch({ objectMove: entry })
       return {
@@ -173,6 +176,7 @@ for (const scenario of [
         metrics: moveController.getEntityDebugMetrics(17),
         carryUpdates: carryUpdates.mock.calls.slice(carryOffset).map(call => call.arguments),
         targets: targets.mock.calls.slice(targetOffset).map(call => call.arguments),
+        clearTargets: clearTargets.mock.calls.slice(clearOffset).map(call => call.arguments),
       }
     }
     const singles = run(false), batch = run(true)
@@ -180,6 +184,8 @@ for (const scenario of [
     assert.equal(batch.metrics!.snapCount, scenario.snaps)
     assert.equal(batch.metrics!.ignoredOutOfOrder, scenario.ignored)
     assert.equal(batch.metrics!.lastMoveSeq, scenario.ignored ? 5 : 0)
+    assert.equal(batch.targets.length, 0, 'stale moves and snaps must not start a target ring')
+    assert.equal(batch.clearTargets.length, scenario.ignored ? 0 : 1)
     assert.equal(store.entities.get(17)!.movement!.position.x, 75, 'existing store update still follows rejected stale moves')
     assert.deepEqual(batch.carryUpdates.map(args => args[0]), [17, 18])
     if (scenario.name === 'stale movement') assert.equal(carriers.get(17), 99)
@@ -191,12 +197,12 @@ for (const scenario of [
 }
 
 test('a failing move entry leaves later moves and following messages usable', t => {
-  const { store, errors, clearTargets } = setup(t)
+  const { store, errors, endTargets } = setup(t)
   dispatch({ objectSpawnBatch: { spawns: [spawn(17), spawn(18)] } })
   const onObjectMove = moveController.onObjectMove.bind(moveController)
   t.mock.method(moveController, 'onObjectMove', (...args: Parameters<typeof onObjectMove>) => {
     if (args[0] === 90) throw new Error('Cannot apply movement')
-    onObjectMove(...args)
+    return onObjectMove(...args)
   })
   dispatch({ objectMoveBatch: { moves: [move(90), move(17), move(18)] } })
   assert.equal(errors.mock.callCount(), 1)
@@ -204,7 +210,7 @@ test('a failing move entry leaves later moves and following messages usable', t 
   assert.equal(moveController.getEntityDebugMetrics(18)!.lastMoveSeq, 5)
   assert.equal(store.entities.get(18)!.movement!.position.x, 50)
   dispatch({ objectMove: move(17, { moveSeq: 6, movement: { position: { x: 75, y: -10 } } }) })
-  assert.equal(clearTargets.mock.callCount(), 1)
+  assert.equal(endTargets.mock.callCount(), 1)
   assert.equal(store.entities.get(17)!.movement!.position.x, 75)
   dispatch({ objectMoveBatch: {} })
   assert.equal(errors.mock.callCount(), 1)

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { AnimationClip, Bone, Group, VectorKeyframeTrack } from 'three'
-import { DOMAdapter, Sprite, Texture } from 'pixi.js'
+import { Container, DOMAdapter, Graphics, Sprite, Texture } from 'pixi.js'
 import fixture from '../../tests/fixtures/action_animations/bindings.json'
 import { parseActionAnimationFile } from '../src/types/actionAnimationDefs'
 import { decodeActionAnimation, actionAnimationPhase, acceptActionAnimation } from '../src/types/actionAnimation'
@@ -12,11 +12,16 @@ import { proto } from '../src/network/proto/packets.js'
 import { useGameStore } from '../src/stores/gameStore'
 import { registerMessageHandlers } from '../src/network/handlers'
 import { messageDispatcher } from '../src/network/MessageDispatcher'
-import { gameFacade } from '../src/game/GameFacade'
+import { GameFacade, gameFacade } from '../src/game/GameFacade'
 import { ObjectView } from '../src/game/ObjectView'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import type { ActorRenderer } from '../src/game/actors/ActorRenderer'
 import { ACTOR_RENDER } from '../src/game/actors/config'
+import { NicknameManager } from '../src/game/NicknameManager'
+import { cameraController } from '../src/game/CameraController'
+import type { ObjectManager } from '../src/game/ObjectManager'
+import { Render } from '../src/game/Render'
+import { NICKNAME_Y_OFFSET_PX } from '../src/constants/nickname'
 
 const definitions = parseActionAnimationFile(fixture, 'shared fixture')
 const first = definitions[0]!, second = definitions[1]!
@@ -192,6 +197,17 @@ test('ObjectView forwards latest state after asynchronous readiness, cancellatio
   }
   const renderer = { create: () => ({ actor, sprite: new Sprite(Texture.EMPTY), immersionPx: 0 }), release: () => {} }
   const view = new ObjectView({ entityId: 17, typeId: 1, resourcePath: 'player', position: { x: 0, y: 0 }, size: { x: 4, y: 4 }, actionAnimation: state() }, renderer as unknown as ActorRenderer)
+  const parent = new Container()
+  parent.addChild(view.getContainer())
+  const nicknames = new NicknameManager(parent)
+  nicknames.show(17, 'Player', 0)
+  const manager = { getObject: () => view } as unknown as ObjectManager
+  cameraController.setZoom(1)
+  t.after(() => { nicknames.destroy(); cameraController.reset() })
+  nicknames.update(manager)
+  const nickname = parent.children[1]!
+  const nicknameY = -ACTOR_RENDER.anchorY + NICKNAME_Y_OFFSET_PX
+  assert.equal(nickname.y, nicknameY)
   view.setActionAnimation(null)
   resolveReady(); await actor.ready
   player.configure(catalog, first.actor)
@@ -203,12 +219,54 @@ test('ObjectView forwards latest state after asynchronous readiness, cancellatio
   assert.equal(player.samples[0]!.phase, .7)
   const bounds = view.computeScreenBounds()
   assert.ok(bounds.minY <= -second.frame.origin_y, 'bounds expand before GPU rendering')
+  view.getContainer().children[0]!.position.set(-second.frame.origin_x, -second.frame.origin_y)
+  const overlay = new Graphics().rect(-40, -400, 80, 20).fill(0xffffff)
+  view.getContainer().addChild(overlay)
+  nicknames.update(manager)
+  assert.equal(nickname.y, nicknameY, 'action-frame expansion and child overlays must not move the nickname')
+  view.setActionAnimation(null)
+  view.updateActionAnimation(1000, 11000)
+  view.updatePosition(12, 24)
+  cameraController.setZoom(.5)
+  nicknames.update(manager)
+  assert.equal(nickname.y, view.getContainer().y + nicknameY, 'movement follows the entity with a fixed vertical offset')
+  assert.equal(nickname.scale.y, 2)
+  view.getContainer().visible = false
+  nicknames.update(manager)
+  assert.equal(nickname.visible, false)
   view.destroy()
   const count = inputPhases.length
   view.setActionAnimation(state())
   view.updateActionAnimation(1000, 11000)
   assert.equal(inputPhases.length, count, 'destroyed view cannot consume a late result')
   assert.equal(ACTOR_RENDER.cellSize, baseFrame.width)
+})
+
+test('overhead screen coordinates follow rendered placement, zoom and pan and hide with the entity', () => {
+  const parent = new Container()
+  const container = new Container()
+  parent.addChild(container)
+  parent.position.set(320, 240)
+  parent.scale.set(2)
+  container.position.set(40, 60)
+  let present = true
+  const render: Render = Object.assign(Object.create(Render.prototype), {
+    objectsContainer: parent,
+    objectManager: { getObject: () => present ? { getContainer: () => container, getOverheadAnchorY: () => -116 } : undefined },
+  })
+  const facade = new GameFacade()
+  assert.equal(facade.getObjectOverheadScreenPosition(17), null)
+  Object.assign(facade, { render })
+  assert.deepEqual(facade.getObjectOverheadScreenPosition(17), { x: 400, y: 128 })
+  parent.position.set(100, 200)
+  parent.scale.set(.5)
+  assert.deepEqual(facade.getObjectOverheadScreenPosition(17), { x: 120, y: 172 })
+  container.visible = false
+  assert.equal(facade.getObjectOverheadScreenPosition(17), null)
+  container.visible = true
+  present = false
+  assert.equal(facade.getObjectOverheadScreenPosition(17), null)
+  parent.destroy({ children: true })
 })
 
 

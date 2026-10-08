@@ -71,13 +71,37 @@ def main():
         alignment = (rest[name] @ Vector((0, 1, 0))).rotation_difference(source_rest @ Vector((0, 1, 0)))
         offsets[name] = source_rest.inverted() @ alignment @ rest[name]
     samples = []
+    foot_heights = []
+    root_positions = []
     for frame in range(start, end + 1):
         scene.frame_set(frame)
         samples.append({name: (target.matrix_world.inverted() @ donor.matrix_world @
                               donor.pose.bones[donor_name].matrix).to_quaternion() @ offsets[name]
                         for name, donor_name in bone_map.items()})
+        root_positions.append(target.matrix_world.inverted() @ donor.matrix_world @ donor.pose.bones[bone_map[recipe['root_bone']]].head)
+        foot_heights.append(min((target.matrix_world.inverted() @ donor.matrix_world @ donor.pose.bones[bone_map[name]].head).z for name in recipe['ground_bones']))
+    clearances = None
+    if recipe.get('locomotion', False):
+        # Match the donor's stride and airborne height to the target leg proportions.
+        target_length = sum(target.data.bones[name].length for name in ('thigh.l', 'shin.l'))
+        donor_length = sum((target.matrix_world.inverted() @ donor.matrix_world @ donor.data.bones[bone_map[name]].tail -
+                            target.matrix_world.inverted() @ donor.matrix_world @ donor.data.bones[bone_map[name]].head).length
+                           for name in ('thigh.l', 'shin.l'))
+        scale = target_length / donor_length
+        baseline = min(foot_heights)
+        clearances = [(height - baseline) * scale for height in foot_heights]
+        displacement = root_positions[-1] - root_positions[0]
+        stride = Vector((displacement.x, displacement.y, 0)).length * scale
+        if stride <= 0:
+            raise ValueError('Locomotion donor must include forward root travel to measure its stride')
+        print('LOCOMOTION=' + json.dumps({'action': recipe['action'], 'cycleDistanceTiles': stride,
+                                          'maximumGroundClearance': max(clearances), 'legScale': scale}))
+    if recipe.get('loop', False):
+        samples[-1] = {name: rotation.copy() for name, rotation in samples[0].items()}
+        if clearances is not None:
+            clearances[-1] = clearances[0]
     action = bake_stationary_clip(target, recipe['action'], samples,
-                                  recipe['root_bone'], recipe['ground_bones'])
+                                  recipe['root_bone'], recipe['ground_bones'], clearances)
     target.animation_data.action = original_action
     if original_slot:
         target.animation_data.action_slot = original_slot

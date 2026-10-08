@@ -13,6 +13,7 @@ import type { EquippedVisual, EquipmentSlot } from '../../types/characterVisual'
 import type { ActionAnimationFrame } from '../../types/actionAnimationDefs'
 import { ActionAnimationPlayer, type ActionAnimationInput } from './ActionAnimationPlayer'
 import { ActorActionLayers } from './ActorActionLayers'
+import { GAIT_CLIPS, locomotionClip, type GaitClip, type LocomotionClip } from './locomotion'
 
 interface EquipmentInstance {
   root: Group
@@ -28,6 +29,7 @@ export class ActorInstance {
   private facingDirection = 3
   distanceTiles = 0
   walking = false
+  movementMode = 1
   stopProgress: number | undefined
   carrying = false
   knockedOut = false
@@ -62,7 +64,11 @@ export class ActorInstance {
   private walkPhase = 0
   private walkPhaseOffset = 0
   private stopStartWeight: number | undefined
-  private walkCycleDistance = 0
+  private readonly cycleDistances = new Map<LocomotionClip, number>()
+  private gait: GaitClip = 'walk'
+  private readonly gaitWeights: Record<GaitClip, number> = { crawl: 0, walk: 1, run: 0, fast_run: 0 }
+  private readonly gaitBlendFrom: Record<GaitClip, number> = { ...this.gaitWeights }
+  private gaitBlendStarted = 0
   private catalog: Readonly<Record<string, EquipmentDefinition>> = {}
   private equipmentReady = false
   private actionLayers: ActorActionLayers | null = null
@@ -121,7 +127,11 @@ export class ActorInstance {
     this.actionLayers = new ActorActionLayers(this.model, animations, actionClips)
     const walk = lease.asset.manifest.clips.walk
     if (!walk?.cycleDistanceTiles || walk.cycleDistanceTiles <= 0 || !Number.isFinite(walk.cycleDistanceTiles) || lease.asset.manifest.clips.carry_walk?.cycleDistanceTiles !== walk.cycleDistanceTiles) throw new Error('Invalid walk distance metadata')
-    this.walkCycleDistance = walk.cycleDistanceTiles
+    for (const name of [...GAIT_CLIPS, 'carry_walk'] as const) {
+      const clip = lease.asset.manifest.clips[name]
+      if (!clip || clip.playback !== 'distance' || !clip.loop || !clip.cycleDistanceTiles || !Number.isFinite(clip.cycleDistanceTiles) || clip.cycleDistanceTiles <= 0) throw new Error(`Invalid locomotion metadata: ${name}`)
+      this.cycleDistances.set(name, clip.cycleDistanceTiles)
+    }
     this.model.traverse((object) => {
       if (object.userData.lod === 1) object.visible = false
       if (object instanceof Bone) this.bones.set(object.name, object)
@@ -132,7 +142,7 @@ export class ActorInstance {
     this.armLayers = new ActorArmLayers(this.model, animations)
     this.root.add(this.model)
     this.mixer = new AnimationMixer(this.model)
-    for (const name of ['idle', 'walk', 'carry_idle', 'carry_walk']) {
+    for (const name of ['idle', ...GAIT_CLIPS, 'carry_idle', 'carry_walk']) {
       const clip = animations.find((candidate) => candidate.name === name)
       if (!clip) throw new Error(`Character animation missing: ${name}`)
       this.actions.set(name, this.mixer.clipAction(clip))
@@ -326,18 +336,35 @@ export class ActorInstance {
     return true
   }
 
+  private updateGait(now: number, bakedMode: boolean): void {
+    const next = locomotionClip(this.movementMode, false) as GaitClip
+    const progress = Math.max(0, Math.min(1, (now - this.gaitBlendStarted) / ACTOR_RENDER.locomotionBlendMs))
+    for (const clip of GAIT_CLIPS) this.gaitWeights[clip] = this.gaitBlendFrom[clip] + ((clip === this.gait ? 1 : 0) - this.gaitBlendFrom[clip]) * progress
+    if (next !== this.gait) {
+      for (const clip of GAIT_CLIPS) this.gaitBlendFrom[clip] = this.gaitWeights[clip]
+      this.gait = next
+      this.gaitBlendStarted = now
+      // Each gait owns its stride; do not carry a restart offset into another clip.
+      this.walkPhaseOffset = 0
+    }
+    if (bakedMode || !this.walking || this.knockedOut || this.carrying) {
+      for (const clip of GAIT_CLIPS) this.gaitWeights[clip] = this.gaitBlendFrom[clip] = clip === next ? 1 : 0
+    }
+  }
+
   updatePose(now = performance.now(), settings: ActorRenderSettings = DEFAULT_ACTOR_RENDER_SETTINGS): boolean {
     if (!this.mixer || this.destroyed) return false
     this.prepareActionAnimation(now)
     const carrying = this.carrying && !this.knockedOut
-    const continuousPhase = this.walking && !this.knockedOut ? ((this.distanceTiles / this.walkCycleDistance) % 1 + 1) % 1 : 0
+    this.updateGait(now, settings.mode === 'baked8')
+    const continuousPhase = this.walking && !this.knockedOut ? ((this.distanceTiles / this.cycleDistanceTiles) % 1 + 1) % 1 : 0
     const phase = settings.mode === 'baked8' ? Math.floor(continuousPhase * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples : continuousPhase
     const bakedMode = settings.mode === 'baked8'
     const holdingBakedWalkFrame = !this.knockedOut && bakedMode && this.stopProgress !== undefined && this.stopProgress < 1
     const visualWalking = !this.knockedOut && (holdingBakedWalkFrame || (this.walking && !(bakedMode && this.stopProgress === 1)))
     const renderedPhase = holdingBakedWalkFrame ? this.walkPhase : phase
     const facingChanged = this.updateFacing(now, settings)
-    const name = this.knockedOut ? 'knocked_out' : `${carrying ? 'carry_' : ''}${visualWalking ? 'walk' : 'idle'}`
+    const name = this.knockedOut ? 'knocked_out' : visualWalking ? this.locomotionClip : carrying ? 'carry_idle' : 'idle'
     const blendDuration = this.walkTarget === 0 ? ACTOR_RENDER.locomotionStopMs : ACTOR_RENDER.locomotionBlendMs
     const progress = Math.max(0, Math.min(1, (now - this.walkBlendStarted) / blendDuration))
     if (!bakedMode && this.stopStartWeight === undefined) {
@@ -383,7 +410,8 @@ export class ActorInstance {
     const frame = this.outputFrame
     const actionIdentity = `${this.actionPlayer.samples.map(sample => sample.clip).join(',')}/${frame.width}/${frame.height}/${frame.origin_x}/${frame.origin_y}/${[...this.actionPlayer.unboundEquipmentSlots].sort().join(',')}`
     const actionPose = this.actionPlayer.samples.map(sample => `${sample.clip}:${sample.phase}:${sample.weight}`).join(',')
-    const key = `${settings.mode}/${name}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}/${actionPose}/${actionIdentity}`
+    const gaitMix = `${this.gaitWeights.crawl},${this.gaitWeights.walk},${this.gaitWeights.run},${this.gaitWeights.fast_run}`
+    const key = `${settings.mode}/${name}/${gaitMix}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}/${actionPose}/${actionIdentity}`
     if (!facingChanged && key === this.lastPose && (this.knockedOut || carrying || !this.armLayers?.transitioning)) return false
     const state = `${settings.mode}/${name}/${this.hovered}/${actionIdentity}`
     if (state !== this.lastPoseState) this.immediateRender = true
@@ -409,14 +437,23 @@ export class ActorInstance {
     }
     for (const action of this.actions.values()) action.stop()
     const prefix = carrying ? 'carry_' : ''
-    for (const [clip, weight, sample] of [
-      [`${prefix}idle`, 1 - this.walkWeight, 0],
-      [`${prefix}walk`, this.walkWeight, this.walkPhase],
-    ] as const) {
+    const idleAction = this.actions.get(`${prefix}idle`)!
+    idleAction.play()
+    idleAction.paused = true
+    idleAction.setEffectiveWeight(1 - this.walkWeight)
+    idleAction.time = 0
+    for (const clip of carrying ? ['carry_walk'] as const : GAIT_CLIPS) {
+      const weight = this.walkWeight * (carrying ? 1 : this.gaitWeights[clip as GaitClip])
+      if (weight === 0) continue
       const action = this.actions.get(clip)!
       action.play()
       action.paused = true
       action.setEffectiveWeight(weight)
+      let sample = this.walkPhase
+      if (clip !== this.locomotionClip && visualWalking && !holdingBakedWalkFrame) {
+        sample = ((this.distanceTiles / this.cycleDistances.get(clip)! + this.walkPhaseOffset) % 1 + 1) % 1
+        if (bakedMode) sample = Math.floor(sample * ACTOR_RENDER.walkSamples + 1e-7) / ACTOR_RENDER.walkSamples
+      }
       action.time = sample * action.getClip().duration
     }
     this.mixer.update(0)
@@ -441,7 +478,8 @@ export class ActorInstance {
   get isReady(): boolean { return this.loaded && !this.error }
   get assetId(): string { return COMMONER_ASSET_ID }
   isActionAnimationSelected(key: string): boolean { return this.actionPlayer.isSelected(key) }
-  get cycleDistanceTiles(): number { return this.walkCycleDistance }
+  get locomotionClip(): LocomotionClip { return locomotionClip(this.movementMode, this.carrying && !this.knockedOut) }
+  get cycleDistanceTiles(): number { return this.cycleDistances.get(this.locomotionClip) ?? 0 }
   get needsImmediateRender(): boolean { return this.immediateRender }
   acknowledgeRender(): void { this.immediateRender = false }
   invalidateRender(): void { this.lastPose = ''; this.immediateRender = true }

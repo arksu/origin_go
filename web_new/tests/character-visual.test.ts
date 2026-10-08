@@ -11,7 +11,7 @@ import { useGameStore } from '../src/stores/gameStore'
 import { ActorInstance } from '../src/game/actors/ActorInstance'
 import { ActorArmLayers } from '../src/game/actors/ActorArmLayers'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
-import { COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
+import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
 import { actorYawForScreenAngle } from '../src/game/actors/facing'
 import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
 import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
@@ -197,7 +197,8 @@ function fixtureRig() {
   }
   const clip = (name: string, factor: number) => new AnimationClip(name, 1, Object.keys(bones).map((name, index) =>
     new VectorKeyframeTrack(`${name}.position`, [0, 1], [factor * (index + 1), 0, 0, factor * (index + 2), 0, 0])))
-  const animations = [clip('idle', 0), clip('walk', 1), clip('carry_idle', 2), clip('carry_walk', 3), clip('hold', 10)]
+  const animations = [clip('idle', 0), clip('walk', 1), clip('carry_idle', 2), clip('carry_walk', 3), clip('hold', 10),
+    clip('crawl', 4), clip('run', 5), clip('fast_run', 6)]
   return { scene, animations, bones }
 }
 
@@ -205,7 +206,8 @@ function gltf(scene: Group, animations: AnimationClip[] = []): ActorBundle {
   const manifest = {
     rigHash: 'fixture', sockets: { grip_l: 'grip_l', grip_r: 'grip_r', forearm_l: 'forearm_l', forearm_r: 'forearm_r' },
     clips: Object.fromEntries(animations.map(clip => [clip.name, { rigHash: 'fixture', duration: 1, loop: true,
-      playback: clip.name.endsWith('walk') ? 'distance' : 'time', cycleDistanceTiles: 1.677975879375,
+      playback: ['walk', 'carry_walk', 'crawl', 'run', 'fast_run'].includes(clip.name) ? 'distance' : 'time',
+      cycleDistanceTiles: clip.name === 'crawl' ? .8 : clip.name === 'run' ? 2.5 : clip.name === 'fast_run' ? 3 : 1.677975879375,
       channelMask: clip.tracks.map(track => track.name.split('.')[0]),
     }])),
   } as unknown as ActorManifest
@@ -277,6 +279,64 @@ test('distance-driven walk samples the 3D clip continuously', async () => {
   const second = actor.root.getObjectByName('pelvis')!.position.x
   assert.notEqual(second, first, 'a sub-eighth stride movement must update the skeletal pose')
   actor.destroy()
+})
+
+test('confirmed modes select distinct distance-driven gaits, with carry and KO precedence', async () => {
+  const { actor } = await fixtureActor()
+  const baked = { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode: 'baked8' as const }
+  try {
+    actor.walking = true
+    for (const [mode, clip, stride, factor] of [[0, 'crawl', .8, 4], [1, 'walk', 1.677975879375, 1], [2, 'run', 2.5, 5], [3, 'fast_run', 3, 6]] as const) {
+      actor.movementMode = mode
+      assert.equal(actor.locomotionClip, clip)
+      assert.equal(actor.cycleDistanceTiles, stride)
+      actor.distanceTiles = stride / 4
+      actor.updatePose(1000, baked)
+      assert.equal(actor.root.getObjectByName('pelvis')!.position.x, factor * 1.25)
+      const revision = actor.revision
+      actor.updatePose(2000, baked)
+      assert.equal(actor.revision, revision, 'time alone cannot advance a gait')
+    }
+    actor.carrying = true
+    actor.distanceTiles = actor.cycleDistanceTiles / 4
+    actor.updatePose(3000, baked)
+    assert.equal(actor.locomotionClip, 'carry_walk')
+    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 3 * 1.25)
+    actor.knockedOut = true
+    actor.updatePose(4000, baked)
+    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 0, 'KO suppresses every gait and carry')
+    actor.knockedOut = actor.carrying = actor.walking = false
+    actor.updatePose(5000, baked)
+    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 0, 'stopping restores idle')
+    for (const mode of [4, 99]) {
+      actor.movementMode = mode
+      assert.equal(actor.locomotionClip, 'walk', 'swim and unknown modes retain the existing walk presentation')
+    }
+  } finally { actor.destroy() }
+})
+
+test('gait switches and reversals blend from the displayed pose without changing distance', async () => {
+  const { actor } = await fixtureActor()
+  try {
+    actor.walking = true
+    actor.distanceTiles = actor.cycleDistanceTiles / 4
+    actor.updatePose(1000)
+    actor.updatePose(2000)
+    const pelvis = actor.root.getObjectByName('pelvis')!
+    const before = pelvis.position.x, distance = actor.distanceTiles
+    actor.movementMode = 2
+    actor.updatePose(2000)
+    assert.equal(pelvis.position.x, before, 'switch begins at the outgoing gait')
+    actor.updatePose(2000 + ACTOR_RENDER.locomotionBlendMs / 2)
+    assert.ok(pelvis.position.x > before, 'the run contributes during the transition')
+    const middle = pelvis.position.x
+    actor.movementMode = 0
+    actor.updatePose(2000 + ACTOR_RENDER.locomotionBlendMs / 2)
+    assert.equal(pelvis.position.x, middle, 'reversal starts from the current mixture')
+    actor.updatePose(3000)
+    assert.equal(actor.distanceTiles, distance)
+    assert.ok(Math.abs(pelvis.position.x - 4 * (1 + distance / .8)) < 1e-6)
+  } finally { actor.destroy() }
 })
 
 test('skeletal weights start in 500ms, stop in 300ms and reverse continuously', async () => {

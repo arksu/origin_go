@@ -22,13 +22,18 @@ Assets are loaded on demand and shared between actors, with reference-counted
 leases and eviction of unused assets when the 128 MiB estimated asset budget is
 exceeded. This estimate is not total browser or GPU memory.
 
-Clips: `idle`, `walk`, `carry_idle`, `carry_walk`. Eight sampled poses per walking
-cycle advance with actual client displacement, including final movement damping.
-One cycle currently covers 1.677975879375 tiles, read from the loaded walk
-metadata. Time alone does not advance a stopped actor.
+Locomotion clips: `idle`, `crawl`, `walk`, `run`, `fast_run`, `carry_idle`,
+`carry_walk`. Server movement modes select the corresponding gait; `crawl` is
+tired walking upright. Carrying retains its raised-arm `carry_walk` pose.
+Each gait advances with actual client displacement, including final movement
+damping, and reads its own cycle distance from metadata: crawl 1.206404019601927,
+walk/carry walk 1.677975879375, run 2.340608494800207, fast run 3.0774975003271843
+tiles. Hybrid rendering blends gait changes over the existing locomotion blend
+duration; the discrete review mode samples eight poses per cycle. Time alone
+does not advance a stopped actor. Footstep contacts select the same gait.
 Skinning follows each mesh’s `skinning` extra: the Meshy model uses linear
 skinning, matching Blender; the old dual-quaternion path remains supported.
-All four clips use a 0.21 m ankle-center width. Walking retains donor foot timing
+The original idle/walk/carry clips use a 0.21 m ankle-center width. Walking retains donor foot timing
 with 25% longer forward/backward travel; cycle distance scales with that travel.
 The universal carry pose does not depend on prop size. Carried world props remain
 2D and use the existing sorting; interleaved 3D hand/prop depth is not implemented.
@@ -91,7 +96,7 @@ retained legacy source/assets, not the new Meshy geometry.
 
 Run `npm run dev` from `web_new`, then open:
 
-- `/tests/hybrid-character.html`: eight directions, idle/walk/carry,
+- `/tests/hybrid-character.html`: eight directions, idle/crawl/walk/run/fast run/carry,
   real game barrel for comparison, 1/8/30 actors, context loss and live metrics.
 - `/tests/hybrid-integration.html`: actual ObjectManager/ObjectView integration,
   64 skeletal poses, distance invariance, picking, rejected legacy gear, carry relation,

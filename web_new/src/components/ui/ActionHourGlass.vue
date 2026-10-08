@@ -1,14 +1,43 @@
 <script lang="ts" setup>
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { gameFacade } from '@/game'
+import { NICKNAME_LABEL_HEIGHT, NICKNAME_Y_OFFSET_PX } from '@/constants/nickname'
 import { useGameStore } from '@/stores/gameStore'
 
-/**
- * песочные часы - индикатор прогресса текущего действия
- */
 const store = useGameStore()
+const position = ref<{ x: number; y: number } | null>(null)
+const NICKNAME_GAP_PX = 8
+let frameId: number | null = null
+
+function updatePosition(): void {
+  const anchor = store.playerEntityId === null ? null : gameFacade.getObjectOverheadScreenPosition(store.playerEntityId)
+  position.value = anchor ? {
+    x: anchor.x,
+    y: anchor.y + NICKNAME_Y_OFFSET_PX * gameFacade.getZoom() - NICKNAME_LABEL_HEIGHT - NICKNAME_GAP_PX,
+  } : null
+  frameId = requestAnimationFrame(updatePosition)
+}
+
+function stopPositionUpdates(): void {
+  if (frameId !== null) cancelAnimationFrame(frameId)
+  frameId = null
+  position.value = null
+}
+
+watch(() => store.actionProgress.total > 0, active => {
+  stopPositionUpdates()
+  if (active) updatePosition()
+}, { immediate: true })
+
+onBeforeUnmount(stopPositionUpdates)
 </script>
 
 <template>
-  <div v-if="store.actionProgress.total > 0" class="window-container">
+  <div
+    v-if="store.actionProgress.total > 0 && position"
+    class="window-container"
+    :style="{ left: `${position.x}px`, top: `${position.y}px` }"
+  >
     <!--  такой ублюдочный код - потому что надо сделать preload картинок  -->
     <!--  v-if тут не подходит. он будет создавать каждый тег каждый кадр и заметно мерцание пока грузится картинка  -->
     <img :style="{display: store.actionFrame===0 ? 'block' : 'none'}" alt="action"
@@ -67,12 +96,10 @@ const store = useGameStore()
 <style lang="scss" scoped>
 .window-container {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  margin-left: -16px;
-  margin-top: -120px;
+  transform: translate(-50%, -100%);
   width: 32px;
-  height: 36px;
+  height: 48px;
+  pointer-events: none;
   z-index: 100;
 }
 
@@ -87,7 +114,6 @@ const store = useGameStore()
   width: 120px;
   border: 2px solid #132d15;
   border-radius: 10px;
-  pointer-events: auto;
   display: inline-block;
   margin-left: -47px;
   margin-top: 39px;

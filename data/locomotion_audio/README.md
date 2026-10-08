@@ -38,6 +38,20 @@ At the next sample each landing foot moves back from Z `0.3493` to `0.3436` m
 and lowers from Y `0.1337` to `0.1237` m. Review these authored contacts again
 after changing source gait timing; stride publication is automatic.
 
+The Mixamo gait contacts use the landing/stance transition in the retargeted
+30 FPS source. For running, the forwardmost foot pose is still airborne, so
+contacts occur as the foot lowers into support. Each range includes the repeated
+loop endpoint; phase is `(frame - 1) / (frameCount - 1)`.
+
+| Clip | Source frames | Left contact | Right contact |
+| --- | --- | --- | --- |
+| `crawl` (Sad Walk) | 45 | frame 10, `9/44` | frame 32, `31/44` |
+| `run` (Slow Run) | 23 | frame 8, `7/22` | frame 19, `18/22` |
+| `fast_run` (Fast Run) | 17 | frame 6, `5/16` | frame 14, `13/16` |
+
+Original FBXs, import recipes and measured strides are recorded in
+[Mixamo references](../../art_source/character/male_commoner/references/mixamo/README.md).
+
 Publish with `tools/assets publish-action-animations`. Output is an immutable
 projection referenced by `asset-catalog.json.locomotionAudio`, switched together
 with sound and action definitions.

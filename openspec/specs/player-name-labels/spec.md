@@ -40,6 +40,11 @@ The client SHALL display a nickname label above the head of every entity whose s
 - **WHEN** an entity's visual is hidden by the client's culling system
 - **THEN** its nickname label is hidden too and never floats detached
 
+#### Scenario: Character starts or finishes an action
+- **WHEN** an action animation changes the character's output-frame bounds or its progress indicator appears or disappears
+- **THEN** the nickname keeps its fixed vertical offset from the character's ground position, using the ordinary standing-frame anchor
+- **AND** the action progress indicator follows the rendered character above the nickname with a constant screen-space gap across zoom levels
+
 ### Requirement: Late name and color updates are applied on respawn
 When a spawn arrives for an entity the client already renders with an unchanged visual state, the client SHALL still apply the spawn's name and role color to the existing entity's label instead of ignoring them.
 
@@ -59,7 +64,7 @@ The client SHALL remove an entity's nickname label when the entity despawns, and
 - **THEN** all nickname labels are cleared and rebuilt only from new spawns
 
 ### Requirement: Chat balloons stack above the nickname
-When a chat balloon and a nickname label are visible for the same entity at the same time, the balloon SHALL be positioned one label-height above the nickname so the two never overlap; the nickname keeps its anchor at the entity's visual top, lowered slightly into the visual by a client-side style constant.
+When a chat balloon and a nickname label are visible for the same entity at the same time, the balloon SHALL be positioned one screen-space label-height above the nickname so the two never overlap; the nickname keeps its anchor at the entity's visual top (the ordinary standing-frame top for characters), lowered slightly into the visual by a client-side style constant.
 
 #### Scenario: Player chats while labeled
 - **WHEN** a chat balloon is shown for an entity whose nickname label is visible

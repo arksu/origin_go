@@ -121,13 +121,10 @@ export class ChatBalloonManager {
       }
 
       const objectContainer = objectView.getContainer()
-      // Anchor the tail tip to the top of the object's visual bounds so the
-      // bubble adapts to tall characters and small props alike, then lift it
-      // above the nickname label when one is shown for this entity. Both the
-      // balloon and the label share the same 15px drop toward the head.
-      const boundsTop = objectContainer.getLocalBounds().top
+      // Share the stable character anchor with nicknames. Label height is in
+      // screen pixels because both overlays are counter-scaled with zoom.
       const nicknameOffset = this.nicknameManager?.has(entityId) ? NICKNAME_LABEL_HEIGHT : 0
-      balloon.container.position.set(objectContainer.x, objectContainer.y + boundsTop + NICKNAME_Y_OFFSET_PX - nicknameOffset)
+      balloon.container.position.set(objectContainer.x, objectContainer.y + objectView.getOverheadAnchorY() + NICKNAME_Y_OFFSET_PX - nicknameOffset * inverseScale)
       balloon.container.scale.set(inverseScale)
       // Mirror culling: a hidden object must not leave a floating balloon.
       balloon.container.visible = objectContainer.visible

@@ -102,6 +102,10 @@ export class GameFacade {
     return this.render?.worldToScreen(worldX, worldY) ?? { x: 0, y: 0 }
   }
 
+  getObjectOverheadScreenPosition(entityId: number): ScreenPoint | null {
+    return this.render?.getObjectOverheadScreenPosition(entityId) ?? null
+  }
+
   armBuildGhost(options: ArmBuildGhostOptions): void {
     this.render?.armBuildGhost(options)
   }
@@ -242,6 +246,10 @@ export class GameFacade {
 
   showMoveTargetMarker(worldX: number, worldY: number): void {
     this.render?.showMoveTargetMarker(worldX, worldY)
+  }
+
+  endMoveTargetMarker(): void {
+    this.render?.endMoveTargetMarker()
   }
 
   hideMoveTargetMarker(): void {

@@ -1,0 +1,40 @@
+{
+  "source": "../../source.blend",
+  "donor": "sad_walk.fbx",
+  "rig": "commoner_rig",
+  "action": "crawl",
+  "range": {
+    "start": 1,
+    "end": 45
+  },
+  "fps": 30,
+  "root_bone": "pelvis",
+  "ground_bones": [
+    "foot.l",
+    "foot.r"
+  ],
+  "bones": {
+    "pelvis": "mixamorig:Hips",
+    "spine": "mixamorig:Spine",
+    "chest": "mixamorig:Spine2",
+    "head": "mixamorig:Head",
+    "clavicle.l": "mixamorig:LeftShoulder",
+    "upper_arm.l": "mixamorig:LeftArm",
+    "forearm.l": "mixamorig:LeftForeArm",
+    "hand.l": "mixamorig:LeftHand",
+    "clavicle.r": "mixamorig:RightShoulder",
+    "upper_arm.r": "mixamorig:RightArm",
+    "forearm.r": "mixamorig:RightForeArm",
+    "hand.r": "mixamorig:RightHand",
+    "thigh.l": "mixamorig:LeftUpLeg",
+    "shin.l": "mixamorig:LeftLeg",
+    "foot.l": "mixamorig:LeftFoot",
+    "toes.l": "mixamorig:LeftToeBase",
+    "thigh.r": "mixamorig:RightUpLeg",
+    "shin.r": "mixamorig:RightLeg",
+    "foot.r": "mixamorig:RightFoot",
+    "toes.r": "mixamorig:RightToeBase"
+  },
+  "locomotion": true,
+  "loop": true
+}

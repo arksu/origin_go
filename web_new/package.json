@@ -10,6 +10,7 @@
     "type-check": "vue-tsc --build --force",
     "test:knockout": "node scripts/test-character-visual.mjs tests/knockout.test.ts",
     "test:movement-input": "node scripts/test-character-visual.mjs tests/movement-input.test.ts",
+    "test:move-marker": "node scripts/test-character-visual.mjs tests/move-marker.test.ts",
     "test:map-click": "node scripts/test-map-click.mjs",
     "test:chunks": "node scripts/test-chunks.mjs",
     "test:minimap": "node scripts/test-minimap.mjs && node --test tests/minimap-hud.test.mjs",

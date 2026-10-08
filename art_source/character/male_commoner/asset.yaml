@@ -163,6 +163,39 @@
       "fps": 30,
       "loop": false,
       "playback": "time"
+    },
+    "crawl": {
+      "action": "crawl",
+      "range": {
+        "start": 1,
+        "end": 45
+      },
+      "fps": 30,
+      "loop": true,
+      "playback": "distance",
+      "cycleDistanceTiles": 1.206404019601927
+    },
+    "run": {
+      "action": "run",
+      "range": {
+        "start": 1,
+        "end": 23
+      },
+      "fps": 30,
+      "loop": true,
+      "playback": "distance",
+      "cycleDistanceTiles": 2.340608494800207
+    },
+    "fast_run": {
+      "action": "fast_run",
+      "range": {
+        "start": 1,
+        "end": 17
+      },
+      "fps": 30,
+      "loop": true,
+      "playback": "distance",
+      "cycleDistanceTiles": 3.0774975003271843
     }
   },
   "bindings": {},
