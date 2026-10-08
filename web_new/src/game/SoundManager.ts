@@ -16,6 +16,8 @@ export interface SoundSample {
 }
 export interface PlaybackOptions {
   sourceId?: string | number
+  // Local presentation can tune a tile independently of its shared sound profile.
+  localVolume?: number
   streamEpoch?: number
   deadlineServerMs?: number
   // Local contacts are consumed when samples are unavailable, never queued.
@@ -117,7 +119,8 @@ export class SoundManager {
 
   play(key: string, gain = 1, options: PlaybackOptions = {}): boolean {
     const profile = this.profile(key)
-    if (!profile || !Number.isFinite(gain) || gain < 0 || gain > 1) {
+    if (!profile || !Number.isFinite(gain) || gain < 0 || gain > 1 ||
+      (options.localVolume !== undefined && (profile.mode !== 'local' || !Number.isFinite(options.localVolume) || options.localVolume < 0 || options.localVolume > 1))) {
       this.metrics.invalid++
       if (!profile && !this.missingKeys.has(key)) {
         this.missingKeys.add(key)
@@ -125,7 +128,7 @@ export class SoundManager {
       }
       return false
     }
-    if (gain === 0 || !this.settings().enabled) return false
+    if (gain === 0 || options.localVolume === 0 || !this.settings().enabled) return false
     for (const voice of this.voices.values()) {
       if (!voice.nativeStarted && !this.current(voice)) { this.metrics.stale++; this.release(voice) }
     }
@@ -216,7 +219,7 @@ export class SoundManager {
 
   private playbackVolume(voice: Voice): number {
     const settings = this.settings()
-    const volume = settings.masterVolume * settings.sfxVolume * voice.profile.volume * voice.gain
+    const volume = settings.masterVolume * settings.sfxVolume * (voice.options.localVolume ?? voice.profile.volume) * voice.gain
     return settings.enabled && Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0
   }
 

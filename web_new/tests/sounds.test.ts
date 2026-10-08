@@ -16,7 +16,7 @@ import { gameFacade } from '../src/game/GameFacade'
 import { worldAudioReceiver } from '../src/game/audioRuntime'
 import { timeSync } from '../src/network/TimeSync'
 import authoredSounds from '../../data/sounds/actions.json'
-import { locomotionSoundKey, validateFootstepSoundProfiles } from '../src/game/footstepConfig'
+import { FOOTSTEP_TILES, locomotionSoundKey, locomotionVolume, validateFootstepSoundProfiles } from '../src/game/footstepConfig'
 import {
   TILE_BROADLEAF_FOREST, TILE_CLAY, TILE_CONIFEROUS_FOREST, TILE_DEEP_WATER, TILE_DIRT,
   TILE_GRASS, TILE_MOUNTAIN, TILE_PLOWED, TILE_SHALLOW_WATER, TILE_STONE_PAVING, TILE_THICKET,
@@ -142,6 +142,32 @@ test('per-source voice cap and mute are honored independently of server selectio
   assert.equal(manager.play('chop', 1, { sourceId: 'other' }), true)
   settings.enabled = false
   assert.equal(manager.play('footstep'), false)
+})
+
+test('local volume overrides retain independent values after native play unlocks and user volume changes', () => {
+  const sample = new NativeLockedSample()
+  const settings = { enabled: true, masterVolume: .5, sfxVolume: 1 }
+  const manager = new SoundManager({ createSample: () => sample, settings: () => settings, serverNow: () => 1000 })
+  manager.configure({ footstep: local })
+  assert.equal(manager.play('footstep', 1, { sourceId: 1, localVolume: .8 }), true)
+  assert.equal(manager.play('footstep', .5, { sourceId: 2, localVolume: .2 }), true)
+  settings.masterVolume = .4
+  sample.emit('play', 1); sample.emit('play', 2)
+  assert.equal(sample.volumes.get(1), .4 * .8)
+  assert.equal(sample.volumes.get(2), .4 * .2 * .5)
+  assert.equal(manager.profile('footstep')!.volume, local.volume, 'A per-instance override must not mutate the shared profile')
+})
+
+test('local volume overrides reject invalid values and cannot alter world playback', () => {
+  const { manager } = playbackFixture()
+  for (const localVolume of [NaN, Infinity, -.1, 1.1]) {
+    assert.equal(manager.play('footstep', 1, { localVolume }), false)
+  }
+  assert.equal(manager.play('chop', 1, { localVolume: .2 }), false)
+  assert.equal(manager.metrics.invalid, 5)
+  assert.equal(manager.play('footstep', 1, { localVolume: 0 }), false)
+  assert.equal(manager.activeVoices, 0)
+  assert.equal(manager.play('footstep', 1, { localVolume: 1 }), true)
 })
 
 test('HTML5 native play locks do not lose per-ID volume, and reset guards a delayed native start', () => {
@@ -299,6 +325,61 @@ test('walk and carry-walk select shared tile sounds and use leather for all unas
       const expectedGain = localDistanceGain(registry[expectedKey as keyof typeof registry]!, 1, snapshot.position.x, entityId === 1)
       assert.equal(played[index]!.gain, expectedGain)
     }
+  }
+})
+
+test('tiles sharing a recording can set independent volumes without changing attenuation or gait timing', () => {
+  const tiles = { ...FOOTSTEP_TILES,
+    [TILE_DIRT]: { soundKey: 'footstep_gravel', volume: .15 },
+    [TILE_CLAY]: { soundKey: 'footstep_gravel', volume: .7 },
+    [TILE_PLOWED]: { soundKey: 'footstep_gravel', volume: 0 },
+    [TILE_GRASS]: { volume: .2 },
+  }
+  for (const clip of ['walk', 'carry_walk']) for (const entityId of [1, 2]) {
+    const sample = new FakeSample()
+    const settings = { enabled: true, masterVolume: .8, sfxVolume: .5 }
+    const manager = new SoundManager({ createSample: () => sample, settings: () => settings, serverNow: () => 1000 })
+    manager.configure(registry)
+    const controller = new LocalAudioController(manager, tiles)
+    const binding = { actor: 'character/male_commoner', clip, cycle_distance_tiles: 1,
+      contacts: [{ id: 'right', phase: .4, sound_key: 'footstep' }, { id: 'left', phase: .9, sound_key: 'footstep' }] }
+    controller.configure([binding], {})
+    controller.setListener(1, 1); controller.setListenerPosition({ x: 0, y: 0 })
+    const snapshot: LocalAudioSnapshot = { ...localFixture().snapshot, entityId, clip, position: { x: entityId === 1 ? 0 : 80, y: 0 } }
+    controller.update(snapshot, 0, 1000)
+    const cases: Array<[number | undefined, number]> = [
+      [TILE_DIRT, .15], [TILE_CLAY, .7], [TILE_PLOWED, 0], [TILE_GRASS, .2], [254, local.volume], [undefined, local.volume],
+    ]
+    for (const [index, [tileType, volume]] of cases.entries()) {
+      manager.reset()
+      const idsBefore = sample.ids
+      snapshot.tileType = tileType
+      controller.update(snapshot, index * 100 + 50, 1000)
+      assert.equal(sample.ids, idsBefore, 'Changing tile volume must not create a contact')
+      snapshot.distanceTiles = (index + 1) * .5
+      controller.update(snapshot, (index + 1) * 100, 1000)
+      assert.equal(sample.ids, idsBefore + (volume === 0 ? 0 : 1))
+      if (volume > 0) {
+        const soundKey = locomotionSoundKey('footstep', tileType, tiles)
+        const gain = localDistanceGain(manager.profile(soundKey)!, 1, snapshot.position.x, entityId === 1)
+        assert.equal(sample.volumes.get(sample.ids), settings.masterVolume * settings.sfxVolume * volume * gain)
+      }
+    }
+  }
+  assert.equal(locomotionSoundKey('footstep', TILE_GRASS, tiles), 'footstep')
+  assert.equal(locomotionVolume('exp_gain', TILE_DIRT, tiles), undefined)
+})
+
+test('tile volume configuration fails before activation for invalid values', () => {
+  const profiles = Object.fromEntries(authoredProfiles.map(profile => [profile.key, profile]))
+  for (const volume of [NaN, Infinity, -.1, 1.1]) {
+    const tiles = { ...FOOTSTEP_TILES, [TILE_DIRT]: { volume } }
+    assert.throws(() => validateFootstepSoundProfiles(profiles, tiles), /tile 60 volume/)
+    assert.throws(() => new LocalAudioController(new SoundManager(), tiles), /tile 60 volume/)
+  }
+  assert.throws(() => validateFootstepSoundProfiles(profiles, { [-1]: { volume: .5 } }), /invalid tile -1/)
+  for (const volume of [0, 1, undefined]) {
+    validateFootstepSoundProfiles(profiles, { ...FOOTSTEP_TILES, [TILE_DIRT]: { volume } })
   }
 })
 
