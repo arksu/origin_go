@@ -134,7 +134,7 @@ type Object struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    int16                 `json:"quality"`
-	Hp         sql.NullInt32         `json:"hp"`
+	Hp         sql.NullFloat64       `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
 	Data       pqtype.NullRawMessage `json:"data"`
 	CreatedAt  sql.NullTime          `json:"created_at"`
@@ -155,7 +155,7 @@ type ObjectRegion1 struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    int16                 `json:"quality"`
-	Hp         sql.NullInt32         `json:"hp"`
+	Hp         sql.NullFloat64       `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
 	Data       pqtype.NullRawMessage `json:"data"`
 	CreatedAt  sql.NullTime          `json:"created_at"`
@@ -176,7 +176,7 @@ type ObjectRegion2 struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    int16                 `json:"quality"`
-	Hp         sql.NullInt32         `json:"hp"`
+	Hp         sql.NullFloat64       `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
 	Data       pqtype.NullRawMessage `json:"data"`
 	CreatedAt  sql.NullTime          `json:"created_at"`

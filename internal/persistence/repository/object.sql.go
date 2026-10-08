@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -209,6 +210,45 @@ func (q *Queries) UpdateObjectData(ctx context.Context, arg UpdateObjectDataPara
 	return id, err
 }
 
+const upsertDroppedObjects = `-- name: UpsertDroppedObjects :exec
+INSERT INTO object (id, type_id, region, x, y, layer, chunk_x, chunk_y, data, create_tick, last_tick)
+SELECT unnest($1::bigint[]), $2::int,
+       unnest($3::int[]), unnest($4::int[]), unnest($5::int[]),
+       unnest($6::int[]), unnest($7::int[]), unnest($8::int[]),
+       unnest($9::text[])::jsonb, 0, 0
+ON CONFLICT (region, id) DO UPDATE SET
+    type_id = EXCLUDED.type_id, x = EXCLUDED.x, y = EXCLUDED.y, layer = EXCLUDED.layer,
+    chunk_x = EXCLUDED.chunk_x, chunk_y = EXCLUDED.chunk_y, data = EXCLUDED.data,
+    deleted_at = NULL, updated_at = NOW()
+`
+
+type UpsertDroppedObjectsParams struct {
+	Ids     []int64  `json:"ids"`
+	TypeID  int      `json:"type_id"`
+	Regions []int    `json:"regions"`
+	Xs      []int    `json:"xs"`
+	Ys      []int    `json:"ys"`
+	Layers  []int    `json:"layers"`
+	ChunkXs []int    `json:"chunk_xs"`
+	ChunkYs []int    `json:"chunk_ys"`
+	Datas   []string `json:"datas"`
+}
+
+func (q *Queries) UpsertDroppedObjects(ctx context.Context, arg UpsertDroppedObjectsParams) error {
+	_, err := q.db.ExecContext(ctx, upsertDroppedObjects,
+		pq.Array(arg.Ids),
+		arg.TypeID,
+		pq.Array(arg.Regions),
+		pq.Array(arg.Xs),
+		pq.Array(arg.Ys),
+		pq.Array(arg.Layers),
+		pq.Array(arg.ChunkXs),
+		pq.Array(arg.ChunkYs),
+		pq.Array(arg.Datas),
+	)
+	return err
+}
+
 const upsertObject = `-- name: UpsertObject :exec
 INSERT INTO object (
     id, type_id, region, x, y, layer, chunk_x, chunk_y,
@@ -248,7 +288,7 @@ type UpsertObjectParams struct {
 	ChunkY     int                   `json:"chunk_y"`
 	Heading    sql.NullInt16         `json:"heading"`
 	Quality    int16                 `json:"quality"`
-	Hp         sql.NullInt32         `json:"hp"`
+	Hp         sql.NullFloat64       `json:"hp"`
 	OwnerID    sql.NullInt64         `json:"owner_id"`
 	Data       pqtype.NullRawMessage `json:"data"`
 	CreateTick int64                 `json:"create_tick"`

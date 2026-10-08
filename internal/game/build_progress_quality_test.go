@@ -53,7 +53,7 @@ func TestComputeCompletedCampfireQualityLeavesMissingProvenanceUnchanged(t *test
 func TestCompletedCampfireQualityPersistsAndLegacyQualityRemainsZero(t *testing.T) {
 	previousObjects := objectdefs.Global()
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previousObjects) })
-	campfireDef := objectdefs.ObjectDef{DefID: 16, Key: "campfire"}
+	campfireDef := objectdefs.ObjectDef{HP: 100, DefID: 16, Key: "campfire"}
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{campfireDef}))
 
 	tests := []struct {

@@ -53,8 +53,8 @@ func (handler *liftActionHandler) Start(world *ecs.World, playerID types.EntityI
 	return ActionResult{Outcome: ActionApproaching}
 }
 
-func (handler *liftActionHandler) Cancel(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, _ components.ActiveGameAction) {
-	handler.lift.CancelPendingLiftTransition(world, playerID, playerHandle)
+func (handler *liftActionHandler) Cancel(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, active components.ActiveGameAction) {
+	cancelLiftActionTransition(handler.lift, world, playerID, playerHandle, active)
 }
 
 type liftDownActionHandler struct {
@@ -79,8 +79,14 @@ func (handler *liftDownActionHandler) Start(world *ecs.World, playerID types.Ent
 	return handler.lift.StartPutDownAt(world, playerID, playerHandle, target.X, target.Y, generation)
 }
 
-func (handler *liftDownActionHandler) Cancel(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, _ components.ActiveGameAction) {
-	handler.lift.CancelPendingLiftTransition(world, playerID, playerHandle)
+func (handler *liftDownActionHandler) Cancel(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, active components.ActiveGameAction) {
+	cancelLiftActionTransition(handler.lift, world, playerID, playerHandle, active)
+}
+
+func cancelLiftActionTransition(service *LiftService, world *ecs.World, playerID types.EntityID, playerHandle types.Handle, active components.ActiveGameAction) {
+	if pending, exists := ecs.GetComponent[components.PendingLiftTransition](world, playerHandle); exists && pending.ActionGeneration == active.Generation {
+		service.CancelPendingLiftTransition(world, playerID, playerHandle)
+	}
 }
 
 func (service *LiftService) StartNoColliderLift(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, target ActionTarget, generation uint64) ActionResult {

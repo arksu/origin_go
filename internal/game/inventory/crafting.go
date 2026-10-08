@@ -88,6 +88,7 @@ func (e *InventoryExecutor) CanFitResolvedCraftOutputs(w *ecs.World, playerID ty
 	}
 
 	gridLinks := orderedGridLinks(owner.Inventories, playerID, defaultGivePlacementPolicy)
+	gridLinks = filterPersonalInventoryLinks(w, playerID, playerHandle, gridLinks)
 	handLink, hasHand := playerHandLink(owner, playerID)
 
 	for _, out := range outputs {
@@ -174,6 +175,7 @@ func (e *InventoryExecutor) prepareCraftInputs(
 	}
 
 	orderedLinks := craftOrderedInventoryLinks(owner, playerID)
+	orderedLinks = filterPersonalInventoryLinks(w, playerID, playerHandle, orderedLinks)
 	clones := make(map[types.Handle]components.InventoryContainer, len(orderedLinks))
 	for _, link := range orderedLinks {
 		if !w.Alive(link.Handle) {

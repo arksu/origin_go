@@ -7,3 +7,8 @@ WHERE name = $1;
 INSERT INTO global_var (name, value_long)
 VALUES ($1, $2)
 ON CONFLICT (name) DO UPDATE SET value_long = EXCLUDED.value_long;
+
+-- name: UpsertGlobalVarLongMax :exec
+INSERT INTO global_var (name, value_long)
+VALUES ($1, $2)
+ON CONFLICT (name) DO UPDATE SET value_long = GREATEST(global_var.value_long, EXCLUDED.value_long);

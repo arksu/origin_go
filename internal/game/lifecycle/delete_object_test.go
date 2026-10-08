@@ -75,3 +75,34 @@ func TestDeleteObjectRemovesNestedContainersOwnedByDeletedItems(t *testing.T) {
 		t.Fatal("nested inventory ref must be removed")
 	}
 }
+
+func TestDeleteOwnedInventoryContainersReleasesDeepTreeAndPreservesForeignEntity(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	refs := ecs.GetResource[ecs.InventoryRefIndex](w)
+	var tree []types.Handle
+	for ownerID := types.EntityID(501); ownerID < 505; ownerID++ {
+		h := w.SpawnWithoutExternalID()
+		container := components.InventoryContainer{OwnerID: ownerID, Kind: constt.InventoryGrid}
+		if ownerID < 504 {
+			container.Items = []components.InvItem{{ItemID: ownerID + 1}}
+		}
+		ecs.AddComponent(w, h, container)
+		refs.Add(container.Kind, ownerID, 0, h)
+		tree = append(tree, h)
+	}
+	foreign := w.SpawnWithoutExternalID()
+	ecs.AddComponent(w, foreign, components.InventoryContainer{OwnerID: 999, Kind: constt.InventoryGrid, Key: 1})
+	refs.Add(constt.InventoryGrid, 503, 1, foreign)
+	DeleteOwnedInventoryContainers(w, 501)
+	for index, h := range tree {
+		if w.Alive(h) {
+			t.Fatalf("tree container %d remains alive", index)
+		}
+		if _, found := refs.Lookup(constt.InventoryGrid, types.EntityID(501+index), 0); found {
+			t.Fatalf("tree ref %d remains indexed", index)
+		}
+	}
+	if !w.Alive(foreign) {
+		t.Fatal("mismatched owner ref deleted a foreign inventory entity")
+	}
+}

@@ -1,6 +1,7 @@
 package world
 
 import (
+	"database/sql"
 	"testing"
 
 	constt "origin/internal/const"
@@ -17,7 +18,7 @@ func TestObjectFactoryBuild_LoadsQualityIntoEntityInfo(t *testing.T) {
 		objectdefs.SetGlobalForTesting(previousRegistry)
 	})
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{
+		{HP: 100,
 			DefID:    9101,
 			Key:      "quality_obj",
 			Name:     "Quality Object",
@@ -28,7 +29,7 @@ func TestObjectFactoryBuild_LoadsQualityIntoEntityInfo(t *testing.T) {
 
 	world := ecs.NewWorldForTesting()
 	factory := &ObjectFactory{}
-	raw := &repository.Object{
+	raw := &repository.Object{Hp: sql.NullFloat64{Float64: 100, Valid: true},
 		ID:      1001,
 		TypeID:  9101,
 		Region:  1,
@@ -72,7 +73,7 @@ func TestObjectFactorySerialize_SavesQualityFromEntityInfo(t *testing.T) {
 			PrevChunkX:    0,
 			PrevChunkY:    0,
 		})
-		ecs.AddComponent(w, h, components.ObjectInternalState{})
+		ecs.AddComponent(w, h, components.ObjectInternalState{HP: 100, HasHP: true})
 	})
 
 	raw, err := factory.Serialize(world, handle)
@@ -115,7 +116,7 @@ func TestObjectFactorySerialize_SkipsEmptyBuildObject(t *testing.T) {
 			PrevChunkX:    0,
 			PrevChunkY:    0,
 		})
-		state := components.ObjectInternalState{}
+		state := components.ObjectInternalState{HP: 100, HasHP: true}
 		components.SetBehaviorState(&state, "build", &components.BuildBehaviorState{
 			BuildKey: "campfire",
 			Items: []components.BuildRequiredItemState{

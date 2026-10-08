@@ -76,6 +76,9 @@ func (v *Validator) ResolveContainer(
 	}
 
 	ownerID := types.EntityID(ref.OwnerId)
+	if ecs.ObjectDestructionOwnerPending(w, ownerID) {
+		return nil, NewValidationError(netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, "Container is unavailable")
+	}
 	refKey := ecs.InventoryRefKey{
 		Kind:    constt.InventoryKind(ref.Kind),
 		OwnerID: ownerID,
@@ -103,11 +106,16 @@ func (v *Validator) ResolveContainer(
 	// Authorization: player can access own inventories and nested containers of own items
 	if ownerID != playerID {
 		// Personal nested (item belongs to player's own inventory tree) remains valid.
-		if v.isNestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
+		if NestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
 			goto authorized
 		}
 
 		openState, hasOpenState := ecs.TryGetResource[ecs.OpenContainerState](w)
+		if hasOpenState {
+			if rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID); hasRoot && ecs.ObjectDestructionOwnerPending(w, rootOwnerID) {
+				return nil, NewValidationError(netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, "Container is unavailable")
+			}
+		}
 		if !hasOpenState || !openState.IsRefOpened(playerID, refKey) {
 			return nil, NewValidationError(
 				netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT,
@@ -143,17 +151,20 @@ authorized:
 	}, nil
 }
 
-// isNestedContainerOwnedByPlayer checks if ownerID (item_id) belongs to an item in player's inventories
-func (v *Validator) isNestedContainerOwnedByPlayer(w *ecs.World, playerHandle types.Handle, itemOwnerID types.EntityID) bool {
+// NestedContainerOwnedByPlayer verifies actual parent-item membership rather
+// than trusting a possibly stale InventoryOwner link to the nested container.
+func NestedContainerOwnedByPlayer(w *ecs.World, playerHandle types.Handle, itemOwnerID types.EntityID) bool {
+	playerID, hasID := w.GetExternalID(playerHandle)
 	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-	if !hasOwner {
+	if !hasID || playerID == 0 || !hasOwner {
 		return false
 	}
 
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	for _, link := range owner.Inventories {
-		// Skip the nested container itself; we need a parent container holding this item.
-		if link.Kind == constt.InventoryGrid && link.Key == 0 && link.OwnerID == itemOwnerID {
+		// The supported single level of nesting must have a player root as its
+		// parent. Another stale nested link cannot confer ownership transitively.
+		if link.OwnerID != playerID {
 			continue
 		}
 		if !w.Alive(link.Handle) {
@@ -161,7 +172,7 @@ func (v *Validator) isNestedContainerOwnedByPlayer(w *ecs.World, playerHandle ty
 		}
 
 		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
-		if !ok {
+		if !ok || container.OwnerID != playerID {
 			continue
 		}
 
@@ -201,6 +212,18 @@ func (v *Validator) isNestedContainerUnderRoot(
 	}
 
 	return false
+}
+
+// filterPersonalInventoryLinks reuses an owned scratch slice. Stale nested
+// owner links cannot grant output or consume somebody else's items.
+func filterPersonalInventoryLinks(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, links []components.InventoryLink) []components.InventoryLink {
+	out := links[:0]
+	for _, link := range links {
+		if link.OwnerID == playerID || NestedContainerOwnedByPlayer(w, playerHandle, link.OwnerID) {
+			out = append(out, link)
+		}
+	}
+	return out
 }
 
 func (v *Validator) FindItemInContainer(

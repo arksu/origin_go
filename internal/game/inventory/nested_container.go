@@ -88,39 +88,23 @@ func detachNestedContainer(w *ecs.World, playerHandle types.Handle, itemID types
 	})
 }
 
-// serializeNestedForDrop serializes a nested container's items into InventoryDataV1
-// for DB persistence when dropping a container item.
-func serializeNestedForDrop(w *ecs.World, itemID types.EntityID) *InventoryDataV1 {
+// serializeNestedForDrop captures the entire nested tree before the source item
+// is removed. Invalid references abort the transfer rather than losing contents.
+func serializeNestedForDrop(w *ecs.World, itemID types.EntityID) (*InventoryDataV1, error) {
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
 	nestedHandle, found := refIndex.Lookup(constt.InventoryGrid, itemID, 0)
 	if !found {
-		return nil
+		return nil, nil
 	}
 	container, ok := ecs.GetComponent[components.InventoryContainer](w, nestedHandle)
-	if !ok {
-		return nil
+	if !w.Alive(nestedHandle) || !ok || container.OwnerID != itemID || container.Kind != constt.InventoryGrid || container.Key != 0 {
+		return nil, ErrInvalidInventoryTree
 	}
-
-	items := make([]InventoryItemV1, 0, len(container.Items))
-	for _, invItem := range container.Items {
-		items = append(items, InventoryItemV1{
-			ItemID:   uint64(invItem.ItemID),
-			TypeID:   invItem.TypeID,
-			Quality:  invItem.Quality,
-			Quantity: invItem.Quantity,
-			X:        invItem.X,
-			Y:        invItem.Y,
-		})
+	data, err := SerializeInventoryTree(w, container)
+	if err != nil {
+		return nil, err
 	}
-
-	return &InventoryDataV1{
-		Kind:    uint8(constt.InventoryGrid),
-		Key:     0,
-		Width:   container.Width,
-		Height:  container.Height,
-		Version: int(container.Version),
-		Items:   items,
-	}
+	return &data, nil
 }
 
 func appendClosedNestedRefIfPresent(w *ecs.World, result *OperationResult, itemID types.EntityID) {

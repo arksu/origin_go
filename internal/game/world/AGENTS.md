@@ -23,6 +23,10 @@
 - `ObjectInternalState.State` persists as object data.
 - Runtime flags are computed and should not be persisted directly.
 - `ObjectInternalState.IsDirty` is used for save filtering.
+- Object HP is stored in typed `ObjectInternalState.HP/HasHP` fields and persisted
+  separately as `object.hp`; `HasHP` distinguishes missing health from valid zero.
+  Restoring behavior state must preserve these fields. Mutate HP through
+  `SetObjectHP` under the shard lock to update HP and dirty intent together.
 - Empty behavior state persists as `NULL` (not empty JSON payload).
 - Runtime despawns of chunk-owned objects must preserve delete intent until chunk save (tombstone/deferred delete), otherwise objects can reappear after restart.
 

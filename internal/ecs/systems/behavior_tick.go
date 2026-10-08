@@ -68,6 +68,9 @@ func (s *BehaviorTickSystem) processTickKey(w *ecs.World, currentTick uint64, ti
 	if handle == types.InvalidHandle || !w.Alive(handle) {
 		return
 	}
+	if ecs.ObjectDestructionPending(w, handle) {
+		return
+	}
 
 	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, handle)
 	if !hasInfo || len(entityInfo.Behaviors) == 0 {

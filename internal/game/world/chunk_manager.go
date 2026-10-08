@@ -18,6 +18,7 @@ import (
 	ecssystems "origin/internal/ecs/systems"
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/game/lifecycle"
 	"origin/internal/mathutil"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
@@ -38,6 +39,7 @@ type loadRequest struct {
 type saveRequest struct {
 	coord types.ChunkCoord
 	chunk *core.Chunk
+	job   PersistenceJob
 }
 
 type saveRetry struct {
@@ -126,6 +128,8 @@ type ChunkManager struct {
 	logger            *zap.Logger
 	// Activation runs under streamMu; rate-limit capacity warnings across chunks.
 	lastActivationCapacityWarning time.Time
+	remainingDroppedActivations   int
+	dropExpiry                    *chunkDropExpiryCoordinator
 
 	// Serializes AOI transitions, tile mutations, and snapshot/event creation,
 	// including initial enabling outside the shard tick. Never held during DB I/O.
@@ -138,8 +142,10 @@ type ChunkManager struct {
 	retryMu             sync.Mutex
 	saveRetries         map[types.ChunkCoord]saveRetry
 
-	chunks   map[types.ChunkCoord]*core.Chunk
-	chunksMu sync.RWMutex
+	chunks        map[types.ChunkCoord]*core.Chunk
+	chunksMu      sync.RWMutex
+	persistenceMu sync.Mutex
+	persistence   map[types.ChunkCoord]*chunkPersistence
 
 	lruCache *lru.LRU[types.ChunkCoord, *core.Chunk]
 
@@ -193,29 +199,32 @@ func NewChunkManager(
 	ttl := time.Duration(cfg.Game.ChunkLRUTTL) * time.Second
 
 	cm := &ChunkManager{
-		cfg:                 cfg,
-		db:                  db,
-		world:               world,
-		shard:               shard,
-		layer:               layer,
-		region:              region,
-		objectFactory:       objectFactory,
-		behaviorRegistry:    behaviorRegistry,
-		logger:              logger.Named("chunk_manager"),
-		readyChunks:         make(map[types.ChunkCoord]struct{}),
-		activationRetries:   make(map[types.ChunkCoord]activationRetry),
-		deactivationRetries: make(map[types.ChunkCoord]deactivationRetry),
-		saveRetries:         make(map[types.ChunkCoord]saveRetry),
-		chunks:              make(map[types.ChunkCoord]*core.Chunk),
-		loadQueue:           make(chan *loadRequest, 512),
-		loadRequests:        make(map[types.ChunkCoord]*loadRequest),
-		saveQueue:           make(chan saveRequest, 512),
-		stopCh:              make(chan struct{}),
-		entityAOIs:          make(map[types.EntityID]*EntityAOI),
-		chunkInterests:      make(map[types.ChunkCoord]*ChunkInterest),
-		activeChunks:        make(map[types.ChunkCoord]struct{}),
-		eventBus:            eventBus,
+		cfg:                         cfg,
+		db:                          db,
+		world:                       world,
+		shard:                       shard,
+		layer:                       layer,
+		region:                      region,
+		objectFactory:               objectFactory,
+		behaviorRegistry:            behaviorRegistry,
+		logger:                      logger.Named("chunk_manager"),
+		readyChunks:                 make(map[types.ChunkCoord]struct{}),
+		activationRetries:           make(map[types.ChunkCoord]activationRetry),
+		deactivationRetries:         make(map[types.ChunkCoord]deactivationRetry),
+		saveRetries:                 make(map[types.ChunkCoord]saveRetry),
+		chunks:                      make(map[types.ChunkCoord]*core.Chunk),
+		persistence:                 make(map[types.ChunkCoord]*chunkPersistence),
+		remainingDroppedActivations: committedDroppedActivationBudget,
+		loadQueue:                   make(chan *loadRequest, 512),
+		loadRequests:                make(map[types.ChunkCoord]*loadRequest),
+		saveQueue:                   make(chan saveRequest, 512),
+		stopCh:                      make(chan struct{}),
+		entityAOIs:                  make(map[types.EntityID]*EntityAOI),
+		chunkInterests:              make(map[types.ChunkCoord]*ChunkInterest),
+		activeChunks:                make(map[types.ChunkCoord]struct{}),
+		eventBus:                    eventBus,
 	}
+	cm.dropExpiry = newChunkDropExpiryCoordinator(cm)
 
 	cm.lruCache = lru.NewLRU(
 		cfg.Game.ChunkLRUCapacity,
@@ -533,6 +542,9 @@ func (cm *ChunkManager) recalculateChunkStates() {
 
 	for coord, snapshot := range interestsSnapshot {
 		chunk := cm.GetChunkFast(coord)
+		if cm.persistenceFor(coord).pins.Load() > 0 && snapshot.activeCount == 0 {
+			continue
+		}
 		if chunk == nil || chunk.GetState() != types.ChunkStateActive || snapshot.activeCount == 0 || len(chunk.GetRawObjects()) == 0 {
 			cm.clearActivationRetry(coord)
 		}
@@ -604,6 +616,12 @@ func (cm *ChunkManager) recalculateChunkStates() {
 				case types.ChunkStatePreloaded:
 					chunk.SetState(types.ChunkStateInactive)
 					cm.lruCache.Add(coord, chunk)
+				case types.ChunkStateInactive:
+					// Eviction can remove a pinned entry before its callback declines
+					// persistence. The final unpin schedules this shard-owned repair.
+					if !cm.lruCache.Contains(coord) {
+						cm.lruCache.Add(coord, chunk)
+					}
 				}
 			}
 
@@ -665,12 +683,19 @@ func (cm *ChunkManager) saveWorker() {
 		case <-cm.stopCh:
 			return
 		case req := <-cm.saveQueue:
-			cm.safeSaveAndRemove(req.coord, req.chunk)
+			if req.job != nil {
+				req.job.Complete(req.job.Run())
+			} else {
+				cm.safeSaveAndRemove(req.coord, req.chunk)
+			}
 		}
 	}
 }
 
 func (cm *ChunkManager) loadChunkFromDB(coord types.ChunkCoord) error {
+	gate := cm.persistenceFor(coord)
+	gate.ioMu.Lock()
+	defer gate.ioMu.Unlock()
 	cm.chunksMu.Lock()
 	chunk, exists := cm.chunks[coord]
 	if !exists {
@@ -728,6 +753,9 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 	if atomic.LoadInt32(&cm.stopped) != 0 {
 		return
 	}
+	if cm.persistenceFor(coord).pins.Load() > 0 {
+		return
+	}
 
 	// Check if any entity is still interested in this chunk
 	cm.interestMu.RLock()
@@ -753,6 +781,12 @@ func (cm *ChunkManager) onEvict(coord types.ChunkCoord, chunk *core.Chunk) {
 }
 
 func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Chunk) {
+	gate := cm.persistenceFor(coord)
+	gate.ioMu.Lock()
+	defer gate.ioMu.Unlock()
+	if gate.pins.Load() > 0 {
+		return
+	}
 	// Повторная проверка interest
 	cm.interestMu.RLock()
 	interest, hasInterest := cm.chunkInterests[coord]
@@ -773,7 +807,11 @@ func (cm *ChunkManager) safeSaveAndRemove(coord types.ChunkCoord, chunk *core.Ch
 
 	// Save to DB only if chunk has dirty state
 	if chunk.IsDirty(cm.world) {
-		chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
+		if err := chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger); err != nil {
+			cm.logger.Error("failed to save inactive chunk", zap.Any("coord", coord), zap.Error(err))
+			cm.scheduleSaveRetry(coord, chunk)
+			return
+		}
 	}
 
 	// Serialize the final checks with AOI changes and new tile edits.
@@ -917,64 +955,82 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord types.ChunkCoor
 
 // activateChunkInternal activates a chunk by building entities from raw objects
 func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *core.Chunk) error {
+	gate := cm.persistenceFor(coord)
+	if !gate.ioMu.TryLock() {
+		cm.markPersistenceReady(coord)
+		return ErrChunkPersistenceBusy
+	}
+	defer gate.ioMu.Unlock()
+	if gate.pins.Load() > 0 && chunk.GetState() != types.ChunkStateActive {
+		return ErrChunkPersistenceBusy
+	}
 	state := chunk.GetState()
 	if state == types.ChunkStateUnloaded || state == types.ChunkStateLoading {
 		return ErrChunkNotLoaded
 	}
 
-	rawObjects := chunk.GetRawObjects()
+	rawStart, rawObjects := chunk.GetRawActivationObjects()
 	if state == types.ChunkStateActive && len(rawObjects) == 0 {
 		cm.clearActivationRetry(coord)
 		return nil
 	}
 	rawInventoriesByOwner := chunk.GetRawInventoriesByOwner()
-	rawDirtyObjectIDs := chunk.GetRawDirtyObjectIDs()
-	failedRawObjects := make([]*repository.Object, 0)
-	failedRawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory)
+	var retainedStorage [committedDroppedActivationBudget]*repository.Object
+	failedRawObjects := retainedStorage[:0:min(len(rawObjects), committedDroppedActivationBudget)]
 	retainRawObject := func(raw *repository.Object) {
-		objectID := types.EntityID(raw.ID)
 		failedRawObjects = append(failedRawObjects, raw)
-		if inventories, ok := rawInventoriesByOwner[objectID]; ok {
-			failedRawInventoriesByOwner[objectID] = inventories
-		}
-	}
-	deferRemainingObjects := func(start int) {
-		deferredCount := 0
-		for _, pending := range rawObjects[start:] {
-			if state == types.ChunkStateActive && cm.world.Alive(cm.world.GetHandleByEntityID(types.EntityID(pending.ID))) {
-				continue
-			}
-			retainRawObject(pending)
-			deferredCount++
-		}
-		cm.warnActivationCapacity(coord, deferredCount)
 	}
 	spatial := chunk.Spatial()
-	behaviorHandles := make([]types.Handle, 0, len(rawObjects))
-	preRecomputeDirty := make(map[types.Handle]bool, len(rawObjects))
+	var behaviorHandles []types.Handle
+	var preRecomputeDirty map[types.Handle]bool
+	visited := 0
 
 	for index, raw := range rawObjects {
+		// Durable removal leaves a hole instead of shifting an arbitrary backlog.
+		// Such holes share the drop budget and disappear with the visited prefix.
+		if raw == nil {
+			if cm.remainingDroppedActivations == 0 {
+				break
+			}
+			cm.remainingDroppedActivations--
+			visited = index + 1
+			continue
+		}
+		if raw.TypeID == _const.DroppedItemTypeID {
+			if cm.remainingDroppedActivations == 0 {
+				break
+			}
+			cm.remainingDroppedActivations--
+		}
 		// An active chunk may also hold a raw cache entry for an already live
 		// transferred object. Its ECS entity is authoritative.
 		if state == types.ChunkStateActive && cm.world.Alive(cm.world.GetHandleByEntityID(types.EntityID(raw.ID))) {
+			visited = index + 1
 			continue
 		}
-		if cm.world.EntityCount() >= cm.world.EntityCapacity() {
+		if raw.TypeID != _const.DroppedItemTypeID && cm.world.EntityCount() >= cm.world.EntityCapacity() {
 			// Every remaining allocation would fail until another entity despawns.
 			// Keep the raw snapshots so the normal activation retry can finish later.
-			deferRemainingObjects(index)
+			cm.warnActivationCapacity(coord, len(rawObjects)-index)
 			break
 		}
-		h, err := cm.objectFactory.Build(cm.world, raw, rawInventoriesByOwner[types.EntityID(raw.ID)])
+		visited = index + 1
+		h, err := cm.objectFactory.BuildForChunk(cm.world, raw, rawInventoriesByOwner[types.EntityID(raw.ID)])
 		if err != nil {
 			if errors.Is(err, ecs.ErrEntityCapacityExhausted) {
-				deferRemainingObjects(index)
+				cm.warnActivationCapacity(coord, len(rawObjects)-index)
+				if raw.TypeID == _const.DroppedItemTypeID && cm.world.EntityCount() < cm.world.EntityCapacity() {
+					// A smaller drop may fit even when this inventory tree cannot.
+					// Retain it for retry; the shared drop budget bounds this search.
+					retainRawObject(raw)
+					continue
+				}
+				visited = index
 				break
 			}
 			if errors.Is(err, ErrDroppedItemExpired) {
-				cm.logger.Debug("deleted expired dropped item while loading chunk",
-					zap.Int64("object_id", raw.ID))
-				delete(rawDirtyObjectIDs, types.EntityID(raw.ID))
+				cm.queueExpiredDropRaw(chunk, raw)
+				retainRawObject(raw)
 				continue
 			}
 			cm.logger.Error("failed to build object",
@@ -999,10 +1055,12 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 			)
 		}
 
-		ecs.AddComponent(cm.world, h, components.ObjectInternalState{
-			State:   restoredState,
-			IsDirty: false,
-		})
+		// Preserve HP restored by Build; dropped items may not have state yet.
+		state, _ := ecs.GetComponent[components.ObjectInternalState](cm.world, h)
+		state.State = restoredState
+		state.Flags = nil
+		state.IsDirty = false
+		ecs.AddComponent(cm.world, h, state)
 		cm.objectFactory.RestoreDerivedComponentsFromState(cm.world, h)
 
 		isStatic := cm.objectFactory.IsStatic(raw)
@@ -1026,6 +1084,11 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 				exposeObject = cm.restoreReconciler.ReconcileRestoredObject(cm.world, h)
 			}
 			if exposeObject {
+				if behaviorHandles == nil {
+					capacity := min(len(rawObjects), committedDroppedActivationBudget)
+					behaviorHandles = make([]types.Handle, 0, capacity)
+					preRecomputeDirty = make(map[types.Handle]bool, capacity)
+				}
 				if state, hasState := ecs.GetComponent[components.ObjectInternalState](cm.world, h); hasState {
 					preRecomputeDirty[h] = state.IsDirty
 				}
@@ -1056,10 +1119,8 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 		})
 	}
 
-	chunk.SetRawObjects(failedRawObjects)
-	chunk.SetRawInventoriesByOwner(failedRawInventoriesByOwner)
-	chunk.SetRawDirtyObjectIDs(rawDirtyObjectIDs)
-	if len(failedRawObjects) > 0 {
+	chunk.RetainRawActivationRange(rawStart, visited, failedRawObjects)
+	if len(chunk.GetRawObjects()) > 0 {
 		cm.scheduleActivationRetry(coord, time.Now())
 	} else {
 		cm.clearActivationRetry(coord)
@@ -1091,6 +1152,14 @@ func (cm *ChunkManager) warnActivationCapacity(coord types.ChunkCoord, deferredC
 
 // deactivateChunkInternal deactivates a chunk by serializing entities to raw objects
 func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
+	gate := cm.persistenceFor(chunk.Coord)
+	if !gate.ioMu.TryLock() {
+		return ErrChunkPersistenceBusy
+	}
+	defer gate.ioMu.Unlock()
+	if gate.pins.Load() > 0 {
+		return ErrChunkPersistenceBusy
+	}
 	if chunk.GetState() != types.ChunkStateActive {
 		return nil
 	}
@@ -1107,7 +1176,6 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 	rawInventoriesByOwner := make(map[types.EntityID][]repository.Inventory, len(handles))
 	rawDirtyObjectIDs := make(map[types.EntityID]struct{}, len(handles))
 	activeObjectIDs := make(map[types.EntityID]struct{}, len(handles))
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](cm.world)
 	type deactivationEntity struct {
 		handle                   types.Handle
 		hasPersistentInventories bool
@@ -1187,24 +1255,9 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 				cm.world.Despawn(h)
 				continue
 			}
-			containerHandles := refIndex.RemoveAllByOwner(extID.ID)
-			for _, containerHandle := range containerHandles {
-				// Depth=1 nested containers are keyed by item_id; remove them before root despawn
-				// to avoid orphaned runtime entities across chunk lifecycle.
-				if container, ok := ecs.GetComponent[components.InventoryContainer](cm.world, containerHandle); ok {
-					for _, item := range container.Items {
-						if nestedHandle, found := refIndex.Lookup(_const.InventoryGrid, item.ItemID, 0); found {
-							refIndex.Remove(_const.InventoryGrid, item.ItemID, 0)
-							if cm.world.Alive(nestedHandle) {
-								cm.world.Despawn(nestedHandle)
-							}
-						}
-					}
-				}
-				if cm.world.Alive(containerHandle) {
-					cm.world.Despawn(containerHandle)
-				}
-			}
+			// Snapshot and cleanup follow the same complete inventory tree. Every
+			// object has already been captured before any runtime entity is removed.
+			lifecycle.DeleteOwnedInventoryContainers(cm.world, extID.ID)
 		}
 		cm.world.Despawn(h)
 	}
@@ -1355,6 +1408,8 @@ func (cm *ChunkManager) Stats() ChunkStats {
 }
 
 func (cm *ChunkManager) Update(dt float64) {
+	cm.remainingDroppedActivations = committedDroppedActivationBudget
+	cm.updateExpiredDrops()
 	cm.readyMu.Lock()
 	now := time.Now()
 	if len(cm.readyChunks) == 0 && !cm.hasDueActivationRetryLocked(now) && !cm.hasDueDeactivationRetryLocked(now) {
@@ -1406,20 +1461,33 @@ func (cm *ChunkManager) Stop() {
 	var wg sync.WaitGroup
 
 	// Start save workers
-	var savedCount int64
+	var savedCount, failedCount int64
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for coord := range workCh {
 				if chunk := cm.GetChunkFast(coord); chunk != nil {
+					gate := cm.persistenceFor(coord)
+					gate.ioMu.Lock()
+					if gate.pins.Load() > 0 {
+						atomic.AddInt64(&failedCount, 1)
+						cm.logger.Error("chunk still has pending persistence during shutdown", zap.Any("coord", coord))
+						gate.ioMu.Unlock()
+						continue
+					}
 					state := chunk.GetState()
 					if state == types.ChunkStateActive || state == types.ChunkStatePreloaded || state == types.ChunkStateInactive {
 						if chunk.IsDirty(cm.world) {
-							chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger)
-							atomic.AddInt64(&savedCount, 1)
+							if err := chunk.SaveToDB(cm.db, cm.world, cm.objectFactory, cm.logger); err != nil {
+								atomic.AddInt64(&failedCount, 1)
+								cm.logger.Error("failed to save chunk during shutdown", zap.Any("coord", coord), zap.Error(err))
+							} else {
+								atomic.AddInt64(&savedCount, 1)
+							}
 						}
 					}
+					gate.ioMu.Unlock()
 				}
 			}
 		}()
@@ -1438,6 +1506,7 @@ func (cm *ChunkManager) Stop() {
 		zap.Int("layer", cm.layer),
 		zap.Int("chunks_total", len(allCoords)),
 		zap.Int64("chunks_saved", savedCount),
+		zap.Int64("chunks_failed", failedCount),
 	)
 }
 

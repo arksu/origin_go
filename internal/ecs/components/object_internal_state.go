@@ -8,12 +8,14 @@ import (
 	"origin/internal/ecs"
 )
 
-// ObjectInternalState tracks runtime state and dirty flag for world objects.
+// ObjectInternalState tracks runtime state, object HP and persistence intent.
 // Added to all non-player entities on chunk activation; used to skip
 // unchanged objects during persistence.
 type ObjectInternalState struct {
 	State   any
 	Flags   []string
+	HP      float64 // Authoritative object HP; meaningful only when HasHP is true.
+	HasHP   bool    // Distinguishes valid zero HP from absent object health.
 	IsDirty bool
 }
 

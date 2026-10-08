@@ -127,32 +127,34 @@ func TakeDamage(world *ecs.World, h ecs.Handle, damage int32) bool {
 
 Maintain this list as you add new components:
 
-| ID | Component                       | Description                                      |
-|----|---------------------------------|--------------------------------------------------|
-| 0  | ExternalID                      | Maps Handle to global EntityID (mandatory)       |
-| 10 | TransformComponentID            | Entity world position                            |
-| 11 | ChunkRefComponentID             | Reference to current chunk                       |
-| 12 | MovementComponentID             | Entity movement velocity                         |
-| 13 | EntityInfoComponentID           | Base Entity info (isStatic, region, layer)       |
-| 14 | ColliderComponentID             | Collider for collision system                    |
-| 15 | CollisionResultComponentID      | Result of collision calculations                 |
-| 16 | VisionComponentID               | Entity vision radius and power                   |
-| 17 | StealthComponentID              | Entity stealth value                             |
-| 18 | AppearanceComponentID           | Entity visual appearance (name)                  |
-| 19 | InventoryOwnerComponentID       | Links entity to its inventory containers         |
-| 20 | InventoryContainerComponentID   | Inventory container (grid/hand/equip/drop)       |
-| 21 | DroppedItemComponentID          | Marks entity as a dropped item in world          |
-| 22 | PendingInteractionComponentID   | Pending auto-interaction intent (pickup)         |
-| 23 | ObjectInternalStateComponentID  | Runtime state & dirty flag for world objects     |
-| 24 | PendingContextActionComponentID | Pending context-menu action until link created   |
-| 25 | ActiveCyclicActionComponentID   | Runtime state for active cyclic action UI/sync   |
-| 26 | CharacterProfileComponentID     | Runtime player-only profile (attributes, experience, etc.) |
+| ID | Component                       | Description                                                   |
+|----|---------------------------------|---------------------------------------------------------------|
+| 0  | ExternalID                      | Maps Handle to global EntityID (mandatory)                    |
+| 10 | TransformComponentID            | Entity world position                                         |
+| 11 | ChunkRefComponentID             | Reference to current chunk                                    |
+| 12 | MovementComponentID             | Entity movement velocity                                      |
+| 13 | EntityInfoComponentID           | Base Entity info (isStatic, region, layer)                    |
+| 14 | ColliderComponentID             | Collider for collision system                                 |
+| 15 | CollisionResultComponentID      | Result of collision calculations                              |
+| 16 | VisionComponentID               | Entity vision radius and power                                |
+| 17 | StealthComponentID              | Entity stealth value                                          |
+| 18 | AppearanceComponentID           | Entity visual appearance (name)                               |
+| 19 | InventoryOwnerComponentID       | Links entity to its inventory containers                      |
+| 20 | InventoryContainerComponentID   | Inventory container (grid/hand/equip/drop)                    |
+| 21 | DroppedItemComponentID          | Marks entity as a dropped item in world                       |
+| 22 | PendingInteractionComponentID   | Pending auto-interaction intent (pickup)                      |
+| 23 | ObjectInternalStateComponentID  | Typed HP, behavior runtime state & dirty flag for world objects |
+| 24 | PendingContextActionComponentID | Pending context-menu action until link created                |
+| 25 | ActiveCyclicActionComponentID   | Runtime state for active cyclic action UI/sync                |
+| 26 | CharacterProfileComponentID     | Runtime player-only profile (attributes, experience, etc.)    |
 | 28 | ActiveCraftComponentID          | Runtime craft batch state paired with synthetic cyclic action |
-| 35 | ActiveGameActionComponentID     | Transient server-owned gameplay action state |
-| 36 | ActionAnimationComponentID     | Transient public cycle identity and retained revision |
-| 37 | ActionCooldownsComponentID | Persisted per-action start and expiry timestamps |
+| 35 | ActiveGameActionComponentID     | Transient server-owned gameplay action state                  |
+| 36 | ActionAnimationComponentID      | Transient public cycle identity and retained revision         |
+| 37 | ActionCooldownsComponentID      | Persisted per-action start and expiry timestamps              |
+| 38 | Reserved (retired ObjectHealth) | Object HP now lives in ObjectInternalState; no registered type |
 
-`ActiveCyclicAction.ActionGeneration` links a timed menu-action cycle to its `ActiveGameAction.Generation`. Repeating menu actions retain that generation while incrementing `CycleIndex` and resetting elapsed ticks. Compare the supplied cycle with the current component and generation before completion, so a canceled or replaced cycle cannot apply a late effect. Other cyclic action sources may leave `ActionGeneration` at zero.
+`ActiveCyclicAction.ActionGeneration` links a timed menu-action cycle to its `ActiveGameAction.Generation`. Repeating menu actions retain that generation while incrementing `CycleIndex` and resetting elapsed ticks.
+Compare the supplied cycle with the current component and generation before completion, so a canceled or replaced cycle cannot apply a late effect. Other cyclic action sources may leave `ActionGeneration` at zero.
 
 ## Migration from Auto-Assignment
 

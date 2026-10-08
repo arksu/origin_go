@@ -42,6 +42,12 @@ type InventorySaverInterface interface {
 	SerializeInventories(world interface{}, characterID types.EntityID, handle types.Handle) []InventorySnapshot
 }
 
+// StrictInventorySaverInterface permits capture failures to abort a save while
+// retaining compatibility with lightweight inventory serializers.
+type StrictInventorySaverInterface interface {
+	SerializeInventoriesStrict(world *ecs.World, characterID types.EntityID, handle types.Handle) ([]InventorySnapshot, error)
+}
+
 type CharacterSaveSystem struct {
 	ecs.BaseSystem
 	saver        *CharacterSaver
@@ -151,7 +157,15 @@ func (s *CharacterSaver) captureSnapshot(w *ecs.World, entityID types.EntityID, 
 		return CharacterSnapshot{}, ErrMissingCharacterStats
 	}
 	attributesRaw, experienceRaw, skillsRaw, discoveryRaw := s.serializeCharacterProfile(w, entityID, handle)
-	inventories := s.inventorySaver.SerializeInventories(w, entityID, handle)
+	var inventories []InventorySnapshot
+	if strictSaver, ok := s.inventorySaver.(StrictInventorySaverInterface); ok {
+		inventories, err = strictSaver.SerializeInventoriesStrict(w, entityID, handle)
+		if err != nil {
+			return CharacterSnapshot{}, err
+		}
+	} else {
+		inventories = s.inventorySaver.SerializeInventories(w, entityID, handle)
+	}
 	snapshot := s.buildSnapshot(entityID, transform, attributesRaw, experienceRaw, skillsRaw, discoveryRaw, staminaValue, energyValue, shpValue, hhpValue, isLying, inventories)
 	if err := snapshot.captureActionCooldowns(w, handle); err != nil {
 		return CharacterSnapshot{}, err

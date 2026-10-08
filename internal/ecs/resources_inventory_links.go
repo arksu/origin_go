@@ -1,6 +1,7 @@
 package ecs
 
 import (
+	"sort"
 	"time"
 
 	constt "origin/internal/const"
@@ -16,15 +17,64 @@ type InventoryRefKey struct {
 
 // InventoryRefIndex provides O(1) lookup from InventoryRef to Handle
 type InventoryRefIndex struct {
-	index map[InventoryRefKey]types.Handle
+	index      map[InventoryRefKey]types.Handle
+	byOwner    map[types.EntityID][]InventoryRefEntry
+	freeOwners [][]InventoryRefEntry
+}
+
+// InventoryRefEntry is an owned reference snapshot, including the generational handle.
+type InventoryRefEntry struct {
+	InventoryRefKey
+	Handle types.Handle
 }
 
 func (idx *InventoryRefIndex) Add(kind constt.InventoryKind, ownerID types.EntityID, key uint32, handle types.Handle) {
-	idx.index[InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}] = handle
+	if idx.index == nil {
+		idx.index = make(map[InventoryRefKey]types.Handle)
+	}
+	if idx.byOwner == nil {
+		idx.byOwner = make(map[types.EntityID][]InventoryRefEntry)
+	}
+	ref := InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key}
+	idx.index[ref] = handle
+	entries := idx.byOwner[ownerID]
+	if len(entries) == 0 && len(idx.freeOwners) != 0 {
+		last := len(idx.freeOwners) - 1
+		entries = idx.freeOwners[last]
+		idx.freeOwners[last] = nil
+		idx.freeOwners = idx.freeOwners[:last]
+	}
+	position := sort.Search(len(entries), func(i int) bool {
+		return entries[i].Kind > kind || entries[i].Kind == kind && entries[i].Key >= key
+	})
+	if position < len(entries) && entries[position].InventoryRefKey == ref {
+		entries[position].Handle = handle
+	} else {
+		entries = append(entries, InventoryRefEntry{})
+		copy(entries[position+1:], entries[position:])
+		entries[position] = InventoryRefEntry{InventoryRefKey: ref, Handle: handle}
+	}
+	idx.byOwner[ownerID] = entries
 }
 
 func (idx *InventoryRefIndex) Remove(kind constt.InventoryKind, ownerID types.EntityID, key uint32) {
 	delete(idx.index, InventoryRefKey{Kind: kind, OwnerID: ownerID, Key: key})
+	entries := idx.byOwner[ownerID]
+	for i := range entries {
+		if entries[i].Kind != kind || entries[i].Key != key {
+			continue
+		}
+		copy(entries[i:], entries[i+1:])
+		entries[len(entries)-1] = InventoryRefEntry{}
+		entries = entries[:len(entries)-1]
+		if len(entries) == 0 {
+			delete(idx.byOwner, ownerID)
+			idx.freeOwners = append(idx.freeOwners, entries)
+		} else {
+			idx.byOwner[ownerID] = entries
+		}
+		return
+	}
 }
 
 func (idx *InventoryRefIndex) Lookup(kind constt.InventoryKind, ownerID types.EntityID, key uint32) (types.Handle, bool) {
@@ -32,20 +82,47 @@ func (idx *InventoryRefIndex) Lookup(kind constt.InventoryKind, ownerID types.En
 	return h, ok
 }
 
+// EntriesByOwnerInto appends only this owner's entries, ordered by kind and key.
+// The caller owns the buffer; no allocation occurs if its capacity is sufficient.
+func (idx *InventoryRefIndex) EntriesByOwnerInto(ownerID types.EntityID, dst []InventoryRefEntry) []InventoryRefEntry {
+	return append(dst, idx.byOwner[ownerID]...)
+}
+
+// EntriesByOwnerRangeInto appends at most limit ordered entries starting at start.
+// Invalid ranges append nothing. The caller holds the owning shard lock and
+// owns the result; adequate destination capacity makes the read allocation-free.
+func (idx *InventoryRefIndex) EntriesByOwnerRangeInto(ownerID types.EntityID, start, limit int, dst []InventoryRefEntry) []InventoryRefEntry {
+	entries := idx.byOwner[ownerID]
+	if start < 0 || limit <= 0 || start >= len(entries) {
+		return dst
+	}
+	end := len(entries)
+	if limit < end-start {
+		end = start + limit
+	}
+	return append(dst, entries[start:end]...)
+}
+
+// OwnerEntryCount returns the number of refs without scanning unrelated owners.
+func (idx *InventoryRefIndex) OwnerEntryCount(ownerID types.EntityID) int {
+	return len(idx.byOwner[ownerID])
+}
+
 // RemoveAllByOwner removes all inventory refs for the owner and returns removed handles.
 func (idx *InventoryRefIndex) RemoveAllByOwner(ownerID types.EntityID) []types.Handle {
-	if len(idx.index) == 0 {
+	entries := idx.byOwner[ownerID]
+	if len(entries) == 0 {
 		return nil
 	}
 
-	removed := make([]types.Handle, 0, 2)
-	for key, handle := range idx.index {
-		if key.OwnerID != ownerID {
-			continue
-		}
-		delete(idx.index, key)
-		removed = append(removed, handle)
+	removed := make([]types.Handle, 0, len(entries))
+	for _, entry := range entries {
+		delete(idx.index, entry.InventoryRefKey)
+		removed = append(removed, entry.Handle)
 	}
+	delete(idx.byOwner, ownerID)
+	clear(entries)
+	idx.freeOwners = append(idx.freeOwners, entries[:0])
 	return removed
 }
 
@@ -82,18 +159,50 @@ type LinkState struct {
 	LinkedByPlayer  map[types.EntityID]PlayerLink
 	PlayersByTarget map[types.EntityID]map[types.EntityID]struct{}
 	IntentByPlayer  map[types.EntityID]LinkIntent
+	// Exact generational handles prevent a retired intent from affecting a
+	// replacement entity. Only active intents consume reverse-index entries.
+	IntentPlayersByTarget map[types.Handle]map[types.EntityID]struct{}
 }
 
 func (s *LinkState) SetIntent(playerID, targetID types.EntityID, targetHandle types.Handle, createdAt time.Time) {
+	if previous, exists := s.IntentByPlayer[playerID]; exists && previous.TargetHandle != targetHandle {
+		s.removeIntentTarget(playerID, previous.TargetHandle)
+	}
+	if s.IntentByPlayer == nil {
+		s.IntentByPlayer = make(map[types.EntityID]LinkIntent)
+	}
 	s.IntentByPlayer[playerID] = LinkIntent{
 		TargetID:     targetID,
 		TargetHandle: targetHandle,
 		CreatedAt:    createdAt,
 	}
+	if targetHandle == types.InvalidHandle {
+		return
+	}
+	if s.IntentPlayersByTarget == nil {
+		s.IntentPlayersByTarget = make(map[types.Handle]map[types.EntityID]struct{})
+	}
+	players := s.IntentPlayersByTarget[targetHandle]
+	if players == nil {
+		players = make(map[types.EntityID]struct{}, 4)
+		s.IntentPlayersByTarget[targetHandle] = players
+	}
+	players[playerID] = struct{}{}
 }
 
 func (s *LinkState) ClearIntent(playerID types.EntityID) {
+	if intent, exists := s.IntentByPlayer[playerID]; exists {
+		s.removeIntentTarget(playerID, intent.TargetHandle)
+	}
 	delete(s.IntentByPlayer, playerID)
+}
+
+func (s *LinkState) removeIntentTarget(playerID types.EntityID, target types.Handle) {
+	players := s.IntentPlayersByTarget[target]
+	delete(players, playerID)
+	if len(players) == 0 {
+		delete(s.IntentPlayersByTarget, target)
+	}
 }
 
 func (s *LinkState) SetLink(link PlayerLink) {

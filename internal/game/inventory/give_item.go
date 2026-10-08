@@ -236,6 +236,7 @@ func (s *InventoryOperationService) tryAddToEligibleGrid(
 		return nil
 	}
 	gridLinks := orderedGridLinks(owner.Inventories, playerID, defaultGivePlacementPolicy)
+	gridLinks = filterPersonalInventoryLinks(w, playerID, playerHandle, gridLinks)
 	for _, link := range gridLinks {
 		if !w.Alive(link.Handle) {
 			continue

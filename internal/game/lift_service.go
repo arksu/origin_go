@@ -569,15 +569,38 @@ func (s *LiftService) clearCarryStateForPlayer(w *ecs.World, playerID types.Enti
 }
 
 func (s *LiftService) clearPendingLiftTransitionState(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, keepPhantom bool) {
+	pending, hadPending := ecs.GetComponent[components.PendingLiftTransition](w, playerHandle)
+	clearPhantom := !keepPhantom && hadPending && liftTransitionOwnsPhantom(w, playerHandle, pending)
 	ecs.RemoveComponent[components.PendingLiftTransition](w, playerHandle)
-	if !keepPhantom {
+	if clearPhantom {
 		ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
 			col.Phantom = nil
 		})
 	}
-	if playerID != 0 {
-		ecs.GetResource[ecs.LinkState](w).ClearIntent(playerID)
+	if playerID != 0 && hadPending {
+		links := ecs.GetResource[ecs.LinkState](w)
+		if intent, exists := links.IntentByPlayer[playerID]; exists && intent.TargetHandle == pending.ObjectHandle {
+			links.ClearIntent(playerID)
+		}
 	}
+}
+
+// A delayed transition may outlive a newer action or placement preview. Match
+// both its generation and the collider values before clearing shared phantom state.
+func liftTransitionOwnsPhantom(w *ecs.World, playerHandle types.Handle, pending components.PendingLiftTransition) bool {
+	if active, exists := ecs.GetComponent[components.ActiveGameAction](w, playerHandle); exists && active.Generation != pending.ActionGeneration {
+		return false
+	}
+	if ecs.HasComponent[components.PendingBuildPlacement](w, playerHandle) {
+		return false
+	}
+	collider, exists := ecs.GetComponent[components.Collider](w, playerHandle)
+	if !exists || collider.Phantom == nil {
+		return false
+	}
+	phantom := collider.Phantom
+	return phantom.TypeID == 0 && phantom.WorldX == pending.TargetX && phantom.WorldY == pending.TargetY &&
+		phantom.HalfWidth == pending.PhantomHalfW && phantom.HalfHeight == pending.PhantomHalfH
 }
 
 func (s *LiftService) clearPendingInteractionIntents(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
@@ -717,6 +740,9 @@ func (s *LiftService) breakAllLinksToTarget(w *ecs.World, targetID types.EntityI
 
 func (s *LiftService) isLiftableTarget(w *ecs.World, targetHandle types.Handle) bool {
 	if w == nil || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
+		return false
+	}
+	if ecs.ObjectDestructionPending(w, targetHandle) {
 		return false
 	}
 	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)

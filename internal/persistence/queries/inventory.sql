@@ -63,3 +63,10 @@ WHERE owner_id = $1 AND kind = $2 AND inventory_key = $3 AND deleted_at IS NULL;
 UPDATE inventory
 SET deleted_at = NOW()
 WHERE owner_id = $1 AND deleted_at IS NULL;
+
+-- name: UpsertDroppedInventories :exec
+INSERT INTO inventory (owner_id, kind, inventory_key, data, version)
+SELECT unnest(sqlc.arg(owner_ids)::bigint[]), sqlc.arg(kind)::int, 0,
+       unnest(sqlc.arg(datas)::text[])::jsonb, 1
+ON CONFLICT (owner_id, kind, inventory_key) DO UPDATE SET
+    data = EXCLUDED.data, version = 1, deleted_at = NULL, updated_at = NOW();

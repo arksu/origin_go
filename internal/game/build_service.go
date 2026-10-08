@@ -528,6 +528,9 @@ func (s *BuildService) onLinkBroken(_ context.Context, event eventbus.Event) err
 			}
 		}
 	}
+	if ecs.ObjectDestructionPending(s.world, targetHandle) {
+		return nil
+	}
 
 	linkState := ecs.GetResource[ecs.LinkState](s.world)
 	if players := linkState.PlayersByTarget[ev.TargetID]; len(players) > 0 {

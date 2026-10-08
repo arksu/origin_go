@@ -276,7 +276,7 @@ func setupTreeActionTestRegistries(t *testing.T, treeDefID int, includeTake bool
 		}
 	}
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{
+		{HP: 100,
 			DefID: treeDefID,
 			Key:   "tree_test_actions",
 			TreeConfig: &objectdefs.TreeBehaviorConfig{
@@ -555,7 +555,7 @@ func TestSpawnStageObjects_UsesParentQuality(t *testing.T) {
 		objectdefs.SetGlobalForTesting(previousRegistry)
 	})
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{
+		{HP: 100,
 			DefID:     9901,
 			Key:       "log_y",
 			Name:      "Log",
@@ -749,7 +749,7 @@ func TestOnScheduledTick_CancelsWhenCatchupReturnsZeroNextTickNonFinal(t *testin
 	})
 	treeDefID := 7001
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{
+		{HP: 100,
 			DefID: treeDefID,
 			Key:   "tree_test_scheduler_cancel",
 			TreeConfig: &objectdefs.TreeBehaviorConfig{
@@ -866,7 +866,7 @@ func TestExecuteAction_ChopKeepsExistingChopPoints(t *testing.T) {
 	})
 	treeDefID := 7002
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{
+		{HP: 100,
 			DefID: treeDefID,
 			Key:   "tree_test_execute",
 			TreeConfig: &objectdefs.TreeBehaviorConfig{
@@ -936,7 +936,7 @@ func TestExecuteAction_InitializesMissingStateAtFinalStage(t *testing.T) {
 	})
 	treeDefID := 7003
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{
+		{HP: 100,
 			DefID: treeDefID,
 			Key:   "tree_test_missing_state",
 			TreeConfig: &objectdefs.TreeBehaviorConfig{

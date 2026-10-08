@@ -57,18 +57,22 @@ func DeleteOwnedInventoryContainers(w *ecs.World, ownerID types.EntityID) {
 		}
 		seenOwners[currentOwnerID] = struct{}{}
 
-		for _, containerHandle := range refIndex.RemoveAllByOwner(currentOwnerID) {
-			container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, containerHandle)
-			if hasContainer {
-				for _, item := range container.Items {
-					if item.ItemID != 0 {
-						pendingOwners = append(pendingOwners, item.ItemID)
-					}
+		for _, ref := range refIndex.EntriesByOwnerInto(currentOwnerID, nil) {
+			if !w.Alive(ref.Handle) {
+				refIndex.Remove(ref.Kind, ref.OwnerID, ref.Key)
+				continue
+			}
+			container, hasContainer := ecs.GetComponent[components.InventoryContainer](w, ref.Handle)
+			if !hasContainer || container.OwnerID != ref.OwnerID || container.Kind != ref.Kind || container.Key != ref.Key {
+				continue // A corrupt reference must never delete another owner's entity.
+			}
+			for _, item := range container.Items {
+				if item.ItemID != 0 {
+					pendingOwners = append(pendingOwners, item.ItemID)
 				}
 			}
-			if w.Alive(containerHandle) {
-				w.Despawn(containerHandle)
-			}
+			refIndex.Remove(ref.Kind, ref.OwnerID, ref.Key)
+			w.Despawn(ref.Handle)
 		}
 	}
 }

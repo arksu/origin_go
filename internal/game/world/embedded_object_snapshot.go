@@ -20,9 +20,10 @@ type EmbeddedObjectSnapshotV1 struct {
 	Layer    int    `json:"layer"`
 	Quality  int16  `json:"quality"`
 
-	Heading *int16          `json:"heading,omitempty"`
+	// HP is required for definition-backed objects; nil denotes a dropped item.
+	HP         *float64        `json:"hp,omitempty"`
+	Heading    *int16          `json:"heading,omitempty"`
 	ObjectData json.RawMessage `json:"object_data,omitempty"`
 
 	RootInventories []EmbeddedInventorySnapshotV1 `json:"root_inventories,omitempty"`
 }
-

@@ -78,8 +78,14 @@ func (s *OpenContainerService) HandleOpenRequest(
 	ownerID := types.EntityID(ref.OwnerId)
 	kind := constt.InventoryKind(ref.Kind)
 	key := ref.InventoryKey
+	if ecs.ObjectDestructionOwnerPending(w, ownerID) {
+		return &systems.OpenContainerError{Code: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: "Container is unavailable"}
+	}
 
 	openState := ecs.GetResource[ecs.OpenContainerState](w)
+	if rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID); hasRoot && ecs.ObjectDestructionOwnerPending(w, rootOwnerID) {
+		return &systems.OpenContainerError{Code: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: "Container is unavailable"}
+	}
 
 	// Nested under currently opened world-object root must be treated as
 	// world-object open flow (tracked in OpenContainerState), even if a stale
@@ -94,6 +100,9 @@ func (s *OpenContainerService) HandleOpenRequest(
 
 	// Keep legacy behavior for any player-owned inventory refs (root + nested item containers).
 	if s.isPlayerOwnedRef(w, playerHandle, kind, ownerID, key) {
+		if kind == constt.InventoryGrid && ownerID != playerID && !inventory.NestedContainerOwnedByPlayer(w, playerHandle, ownerID) {
+			return &systems.OpenContainerError{Code: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: "Nested inventory is no longer accessible"}
+		}
 		return s.openAnyRefForPlayer(w, playerID, kind, ownerID, key, false)
 	}
 	// Fallback for personal nested refs when InventoryOwner link is not yet synchronized.
@@ -163,36 +172,7 @@ func (s *OpenContainerService) isNestedContainerOwnedByPlayer(
 	playerHandle types.Handle,
 	nestedOwnerID types.EntityID,
 ) bool {
-	owner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-	if !hasOwner {
-		return false
-	}
-
-	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
-	for _, link := range owner.Inventories {
-		// Skip the nested container itself; we need parent containers that hold the item.
-		if link.Kind == constt.InventoryGrid && link.Key == 0 && link.OwnerID == nestedOwnerID {
-			continue
-		}
-		if !w.Alive(link.Handle) {
-			continue
-		}
-
-		container, ok := ecs.GetComponent[components.InventoryContainer](w, link.Handle)
-		if !ok {
-			continue
-		}
-
-		for _, item := range container.Items {
-			if item.ItemID != nestedOwnerID {
-				continue
-			}
-			nestedHandle, found := refIndex.Lookup(constt.InventoryGrid, nestedOwnerID, 0)
-			return found && w.Alive(nestedHandle)
-		}
-	}
-
-	return false
+	return inventory.NestedContainerOwnedByPlayer(w, playerHandle, nestedOwnerID)
 }
 
 func (s *OpenContainerService) HandleCloseRequest(

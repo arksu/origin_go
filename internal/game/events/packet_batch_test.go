@@ -16,6 +16,7 @@ import (
 	"origin/internal/eventbus"
 	"origin/internal/game"
 	gameworld "origin/internal/game/world"
+	"origin/internal/itemdefs"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/sounddefs"
@@ -40,6 +41,9 @@ type batchFixture struct {
 
 func newBatchFixture(t *testing.T) *batchFixture {
 	t.Helper()
+	previousItems := itemdefs.Global()
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry(nil))
+	t.Cleanup(func() { itemdefs.SetGlobalForTesting(previousItems) })
 	previous := actiondefs.Global()
 	actiondefs.SetGlobalForTesting(actiondefs.NewRegistry([]actiondefs.Definition{{ID: "lift"}, {ID: "lift_down"}, {ID: "plow_tile"}, {ID: "dig"}}))
 	t.Cleanup(func() { actiondefs.SetGlobalForTesting(previous) })
