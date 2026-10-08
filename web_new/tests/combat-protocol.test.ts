@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { MessageDispatcher } from '../src/network/MessageDispatcher'
 import { proto } from '../src/network/proto/packets.js'
+import { util } from 'protobufjs/minimal'
+import { AttackResultReceiver } from '../src/network/AttackResultReceiver'
 
 test('activation preserves absent and zero aim and decodes legacy requests', () => {
   for (const aimAngle of [undefined, 0, Math.PI / 2]) {
@@ -82,4 +84,96 @@ test('attack result dispatch preserves misses, zero damage, fractional damage an
   }
   assert.equal(received.length, 2)
   assert.equal(dispatcher.getUnknownMessageCount(), 0)
+})
+
+function attackResult(overrides: Record<string, unknown> = {}): proto.IS2C_AttackResult {
+  return { streamEpoch: 7, eventId: 11, attackerId: 21, hits: [{ targetId: 31, damage: 0.6 }], ...overrides } as proto.IS2C_AttackResult
+}
+
+test('attack receiver consumes misses and contacts without modifying the packet', () => {
+  const receiver = new AttackResultReceiver()
+  receiver.reset(7)
+  const miss = attackResult({ hits: [] })
+  assert.equal(receiver.accept(miss), true)
+  const contacts = attackResult({ eventId: 12, hits: [{ targetId: 31, damage: 0 }, { targetId: 41, damage: 81 / 13 }] })
+  const before = structuredClone(contacts)
+  assert.equal(receiver.accept(contacts), true)
+  assert.deepEqual(contacts, before)
+  assert.equal(receiver.accept(attackResult({ eventId: 13, hits: undefined })), true)
+})
+
+test('attack receiver preserves exact uint64 ordering through wire decoding', () => {
+  const receiver = new AttackResultReceiver(), dispatcher = new MessageDispatcher(), accepted: boolean[] = []
+  receiver.reset(7)
+  dispatcher.on('attackResult', message => accepted.push(receiver.accept(message)))
+  for (const eventId of ['9007199254740992', '9007199254740993', '9007199254740992', '18446744073709551615', '18446744073709551615']) {
+    const packet = proto.ServerMessage.fromObject({ attackResult: {
+      streamEpoch: 7, eventId, attackerId: '9007199254740995', hits: [{ targetId: '18446744073709551615', damage: 3.6 }],
+    } })
+    dispatcher.dispatch(proto.ServerMessage.decode(proto.ServerMessage.encode(packet).finish()))
+  }
+  assert.deepEqual(accepted, [true, true, false, true, false])
+  receiver.reset(7)
+  for (const eventId of [9, 10, 99, 100]) assert.equal(receiver.accept(attackResult({ eventId })), true)
+})
+
+test('attack receiver resets its watermark on world and connection changes', () => {
+  const receiver = new AttackResultReceiver()
+  assert.equal(receiver.accept(attackResult()), false)
+  receiver.reset(7)
+  assert.equal(receiver.accept(attackResult({ eventId: 100 })), true)
+  assert.equal(receiver.accept(attackResult({ eventId: 99 })), false)
+  receiver.reset()
+  assert.equal(receiver.accept(attackResult({ eventId: 101 })), false)
+  receiver.reset(7)
+  assert.equal(receiver.accept(attackResult({ eventId: 1 })), true)
+  receiver.reset(8)
+  assert.equal(receiver.accept(attackResult({ eventId: 1000 })), false)
+  assert.equal(receiver.accept(attackResult({ streamEpoch: 8, eventId: 1 })), true)
+  for (const epoch of [NaN, Infinity, -1, 0.5, 4294967296]) {
+    receiver.reset(epoch)
+    assert.equal(receiver.accept(attackResult({ streamEpoch: epoch })), false)
+  }
+})
+
+test('attack receiver rejects malformed identities without consuming their event ID', () => {
+  const malformedLong = new util.Long(11, 0, true)
+  malformedLong.low = NaN
+  const fractionalLong = new util.Long(11, 0, true)
+  fractionalLong.high = 0.5
+  const malformedValues: unknown[] = [
+    undefined, null, false, {}, { toString: () => '11' }, { low: 11, high: 0, unsigned: true },
+    0, -1, NaN, Infinity, -Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1,
+    '', '0', '-1', '01', '+1', '1.0', '1e2', ' 11', '11 ', '0x0b', '18446744073709551616',
+    malformedLong, fractionalLong, new util.Long(-1, -1, false),
+  ]
+  for (const value of malformedValues) {
+    for (const field of ['eventId', 'attackerId', 'targetId']) {
+      const receiver = new AttackResultReceiver()
+      receiver.reset(7)
+      const packet = field === 'targetId' ? attackResult({ hits: [{ targetId: value, damage: 0.6 }] }) : attackResult({ [field]: value })
+      assert.equal(receiver.accept(packet), false, `${field}: ${String(value)}`)
+      assert.equal(receiver.accept(attackResult()), true, 'invalid packet must not advance the watermark')
+    }
+  }
+})
+
+test('attack receiver validates the entire hit list before advancing the watermark', () => {
+  const invalidLists: unknown[] = [
+    'hits', {}, [null], [undefined],
+    [{ targetId: 31, damage: 1 }, { targetId: '31', damage: 2 }],
+    [{ targetId: 21, damage: 1 }],
+    ...[NaN, Infinity, -Infinity, -0.1, '0.6'].map(damage => [{ targetId: 31, damage }]),
+    Array.from({ length: 513 }, (_, index) => ({ targetId: index + 100, damage: 1 })),
+  ]
+  for (const hits of invalidLists) {
+    const receiver = new AttackResultReceiver()
+    receiver.reset(7)
+    assert.equal(receiver.accept(attackResult({ eventId: 1000, hits })), false)
+    assert.equal(receiver.accept(attackResult()), true)
+    assert.equal(receiver.accept(attackResult({ eventId: 1000 })), true)
+  }
+  const receiver = new AttackResultReceiver()
+  receiver.reset(7)
+  assert.equal(receiver.accept(attackResult({ hits: Array.from({ length: 512 }, (_, index) => ({ targetId: index + 100, damage: 0 })) })), true)
 })
