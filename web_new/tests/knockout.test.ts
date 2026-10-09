@@ -158,6 +158,36 @@ test('live lying uses one transition path and death fallback cannot be cleared b
   game.setPlayerLeaveWorld()
 })
 
+test('same-ID skeleton spawn clears corpse appearance and rejects late character packets', t => {
+  setActivePinia(createPinia())
+  const game = useGameStore()
+  game.setConnectionState('connected')
+  t.mock.method(gameFacade, 'resetWorld', () => {})
+  const spawns = t.mock.method(gameFacade, 'spawnObject', () => {})
+  const equipment = t.mock.method(gameFacade, 'setCharacterEquipment', async () => {})
+  const poses = t.mock.method(gameFacade, 'setObjectKnockedOutPose', () => {})
+  const animations = t.mock.method(gameFacade, 'setActionAnimation', () => {})
+  t.mock.method(soundManager, 'initialize', async () => ({ manifests: {}, equipment: {}, actionAnimations: {} }))
+  registerMessageHandlers()
+  dispatch({ playerEnterWorld: { entityId: 99, streamEpoch: 1, coordPerTile: 12, chunkSize: 4 } })
+  const corpseVisual = { generation: '0:4294967297', revision: 5, isLying: true,
+    equipment: [{ slot: proto.EquipSlot.EQUIP_SLOT_RIGHT_HAND, visualKey: 'stone_axe' }] }
+  dispatch({ objectSpawn: { entityId: 17, typeId: 15, resourcePath: 'player', streamEpoch: 1, characterVisual: corpseVisual } })
+  dispatch({ objectSpawn: { entityId: 17, typeId: 17, resourcePath: 'player_skeleton', streamEpoch: 1 } })
+  assert.equal(spawns.mock.callCount(), 2)
+  assert.equal(game.entities.get(17)!.resourcePath, 'player_skeleton')
+  assert.equal(game.entities.get(17)!.characterVisual, undefined)
+  assert.equal(game.entities.get(17)!.actionAnimation, undefined)
+  const calls = [equipment.mock.callCount(), poses.mock.callCount(), animations.mock.callCount()]
+  dispatch({ characterVisual: { entityId: 17, streamEpoch: 1, state: { ...corpseVisual, revision: 6 } } })
+  dispatch({ characterActionAnimation: { entityId: 17, streamEpoch: 1, state: {
+    generation: corpseVisual.generation, revision: 7, animationKey: '', elapsedTicks: 0,
+    totalTicks: 0, tickDurationMs: 100, serverTimeMs: 1000, facingAngle: 0,
+  } } })
+  assert.deepEqual([equipment.mock.callCount(), poses.mock.callCount(), animations.mock.callCount()], calls)
+  game.setPlayerLeaveWorld()
+})
+
 test('forbidden craft and build retire keyboard input and reach the server for an explicit refusal', t => {
   setActivePinia(createPinia())
   const game = useGameStore()

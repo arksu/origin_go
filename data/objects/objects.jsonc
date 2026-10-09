@@ -126,11 +126,37 @@
           }
         ]
       },
-      "resource": "player", // TODO: replace with lying-body sprite/spine animation resource.
+      "resource": "player",
       "behaviors": {
         "container": {},
         "player_dead": {}
       }
+    },
+    {
+      "defId": 17,
+      "key": "player_skeleton",
+      "name": "Player Skeleton",
+      "static": true,
+      "hp": 100,
+      "indestructible": true,
+      "components": {
+        "collider": { "w": 9, "h": 9 }
+      },
+      "resource": "player_skeleton",
+      "behaviors": { "lift": {} }
+    },
+    {
+      "defId": 18,
+      "key": "player_skeleton_without_skull",
+      "name": "Headless Player Skeleton",
+      "static": true,
+      "hp": 100,
+      "indestructible": true,
+      "components": {
+        "collider": { "w": 9, "h": 9 }
+      },
+      "resource": "player_skeleton_without_skull",
+      "behaviors": { "lift": {} }
     },
     {
       "defId": 1001,

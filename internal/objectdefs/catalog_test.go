@@ -26,9 +26,10 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 	require.True(t, exists)
 	require.Equal(t, "player_dead", corpse.Key)
 	require.Equal(t, "Dead Player", corpse.Name)
+	protected := map[string]bool{"player_dead": true, "player_skeleton": true, "player_skeleton_without_skull": true}
 	for _, definition := range objects.All() {
-		require.Equal(t, definition.Key == "player_dead", definition.Indestructible,
-			"only player_dead is indestructible in the object catalog: %s", definition.Key)
+		require.Equal(t, protected[definition.Key], definition.Indestructible,
+			"only player remains are indestructible in the object catalog: %s", definition.Key)
 		if definition.Key == "player" {
 			require.Zero(t, definition.HP)
 			continue
@@ -36,10 +37,22 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 		require.Positive(t, definition.HP, "object %s (defId=%d)", definition.Key, definition.DefID)
 	}
 
-	for _, key := range []string{"boulder", "kiln", "campfire", "player_dead", "build"} {
+	for _, key := range []string{"boulder", "kiln", "campfire", "player_dead", "player_skeleton", "player_skeleton_without_skull", "build"} {
 		definition, exists := objects.GetByKey(key)
 		require.True(t, exists, "object %s", key)
 		require.Equal(t, 100, definition.HP, "object %s", key)
+	}
+	for key, id := range map[string]int{"player_skeleton": 17, "player_skeleton_without_skull": 18} {
+		definition, exists := objects.GetByKey(key)
+		require.True(t, exists)
+		require.Equal(t, id, definition.DefID)
+		require.True(t, definition.IsStatic)
+		require.Equal(t, key, definition.Resource)
+		require.InDelta(t, 9, definition.Components.Collider.W, 0)
+		require.InDelta(t, 9, definition.Components.Collider.H, 0)
+		require.Empty(t, definition.Components.Inventory)
+		require.Len(t, definition.Behaviors, 1)
+		require.Contains(t, definition.Behaviors, "lift")
 	}
 	for key, hp := range map[string]int{"log_x": 1, "log_y": 1, "tree_birch": 100} {
 		definition, exists := objects.GetByKey(key)

@@ -39,3 +39,20 @@ func TestLoadedObjectCachePreservesNewerCommittedReplacement(t *testing.T) {
 	require.NotContains(t, rows, types.EntityID(5))
 	require.Equal(t, 2, rows[6][0].Version)
 }
+
+func TestLoadedObjectCachePreservesInPlaceTransformAndClearsInventories(t *testing.T) {
+	chunk := NewChunk(types.ChunkCoord{}, 1, 0, 128)
+	chunk.SetRawObjects([]*repository.Object{{ID: 5, TypeID: 15}})
+	chunk.SetRawInventoriesForOwner(5, []repository.Inventory{{OwnerID: 5, Version: 1}})
+	revision := chunk.beginCacheLoad()
+	chunk.InsertCommittedObject(&repository.Object{ID: 5, TypeID: 17}, nil)
+	chunk.installLoadedObjects(revision, []*repository.Object{{ID: 5, TypeID: 15}}, map[types.EntityID][]repository.Inventory{
+		5: {{OwnerID: 5, Version: 2}},
+	})
+	objects := chunk.GetRawObjects()
+	require.Len(t, objects, 1)
+	require.Equal(t, int64(5), objects[0].ID)
+	require.Equal(t, 17, objects[0].TypeID)
+	require.Empty(t, chunk.GetRawInventoriesByOwner()[5])
+	require.Empty(t, chunk.GetRawDirtyObjectIDs())
+}

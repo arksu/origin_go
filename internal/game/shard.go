@@ -150,7 +150,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.objectDestruction, destructionErr = NewObjectDestructionService(s.world, ObjectDestructionDependencies{
 		Chunks: s.chunkManager, Persister: worldObjectPersistence, IDs: entityIDManager,
 		Items: itemdefs.Global(), WithWorldRead: s.WithWorldRead, Quarantine: s.quarantineDestroyedObject,
-		MinX: minX, MinY: minY, MaxX: maxX, MaxY: maxY, Region: cfg.Game.Region, Logger: logger,
+		TransformCommitted: s.completeCorpseDecay,
+		MinX:               minX, MinY: minY, MaxX: maxX, MaxY: maxY, Region: cfg.Game.Region, Logger: logger,
 	})
 	if destructionErr != nil {
 		logger.Fatal("Invalid object destruction service", zap.Error(destructionErr))
@@ -199,7 +200,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		visionForcer:         visionSystem,
 		logger:               logger,
 	}
-	s.chunkManager.SetRestoredObjectReconciler(burnerExhaustion)
+	s.chunkManager.SetRestoredObjectReconciler(&shardObjectRestoreReconciler{shard: s, burner: burnerExhaustion})
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
@@ -315,6 +316,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	cyclicActions := NewCyclicActionSystem(contextActionService, s, logger)
 	cyclicActions.SetActionService(actionService)
 	s.world.AddSystem(cyclicActions)
+	s.world.AddSystem(&corpseDecaySystem{BaseSystem: ecs.NewBaseSystem("CorpseDecay", 314), shard: s})
 	s.world.AddSystem(visionSystem)
 	s.world.AddSystem(systems.NewAutoInteractSystem(inventoryExecutor, s, visionSystem, logger))
 	s.world.AddSystem(systems.NewBehaviorTickSystem(logger, systems.BehaviorTickSystemConfig{
@@ -903,6 +905,12 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 	ecs.AddComponent(w, playerHandle, components.ObjectInternalState{
 		HP: float64(def.HP), HasHP: true, IsDirty: true,
 	})
+	if err := behaviors.MustDefaultRegistry().InitObjectBehaviors(&contracts.BehaviorObjectInitContext{
+		World: w, Handle: playerHandle, EntityID: playerID, EntityType: uint32(def.DefID),
+		Reason: contracts.ObjectBehaviorInitReasonTransform,
+	}, def.CopyBehaviorOrder()); err != nil {
+		s.logger.Error("Failed to initialize corpse behaviors", zap.Uint64("player_id", uint64(playerID)), zap.Error(err))
+	}
 	ecs.MarkObjectBehaviorDirty(w, playerHandle)
 	ecs.MarkCharacterVisualDirty(w, playerID)
 

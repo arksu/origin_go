@@ -14,6 +14,7 @@ import (
 	"origin/internal/game/inventory"
 	gameworld "origin/internal/game/world"
 	"origin/internal/itemdefs"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 
@@ -56,6 +57,16 @@ type ObjectDestructionPersister interface {
 		func([]inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error)) error
 }
 
+// Transformation keeps the source identity instead of deleting its object row.
+type objectLootTransformationPersister interface {
+	TransformObjectWithDroppedItems(context.Context, *repository.Object, types.EntityID,
+		func([]inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error)) error
+}
+
+type objectLootTransformationChunks interface {
+	ReplaceCommittedSource(*repository.Object) error
+}
+
 type ObjectDestructionIDs interface {
 	ReserveIDs(uint64) (types.EntityID, types.EntityID, error)
 }
@@ -69,6 +80,7 @@ type ObjectDestructionDependencies struct {
 	Items                  *itemdefs.Registry
 	WithWorldRead          func(func(*ecs.World))
 	Quarantine             func(types.Handle)
+	TransformCommitted     func(types.Handle, *objectdefs.ObjectDef) bool
 	Region                 int
 	MinX, MinY, MaxX, MaxY int // Inclusive minimum, exclusive maximum.
 	Logger                 *zap.Logger
@@ -135,6 +147,8 @@ type objectDestructionOperation struct {
 	cursor              destructionLootCursor
 	page                []destructionDroppedRecord
 	pageRead            int
+	replacement         *repository.Object
+	replacementDef      *objectdefs.ObjectDef
 }
 
 type destructionDroppedRecord struct {
@@ -189,6 +203,46 @@ func (s *ObjectDestructionService) PrepareTarget(target types.Handle) error {
 	if _, exists := s.reserved[target]; !exists {
 		s.reserved[target] = 0
 	}
+	return nil
+}
+
+// TransformWithLoot admits a durable lifecycle transition without applying damage.
+// The owning shard lock covers preparation, quarantine and every completion.
+func (s *ObjectDestructionService) TransformWithLoot(target types.Handle, destination *objectdefs.ObjectDef) error {
+	if s == nil || destination == nil || destination.Key == "player" || destination.HP <= 0 ||
+		(destination.Components != nil && len(destination.Components.Inventory) != 0) || s.deps.TransformCommitted == nil {
+		return ErrInvalidObjectDestructionService
+	}
+	if _, ok := s.deps.Persister.(objectLootTransformationPersister); !ok {
+		return ErrInvalidObjectDestructionService
+	}
+	if _, ok := s.deps.Chunks.(objectLootTransformationChunks); !ok {
+		return ErrInvalidObjectDestructionService
+	}
+	if !s.world.Alive(target) || ecs.ObjectDestructionPending(s.world, target) {
+		return ErrObjectDestructionPending
+	}
+	replacement, err := gameworld.NewObjectFactory(nil).Serialize(s.world, target)
+	if err != nil {
+		return err
+	}
+	if replacement == nil {
+		return ErrObjectDestructionCapture
+	}
+	replacement.TypeID = destination.DefID
+	replacement.Hp = sql.NullFloat64{Float64: float64(destination.HP), Valid: true}
+	replacement.Data = pqtype.NullRawMessage{}
+	if err := s.PrepareTarget(target); err != nil {
+		return err
+	}
+	reservation, err := s.reserve(target)
+	if err != nil {
+		return err
+	}
+	op := s.reservationOperation(reservation, destructionReserved)
+	op.replacement, op.replacementDef = replacement, destination
+	s.commitReservation(reservation)
+	s.finalizeReservation(reservation)
 	return nil
 }
 
@@ -379,6 +433,20 @@ func (s *ObjectDestructionService) finalizeSource(op *objectDestructionOperation
 		return false
 	}
 	*budget--
+	if op.replacement != nil {
+		if err := s.deps.Chunks.(objectLootTransformationChunks).ReplaceCommittedSource(op.replacement); err != nil {
+			return false
+		}
+		// The ordinary transform helper rejects quarantined entities. Open this
+		// exact generation only for its synchronous, already durable transition.
+		state := ecs.GetResource[ecs.ObjectDestructionState](s.world)
+		state.Pending[op.target] = false
+		if !s.deps.TransformCommitted(op.target, op.replacementDef) {
+			state.Pending[op.target] = true
+			return false
+		}
+		return true
+	}
 	s.deps.Chunks.RemoveCommittedSource(op.source, op.id)
 	if s.world.Alive(op.target) {
 		if id, ok := s.world.GetExternalID(op.target); ok && id == op.id {
@@ -407,6 +475,8 @@ func (s *ObjectDestructionService) release(op *objectDestructionOperation) {
 	op.cursor = destructionLootCursor{}
 	op.page = nil
 	op.pageRead = 0
+	op.replacement = nil
+	op.replacementDef = nil
 	if _, exists := s.reserved[op.target]; exists {
 		s.reserved[op.target] = 0
 	}
@@ -455,7 +525,11 @@ func (op *objectDestructionOperation) Run() error {
 					}
 					refs = append(refs, page...)
 				}
-				op.capture = inventory.NewObjectLootCapture(op.id, refs)
+				if op.replacement != nil {
+					op.capture = inventory.NewObjectLootCaptureForTransformation(op.id, refs)
+				} else {
+					op.capture = inventory.NewObjectLootCapture(op.id, refs)
+				}
 			}
 			for {
 				var done bool
@@ -528,9 +602,13 @@ func (op *objectDestructionOperation) Run() error {
 		defer cancel()
 		cursor := destructionLootCursor{}
 		err := s.deps.Chunks.WithPersistence(op.pinned, func() error {
-			return s.deps.Persister.ReplaceObjectWithDroppedItems(ctx, op.region, op.id, op.lastID, func(dst []inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error) {
+			next := func(dst []inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error) {
 				return op.records(&cursor, dst, objectDestructionSQLBudget)
-			})
+			}
+			if op.replacement != nil {
+				return s.deps.Persister.(objectLootTransformationPersister).TransformObjectWithDroppedItems(ctx, op.replacement, op.lastID, next)
+			}
+			return s.deps.Persister.ReplaceObjectWithDroppedItems(ctx, op.region, op.id, op.lastID, next)
 		})
 		if err != nil {
 			return err

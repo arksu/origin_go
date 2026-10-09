@@ -13,6 +13,11 @@ uses the ordinary paid-miss completion. `player_dead` enables the flag. Generic
 destruction/deletion and administrative `/destroy` remain available; this is a
 damage policy rather than a prohibition on lifecycle removal.
 
+`player_dead` also uses this pipeline for timed corpse decay. That operation
+releases the same captured inventory tree but replaces the source with an
+inventory-free skeleton under its original `EntityID`. See
+[corpse decay](corpse_decay.md) for its server-runtime deadline and identity rules.
+
 ## Ownership and admission
 
 `ObjectDamageService` and `ObjectDestructionService` belong to one World.
@@ -73,12 +78,27 @@ inventory rows. An empty replacement and an unsaved source are valid. Replaying
 the same replacement after an ambiguous commit is idempotent. Dedicated drop-root
 upserts replace an older deleted root regardless of its previous inventory version.
 
+`TransformObjectWithDroppedItems` shares this streaming transaction with ordinary
+destruction. Instead of deleting the source object, it deletes all source-root
+inventory rows and upserts the immutable replacement snapshot under the same
+region and ID. Replacement requires a registered normal definition with positive
+HP and no inventory components, and valid finite positive persisted HP. An empty
+loot set and an unsaved source are valid. Iterator failures, invalid batches and
+replacement write failures roll back the drops, inventory removal, replacement
+and ID watermark together. Replaying the captured snapshot preserves identity
+without duplicating drops.
+
 All affected chunks are pinned and their I/O gates are locked in coordinate
 order by the worker. Tick admission/activation/deactivation uses nonblocking gate
 checks. Earlier chunk saves finish before replacement, and pins prevent new
 ordinary chunk saves from resurrecting pending sources. A raw-cache revision fence preserves
 newer committed rows and deletions if an older load overlaps cache application.
 This merges authoritative committed data instead of issuing an extra full reload.
+`ReplaceCommittedSource` applies the durable replacement through the same cache
+revision fence with an explicitly empty root-inventory list, so a late load cannot
+restore the old corpse type or its removed inventory rows. It owns a copy of the
+replacement JSON and preserves operation pins; runtime transformation remains an
+owning-shard action after persistence succeeds.
 
 ## Completion, capacity and shutdown
 
