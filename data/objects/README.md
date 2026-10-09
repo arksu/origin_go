@@ -15,6 +15,7 @@ Files in this folder are loaded by `internal/objectdefs`.
       "defId": 10,
       "key": "box",
       "name": "Box",
+      "hp": 100,
       "resource": "box/empty"
     }
   ]
@@ -26,11 +27,12 @@ Files in this folder are loaded by `internal/objectdefs`.
 - `defId` (int, `> 0`)
 - `key` (string, non-empty)
 - `name` (string, non-empty)
+- `hp` (positive integer for every definition except `player`, including indestructible objects)
 
 ## Common Optional Fields
 
 - `static` (defaults to `true`)
-- `hp`
+- `indestructible` (boolean, defaults to `false`; unsupported for `player`)
 - `resource`
 - `appearance` (conditional visual variants)
 - `station` (autonomous station configuration)
@@ -38,6 +40,13 @@ Files in this folder are loaded by `internal/objectdefs`.
   - `collider`
   - `inventory`
 - `behaviors` (server behavior config map)
+
+`indestructible: true` prevents object damage and excludes the object from melee
+damage targets. It does not change collision, lifting, inventory interaction,
+behavior-driven transforms or removal, or administrator `/destroy`. The current
+catalog enables it only for `player_dead` (`Dead Player`), which retains its initial `hp: 100`.
+The corpse definition keeps `defId: 15`; existing saved corpses load through this
+same ID without a database migration.
 
 ## Components Rules
 
@@ -130,6 +139,7 @@ Changing an object key can break builds/crafts and code paths. Prefer adding new
 - `defId` unique across all files in `data/objects`
 - `key` unique across all files in `data/objects`
 - `name` is present and user-friendly
+- `hp` is a positive integer for every definition except `player`
 - collider/inventory dimensions are positive when used
 - behavior keys are valid (copy from known working examples)
 - no trailing commas / no unknown fields

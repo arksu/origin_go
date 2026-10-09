@@ -26,7 +26,7 @@ func TestCorpseConversionInitializesAndPersistsObjectHealth(t *testing.T) {
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
 		{DefID: 1, Key: "player"},
-		{DefID: 901, Key: "player_death", HP: 125, Resource: "corpse", IsStatic: true},
+		{DefID: 901, Key: "player_dead", HP: 125, Resource: "corpse", IsStatic: true, Indestructible: true},
 	}))
 	w := ecs.NewWorldForTesting()
 	player := w.Spawn(10, func(w *ecs.World, h types.Handle) {
@@ -50,6 +50,7 @@ func TestCorpseConversionInitializesAndPersistsObjectHealth(t *testing.T) {
 	require.True(t, exists)
 	require.Equal(t, uint32(901), info.TypeID)
 	require.Equal(t, uint32(20), info.Quality)
+	require.True(t, info.Indestructible)
 	ecs.AddComponent(w, player, components.ChunkRef{})
 	require.NoError(t, gameworld.SetObjectHP(w, player, .49))
 	factory := gameworld.NewObjectFactory(nil)
@@ -65,12 +66,36 @@ func TestCorpseConversionInitializesAndPersistsObjectHealth(t *testing.T) {
 	require.True(t, state.HasHP)
 	require.Equal(t, .49, state.HP)
 	require.False(t, ecs.HasComponent[components.EntityHealth](restoredWorld, restored))
+	restoredInfo, exists := ecs.GetComponent[components.EntityInfo](restoredWorld, restored)
+	require.True(t, exists)
+	require.True(t, restoredInfo.Indestructible)
+}
+
+func TestCorpseConversionUsesDefinitionIndestructibility(t *testing.T) {
+	previous := objectdefs.Global()
+	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
+	for _, indestructible := range []bool{false, true} {
+		objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
+			{DefID: 901, Key: "player_dead", HP: 125, Resource: "corpse", IsStatic: true, Indestructible: indestructible},
+		}))
+		w := ecs.NewWorldForTesting()
+		player := w.Spawn(10, nil)
+		ecs.AddComponent(w, player, components.EntityInfo{TypeID: 1, Indestructible: !indestructible})
+		ecs.AddComponent(w, player, components.Appearance{Resource: "player"})
+		ecs.AddComponent(w, player, components.EntityHealth{})
+		shard := &Shard{world: w, cfg: &config.Config{}, logger: zap.NewNop()}
+		shard.convertPlayerEntityToCorpse(w, 10, player)
+		info, exists := ecs.GetComponent[components.EntityInfo](w, player)
+		require.True(t, exists)
+		require.Equal(t, uint32(901), info.TypeID)
+		require.Equal(t, indestructible, info.Indestructible)
+	}
 }
 
 func TestCorpseConversionRejectsInvalidDefinitionBeforeMutation(t *testing.T) {
 	previous := objectdefs.Global()
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
-	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 901, Key: "player_death"}}))
+	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{DefID: 901, Key: "player_dead"}}))
 	w := ecs.NewWorldForTesting()
 	player := w.Spawn(10, nil)
 	info := components.EntityInfo{TypeID: 1, Region: 1}
@@ -105,7 +130,7 @@ func TestCorpseConversionPublishesLyingWithoutLosingPoseRevision(t *testing.T) {
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
 		{DefID: 1, Key: "player"},
-		{DefID: 901, Key: "player_death", HP: 125, Resource: "player", IsStatic: true},
+		{DefID: 901, Key: "player_dead", HP: 125, Resource: "player", IsStatic: true},
 	}))
 	for _, wasLying := range []bool{false, true} {
 		name := "standing"
@@ -169,7 +194,7 @@ func TestRestoredCorpseHasLyingPoseWithoutCharacterHealth(t *testing.T) {
 	previous := objectdefs.Global()
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{DefID: 901, Key: "player_death", HP: 125, Resource: "player", IsStatic: true},
+		{DefID: 901, Key: "player_dead", HP: 125, Resource: "player", IsStatic: true},
 	}))
 	w := ecs.NewWorldForTesting()
 	definition, found := objectdefs.Global().GetByID(901)
@@ -203,7 +228,7 @@ func TestMovingPlayerDeathPublishesOneFinalStopAtCurrentTransform(t *testing.T) 
 	previous := objectdefs.Global()
 	t.Cleanup(func() { objectdefs.SetGlobalForTesting(previous) })
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
-		{DefID: 901, Key: "player_death", HP: 125, Resource: "player", IsStatic: true},
+		{DefID: 901, Key: "player_dead", HP: 125, Resource: "player", IsStatic: true},
 	}))
 	bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 1})
 	t.Cleanup(func() { require.NoError(t, bus.Shutdown(context.Background())) })

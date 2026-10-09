@@ -41,7 +41,7 @@ func installLiftTransferHealthDefinitions(t *testing.T) {
 		itemdefs.SetGlobalForTesting(oldItems)
 	})
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{{
-		DefID: liftHealthTypeID, Key: "lift-health-fixture", HP: 100, IsStatic: true,
+		DefID: liftHealthTypeID, Key: "lift-health-fixture", HP: 100, IsStatic: true, Indestructible: true,
 		BehaviorOrder: []string{"container", "lift"},
 		Behaviors:     map[string]json.RawMessage{"container": json.RawMessage(`{}`), "lift": json.RawMessage(`{}`)},
 		Components: &objectdefs.Components{
@@ -113,6 +113,9 @@ func requireLiftHealthTransferState(t *testing.T, shard *Shard, player types.Han
 	require.Equal(t, liftHealthObjectID, carry.ObjectEntityID)
 	require.Equal(t, int64(123456), carry.StartedAtUnixMs)
 	require.True(t, shard.world.Alive(carry.ObjectHandle))
+	info, ok := ecs.GetComponent[components.EntityInfo](shard.world, carry.ObjectHandle)
+	require.True(t, ok)
+	require.True(t, info.Indestructible)
 	state, ok := ecs.GetComponent[components.ObjectInternalState](shard.world, carry.ObjectHandle)
 	require.True(t, ok)
 	require.True(t, state.HasHP)
@@ -173,6 +176,32 @@ func TestLiftCarryTransferHealthTargetAndRollback(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestLiftCarryTransferIndestructibleRuntimeRestore(t *testing.T) {
+	for _, mode := range []string{"target", "rollback"} {
+		t.Run(mode, func(t *testing.T) {
+			g, source, target, sourcePlayer, targetPlayer, object := newLiftHealthTransferFixture(t, nil, .49)
+			originalMeta, exists := ecs.GetComponent[components.LiftedObjectState](source.world, object)
+			require.True(t, exists)
+			participant := NewLiftCarryTransferParticipant(zap.NewNop())
+			req := PlayerTransferRequest{PlayerID: liftHealthPlayerID, SourceLayer: 0, TargetLayer: 1}
+			stateAny, err := participant.CaptureSource(g, source, req, sourcePlayer)
+			require.NoError(t, err)
+			require.False(t, source.world.Alive(object))
+			if mode == "target" {
+				// Exercise the real target runtime restore; database durability is covered separately.
+				state := stateAny.(*liftCarryTransferState)
+				require.NoError(t, participant.restoreCarryToShard(g, target, req, targetPlayer, state, false))
+				restored := requireLiftHealthTransferState(t, target, targetPlayer, .49, originalMeta)
+				require.Contains(t, target.chunkManager.GetChunkFast(types.ChunkCoord{}).GetHandles(), restored)
+			} else {
+				require.NoError(t, participant.RestoreSourceRollback(g, source, req, sourcePlayer, stateAny))
+				restored := requireLiftHealthTransferState(t, source, sourcePlayer, .49, originalMeta)
+				require.Contains(t, source.chunkManager.GetChunkFast(types.ChunkCoord{}).GetHandles(), restored)
+			}
+		})
 	}
 }
 

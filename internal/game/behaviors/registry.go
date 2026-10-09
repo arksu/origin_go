@@ -143,7 +143,7 @@ func DefaultRegistry() (*Registry, error) {
 			burnerBehavior{},
 			takeBehavior{},
 			playerBehavior{},
-			playerDeathBehavior{},
+			playerDeadBehavior{},
 		)
 	})
 	return defaultRegistry, defaultRegistryErr

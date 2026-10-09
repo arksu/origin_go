@@ -41,6 +41,7 @@ type ObjectDef struct {
     Static                    *bool // default true -> resolved into IsStatic
     ContextMenuEvenForOneItem *bool // default true -> resolved runtime value
     HP                        int
+    Indestructible            bool // default false; object damage immunity
     Components                *Components
     Resource                  string
     Appearance                []Appearance
@@ -65,6 +66,8 @@ type ObjectDef struct {
 6. **Appearance IDs**: Must be unique within the def (if present)
 7. **Behaviors**: Keys must exist in unified runtime behavior registry (`contracts.BehaviorRegistry` from `internal/game/behaviors/contracts`); each behavior config is validated strictly
 8. **ContextMenuEvenForOneItem**: Optional; defaults to `true`
+9. **HP**: Required positive integer for every definition except `player`, including indestructible objects
+10. **Indestructible**: Optional boolean; defaults to `false`. `player` cannot set it to `true`.
 
 ## Usage
 
@@ -147,7 +150,7 @@ The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) regis
 | Package | Integration |
 |---------|-------------|
 | `game/world` | `ObjectFactory` uses registry to build entities |
-| `ecs/components` | `EntityInfo` stores `TypeID` (defId) and `Behaviors` |
+| `ecs/components` | `EntityInfo` stores `TypeID` (defId), `Behaviors`, and definition-derived `Indestructible` |
 | `persistence` | DB stores `type_id` referencing defId |
 | `game/events` | Network spawn uses `EntityInfo.TypeID` → proto `type_id` |
 
@@ -158,6 +161,10 @@ The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) regis
 - Keep object def focused on numeric/static tuning values; behavior algorithms stay in code.
 - `BehaviorOrder` is derived from validated behavior priorities; use `CopyBehaviorOrder()` where a defensive copy is needed.
 - `contextMenuEvenForOneItem` defaults to `true` when omitted.
+- `indestructible` defaults to `false`. It prevents object damage and melee damage
+  targeting, while ordinary interactions, behavior-driven transforms/removal and
+  administrator `/destroy` retain their existing behavior. It is definition
+  metadata, not persistent per-instance state.
 
 ## Tree Behavior Def Fields
 

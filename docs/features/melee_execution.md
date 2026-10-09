@@ -19,6 +19,11 @@ does not prioritize creatures over objects. Invalid health, identity or required
 preparation rejects the whole action, including for other geometric contacts of a
 nearest attack.
 
+Objects with `indestructible: true` are skipped before nearest/all selection and
+do not appear in AttackResult. They do not prevent hitting another eligible
+contact. An immune-only sector completes as the existing paid miss. The object
+damage receiver independently rejects direct damage to these targets.
+
 Completion performs validation and calculation for all selected targets, then
 reserves every lethal object, allocates an EventID, and calls the existing stamina
 and cooldown payment once. A failed preparation owns its rollback; a nested busy

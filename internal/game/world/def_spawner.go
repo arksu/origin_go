@@ -43,12 +43,13 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 		})
 
 		ecs.AddComponent(w, h, components.EntityInfo{
-			TypeID:    uint32(def.DefID),
-			Behaviors: def.CopyBehaviorOrder(),
-			IsStatic:  def.IsStatic,
-			Quality:   params.Quality,
-			Region:    params.Region,
-			Layer:     params.Layer,
+			TypeID:         uint32(def.DefID),
+			Behaviors:      def.CopyBehaviorOrder(),
+			IsStatic:       def.IsStatic,
+			Indestructible: def.Indestructible,
+			Quality:        params.Quality,
+			Region:         params.Region,
+			Layer:          params.Layer,
 		})
 
 		if def.Components != nil && def.Components.Collider != nil {
@@ -60,7 +61,7 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 			resource = def.Resource
 		}
 		ecs.AddComponent(w, h, components.Appearance{Resource: resource})
-		if def.Key == "player_death" {
+		if def.Key == "player_dead" {
 			ecs.AddComponent(w, h, components.CorpseVisualState{})
 		}
 		state := components.ObjectInternalState{IsDirty: true}

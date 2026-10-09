@@ -10,6 +10,7 @@ type ObjectDef struct {
 	Static                    *bool                      `json:"static,omitempty"`
 	ContextMenuEvenForOneItem *bool                      `json:"contextMenuEvenForOneItem,omitempty"`
 	HP                        int                        `json:"hp,omitempty"`
+	Indestructible            bool                       `json:"indestructible,omitempty"`
 	Components                *Components                `json:"components,omitempty"`
 	Resource                  string                     `json:"resource,omitempty"`
 	Appearance                []Appearance               `json:"appearance,omitempty"`

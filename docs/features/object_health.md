@@ -4,9 +4,8 @@
 
 Definition-backed world objects store `HP float64` and `HasHP bool` in the existing
 `components.ObjectInternalState`, component ID 23. No separate health component
-is registered. This prepares object state for the combat stage described in
-[combat_final.md](combat_final.md). Damage, destruction and public combat handlers
-are separate changes. HP zero is retained as zero; this component does not
+is registered. Combat damage and durable destruction use the receiver described
+in [object_destruction.md](object_destruction.md). HP zero is retained as zero; this component does not
 automatically despawn an object.
 
 Fresh objects receive `float64(def.HP)`. Database restoration uses `float64(def.HP)`
@@ -50,6 +49,24 @@ state, flags and dirty intent. This also creates internal state for dropped item
 without setting `HasHP`. Behavior recomputation cannot replace the typed HP fields.
 The formerly assigned standalone component ID 38 remains reserved under the
 stable-ID rule; it has no registered type or storage.
+
+## Indestructible objects
+
+Object definitions accept `indestructible`, defaulting to `false`. A positive
+definition HP remains required for every non-player object, including protected
+ones. `player` cannot enable this flag. `player_dead` enables it and retains
+100 initial HP; corpse inventory access and the lying pose are unchanged.
+
+`EntityInfo.Indestructible` is copied from the definition on spawn, in-place
+definition refresh and player-to-corpse conversion. Database and portable restore
+derive it from the current definition, preserving saved HP. It is not persisted
+or sent to clients; no database migration or protocol change is needed. Deploy
+the updated server and definitions together and restart the server.
+
+The damage receiver rejects protected targets and melee skips them before
+nearest/all selection. HP, dirty state and destruction queues remain unchanged.
+The flag blocks damage only: administrative `/destroy`, resource gathering,
+definition transformations and normal lifecycle deletion retain their rules.
 
 ## Persistence and failure handling
 

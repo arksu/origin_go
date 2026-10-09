@@ -51,9 +51,9 @@
 
 ### 2.1 Субстраты (что уже есть в коде)
 
-- **Клиентская часть животных готова**: web_new/src/game/objects/animals.json — рендер-дефы **fox, deer, bear, aurochs, mufflon, sheep** с 8 направлениями (арт animals/fox/0..7.png из H&H-ассетов). Серверной части нет (data/objects: containers/objects/trees — животных нет; behaviors: build/burner/container/player/lift/player_death/take/tree).
+- **Клиентская часть животных готова**: web_new/src/game/objects/animals.json — рендер-дефы **fox, deer, bear, aurochs, mufflon, sheep** с 8 направлениями (арт animals/fox/0..7.png из H&H-ассетов). Серверной части нет (data/objects: containers/objects/trees — животных нет; behaviors: build/burner/container/player/lift/player_dead/take/tree).
 - **ECS-движок**: Transform с Direction (8 направлений — уже для клиентских дефов), Movement + коллайдеры + spatial dynamic (прецедент — игроки), behaviors registry с contracts (ProvideActions/Validate/Execute).
-- **HP-пулы и смерть**: entityhealth (SHP/HHP), player_death_system — прецедент превращения сущности в статичный труп-объект (`player_death` → по аналогии `dead_rabbit`/`dead_fox`); take_behavior — прецедент забора лута.
+- **HP-пулы и смерть**: entityhealth (SHP/HHP), player_death_system — прецедент превращения сущности в статичный труп-объект (`player_dead` → по аналогии `dead_rabbit`/`dead_fox`); take_behavior — прецедент забора лута.
 - **Спавн**: world/def_spawner.go `SpawnEntityFromDef` — спавн по ObjectDef с качеством/направлением — база для спавн-точек.
 - **Качество**: Quality у объектов/стаков есть; quality-ноды ([spot.md](spot.md)) — research-стадия.
 - **Чего нет — критично**: **боевой системы** (grep Attack по internal/game — пусто; data/actions — только lift/plow; есть только HP-пулы/KO), ИИ-систем, спавн-точек, скилл-гейта Hunting как проверки (скиллы есть в модели персонажа).
@@ -100,7 +100,7 @@
 
 ### 3.2 Модель данных (наш порт)
 
-Труп лисы — **мировой объект** `dead_fox` (прецедент: `player_death`-труп) с behavior `butcherable` и персистентным состоянием по образцу `BuildBehaviorState`:
+Труп лисы — **мировой объект** `dead_fox` (прецедент: `player_dead`-труп) с behavior `butcherable` и персистентным состоянием по образцу `BuildBehaviorState`:
 
 ```go
 components.CorpseButcheryState{

@@ -108,7 +108,7 @@
 - **Клиент овцы готов**: web_new/src/game/objects/animals.json (`sheep`, 8 направлений) + спрайты web_new/public/assets/game/animals/sheep/0..7.png (подключение: objects/index.ts:2). **Муфлона в дефах нет** — но есть `mufflon` (8 направлений, свои спрайты): H&H-муфлон и есть дикий предок — **переиспользуем mufflon как дикую форму**.
 - **Сервер**: data/objects/objects.jsonc — всего 6 дефов (образец схемы: campfire: defId/key/static/components.collider/resource/station/behaviors). **Заборов/стен/дверей нет** — загоны не нужны в H&H-модели (пост+кормушка), зависимость только для будущих пастухов.
 - **Продукты частично есть**: `raw_mutton`/`roasted_mutton` (data/items/food.jsonc:110/174) + крафт жарки (data/crafts/cooking.jsonc:29) — мясная ветка овцы закрывается сразу.
-- Из [animals.md](animals.md) §2.1: behaviors registry с contracts, GiveItem(quality), cyclic build-паттерн, HP-пулы entityhealth, труп-прецедент player_death, def_spawner, **бинарные скиллы** (action_requirements.go:44), **боя нет**, ИИ нет, спавн-точек нет.
+- Из [animals.md](animals.md) §2.1: behaviors registry с contracts, GiveItem(quality), cyclic build-паттерн, HP-пулы entityhealth, труп-прецедент player_dead, def_spawner, **бинарные скиллы** (action_requirements.go:44), **боя нет**, ИИ нет, спавн-точек нет.
 
 ### 2.2 Зависимости от других фич
 

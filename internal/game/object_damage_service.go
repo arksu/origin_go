@@ -13,11 +13,12 @@ import (
 )
 
 var (
-	ErrInvalidObjectDamageService   = errors.New("object damage: invalid world or destruction service")
-	ErrInvalidObjectDamageTarget    = errors.New("object damage: invalid target identity or missing health")
-	ErrObjectDamageTargetUnprepared = errors.New("object damage: target is not prepared")
-	ErrObjectDamageTargetDead       = errors.New("object damage: target is dead or being destroyed")
-	ErrInvalidObjectDamageHealth    = errors.New("object damage: invalid health")
+	ErrInvalidObjectDamageService       = errors.New("object damage: invalid world or destruction service")
+	ErrInvalidObjectDamageTarget        = errors.New("object damage: invalid target identity or missing health")
+	ErrObjectDamageTargetUnprepared     = errors.New("object damage: target is not prepared")
+	ErrObjectDamageTargetDead           = errors.New("object damage: target is dead or being destroyed")
+	ErrObjectDamageTargetIndestructible = errors.New("object damage: target is indestructible")
+	ErrInvalidObjectDamageHealth        = errors.New("object damage: invalid health")
 )
 
 // ObjectDamageResult owns its before/after pools. Armor is zero for objects in v0.
@@ -87,6 +88,9 @@ func (s *ObjectDamageService) readTarget(target types.Handle) (components.Object
 	info, ok := s.info.Get(target)
 	if !ok || info.Region != s.destruction.deps.Region || info.Layer != s.world.Layer || info.TypeID == 0 || info.TypeID == constt.DroppedItemTypeID || s.creatures.Has(target) || s.dropped.Has(target) {
 		return components.ObjectInternalState{}, ErrInvalidObjectDamageTarget
+	}
+	if info.Indestructible {
+		return components.ObjectInternalState{}, ErrObjectDamageTargetIndestructible
 	}
 	health, ok := s.health.Get(target)
 	if !ok || !health.HasHP {

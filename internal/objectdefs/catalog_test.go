@@ -22,7 +22,13 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 	objects, err := objectdefs.LoadFromDirectory(filepath.Join("..", "..", "data", "objects"), behaviors.MustDefaultRegistry(), zap.NewNop())
 	require.NoError(t, err)
 	require.NotEmpty(t, objects.All())
+	corpse, exists := objects.GetByID(15)
+	require.True(t, exists)
+	require.Equal(t, "player_dead", corpse.Key)
+	require.Equal(t, "Dead Player", corpse.Name)
 	for _, definition := range objects.All() {
+		require.Equal(t, definition.Key == "player_dead", definition.Indestructible,
+			"only player_dead is indestructible in the object catalog: %s", definition.Key)
 		if definition.Key == "player" {
 			require.Zero(t, definition.HP)
 			continue
@@ -30,7 +36,7 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 		require.Positive(t, definition.HP, "object %s (defId=%d)", definition.Key, definition.DefID)
 	}
 
-	for _, key := range []string{"boulder", "kiln", "campfire", "player_death", "build"} {
+	for _, key := range []string{"boulder", "kiln", "campfire", "player_dead", "build"} {
 		definition, exists := objects.GetByKey(key)
 		require.True(t, exists, "object %s", key)
 		require.Equal(t, 100, definition.HP, "object %s", key)

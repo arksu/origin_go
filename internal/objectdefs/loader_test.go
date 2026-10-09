@@ -358,6 +358,70 @@ func TestLoadFromDirectory_InitialHP(t *testing.T) {
 	}
 }
 
+func TestLoadFromDirectory_Indestructible(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		key       string
+		field     string
+		want      bool
+		wantError string
+	}{
+		{name: "omitted", key: "boulder"},
+		{name: "false", key: "boulder", field: `,"indestructible":false`},
+		{name: "true", key: "boulder", field: `,"indestructible":true`, want: true},
+		{name: "player_omitted", key: "player"},
+		{name: "player_false", key: "player", field: `,"indestructible":false`},
+		{name: "player_true", key: "player", field: `,"indestructible":true`, wantError: "indestructible is not supported for player"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			filename := "indestructible.jsonc"
+			hpField := `,"hp":100`
+			if test.key == "player" {
+				hpField = ""
+			}
+			writeJSONC(t, directory, filename, fmt.Sprintf(`{
+				"v": 1,
+				"objects": [{"defId": 13, "key": %q, "name": "Test Object", "resource": "test"%s%s}]
+			}`, test.key, hpField, test.field))
+
+			registry, err := LoadFromDirectory(directory, testBehaviors(t), zap.NewNop())
+			if test.wantError != "" {
+				var loadError *LoadError
+				require.ErrorAs(t, err, &loadError)
+				assert.Equal(t, filepath.Join(directory, filename), loadError.FilePath)
+				assert.Equal(t, 13, loadError.DefID)
+				assert.Equal(t, test.key, loadError.Key)
+				assert.Equal(t, test.wantError, loadError.Message)
+				return
+			}
+			require.NoError(t, err)
+			definition, exists := registry.GetByKey(test.key)
+			require.True(t, exists)
+			assert.Equal(t, test.want, definition.Indestructible)
+		})
+	}
+}
+
+func TestLoadFromDirectory_IndestructibleRequiresBoolean(t *testing.T) {
+	for _, value := range []string{`1`, `"true"`, `[]`, `{}`} {
+		t.Run(value, func(t *testing.T) {
+			directory := t.TempDir()
+			filename := "indestructible.jsonc"
+			writeJSONC(t, directory, filename, fmt.Sprintf(`{
+				"v": 1,
+				"objects": [{"defId": 13, "key": "boulder", "name": "Boulder", "hp": 100, "resource": "boulder", "indestructible": %s}]
+			}`, value))
+
+			_, err := LoadFromDirectory(directory, testBehaviors(t), zap.NewNop())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), filepath.Join(directory, filename))
+			assert.Contains(t, err.Error(), "failed to parse JSON")
+			assert.Contains(t, err.Error(), "indestructible")
+		})
+	}
+}
+
 func TestLoadFromDirectory_InvalidHP(t *testing.T) {
 	for _, test := range []struct {
 		name    string
@@ -369,23 +433,27 @@ func TestLoadFromDirectory_InvalidHP(t *testing.T) {
 		{name: "null", hpField: `,"hp":null`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			directory := t.TempDir()
-			filename := "invalid_hp.jsonc"
-			writeJSONC(t, directory, filename, fmt.Sprintf(`{
+			for _, indestructible := range []bool{false, true} {
+				t.Run(fmt.Sprintf("indestructible_%t", indestructible), func(t *testing.T) {
+					directory := t.TempDir()
+					filename := "invalid_hp.jsonc"
+					writeJSONC(t, directory, filename, fmt.Sprintf(`{
 				"v": 1,
-				"objects": [{"defId": 13, "key": "boulder", "name": "Boulder", "resource": "boulder"%s}]
-			}`, test.hpField))
+				"objects": [{"defId": 13, "key": "boulder", "name": "Boulder", "resource": "boulder", "indestructible": %t%s}]
+			}`, indestructible, test.hpField))
 
-			_, err := LoadFromDirectory(directory, testBehaviors(t), zap.NewNop())
-			require.Error(t, err)
-			var loadError *LoadError
-			require.ErrorAs(t, err, &loadError)
-			assert.Equal(t, filepath.Join(directory, filename), loadError.FilePath)
-			assert.Equal(t, 13, loadError.DefID)
-			assert.Equal(t, "boulder", loadError.Key)
-			assert.Contains(t, err.Error(), "defId=13")
-			assert.Contains(t, err.Error(), "key=boulder")
-			assert.Contains(t, err.Error(), "hp is required and must be a positive integer")
+					_, err := LoadFromDirectory(directory, testBehaviors(t), zap.NewNop())
+					require.Error(t, err)
+					var loadError *LoadError
+					require.ErrorAs(t, err, &loadError)
+					assert.Equal(t, filepath.Join(directory, filename), loadError.FilePath)
+					assert.Equal(t, 13, loadError.DefID)
+					assert.Equal(t, "boulder", loadError.Key)
+					assert.Contains(t, err.Error(), "defId=13")
+					assert.Contains(t, err.Error(), "key=boulder")
+					assert.Contains(t, err.Error(), "hp is required and must be a positive integer")
+				})
+			}
 		})
 	}
 }
