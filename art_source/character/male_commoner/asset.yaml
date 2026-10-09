@@ -196,6 +196,16 @@
       "loop": true,
       "playback": "distance",
       "cycleDistanceTiles": 3.0774975003271843
+    },
+    "fall_down": {
+      "action": "fall_down",
+      "range": {
+        "start": 1,
+        "end": 118
+      },
+      "fps": 30,
+      "loop": false,
+      "playback": "time"
     }
   },
   "bindings": {},

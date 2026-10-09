@@ -12,7 +12,7 @@ import { ActorInstance } from '../src/game/actors/ActorInstance'
 import { ActorArmLayers } from '../src/game/actors/ActorArmLayers'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
 import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings } from '../src/game/actors/config'
-import { actorYawForScreenAngle, screenFacingAngleFromDisplacement } from '../src/game/actors/facing'
+import { actorYawForScreenAngle, screenFacingAngle, screenFacingAngleFromDisplacement } from '../src/game/actors/facing'
 import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderMode } from '../src/composables/useActorRenderSettings'
 import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
 import type { ActionAnimationDefinition } from '../src/types/actionAnimationDefs'
@@ -201,14 +201,16 @@ function fixtureRig() {
   const clip = (name: string, factor: number) => new AnimationClip(name, 1, Object.keys(bones).map((name, index) =>
     new VectorKeyframeTrack(`${name}.position`, [0, 1], [factor * (index + 1), 0, 0, factor * (index + 2), 0, 0])))
   const animations = [clip('idle', 0), clip('walk', 1), clip('carry_idle', 2), clip('carry_walk', 3), clip('hold', 10),
-    clip('crawl', 4), clip('run', 5), clip('fast_run', 6)]
+    clip('crawl', 4), clip('run', 5), clip('fast_run', 6), clip('fall_down', 7)]
+  // Keep existing track indices intact while giving the fall its anatomical anchor.
+  const spine = new Bone(); spine.name = 'spine'; spine.position.set(.2, .4, .1); pelvis.add(spine)
   return { scene, animations, bones }
 }
 
 function gltf(scene: Group, animations: AnimationClip[] = []): ActorBundle {
   const manifest = {
     rigHash: 'fixture', sockets: { grip_l: 'grip_l', grip_r: 'grip_r', forearm_l: 'forearm_l', forearm_r: 'forearm_r' },
-    clips: Object.fromEntries(animations.map(clip => [clip.name, { rigHash: 'fixture', duration: 1, loop: true,
+    clips: Object.fromEntries(animations.map(clip => [clip.name, { rigHash: 'fixture', duration: clip.duration, loop: clip.name !== 'fall_down',
       playback: ['walk', 'carry_walk', 'crawl', 'run', 'fast_run'].includes(clip.name) ? 'distance' : 'time',
       cycleDistanceTiles: clip.name === 'crawl' ? .8 : clip.name === 'run' ? 2.5 : clip.name === 'fast_run' ? 3 : 1.677975879375,
       channelMask: clip.tracks.map(track => track.name.split('.')[0]),
@@ -272,6 +274,13 @@ async function fixtureActor(actionAnimations: Record<string, ActionAnimationDefi
   return { actor, cache }
 }
 
+function assertCenteredAbdomen(actor: ActorInstance, context: string) {
+  const position = actor.root.getObjectByName('spine')!.matrixWorld.elements
+  assert.ok(Math.abs(position[12]!) < 1e-6, `${context}: projected abdomen X`)
+  const depth = position[14]! * Math.sin(ACTOR_RENDER.cameraElevation) - position[13]! * Math.cos(ACTOR_RENDER.cameraElevation)
+  assert.ok(Math.abs(depth) < 1e-6, `${context}: projected abdomen Y`)
+}
+
 test('distance-driven walk samples the 3D clip continuously', async () => {
   const { actor } = await fixtureActor()
   actor.walking = true
@@ -308,7 +317,7 @@ test('confirmed modes select distinct distance-driven gaits, with carry and KO p
     assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 3 * 1.25)
     actor.knockedOut = true
     actor.updatePose(4000, baked)
-    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 0, 'KO suppresses every gait and carry')
+    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 14, 'KO uses the exact final authored pose and suppresses every gait and carry')
     actor.knockedOut = actor.carrying = actor.walking = false
     actor.updatePose(5000, baked)
     assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 0, 'stopping restores idle')
@@ -317,6 +326,119 @@ test('confirmed modes select distinct distance-driven gaits, with carry and KO p
       assert.equal(actor.locomotionClip, 'walk', 'swim and unknown modes retain the existing walk presentation')
     }
   } finally { actor.destroy() }
+})
+
+test('fall uses natural clip time at every frame rate, holds its exact endpoint and latches authoritative facing', async () => {
+  for (const mode of ['hybrid3d', 'baked8'] as const) for (const fps of [30, 60, 144]) {
+    const { actor } = await fixtureActor()
+    try {
+      const facing = -Math.PI / 4
+      actor.walking = actor.carrying = true
+      actor.setKnockedOutPose(true, 'transition', 1000, facing)
+      const pelvis = actor.root.getObjectByName('pelvis')!
+      const yaw = actorYawForScreenAngle(facing)
+      for (let frame = 0; frame <= fps; frame++) {
+        const now = 1000 + frame * 1000 / fps
+        actor.updatePose(now, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode })
+        assert.ok(Math.abs(pelvis.position.x - 7 * (1 + frame / fps)) < 1e-6)
+        assert.equal(actor.root.rotation.x, 0)
+        assert.equal(actor.root.rotation.z, 0)
+        assert.ok(Math.abs(actor.root.rotation.y - actorYawForScreenAngle(facing)) < 1e-6)
+        assert.deepEqual(actor.root.scale.toArray(), [1, 1, 1])
+        assert.equal(actor.root.position.y, 0, 'centering never changes the authored floor clearance')
+        if (frame === 0) assert.equal(actor.root.position.lengthSq(), 0, 'fall starts at the standing feet anchor')
+        if (frame === fps / 2) {
+          assert.ok(Math.abs(actor.root.position.x - (-14.2 * Math.cos(yaw) - .1 * Math.sin(yaw)) / 2) < 1e-6)
+          const screenCenterDepth = .4 / Math.tan(ACTOR_RENDER.cameraElevation)
+          assert.ok(Math.abs(actor.root.position.z - (14.2 * Math.sin(yaw) - .1 * Math.cos(yaw) + screenCenterDepth) / 2) < 1e-6)
+        }
+        if (frame === fps) assertCenteredAbdomen(actor, `${mode}, ${fps} FPS`)
+        assert.deepEqual(actor.outputFrame, ACTOR_RENDER.lyingFrame)
+      }
+      actor.setFacingAngle(Math.PI / 2)
+      actor.setKnockedOutPose(true, 'transition', 2500, Math.PI / 2)
+      actor.setKnockedOutPose(true, 'snapshot', 3000, 0)
+      actor.updatePose(4000, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode })
+      assert.equal(pelvis.position.x, 14, 'repeat KO, death and snapshots retain the last frame')
+      assert.ok(Math.abs(actor.root.rotation.y - actorYawForScreenAngle(facing)) < 1e-6)
+      assert.equal(actor.updatePose(9000, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode }), false, 'terminal pose stays cached')
+      actor.walking = actor.carrying = false
+      actor.setKnockedOutPose(false)
+      actor.updatePose(9500)
+      assert.equal(pelvis.position.x, 0, 'confirmed stand-up restores ordinary idle')
+      assert.equal(actor.root.position.lengthSq(), 0, 'standing restores the feet anchor')
+    } finally { actor.destroy() }
+  }
+})
+
+test('visible terminal abdomen centers on the entity in every heading for live falls and late snapshots', async () => {
+  for (const mode of ['hybrid3d', 'baked8'] as const) {
+    const { actor } = await fixtureActor()
+    try {
+      const pelvis = actor.root.getObjectByName('pelvis')!, spine = actor.root.getObjectByName('spine')!
+      for (let direction = 0; direction < 8; direction++) {
+        const facing = screenFacingAngle(direction)
+        actor.setKnockedOutPose(false)
+        actor.setKnockedOutPose(true, 'transition', 1000, facing)
+        actor.updatePose(2000, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode })
+        const liveEndpoint = actor.root.position.clone()
+        assert.equal(pelvis.position.x, 14, 'centering leaves the exact local clip endpoint unchanged')
+        assert.deepEqual(spine.position.toArray(), [.2, .4, .1])
+        assertCenteredAbdomen(actor, `${mode}, heading ${direction}, live fall`)
+        assert.equal(actor.root.position.y, 0)
+        assert.deepEqual(actor.root.scale.toArray(), [1, 1, 1])
+        actor.setKnockedOutPose(false)
+        actor.updatePose(2500, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode })
+        assert.equal(actor.root.position.lengthSq(), 0)
+        actor.setKnockedOutPose(true, 'snapshot', 3000, facing)
+        actor.updatePose(3000, { ...DEFAULT_ACTOR_RENDER_SETTINGS, mode })
+        assert.ok(actor.root.position.distanceTo(liveEndpoint) < 1e-6, 'late snapshot uses the same centered endpoint')
+        assertCenteredAbdomen(actor, `${mode}, heading ${direction}, snapshot`)
+      }
+    } finally { actor.destroy() }
+  }
+})
+
+test('late snapshots settle immediately and a culled fall resumes at current time without replay', async () => {
+  const { actor } = await fixtureActor()
+  try {
+    actor.setKnockedOutPose(true, 'snapshot', 1000, 0)
+    actor.updatePose(1000)
+    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 14)
+    const snapshotCenter = actor.root.position.clone()
+    const snapshotShadow = { ...actor.groundShadow }
+    actor.setKnockedOutPose(false)
+    actor.setKnockedOutPose(true, 'transition', 2000, 0)
+    actor.updatePose(2250)
+    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 8.75)
+    actor.updatePose(9000)
+    assert.equal(actor.root.getObjectByName('pelvis')!.position.x, 14)
+    assert.ok(actor.root.position.distanceTo(snapshotCenter) < 1e-6, 'culling cannot change the final centered anchor')
+    assert.deepEqual(actor.groundShadow, snapshotShadow, 'ground contact follows the same centered endpoint')
+  } finally { actor.destroy() }
+})
+
+test('fall input survives model loading, but confirmed stand-up before readiness cancels it', async t => {
+  let nowMs = 1000
+  t.mock.method(performance, 'now', () => nowMs)
+  for (const cancel of [false, true]) {
+    const rig = fixtureRig(), cache = new FixtureCache()
+    const bundle = gltf(rig.scene, rig.animations)
+    let finish!: (asset: ActorBundle) => void
+    cache.pending.set(COMMONER_ASSET_ID, new Promise(resolve => { finish = resolve }))
+    const actor = new ActorInstance(cache)
+    actor.setKnockedOutPose(true, 'transition', nowMs, -Math.PI / 2)
+    if (cancel) actor.setKnockedOutPose(false)
+    nowMs += 2000
+    finish(bundle)
+    await actor.ready
+    try {
+      assert.equal(actor.root.getObjectByName('pelvis')!.position.x, cancel ? 0 : 14)
+      if (cancel) assert.equal(actor.root.position.lengthSq(), 0)
+      else assertCenteredAbdomen(actor, 'deferred readiness')
+      if (!cancel) assert.equal(actor.updatePose(nowMs + 1000), false, 'late readiness cannot replay the fall')
+    } finally { actor.destroy() }
+  }
 })
 
 test('gait switches and reversals blend from the displayed pose without changing distance', async () => {

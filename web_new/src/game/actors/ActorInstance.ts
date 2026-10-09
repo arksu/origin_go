@@ -1,4 +1,4 @@
-import { AnimationMixer, Bone, Group, Mesh, Skeleton, SkinnedMesh, type AnimationAction, type Object3D, type ShaderMaterial } from 'three'
+import { AnimationMixer, Bone, Group, LoopOnce, Mesh, PropertyBinding, Skeleton, SkinnedMesh, Vector3, type AnimationAction, type Object3D, type ShaderMaterial } from 'three'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
 import type { ActorAssetCache, ActorBundle } from './ActorAssetCache'
 import { bindClips } from './ActorClipBinding'
@@ -6,7 +6,7 @@ import { createActorMaterial } from './ActorMaterial'
 import { DualQuaternionSkin } from './DualQuaternionSkin'
 import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_ACTOR_RENDER_SETTINGS, type ActorRenderSettings } from './config'
 import { DEFAULT_EQUIPMENT, armForSlot, validateEquipment, type ArmMotion, type ArmSide, type EquipmentDefinition, type EquipmentBinding } from './equipment'
-import { ActorSockets } from './ActorSockets'
+import { ActorSockets, findRigBone } from './ActorSockets'
 import { ActorArmLayers } from './ActorArmLayers'
 import { actorYawForScreenAngle, screenFacingAngle } from './facing'
 import type { EquippedVisual, EquipmentSlot } from '../../types/characterVisual'
@@ -14,6 +14,7 @@ import type { ActionAnimationFrame } from '../../types/actionAnimationDefs'
 import { ActionAnimationPlayer, type ActionAnimationInput } from './ActionAnimationPlayer'
 import { ActorActionLayers } from './ActorActionLayers'
 import { GAIT_CLIPS, locomotionClip, type GaitClip, type LocomotionClip } from './locomotion'
+import type { LyingPresentationMode } from './lyingPresentation'
 
 interface EquipmentInstance {
   root: Group
@@ -32,7 +33,11 @@ export class ActorInstance {
   movementMode = 1
   stopProgress: number | undefined
   carrying = false
-  knockedOut = false
+  private lying = false
+  private fallStartedMs: number | null = null
+  private lyingFacingAngle: number | null = null
+  private readonly fallCenterOffset = new Vector3()
+  private fallCenterDepthOffset = 0
   hovered = false
   error: Error | null = null
   private model: Object3D | null = null
@@ -42,6 +47,8 @@ export class ActorInstance {
   private armLayers: ActorArmLayers | null = null
   private readonly actions = new Map<string, AnimationAction>()
   private readonly bones = new Map<string, Bone>()
+  private groundShadowBones: Bone[] = []
+  readonly groundShadow = { x: 0, y: 0, radiusX: 15, radiusY: 5, rotation: 0 }
   private readonly skins = new Map<Skeleton, DualQuaternionSkin>()
   private readonly materials = new Set<ShaderMaterial>()
   private readonly equipment = new Map<EquipmentSlot, EquipmentInstance>()
@@ -122,6 +129,8 @@ export class ActorInstance {
     this.releaseModel = lease.release
     this.model = clone(lease.asset.scene)
     const animations = bindClips(this.model, lease.asset.manifest, lease.asset.animations)
+    const fall = lease.asset.manifest.clips.fall_down
+    if (!fall || fall.loop || fall.playback !== 'time') throw new Error('Invalid fall_down animation metadata')
     this.actionPlayer.configure(catalog.actionAnimations, lease.asset.manifest.id)
     const actionClips = new Set(Object.values(catalog.actionAnimations).filter(binding => binding.actor === lease.asset.manifest.id).flatMap(binding => binding.variants.map(variant => variant.clip)))
     this.actionLayers = new ActorActionLayers(this.model, animations, actionClips)
@@ -138,15 +147,32 @@ export class ActorInstance {
       if (object instanceof SkinnedMesh) this.prepareMesh(object)
     })
     if (this.bones.size === 0) throw new Error('Character has no skeleton')
+    this.groundShadowBones = ['pelvis', 'head', 'foot.l', 'foot.r', 'toes.l', 'toes.r', 'hand.l', 'hand.r']
+      .flatMap(name => this.bones.get(PropertyBinding.sanitizeNodeName(name)) ?? this.bones.get(name) ?? [])
     this.sockets = new ActorSockets(this.model, lease.asset.manifest.sockets)
     this.armLayers = new ActorArmLayers(this.model, animations)
     this.root.add(this.model)
     this.mixer = new AnimationMixer(this.model)
-    for (const name of ['idle', ...GAIT_CLIPS, 'carry_idle', 'carry_walk']) {
+    for (const name of ['idle', ...GAIT_CLIPS, 'carry_idle', 'carry_walk', 'fall_down']) {
       const clip = animations.find((candidate) => candidate.name === name)
       if (!clip) throw new Error(`Character animation missing: ${name}`)
       this.actions.set(name, this.mixer.clipAction(clip))
     }
+    // The authored fall travels away from the standing feet. Anchor its settled
+    // abdomen at the entity's screen origin, without changing the clip or height.
+    const fallAction = this.actions.get('fall_down')!
+    fallAction.setLoop(LoopOnce, 1)
+    fallAction.clampWhenFinished = true
+    fallAction.play()
+    fallAction.paused = true
+    fallAction.time = fallAction.getClip().duration
+    this.mixer.update(0)
+    this.root.updateMatrixWorld(true)
+    const abdomen = findRigBone(this.model, 'spine').matrixWorld.elements
+    this.fallCenterOffset.set(-abdomen[12]!, 0, -abdomen[14]!)
+    // Move along the ground so the elevated abdomen projects onto the origin.
+    this.fallCenterDepthOffset = abdomen[13]! / Math.tan(ACTOR_RENDER.cameraElevation)
+    fallAction.stop()
     await this.setEquipment(DEFAULT_EQUIPMENT)
     if (this.destroyed) return
     this.loaded = true
@@ -314,8 +340,28 @@ export class ActorInstance {
     this.immediateRender = true
   }
 
+  get knockedOut(): boolean { return this.lying }
+  set knockedOut(enabled: boolean) { this.setKnockedOutPose(enabled) }
+
+  setKnockedOutPose(enabled: boolean, mode: LyingPresentationMode = 'snapshot', nowMs = performance.now(), facingAngle = this.targetFacingAngle): void {
+    if (!Number.isFinite(nowMs) || !Number.isFinite(facingAngle)) throw new Error('Invalid lying presentation')
+    // Equipment refreshes, death after KO and repeated snapshots never restart a fall.
+    if (this.lying === enabled) return
+    this.lying = enabled
+    this.fallStartedMs = enabled && mode === 'transition' ? nowMs : null
+    this.lyingFacingAngle = enabled ? facingAngle : null
+    if (enabled) this.facingAngle = facingAngle
+    this.invalidateRender()
+  }
+
+  getFallPhase(nowMs: number): number {
+    if (!this.lying || this.fallStartedMs === null) return 1
+    const durationMs = this.actions.get('fall_down')!.getClip().duration * 1000
+    return Math.max(0, Math.min(1, (nowMs - this.fallStartedMs) / durationMs))
+  }
+
   private updateFacing(now: number, settings: ActorRenderSettings): boolean {
-    const desiredFacing = this.actionPlayer.facingAngle ?? this.targetFacingAngle
+    const desiredFacing = this.lyingFacingAngle ?? this.actionPlayer.facingAngle ?? this.targetFacingAngle
     if (settings.mode === 'baked8') {
       const direction = ((Math.floor(desiredFacing / (Math.PI / 4) + .5) + 1) % 8 + 8) % 8
       const next = screenFacingAngle(direction)
@@ -369,6 +415,7 @@ export class ActorInstance {
     const renderedPhase = holdingBakedWalkFrame ? this.walkPhase : phase
     const facingChanged = this.updateFacing(now, settings)
     const name = this.knockedOut ? 'knocked_out' : visualWalking ? this.locomotionClip : carrying ? 'carry_idle' : 'idle'
+    const fallPhase = this.knockedOut ? this.getFallPhase(now) : 0
     const blendDuration = this.walkTarget === 0 ? ACTOR_RENDER.locomotionStopMs : ACTOR_RENDER.locomotionBlendMs
     const progress = Math.max(0, Math.min(1, (now - this.walkBlendStarted) / blendDuration))
     if (!bakedMode && this.stopStartWeight === undefined) {
@@ -415,19 +462,19 @@ export class ActorInstance {
     const actionIdentity = `${this.actionPlayer.samples.map(sample => sample.clip).join(',')}/${frame.width}/${frame.height}/${frame.origin_x}/${frame.origin_y}/${[...this.actionPlayer.unboundEquipmentSlots].sort().join(',')}`
     const actionPose = this.actionPlayer.samples.map(sample => `${sample.clip}:${sample.phase}:${sample.weight}`).join(',')
     const gaitMix = `${this.gaitWeights.crawl},${this.gaitWeights.walk},${this.gaitWeights.run},${this.gaitWeights.fast_run}`
-    const key = `${settings.mode}/${name}/${gaitMix}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}/${actionPose}/${actionIdentity}`
+    const key = `${settings.mode}/${name}/${fallPhase}/${gaitMix}/${renderedPhase}/${this.walkWeight}/${this.facingAngle}/${this.hovered}/${actionPose}/${actionIdentity}`
     if (!facingChanged && key === this.lastPose && (this.knockedOut || carrying || !this.armLayers?.transitioning)) return false
     const state = `${settings.mode}/${name}/${this.hovered}/${actionIdentity}`
     if (state !== this.lastPoseState) this.immediateRender = true
     this.lastPose = key
     this.lastPoseState = state
+    this.root.rotation.set(0, actorYawForScreenAngle(this.facingAngle), 0)
+    this.root.position.set(0, 0, 0)
     if (this.knockedOut) {
-      // Rotate the body in world space: face up, head left, centered over its ground position.
-      this.root.rotation.set(-Math.PI / 2, 0, Math.PI / 2)
-      this.root.position.set(ACTOR_RENDER.knockedOutBodyCenter, ACTOR_RENDER.knockedOutGroundHeight, 0)
-    } else {
-      this.root.rotation.set(0, actorYawForScreenAngle(this.facingAngle), 0)
-      this.root.position.set(0, 0, 0)
+      // Ease the new anchor in during the fall; snapshots use the final offset.
+      const centering = fallPhase * fallPhase * (3 - 2 * fallPhase)
+      this.root.position.copy(this.fallCenterOffset).multiplyScalar(centering).applyQuaternion(this.root.quaternion)
+      this.root.position.z += this.fallCenterDepthOffset * centering
     }
     if (!this.knockedOut && !carrying && this.armLayers) {
       for (const side of ['left', 'right'] as const) {
@@ -441,11 +488,15 @@ export class ActorInstance {
     }
     for (const action of this.actions.values()) action.stop()
     const prefix = carrying ? 'carry_' : ''
-    const idleAction = this.actions.get(`${prefix}idle`)!
+    const idleAction = this.actions.get(this.knockedOut ? 'fall_down' : `${prefix}idle`)!
+    if (this.knockedOut) {
+      idleAction.setLoop(LoopOnce, 1)
+      idleAction.clampWhenFinished = true
+    }
     idleAction.play()
     idleAction.paused = true
     idleAction.setEffectiveWeight(1 - this.walkWeight)
-    idleAction.time = 0
+    idleAction.time = this.knockedOut ? fallPhase * idleAction.getClip().duration : 0
     for (const clip of carrying ? ['carry_walk'] as const : GAIT_CLIPS) {
       const weight = this.walkWeight * (carrying ? 1 : this.gaitWeights[clip as GaitClip])
       if (weight === 0) continue
@@ -474,9 +525,44 @@ export class ActorInstance {
       }
     }
     this.root.updateMatrixWorld(true)
+    if (this.knockedOut) this.updateGroundShadow()
     this.skins.forEach((skin) => skin.update())
     this.revision++
     return true
+  }
+
+  private updateGroundShadow(): void {
+    if (!this.groundShadowBones.length) return
+    const pixelsPerUnit = ACTOR_RENDER.cellSize / ACTOR_RENDER.orthoHeight
+    const depthScale = Math.sin(ACTOR_RENDER.cameraElevation)
+    let centerX = 0, centerY = 0
+    for (const bone of this.groundShadowBones) {
+      centerX += bone.matrixWorld.elements[12]!
+      centerY += bone.matrixWorld.elements[14]! * depthScale
+    }
+    centerX /= this.groundShadowBones.length
+    centerY /= this.groundShadowBones.length
+    let xx = 0, xy = 0, yy = 0
+    for (const bone of this.groundShadowBones) {
+      const x = bone.matrixWorld.elements[12]! - centerX
+      const y = bone.matrixWorld.elements[14]! * depthScale - centerY
+      xx += x * x; xy += x * y; yy += y * y
+    }
+    const rotation = .5 * Math.atan2(2 * xy, xx - yy)
+    const cosine = Math.cos(rotation), sine = Math.sin(rotation)
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const bone of this.groundShadowBones) {
+      const x = bone.matrixWorld.elements[12]!, y = bone.matrixWorld.elements[14]! * depthScale
+      const along = x * cosine + y * sine, across = -x * sine + y * cosine
+      minX = Math.min(minX, along); maxX = Math.max(maxX, along)
+      minY = Math.min(minY, across); maxY = Math.max(maxY, across)
+    }
+    const along = (minX + maxX) / 2, across = (minY + maxY) / 2
+    this.groundShadow.x = (along * cosine - across * sine) * pixelsPerUnit
+    this.groundShadow.y = (along * sine + across * cosine) * pixelsPerUnit
+    this.groundShadow.radiusX = (maxX - minX) * pixelsPerUnit / 2 + 4
+    this.groundShadow.radiusY = (maxY - minY) * pixelsPerUnit / 2 + 4
+    this.groundShadow.rotation = rotation
   }
 
   get isReady(): boolean { return this.loaded && !this.error }
@@ -499,7 +585,7 @@ export class ActorInstance {
   }
 
   get outputFrame(): ActionAnimationFrame {
-    return this.knockedOut ? { width: ACTOR_RENDER.cellSize, height: ACTOR_RENDER.cellSize, origin_x: ACTOR_RENDER.anchorX, origin_y: ACTOR_RENDER.knockedOutAnchorY } : this.actionPlayer.frame
+    return this.knockedOut ? ACTOR_RENDER.lyingFrame : this.actionPlayer.frame
   }
 
   releaseGPUResources(): void {

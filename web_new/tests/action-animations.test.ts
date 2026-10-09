@@ -51,6 +51,7 @@ function headingFixture(t: TestContext) {
     get direction() { return direction },
     set direction(value: number) { direction = value; baseFacing = screenFacingAngle(value) },
     setFacingAngle: (angle: number) => { baseFacing = angle },
+    setKnockedOutPose: () => {},
     setActionAnimation: (input: Parameters<ActionAnimationPlayer['setInput']>[0]) => player.setInput(input),
     prepareActionAnimation: (now: number) => player.update(context, now),
     get outputFrame() { return player.frame },
@@ -271,7 +272,7 @@ test('ObjectView forwards latest state after asynchronous readiness, cancellatio
     direction: 3, walking: false, carrying: false, knockedOut: false, hovered: false,
     setActionAnimation: (input: Parameters<ActionAnimationPlayer['setInput']>[0]) => { player.setInput(input); if (input) inputPhases.push(input.phase) },
     prepareActionAnimation: (now: number) => player.update(context, now), get outputFrame() { return player.frame },
-    setEquipment: async () => {}, setFacingAngle: () => {},
+    setEquipment: async () => {}, setFacingAngle: () => {}, setKnockedOutPose: () => {},
   }
   const renderer = { create: () => ({ actor, sprite: new Sprite(Texture.EMPTY), immersionPx: 0 }), release: () => {} }
   const view = new ObjectView({ entityId: 17, typeId: 1, resourcePath: 'player', position: { x: 0, y: 0 }, size: { x: 4, y: 4 }, actionAnimation: state() }, renderer as unknown as ActorRenderer)
@@ -327,7 +328,7 @@ test('ObjectView projects fixed world facing and keeps it independent of actor m
   player.configure(catalog, first.actor)
   const inputs: Parameters<ActionAnimationPlayer['setInput']>[0][] = []
   const actor = {
-    ready: Promise.resolve(), setEquipment: async () => {}, setFacingAngle: () => {},
+    ready: Promise.resolve(), setEquipment: async () => {}, setFacingAngle: () => {}, setKnockedOutPose: () => {},
     setActionAnimation: (input: Parameters<ActionAnimationPlayer['setInput']>[0]) => { inputs.push(input); player.setInput(input) },
     prepareActionAnimation: (now: number) => player.update(context, now), get outputFrame() { return player.frame },
   }

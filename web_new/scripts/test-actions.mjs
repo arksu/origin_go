@@ -316,7 +316,7 @@ try {
   reopenedApp.unmount()
   hotbarApp.unmount()
 
-  // Both UI entry points must arm local direction selection through the same activation path.
+  // Both UI entry points immediately request the directional action through the shared activation path.
   gameStore.setConnectionState('connected')
   gameStore.setPlayerEnterWorld(1, 'Player', 12, 100, 7)
   const directionalActions = [
@@ -329,13 +329,14 @@ try {
   const activateAim = id => aimPresentation.activate(id, candidate => aimRequests.push(candidate))
   const aimMenuRoot = hostNode('root')
   const aimMenuApp = renderer.createApp(withSsrContext(() => h(ActionsMenu, {
-    actions: directionalActions, activeActionId: gameStore.directionAim?.actionId || '', activePhase: gameStore.directionAim ? 'selecting' : 'idle',
+    actions: directionalActions, activeActionId: gameStore.gameActionState.actionId || '', activePhase: gameStore.gameActionState.phase || 'idle',
     onActivate: activateAim,
   })))
   aimMenuApp.mount(aimMenuRoot)
   await nextTick()
   descendants(aimMenuRoot, 'button')[0].props.onClick()
-  assert.deepEqual(gameStore.directionAim, { actionId: 'axe_sweep', streamEpoch: 7 })
+  assert.deepEqual(aimRequests, ['axe_sweep'])
+  assert.equal(gameStore.gameActionState.phase, 'idle')
   const aimHotbarRoot = hostNode('root')
   const aimHotbarApp = renderer.createApp(withSsrContext(() => h(Hotbar, {
     assignments: ['game:axe_sweep', 'game:axe_strike', null, null, null, null, null, null, null, null],
@@ -344,8 +345,8 @@ try {
   aimHotbarApp.mount(aimHotbarRoot)
   await nextTick()
   descendants(aimHotbarRoot, 'button')[1].props.onClick()
-  assert.deepEqual(gameStore.directionAim, { actionId: 'axe_strike', streamEpoch: 7 })
-  assert.deepEqual(aimRequests, [])
+  assert.deepEqual(aimRequests, ['axe_sweep', 'axe_strike'])
+  assert.equal(gameStore.gameActionState.phase, 'idle')
   aimMenuApp.unmount()
   aimHotbarApp.unmount()
   gameStore.reset()

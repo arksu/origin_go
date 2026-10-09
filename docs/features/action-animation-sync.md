@@ -39,13 +39,17 @@ presentation. Broken assets for a known binding fail validation explicitly.
 lossless string in TypeScript), binding key, actual elapsed/total ticks, fractional
 milliseconds per tick, the sampling timestamp and an optional target position
 or fixed world-space `facing_angle`. These facing fields are mutually exclusive.
-Directed menu cycles capture their accepted angle at start; character movement
-or later cursor changes do not retarget the animation. The client projects that
+Directed menu cycles capture the normalized server Transform.Direction at start;
+legacy finite client aim is ignored. Character movement or later heading changes
+do not retarget the animation. The client projects that
 world direction into the isometric actor view. `axe_sweep` and `axe_strike` map
 to the existing right/left-hand chop clips through `data/action_animations/axe.json`.
 Action facing overrides presentation only and does not change server
 `Position.heading`. The client retains base heading updates during the action
 and returns to the latest server heading on completion or cancellation.
+The owner sector uses ActionStateChanged generation/epoch/facing, independently
+of animation bindings and model loading; its 1000 ms TTL begins on receipt.
+Cancellation clears it, while successful completion keeps the remaining TTL.
 An empty key means idle; idle retains the last revision. The incarnation matches
 the character visual generation. `S2C_CharacterActionAnimation` adds entity ID
 and the recipient's current stream epoch. Player spawn/appearance snapshots

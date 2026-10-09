@@ -4,7 +4,7 @@ import { registerMessageHandlers, resetAttackResultStream } from './handlers'
 import { useGameStore } from '@/stores/gameStore'
 import { gameFacade, moveController } from '@/game'
 import { proto } from './proto/packets.js'
-import { getDirectionSector, normalizeAimAngle, type DirectionActionInput } from '@/game/hud/directionAim'
+import { getDirectionSector } from '@/game/hud/directionAim'
 
 let initialized = false
 
@@ -182,20 +182,21 @@ export function sendBuildTakeBack(entityId: number, slot: number): void {
   })
 }
 
-export function sendActivateAction(actionId: string, direction?: DirectionActionInput): void {
+export function sendActivateAction(actionId: string): void {
   if (!actionId) return
+  const game = useGameStore()
+  const definition = game.gameActionsById.get(actionId)
+  const direction = definition?.targetKind === 'direction'
+  const epoch = game.worldParams?.streamEpoch
   if (direction) {
-    const game = useGameStore()
-    if (!game.isInGame || direction.streamEpoch !== game.worldParams?.streamEpoch ||
-        !Number.isInteger(direction.streamEpoch) || direction.streamEpoch <= 0 || direction.streamEpoch > 0xffffffff ||
-        !Number.isFinite(direction.aimAngle) || !getDirectionSector(game.gameActionsById.get(actionId))) return
-  } else {
-    gameFacade.releaseKeyboardMovement()
+    if (!game.isInGame || !Number.isInteger(epoch) || !epoch || epoch < 0 || epoch > 0xffffffff ||
+        !getDirectionSector(definition)) return
   }
+  gameFacade.releaseKeyboardMovement()
   gameConnection.send({
     activateAction: proto.C2S_ActivateAction.create({
       actionId,
-      ...(direction ? { aimAngle: normalizeAimAngle(direction.aimAngle), streamEpoch: direction.streamEpoch } : {}),
+      ...(direction ? { streamEpoch: epoch } : {}),
     }),
   })
 }

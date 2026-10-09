@@ -30,6 +30,9 @@ func Snapshot(w *ecs.World, handle types.Handle) (*netproto.CharacterVisualState
 	if health, exists := ecs.GetComponent[components.EntityHealth](w, handle); exists {
 		state.IsLying = health.IsLying
 		state.Revision = health.LyingRevision
+	} else if corpse, exists := ecs.GetComponent[components.CorpseVisualState](w, handle); exists {
+		state.IsLying = true
+		state.Revision = corpse.LyingRevision
 	}
 	equipmentHandle, found := ecs.GetResource[ecs.InventoryRefIndex](w).Lookup(constt.InventoryEquipment, ownerID, 0)
 	if !found {

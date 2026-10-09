@@ -49,6 +49,11 @@ async function main() {
 
   async function applyState() {
     actionStart = performance.now()
+    for (const handle of handles) {
+      handle.actor.setKnockedOutPose(false)
+      handle.actor.setKnockedOutPose(state.value === 'knocked_out' || state.value === 'falling',
+        state.value === 'falling' ? 'transition' : 'snapshot', actionStart)
+    }
     const choice = choices.get(state.value)
     if (choice) actionDuration.value = String(choice.binding.preview?.duration_ms ?? 2000)
     const equipment = new Map<string, EquippedVisual>()
@@ -58,6 +63,10 @@ async function main() {
     await Promise.all(handles.map(handle => handle.actor.setEquipment([...equipment.values()])))
   }
   state.addEventListener('change', () => { void applyState().catch(error => { failure = error }) })
+  document.querySelector('#restart-fall')!.addEventListener('click', () => {
+    state.value = 'falling'
+    void applyState().catch(error => { failure = error })
+  })
 
   async function populate() {
     const ownGeneration = ++generation
@@ -69,10 +78,11 @@ async function main() {
     const number = Number(count.value)
     const scale = number > 8 ? 1 : 2
     const columns = number > 8 ? 10 : 4
-    const spacing = (app.screen.width - 32) / columns
+    const spacing = number > 8 ? (app.screen.width - 32) / columns : (app.screen.width - 400) / (columns - 1)
     for (let index = 0; index < number; index++) {
       const container = new Container()
-      container.position.set(16 + spacing * (index % columns) + spacing / 2, (number > 8 ? 185 : 360) + Math.floor(index / columns) * (number > 8 ? 160 : 330))
+      container.position.set(number > 8 ? 16 + spacing * (index % columns) + spacing / 2 : 200 + spacing * (index % columns),
+        (number > 8 ? 185 : 280) + Math.floor(index / columns) * (number > 8 ? 160 : 320))
       container.scale.set(scale)
       const shadow = new Graphics().ellipse(0, 0, 15, 5).fill({ color: '#17201b', alpha: .45 })
       const angle = screenFacingAngle(indices[index % 8]!)
@@ -127,7 +137,6 @@ async function main() {
       handle.actor.walking = ['crawl', 'walk', 'run', 'fast_run', 'carry_walk'].includes(state.value)
       handle.actor.movementMode = state.value === 'crawl' ? 0 : state.value === 'run' ? 2 : state.value === 'fast_run' ? 3 : 1
       handle.actor.carrying = state.value.startsWith('carry')
-      handle.actor.knockedOut = state.value === 'knocked_out'
       const choice = choices.get(state.value)
       const duration = Number(actionDuration.value)
       const phase = actionPlay.checked && Number.isFinite(duration) && duration > 0 ? ((now - actionStart) % duration) / duration : Number(actionPhase.value)
@@ -139,14 +148,22 @@ async function main() {
       const offsetY = Math.sin(angle) * travel
       const shadow = shadows.get(handle)!
       shadow.clear()
-      if (handle.actor.knockedOut) shadow.ellipse(3, 4, 46, 8).fill({ color: '#17201b', alpha: .3 })
-      else shadow.ellipse(0, 0, 15, 5).fill({ color: '#17201b', alpha: .45 })
-      shadow.position.set(offsetX, offsetY)
+      if (handle.actor.knockedOut) {
+        const footprint = handle.actor.groundShadow
+        shadow.ellipse(0, 0, footprint.radiusX, footprint.radiusY).fill({ color: '#17201b', alpha: .3 })
+        shadow.position.set(offsetX + footprint.x, offsetY + footprint.y)
+        shadow.rotation = footprint.rotation
+      } else {
+        shadow.ellipse(0, 0, 15, 5).fill({ color: '#17201b', alpha: .45 })
+        shadow.position.set(offsetX, offsetY)
+        shadow.rotation = 0
+      }
     }
     try { renderer.render(now) } catch (error) { failure = error }
     for (const handle of handles) {
-      const offset = shadows.get(handle)!.position
-      handle.sprite.position.set(-handle.actor.outputFrame.origin_x + offset.x, -handle.anchorY + offset.y)
+      const angle = screenFacingAngle(handle.actor.direction)
+      const travel = handle.actor.walking ? ((handle.actor.distanceTiles / handle.actor.cycleDistanceTiles) % 1) * 32 - 16 : 0
+      handle.sprite.position.set(-handle.actor.outputFrame.origin_x + Math.cos(angle) * travel, -handle.anchorY + Math.sin(angle) * travel)
     }
     if (now - lastReport > 500) {
       const ordered = [...frames].sort((first, second) => first - second)

@@ -165,13 +165,13 @@ export class ActorRenderer {
         this.pass.setSize(frame.width, frame.height)
         // Extra pixels extend the view; they never zoom the actor or move its feet.
         const unitsPerPixel = ACTOR_RENDER.orthoHeight / ACTOR_RENDER.cellSize
-        const baseOriginY = handle.actor.knockedOut ? ACTOR_RENDER.knockedOutAnchorY : ACTOR_RENDER.anchorY
+        const baseOriginY = ACTOR_RENDER.anchorY
         this.camera.left = -ACTOR_RENDER.orthoHeight / 2 - (frame.origin_x - ACTOR_RENDER.anchorX) * unitsPerPixel
         this.camera.right = this.camera.left + frame.width * unitsPerPixel
         this.camera.top = ACTOR_RENDER.orthoHeight / 2 + (frame.origin_y - baseOriginY) * unitsPerPixel
         this.camera.bottom = this.camera.top - frame.height * unitsPerPixel
         this.camera.updateProjectionMatrix()
-        const cameraHeight = handle.actor.knockedOut ? 0 : ACTOR_RENDER.cameraHeight
+        const cameraHeight = ACTOR_RENDER.cameraHeight
         this.camera.position.y = cameraHeight + 6 * Math.sin(ACTOR_RENDER.cameraElevation)
         this.camera.lookAt(0, cameraHeight, 0)
         this.renderer.setRenderTarget(this.pass.source)

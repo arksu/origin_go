@@ -7,6 +7,7 @@ import { DEBUG_SHOW_OBJECT_BOUNDS } from '@/constants/game'
 import type { ActorRenderer } from './actors/ActorRenderer'
 import { loadShallowWaterTextures } from './actors/ShallowWaterVisual'
 import { localAudioController } from './audioRuntime'
+import type { LyingPresentationMode } from './actors/lyingPresentation'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
@@ -271,7 +272,7 @@ export class ObjectManager {
     return this.carriedByByObject.get(objectId) ?? null
   }
 
-  setKnockedOutPose(entityId: number, knockedOut: boolean): void {
+  setKnockedOutPose(entityId: number, knockedOut: boolean, mode: LyingPresentationMode = 'snapshot', nowMs = performance.now()): void {
     if (knockedOut) {
       this.knockedOutObjectIds.add(entityId)
     } else {
@@ -283,7 +284,7 @@ export class ObjectManager {
       return
     }
 
-    objectView.setKnockedOutPose(knockedOut)
+    objectView.setKnockedOutPose(knockedOut, mode, nowMs)
     cullingController.updateObjectBounds(entityId, objectView.computeScreenBounds())
     this.needsSort = true
   }

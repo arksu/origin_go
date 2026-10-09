@@ -8,12 +8,18 @@ import { decodeCharacterVisual } from '@/types/characterVisual'
 import { decodeActionAnimation } from '@/types/actionAnimation'
 import { ChunkStreamGuard } from './ChunkStreamGuard'
 import { AttackResultReceiver } from './AttackResultReceiver'
+import { ActionExecutionReceiver } from './ActionExecutionReceiver'
 
 const chunkStream = new ChunkStreamGuard()
 const attackResults = new AttackResultReceiver()
+const actionExecutions = new ActionExecutionReceiver({
+  showAttackSector: (angle, sector) => gameFacade.showAttackSector(angle, sector),
+  clearAttackSector: () => gameFacade.clearAttackSector(),
+})
 
 export function resetAttackResultStream(epoch = 0): void {
   attackResults.reset(epoch)
+  actionExecutions.reset(epoch)
   gameFacade.clearDamageNumbers()
 }
 
@@ -117,7 +123,7 @@ export function registerMessageHandlers(): void {
   messageDispatcher.on('deathDialog', (msg: proto.IS2C_DeathDialog) => {
     gameStore.setDeathDialog(msg)
     if (gameStore.playerEntityId != null) {
-      gameFacade.setObjectKnockedOutPose(gameStore.playerEntityId, true)
+      gameFacade.setObjectKnockedOutPose(gameStore.playerEntityId, true, 'transition', performance.now())
     }
   })
 
@@ -178,6 +184,7 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('actionStateChanged', (msg: proto.IS2C_ActionStateChanged) => {
+    if (!actionExecutions.acceptState(msg, gameStore.gameActionsById)) return
     gameStore.setGameActionState(msg)
   })
 
@@ -253,7 +260,7 @@ export function registerMessageHandlers(): void {
       existing.position.heading = heading
       moveController.refreshHeading(entityId, heading)
       gameFacade.setObjectHeading(entityId, heading)
-      if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterVisual(entityId, characterVisual)
+      if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterVisual(entityId, characterVisual, 'snapshot')
       if (actionAnimation) {
         if (gameStore.updateActionAnimation(entityId, actionAnimation)) gameFacade.setActionAnimation(entityId, actionAnimation)
       } else {
@@ -288,7 +295,7 @@ export function registerMessageHandlers(): void {
     gameStore.spawnEntity(objectData)
     gameFacade.spawnObject(objectData)
     gameFacade.setObjectNickname(entityId, displayName, nameColor)
-    if (characterVisual) applyCharacterVisual(entityId, characterVisual)
+    if (characterVisual) applyCharacterVisual(entityId, characterVisual, 'snapshot')
     gameFacade.setObjectCarryVisualRelation(entityId, carriedByEntityId > 0 ? carriedByEntityId : null)
 
     // Initialize entity in MoveController for smooth movement
@@ -309,8 +316,10 @@ export function registerMessageHandlers(): void {
     applyBatchEntries('objectSpawn', msg.spawns || [], handleObjectSpawn)
   })
 
-  function applyCharacterVisual(entityId: number, state: import('@/types/characterVisual').CharacterVisualState): void {
-    gameFacade.setObjectKnockedOutPose(entityId, state.isLying)
+  function applyCharacterVisual(entityId: number, state: import('@/types/characterVisual').CharacterVisualState, mode: import('@/game/actors/lyingPresentation').LyingPresentationMode): void {
+    // The owner's death fallback is terminal even if an earlier standing visual is still queued.
+    const lying = state.isLying || (entityId === gameStore.playerEntityId && gameStore.deathDialog !== null)
+    gameFacade.setObjectKnockedOutPose(entityId, lying, mode, performance.now())
     applyCharacterEquipment(entityId, state.equipment)
   }
 
@@ -325,7 +334,7 @@ export function registerMessageHandlers(): void {
     if (!msg.state || msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
     const entityId = toNumber(msg.entityId || 0)
     const state = decodeCharacterVisual(msg.state)
-    if (gameStore.updateCharacterVisual(entityId, state)) applyCharacterVisual(entityId, state)
+    if (gameStore.updateCharacterVisual(entityId, state)) applyCharacterVisual(entityId, state, 'transition')
   })
 
   messageDispatcher.on('characterActionAnimation', (msg: proto.IS2C_CharacterActionAnimation) => {
@@ -338,6 +347,7 @@ export function registerMessageHandlers(): void {
   messageDispatcher.on('objectDespawn', (msg: proto.IS2C_ObjectDespawn) => {
     if (msg.streamEpoch !== gameStore.worldParams?.streamEpoch) return
     const entityId = toNumber(msg.entityId!)
+    if (entityId === gameStore.playerEntityId) actionExecutions.reset(gameStore.worldParams?.streamEpoch)
     // console.log(`[Handlers] objectDespawn: entityId=${entityId}`)
     gameStore.despawnEntity(entityId)
     gameFacade.despawnObject(entityId)
@@ -578,6 +588,7 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('cyclicActionFinished', (msg: proto.IS2C_CyclicActionFinished) => {
+    actionExecutions.finish(msg)
     console.log('[Handlers] cyclicActionFinished:', {
       actionId: msg.actionId,
       targetEntityId: msg.targetEntityId,

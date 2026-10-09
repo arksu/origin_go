@@ -117,7 +117,44 @@ test('local and observed poses share the visual gate for epoch, generation, exac
     assert.equal(poses.mock.callCount(), count)
     assert.equal(game.entities.get(entityId)!.characterVisual!.isLying, false)
   }
-  assert.deepEqual(poses.mock.calls.map(call => call.arguments), [[17, true], [17, false], [18, true], [18, false]])
+  assert.deepEqual(poses.mock.calls.map(call => call.arguments.slice(0, 3)),
+    [[17, true, 'snapshot'], [17, false, 'transition'], [18, true, 'snapshot'], [18, false, 'transition']])
+  game.setPlayerLeaveWorld()
+})
+
+test('live lying uses one transition path and death fallback cannot be cleared by a queued standing visual', t => {
+  setActivePinia(createPinia())
+  const game = useGameStore()
+  game.setConnectionState('connected')
+  const resets = t.mock.method(gameFacade, 'resetWorld', () => {})
+  t.mock.method(gameFacade, 'spawnObject', () => {})
+  t.mock.method(gameFacade, 'setCharacterEquipment', async () => {})
+  const poses = t.mock.method(gameFacade, 'setObjectKnockedOutPose', () => {})
+  t.mock.method(soundManager, 'initialize', async () => ({ manifests: {}, equipment: {}, actionAnimations: {} }))
+  let nowMs = 1000
+  t.mock.method(performance, 'now', () => nowMs)
+  registerMessageHandlers()
+  const visual = (revision: number, isLying: boolean) => ({ generation: '0:4294967297', revision, isLying })
+  dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1, coordPerTile: 12, chunkSize: 4 } })
+  dispatch({ objectSpawn: { entityId: 17, typeId: 1, resourcePath: 'player', streamEpoch: 1, characterVisual: visual(1, false) } })
+  nowMs = 1100
+  dispatch({ characterVisual: { entityId: 17, streamEpoch: 1, state: visual(2, true) } })
+  assert.deepEqual(poses.mock.calls.at(-1)!.arguments, [17, true, 'transition', 1100])
+  nowMs = 1200
+  dispatch({ deathDialog: { title: 'Death', message: 'You are dead' } })
+  assert.equal(resets.mock.callCount(), 1, 'death keeps the world and renderer alive')
+  dispatch({ characterVisual: { entityId: 17, streamEpoch: 1, state: visual(3, true) } })
+  assert.equal(game.deathDialog?.title, 'Death')
+
+  dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 2, coordPerTile: 12, chunkSize: 4 } })
+  dispatch({ objectSpawn: { entityId: 17, typeId: 1, resourcePath: 'player', streamEpoch: 2, characterVisual: visual(1, false) } })
+  dispatch({ deathDialog: { title: 'Death' } })
+  const deathCall = poses.mock.callCount()
+  dispatch({ characterVisual: { entityId: 17, streamEpoch: 2, state: visual(2, false) } })
+  dispatch({ characterVisual: { entityId: 17, streamEpoch: 2, state: visual(3, true) } })
+  assert.ok(poses.mock.calls.slice(deathCall).every(call => call.arguments[1] === true))
+  assert.equal(resets.mock.callCount(), 2)
+  assert.equal(game.connectionState, 'connected')
   game.setPlayerLeaveWorld()
 })
 

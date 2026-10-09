@@ -238,14 +238,14 @@ function renderBridgeFixture(t: TestContext, manager: ChunkManager) {
   const render: Render = Object.assign(Object.create(Render.prototype), {
     chunkManager: manager, objectManager, minimapRenderer: minimap, minimapCanvas: null,
     playerEntityId: null, actorRenderer: null,
-    directionAimPreview: { clear: noop }, directionAimSelection: null,
+    combatSectorPreview: { clear: noop },
     keyboardMovement: { reset: noop }, inputController: { setKeyboardMovementEnabled: noop },
     buildGhostController: { cancel: noop }, liftGhostController: { cancel: noop },
     nicknameManager: { clear: noop, update: noop }, chatBalloonManager: { clear: noop, update: noop },
     damageNumberManager: { clear: noop, update: noop, forgetSpawn: noop, rememberDespawn: noop },
   })
   const frameLoop = render as unknown as { update(): void }
-  for (const method of ['updateCamera', 'updateBuildGhost', 'updateLiftGhost', 'updateDirectionAim', 'updateChunkBuilds', 'updateCulling', 'updateHoverHighlight', 'updateDebugOverlay'] as const) {
+  for (const method of ['updateCamera', 'updateBuildGhost', 'updateLiftGhost', 'updateCombatSector', 'updateChunkBuilds', 'updateCulling', 'updateHoverHighlight', 'updateDebugOverlay'] as const) {
     t.mock.method(render as unknown as Record<typeof method, () => void>, method, noop)
   }
   moveController.reset()

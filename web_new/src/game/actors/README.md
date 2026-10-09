@@ -71,13 +71,21 @@ See [the synchronization contract](../../../../docs/features/action-animation-sy
 
 ## Reproduce and inspect
 
-Knocked out characters use a separate runtime 3D state: the idle skeleton lies
-face up with the head to screen left, centered at the entity's ground position.
-This state immediately suppresses gait blending, carry poses and equipment arm
-layers. Its ground-centered camera frame is shared by rendering, picking and
-culling; ObjectView supplies a low horizontal contact shadow. Recovery restores
-ordinary facing, equipment poses and the standing frame. This is a static lying
-pose; no fall or get-up transition clip is authored yet.
+The non-looping `fall_down` clip plays once at its authored duration when a visible
+standing character enters KO or dies. It captures the server heading and holds
+the exact last sample for KO, voluntary lying after KO, and corpses. Visibility
+snapshots already lying show that final sample immediately. Repeated snapshots,
+equipment loading, culling and death after KO do not replay the transition.
+The state immediately suppresses gait blending, carry poses and equipment arm
+layers. A shared ground-anchored frame covers the fall and lying pose without
+changing character scale; rendering, picking and culling use those same bounds.
+The settled abdomen projects onto the entity screen origin. A heading-relative
+horizontal offset (including the abdomen height's camera projection) eases in
+during the fall and resets on stand-up; it leaves the
+authored skeleton pose and ground contact height unchanged.
+The contact shadow follows the authored skeletal footprint. Confirmed stand-up
+restores ordinary facing, equipment poses and the standing frame immediately;
+there is no get-up clip or skeleton transformation in this stage.
 
 The maintained workflow is [Blender asset workflow](../../../../docs/assets/README.md).
 Edit the canonical `source.blend`, save, then run `tools/assets build` from the

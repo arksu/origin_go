@@ -143,6 +143,7 @@ type LiftCommandService interface {
 }
 
 type ActionCommandService interface {
+	IsDirectionAction(id string) bool
 	ActivateRequest(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, request *netproto.C2S_ActivateAction)
 	CancelForPointMovement(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
 	Cancel(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
@@ -339,7 +340,7 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		s.handleBuildTakeBack(w, handle, cmd)
 	case network.CmdActivateAction:
 		if request, ok := cmd.Payload.(*netproto.C2S_ActivateAction); ok && request != nil && s.actionService != nil {
-			if request.AimAngle != nil || request.StreamEpoch != 0 {
+			if s.actionService.IsDirectionAction(request.ActionId) || request.AimAngle != nil || request.StreamEpoch != 0 {
 				if cmd.Layer != w.Layer || s.directionalSessionValidator == nil ||
 					!s.directionalSessionValidator(cmd.CharacterID, cmd.ClientID, request.StreamEpoch) ||
 					ecs.GetResource[ecs.DetachedEntities](w).IsDetached(cmd.CharacterID) {

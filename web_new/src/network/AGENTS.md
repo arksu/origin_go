@@ -290,3 +290,9 @@ All errors transition to `error` state. Handler must reset or retry.
 | `types.ts` | Connection state types |
 | `index.ts` | Module exports + packet send helpers (`openWindow`, craft start, etc.) |
 | `proto/` | Protobuf generated code |
+
+### Confirmed melee execution
+
+`sendActivateAction` sends direction-target actions immediately with current nonzero epoch and no aim, after WASD release/suppression. Server heading is authoritative. Geometry is already in the action catalog.
+
+`ActionExecutionReceiver` validates ActionStateChanged epoch and exact uint64 generation before changing UI/cooldown snapshots. Explicit facing zero is valid; stale/duplicate generations cannot replay or extend the sector, conflicting action IDs/angles are rejected. Critical server FIFO is executing → finished → idle → next executing. Canceled finished clears the owner sector; completed finished keeps its remaining 1000 ms TTL through idle. Session/world/epoch changes and owner despawn clear receiver state and presentation. Actor animation bindings do not control this feedback.

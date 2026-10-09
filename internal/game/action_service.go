@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"fmt"
+	"math"
 	"origin/internal/actionanimationdefs"
 	"origin/internal/cyclicaction"
 	"origin/internal/ecs/systems"
@@ -154,6 +155,11 @@ func (service *ActionService) State(world *ecs.World, playerHandle types.Handle)
 		cursor = definition.Target.Cursor
 	}
 	state.ActionId, state.Phase, state.Cursor = active.ActionID, string(active.Phase), cursor
+	state.ActionGeneration = active.Generation
+	if active.Phase == components.GameActionExecuting && definition.Combat != nil && definition.Target.Kind == actiondefs.TargetDirection {
+		angle := float32(active.AimAngle)
+		state.FacingAngle = &angle
+	}
 	return state
 }
 
@@ -231,8 +237,15 @@ func (service *ActionService) ActivateRequest(world *ecs.World, playerID types.E
 	id := request.ActionId
 	target := ActionTarget{}
 	if service.isDirectionAction(id) {
-		angle, valid := normalizeActionAim(request.AimAngle)
-		if !valid {
+		// Legacy finite aim is accepted for wire compatibility, but never controls
+		// an attack. Capture the authoritative gaze before stopping movement.
+		if request.AimAngle != nil && (math.IsNaN(float64(*request.AimAngle)) || math.IsInf(float64(*request.AimAngle), 0)) {
+			service.alert(playerID, "ACTION_INVALID_TARGET")
+			return
+		}
+		transform, exists := ecs.GetComponent[components.Transform](world, playerHandle)
+		angle, valid := normalizeActionHeading(transform.Direction)
+		if !exists || !valid {
 			service.alert(playerID, "ACTION_INVALID_TARGET")
 			return
 		}
@@ -242,6 +255,9 @@ func (service *ActionService) ActivateRequest(world *ecs.World, playerID types.E
 		return
 	}
 	if service.rejectCooldown(world, playerID, playerHandle, id) {
+		return
+	}
+	if service.rejectExhaustedGeneration(playerID) {
 		return
 	}
 	if active, exists := ecs.GetComponent[components.ActiveGameAction](world, playerHandle); exists {
@@ -301,6 +317,9 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 	if service.rejectCooldown(world, playerID, playerHandle, id) {
 		return
 	}
+	if service.rejectExhaustedGeneration(playerID) {
+		return
+	}
 	service.Cancel(world, playerID, playerHandle)
 	definition := service.availableDefinition(world, playerID, playerHandle, id)
 	if definition == nil {
@@ -317,6 +336,14 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 	service.nextGeneration++
 	active := components.ActiveGameAction{ActionID: id, Generation: service.nextGeneration, DirectAttempt: true}
 	service.startTarget(world, playerID, playerHandle, definition, active, target)
+}
+
+func (service *ActionService) rejectExhaustedGeneration(playerID types.EntityID) bool {
+	if service.nextGeneration != math.MaxUint64 {
+		return false
+	}
+	service.alert(playerID, "ACTION_FAILED")
+	return true
 }
 
 func (service *ActionService) rejectIncapacitatedAction(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string) bool {

@@ -3517,8 +3517,8 @@ func (x *C2S_BuildTakeBack) GetSlot() uint32 {
 type C2S_ActivateAction struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	ActionId string                 `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
-	// Required for direction-target actions; presence distinguishes missing aim from zero.
-	AimAngle      *float32 `protobuf:"fixed32,2,opt,name=aim_angle,json=aimAngle,proto3,oneof" json:"aim_angle,omitempty"`   // World direction in radians, normalized to [0, 2*pi).
+	// Legacy client aim. Direction-target actions use server heading; finite values are ignored.
+	AimAngle      *float32 `protobuf:"fixed32,2,opt,name=aim_angle,json=aimAngle,proto3,oneof" json:"aim_angle,omitempty"`
 	StreamEpoch   uint32   `protobuf:"varint,3,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"` // Required current world epoch for direction-target actions.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7124,14 +7124,17 @@ func (x *S2C_ActionList) GetActions() []*ActionDefinition {
 }
 
 type S2C_ActionStateChanged struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ActionId      string                 `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
-	Phase         string                 `protobuf:"bytes,2,opt,name=phase,proto3" json:"phase,omitempty"`
-	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	Cooldowns     []*ActionCooldown      `protobuf:"bytes,4,rep,name=cooldowns,proto3" json:"cooldowns,omitempty"`
-	ServerTimeMs  int64                  `protobuf:"varint,5,opt,name=server_time_ms,json=serverTimeMs,proto3" json:"server_time_ms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ActionId         string                 `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	Phase            string                 `protobuf:"bytes,2,opt,name=phase,proto3" json:"phase,omitempty"`
+	Cursor           string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Cooldowns        []*ActionCooldown      `protobuf:"bytes,4,rep,name=cooldowns,proto3" json:"cooldowns,omitempty"`
+	ServerTimeMs     int64                  `protobuf:"varint,5,opt,name=server_time_ms,json=serverTimeMs,proto3" json:"server_time_ms,omitempty"`
+	ActionGeneration uint64                 `protobuf:"varint,6,opt,name=action_generation,json=actionGeneration,proto3" json:"action_generation,omitempty"` // Active execution identity; zero while idle.
+	FacingAngle      *float32               `protobuf:"fixed32,7,opt,name=facing_angle,json=facingAngle,proto3,oneof" json:"facing_angle,omitempty"`         // Accepted combat heading in radians, including explicit zero.
+	StreamEpoch      uint32                 `protobuf:"varint,8,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *S2C_ActionStateChanged) Reset() {
@@ -7195,6 +7198,27 @@ func (x *S2C_ActionStateChanged) GetCooldowns() []*ActionCooldown {
 func (x *S2C_ActionStateChanged) GetServerTimeMs() int64 {
 	if x != nil {
 		return x.ServerTimeMs
+	}
+	return 0
+}
+
+func (x *S2C_ActionStateChanged) GetActionGeneration() uint64 {
+	if x != nil {
+		return x.ActionGeneration
+	}
+	return 0
+}
+
+func (x *S2C_ActionStateChanged) GetFacingAngle() float32 {
+	if x != nil && x.FacingAngle != nil {
+		return *x.FacingAngle
+	}
+	return 0
+}
+
+func (x *S2C_ActionStateChanged) GetStreamEpoch() uint32 {
+	if x != nil {
+		return x.StreamEpoch
 	}
 	return 0
 }
@@ -9053,13 +9077,17 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"cooldownMs\x12+\n" +
 	"\x06sector\x18\f \x01(\v2\x13.proto.ActionSectorR\x06sector\"C\n" +
 	"\x0eS2C_ActionList\x121\n" +
-	"\aactions\x18\x01 \x03(\v2\x17.proto.ActionDefinitionR\aactions\"\xbe\x01\n" +
+	"\aactions\x18\x01 \x03(\v2\x17.proto.ActionDefinitionR\aactions\"\xc7\x02\n" +
 	"\x16S2C_ActionStateChanged\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12\x14\n" +
 	"\x05phase\x18\x02 \x01(\tR\x05phase\x12\x16\n" +
 	"\x06cursor\x18\x03 \x01(\tR\x06cursor\x123\n" +
 	"\tcooldowns\x18\x04 \x03(\v2\x15.proto.ActionCooldownR\tcooldowns\x12$\n" +
-	"\x0eserver_time_ms\x18\x05 \x01(\x03R\fserverTimeMs\"u\n" +
+	"\x0eserver_time_ms\x18\x05 \x01(\x03R\fserverTimeMs\x12+\n" +
+	"\x11action_generation\x18\x06 \x01(\x04R\x10actionGeneration\x12&\n" +
+	"\ffacing_angle\x18\a \x01(\x02H\x00R\vfacingAngle\x88\x01\x01\x12!\n" +
+	"\fstream_epoch\x18\b \x01(\rR\vstreamEpochB\x0f\n" +
+	"\r_facing_angle\"u\n" +
 	"\x0eActionCooldown\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12\"\n" +
 	"\rstarted_at_ms\x18\x02 \x01(\x03R\vstartedAtMs\x12\"\n" +
@@ -9595,6 +9623,7 @@ func file_api_proto_packets_proto_init() {
 	file_api_proto_packets_proto_msgTypes[82].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[84].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[85].OneofWrappers = []any{}
+	file_api_proto_packets_proto_msgTypes[95].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[99].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[101].OneofWrappers = []any{}
 	file_api_proto_packets_proto_msgTypes[103].OneofWrappers = []any{}

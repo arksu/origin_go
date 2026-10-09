@@ -1,5 +1,51 @@
 # Mixamo motion references
 
+## Falling and lying, 2026-10-09
+
+`sword_and_shield_death.fbx` retains the user's original **Sword And Shield Death.fbx**
+motion reference, supplied on 2026-10-09. Its SHA-256 is
+`8d5a2e3784d0753e9e590948e13dcc74569ddbc0ef4d1d88cbd92c356d8e789a`.
+It supplies motion only; the existing commoner model, 20-bone rig, sockets and
+all 15 previous actions remain unchanged.
+
+`fall_down` retargets all 118 source frames at 30 FPS, for a duration of 3.9 seconds.
+It does not loop or close its terminal frame onto its first. The final pose is the
+shared resting frame for lying characters and corpses. The importer corrects the
+donor T-pose to the commoner's A-pose and scales pelvis travel by the target/donor
+leg-length ratio (`1.0199211374524602`). The first supporting body geometry defines
+one fixed vertical anchor. Later samples retain local horizontal travel and vertical
+motion, with only upward penetration corrections against both evaluated body LODs.
+This model-local movement never changes the server entity position.
+
+Body samples use linear interpolation and a 5 mm floor clearance. The saved-source
+regression samples every half frame, verifies the initial/final floor contact and
+holds the exact final bone matrices beyond the action range. Its authoring evidence
+is `fall_down.validation.json`, including the original action hashes and projected
+conservative bounds for all eight facing directions at normal game scale.
+
+To repeat the import and publish only this clip:
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+  --disable-autoexec art_source/character/male_commoner/source.blend \
+  --python-exit-code 1 --python tools/blender/import_mixamo_clip.py -- \
+  --recipe art_source/character/male_commoner/references/mixamo/fall_down.import.json
+tools/assets build character/male_commoner --animations --clip fall_down
+```
+
+Run the read-only saved-source regression after authoring or rebuilding:
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+  --disable-autoexec art_source/character/male_commoner/source.blend \
+  --python-exit-code 1 --python tools/blender/validate_body_clip.py -- \
+  --recipe art_source/character/male_commoner/references/mixamo/fall_down.import.json
+```
+
+The animation-only publication verifies identical model/texture artifacts and rig
+compatibility, and preserves every previous clip reference. It publishes no new
+character geometry or equipment.
+
 ## Locomotion, 2026-10-08
 
 The user supplied these original FBX files. They remain motion references;

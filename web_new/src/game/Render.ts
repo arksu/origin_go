@@ -11,9 +11,8 @@ import { gameConnection } from '@/network/GameConnection'
 import { coordGame2Screen, coordScreen2Game } from './utils/coordConvert'
 import { BuildGhostController, type ArmBuildGhostOptions } from './BuildGhostController'
 import { LiftGhostController, type ArmLiftGhostOptions } from './LiftGhostController'
-import { DirectionAimPreview } from './DirectionAimPreview'
-import { getDirectionSector, normalizeAimAngle, resolveDirectionAimAngle, type DirectionAimState } from './hud/directionAim'
-import { sendActivateAction } from '@/network'
+import { CombatSectorPreview } from './CombatSectorPreview'
+import type { DirectionSector } from './hud/directionAim'
 import { ChatBalloonManager } from './ChatBalloonManager'
 import { NicknameManager } from './NicknameManager'
 import { DamageNumberManager } from './DamageNumberManager'
@@ -32,6 +31,7 @@ import { clearAlphaMaskCache } from './PixelHitTest'
 import { ActorRenderer } from './actors/ActorRenderer'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import type { EquippedVisual } from '../types/characterVisual'
+import type { LyingPresentationMode } from './actors/lyingPresentation'
 import type { CharacterActionAnimationState } from '../types/actionAnimation'
 import type { ObjectViewOptions } from './ObjectView'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
@@ -53,9 +53,7 @@ export class Render {
   private keyboardMovement: KeyboardMovementController
   private buildGhostController: BuildGhostController
   private liftGhostController: LiftGhostController
-  private directionAimPreview: DirectionAimPreview
-  private directionAimSelection: DirectionAimState | null = null
-  private directionAimAngle = 0
+  private combatSectorPreview: CombatSectorPreview
   private chatBalloonManager: ChatBalloonManager
   private nicknameManager: NicknameManager
   private damageNumberManager: DamageNumberManager
@@ -101,7 +99,7 @@ export class Render {
     )
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
     this.liftGhostController = new LiftGhostController(this.objectsContainer)
-    this.directionAimPreview = new DirectionAimPreview(this.objectsContainer)
+    this.combatSectorPreview = new CombatSectorPreview(this.objectsContainer)
     this.nicknameManager = new NicknameManager(this.objectsContainer)
     this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer, this.nicknameManager)
     this.damageNumberManager = new DamageNumberManager(this.objectsContainer)
@@ -172,9 +170,6 @@ export class Render {
       this.lastPointerScreen = { x: event.screenX, y: event.screenY }
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
 
-      // Direction confirmation owns the click, including clicks over dropped items.
-      if (event.button === 0 && this.handleDirectionAimClick(this.lastClickWorld)) return
-
       if (event.button === 2) {
         this.handleSecondaryMapClick(event.screenX, event.screenY, event.modifiers)
         return
@@ -185,8 +180,7 @@ export class Render {
         this.releaseKeyboardMovement()
         gameStore.closeContextMenu()
 
-        // Outside direction aiming, dropped items precede build/lift callbacks
-        // so mouse and touch use the same pickup route.
+        // Dropped items precede build/lift callbacks so mouse and touch use the same pickup route.
         if (this.trySendDroppedItemMapClick(event.screenX, event.screenY, event.modifiers)) {
           return
         }
@@ -270,7 +264,6 @@ export class Render {
   }
 
   private handleSecondaryMapClick(screenX: number, screenY: number, modifiers: number): void {
-    if (this.cancelDirectionAim()) return
     this.releaseKeyboardMovement()
     this.lastClickScreen = { x: screenX, y: screenY }
     this.lastPointerScreen = { x: screenX, y: screenY }
@@ -317,57 +310,16 @@ export class Render {
     return true
   }
 
-  private resolveAimAngle(selection: DirectionAimState, pose: { x: number; y: number; heading: number }, pointer: ScreenPoint | null): number {
-    if (this.directionAimSelection !== selection) {
-      this.directionAimSelection = selection
-      this.directionAimAngle = normalizeAimAngle(pose.heading)
-    }
-    this.directionAimAngle = resolveDirectionAimAngle(pose, pointer, this.directionAimAngle)
-    return this.directionAimAngle
-  }
-
-  private cancelDirectionAim(): boolean {
-    const canceled = useGameStore().cancelDirectionAim()
-    if (!canceled) return false
-    this.directionAimSelection = null
-    this.directionAimPreview.clear()
-    return canceled
-  }
-
-  private handleDirectionAimClick(pointer: ScreenPoint): boolean {
-    const game = useGameStore()
-    const selection = game.directionAim
-    if (!selection) return false
-    const definition = game.getDirectionAimDefinition()
-    const pose = game.playerEntityId === null ? null : moveController.getVisualPosition(game.playerEntityId)
-    const angle = definition && pose ? this.resolveAimAngle(selection, pose, pointer) : null
-    // End selection before sending so another input cannot confirm the same selection.
-    this.cancelDirectionAim()
-    if (angle !== null) sendActivateAction(selection.actionId, { aimAngle: angle, streamEpoch: selection.streamEpoch })
-    return true
-  }
-
-  private updateDirectionAim(): void {
-    const game = useGameStore()
-    const definition = game.getDirectionAimDefinition()
-    const selection = game.directionAim
-    const sector = getDirectionSector(definition ?? undefined)
-    const pose = game.playerEntityId === null ? null : moveController.getVisualPosition(game.playerEntityId)
-    if (!selection || !sector || !pose) {
-      this.directionAimPreview.clear()
-      if (!selection) this.directionAimSelection = null
-      return
-    }
-    const pointer = this.lastPointerScreen ? this.screenToWorld(this.lastPointerScreen.x, this.lastPointerScreen.y) : null
-    const angle = this.resolveAimAngle(selection, pose, pointer)
-    this.directionAimPreview.update(pose, angle, sector, cameraController.getState().zoom)
+  private updateCombatSector(now: number): void {
+    const view = this.playerEntityId === null ? undefined : this.objectManager.getObject(this.playerEntityId)
+    this.combatSectorPreview.update(view?.getContainer() ?? null, cameraController.getZoom(), now)
   }
 
   private update(): void {
     const now = performance.now()
     this.updateMovement()
     this.updateCamera()
-    this.updateDirectionAim()
+    this.updateCombatSector(now)
     this.updateBuildGhost()
     this.updateLiftGhost()
     this.updateChunkBuilds()
@@ -701,6 +653,7 @@ export class Render {
   }
 
   setPlayerEntityId(entityId: number | null): void {
+    if (entityId !== this.playerEntityId) this.clearAttackSector()
     this.playerEntityId = entityId
     cameraController.setTargetEntity(entityId)
     this.objectManager.setPlayerEntityId(entityId)
@@ -730,7 +683,10 @@ export class Render {
   }
 
   despawnObject(entityId: number): void {
-    if (entityId === this.playerEntityId) this.moveMarkerManager?.clear()
+    if (entityId === this.playerEntityId) {
+      this.moveMarkerManager?.clear()
+      this.clearAttackSector()
+    }
     this.damageNumberManager.rememberDespawn(entityId, this.objectManager, performance.now())
     this.objectManager.despawnObject(entityId)
     this.nicknameManager.remove(entityId)
@@ -744,6 +700,19 @@ export class Render {
     this.damageNumberManager.clear()
   }
 
+  showAttackSector(angle: number, sector: DirectionSector): void {
+    const view = this.playerEntityId === null ? undefined : this.objectManager.getObject(this.playerEntityId)
+    if (!view) {
+      this.clearAttackSector()
+      return
+    }
+    this.combatSectorPreview.show(view.getContainer(), angle, sector, cameraController.getZoom(), performance.now())
+  }
+
+  clearAttackSector(): void {
+    this.combatSectorPreview.clear()
+  }
+
   updateObjectPosition(entityId: number, x: number, y: number): void {
     this.objectManager.updateObjectPosition(entityId, x, y)
   }
@@ -752,8 +721,8 @@ export class Render {
     this.objectManager.getObject(entityId)?.setHeading(heading)
   }
 
-  setObjectKnockedOutPose(entityId: number, knockedOut: boolean): void {
-    this.objectManager.setKnockedOutPose(entityId, knockedOut)
+  setObjectKnockedOutPose(entityId: number, knockedOut: boolean, mode: LyingPresentationMode = 'snapshot', nowMs = performance.now()): void {
+    this.objectManager.setKnockedOutPose(entityId, knockedOut, mode, nowMs)
   }
 
   setObjectCarryVisualRelation(objectId: number, carrierId: number | null): void {
@@ -879,9 +848,7 @@ export class Render {
    * This keeps canvas/input alive between reconnect attempts.
    */
   resetWorld(): void {
-    this.cancelDirectionAim()
-    this.directionAimSelection = null
-    this.directionAimPreview.clear()
+    this.clearAttackSector()
     this.playerEntityId = null
     this.clearMinimap()
     this.keyboardMovement.reset()
@@ -905,8 +872,7 @@ export class Render {
   }
 
   destroy(): void {
-    this.cancelDirectionAim()
-    this.directionAimPreview.destroy()
+    this.combatSectorPreview.destroy()
     if (this.minimapCanvas) this.detachMinimap(this.minimapCanvas)
     this.playerEntityId = null
     this.keyboardMovement.destroy()

@@ -264,7 +264,8 @@ func (f *meleeFixture) object(t testing.TB, id types.EntityID, x, y, hp float64)
 }
 
 func (f *meleeFixture) start(id string, angle float32) {
-	f.actions.ActivateRequest(f.world, 1, f.owner, &netproto.C2S_ActivateAction{ActionId: id, AimAngle: &angle, StreamEpoch: 1})
+	ecs.WithComponent(f.world, f.owner, func(transform *components.Transform) { transform.Direction = float64(angle) })
+	f.actions.ActivateRequest(f.world, 1, f.owner, &netproto.C2S_ActivateAction{ActionId: id, StreamEpoch: 1})
 }
 func (f *meleeFixture) tick() {
 	clock := ecs.GetResource[ecs.TimeState](f.world)
