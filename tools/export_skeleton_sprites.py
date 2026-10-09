@@ -2,8 +2,8 @@
 """Publish the selected paired skeleton sprites without changing their artwork.
 
 Both images retain their common square canvas. Nearest-neighbor resampling to
-128 px matches the commoner's ~96 px body height and keeps the pixel clusters
-crisp. The client's common (64, 56) abdomen anchor is independent of the skull.
+85 px reduces the original 128 px size by 1.5 (rounded to whole pixels).
+The client's common (43, 37) abdomen anchor is independent of the skull.
 Run with --check to verify the published assets without rewriting them.
 """
 
@@ -16,7 +16,7 @@ from png_codec import decode_rgba_png, encode_rgba_png
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "art_source/objects/skeleton"
 OUTPUT = ROOT / "web_new/public/assets/game/obj/skeleton"
-SIZE = 128
+SIZE = round(128 / 1.5)
 SOURCE_SHA256 = {
     "skeleton-with-skull.png": "05a63399a62a8767a67fa3e1f310dbc383ab2053d3830327f508ea3320912cd1",
     "skeleton-without-skull.png": "dcc2b31c6dc1a4fbd11b549ad8ddfba8ef1e466acf9b47d09c1ac9cd523559df",
@@ -42,7 +42,7 @@ def publish(check=False):
                 output_offset = (y * SIZE + x) * 4
                 pixels[output_offset:output_offset + 4] = rgba[offset:offset + 4]
         # A separate compact silhouette shadow can be hidden while lifting.
-        # Its client layer moves two pixels down/right, opposite the fixed light.
+        # Its client layer moves one pixel down/right, opposite the fixed light.
         shadow = bytearray(pixels)
         for offset in range(0, len(shadow), 4):
             shadow[offset:offset + 3] = bytes((15, 22, 11))

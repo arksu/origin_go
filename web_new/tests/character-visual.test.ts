@@ -182,13 +182,13 @@ test('paired skeleton sprites share their abdomen anchor and culling includes th
   for (const resourcePath of ['player_skeleton', 'player_skeleton_without_skull']) {
     const resource = ResourceLoader.getResourceDef(resourcePath)!
     assert.equal(resource.actor3d, undefined)
-    assert.deepEqual(resource.size, [128, 128])
-    assert.deepEqual(resource.offset, [64, 56])
+    assert.deepEqual(resource.size, [85, 85])
+    assert.deepEqual(resource.offset, [43, 37])
     assert.equal(resource.layers[0]!.interactive, true)
     assert.equal(resource.layers[1]!.shadow, true)
     assert.equal(resource.layers[1]!.interactive, undefined)
     const position = ResourceLoader.resolveLayerPosition(resource.layers[0]!, resource)
-    assert.deepEqual(position, { x: -64, y: -56 })
+    assert.deepEqual(position, { x: -43, y: -37 })
   }
 })
 
@@ -222,10 +222,10 @@ test('replacing a corpse with a skeleton releases its actor and covers the sprit
   assert.equal(skeleton.getContainer().rotation, 0)
   const bounds = skeleton.computeScreenBounds()
   const container = skeleton.getContainer()
-  assert.ok(bounds.minX <= container.x - 64)
-  assert.ok(bounds.minY <= container.y - 56)
-  assert.ok(bounds.maxX >= container.x + 64)
-  assert.ok(bounds.maxY >= container.y + 72, 'canvas below the abdomen must remain visible at viewport edges')
+  assert.ok(bounds.minX <= container.x - 43)
+  assert.ok(bounds.minY <= container.y - 37)
+  assert.ok(bounds.maxX >= container.x + 42)
+  assert.ok(bounds.maxY >= container.y + 48, 'canvas below the abdomen must remain visible at viewport edges')
   await Promise.resolve()
   const shadow = skeleton.getContainer().children.find(child => child.zIndex === -1)!
   assert.ok(shadow)
