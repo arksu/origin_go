@@ -111,12 +111,16 @@ func validateBehaviorContract(behavior contracts.Behavior) error {
 	_, hasValidator := behavior.(contracts.ContextActionValidator)
 	_, hasExecutor := behavior.(contracts.ContextActionExecutor)
 	_, hasScheduledTick := behavior.(contracts.ScheduledTickBehavior)
+	_, hasScheduledRuntime := behavior.(contracts.ScheduledRuntimeBehavior)
 
 	if !hasDefConfigValidator {
 		return fmt.Errorf("missing def config validator capability")
 	}
 	if hasScheduledTick && !hasRuntime {
 		return fmt.Errorf("scheduled tick capability requires runtime capability")
+	}
+	if hasScheduledRuntime && !hasRuntime {
+		return fmt.Errorf("scheduled runtime capability requires runtime capability")
 	}
 
 	if (hasProvider || hasValidator) && !hasExecutor {
@@ -137,6 +141,7 @@ func DefaultRegistry() (*Registry, error) {
 	defaultRegistryOnce.Do(func() {
 		defaultRegistry, defaultRegistryErr = NewRegistry(
 			containerBehavior{},
+			dryingBehavior{},
 			buildBehavior{},
 			liftBehavior{},
 			treeBehavior{},

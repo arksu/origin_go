@@ -57,6 +57,20 @@ func (s *BehaviorTickSystem) Update(w *ecs.World, dt float64) {
 	for _, tickKey := range s.processBatch {
 		s.processTickKey(w, timeState.Tick, tickKey)
 	}
+
+	// Tick deadlines retain precedence. Runtime work shares the same budget,
+	// including entries rejected by execution-time identity checks.
+	runtimeSchedule, exists := ecs.TryGetResource[ecs.BehaviorRuntimeSchedule](w)
+	if !exists {
+		return
+	}
+	for remaining := s.budgetPerTick - len(s.processBatch); remaining > 0; remaining-- {
+		entry, due := runtimeSchedule.PopDue(timeState.RuntimeSecondsTotal)
+		if !due {
+			break
+		}
+		s.processRuntimeEntry(w, timeState.RuntimeSecondsTotal, entry)
+	}
 }
 
 func (s *BehaviorTickSystem) processTickKey(w *ecs.World, currentTick uint64, tickKey ecs.BehaviorTickKey) {
@@ -115,6 +129,55 @@ func (s *BehaviorTickSystem) processTickKey(w *ecs.World, currentTick uint64, ti
 	}
 	if result.StateChanged {
 		ecs.MarkObjectBehaviorDirty(w, handle)
+	}
+}
+
+func (s *BehaviorTickSystem) processRuntimeEntry(w *ecs.World, currentRuntimeSeconds int64, entry ecs.BehaviorRuntimeEntry) {
+	if entry.EntityID == 0 || entry.BehaviorKey == "" || !w.Alive(entry.Handle) {
+		return
+	}
+	externalID, hasExternalID := ecs.GetComponent[ecs.ExternalID](w, entry.Handle)
+	if !hasExternalID || externalID.ID != entry.EntityID || ecs.ObjectDestructionPending(w, entry.Handle) {
+		return
+	}
+	entityInfo, hasInfo := ecs.GetComponent[components.EntityInfo](w, entry.Handle)
+	if !hasInfo || !containsBehaviorKey(entityInfo.Behaviors, entry.BehaviorKey) {
+		return
+	}
+	behavior, found := s.behaviorRegistry.GetBehavior(entry.BehaviorKey)
+	if !found || behavior == nil {
+		return
+	}
+	runtimeBehavior, ok := behavior.(contracts.ScheduledRuntimeBehavior)
+	if !ok {
+		return
+	}
+
+	internalState, hasInternalState := ecs.GetComponent[components.ObjectInternalState](w, entry.Handle)
+	var runtimeState *components.RuntimeObjectState
+	if hasInternalState {
+		runtimeState, _ = components.GetRuntimeObjectState(internalState)
+	}
+	result, err := runtimeBehavior.OnScheduledRuntimeTick(&contracts.BehaviorRuntimeTickContext{
+		World:                 w,
+		Handle:                entry.Handle,
+		EntityID:              entry.EntityID,
+		EntityType:            entityInfo.TypeID,
+		BehaviorKey:           entry.BehaviorKey,
+		CurrentRuntimeSeconds: currentRuntimeSeconds,
+		CurrentState:          runtimeState,
+		Deps:                  s.executionDeps,
+	})
+	if err != nil {
+		s.logger.Error("scheduled runtime behavior tick failed",
+			zap.Uint64("entity_id", uint64(entry.EntityID)),
+			zap.String("behavior_key", entry.BehaviorKey),
+			zap.Error(err),
+		)
+		return
+	}
+	if result.StateChanged {
+		ecs.MarkObjectBehaviorDirty(w, entry.Handle)
 	}
 }
 

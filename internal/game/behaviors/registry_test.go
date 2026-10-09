@@ -48,6 +48,16 @@ func (testBehaviorCyclicDeclaredNoHandler) ExecuteAction(*contracts.BehaviorActi
 
 type testBehaviorValidActionAndCycle struct{}
 
+type testBehaviorRuntimeScheduleWithoutRuntime struct{}
+
+func (testBehaviorRuntimeScheduleWithoutRuntime) Key() string { return "invalid_runtime_schedule" }
+func (testBehaviorRuntimeScheduleWithoutRuntime) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
+	return 100, nil
+}
+func (testBehaviorRuntimeScheduleWithoutRuntime) OnScheduledRuntimeTick(*contracts.BehaviorRuntimeTickContext) (contracts.BehaviorTickResult, error) {
+	return contracts.BehaviorTickResult{}, nil
+}
+
 func (testBehaviorValidActionAndCycle) Key() string { return "valid_action_cyclic" }
 func (testBehaviorValidActionAndCycle) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 100, nil
@@ -91,5 +101,12 @@ func TestNewRegistry_Success_WhenActionAndCyclicCapabilitiesMatch(t *testing.T) 
 	_, err := NewRegistry(testBehaviorValidActionAndCycle{})
 	if err != nil {
 		t.Fatalf("expected valid registry, got error: %v", err)
+	}
+}
+
+func TestNewRegistry_RejectsRuntimeScheduleWithoutRuntimeCapability(t *testing.T) {
+	_, err := NewRegistry(testBehaviorRuntimeScheduleWithoutRuntime{})
+	if err == nil {
+		t.Fatal("runtime scheduling requires runtime capability")
 	}
 }

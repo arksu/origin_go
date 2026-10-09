@@ -28,7 +28,14 @@ type InventoryExecutor struct {
 	service          *InventoryOperationService
 	spatialRegistrar DroppedItemSpatialRegistrar
 	visionForcer     VisionUpdateForcer
+	rootMutationHook func(*ecs.World, types.EntityID)
 	logger           *zap.Logger
+}
+
+// SetRootMutationHook installs the synchronous notification for committed
+// world-root inventory changes. It runs under the owning shard's lock.
+func (e *InventoryExecutor) SetRootMutationHook(hook func(*ecs.World, types.EntityID)) {
+	e.rootMutationHook = hook
 }
 
 func NewInventoryExecutor(
@@ -414,7 +421,8 @@ func (e *InventoryExecutor) markBehaviorDirtyForUpdatedRoots(w *ecs.World, resul
 		return
 	}
 
-	for _, info := range result.UpdatedContainers {
+	notified := false
+	for index, info := range result.UpdatedContainers {
 		if info == nil || info.Container == nil {
 			continue
 		}
@@ -431,7 +439,38 @@ func (e *InventoryExecutor) markBehaviorDirtyForUpdatedRoots(w *ecs.World, resul
 		if _, hasObjectState := ecs.GetComponent[components.ObjectInternalState](w, handle); !hasObjectState {
 			continue
 		}
+		// A root can appear more than once after nested-resource cascades.
+		// Notify it once per operation, while separate commands still notify
+		// independently even when they execute in the same tick.
+		alreadyNotified := false
+		for _, previous := range result.UpdatedContainers[:index] {
+			if previous != nil && previous.Container != nil && previous.Container.Kind == constt.InventoryGrid && previous.Container.Key == 0 && previous.Container.OwnerID == container.OwnerID {
+				alreadyNotified = true
+				break
+			}
+		}
+		if alreadyNotified {
+			continue
+		}
+		if e.rootMutationHook != nil {
+			e.rootMutationHook(w, container.OwnerID)
+			notified = true
+		}
 		ecs.MarkObjectBehaviorDirty(w, handle)
+	}
+
+	// The notification may finish an overdue process and replace an item.
+	// Build the response from committed ECS state, rather than the copies
+	// captured by the operation before its notification ran.
+	if notified {
+		for _, info := range result.UpdatedContainers {
+			if info == nil || info.Container == nil || !w.Alive(info.Handle) {
+				continue
+			}
+			if current, found := ecs.GetComponent[components.InventoryContainer](w, info.Handle); found {
+				*info.Container = current
+			}
+		}
 	}
 }
 
