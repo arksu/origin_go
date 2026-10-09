@@ -130,6 +130,10 @@ func (s *ContextActionService) SetInventoryUpdate(fn func(*ecs.World, types.Enti
 	s.actionDeps.InventoryUpdate = fn
 }
 
+func (s *ContextActionService) SetTakeSkull(fn contracts.TakeSkullFn) {
+	s.actionDeps.TakeSkull = fn
+}
+
 func (s *ContextActionService) SetSoundEventService(service *SoundEventService) {
 	s.soundEvents = service
 }

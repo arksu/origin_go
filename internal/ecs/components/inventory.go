@@ -60,6 +60,9 @@ type InvItem struct {
 	Quality  uint32
 	Quantity uint32
 
+	// Skull is immutable instance metadata; ordinary skulls may leave it nil.
+	Skull *SkullMetadata
+
 	// size in slots (no rotation); fits max 20x20 so uint8 is enough
 	W uint8
 	H uint8

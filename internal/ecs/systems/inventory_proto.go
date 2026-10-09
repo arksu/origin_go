@@ -88,6 +88,11 @@ func BuildItemInstanceProto(item InventoryItemState) *netproto.ItemInstance {
 		H:        uint32(item.H),
 	}
 
+	if item.HintExt != "" {
+		hint := item.HintExt
+		instance.HintExt = &hint
+	}
+
 	// Set name from item definition
 	if def, ok := itemdefs.Global().GetByID(int(item.TypeID)); ok {
 		instance.Name = def.Name

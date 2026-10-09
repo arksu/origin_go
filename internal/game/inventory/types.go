@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"origin/internal/ecs/components"
 	netproto "origin/internal/network/proto"
 )
 
@@ -69,21 +70,24 @@ func StringToEquipSlot(slot string) netproto.EquipSlot {
 }
 
 type InventoryDataV1 struct {
-	Kind    uint8             `json:"kind"`
-	Key     uint32            `json:"key"`
-	Width   uint8             `json:"width,omitempty"`
-	Height  uint8             `json:"height,omitempty"`
-	Version int               `json:"v"`
-	Items   []InventoryItemV1 `json:"items"`
+	Kind             uint8             `json:"kind"`
+	Key              uint32            `json:"key"`
+	Width            uint8             `json:"width,omitempty"`
+	Height           uint8             `json:"height,omitempty"`
+	Version          int               `json:"v"`
+	Items            []InventoryItemV1 `json:"items"`
+	HandMouseOffsetX int16             `json:"hand_mouse_offset_x,omitempty"`
+	HandMouseOffsetY int16             `json:"hand_mouse_offset_y,omitempty"`
 }
 
 type InventoryItemV1 struct {
-	ItemID          uint64           `json:"item_id"`
-	TypeID          uint32           `json:"type_id"`
-	Quality         uint32           `json:"quality"`
-	Quantity        uint32           `json:"quantity"`
-	X               uint8            `json:"x,omitempty"`
-	Y               uint8            `json:"y,omitempty"`
-	EquipSlot       string           `json:"equip_slot,omitempty"`
-	NestedInventory *InventoryDataV1 `json:"nested_inventory,omitempty"`
+	ItemID          uint64                    `json:"item_id"`
+	TypeID          uint32                    `json:"type_id"`
+	Quality         uint32                    `json:"quality"`
+	Quantity        uint32                    `json:"quantity"`
+	X               uint8                     `json:"x,omitempty"`
+	Y               uint8                     `json:"y,omitempty"`
+	EquipSlot       string                    `json:"equip_slot,omitempty"`
+	NestedInventory *InventoryDataV1          `json:"nested_inventory,omitempty"`
+	Skull           *components.SkullMetadata `json:"skull,omitempty"`
 }

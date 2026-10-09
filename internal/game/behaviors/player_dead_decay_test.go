@@ -12,6 +12,7 @@ func TestPlayerDeadDecayInitializesOnceAcrossLifecycleReasons(t *testing.T) {
 	for _, reason := range []contracts.ObjectBehaviorInitReason{contracts.ObjectBehaviorInitReasonSpawn, contracts.ObjectBehaviorInitReasonRestore, contracts.ObjectBehaviorInitReasonTransform} {
 		t.Run(string(reason), func(t *testing.T) {
 			w := ecs.NewWorldForTesting()
+			expectedDeadline := int64(500) + CorpseDecaySeconds
 			ecs.SetResource(w, ecs.TimeState{Tick: 100, RuntimeSecondsTotal: 500})
 			h := w.Spawn(1, nil)
 			ecs.AddComponent(w, h, components.ObjectInternalState{HP: 0.49, HasHP: true, Flags: []string{"existing.flag"}})
@@ -21,11 +22,11 @@ func TestPlayerDeadDecayInitializesOnceAcrossLifecycleReasons(t *testing.T) {
 			}
 			state, _ := ecs.GetComponent[components.ObjectInternalState](w, h)
 			decay, ok := components.GetBehaviorState[components.CorpseDecayBehaviorState](state, "player_dead")
-			if !ok || decay.DecayAtRuntimeSeconds != 22100 || !state.IsDirty || state.HP != 0.49 || !state.HasHP || len(state.Flags) != 1 {
+			if !ok || decay.DecayAtRuntimeSeconds != expectedDeadline || !state.IsDirty || state.HP != 0.49 || !state.HasHP || len(state.Flags) != 1 {
 				t.Fatalf("invalid initialized state: %+v, decay %+v", state, decay)
 			}
 			ecs.WithComponent(w, h, func(current *components.ObjectInternalState) { current.IsDirty = false })
-			ecs.SetResource(w, ecs.TimeState{Tick: 900000, TickRate: 10, RuntimeSecondsTotal: 21500})
+			ecs.SetResource(w, ecs.TimeState{Tick: 900000, TickRate: 10, RuntimeSecondsTotal: expectedDeadline - 1})
 			for _, repeatReason := range []contracts.ObjectBehaviorInitReason{contracts.ObjectBehaviorInitReasonRestore, contracts.ObjectBehaviorInitReasonTransform, contracts.ObjectBehaviorInitReasonSpawn} {
 				ctx.Reason = repeatReason
 				if err := (playerDeadBehavior{}).InitObject(ctx); err != nil {
@@ -34,17 +35,17 @@ func TestPlayerDeadDecayInitializesOnceAcrossLifecycleReasons(t *testing.T) {
 			}
 			state, _ = ecs.GetComponent[components.ObjectInternalState](w, h)
 			decay, _ = components.GetBehaviorState[components.CorpseDecayBehaviorState](state, "player_dead")
-			if decay.DecayAtRuntimeSeconds != 22100 || state.IsDirty {
+			if decay.DecayAtRuntimeSeconds != expectedDeadline || state.IsDirty {
 				t.Fatalf("repeated init changed restored deadline or dirty state: %+v, %+v", state, decay)
 			}
 			schedule := ecs.GetResource[ecs.CorpseDecaySchedule](w)
 			if schedule.PendingCount() != 1 {
 				t.Fatalf("repeated init duplicated queue: %d", schedule.PendingCount())
 			}
-			if _, due := schedule.PopDue(22099); due {
-				t.Fatal("decay fired before six runtime hours")
+			if _, due := schedule.PopDue(expectedDeadline - 1); due {
+				t.Fatal("decay fired before its configured runtime deadline")
 			}
-			entry, due := schedule.PopDue(22100)
+			entry, due := schedule.PopDue(expectedDeadline)
 			if !due || entry.Handle != h || entry.EntityID != 1 {
 				t.Fatalf("decay not due at exact deadline: %+v", entry)
 			}

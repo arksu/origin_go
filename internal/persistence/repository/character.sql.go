@@ -275,6 +275,25 @@ func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64)
 	return items, nil
 }
 
+const getDeadCharacterMetadata = `-- name: GetDeadCharacterMetadata :one
+SELECT name, deleted_at
+FROM character
+WHERE id = $1
+  AND deleted_at IS NOT NULL
+`
+
+type GetDeadCharacterMetadataRow struct {
+	Name      string       `json:"name"`
+	DeletedAt sql.NullTime `json:"deleted_at"`
+}
+
+func (q *Queries) GetDeadCharacterMetadata(ctx context.Context, id int64) (GetDeadCharacterMetadataRow, error) {
+	row := q.db.QueryRowContext(ctx, getDeadCharacterMetadata, id)
+	var i GetDeadCharacterMetadataRow
+	err := row.Scan(&i.Name, &i.DeletedAt)
+	return i, err
+}
+
 const resetOnlinePlayers = `-- name: ResetOnlinePlayers :exec
 UPDATE character
 SET is_online = false

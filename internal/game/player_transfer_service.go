@@ -194,6 +194,9 @@ func (s *PlayerTransferService) detachTransferSource(
 	if playerHandle == types.InvalidHandle || !shard.world.Alive(playerHandle) {
 		return snapshot, fmt.Errorf("entity not alive")
 	}
+	if ecs.InventoryHandleReserved(shard.world, playerHandle) {
+		return snapshot, fmt.Errorf("inventory operation is still being committed")
+	}
 	// A queued teleport must recheck under the world lock before saving, leaving
 	// the world or capturing participants: KO/lying cannot be bypassed by transfer.
 	if playerstate.IsIncapacitated(shard.world, playerHandle) {

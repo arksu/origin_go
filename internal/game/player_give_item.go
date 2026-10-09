@@ -25,36 +25,44 @@ func newPlayerGiveItemAdapter(executor *inventory.InventoryExecutor, sender play
 		if result == nil {
 			return contracts.GiveItemOutcome{Message: "nil give result"}
 		}
-		if result.Success && len(result.UpdatedContainers) > 0 && sender != nil {
-			states := executor.ConvertContainersToStates(world, result.UpdatedContainers)
-			updated := make([]*netproto.InventoryState, 0, len(states))
-			for _, state := range states {
-				updated = append(updated, systems.BuildInventoryStateProto(state))
-			}
-			if len(updated) > 0 {
-				sender.SendInventoryOpResult(playerID, &netproto.S2C_InventoryOpResult{
-					OpId:    0,
-					Success: true,
-					Updated: updated,
-				})
-			}
-		}
-		if result.Success && result.DiscoveryLPGained > 0 && sender != nil {
-			lp := result.DiscoveryLPGained
-			sender.SendExpGained(playerID, &netproto.S2C_ExpGained{EntityId: uint64(playerID), Lp: &lp})
-
-			var posX, posY float64
-			ecs.WithComponent(world, playerHandle, func(transform *components.Transform) {
-				posX, posY = transform.X, transform.Y
-			})
-			sender.SendFx(playerID, &netproto.S2C_Fx{
-				FxKey:    "exp_gain",
-				Position: &netproto.Vector2{X: int32(posX), Y: int32(posY)},
-			})
-		}
+		publishPlayerGiveItemResult(world, playerID, playerHandle, result, executor, sender)
 		return contracts.GiveItemOutcome{
 			Success: result.Success, AnyDropped: false, PlacedInHand: result.PlacedInHand,
 			GrantedCount: result.GrantedCount, Message: result.Message,
 		}
+	}
+}
+
+func (s *Shard) skullGranted(playerID types.EntityID, playerHandle types.Handle, result *inventory.GiveItemResult) {
+	publishPlayerGiveItemResult(s.world, playerID, playerHandle, result, s.inventoryExecutor, s)
+}
+
+func publishPlayerGiveItemResult(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, result *inventory.GiveItemResult, executor *inventory.InventoryExecutor, sender playerGiveItemSender) {
+	if result.Success && len(result.UpdatedContainers) > 0 && sender != nil {
+		states := executor.ConvertContainersToStates(world, result.UpdatedContainers)
+		updated := make([]*netproto.InventoryState, 0, len(states))
+		for _, state := range states {
+			updated = append(updated, systems.BuildInventoryStateProto(state))
+		}
+		if len(updated) > 0 {
+			sender.SendInventoryOpResult(playerID, &netproto.S2C_InventoryOpResult{
+				OpId:    0,
+				Success: true,
+				Updated: updated,
+			})
+		}
+	}
+	if result.Success && result.DiscoveryLPGained > 0 && sender != nil {
+		lp := result.DiscoveryLPGained
+		sender.SendExpGained(playerID, &netproto.S2C_ExpGained{EntityId: uint64(playerID), Lp: &lp})
+
+		var posX, posY float64
+		ecs.WithComponent(world, playerHandle, func(transform *components.Transform) {
+			posX, posY = transform.X, transform.Y
+		})
+		sender.SendFx(playerID, &netproto.S2C_Fx{
+			FxKey:    "exp_gain",
+			Position: &netproto.Vector2{X: int32(posX), Y: int32(posY)},
+		})
 	}
 }

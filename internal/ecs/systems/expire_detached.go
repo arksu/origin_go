@@ -119,6 +119,10 @@ func (s *ExpireDetachedSystem) Update(w *ecs.World, dt float64) {
 			detachedEntities.ScheduleNext(entityID, handle, now, time.Second, minDelay)
 			continue
 		}
+		if ecs.InventoryHandleReserved(w, handle) {
+			detachedEntities.ScheduleNext(entityID, handle, now, time.Second, minDelay)
+			continue
+		}
 		if now.Before(entity.SaveRetryAt) {
 			detachedEntities.SetSaveRetryAt(entityID, handle, entity.SaveRetryAt)
 			continue

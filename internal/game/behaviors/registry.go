@@ -144,6 +144,7 @@ func DefaultRegistry() (*Registry, error) {
 			takeBehavior{},
 			playerBehavior{},
 			playerDeadBehavior{},
+			playerSkeletonBehavior{},
 		)
 	})
 	return defaultRegistry, defaultRegistryErr

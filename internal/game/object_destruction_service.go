@@ -81,6 +81,8 @@ type ObjectDestructionDependencies struct {
 	WithWorldRead          func(func(*ecs.World))
 	Quarantine             func(types.Handle)
 	TransformCommitted     func(types.Handle, *objectdefs.ObjectDef) bool
+	SkullGranted           func(types.EntityID, types.Handle, *inventory.GiveItemResult)
+	SkullRejected          func(types.EntityID)
 	Region                 int
 	MinX, MinY, MaxX, MaxY int // Inclusive minimum, exclusive maximum.
 	Logger                 *zap.Logger
@@ -149,6 +151,7 @@ type objectDestructionOperation struct {
 	pageRead            int
 	replacement         *repository.Object
 	replacementDef      *objectdefs.ObjectDef
+	skullClaim          *skullClaimOperation
 }
 
 type destructionDroppedRecord struct {
@@ -259,6 +262,9 @@ func (s *ObjectDestructionService) reserve(target types.Handle) (objectDestructi
 	if state.Pending[target] || s.reserved[target] != 0 {
 		return objectDestructionReservation{}, ErrObjectDestructionPending
 	}
+	if ecs.InventoryHandleReserved(s.world, target) {
+		return objectDestructionReservation{}, ErrObjectDestructionPending
+	}
 	if !state.Prepared[target] {
 		return objectDestructionReservation{}, ErrObjectDamageTargetUnprepared
 	}
@@ -342,7 +348,12 @@ func (s *ObjectDestructionService) finalizeReservation(reservation objectDestruc
 	if op == nil {
 		return false
 	}
-	s.deps.Quarantine(op.target)
+	// Taking a skull only reserves interactions. Preserve spatial membership
+	// and observers so the committed appearance replaces the visible skeleton
+	// immediately, without a despawn followed by a periodic vision refresh.
+	if op.skullClaim == nil {
+		s.deps.Quarantine(op.target)
+	}
 	op.phase = destructionQueued
 	return true
 }
@@ -361,6 +372,13 @@ func (s *ObjectDestructionService) Update() {
 		op.mu.Lock()
 		if op.phase == destructionReady {
 			if op.err != nil {
+				if op.skullClaim != nil && definiteSkullClaimFailure(op.err) {
+					if s.rejectSkullClaim(op) {
+						s.release(op)
+					}
+					op.mu.Unlock()
+					continue
+				}
 				if op.backoff == 0 {
 					op.backoff = time.Second
 				} else {
@@ -414,6 +432,9 @@ func (s *ObjectDestructionService) Update() {
 }
 
 func (s *ObjectDestructionService) finalizeSource(op *objectDestructionOperation, budget *int) bool {
+	if op.skullClaim != nil {
+		return s.finalizeSkullClaim(op, budget)
+	}
 	// Every nested value is now owned by durable dropped JSON. Remove only the
 	// exact captured references, never recurse into arbitrary current owners.
 	index := ecs.GetResource[ecs.InventoryRefIndex](s.world)
@@ -457,6 +478,9 @@ func (s *ObjectDestructionService) finalizeSource(op *objectDestructionOperation
 }
 
 func (s *ObjectDestructionService) release(op *objectDestructionOperation) {
+	if op.skullClaim != nil {
+		ecs.ReleaseInventoryOwner(s.world, op.skullClaim.recipientID, op.skullClaim.recipient)
+	}
 	for _, coord := range op.pinned {
 		s.deps.Chunks.UnpinPersistence(coord)
 	}
@@ -477,6 +501,7 @@ func (s *ObjectDestructionService) release(op *objectDestructionOperation) {
 	op.pageRead = 0
 	op.replacement = nil
 	op.replacementDef = nil
+	op.skullClaim = nil
 	if _, exists := s.reserved[op.target]; exists {
 		s.reserved[op.target] = 0
 	}
@@ -500,6 +525,9 @@ func (op *objectDestructionOperation) Complete(err error) {
 
 // Run never mutates ECS. The source is quarantined throughout incremental capture.
 func (op *objectDestructionOperation) Run() error {
+	if op.skullClaim != nil {
+		return op.runSkullClaim()
+	}
 	s := op.service
 	if !op.committed {
 		// Once captured and assigned identities, only owned immutable data is
@@ -643,7 +671,7 @@ func (op *objectDestructionOperation) records(cursor *destructionLootCursor, dst
 		x := clampDrop(op.x+dropOffset(op.seed, position.emitted*2), op.service.deps.MinX, op.service.deps.MaxX-1)
 		y := clampDrop(op.y+dropOffset(op.seed, position.emitted*2+1), op.service.deps.MinY, op.service.deps.MaxY-1)
 		coord := types.WorldToChunkCoord(x, y, constt.ChunkSize, constt.CoordPerTile)
-		params := inventory.SpawnDroppedEntityParams{DroppedEntityID: id, ItemID: id, TypeID: item.TypeID, Resource: item.Resource, Quality: item.Quality, Quantity: 1, W: item.W, H: item.H, DropX: x, DropY: y, Region: op.region, Layer: op.layer, ChunkX: coord.X, ChunkY: coord.Y, NowRuntimeSeconds: op.dropTime}
+		params := inventory.SpawnDroppedEntityParams{DroppedEntityID: id, ItemID: id, TypeID: item.TypeID, Resource: item.Resource, Quality: item.Quality, Quantity: 1, W: item.W, H: item.H, Skull: item.Skull.Clone(), DropX: x, DropY: y, Region: op.region, Layer: op.layer, ChunkX: coord.X, ChunkY: coord.Y, NowRuntimeSeconds: op.dropTime}
 		record, err := inventory.BuildDroppedItemPersistenceRecord(params, item.NestedInventory)
 		if err != nil {
 			return nil, err

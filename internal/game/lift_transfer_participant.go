@@ -65,7 +65,7 @@ func (p *LiftCarryTransferParticipant) CaptureSource(
 		sourceShard.liftService.clearCarryStateForPlayer(sourceShard.world, req.PlayerID, playerHandle, false)
 		return nil, nil
 	}
-	if ecs.ObjectDestructionPending(sourceShard.world, objectHandle) {
+	if ecs.ObjectDestructionPending(sourceShard.world, objectHandle) || ecs.InventoryHandleReserved(sourceShard.world, objectHandle) {
 		return nil, ErrObjectDamageTargetDead
 	}
 

@@ -13,9 +13,12 @@ import (
 )
 
 func TestItemLockGuardsInitiatorBeforeAnyMutation(t *testing.T) {
-	for _, state := range []components.EntityHealth{{SHP: 0, HHP: 20, KOUntilUnixMs: 60000}, {SHP: 5, HHP: 20, IsLying: true}} {
+	for index, state := range []components.EntityHealth{{SHP: 0, HHP: 20, KOUntilUnixMs: 60000}, {SHP: 5, HHP: 20, IsLying: true}, {SHP: 20, HHP: 20}} {
 		world, id, player := setupTestWorld(t)
 		ecs.AddComponent(world, player, state)
+		if index == 2 {
+			require.True(t, ecs.ReserveInventoryOwner(world, id, player))
+		}
 		ecs.AddComponent(world, player, components.CharacterProfile{})
 		ecs.AddComponent(world, player, components.EntityStats{Stamina: 100, Energy: 900})
 		grid := createGridContainer(world, id, 0, 4, 4)

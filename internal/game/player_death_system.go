@@ -125,7 +125,7 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 		HandlePlayerIncapacitated(*ecs.World, types.EntityID, types.Handle)
 		ApplyPendingStandUp(*ecs.World, types.EntityID, types.Handle)
 	}); ok {
-		if playerstate.ItemsLocked(w, handle) {
+		if playerstate.IsIncapacitated(w, handle) {
 			runtime.HandlePlayerIncapacitated(w, playerID, handle)
 		}
 		runtime.ApplyPendingStandUp(w, playerID, handle)

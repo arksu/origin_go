@@ -82,13 +82,15 @@ func (il *InventoryLoader) loadInventoryRecursive(
 	*allHandles = append(*allHandles, containerHandle)
 
 	container := components.InventoryContainer{
-		OwnerID: ownerID,
-		Kind:    constt.InventoryKind(dbInv.Kind),
-		Key:     dbInv.Key,
-		Version: uint64(dbInv.Version),
-		Width:   dbInv.Width,
-		Height:  dbInv.Height,
-		Items:   make([]components.InvItem, 0, len(dbInv.Items)),
+		OwnerID:          ownerID,
+		Kind:             constt.InventoryKind(dbInv.Kind),
+		Key:              dbInv.Key,
+		Version:          uint64(dbInv.Version),
+		Width:            dbInv.Width,
+		Height:           dbInv.Height,
+		Items:            make([]components.InvItem, 0, len(dbInv.Items)),
+		HandMouseOffsetX: dbInv.HandMouseOffsetX,
+		HandMouseOffsetY: dbInv.HandMouseOffsetY,
 	}
 
 	for _, dbItem := range dbInv.Items {
@@ -106,6 +108,7 @@ func (il *InventoryLoader) loadInventoryRecursive(
 			Resource:  itemDef.ResolveResource(hasNestedItems),
 			Quality:   dbItem.Quality,
 			Quantity:  dbItem.Quantity,
+			Skull:     dbItem.Skull.Clone(),
 			W:         uint8(itemDef.Size.W),
 			H:         uint8(itemDef.Size.H),
 			X:         dbItem.X,

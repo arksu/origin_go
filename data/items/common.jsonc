@@ -115,6 +115,16 @@
         "w": 1,
         "h": 1
       }
+    },
+    {
+      "defId": 3014,
+      "key": "skull",
+      "name": "Skull",
+      "resource": "items/skull.png",
+      "tags": [],
+      "size": { "w": 1, "h": 1 },
+      "stack": { "mode": "none", "max": 1 },
+      "allowed": { "grid": true, "hand": true, "equipmentSlots": [] }
     }
   ]
 }

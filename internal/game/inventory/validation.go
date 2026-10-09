@@ -76,7 +76,7 @@ func (v *Validator) ResolveContainer(
 	}
 
 	ownerID := types.EntityID(ref.OwnerId)
-	if ecs.ObjectDestructionOwnerPending(w, ownerID) {
+	if ecs.ObjectDestructionOwnerPending(w, ownerID) || ecs.InventoryOwnerReserved(w, ownerID) {
 		return nil, NewValidationError(netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, "Container is unavailable")
 	}
 	refKey := ecs.InventoryRefKey{
@@ -112,7 +112,7 @@ func (v *Validator) ResolveContainer(
 
 		openState, hasOpenState := ecs.TryGetResource[ecs.OpenContainerState](w)
 		if hasOpenState {
-			if rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID); hasRoot && ecs.ObjectDestructionOwnerPending(w, rootOwnerID) {
+			if rootOwnerID, hasRoot := openState.GetOpenedRoot(playerID); hasRoot && (ecs.ObjectDestructionOwnerPending(w, rootOwnerID) || ecs.InventoryOwnerReserved(w, rootOwnerID)) {
 				return nil, NewValidationError(netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, "Container is unavailable")
 			}
 		}

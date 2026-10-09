@@ -16,6 +16,20 @@ FROM object
 WHERE id = $1
   AND deleted_at IS NULL;
 
+-- name: GetSkullClaimSourceForUpdate :one
+SELECT *
+FROM object
+WHERE region = $1 AND id = $2
+FOR UPDATE;
+
+-- name: InsertSkullClaimSourceIfMissing :exec
+INSERT INTO object (
+    id, type_id, region, x, y, layer, chunk_x, chunk_y,
+    heading, quality, hp, owner_id, data, create_tick, last_tick
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+ON CONFLICT (region, id) DO NOTHING;
+
 -- name: DeleteObject :exec
 DELETE
 FROM object

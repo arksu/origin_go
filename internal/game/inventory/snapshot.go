@@ -199,6 +199,10 @@ func (ss *SnapshotSender) buildItemInstance(
 		H:        uint32(invItem.H),
 	}
 
+	if hint := invItem.Skull.HintExt(); hint != "" {
+		itemInstance.HintExt = &hint
+	}
+
 	// Set name from item definition
 	if def, ok := itemdefs.Global().GetByID(int(invItem.TypeID)); ok {
 		itemInstance.Name = def.Name

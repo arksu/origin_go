@@ -742,7 +742,7 @@ func (s *LiftService) isLiftableTarget(w *ecs.World, targetHandle types.Handle) 
 	if w == nil || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
 		return false
 	}
-	if ecs.ObjectDestructionPending(w, targetHandle) {
+	if ecs.ObjectDestructionPending(w, targetHandle) || ecs.InventoryHandleReserved(w, targetHandle) {
 		return false
 	}
 	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
