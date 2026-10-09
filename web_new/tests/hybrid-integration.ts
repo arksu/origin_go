@@ -8,6 +8,7 @@ import { ObjectManager } from '../src/game/ObjectManager'
 import { ResourceLoader } from '../src/game/ResourceLoader'
 import { ActorRenderer } from '../src/game/actors/ActorRenderer'
 import { ACTOR_RENDER, COMMONER_ASSET_ID, DEFAULT_EQUIPMENT } from '../src/game/actors/config'
+import { findRigBone } from '../src/game/actors/ActorSockets'
 import { setWorldParams } from '../src/game/tiles/Tile'
 import { coordScreen2Game } from '../src/game/utils/coordConvert'
 import { SHALLOW_WATER } from '../src/game/actors/shallowWaterConfig'
@@ -188,21 +189,27 @@ async function main() {
   view.setShadowSuppressed(false)
   check(koView.knockedOutShadow.visible, 'Lying contact shadow must return when suppression ends')
   const koPixels = pixels()
-  let minX = 128, maxX = 0, minY = 128, maxY = 0
-  for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
-    if (!koPixels[(y * 128 + x) * 4 + 3]) continue
+  const lyingFrame = ACTOR_RENDER.lyingFrame
+  const width = lyingFrame.width, height = lyingFrame.height
+  let minX: number = width, maxX = 0, minY: number = height, maxY = 0
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (!koPixels[(y * width + x) * 4 + 3]) continue
     minX = Math.min(minX, x); maxX = Math.max(maxX, x)
     minY = Math.min(minY, y); maxY = Math.max(maxY, y)
   }
-  check(maxX - minX > (maxY - minY) * 2, 'KO silhouette must lie horizontally on the ground')
-  check(minX > 0 && maxX < 127 && minY > 0 && maxY < 127, 'Lying body must fit entirely inside its texture')
+  check(maxY - minY < 96, 'The authored final pose must lie below the standing body height')
+  check(minX > 0 && maxX < width - 1 && minY > 0 && maxY < height - 1, 'Lying body must fit entirely inside its texture')
   const bounds = view.computeScreenBounds()
-  check(bounds.minX <= -ACTOR_RENDER.anchorX && bounds.maxX >= ACTOR_RENDER.cellSize - ACTOR_RENDER.anchorX &&
-    bounds.maxY >= ACTOR_RENDER.cellSize - ACTOR_RENDER.knockedOutAnchorY, 'Culling must include the ground-centered KO frame')
-  const hitX = Math.floor((minX + maxX) / 2), hitY = Math.floor((minY + maxY) / 2)
-  check(koPixels[(hitY * 128 + hitX) * 4 + 3], 'KO picking fixture must land inside the torso')
-  check(view.hitTestRmbScreenPoint(120 + (hitX - ACTOR_RENDER.anchorX) * 2,
-    250 + (hitY - ACTOR_RENDER.knockedOutAnchorY) * 2, coordScreen2Game), 'Lying torso must use the new picking anchor')
+  check(bounds.minX <= -lyingFrame.origin_x && bounds.maxX >= width - lyingFrame.origin_x &&
+    bounds.maxY >= height - lyingFrame.origin_y, 'Culling must include the whole ground-anchored KO frame')
+  let hitX = minX, hitY = minY, nearest = Infinity
+  for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+    if (!koPixels[(y * width + x) * 4 + 3]) continue
+    const distance = (x - (minX + maxX) / 2) ** 2 + (y - (minY + maxY) / 2) ** 2
+    if (distance < nearest) { nearest = distance; hitX = x; hitY = y }
+  }
+  check(view.hitTestRmbScreenPoint(120 + (hitX - lyingFrame.origin_x) * 2,
+    250 + (hitY - lyingFrame.origin_y) * 2, coordScreen2Game), 'Lying torso must use the shared ground anchor')
   check(!view.hitTestRmbScreenPoint(120, 50, coordScreen2Game), 'Empty space above a knocked out body must not consume clicks')
   for (const mode of ['hybrid3d', 'baked8'] as const) {
     renderer.setSettings({ mode })
@@ -218,6 +225,59 @@ async function main() {
   manager.setKnockedOutPose(101, false)
   check(hash() === idle && playerSprite.y === -ACTOR_RENDER.anchorY, 'Recovery must restore the exact standing body and anchor')
   check(!koView.knockedOutShadow.visible && koView.shadowSprites.every((shadow) => shadow.visible), 'Recovery must restore the standing shadow')
+  const fallStarted = renderTime
+  manager.setKnockedOutPose(101, true, 'transition', fallStarted)
+  const falling = hash()
+  check(falling !== knockedOut, 'A live lying edge must play the authored fall before holding its final pose')
+  check(playerSprite.y === -lyingFrame.origin_y, 'The fall and final pose must use the same ground anchor')
+  manager.setKnockedOutPose(101, true, 'transition', renderTime)
+  renderTime = fallStarted + catalog.manifests[COMMONER_ASSET_ID]!.clips.fall_down!.duration * 1000
+  check(hash() === knockedOut, 'Repeat KO or direct death during the fall must not restart it')
+  check(hash() === knockedOut, 'The authored final sample must remain exact and stable')
+  check(koView.actorHandle.actor.groundShadow.radiusX > 15,
+    'Contact shadow must retain the full lying body footprint after centering')
+  manager.setKnockedOutPose(101, false)
+  check(hash() === idle, 'Confirmed stand-up must recover after the authored fall')
+  const fallDurationMs = catalog.manifests[COMMONER_ASSET_ID]!.clips.fall_down!.duration * 1000
+  for (let direction = 0; direction < 8; direction++) {
+    view.onMoved(direction)
+    view.onStopped()
+    const started = renderTime + 100
+    manager.setKnockedOutPose(101, true, 'transition', started)
+    for (const phase of [0, .5, 1]) {
+      renderTime = started + phase * fallDurationMs - 100
+      const framePixels = pixels()
+      let top: number = height, bottom = -1, opaque = 0
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        if (!framePixels[(y * width + x) * 4 + 3]) continue
+        check(x > 0 && x < width - 1 && y > 0 && y < height - 1,
+          `Fall frame must remain unclipped at heading ${direction}, phase ${phase}`)
+        top = Math.min(top, y); bottom = Math.max(bottom, y); opaque++
+      }
+      check(opaque > 100, `Fall must remain visible at heading ${direction}, phase ${phase}`)
+      check(playerSprite.x === -lyingFrame.origin_x && playerSprite.y === -lyingFrame.origin_y,
+        'Every heading and fall phase must retain the same ground anchor')
+      check(koView.actorHandle.actor.root.scale.x === 1 && koView.actorHandle.actor.root.scale.y === 1 &&
+        koView.actorHandle.actor.root.scale.z === 1, 'Fall must preserve the standing character scale')
+      if (phase === 0) check(bottom - top >= 80 && bottom - top <= 103,
+        `Fall start must retain the standing native pixel height at heading ${direction}`)
+      if (phase === 0) check(koView.actorHandle.actor.root.position.length() < 1e-6,
+        'Fall centering must start at the ordinary standing origin')
+      if (phase === 1) {
+        const abdomen = findRigBone(koView.actorHandle.actor.root, 'spine').matrixWorld.elements
+        const projectedY = abdomen[14]! * Math.sin(ACTOR_RENDER.cameraElevation) - abdomen[13]! * Math.cos(ACTOR_RENDER.cameraElevation)
+        check(Math.hypot(abdomen[12]!, projectedY) < 1e-6,
+          `Lying abdomen must project onto the entity center at heading ${direction}`)
+        check(Math.abs(koView.actorHandle.actor.root.position.y) < 1e-6,
+          'Centering must preserve the authored ground contact height')
+      }
+    }
+    manager.setKnockedOutPose(101, false)
+  }
+  view.onMoved(3)
+  view.onStopped()
+  check(hash() === idle, 'Eight-heading fall checks must restore ordinary presentation')
+  check(koView.actorHandle.actor.root.position.length() < 1e-6, 'Stand-up must clear the lying center offset')
   pass('Server carry relation / universal hands / carry walk / release / 3D KO / ground picking / recovery')
 
   view.getContainer().renderable = false

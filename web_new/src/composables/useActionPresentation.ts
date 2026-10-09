@@ -1,6 +1,7 @@
 import { ACTION_CATALOG, requestGameAction, type HotbarActionId } from '@/game/hud/actionCatalog'
 import { useGameStore } from '@/stores/gameStore'
 import { useActionCooldownStore } from '@/stores/actionCooldownStore'
+import { getDirectionSector } from '@/game/hud/directionAim'
 
 const shortcuts = new Map(ACTION_CATALOG.map(entry => [entry.id as string, entry]))
 
@@ -33,11 +34,16 @@ export function useActionPresentation() {
     let accepted = true
     const requested = requestGameAction(actionId, game.gameActions, game.gameActionListLoaded, id => {
       if (game.gameActionsById.get(id)?.targetKind === 'direction') {
-        accepted = game.armDirectionAim(id)
-      } else {
-        game.cancelDirectionAim()
-        send(id)
+        const epoch = game.worldParams?.streamEpoch
+        if (!game.isInGame || !Number.isInteger(epoch) || !epoch || epoch < 0 || epoch > 0xffffffff ||
+            !getDirectionSector(game.gameActionsById.get(id))) {
+          accepted = false
+          return
+        }
+        game.clearBuildPlacement()
+        game.closeContextMenu()
       }
+      send(id)
     }, cooldowns.isCoolingDown)
     return requested && accepted
   }

@@ -15,6 +15,12 @@ func (service *ActionService) isDirectionAction(id string) bool {
 	return exists && definition.Target.Kind == actiondefs.TargetDirection
 }
 
+// IsDirectionAction lets ingress enforce session ownership even when the client
+// omits every optional directional field.
+func (service *ActionService) IsDirectionAction(id string) bool {
+	return service.isDirectionAction(id)
+}
+
 // Point movement keeps ordinary armed/timed actions under their existing rules.
 // A directed action must be canceled when movement is accepted, even if blocked.
 func (service *ActionService) CancelForPointMovement(world *ecs.World, playerID types.EntityID, player types.Handle) {
@@ -26,11 +32,11 @@ func (service *ActionService) CancelForPointMovement(world *ecs.World, playerID 
 	}
 }
 
-func normalizeActionAim(angle *float32) (float64, bool) {
-	if angle == nil || math.IsNaN(float64(*angle)) || math.IsInf(float64(*angle), 0) {
+func normalizeActionHeading(angle float64) (float64, bool) {
+	if math.IsNaN(angle) || math.IsInf(angle, 0) {
 		return 0, false
 	}
-	normalized := math.Mod(float64(*angle), 2*math.Pi)
+	normalized := math.Mod(angle, 2*math.Pi)
 	if normalized < 0 {
 		normalized += 2 * math.Pi
 	}

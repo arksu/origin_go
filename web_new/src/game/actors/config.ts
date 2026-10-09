@@ -11,9 +11,8 @@ export const ACTOR_RENDER = {
   supersampling: 2,
   orthoHeight: 1.94 * 128 / 96,
   cameraHeight: (116 - 64) / (96 / 1.94) / Math.cos(Math.PI / 6),
-  knockedOutAnchorY: 64,
-  knockedOutBodyCenter: 1.94 / 2,
-  knockedOutGroundHeight: .19,
+  // One ground-anchored envelope covers both the upright start and settled body.
+  lyingFrame: { width: 256, height: 256, origin_x: 128, origin_y: 164 },
   walkSamples: 8,
   actionSamples: 8,
   locomotionBlendMs: LOCOMOTION_TRANSITION_MS,

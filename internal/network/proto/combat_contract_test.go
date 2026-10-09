@@ -99,3 +99,20 @@ func TestAttackResultWireRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestActionExecutionStateWireRoundTrip(t *testing.T) {
+	for _, angle := range []*float32{nil, proto.Float32(0), proto.Float32(2*math.Pi - 0.25)} {
+		assertCombatWireRoundTrip(t, &ServerMessage{Payload: &ServerMessage_ActionStateChanged{ActionStateChanged: &S2C_ActionStateChanged{
+			ActionId: "axe_sweep", Phase: "executing", ActionGeneration: math.MaxUint64,
+			FacingAngle: angle, StreamEpoch: 7, ServerTimeMs: 1790970000000,
+		}}})
+	}
+	state := &S2C_ActionStateChanged{}
+	fields := state.ProtoReflect().Descriptor().Fields()
+	if fields.ByName("action_generation").Number() != 6 || fields.ByName("facing_angle").Number() != 7 || fields.ByName("stream_epoch").Number() != 8 {
+		t.Fatal("action execution confirmation field numbers changed")
+	}
+	if !fields.ByName("facing_angle").HasPresence() {
+		t.Fatal("zero facing must remain distinct from an absent angle")
+	}
+}

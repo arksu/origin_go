@@ -4,6 +4,7 @@ Blender --background source.blend --python tools/blender/import_mixamo_clip.py
 -- --recipe /path/to/import.json. Only the declared action is replaced.
 """
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from retarget_clip import bake_stationary_clip
+from retarget_clip import bake_body_clip, bake_stationary_clip, body_bounds
 
 
 def main():
@@ -20,11 +21,17 @@ def main():
     parser.add_argument('--recipe', required=True, type=Path)
     args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
     recipe = json.loads(args.recipe.read_text())
+    grounding = recipe.get('grounding', 'feet')
+    if grounding not in ('feet', 'body') or (grounding == 'body' and (
+            recipe.get('locomotion', False) or recipe.get('loop', False))):
+        raise ValueError('Body grounding is only supported for non-looping, non-locomotion clips')
     directory = args.recipe.resolve().parent
     source = (directory / recipe['source']).resolve()
     donor_path = (directory / recipe['donor']).resolve()
     if Path(bpy.data.filepath).resolve() != source or not donor_path.is_file():
         raise ValueError('Open the recipe source blend and provide its donor FBX')
+    if recipe.get('donor_sha256') and hashlib.sha256(donor_path.read_bytes()).hexdigest() != recipe['donor_sha256']:
+        raise ValueError('Donor FBX does not match its recorded original bytes')
     start, end = recipe['range']['start'], recipe['range']['end']
     if type(start) is not int or type(end) is not int or end <= start:
         raise ValueError('Frame range must contain at least two inclusive integer frames')
@@ -100,8 +107,40 @@ def main():
         samples[-1] = {name: rotation.copy() for name, rotation in samples[0].items()}
         if clearances is not None:
             clearances[-1] = clearances[0]
-    action = bake_stationary_clip(target, recipe['action'], samples,
-                                  recipe['root_bone'], recipe['ground_bones'], clearances)
+    if grounding == 'body':
+        target_length = sum(target.data.bones[name].length for name in ('thigh.l', 'shin.l'))
+        donor_length = sum((target.matrix_world.inverted() @ donor.matrix_world @ donor.data.bones[bone_map[name]].tail -
+                            target.matrix_world.inverted() @ donor.matrix_world @ donor.data.bones[bone_map[name]].head).length
+                           for name in ('thigh.l', 'shin.l'))
+        scale = target_length / donor_length
+        # One fixed anchor preserves the fall's local root travel without moving the world entity.
+        root_offsets = [(position - root_positions[0]) * scale for position in root_positions]
+        meshes = [bpy.data.objects[name] for name in recipe['ground_meshes']]
+        action = bake_body_clip(target, recipe['action'], samples, recipe['root_bone'], root_offsets,
+                                meshes, recipe.get('body_clearance', 0.005))
+        bounds, roots = [], []
+        for half_frame in range(2, len(samples) * 2 + 1):
+            frame = half_frame / 2
+            scene.frame_set(int(frame), subframe=frame % 1)
+            bounds.append(body_bounds(target, meshes))
+            roots.append(list(target.pose.bones[recipe['root_bone']].head))
+        minimum = [min(bound[0][axis] for bound in bounds) for axis in range(3)]
+        maximum = [max(bound[1][axis] for bound in bounds) for axis in range(3)]
+        if minimum[2] < -0.005:
+            raise ValueError(f'Body penetrates the floor between frames: {minimum[2]:.6f}')
+        if bounds[-1][0][2] > recipe.get('body_clearance', 0.005) + 0.005:
+            raise ValueError(f'Terminal body is above the floor: {bounds[-1][0][2]:.6f}')
+        print('BODY=' + json.dumps({'action': recipe['action'], 'legScale': scale,
+                                    'bounds': [minimum, maximum], 'firstBounds': bounds[0], 'lastBounds': bounds[-1],
+                                    'firstRoot': roots[0], 'lastRoot': roots[-1],
+                                    'rootBounds': [[min(root[axis] for root in roots) for axis in range(3)],
+                                                   [max(root[axis] for root in roots) for axis in range(3)]],
+                                    'minimumFloorHeight': minimum[2],
+                                    'maximumFloorHeight': max(bound[0][2] for bound in bounds),
+                                    'middleBounds': bounds[len(bounds) // 2], 'sampleCount': len(bounds)}))
+    else:
+        action = bake_stationary_clip(target, recipe['action'], samples,
+                                      recipe['root_bone'], recipe['ground_bones'], clearances)
     target.animation_data.action = original_action
     if original_slot:
         target.animation_data.action_slot = original_slot

@@ -879,6 +879,17 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 		ecs.AddComponent(w, playerHandle, objectdefs.BuildColliderComponent(def.Components.Collider))
 	}
 
+	corpseVisual := components.CorpseVisualState{}
+	if health, exists := ecs.GetComponent[components.EntityHealth](w, playerHandle); exists {
+		corpseVisual.LyingRevision = health.LyingRevision
+		if !health.IsLying {
+			corpseVisual.LyingRevision++
+		}
+	}
+	ecs.AddComponent(w, playerHandle, corpseVisual)
+	if hasTransform {
+		s.publishDeathMovementStop(w, playerID, playerHandle, transform)
+	}
 	ecs.RemoveComponent[components.Movement](w, playerHandle)
 	ecs.RemoveComponent[components.CollisionResult](w, playerHandle)
 	ecs.RemoveComponent[components.Stealth](w, playerHandle)
@@ -892,6 +903,7 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 		HP: float64(def.HP), HasHP: true, IsDirty: true,
 	})
 	ecs.MarkObjectBehaviorDirty(w, playerHandle)
+	ecs.MarkCharacterVisualDirty(w, playerID)
 
 	if s.chunkManager != nil {
 		if factory := s.chunkManager.ObjectFactory(); factory != nil {
@@ -1239,33 +1251,12 @@ func (s *Shard) SendCyclicActionProgress(entityID types.EntityID, progress *netp
 	client.Send(data)
 }
 
+// Action transitions share the critical FIFO under the owning shard lock.
 func (s *Shard) SendCyclicActionFinished(entityID types.EntityID, finished *netproto.S2C_CyclicActionFinished) {
 	if finished == nil {
 		return
 	}
-
-	s.ClientsMu.RLock()
-	client, ok := s.Clients[entityID]
-	s.ClientsMu.RUnlock()
-	if !ok || client == nil {
-		return
-	}
-
-	response := &netproto.ServerMessage{
-		Payload: &netproto.ServerMessage_CyclicActionFinished{
-			CyclicActionFinished: finished,
-		},
-	}
-
-	data, err := proto.Marshal(response)
-	if err != nil {
-		s.logger.Error("Failed to marshal cyclic action finished",
-			zap.Int64("entity_id", int64(entityID)),
-			zap.Error(err))
-		return
-	}
-
-	client.Send(data)
+	s.sendActionTransition(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_CyclicActionFinished{CyclicActionFinished: finished}})
 }
 
 func (s *Shard) SendSoundBatch(entityID types.EntityID, clientID uint64, batch *netproto.S2C_SoundBatch) soundBatchDelivery {
@@ -1468,7 +1459,37 @@ func (s *Shard) SendActionStateChanged(entityID types.EntityID, state *netproto.
 	if state == nil {
 		return
 	}
-	s.sendActionMessage(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_ActionStateChanged{ActionStateChanged: state}})
+	// The caller may retain its snapshot; only this message owns its epoch.
+	messageState := &netproto.S2C_ActionStateChanged{
+		ActionId: state.ActionId, Phase: state.Phase, Cursor: state.Cursor,
+		Cooldowns: state.Cooldowns, ServerTimeMs: state.ServerTimeMs,
+		ActionGeneration: state.ActionGeneration, FacingAngle: state.FacingAngle,
+	}
+	s.sendActionTransition(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_ActionStateChanged{ActionStateChanged: messageState}})
+}
+
+// Keep client validation and enqueue in the same read-lock section so a replaced
+// session cannot receive the tail of a prior action's transition sequence.
+func (s *Shard) sendActionTransition(entityID types.EntityID, message *netproto.ServerMessage) {
+	s.ClientsMu.RLock()
+	defer s.ClientsMu.RUnlock()
+	client := s.Clients[entityID]
+	if client == nil || !client.InWorld.Load() || client.CharacterID != entityID || client.Layer != s.layer {
+		return
+	}
+	epoch := client.StreamEpoch.Load()
+	if epoch == 0 {
+		return
+	}
+	if state := message.GetActionStateChanged(); state != nil {
+		state.StreamEpoch = epoch
+	}
+	encoded, err := proto.Marshal(message)
+	if err != nil {
+		s.logger.Error("Failed to marshal action transition", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+		return
+	}
+	client.SendCritical(encoded)
 }
 
 func (s *Shard) sendActionMessage(entityID types.EntityID, message *netproto.ServerMessage) {

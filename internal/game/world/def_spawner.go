@@ -60,6 +60,9 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 			resource = def.Resource
 		}
 		ecs.AddComponent(w, h, components.Appearance{Resource: resource})
+		if def.Key == "player_death" {
+			ecs.AddComponent(w, h, components.CorpseVisualState{})
+		}
 		state := components.ObjectInternalState{IsDirty: true}
 		if def.Key != "player" {
 			state.HP = hp

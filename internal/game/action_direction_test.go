@@ -30,6 +30,7 @@ func newDirectionActionTest(t *testing.T) (*ecs.World, types.Handle, *ActionServ
 	world := ecs.NewWorldForTesting()
 	ecs.GetResource[ecs.TimeState](world).UnixMs = 10000
 	player := world.Spawn(1, func(w *ecs.World, handle types.Handle) {
+		ecs.AddComponent(w, handle, components.Transform{})
 		ecs.AddComponent(w, handle, components.Movement{State: constt.StateMoving, TargetType: constt.TargetPoint, VelocityX: 4})
 		ecs.AddComponent(w, handle, components.EntityStats{Stamina: 1000})
 		ecs.AddComponent(w, handle, components.EntityHealth{SHP: 25, HHP: 25})
@@ -56,12 +57,13 @@ func directionTestRequest(angle float32) *netproto.C2S_ActivateAction {
 }
 
 func TestDirectionActionTimedCompletion(t *testing.T) {
-	for _, angle := range []float32{0, -math.Pi / 2} {
+	for _, angle := range []float64{0, -math.Pi / 2, 0.123456789123456} {
 		world, player, service, handler, sender := newDirectionActionTest(t)
+		ecs.WithComponent(world, player, func(transform *components.Transform) { transform.Direction = angle })
 		commands, inbox := directionalTestCommands(world, service)
 		timing := ecs.GetResource[ecs.TimeState](world)
 		timing.UnixMs = 10000
-		request := directionTestRequest(angle)
+		request := &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 1}
 		require.NoError(t, inbox.Enqueue(&network.PlayerCommand{
 			ClientID: 1, CharacterID: 1, CommandID: 1, CommandType: network.CmdActivateAction,
 			ReceivedAt: timing.WallNow, Payload: request,
@@ -73,14 +75,18 @@ func TestDirectionActionTimedCompletion(t *testing.T) {
 		require.True(t, validActionAim(active.AimAngle))
 		if angle == 0 {
 			require.Zero(t, active.AimAngle)
+		} else if angle < 0 {
+			require.Equal(t, 1.5*math.Pi, active.AimAngle)
 		} else {
-			require.InDelta(t, 1.5*math.Pi, active.AimAngle, 1e-6)
+			require.Equal(t, angle, active.AimAngle, "server precision must not pass through float32")
 		}
 		movement, _ := ecs.GetComponent[components.Movement](world, player)
 		require.Equal(t, constt.TargetNone, movement.TargetType)
 		require.Zero(t, movement.VelocityX)
 		stale, _ := ecs.GetComponent[components.ActiveCyclicAction](world, player)
-		*request.AimAngle = math.Pi
+		ecs.WithComponent(world, player, func(transform *components.Transform) { transform.Direction = math.Pi })
+		require.Equal(t, active.AimAngle, stale.FacingAngle)
+		require.True(t, stale.HasFacingAngle)
 		cycles := NewCyclicActionSystem(nil, sender, zap.NewNop())
 		cycles.SetActionService(service)
 		for tick := 1; tick <= 6; tick++ {
@@ -112,27 +118,33 @@ func TestDirectionActionTimedCompletion(t *testing.T) {
 
 func TestDirectionActionInvalidRequestPreservesCurrentAction(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		request *netproto.C2S_ActivateAction
-		client  uint64
-		alert   bool
+		name     string
+		request  *netproto.C2S_ActivateAction
+		client   uint64
+		alert    bool
+		layer    int
+		detached bool
 	}{
-		{name: "missing direction", request: &netproto.C2S_ActivateAction{ActionId: "direction_test"}, client: 1, alert: true},
-		{name: "missing angle", request: &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 1}, client: 1, alert: true},
+		{name: "missing epoch and angle", request: &netproto.C2S_ActivateAction{ActionId: "direction_test"}, client: 1},
 		{name: "nan", request: directionTestRequest(float32(math.NaN())), client: 1, alert: true},
 		{name: "infinity", request: directionTestRequest(float32(math.Inf(1))), client: 1, alert: true},
 		{name: "missing epoch", request: &netproto.C2S_ActivateAction{ActionId: "direction_test", AimAngle: new(float32)}, client: 1},
-		{name: "old epoch", request: &netproto.C2S_ActivateAction{ActionId: "direction_test", AimAngle: new(float32), StreamEpoch: 2}, client: 1},
-		{name: "old connection", request: directionTestRequest(0), client: 2},
+		{name: "old epoch", request: &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 2}, client: 1},
+		{name: "old connection", request: &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 1}, client: 2},
+		{name: "wrong layer without aim", request: &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 1}, client: 1, layer: 1},
+		{name: "detached without aim", request: &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 1}, client: 1, detached: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			world, player, service, handler, sender := newDirectionActionTest(t)
 			service.Activate(world, 1, player, "selected")
 			before, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
 			commands, inbox := directionalTestCommands(world, service)
+			if test.detached {
+				ecs.GetResource[ecs.DetachedEntities](world).AddDetachedEntity(1, player, ecs.GetResource[ecs.TimeState](world).Now, ecs.GetResource[ecs.TimeState](world).Now)
+			}
 			require.NoError(t, inbox.Enqueue(&network.PlayerCommand{
 				ClientID: test.client, CharacterID: 1, CommandID: 1, CommandType: network.CmdActivateAction,
-				ReceivedAt: ecs.GetResource[ecs.TimeState](world).WallNow, Payload: test.request,
+				ReceivedAt: ecs.GetResource[ecs.TimeState](world).WallNow, Payload: test.request, Layer: test.layer,
 			}))
 			commands.Update(world, .1)
 			after, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
@@ -203,6 +215,136 @@ func TestDirectionActionCancellation(t *testing.T) {
 			if cause != "failed completion" {
 				require.Zero(t, handler.startCount)
 			}
+		})
+	}
+}
+
+func TestDirectionActionUsesHeadingInsteadOfLegacyAim(t *testing.T) {
+	for _, aim := range []float32{0, 1, -2, math.MaxFloat32} {
+		world, player, service, _, _ := newDirectionActionTest(t)
+		ecs.WithComponent(world, player, func(transform *components.Transform) { transform.Direction = -0.75 })
+		service.ActivateRequest(world, 1, player, directionTestRequest(aim))
+		active, exists := ecs.GetComponent[components.ActiveGameAction](world, player)
+		require.True(t, exists)
+		require.Equal(t, 2*math.Pi-0.75, active.AimAngle)
+		transform, _ := ecs.GetComponent[components.Transform](world, player)
+		require.Equal(t, -0.75, transform.Direction)
+	}
+}
+
+func TestDirectionInvalidHeadingPreservesActionAndMovement(t *testing.T) {
+	for _, cause := range []string{"missing", "nan", "positive infinity", "negative infinity"} {
+		t.Run(cause, func(t *testing.T) {
+			world, player, service, handler, sender := newDirectionActionTest(t)
+			service.Activate(world, 1, player, "selected")
+			switch cause {
+			case "missing":
+				ecs.RemoveComponent[components.Transform](world, player)
+			default:
+				invalid := map[string]float64{"nan": math.NaN(), "positive infinity": math.Inf(1), "negative infinity": math.Inf(-1)}[cause]
+				ecs.WithComponent(world, player, func(transform *components.Transform) { transform.Direction = invalid })
+			}
+			before, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
+			beforeMovement, _ := ecs.GetComponent[components.Movement](world, player)
+			generation := service.nextGeneration
+			service.ActivateRequest(world, 1, player, &netproto.C2S_ActivateAction{ActionId: "direction_test"})
+			after, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
+			afterMovement, _ := ecs.GetComponent[components.Movement](world, player)
+			require.Equal(t, before, after)
+			require.Equal(t, beforeMovement, afterMovement)
+			require.Equal(t, generation, service.nextGeneration)
+			require.Zero(t, handler.startCount)
+			require.Equal(t, "ACTION_INVALID_TARGET", sender.alerts[0].ReasonCode)
+		})
+	}
+}
+
+func TestActionGenerationExhaustionPreservesCurrentExecution(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		world, player, service, _, sender := newDirectionActionTest(t)
+		service.nextGeneration = math.MaxUint64 - 1
+		service.Activate(world, 1, player, "direction_test")
+		before, exists := ecs.GetComponent[components.ActiveGameAction](world, player)
+		require.True(t, exists)
+		require.EqualValues(t, uint64(math.MaxUint64), before.Generation)
+		beforeMovement, _ := ecs.GetComponent[components.Movement](world, player)
+		beforeCycle, _ := ecs.GetComponent[components.ActiveCyclicAction](world, player)
+		if direct {
+			service.StartTargetedOnce(world, 1, player, "selected", 0, types.InvalidHandle, 1, 2)
+		} else {
+			service.Activate(world, 1, player, "ready")
+		}
+		after, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
+		afterMovement, _ := ecs.GetComponent[components.Movement](world, player)
+		afterCycle, _ := ecs.GetComponent[components.ActiveCyclicAction](world, player)
+		require.Equal(t, before, after)
+		require.Equal(t, beforeMovement, afterMovement)
+		require.Equal(t, beforeCycle, afterCycle)
+		require.EqualValues(t, uint64(math.MaxUint64), service.nextGeneration)
+		require.Equal(t, "ACTION_FAILED", sender.alerts[0].ReasonCode)
+		require.Empty(t, sender.finished)
+	}
+}
+
+func TestDirectionStartUsesCommittedHeadingBeforeSameTickWASD(t *testing.T) {
+	world, player, service, _, _ := newDirectionActionTest(t)
+	ecs.WithComponent(world, player, func(transform *components.Transform) { transform.Direction = 0.25 })
+	commands, inbox := directionalTestCommands(world, service)
+	require.NoError(t, inbox.Enqueue(&network.PlayerCommand{
+		ClientID: 1, CharacterID: 1, CommandID: 1, CommandType: network.CmdMoveDirection,
+		ReceivedAt: ecs.GetResource[ecs.TimeState](world).WallNow,
+		Payload:    &netproto.MoveDirection{X: -1, InputRevision: 1, StreamEpoch: 1},
+	}))
+	require.NoError(t, inbox.Enqueue(&network.PlayerCommand{
+		ClientID: 1, CharacterID: 1, CommandID: 2, CommandType: network.CmdActivateAction,
+		ReceivedAt: ecs.GetResource[ecs.TimeState](world).WallNow,
+		Payload:    &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 1},
+	}))
+	commands.Update(world, .1)
+	active, exists := ecs.GetComponent[components.ActiveGameAction](world, player)
+	require.True(t, exists)
+	require.Equal(t, 0.25, active.AimAngle)
+	transform, _ := ecs.GetComponent[components.Transform](world, player)
+	require.Equal(t, 0.25, transform.Direction)
+	movement, _ := ecs.GetComponent[components.Movement](world, player)
+	require.Equal(t, constt.TargetNone, movement.TargetType)
+}
+
+func TestQueuedDirectionActivationRevalidatesCurrentSession(t *testing.T) {
+	for _, transition := range []string{"disconnect", "replacement", "epoch", "detach"} {
+		t.Run(transition, func(t *testing.T) {
+			world, player, service, handler, _ := newDirectionActionTest(t)
+			service.Activate(world, 1, player, "selected")
+			before, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
+			client := &network.Client{ID: 1, CharacterID: 1}
+			client.InWorld.Store(true)
+			client.StreamEpoch.Store(1)
+			shard := &Shard{Clients: map[types.EntityID]*network.Client{1: client}}
+			commands, inbox := directionalTestCommands(world, service)
+			commands.SetDirectionalSessionValidator(shard.validDirectionalSession)
+			require.NoError(t, inbox.Enqueue(&network.PlayerCommand{
+				ClientID: 1, CharacterID: 1, CommandID: 1, CommandType: network.CmdActivateAction,
+				ReceivedAt: ecs.GetResource[ecs.TimeState](world).WallNow,
+				Payload:    &netproto.C2S_ActivateAction{ActionId: "direction_test", StreamEpoch: 1},
+			}))
+			switch transition {
+			case "disconnect":
+				client.InWorld.Store(false)
+			case "replacement":
+				replacement := &network.Client{ID: 2, CharacterID: 1}
+				replacement.InWorld.Store(true)
+				replacement.StreamEpoch.Store(1)
+				shard.Clients[1] = replacement
+			case "epoch":
+				client.StreamEpoch.Store(2)
+			case "detach":
+				now := ecs.GetResource[ecs.TimeState](world).Now
+				ecs.GetResource[ecs.DetachedEntities](world).AddDetachedEntity(1, player, now, now)
+			}
+			commands.Update(world, .1)
+			after, _ := ecs.GetComponent[components.ActiveGameAction](world, player)
+			require.Equal(t, before, after)
+			require.Zero(t, handler.startCount)
 		})
 	}
 }

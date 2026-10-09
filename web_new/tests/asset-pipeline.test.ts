@@ -20,8 +20,8 @@ function compatibleClipManifests(): ActorManifest {
     metadata: { ...artifact, url: artifact.url.replace('.glb', '.json') }, textures: [], bindings: {},
     equipmentSlots: [],
     sockets: { grip_l: 'grip_l', grip_r: 'grip_r', forearm_l: 'forearm_l', forearm_r: 'forearm_r' },
-    clips: Object.fromEntries(['idle', 'walk', 'carry_idle', 'carry_walk'].map(name => [name, {
-      artifact, rigHash: hash, channelMask: ['pelvis'], duration: 1, loop: true,
+    clips: Object.fromEntries(['idle', 'walk', 'carry_idle', 'carry_walk', 'fall_down'].map(name => [name, {
+      artifact, rigHash: hash, channelMask: ['pelvis'], duration: 1, loop: name !== 'fall_down',
       playback: name.endsWith('walk') ? 'distance' : 'time', ...(name.endsWith('walk') ? { cycleDistanceTiles: 1.677975879375 } : {}),
     }])) } as ActorManifest
 }
@@ -109,6 +109,9 @@ test('schema validates immutable paths and compatible distance metadata', () => 
     (m: ActorManifest) => { m.schema = 2 },
     (m: ActorManifest) => { m.clips.walk!.cycleDistanceTiles = 0 },
     (m: ActorManifest) => { m.clips.carry_walk!.cycleDistanceTiles = 2 },
+    (m: ActorManifest) => { delete m.clips.fall_down },
+    (m: ActorManifest) => { m.clips.fall_down!.loop = true },
+    (m: ActorManifest) => { m.clips.fall_down!.playback = 'distance'; m.clips.fall_down!.cycleDistanceTiles = 1 },
     (m: ActorManifest) => { m.model.url = '/assets/game/mutable.glb' },
     (m: ActorManifest) => { delete m.sockets.grip_l },
   ]) { const manifest = compatibleClipManifests(); mutate(manifest); assert.throws(() => parseActorManifest(manifest)) }
@@ -161,7 +164,7 @@ test('catalog exposes rigged garments only in their declared character slots', a
 test('cache shares artifact leases across animation revisions, accounts decoded buffers once and releases final owners', async t => {
   const first = compatibleClipManifests(); const second = compatibleClipManifests(); second.id = 'character/revision'
   for (const [index, manifest] of [first, second].entries()) for (const [name, clip] of Object.entries(manifest.clips)) {
-    const sha256 = String(index * 4 + ['idle', 'walk', 'carry_idle', 'carry_walk'].indexOf(name) + 1).repeat(64)
+    const sha256 = `${index + 1}${['idle', 'walk', 'carry_idle', 'carry_walk', 'fall_down'].indexOf(name) + 1}`.padEnd(64, '0')
     clip.artifact = { ...artifact, sha256, url: `/assets/game/test/${sha256}.glb` }
   }
   const refs = ['b'.repeat(64), 'c'.repeat(64)].map(sha256 => ({ sha256, bytes: 100, url: `/assets/game/test/${sha256}.json` }))
@@ -186,11 +189,11 @@ test('cache shares artifact leases across animation revisions, accounts decoded 
   const cache = new ActorAssetCache(renderer)
   const [one, two] = await Promise.all([cache.acquire(first.id), cache.acquire(second.id)])
   assert.equal(catalogReads, 1); assert.equal(modelLoads, 1); assert.equal(one.asset.scene, two.asset.scene)
-  // 48 shared geometry bytes + 16 compressed mip bytes + eight 32-byte tracks.
-  assert.equal(cache.residentBytes, 320)
+  // 48 shared geometry bytes + 16 compressed mip bytes + ten 32-byte tracks.
+  assert.equal(cache.residentBytes, 384)
   cache.releaseGPUResources()
   assert.equal(geometryDisposals, 1); assert.equal(textureDisposals, 1)
-  assert.equal(cache.residentBytes, 320); assert.equal(cache.loadedCount, 9)
+  assert.equal(cache.residentBytes, 384); assert.equal(cache.loadedCount, 11)
   assert.equal(geometry.getAttribute('position').array, buffer, 'context loss retains CPU geometry')
   assert.equal(texture.mipmaps[0]!.data.byteLength, 16, 'context loss retains decoded texture bytes')
   one.release(); one.release(); assert.equal(geometryDisposals, 1)

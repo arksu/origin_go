@@ -72,7 +72,9 @@ export function parseActorManifest(value: unknown): ActorManifest {
     if (clip.playback === 'distance' && !positive(clip.cycleDistanceTiles)) throw new Error(`Invalid cycleDistanceTiles: ${name}`)
   }
   if (manifest.kind === 'character') {
-    for (const name of ['idle', 'walk', 'carry_idle', 'carry_walk']) if (!clips[name]) throw new Error(`Required animation missing: ${name}`)
+    for (const name of ['idle', 'walk', 'carry_idle', 'carry_walk', 'fall_down']) if (!clips[name]) throw new Error(`Required animation missing: ${name}`)
+    const fall = clips.fall_down as ClipManifest
+    if (fall.loop || fall.playback !== 'time') throw new Error('Invalid fall_down animation metadata')
     const walk = clips.walk as ClipManifest; const carry = clips.carry_walk as ClipManifest
     if (walk.playback !== 'distance' || carry.playback !== 'distance' || walk.cycleDistanceTiles !== carry.cycleDistanceTiles || walk.duration !== carry.duration || !walk.loop || !carry.loop) throw new Error('Incompatible carry_walk locomotion metadata')
     for (const name of ['crawl', 'run', 'fast_run']) {

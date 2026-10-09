@@ -81,7 +81,6 @@ if (authStore.isAuthenticated) { /* proceed */ }
 | State | Type | Description |
 |-------|------|-------------|
 | `contextMenu` | `ContextMenuState \| null` | Server-provided context actions for selected entity |
-| `directionAim` | `{ actionId, streamEpoch } \| null` | Local direction selection; independent of server action state, cleared on confirmation, cancellation and session reset |
 | `miniAlerts` | `MiniAlertItem[]` | Center-screen transient alerts with severity and TTL |
 | `characterSheetVisible` | `boolean` | Visibility flag for Character Sheet window |
 | `craftWindowVisible` | `boolean` | Visibility flag for Craft window |

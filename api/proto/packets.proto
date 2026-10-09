@@ -439,8 +439,8 @@ message C2S_BuildTakeBack {
 
 message C2S_ActivateAction {
   string action_id = 1;
-  // Required for direction-target actions; presence distinguishes missing aim from zero.
-  optional float aim_angle = 2; // World direction in radians, normalized to [0, 2*pi).
+  // Legacy client aim. Direction-target actions use server heading; finite values are ignored.
+  optional float aim_angle = 2;
   uint32 stream_epoch = 3; // Required current world epoch for direction-target actions.
 }
 
@@ -859,6 +859,9 @@ message S2C_ActionStateChanged {
   string cursor = 3;
   repeated ActionCooldown cooldowns = 4;
   int64 server_time_ms = 5;
+  uint64 action_generation = 6; // Active execution identity; zero while idle.
+  optional float facing_angle = 7; // Accepted combat heading in radians, including explicit zero.
+  uint32 stream_epoch = 8;
 }
 
 message ActionCooldown {

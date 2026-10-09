@@ -6,6 +6,7 @@ import type { DebugInfo, ScreenPoint } from './types'
 import type { ArmBuildGhostOptions } from './BuildGhostController'
 import type { ArmLiftGhostOptions } from './LiftGhostController'
 import type { EquippedVisual } from '../types/characterVisual'
+import type { LyingPresentationMode } from './actors/lyingPresentation'
 import type { CharacterActionAnimationState } from '../types/actionAnimation'
 import type { ObjectViewOptions } from './ObjectView'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
@@ -13,6 +14,7 @@ import { config } from '@/config'
 import type { MinimapPose } from './minimap/types'
 import { localAudioController, worldAudioReceiver } from './audioRuntime'
 import type { DamageNumberHit } from './hud/damageNumbers'
+import type { DirectionSector } from './hud/directionAim'
 
 export class GameFacade {
   private render: Render | null = null
@@ -221,6 +223,14 @@ export class GameFacade {
     this.render?.clearDamageNumbers()
   }
 
+  showAttackSector(angle: number, sector: DirectionSector): void {
+    this.render?.showAttackSector(angle, sector)
+  }
+
+  clearAttackSector(): void {
+    this.render?.clearAttackSector()
+  }
+
   updateObjectPosition(entityId: number, x: number, y: number): void {
     this.render?.updateObjectPosition(entityId, x, y)
   }
@@ -229,8 +239,8 @@ export class GameFacade {
     this.render?.setObjectHeading(entityId, heading)
   }
 
-  setObjectKnockedOutPose(entityId: number, knockedOut: boolean): void {
-    this.render?.setObjectKnockedOutPose(entityId, knockedOut)
+  setObjectKnockedOutPose(entityId: number, knockedOut: boolean, mode: LyingPresentationMode = 'snapshot', nowMs = performance.now()): void {
+    this.render?.setObjectKnockedOutPose(entityId, knockedOut, mode, nowMs)
   }
 
   setObjectCarryVisualRelation(objectId: number, carrierId: number | null): void {

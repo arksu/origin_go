@@ -214,7 +214,7 @@ function syncLiftGhostFromStore(): void {
     return
   }
 
-  if (gameStore.directionAim || gameStore.gameActionState.actionId !== 'lift_down' || gameStore.gameActionState.phase !== 'selecting' || !gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
+  if (gameStore.gameActionState.actionId !== 'lift_down' || gameStore.gameActionState.phase !== 'selecting' || !gameStore.liftCarryActive || !gameStore.liftCarriedEntityId) {
     gameFacade.cancelLiftGhost?.()
     return
   }
@@ -237,7 +237,7 @@ async function initCanvas(): Promise<boolean> {
   try {
     await gameFacade.init(gameCanvas.value)
     canvasInitialized.value = true
-    gameFacade.setActionCursor(gameStore.directionAim ? '' : gameStore.gameActionState.cursor || '')
+    gameFacade.setActionCursor(gameStore.gameActionState.cursor || '')
 
     gameFacade.onPlayerClick(({ screenX, screenY, worldX, worldY, button }: { screenX: number; screenY: number; worldX: number; worldY: number; button: number }) => {
       console.debug('[GameView] Click:', screenX, screenY, 'button=', button)
@@ -305,14 +305,14 @@ watch(() => gameStore.buildRecipes, () => {
 })
 
 watch(
-  [liftCarryActive, liftCarriedEntityId, liftCarriedResourcePath, () => gameStore.gameActionState.actionId, () => gameStore.gameActionState.phase, () => gameStore.entities.size, () => gameStore.directionAim],
+  [liftCarryActive, liftCarriedEntityId, liftCarriedResourcePath, () => gameStore.gameActionState.actionId, () => gameStore.gameActionState.phase, () => gameStore.entities.size],
   () => {
     syncLiftGhostFromStore()
   }
 )
 
-watch([() => gameStore.gameActionState.cursor, () => gameStore.directionAim], ([cursor, aim]) => {
-  gameFacade?.setActionCursor(aim ? '' : cursor || '')
+watch(() => gameStore.gameActionState.cursor, (cursor) => {
+  gameFacade?.setActionCursor(cursor || '')
 })
 
 watch(() => gameStore.gameActionState.phase, (phase) => {
@@ -731,7 +731,7 @@ const hotkeys: HotkeyConfig[] = [...DEFAULT_HOTKEYS, ...hotbarNumberHotkeys].map
         chatContainerRef.value?.focusChat()
         break
       case 'Escape':
-        if (cancelActiveActionOnEscape(gameStore.gameActionState.phase, sendCancelAction, gameStore.cancelDirectionAim)) {
+        if (cancelActiveActionOnEscape(gameStore.gameActionState.phase, sendCancelAction)) {
           break
         }
         if (showSettingsWindow.value) {
@@ -873,8 +873,8 @@ useHotkeys(hotkeys)
               <ActionsMenu
                 v-if="actionsMenuOpen"
                 :actions="gameStore.gameActions"
-                :active-action-id="gameStore.directionAim?.actionId || gameStore.gameActionState.actionId || ''"
-                :active-phase="gameStore.directionAim ? 'selecting' : gameStore.gameActionState.phase || 'idle'"
+                :active-action-id="gameStore.gameActionState.actionId || ''"
+                :active-phase="gameStore.gameActionState.phase || 'idle'"
                 @activate="onGameActionActivate"
                 @drag-start="onActionDragStart"
                 @drag-end="onActionDragEnd"

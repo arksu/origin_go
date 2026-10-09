@@ -152,6 +152,7 @@ Maintain this list as you add new components:
 | 36 | ActionAnimationComponentID      | Transient public cycle identity and retained revision         |
 | 37 | ActionCooldownsComponentID      | Persisted per-action start and expiry timestamps              |
 | 38 | Reserved (retired ObjectHealth) | Object HP now lives in ObjectInternalState; no registered type |
+| 39 | CorpseVisualStateComponentID    | Runtime lying-pose revision retained after character death     |
 
 `ActiveCyclicAction.ActionGeneration` links a timed menu-action cycle to its `ActiveGameAction.Generation`. Repeating menu actions retain that generation while incrementing `CycleIndex` and resetting elapsed ticks.
 Compare the supplied cycle with the current component and generation before completion, so a canceled or replaced cycle cannot apply a late effect. Other cyclic action sources may leave `ActionGeneration` at zero.

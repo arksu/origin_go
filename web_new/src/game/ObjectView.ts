@@ -31,6 +31,7 @@ import { fxManager } from './fx/FxManager'
 import type { ParticleEmitter } from './fx/ParticleEmitter'
 import type { LocalAudioSnapshot } from './LocalAudioController'
 import { locomotionClip } from './actors/locomotion'
+import type { LyingPresentationMode } from './actors/lyingPresentation'
 
 interface AnimatedFrameLayer {
   layer: LayerDef
@@ -110,7 +111,11 @@ export class ObjectView {
   private hoverBorderSignature = ''
   private shadowSuppressed = false
   private knockedOutPose = false
+  private lyingMode: LyingPresentationMode = 'snapshot'
+  private lyingStartedMs = 0
+  private lyingFacingAngle: number | undefined
   private knockedOutShadow: Graphics | null = null
+  private groundShadowRevision = -1
   private actorHandle: ActorHandle | null = null
   private shallowWater: ShallowWaterVisual | null = null
   private carrying = false
@@ -1096,11 +1101,14 @@ export class ObjectView {
     this.syncShadows()
   }
 
-  setKnockedOutPose(enabled: boolean): void {
+  setKnockedOutPose(enabled: boolean, mode: LyingPresentationMode = 'snapshot', nowMs = performance.now()): void {
     if (this.knockedOutPose === enabled) {
       return
     }
     this.knockedOutPose = enabled
+    this.lyingMode = mode
+    this.lyingStartedMs = nowMs
+    this.lyingFacingAngle = enabled ? this.actorFacingAngle ?? undefined : undefined
 
     if (enabled) {
       this.onStopped()
@@ -1112,10 +1120,18 @@ export class ObjectView {
 
   private syncShadows(): void {
     if (this.actorHandle && this.knockedOutPose && !this.knockedOutShadow) {
-      this.knockedOutShadow = new Graphics().ellipse(3, 4, 46, 8).fill({ color: 0x17201b, alpha: .3 })
+      this.knockedOutShadow = new Graphics()
       this.knockedOutShadow.zIndex = -1
       this.knockedOutShadow.eventMode = 'none'
       this.container.addChild(this.knockedOutShadow)
+    }
+    const actor = this.actorHandle?.actor
+    if (this.knockedOutShadow && this.knockedOutPose && actor && this.groundShadowRevision !== actor.revision) {
+      const shadow = actor.groundShadow
+      this.knockedOutShadow.clear().ellipse(0, 0, shadow.radiusX, shadow.radiusY).fill({ color: 0x17201b, alpha: .3 })
+      this.knockedOutShadow.position.set(shadow.x, shadow.y)
+      this.knockedOutShadow.rotation = shadow.rotation
+      this.groundShadowRevision = actor.revision
     }
     const submerged = (this.actorHandle?.immersionPx ?? 0) > 0
     if (this.knockedOutShadow) this.knockedOutShadow.visible = this.knockedOutPose && !this.shadowSuppressed && !submerged
@@ -1144,7 +1160,7 @@ export class ObjectView {
     actor.stopProgress = this.stopProgress
     actor.distanceTiles = this.walkDistanceTiles
     actor.carrying = this.carrying && !this.knockedOutPose
-    actor.knockedOut = this.knockedOutPose
+    actor.setKnockedOutPose(this.knockedOutPose, this.lyingMode, this.lyingStartedMs, this.lyingFacingAngle)
     actor.hovered = this.isHovered
   }
 
@@ -1154,6 +1170,7 @@ export class ObjectView {
 
   updateActionAnimation(nowMs: number, serverNowMs: number): boolean {
     if (!this.actorHandle || this.isDestroyed) return false
+    this.syncShadows()
     const actor = this.actorHandle.actor
     const state = this.actionAnimation
     const target = state?.targetPosition

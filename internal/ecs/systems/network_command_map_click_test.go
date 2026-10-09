@@ -225,6 +225,7 @@ func (router *testActionClickRouter) StartTargetedOnce(w *ecs.World, _ types.Ent
 }
 func (*testActionClickRouter) ActivateRequest(*ecs.World, types.EntityID, types.Handle, *netproto.C2S_ActivateAction) {
 }
+func (*testActionClickRouter) IsDirectionAction(string) bool                                   { return false }
 func (*testActionClickRouter) CancelForPointMovement(*ecs.World, types.EntityID, types.Handle) {}
 func (router *testActionClickRouter) Cancel(w *ecs.World, _ types.EntityID, player types.Handle) {
 	router.cancelCalls++

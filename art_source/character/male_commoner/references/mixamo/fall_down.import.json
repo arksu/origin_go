@@ -1,0 +1,47 @@
+{
+  "source": "../../source.blend",
+  "donor": "sword_and_shield_death.fbx",
+  "donor_sha256": "8d5a2e3784d0753e9e590948e13dcc74569ddbc0ef4d1d88cbd92c356d8e789a",
+  "rig": "commoner_rig",
+  "action": "fall_down",
+  "range": {
+    "start": 1,
+    "end": 118
+  },
+  "fps": 30,
+  "root_bone": "pelvis",
+  "ground_bones": [
+    "foot.l",
+    "foot.r"
+  ],
+  "bones": {
+    "pelvis": "mixamorig:Hips",
+    "spine": "mixamorig:Spine",
+    "chest": "mixamorig:Spine2",
+    "head": "mixamorig:Head",
+    "clavicle.l": "mixamorig:LeftShoulder",
+    "upper_arm.l": "mixamorig:LeftArm",
+    "forearm.l": "mixamorig:LeftForeArm",
+    "hand.l": "mixamorig:LeftHand",
+    "clavicle.r": "mixamorig:RightShoulder",
+    "upper_arm.r": "mixamorig:RightArm",
+    "forearm.r": "mixamorig:RightForeArm",
+    "hand.r": "mixamorig:RightHand",
+    "thigh.l": "mixamorig:LeftUpLeg",
+    "shin.l": "mixamorig:LeftLeg",
+    "foot.l": "mixamorig:LeftFoot",
+    "toes.l": "mixamorig:LeftToeBase",
+    "thigh.r": "mixamorig:RightUpLeg",
+    "shin.r": "mixamorig:RightLeg",
+    "foot.r": "mixamorig:RightFoot",
+    "toes.r": "mixamorig:RightToeBase"
+  },
+  "locomotion": false,
+  "loop": false,
+  "grounding": "body",
+  "ground_meshes": [
+    "meshy_commoner",
+    "meshy_commoner_low"
+  ],
+  "body_clearance": 0.005
+}
