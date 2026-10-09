@@ -119,7 +119,6 @@ function tileLabel(tileID: number | null | undefined): string {
 
 type LayerDefLike = { img?: string; shadow?: boolean }
 type VariantDefLike = { layers?: LayerDefLike[] }
-type ObjectVisualDefsLike = Record<string, Record<string, VariantDefLike>>
 
 function firstLayerImage(layers: LayerDefLike[] | undefined): string {
   if (!Array.isArray(layers)) return ''
@@ -127,25 +126,30 @@ function firstLayerImage(layers: LayerDefLike[] | undefined): string {
   return preferred?.img ? `/assets/game/${preferred.img}` : ''
 }
 
-function objectIconUrl(objectKey: string | null | undefined): string {
-  const key = (objectKey || '').trim()
-  if (!key) return ''
-  const allDefs = objectVisualDefs as unknown as ObjectVisualDefsLike
-  const objDef = allDefs[key]
-  if (!objDef || typeof objDef !== 'object') return ''
+function objectIconUrl(resourcePath: string | null | undefined): string {
+  const path = (resourcePath || '').trim()
+  if (!path) return ''
+  let node: unknown = objectVisualDefs
+  for (const part of path.split('/')) {
+    if (!node || typeof node !== 'object') return ''
+    node = (node as Record<string, unknown>)[part]
+  }
+  if (!node || typeof node !== 'object') return ''
+  const objDef = node as Record<string, unknown>
 
-  const directImage = firstLayerImage((objDef as unknown as VariantDefLike).layers)
+  const directImage = firstLayerImage((objDef as VariantDefLike).layers)
   if (directImage) return directImage
 
   for (const variant of Object.values(objDef)) {
-    const image = firstLayerImage(variant?.layers)
+    if (!variant || typeof variant !== 'object') continue
+    const image = firstLayerImage((variant as VariantDefLike).layers)
     if (image) return image
   }
   return ''
 }
 
 function firstResultIconForBuild(build: proto.IBuildRecipeEntry | null | undefined): string {
-  return objectIconUrl(build?.objectKey)
+  return objectIconUrl(build?.objectResourcePath) || objectIconUrl(build?.objectKey)
 }
 
 function createTooltip(text: string) {
@@ -304,9 +308,9 @@ onUnmounted(() => {
                 <div class="build-window__chip build-window__chip--result">
                   <span class="build-window__icon-slot">
                     <img
-                      v-if="objectIconUrl(selectedBuild.objectKey)"
+                      v-if="firstResultIconForBuild(selectedBuild)"
                       class="build-window__icon"
-                      :src="objectIconUrl(selectedBuild.objectKey)"
+                      :src="firstResultIconForBuild(selectedBuild)"
                       alt=""
                       draggable="false"
                     >

@@ -83,6 +83,24 @@
       "requiredDiscovery": [],
       "allowedTiles": [],
       "objectKey": "campfire"
+    },
+    {
+      "defId": 5,
+      "key": "drying_frame",
+      "name": "Drying Frame",
+      "inputs": [
+        {
+          "itemKey": "branch",
+          "count": 1,
+          "qualityWeight": 1
+        }
+      ],
+      "staminaCost": 8,
+      "ticksRequired": 20,
+      "requiredSkills": [],
+      "requiredDiscovery": [],
+      "allowedTiles": [],
+      "objectKey": "drying_frame"
     }
   ]
 }

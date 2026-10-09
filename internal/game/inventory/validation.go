@@ -8,6 +8,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
+	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
 
@@ -268,6 +269,9 @@ func (v *Validator) ValidateItemAllowedInContainer(
 				"Item cannot be placed in grid inventory",
 			)
 		}
+		if err := v.validateWorldRootRules(w, item, dstInfo); err != nil {
+			return err
+		}
 		if err := v.validateContainerRules(w, itemDef, dstInfo); err != nil {
 			return err
 		}
@@ -281,6 +285,31 @@ func (v *Validator) ValidateItemAllowedInContainer(
 		}
 	}
 
+	return nil
+}
+
+// World-root rules use the owning entity directly. Nested item containers keep
+// their existing parent-item rules and never inherit station restrictions.
+func (v *Validator) validateWorldRootRules(w *ecs.World, item *components.InvItem, dstInfo *ContainerInfo) *ValidationError {
+	if dstInfo.Container.Key != 0 {
+		return nil
+	}
+	ownerHandle := w.GetHandleByEntityID(dstInfo.Container.OwnerID)
+	if ownerHandle == types.InvalidHandle || !w.Alive(ownerHandle) {
+		return nil
+	}
+	entityInfo, hasEntityInfo := ecs.GetComponent[components.EntityInfo](w, ownerHandle)
+	registry := objectdefs.Global()
+	if !hasEntityInfo || registry == nil {
+		return nil
+	}
+	def, found := registry.GetByID(int(entityInfo.TypeID))
+	if !found || def.DryingConfig == nil {
+		return nil
+	}
+	if item.Quantity != 1 || !def.DryingConfig.AllowsItemTypeID(item.TypeID) {
+		return NewValidationError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Item is not allowed in this drying frame")
+	}
 	return nil
 }
 

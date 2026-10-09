@@ -125,6 +125,7 @@ func TransformObjectToDefInPlace(
 	})
 
 	ecs.CancelBehaviorTicksByEntityID(w, targetID)
+	ecs.CancelBehaviorRuntimeByHandle(w, targetHandle)
 
 	// Lifecycle hooks must see the destination's station state, just as on spawn.
 	if newDef.Station != nil {

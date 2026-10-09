@@ -180,19 +180,20 @@ type TakeSkullFn func(
 
 // ExecutionDeps contains shared dependencies for actions and scheduled behaviors.
 type ExecutionDeps struct {
-	ExhaustBurner    func(w *ecs.World, handle types.Handle) bool
-	InventoryUpdate  func(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
-	OpenContainer    OpenContainerFn
-	GiveItem         GiveItemFn
-	TakeSkull        TakeSkullFn
-	EventBus         *eventbus.EventBus
-	Chunks           TreeChunkProvider
-	IDAllocator      EntityIDAllocator
-	VisionForcer     VisionUpdateForcer
-	Alerts           MiniAlertSender
-	BuildState       BuildStateSender
-	BehaviorRegistry BehaviorRegistry
-	Logger           *zap.Logger
+	ExhaustBurner       func(w *ecs.World, handle types.Handle) bool
+	InventoryUpdate     func(w *ecs.World, playerID types.EntityID, playerHandle types.Handle)
+	RootInventoryUpdate func(w *ecs.World, rootID types.EntityID)
+	OpenContainer       OpenContainerFn
+	GiveItem            GiveItemFn
+	TakeSkull           TakeSkullFn
+	EventBus            *eventbus.EventBus
+	Chunks              TreeChunkProvider
+	IDAllocator         EntityIDAllocator
+	VisionForcer        VisionUpdateForcer
+	Alerts              MiniAlertSender
+	BuildState          BuildStateSender
+	BehaviorRegistry    BehaviorRegistry
+	Logger              *zap.Logger
 }
 
 // BehaviorActionListContext is used to compute context actions.
@@ -256,6 +257,25 @@ type BehaviorTickResult struct {
 // ScheduledTickBehavior handles due ticks from the unified behavior tick scheduler.
 type ScheduledTickBehavior interface {
 	OnScheduledTick(ctx *BehaviorTickContext) (BehaviorTickResult, error)
+}
+
+// BehaviorRuntimeTickContext contains scheduled behavior execution data for
+// deadlines measured by the durable server-runtime clock.
+type BehaviorRuntimeTickContext struct {
+	World                 *ecs.World
+	Handle                types.Handle
+	EntityID              types.EntityID
+	EntityType            uint32
+	BehaviorKey           string
+	CurrentRuntimeSeconds int64
+	CurrentState          *components.RuntimeObjectState
+	Deps                  *ExecutionDeps
+}
+
+// ScheduledRuntimeBehavior handles due server-runtime deadlines. Like tick
+// callbacks, these run synchronously under the owning shard's lock.
+type ScheduledRuntimeBehavior interface {
+	OnScheduledRuntimeTick(ctx *BehaviorRuntimeTickContext) (BehaviorTickResult, error)
 }
 
 // BehaviorActionValidateContext is used before action execution.

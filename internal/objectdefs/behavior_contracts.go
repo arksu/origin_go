@@ -60,3 +60,20 @@ func (d *ObjectDef) SetBurnerBehaviorConfig(cfg contracts.BurnerBehaviorConfig) 
 	}
 	d.BurnerConfig = &BurnerBehaviorConfig{Priority: cfg.Priority, FuelAbilities: append([]string(nil), cfg.FuelAbilities...), FuelCapacity: cfg.FuelCapacity, TicksPerFuel: cfg.TicksPerFuel, InitialFuel: cfg.InitialFuel, DropItem: cfg.OnExhausted.DropItem, Despawn: cfg.OnExhausted.Despawn}
 }
+
+func (d *ObjectDef) SetDryingBehaviorConfig(cfg contracts.DryingBehaviorConfig) {
+	if d == nil {
+		return
+	}
+	processes := make([]DryingProcessConfig, len(cfg.Processes))
+	for i, process := range cfg.Processes {
+		processes[i] = DryingProcessConfig{
+			InputItemKey: process.InputItemKey, OutputItemKey: process.OutputItemKey,
+			DurationSeconds: process.DurationSeconds,
+			InputTypeID:     process.InputTypeID, OutputTypeID: process.OutputTypeID,
+			InputWidth: process.InputWidth, InputHeight: process.InputHeight,
+			OutputWidth: process.OutputWidth, OutputHeight: process.OutputHeight,
+		}
+	}
+	d.DryingConfig = &DryingBehaviorConfig{Priority: cfg.Priority, Processes: processes}
+}

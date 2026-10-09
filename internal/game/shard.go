@@ -210,6 +210,16 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetDirectionalSessionValidator(s.validDirectionalSession)
 	networkCmdSystem.SetStandUpHandler(s.queueStandUp)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
+	behaviorExecutionDeps := &contracts.ExecutionDeps{
+		EventBus: s.eventBus, Logger: logger, ExhaustBurner: burnerExhaustion.exhaust,
+		IDAllocator: entityIDManager,
+		RootInventoryUpdate: func(w *ecs.World, rootID types.EntityID) {
+			broadcastRootInventoryUpdate(w, openContainerService, rootID)
+		},
+	}
+	inventoryExecutor.SetRootMutationHook(func(w *ecs.World, rootID types.EntityID) {
+		notifyRootInventoryMutation(w, behaviorRegistry, behaviorExecutionDeps, rootID)
+	})
 	craftingService := NewCraftingService(s.world, s.eventBus, inventoryExecutor, s, logger)
 	giveItem := newPlayerGiveItemAdapter(inventoryExecutor, s)
 	contextActionService := NewContextActionService(
@@ -326,7 +336,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewBehaviorTickSystem(logger, systems.BehaviorTickSystemConfig{
 		BudgetPerTick:    cfg.Game.BehaviorTickGlobalBudget,
 		BehaviorRegistry: behaviorRegistry,
-		ExecutionDeps:    &contracts.ExecutionDeps{EventBus: s.eventBus, Logger: logger, ExhaustBurner: burnerExhaustion.exhaust},
+		ExecutionDeps:    behaviorExecutionDeps,
 	}))
 	s.world.AddSystem(systems.NewObjectBehaviorSystem(s.eventBus, logger, systems.ObjectBehaviorConfig{
 		BudgetPerTick:       cfg.Game.ObjectBehaviorBudgetPerTick,

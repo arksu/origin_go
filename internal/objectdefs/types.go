@@ -25,6 +25,7 @@ type ObjectDef struct {
 	TreeConfig                     *TreeBehaviorConfig   `json:"-"`
 	TakeConfig                     *TakeBehaviorConfig   `json:"-"`
 	BurnerConfig                   *BurnerBehaviorConfig `json:"-"`
+	DryingConfig                   *DryingBehaviorConfig `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.
@@ -118,6 +119,32 @@ type BurnerBehaviorConfig struct {
 	FuelCapacity, TicksPerFuel, InitialFuel uint32
 	DropItem                                string
 	Despawn                                 bool
+}
+
+// DryingBehaviorConfig is resolved and immutable after definition loading.
+type DryingBehaviorConfig struct {
+	Priority  int
+	Processes []DryingProcessConfig
+}
+
+type DryingProcessConfig struct {
+	InputItemKey, OutputItemKey string
+	DurationSeconds             int64
+	InputTypeID, OutputTypeID   uint32
+	InputWidth, InputHeight     uint8
+	OutputWidth, OutputHeight   uint8
+}
+
+func (c *DryingBehaviorConfig) AllowsItemTypeID(typeID uint32) bool {
+	if c == nil || typeID == 0 {
+		return false
+	}
+	for _, process := range c.Processes {
+		if process.InputTypeID == typeID || process.OutputTypeID == typeID {
+			return true
+		}
+	}
+	return false
 }
 
 // ObjectsFile represents a JSONC file containing object definitions.

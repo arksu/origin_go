@@ -123,6 +123,20 @@ For new content creators:
 Examples in this folder:
 - `containers.jsonc` for `container`
 - `trees.jsonc` for `tree` / `take` patterns
+- `drying.jsonc` for `container` + `drying` (currently no live processes)
+
+### Drying
+
+`drying` requires `container` and exactly one 2×2 root grid (key 0). Its
+`processes` list may be empty. Each process uses `inputItemKey`, `outputItemKey`,
+and positive integer `durationSeconds`. Both items must exist and be
+nonstackable grid items without nested inventories; the output dimensions must
+fit inside the input rectangle. Repeated input keys are rejected. Only declared
+inputs and outputs may enter the frame, one item at a time.
+
+Drying uses fixed recipe duration and preserves input quality. Object quality
+does not affect either. See `docs/features/drying_frame.md` for timer, scheduler
+and persistence semantics.
 
 ## Cross-References
 
