@@ -26,6 +26,7 @@ type SpawnDroppedEntityParams struct {
 	ChunkX, ChunkY    int
 	DropperID         types.EntityID
 	NowRuntimeSeconds int64
+	Skull             *components.SkullMetadata
 }
 
 // SpawnDroppedEntityResult holds the output of a successful spawn.
@@ -118,6 +119,7 @@ func SpawnDroppedEntity(w *ecs.World, p SpawnDroppedEntityParams) (SpawnDroppedE
 					Resource: p.Resource,
 					Quality:  p.Quality,
 					Quantity: p.Quantity,
+					Skull:    p.Skull.Clone(),
 					W:        p.W,
 					H:        p.H,
 				},
@@ -295,6 +297,7 @@ func buildDroppedItemPersistenceRecord(
 		Quality:         p.Quality,
 		Quantity:        p.Quantity,
 		NestedInventory: nestedInvData,
+		Skull:           p.Skull.Clone(),
 	}
 	invData := InventoryDataV1{
 		Kind:    uint8(constt.InventoryDroppedItem),

@@ -592,7 +592,7 @@ func (h *ChatAdminCommandHandler) ExecutePendingDestroy(w *ecs.World, playerID, 
 		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
 		return
 	}
-	if ecs.ObjectDestructionPending(w, targetHandle) {
+	if ecs.ObjectDestructionPending(w, targetHandle) || ecs.InventoryHandleReserved(w, targetHandle) {
 		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
 		return
 	}

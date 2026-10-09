@@ -34,14 +34,15 @@ the skeleton and ground items directly from PostgreSQL.
 
 The skeleton definitions are `player_skeleton` (17) and
 `player_skeleton_without_skull` (18). Both have 100 HP, are indestructible and
-liftable, and have no inventories. Decay creates only the first. Removing the
-skull and granting a skull inventory item are future work.
+liftable, and have no inventories. Decay creates only the first. Its **Take
+Skull** action grants a linked memorial skull and replaces it with the second;
+see [Taking a skull](skull_taking.md).
 
 The same ID is retained from player to corpse to skeleton. The soft-deleted
-`character` row therefore remains the future authoritative source for the dead
-player's name. The ordinary active-character query filters deleted rows and is
-not an appropriate lookup for that future interaction. No name is duplicated in
-the skeleton state, and this feature does not expose a new name lookup API.
+`character` row therefore remains the authoritative source for the dead player's
+name and date of death when taking a skull. The ordinary active-character query
+filters deleted rows and is not an appropriate lookup for that interaction.
+No name is duplicated in the skeleton state or exposed through a new lookup API.
 
 Validation covers persisted runtime deadlines, overdue restoration, bounded
 scheduling, admission retries, inventory release, preserved identity and

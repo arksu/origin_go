@@ -669,6 +669,7 @@ func (s *InventoryOperationService) ExecuteDropToWorld(
 	// source stack is fully removed; a partial drop must allocate new IDs.
 	baseParams := SpawnDroppedEntityParams{
 		TypeID:            srcItem.TypeID,
+		Skull:             srcItem.Skull.Clone(),
 		Resource:          resource,
 		Quality:           srcItem.Quality,
 		Quantity:          1,

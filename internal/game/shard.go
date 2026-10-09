@@ -75,6 +75,7 @@ type Shard struct {
 	soundEvents       *SoundEventService
 	sectorResolver    *SectorResolver
 	objectDestruction *ObjectDestructionService
+	inventoryExecutor *inventory.InventoryExecutor
 	objectDamage      *ObjectDamageService
 	creatureDamage    *CreatureDamageService
 	meleeExecution    *MeleeExecutionService
@@ -151,7 +152,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		Chunks: s.chunkManager, Persister: worldObjectPersistence, IDs: entityIDManager,
 		Items: itemdefs.Global(), WithWorldRead: s.WithWorldRead, Quarantine: s.quarantineDestroyedObject,
 		TransformCommitted: s.completeCorpseDecay,
-		MinX:               minX, MinY: minY, MaxX: maxX, MaxY: maxY, Region: cfg.Game.Region, Logger: logger,
+		SkullGranted:       s.skullGranted, SkullRejected: s.skullClaimRejected,
+		MinX: minX, MinY: minY, MaxX: maxX, MaxY: maxY, Region: cfg.Game.Region, Logger: logger,
 	})
 	if destructionErr != nil {
 		logger.Fatal("Invalid object destruction service", zap.Error(destructionErr))
@@ -202,6 +204,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	}
 	s.chunkManager.SetRestoredObjectReconciler(&shardObjectRestoreReconciler{shard: s, burner: burnerExhaustion})
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
+	s.inventoryExecutor = inventoryExecutor
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	networkCmdSystem.SetDirectionalSessionValidator(s.validDirectionalSession)
@@ -226,6 +229,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		s.SendInventorySnapshots(w, playerID, playerHandle)
 	})
 	contextActionService.SetCraftingService(craftingService)
+	contextActionService.SetTakeSkull(s.takeSkull)
 	s.contextActions = contextActionService
 	contextActionService.SetSoundEventService(s.soundEvents)
 	s.craftingService = craftingService

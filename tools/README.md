@@ -79,3 +79,13 @@ hidden while carrying. No model, texture or animation assets are rebuilt.
 
 Run the Vite dev server and open `/tests/skeleton.html` to compare the sprites
 with standing and lying actors over dark green ground at the same scale.
+
+## Skull inventory icon
+
+`python3 tools/export_skull_icon.py` publishes
+`art_source/items/skull/skull-generated.png` as the transparent 32×32
+`web_new/public/assets/game/items/skull.png` using nearest-neighbor resampling.
+`--check` verifies the pinned source SHA-256 and byte-exact output. The source's
+generation prompt and tool provenance are saved alongside it in `generation.json`.
+The icon matches the skeleton's warm bone palette, right-facing view and fixed
+upper-left lighting. Its alpha edges are checked over dark green terrain.

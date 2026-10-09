@@ -51,6 +51,7 @@ func SerializeInventoryTree(w *ecs.World, root components.InventoryContainer) (I
 		dbItem := InventoryItemV1{
 			ItemID: uint64(item.ItemID), TypeID: item.TypeID, Quality: item.Quality,
 			Quantity: item.Quantity, X: item.X, Y: item.Y, EquipSlot: EquipSlotToString(item.EquipSlot),
+			Skull: item.Skull.Clone(),
 		}
 		childKey := ecs.InventoryRefKey{Kind: constt.InventoryGrid, OwnerID: item.ItemID, Key: 0}
 		childHandle, hasChild := refs.Lookup(childKey.Kind, childKey.OwnerID, childKey.Key)
@@ -87,7 +88,8 @@ func inventoryTreeData(container components.InventoryContainer) InventoryDataV1 
 	return InventoryDataV1{
 		Kind: uint8(container.Kind), Key: container.Key, Width: container.Width,
 		Height: container.Height, Version: int(container.Version),
-		Items: make([]InventoryItemV1, 0, len(container.Items)),
+		Items:            make([]InventoryItemV1, 0, len(container.Items)),
+		HandMouseOffsetX: container.HandMouseOffsetX, HandMouseOffsetY: container.HandMouseOffsetY,
 	}
 }
 

@@ -154,7 +154,7 @@ func (playerDeadBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteCont
 }
 
 func collectUnequipCandidates(w *ecs.World, corpseID types.EntityID) (types.Handle, []unequipCandidate) {
-	if w == nil || corpseID == 0 {
+	if w == nil || corpseID == 0 || ecs.InventoryOwnerReserved(w, corpseID) || ecs.ObjectDestructionOwnerPending(w, corpseID) {
 		return types.InvalidHandle, nil
 	}
 

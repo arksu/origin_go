@@ -464,6 +464,7 @@ func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *Containe
 			X:         item.X,
 			Y:         item.Y,
 			EquipSlot: item.EquipSlot,
+			HintExt:   item.Skull.HintExt(),
 		}
 
 		// Check if this item has a nested container via index (O(1))

@@ -72,7 +72,9 @@ const createTooltip = () => {
 
   tooltipElement = document.createElement('div')
   tooltipElement.className = 'item-tooltip-global'
-  tooltipElement.innerHTML = `<pre>${tooltipText.value}</pre>`
+  const content = document.createElement('pre')
+  content.textContent = tooltipText.value
+  tooltipElement.appendChild(content)
   document.body.appendChild(tooltipElement)
 }
 

@@ -133,6 +133,9 @@ func (s *Shard) completeCorpseDecay(handle types.Handle, destination *objectdefs
 	if s.chunkManager != nil {
 		position, _ := ecs.GetComponent[components.Transform](w, handle)
 		ref, _ := ecs.GetComponent[components.ChunkRef](w, handle)
+		// Skull claims retain their spatial entry during persistence. Remove any
+		// existing entry before re-registering the committed replacement.
+		s.chunkManager.RemoveStaticFromChunkSpatial(handle, ref.CurrentChunkX, ref.CurrentChunkY, int(position.X), int(position.Y))
 		s.chunkManager.AddStaticToChunkSpatial(handle, ref.CurrentChunkX, ref.CurrentChunkY, int(position.X), int(position.Y))
 	}
 	return true

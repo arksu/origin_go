@@ -51,7 +51,13 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 		require.InDelta(t, 9, definition.Components.Collider.W, 0)
 		require.InDelta(t, 9, definition.Components.Collider.H, 0)
 		require.Empty(t, definition.Components.Inventory)
-		require.Len(t, definition.Behaviors, 1)
+		if key == "player_skeleton" {
+			require.Len(t, definition.Behaviors, 2)
+			require.Contains(t, definition.Behaviors, "player_skeleton")
+		} else {
+			require.Len(t, definition.Behaviors, 1)
+			require.NotContains(t, definition.Behaviors, "player_skeleton")
+		}
 		require.Contains(t, definition.Behaviors, "lift")
 	}
 	for key, hp := range map[string]int{"log_x": 1, "log_y": 1, "tree_birch": 100} {

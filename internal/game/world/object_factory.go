@@ -727,13 +727,15 @@ func (f *ObjectFactory) spawnContainerTreeFromData(
 	}
 
 	container := components.InventoryContainer{
-		OwnerID: ownerID,
-		Kind:    constt.InventoryKind(data.Kind),
-		Key:     data.Key,
-		Version: uint64(maxInt(data.Version, 1)),
-		Width:   data.Width,
-		Height:  data.Height,
-		Items:   make([]components.InvItem, 0, len(data.Items)),
+		OwnerID:          ownerID,
+		Kind:             constt.InventoryKind(data.Kind),
+		Key:              data.Key,
+		Version:          uint64(maxInt(data.Version, 1)),
+		Width:            data.Width,
+		Height:           data.Height,
+		Items:            make([]components.InvItem, 0, len(data.Items)),
+		HandMouseOffsetX: data.HandMouseOffsetX,
+		HandMouseOffsetY: data.HandMouseOffsetY,
 	}
 
 	refIndex := ecs.GetResource[ecs.InventoryRefIndex](w)
@@ -750,6 +752,7 @@ func (f *ObjectFactory) spawnContainerTreeFromData(
 			Resource:  itemDef.ResolveResource(hasNestedItems),
 			Quality:   dbItem.Quality,
 			Quantity:  dbItem.Quantity,
+			Skull:     dbItem.Skull.Clone(),
 			W:         uint8(itemDef.Size.W),
 			H:         uint8(itemDef.Size.H),
 			X:         dbItem.X,

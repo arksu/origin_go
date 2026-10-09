@@ -52,7 +52,7 @@ func IsIncapacitated(w *ecs.World, handle types.Handle) bool {
 }
 
 func ItemsLocked(w *ecs.World, handle types.Handle) bool {
-	return IsIncapacitated(w, handle)
+	return ecs.InventoryHandleReserved(w, handle) || IsIncapacitated(w, handle)
 }
 
 func StopMovement(w *ecs.World, handle types.Handle) {

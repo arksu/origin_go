@@ -49,7 +49,7 @@ func TransformObjectToDefInPlace(
 	if w == nil || targetID == 0 || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) || newDef == nil || newDef.Key == "player" || newDef.HP <= 0 {
 		return false
 	}
-	if ecs.ObjectDestructionPending(w, targetHandle) {
+	if ecs.ObjectDestructionPending(w, targetHandle) || ecs.InventoryHandleReserved(w, targetHandle) {
 		return false
 	}
 	logger := opts.Logger

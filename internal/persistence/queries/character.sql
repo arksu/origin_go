@@ -4,6 +4,12 @@ FROM character
 WHERE id = $1
   AND deleted_at IS NULL;
 
+-- name: GetDeadCharacterMetadata :one
+SELECT name, deleted_at
+FROM character
+WHERE id = $1
+  AND deleted_at IS NOT NULL;
+
 -- name: GetCharactersByAccountID :many
 SELECT *
 FROM character

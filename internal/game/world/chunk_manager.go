@@ -1186,6 +1186,9 @@ func (cm *ChunkManager) deactivateChunkInternal(chunk *core.Chunk) error {
 		if !cm.world.Alive(h) {
 			continue
 		}
+		if ecs.InventoryHandleReserved(cm.world, h) {
+			return ErrChunkPersistenceBusy
+		}
 		if objectID, hasID := cm.world.GetExternalID(h); hasID {
 			activeObjectIDs[objectID] = struct{}{}
 		}

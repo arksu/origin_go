@@ -148,12 +148,98 @@ func (q *Queries) GetObjectsByChunk(ctx context.Context, arg GetObjectsByChunkPa
 	return items, nil
 }
 
+const getSkullClaimSourceForUpdate = `-- name: GetSkullClaimSourceForUpdate :one
+SELECT id, type_id, region, x, y, layer, chunk_x, chunk_y, heading, quality, hp, owner_id, data, created_at, create_tick, last_tick, updated_at, deleted_at
+FROM object
+WHERE region = $1 AND id = $2
+FOR UPDATE
+`
+
+type GetSkullClaimSourceForUpdateParams struct {
+	Region int   `json:"region"`
+	ID     int64 `json:"id"`
+}
+
+func (q *Queries) GetSkullClaimSourceForUpdate(ctx context.Context, arg GetSkullClaimSourceForUpdateParams) (Object, error) {
+	row := q.db.QueryRowContext(ctx, getSkullClaimSourceForUpdate, arg.Region, arg.ID)
+	var i Object
+	err := row.Scan(
+		&i.ID,
+		&i.TypeID,
+		&i.Region,
+		&i.X,
+		&i.Y,
+		&i.Layer,
+		&i.ChunkX,
+		&i.ChunkY,
+		&i.Heading,
+		&i.Quality,
+		&i.Hp,
+		&i.OwnerID,
+		&i.Data,
+		&i.CreatedAt,
+		&i.CreateTick,
+		&i.LastTick,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const hardDeleteObjectsByRegion = `-- name: HardDeleteObjectsByRegion :exec
 DELETE FROM object WHERE region = $1
 `
 
 func (q *Queries) HardDeleteObjectsByRegion(ctx context.Context, region int) error {
 	_, err := q.db.ExecContext(ctx, hardDeleteObjectsByRegion, region)
+	return err
+}
+
+const insertSkullClaimSourceIfMissing = `-- name: InsertSkullClaimSourceIfMissing :exec
+INSERT INTO object (
+    id, type_id, region, x, y, layer, chunk_x, chunk_y,
+    heading, quality, hp, owner_id, data, create_tick, last_tick
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+ON CONFLICT (region, id) DO NOTHING
+`
+
+type InsertSkullClaimSourceIfMissingParams struct {
+	ID         int64                 `json:"id"`
+	TypeID     int                   `json:"type_id"`
+	Region     int                   `json:"region"`
+	X          int                   `json:"x"`
+	Y          int                   `json:"y"`
+	Layer      int                   `json:"layer"`
+	ChunkX     int                   `json:"chunk_x"`
+	ChunkY     int                   `json:"chunk_y"`
+	Heading    sql.NullInt16         `json:"heading"`
+	Quality    int16                 `json:"quality"`
+	Hp         sql.NullFloat64       `json:"hp"`
+	OwnerID    sql.NullInt64         `json:"owner_id"`
+	Data       pqtype.NullRawMessage `json:"data"`
+	CreateTick int64                 `json:"create_tick"`
+	LastTick   int64                 `json:"last_tick"`
+}
+
+func (q *Queries) InsertSkullClaimSourceIfMissing(ctx context.Context, arg InsertSkullClaimSourceIfMissingParams) error {
+	_, err := q.db.ExecContext(ctx, insertSkullClaimSourceIfMissing,
+		arg.ID,
+		arg.TypeID,
+		arg.Region,
+		arg.X,
+		arg.Y,
+		arg.Layer,
+		arg.ChunkX,
+		arg.ChunkY,
+		arg.Heading,
+		arg.Quality,
+		arg.Hp,
+		arg.OwnerID,
+		arg.Data,
+		arg.CreateTick,
+		arg.LastTick,
+	)
 	return err
 }
 
