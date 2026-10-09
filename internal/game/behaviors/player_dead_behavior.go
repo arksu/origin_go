@@ -15,15 +15,15 @@ import (
 )
 
 const (
-	playerDeathBehaviorKey = "player_death"
-	actionUnequip          = "unequip"
+	playerDeadBehaviorKey = "player_dead"
+	actionUnequip         = "unequip"
 
 	reasonUnequipUnavailable  = "UNEQUIP_UNAVAILABLE"
 	reasonUnequipGiveFailed   = "UNEQUIP_GIVE_FAILED"
 	reasonUnequipStateChanged = "UNEQUIP_STATE_CHANGED"
 )
 
-type playerDeathBehavior struct{}
+type playerDeadBehavior struct{}
 
 type unequipCandidate struct {
 	ItemIndex int
@@ -31,18 +31,18 @@ type unequipCandidate struct {
 	Quality   uint32
 }
 
-func (playerDeathBehavior) RequiresItemMutation(string) bool { return true }
+func (playerDeadBehavior) RequiresItemMutation(string) bool { return true }
 
-func (playerDeathBehavior) Key() string { return playerDeathBehaviorKey }
+func (playerDeadBehavior) Key() string { return playerDeadBehaviorKey }
 
-func (playerDeathBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
+func (playerDeadBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfigContext) (int, error) {
 	if ctx == nil {
-		return 0, fmt.Errorf("player_death def config context is nil")
+		return 0, fmt.Errorf("player_dead def config context is nil")
 	}
-	return parsePriorityOnlyConfig(ctx.RawConfig, playerDeathBehaviorKey)
+	return parsePriorityOnlyConfig(ctx.RawConfig, playerDeadBehaviorKey)
 }
 
-func (playerDeathBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []contracts.ContextAction {
+func (playerDeadBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []contracts.ContextAction {
 	if ctx == nil || ctx.World == nil {
 		return nil
 	}
@@ -58,7 +58,7 @@ func (playerDeathBehavior) ProvideActions(ctx *contracts.BehaviorActionListConte
 	}
 }
 
-func (playerDeathBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext) contracts.BehaviorResult {
+func (playerDeadBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContext) contracts.BehaviorResult {
 	if ctx == nil || ctx.World == nil || ctx.ActionID != actionUnequip {
 		return contracts.BehaviorResult{OK: false}
 	}
@@ -69,7 +69,7 @@ func (playerDeathBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateC
 	return contracts.BehaviorResult{OK: true}
 }
 
-func (playerDeathBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
+func (playerDeadBehavior) ExecuteAction(ctx *contracts.BehaviorActionExecuteContext) contracts.BehaviorResult {
 	if ctx == nil || ctx.World == nil || ctx.ActionID != actionUnequip {
 		return contracts.BehaviorResult{OK: false}
 	}

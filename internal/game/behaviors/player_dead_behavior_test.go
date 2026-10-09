@@ -12,10 +12,10 @@ import (
 	"origin/internal/types"
 )
 
-func TestPlayerDeathBehavior_UnequipSuccess(t *testing.T) {
+func TestPlayerDeadBehavior_UnequipSuccess(t *testing.T) {
 	setupPlayerDeathItemRegistry(t)
 
-	world, playerID, playerHandle, corpseID, corpseHandle, equipmentHandle := setupPlayerDeathBehaviorWorld(
+	world, playerID, playerHandle, corpseID, corpseHandle, equipmentHandle := setupPlayerDeadBehaviorWorld(
 		t,
 		[]components.InvItem{
 			{
@@ -31,7 +31,7 @@ func TestPlayerDeathBehavior_UnequipSuccess(t *testing.T) {
 	)
 
 	called := false
-	result := playerDeathBehavior{}.ExecuteAction(&contracts.BehaviorActionExecuteContext{
+	result := playerDeadBehavior{}.ExecuteAction(&contracts.BehaviorActionExecuteContext{
 		World:        world,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
@@ -89,10 +89,10 @@ func TestPlayerDeathBehavior_UnequipSuccess(t *testing.T) {
 	}
 }
 
-func TestPlayerDeathBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
+func TestPlayerDeadBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
 	setupPlayerDeathItemRegistry(t)
 
-	world, playerID, playerHandle, corpseID, corpseHandle, equipmentHandle := setupPlayerDeathBehaviorWorld(
+	world, playerID, playerHandle, corpseID, corpseHandle, equipmentHandle := setupPlayerDeadBehaviorWorld(
 		t,
 		[]components.InvItem{
 			{
@@ -107,7 +107,7 @@ func TestPlayerDeathBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
 		},
 	)
 
-	result := playerDeathBehavior{}.ExecuteAction(&contracts.BehaviorActionExecuteContext{
+	result := playerDeadBehavior{}.ExecuteAction(&contracts.BehaviorActionExecuteContext{
 		World:        world,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
@@ -151,10 +151,10 @@ func TestPlayerDeathBehavior_UnequipGiveFailureKeepsEquipment(t *testing.T) {
 	}
 }
 
-func TestPlayerDeathBehavior_NoEligibleItemsNoAction(t *testing.T) {
+func TestPlayerDeadBehavior_NoEligibleItemsNoAction(t *testing.T) {
 	setupPlayerDeathItemRegistry(t)
 
-	world, playerID, playerHandle, corpseID, corpseHandle, _ := setupPlayerDeathBehaviorWorld(
+	world, playerID, playerHandle, corpseID, corpseHandle, _ := setupPlayerDeadBehaviorWorld(
 		t,
 		[]components.InvItem{
 			{
@@ -169,7 +169,7 @@ func TestPlayerDeathBehavior_NoEligibleItemsNoAction(t *testing.T) {
 		},
 	)
 
-	actions := playerDeathBehavior{}.ProvideActions(&contracts.BehaviorActionListContext{
+	actions := playerDeadBehavior{}.ProvideActions(&contracts.BehaviorActionListContext{
 		World:        world,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
@@ -180,7 +180,7 @@ func TestPlayerDeathBehavior_NoEligibleItemsNoAction(t *testing.T) {
 		t.Fatalf("expected no context actions, got %+v", actions)
 	}
 
-	validate := playerDeathBehavior{}.ValidateAction(&contracts.BehaviorActionValidateContext{
+	validate := playerDeadBehavior{}.ValidateAction(&contracts.BehaviorActionValidateContext{
 		World:        world,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
@@ -194,10 +194,10 @@ func TestPlayerDeathBehavior_NoEligibleItemsNoAction(t *testing.T) {
 	}
 }
 
-func TestPlayerDeathBehavior_SkipsContainerItems(t *testing.T) {
+func TestPlayerDeadBehavior_SkipsContainerItems(t *testing.T) {
 	setupPlayerDeathItemRegistry(t)
 
-	world, playerID, playerHandle, corpseID, corpseHandle, _ := setupPlayerDeathBehaviorWorld(
+	world, playerID, playerHandle, corpseID, corpseHandle, _ := setupPlayerDeadBehaviorWorld(
 		t,
 		[]components.InvItem{
 			{
@@ -212,7 +212,7 @@ func TestPlayerDeathBehavior_SkipsContainerItems(t *testing.T) {
 		},
 	)
 
-	actions := playerDeathBehavior{}.ProvideActions(&contracts.BehaviorActionListContext{
+	actions := playerDeadBehavior{}.ProvideActions(&contracts.BehaviorActionListContext{
 		World:        world,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
@@ -223,7 +223,7 @@ func TestPlayerDeathBehavior_SkipsContainerItems(t *testing.T) {
 		t.Fatalf("container item must be excluded from unequip candidates")
 	}
 
-	validate := playerDeathBehavior{}.ValidateAction(&contracts.BehaviorActionValidateContext{
+	validate := playerDeadBehavior{}.ValidateAction(&contracts.BehaviorActionValidateContext{
 		World:        world,
 		PlayerID:     playerID,
 		PlayerHandle: playerHandle,
@@ -237,7 +237,7 @@ func TestPlayerDeathBehavior_SkipsContainerItems(t *testing.T) {
 	}
 }
 
-func setupPlayerDeathBehaviorWorld(
+func setupPlayerDeadBehaviorWorld(
 	t *testing.T,
 	equipmentItems []components.InvItem,
 ) (
@@ -272,7 +272,7 @@ func setupPlayerDeathBehaviorWorld(
 	return world, playerID, playerHandle, corpseID, corpseHandle, equipmentHandle
 }
 
-func newPlayerDeathBehaviorItemRegistry() *itemdefs.Registry {
+func newPlayerDeadBehaviorItemRegistry() *itemdefs.Registry {
 	return itemdefs.NewRegistry([]itemdefs.ItemDef{
 		{
 			DefID:    9001,
@@ -308,7 +308,7 @@ func setupPlayerDeathItemRegistry(t *testing.T) {
 	t.Cleanup(func() {
 		itemdefs.SetGlobalForTesting(previousRegistry)
 	})
-	itemdefs.SetGlobalForTesting(newPlayerDeathBehaviorItemRegistry())
+	itemdefs.SetGlobalForTesting(newPlayerDeadBehaviorItemRegistry())
 }
 
 func boolPtr(value bool) *bool {

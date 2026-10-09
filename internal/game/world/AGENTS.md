@@ -22,6 +22,9 @@
 
 - `ObjectInternalState.State` persists as object data.
 - Runtime flags are computed and should not be persisted directly.
+- `EntityInfo.Indestructible` caches the current object definition at common spawn,
+  database/portable restore, in-place transform (including the same type), and corpse
+  conversion. It is never persisted; restored payloads cannot override the current definition.
 - `ObjectInternalState.IsDirty` is used for save filtering.
 - Object HP is stored in typed `ObjectInternalState.HP/HasHP` fields and persisted
   separately as `object.hp`; `HasHP` distinguishes missing health from valid zero.

@@ -837,13 +837,13 @@ func (s *Shard) clearPlayerTransientStateForDeath(w *ecs.World, playerID types.E
 }
 
 func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
-	def, ok := objectdefs.Global().GetByKey("player_death")
+	def, ok := objectdefs.Global().GetByKey("player_dead")
 	if !ok || def == nil {
-		s.logger.Error("player_death object definition not found")
+		s.logger.Error("player_dead object definition not found")
 		return
 	}
 	if def.HP <= 0 {
-		s.logger.Error("player_death object definition has invalid HP")
+		s.logger.Error("player_dead object definition has invalid HP")
 		return
 	}
 
@@ -857,11 +857,12 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 
 	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, playerHandle)
 	corpseInfo := components.EntityInfo{
-		TypeID:    uint32(def.DefID),
-		Behaviors: def.CopyBehaviorOrder(),
-		IsStatic:  true,
-		Region:    s.cfg.Game.Region,
-		Layer:     s.layer,
+		TypeID:         uint32(def.DefID),
+		Behaviors:      def.CopyBehaviorOrder(),
+		IsStatic:       true,
+		Indestructible: def.Indestructible,
+		Region:         s.cfg.Game.Region,
+		Layer:          s.layer,
 	}
 	if hasInfo {
 		corpseInfo.Quality = info.Quality

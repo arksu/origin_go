@@ -127,7 +127,7 @@ func (s *MeleeExecutionService) eligible(hit SectorHit) (bool, bool, error) {
 		return false, false, nil
 	}
 	_, err := s.objects.readTarget(hit.Handle)
-	if err == ErrObjectDamageTargetDead {
+	if err == ErrObjectDamageTargetDead || err == ErrObjectDamageTargetIndestructible {
 		return false, false, nil
 	}
 	if err != nil {

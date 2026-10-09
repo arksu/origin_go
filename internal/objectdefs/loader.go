@@ -228,6 +228,14 @@ func validateObject(obj *ObjectDef, filePath string, behaviors contracts.Behavio
 			Message:  "hp is required and must be a positive integer",
 		}
 	}
+	if obj.Key == "player" && obj.Indestructible {
+		return &LoadError{
+			FilePath: filePath,
+			DefID:    obj.DefID,
+			Key:      obj.Key,
+			Message:  "indestructible is not supported for player",
+		}
+	}
 	if err := validateStationDef(obj, filePath); err != nil {
 		return err
 	}

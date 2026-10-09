@@ -129,6 +129,11 @@ func TestDestroyCommandArmsObjectSelection(t *testing.T) {
 }
 
 func TestDestroyCommandDeletesSelectedObjectAndOwnedInventories(t *testing.T) {
+	t.Run("ordinary", func(t *testing.T) { testDestroyCommandDeletesSelectedObject(t, false) })
+	t.Run("indestructible", func(t *testing.T) { testDestroyCommandDeletesSelectedObject(t, true) })
+}
+
+func testDestroyCommandDeletesSelectedObject(t *testing.T, indestructible bool) {
 	logger := zaptest.NewLogger(t)
 	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
 	world := ecs.NewWorldWithCapacity(100, eventBus, 0)
@@ -141,7 +146,7 @@ func TestDestroyCommandDeletesSelectedObjectAndOwnedInventories(t *testing.T) {
 	playerID := types.EntityID(42)
 	targetID := types.EntityID(777)
 	targetHandle := world.Spawn(targetID, func(w *ecs.World, h types.Handle) {
-		ecs.AddComponent(w, h, components.EntityInfo{Region: 1, IsStatic: true})
+		ecs.AddComponent(w, h, components.EntityInfo{Region: 1, IsStatic: true, Indestructible: indestructible})
 		ecs.AddComponent(w, h, components.Transform{X: 10, Y: 10})
 		ecs.AddComponent(w, h, components.ChunkRef{})
 	})

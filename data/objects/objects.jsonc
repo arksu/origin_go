@@ -95,10 +95,11 @@
     },
     {
       "defId": 15,
-      "key": "player_death",
-      "name": "Player Death",
+      "key": "player_dead",
+      "name": "Dead Player",
       "static": true,
       "hp": 100,
+      "indestructible": true,
       "components": {
         "collider": {
           "w": 9,
@@ -128,7 +129,7 @@
       "resource": "player", // TODO: replace with lying-body sprite/spine animation resource.
       "behaviors": {
         "container": {},
-        "player_death": {}
+        "player_dead": {}
       }
     },
     {

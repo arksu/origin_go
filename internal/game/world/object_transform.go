@@ -70,6 +70,7 @@ func TransformObjectToDefInPlace(
 		info.TypeID = uint32(newDef.DefID)
 		info.Behaviors = newDef.CopyBehaviorOrder()
 		info.IsStatic = newDef.IsStatic
+		info.Indestructible = newDef.Indestructible
 		if opts.QualityOverride != nil {
 			info.Quality = *opts.QualityOverride
 		}

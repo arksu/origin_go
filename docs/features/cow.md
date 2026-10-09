@@ -81,7 +81,7 @@
 
 - **Клиент: спрайт тура готов** (animals.json `aurochs`, 8 направлений + web_new/public/assets/game/animals/aurochs/) — **домашней коровы/быка в дефах НЕТ** (всего 6 животных). Варианты: достать cow/bull арт из тех же H&H-ассетов, что и остальные 6 (прецедент — animals.md §2.1), или временно переиспользовать aurochs с масштабом. Открытое решение §2.6.1.
 - **Мясная ветка готова**: `beef`/`roasted_beef` (data/items/food.jsonc:32, 265). **Молока, ведра, творога/сыра нет** — новые предметы.
-- Общая база скота — [sheep.md](sheep.md) §2.1: behaviors registry, GiveItem(quality), cyclic build-паттерн, HP-пулы, труп-прецедент player_death, бинарные скиллы; **боя нет**, контейнеры есть (container behavior), объёмов нет.
+- Общая база скота — [sheep.md](sheep.md) §2.1: behaviors registry, GiveItem(quality), cyclic build-паттерн, HP-пулы, труп-прецедент player_dead, бинарные скиллы; **боя нет**, контейнеры есть (container behavior), объёмов нет.
 
 ### 2.2 Зависимости
 

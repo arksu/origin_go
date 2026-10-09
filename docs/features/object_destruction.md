@@ -2,8 +2,16 @@
 
 This step implements a generic object damage receiver. It accepts calculated
 `Draw`, uses object armor `0`, and changes fractional `ObjectInternalState.HP`.
-It adds no ECS component, public attack handler, effects, health migration,
-protobuf field, definition or balance change.
+It requires no extra ECS component, health migration or protobuf field.
+
+Definitions may set `indestructible: true` (default `false`, positive HP still
+required). The existing `EntityInfo` carries that policy. `ObjectDamageService`
+returns `ErrObjectDamageTargetIndestructible` before preparation or calculation,
+without health writes, dirty notifications, reservations or quarantine. Melee
+excludes the target before selecting nearest/all hits; an immune-only sector
+uses the ordinary paid-miss completion. `player_dead` enables the flag. Generic
+destruction/deletion and administrative `/destroy` remain available; this is a
+damage policy rather than a prohibition on lifecycle removal.
 
 ## Ownership and admission
 

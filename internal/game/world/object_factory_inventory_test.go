@@ -144,7 +144,7 @@ func TestEnsureObjectInventoriesForDef_LinksAllExistingRootInventories(t *testin
 	refIndex.Add(constt.InventoryHand, objectID, 0, handHandle)
 
 	def := &objectdefs.ObjectDef{
-		Key: "player_death_test",
+		Key: "player_dead_test",
 		Components: &objectdefs.Components{
 			Inventory: []objectdefs.InventoryDef{
 				{Kind: "grid", Key: 0, W: 4, H: 4},
