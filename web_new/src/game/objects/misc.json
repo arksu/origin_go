@@ -111,19 +111,19 @@
     ]
   },
   "player_skeleton": {
-    "size": [128, 128],
-    "offset": [64, 56],
+    "size": [85, 85],
+    "offset": [43, 37],
     "layers": [
       { "interactive": true, "img": "obj/skeleton/skeleton-with-skull.png" },
-      { "img": "obj/skeleton/skeleton-with-skull-shadow.png", "offset": [2, 2], "shadow": true }
+      { "img": "obj/skeleton/skeleton-with-skull-shadow.png", "offset": [1, 1], "shadow": true }
     ]
   },
   "player_skeleton_without_skull": {
-    "size": [128, 128],
-    "offset": [64, 56],
+    "size": [85, 85],
+    "offset": [43, 37],
     "layers": [
       { "interactive": true, "img": "obj/skeleton/skeleton-without-skull.png" },
-      { "img": "obj/skeleton/skeleton-without-skull-shadow.png", "offset": [2, 2], "shadow": true }
+      { "img": "obj/skeleton/skeleton-without-skull-shadow.png", "offset": [1, 1], "shadow": true }
     ]
   },
   "build": {

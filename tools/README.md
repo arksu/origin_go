@@ -72,8 +72,8 @@ node tools/tests/pixi_semantics_test.mjs             # fixtures through the REAL
 pair from `art_source/objects/skeleton/` to the client's `obj/skeleton/` assets.
 `--check` verifies the source SHA-256 checksums and byte-exact output without
 writing files. The export preserves the shared canvas and uses nearest-neighbor
-resampling to 128×128, matching the commoner's approximately 96 px body height.
-The resources share abdomen anchor `(64, 56)`; removing the skull never recenters
+resampling to 85×85, the original 128×128 size divided by 1.5 and rounded to whole pixels.
+The resources share abdomen anchor `(43, 37)`; removing the skull never recenters
 the remaining body. Separate compact contact shadows offset down/right can be
 hidden while carrying. No model, texture or animation assets are rebuilt.
 

@@ -16,7 +16,7 @@ import (
 
 const (
 	// CorpseDecaySeconds counts server runtime, including time in unloaded chunks.
-	CorpseDecaySeconds int64 = 21600
+	CorpseDecaySeconds int64 = 120
 
 	playerDeadBehaviorKey = "player_dead"
 	actionUnequip         = "unequip"
