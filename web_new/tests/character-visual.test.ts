@@ -17,12 +17,13 @@ import { ACTOR_RENDER_MODE_STORAGE_KEY, loadActorRenderMode, persistActorRenderM
 import { RENDER_DEBUG_STORAGE_KEY, loadRenderDebugEnabled, persistRenderDebugEnabled } from '../src/composables/useRenderDebugSettings'
 import type { ActionAnimationDefinition } from '../src/types/actionAnimationDefs'
 import type { EquipmentDefinition } from '../src/game/actors/equipment'
-import { DOMAdapter, Sprite, Texture } from 'pixi.js'
+import { Container, DOMAdapter, Sprite, Texture } from 'pixi.js'
 import { ShallowWaterVisual } from '../src/game/actors/ShallowWaterVisual'
 import { SHALLOW_WATER } from '../src/game/actors/shallowWaterConfig'
 import { ObjectView } from '../src/game/ObjectView'
-import { ResourceLoader } from '../src/game/ResourceLoader'
+import { ResourceLoader, type LayerDef, type ResourceDef } from '../src/game/ResourceLoader'
 import type { ActorRenderer } from '../src/game/actors/ActorRenderer'
+import { ObjectManager } from '../src/game/ObjectManager'
 
 test('waterline reverses smoothly and clears unknown terrain without destroying the shared texture', () => {
   const effect = new ShallowWaterVisual([Texture.EMPTY])
@@ -175,6 +176,65 @@ test('store accepts only a newer revision of the current incarnation and cannot 
   assert.equal(store.updateCharacterVisual(101, visual('9007199254740995')), false)
   store.setPlayerLeaveWorld()
   assert.equal(store.updateCharacterVisual(101, visual('2', '0:8589934593')), false)
+})
+
+test('paired skeleton sprites share their abdomen anchor and culling includes the full unloaded canvas', () => {
+  for (const resourcePath of ['player_skeleton', 'player_skeleton_without_skull']) {
+    const resource = ResourceLoader.getResourceDef(resourcePath)!
+    assert.equal(resource.actor3d, undefined)
+    assert.deepEqual(resource.size, [128, 128])
+    assert.deepEqual(resource.offset, [64, 56])
+    assert.equal(resource.layers[0]!.interactive, true)
+    assert.equal(resource.layers[1]!.shadow, true)
+    assert.equal(resource.layers[1]!.interactive, undefined)
+    const position = ResourceLoader.resolveLayerPosition(resource.layers[0]!, resource)
+    assert.deepEqual(position, { x: -64, y: -56 })
+  }
+})
+
+test('replacing a corpse with a skeleton releases its actor and covers the sprite below its abdomen', async t => {
+  const adapter = DOMAdapter.get()
+  DOMAdapter.set({ ...adapter, createCanvas: () => ({ getContext: () => null }) as unknown as HTMLCanvasElement })
+  t.after(() => DOMAdapter.set(adapter))
+  t.mock.method(ResourceLoader, 'createSprite', async (layer: LayerDef, resource: ResourceDef) => {
+    const sprite = new Sprite(Texture.EMPTY)
+    const position = ResourceLoader.resolveLayerPosition(layer, resource)
+    sprite.position.set(position.x, position.y)
+    sprite.zIndex = ResourceLoader.resolveLayerZ(layer)
+    return sprite
+  })
+  const { actor } = await fixtureActor()
+  const releases = t.mock.fn(() => actor.destroy())
+  const renderer = { create: () => ({ actor, sprite: new Sprite(Texture.EMPTY), immersionPx: 0 }), release: releases }
+  const manager = new ObjectManager()
+  manager.setParentContainer(new Container())
+  manager.setActorRenderer(renderer as unknown as ActorRenderer)
+  const common = { entityId: 17, position: { x: 50, y: 50 }, size: { x: 9, y: 9 } }
+  manager.spawnObject({ ...common, typeId: 15, resourcePath: 'player' })
+  const corpseContainer = manager.getObject(17)!.getContainer()
+  manager.setKnockedOutPose(17, true)
+  manager.spawnObject({ ...common, typeId: 17, resourcePath: 'player_skeleton' })
+  assert.equal(releases.mock.callCount(), 1)
+  assert.equal(corpseContainer.destroyed, true)
+  assert.equal(manager.getObjectCount(), 1)
+  const skeleton = manager.getObject(17)!
+  assert.equal(skeleton.hasAnimatedFrames(), false)
+  assert.equal(skeleton.getContainer().rotation, 0)
+  const bounds = skeleton.computeScreenBounds()
+  const container = skeleton.getContainer()
+  assert.ok(bounds.minX <= container.x - 64)
+  assert.ok(bounds.minY <= container.y - 56)
+  assert.ok(bounds.maxX >= container.x + 64)
+  assert.ok(bounds.maxY >= container.y + 72, 'canvas below the abdomen must remain visible at viewport edges')
+  await Promise.resolve()
+  const shadow = skeleton.getContainer().children.find(child => child.zIndex === -1)!
+  assert.ok(shadow)
+  assert.equal(shadow.visible, true)
+  manager.setCarryVisualRelation(17, 99)
+  assert.equal(shadow.visible, false, 'lifting must hide only the separate ground shadow')
+  manager.clearCarryVisualRelation(17)
+  assert.equal(shadow.visible, true)
+  manager.clear()
 })
 
 // Synthetic test fixtures only: production meshes and animation files are not

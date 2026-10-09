@@ -15,6 +15,9 @@ import (
 )
 
 const (
+	// CorpseDecaySeconds counts server runtime, including time in unloaded chunks.
+	CorpseDecaySeconds int64 = 21600
+
 	playerDeadBehaviorKey = "player_dead"
 	actionUnequip         = "unequip"
 
@@ -40,6 +43,30 @@ func (playerDeadBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefCo
 		return 0, fmt.Errorf("player_dead def config context is nil")
 	}
 	return parsePriorityOnlyConfig(ctx.RawConfig, playerDeadBehaviorKey)
+}
+
+func (playerDeadBehavior) InitObject(ctx *contracts.BehaviorObjectInitContext) error {
+	if ctx == nil || ctx.World == nil || ctx.Handle == types.InvalidHandle || !ctx.World.Alive(ctx.Handle) || ctx.EntityID == 0 {
+		return nil
+	}
+	if ctx.Reason != contracts.ObjectBehaviorInitReasonSpawn && ctx.Reason != contracts.ObjectBehaviorInitReasonRestore && ctx.Reason != contracts.ObjectBehaviorInitReasonTransform {
+		return nil
+	}
+	now := ecs.GetResource[ecs.TimeState](ctx.World).RuntimeSecondsTotal
+	var deadline int64
+	ecs.WithComponent(ctx.World, ctx.Handle, func(state *components.ObjectInternalState) {
+		if existing, ok := components.GetBehaviorState[components.CorpseDecayBehaviorState](*state, playerDeadBehaviorKey); ok && existing != nil && existing.DecayAtRuntimeSeconds > 0 {
+			deadline = existing.DecayAtRuntimeSeconds
+			return
+		}
+		deadline = now + CorpseDecaySeconds
+		components.SetBehaviorState(state, playerDeadBehaviorKey, &components.CorpseDecayBehaviorState{DecayAtRuntimeSeconds: deadline})
+		state.IsDirty = true
+	})
+	if deadline > 0 {
+		ecs.EnsureCorpseDecaySchedule(ctx.World).Schedule(ctx.Handle, ctx.EntityID, deadline)
+	}
+	return nil
 }
 
 func (playerDeadBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) []contracts.ContextAction {

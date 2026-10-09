@@ -1001,6 +1001,12 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 				return nil, fmt.Errorf("failed to decode burner state: %w", err)
 			}
 			runtimeState.Behaviors[behaviorKey] = &burnerState
+		case "player_dead":
+			var corpseState components.CorpseDecayBehaviorState
+			if err := json.Unmarshal(rawBehaviorState, &corpseState); err != nil {
+				return nil, fmt.Errorf("failed to decode corpse decay state: %w", err)
+			}
+			runtimeState.Behaviors[behaviorKey] = &corpseState
 		default:
 			cloned := append([]byte(nil), rawBehaviorState...)
 			runtimeState.Behaviors[behaviorKey] = json.RawMessage(cloned)

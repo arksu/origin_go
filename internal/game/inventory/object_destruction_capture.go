@@ -41,35 +41,49 @@ type objectLootContainerStamp struct {
 	height  uint8
 }
 
-// ObjectLootCapture incrementally reads a quarantined HP-zero object's inventory
-// tree. The caller holds the owning shard's read lock for each CaptureBatch and
-// prevents inventory mutations until completion. No mutable ECS data is retained.
+// ObjectLootCapture incrementally reads a quarantined object's inventory tree.
+// Destruction requires zero HP; lifecycle transformation retains valid HP. The
+// caller holds the owning shard's read lock for each CaptureBatch and prevents
+// inventory mutations until completion. No mutable ECS data is retained.
 type ObjectLootCapture struct {
-	targetID     types.EntityID
-	target       types.Handle
-	world        *ecs.World
-	registry     *itemdefs.Registry
-	roots        []ecs.InventoryRefEntry
-	nextRoot     int
-	frames       []objectLootFrame
-	items        []ObjectLootItem
-	maxItemID    types.EntityID
-	refs         []ecs.InventoryRefEntry
-	stamps       []objectLootContainerStamp
-	seenItems    map[types.EntityID]struct{}
-	seenRefs     map[types.Handle]struct{}
-	validateNext int
-	err          error
-	done         bool
+	targetID       types.EntityID
+	target         types.Handle
+	world          *ecs.World
+	registry       *itemdefs.Registry
+	roots          []ecs.InventoryRefEntry
+	nextRoot       int
+	frames         []objectLootFrame
+	items          []ObjectLootItem
+	maxItemID      types.EntityID
+	refs           []ecs.InventoryRefEntry
+	stamps         []objectLootContainerStamp
+	seenItems      map[types.EntityID]struct{}
+	seenRefs       map[types.Handle]struct{}
+	validateNext   int
+	err            error
+	done           bool
+	transformation bool
 }
 
 // NewObjectLootCapture takes its own copy of the owner's ordered root refs.
+// Ordinary destruction still requires the target's HP to be zero.
 func NewObjectLootCapture(targetID types.EntityID, roots []ecs.InventoryRefEntry) *ObjectLootCapture {
+	return newObjectLootCapture(targetID, roots, false)
+}
+
+// NewObjectLootCaptureForTransformation captures a quarantined lifecycle
+// transition without reducing HP. Health must remain finite and nonnegative.
+func NewObjectLootCaptureForTransformation(targetID types.EntityID, roots []ecs.InventoryRefEntry) *ObjectLootCapture {
+	return newObjectLootCapture(targetID, roots, true)
+}
+
+func newObjectLootCapture(targetID types.EntityID, roots []ecs.InventoryRefEntry, transformation bool) *ObjectLootCapture {
 	return &ObjectLootCapture{
-		targetID:  targetID,
-		roots:     append([]ecs.InventoryRefEntry(nil), roots...),
-		seenItems: make(map[types.EntityID]struct{}),
-		seenRefs:  make(map[types.Handle]struct{}),
+		targetID:       targetID,
+		transformation: transformation,
+		roots:          append([]ecs.InventoryRefEntry(nil), roots...),
+		seenItems:      make(map[types.EntityID]struct{}),
+		seenRefs:       make(map[types.Handle]struct{}),
 	}
 }
 
@@ -210,7 +224,14 @@ func (c *ObjectLootCapture) validTarget(w *ecs.World, registry *itemdefs.Registr
 		return false
 	}
 	state, ok := ecs.GetComponent[components.ObjectInternalState](w, handle)
-	if !ok || !state.HasHP || state.HP != 0 {
+	if !ok || !state.HasHP {
+		return false
+	}
+	if c.transformation {
+		if !ecs.ObjectDestructionPending(w, handle) || state.HP < 0 || math.IsNaN(state.HP) || math.IsInf(state.HP, 0) {
+			return false
+		}
+	} else if state.HP != 0 {
 		return false
 	}
 	if ecs.GetResource[ecs.InventoryRefIndex](w).OwnerEntryCount(c.targetID) != len(c.roots) {

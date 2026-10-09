@@ -662,12 +662,13 @@ export class ObjectView {
         maxY = Math.max(maxY, cy + extent)
       }
     }
-    // Baked feet extend below the ground anchor; include the entire frame even
-    // before it loads, and also when the existing KO pose rotates the container.
+    // Ground props can extend below their belly anchor. Declared frame sizes
+    // keep their complete canvas visible before asynchronous textures load.
     for (const layer of this.resDef?.layers ?? []) {
-      if (!layer.spriteSheet || !this.resDef) continue
+      const frameSize = layer.spriteSheet?.frameSize ?? (layer.img ? this.resDef?.size : undefined)
+      if (!frameSize || !this.resDef) continue
       const position = ResourceLoader.resolveLayerPosition(layer, this.resDef)
-      const [width, height] = layer.spriteSheet.frameSize
+      const [width, height] = frameSize
       const cosine = Math.cos(this.container.rotation)
       const sine = Math.sin(this.container.rotation)
       for (const localX of [position.x, position.x + width]) {

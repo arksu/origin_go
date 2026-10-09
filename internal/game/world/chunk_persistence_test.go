@@ -124,3 +124,66 @@ func TestCommittedDropInsertionDoesNotWaitForInFlightLoad(t *testing.T) {
 	require.NoError(t, cm.InsertCommittedDropped(&object, &root))
 	require.Len(t, chunk.GetRawObjects(), 1)
 }
+
+func TestCommittedSourceReplacementOwnsCleanInventoryFreeSnapshot(t *testing.T) {
+	installObjectHealthLifecycleDefinitions(t)
+	cm := newTestChunkManagerWithLoadWorkers(0)
+	defer cm.Stop()
+	coord := types.ChunkCoord{X: 2, Y: 2}
+	chunk := core.NewChunk(coord, 1, 0, constt.ChunkSize)
+	chunk.SetState(types.ChunkStatePreloaded)
+	cm.chunks[coord] = chunk
+	chunk.SetRawObjects([]*repository.Object{{ID: 902, TypeID: objectHealthContainerTypeID}})
+	chunk.SetRawInventoriesForOwner(902, []repository.Inventory{{OwnerID: 902, Data: []byte(`{"items":[{"item_id":1}]}`)}})
+	chunk.SetRawDirtyObjectIDs(map[types.EntityID]struct{}{902: {}})
+	chunk.MarkDeletedObjectID(902)
+	raw := transformationReplacement(902)
+	raw.ChunkX, raw.ChunkY = coord.X, coord.Y
+	raw.Data = pqtype.NullRawMessage{Valid: true, RawMessage: []byte(`{"a":1}`)}
+	require.NoError(t, cm.PinPersistence(coord))
+	require.NoError(t, cm.ReplaceCommittedSource(raw))
+	raw.Data.RawMessage[2] = 'b'
+	raw.TypeID = objectHealthContainerTypeID
+	objects := chunk.GetRawObjects()
+	require.Len(t, objects, 1)
+	require.Equal(t, int64(902), objects[0].ID)
+	require.Equal(t, objectHealthLifecycleTypeID, objects[0].TypeID)
+	require.Equal(t, `{"a":1}`, string(objects[0].Data.RawMessage))
+	require.Empty(t, chunk.GetRawInventoriesByOwner()[902])
+	require.Empty(t, chunk.GetRawDirtyObjectIDs())
+	require.Empty(t, chunk.GetDeletedObjectIDs())
+	require.EqualValues(t, 1, cm.persistenceFor(coord).pins.Load(), "cache application must not release the operation pin")
+	cm.UnpinPersistence(coord)
+}
+
+func TestCommittedSourceReplacementInsertionAndValidation(t *testing.T) {
+	installObjectHealthLifecycleDefinitions(t)
+	cm := newTestChunkManagerWithLoadWorkers(0)
+	defer cm.Stop()
+	coord := types.ChunkCoord{X: 2, Y: 2}
+	chunk := core.NewChunk(coord, 1, 0, constt.ChunkSize)
+	chunk.SetState(types.ChunkStatePreloaded)
+	cm.chunks[coord] = chunk
+	raw := transformationReplacement(903)
+	raw.ChunkX, raw.ChunkY = coord.X, coord.Y
+	gate := cm.persistenceFor(coord)
+	gate.ioMu.Lock()
+	err := cm.ReplaceCommittedSource(raw)
+	gate.ioMu.Unlock()
+	require.ErrorIs(t, err, ErrChunkPersistenceBusy)
+	require.Empty(t, chunk.GetRawObjects())
+	require.NoError(t, cm.ReplaceCommittedSource(raw))
+	require.Len(t, chunk.GetRawObjects(), 1)
+	for _, mutate := range []func(*repository.Object){
+		func(raw *repository.Object) { raw.Region++ },
+		func(raw *repository.Object) { raw.Layer++ },
+		func(raw *repository.Object) { raw.Hp.Valid = false },
+	} {
+		invalid := *raw
+		mutate(&invalid)
+		require.ErrorIs(t, cm.ReplaceCommittedSource(&invalid), ErrInvalidCommittedObject)
+	}
+	raw.ChunkX = 500
+	require.ErrorIs(t, cm.ReplaceCommittedSource(raw), ErrChunkOutsideWorld)
+	require.ErrorIs(t, cm.ReplaceCommittedSource(nil), ErrInvalidCommittedObject)
+}

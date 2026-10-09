@@ -172,6 +172,39 @@ func (cm *ChunkManager) RemoveCommittedSource(coord types.ChunkCoord, id types.E
 	}
 }
 
+// ReplaceCommittedSource reconciles an already-durable in-place transform.
+// Empty owned inventories deliberately override older load snapshots. Runtime
+// transform and inventory cleanup remain the owning shard's responsibility.
+func (cm *ChunkManager) ReplaceCommittedSource(raw *repository.Object) error {
+	if cm == nil || validateCommittedSource(raw) != nil || raw.Region != cm.region || raw.Layer != cm.layer {
+		return ErrInvalidCommittedObject
+	}
+	coord := types.ChunkCoord{X: raw.ChunkX, Y: raw.ChunkY}
+	if !cm.IsWithinWorldBounds(coord) {
+		return ErrChunkOutsideWorld
+	}
+	gate := cm.persistenceFor(coord)
+	if !gate.ioMu.TryLock() {
+		return ErrChunkPersistenceBusy
+	}
+	defer gate.ioMu.Unlock()
+	cm.chunksMu.Lock()
+	chunk := cm.chunks[coord]
+	if chunk == nil {
+		chunk = core.NewChunk(coord, cm.region, cm.layer, constt.ChunkSize)
+		cm.chunks[coord] = chunk
+	}
+	cm.chunksMu.Unlock()
+	objectCopy := *raw
+	objectCopy.Data.RawMessage = append([]byte(nil), raw.Data.RawMessage...)
+	chunk.InsertCommittedObject(&objectCopy, nil)
+	cm.markPersistenceReady(coord)
+	if chunk.GetState() == types.ChunkStateUnloaded {
+		_ = cm.requestLoad(coord)
+	}
+	return nil
+}
+
 // WorldBounds returns the half-open bounds in world coordinates.
 func (cm *ChunkManager) WorldBounds() (minX, minY, maxX, maxY int) {
 	size := constt.ChunkSize * constt.CoordPerTile

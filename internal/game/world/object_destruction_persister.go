@@ -10,6 +10,7 @@ import (
 
 	constt "origin/internal/const"
 	"origin/internal/game/inventory"
+	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 )
@@ -25,6 +26,49 @@ func (p *DroppedItemPersisterDB) ReplaceObjectWithDroppedItems(
 	region int,
 	sourceID types.EntityID,
 	maxAllocatedID types.EntityID,
+	next func(dst []inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error),
+) error {
+	return p.persistObjectReplacement(ctx, region, sourceID, maxAllocatedID, nil, next)
+}
+
+// TransformObjectWithDroppedItems atomically releases every source inventory
+// and installs an inventory-free normal object under the same durable identity.
+// replacement and iterator payloads must remain immutable until this call returns.
+// Replaying the same snapshot and drops after an ambiguous commit is idempotent.
+func (p *DroppedItemPersisterDB) TransformObjectWithDroppedItems(
+	ctx context.Context,
+	replacement *repository.Object,
+	maxAllocatedID types.EntityID,
+	next func(dst []inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error),
+) error {
+	if err := validateCommittedSource(replacement); err != nil {
+		return err
+	}
+	return p.persistObjectReplacement(ctx, replacement.Region, types.EntityID(replacement.ID), maxAllocatedID, replacement, next)
+}
+
+func validateCommittedSource(raw *repository.Object) error {
+	if raw == nil || raw.ID <= 0 || raw.Region <= 0 || raw.TypeID <= 0 || raw.TypeID == constt.DroppedItemTypeID ||
+		!raw.Hp.Valid || raw.Hp.Float64 <= 0 || math.IsNaN(raw.Hp.Float64) || math.IsInf(raw.Hp.Float64, 0) || raw.DeletedAt.Valid {
+		return ErrInvalidCommittedObject
+	}
+	registry := objectdefs.Global()
+	if registry == nil {
+		return ErrInvalidCommittedObject
+	}
+	def, ok := registry.GetByID(raw.TypeID)
+	if !ok || def.Key == "player" || def.HP <= 0 || (def.Components != nil && len(def.Components.Inventory) != 0) {
+		return ErrInvalidCommittedObject
+	}
+	return nil
+}
+
+func (p *DroppedItemPersisterDB) persistObjectReplacement(
+	ctx context.Context,
+	region int,
+	sourceID types.EntityID,
+	maxAllocatedID types.EntityID,
+	replacement *repository.Object,
 	next func(dst []inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error),
 ) error {
 	if p == nil || p.db == nil || ctx == nil || next == nil || region <= 0 || sourceID == 0 || sourceID > math.MaxInt64 || maxAllocatedID > math.MaxInt64 {
@@ -60,7 +104,23 @@ func (p *DroppedItemPersisterDB) ReplaceObjectWithDroppedItems(
 				return fmt.Errorf("persist destruction ID high watermark: %w", err)
 			}
 		}
-		return deleteObjectRows(ctx, q, region, sourceID, true)
+		if replacement == nil {
+			return deleteObjectRows(ctx, q, region, sourceID, true)
+		}
+		if err := q.DeleteInventoriesByOwner(ctx, int64(sourceID)); err != nil {
+			return fmt.Errorf("delete transformed object inventories: %w", err)
+		}
+		if err := q.UpsertObject(ctx, repository.UpsertObjectParams{
+			ID: replacement.ID, TypeID: replacement.TypeID, Region: replacement.Region,
+			X: replacement.X, Y: replacement.Y, Layer: replacement.Layer,
+			ChunkX: replacement.ChunkX, ChunkY: replacement.ChunkY,
+			Heading: replacement.Heading, Quality: replacement.Quality, Hp: replacement.Hp,
+			OwnerID: replacement.OwnerID, Data: replacement.Data,
+			CreateTick: replacement.CreateTick, LastTick: replacement.LastTick,
+		}); err != nil {
+			return fmt.Errorf("persist transformed object: %w", err)
+		}
+		return nil
 	})
 }
 

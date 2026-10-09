@@ -65,6 +65,12 @@ type BurnerBehaviorState struct {
 	OutcomeCreated     bool   `json:"outcome_created,omitempty"`
 }
 
+// CorpseDecayBehaviorState persists the absolute server-runtime deadline in the
+// existing player_dead behavior state; offline time does not advance it.
+type CorpseDecayBehaviorState struct {
+	DecayAtRuntimeSeconds int64 `json:"decay_at_runtime_seconds"`
+}
+
 type BuildRequiredItemState struct {
 	Slot int `json:"slot,omitempty"`
 
