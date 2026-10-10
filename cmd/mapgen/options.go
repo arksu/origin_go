@@ -175,6 +175,7 @@ type PNGOptions struct {
 
 type MapgenOptions struct {
 	ConfigPath         string
+	SpotsConfigPath    string
 	ChunksX            int
 	ChunksY            int
 	Seed               int64
@@ -192,6 +193,7 @@ type MapgenOptions struct {
 func DefaultMapgenOptions() MapgenOptions {
 	return MapgenOptions{
 		ConfigPath:         defaultGenConfigPath,
+		SpotsConfigPath:    defaultSpotsConfigPath,
 		ChunksX:            50,
 		ChunksY:            50,
 		Seed:               0,
@@ -348,6 +350,7 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 
 	var (
 		genConfigPath      = defaultGenConfigPath
+		spotsConfigPath    = defaults.SpotsConfigPath
 		chunksX            = defaults.ChunksX
 		chunksY            = defaults.ChunksY
 		seed               = defaults.Seed
@@ -363,6 +366,7 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 
 	fs := flag.NewFlagSet("mapgen", flag.ContinueOnError)
 	fs.StringVar(&genConfigPath, "gen-config", genConfigPath, "path to YAML generation preset")
+	fs.StringVar(&spotsConfigPath, "spots-config", spotsConfigPath, "path to YAML spot configuration")
 	fs.IntVar(&chunksX, "chunks-x", chunksX, "override chunks in X direction")
 	fs.IntVar(&chunksY, "chunks-y", chunksY, "override chunks in Y direction")
 	fs.Int64Var(&seed, "seed", seed, "override random seed (0 = use current time)")
@@ -389,6 +393,7 @@ func ParseMapgenOptions(args []string) (MapgenOptions, error) {
 		return MapgenOptions{}, err
 	}
 	opts.ConfigPath = resolvedConfigPath
+	opts.SpotsConfigPath = spotsConfigPath
 
 	if _, ok := overrides["chunks-x"]; ok {
 		opts.ChunksX = chunksX

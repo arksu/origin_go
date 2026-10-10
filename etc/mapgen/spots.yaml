@@ -1,0 +1,20 @@
+version: 1
+
+district_size_tiles: 512
+radius_tiles: 64
+
+base_quality: 10
+peak_quality_min: 20
+peak_quality_max: 50
+
+spots:
+- type: www
+  center_tiles: [20, 25, 35, 50]
+- type: clay
+  center_tiles: [64]
+- type: soil
+  center_tiles: [35, 60]
+- type: sand
+  center_tiles: [68]
+- type: water
+  center_tiles: [20, 25, 35]
