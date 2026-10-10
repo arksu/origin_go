@@ -32,8 +32,16 @@ type SpotsConfig struct {
 }
 
 type SpotTypeConfig struct {
-	Type        string `yaml:"type"`
-	CenterTiles []int  `yaml:"center_tiles"`
+	Type        string   `yaml:"type"`
+	CenterTiles []int    `yaml:"center_tiles"`
+	SpawnChance *float64 `yaml:"spawn_chance,omitempty"`
+}
+
+func (definition SpotTypeConfig) spawnChance() float64 {
+	if definition.SpawnChance == nil {
+		return 1
+	}
+	return *definition.SpawnChance
 }
 
 func LoadSpotsConfig(path string) (SpotsConfig, string, error) {
@@ -63,8 +71,7 @@ func decodeSpotsConfig(content []byte) (SpotsConfig, error) {
 		return SpotsConfig{}, fmt.Errorf("must contain a single YAML document")
 	}
 	// yaml.v3 can truncate floating-point scalars while decoding into integers.
-	// Every numeric setting in this file is an integer, so reject those scalars
-	// before validating the decoded values.
+	// Only spawn_chance allows fractional values; integer fields stay strict.
 	var document yaml.Node
 	if err := yaml.Unmarshal(content, &document); err != nil {
 		return SpotsConfig{}, fmt.Errorf("decode YAML: %w", err)
@@ -79,6 +86,27 @@ func decodeSpotsConfig(content []byte) (SpotsConfig, error) {
 }
 
 func validateSpotIntegerInput(node *yaml.Node) error {
+	if node.Kind == yaml.AliasNode {
+		return validateSpotIntegerInput(node.Alias)
+	}
+	if node.Kind == yaml.MappingNode {
+		for index := 0; index < len(node.Content); index += 2 {
+			key, value := node.Content[index], node.Content[index+1]
+			if key.Value == "spawn_chance" {
+				for value.Kind == yaml.AliasNode {
+					value = value.Alias
+				}
+				if value.Kind != yaml.ScalarNode || value.Tag != "!!int" && value.Tag != "!!float" {
+					return fmt.Errorf("spawn_chance must be a number (line %d)", value.Line)
+				}
+				continue
+			}
+			if err := validateSpotIntegerInput(value); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	if node.Kind == yaml.ScalarNode && node.Tag == "!!float" {
 		return fmt.Errorf("numeric settings must be integers (line %d)", node.Line)
 	}
@@ -117,6 +145,10 @@ func (config SpotsConfig) Validate() error {
 			return fmt.Errorf("duplicate spot type %q", definition.Type)
 		}
 		seen[index] = true
+		chance := definition.spawnChance()
+		if math.IsNaN(chance) || math.IsInf(chance, 0) || chance < 0 || chance > 1 {
+			return fmt.Errorf("spot %q spawn_chance must be finite and between 0 and 1", definition.Type)
+		}
 		if len(definition.CenterTiles) == 0 {
 			return fmt.Errorf("spot %q center_tiles must not be empty", definition.Type)
 		}

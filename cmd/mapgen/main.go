@@ -359,7 +359,8 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 		return fmt.Errorf("generate and save spots: %w", err)
 	}
 	g.logger.Info("spot generation completed", zap.Any("generated", spotStats.Generated),
-		zap.Any("skipped_no_eligible_tile", spotStats.Skipped), zap.Uint64("districts", spotStats.Districts))
+		zap.Any("skipped_no_eligible_tile", spotStats.Skipped),
+		zap.Any("skipped_by_chance", spotStats.SkippedByChance), zap.Uint64("districts", spotStats.Districts))
 
 	return nil
 }

@@ -38,7 +38,7 @@ func spotStageOptions(t *testing.T) MapgenOptions {
 }
 
 func TestMapgenSpotsPreflightBeforeDatabaseAccess(t *testing.T) {
-	for _, failure := range []string{"missing config", "invalid config", "coordinate overflow"} {
+	for _, failure := range []string{"missing config", "invalid config", "invalid spawn chance", "coordinate overflow"} {
 		t.Run(failure, func(t *testing.T) {
 			options := spotStageOptions(t)
 			switch failure {
@@ -47,6 +47,14 @@ func TestMapgenSpotsPreflightBeforeDatabaseAccess(t *testing.T) {
 			case "invalid config":
 				options.SpotsConfigPath = filepath.Join(t.TempDir(), "invalid.yaml")
 				require.NoError(t, os.WriteFile(options.SpotsConfigPath, []byte("version: 2\n"), 0o600))
+			case "invalid spawn chance":
+				config := validSpotsConfig()
+				chance := 1.1
+				config.Spots[0].SpawnChance = &chance
+				content, err := yaml.Marshal(config)
+				require.NoError(t, err)
+				options.SpotsConfigPath = filepath.Join(t.TempDir(), "invalid.yaml")
+				require.NoError(t, os.WriteFile(options.SpotsConfigPath, content, 0o600))
 			case "coordinate overflow":
 				// A huge dimension must fail before either terrain allocation or DB access.
 				options.ChunksX = int(^uint32(0)>>1)/_const.ChunkWorldSize + 1

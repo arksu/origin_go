@@ -48,6 +48,14 @@ underground well source and has its center on grass or forest. A district with
 no eligible center tile skips that type. Centers cannot be on water; circles
 may overlap water, other districts, other spots, and the world boundary.
 
+Each type can set `spawn_chance` from 0 to 1 (omitted defaults to 1). The default
+config uses 0.25 for `www` and 1 for the other types. This is one deterministic
+roll per district/type using the map seed, independent of eligible tile count:
+0 disables that type, 1 always places it when terrain allows, and 0.25 gives a
+25% chance in each eligible district rather than an exact 25% quota. Changing
+chance does not change the center or quality of retained spots. Logs distinguish
+`skipped_no_eligible_tile` from `skipped_by_chance`.
+
 Config dimensions are in tiles. Persisted centers and radii use absolute world
 units calculated through `CoordPerTile`; chunk sizes use the shared constants.
 Config and coordinate-range checks and a strict runtime read happen before any
