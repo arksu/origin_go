@@ -18,7 +18,7 @@ import (
 
 func directionalTestCommands(w *ecs.World, actions *ActionService) (*systems.NetworkCommandSystem, *network.PlayerCommandInbox) {
 	inbox := network.NewPlayerCommandInbox(network.CommandQueueConfig{MaxQueueSize: 20, MaxPacketsPerSecond: 40, MaxCommandsPerTickPerClient: 20})
-	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, 0, zap.NewNop())
+	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, nil, 0, zap.NewNop())
 	commands.SetDirectionalSessionValidator(func(id types.EntityID, client uint64, epoch uint32) bool { return id == 1 && client == 1 && epoch == 1 })
 	commands.SetActionService(actions)
 	ecs.SetResource(w, ecs.TimeState{Now: time.Unix(100, 0), WallNow: time.Unix(10000, 0)})

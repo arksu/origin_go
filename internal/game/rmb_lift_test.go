@@ -39,7 +39,7 @@ func newRMBLiftTest(t *testing.T) *rmbLiftTest {
 	lift.alerts = sender
 	sender.states = nil
 	inbox := network.NewPlayerCommandInbox(network.CommandQueueConfig{MaxQueueSize: 20, MaxPacketsPerSecond: 20, MaxCommandsPerTickPerClient: 20})
-	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, 0, zap.NewNop())
+	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, nil, 0, zap.NewNop())
 	commands.SetActionService(actions)
 	commands.SetLiftCommandService(lift)
 	return &rmbLiftTest{world: w, player: player, object: object, lift: lift, actions: actions, sender: sender, commands: commands, inbox: inbox}
@@ -216,7 +216,7 @@ func TestRMBGroundCancelsLiftSelectionAndApproach(t *testing.T) {
 			}
 			pending, _ := ecs.GetComponent[components.PendingLiftTransition](world, player)
 			inbox := network.NewPlayerCommandInbox(network.CommandQueueConfig{MaxQueueSize: 20, MaxPacketsPerSecond: 20, MaxCommandsPerTickPerClient: 20})
-			commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, 0, nil)
+			commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, nil, 0, nil)
 			commands.SetActionService(actions)
 			commands.SetLiftCommandService(lift)
 			test := &rmbLiftTest{world: world, player: player, object: target, lift: lift, actions: actions, sender: sender, inbox: inbox, commands: commands}

@@ -79,7 +79,7 @@ func TestNetworkCommandSystem_InfoInspectionConsumesMapClickAndGroundClick(t *te
 		ecs.AddComponent(w, h, components.Collider{HalfWidth: 1, HalfHeight: 1, Layer: 1, Mask: 1})
 	})
 
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	admin := &testAdminObjectInfoHandler{}
 	system.SetAdminHandler(admin)
 	ecs.GetResource[ecs.PendingAdminObjectInfo](world).Set(playerID)
@@ -122,7 +122,7 @@ func TestNetworkCommandSystem_DestroyConsumesMapClickAndGroundClick(t *testing.T
 		ecs.AddComponent(w, h, components.Collider{HalfWidth: 1, HalfHeight: 1, Layer: 1, Mask: 1})
 	})
 
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	admin := &testAdminObjectInfoHandler{}
 	system.SetAdminHandler(admin)
 	ecs.GetResource[ecs.PendingAdminDestroy](world).Set(playerID)
@@ -179,7 +179,7 @@ func TestNetworkCommandSystem_SecondarySingleAction_AutoExecWhenDefDisablesSingl
 		},
 	}))
 
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	menuSender := &testContextMenuSender{}
 	system.SetContextMenuSender(menuSender)
 	system.SetContextActionService(testContextActionResolver{
@@ -237,7 +237,7 @@ func TestNetworkCommandSystem_SecondarySingleAction_OpensMenuWhenDefEnablesSingl
 		},
 	}))
 
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	menuSender := &testContextMenuSender{}
 	system.SetContextMenuSender(menuSender)
 	system.SetContextActionService(testContextActionResolver{
@@ -281,7 +281,7 @@ func TestNetworkCommandSystem_SecondarySingleAction_OpensMenuWhenDefEnablesSingl
 
 func TestNetworkCommandSystem_CleanupPendingContextActions_ClearsMatchingLinkIntent(t *testing.T) {
 	world := ecs.NewWorldForTesting()
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 
 	const (
 		playerID = types.EntityID(5001)
@@ -318,7 +318,7 @@ func TestNetworkCommandSystem_CleanupPendingContextActions_ClearsMatchingLinkInt
 
 func TestNetworkCommandSystem_CleanupPendingContextActions_PreservesOtherLinkIntent(t *testing.T) {
 	world := ecs.NewWorldForTesting()
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 
 	const (
 		playerID   = types.EntityID(6001)

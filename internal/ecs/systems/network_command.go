@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"math"
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
@@ -21,10 +22,14 @@ const (
 	NetworkCommandSystemPriority = 0
 )
 
-// ChatDeliveryService NetworkCommandSystem processes player commands from the network layer
-// This is the bridge between network I/O and ECS game state
-// Commands are drained from the inbox at the start of each tick
-// ChatDeliveryService provides methods to send chat messages to clients
+// ChatRecipientSelector appends local recipients under the owning shard lock.
+// The caller owns dst and may reuse it after synchronous delivery returns.
+type ChatRecipientSelector interface {
+	AppendLocalChatRecipients(w *ecs.World, x, y, radius, radiusSq float64, dst []types.EntityID) []types.EntityID
+}
+
+// ChatDeliveryService provides synchronous chat delivery. Implementations must
+// consume entityIDs before BroadcastChatMessage returns, without retaining it.
 type ChatDeliveryService interface {
 	SendChatMessage(entityID types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string)
 	BroadcastChatMessage(entityIDs []types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string)
@@ -161,6 +166,8 @@ type NetworkCommandSystem struct {
 	serverInbox       *network.ServerJobInbox
 	logger            *zap.Logger
 	chatDelivery      ChatDeliveryService
+	chatSelector      ChatRecipientSelector
+	chatLocalRadius   float64
 	chatLocalRadiusSq float64
 
 	// Inventory operation handling
@@ -189,6 +196,7 @@ type NetworkCommandSystem struct {
 	// Reusable buffers to avoid allocations
 	playerCommands       []*network.PlayerCommand
 	serverJobs           []*network.ServerJob
+	chatRecipients       []types.EntityID
 	pendingContextQuery  *ecs.PreparedQuery
 	pendingContextRemove []types.Handle
 }
@@ -198,26 +206,30 @@ func NewNetworkCommandSystem(
 	playerInbox *network.PlayerCommandInbox,
 	serverInbox *network.ServerJobInbox,
 	chatDelivery ChatDeliveryService,
+	chatSelector ChatRecipientSelector,
 	inventoryExecutor InventoryOperationExecutor,
 	inventoryResultSender InventoryResultSender,
 	visionSystem *VisionSystem,
 	chatLocalRadius int,
 	logger *zap.Logger,
 ) *NetworkCommandSystem {
-	radiusSq := float64(chatLocalRadius * chatLocalRadius)
+	radius := math.Abs(float64(chatLocalRadius))
 	return &NetworkCommandSystem{
 		BaseSystem:            ecs.NewBaseSystem("NetworkCommandSystem", NetworkCommandSystemPriority),
 		playerInbox:           playerInbox,
 		serverInbox:           serverInbox,
 		logger:                logger,
 		chatDelivery:          chatDelivery,
+		chatSelector:          chatSelector,
 		inventoryExecutor:     inventoryExecutor,
 		inventoryResultSender: inventoryResultSender,
 		visionSystem:          visionSystem,
-		chatLocalRadiusSq:     radiusSq,
+		chatLocalRadius:       radius,
+		chatLocalRadiusSq:     radius * radius,
 		contextPendingTTL:     15 * time.Second,
 		playerCommands:        make([]*network.PlayerCommand, 0, 256),
 		serverJobs:            make([]*network.ServerJob, 0, 64),
+		chatRecipients:        make([]types.EntityID, 0, 32),
 		pendingContextRemove:  make([]types.Handle, 0, 64),
 	}
 }
@@ -994,7 +1006,13 @@ func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handl
 		senderName = *senderAppearance.Name
 	}
 
-	recipients := s.findChatRecipients(w, senderTransform.X, senderTransform.Y, cmd.CharacterID)
+	if s.chatSelector == nil || s.chatDelivery == nil {
+		s.logger.Error("Chat routing dependencies are missing")
+		return
+	}
+	s.chatRecipients = s.chatSelector.AppendLocalChatRecipients(w, senderTransform.X, senderTransform.Y,
+		s.chatLocalRadius, s.chatLocalRadiusSq, s.chatRecipients[:0])
+	recipients := s.chatRecipients
 
 	if len(recipients) == 0 {
 		s.logger.Debug("No recipients found for chat message",
@@ -1015,34 +1033,6 @@ func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handl
 		zap.Int64("sender_id", int64(cmd.CharacterID)),
 		zap.Int("recipients", len(recipients)),
 		zap.Int("text_len", len(payload.Text)))
-}
-
-func (s *NetworkCommandSystem) findChatRecipients(w *ecs.World, senderX, senderY float64, senderID types.EntityID) []types.EntityID {
-	recipients := make([]types.EntityID, 0, 32)
-
-	characterEntities := ecs.GetResource[ecs.CharacterEntities](w)
-
-	for entityID := range characterEntities.Map {
-		handle := w.GetHandleByEntityID(entityID)
-		if handle == types.InvalidHandle || !w.Alive(handle) {
-			continue
-		}
-
-		transform, hasTransform := ecs.GetComponent[components.Transform](w, handle)
-		if !hasTransform {
-			continue
-		}
-
-		dx := transform.X - senderX
-		dy := transform.Y - senderY
-		distSq := dx*dx + dy*dy
-
-		if distSq <= s.chatLocalRadiusSq {
-			recipients = append(recipients, entityID)
-		}
-	}
-
-	return recipients
 }
 
 func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {

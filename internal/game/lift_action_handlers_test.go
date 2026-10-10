@@ -199,7 +199,7 @@ func TestLiftDownForcedCarryLossCancelsPendingPlacement(t *testing.T) {
 func TestColliderLiftApproachesAndCompletesAfterLink(t *testing.T) {
 	world, player, target, lift, actions, _ := newNoColliderLiftActionTest(t)
 	ecs.AddComponent(world, target, components.Collider{HalfWidth: 5, HalfHeight: 5})
-	commands := systems.NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	commands := systems.NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	actions.handlers["lift"] = &liftActionHandler{lift: lift, commands: commands}
 	actions.Activate(world, 1, player, "lift")
 	actions.HandleArmedClick(world, 1, player, 3, target, 1000, 1000)
@@ -221,7 +221,7 @@ func TestColliderLiftApproachesAndCompletesAfterLink(t *testing.T) {
 func TestColliderLiftRejectsNonLiftableAndTargetLoss(t *testing.T) {
 	world, player, target, lift, actions, sender := newNoColliderLiftActionTest(t)
 	ecs.AddComponent(world, target, components.Collider{HalfWidth: 5, HalfHeight: 5})
-	commands := systems.NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	commands := systems.NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	actions.handlers["lift"] = &liftActionHandler{lift: lift, commands: commands}
 	ecs.WithComponent(world, target, func(info *components.EntityInfo) { info.Behaviors = nil })
 	actions.Activate(world, 1, player, "lift")
@@ -241,7 +241,7 @@ func TestColliderLiftRejectsNonLiftableAndTargetLoss(t *testing.T) {
 func TestColliderLiftCancelStopsApproach(t *testing.T) {
 	world, player, target, lift, actions, _ := newNoColliderLiftActionTest(t)
 	ecs.AddComponent(world, target, components.Collider{HalfWidth: 5, HalfHeight: 5})
-	actions.handlers["lift"] = &liftActionHandler{lift: lift, commands: systems.NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())}
+	actions.handlers["lift"] = &liftActionHandler{lift: lift, commands: systems.NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())}
 	actions.Activate(world, 1, player, "lift")
 	actions.HandleArmedClick(world, 1, player, 3, target, 1000, 1000)
 	actions.Cancel(world, 1, player)

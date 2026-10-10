@@ -28,7 +28,7 @@ func newDirectionalFixture(t *testing.T) *directionalFixture {
 		ecs.AddComponent(w, h, components.Transform{X: 100, Y: 100})
 		ecs.AddComponent(w, h, components.Movement{Mode: constt.Walk, Speed: 32})
 	})
-	commands := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	commands := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	commands.SetDirectionalSessionValidator(func(id types.EntityID, client uint64, epoch uint32) bool { return id == 1 && client == 2 && epoch == 3 })
 	ecs.SetResource(w, ecs.TimeState{Now: time.Unix(100, 0), WallNow: time.Unix(10000, 0)})
 	return &directionalFixture{w, player, commands, NewMovementSystem(w, nil, zap.NewNop())}
@@ -345,7 +345,7 @@ func TestDirectionPopulationInputQueueBounded(t *testing.T) {
 	const population = 200
 	world := ecs.NewWorldForTesting()
 	inbox := network.NewPlayerCommandInbox(network.CommandQueueConfig{MaxQueueSize: 500, MaxPacketsPerSecond: 40, MaxCommandsPerTickPerClient: 20})
-	commands := NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 500}), nil, nil, nil, nil, 0, zap.NewNop())
+	commands := NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 500}), nil, nil, nil, nil, nil, 0, zap.NewNop())
 	commands.SetDirectionalSessionValidator(func(id types.EntityID, client uint64, epoch uint32) bool { return uint64(id) == client && epoch == 1 })
 	for id := 1; id <= population; id++ {
 		world.Spawn(types.EntityID(id), func(w *ecs.World, h types.Handle) {
