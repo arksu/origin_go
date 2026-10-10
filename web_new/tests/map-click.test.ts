@@ -29,7 +29,7 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
     render.keyboardMovement = { release() {} }
     render.canvas = {}
     render.inputController = {
-      init() {}, onDirection() {}, suppressMovementKeys() {}, onClick(handler: typeof click) { click = handler },
+      init() {}, onDirection() {}, onCameraReset() {}, suppressMovementKeys() {}, onClick(handler: typeof click) { click = handler },
       onLongPress(handler: typeof longPress) { longPress = handler }, onDragStart() {}, onDragMove() {}, onDragEnd() {},
       onZoom() {}, onPinch() {}, onPinchMove() {}, onPointerMove() {}, onWheel() {},
     }

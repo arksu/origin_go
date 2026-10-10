@@ -109,6 +109,7 @@ export class InputController {
   private onPinchMoveHandler: PinchMoveHandler | null = null
   private onPinchEndHandler: PinchEndHandler | null = null
   private onPointerMoveHandler: PointerMoveHandler | null = null
+  private onCameraResetHandler: (() => void) | null = null
 
   private boundPointerDown: (e: globalThis.PointerEvent) => void
   private boundPointerMove: (e: globalThis.PointerEvent) => void
@@ -239,6 +240,10 @@ export class InputController {
 
   onPointerMove(handler: PointerMoveHandler): void {
     this.onPointerMoveHandler = handler
+  }
+
+  onCameraReset(handler: () => void): void {
+    this.onCameraResetHandler = handler
   }
 
   getModifiers(): number {
@@ -404,6 +409,12 @@ export class InputController {
     if (this.composing || e.isComposing || e.ctrlKey || e.altKey || e.metaKey ||
       isEditable(document.activeElement) || e.composedPath().some(isEditable)) {
       this.suppressMovementKeys()
+      return
+    }
+    if (e.code === 'Home') {
+      if (e.repeat || e.shiftKey || e.defaultPrevented || document.hidden || !this.onCameraResetHandler) return
+      e.preventDefault()
+      this.onCameraResetHandler()
       return
     }
     if (!MOVEMENT_KEYS.has(e.code) || e.repeat) return

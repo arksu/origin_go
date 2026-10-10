@@ -164,6 +164,13 @@ export class Render {
 
     this.inputController.init(this.canvas)
     this.inputController.onDirection((x, y) => this.keyboardMovement.setDirection(x, y))
+    this.inputController.onCameraReset(() => {
+      if (!useGameStore().isInGame || this.playerEntityId === null) return
+      cameraController.setZoom(1)
+      cameraController.resetPanOffset()
+      const position = moveController.getVisualPosition(this.playerEntityId)
+      if (position) cameraController.setPosition(position.x, position.y)
+    })
 
     this.inputController.onClick((event) => {
       if (!hasWorldParams() || !useGameStore().isInGame) return

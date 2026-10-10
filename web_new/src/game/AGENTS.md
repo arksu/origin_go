@@ -131,6 +131,9 @@ facing; completion/cancellation resumes the latest server heading.
 - `follow` mode — Smooth follow player with damping
 - `pan` mode — Middle-mouse drag
 - Zoom with wheel
+- Home restores zoom 1:1, clears pan offset and recenters on the player's current
+  visual position while preserving follow. It does not interrupt movement or
+  handle text editing, composition, or modified shortcuts.
 
 **PlayerCommandController.ts** (singleton):
 - Converts input to `C2S_PlayerAction` messages
