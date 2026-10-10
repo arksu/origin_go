@@ -24,6 +24,7 @@
 etc/*
 !etc/mapgen/
 etc/mapgen/*
+!etc/mapgen/spots.yaml
 !etc/mapgen/presets/
 !etc/mapgen/presets/*.yaml
 

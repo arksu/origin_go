@@ -1,8 +1,8 @@
 # cmd/mapgen — как устроен генератор мира
 
-Офлайн-утилита: генерирует весь мир (тайлы + деревья/валуны) и заливает в Postgres.
+Офлайн-утилита: генерирует весь мир (тайлы + деревья/валуны + ресурсные споты) и заливает в Postgres.
 В рантайме сервер ничего не генерирует. Исследование H&H-первоисточников и философия —
-в [docs/features/mapgen.md](../docs/features/mapgen.md).
+в [docs/features/mapgen.md](../../docs/features/mapgen.md).
 
 ## Запуск
 
@@ -27,6 +27,41 @@ go run ./cmd/mapgen -gen-config ... -seed 42 -chunks-x 50 -chunks-y 50 -threads 
 Generated trees and boulders store `object.hp = NULL`. The server initializes HP
 from the matching object definition on load, without backfilling the database.
 Explicitly saved HP, including zero, is restored unchanged.
+
+## Resource spots
+
+Full database generation automatically runs the spot stage after chunks,
+objects, and `last_used_id` have been saved. Configure it separately:
+
+```bash
+go run ./cmd/mapgen -gen-config etc/mapgen/presets/hnh.yaml -spots-config etc/mapgen/spots.yaml
+```
+
+Apply [the spot migration](../../migrations/20261010_spots.sql) to an existing
+database before running mapgen. A fresh database uses `migrations/schema.sql`.
+The migration creates an empty table; spots are populated by full map generation.
+
+The default spot config declares five types: `www`, `clay`, `soil`, `sand`, and
+`water`. Each 512-tile district gets at most one spot per type, with a 64-tile
+radius and a peak quality in the inclusive range 20–50. `water` represents an
+underground well source and has its center on grass or forest. A district with
+no eligible center tile skips that type. Centers cannot be on water; circles
+may overlap water, other districts, other spots, and the world boundary.
+
+Config dimensions are in tiles. Persisted centers and radii use absolute world
+units calculated through `CoordPerTile`; chunk sizes use the shared constants.
+Config and coordinate-range checks and a strict runtime read happen before any
+region reset. PNG-only and interactive previews do not load spot config or write
+spots. PNG export alongside full database generation still generates spots.
+
+Generation streams five candidates per district and inserts batches of at most
+1000 spots in one transaction. An insertion error rolls back that stage; the
+whole map reset is not atomic. Region reset uses `DELETE` and retains the spot
+ID sequence. Spots store geometry, peak quality, `{}` state, revision `1`, and
+the saved server-runtime timestamp. No generation metadata is stored.
+
+This stage does not change resource gathering, digging, wells, or runtime
+regeneration. Feature details: [spots](../../docs/features/spot.md).
 
 ## Интерактивный предпросмотр слоёв (preview_server.go)
 

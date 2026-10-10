@@ -94,6 +94,7 @@ func main() {
 
 	logger.Info("starting map generation",
 		zap.String("gen_config", opts.ConfigPath),
+		zap.String("spots_config", opts.SpotsConfigPath),
 		zap.Int("chunks_x", opts.ChunksX),
 		zap.Int("chunks_y", opts.ChunksY),
 		zap.Int64("seed", opts.Seed),
@@ -235,6 +236,30 @@ type ChunkTask struct {
 }
 
 func (g *MapGenerator) Generate(ctx context.Context) error {
+	var spotsConfig SpotsConfig
+	var spotRuntimeSeconds int64
+	if !g.options.PNG.OverviewOnly {
+		var err error
+		var resolvedPath string
+		spotsConfig, resolvedPath, err = LoadSpotsConfig(g.options.SpotsConfigPath)
+		if err != nil {
+			return err
+		}
+		width, height, err := g.options.WorldTileDimensions()
+		if err != nil {
+			return err
+		}
+		if err := spotsConfig.ValidateForWorld(width, height); err != nil {
+			return fmt.Errorf("validate spots for world: %w", err)
+		}
+		spotRuntimeSeconds, err = loadSpotRuntimeSeconds(ctx, g.db.Queries())
+		if err != nil {
+			return err
+		}
+		g.logger.Info("loaded spot configuration", zap.String("path", resolvedPath),
+			zap.Int64("runtime_seconds", spotRuntimeSeconds))
+	}
+
 	g.logger.Info("precomputing terrain")
 	terrain, err := BuildTerrainPrecompute(g.options, g.chunkSize, g.noiseFields)
 	if err != nil {
@@ -271,6 +296,9 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 	}
 
 	g.logger.Info("truncating existing data for region", zap.Int("region", g.region))
+	if err := g.db.Queries().DeleteSpotsByRegion(ctx, g.region); err != nil {
+		return fmt.Errorf("delete spots: %w", err)
+	}
 	if err := g.db.Queries().DeleteChunksByRegion(ctx, g.region); err != nil {
 		return fmt.Errorf("delete chunks: %w", err)
 	}
@@ -320,6 +348,18 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 		return fmt.Errorf("save last entity ID: %w", err)
 	}
 	g.logger.Info("saved last entity ID", zap.Uint64("last_entity_id", g.lastEntityID.Load()))
+
+	var spotStats SpotGenerationStats
+	if err := g.db.WithTx(ctx, func(queries *repository.Queries) error {
+		var err error
+		spotStats, err = writeSpotBatches(ctx, terrain, spotsConfig, g.seed,
+			g.region, spotRuntimeSeconds, queries.InsertSpots)
+		return err
+	}); err != nil {
+		return fmt.Errorf("generate and save spots: %w", err)
+	}
+	g.logger.Info("spot generation completed", zap.Any("generated", spotStats.Generated),
+		zap.Any("skipped_no_eligible_tile", spotStats.Skipped), zap.Uint64("districts", spotStats.Districts))
 
 	return nil
 }

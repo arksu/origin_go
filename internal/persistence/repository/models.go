@@ -195,3 +195,19 @@ type Skill struct {
 	CreatedAt   sql.NullTime  `json:"created_at"`
 	UpdatedAt   sql.NullTime  `json:"updated_at"`
 }
+
+type Spot struct {
+	ID                 int64           `json:"id"`
+	Region             int             `json:"region"`
+	Layer              int             `json:"layer"`
+	SpotType           string          `json:"spot_type"`
+	DistrictX          int             `json:"district_x"`
+	DistrictY          int             `json:"district_y"`
+	CenterX            int             `json:"center_x"`
+	CenterY            int             `json:"center_y"`
+	Radius             int             `json:"radius"`
+	PeakQuality        int16           `json:"peak_quality"`
+	State              json.RawMessage `json:"state"`
+	LastRuntimeSeconds int64           `json:"last_runtime_seconds"`
+	Revision           int64           `json:"revision"`
+}
