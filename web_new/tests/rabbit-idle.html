@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rabbit idle sprite review</title>
+  <style>
+    body { margin: 24px; background: #18251c; color: #d8e3cc; font: 14px monospace; }
+    canvas { display: block; max-width: 100%; image-rendering: pixelated; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Rabbit idle</h1>
+  <p>Eight directions at native scale and 4×. Crosses mark the common ground origin.</p>
+  <div id="preview"></div><pre id="result">Loading…</pre>
+  <script type="module">
+    import { Application, Container, Graphics, Text, TextureStyle } from 'pixi.js'
+    import { MOVEMENT_DIRECTIONS, ResourceLoader } from '../src/game/ResourceLoader'
+
+    async function main() {
+      TextureStyle.defaultOptions.scaleMode = 'nearest'
+      const app = new Application()
+      await app.init({ width: 1000, height: 650, background: '#334132', antialias: false, resolution: 1, preference: 'webgl' })
+      document.querySelector('#preview').append(app.canvas)
+      for (const scale of [1, 4]) {
+        for (const [index, direction] of MOVEMENT_DIRECTIONS.entries()) {
+          const resourcePath = `rabbit/idle/${index}`
+          const resource = ResourceLoader.getResourceDef(resourcePath)
+          if (!resource) throw new Error(`Missing resource: ${resourcePath}`)
+          const sprite = await ResourceLoader.createSprite(resource.layers[0], resource)
+          if (sprite.texture.width !== 64 || sprite.texture.height !== 64) {
+            throw new Error(`Invalid frame dimensions: ${resourcePath}`)
+          }
+          const cell = new Container()
+          cell.position.set(scale === 1 ? 65 + index * 125 : 125 + index % 4 * 250,
+            scale === 1 ? 95 : 320 + Math.floor(index / 4) * 240)
+          cell.scale.set(scale)
+          const anchor = new Graphics().moveTo(-3, 0).lineTo(3, 0).moveTo(0, -3).lineTo(0, 3)
+            .stroke({ color: '#d56a55', width: 1 / scale })
+          const label = new Text({ text: `${index} ${direction}`, style: { fontFamily: 'monospace', fontSize: 12 / scale, fill: '#d8e3cc' } })
+          label.anchor.set(0.5)
+          label.position.set(0, 16)
+          cell.addChild(sprite, anchor, label)
+          app.stage.addChild(cell)
+        }
+      }
+      document.querySelector('#result').textContent = 'Loaded all eight rabbit/idle resources. Frame: 64×64; ground origin: (32, 48).'
+    }
+    main().catch(error => { document.querySelector('#result').textContent = error.stack ?? String(error) })
+  </script>
+</body>
+</html>

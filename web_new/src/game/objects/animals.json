@@ -637,6 +637,434 @@
           "z": 0
         }
       ]
+    },
+    "idle": {
+      "0": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              2
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/0.png"
+          }
+        ]
+      },
+      "1": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              3
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/1.png"
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              12,
+              3
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/2.png"
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              16,
+              5
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/3.png"
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              12,
+              2
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/4.png"
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              8,
+              3
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/5.png"
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              21,
+              11
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/6.png"
+          }
+        ]
+      },
+      "7": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              15,
+              5
+            ],
+            "z": 0,
+            "img": "animals/deer/idle/7.png"
+          }
+        ]
+      }
+    },
+    "walk": {
+      "0": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              2
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/0/00.png"
+              },
+              {
+                "img": "animals/deer/walk/0/01.png"
+              },
+              {
+                "img": "animals/deer/walk/0/02.png"
+              },
+              {
+                "img": "animals/deer/walk/0/03.png"
+              },
+              {
+                "img": "animals/deer/walk/0/04.png"
+              },
+              {
+                "img": "animals/deer/walk/0/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      },
+      "1": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              3
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/1/00.png"
+              },
+              {
+                "img": "animals/deer/walk/1/01.png"
+              },
+              {
+                "img": "animals/deer/walk/1/02.png"
+              },
+              {
+                "img": "animals/deer/walk/1/03.png"
+              },
+              {
+                "img": "animals/deer/walk/1/04.png"
+              },
+              {
+                "img": "animals/deer/walk/1/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              12,
+              3
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/2/00.png"
+              },
+              {
+                "img": "animals/deer/walk/2/01.png"
+              },
+              {
+                "img": "animals/deer/walk/2/02.png"
+              },
+              {
+                "img": "animals/deer/walk/2/03.png"
+              },
+              {
+                "img": "animals/deer/walk/2/04.png"
+              },
+              {
+                "img": "animals/deer/walk/2/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              16,
+              5
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/3/00.png"
+              },
+              {
+                "img": "animals/deer/walk/3/01.png"
+              },
+              {
+                "img": "animals/deer/walk/3/02.png"
+              },
+              {
+                "img": "animals/deer/walk/3/03.png"
+              },
+              {
+                "img": "animals/deer/walk/3/04.png"
+              },
+              {
+                "img": "animals/deer/walk/3/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              12,
+              2
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/4/00.png"
+              },
+              {
+                "img": "animals/deer/walk/4/01.png"
+              },
+              {
+                "img": "animals/deer/walk/4/02.png"
+              },
+              {
+                "img": "animals/deer/walk/4/03.png"
+              },
+              {
+                "img": "animals/deer/walk/4/04.png"
+              },
+              {
+                "img": "animals/deer/walk/4/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              8,
+              3
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/5/00.png"
+              },
+              {
+                "img": "animals/deer/walk/5/01.png"
+              },
+              {
+                "img": "animals/deer/walk/5/02.png"
+              },
+              {
+                "img": "animals/deer/walk/5/03.png"
+              },
+              {
+                "img": "animals/deer/walk/5/04.png"
+              },
+              {
+                "img": "animals/deer/walk/5/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              21,
+              11
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/6/00.png"
+              },
+              {
+                "img": "animals/deer/walk/6/01.png"
+              },
+              {
+                "img": "animals/deer/walk/6/02.png"
+              },
+              {
+                "img": "animals/deer/walk/6/03.png"
+              },
+              {
+                "img": "animals/deer/walk/6/04.png"
+              },
+              {
+                "img": "animals/deer/walk/6/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      },
+      "7": {
+        "offset": [
+          33,
+          45
+        ],
+        "layers": [
+          {
+            "offset": [
+              15,
+              5
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/deer/walk/7/00.png"
+              },
+              {
+                "img": "animals/deer/walk/7/01.png"
+              },
+              {
+                "img": "animals/deer/walk/7/02.png"
+              },
+              {
+                "img": "animals/deer/walk/7/03.png"
+              },
+              {
+                "img": "animals/deer/walk/7/04.png"
+              },
+              {
+                "img": "animals/deer/walk/7/05.png"
+              }
+            ],
+            "fps": 6.25,
+            "loop": true
+          }
+        ]
+      }
     }
   },
   "bear": {
@@ -1158,5 +1586,547 @@
         }
       ]
     }
+  },
+  "rabbit": {
+	"idle": {
+	  "0": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/0.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  },
+	  "1": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/1.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  },
+	  "2": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/2.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  },
+	  "3": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/3.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  },
+	  "4": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/4.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  },
+	  "5": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/5.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  },
+	  "6": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/6.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  },
+	  "7": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"img": "animals/rabbit/idle/7.png",
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0
+		  }
+		]
+	  }
+	},
+	"walk": {
+	  "0": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/0/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/0/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/0/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/0/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/0/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/0/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/0/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/0/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  },
+	  "1": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/1/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/1/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/1/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/1/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/1/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/1/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/1/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/1/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  },
+	  "2": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/2/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/2/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/2/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/2/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/2/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/2/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/2/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/2/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  },
+	  "3": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/3/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/3/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/3/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/3/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/3/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/3/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/3/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/3/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  },
+	  "4": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/4/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/4/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/4/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/4/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/4/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/4/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/4/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/4/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  },
+	  "5": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/5/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/5/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/5/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/5/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/5/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/5/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/5/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/5/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  },
+	  "6": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/6/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/6/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/6/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/6/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/6/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/6/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/6/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/6/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  },
+	  "7": {
+		"size": [
+		  64,
+		  64
+		],
+		"offset": [
+		  32,
+		  48
+		],
+		"layers": [
+		  {
+			"offset": [
+			  0,
+			  0
+			],
+			"z": 0,
+			"frames": [
+			  {
+				"img": "animals/rabbit/walk/7/00.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/7/01.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/7/02.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/7/03.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/7/04.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/7/05.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/7/06.png"
+			  },
+			  {
+				"img": "animals/rabbit/walk/7/07.png"
+			  }
+			],
+			"fps": 8,
+			"loop": true
+		  }
+		]
+	  }
+	}
   }
 }

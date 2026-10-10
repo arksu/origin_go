@@ -19,6 +19,15 @@ testable code and you protect server authority and protocol compatibility.
   against current code rather than treating proposed or superseded decisions as implemented.
 - Trace the affected runtime path before editing. Keep unrelated working-tree changes intact.
 
+## Origin art direction
+
+- Before generating or editing Origin game art, read `docs/art/STYLE_GUIDE.md`
+  and visually inspect its approved reference, `docs/art/style/origin-forest-camp-v1.png`.
+- Use this approved style by default for all Origin art generation and edits unless
+  the user explicitly overrides it. This rule does not apply to unrelated images.
+- Follow the target asset's projection, scale, direction order, ground anchor and
+  transparency contract; a concept image does not replace those contracts.
+
 ## Architecture invariants
 
 - **Ownership:** `ShardManager` creates one `Shard` per world layer, each with its

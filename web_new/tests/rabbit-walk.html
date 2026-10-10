@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Published rabbit walk preview</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 24px; background: #18251c; color: #d8e3cc; font: 14px monospace; }
+    h1 { margin-bottom: 12px; font-size: 24px; }
+    p { max-width: 1000px; line-height: 1.5; }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px; background: #253428; border: 1px solid #52634d; }
+    .controls label { display: inline-flex; align-items: center; gap: 8px; }
+    button, select { padding: 6px 10px; border: 1px solid #708167; background: #334132; color: inherit; font: inherit; }
+    button { min-width: 80px; cursor: pointer; }
+    input[type="range"] { width: 110px; accent-color: #b8c98c; }
+    output { min-width: 2ch; }
+    #status { min-height: 3em; white-space: pre-wrap; }
+    #overview { display: block; width: 1024px; max-width: 100%; height: auto; image-rendering: pixelated; }
+    .overview-note { color: #b8c5ad; font-size: 12px; }
+    details { margin-top: 20px; }
+    summary { margin-bottom: 16px; cursor: pointer; }
+    #cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(288px, 1fr)); gap: 16px; max-width: 1440px; }
+    .card { padding: 14px; border: 1px solid #52634d; background: #253428; }
+    .card h2 { margin: 0 0 10px; font-size: 16px; }
+    .frame-status { min-height: 2em; margin: 0 0 10px; color: #b8c5ad; font-size: 12px; }
+    .views { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 14px; }
+    figure { margin: 0; text-align: center; }
+    figcaption { margin-bottom: 6px; font-size: 12px; color: #b8c5ad; }
+    canvas { display: block; image-rendering: pixelated; outline: 1px solid #708167; background: #334132; }
+    .reference { margin-top: 16px; padding-top: 12px; border-top: 1px solid #52634d; }
+    .reference[hidden] { display: none; }
+    #cards[data-size="native"] .view-enlarged { display: none; }
+    #cards[data-size="enlarged"] .view-native { display: none; }
+    @media (max-width: 420px) { body { margin: 12px; } #cards { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Rabbit walk · approved and published</h1>
+  <p>Eight directions share the same animation frame. Crosses mark the ground origin at (32, 48). Frames and animation settings come from the registered game resources.</p>
+  <div class="controls" aria-label="Animation controls">
+    <button id="play" type="button">Pause</button>
+    <label for="fps">FPS <input id="fps" type="range" min="4" max="16" step="1" value="8"><output id="fps-value" for="fps">8</output></label>
+    <label for="frame">Frame <input id="frame" type="range" min="0" max="7" step="1" value="0"><output id="frame-value" for="frame">00 / 07</output></label>
+    <label for="size">Preview size <select id="size"><option value="both">Native + 4×</option><option value="native">Native</option><option value="enlarged">4×</option></select></label>
+    <label><input id="idle" type="checkbox">Show idle reference</label>
+    <label><input id="anchors" type="checkbox" checked>Show ground origin</label>
+  </div>
+  <p id="status" role="status">Loading published frames…</p>
+  <main>
+    <canvas id="overview" width="1024" height="512" role="img" aria-label="Animated overview of all eight rabbit directions"></canvas>
+    <p class="overview-note">4× overview scales to fit. Preview size and idle reference controls apply to individual views.</p>
+    <details>
+      <summary>Inspect individual directions</summary>
+      <div id="cards" data-size="both" aria-label="Eight rabbit directions"></div>
+    </details>
+  </main>
+  <noscript>This preview needs JavaScript.</noscript>
+  <script type="module" src="./rabbit-walk.ts"></script>
+</body>
+</html>
