@@ -23,6 +23,7 @@ import ActionsRail from '@/components/ui/ActionsRail.vue'
 import { useActionPresentation } from '@/composables/useActionPresentation'
 import ActionsMenu from '@/components/ui/ActionsMenu.vue'
 import HotbarPlaceholder from '@/components/ui/HotbarPlaceholder.vue'
+import DayTime from '@/components/ui/DayTime.vue'
 import PortraitWarningBanner from '@/components/ui/PortraitWarningBanner.vue'
 import MinimapWindow from '@/components/ui/MinimapWindow.vue'
 import SettingsWindow from '@/components/ui/SettingsWindow.vue'
@@ -858,6 +859,7 @@ useHotkeys(hotkeys)
             @clear="onHotbarClear"
             @activate="onHotbarActivate"
           />
+          <DayTime />
         </div>
 
         <div class="hud-left-rail">
@@ -1108,6 +1110,10 @@ useHotkeys(hotkeys)
   top: calc(8px + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .hud-left-rail {

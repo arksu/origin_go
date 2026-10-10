@@ -1,4 +1,4 @@
-import { timeSync } from './TimeSync'
+import { shallowRef } from 'vue'
 import type { ServerConstantsSnapshot } from './ServerConstants'
 
 const MAX_RUNTIME = (1n << 63n) - 1n
@@ -68,43 +68,44 @@ function calendarFromRuntimeMilliseconds(runtimeMs: bigint, constants: ServerCon
   }
 }
 
-/** On-demand estimate. The server runtime remains the gameplay authority. */
+/** Reactive calendar snapshot from the last accepted server runtime sample. */
 export class GameCalendarSync {
   private constants: ServerConstantsSnapshot | null = null
-  private anchor: { runtime: bigint; wallMs: number; correctedRuntimeMs: bigint; monotonicMs: number } | null = null
+  private lastSample: { runtime: bigint; wallMs: number } | null = null
+  private readonly snapshot = shallowRef<GameCalendar | null>(null)
 
-  constructor(
-    private readonly monotonicNow: () => number = () => performance.now(),
-    private readonly estimateServerNowMs: () => number = () => timeSync.estimateServerNowMs(),
-  ) {}
-
-  configure(constants: ServerConstantsSnapshot): void { this.constants = constants }
+  configure(constants: ServerConstantsSnapshot): void {
+    this.constants = constants
+    this.updateSnapshot()
+  }
 
   acceptSample(runtimeValue: unknown, wallValue: unknown): boolean {
     const runtime = parseRuntime(runtimeValue)
     const wallMs = parseWallTimestamp(wallValue)
     if (runtime === null || wallMs === null) return false
-    if (this.anchor && (runtime < this.anchor.runtime ||
-      (runtime === this.anchor.runtime && wallMs === this.anchor.wallMs))) return false
-    const monotonicMs = this.monotonicNow()
-    const estimatedServerMs = this.estimateServerNowMs()
-    if (!Number.isFinite(monotonicMs) || !Number.isFinite(estimatedServerMs)) return false
-    const deliveryAge = Math.max(0, estimatedServerMs - wallMs)
-    if (!Number.isSafeInteger(Math.floor(deliveryAge))) return false
-    this.anchor = { runtime, wallMs, correctedRuntimeMs: runtime * MILLISECONDS_PER_SECOND + BigInt(Math.floor(deliveryAge)), monotonicMs }
+    if (this.lastSample && (runtime < this.lastSample.runtime ||
+      (runtime === this.lastSample.runtime && wallMs === this.lastSample.wallMs))) return false
+    this.lastSample = { runtime, wallMs }
+    this.updateSnapshot()
     return true
   }
 
-  getCalendar(): GameCalendar | null {
-    if (!this.constants || !this.anchor) return null
-    const elapsed = Math.max(0, this.monotonicNow() - this.anchor.monotonicMs)
-    if (!Number.isFinite(elapsed) || !Number.isSafeInteger(Math.floor(elapsed))) return null
-    const runtimeMs = this.anchor.correctedRuntimeMs + BigInt(Math.floor(elapsed))
-    return calendarFromRuntimeMilliseconds(runtimeMs, this.constants)
+  getCalendar(): GameCalendar | null { return this.snapshot.value }
+  getDayPhase(): number | null { return this.snapshot.value?.dayPhase ?? null }
+
+  reset(): void {
+    this.constants = null
+    this.lastSample = null
+    this.snapshot.value = null
   }
 
-  getDayPhase(): number | null { return this.getCalendar()?.dayPhase ?? null }
-  reset(): void { this.constants = null; this.anchor = null }
+  private updateSnapshot(): void {
+    if (this.constants && this.lastSample) {
+      this.snapshot.value = Object.freeze(calendarFromRuntimeMilliseconds(
+        this.lastSample.runtime * MILLISECONDS_PER_SECOND, this.constants,
+      ))
+    }
+  }
 }
 
 export const gameCalendarSync = new GameCalendarSync()

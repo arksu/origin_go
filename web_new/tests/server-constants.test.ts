@@ -121,13 +121,23 @@ test('first Pong initializes before world entry; transfers retain constants/cale
   t.after(() => store.reset())
 })
 
-test('Pong updates wall synchronization before compensating calendar delivery age', t => {
+test('Pong keeps the server calendar snapshot independent of wall synchronization', t => {
   t.mock.timers.enable({ apis: ['Date'], now: 10000 })
   const { connect } = connectionFixture(t)
   const socket = connect()
   socket.receive({ serverConstants: serverProfile })
   socket.receive({ pong: { clientTimeMs: 8000, serverTimeMs: 9000, runtimeSecondsTotal: 28799 } })
-  assert.equal(gameCalendarSync.getCalendar()?.day, 2, 'one second of delivery age crosses midnight with fresh TimeSync')
+  assert.equal(timeSync.isInitialized(), true)
+  assert.equal(timeSync.getLastRttMs(), 2000)
+  assert.equal(timeSync.estimateServerNowMs(), 10000)
+  const snapshot = gameCalendarSync.getCalendar()
+  assert.deepEqual([snapshot?.day, snapshot?.hour, snapshot?.minute, snapshot?.second], [1, 23, 59, 57])
+  t.mock.timers.tick(60000)
+  assert.equal(timeSync.estimateServerNowMs(), 70000, 'wall synchronization continues using its existing local clock')
+  assert.strictEqual(gameCalendarSync.getCalendar(), snapshot, 'calendar changes only when a valid runtime Pong arrives')
+  socket.receive({ pong: { clientTimeMs: 70000, serverTimeMs: 70000, runtimeSecondsTotal: 28800 } })
+  assert.equal(gameCalendarSync.getCalendar()?.day, 2)
+  assert.equal(gameCalendarSync.getDayPhase(), 0)
 })
 
 test('missing, malformed and changed constants use connection errors', t => {
