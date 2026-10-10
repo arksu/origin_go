@@ -127,6 +127,386 @@
           "z": 0
         }
       ]
+    },
+    "idle": {
+      "0": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              21,
+              27
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/0.png"
+          }
+        ]
+      },
+      "1": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              28,
+              25
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/1.png"
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              14,
+              30
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/2.png"
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              30
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/3.png"
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              16,
+              27
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/4.png"
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              17,
+              30
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/5.png"
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              28,
+              29
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/6.png"
+          }
+        ]
+      },
+      "7": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              30
+            ],
+            "z": 0,
+            "img": "animals/fox/idle/7.png"
+          }
+        ]
+      }
+    },
+    "walk": {
+      "0": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              21,
+              27
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/0/00.png"
+              },
+              {
+                "img": "animals/fox/walk/0/01.png"
+              },
+              {
+                "img": "animals/fox/walk/0/02.png"
+              },
+              {
+                "img": "animals/fox/walk/0/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      },
+      "1": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              28,
+              25
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/1/00.png"
+              },
+              {
+                "img": "animals/fox/walk/1/01.png"
+              },
+              {
+                "img": "animals/fox/walk/1/02.png"
+              },
+              {
+                "img": "animals/fox/walk/1/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      },
+      "2": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              14,
+              30
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/2/00.png"
+              },
+              {
+                "img": "animals/fox/walk/2/01.png"
+              },
+              {
+                "img": "animals/fox/walk/2/02.png"
+              },
+              {
+                "img": "animals/fox/walk/2/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      },
+      "3": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              30
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/3/00.png"
+              },
+              {
+                "img": "animals/fox/walk/3/01.png"
+              },
+              {
+                "img": "animals/fox/walk/3/02.png"
+              },
+              {
+                "img": "animals/fox/walk/3/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      },
+      "4": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              16,
+              27
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/4/00.png"
+              },
+              {
+                "img": "animals/fox/walk/4/01.png"
+              },
+              {
+                "img": "animals/fox/walk/4/02.png"
+              },
+              {
+                "img": "animals/fox/walk/4/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      },
+      "5": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              17,
+              30
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/5/00.png"
+              },
+              {
+                "img": "animals/fox/walk/5/01.png"
+              },
+              {
+                "img": "animals/fox/walk/5/02.png"
+              },
+              {
+                "img": "animals/fox/walk/5/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      },
+      "6": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              28,
+              29
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/6/00.png"
+              },
+              {
+                "img": "animals/fox/walk/6/01.png"
+              },
+              {
+                "img": "animals/fox/walk/6/02.png"
+              },
+              {
+                "img": "animals/fox/walk/6/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      },
+      "7": {
+        "offset": [
+          33,
+          47
+        ],
+        "layers": [
+          {
+            "offset": [
+              19,
+              30
+            ],
+            "z": 0,
+            "frames": [
+              {
+                "img": "animals/fox/walk/7/00.png"
+              },
+              {
+                "img": "animals/fox/walk/7/01.png"
+              },
+              {
+                "img": "animals/fox/walk/7/02.png"
+              },
+              {
+                "img": "animals/fox/walk/7/03.png"
+              }
+            ],
+            "fps": 5.555555555555555,
+            "loop": true
+          }
+        ]
+      }
     }
   },
   "deer": {

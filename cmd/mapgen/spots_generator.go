@@ -9,6 +9,7 @@ import (
 const (
 	spotCenterSalt  = uint64(0xD4E12C77A3296B51)
 	spotQualitySalt = uint64(0x872A619BF43D05CE)
+	spotSpawnSalt   = uint64(0xA7615FBDF0932C48)
 )
 
 // GeneratedSpot contains the immutable initial geometry and quality of one spot.
@@ -24,9 +25,10 @@ type GeneratedSpot struct {
 }
 
 type SpotGenerationStats struct {
-	Districts uint64
-	Generated map[string]uint64
-	Skipped   map[string]uint64
+	Districts       uint64
+	Generated       map[string]uint64
+	Skipped         map[string]uint64
+	SkippedByChance map[string]uint64
 }
 
 type spotCenterCandidate struct {
@@ -47,12 +49,14 @@ func (candidate *spotCenterCandidate) consider(x, y int, hash uint64) {
 // district. Neither map size nor the number of eligible tiles grows its memory.
 func GenerateSpots(ctx context.Context, terrain *TerrainPrecompute, config SpotsConfig, seed int64, emit func(GeneratedSpot) error) (SpotGenerationStats, error) {
 	stats := SpotGenerationStats{
-		Generated: make(map[string]uint64, spotTypeCount),
-		Skipped:   make(map[string]uint64, spotTypeCount),
+		Generated:       make(map[string]uint64, spotTypeCount),
+		Skipped:         make(map[string]uint64, spotTypeCount),
+		SkippedByChance: make(map[string]uint64, spotTypeCount),
 	}
 	for _, spotType := range spotTypes {
 		stats.Generated[spotType] = 0
 		stats.Skipped[spotType] = 0
+		stats.SkippedByChance[spotType] = 0
 	}
 	if ctx == nil || terrain == nil || emit == nil {
 		return stats, fmt.Errorf("spot generation requires context, terrain, and output callback")
@@ -76,10 +80,12 @@ func GenerateSpots(ctx context.Context, terrain *TerrainPrecompute, config Spots
 	// avoids five allow-list searches for every tile without a world-sized mask.
 	var eligibleTypes [256]uint8
 	var typeSalts [spotTypeCount]uint64
+	var spawnChances [spotTypeCount]float64
 	for index, spotType := range spotTypes {
 		typeSalts[index] = spotTypeSalt(spotType)
 		for _, definition := range config.Spots {
 			if definition.Type == spotType {
+				spawnChances[index] = definition.spawnChance()
 				for _, tileID := range definition.CenterTiles {
 					eligibleTypes[tileID] |= 1 << index
 				}
@@ -98,6 +104,14 @@ func GenerateSpots(ctx context.Context, terrain *TerrainPrecompute, config Spots
 				return stats, err
 			}
 			endX := startX + minInt(districtSize, terrain.WidthTiles-startX)
+			// A single independent roll per district/type, never one per tile.
+			// Rejected types still record eligibility but do not hash candidates.
+			var spawnMask, foundEligibleMask uint8
+			for index, chance := range spawnChances {
+				if chance == 1 || chance > 0 && coordHash01(seed, districtX, districtY, typeSalts[index]^spotSpawnSalt) < chance {
+					spawnMask |= 1 << index
+				}
+			}
 			var candidates [spotTypeCount]spotCenterCandidate
 			for y := startY; y < endY; y++ {
 				if err := ctx.Err(); err != nil {
@@ -105,7 +119,9 @@ func GenerateSpots(ctx context.Context, terrain *TerrainPrecompute, config Spots
 				}
 				row := y * terrain.WidthTiles
 				for x := startX; x < endX; x++ {
-					mask := eligibleTypes[terrain.Tiles[row+x]]
+					eligible := eligibleTypes[terrain.Tiles[row+x]]
+					foundEligibleMask |= eligible
+					mask := eligible & spawnMask
 					for mask != 0 {
 						index := bits.TrailingZeros8(mask)
 						hash := spotCoordinateHash(seed, x, y, typeSalts[index]^spotCenterSalt)
@@ -120,8 +136,12 @@ func GenerateSpots(ctx context.Context, terrain *TerrainPrecompute, config Spots
 					return stats, err
 				}
 				spotType := spotTypes[index]
-				if !candidate.found {
+				if foundEligibleMask&(1<<index) == 0 {
 					stats.Skipped[spotType]++
+					continue
+				}
+				if spawnMask&(1<<index) == 0 {
+					stats.SkippedByChance[spotType]++
 					continue
 				}
 				centerX, err := spotTileCenter(int64(candidate.x))
