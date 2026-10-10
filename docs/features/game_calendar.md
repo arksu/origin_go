@@ -97,14 +97,16 @@ instant without changing ECS time, persistence, or gameplay timers. Serializatio
 runs outside the lock. Pong carries no constants, fractions, date fields, or
 additional timestamp.
 
-The client first updates existing wall-time `TimeSync`, accounts for estimated
-sample age, then advances calendar queries using monotonic local elapsed time.
-Runtime and absolute indexes retain exact integer precision. Calendar queries
-remain unsynchronized until valid constants and a runtime sample exist. Missing,
-malformed, negative, or decreasing authoritative runtime is ignored; comparison
-is against the last authoritative sample, not the extrapolated estimate. Identical
-runtime/timestamp pairs are duplicates, while equal runtime with a fresh timestamp
-can refresh the anchor. Fresh samples may correct earlier extrapolation.
+The client first updates existing wall-time `TimeSync`, then converts the received
+whole runtime seconds using the received calendar constants. `GameCalendarSync`
+retains an immutable reactive snapshot of that server sample. It does not
+compensate network delivery age or advance from local wall/monotonic clocks.
+Calendar values remain unchanged between accepted Pongs. Runtime and absolute
+indexes retain exact integer precision. Calendar queries remain unsynchronized
+until valid constants and a runtime sample exist; a sample received before
+constants is converted once the constants arrive. Missing, malformed, negative,
+or decreasing runtime is ignored. Identical runtime/timestamp pairs are duplicates,
+while equal runtime with a fresh timestamp is a valid sample.
 
 Connection start, disconnect, authentication failure, and connection errors clear
 constants and calendar synchronization. Entry, leave, and layer transfers on the
@@ -112,7 +114,33 @@ same connection retain them. Retired socket callbacks cannot update a replacemen
 connection; reconnect can accept lower runtime after crash rollback.
 
 Flooring omits less than one real second, equivalent to less than three game
-seconds at the current scale. Network delay and clock estimation add their own
-error. The client estimate is presentation data and never controls gameplay.
+seconds at the current scale. The displayed sample also ages through network
+delivery and until the next Pong; the client deliberately does not predict time
+between samples. The client snapshot is presentation data and never controls gameplay.
 Legacy Pongs still update wall synchronization without inventing calendar time.
-No clock UI, lighting changes, or calendar timer is included.
+
+## Day-time HUD
+
+`web_new/src/components/ui/DayTime.vue` displays the original `origin_webgl`
+day/night sky, landscape, and sun artwork at 134 by 71 pixels, followed by
+zero-padded `HH:mm`. It sits centered under the hotbar with an 8-pixel gap and
+shares the map and other HUD elements' visibility. It has no separate connection
+or world-entry mount condition. Before a valid snapshot, it shows `--:--` with
+the graphical layers hidden. Connection resets restore that placeholder; layer
+transfers preserve the current sample.
+
+The five PNG files in `web_new/src/assets/img/daytime/` are unchanged copies of
+`origin_webgl/frontend/assets/img/`. They retain their original alpha and layer
+order: day sky, night sky, sun, day landscape, night landscape. The label uses
+the original green 12-pixel type and black shadow. The widget does not capture
+pointer input.
+
+The decorative profile retains the old artwork's normalized day fractions:
+dawn at 5/24 through 6/24, daylight until 21/24, and dusk until 22/24. These are
+artwork phases, not calendar-duration defaults. Both night layers use the same
+opacity. Sun progress is clamped from 5/24 to 21/24 and uses the original
+23-pixel radius, (60, 26) offset, and angle `progress * (pi + 0.6) - 0.2`.
+Position uses the full sampled day phase rather than an integer hour. Clock text,
+sun position, and night opacity update only from server snapshots; there are no
+local timers, frame callbacks, or CSS time animations. The HUD adds no date,
+moon, world-lighting changes, server fields, or network messages.

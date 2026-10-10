@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { computed } from 'vue'
 import { GameCalendarSync, gameCalendarFromRuntimeSeconds } from '../src/network/GameCalendarSync'
 import { proto } from '../src/network/proto/packets.js'
 import { serverProfile } from './serverConstantsFixture'
@@ -37,65 +38,94 @@ test('a different received calendar profile controls day duration, hours and cal
 })
 
 function fixture() {
-  let monotonic = 0, wall = 1000
-  const sync = new GameCalendarSync(() => monotonic, () => wall)
+  const sync = new GameCalendarSync()
   sync.configure(serverProfile)
-  return { sync, monotonic(value: number) { monotonic = value }, wall(value: number) { wall = value } }
+  return sync
 }
 
 test('optional runtime distinguishes zero, remains unsynchronized without constants, and ignores invalid samples', () => {
-  const f = fixture()
+  const sync = fixture()
   const absent = proto.S2C_Pong.decode(proto.S2C_Pong.encode({ serverTimeMs: 1000 }).finish())
-  assert.equal(f.sync.acceptSample(absent.runtimeSecondsTotal, absent.serverTimeMs), false)
-  assert.equal(f.sync.getCalendar(), null)
+  assert.equal(sync.acceptSample(absent.runtimeSecondsTotal, absent.serverTimeMs), false)
+  assert.equal(sync.getCalendar(), null)
   const zero = proto.S2C_Pong.decode(proto.S2C_Pong.encode({ serverTimeMs: 1000, runtimeSecondsTotal: 0 }).finish())
-  assert.equal(f.sync.acceptSample(zero.runtimeSecondsTotal, zero.serverTimeMs), true)
-  assert.deepEqual(f.sync.getCalendar(), gameCalendarFromRuntimeSeconds(0, serverProfile))
-  const before = f.sync.getCalendar()
-  for (const runtime of [null, undefined, '-1', 'abc', Number.MAX_SAFE_INTEGER + 1]) assert.equal(f.sync.acceptSample(runtime, 2000), false)
-  for (const wall of [null, undefined, -1, NaN, Infinity, 1.5, '9007199254740992']) assert.equal(f.sync.acceptSample(1, wall), false)
-  assert.deepEqual(f.sync.getCalendar(), before)
-  const noConstants = new GameCalendarSync(() => 0, () => 1000)
-  noConstants.acceptSample(0, 1000)
+  assert.equal(sync.acceptSample(zero.runtimeSecondsTotal, zero.serverTimeMs), true)
+  assert.deepEqual(sync.getCalendar(), gameCalendarFromRuntimeSeconds(0, serverProfile))
+  const before = sync.getCalendar()
+  for (const runtime of [null, undefined, '-1', 'abc', Number.MAX_SAFE_INTEGER + 1]) assert.equal(sync.acceptSample(runtime, 2000), false)
+  for (const wall of [null, undefined, -1, NaN, Infinity, 1.5, '9007199254740992']) assert.equal(sync.acceptSample(1, wall), false)
+  assert.strictEqual(sync.getCalendar(), before)
+  const noConstants = new GameCalendarSync()
+  assert.equal(noConstants.acceptSample(0, 1000), true)
   assert.equal(noConstants.getCalendar(), null)
   assert.equal(noConstants.getDayPhase(), null)
   noConstants.configure(serverProfile)
-  assert.equal(noConstants.getCalendar()?.year, 1n)
+  assert.deepEqual(noConstants.getCalendar(), gameCalendarFromRuntimeSeconds(0, serverProfile))
 })
 
-test('delivery age and monotonic local time cross midnight at subsecond precision', () => {
-  const f = fixture()
-  f.wall(1250)
-  assert.equal(f.sync.acceptSample(28799, 1000), true)
-  assert.equal(f.sync.getCalendar()?.second, 57)
-  f.monotonic(500)
-  assert.equal(f.sync.getCalendar()?.second, 59)
-  f.monotonic(750)
-  assert.equal(f.sync.getCalendar()?.day, 2)
-  assert.equal(f.sync.getDayPhase(), 0)
-  f.wall(-1000000) // Local/wall estimator changes cannot alter an existing monotonic anchor.
-  f.monotonic(1000)
-  assert.equal(f.sync.getCalendar()?.day, 2)
-  assert.ok(f.sync.getDayPhase()! > 0)
+test('local clocks never advance a snapshot; midnight arrives only with a new Pong', t => {
+  let wall = 10000, monotonic = 0
+  t.mock.method(Date, 'now', () => wall)
+  t.mock.method(performance, 'now', () => monotonic)
+  const sync = fixture()
+  assert.equal(sync.acceptSample(28799, 1000), true)
+  const before = sync.getCalendar()
+  assert.deepEqual(before, gameCalendarFromRuntimeSeconds(28799, serverProfile))
+  assert.equal(Object.isFrozen(before), true)
+  wall += 1000000
+  monotonic += 1000000
+  assert.strictEqual(sync.getCalendar(), before)
+  assert.equal(sync.getDayPhase(), 28799 / 28800)
+  wall = -1000000
+  monotonic = -1000000
+  assert.strictEqual(sync.getCalendar(), before)
+  assert.equal(sync.acceptSample(28800, 1001), true)
+  assert.equal(sync.getCalendar()?.day, 2)
+  assert.equal(sync.getDayPhase(), 0)
 })
 
-test('authoritative samples compare to the last sample and may correct local extrapolation', () => {
-  const f = fixture()
-  assert.equal(f.sync.acceptSample(100, 1000), true)
-  f.monotonic(900)
-  assert.equal(f.sync.getCalendar()?.second, 2)
-  assert.equal(f.sync.acceptSample(100, 1000), false, 'identical pair is a duplicate')
-  assert.equal(f.sync.acceptSample(99, 2000), false)
-  assert.equal(f.sync.acceptSample(100, 1100), true, 'fresh equal-second response can reanchor behind extrapolation')
-  assert.equal(f.sync.getCalendar()?.second, 0)
-  f.monotonic(1900)
-  f.wall(500)
-  assert.equal(f.sync.acceptSample(100, 500), true, 'response wall clock is not a monotonic sequence')
-  assert.equal(f.sync.getCalendar()?.second, 0)
-  assert.equal(f.sync.acceptSample(101, 600), true)
-  assert.equal(f.sync.getCalendar()?.second, 3)
-  f.sync.reset()
-  assert.equal(f.sync.getCalendar(), null)
-  f.sync.configure(serverProfile)
-  assert.equal(f.sync.acceptSample(0, 500), true, 'new connection accepts restored lower runtime')
+test('accepted samples and reset update reactive computed consumers', () => {
+  const sync = new GameCalendarSync()
+  const calendar = computed(() => sync.getCalendar())
+  const dayPhase = computed(() => sync.getDayPhase())
+  const currentCalendar = () => calendar.value
+  assert.equal(currentCalendar(), null)
+  assert.equal(dayPhase.value, null)
+  assert.equal(sync.acceptSample(28799, 1000), true)
+  assert.equal(currentCalendar(), null, 'a sample waits for constants')
+  sync.configure(serverProfile)
+  assert.equal(currentCalendar()?.day, 1)
+  assert.equal(dayPhase.value, 28799 / 28800)
+  assert.equal(sync.acceptSample(28800, 1001), true)
+  assert.equal(currentCalendar()?.day, 2)
+  assert.equal(dayPhase.value, 0)
+  sync.reset()
+  assert.equal(currentCalendar(), null)
+  assert.equal(dayPhase.value, null)
+})
+
+test('duplicate and lower samples preserve snapshots; fresh same-second Pongs and reconnects are accepted', () => {
+  const sync = fixture()
+  assert.equal(sync.acceptSample(100, 1000), true)
+  const first = sync.getCalendar()
+  assert.equal(sync.acceptSample(100, 1000), false, 'identical pair is a duplicate')
+  assert.equal(sync.acceptSample(99, 2000), false)
+  assert.strictEqual(sync.getCalendar(), first)
+  assert.equal(sync.acceptSample(100, 1100), true, 'fresh equal-second response is accepted')
+  const fresh = sync.getCalendar()
+  assert.notStrictEqual(fresh, first)
+  assert.deepEqual(fresh, first)
+  assert.equal(sync.acceptSample(100, 500), true, 'response wall clock is not a monotonic sequence')
+  assert.deepEqual(sync.getCalendar(), first)
+  assert.equal(sync.acceptSample(101, 600), true)
+  assert.equal(sync.getCalendar()?.second, 3)
+  const maximum = proto.S2C_Pong.fromObject({ runtimeSecondsTotal: '9223372036854775807', serverTimeMs: 700 })
+  const decoded = proto.S2C_Pong.decode(proto.S2C_Pong.encode(maximum).finish())
+  assert.equal(sync.acceptSample(decoded.runtimeSecondsTotal, decoded.serverTimeMs), true)
+  assert.deepEqual(sync.getCalendar(), gameCalendarFromRuntimeSeconds('9223372036854775807', serverProfile))
+  sync.reset()
+  assert.equal(sync.getCalendar(), null)
+  sync.configure(serverProfile)
+  assert.equal(sync.acceptSample(0, 500), true, 'new connection accepts restored lower runtime')
+  assert.deepEqual(sync.getCalendar(), gameCalendarFromRuntimeSeconds(0, serverProfile))
 })

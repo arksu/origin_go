@@ -15,6 +15,7 @@
     "test:map-click": "node scripts/test-map-click.mjs",
     "test:chunks": "node scripts/test-chunks.mjs",
     "test:minimap": "node scripts/test-minimap.mjs && node --test tests/minimap-hud.test.mjs",
+    "test:daytime-hud": "node --test tests/daytime-hud.test.mjs",
     "test:actions": "node scripts/test-actions.mjs",
     "test:combat-protocol": "node scripts/test-character-visual.mjs tests/combat-protocol.test.ts",
     "test:damage-numbers": "node scripts/test-character-visual.mjs tests/damage-numbers.test.ts",

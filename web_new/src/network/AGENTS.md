@@ -61,9 +61,11 @@ TimeSync (singleton)
   valid directional capability. Different valid values on reconnect are supported.
 - Every authenticated Pong includes optional whole `runtimeSecondsTotal`, paired
   with its existing wall timestamp. Process `TimeSync` first, then update the game
-  calendar using estimated delivery age and monotonic elapsed time. Preserve exact
-  int64 precision and distinguish absent runtime from explicit zero. No new ping
-  cadence, calendar timer, or UI is needed.
+  calendar from the received runtime only. `GameCalendarSync` exposes a reactive,
+  immutable snapshot; it must not compensate delivery age or advance from local
+  clocks. Preserve exact int64 precision and distinguish absent runtime from
+  explicit zero. Keep the existing ping cadence. `DayTime.vue` reads the snapshot
+  directly and does not start a timer or animate between Pongs.
 - Runtime zero is the calendar epoch; offline time pauses. A new connection can
   accept lower runtime after crash rollback. Legacy Pongs still feed wall time.
 - This bootstrap migration requires matching server/client deployment: removed

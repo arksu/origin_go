@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define one world calendar from accumulated server runtime and make the same date and time available to administrators and connected clients without adding visual presentation.
+Define one world calendar from accumulated server runtime, make the same date and time available to administrators and connected clients, and display server-sampled time of day in the client HUD.
 
 ## Requirements
 
@@ -89,33 +89,39 @@ The whole runtime seconds in a Pong SHALL describe runtime rounded down at the s
 - **AND** its existing RTT timestamp describes that same response instant
 - **AND** no extra runtime timestamp is transmitted
 
-### Requirement: Client calendar supports runtime estimation and validation
-The client SHALL expose an on-demand calendar and day-fraction API without adding clock UI, rendering, or a periodic calendar timer. It SHALL derive calendar values using the received server constants, account for delivery age using the Pong's existing `server_time_ms` and wall-time synchronization, then advance its estimate using monotonic local elapsed time between accepted samples. Integer runtime data SHALL retain its precision through calendar conversion. Missing, malformed, or lower authoritative runtime samples SHALL NOT initialize or replace a valid calendar anchor; explicit zero SHALL be valid. An identical runtime and wall-timestamp pair SHALL be treated as a duplicate, while a fresh Pong with unchanged whole runtime seconds SHALL be eligible to refresh the anchor. Until valid server constants and a valid runtime sample have both been received, the API SHALL report an unsynchronized state. A valid refreshed sample SHALL be allowed to correct earlier local extrapolation.
+### Requirement: Client calendar exposes validated server snapshots
+The client SHALL expose a reactive read-only calendar and day-fraction snapshot derived only from received whole runtime seconds and server constants. It SHALL NOT compensate delivery age or advance the snapshot using local wall time, monotonic elapsed time, timers, or frame callbacks. Integer runtime data SHALL retain its precision through calendar conversion. Missing, malformed, or lower authoritative runtime samples SHALL NOT initialize or replace a valid calendar snapshot; explicit zero SHALL be valid. An identical runtime and wall-timestamp pair SHALL be treated as a duplicate, while a fresh Pong with unchanged whole runtime seconds SHALL remain valid. Until valid server constants and a valid runtime sample have both been received, the API SHALL report an unsynchronized state. A valid sample received before constants SHALL be converted when those constants arrive.
 
 #### Scenario: Constants have not arrived
 - **WHEN** the client has not received valid server calendar constants
 - **THEN** its calendar remains unsynchronized
 - **AND** it does not substitute embedded calendar values
 
-#### Scenario: Local extrapolation crosses midnight
-- **WHEN** the accepted whole runtime sample is 28,799 seconds with zero estimated delivery age and one second of monotonic local time elapses
-- **THEN** the estimated calendar crosses from the first day into day 2 at 00:00:00
+#### Scenario: Local time does not cross midnight
+- **WHEN** the accepted whole runtime sample is 28,799 seconds and local time elapses without another valid Pong
+- **THEN** the calendar remains on the first day at 23:59:57 regardless of delivery age or local clock changes
+- **AND** only a subsequent accepted runtime sample of 28,800 seconds changes it to day 2 at 00:00:00
 
 #### Scenario: Invalid or absent synchronization data
 - **WHEN** a client receives a Pong without `runtime_seconds_total`, with malformed or negative runtime, an invalid wall timestamp, or a lower authoritative runtime sample
-- **THEN** its current calendar anchor is unchanged
+- **THEN** its current calendar snapshot is unchanged
 - **AND** an uninitialized calendar remains unsynchronized
 
 #### Scenario: Two valid Pongs within the same runtime second
 - **WHEN** two valid Pongs contain the same whole runtime seconds and different response timestamps
-- **THEN** the second Pong can refresh the anchor without being rejected merely because runtime seconds are equal
+- **THEN** the second Pong is accepted without advancing the calendar merely because its wall timestamp is later
+
+#### Scenario: Pong arrives before calendar constants
+- **WHEN** a valid runtime sample arrives before valid calendar constants
+- **THEN** the calendar remains unsynchronized until those constants arrive
+- **AND** it then exposes the retained server sample without adding locally elapsed time
 
 ### Requirement: Calendar lifetime follows the connection rather than the world stream
-Starting a connection, disconnecting, or entering a connection error state SHALL clear the client's calendar anchor. World entry, world leave during transfer, and layer changes within the same connection SHALL retain the server-global calendar anchor. A new connection SHALL accept its first valid snapshot even if server runtime is lower than in the previous connection.
+Starting a connection, disconnecting, or entering a connection error state SHALL clear the client's calendar snapshot. World entry, world leave during transfer, and layer changes within the same connection SHALL retain the server-global calendar snapshot. A new connection SHALL accept its first valid snapshot even if server runtime is lower than in the previous connection.
 
 #### Scenario: Pong arrives before world entry
 - **WHEN** a client accepts game-time data and then enters the world
-- **THEN** its accepted calendar anchor remains available
+- **THEN** its accepted calendar snapshot remains available
 
 #### Scenario: Transfer within one server connection
 - **WHEN** a player leaves one layer and enters another without replacing the connection
@@ -123,17 +129,41 @@ Starting a connection, disconnecting, or entering a connection error state SHALL
 
 #### Scenario: Reconnect after crash rollback
 - **WHEN** a client reconnects to a server restored to an earlier persisted runtime value
-- **THEN** the previous connection's anchor has been cleared
+- **THEN** the previous connection's snapshot has been cleared
 - **AND** the new lower runtime is accepted as authoritative
 
 #### Scenario: Retired connection delivers a late callback
 - **WHEN** a game-time callback belongs to a disconnected, failed, or replaced connection
-- **THEN** it cannot initialize or replace the current calendar anchor
+- **THEN** it cannot initialize or replace the current calendar snapshot
 
 ### Requirement: Runtime synchronization preserves existing wall-time consumers
-Game-time synchronization SHALL extend Pong additively while preserving its existing protobuf field numbers and wall-time behavior. A client receiving a legacy Pong SHALL continue wall-time synchronization while leaving its game calendar unsynchronized. The separate server-constants bootstrap migration SHALL require matching server/client versions and SHALL NOT be described as mixed-version compatible. Existing movement interpolation behavior after valid bootstrap, action cooldowns, and gameplay timer domains SHALL retain their current behavior. Calendar synchronization SHALL NOT introduce visual changes.
+Game-time synchronization SHALL extend Pong additively while preserving its existing protobuf field numbers and wall-time behavior. A client receiving a legacy Pong SHALL continue wall-time synchronization while leaving its game calendar unsynchronized. The separate server-constants bootstrap migration SHALL require matching server/client versions and SHALL NOT be described as mixed-version compatible. Existing movement interpolation behavior after valid bootstrap, action cooldowns, and gameplay timer domains SHALL retain their current behavior. The day-time HUD SHALL consume calendar snapshots without changing world lighting or wall-time consumers.
 
 #### Scenario: Legacy Pong remains usable
 - **WHEN** a new client receives a Pong containing only the original client and server wall timestamps
 - **THEN** existing RTT and wall-offset synchronization continue normally
 - **AND** no game-time value is inferred from those wall timestamps alone
+
+### Requirement: Day-time indicator shares the game HUD and server samples
+The client SHALL display the original day/night sky, landscape, and sun artwork centered under the hotbar with an 8-pixel gap, followed by zero-padded `HH:mm`. The indicator SHALL share the map and common HUD's visibility without a separate connection or world-entry mount condition. Before a valid calendar snapshot it SHALL show `--:--` with graphical layers hidden. It SHALL preserve the original artwork scale, layering, label treatment, sun geometry, and decorative dawn/day/dusk profile. Sun position SHALL use the full sampled day phase rather than integer-hour steps. Clock text, sun position, and night opacity SHALL remain unchanged between accepted server samples; no local clock, polling timer, frame callback, or CSS time animation SHALL advance them. The indicator SHALL pass pointer input through to gameplay and SHALL NOT add a date, moon, or world-lighting effect.
+
+#### Scenario: HUD is visible before time is synchronized
+- **WHEN** the map and common HUD are visible without a valid calendar snapshot
+- **THEN** the indicator remains present and displays `--:--` without graphical time-of-day layers
+
+#### Scenario: Accepted Pong updates the indicator
+- **WHEN** a valid Pong supplies a new runtime sample
+- **THEN** the clock, sun position, and night overlays update from that server sample and received calendar constants
+- **AND** they remain fixed until another valid sample arrives
+
+#### Scenario: Layer transfer preserves the visible sample
+- **WHEN** the player transfers layers while the map and common HUD remain visible
+- **THEN** the same indicator retains the last accepted server sample without remounting or restarting time
+
+#### Scenario: Connection reset clears displayed time
+- **WHEN** connection time state resets
+- **THEN** the indicator returns to `--:--` without its own connection-dependent mount condition
+
+#### Scenario: Pointer input passes through the indicator
+- **WHEN** the player clicks the map where the indicator is drawn
+- **THEN** the indicator does not intercept gameplay input
