@@ -99,6 +99,7 @@ type EventBus struct {
 
 	workers      []*worker
 	workersMu    sync.Mutex
+	workerCount  atomic.Int64 // Registered pool size, updated under workersMu.
 	minWorkers   int
 	maxWorkers   int
 	activeWorker int32
@@ -202,6 +203,12 @@ func (eb *EventBus) startWorkers(count int) {
 	eb.workersMu.Lock()
 	defer eb.workersMu.Unlock()
 
+	eb.startWorkersLocked(count)
+	eb.workerCount.Store(int64(len(eb.workers)))
+}
+
+// startWorkersLocked requires workersMu to be held.
+func (eb *EventBus) startWorkersLocked(count int) {
 	for i := 0; i < count; i++ {
 		w := &worker{
 			eb:     eb,
@@ -214,28 +221,57 @@ func (eb *EventBus) startWorkers(count int) {
 }
 
 func (eb *EventBus) scaleWorkers() {
+	if eb.minWorkers == eb.maxWorkers {
+		return
+	}
+
 	queueDepth := len(eb.highPriorityCh) + len(eb.mediumPriorityCh) + len(eb.lowPriorityCh)
 	activeWorkers := int(atomic.LoadInt32(&eb.activeWorker))
-	currentWorkers := len(eb.workers)
+	currentWorkers := int(eb.workerCount.Load())
+	scaleUp := queueDepth > currentWorkers*100 && currentWorkers < eb.maxWorkers && queueDepth/100 > currentWorkers
+	scaleDown := queueDepth < currentWorkers*10 && currentWorkers > eb.minWorkers && activeWorkers < currentWorkers/2 && currentWorkers >= 4
+	if !scaleUp && !scaleDown {
+		return
+	}
+
+	// Resizing is opportunistic: publishers must not wait for another resizer.
+	if !eb.workersMu.TryLock() {
+		return
+	}
+	if eb.isShutdown.Load() {
+		eb.workersMu.Unlock()
+		return
+	}
+
+	// The fast snapshot may be stale. Recheck limits and demand while locked.
+	queueDepth = len(eb.highPriorityCh) + len(eb.mediumPriorityCh) + len(eb.lowPriorityCh)
+	activeWorkers = int(atomic.LoadInt32(&eb.activeWorker))
+	currentWorkers = len(eb.workers)
+	var added, removed int
 
 	if queueDepth > currentWorkers*100 && currentWorkers < eb.maxWorkers {
-		toAdd := min((queueDepth/100)-currentWorkers, eb.maxWorkers-currentWorkers)
-		if toAdd > 0 {
-			eb.startWorkers(toAdd)
-			eb.logger.Debug("scaled up workers", zap.Int("added", toAdd), zap.Int("total", len(eb.workers)))
+		added = min((queueDepth/100)-currentWorkers, eb.maxWorkers-currentWorkers)
+		if added > 0 {
+			eb.startWorkersLocked(added)
 		}
 	} else if queueDepth < currentWorkers*10 && currentWorkers > eb.minWorkers && activeWorkers < currentWorkers/2 {
-		eb.workersMu.Lock()
-		toRemove := min(currentWorkers-eb.minWorkers, currentWorkers/4)
-		for i := 0; i < toRemove && len(eb.workers) > eb.minWorkers; i++ {
+		removed = min(currentWorkers-eb.minWorkers, currentWorkers/4)
+		for i := 0; i < removed; i++ {
 			w := eb.workers[len(eb.workers)-1]
 			eb.workers = eb.workers[:len(eb.workers)-1]
 			close(w.stopCh)
 		}
-		eb.workersMu.Unlock()
-		if toRemove > 0 {
-			eb.logger.Debug("scaled down workers", zap.Int("removed", toRemove), zap.Int("total", len(eb.workers)))
-		}
+	}
+	total := len(eb.workers)
+	if added > 0 || removed > 0 {
+		eb.workerCount.Store(int64(total))
+	}
+	eb.workersMu.Unlock()
+
+	if added > 0 {
+		eb.logger.Debug("scaled up workers", zap.Int("added", added), zap.Int("total", total))
+	} else if removed > 0 {
+		eb.logger.Debug("scaled down workers", zap.Int("removed", removed), zap.Int("total", total))
 	}
 }
 
@@ -505,6 +541,9 @@ func (eb *EventBus) Shutdown(ctx context.Context) error {
 	var err error
 	eb.shutdownOnce.Do(func() {
 		eb.isShutdown.Store(true)
+		// Finish in-flight registrations before any worker WaitGroup wait.
+		eb.workersMu.Lock()
+		eb.workersMu.Unlock()
 		eb.logger.Info("shutting down event bus")
 
 		eb.batchPublisher.Stop()
