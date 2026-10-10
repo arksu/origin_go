@@ -89,3 +89,34 @@ with standing and lying actors over dark green ground at the same scale.
 generation prompt and tool provenance are saved alongside it in `generation.json`.
 The icon matches the skeleton's warm bone palette, right-facing view and fixed
 upper-left lighting. Its alpha edges are checked over dark green terrain.
+
+## Rabbit idle sprites
+
+`python3 tools/export_rabbit_idle_sprites.py` exports the approved rabbit v2
+source sheet to `web_new/public/assets/game/animals/rabbit/idle/0.png` through
+`7.png`, ordered NE, E, SE, S, SW, W, NW, N. Explicit source regions and
+nearest-neighbor sampling produce transparent 64×64 canvases with binary alpha.
+All views use one scale: the tallest silhouette is 30 pixels, with other views
+retaining their relative heights. Reviewed body-support anchors share the
+client ground origin `(32, 48)` without centering the ears or tail. The original
+source is retained. No Blender build or atlas publication is required.
+
+`python3 tools/export_rabbit_idle_sprites.py --check` verifies the pinned source
+SHA-256, dimensions, silhouette margins and byte-exact outputs without writing.
+
+## Rabbit walk sprites
+
+`python3 tools/export_rabbit_walk_sprites.py` copies the 64 approved walk frames
+from `art_source/animals/rabbit/walk_candidate_v1/` into
+`web_new/public/assets/game/animals/rabbit/walk/{0..7}/{00..07}.png` without
+resampling. Directions are NE, E, SE, S, SW, W, NW, N. Each frame keeps its 64×64
+canvas, binary alpha and common `(32, 48)` origin, including the approved
+push-off/flight gap. The catalog registers one looping 8 FPS frame layer per
+direction and leaves idle resources unchanged.
+
+`python3 tools/export_rabbit_walk_sprites.py --check` verifies the pinned approval
+manifest, every candidate SHA-256, frame contracts and byte-exact runtime copies.
+The original sheets, prompts and preparation recipe remain with the source.
+Open `/tests/rabbit-walk.html` on the Vite server to review all eight published
+resources with playback controls and an idle comparison. No Blender or atlas
+rebuild is needed for these ordinary frame-layer PNGs.
