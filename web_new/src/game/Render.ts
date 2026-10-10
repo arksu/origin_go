@@ -37,7 +37,7 @@ import type { ObjectViewOptions } from './ObjectView'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
 import { MinimapRenderer } from './minimap/MinimapRenderer'
 import type { MinimapPose } from './minimap/types'
-import { getChunkSize, getCoordPerTile } from './tiles/Tile'
+import { getChunkSize, getCoordPerTile, hasWorldParams } from './tiles/Tile'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
 
@@ -92,7 +92,7 @@ export class Render {
       (x, y, revision, epoch) => playerCommandController.sendMoveDirection(x, y, revision, epoch),
       () => {
         const game = useGameStore()
-        return this.canvas !== null && gameConnection.getState() === 'connected' && game.worldBootstrapState === 'ready' &&
+        return this.canvas !== null && game.isInGame && gameConnection.getState() === 'connected' && game.worldBootstrapState === 'ready' &&
           !game.playerStats.isKnockedOut && !game.playerStats.isLying
       },
       () => this.inputController.suppressMovementKeys(),
@@ -166,6 +166,7 @@ export class Render {
     this.inputController.onDirection((x, y) => this.keyboardMovement.setDirection(x, y))
 
     this.inputController.onClick((event) => {
+      if (!hasWorldParams() || !useGameStore().isInGame) return
       this.lastClickScreen = { x: event.screenX, y: event.screenY }
       this.lastPointerScreen = { x: event.screenX, y: event.screenY }
       this.lastClickWorld = this.screenToWorld(event.screenX, event.screenY)
@@ -264,6 +265,7 @@ export class Render {
   }
 
   private handleSecondaryMapClick(screenX: number, screenY: number, modifiers: number): void {
+    if (!hasWorldParams() || !useGameStore().isInGame) return
     this.releaseKeyboardMovement()
     this.lastClickScreen = { x: screenX, y: screenY }
     this.lastPointerScreen = { x: screenX, y: screenY }
@@ -316,6 +318,10 @@ export class Render {
   }
 
   private update(): void {
+    // Renderer starts before network authentication; no world coordinate math yet.
+    if (!hasWorldParams()) return
+    const game = useGameStore()
+    if (game.worldParams && !game.isInGame) return
     const now = performance.now()
     this.updateMovement()
     this.updateCamera()
@@ -622,10 +628,6 @@ export class Render {
     return this.chunkManager
   }
 
-  setWorldParams(coordPerTile: number, chunkSize: number): void {
-    this.chunkManager.setWorldParams(coordPerTile, chunkSize)
-  }
-
   attachMinimap(canvas: HTMLCanvasElement): void {
     if (this.minimapCanvas === canvas) return
     this.minimapRenderer?.destroy()
@@ -909,8 +911,8 @@ export class Render {
   setKeyboardMovementEnabled(enabled: boolean): void {
     const game = useGameStore()
     const params = game.worldParams
-    const accepted = this.keyboardMovement.configure(params?.streamEpoch ?? 0, params?.directionalMovementSupported === true,
-      enabled && !game.playerStats.isKnockedOut && !game.playerStats.isLying)
+    const accepted = this.keyboardMovement.configure(params?.streamEpoch ?? 0, hasWorldParams() && params?.directionalMovementSupported === true,
+      enabled && game.isInGame && !game.playerStats.isKnockedOut && !game.playerStats.isLying)
     this.inputController.setKeyboardMovementEnabled(accepted)
   }
 

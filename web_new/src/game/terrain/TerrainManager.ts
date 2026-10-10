@@ -3,7 +3,7 @@ import { TerrainSpriteRenderer } from './TerrainSpriteRenderer'
 import { getTerrainGenerator } from './TerrainRegistry'
 import type { TerrainSubchunk, TerrainBuildTask } from './TerrainSubchunkTypes'
 import { TerrainSubchunkState } from './TerrainSubchunkTypes'
-import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getChunkSize, getFullChunkSize } from '../tiles/Tile'
+import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF, getChunkSize, getFullChunkSize, hasWorldParams } from '../tiles/Tile'
 import { terrainBuildQueue } from './TerrainBuildQueue'
 import { terrainMetrics } from './TerrainMetricsCollector'
 import { terrainSpritePool } from './TerrainSpritePool'
@@ -51,6 +51,7 @@ export class TerrainManager {
    * Call this from render loop.
    */
   setCameraPosition(gameX: number, gameY: number): void {
+    if (!hasWorldParams()) return
     // Convert game coords to subchunk coords directly
     // Game coords are in tile units, subchunk coords are in subchunk units
     const chunkSize = getFullChunkSize()

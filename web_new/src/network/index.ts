@@ -206,3 +206,8 @@ export function sendCancelAction(): void {
 }
 
 export { gameConnection, messageDispatcher }
+
+export { serverConstants, ServerConstants } from './ServerConstants'
+export { gameCalendarSync, GameCalendarSync, gameCalendarFromRuntimeSeconds } from './GameCalendarSync'
+export type { GameCalendar } from './GameCalendarSync'
+export type { ServerConstantsSnapshot } from './ServerConstants'

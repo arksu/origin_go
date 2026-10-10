@@ -104,8 +104,35 @@ func TestHandleTimeReportsRuntimeSeconds(t *testing.T) {
 	if handled := handler.HandleCommand(world, playerID, types.InvalidHandle, "/time"); !handled {
 		t.Fatal("expected /time to be recognized")
 	}
-	if got := mockChat.messages[playerID]; got != "runtime_seconds: 364686" {
+	if got := mockChat.messages[playerID]; got != "Year 1, Month 1, Day 13, 15:54:18; runtime_seconds: 364686" {
 		t.Fatalf("unexpected runtime time message: %q", got)
+	}
+}
+
+func TestHandleTimeEpochAndInvalidRuntime(t *testing.T) {
+	tests := []struct {
+		name    string
+		runtime int64
+		want    string
+	}{
+		{"epoch", 0, "Year 1, Month 1, Day 1, 00:00:00; runtime_seconds: 0"},
+		{"invalid", -1, "Game time unavailable: runtime seconds must not be negative; runtime_seconds: -1"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
+			world := ecs.NewWorldWithCapacity(100, bus, 0)
+			ecs.SetResource(world, ecs.TimeState{RuntimeSecondsTotal: test.runtime})
+			chat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+			handler := NewChatAdminCommandHandler(nil, nil, chat, nil, nil, nil, nil, nil, bus, zaptest.NewLogger(t))
+			playerID := types.EntityID(42)
+			if !handler.HandleCommand(world, playerID, types.InvalidHandle, "/time") {
+				t.Fatal("expected /time to be recognized")
+			}
+			if got := chat.messages[playerID]; got != test.want {
+				t.Fatalf("time message = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

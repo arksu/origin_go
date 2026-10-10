@@ -30,28 +30,20 @@ func TestMoveDirectionRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDirectionalMovementCapabilityCompatibility(t *testing.T) {
-	var snapshot S2C_PlayerEnterWorld
-	// Pre-capability snapshot: entity_id=42, stream_epoch=7.
-	if err := proto.Unmarshal([]byte{8, 42, 72, 7}, &snapshot); err != nil {
-		t.Fatal(err)
-	}
-	if snapshot.DirectionalMovementSupported || snapshot.EntityId != 42 || snapshot.StreamEpoch != 7 {
-		t.Fatalf("legacy snapshot changed: %v", &snapshot)
-	}
-	snapshot.DirectionalMovementSupported = true
-	wire, err := proto.Marshal(&snapshot)
+func TestDirectionalMovementCapabilityInServerConstants(t *testing.T) {
+	constants := &S2C_ServerConstants{DirectionalMovementSupported: true}
+	wire, err := proto.Marshal(constants)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var decoded S2C_PlayerEnterWorld
+	var decoded S2C_ServerConstants
 	if err := proto.Unmarshal(wire, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if !proto.Equal(&snapshot, &decoded) {
+	if !proto.Equal(constants, &decoded) {
 		t.Fatalf("capability lost: %v", &decoded)
 	}
-	if snapshot.ProtoReflect().Descriptor().Fields().ByName("directional_movement_supported").Number() != 10 ||
+	if constants.ProtoReflect().Descriptor().Fields().ByName("directional_movement_supported").Number() != 4 ||
 		(&C2S_PlayerAction{}).ProtoReflect().Descriptor().Fields().ByName("move_direction").Number() != 6 {
 		t.Fatal("directional contract tags changed")
 	}

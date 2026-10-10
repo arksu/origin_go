@@ -1,6 +1,9 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { test, beforeEach } from 'node:test'
+import { setWorldParams } from './serverConstantsFixture'
+
+beforeEach(() => setWorldParams(32, 128))
 import { createPinia, setActivePinia } from 'pinia'
 import { AnimationClip, Bone, BoxGeometry, Group, Mesh, MeshStandardMaterial, ShaderMaterial, Vector3, VectorKeyframeTrack } from 'three'
 import type { ActorBundle } from '../src/game/actors/ActorAssetCache'

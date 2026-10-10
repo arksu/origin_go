@@ -6,7 +6,7 @@ export {
   TILE_HEIGHT_HALF,
   getCoordPerTile,
   getChunkSize,
-  setWorldParams,
+  hasWorldParams,
 } from './Tile'
 
 export {

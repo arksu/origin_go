@@ -385,6 +385,15 @@ response := http.Get(validateURL)
 
 ### 3. Client Cleanup
 
+Initial authentication uses `Client.BeginAuthentication` / `EndAuthentication`
+around the complete auth path. The connection read loop processes it sequentially.
+`Close` ends the transport immediately; if auth is still in flight, its disconnect
+callback waits until `EndAuthentication` publishes the final character association
+or DB failure. This lets existing guarded disconnect cleanup clear a committed
+online flag exactly once, including a socket closed before auth commit. Always
+defer `EndAuthentication` after a successful begin; do not introduce a parallel
+offline write or hold the authentication mutex during DB work.
+
 ```go
 // On client disconnect
 func (s *Server) onDisconnect(client *Client) {

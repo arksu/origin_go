@@ -6,6 +6,8 @@ import { DEBUG_MOVEMENT } from '@/constants/game'
 import { initializeAudio, localAudioController, worldAudioReceiver } from '@/game/audioRuntime'
 import { decodeCharacterVisual } from '@/types/characterVisual'
 import { decodeActionAnimation } from '@/types/actionAnimation'
+import { serverConstants } from './ServerConstants'
+import { gameConnection } from './GameConnection'
 import { ChunkStreamGuard } from './ChunkStreamGuard'
 import { AttackResultReceiver } from './AttackResultReceiver'
 import { ActionExecutionReceiver } from './ActionExecutionReceiver'
@@ -55,16 +57,19 @@ export function registerMessageHandlers(): void {
   void initializeAudio().catch((error: unknown) => console.error('[Audio] Catalog initialization failed', error))
 
   messageDispatcher.on('playerEnterWorld', (msg: proto.IS2C_PlayerEnterWorld) => {
+    const constants = serverConstants.getSnapshot()
+    if (!constants) {
+      gameConnection.protocolError('World entry arrived before server constants')
+      return
+    }
     // Each entry is a fresh world, including teleports and future mine layers.
     // A preceding leave packet is not required and coordinates may be reused.
     clearClientWorldState()
 
-    const coordPerTile = msg.coordPerTile || 32
-    const chunkSize = msg.chunkSize || 128
+    const { coordPerTile, chunkSize, tickRate } = constants
     const streamEpoch = msg.streamEpoch || 0
     chunkStream.reset(streamEpoch)
     resetAttackResultStream(streamEpoch)
-    const tickRate = msg.tickRate || 10 // Default to 10 ticks/sec
     worldAudioReceiver.configure(streamEpoch, msg.audio)
     localAudioController.setListener(toNumber(msg.entityId!), worldAudioReceiver.hearing)
 
@@ -73,21 +78,17 @@ export function registerMessageHandlers(): void {
     gameStore.setPlayerEnterWorld(
       toNumber(msg.entityId!),
       msg.name || '',
-      coordPerTile,
-      chunkSize,
       streamEpoch,
-      msg.directionalMovementSupported === true,
     )
     gameStore.markPlayerEnterWorldBootstrap()
 
     // Set stream epoch for MoveController to validate incoming movement packets
-    moveController.setStreamEpoch(streamEpoch, tickRate)
+    moveController.setStreamEpoch(streamEpoch)
 
     // Set player ID for command controller (camera target is deferred to objectSpawn
     // to avoid camera sitting at (0,0) before the player entity actually spawns)
     playerCommandController.setPlayerId(toNumber(msg.entityId!))
 
-    gameFacade.setWorldParams(coordPerTile, chunkSize)
   })
 
   messageDispatcher.on('playerLeaveWorld', () => {

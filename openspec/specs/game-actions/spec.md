@@ -402,6 +402,16 @@ For automatic execution repeat, every successfully completed cycle SHALL start i
 
 Cooldown start and expiry times SHALL be included in ordinary character saves and restored across sessions and orderly restarts. Offline time SHALL count toward expiry. Reattachment SHALL preserve runtime deadlines, and transfer/rollback SHALL carry the current snapshot. Abrupt crashes retain the existing character-save durability guarantees.
 
+#### Scenario: Successful completion starts the action cooldown
+- **WHEN** a character successfully completes an action with a positive cooldown
+- **THEN** the server SHALL start that character's cooldown for that action at the same commit point as its action costs
+- **AND** new attempts of that action SHALL remain blocked until the deadline expires
+
 ### Requirement: Universal action icon presentation
 
 All client action icon locations SHALL use `ActionIcon` and the shared action presentation interface. A single session clock and server-owned timestamps SHALL determine the clockwise dark overlay, clearing from 12 o'clock to reveal the icon. The Actions dropdown, duplicate hotbar assignments and icons mounted during cooldown SHALL show the same proportional progress. No per-icon countdown timer or click-derived cooldown SHALL exist. Cooldown SHALL block mouse, touch and keyboard activation while preserving dragging, tooltips, cancellation and hotbar clearing.
+
+#### Scenario: Duplicate icons share cooldown progress
+- **WHEN** an action is cooling down and its icon appears in the Actions dropdown and multiple hotbar slots
+- **THEN** every icon SHALL show the same proportional cooldown overlay from the shared clock and server-owned timestamps
+- **AND** activation SHALL remain blocked while dragging, tooltips, cancellation and hotbar clearing remain available

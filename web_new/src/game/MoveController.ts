@@ -11,6 +11,7 @@
  */
 
 import { timeSync } from '@/network/TimeSync'
+import { serverConstants } from '@/network/ServerConstants'
 import { DEBUG_MOVEMENT } from '@/constants/game'
 import { LOCOMOTION_STOP_MS } from './movementTiming'
 
@@ -90,23 +91,19 @@ class MoveController {
   private entities: Map<number, EntityMoveState> = new Map()
   private lastRenderPositions: Map<number, RenderPosition> = new Map()
   private globalStreamEpoch = 0
-  private tickRate = 10 // Default fallback (100ms per tick)
 
   /**
-   * Set the global stream epoch and tick rate (from S2C_PlayerEnterWorld).
+   * Set the per-world stream epoch. Tick rate belongs to connection constants.
    */
-  setStreamEpoch(epoch: number, tickRate?: number): void {
+  setStreamEpoch(epoch: number): void {
     this.globalStreamEpoch = epoch
-    if (tickRate && tickRate > 0) {
-      this.tickRate = tickRate
-    }
   }
 
   /**
    * Get the current tick rate.
    */
   getTickRate(): number {
-    return this.tickRate
+    return serverConstants.requireSnapshot().tickRate
   }
 
   /**
@@ -209,7 +206,7 @@ class MoveController {
 
     // Add synthetic pre-roll keyframe for smooth movement start
     if (isMovementStart && isMoving) {
-      const syntheticOffsetMs = Math.floor(1000 / this.tickRate) // One tick duration in ms
+      const syntheticOffsetMs = Math.floor(1000 / this.getTickRate()) // One tick duration in ms
       const syntheticKeyframe: MoveKeyframe = {
         tServerMs: serverTimeMs - syntheticOffsetMs,
         x: state.visualX,
@@ -227,7 +224,7 @@ class MoveController {
         console.log(`[MoveController] Synthetic pre-roll keyframe for entity ${entityId}:`, {
           pos: `(${state.visualX.toFixed(2)}, ${state.visualY.toFixed(2)})`,
           offsetMs: syntheticOffsetMs,
-          tickRate: this.tickRate,
+          tickRate: this.getTickRate(),
         })
       }
     }

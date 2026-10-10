@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createPinia, setActivePinia } from 'pinia'
@@ -505,7 +506,8 @@ test('discovery playback requires the feedback FX trigger, not an experience del
   assert.equal(samples[2]!.volumes.get(1), .8 * .5 * .4)
   setActivePinia(createPinia())
   const store = useGameStore()
-  store.setPlayerEnterWorld(1, 'owner', 12, 128, 7)
+  setWorldParams(12, 128, false)
+  store.setPlayerEnterWorld(1, 'owner', 7)
   t.mock.method(soundManager, 'initialize', async () => ({ manifests: {}, equipment: {}, actionAnimations: {} }))
   const feedbackCalls = t.mock.method(soundManager, 'playFeedback', () => {})
   const fxCalls = t.mock.method(gameFacade, 'playFx', () => {})

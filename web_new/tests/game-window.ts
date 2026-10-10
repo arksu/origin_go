@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import { createApp, defineComponent, h, nextTick, ref, type VNode } from 'vue'
 import { createPinia } from 'pinia'
 import '../src/assets/main.scss'
@@ -144,7 +145,8 @@ async function unmountDuringDrag() {
 createApp(defineComponent({ setup() {
   const game = useGameStore(), clock = useActionCooldownStore()
   game.setConnectionState('connected')
-  game.setPlayerEnterWorld(1, 'Window preview', 12, 4, 7, true)
+  setWorldParams(12, 4, true)
+  game.setPlayerEnterWorld(1, 'Window preview', 7)
   timeSync.reset(); clock.setSnapshot({ serverTimeMs: Date.now() })
   game.setPlayerStats({ isKnockedOut: true, isLying: true, canStandUp: false, koUntilMs: clock.serverNow() + 600000 })
   const brick = (itemId: number): proto.IItemInstance => ({ itemId, name: 'Brick', resource: 'items/brick.png', quality: 12 })

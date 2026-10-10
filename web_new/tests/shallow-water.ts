@@ -7,7 +7,7 @@ import { ObjectManager } from '../src/game/ObjectManager'
 import { type ObjectView } from '../src/game/ObjectView'
 import { coordScreen2Game } from '../src/game/utils/coordConvert'
 import { TILE_GRASS, TILE_SHALLOW_WATER } from '../src/game/tiles/tileIds'
-import { setWorldParams } from '../src/game/tiles/Tile'
+import { setWorldParams } from './serverConstantsFixture'
 
 const report = document.querySelector<HTMLPreElement>('#result')!
 const metrics = document.querySelector<HTMLPreElement>('#metrics')!

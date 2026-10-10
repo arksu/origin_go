@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
@@ -175,9 +176,10 @@ function setupHandlers(t: TestContext) {
   t.mock.method(gameFacade, 'spawnObject', () => {})
   t.mock.method(console, 'log', () => {})
   t.mock.method(console, 'error', () => {})
+  setWorldParams(32, 128)
   registerMessageHandlers()
   const enter = (epoch = 7) => {
-    dispatch({ playerEnterWorld: { entityId: 42, streamEpoch: epoch, coordPerTile: 32, chunkSize: 128 } })
+    dispatch({ playerEnterWorld: { entityId: 42, streamEpoch: epoch} })
     dispatch({ actionList: { actions: [...definitions.values()] } })
   }
   enter()

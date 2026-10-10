@@ -510,22 +510,34 @@ message S2C_AuthResult {
 message S2C_Pong {
   int64 client_time_ms = 1;
   int64 server_time_ms = 2;
+  optional int64 runtime_seconds_total = 3;
+}
+
+// Immutable for the server run; sent once after successful authentication.
+message S2C_ServerConstants {
+  uint32 coord_per_tile = 1;
+  uint32 chunk_size = 2;
+  uint32 tick_rate = 3;
+  bool directional_movement_supported = 4;
+  uint32 real_seconds_per_game_day = 5;
+  uint32 hours_per_day = 6;
+  uint32 days_per_month = 7;
+  uint32 months_per_year = 8;
 }
 
 // when all is ready to player enter, than send chunks, entities, etc
 message S2C_PlayerEnterWorld {
+  reserved 3, 4, 5, 10;
+  reserved "coord_per_tile", "chunk_size", "tick_rate", "directional_movement_supported";
+
   uint64 entity_id = 1;
   string name = 2;
-  uint32 coord_per_tile = 3;
-  uint32 chunk_size = 4;
-  uint32 tick_rate = 5;
   //  EntityStats stats = 4;
   //  EntitySkills skills = 5;
   //  Inventory inventory = 6;
   //  Paperdoll paperdoll = 7;
   //  optional uint64 dragging_entity_id = 8; // если тащим что-то
   uint32 stream_epoch = 9; // для защиты от гонок состояний
-  bool directional_movement_supported = 10;
   S2C_AudioParameters audio = 11;
 }
 
@@ -983,6 +995,7 @@ message ServerMessage {
     S2C_ObjectSpawnBatch object_spawn_batch = 50;
     S2C_SoundBatch sound_batch = 51;
     S2C_AttackResult attack_result = 52;
+    S2C_ServerConstants server_constants = 53;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

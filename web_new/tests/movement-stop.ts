@@ -2,7 +2,8 @@ import type { ActorHandle } from '../src/game/actors/ActorRenderer'
 import { ACTOR_RENDER } from '../src/game/actors/config'
 import { moveController } from '../src/game/MoveController'
 import { ObjectManager } from '../src/game/ObjectManager'
-import { getCoordPerTile, setWorldParams } from '../src/game/tiles/Tile'
+import { getCoordPerTile } from '../src/game/tiles/Tile'
+import { setWorldParams } from './serverConstantsFixture'
 import { coordGame2Screen } from '../src/game/utils/coordConvert'
 import { timeSync } from '../src/network/TimeSync'
 
@@ -21,6 +22,7 @@ export async function verifyMovementStopping(manager: ObjectManager): Promise<vo
   const isIdle = () => !handle.actor.walking
   const frame = () => Math.floor(handle.actor.distanceTiles / sheet.cycleDistanceTiles * sheet.frameCount + 1e-8) % sheet.frameCount
   const originalNow = Date.now
+  setWorldParams(32, 128)
   const originalCoordPerTile = getCoordPerTile()
 
   try {

@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { BitmapText, Container } from 'pixi.js'
@@ -187,9 +188,10 @@ test('actual network handler presents only fully accepted events and clears the 
   context.mock.method(gameFacade, 'resetWorld', () => f.manager.clear())
   const clears = context.mock.method(gameFacade, 'clearDamageNumbers', () => f.manager.clear())
   const shows = context.mock.method(gameFacade, 'showDamageNumbers', (hits: readonly DamageNumberHit[]) => f.manager.show(hits, f.objects, 1000, 1))
+  setWorldParams(32, 128)
   registerMessageHandlers()
   const dispatch = (packet: proto.IServerMessage) => messageDispatcher.dispatch(proto.ServerMessage.create(packet))
-  dispatch({ playerEnterWorld: { entityId: 21, streamEpoch: 7, coordPerTile: 32, chunkSize: 128 } })
+  dispatch({ playerEnterWorld: { entityId: 21, streamEpoch: 7} })
   f.positions.set(31, { x: 100, y: 200, top: -30 })
   const healthBefore = { ...store.playerStats }
   const send = (eventId: string, hits: unknown[], epoch = 7) => dispatch(proto.ServerMessage.fromObject({ attackResult: {
@@ -218,7 +220,7 @@ test('actual network handler presents only fully accepted events and clears the 
   assert.equal(f.manager.presentation.activeCount, 0)
   send('4', [{ targetId: '31', damage: 3.6 }])
   assert.equal(f.manager.presentation.activeCount, 0)
-  dispatch({ playerEnterWorld: { entityId: 21, streamEpoch: 8, coordPerTile: 32, chunkSize: 128 } })
+  dispatch({ playerEnterWorld: { entityId: 21, streamEpoch: 8} })
   send('1', [{ targetId: '31', damage: 0.6 }], 8)
   assert.equal(f.manager.presentation.activeCount, 1)
   dispatch({ playerLeaveWorld: {} })

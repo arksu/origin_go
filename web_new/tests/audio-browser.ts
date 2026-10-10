@@ -114,7 +114,7 @@ async function verify(): Promise<void> {
     assert(playEvents.some(event => event.file.includes('/tree_fall/') && event.playing), 'Decoded final fall feedback did not start')
     if (serverFixture) {
       const entry = decodePacket(serverFixture.enter_world_base64).playerEnterWorld
-      assert(entry?.streamEpoch && entry.audio && entry.tickRate === 10, 'Server entry lacks stream/audio parameters')
+      assert(entry?.streamEpoch && entry.audio, 'Server entry lacks stream/audio parameters')
       receiver.configure(entry.streamEpoch, entry.audio)
       for (const emission of serverFixture.emissions) {
         const batch = decodePacket(emission.packet_base64).soundBatch

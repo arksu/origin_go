@@ -21,6 +21,7 @@ import (
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/playerstate"
+	"origin/internal/timeutil"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -751,7 +752,13 @@ func (h *ChatAdminCommandHandler) handleOnline(
 
 func (h *ChatAdminCommandHandler) handleTime(w *ecs.World, playerID types.EntityID) {
 	runtimeSeconds := ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal
-	h.sendSystemMessage(playerID, fmt.Sprintf("runtime_seconds: %d", runtimeSeconds))
+	calendar, err := timeutil.GameCalendarFromRuntime(runtimeSeconds)
+	if err != nil {
+		h.sendSystemMessage(playerID, fmt.Sprintf("Game time unavailable: %v; runtime_seconds: %d", err, runtimeSeconds))
+		return
+	}
+	h.sendSystemMessage(playerID, fmt.Sprintf("Year %d, Month %d, Day %d, %02d:%02d:%02d; runtime_seconds: %d",
+		calendar.Year, calendar.Month, calendar.Day, calendar.Hour, calendar.Minute, calendar.Second, runtimeSeconds))
 }
 
 // handlePosition processes: /pos - displays the caller's current coordinates.

@@ -32,6 +32,16 @@ type spawnPos struct {
 }
 
 func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S_Auth) {
+	if !c.BeginAuthentication() {
+		select {
+		case <-c.Done():
+			return
+		default:
+		}
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, "Already authenticated")
+		return
+	}
+	defer c.EndAuthentication()
 	g.logger.Debug("Auth request", zap.Uint64("client_id", c.ID), zap.String("token", auth.Token))
 
 	if auth.Token == "" {
@@ -109,12 +119,14 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
-	g.sendAuthResult(c, sequence, true, "")
+	if !g.sendAuthenticatedBootstrap(c, sequence) {
+		return
+	}
 
 	go g.spawnAndLogin(c, character)
 }
 
-func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, errorMsg string) {
+func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, errorMsg string) bool {
 	result := &netproto.S2C_AuthResult{
 		Success:      success,
 		ErrorMessage: errorMsg,
@@ -130,10 +142,15 @@ func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, 
 	data, err := proto.Marshal(response)
 	if err != nil {
 		g.logger.Error("Failed to marshal auth result", zap.Uint64("client_id", c.ID), zap.Error(err))
-		return
+		c.Close()
+		return false
 	}
 
-	c.Send(data)
+	if !c.SendCritical(data) {
+		c.Close()
+		return false
+	}
+	return true
 }
 
 func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) {
@@ -784,13 +801,9 @@ func (g *Game) sendPlayerEnterWorld(c *network.Client, entityID types.EntityID, 
 	enterWorld := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_PlayerEnterWorld{
 			PlayerEnterWorld: &netproto.S2C_PlayerEnterWorld{
-				EntityId:                     uint64(entityID),
-				Name:                         character.Name,
-				CoordPerTile:                 _const.CoordPerTile,
-				ChunkSize:                    _const.ChunkSize,
-				TickRate:                     uint32(g.cfg.Game.TickRate),
-				StreamEpoch:                  c.StreamEpoch.Load(),
-				DirectionalMovementSupported: true,
+				EntityId:    uint64(entityID),
+				Name:        character.Name,
+				StreamEpoch: c.StreamEpoch.Load(),
 				Audio: &netproto.S2C_AudioParameters{
 					Hearing:     hearing,
 					FreshnessMs: uint32(freshnessMs),

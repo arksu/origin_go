@@ -7,7 +7,7 @@ import { ParticleEmitter } from '../src/game/fx/ParticleEmitter'
 import { ParticlePool } from '../src/game/fx/ParticlePool'
 import { smokePreset } from '../src/game/fx/presets/smoke'
 import { validateFxDefinition } from '../src/game/fx/validateDefinition.js'
-import { setWorldParams } from '../src/game/tiles/Tile'
+import { setWorldParams } from './serverConstantsFixture'
 import { coordScreen2Game } from '../src/game/utils/coordConvert'
 
 const result = document.querySelector<HTMLPreElement>('#result')!

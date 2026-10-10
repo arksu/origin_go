@@ -6,7 +6,7 @@ import { Render } from '../src/game/Render'
 import { GameFacade } from '../src/game/GameFacade'
 import { directionSectorPoints, type DirectionSector } from '../src/game/hud/directionAim'
 import { coordGame2Screen } from '../src/game/utils/coordConvert'
-import { setWorldParams } from '../src/game/tiles/Tile'
+import { setWorldParams } from './serverConstantsFixture'
 import { cameraController } from '../src/game/CameraController'
 
 const sector: DirectionSector = { range: 18, angle: Math.PI / 2 }

@@ -179,10 +179,6 @@ export class GameFacade {
     this.render?.releaseKeyboardMovement()
   }
 
-  setWorldParams(coordPerTile: number, chunkSize: number): void {
-    this.render?.setWorldParams(coordPerTile, chunkSize)
-  }
-
   setPlayerEntityId(entityId: number | null): void {
     this.render?.setPlayerEntityId(entityId)
     if (entityId !== null) {
