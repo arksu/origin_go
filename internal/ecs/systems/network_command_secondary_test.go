@@ -39,7 +39,7 @@ func TestLockedSecondaryItemAttemptRejectsBeforeReplacingAnotherAction(t *testin
 			}
 		})
 		router := &testActionClickRouter{}
-		system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, nil)
+		system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, nil)
 		system.SetActionService(router)
 		system.SetContextActionService(testItemContextResolver{testContextActionResolver{actions: []ContextAction{{ActionID: "take"}}}})
 		system.handleSecondaryMapClick(w, player, 1, &netproto.MapClick{TargetEntityId: 2})
@@ -82,7 +82,7 @@ func TestSecondaryCarryPrecedesEveryTargetAndHasNoFallback(t *testing.T) {
 				})
 			}
 			router, menu := &testActionClickRouter{consume: true}, &testContextMenuSender{}
-			system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, nil)
+			system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, nil)
 			system.SetActionService(router)
 			system.SetLiftCommandService(testCarryStateService{})
 			system.SetContextMenuSender(menu)
@@ -113,7 +113,7 @@ func TestSecondaryCancelsEveryPhaseAndLeavesAdminCommandsPending(t *testing.T) {
 			ecs.GetResource[ecs.PendingAdminTeleport](w).Set(1)
 			ecs.GetResource[ecs.PendingAdminSpawn](w).Set(1, ecs.AdminSpawnEntry{})
 			admin, router := &testAdminObjectInfoHandler{}, &testActionClickRouter{consume: true}
-			system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, nil)
+			system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, nil)
 			system.SetAdminHandler(admin)
 			system.SetActionService(router)
 			for _, button := range []netproto.MapClickButton{1, 99, -1} {
@@ -147,7 +147,7 @@ func TestSecondaryGroundAndStaleTargetsPreserveUnrelatedMovement(t *testing.T) {
 			ecs.AddComponent(w, h, movement)
 			ecs.AddComponent(w, h, components.PendingContextAction{TargetEntityID: 8})
 		})
-		system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, nil)
+		system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, nil)
 		system.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, X: 43, Y: 99, TargetEntityId: targetID}})
 		movement, _ := ecs.GetComponent[components.Movement](w, player)
 		_, pending := ecs.GetComponent[components.PendingContextAction](w, player)
@@ -163,7 +163,7 @@ func TestSecondaryContextActionCounts(t *testing.T) {
 		player := w.Spawn(1, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.Movement{}) })
 		w.Spawn(2, func(w *ecs.World, h types.Handle) { ecs.AddComponent(w, h, components.Collider{}) })
 		menu := &testContextMenuSender{}
-		system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, nil)
+		system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, nil)
 		system.SetContextMenuSender(menu)
 		system.SetContextActionService(testContextActionResolver{actions: []ContextAction{{ActionID: "one"}, {ActionID: "two"}}[:count]})
 		system.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, TargetEntityId: 2}})
@@ -192,7 +192,7 @@ func TestSecondaryPickupAfterCancelRunsOnce(t *testing.T) {
 	ecs.AddComponent(w, hand, components.InventoryContainer{Kind: constt.InventoryHand, OwnerID: 1})
 	ecs.GetResource[ecs.InventoryRefIndex](w).Add(constt.InventoryHand, 1, 0, hand)
 	router := &testActionClickRouter{consume: true}
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, nil)
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, nil)
 	system.SetActionService(router)
 	system.handleMapClick(w, player, &network.PlayerCommand{CharacterID: 1, Payload: &netproto.MapClick{Button: netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, TargetEntityId: 2}})
 	executor := &autoPickupExecutorStub{results: []InventoryOpResult{{Success: true}}}

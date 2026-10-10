@@ -59,7 +59,7 @@ func TestDirectionBootstrapAndIngressToMovement(t *testing.T) {
 	require.Equal(t, uint64(1), snapshot.GetPlayerEnterWorld().GetEntityId())
 	require.Equal(t, "wasd-test", snapshot.GetPlayerEnterWorld().GetName())
 	require.NotNil(t, snapshot.GetPlayerEnterWorld().GetAudio())
-	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, 0, zap.NewNop())
+	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, nil, 0, zap.NewNop())
 	commands.SetDirectionalSessionValidator(shard.validDirectionalSession)
 	mover := systems.NewMovementSystem(w, nil, zap.NewNop())
 	ecs.SetResource(w, ecs.TimeState{Now: time.Unix(100, 0), WallNow: clock.WallNow()})

@@ -29,7 +29,7 @@ func TestDirectionCommandDrainChargesOneStepAndNeverEmitsPointArrival(t *testing
 		return nil
 	})
 	inbox := network.NewPlayerCommandInbox(network.CommandQueueConfig{MaxQueueSize: 20, MaxPacketsPerSecond: 40, MaxCommandsPerTickPerClient: 20})
-	commands := NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, 0, zap.NewNop())
+	commands := NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, nil, 0, zap.NewNop())
 	commands.SetDirectionalSessionValidator(func(types.EntityID, uint64, uint32) bool { return true })
 	cm := &testChunkManager{chunk: scene.chunk}
 	mover := NewMovementSystem(w, cm, zap.NewNop())

@@ -206,7 +206,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
 	s.inventoryExecutor = inventoryExecutor
 
-	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
+	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	networkCmdSystem.SetDirectionalSessionValidator(s.validDirectionalSession)
 	networkCmdSystem.SetStandUpHandler(s.queueStandUp)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
@@ -1887,7 +1887,8 @@ func (s *Shard) SendWarning(entityID types.EntityID, warningCode netproto.Warnin
 	client.SendWarning(warningCode, message)
 }
 
-// BroadcastChatMessage sends a chat message to multiple entities
+// BroadcastChatMessage consumes entityIDs synchronously without retaining the
+// caller's slice. Only the immutable serialized payload escapes into send queues.
 func (s *Shard) BroadcastChatMessage(entityIDs []types.EntityID, channel netproto.ChatChannel, fromEntityID types.EntityID, fromName, text string) {
 	if len(entityIDs) == 0 {
 		return

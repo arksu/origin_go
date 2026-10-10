@@ -31,7 +31,7 @@ func TestNetworkCommandSystem_HandleSetMovementMode_CarryingRunBecomesWalk(t *te
 		})
 	})
 
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	system.handleSetMovementMode(world, playerHandle, &network.PlayerCommand{
 		CharacterID: playerID,
 		Payload: &netproto.C2S_MovementMode{
@@ -66,7 +66,7 @@ func TestNetworkCommandSystem_HandleSetMovementMode_CarryingOverstuffedForcesCra
 		})
 	})
 
-	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
+	system := NewNetworkCommandSystem(nil, nil, nil, nil, nil, nil, nil, 0, zap.NewNop())
 	system.handleSetMovementMode(world, playerHandle, &network.PlayerCommand{
 		CharacterID: playerID,
 		Payload: &netproto.C2S_MovementMode{

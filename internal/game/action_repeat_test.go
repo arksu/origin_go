@@ -146,7 +146,7 @@ func TestActionExecutionRepeatCancelsFromPlayerInput(t *testing.T) {
 			world, player, service, handler, sender := newRepeatActionTest(t, true, false, 0)
 			stale, _ := ecs.GetComponent[components.ActiveCyclicAction](world, player)
 			inbox := network.NewPlayerCommandInbox(network.CommandQueueConfig{MaxQueueSize: 20, MaxPacketsPerSecond: 20, MaxCommandsPerTickPerClient: 20})
-			commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, 0, zap.NewNop())
+			commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, nil, 0, zap.NewNop())
 			commands.SetActionService(service)
 			command := &network.PlayerCommand{ClientID: 1, CharacterID: 1, CommandID: 1}
 			if input == "escape" {
