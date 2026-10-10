@@ -37,7 +37,7 @@ function fixture(context: TestContext) {
   render.canvas = {}
   render.keyboardMovement = { release() { order.push('release') } }
   render.inputController = {
-    init() {}, onDirection() {}, suppressMovementKeys() {},
+    init() {}, onDirection() {}, onCameraReset() {}, suppressMovementKeys() {},
     onClick(handler: typeof click) { click = handler }, onLongPress(handler: typeof longPress) { longPress = handler },
     onDragStart() {}, onDragMove() {}, onDragEnd() {}, onWheel() {}, onPinchMove() {}, onPointerMove() {},
   }
