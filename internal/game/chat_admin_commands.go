@@ -56,6 +56,7 @@ type ChatAdminCommandHandler struct {
 	chunkProvider         AdminSpawnChunkProvider
 	visionForcer          AdminVisionForcer
 	teleportExecutor      AdminTeleportExecutor
+	timeExecutor          AdminTimeExecutor
 	objectDeleter         gameworld.ObjectDeleter
 	containerCloseSender  AdminContainerCloseSender
 	behaviorRegistry      contracts.BehaviorRegistry
@@ -74,6 +75,11 @@ type AdminAlertSender interface {
 // AdminTeleportExecutor handles full player teleport transfer flow.
 type AdminTeleportExecutor interface {
 	RequestAdminTeleport(playerID types.EntityID, sourceLayer int, targetX, targetY int, targetLayer *int) error
+}
+
+// AdminTimeExecutor queues a server-wide runtime adjustment for the next tick.
+type AdminTimeExecutor interface {
+	RequestAdminAddTime(seconds int64) error
 }
 
 type AdminContainerCloseSender interface {
@@ -110,6 +116,10 @@ func NewChatAdminCommandHandler(
 
 func (h *ChatAdminCommandHandler) SetTeleportExecutor(executor AdminTeleportExecutor) {
 	h.teleportExecutor = executor
+}
+
+func (h *ChatAdminCommandHandler) SetTimeExecutor(executor AdminTimeExecutor) {
+	h.timeExecutor = executor
 }
 
 func (h *ChatAdminCommandHandler) SetObjectDeleter(deleter gameworld.ObjectDeleter) {
@@ -161,6 +171,9 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	case "/time":
 		h.handleTime(w, playerID)
 		return true
+	case "/addtime":
+		h.handleAddTime(playerID, parts[1:])
+		return true
 	case "/pos":
 		h.handlePosition(w, playerID, playerHandle)
 		return true
@@ -200,6 +213,31 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	default:
 		return false
 	}
+}
+
+// handleAddTime processes: /addtime <seconds>
+func (h *ChatAdminCommandHandler) handleAddTime(playerID types.EntityID, args []string) {
+	if len(args) != 1 {
+		h.sendSystemMessage(playerID, "usage: /addtime <seconds>")
+		return
+	}
+	seconds, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil || seconds <= 0 {
+		h.sendSystemMessage(playerID, "invalid seconds: "+args[0]+"; expected a positive integer")
+		return
+	}
+	if h.timeExecutor == nil {
+		h.sendSystemMessage(playerID, "runtime service unavailable")
+		return
+	}
+	if err := h.timeExecutor.RequestAdminAddTime(seconds); err != nil {
+		h.sendSystemMessage(playerID, "addtime failed: "+err.Error())
+		return
+	}
+	h.sendSystemMessage(playerID, fmt.Sprintf("Queued +%d runtime seconds; applies next tick.", seconds))
+	h.logger.Info("Admin /addtime queued",
+		zap.Uint64("player_id", uint64(playerID)),
+		zap.Int64("seconds", seconds))
 }
 
 // handleGive processes: /give <item_key> [count] [quality]

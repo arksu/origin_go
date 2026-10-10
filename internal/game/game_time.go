@@ -1,9 +1,49 @@
 package game
 
 import (
+	"fmt"
 	"math"
 	"time"
 )
+
+// Bootstrap currently converts total runtime seconds to a time.Duration.
+const maxAdminRuntimeSeconds = int64(math.MaxInt64) / int64(time.Second)
+
+// RequestAdminAddTime aggregates a runtime jump without changing any live tick
+// snapshot. Called from shard command execution; the game loop applies the sum
+// only after every shard has completed its update.
+func (g *Game) RequestAdminAddTime(seconds int64) error {
+	if seconds <= 0 {
+		return fmt.Errorf("seconds must be a positive integer")
+	}
+	g.timeStateMu.Lock()
+	defer g.timeStateMu.Unlock()
+	if g.runtimeSecondsTotal < 0 || g.runtimeSecondsTotal > maxAdminRuntimeSeconds {
+		return fmt.Errorf("runtime seconds are outside the supported range")
+	}
+	if seconds > maxAdminRuntimeSeconds-g.runtimeSecondsTotal-g.pendingAdminSeconds {
+		return fmt.Errorf("runtime seconds would exceed supported limit (%d)", maxAdminRuntimeSeconds)
+	}
+	g.pendingAdminSeconds += seconds
+	return nil
+}
+
+// applyPendingAdminTime runs only on the game loop after the shard barrier.
+// Keep the scalar, game clock and process-uptime origin coherent; the jump must
+// not change the wall sampling anchor or consume the fractional remainder.
+func (g *Game) applyPendingAdminTime() {
+	g.timeStateMu.Lock()
+	defer g.timeStateMu.Unlock()
+	seconds := g.pendingAdminSeconds
+	if seconds == 0 {
+		return
+	}
+	duration := time.Duration(seconds) * time.Second
+	g.clock.Advance(duration)
+	g.startTime = g.startTime.Add(duration)
+	g.runtimeSecondsTotal += seconds
+	g.pendingAdminSeconds = 0
+}
 
 // Start counting only when the loop starts, after world/bootstrap loading.
 // The returned instant is also the first loop frame's elapsed-time origin.

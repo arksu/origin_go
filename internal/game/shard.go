@@ -376,6 +376,14 @@ func (s *Shard) SetAdminTeleportExecutor(executor AdminTeleportExecutor) {
 	}
 }
 
+func (s *Shard) SetAdminTimeExecutor(executor AdminTimeExecutor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.adminHandler != nil {
+		s.adminHandler.SetTimeExecutor(executor)
+	}
+}
+
 func (s *Shard) World() *ecs.World {
 	return s.world
 }
