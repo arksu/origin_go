@@ -5,7 +5,7 @@ import { InputController } from '../src/game/InputController'
 import { KeyboardMovementController } from '../src/game/KeyboardMovementController'
 import { screenMovementDirection } from '../src/game/utils/movementDirection'
 import { coordGame2Screen } from '../src/game/utils/coordConvert'
-import { setWorldParams } from '../src/game/tiles/Tile'
+import { setWorldParams } from './serverConstantsFixture'
 import { playerCommandController } from '../src/game/PlayerCommandController'
 import { gameConnection } from '../src/network/GameConnection'
 import { gameFacade } from '../src/game/GameFacade'
@@ -71,7 +71,9 @@ test('KO and lying disable WASD until confirmed standing and require a fresh key
   setActivePinia(createPinia())
   const fixture = inputFixture(context)
   const game = useGameStore()
-  game.setPlayerEnterWorld(1, 'test', 12, 128, 7, true)
+  setWorldParams(12, 128, true)
+  game.setConnectionState('connected')
+  game.setPlayerEnterWorld(1, 'test', 7)
   const render = Object.create(Render.prototype) as Render
   Object.assign(render, { inputController: fixture.input, keyboardMovement: fixture.keyboard })
   render.setKeyboardMovementEnabled(true)
@@ -281,7 +283,9 @@ test('Render sends stop before primary, secondary, long-press, placement and han
   render.setupInputController()
   f.input.setKeyboardMovementEnabled(true)
   const store = useGameStore()
-  store.setPlayerEnterWorld(1, 'test', 12, 128, 7, true)
+  setWorldParams(12, 128, true)
+  store.setConnectionState('connected')
+  store.setPlayerEnterWorld(1, 'test', 7)
   const pointer = (type: string, button = 0, touch = false) => f.canvas.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), {
     pointerId: 1, pointerType: touch ? 'touch' : 'mouse', clientX: 10, clientY: 20, button,
   }))

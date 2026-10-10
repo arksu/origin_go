@@ -73,7 +73,7 @@ if (authStore.isAuthenticated) { /* proceed */ }
 #### World
 | State | Type | Description |
 |-------|------|-------------|
-| `worldParams` | `WorldParams \| null` | `coordPerTile`, `chunkSize`, `streamEpoch` |
+| `worldParams` | `WorldParams \| null` | Per-entry `streamEpoch` and read-only geometry/capability from the connection constants |
 | `chunks` | `Map<string, ChunkData>` | Loaded chunk data by key `"x,y"` |
 | `entities` | `Map<number, GameObjectData>` | All game objects by entity ID |
 
@@ -135,9 +135,15 @@ interface ChunkData {
 - `setConnectionState(state, error?)` — Updated by GameConnection
 
 #### Player
-- `setPlayerEnterWorld(entityId, name, coordPerTile, chunkSize, streamEpoch)` — On `S2C_PlayerEnterWorld`
+- `setPlayerEnterWorld(entityId, name, streamEpoch)` — On `S2C_PlayerEnterWorld`; requires valid connection constants
 - `setPlayerLeaveWorld()` — Clear all player/world state
 - `updatePlayerPosition(position)` — On `S2C_ObjectMove` for player
+
+World parameters do not own writable copies of global constants. Their geometry
+and directional capability come from the connection snapshot; world entry/leave
+and layer transfers retain that snapshot. Connection replacement invalidates the
+old world's readiness even before a new world-entry packet arrives. Do not restore
+numeric defaults for absent constants. See `docs/features/game_calendar.md`.
 
 #### Chunks
 - `loadChunk(x, y, tiles, version)` — On `S2C_ChunkLoad`

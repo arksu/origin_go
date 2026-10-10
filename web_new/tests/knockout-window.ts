@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { createPinia } from 'pinia'
 import KnockoutWindow from '../src/components/ui/KnockoutWindow.vue'
@@ -23,7 +24,8 @@ createApp(defineComponent({ setup() {
   const clock = useActionCooldownStore()
   const width = ref(900), height = ref(600), ordinary = ref(true)
   game.setConnectionState('connected')
-  game.setPlayerEnterWorld(17, 'KO fixture', 12, 4, 7, true)
+  setWorldParams(12, 4, true)
+  game.setPlayerEnterWorld(17, 'KO fixture', 7)
   function stats(knockedOut: boolean, lying: boolean, canStand: boolean, deadline = clock.serverNow() + 60000) {
     game.setPlayerStats({ isKnockedOut: knockedOut, isLying: lying, canStandUp: canStand, koUntilMs: knockedOut ? deadline : 0 })
   }

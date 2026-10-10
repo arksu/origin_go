@@ -3,7 +3,7 @@ import { Container, Graphics } from 'pixi.js'
 import { CombatSectorPreview } from '../src/game/CombatSectorPreview'
 import { directionSectorPoints, type DirectionSector } from '../src/game/hud/directionAim'
 import { coordGame2Screen } from '../src/game/utils/coordConvert'
-import { setWorldParams } from '../src/game/tiles/Tile'
+import { setWorldParams } from '../tests/serverConstantsFixture'
 
 // CPU-only comparison with the previous DirectionAimPreview update. No renderer,
 // draw calls or GPU memory are represented by these measurements.

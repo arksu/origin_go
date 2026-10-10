@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
@@ -50,8 +51,9 @@ function setup(t: TestContext) {
   const clearTargets = t.mock.method(gameFacade, 'hideMoveTargetMarker', () => {})
   const errors = t.mock.method(console, 'error', () => {})
   t.mock.method(console, 'log', () => {})
+  setWorldParams(12, 4)
   registerMessageHandlers()
-  const begin = () => dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1, coordPerTile: 12, chunkSize: 4, tickRate: 10 } })
+  const begin = () => dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1} })
   begin()
   return { store, carriers, spawns, names, carryUpdates, targets, endTargets, clearTargets, errors, begin }
 }

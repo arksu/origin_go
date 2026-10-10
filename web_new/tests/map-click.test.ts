@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
@@ -12,6 +13,9 @@ import { DROP_ITEM_TYPE_ID } from '../src/constants/render'
 
 test('primary map clicks preserve targets, rounding, modifiers and tool routing', () => {
   setActivePinia(createPinia())
+  setWorldParams(12, 128)
+  useGameStore().setConnectionState('connected')
+  useGameStore().setPlayerEnterWorld(1, 'Player', 1)
   const packets: proto.IClientMessage[] = []
   const originalSend = gameConnection.send
   gameConnection.send = packet => { packets.push(packet) }
@@ -69,7 +73,8 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
     assert.equal(useGameStore().contextMenu, null)
 
     const gameStore = useGameStore()
-    gameStore.setPlayerEnterWorld(1, 'Player', 1, 1, 1)
+    setWorldParams(1, 1, false)
+    gameStore.setPlayerEnterWorld(1, 'Player', 1)
     gameStore.updateInventory({
       ref: { kind: proto.InventoryKind.INVENTORY_KIND_HAND, ownerId: 1, inventoryKey: 0 },
       revision: 1,
@@ -136,6 +141,9 @@ test('primary map clicks preserve targets, rounding, modifiers and tool routing'
 
 test('touch long-press sends one secondary packet, suppresses release tap, and middle drag only pans', context => {
   setActivePinia(createPinia())
+  setWorldParams(12, 128)
+  useGameStore().setConnectionState('connected')
+  useGameStore().setPlayerEnterWorld(1, 'Player', 1)
   context.mock.timers.enable({ apis: ['setTimeout'] })
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')

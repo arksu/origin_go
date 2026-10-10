@@ -20,12 +20,12 @@ test('directional start, turn and release survive the wire with revision and epo
   }
 })
 
-test('legacy enter-world disables WASD and existing map buttons retain their meaning', () => {
+test('constants advertise WASD and existing map buttons retain their meaning', () => {
   const legacy = proto.S2C_PlayerEnterWorld.decode(Uint8Array.of(8, 42, 72, 7))
-  assert.equal(legacy.directionalMovementSupported, false)
+  assert.equal(Object.hasOwn(legacy, 'directionalMovementSupported'), false)
   assert.equal(legacy.streamEpoch, 7)
-  const supported = proto.S2C_PlayerEnterWorld.decode(proto.S2C_PlayerEnterWorld.encode({
-    entityId: 42, streamEpoch: 7, directionalMovementSupported: true,
+  const supported = proto.S2C_ServerConstants.decode(proto.S2C_ServerConstants.encode({
+    directionalMovementSupported: true,
   }).finish())
   assert.equal(supported.directionalMovementSupported, true)
   for (const button of [0, 2]) {

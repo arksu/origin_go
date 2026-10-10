@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { useActionCooldownStore } from '@/stores/actionCooldownStore'
 import { ref, computed } from 'vue'
 import { proto } from '@/network/proto/packets.js'
+import { serverConstants, type ServerConstantsSnapshot } from '@/network/ServerConstants'
 import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERVAL_MS, CHAT_MAX_MESSAGES } from '@/constants/chat'
 import type { ConnectionState, ConnectionError } from '@/network/types'
 import { isNewerCharacterVisual, type CharacterVisualState } from '@/types/characterVisual'
@@ -42,10 +43,11 @@ export interface ChunkData {
 }
 
 export interface WorldParams {
-  coordPerTile: number
-  chunkSize: number
+  readonly connectionConstants: ServerConstantsSnapshot
+  readonly coordPerTile: number
+  readonly chunkSize: number
   streamEpoch: number
-  directionalMovementSupported: boolean
+  readonly directionalMovementSupported: boolean
 }
 
 export interface ChatMessage {
@@ -207,7 +209,8 @@ export const useGameStore = defineStore('game', () => {
 
   // Computed
   const isConnected = computed(() => connectionState.value === 'connected')
-  const isInGame = computed(() => isConnected.value && playerEntityId.value !== null)
+  const isInGame = computed(() => isConnected.value && playerEntityId.value !== null &&
+    worldParams.value?.connectionConstants === serverConstants.getSnapshot())
   const actionFrame = computed(() => {
     if (actionProgress.value.total <= 0) return 0
     return Math.round((actionProgress.value.current / actionProgress.value.total) * 21)
@@ -302,14 +305,18 @@ export const useGameStore = defineStore('game', () => {
   function setPlayerEnterWorld(
     entityId: number,
     name: string,
-    coordPerTile: number,
-    chunkSize: number,
     streamEpoch: number,
-    directionalMovementSupported = false,
   ) {
     playerEntityId.value = entityId
     playerName.value = name
-    worldParams.value = { coordPerTile, chunkSize, streamEpoch, directionalMovementSupported }
+    const constants = serverConstants.requireSnapshot()
+    worldParams.value = {
+      connectionConstants: constants,
+      streamEpoch,
+      get coordPerTile() { return constants.coordPerTile },
+      get chunkSize() { return constants.chunkSize },
+      get directionalMovementSupported() { return constants.directionalMovementSupported },
+    }
 
     // Clear inventories when entering new world
     console.log('[gameStore] Clearing inventories on world enter')

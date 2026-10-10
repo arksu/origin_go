@@ -44,20 +44,23 @@ type Server struct {
 }
 
 type Client struct {
-	ID                 uint64
-	conn               net.Conn
-	server             *Server
-	logger             *zap.Logger
-	sendCh             chan []byte
-	audioCh            chan []byte
-	closeCh            chan struct{}
-	closeOnce          sync.Once
-	writeBuf           *bufio.Writer
-	CharacterID        types.EntityID
-	Layer              int
-	StreamEpoch        atomic.Uint32
-	InWorld            atomic.Bool
-	criticalSendFailed atomic.Bool
+	ID                     uint64
+	conn                   net.Conn
+	server                 *Server
+	logger                 *zap.Logger
+	sendCh                 chan []byte
+	audioCh                chan []byte
+	closeCh                chan struct{}
+	closeOnce              sync.Once
+	authenticationMu       sync.Mutex
+	authenticationInFlight bool
+	disconnectPending      bool
+	writeBuf               *bufio.Writer
+	CharacterID            types.EntityID
+	Layer                  int
+	StreamEpoch            atomic.Uint32
+	InWorld                atomic.Bool
+	criticalSendFailed     atomic.Bool
 
 	DeadObserverDeadlineUnixMs atomic.Int64
 }
@@ -418,10 +421,50 @@ func (c *Client) Close() {
 		delete(c.server.clients, c.ID)
 		c.server.clientsMu.Unlock()
 
+		c.authenticationMu.Lock()
+		if c.authenticationInFlight {
+			// Authentication may still commit its online flag. Its completion
+			// publishes the association before notifying disconnect exactly once.
+			c.disconnectPending = true
+			c.authenticationMu.Unlock()
+			return
+		}
+		c.authenticationMu.Unlock()
 		if c.server.onDisconnect != nil {
 			c.server.onDisconnect(c)
 		}
 	})
+}
+
+// BeginAuthentication serializes the initial identity association with the
+// disconnect notification, without holding a mutex during database work.
+func (c *Client) BeginAuthentication() bool {
+	c.authenticationMu.Lock()
+	defer c.authenticationMu.Unlock()
+	select {
+	case <-c.closeCh:
+		return false
+	default:
+	}
+	if c.authenticationInFlight || c.CharacterID != 0 {
+		return false
+	}
+	c.authenticationInFlight = true
+	return true
+}
+
+// EndAuthentication must follow every successful BeginAuthentication, including
+// database errors. If Close arrived meanwhile, the existing disconnect handler
+// now observes the final association and performs its normal guarded cleanup.
+func (c *Client) EndAuthentication() {
+	c.authenticationMu.Lock()
+	c.authenticationInFlight = false
+	notify := c.disconnectPending
+	c.disconnectPending = false
+	c.authenticationMu.Unlock()
+	if notify && c.server.onDisconnect != nil {
+		c.server.onDisconnect(c)
+	}
 }
 
 func (c *Client) Done() <-chan struct{} {

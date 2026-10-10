@@ -33,15 +33,32 @@ func TestDirectionBootstrapAndIngressToMovement(t *testing.T) {
 	inbox := network.NewPlayerCommandInbox(network.CommandQueueConfig{MaxQueueSize: 20, MaxPacketsPerSecond: 40, MaxCommandsPerTickPerClient: 20})
 	shard := &Shard{world: w, playerInbox: inbox, Clients: map[types.EntityID]*network.Client{1: client}}
 	clock := timeutil.NewManualClock(time.Unix(10000, 0))
-	g := &Game{logger: zap.NewNop(), clock: clock, cfg: &config.Config{Game: config.GameConfig{TickRate: 10}}, shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}
+	g := &Game{logger: zap.NewNop(), clock: clock, tickRate: 10, cfg: &config.Config{Game: config.GameConfig{TickRate: 10}}, shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}
+	constantsData, err := marshalServerConstants(g.tickRate)
+	require.NoError(t, err)
+	g.serverConstantsData = constantsData
+	require.True(t, g.sendAuthenticatedBootstrap(client, 1))
 	g.sendPlayerEnterWorld(client, 1, shard, repository.Character{Name: "wasd-test"})
 	require.NoError(t, connection.SetReadDeadline(time.Now().Add(time.Second)))
 	wire, _, err := wsutil.ReadServerData(connection)
 	require.NoError(t, err)
+	var auth netproto.ServerMessage
+	require.NoError(t, proto.Unmarshal(wire, &auth))
+	require.True(t, auth.GetAuthResult().GetSuccess())
+	wire, _, err = wsutil.ReadServerData(connection)
+	require.NoError(t, err)
+	var constants netproto.ServerMessage
+	require.NoError(t, proto.Unmarshal(wire, &constants))
+	require.True(t, constants.GetServerConstants().GetDirectionalMovementSupported())
+	require.Equal(t, uint32(10), constants.GetServerConstants().GetTickRate())
+	wire, _, err = wsutil.ReadServerData(connection)
+	require.NoError(t, err)
 	var snapshot netproto.ServerMessage
 	require.NoError(t, proto.Unmarshal(wire, &snapshot))
-	require.True(t, snapshot.GetPlayerEnterWorld().GetDirectionalMovementSupported())
 	require.Equal(t, uint32(7), snapshot.GetPlayerEnterWorld().GetStreamEpoch())
+	require.Equal(t, uint64(1), snapshot.GetPlayerEnterWorld().GetEntityId())
+	require.Equal(t, "wasd-test", snapshot.GetPlayerEnterWorld().GetName())
+	require.NotNil(t, snapshot.GetPlayerEnterWorld().GetAudio())
 	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(network.CommandQueueConfig{MaxQueueSize: 20}), nil, nil, nil, nil, 0, zap.NewNop())
 	commands.SetDirectionalSessionValidator(shard.validDirectionalSession)
 	mover := systems.NewMovementSystem(w, nil, zap.NewNop())

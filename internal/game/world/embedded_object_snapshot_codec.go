@@ -248,11 +248,12 @@ func (f *ObjectFactory) SpawnWorldObjectFromSnapshot(
 }
 
 func (f *ObjectFactory) PersistWorldObjectNow(
-	db *persistence.Postgres,
+	db interface{ Queries() *repository.Queries },
 	w *ecs.World,
 	h types.Handle,
 ) error {
-	if f == nil || db == nil || w == nil || h == types.InvalidHandle || !w.Alive(h) {
+	postgres, isPostgres := db.(*persistence.Postgres)
+	if f == nil || db == nil || (isPostgres && postgres == nil) || w == nil || h == types.InvalidHandle || !w.Alive(h) {
 		return fmt.Errorf("invalid persist target")
 	}
 	obj, err := f.Serialize(w, h)

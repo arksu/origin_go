@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
@@ -60,7 +61,7 @@ async function managerFixture(t: TestContext) {
   t.mock.method(Assets, 'load', async () => sheet)
   t.mock.method(terrainManager, 'generateTerrainForChunk', () => {})
   const manager = new ChunkManager()
-  manager.setWorldParams(12, 4)
+  setWorldParams(12, 4)
   t.after(() => manager.destroy())
   await manager.init()
   return manager
@@ -165,9 +166,10 @@ test('handlers gate store, renderer and bootstrap together', t => {
   const unloads = t.mock.method(gameFacade, 'unloadChunk', () => {})
   const resets = t.mock.method(gameFacade, 'resetWorld', () => {})
   const bootstraps = t.mock.method(store, 'markBootstrapFirstChunkLoaded', () => {})
+  setWorldParams(12, 4)
   registerMessageHandlers()
   const dispatch = (packet: proto.IServerMessage) => messageDispatcher.dispatch(proto.ServerMessage.create(packet))
-  const enter = (streamEpoch: number) => dispatch({ playerEnterWorld: { entityId: 1, streamEpoch, coordPerTile: 12, chunkSize: 4 } })
+  const enter = (streamEpoch: number) => dispatch({ playerEnterWorld: { entityId: 1, streamEpoch} })
   const load = (eventSeq: number, version: number, streamEpoch = 1) => dispatch({ chunkLoad: { streamEpoch, eventSeq, chunk: { coord: { x: 0, y: 0 }, tiles: tiles(), version } } })
   enter(1)
   assert.equal(resets.mock.callCount(), 1, 'even the first entry unconditionally resets presentation')
@@ -200,9 +202,10 @@ test('minimap reads only accepted terrain and rejected packets cannot revive evi
   t.mock.method(gameFacade, 'loadChunk', manager.loadChunk.bind(manager))
   t.mock.method(gameFacade, 'unloadChunk', manager.unloadChunk.bind(manager))
   t.mock.method(gameFacade, 'resetWorld', manager.clear.bind(manager))
+  setWorldParams(12, 4)
   registerMessageHandlers()
   const dispatch = (packet: proto.IServerMessage) => messageDispatcher.dispatch(proto.ServerMessage.create(packet))
-  dispatch({ playerEnterWorld: { entityId: 1, streamEpoch: 1, coordPerTile: 12, chunkSize: 4 } })
+  dispatch({ playerEnterWorld: { entityId: 1, streamEpoch: 1} })
   const load = (eventSeq: number, version: number, tileType: number, streamEpoch = 1) => dispatch({
     chunkLoad: { streamEpoch, eventSeq, chunk: { coord: { x: 0, y: 0 }, tiles: new Uint8Array(16).fill(tileType), version } },
   })
@@ -323,12 +326,13 @@ test('every world entry clears the minimap before same-coordinate surface and mi
   t.after(() => { facadeState.render = originalRender })
   const clears = t.mock.method(minimap, 'clear')
   const frames = t.mock.method(minimap, 'render')
+  setWorldParams(12, 4)
   registerMessageHandlers()
   const dispatch = (packet: proto.IServerMessage) => messageDispatcher.dispatch(proto.ServerMessage.create(packet))
 
   for (const [index, layer] of ['surface', 'mine entrance', 'deeper mine', 'surface return'].entries()) {
     const streamEpoch = index + 1
-    dispatch({ playerEnterWorld: { entityId: 42, streamEpoch, coordPerTile: 12, chunkSize: 4 } })
+    dispatch({ playerEnterWorld: { entityId: 42, streamEpoch} })
     assert.equal(clears.mock.callCount(), streamEpoch, `${layer}: entry clears synchronously without a leave packet`)
     assert.equal(manager.getMinimapChunk(0, 0), undefined, `${layer}: matching coordinates cannot reuse the previous layer`)
     assert.equal(gameFacade.getMinimapPlayerPose(), null)
@@ -454,7 +458,7 @@ test('buffered and queued loads cannot resurrect after unload or reset', async t
   let resolve!: (sheet: Spritesheet) => void
   t.mock.method(Assets, 'load', () => new Promise<Spritesheet>(ready => { resolve = ready }))
   const manager = new ChunkManager()
-  manager.setWorldParams(12, 4)
+  setWorldParams(12, 4)
   t.after(() => manager.destroy())
   const ready = manager.init()
   manager.loadChunk(0, 0, tiles(), 1, identity(1))

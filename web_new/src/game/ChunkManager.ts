@@ -1,7 +1,7 @@
 import { Container, Assets, Spritesheet } from 'pixi.js'
 import { Chunk } from './Chunk'
 import { initTileSets } from './tiles/tileSetLoader'
-import { setWorldParams, getChunkSize, getCoordPerTile } from './tiles/Tile'
+import { getChunkSize, getCoordPerTile, hasWorldParams } from './tiles/Tile'
 import { terrainManager } from './terrain'
 import { cullingController } from './culling'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
@@ -60,7 +60,6 @@ export class ChunkManager {
     }
   }
 
-  setWorldParams(coordPerTile: number, chunkSize: number): void { setWorldParams(coordPerTile, chunkSize) }
   setCameraPosition(x: number, y: number): void { this.cameraX = x; this.cameraY = y }
 
   loadChunk(x: number, y: number, tiles: Uint8Array, version: number, identity: ChunkEventIdentity): void {
@@ -276,6 +275,7 @@ export class ChunkManager {
   }
 
   getTileTypeAtWorld(worldX: number, worldY: number): number | undefined {
+    if (!hasWorldParams()) return undefined
     if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return undefined
     const tileX = Math.floor(worldX / getCoordPerTile())
     const tileY = Math.floor(worldY / getCoordPerTile())

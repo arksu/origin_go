@@ -177,13 +177,21 @@ internal/game/
 ## Data Flow
 
 ### Player Connection Flow
-1. Client connects → `game.go:handleConnect()`
+1. Client connects → `game.go:setupNetworkHandlers()`
 2. Client sends auth → `game_auth.go:handleAuth()`
 3. Load character + normalize attributes (self-heal DB when needed) → `game_auth.go:handleAuth()`
-4. Spawn in world and attach runtime attributes component → `game_auth.go:spawnAndLogin()`
-5. Send `S2C_PlayerEnterWorld` → `game_auth.go:sendPlayerEnterWorld()`
-6. Send inventory/profile/player-stats snapshots via server jobs → `network_command.go`
-7. Setup event handlers → `events/game_events.go`
+4. Enqueue successful auth, then one immutable `S2C_ServerConstants`, through critical delivery → `server_constants.go:sendAuthenticatedBootstrap()`
+5. Spawn in world and attach runtime attributes component → `game_auth.go:spawnAndLogin()`
+6. Send per-entry identity/epoch/audio in `S2C_PlayerEnterWorld` → `game_auth.go:sendPlayerEnterWorld()`
+7. Send inventory/profile/player-stats snapshots via server jobs → `network_command.go`
+8. Setup event handlers → `events/game_events.go`
+
+Constants are prepared once at initialization and sent once per authenticated
+connection, never per transfer or Ping. Failed mandatory bootstrap closes the
+connection before spawn. Initial authentication and disconnect notification are
+coordinated by the client's authentication lifecycle so existing cleanup observes
+the final association even if the socket closes during DB work. Do not add a
+second unguarded offline write. See `docs/features/game_calendar.md`.
 
 ### Game Loop Flow
 1. `game.go:gameLoop()` runs at configured tick rate
@@ -265,6 +273,14 @@ Key configuration parameters:
 - Runtime seconds are accumulated from wall elapsed time and advance only while server process runs.
 - `server_time_ms` in network packets uses wall unix milliseconds.
 - Server time state is persisted periodically (every 20s) in a dedicated goroutine and once on shutdown.
+- The calendar uses `timeutil.GameCalendarFromRuntime`: 28,800 runtime seconds per
+  day, 24 game hours, 30 days per month, 12 months per year; runtime zero is year 1,
+  month 1, day 1. Offline time pauses and startup adds no allowance. Independent
+  clock/object checkpoints may extend object timers after a crash; this is accepted.
+- Pong includes optional whole runtime seconds at the same response instant as
+  its existing wall timestamp. `game_time.go` projects from a coherent published
+  accumulator and original monotonic sampling instant under `timeStateMu`, without
+  mutating ECS, timers, or persisted time. Serialization remains outside the lock.
 
 ## Error Handling
 

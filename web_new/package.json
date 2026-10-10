@@ -29,7 +29,9 @@
     "test:asset-pipeline": "node scripts/test-asset-pipeline.mjs",
     "validate-objects": "node scripts/validate-object-schema.mjs",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
-    "proto": "pbjs -t static-module -w es6 -o src/network/proto/packets.js ../api/proto/packets.proto && pbts -o src/network/proto/packets.d.ts src/network/proto/packets.js"
+    "proto": "pbjs -t static-module -w es6 -o src/network/proto/packets.js ../api/proto/packets.proto && pbts -o src/network/proto/packets.d.ts src/network/proto/packets.js",
+    "test:game-calendar": "node scripts/test-character-visual.mjs tests/game-calendar.test.ts",
+    "test:server-constants": "node scripts/test-character-visual.mjs tests/server-constants.test.ts"
   },
   "dependencies": {
     "@esotericsoftware/spine-pixi-v8": "^4.3.13",

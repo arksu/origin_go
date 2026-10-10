@@ -2,7 +2,8 @@ import { Application, Assets, Container, Graphics, TextureStyle, type Spriteshee
 import { Chunk } from '../src/game/Chunk'
 import { getGroundTextureName, getRegisteredTileIdsBelow, getTileSet } from '../src/game/tiles/TileSet'
 import { initTileSets } from '../src/game/tiles/tileSetLoader'
-import { setWorldParams, TILE_WIDTH_HALF, TILE_HEIGHT_HALF } from '../src/game/tiles/Tile'
+import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF } from '../src/game/tiles/Tile'
+import { setWorldParams } from './serverConstantsFixture'
 import * as tileIds from '../src/game/tiles/tileIds'
 
 const CHUNK_SIZE = 16

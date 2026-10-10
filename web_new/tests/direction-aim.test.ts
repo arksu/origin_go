@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
@@ -23,7 +24,8 @@ function fixture(context: TestContext) {
   setActivePinia(createPinia())
   const game = useGameStore()
   game.setConnectionState('connected')
-  game.setPlayerEnterWorld(1, 'Player', 12, 100, 7)
+  setWorldParams(12, 100, false)
+  game.setPlayerEnterWorld(1, 'Player', 7)
   game.setGameActionList(actions)
   const packets: proto.IClientMessage[] = []
   const order: string[] = []

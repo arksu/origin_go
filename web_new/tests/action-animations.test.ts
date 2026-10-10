@@ -1,3 +1,4 @@
+import { setWorldParams } from './serverConstantsFixture'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
@@ -175,9 +176,10 @@ test('revisions, timestamps and independent appearance updates converge without 
   const updates = t.mock.method(gameFacade, 'setActionAnimation', () => {})
   t.mock.method(gameFacade, 'setCharacterEquipment', async () => {})
   const errors = t.mock.method(console, 'error', () => {})
+  setWorldParams(12, 4)
   registerMessageHandlers()
   const dispatch = (packet: proto.IServerMessage) => messageDispatcher.dispatch(proto.ServerMessage.create(packet))
-  const enter = (streamEpoch: number) => dispatch({ playerEnterWorld: { entityId: 1, streamEpoch, coordPerTile: 12, chunkSize: 4 } })
+  const enter = (streamEpoch: number) => dispatch({ playerEnterWorld: { entityId: 1, streamEpoch} })
   const update = (value = wire(), streamEpoch = 1) => dispatch({ characterActionAnimation: { entityId: 17, streamEpoch, state: value } })
   const spawn = (value: proto.ICharacterActionAnimationState | undefined = wire()) => dispatch({ objectSpawn: { entityId: 17, typeId: 1, resourcePath: 'player', streamEpoch: 1,
     characterVisual: { generation: '0:4294967297', revision: 1 }, actionAnimation: value } })

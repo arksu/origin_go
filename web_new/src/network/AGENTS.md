@@ -40,10 +40,35 @@ TimeSync (singleton)
 3. ws.onopen → send C2S_Auth { token, clientVersion }
 4. ← receive S2C_AuthResult
 5. If success: start ping interval, state = connected
-6. If fail: disconnect, state = error
+6. ← receive one S2C_ServerConstants before any world bootstrap/Pong
+7. If fail: disconnect, state = error
 ```
 
 **Important**: `ws.onopen` alone does NOT mean connected — must wait for `S2C_AuthResult.success = true`.
+
+### Server constants and game calendar
+
+- Successful authentication is followed by one required `S2C_ServerConstants` per
+  connection. Geometry, tick rate, directional capability, and calendar scale are
+  server-owned and immutable during its run. Do not embed fallback values in the
+  client or read migrated constants from `PlayerEnterWorld`.
+- Constants survive world entry/leave and layer transfers. Connection start,
+  disconnect, auth failure, and error clear constants, dependent readiness, and
+  calendar synchronization. Accept data only from the current authenticated
+  socket. Identical duplicates are harmless; changed constants are a protocol error.
+- Renderer initialization before handshake must remain safe; parameter-dependent
+  calculations and world bootstrap require valid constants. Boolean false is a
+  valid directional capability. Different valid values on reconnect are supported.
+- Every authenticated Pong includes optional whole `runtimeSecondsTotal`, paired
+  with its existing wall timestamp. Process `TimeSync` first, then update the game
+  calendar using estimated delivery age and monotonic elapsed time. Preserve exact
+  int64 precision and distinguish absent runtime from explicit zero. No new ping
+  cadence, calendar timer, or UI is needed.
+- Runtime zero is the calendar epoch; offline time pauses. A new connection can
+  accept lower runtime after crash rollback. Legacy Pongs still feed wall time.
+- This bootstrap migration requires matching server/client deployment: removed
+  enter-world tags 3/4/5/10 and names are reserved. See
+  `docs/features/game_calendar.md` for the complete contract and accepted precision.
 
 ## Components
 
@@ -77,7 +102,7 @@ messageDispatcher.on('objectMove', (msg) => { /* ... */ })
 ```
 
 **Supported Types** (from `proto.IServerMessage`):
-- `authResult`, `pong`
+- `authResult`, `serverConstants`, `pong`
 - `chunkLoad`, `chunkUnload`
 - `playerEnterWorld`, `playerLeaveWorld`
 - `objectSpawn`, `objectDespawn`, `objectMove`

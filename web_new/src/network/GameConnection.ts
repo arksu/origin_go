@@ -2,6 +2,8 @@ import { proto } from './proto/packets.js'
 import { config } from '@/config'
 import type { ConnectionState, ConnectionError } from './types'
 import { timeSync } from './TimeSync'
+import { serverConstants } from './ServerConstants'
+import { gameCalendarSync } from './GameCalendarSync'
 
 type MessageHandler = (message: proto.ServerMessage) => void
 type StateChangeHandler = (state: ConnectionState, error?: ConnectionError) => void
@@ -32,18 +34,19 @@ export class GameConnection {
       this.disconnect()
     }
 
-    timeSync.reset()
+    this.resetConnectionTime()
     this.authToken = authToken
     this.setState('connecting')
 
     try {
-      this.ws = new WebSocket(config.WS_URL)
-      this.ws.binaryType = 'arraybuffer'
+      const socket = new WebSocket(config.WS_URL)
+      this.ws = socket
+      socket.binaryType = 'arraybuffer'
 
-      this.ws.onopen = this.handleOpen.bind(this)
-      this.ws.onmessage = this.handleMessage.bind(this)
-      this.ws.onclose = this.handleClose.bind(this)
-      this.ws.onerror = this.handleError.bind(this)
+      socket.onopen = () => { if (this.ws === socket) this.handleOpen() }
+      socket.onmessage = event => { if (this.ws === socket) this.handleMessage(event) }
+      socket.onclose = event => { if (this.ws === socket) this.handleClose(event) }
+      socket.onerror = () => { if (this.ws === socket) this.handleError() }
     } catch (err) {
       this.setState('error', {
         code: 'CONNECTION_FAILED',
@@ -110,11 +113,27 @@ export class GameConnection {
         return
       }
 
+      if (this.state !== 'connected') return
+
+      if (message.serverConstants) {
+        const result = serverConstants.accept(message.serverConstants)
+        if (result === 'invalid' || result === 'changed') {
+          this.protocolError('Invalid or changed server constants')
+          return
+        }
+        if (result === 'accepted') gameCalendarSync.configure(serverConstants.requireSnapshot())
+        return
+      }
+
       if (message.pong) {
         this.handlePong(message.pong)
         return
       }
 
+      if (!serverConstants.isReady() && !message.error && !message.warning) {
+        this.protocolError('World bootstrap arrived before server constants')
+        return
+      }
       this.messageHandler?.(message)
     } catch (err) {
       console.error('[GameConnection] Failed to decode message:', err)
@@ -122,6 +141,7 @@ export class GameConnection {
   }
 
   private handleAuthResult(result: proto.IS2C_AuthResult): void {
+    if (this.state !== 'authenticating') return
     if (result.success) {
       this.setState('connected')
       this.startPing()
@@ -140,7 +160,10 @@ export class GameConnection {
     const clientSendMs = Number(pong.clientTimeMs)
     const serverTimeMs = Number(pong.serverTimeMs)
 
-    timeSync.onPong(clientSendMs, serverTimeMs)
+    if (Number.isSafeInteger(clientSendMs) && Number.isSafeInteger(serverTimeMs) && clientSendMs >= 0 && serverTimeMs >= 0) {
+      timeSync.onPong(clientSendMs, serverTimeMs)
+    }
+    gameCalendarSync.acceptSample(pong.runtimeSecondsTotal, pong.serverTimeMs)
 
     if (config.DEBUG) {
       const metrics = timeSync.getDebugMetrics()
@@ -162,12 +185,24 @@ export class GameConnection {
   }
 
   private handleError(): void {
-    if (this.state === 'connecting') {
-      this.setState('error', {
-        code: 'CONNECTION_FAILED',
-        message: 'Failed to establish connection',
-      })
-    }
+    this.stopPing()
+    this.setState('error', {
+      code: 'CONNECTION_FAILED',
+      message: 'Connection failed',
+    })
+    this.closeSocket()
+  }
+
+  protocolError(message: string): void {
+    this.stopPing()
+    this.setState('error', { code: 'CONNECTION_FAILED', message })
+    this.closeSocket()
+  }
+
+  private resetConnectionTime(): void {
+    timeSync.reset()
+    serverConstants.reset()
+    gameCalendarSync.reset()
   }
 
   private startPing(): void {
@@ -186,6 +221,7 @@ export class GameConnection {
   }
 
   private setState(state: ConnectionState, error?: ConnectionError): void {
+    if (state === 'disconnected' || state === 'error') this.resetConnectionTime()
     this.state = state
     this.stateChangeHandler?.(state, error)
   }

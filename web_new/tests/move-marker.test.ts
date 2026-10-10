@@ -15,7 +15,7 @@ import { messageDispatcher } from '../src/network/MessageDispatcher'
 import { proto } from '../src/network/proto/packets.js'
 import { useGameStore } from '../src/stores/gameStore'
 import { coordGame2Screen } from '../src/game/utils/coordConvert'
-import { setWorldParams } from '../src/game/tiles/Tile'
+import { setWorldParams } from './serverConstantsFixture'
 import { TERRAIN_BASE_Z_INDEX } from '../src/constants/terrain'
 
 function markerFixture(t: TestContext) {
@@ -153,8 +153,9 @@ function networkFixture(t: TestContext) {
   t.mock.method(gameFacade, 'getObjectCarryVisualCarrierId', () => null)
   t.mock.method(gameFacade, 'setObjectCarryVisualRelation', () => {})
   t.mock.method(gameConnection, 'send', () => {})
+  setWorldParams(32, 128)
   registerMessageHandlers()
-  dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1, coordPerTile: 32, chunkSize: 128, tickRate: 10 } })
+  dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1} })
   t.after(() => { store.reset(); moveController.clear() })
   const send = (sequence: number, movement: proto.IEntityMovement, batched = false, entityId = 17, isTeleport = false) => {
     const entry = { entityId, moveSeq: sequence, serverTimeMs: 10000 + sequence * 100, movement, isTeleport }
@@ -217,10 +218,10 @@ for (const batched of [false, true]) {
     assert.equal(ring.visible, true)
     dispatch({ playerLeaveWorld: {} })
     assert.equal(ring.visible, false, 'world leave immediately clears the ring')
-    dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 2, coordPerTile: 32, chunkSize: 128, tickRate: 10 } })
+    dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 2} })
     send(1, moving(), batched)
     assert.equal(ring.visible, true, 'world re-entry clears target memory')
-    dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 3, coordPerTile: 32, chunkSize: 128, tickRate: 10 } })
+    dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 3} })
     assert.equal(ring.visible, false, 'new entry clears a ring without a preceding leave')
   })
 }
@@ -231,6 +232,7 @@ test('despawning the local player immediately clears its ring', t => {
   Object.assign(render, {
     playerEntityId: 17, moveMarkerManager: marker,
     objectManager: { despawnObject() {} }, nicknameManager: { remove() {} },
+    damageNumberManager: { rememberDespawn() {} }, combatSectorPreview: { clear() {} },
   })
   marker.show(64, 32)
   advance(350)
@@ -247,7 +249,7 @@ test('disconnect and connection errors immediately clear the ring and its target
   t.mock.method(gameConnection, 'onMessage', () => {})
   initNetwork()
   for (const state of ['disconnected', 'error'] as const) {
-    dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1, coordPerTile: 32, chunkSize: 128, tickRate: 10 } })
+    dispatch({ playerEnterWorld: { entityId: 17, streamEpoch: 1} })
     send(1, moving())
     assert.equal(ring.visible, true)
     changeState(state)

@@ -9,6 +9,7 @@ import (
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence"
+	"origin/internal/persistence/repository"
 	"origin/internal/timeutil"
 	"origin/internal/types"
 	"strings"
@@ -65,9 +66,14 @@ type GameStats struct {
 	AvgTickDuration  time.Duration
 }
 
+type gameDatabase interface {
+	WithTx(context.Context, func(*repository.Queries) error) error
+	Queries() *repository.Queries
+}
+
 type Game struct {
 	cfg    *config.Config
-	db     *persistence.Postgres
+	db     gameDatabase
 	logger *zap.Logger
 
 	objectFactory       *world.ObjectFactory
@@ -81,6 +87,8 @@ type Game struct {
 	timeStateMu         sync.RWMutex
 	runtimeSecondsTotal int64
 	runtimeRemainder    time.Duration
+	runtimeSampledAt    time.Time
+	serverConstantsData []byte // Prepared once at initialization; never mutated after publication.
 
 	clock             timeutil.Clock
 	startTime         time.Time
@@ -140,6 +148,11 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 		transferInFlight: make(map[types.EntityID]struct{}),
 	}
 	g.state.Store(int32(GameStateStarting))
+	var constantsErr error
+	g.serverConstantsData, constantsErr = marshalServerConstants(g.tickRate)
+	if constantsErr != nil {
+		logger.Fatal("Failed to initialize server constants", zap.Error(constantsErr))
+	}
 
 	g.entityIDManager = NewEntityIDManager(cfg, db, logger)
 	g.shardManager = NewShardManager(cfg, db, g.entityIDManager, objectFactory, inventorySnapshotSender, enableVisionStats, logger)
@@ -240,9 +253,13 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 }
 
 func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S_Ping) {
+	serverTimeMs, runtimeSeconds := g.runtimePongSample()
 	pong := &netproto.S2C_Pong{
 		ClientTimeMs: ping.ClientTimeMs,
-		ServerTimeMs: g.clock.WallNow().UnixMilli(),
+		ServerTimeMs: serverTimeMs,
+	}
+	if c.CharacterID != 0 {
+		pong.RuntimeSecondsTotal = &runtimeSeconds
 	}
 
 	response := &netproto.ServerMessage{
@@ -947,10 +964,11 @@ func (g *Game) resetOnlinePlayers() {
 }
 
 func (g *Game) StartGameLoop() {
+	initialWallTime := g.initializeRuntimeAccumulator()
 	g.setState(GameStateRunning)
 	g.startPeriodicServerTimePersist()
 	g.wg.Add(1)
-	go g.gameLoop()
+	go g.gameLoop(initialWallTime)
 
 	g.logger.Info("Game loop started", zap.Int("tick_rate_hz", g.tickRate))
 }
@@ -958,10 +976,10 @@ func (g *Game) StartGameLoop() {
 const maxCatchUpTicks = 4
 const serverTimePersistInterval = 20 * time.Second
 
-func (g *Game) gameLoop() {
+func (g *Game) gameLoop(initialWallTime time.Time) {
 	defer g.wg.Done()
 
-	lastWallTime := g.clock.WallNow()
+	lastWallTime := initialWallTime
 	var accum time.Duration
 	maxFrameTime := g.tickPeriod * time.Duration(maxCatchUpTicks)
 
@@ -980,14 +998,7 @@ func (g *Game) gameLoop() {
 		// Runtime time is based on real elapsed wall time, independent from tick catch-up limits.
 		g.clock.Advance(frameTime)
 		runtimeNow := g.clock.GameNow()
-		g.timeStateMu.Lock()
-		g.runtimeRemainder += frameTime
-		if g.runtimeRemainder >= time.Second {
-			addedRuntimeSeconds := int64(g.runtimeRemainder / time.Second)
-			g.runtimeRemainder -= time.Duration(addedRuntimeSeconds) * time.Second
-			g.runtimeSecondsTotal += addedRuntimeSeconds
-		}
-		g.timeStateMu.Unlock()
+		g.accumulateRuntime(nowWall, frameTime)
 
 		frameTimeForTicks := frameTime
 		if frameTimeForTicks > maxFrameTime {
