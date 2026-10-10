@@ -88,6 +88,7 @@ type Game struct {
 	runtimeSecondsTotal int64
 	runtimeRemainder    time.Duration
 	runtimeSampledAt    time.Time
+	pendingAdminSeconds int64  // Aggregated requests; applied only between shard updates.
 	serverConstantsData []byte // Prepared once at initialization; never mutated after publication.
 
 	clock             timeutil.Clock
@@ -163,6 +164,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	g.setupNetworkHandlers()
 	for _, shard := range g.shardManager.GetShards() {
 		shard.SetAdminTeleportExecutor(g)
+		shard.SetAdminTimeExecutor(g)
 	}
 
 	g.resetOnlinePlayers()
@@ -997,7 +999,6 @@ func (g *Game) gameLoop(initialWallTime time.Time) {
 
 		// Runtime time is based on real elapsed wall time, independent from tick catch-up limits.
 		g.clock.Advance(frameTime)
-		runtimeNow := g.clock.GameNow()
 		g.accumulateRuntime(nowWall, frameTime)
 
 		frameTimeForTicks := frameTime
@@ -1015,6 +1016,8 @@ func (g *Game) gameLoop(initialWallTime time.Time) {
 			currentRuntimeSeconds := g.runtimeSecondsTotal
 			g.timeStateMu.Unlock()
 
+			// A command in the previous catch-up tick may have advanced runtime.
+			runtimeNow := g.clock.GameNow()
 			ts := ecs.TimeState{
 				Tick:                currentTick,
 				TickRate:            g.tickRate,
@@ -1028,6 +1031,7 @@ func (g *Game) gameLoop(initialWallTime time.Time) {
 			}
 
 			g.update(ts)
+			g.applyPendingAdminTime()
 
 			accum -= g.tickPeriod
 			catchUp++

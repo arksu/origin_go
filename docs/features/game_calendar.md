@@ -1,8 +1,9 @@
 # Game calendar and server constants
 
 The world calendar derives from `RuntimeSecondsTotal`, the accumulated real time
-that the server has been running. Simulation ticks remain independent: bounded
-tick catch-up and discarded ticks do not change the length of a game day.
+that the server has been running plus explicit administrator time advances.
+Simulation ticks remain independent: bounded tick catch-up and discarded ticks
+do not change the length of a game day.
 
 The server defines the scale:
 
@@ -34,6 +35,37 @@ than an object's saved timer state and extend the remaining wait. This is an
 accepted gameplay trade-off; there is no startup compensation, durable clock
 watermark, or transaction coupling object saves to clock saves. Existing gameplay
 timers keep their runtime, tick, or wall-time domains.
+
+## Administrator runtime advance
+
+`/addtime <seconds>` queues an advance of the shared server runtime. It accepts
+exactly one positive whole-second integer, for example `/addtime 60`, and has the
+same access as `/give`, with no additional permission check. Success sends the
+requesting player a private English response:
+`Queued +60 runtime seconds; applies next tick.` Errors are also private English
+responses; recognized commands are never broadcast as local chat, including
+invalid requests.
+
+Concurrent requests are summed in one pending counter under `timeStateMu`.
+The resulting runtime, including pending advances, must not exceed
+`math.MaxInt64 / int64(time.Second)` (9,223,372,036 seconds), because the current
+clock bootstrap converts persisted runtime to `time.Duration`. Rejected requests
+leave both pending and applied runtime unchanged. This command limit does not
+limit the pure calendar converter's supported signed 64-bit input range.
+
+After all shards finish the current tick, the game loop applies the pending
+advance once to both `RuntimeSecondsTotal` and the runtime clock. It preserves
+the subsecond remainder and original sampling instant. The next tick receives
+the advanced runtime and `TimeState.Now` identically in every layer, including a
+catch-up tick within the same loop iteration. `/time` executed in the same
+command batch as `/addtime` still reads that tick's earlier time snapshot.
+
+The advance changes the calendar and runtime-based timers, which continue through
+their existing systems and schedules. It does not add simulation ticks, increase
+`Delta` or catch-up work, change wall time, or increase process `Uptime`. Applied
+advances use the existing 20-second and shutdown checkpoints; the command does
+not force an immediate save. Clients see the advance in their next ordinary
+Pong, without a new packet or broadcast.
 
 ## Connection bootstrap
 
@@ -84,8 +116,9 @@ roll back both together. Do not reuse the reserved tags or names.
 ## Runtime synchronization
 
 `S2C_Pong` keeps its wall-time fields and adds only
-`optional int64 runtime_seconds_total = 3`. This value is real accumulated runtime
-rounded down to whole seconds. Presence distinguishes valid zero from a legacy
+`optional int64 runtime_seconds_total = 3`. This value is accumulated runtime,
+including applied administrator advances, rounded down to whole seconds.
+Presence distinguishes valid zero from a legacy
 Pong with no runtime. Every authenticated Pong contains it: the immediate Ping
 after authentication, the existing five-second periodic Ping, and extra Pings.
 No separate periodic calendar message or player scan is introduced.

@@ -35,7 +35,7 @@ Runtime zero SHALL represent year 1, month 1, day 1 at 00:00:00. Displayed years
 - **THEN** the dates are respectively year 1, month 2, day 1 and year 2, month 1, day 1 at 00:00:00
 
 ### Requirement: Calendar inherits runtime lifecycle and remains independent of simulation ticks
-Calendar progression SHALL use the existing runtime persistence and offline pause semantics. Offline duration SHALL NOT advance the calendar. Changing tick rate or discarding simulation catch-up ticks SHALL NOT alter its runtime-to-calendar scale. Restart SHALL NOT add an artificial calendar advance.
+Calendar progression SHALL use the existing runtime persistence and offline pause semantics, including explicit administrator runtime advances. Offline duration SHALL NOT advance the calendar. Changing tick rate or discarding simulation catch-up ticks SHALL NOT alter its runtime-to-calendar scale. Restart SHALL NOT add an artificial calendar advance.
 
 #### Scenario: Restart after offline duration
 - **WHEN** the server stops with a persisted runtime value and restarts after any offline duration
@@ -53,8 +53,44 @@ The existing administrator `/time` command SHALL report the game year, month, da
 - **WHEN** an administrator executes `/time` at runtime zero
 - **THEN** the response reports year 1, month 1, day 1, 00:00:00, and runtime seconds 0
 
+### Requirement: Administrator can queue a global runtime advance
+The administrator `/addtime <seconds>` command SHALL accept exactly one positive whole-second integer with the same access as `/give` and no additional privilege check. It SHALL queue a global runtime advance through `AdminTimeExecutor.RequestAdminAddTime(seconds int64) error`, sum concurrent requests in a single pending counter protected by `timeStateMu`, and reject requests whose resulting runtime including pending advances exceeds `math.MaxInt64 / int64(time.Second)` (9,223,372,036 seconds). Rejection SHALL NOT change pending or applied runtime. Recognized commands, including invalid requests, SHALL be consumed without local chat broadcast. Application-provided responses SHALL be private and English.
+
+#### Scenario: Valid request is acknowledged privately
+- **WHEN** an administrator executes `/addtime 60`
+- **THEN** the requesting player receives `Queued +60 runtime seconds; applies next tick.` privately
+- **AND** no local chat broadcast occurs
+
+#### Scenario: Invalid request leaves time unchanged
+- **WHEN** `/addtime` receives no argument, extra arguments, a fraction, zero, a negative number, or an integer outside the accepted range
+- **THEN** the requesting player receives a private English error
+- **AND** the command is consumed without changing pending or applied runtime
+
+#### Scenario: Concurrent requests respect the combined limit
+- **WHEN** concurrent requests would together exceed the supported resulting runtime
+- **THEN** accepted requests are summed once and any request exceeding the combined limit is rejected without changing the sum
+
+### Requirement: Runtime advances apply between shard ticks
+The game loop SHALL apply pending administrator runtime seconds once after all shards finish the current tick. It SHALL advance both accumulated runtime and the runtime clock while preserving the subsecond remainder and original runtime sampling instant. Every layer SHALL receive the same advanced `TimeState.Now` and `RuntimeSecondsTotal` on the next tick, including a catch-up tick in the same loop iteration. Runtime consumers SHALL continue processing through their existing systems and schedules. The advance SHALL NOT change simulation tick count, fixed `Delta`, wall time, process `Uptime`, or the amount of catch-up work.
+
+#### Scenario: Command batch retains its original snapshot
+- **WHEN** `/addtime 60` and `/time` execute in the same command batch
+- **THEN** `/time` reports the batch's original runtime snapshot
+- **AND** the next tick receives the 60-second advance identically across layers
+
+#### Scenario: Advance crosses a calendar boundary
+- **WHEN** one runtime second is applied after a tick at runtime 28,799 seconds
+- **THEN** the next tick's calendar is day 2 at 00:00:00
+- **AND** runtime-based timers observe the advance when their existing schedules run
+- **AND** no simulation ticks or wall-time seconds are added by the command
+
+#### Scenario: Applied advance uses existing synchronization and persistence
+- **WHEN** an administrator runtime advance has been applied
+- **THEN** the next authenticated Pong includes the advanced runtime through the existing runtime field
+- **AND** the existing 20-second or shutdown checkpoint saves the advanced runtime without an immediate command-specific save, protocol change, or database migration
+
 ### Requirement: Existing Ping and Pong exchange synchronizes game time
-Every authenticated client's existing Pong response SHALL include `optional int64 runtime_seconds_total = 3`, containing nonnegative accumulated real runtime rounded down to whole seconds. The existing immediate Ping after successful authentication, each periodic Ping at the current five-second interval, and any additional Ping SHALL receive the field in the corresponding Pong. This scalar SHALL be the only added Pong field: Pong SHALL NOT add a nested message, fractional runtime, calendar parameters, ready-made date fields, or another timestamp. The client SHALL use calendar parameters received through the one-time server-constants packet, without embedding their numeric values in client code. Runtime synchronization SHALL NOT require a new client request, a separate periodic broadcast, or iteration over all players. Server runtime SHALL remain authoritative.
+Every authenticated client's existing Pong response SHALL include `optional int64 runtime_seconds_total = 3`, containing nonnegative accumulated runtime including applied administrator advances, rounded down to whole seconds. The existing immediate Ping after successful authentication, each periodic Ping at the current five-second interval, and any additional Ping SHALL receive the field in the corresponding Pong. This scalar SHALL be the only added Pong field: Pong SHALL NOT add a nested message, fractional runtime, calendar parameters, ready-made date fields, or another timestamp. The client SHALL use calendar parameters received through the one-time server-constants packet, without embedding their numeric values in client code. Runtime synchronization SHALL NOT require a new client request, a separate periodic broadcast, or iteration over all players. Server runtime SHALL remain authoritative.
 
 #### Scenario: First synchronization
 - **WHEN** a client has valid server constants and receives its first valid `runtime_seconds_total` field in a Pong after authentication
