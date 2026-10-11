@@ -8,6 +8,7 @@ import type { ActorRenderer } from './actors/ActorRenderer'
 import { loadShallowWaterTextures } from './actors/ShallowWaterVisual'
 import { localAudioController } from './audioRuntime'
 import type { LyingPresentationMode } from './actors/lyingPresentation'
+import type { LightingManager } from './lighting/LightingManager'
 
 /**
  * ObjectManager manages all game objects (characters, resources, buildings, etc.)
@@ -29,8 +30,20 @@ export class ObjectManager {
   private playerEntityId: number | null = null
   private rippleTextures: readonly Texture[] | undefined
   private tileTypeLookup: ((x: number, y: number) => number | undefined) | undefined
+  private lightingManager: LightingManager | null = null
 
   setActorRenderer(renderer: ActorRenderer | undefined): void { this.actorRenderer = renderer }
+
+  setLightingManager(manager: LightingManager | null): void {
+    if (manager === this.lightingManager) return
+    for (const entityId of this.objects.keys()) this.lightingManager?.unregister(entityId)
+    this.lightingManager = manager
+    if (!manager) return
+    for (const [entityId, view] of this.objects) {
+      const light = view.getLightDefinition()
+      if (light) manager.register(entityId, view.getContainer(), light)
+    }
+  }
 
   async initShallowWater(lookup: (x: number, y: number) => number | undefined): Promise<void> {
     this.tileTypeLookup = lookup
@@ -69,6 +82,9 @@ export class ObjectManager {
       this.animatedObjectIds.add(options.entityId)
     }
     this.parentContainer!.addChild(objectView.getContainer())
+
+    const light = objectView.getLightDefinition()
+    if (light) this.lightingManager?.register(options.entityId, objectView.getContainer(), light)
 
     // Register with culling controller
     cullingController.registerObject(
@@ -110,6 +126,7 @@ export class ObjectManager {
 
     // Unregister from culling controller
     cullingController.unregisterObject(entityId)
+    this.lightingManager?.unregister(entityId)
 
     this.parentContainer?.removeChild(objectView.getContainer())
     objectView.destroy()
@@ -480,6 +497,7 @@ export class ObjectManager {
     // Unregister all objects from culling
     for (const entityId of this.objects.keys()) {
       cullingController.unregisterObject(entityId)
+      this.lightingManager?.unregister(entityId)
     }
     for (const obj of this.objects.values()) {
       this.parentContainer?.removeChild(obj.getContainer())
@@ -498,6 +516,7 @@ export class ObjectManager {
    */
   destroy(): void {
     this.clear()
+    this.lightingManager = null
     this.parentContainer = null
   }
 }

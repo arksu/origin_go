@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lighting and moving character regression</title>
+  <style>
+    body { background: #192425; color: #ebdfbb; font: 14px monospace; margin: 24px; }
+    canvas { max-width: 100%; height: auto; image-rendering: pixelated; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Lighting and moving character regression</h1>
+  <p>The production Three.js character pass shares WebGL with Pixi. Pixels are read immediately from the actual canvas render, without an extraction render or a state reset.</p>
+  <div id="preview"></div>
+  <pre id="result" data-status="running">Loading character assets…</pre>
+  <details><summary>Frame samples</summary><pre id="samples"></pre></details>
+  <script type="module" src="/tests/lighting-character.ts"></script>
+</body>
+</html>

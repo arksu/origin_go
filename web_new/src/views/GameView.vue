@@ -35,6 +35,7 @@ import { useHotbarAssignments } from '@/composables/useHotbarAssignments'
 import { useActionsPanel } from '@/composables/useActionsPanel'
 import { useActorRenderSettings, type ActorRenderMode } from '@/composables/useActorRenderSettings'
 import { useRenderDebugSettings } from '@/composables/useRenderDebugSettings'
+import { useEconomyRendering } from '@/composables/useEconomyRendering'
 import { config as appConfig } from '@/config'
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '@/constants/hotkeys'
 import { MINIMAP_SIZE } from '@/constants/minimap'
@@ -133,6 +134,7 @@ const portraitWarningDismissed = ref(false)
 const showSettingsWindow = ref(false)
 const { mode: actorRenderMode, setMode: saveActorRenderMode } = useActorRenderSettings()
 const { enabled: renderDebugEnabled, setEnabled: saveRenderDebugEnabled } = useRenderDebugSettings(appConfig.DEBUG)
+const { enabled: economyRendering, setEnabled: saveEconomyRendering } = useEconomyRendering()
 
 const PORTRAIT_WARNING_DISMISSED_KEY = 'hud_portrait_warning_dismissed_v1'
 
@@ -415,6 +417,7 @@ onMounted(async () => {
   disconnectFromGame = networkModule.disconnectFromGame
   gameFacade.setActorRenderSettings({ mode: actorRenderMode.value })
   gameFacade.setRenderDebugEnabled(renderDebugEnabled.value)
+  gameFacade.setEconomyRendering(economyRendering.value)
 
   gameStore.clearLastServerErrorMessage()
   gameStore.startWorldBootstrap()
@@ -502,6 +505,11 @@ function setActorRenderMode(mode: ActorRenderMode): void {
 function setRenderDebugEnabled(enabled: boolean): void {
   saveRenderDebugEnabled(enabled)
   gameFacade?.setRenderDebugEnabled(enabled)
+}
+
+function setEconomyRendering(enabled: boolean): void {
+  saveEconomyRendering(enabled)
+  gameFacade?.setEconomyRendering(enabled)
 }
 
 function openCraftWindow() {
@@ -947,9 +955,11 @@ useHotkeys(hotkeys)
       <div v-if="showSettingsWindow" class="game-settings-window">
         <SettingsWindow
           :debug-enabled="renderDebugEnabled"
+          :economy-rendering="economyRendering"
           :mode="actorRenderMode"
           @close="showSettingsWindow = false"
           @update-debug-enabled="setRenderDebugEnabled"
+          @update-economy-rendering="setEconomyRendering"
           @update-mode="setActorRenderMode"
         />
       </div>

@@ -5,12 +5,14 @@ import type { ActorRenderMode } from '@/composables/useActorRenderSettings'
 defineProps<{
   mode: ActorRenderMode
   debugEnabled: boolean
+  economyRendering: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   updateMode: [mode: ActorRenderMode]
   updateDebugEnabled: [enabled: boolean]
+  updateEconomyRendering: [enabled: boolean]
 }>()
 
 const renderModes: readonly { value: ActorRenderMode; label: string; description: string }[] = [
@@ -45,6 +47,18 @@ const renderModes: readonly { value: ActorRenderMode; label: string; description
         </label>
       </fieldset>
 
+      <label class="settings-window__mode settings-window__economy">
+        <input
+          :checked="economyRendering"
+          type="checkbox"
+          @change="emit('updateEconomyRendering', ($event.target as HTMLInputElement).checked)"
+        >
+        <span>
+          <span class="settings-window__mode-label">Economy rendering</span>
+          <span class="settings-window__mode-description">Lower resolution to reduce graphics load.</span>
+        </span>
+      </label>
+
       <p class="settings-window__title settings-window__title--debug">Debug</p>
       <label class="settings-window__mode">
         <input
@@ -65,6 +79,7 @@ const renderModes: readonly { value: ActorRenderMode; label: string; description
 .settings-window {
   width: 100%;
   height: 100%;
+  overflow-y: auto;
   text-align: left;
   color: #d7ddd3;
 }
@@ -79,6 +94,10 @@ const renderModes: readonly { value: ActorRenderMode; label: string; description
 
 .settings-window__title--debug {
   margin-top: 16px;
+}
+
+.settings-window__economy {
+  margin-top: 12px;
 }
 
 .settings-window__modes {

@@ -12,6 +12,8 @@ GameFacade — Single entry point for Vue
 Render — Main Pixi Application
     ├─ mapContainer — Ground tiles, borders, corners
     ├─ objectsContainer — Players, objects, terrain (Z-sorted together)
+    ├─ LightingManager mesh — Night multiplier over the world
+    ├─ worldHudContainer — Nicknames, chat balloons, damage numbers
     └─ uiContainer — In-game debug overlay
 ```
 
@@ -28,6 +30,7 @@ Render — Main Pixi Application
 - `spawnObject(options)` — Create game object
 - `updateObjectPosition(entityId, x, y)` — Update object visual position
 - `screenToWorld(x, y)` / `worldToScreen(x, y)` — Coordinate conversion
+- `setEconomyRendering(enabled)` — Live canvas DPR change; logical coordinates stay fixed
 
 ### Render.ts
 
@@ -38,13 +41,32 @@ Render — Main Pixi Application
 |-----------|---------|---------|
 | `mapContainer` | Ground tiles (VBO meshes) | `sortableChildren: true` |
 | `objectsContainer` | Players, objects, terrain sprites | `sortableChildren: true` |
+| Lighting mesh | Screen-space night multiplier | Between world and text |
+| `worldHudContainer` | Nicknames, chat balloons, damage numbers | `sortableChildren: true` |
 | `uiContainer` | Debug overlay | Manual |
 
 **Update Loop** (per frame):
 1. `MoveController.update()` — Get interpolated positions
-2. `ObjectManager.update()` — Update sprites, Z-sort if needed
-3. Camera update — Apply pan/follow/zoom
-4. Debug overlay refresh
+2. Camera update — Apply rounded pan/follow/zoom to world and world HUD
+3. `ObjectManager.update()` — Update sprites, Z-sort if needed, then cull and sync carried positions
+4. Update world text and render Three.js characters, restoring Pixi state
+5. `LightingManager.update()` — Refresh the cached light map when needed
+6. Debug overlay refresh, followed by the main Pixi stage render
+
+### Night Lighting
+
+- `LightingManager` owns a sparse registry of authored `ResourceDef.light` sources,
+  synchronized by `ObjectManager` spawn/despawn/appearance replacement.
+- Server-sampled `GameCalendarSync` phase controls the shared day/night curve;
+  an unsynchronized calendar renders daylight. The client does not advance time.
+- An additive RGBA8 map, at most 512 pixels per dimension and independent of DPR,
+  feeds one multiply mesh. Daylight skips lighting; an empty night uses ambient only.
+- Source culling uses light radius rather than object visibility. Read displayed
+  object positions and the actual rounded world transform after carry updates.
+- Geometry changes refresh immediately; stationary flicker refreshes at most 15 Hz
+  through the existing frame loop. Reset and WebGL restoration invalidate the map.
+- Nicknames, chat and damage numbers use `worldHudContainer`, with the same camera
+  transform as the world, and render after the night multiplier.
 
 ## Subsystems
 
@@ -86,7 +108,7 @@ ObjectView
 
 ```
 ChatBalloonManager (owned by Render)
-    └─ Map<entityId, ActiveBalloon> (PIXI.Container in objectsContainer)
+    └─ Map<entityId, ActiveBalloon> (PIXI.Container in worldHudContainer)
 ```
 
 - Local chat (`CHAT_CHANNEL_LOCAL`) shows a timed balloon above the sender object

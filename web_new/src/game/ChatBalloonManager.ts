@@ -40,7 +40,7 @@ function nowMs(): number {
 
 /**
  * Renders timed speech balloons over world objects for local chat messages.
- * Balloons live in objectsContainer (so they follow camera and zoom) with a
+ * Balloons live in worldHudContainer (so they follow camera and zoom) with a
  * very high zIndex, and are counter-scaled each frame to keep a constant
  * on-screen size across zoom levels.
  */

@@ -26,6 +26,13 @@
       ]
     },
     "burning": {
+      "light": {
+        "radius": 160,
+        "offset": [0, -12],
+        "tint": 16770764,
+        "strength": 0.96,
+        "flicker": 0.04
+      },
       "fx": {
         "preset": "smoke",
         "texture": "fx/smoke_puff.png",

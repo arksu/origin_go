@@ -22,6 +22,7 @@ export class GameFacade {
   private initialized: boolean = false
   private actorRenderSettings: Readonly<ActorRenderSettings> = DEFAULT_ACTOR_RENDER_SETTINGS
   private renderDebugEnabled = config.DEBUG
+  private economyRendering = false
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     if (this.initialized) {
@@ -29,6 +30,7 @@ export class GameFacade {
     }
 
     this.render = new Render(this.actorRenderSettings)
+    this.render.setEconomyRendering(this.economyRendering)
     this.render.setDebugOverlayVisible(this.renderDebugEnabled)
     await this.render.init(canvas)
     this.cursorManager.attach(canvas, this.render.getApp().renderer.events)
@@ -67,6 +69,11 @@ export class GameFacade {
   setRenderDebugEnabled(enabled: boolean): void {
     this.renderDebugEnabled = enabled
     this.render?.setDebugOverlayVisible(enabled)
+  }
+
+  setEconomyRendering(enabled: boolean): void {
+    this.economyRendering = enabled
+    this.render?.setEconomyRendering(enabled)
   }
 
   onPlayerClick(callback: (event: { screenX: number; screenY: number; worldX: number; worldY: number; button: number }) => boolean | void): void {

@@ -3,6 +3,7 @@ import { Spine } from '@esotericsoftware/spine-pixi-v8'
 import objects from './objects'
 import { clearAlphaMaskCache } from './PixelHitTest'
 import type { FxDefinition } from './fx/presets/smoke'
+import type { LightDefinition } from './lighting/model'
 
 // --- Types matching objects.json structure ---
 
@@ -51,6 +52,7 @@ export type Directions = {
 
 export interface ResourceDef {
   fx?: FxDefinition
+  light?: LightDefinition
   actor3d?: 'commoner'
   layers: LayerDef[]
   size?: [number, number]

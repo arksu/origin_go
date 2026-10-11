@@ -22,7 +22,7 @@ interface ActiveNickname {
 
 /**
  * Renders persistent nickname labels over named world entities (players, later
- * NPCs). Labels live in objectsContainer (so they follow camera and zoom) with
+ * NPCs). Labels live in worldHudContainer (so they follow camera and zoom) with
  * a very high zIndex below chat balloons, and are counter-scaled each frame to
  * keep a constant on-screen size across zoom levels. Unlike chat balloons they
  * never expire: they follow the entity until it despawns or the world resets.

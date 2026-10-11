@@ -38,7 +38,7 @@ export class ActorRenderer {
     if (pixi.context.webGLVersion !== 2) throw new Error('Hybrid characters require WebGL2')
     // Three initializes array textures immediately; WebGL forbids those uploads
     // while Pixi's UNPACK_PREMULTIPLY_ALPHA_WEBGL flag is still enabled.
-    pixi.resetState()
+    this.resetPixiState()
     pixi.canvas.addEventListener('webglcontextrestored', this.beforeThreeContextRestore)
     try {
       this.renderer = new WebGLRenderer({ canvas: pixi.canvas as HTMLCanvasElement, context: pixi.gl as WebGL2RenderingContext, antialias: false, stencil: true, alpha: true })
@@ -72,7 +72,7 @@ export class ActorRenderer {
     this.readFramebuffer = framebuffer
     pixi.canvas.addEventListener('webglcontextlost', this.onContextLost)
     pixi.canvas.addEventListener('webglcontextrestored', this.onContextRestored)
-    pixi.resetState()
+    this.resetPixiState()
   }
 
   create(): ActorHandle {
@@ -123,7 +123,6 @@ export class ActorRenderer {
     this.renderedThisFrame = 0
     this.renderer.info.reset()
     let touched = false
-    let clearColor: Float32Array | null = null
     try {
       for (const handle of this.actors) {
         const visible = handle.sprite.parent?.visible && handle.sprite.parent?.renderable
@@ -154,7 +153,6 @@ export class ActorRenderer {
           handle.sprite.texture = texture
         }
         if (!touched) {
-          clearColor = this.pixi.gl.getParameter(this.pixi.gl.COLOR_CLEAR_VALUE) as Float32Array
           this.renderer.resetState()
           touched = true
         }
@@ -187,12 +185,18 @@ export class ActorRenderer {
     } finally {
       if (touched) {
         this.renderer.setRenderTarget(null)
-        this.pixi.resetState()
-        // Pixi 8.16 does not invalidate its clear-color cache in resetState.
-        if (clearColor) this.pixi.gl.clearColor(clearColor[0]!, clearColor[1]!, clearColor[2]!, clearColor[3]!)
+        this.resetPixiState()
       }
       this.renderMs = performance.now() - started
     }
+  }
+
+  private resetPixiState(): void {
+    this.pixi.resetState()
+    // Pixi 8.21 resets its clear-color cache to transparent black without a GL
+    // call. Match the actual GL value so zero-cleared targets (the light map)
+    // cannot inherit a previous stage or Three.js background color.
+    this.pixi.gl.clearColor(0, 0, 0, 0)
   }
 
   private copyOutput(texture: Texture): void {
@@ -217,7 +221,7 @@ export class ActorRenderer {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture.texture, 0)
     gl.readPixels(column, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.readPixel)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-    this.pixi.resetState()
+    this.resetPixiState()
     return this.readPixel[3]! > 0
   }
 
@@ -240,7 +244,7 @@ export class ActorRenderer {
     // its new resource maps. Otherwise a later resize disposes stale GL handles.
     this.pass.destroy()
   }
-  private readonly beforeThreeContextRestore = (): void => { this.pixi.resetState() }
+  private readonly beforeThreeContextRestore = (): void => { this.resetPixiState() }
   private readonly onContextRestored = (): void => {
     this.pass = new PixelActorPass()
     // Three rebuilds its background from the shared context's alpha attribute.
@@ -275,6 +279,6 @@ export class ActorRenderer {
     this.pass.destroy()
     this.renderer.dispose()
     this.cache.destroy()
-    this.pixi.resetState()
+    this.resetPixiState()
   }
 }

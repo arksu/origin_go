@@ -220,7 +220,7 @@ createApp(defineComponent({ setup() {
       card('equipment', 'Equipment', 218, 268, () => h(EquipmentWindow, { inventory: equipment, onClose: () => close('equipment') })),
       card('character', 'Character', 236, 292, () => h(CharacterSheetWindow, { onClose: () => close('character') })),
       card('stats', 'Player stats', 236, 190, () => h(PlayerStatsWindow, { onClose: () => close('stats') })),
-      card('settings', 'Settings', 270, 230, () => h(SettingsWindow, { mode: 'hybrid3d', debugEnabled: false, onClose: () => close('settings') })),
+      card('settings', 'Settings', 270, 230, () => h(SettingsWindow, { mode: 'hybrid3d', debugEnabled: false, economyRendering: false, onClose: () => close('settings') })),
       card('long-title', 'Long title', 180, 64, () => h(GameWindow, { id: 9901, title: 'A very long container title that must not overlap the close control', innerWidth: 180, innerHeight: 64, onClose: () => close('long-title') }, () => 'Exact content dimensions')),
       card('knockout', 'Knockout · centered, no close control', 280, 104, () => h(KnockoutWindow), true),
       card('build-state', 'Build state', 210, 140, () => h(BuildStateWindow, { entityId: 2, title: 'Crate', list: [{ resource: 'items/brick.png', putCount: 1, buildCount: 3 }, { resource: 'items/brick.png', putCount: 0, buildCount: 2 }], onClose: () => close('build-state') })),

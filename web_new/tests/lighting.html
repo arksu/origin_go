@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>World lighting GPU checks</title>
+<style>body{margin:24px;background:#19251d;color:#e2e9df;font:14px monospace}canvas{max-width:100%;image-rendering:pixelated;border:1px solid #465644}#preview canvas{height:auto!important}button,input,select{padding:8px;margin:0 8px 12px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#b6d7fa}label{display:inline-block}#metrics{max-width:900px}table{border-collapse:collapse}td,th{padding:6px;border:1px solid #465644;text-align:right}</style></head>
+<body data-status="running"><h1>World lighting</h1>
+<p>Real PixiJS WebGL rendering. Pixel checks run before the live production campfire preview. Lighting follows server-sampled phases; this page supplies explicit test samples.</p>
+<label>Game hour <input id="hour" type="range" min="0" max="24" step="0.05" value="0"><output id="clock">00:00</output></label>
+<label><input id="economy" type="checkbox">Economy rendering</label>
+<button id="toggle" disabled>Extinguish first fire</button><button id="pan" disabled>Pan away</button><button id="zoom" disabled>Zoom in</button><button id="reset" disabled>Reset world</button><button id="benchmark" disabled>Run bounded benchmark</button>
+<div id="preview"></div><p id="pointer">Click the canvas to inspect logical pointer coordinates.</p><p id="metrics"></p>
+<pre id="result">Running GPU checks…</pre><h2>Benchmark</h2>
+<p>Browser requestAnimationFrame intervals are reported separately from submission time (submissions are paced to at most 30 per second). CPU submission times include manager update and renderer submission. Optional WebGL2 GPU timer queries measure GPU work separately. Pixel extraction never runs during measured frames. Results apply to this browser and device.</p>
+<pre id="benchmark-result" data-status="idle">Not run. The benchmark takes about 90 seconds.</pre>
+<script type="module" src="/tests/lighting-browser.ts"></script></body></html>

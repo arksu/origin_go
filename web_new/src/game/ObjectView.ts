@@ -32,6 +32,7 @@ import type { ParticleEmitter } from './fx/ParticleEmitter'
 import type { LocalAudioSnapshot } from './LocalAudioController'
 import { locomotionClip } from './actors/locomotion'
 import type { LyingPresentationMode } from './actors/lyingPresentation'
+import type { LightDefinition } from './lighting/model'
 
 interface AnimatedFrameLayer {
   layer: LayerDef
@@ -158,6 +159,10 @@ export class ObjectView {
 
   getContainer(): Container {
     return this.container
+  }
+
+  getLightDefinition(): LightDefinition | undefined {
+    return this.resDef?.light
   }
 
   getOverheadAnchorY(): number {

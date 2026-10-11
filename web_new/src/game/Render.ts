@@ -4,7 +4,7 @@ import { ChunkManager } from './ChunkManager'
 import { ObjectManager } from './ObjectManager'
 import { moveController } from './MoveController'
 import { InputController, Modifiers } from './InputController'
-import { cameraController } from './CameraController'
+import { cameraController, type CameraState } from './CameraController'
 import { playerCommandController } from './PlayerCommandController'
 import { KeyboardMovementController } from './KeyboardMovementController'
 import { gameConnection } from '@/network/GameConnection'
@@ -38,6 +38,9 @@ import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
 import { MinimapRenderer } from './minimap/MinimapRenderer'
 import type { MinimapPose } from './minimap/types'
 import { getChunkSize, getCoordPerTile, hasWorldParams } from './tiles/Tile'
+import { LightingManager } from './lighting/LightingManager'
+import { gameCalendarSync } from '@/network/GameCalendarSync'
+import { resolveRenderResolution } from './renderResolution'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
 
@@ -45,7 +48,11 @@ export class Render {
   private app: Application
   private mapContainer: Container
   private objectsContainer: Container
+  private worldHudContainer: Container
   private uiContainer: Container
+  private lightingManager: LightingManager | null = null
+  private economyRendering = false
+  private sceneInitialized = false
   private debugOverlay: DebugOverlay
   private chunkManager: ChunkManager
   private objectManager: ObjectManager
@@ -82,6 +89,7 @@ export class Render {
     this.app = new Application()
     this.mapContainer = new Container()
     this.objectsContainer = new Container()
+    this.worldHudContainer = new Container()
     this.uiContainer = new Container()
     this.debugOverlay = new DebugOverlay()
     this.chunkManager = new ChunkManager()
@@ -100,14 +108,14 @@ export class Render {
     this.buildGhostController = new BuildGhostController(this.objectsContainer)
     this.liftGhostController = new LiftGhostController(this.objectsContainer)
     this.combatSectorPreview = new CombatSectorPreview(this.objectsContainer)
-    this.nicknameManager = new NicknameManager(this.objectsContainer)
-    this.chatBalloonManager = new ChatBalloonManager(this.objectsContainer, this.nicknameManager)
-    this.damageNumberManager = new DamageNumberManager(this.objectsContainer)
+    this.nicknameManager = new NicknameManager(this.worldHudContainer)
+    this.chatBalloonManager = new ChatBalloonManager(this.worldHudContainer, this.nicknameManager)
+    this.damageNumberManager = new DamageNumberManager(this.worldHudContainer)
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.canvas = canvas
-    const resolution = Math.min(window.devicePixelRatio, 2)
+    const resolution = resolveRenderResolution(this.economyRendering, window.devicePixelRatio)
     TextureStyle.defaultOptions.scaleMode = 'nearest'
 
     await this.app.init({
@@ -121,6 +129,8 @@ export class Render {
     })
 
     this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer, this.actorRenderSettings)
+    this.lightingManager = new LightingManager(this.app.renderer as WebGLRenderer)
+    this.objectManager.setLightingManager(this.lightingManager)
     this.damageNumberManager.installFont()
     this.objectManager.setActorRenderer(this.actorRenderer)
     await this.objectManager.initShallowWater((x, y) => this.chunkManager.getTileTypeAtWorld(x, y))
@@ -130,6 +140,7 @@ export class Render {
 
     this.mapContainer.sortableChildren = true
     this.objectsContainer.sortableChildren = true
+    this.worldHudContainer.sortableChildren = true
     this.uiContainer.sortableChildren = true
 
     this.chunkManager.setObjectsContainer(this.objectsContainer)
@@ -137,6 +148,8 @@ export class Render {
     this.mapContainer.addChild(this.chunkManager.getContainer())
     this.app.stage.addChild(this.mapContainer)
     this.app.stage.addChild(this.objectsContainer)
+    this.app.stage.addChild(this.lightingManager.getContainer())
+    this.app.stage.addChild(this.worldHudContainer)
     this.app.stage.addChild(this.uiContainer)
     this.uiContainer.addChild(this.debugOverlay.getContainer())
 
@@ -146,6 +159,9 @@ export class Render {
     this.debugOverlay.setVisible(this.debugOverlay.isVisible())
 
     this.setupInputController()
+
+    this.sceneInitialized = true
+    this.app.renderer.on('resize', this.onRendererResize)
 
     this.app.ticker.add(this.update.bind(this))
   }
@@ -157,6 +173,30 @@ export class Render {
 
   getActorRenderSettings(): Readonly<ActorRenderSettings> {
     return this.actorRenderSettings
+  }
+
+  setEconomyRendering(enabled: boolean): void {
+    this.economyRendering = enabled
+    if (!this.sceneInitialized) return
+    const resolution = resolveRenderResolution(enabled, window.devicePixelRatio)
+    if (this.app.renderer.resolution === resolution) return
+    this.app.renderer.resize(this.app.screen.width, this.app.screen.height, resolution)
+  }
+
+  // ResizePlugin also renders immediately, before the next ticker update.
+  private readonly onRendererResize = (): void => {
+    if (!this.sceneInitialized) return
+    if (hasWorldParams()) this.applyCameraTransform(cameraController.getState())
+    this.lightingManager?.invalidate()
+    this.updateLighting(performance.now(), hasWorldParams() && useGameStore().isInGame)
+    this.lastHoverCheckScreen = null
+  }
+
+  private updateLighting(now: number, active: boolean): void {
+    this.lightingManager?.update(
+      now, gameCalendarSync.getDayPhase(), this.objectsContainer,
+      this.app.screen.width, this.app.screen.height, active,
+    )
   }
 
   private setupInputController(): void {
@@ -326,9 +366,15 @@ export class Render {
 
   private update(): void {
     // Renderer starts before network authentication; no world coordinate math yet.
-    if (!hasWorldParams()) return
+    if (!hasWorldParams()) {
+      this.updateLighting(performance.now(), false)
+      return
+    }
     const game = useGameStore()
-    if (game.worldParams && !game.isInGame) return
+    if (game.worldParams && !game.isInGame) {
+      this.updateLighting(performance.now(), false)
+      return
+    }
     const now = performance.now()
     this.updateMovement()
     this.updateCamera()
@@ -357,6 +403,7 @@ export class Render {
       this.app.canvas.parentElement?.append(notice)
       return
     }
+    this.updateLighting(now, game.isInGame)
     this.updateHoverHighlight()
 
     this.updateDebugOverlay()
@@ -490,7 +537,10 @@ export class Render {
 
   private updateCamera(): void {
     // Update camera controller (handles follow logic)
-    const camState = cameraController.update()
+    this.applyCameraTransform(cameraController.update())
+  }
+
+  private applyCameraTransform(camState: CameraState): void {
 
     // Convert world coordinates to screen coordinates for camera positioning
     const screenPos = coordGame2Screen(camState.x, camState.y)
@@ -509,6 +559,8 @@ export class Render {
     this.objectsContainer.x = this.mapContainer.x
     this.objectsContainer.y = this.mapContainer.y
     this.objectsContainer.scale.set(camState.zoom)
+    this.worldHudContainer.position.copyFrom(this.mapContainer.position)
+    this.worldHudContainer.scale.set(camState.zoom)
   }
 
   private updateCulling(): void {
@@ -869,6 +921,7 @@ export class Render {
     this.nicknameManager.clear()
     this.moveMarkerManager?.clear()
     this.objectManager.clear()
+    this.lightingManager?.clear()
     this.chunkManager.clear()
     terrainManager.resetWorld()
     cullingController.clear()
@@ -881,6 +934,8 @@ export class Render {
   }
 
   destroy(): void {
+    this.sceneInitialized = false
+    this.app.renderer.off('resize', this.onRendererResize)
     this.combatSectorPreview.destroy()
     if (this.minimapCanvas) this.detachMinimap(this.minimapCanvas)
     this.playerEntityId = null
@@ -899,6 +954,8 @@ export class Render {
 
     this.chunkManager.destroy()
     this.objectManager.destroy()
+    this.lightingManager?.destroy()
+    this.lightingManager = null
     this.actorRenderer?.destroy()
     this.actorRenderer = null
     this.debugOverlay.destroy()

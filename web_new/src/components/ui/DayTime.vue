@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { gameCalendarSync } from '@/network/GameCalendarSync'
+import { getNightOpacity } from '@/utils/dayNight'
 import daysky from '@/assets/img/daytime/daysky.png'
 import nightsky from '@/assets/img/daytime/nightsky.png'
 import dayscape from '@/assets/img/daytime/dayscape.png'
@@ -19,9 +20,7 @@ const sky = computed(() => {
   // The original artwork uses a normalized dawn-to-evening decorative profile.
   const progress = Math.min(1, Math.max(0, (phase - 5 / 24) / (16 / 24)))
   const angle = progress * (Math.PI + 0.6) - 0.2
-  const nightOpacity = phase < 5 / 24 || phase >= 22 / 24 ? 1
-    : phase < 6 / 24 ? 6 - phase * 24
-      : phase <= 21 / 24 ? 0 : phase * 24 - 21
+  const nightOpacity = getNightOpacity(phase)
   return {
     nightOpacity,
     sunStyle: {
