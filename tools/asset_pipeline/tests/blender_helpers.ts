@@ -7,10 +7,17 @@ import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import type { AssetKind, AssetRecipe } from '../catalog.ts'
 import { exportAsset } from '../blender.ts'
+import { inspectToolchain, type ToolchainLock } from '../toolchain.ts'
 
 const execute = promisify(execFile)
 export const blenderPath = process.env['ASSET_PIPELINE_BLENDER'] ?? '/Applications/Blender.app/Contents/MacOS/Blender'
 export const pipelineDirectory = fileURLToPath(new URL('../', import.meta.url))
+export async function configuredToolchain() {
+  const lock = JSON.parse(await readFile(join(pipelineDirectory, 'toolchain.lock.json'), 'utf8')) as ToolchainLock
+  const paths = { node: process.execPath, blender: blenderPath,
+    toktx: join(pipelineDirectory, '.tools/ktx-4.4.2/install/usr/local/bin/toktx') }
+  return { paths, identity: inspectToolchain(paths, lock) }
+}
 export async function runBlender(script: string, args: string[]): Promise<string> {
   try {
     const result = await execute(blenderPath, ['--background', '--factory-startup', '--disable-autoexec',

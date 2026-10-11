@@ -7,15 +7,14 @@ import { exportAsset } from '../blender.ts'
 import { optimizeExport } from '../optimize.mjs'
 import { assetIO, canonicalJSON, catalogBytes, sha256, validateArtifacts } from '../report.mjs'
 import { reviewTexture } from '../texture-review.mjs'
-import { blenderPath, pipelineDirectory } from './blender_helpers.ts'
+import { blenderPath, configuredToolchain } from './blender_helpers.ts'
 
 test('production assets preserve the full decoded contract and meet measured UASTC budgets', async () => {
   const root = resolve(import.meta.dirname, '../../..')
   const recipes = await loadRecipes(root)
   const output = join(root, `build/optimization-review-${Date.now()}`)
   await mkdir(output, { recursive: true })
-  const identity = JSON.parse(await readFile(new URL('../toolchain.lock.json', import.meta.url)))
-  const toolchain = { identity, paths: { toktx: join(pipelineDirectory, '.tools/ktx-4.4.2/install/usr/local/bin/toktx') } }
+  const toolchain = await configuredToolchain()
   const reports = {}, metrics = []
   for (const [id, recipe] of recipes) {
     const directory = join(output, id.replace('/', '-'))

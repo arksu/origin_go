@@ -3,14 +3,14 @@ import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import test from 'node:test'
-import { createFixture, runExport, pipelineDirectory, readGlb } from './blender_helpers.ts'
+import { createFixture, runExport, configuredToolchain, readGlb } from './blender_helpers.ts'
 import { optimizeExport } from '../optimize.mjs'
 import { canonicalJSON, sha256, validateArtifacts, validateGLB, catalogBytes } from '../report.mjs'
 import { installDecoders } from '../install-decoders.mjs'
 import { decodeKTX2, comparePixels } from '../texture-review.mjs'
 
-const identity = JSON.parse(await readFile(new URL('../toolchain.lock.json', import.meta.url)))
-const toolchain = { identity, paths: { toktx: join(pipelineDirectory, '.tools/ktx-4.4.2/install/usr/local/bin/toktx') } }
+const toolchain = await configuredToolchain()
+const { identity } = toolchain
 
 test('canonical hashing ignores object order but retains array order and rejects nonfinite values', () => {
   assert.equal(canonicalJSON({ z: [2, 1], a: { b: true } }), '{"a":{"b":true},"z":[2,1]}')
@@ -53,6 +53,13 @@ test('optimization preserves authored rig, clips, external textures and rejects 
   }
   assert.equal(sha256(await readFile(result.model)), sha256(await readFile(second.model)))
   assert.equal(sha256(await readFile(result.metadata)), sha256(await readFile(second.metadata)))
+  const newerTools = await optimizeExport({ ...input, outputDirectory: fixture.directory('newer-tools'),
+    toolchain: { ...toolchain, identity: { ...identity, node: { version: 'v30.0.0' },
+      blender: { ...identity.blender, version: '6.0.0', buildHash: 'newer-build' } } } })
+  assert.equal(sha256(await readFile(result.model)), sha256(await readFile(newerTools.model)))
+  const originalMetadata = JSON.parse(await readFile(result.metadata, 'utf8'))
+  const newerMetadata = JSON.parse(await readFile(newerTools.metadata, 'utf8'))
+  assert.notEqual(originalMetadata.toolchainHash, newerMetadata.toolchainHash, 'actual tools remain part of compatibility hashes')
   assert.equal(catalogBytes([result.metrics, second.metrics]),
     2 * (result.metrics.geometryBytes + result.metrics.animationBytes + result.metrics.metadataBytes) + result.metrics.textureBytes)
   for (const override of [{ trianglesByLod: {} }, { trianglesByLod: { '0': 0 } }, { bones: 1 }, { boneInfluences: 0 },
@@ -63,7 +70,8 @@ test('optimization preserves authored rig, clips, external textures and rejects 
   assert.deepEqual(raw.metadata.rig.bones.map(bone => bone.name), ['hand.r', 'root'])
   await assert.rejects(validateArtifacts({ ...result, clips: {} }, fixture.recipe), /selected clip set/)
   await assert.rejects(validateArtifacts({ ...result, textures: [] }, fixture.recipe), /external texture set/)
-  await assert.rejects(optimizeExport({ ...input, toolchain: { ...toolchain, identity: { ...identity, blender: { ...identity.blender, version: '5.2.0' } } } }), /locked blender/)
+  await assert.rejects(optimizeExport({ ...input, toolchain: { ...toolchain, identity: { ...identity, blender: { ...identity.blender, version: '4.5.0' } } } }), /Blender 5\+ is required/)
+  await assert.rejects(optimizeExport({ ...input, toolchain: { ...toolchain, identity: { ...identity, node: { version: 'v24.0.0' } } } }), /Node 25\+ is required/)
   await assert.rejects(optimizeExport({ ...input, recipe: { ...fixture.recipe, optimization: { ...fixture.recipe.optimization,
     texture: { ...fixture.recipe.optimization.texture, codec: 'etc1s' } } } }), /profile/)
   const pixels = await decodeKTX2(result.textures[0])

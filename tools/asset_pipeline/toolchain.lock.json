@@ -5,14 +5,10 @@
     "arch": "arm64"
   },
   "node": {
-    "version": "v25.8.0"
+    "minimumMajor": 25
   },
   "blender": {
-    "version": "5.2.1",
-    "buildHash": "9e2066aef7ef",
-    "buildPlatform": "Darwin",
-    "pythonVersion": "3.13.13",
-    "ioSceneGltf2TreeSha256": "56762edd13b74d11189a5c700d0824a009b855857c3a8432a4e6fad1f6e26442"
+    "minimumMajor": 5
   },
   "toktx": {
     "version": "4.4.2",

@@ -6,6 +6,7 @@ import { Format } from '@gltf-transform/core'
 import { EXTMeshoptCompression, KHRTextureBasisu } from '@gltf-transform/extensions'
 import { MeshoptEncoder } from 'meshoptimizer'
 import sharp from 'sharp'
+import { validateBlenderIdentity, validateNodeIdentity, validatePlatformIdentity } from './toolchain.ts'
 import { assetIO, canonicalJSON, sha256, skinContract, validateGLB, validateArtifacts } from './report.mjs'
 
 const execute = promisify(execFile)
@@ -68,15 +69,15 @@ function compress(document) {
 }
 export async function optimizeExport({ rawDirectory, recipe, toolchain, outputDirectory, log = () => {} }) {
   const lock = JSON.parse(await readFile(lockPath, 'utf8'))
-  for (const field of ['platform', 'node', 'blender']) {
-    if (canonicalJSON(toolchain.identity[field]) !== canonicalJSON(lock[field])) throw new Error(`Optimizer requires locked ${field} identity`)
-  }
+  validatePlatformIdentity(toolchain.identity.platform, lock.platform)
+  validateNodeIdentity(toolchain.identity.node, lock.node)
+  validateBlenderIdentity(toolchain.identity.blender, lock.blender)
   const encoder = toolchain.paths.toktx
   if (sha256(await readFile(encoder)) !== lock.toktx.binarySha256) throw new Error('Optimizer requires locked toktx binary')
   const profile = optimizerProfile(recipe)
   const packageLockHash = sha256(await readFile(new URL('./package-lock.json', import.meta.url)))
   const profileHash = sha256(canonicalJSON(profile))
-  const toolchainHash = sha256(canonicalJSON({ lock, packageLockHash, profileHash }))
+  const toolchainHash = sha256(canonicalJSON({ lock, identity: toolchain.identity, packageLockHash, profileHash }))
   await MeshoptEncoder.ready
   const io = assetIO().registerDependencies({ 'meshopt.encoder': MeshoptEncoder })
   const rawModel = join(rawDirectory, 'model.glb')

@@ -124,7 +124,7 @@ test('help documents all accepted workflows and setup failures', () => {
   ]
   for (const example of examples) assert.match(HELP_TEXT, new RegExp(example.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   assert.match(HELP_TEXT, /Setup errors:/)
-  assert.match(HELP_TEXT, /Blender 5\.2\.1/)
+  assert.match(HELP_TEXT, /Node 25\+ and Blender 5\+/)
   assert.match(HELP_TEXT, /--toktx/)
 })
 

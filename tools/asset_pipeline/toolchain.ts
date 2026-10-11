@@ -31,8 +31,15 @@ export interface ToolchainIdentity {
   toktx: ToktxIdentity
 }
 
-export interface ToolchainLock extends ToolchainIdentity {
+export interface VersionRequirement {
+  minimumMajor: number
+}
+
+export interface ToolchainLock {
   schemaVersion: 1
+  platform: PlatformIdentity
+  node: VersionRequirement
+  blender: VersionRequirement
   toktx: ToktxIdentity & {
     archive: {
       url: string
@@ -47,20 +54,22 @@ export interface ToolPaths {
   toktx: string
 }
 
-export function validateBlenderIdentity(actual: BlenderIdentity, expected: BlenderIdentity): void {
-  if (actual.version !== expected.version) {
-    throw new Error(`Blender ${expected.version} is required; found ${actual.version}`)
+function validateVersion(tool: string, version: string, requirement: VersionRequirement): void {
+  if (!Number.isSafeInteger(requirement.minimumMajor) || requirement.minimumMajor < 1) {
+    throw new Error(`Invalid ${tool} minimum major version`)
   }
+  const match = version.match(/^v?(\d+)\.\d+\.\d+$/)
+  if (!match || Number(match[1]) < requirement.minimumMajor) {
+    throw new Error(`${tool} ${requirement.minimumMajor}+ is required; found ${version}`)
+  }
+}
 
-  if (actual.buildHash !== expected.buildHash) {
-    throw new Error(`Blender build ${expected.buildHash} is required; found ${actual.buildHash}`)
-  }
+export function validateBlenderIdentity(actual: BlenderIdentity, requirement: VersionRequirement): void {
+  validateVersion('Blender', actual.version, requirement)
+}
 
-  for (const field of ['buildPlatform', 'pythonVersion', 'ioSceneGltf2TreeSha256'] as const) {
-    if (expected[field] !== undefined && actual[field] !== expected[field]) {
-      throw new Error(`Blender ${field} ${expected[field]} is required; found ${actual[field] ?? 'unknown'}`)
-    }
-  }
+export function validateNodeIdentity(actual: NodeIdentity, requirement: VersionRequirement): void {
+  validateVersion('Node', actual.version, requirement)
 }
 
 export function validatePlatformIdentity(actual: PlatformIdentity, expected: PlatformIdentity): void {
@@ -140,9 +149,7 @@ export function inspectToolchain(paths: ToolPaths, lock: ToolchainLock): Toolcha
   validatePlatformIdentity(platform, lock.platform)
 
   const node: NodeIdentity = { version: run(paths.node, ['--version']).trim() }
-  if (node.version !== lock.node.version) {
-    throw new Error(`Node ${lock.node.version} is required; found ${node.version}. Pass the pinned executable path.`)
-  }
+  validateNodeIdentity(node, lock.node)
 
   const blender = inspectBlender(paths.blender)
   validateBlenderIdentity(blender, lock.blender)

@@ -53,7 +53,7 @@ Examples:
 
 Setup errors:
   Run tools/assets setup to install the locked KTX-Software archive locally.
-  Install the locked Node version and Blender 5.2.1.
+  Install Node 25+ and Blender 5+.
   Pass non-default executable locations with --blender and --toktx.
   Builds run offline and never install missing tools.
 `

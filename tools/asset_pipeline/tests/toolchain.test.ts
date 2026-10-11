@@ -11,20 +11,31 @@ import {
   parseToktxVersionOutput,
   type ToolchainLock,
   validateBlenderIdentity,
+  validateNodeIdentity,
   validatePlatformIdentity,
 } from '../toolchain.ts'
 
-test('rejects a Blender patch release mismatch', () => {
-  assert.throws(
-    () => validateBlenderIdentity(
-      { version: '5.2.0', buildHash: '9e2066aef7ef' },
-      { version: '5.2.1', buildHash: '9e2066aef7ef' },
-    ),
-    /5\.2\.1/,
-  )
+test('accepts Blender 5 and newer without pinning build, Python or exporter identities', () => {
+  for (const version of ['5.0.0', '5.2.1', '5.2.2', '6.0.0']) {
+    assert.doesNotThrow(() => validateBlenderIdentity({ version, buildHash: 'another-build',
+      buildPlatform: 'Darwin', pythonVersion: '3.14.0', ioSceneGltf2TreeSha256: 'another-exporter' }, { minimumMajor: 5 }))
+  }
+  for (const version of ['4.9.99', 'unknown', '']) {
+    assert.throws(() => validateBlenderIdentity({ version, buildHash: 'any' }, { minimumMajor: 5 }), /Blender 5\+ is required/)
+  }
 })
 
-test('parses the pinned Blender version output', () => {
+test('accepts Node 25 and newer and rejects older or malformed versions', () => {
+  for (const version of ['v25.0.0', 'v25.8.0', 'v26.10.0', 'v30.0.0']) {
+    assert.doesNotThrow(() => validateNodeIdentity({ version }, { minimumMajor: 25 }))
+  }
+  for (const version of ['v24.99.99', 'unknown', '']) {
+    assert.throws(() => validateNodeIdentity({ version }, { minimumMajor: 25 }), /Node 25\+ is required/)
+  }
+  assert.throws(() => validateNodeIdentity({ version: 'v26.10.0' }, { minimumMajor: NaN }), /Invalid Node minimum/)
+})
+
+test('parses the actual Blender version output', () => {
   assert.deepEqual(
     parseBlenderVersionOutput(`Blender 5.2.1 LTS
 \tbuild hash: 9e2066aef7ef
@@ -53,10 +64,10 @@ test('inspects tools that report their version on stderr', async () => {
   const nodePath = join(directory, 'node')
   const blenderPath = join(directory, 'blender')
   const toktxPath = join(directory, 'toktx')
-  await writeFile(nodePath, '#!/bin/sh\necho v25.8.0\n')
+  await writeFile(nodePath, '#!/bin/sh\necho v26.10.0\n')
   await writeFile(blenderPath, `#!/bin/sh
 if [ "$1" = "--version" ]; then
-  printf 'Blender 5.2.1 LTS\\n  build hash: 9e2066aef7ef\\n  build platform: Darwin\\n'
+  printf 'Blender 5.2.2 LTS\\n  build hash: d13f752e3b9c\\n  build platform: Darwin\\n'
 else
   echo 'ASSET_PIPELINE_IDENTITY={"pythonVersion":"3.13.13","ioSceneGltf2TreeSha256":"exporter-hash"}'
 fi
@@ -67,11 +78,8 @@ fi
   const lock: ToolchainLock = {
     schemaVersion: 1,
     platform: { platform: process.platform, arch: process.arch },
-    node: { version: 'v25.8.0' },
-    blender: {
-      version: '5.2.1', buildHash: '9e2066aef7ef', buildPlatform: 'Darwin',
-      pythonVersion: '3.13.13', ioSceneGltf2TreeSha256: 'exporter-hash',
-    },
+    node: { minimumMajor: 25 },
+    blender: { minimumMajor: 5 },
     toktx: {
       version: '4.4.2', binarySha256,
       archive: { url: 'https://example.invalid/ktx.pkg', sha256: 'archive-hash' },
@@ -80,8 +88,14 @@ fi
 
   assert.deepEqual(inspectToolchain({ node: nodePath, blender: blenderPath, toktx: toktxPath }, lock), {
     platform: lock.platform,
-    node: lock.node,
-    blender: lock.blender,
+    node: { version: 'v26.10.0' },
+    blender: { version: '5.2.2', buildHash: 'd13f752e3b9c', buildPlatform: 'Darwin',
+      pythonVersion: '3.13.13', ioSceneGltf2TreeSha256: 'exporter-hash' },
     toktx: { version: '4.4.2', binarySha256 },
   })
+  await writeFile(nodePath, '#!/bin/sh\necho v24.0.0\n')
+  assert.throws(() => inspectToolchain({ node: nodePath, blender: blenderPath, toktx: toktxPath }, lock), /Node 25\+ is required/)
+  await writeFile(nodePath, '#!/bin/sh\necho v26.10.0\n')
+  await writeFile(blenderPath, (await readFile(blenderPath, 'utf8')).replace('Blender 5.2.2', 'Blender 4.5.0'))
+  assert.throws(() => inspectToolchain({ node: nodePath, blender: blenderPath, toktx: toktxPath }, lock), /Blender 5\+ is required/)
 })

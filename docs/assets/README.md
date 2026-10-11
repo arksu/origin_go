@@ -12,8 +12,8 @@ the blends. Generated runtime files are not authoring inputs.
 ## Setup
 
 Run commands from the repository root. The checked-in toolchain lock currently
-supports macOS arm64, Node 25.8.0, Blender 5.2.1 build `9e2066aef7ef`, and official
-KTX-Software 4.4.2. Install the locked Node and Blender releases, then install npm
+supports macOS arm64, Node 25 or newer, Blender 5 or newer, and official
+KTX-Software 4.4.2. Install supported Node and Blender releases, then install npm
 dependencies, decoder files and the pinned local KTX encoder:
 
 ```sh
@@ -34,8 +34,12 @@ tools/assets validate all --blender /Applications/Blender.app/Contents/MacOS/Ble
 ```
 
 Use those overrides on each command when executable locations differ from the
-defaults. A platform/version/hash mismatch requires the pinned installation or
-a deliberately reviewed toolchain-lock update, not bypassing validation.
+defaults. Node and Blender checks enforce minimum major versions, without
+requiring an exact patch release or Blender build hash. Platform and KTX
+version/hash checks remain pinned. Actual Node, Blender, Python and glTF exporter
+identities are recorded in build provenance and compatibility hashes. After
+changing tools, run a full build before using animation-only builds.
+Reproducibility compares builds made with the same installed tools.
 
 ## Daily commands
 

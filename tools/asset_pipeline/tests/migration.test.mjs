@@ -11,20 +11,15 @@ import { blenderPath, fileHash, readGlb, runBlender } from './blender_helpers.ts
 
 const root = resolve(import.meta.dirname, '../../..')
 const characterReferences = join(root, 'art_source/character/male_commoner/references')
-test('migration and source verification reject mismatched Blender identities before opening sources', async () => {
+test('migration and source verification reject unsupported Blender versions before opening sources', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'migration-identity-'))
   await mkdir(join(directory, 'migration'))
   const script = join(directory, 'migration/migrate_sources.py')
   await writeFile(script, await readFile(join(root, 'tools/asset_pipeline/migration/migrate_sources.py')))
   const lock = JSON.parse(await readFile(join(root, 'tools/asset_pipeline/toolchain.lock.json'), 'utf8'))
-  for (const [field, value, expected] of [
-    ['version', '0.0.0', /Blender 0\.0\.0 is required; found 5\.2\.1/],
-    ['buildHash', '000000000000', /Blender build 000000000000 is required; found 9e2066aef7ef/],
-  ]) {
-    await writeFile(join(directory, 'toolchain.lock.json'), JSON.stringify({ ...lock, blender: { ...lock.blender, [field]: value } }))
-    for (const mode of [[], ['--verify-only'], ['--audit-only']]) {
-      await assert.rejects(runBlender(script, ['--root', root, '--baseline', characterReferences, ...mode]), expected)
-    }
+  await writeFile(join(directory, 'toolchain.lock.json'), JSON.stringify({ ...lock, blender: { minimumMajor: 999 } }))
+  for (const mode of [[], ['--verify-only'], ['--audit-only']]) {
+    await assert.rejects(runBlender(script, ['--root', root, '--baseline', characterReferences, ...mode]), /Blender 999\+ is required; found/)
   }
 })
 test('one-time migration refuses to overwrite an editable canonical source', async () => {
