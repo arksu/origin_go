@@ -44,7 +44,8 @@ Files in this folder are loaded by `internal/objectdefs`.
 `indestructible: true` prevents object damage and excludes the object from melee
 damage targets. It does not change collision, lifting, inventory interaction,
 behavior-driven transforms or removal, or administrator `/destroy`. The current
-catalog enables it only for `player_dead` (`Dead Player`), which retains its initial `hp: 100`.
+catalog enables it for player remains and `hearth_fire` (`Hearth Fire`).
+The corpse retains its initial `hp: 100`.
 The corpse definition keeps `defId: 15`; existing saved corpses load through this
 same ID without a database migration.
 

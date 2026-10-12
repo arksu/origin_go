@@ -1,6 +1,9 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict'
 import { test, beforeEach } from 'node:test'
+import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { setWorldParams } from './serverConstantsFixture'
 
 beforeEach(() => setWorldParams(32, 128))
@@ -192,6 +195,40 @@ test('paired skeleton sprites share their abdomen anchor and culling includes th
     assert.equal(resource.layers[1]!.interactive, undefined)
     const position = ResourceLoader.resolveLayerPosition(resource.layers[0]!, resource)
     assert.deepEqual(position, { x: -43, y: -37 })
+  }
+})
+
+test('Hearth Fire resolves reviewed 70-percent flame assets with their shared anchor and timing', async () => {
+  const resource = ResourceLoader.getResourceDef('hearth_fire')!
+  const campfire = ResourceLoader.getResourceDef('campfire/burning')!
+  assert.ok(resource, 'server resource hearth_fire must resolve without a preview override')
+  assert.equal(resource.fx, undefined)
+  assert.equal(resource.light, undefined)
+  assert.equal(resource.actor3d, undefined)
+  assert.deepEqual(resource.layers[0], campfire.layers[0], 'wood base remains shared with the campfire')
+  assert.deepEqual(resource.layers[2], campfire.layers[2], 'ground shadow remains shared with the campfire')
+  const flame = resource.layers[1]!
+  assert.equal(flame.fps, 4)
+  assert.equal(flame.loop, true)
+  assert.equal(flame.z, 1)
+  assert.deepEqual(flame.frames!.map((frame) => frame.img), [1, 3, 2, 5, 4, 6, 7].map((frame) => `obj/hearth_fire/flame/frame_${frame}.png`))
+  const expectedHashes = [
+	'f5e458d2f4471a9577c813f99c466ecb26d8b6d071cca5e6d4bed937c3847ecb',
+	'616b86527ff27283136ea04872095a8ac9e89442759163f66c45e7bfec7c23ec',
+	'bdb110458b0a974d7041658e6b6f6912558ff8b2b36baa6c0298f6b863d310a7',
+	'e14bd902b97b24b4bd188c21e0134192bed01bd39c61ae69c464782914f22147',
+	'8cb6abdf746e991ca84ec64b01c7b55c89793feff48a86f931efcd1f620fd590',
+	'59174b0d2efbdcb94d8cbee05e2aa09274860faedd5efedaa25a7378fa6ce2e1',
+	'1d992e3f796630d8f345410068a229c7f470c7b8db360ba60823afac018720a5',
+  ]
+  for (const [index, frame] of flame.frames!.entries()) {
+	assert.deepEqual(ResourceLoader.resolveLayerPosition(flame, resource, frame.offset), { x: -48, y: -74 })
+	const png = await readFile(resolve('public/assets/game', frame.img))
+	assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
+	assert.equal(png.readUInt32BE(16), 96)
+	assert.equal(png.readUInt32BE(20), 96)
+	assert.equal(png[25], 6, 'flame frame must retain RGBA transparency')
+	assert.equal(createHash('sha256').update(png).digest('hex'), expectedHashes[index], 'published frame must match the prepared 70-percent asset')
   }
 })
 

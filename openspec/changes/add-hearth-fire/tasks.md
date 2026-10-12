@@ -1,5 +1,19 @@
 # Tasks
 
+## Preparatory Delivery
+
+The user requested object/asset integration only on 2026-10-12, explicitly
+excluding Hearth gameplay. The server catalog now contains static, indestructible
+`hearth_fire` (ID 36, resource `hearth_fire`, 12x12 collider) without behaviors or
+a station. The client uses the approved seven green flame frames at 70% scale,
+4 FPS, through the ordinary resource loader. Spawn/restore and resource/asset
+regressions cover this preparation; the art-review page uses the real resource.
+
+This partially prepares tasks 3.1 and 9.1-9.2. Their full behavioral/presentation
+scope, including the Hearth behavior, skull smoke and Actions integration, is
+still pending, so no full task is checked off here. See feature section 2.12 for
+the delivered paths and current limits.
+
 ## 1. Persistence Contracts
 
 - [ ] 1.1 Add the deployment migration and matching `migrations/schema.sql` changes for nullable `character.first_world_entry_at` and unpartitioned `character_hearth` with character PK, unique object reference, and composite RESTRICT FK; verify PostgreSQL tests reject duplicate ownership and invalid references and do not require legacy backfill.

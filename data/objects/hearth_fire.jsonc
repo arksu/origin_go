@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "source": "hearth_fire",
+  "objects": [
+	{
+	  "defId": 36,
+	  "key": "hearth_fire",
+	  "name": "Hearth Fire",
+	  "static": true,
+	  "hp": 100,
+	  "indestructible": true,
+	  "components": {
+		"collider": { "w": 12, "h": 12 }
+	  },
+	  "resource": "hearth_fire",
+	  "behaviors": {}
+	}
+  ]
+}

@@ -1,4 +1,35 @@
 {
+  "hearth_fire": {
+	"offset": [32, 63],
+	"layers": [
+	  {
+		"interactive": true,
+		"img": "obj/campfire/campfire.png",
+		"offset": [7, 28],
+		"z": 0
+	  },
+	  {
+		"frames": [
+		  { "img": "obj/hearth_fire/flame/frame_1.png", "offset": [0, 0] },
+		  { "img": "obj/hearth_fire/flame/frame_3.png", "offset": [0, 0] },
+		  { "img": "obj/hearth_fire/flame/frame_2.png", "offset": [0, 0] },
+		  { "img": "obj/hearth_fire/flame/frame_5.png", "offset": [0, 0] },
+		  { "img": "obj/hearth_fire/flame/frame_4.png", "offset": [0, 0] },
+		  { "img": "obj/hearth_fire/flame/frame_6.png", "offset": [0, 0] },
+		  { "img": "obj/hearth_fire/flame/frame_7.png", "offset": [0, 0] }
+		],
+		"fps": 4,
+		"loop": true,
+		"offset": [-16, -11],
+		"z": 1
+	  },
+	  {
+		"img": "obj/campfire/campfire_.png",
+		"offset": [10, 35],
+		"shadow": true
+	  }
+	]
+  },
   "campfire": {
     "unlit": {
       "offset": [

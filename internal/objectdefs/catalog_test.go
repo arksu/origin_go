@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	constt "origin/internal/const"
 	"origin/internal/game/behaviors"
 	"origin/internal/itemdefs"
 	"origin/internal/objectdefs"
@@ -26,10 +27,10 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 	require.True(t, exists)
 	require.Equal(t, "player_dead", corpse.Key)
 	require.Equal(t, "Dead Player", corpse.Name)
-	protected := map[string]bool{"player_dead": true, "player_skeleton": true, "player_skeleton_without_skull": true}
+	protected := map[string]bool{"player_dead": true, "player_skeleton": true, "player_skeleton_without_skull": true, "hearth_fire": true}
 	for _, definition := range objects.All() {
 		require.Equal(t, protected[definition.Key], definition.Indestructible,
-			"only player remains are indestructible in the object catalog: %s", definition.Key)
+			"only player remains and hearth fire are indestructible in the object catalog: %s", definition.Key)
 		if definition.Key == "player" {
 			require.Zero(t, definition.HP)
 			continue
@@ -37,7 +38,7 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 		require.Positive(t, definition.HP, "object %s (defId=%d)", definition.Key, definition.DefID)
 	}
 
-	for _, key := range []string{"boulder", "kiln", "campfire", "player_dead", "player_skeleton", "player_skeleton_without_skull", "build"} {
+	for _, key := range []string{"boulder", "kiln", "campfire", "hearth_fire", "player_dead", "player_skeleton", "player_skeleton_without_skull", "build"} {
 		definition, exists := objects.GetByKey(key)
 		require.True(t, exists, "object %s", key)
 		require.Equal(t, 100, definition.HP, "object %s", key)
@@ -65,4 +66,17 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 		require.True(t, exists, "object %s", key)
 		require.Equal(t, hp, definition.HP, "existing HP for %s", key)
 	}
+	hearth, exists := objects.GetByKey("hearth_fire")
+	require.True(t, exists)
+	require.Equal(t, 36, hearth.DefID)
+	require.Equal(t, "Hearth Fire", hearth.Name)
+	require.True(t, hearth.IsStatic)
+	require.Equal(t, "hearth_fire", hearth.Resource)
+	require.InDelta(t, constt.CoordPerTile, hearth.Components.Collider.W, 0)
+	require.InDelta(t, constt.CoordPerTile, hearth.Components.Collider.H, 0)
+	require.Empty(t, hearth.Components.Inventory)
+	require.Empty(t, hearth.Appearance)
+	require.Empty(t, hearth.Behaviors, "the preparatory object must not add fuel, lift, or Hearth gameplay")
+	require.Empty(t, hearth.BehaviorOrder)
+	require.Nil(t, hearth.Station, "Hearth Fire is not a cooking or fuel station")
 }

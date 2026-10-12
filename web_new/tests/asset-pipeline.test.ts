@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { AnimationClip, AnimationMixer, Bone, Group, VectorKeyframeTrack, BufferGeometry, BufferAttribute, Mesh, MeshStandardMaterial, CompressedTexture, RGBA_S3TC_DXT5_Format, type WebGLRenderer } from 'three'
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
@@ -11,10 +12,42 @@ import { parseActorManifest, loadActorCatalog, validateAssetURL, type ActorManif
 import { bindClips } from '../src/game/actors/ActorClipBinding'
 import { ActorSockets } from '../src/game/actors/ActorSockets'
 import { parseActionAnimationFile } from '../src/types/actionAnimationDefs'
+import { SKULL_SMOKE } from '../src/game/fx/assets/skullSmoke'
 
 declare const ASSET_TEST_ROOT: string
 const hash = 'a'.repeat(64)
 const artifact = { url: `/assets/game/test/${hash}.glb`, sha256: hash, bytes: 100 }
+
+test('shared skull smoke assets preserve the approved frames and one-shot contract', async () => {
+  assert.equal(SKULL_SMOKE.key, 'skull_smoke')
+  assert.deepEqual(SKULL_SMOKE.frameSize, [96, 128])
+  assert.deepEqual(SKULL_SMOKE.anchor, [48, 120])
+  assert.equal(SKULL_SMOKE.frameDurationMs, 250)
+  assert.equal(SKULL_SMOKE.lifetimeMs, 2000)
+  assert.equal(SKULL_SMOKE.loop, false)
+  assert.equal(SKULL_SMOKE.frames.length, 8)
+  assert.equal(SKULL_SMOKE.frames.length * SKULL_SMOKE.frameDurationMs, SKULL_SMOKE.lifetimeMs)
+  const approvedHashes = [
+	'e2873df08c2b0af799195333f216d0ab8c0a05b872d51f2346f77a71d0fddba3',
+	'546c7d241f2dc22384bcf6e27924587c15e777280dcd4db0422d85d3e0712e01',
+	'263b79a4a7adb7974e292615423f56e63ed74808b077003ae98e5a755a640d0a',
+	'31367933782f05fd92e49782357e212f8283274d08f2474d85f4fb0736beec0f',
+	'60856f25691bf5bfb65624dd9c605b0cdd94ae5b55e86f5b1feccb94bbb0fe7e',
+	'51ead554feeeba271e26d62e8c88bacd137183f4138013ffc764f18b81f2c578',
+	'ef00401969d0cdbf976e8bbb4973bca94f59004f6a592d52a63950919b6210bf',
+	'2888c5ab243b64f4865ef58f67dac7781011b106324d1d5b96653a4f8203fa4d',
+  ]
+  for (const [index, path] of SKULL_SMOKE.frames.entries()) {
+	assert.equal(path, `fx/skull_smoke/frame_${index + 1}.png`)
+	const png = await readFile(`${ASSET_TEST_ROOT}/public/assets/game/${path}`)
+	assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
+	assert.equal(png.readUInt32BE(16), SKULL_SMOKE.frameSize[0])
+	assert.equal(png.readUInt32BE(20), SKULL_SMOKE.frameSize[1])
+	assert.equal(png[25], 6, 'approved frames must retain RGBA transparency')
+	assert.equal(createHash('sha256').update(png).digest('hex'), approvedHashes[index])
+  }
+})
+
 function compatibleClipManifests(): ActorManifest {
   return { schema: 1, id: 'character/test', kind: 'character', rigHash: hash, model: { ...artifact },
     metadata: { ...artifact, url: artifact.url.replace('.glb', '.json') }, textures: [], bindings: {},
