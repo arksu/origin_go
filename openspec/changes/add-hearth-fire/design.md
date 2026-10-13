@@ -2,208 +2,125 @@
 
 ## Context
 
-See `proposal.md` for motivation and `docs/features/hearth_fire.md`, Part 2, for the approved gameplay and database contract. This is a cross-cutting persistence, world-lifecycle, action, transfer, and rendering change; no implementation is implied by these artifacts.
+See `proposal.md` and `docs/features/hearth_fire.md`, Part 2, for gameplay. On 2026-10-13 the owner reverted Hearth gameplay/persistence code and requested a simpler design: runtime integrity is required; asynchronous saves, independent checkpoints, and loss of recent progress after a crash are acceptable.
 
-Each world layer has its own shard and ECS world. Network commands and server jobs execute through the owning shard. Database work must not be introduced into that tick path, and the shared event bus is not a cross-layer mutation queue. The accepted unified-behavior ADR informs object integration; proposed time/stamina ADRs are not evidence of implemented behavior.
+The prepared static `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. The ownership table, Hearth runtime module, finisher codec, and lifecycle coordinator do not. Previous completed task marks therefore no longer describe the source tree.
 
-Relevant current boundaries:
+Relevant existing mechanisms:
 
-- `object` is partitioned by region with primary key `(region, id)`. Character death is a soft delete. Generic object upsert can overwrite type/state, so a transaction alone does not prevent an older chunk save from resurrecting pre-conversion state.
-- Build progress lives in the `build` behavior in `object.data`. Fully processed builds can be finalized again by a different actor; the current state does not record the original finisher.
-- `spawnAndLogin` first attempts live-body reattachment, then normal spawn candidates. This distinction must remain intact.
-- `RequestTransfer` admits an asynchronous transfer, not its successful outcome. Source detach clears transient actions and despawns the source handle. Target spawn and participant restoration precede client attachment; rollback uses the captured source runtime.
-- Transfer currently rejects all KO/lying states. Shared action cooldowns commit on successful action completion and survive transfer/rollback and ordinary saves.
-- `S2C_Fx` has only key and position. Existing dispatch supports local-player `exp_gain`; object-attached continuous particle effects have separate lifetime rules.
+- One shard/World owns each layer. Hearths and their construction sites are surface-only, so both sides of a replacement belong to one surface World.
+- Build cycles already process materials and stamina under the owning shard lock. `TransformObjectToDefInPlace` updates a live object's type, collider, behaviors, appearance and dirty intent without changing its ID or position.
+- Chunk persistence has bounded workers, I/O gates, raw cache and load revisions. `core.Chunk.UpsertRawObject` marks raw data dirty, but currently does not advance the cache revision used to fence old loads.
+- `finalizeCompletedBuild` currently ignores the transform's failure result. This needs a small correction before integrating another completion policy.
+- Player transfers are asynchronous; accepting `RequestTransfer` is not successful relocation. Action progress, cooldowns, carry snapshots, generation checks and rollback already exist.
+- `S2C_Fx` currently carries a key and position. Existing dispatch is local-player-oriented; finite world effects need detached rendering, not a new persistence subsystem.
 
 ## Goals / Non-Goals
 
-**Goals:**
+**Goals:** immediate, unambiguous runtime ownership; ordinary construction/action/transfer reuse; feature-owned policy; bounded background saving; safe restoration of potentially partial saved state.
 
-- Make the active-hearth association and its object conversion durable as one operation, with deterministic ownership, bounded asynchronous work, and replay-safe reconciliation.
-- Integrate return with ordinary action progress and transfer outcomes without charging cooldown on admission or failure.
-- Keep movement collision, structural placement, and carried-object destination checks explicitly separate.
-- Deliver finite event-position effects without making them persistent object/view state.
-
-**Non-Goals:**
-
-- A general transaction framework, new dependencies, replacement of unrelated action/transfer behavior, or broad death/corpse refactoring.
-- Legacy backfill, inherited homes, new travel resources, minimap work, or a new persistent owner representation in object JSON.
-- Changing existing REST authorization/deletion policy, reconnect body ownership, or post-capture transfer restoration on socket failure.
+**Non-Goals:** lossless crash recovery, a globally consistent world checkpoint, commit-before-gameplay publication, lifecycle operation journals/coordinators, generic mutation reservations, special corpse/character save barriers, or a new global shutdown protocol. No automatic first-entry hearth, inheritance, backfill, new dependencies, balance changes, or minimap work.
 
 ## Decisions
 
-### 1. Separate the active association from the physical object
+### 1. Keep ownership in the Hearth module
 
-Retain the exact approved schema from feature section 2.11:
+Use `internal/game/hearth` for home lookup, current ownership, conversion policy and association persistence. It owns a current `character -> home` cache and reverse object-owner index. Distinguish an unknown lookup from known absence; an absent home never creates one automatically. Store copied IDs, positions and generations, not pointers to live components.
+
+Current runtime state wins over SQL results. A small revision/load-generation check rejects stale lookups and acknowledgments. Protect shared index access across layers with short synchronization, never holding that lock across ECS callbacks, shard locks or I/O. Geometry checks use the cached owner, not SQL.
+
+Cache entries are needed for connected characters, active/loading hearth objects and dirty ownership changes, not all historical characters. Do not evict dirty entries or revocation overrides. Retire clean idle entries only after their writes and referencing lookups finish; callbacks must still match their lookup generation. No permanent per-character terminal registration is required.
+
+### 2. Finalize construction immediately, in one surface critical section
+
+Integrate through a small registered construction-result capability using the existing behavior registry. The feature selects its recipe/policy; shared construction does not check a Hearth key or carry a finisher field.
+
+Preparation runs before the last material and stamina costs. Resolve the actor's current home and prepare the old object's live/raw source. Use existing cache or worker reads for unloaded data, without activating a remote area or waiting for SQL under the shard lock. If preparation is unavailable, invalid or stale, use ordinary build failure/retry with a clear message and no final-cycle costs; do not introduce a special pending-finalization phase.
+
+When ready, revalidate the exact actor, site handle, current home revision and old source. Under the single surface shard lock, process/pay the final branch, transform the old home into an ordinary unlit campfire, transform the site into a Hearth, switch the feature-owned association, and perform ordinary link/window cleanup. Preflight both transforms before costs and propagate actual transform failure rather than reporting success. Preserve existing synchronous lifecycle ordering.
+
+For a non-active old home, apply the prepared campfire row to the existing raw cache with dirty intent instead of spawning it. Make this generic runtime raw update participate in existing cache-revision fencing, so an older load cannot reinstall the prior type. If a required cache update cannot be prepared without blocking, defer the final cycle before payment.
+
+The game sees the final result immediately. Later save snapshots see either previous build progress or the final object, not a paid completed site waiting for a DB commit. The actual finisher is available in this synchronous call and becomes the current owner there. Neither `BuildBehaviorState.HearthFinisherID` nor `behaviors.hearth_construction` is needed. No feature state is added to shared ECS/build contracts.
+
+### 3. Save current state, not a history of operations
+
+Keep the simple active-only unpartitioned table:
 
 ```sql
-ALTER TABLE origin.character
-	ADD COLUMN first_world_entry_at TIMESTAMPTZ NULL;
-
 CREATE TABLE origin.character_hearth
 (
 	character_id BIGINT PRIMARY KEY
 		REFERENCES origin.character (id) ON DELETE RESTRICT,
 	object_region INT NOT NULL,
 	object_id BIGINT NOT NULL,
-
-	CONSTRAINT character_hearth_object_unique
-		UNIQUE (object_region, object_id),
-	CONSTRAINT character_hearth_object_fk
-		FOREIGN KEY (object_region, object_id)
+	CONSTRAINT character_hearth_object_unique UNIQUE (object_region, object_id),
+	CONSTRAINT character_hearth_object_fk FOREIGN KEY (object_region, object_id)
 		REFERENCES origin.object (region, id) ON DELETE RESTRICT
 );
 ```
 
-The unpartitioned association's primary key enforces at most one active hearth per character across regions; its unique object key prevents two owners sharing one hearth. Coordinates, surface layer, type, quality, and state remain in `object`. Active-hearth `object.owner_id` stays NULL. Runtime ownership caches are derived from the association, not independently persisted.
+The keys enforce one saved home per character and one saved owner per object. Coordinates/type/state remain in `object`; Hearth ownership does not use `object.owner_id` or object JSON. There is no first-entry marker, finisher table, pending operation table or cooldown column.
 
-FKs guarantee row existence, not an undeleted character, an undeleted hearth type, or layer zero. Lifecycle transactions validate those conditions. RESTRICT blocks accidental physical deletion while linked; soft delete requires explicit conversion and unlinking. Ordinary campfires have no active association after conversion.
+After runtime changes, mark the latest ownership projection dirty. Reuse existing bounded persistence workers and the current saver pattern: coalesce changes per character, allow one in-flight association write per character, and retry dirty state when submission or writing fails. This is a dirty-state saver, not a completion/death operation queue. An immutable worker snapshot carries its revision; only a matching acknowledgment clears dirty intent. Workers never change runtime ownership, transforms or FX.
 
-Alternative: an owner-based partial unique index on `object` would mix generic attribution with Hearth ownership and cannot provide global owner uniqueness on the region-partitioned table without including the partition key. Duplicating target coordinates on the character would introduce another authority to reconcile.
+A modest association transaction ensures the current target object exists for its FK, converts a previously linked saved Hearth if necessary, and sets/deletes the link. A deleted saved character cannot acquire a link. For newly persisted IDs reuse allocator watermark advancement. Normal chunk objects, character state and corpses continue their ordinary saving; they do not join an all-or-nothing Hearth checkpoint. Reuse `WithPersistence` for affected object I/O, outside shard locks. Do not pin gameplay objects until commit.
 
-### 2. Serialize bounded lifecycle operations in accepted gameplay order
+An unknown commit outcome is handled by retrying the latest idempotent projection, not by replaying the original gameplay action or retaining its paid source. Replacements occurring while a write is in flight remain authoritative in memory and produce a newer dirty projection. Queue pressure or DB errors never roll runtime back or assign a different owner.
 
-Use a small Hearth lifecycle coordinator shared by the game's shards, with bounded per-character pending state. It owns operation identity and sequencing, not live ECS references. Each accepted operation contains immutable EntityIDs, source keys, expected transition, snapshots, and completion state.
+Ordinary shutdown makes a bounded best-effort flush using existing worker lifetimes before their closure. Report remaining dirty state on failure; do not introduce shared participant/drain infrastructure or retain dead bodies to make flushing lossless.
 
-Reserve admission before accepting a final construction cycle or first-entry preparation. Do not consume the last branch or stamina and then discover that the bounded operation budget cannot accept ownership activation. Permit at most one pending initialization/replacement per character; ordinary busy admission can retry without changing the accepted finisher. A later terminal deletion is latched behind that operation, not lost because the worker queue is full. Terminal cleanup for an already accepted/registered character has reserved pending capacity and retries submission through existing bounded workers.
+### 4. Hydrate and normalize before exposure
 
-The coordinator orders replacement and terminal operations independently of worker scheduling and layer-update order. A replacement accepted before death finishes its durable transition before the queued terminal operation converts its result. Terminal acceptance prohibits later replacements. REST deletion of a character without existing pending state uses bounded service admission and the same terminal lifecycle.
+Prepare owners in one batch while a chunk loads, then apply copied metadata through the owning shard before object activation/visibility. Add only the narrow metadata preparation/apply hook needed by this responsibility. Preserve existing burner/corpse restoration composition; no new deferred-restore framework or generic codec registry is required.
 
-Every transaction first locks the character row with `SELECT ... FOR UPDATE`, even when no association exists. It then rechecks the character's terminal state, expected object source, and current association. Row locks protect durable concurrency; the coordinator, not lock acquisition races, preserves accepted gameplay order.
+In the running process, known runtime ownership and retired-object overrides supersede stale SQL/load results. A current home cannot be replaced by an old hydration callback. Reuse chunk load/raw revisions and the feature lookup generation; do not perform per-object SQL or scan the world each tick.
 
-Alternative: submitting independent workers and relying only on association uniqueness or character locks prevents some duplicate rows but leaves completion/death order dependent on I/O scheduling.
+After restart, accept only a saved association whose character is alive and whose object is undeleted, on the surface and of Hearth type. An invalid association means no home and can be cleaned asynchronously. A restored Hearth without a valid current owner becomes an ordinary unlit campfire before visibility. Do not infer ownership from JSON/`owner_id`, upgrade a saved campfire from the link, replay construction, or recreate missing objects. Partial saves can lose a home or restore an earlier saved result; they cannot publish two runtime homes.
 
-### 3. Reuse chunk persistence gates and durable in-place conversion
+### 5. Death uses ordinary lifecycle paths
 
-Stage object preparation under the owning surface shard, using bounded server jobs where the initiating character is on another layer. Capture immutable snapshots and pin affected chunks. Old and new hearths are both on the surface; unloaded objects are prepared from durable/raw state without activating unrelated world areas or retaining live mutable references.
+Actual permanent death immediately revokes the current home in the feature-owned index. If the source is another layer, enqueue ordinary surface work; only the surface owner transforms its live/raw Hearth. Until that work applies, the old object is already unavailable as an active home. Retain a coalesced feature conversion intent if an existing inbox is full, not the dead body or a heavyweight terminal operation. Process only changed homes with bounded work, not a full-world sweep.
 
-Worker operations reuse `SubmitPersistenceJob` and `WithPersistence` to serialize loads and old saves for all affected chunks. Under the character-row lock, atomically perform one of these transitions:
+Use a small registered terminal notification at actual death and the existing REST deletion boundary. Preserve REST authorization, response and online/offline policy. Do not manufacture an offline body or death FX. A delayed conversion must match the revoked object's identity and cannot affect a newer home. Character/corpse persistence and decomposition retain existing semantics; this feature does not promise atomic status/home/corpse persistence or terminal-commit-before-corpse ordering.
 
-- First initialization: create the hearth, create the association, save the prepared player position, and set the first-entry marker.
-- Replacement: durably transform the finished site into the new hearth, transform the old hearth into an ordinary unlit campfire, and insert/update the association.
-- Terminal deletion: transform the active hearth into an ordinary unlit campfire, delete the association, and write the character's soft-delete/status/token changes.
+### 6. Keep object policy separate from geometry
 
-Whenever the transaction first persists an allocated ID, advance the existing allocator high watermark using `UpsertGlobalVarLongMax` in that transaction. This includes an unsaved build object, not just an automatically allocated hearth.
+Reuse the prepared definition and existing indestructibility; add the Hearth behavior without burner/fuel runtime or lift capability. Protect removal through a small registered object policy before gameplay/admin deletion, without adding a Hearth branch to the deletion core.
 
-After a confirmed commit, use owning-shard completion jobs and the common in-place transform helper to reconcile raw cache, ECS type, collider, appearance, behaviors, dirty intent, and derived ownership. Keep pins until this reconciliation completes. Apply bounded work; a stale handle must pass `World.Alive` and source-ID/type checks before mutation. FX are emitted through this owning-shard transition, never directly by a persistence worker.
+Use identical 1x1 bounds for terrain, collision and structural overlap. Placement checks every overlapped surface dry-land tile, excluding water, shallow water, swamp and bog. Movement/spawn/return filtering allows the owner and animals through this object only; unrelated obstacles still block. Construction and put-down separately reject footprint overlap, including owner attempts, at admission and final application. Reuse spatial queries and bounded buffers.
 
-Unknown commit outcomes retain the exact accepted record and pins until durable state is checked/retried. Definite refusal releases reservations without publishing an active hearth. Completed source keys are never blindly upserted back into build state. A source already transformed to hearth, later converted campfire, or deleted is not a fresh completion; delayed replay must not switch a newer association. Runtime completion acknowledgment and effect publication are idempotent within the retained operation record.
+### 7. Return is an ordinary action with an asynchronous outcome
 
-Alternative: transforming runtime first and relying on periodic saves exposes ownership that can disappear on restart, while an isolated transaction without gates still admits stale type/state overwrites.
+Register the no-target action with existing five-second progress, zero stamina and 360000 ms cooldown. Read the latest runtime home, not SQL, and resolve it again on the target surface shard immediately before authoritative relocation. Coordinates captured at progress completion or queue admission are preparation hints, not a fixed destination. If a newer home needs preparation, reuse ordinary bounded transfer preparation/timeout and revalidate afterward; never spawn at a retired home. Add only neutral source-validation, target-resolution and successful-target completion hooks to existing transfer; Hearth supplies its policy through registration. Return `ActionDeferred` on accepted transfer work, then start cooldown exactly once after successful body relocation, before initial target snapshots. Failure/rollback starts none.
 
-### 4. Persist the actual finisher while activation is pending
+Revalidate the action generation, connection, health/KO, combat and swimming before detach. Destination checks exact home identity/location and player footprint only; no nearby fallback. Use the existing carry participant. Allow post-KO lying only by Hearth transfer policy: use a separate standing target snapshot and preserve the lying rollback snapshot. Other transfer causes retain their rules and ordinary post-capture disconnect handling.
 
-Add optional `hearth_finisher_id` to the existing build behavior JSON only for the Hearth recipe. Set it once when the last branch is successfully processed and its ordinary stamina charge is accepted. Any durable snapshot of a fully processed, pending site includes this ID. Retried finalization and restart recovery use it rather than the calling helper, placer, or current online player.
+Interruption is an optional active-handler policy invoked through existing cancellation paths at valid gameplay intent, before another action's eligibility/cooldown rejection. Include fresh movement attempts, context/craft/build/carry/Stand Up attempts, any damage, combat/swimming and ordinary disconnect cleanup. Invalid/stale input is not gameplay intent. Chat and personal windows do not interrupt. The client sends existing `C2S_CancelAction` when its cooldown UI blocks another attempted action during return; no new command protocol is needed.
 
-The accepted immutable persistence record carries the same ID. Successful durable transformation removes the entire build behavior state, including finisher metadata; active ownership then exists only in `character_hearth`.
+Login keeps `tryReattachPlayer` first. Normal spawning tries saved position, exact current home if present, nearby saved-position candidates, then existing random fallback. Carry each candidate's layer. Missing ownership never creates an object or changes ordinary first-entry spawn eligibility.
 
-Alternative: keeping the ID solely in a worker closure loses it when a completed site is saved and restored. Gates and source-type guards alone do not recover the original actor while the object remains a completed site.
+### 8. Reuse approved assets and a small transient FX path
 
-### 5. Prepare first entry durably before exposure
+Keep the existing green fire and skull-smoke assets; do not generate replacements. Play the eight skull frames once over two seconds at the event position, independent of the surviving object/player view. The renderer is reusable for other death events; animal event wiring is not added by this change.
 
-Keep character creation as record creation; do not create a hearth there. On normal first spawn, prepare a surface dry-ground candidate that fits both complete footprints. Reserve the initial placement against conflicting structural placements/initializations and retain the needed chunk/capacity lifecycle while the worker commits. Revalidate relevant runtime conditions before exposing the prepared world entry.
+Reuse `S2C_Fx` fields 1/2; add only `stream_epoch = 3` for world-event freshness. Publish once from real runtime death/conversion to event-time observers and matching sessions. No persistence worker sends effects, and restore/view rebuild never synthesizes old events. No event-ID sequence, retransmission/dedup service, server-authored expiry or new clock protocol is required.
 
-`first_world_entry_at` records durable first-entry preparation, not socket acknowledgment. Its transaction commits the hearth, association, chosen player position, and marker before publishing the new hearth/player entry. A rollback leaves the marker NULL. After commit, disconnect, capacity retry, or callback failure retains the prepared hearth and non-NULL marker; recovery installs/reuses the existing object rather than allocating another one. Ordinary character snapshots cannot overwrite the marker or association.
-
-On later normal spawn, try the saved position, exact current hearth position, existing nearby candidates around the saved position, then existing random candidates. Carry the candidate's layer through AOI preparation and attachment: a saved underground position may fall back to a surface hearth, while nearby/random fallback remains on the saved layer according to existing rules.
-
-Attempt live-body reattachment first and unchanged. An existing detached body is not respawned at a hearth or duplicated. Preparation failure before any accepted initialization produces the ordinary spawn error; no client-visible fake success is sent.
-
-Alternative: treating successful packet delivery as initialization would require impossible database/socket atomicity and permits duplicate hearth creation on ambiguous connection failure.
-
-### 6. Keep movement pass-through independent from placement exclusion
-
-Use one shared Hearth bounds definition for the 1x1-tile object and all structural overlap tests. Placement validates the whole footprint on layer zero against passable dry-land terrain, excluding water, shallow water, swamp, and bog. The eternal hearth uses its own definition/behavior, not an infinite synthetic fuel balance in the ordinary burner.
-
-Movement candidate filtering allows only the owning character and animals through an active hearth; other players collide normally. Reuse the same ownership exception in player spawn and return collision checks. Do not implement it with global `IgnoreObjectCollision`, which would suppress unrelated obstacles.
-
-Construction and lifted-object put-down use structural exclusion regardless of mover ownership or creature pass-through. Include reserved/pending structural transitions and existing sites where applicable, so neither placement path can overlap an active hearth. Restore initializes derived ownership/collision before ordinary world exposure, using batched association joins/lookups rather than per-object SQL or tick scans.
-
-Alternative: a single passability predicate would wrongly let owners put objects on their hearth or make animals structural blockers.
-
-### 7. Use a deferred, cause-scoped transfer completion
-
-Register a no-target `Travel to Hearth Fire` action with the existing five-second cyclic progress and six-minute cooldown definition, zero stamina, no repeat, and no new client action protocol. After the progress completes, its handler returns `ActionDeferred`; `RequestTransfer` returning nil is only admission.
-
-Add a Hearth transfer cause carrying the accepted action token/generation, source identity, and outcome context. Resolve the current active hearth at the authoritative transfer handoff, after preceding accepted ownership changes. Coordinate that short handoff with lifecycle replacement so a mid-progress change selects the new hearth instead of canceling or retaining the channel-start destination.
-
-Before detach, under the source shard, recheck the live generational handle, current action token, connection/progress cancellation, health, resolved KO state, combat, swimming, and transfer reservations. Target spawn checks the exact hearth position, current ownership/type, terrain, and unrelated obstacle overlap. There is no nearby/random return fallback. Destination clearance considers only the player's footprint; the existing carry participant transports the lifted object without making its footprint part of target clearance.
-
-After successful target body spawn and ordinary participant restoration or its existing failure-resolution path, use an explicit transfer-success commit hook under the target shard to start the shared action cooldown exactly once before initial action/stat snapshots. Successful authoritative body relocation is the success boundary: a participant warning or ordinary force-drop recovery does not retroactively make the transfer fail or suppress cooldown/standing. It must not call completion on the despawned source handle. All source rejection, target rejection, rollback, and pre-handoff cancellation paths finish unsuccessfully without charging cooldown. Duplicate outcomes cannot commit a second cooldown.
-
-Keep the established post-capture rule: a successful body transfer is authoritative even if the socket closes before attachment. Restore body/carry and queue ordinary logout; do not create an extra rollback solely for network attachment failure. A disconnect while progress is pending cancels before authorized detach through ordinary action cleanup.
-
-Alternative: returning `ActionSucceeded` on async admission charges cooldown before a possibly failing transfer. Copying all transient active actions to the target would broaden unrelated transfer behavior.
-
-### 8. Limit the lying exception to this transfer cause
-
-Hearth eligibility rejects an active knockout but allows lying after the existing KO resolver has cleared that state. Do not infer eligibility only from a raw deadline or change stairs/admin incapacity rules.
-
-Keep the captured source health/runtime snapshot immutable for rollback. Prepare a distinct successful-target runtime copy that stands the post-KO character and advances the existing lying visual revision. Apply that standing state only to successful target publication; a failed transfer restores the original lying state and old cooldowns. Reuse existing stats/pose messages and the same ordinary action behind the knockout-window button.
-
-Alternative: clearing lying on the source or mutating the shared transfer snapshot also makes a failed return stand the character.
-
-### 9. Interrupt at input/health admission without changing unrelated actions
-
-Use the existing progress/action cleanup paths with a narrow Hearth-return check. Any movement command and any attempt to start another gameplay action cancel Hearth return at ingress, before later cooldown/requirement/target rejection. Damage, combat/swimming transitions, and ordinary disconnect/KO/death cleanup likewise invalidate it. Chat and personal-window opening do not.
-
-Recheck the same authoritative conditions at delayed handoff; a queued transfer cannot bypass a cancellation that happened after its handler started. Preserve unrelated actions' admission/cleanup rules. The cooldown belongs to shared successful completion, not the five-second timer.
-
-Alternative: canceling only after displacement or successful other-action admission would miss the approved command-attempt interruption rule.
-
-### 10. Include every terminal soft-delete route without fabricating death events
-
-Actual permanent death retains existing corpse/observer/transient cleanup and emits character-position skull smoke once at that gameplay event, capturing its current observers before visibility changes. Hearth conversion/unlink joins its durable terminal transaction and reconciles on the surface shard, including when the dead owner was underground or disconnected.
-
-Preserve the existing durable ordering of character terminal commit before corpse persistence. Immediate runtime corpse/observer/FX handling can remain, but pin the source corpse chunk and defer both its immediate durable write and ordinary chunk-save exposure until the terminal transaction is confirmed. Capture the corpse record under its owning shard and persist it through workers, never by passing a live world to a worker. If the corpse write needs retry after terminal commit, the character remains terminal; never save a corpse while its owner is still live in SQL. This is a scoped sequencing change, not a general corpse/decomposition redesign.
-
-The REST character-delete route currently writes `deleted_at` directly. Route its terminal persistence through the same ordered Hearth cleanup so the live-owner association invariant cannot be bypassed; preserve its existing authorization and deletion policy. This produces conversion smoke only for an observed hearth that actually changes. It does not invent a character-location death effect or a corpse for an offline REST deletion.
-
-Alternative: integrating only `HandlePlayerPermanentDeath` leaves active immortal hearths linked to soft-deleted characters from the other existing route.
-
-### 11. Extend the existing FX message additively for finite world events
-
-Preserve `S2C_Fx.fx_key = 1` and `position = 2`; add the following unused field numbers:
-
-```proto
-uint32 stream_epoch = 3;
-uint64 event_id = 4;
-int64 server_time_ms = 5;
-```
-
-World events use a nonzero monotonic server-instance FX event sequence, never wrap/reuse an ID, and reuse the same ID on duplicate delivery. Allocate and serialize publication synchronously through the owning shard, so a recipient's current world stream sees monotonic IDs. Stamp each recipient's current nonzero epoch and the event's authored wall timestamp. Use owned encoded bytes; no async worker retains mutable scratch buffers or live observers.
-
-Capture event-time observer/session identities from the existing reverse visibility index, plus the dying player's own current session when applicable. Send only to still-matching sessions/epochs; a later viewer or a reattached session is not added retroactively. A conversion in an unloaded/unobserved area emits no future replay. Character death and hearth conversion are separate events at their own locations, each with its own identity.
-
-`skull_smoke` renders at the packet's world position in the current world FX layer, independent of a surviving owner sprite. Require valid current epoch, nonzero exact uint64 event ID, finite position, and valid server timestamp. Maintain/reset the per-stream event highwater using the existing exact-ID decoding pattern. Reject duplicate/stale packets and expire the effect at authored time plus 2,000 ms using existing server-time synchronization; delivery or asset-loading delay does not grant a fresh two seconds. Freshness uses an initialized current-session clock sample; without one, cosmetic events are dropped rather than guessing from an unrelated local clock. Reject future skew over 250 ms, tolerate smaller synchronization skew with age clamped to zero, and retain the original absolute expiry rather than restarting from receipt time.
-
-Use the existing particle engine with a one-shot skull preset and bounded active-effect/particle limits. Preload through existing resource loading; asynchronous loads carry a world/session token and are discarded after reset, expiry, or container destruction. Emission plus every particle's tail ends within the two-second total lifetime. Disconnect, leave/entry, layer change, and renderer reset clear event effects and dedup state. View rebuilds and late object spawns never recreate this event.
-
-Keep `exp_gain`'s existing local-player presentation and continuous object smoke's attach/detach contract; the new world-event validation branch must not reject legacy owner-local FX merely because new fields are absent. An unlit campfire has no continuous smoke; a finite conversion event is not a burner state. No new dependencies are required.
-
-Alternative: only adding a skull texture leaves effects tied to the local player and admits late/duplicate rendering across world transitions. Persisting an FX appearance flag would replay the effect on view rebuild.
-
-### 12. Create assets only during implementation under the approved art contract
-
-Hearth rendering and skull particles will use production assets/presets consistent with existing object/resource integration. Before any Origin art generation/editing, read `docs/art/STYLE_GUIDE.md` and visually inspect `docs/art/style/origin-forest-camp-v1.png`; verify the target projection, scale, direction/frame keys, ground anchor, and transparency rules at that time. These planning artifacts generate no art. Asset pipeline changes must run the repository's corresponding regression checks.
+Preload through existing asset loading, bound concurrent one-shot effects, and use a local monotonic two-second deadline starting at playback. Clear effects on world/layer/session/reset/destroy and invalidate late callbacks with the existing reset-generation pattern. Suspended rendering does not extend an already started effect. Legacy local-player `exp_gain` and continuous burning-campfire smoke retain their behavior.
 
 ## Risks / Trade-offs
 
-- [Worker saturation or DB outage] -> Admission is bounded before consuming the final build cycle; accepted terminal work remains latched and retryable rather than dropped. Pins and operation state have bounded budgets and are released only after definitive refusal or reconciled completion.
-- [Commit succeeds but acknowledgment is lost] -> Retain immutable source/finisher/operation identity and check durable transition state; do not allocate another first hearth, rebuild a transformed site, or overwrite a newer association.
-- [Old snapshot overwrites a conversion] -> Gate all affected chunk persistence and reconcile committed raw/runtime state before releasing pins or admitting the next same-character lifecycle operation.
-- [Death originates on a different layer] -> Sequence by character, stage surface object work through its shard, and never assume worker-pool layer order or mutate another ECS from the shared event bus.
-- [Corpse save overtakes asynchronous death] -> Pin/gate the source corpse chunk and defer its durable saves until terminal character commit; failure-injection tests must prevent simultaneous durable live-character and corpse state.
-- [Generic FK permits a wrong type or soft-deleted owner] -> Lifecycle row locks and explicit checks enforce these semantic conditions; restoration validates data and fails safely rather than silently assigning ownership.
-- [Spawn reservation survives a callback/connection failure] -> Distinguish pre-commit rollback from committed preparation; recover the existing object/marker and release transient capacity/reservation state without erasing durable initialization.
-- [Transfer callback acts on a stale handle/action] -> Validate generation and source identity immediately before detach, commit once on the actual target handle, and retain an untouched rollback snapshot.
-- [Network/texture delay or event flood] -> Epoch/ID/timestamp validation, authored-time expiry, bounded caps, and reset tokens prevent replay and unbounded particle work. Visual delivery is best effort and never rolls back gameplay.
-- [Extra association lookups at scale] -> Batch chunk ownership hydration and indexed character lookup; keep movement filtering O(local candidates) with cached association data, not SQL or world scans in the tick.
+- [Crash or independent save snapshots] -> Recent construction, home changes or death can roll back or lose a home. Conservative restore removes invalid runtime ownership; no lossless or cross-feature checkpoint is claimed.
+- [Missing old-home data] -> Prepare asynchronously before final costs; ordinary failure/retry is preferable to a paid half-completed runtime transition.
+- [Stale load or write completion] -> Existing raw/load revisions plus feature lookup/dirty revisions prevent callbacks from overriding known current runtime state.
+- [DB outage or queue pressure] -> Coalesce dirty projections and keep gameplay memory authoritative; reuse bounded workers. Observe dirty count/save failures, without per-entity metric labels or a new persistence platform.
+- [Cross-layer terminal work] -> Revoke the logical home immediately, apply physical conversion through the surface owner, and validate identity on delayed work.
+- [Transfer admission confused with success] -> Use existing deferred action/rollback and a target-success callback; do not charge cooldown at queue admission.
+- [Cosmetic delay] -> FX is best effort and locally short-lived. It has no durable exactly-once delivery guarantee and does not roll back gameplay.
 
 ## Migration Plan
 
-1. Implement deployment migration, matching `migrations/schema.sql`, and sqlc lifecycle/lookup queries together. Regenerate with `make sqlc`; never manually edit generated repository code. No legacy-character backfill is included.
-2. Regenerate server/client protobuf outputs after the additive FX fields, and deploy matching client assets and server functionality. Preserve the old FX field numbers and local `exp_gain` behavior.
-3. Validate schema constraints, first-init replay, pending finisher recovery, completion/death order, REST terminal cleanup, chunk save races, transfer success/failure/lying rollback, and stale FX/session behavior. Run required server/client/asset checks from AGENTS.md for the implemented scope.
-4. The project owner performs the planned database/world cleanup before feature release. Neither these artifacts nor the feature implementation automatically erase existing data.
-5. Roll back by stopping/draining feature-enabled services before restoring the prior client/server build. Do not remove tables/columns while a running server can write them. Hearth-linked data must first be removed through an explicit coordinated cleanup or restored together from a compatible backup; an old server cannot safely operate a feature-populated world. Fresh-world rollback may use the owner's clean database plan. Schema rollback is a separate controlled step, not a code-only hot rollback.
+1. Add the Hearth association migration, canonical schema and sqlc queries together; regenerate rather than hand-edit generated code. The feature is undeployed, so no corrective migration or legacy backfill is needed.
+2. Implement and test runtime construction/ownership before adding background save and return. Prepared art remains input; previous reverted code is not counted as delivered work.
+3. Regenerate server/client protobuf only for the additive FX epoch field. Run server, PostgreSQL schema/projection, client and relevant asset checks for implemented scope.
+4. The owner prepares the approved clean database/world before release. The application performs no automatic database cleanup. Rollback of a populated feature world requires a compatible backup or explicit cleanup; dropping the table under a running writer is not supported.

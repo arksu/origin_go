@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Give each character a durable personal home, with server-authoritative creation, replacement, protected world presence, and interruptible travel that respects permanent death and normal world-entry recovery.
+Let characters acquire a personal home through construction, with authoritative runtime ownership, asynchronous saving, protected world presence, and interruptible travel that respects permanent death and normal world-entry recovery.
 
 ## ADDED Requirements
 
@@ -18,22 +18,22 @@ An active hearth SHALL belong to one character, not an account. The database SHA
 - **WHEN** a character has an active hearth and starts several hearth construction sites
 - **THEN** all otherwise-valid sites SHALL be allowed and the active home SHALL remain unchanged
 
-### Requirement: First entry creates the hearth exactly once
+### Requirement: Characters acquire hearths only through construction
 
-A character's first durably prepared world entry SHALL create its automatic hearth exactly at the player spawn position. The complete player and hearth footprints SHALL both fit there. Later entry, reconnect, replacement, or absence of an active association SHALL NOT create another automatic hearth after first-entry initialization.
+A newly created character SHALL enter the world without an active hearth. Character creation, first entry, later login, reconnect, and the absence of an active home SHALL NOT create a hearth automatically. First entry SHALL use ordinary player spawn eligibility without imposing Hearth-specific footprint or terrain requirements. Completing construction SHALL be the only gameplay mechanism for acquiring the first or a subsequent active hearth.
 
-#### Scenario: First suitable spawn
+#### Scenario: First entry has no home
 - **WHEN** a new character enters the world for the first time
-- **THEN** one active hearth SHALL be created exactly at the accepted player position before that prepared spawn is published
+- **THEN** the character SHALL spawn normally without a Hearth object or active home association
+- **AND** return SHALL remain unavailable until that character finishes a hearth
 
-#### Scenario: Player-only fit is insufficient
-- **WHEN** a proposed first-spawn position fits the player but intersects forbidden terrain or an obstacle across the hearth footprint
-- **THEN** that position SHALL NOT be accepted for first-entry initialization
+#### Scenario: Player spawn does not require a hearth-sized area
+- **WHEN** an ordinary spawn candidate is valid for the player but would not fit a Hearth footprint
+- **THEN** Hearth requirements SHALL NOT reject that player spawn
 
-#### Scenario: Retry after commit or rollback
-- **WHEN** first-entry preparation is retried after a disconnect or restart
-- **THEN** a previously committed initialization SHALL be reused without a second automatic hearth
-- **AND** a rolled-back initialization SHALL remain eligible for a new first-entry attempt
+#### Scenario: Login without a home does not create one
+- **WHEN** a character without an active hearth logs in or reconnects, including after a server restart
+- **THEN** no hearth or active home association SHALL be created by world entry
 
 ### Requirement: Manual construction is available immediately
 
@@ -61,7 +61,12 @@ Processing one branch SHALL take two seconds and cost eight stamina through ordi
 
 ### Requirement: The actual finisher receives the hearth
 
-Ownership SHALL be determined by the character successfully processing the final required branch, not the site initiator or material provider. That finisher identity SHALL remain fixed across pending finalization, retries, and restart recovery. Finishing a helper's site SHALL replace the finisher's home, not the initiator's home.
+Ownership SHALL be determined by the character successfully processing the final required branch, not the site initiator or material provider. The same runtime operation SHALL immediately make the completed object that finisher's first or replacement home. There SHALL be no paid completed site awaiting a database result. Finishing another character's site SHALL NOT change the initiator's home.
+
+#### Scenario: Finisher acquires their first home
+- **WHEN** a character with no active hearth successfully completes a hearth site
+- **THEN** the completed site's object SHALL immediately become that finisher's active hearth in runtime and its ownership SHALL be scheduled for ordinary asynchronous persistence
+- **AND** the character SHALL remain at their current position
 
 #### Scenario: Helper finishes an offline initiator's site
 - **WHEN** a helper completes a site placed by another character who is offline
@@ -71,13 +76,26 @@ Ownership SHALL be determined by the character successfully processing the final
 - **WHEN** a living helper finishes a site whose initiator permanently died
 - **THEN** the result SHALL be the helper's active hearth, not an ordinary campfire
 
-#### Scenario: Another helper retries completed work
-- **WHEN** a fully processed site awaits finalization and another character triggers a retry or the server restarts
-- **THEN** the original finisher SHALL remain the owner of the result
+#### Scenario: Two helpers reach the last branch
+- **WHEN** two helpers attempt to process a site's last branch during the same server tick
+- **THEN** only the first successful final cycle SHALL assign ownership and pay that cycle's cost
+- **AND** the other attempt SHALL NOT re-finalize the object or replace its owner
+
+### Requirement: Hearth policy remains feature-owned
+
+Hearth ownership, construction completion policy, and persistence SHALL belong to the Hearth module and integrate through ordinary behavior capabilities and narrow generic hooks. Shared build, action, and object state SHALL NOT contain Hearth-specific fields or key branches. Construction SHALL NOT persist pending finisher metadata or require replay of a completed-site transition.
+
+#### Scenario: Construction saves ordinary progress
+- **WHEN** an unfinished Hearth site or an ordinary construction site is saved
+- **THEN** its generic build progress SHALL contain no Hearth finisher field or feature-owned pending-completion sidecar
+
+#### Scenario: Completed site is not a durable intermediate state
+- **WHEN** a successful final branch is processed and an object snapshot is taken afterward
+- **THEN** the snapshot SHALL represent the resulting Hearth rather than a fully processed site waiting for a database result
 
 ### Requirement: Replacement converts the previous hearth in place
 
-Completing a new hearth SHALL atomically make it the finisher's active home and transform the previous active hearth into an ordinary unlit campfire. The previous object's identity and position SHALL remain unchanged. Ordinary campfire rules SHALL then apply; lighting it SHALL NOT restore personal-hearth ownership.
+Completing a new hearth SHALL atomically change runtime ownership and convert the previous hearth, if any, into an ordinary unlit campfire. The previous object's identity and position SHALL remain unchanged, whether its chunk is active or cached. An unloaded old object SHALL be reconciled before becoming visible again. Ordinary campfire rules SHALL then apply; lighting it SHALL NOT restore personal-hearth ownership.
 
 #### Scenario: New home becomes active
 - **WHEN** a character completes a new hearth while owning one elsewhere
@@ -87,25 +105,41 @@ Completing a new hearth SHALL atomically make it the finisher's active home and 
 - **WHEN** somebody later lights that ordinary campfire
 - **THEN** it SHALL behave as a campfire and SHALL NOT become a personal hearth again
 
+#### Scenario: Previous home is unloaded
+- **WHEN** a character successfully completes a replacement while the previous home's chunk is unloaded
+- **THEN** only the new home SHALL be active in runtime
+- **AND** loading the previous object SHALL expose an ordinary unlit campfire, not restore the old home
+
 ### Requirement: Permanent death clears the active home
 
-Permanent death SHALL atomically convert the owner's active hearth into an ordinary unlit campfire and remove its active ownership association. This SHALL work even if the player dies on another layer or the hearth's chunk is not active. Hearth inheritance and descendant spawning SHALL NOT be added.
+Permanent death SHALL immediately revoke the owner's active runtime home. Conversion to an ordinary unlit campfire SHALL run through the surface world's owning execution path, including death on another layer; an unloaded hearth SHALL be reconciled before visibility. Saving SHALL remain asynchronous without a new atomic corpse-and-character guarantee. Hearth inheritance and descendant spawning SHALL NOT be added.
+
+#### Scenario: Death before acquiring a home
+- **WHEN** a character permanently dies without an active hearth
+- **THEN** ordinary terminal character cleanup SHALL proceed without a Hearth conversion or creation
 
 #### Scenario: Death underground
 - **WHEN** a character permanently dies underground while its hearth is on the surface
-- **THEN** the surface hearth SHALL become an ordinary unlit campfire and no active home association SHALL remain for that character
+- **THEN** no active runtime home SHALL remain for that character immediately
+- **AND** the surface world's execution path SHALL convert the old hearth into an ordinary unlit campfire
 
 #### Scenario: Death with an unloaded hearth
 - **WHEN** permanent death occurs while the hearth is not loaded by any player
-- **THEN** its saved state SHALL become an unlit campfire and later loading SHALL not restore an active hearth
+- **THEN** its runtime ownership SHALL be revoked and its conversion SHALL be scheduled for saving
+- **AND** later loading during that server run SHALL not restore an active hearth or expose its old green flame
+
+#### Scenario: Persistence is delayed during death
+- **WHEN** a character permanently dies while database saving is delayed
+- **THEN** death and runtime home revocation SHALL NOT wait for the database or retain a living character for a Hearth operation
 
 ### Requirement: Terminal deletion cannot orphan an active hearth
 
-Any terminal deletion of a character SHALL leave no active hearth association for that deleted owner. An existing hearth SHALL undergo the same ordinary-campfire conversion and unlinking, without changing the existing authorization or deletion policy. This cleanup SHALL NOT invent a character-location death event for an absent body.
+Any accepted terminal deletion of a character SHALL revoke its active runtime home and schedule ordinary-campfire conversion and ownership saving. This SHALL preserve the existing authorization and deletion policy and SHALL NOT invent a character-location death event for an absent body. An invalid saved association to a deleted character SHALL NOT restore an active home.
 
 #### Scenario: Offline character is explicitly deleted
 - **WHEN** an authorized character deletion removes an offline owner who has an active hearth
-- **THEN** the hearth SHALL become an ordinary unlit campfire and its ownership association SHALL be removed
+- **THEN** runtime ownership SHALL be revoked and the hearth SHALL be converted through its owning world
+- **AND** the change SHALL use asynchronous saving without fabricating a character death event
 
 ### Requirement: Hearth placement uses the entire surface footprint
 
@@ -232,6 +266,11 @@ Return SHALL resolve the active hearth immediately before relocation, not freeze
 - **WHEN** the active hearth changes while return progresses
 - **THEN** the completed return SHALL target the new active hearth
 
+#### Scenario: Home changes while transfer is queued
+- **WHEN** the active hearth changes after transfer admission but before destination relocation
+- **THEN** the target world SHALL resolve the new active home before spawning the character
+- **AND** queued coordinates SHALL NOT relocate the character to the retired home
+
 #### Scenario: Destination is blocked
 - **WHEN** the exact hearth destination cannot fit the player because of an obstacle
 - **THEN** return SHALL fail with a clear message, no relocation, and no cooldown
@@ -287,7 +326,12 @@ After active knockout ends, the knockout window SHALL show `Travel to Hearth Fir
 
 ### Requirement: Login fallback differs from voluntary return
 
-Normal world-entry spawning SHALL try the saved player position, the current exact hearth, nearby positions around the saved player position, then existing random-spawn fallback. Existing reattachment of a still-live detached body SHALL stay first and unchanged. Login recovery SHALL NOT turn voluntary return into a nearby-position search.
+Normal world-entry spawning SHALL try the saved player position, the current exact hearth if one exists, nearby positions around the saved player position, then existing random-spawn fallback. Without an active hearth, the home stage SHALL be skipped without creating an object or failing merely because ownership is absent. Existing reattachment of a still-live detached body SHALL stay first and unchanged. Login recovery SHALL NOT turn voluntary return into a nearby-position search.
+
+#### Scenario: Saved position is blocked and no home exists
+- **WHEN** normal login cannot use the saved position and the character has no active hearth
+- **THEN** normal login SHALL try nearby positions around the saved position and then existing random spawn if necessary
+- **AND** no hearth SHALL be created
 
 #### Scenario: Saved position is blocked but home is free
 - **WHEN** normal login cannot use the saved position and the active hearth position is free
@@ -301,21 +345,69 @@ Normal world-entry spawning SHALL try the saved player position, the current exa
 - **WHEN** a reconnect can reattach the existing live body
 - **THEN** it SHALL reattach in place without applying home fallback or creating another hearth
 
-### Requirement: Hearth transitions are durable and replay safe
+### Requirement: Runtime transitions do not wait for persistence
 
-First initialization, home replacement, and terminal-owner cleanup SHALL be atomic durable transitions with server-authoritative ordering. Retry, restart, late callbacks, or older saves SHALL NOT duplicate initialization, steal finalizer ownership, restore a converted hearth, replace a newer home, or rebind a deleted owner.
+Successful construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world. Runtime state SHALL remain authoritative while saving is delayed or fails. Old saves, load results, and callbacks SHALL NOT change the latest runtime ownership, recreate a transformed site, or rebind a terminal owner. Saving SHALL use bounded asynchronous work without a durable operation journal or a database-confirmed publication barrier.
 
-#### Scenario: Late completion after a newer home
-- **WHEN** an already-processed build completion is retried after a newer hearth became active
-- **THEN** the newer home SHALL remain active and the earlier operation SHALL NOT reapply its ownership change
+#### Scenario: Database is slow after construction
+- **WHEN** a character completes a Hearth while its save is delayed
+- **THEN** the completed object SHALL already be usable as that character's only active runtime home
+- **AND** the site SHALL NOT remain available for another construction completion
 
-#### Scenario: Terminal owner and pending completion
-- **WHEN** accepted completion and terminal deletion affect the same owner
-- **THEN** their accepted authoritative order SHALL be preserved and the terminal state SHALL contain no active association for the deleted character
+#### Scenario: Earlier save finishes after a newer home exists
+- **WHEN** a save callback or ownership-load result reflects an earlier home after replacement in runtime
+- **THEN** the newer runtime home SHALL remain active and the older result SHALL NOT restore ownership or the old green Hearth
 
-#### Scenario: Older chunk save arrives
-- **WHEN** an older object snapshot is saved after a committed hearth-to-campfire conversion
-- **THEN** it SHALL NOT restore the previous hearth type or active association
+#### Scenario: Completion followed by permanent death
+- **WHEN** a character successfully finishes a Hearth and then permanently dies before the completion is saved
+- **THEN** the Hearth SHALL cease to be an active runtime home
+- **AND** no later save callback SHALL undo that death or reinstate the home during that server run
+
+#### Scenario: Old source handle is reused
+- **WHEN** asynchronous preparation completes after its source object was removed and its handle was reused
+- **THEN** the result SHALL NOT mutate the replacement entity or assign it Hearth ownership
+
+### Requirement: Final-cycle preparation precedes costs
+
+The final construction cycle SHALL validate and prepare the runtime data needed for immediate completion before consuming its branch or stamina. If preparation is unavailable or stale, the ordinary construction retry or failure path SHALL leave that cycle's materials, stamina, progress, and ownership unchanged. A successful payment SHALL NOT leave a completed site waiting for a database response.
+
+#### Scenario: Previous home data is not ready
+- **WHEN** the last branch is reached before required previous-home data is ready
+- **THEN** the final cycle SHALL use ordinary retry or failure without consuming the branch or stamina
+- **AND** the site SHALL remain an ordinary unfinished construction site
+
+#### Scenario: Preparation becomes stale
+- **WHEN** the prepared source or active ownership no longer matches immediately before final processing
+- **THEN** the final cycle SHALL be revalidated or rejected without applying costs or an outdated ownership change
+
+### Requirement: Recovery accepts asynchronous save rollback
+
+After a process failure, recovery SHALL use saved character, object, and ownership data; recent unsaved progress, homes, or terminal changes MAY roll back. These snapshots need not form one atomic checkpoint. Invalid associations SHALL yield no active home. A saved Hearth without valid ownership SHALL become an unlit campfire before visibility. Recovery SHALL NOT infer an owner, upgrade a campfire, or replay an unsaved final cycle. Ordinary material and stamina durability SHALL remain unchanged.
+
+#### Scenario: Process fails before completion is saved
+- **WHEN** the process fails after runtime completion but before its data is saved
+- **THEN** recovery MAY restore earlier saved progress or ownership instead of the unsaved completion
+- **AND** it SHALL NOT fabricate the lost finisher or replay the final cycle
+
+#### Scenario: Process fails before death is saved
+- **WHEN** death and home revocation exist only in memory when the process fails
+- **THEN** recovery MAY use the earlier saved character and home state
+- **AND** the feature SHALL NOT claim every runtime terminal change survived the restart
+
+#### Scenario: Association points to invalid saved data
+- **WHEN** saved ownership points to a missing object, an ordinary campfire, another unsupported type, or a deleted character
+- **THEN** the association SHALL NOT provide a home or return destination
+- **AND** recovery SHALL NOT recreate the object, upgrade its type, or infer a replacement owner
+
+#### Scenario: Saved Hearth has no valid association
+- **WHEN** a saved Hearth has no valid owning association after a partial save or crash
+- **THEN** it SHALL be converted to an ordinary unlit campfire before becoming visible
+- **AND** it SHALL NOT acquire an owner from nearby players, a build initiator, or a later retry caller
+
+#### Scenario: Ordinary shutdown cannot finish saving
+- **WHEN** ordinary shutdown ends before all latest Hearth data has been saved
+- **THEN** the unsaved portion MAY be lost under the same recovery rules
+- **AND** shutdown SHALL NOT require a new Hearth operation drain or claim a fully atomic world checkpoint
 
 ### Requirement: Deployment starts from the approved clean database
 

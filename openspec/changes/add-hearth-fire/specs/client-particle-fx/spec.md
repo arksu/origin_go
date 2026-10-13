@@ -40,7 +40,7 @@ The client SHALL render the reusable `skull_smoke` effect once at the authoritat
 - **THEN** the effect SHALL retain its event position and remaining lifetime without restarting
 
 ### Requirement: Transient world effects reach current observers without replay
-The server SHALL deliver each skull-smoke event only to players who can see its source character or hearth when the event occurs under ordinary world-visibility rules. The client SHALL accept only valid, known events for its current world entry and render each event at most once. Later visibility, object loading, view rebuilding, or reconnecting SHALL NOT replay historical events.
+The server SHALL send one skull-smoke event to the current observers of a runtime death or Hearth conversion, using the event position and each recipient's world-entry epoch. The client SHALL accept known effects with finite positions only for its current entry. Later visibility, loading, rebuilding, or reconnecting SHALL NOT replay the event. No application-level effect retransmission or durable history SHALL be required.
 
 #### Scenario: Current observers receive the event
 - **WHEN** a visible character permanently dies or a visible active hearth is converted
@@ -51,36 +51,45 @@ The server SHALL deliver each skull-smoke event only to players who can see its 
 - **WHEN** a player later loads, sees, or rebuilds the resulting corpse or ordinary unlit campfire
 - **THEN** the client SHALL NOT infer or replay a historical skull-smoke event from that object's state
 
-#### Scenario: Duplicate or stale events are ignored
-- **WHEN** a received transient event is a duplicate or belongs to a previous world entry
-- **THEN** the client SHALL NOT render it or restart an existing effect
+#### Scenario: Runtime transition emits only one event
+- **WHEN** a character death or Hearth conversion has already occurred and a later persistence acknowledgment or visibility refresh is processed
+- **THEN** the server SHALL NOT emit another skull-smoke event for that transition
+
+#### Scenario: A previous world-entry event is ignored
+- **WHEN** a received transient event belongs to a previous world entry
+- **THEN** the client SHALL NOT render it in the current world
 
 #### Scenario: Invalid events create no presentation
-- **WHEN** a transient event has an unknown effect key, invalid world position, or invalid freshness identity
+- **WHEN** a transient event has an unknown effect key, invalid world position, or invalid world-entry epoch
 - **THEN** the client SHALL ignore it without creating objects or particles
 
 ### Requirement: Skull smoke has a finite two-second lifetime
-Skull smoke SHALL have a total event lifetime of 2000 milliseconds, including emission and fading, after which all its particles SHALL disappear. Visibility changes, suspended rendering, delivery delay, and delayed asset loading SHALL NOT extend or restart that lifetime. An event whose lifetime has already ended SHALL NOT start rendering.
+Skull smoke SHALL use the eight approved frames once, at 250 milliseconds per frame, and disappear 2000 milliseconds after local playback starts. Its local monotonic deadline SHALL continue while rendering is suspended. Delivery delay SHALL NOT require server-clock synchronization. Visibility changes and source-view rebuilding SHALL NOT restart playback; shared assets SHALL be prepared through the existing loader.
 
 #### Scenario: Smoke finishes within two seconds
-- **WHEN** an accepted skull-smoke event reaches 2000 milliseconds of age
-- **THEN** its emission SHALL have stopped and every particle SHALL be gone
+- **WHEN** a locally playing skull-smoke event reaches its 2000 millisecond deadline
+- **THEN** its animation SHALL have ended and every sprite for that effect SHALL be gone
 
 #### Scenario: Hidden or suspended effects still expire
 - **WHEN** skull smoke leaves the viewport or rendering is suspended beyond its expiry
 - **THEN** resuming visibility or rendering SHALL show no particles from that expired event
-- **AND** the event SHALL NOT replay missed emission
+- **AND** the event SHALL NOT replay missed frames
 
-#### Scenario: Delivery or asset loading consumes the original lifetime
-- **WHEN** an accepted event or its required asset becomes available after part of the event's lifetime has elapsed
-- **THEN** rendering SHALL use only the remaining original lifetime
-- **AND** an already expired event SHALL be discarded
+#### Scenario: Delayed delivery starts ordinary local playback
+- **WHEN** a valid current-entry event is delivered after a transport delay
+- **THEN** the client SHALL play its one-shot animation using the local two-second lifetime
+- **AND** no server-authored timestamp or effect-event sequence SHALL be required
+
+#### Scenario: Missing assets do not create a historical queue
+- **WHEN** an event arrives before its shared assets are ready
+- **THEN** the client MAY drop that cosmetic event rather than queue an unbounded backlog
+- **AND** loading the assets later SHALL NOT replay previously dropped events
 
 ### Requirement: Transient effects have bounded resources and clear on reset
-The client SHALL bound concurrent transient world effects, particles per effect, and pending asset-load work. Capacity exhaustion SHALL drop cosmetic work without affecting gameplay or creating an unbounded queue. World entry or leave, disconnect, session changes, and renderer destruction SHALL clear active transient effects and invalidate pending completions from the previous world or session.
+The client SHALL bound concurrent transient world effects and use shared asset loading without an unbounded event queue. Capacity exhaustion SHALL drop cosmetic work without affecting gameplay. World entry or leave, disconnect, session changes, and renderer destruction SHALL clear active transient effects and invalidate pending completions from the previous world or session. The renderer SHALL accept an effect key and event position without Hearth-specific state.
 
 #### Scenario: Capacity exhaustion remains cosmetic
-- **WHEN** a transient-effect or particle capacity limit is reached
+- **WHEN** the transient-effect capacity limit is reached
 - **THEN** the client SHALL enforce that limit without unbounded queuing or resource growth
 - **AND** gameplay state and later valid events SHALL remain usable
 
@@ -90,4 +99,4 @@ The client SHALL bound concurrent transient world effects, particles per effect,
 
 #### Scenario: Pending asset loads cannot revive the previous world
 - **WHEN** an asset load for an old transient event completes after its world or session was reset
-- **THEN** that completion SHALL NOT create particles in either the old world or the new world
+- **THEN** that completion SHALL NOT create effect sprites in either the old world or the new world

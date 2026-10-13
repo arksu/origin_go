@@ -1,99 +1,74 @@
 # Tasks
 
-## Preparatory Delivery
+## Existing Preparation and Revised Baseline
 
-The user requested object/asset integration only on 2026-10-12, explicitly
-excluding Hearth gameplay. The server catalog now contains static, indestructible
-`hearth_fire` (ID 36, resource `hearth_fire`, 12x12 collider) without behaviors or
-a station. The client uses the approved seven green flame frames at 70% scale,
-4 FPS, through the ordinary resource loader. Spawn/restore and resource/asset
-regressions cover this preparation; the art-review page uses the real resource.
+Only object/art preparation remains in the source tree. The server catalog
+contains static, indestructible `hearth_fire` (ID 36, resource `hearth_fire`,
+12x12 collider) without Hearth behaviors or a station. The ordinary client
+resource uses the approved seven green flame frames at 70% scale and 4 FPS.
+Eight approved skull-smoke frames and their asset descriptor are also present;
+the descriptor specifies 250 ms per frame and a 2000 ms one-shot animation.
+Reuse these assets instead of regenerating them.
 
-This partially prepares tasks 3.1 and 9.1-9.2. Their full behavioral/presentation
-scope, including the Hearth behavior, skull smoke and Actions integration, is
-still pending, so no full task is checked off here. See feature section 2.12 for
-the delivered paths and current limits.
+Previous feature persistence and lifecycle implementation was reverted. All
+tasks below are therefore unchecked. This replaces the former durable-lifecycle
+plan: gameplay changes finish in runtime without waiting for a database commit.
+Ordinary asynchronous persistence may lose recent progress on a crash. Runtime
+ownership, object state, action cancellation, and stale-handle safety remain
+authoritative; no lifecycle coordinator, mutation-reservation framework,
+finisher sidecar, body-retention system, or special shutdown barrier is required.
 
-## 1. Persistence Contracts
+## 1. Ownership Data and Runtime State
 
-- [ ] 1.1 Add the deployment migration and matching `migrations/schema.sql` changes for nullable `character.first_world_entry_at` and unpartitioned `character_hearth` with character PK, unique object reference, and composite RESTRICT FK; verify PostgreSQL tests reject duplicate ownership and invalid references and do not require legacy backfill.
-- [ ] 1.2 Add sqlc queries for indexed home/owner joins, character-row locking, guarded initialization, replacement, and terminal unlinking using `(region, id)`; run `make sqlc` and verify transactional tests cover an absent association and soft-deleted characters without hand-editing generated files.
-- [ ] 1.3 Add optional `hearth_finisher_id` to the existing build behavior state and serialization only for pending completed Hearth sites; verify round-trip/recovery tests preserve the original finisher and ordinary build states omit the field.
-- [ ] 1.4 Reconcile the implemented persistence contract with `docs/features/hearth_fire.md` section 2.11; verify schema/query paths, no duplicated home coordinates or cooldown columns, and `git diff --check`.
+- [ ] 1.1 Add the single undeployed migration and matching canonical schema for unpartitioned `character_hearth`: character PK/FK, unique `(object_region, object_id)`, and composite RESTRICT object FK. Verify PostgreSQL rejects duplicate or invalid associations; add no first-entry marker, compatibility migration, or backfill.
+- [ ] 1.2 Add sqlc queries for indexed home/owner lookup, batched owner loading, latest association replacement/removal, and restart repair; run `make sqlc` and cover absent ownership, deleted characters, and invalid object references without hand-editing generated code.
+- [ ] 1.3 Add the feature-owned runtime home index with explicit unknown/known-no-home/current-home states and dirty revisions. Keep mutation on the owning execution path and expose copied metadata to other layers; test first assignment, replacement, removal, stale revisions, and absence of permanent pending-operation records.
+- [ ] 1.4 Document runtime authority, schema/index responsibilities, asynchronous save lag, and restart repair in the feature engineering notes. Verify ordinary character saves cannot overwrite home ownership and shared ECS/build/action state contains no Hearth-specific fields.
 
-## 2. Ordered Durable Hearth Lifecycle
+## 2. Manual Construction and Immediate Replacement
 
-- [ ] 2.1 Add bounded per-character lifecycle admission, immutable operation records, and terminal latching shared across shards; verify tests preserve accepted completion/death order regardless of worker scheduling and queue saturation, without consuming final-branch costs on rejected admission.
-- [ ] 2.2 Prepare and pin affected surface chunks through their owning shard and submit work through the existing bounded persistence workers; verify inactive/unloaded chunk cases and instrumentation show no SQL, blocking DB waits, or cross-world mutation in the tick path.
-- [ ] 2.3 Implement atomic initialization/replacement transactions with character locks, expected-source guards, current association checks, and allocator high-watermark advancement for first durable IDs; verify rollback, conflicting source, and unsaved-build-object PostgreSQL cases.
-- [ ] 2.4 Reconcile confirmed commits into raw cache, derived ownership, and ECS through existing in-place lifecycle helpers before releasing pins; verify stale handle, old save/load snapshot, duplicate callback, and ordinary-campfire restore tests cannot resurrect a prior hearth or site.
-- [ ] 2.5 Implement uncertain-commit retry, replay detection, definitive-refusal cleanup, and bounded shutdown handling; verify lost-ack and delayed-old-completion tests neither allocate another automatic hearth nor overwrite a newer home, and all definitive paths release reservations.
-- [ ] 2.6 Document coordinator ordering, worker/pin lifetime, and recovery boundaries in the feature's engineering notes; verify they match the delivered tests and do not claim DB transactions alone prevent stale chunk saves.
+- [ ] 2.1 Add the universally available five-branch Hearth recipe using existing two-second and eight-stamina processing per branch. Verify solo ten-second/forty-stamina construction, cooperative acceleration, and no skill/discovery requirement.
+- [ ] 2.2 Add small registered construction preflight/completion hooks and implement Hearth policy in its feature module. Before final-cycle costs, prepare any unknown old-home metadata through existing bounded read workers; if not ready, end that attempt with a loading message and no final-cycle costs. Verify ordinary recipes retain their current path and no SQL or blocking worker wait runs under the shard lock.
+- [ ] 2.3 Complete Hearth synchronously on the surface owning shard using the actual successful final-branch actor. Prepare fallible runtime transforms before mutation, convert the previous home to an ordinary unlit campfire, transform the site, and replace ownership in one shard-locked completion; test exact identity/location preservation and unchanged player position without a saved finisher sidecar.
+- [ ] 2.4 Apply an inactive old-home conversion to the prepared raw record without forcing activation; retain its latest runtime projection until ordinary save/activation consumes it. Make runtime raw updates advance the existing cache revision; test unloaded homes, stale read/load results, and activation before database catch-up cannot reveal a second active home.
+- [ ] 2.5 Add cooperative and competing completion coverage and update construction notes. Verify unlimited sites, initiator independence, offline/dead initiators, first-home construction, repeated completion of an already transformed site, and latest runtime ownership without admission tickets or a retained mutable build site.
 
-## 3. World Definition and Placement
+## 3. World Rules and Ownership Restoration
 
-- [ ] 3.1 Add the `hearth_fire` object/behavior definition using existing indestructibility and non-liftability mechanisms, fixed green appearance, and exact 1x1-tile bounds without fuel runtime; verify definition/restore tests deny damage, removal, and lift for owner and non-owner and keep ordinary campfires unchanged.
-- [ ] 3.2 Add owner/animal-specific hearth candidate filtering with cached ownership and reuse it in authoritative spawn checks; verify owner passage, other-player blocking, animal passage, and unrelated-obstacle blocking without global `IgnoreObjectCollision` or tick-time SQL.
-- [ ] 3.3 Validate Hearth placement over every overlapped surface tile against existing terrain identifiers for passable dry land, excluding water, shallow water, swamp, and bog; verify edge-overlap, underground, and allowed dry-soil tests using the same bounds as collision.
-- [ ] 3.4 Enforce independent hearth-footprint exclusion for construction and carried-object put-down at admission and final application, including owner and pending reservations; verify anchor-outside/footprint-inside and stale-placement tests reject overlap while preserving valid carry state.
-- [ ] 3.5 Hydrate derived hearth ownership with batched joins/lookup on chunk activation and clear it on conversion; verify chunk unload/reload and conversion tests restore the correct collision policy before visibility and document actual terrain mapping and placement predicates.
+- [ ] 3.1 Extend the prepared Hearth definition with feature behavior, fixed green appearance, and the approved exact 1x1 footprint. Reuse indestructibility/non-liftability; add a small registered removal policy checked before gameplay/admin deletion changes memory or SQL. Test damage, removal, and lift rejection while ordinary campfires remain unchanged, without a Hearth key check in shared deletion code.
+- [ ] 3.2 Add the small behavior collision-filter capability and implement owner/non-player passage in Hearth behavior. Reuse it for movement and authoritative player spawn; test owner passage, foreign-player blocking, animals, and unrelated obstacles without global collision bypass or tick-time SQL.
+- [ ] 3.3 Validate every overlapped surface tile against passable dry-land terrain using the result collider footprint. Test allowed dry ground, full-footprint edge cases, underground, water/shallow water, swamp, and bog rejection.
+- [ ] 3.4 Add independent structural-footprint exclusion through existing spatial queries for construction and carried-object placement, at request and final application. Test owner placement, anchor-outside/footprint-inside overlaps, ordinary construction-site footprints, stale previews, and preserved carry state on refusal.
+- [ ] 3.5 Batch ownership preparation during chunk loading and apply metadata on the owning shard before object visibility; guard load generations and normalize orphan Hearth records to ordinary unlit campfires. Verify unload/reload, stale snapshots, dead owners, and conversions; document terrain predicates and the actual metadata hook without a new deferred-restore framework.
 
-## 4. First Entry and Login Recovery
+## 4. Death, Deletion, and Ordinary Persistence
 
-- [ ] 4.1 Integrate first-entry detection into normal world-entry preparation rather than REST character creation, reserving a spawn that fits player and hearth; verify player-only-fit rejection and exact shared-position tests.
-- [ ] 4.2 Commit first object, association, player position, marker, and allocator watermark before world exposure; verify failure before commit leaves retry eligibility and failure after commit, disconnect, or restart reuses the existing initialization without duplicate objects.
-- [ ] 4.3 Implement staged normal login candidates: saved position, exact active home with its layer, near the saved position, then existing random fallback on the saved layer; verify same-layer and underground-to-surface cases and that a blocked home does not move the nearby search around the home.
-- [ ] 4.4 Preserve `tryReattachPlayer` as the first unchanged live-body path, plus existing capacity/error cleanup; verify reconnect keeps the same entity/position and never runs first-home creation or fallback for that body.
-- [ ] 4.5 Update the feature's entry/recovery documentation to match actual marker and candidate-stage behavior; verify examples distinguish normal login fallback from voluntary exact-home return and ordinary saves cannot rewrite initialization.
+- [ ] 4.1 Register a narrow permanent-death hook that immediately revokes runtime ownership and schedules any surface conversion through the existing owning-shard execution path. Retain only coalesced conversion intent when an inbox is full; test queue pressure, death with/without a home, cross-layer death, unloaded homes, and completion/death runtime ordering without retaining bodies or changing corpse save/decomposition rules.
+- [ ] 4.2 Connect REST character deletion to the same feature cleanup while preserving account-scoped authorization, deletion responses, and current online/offline policy. Test absent/already-deleted characters and no-home cleanup; emit no character-position death effect or fabricated corpse for REST deletion.
+- [ ] 4.3 Persist copied latest runtime projections through existing bounded persistence workers, with at most one in-flight write per character and coalesced dirty revisions. Use modest transactions for affected object rows and association changes plus existing chunk I/O gates; test queue saturation, retries, and stale acknowledgments without reverting runtime state or holding a gameplay reservation until commit.
+- [ ] 4.4 Add restart repair and ordinary shutdown coverage. Treat a valid saved association as the surviving home and normalize orphan or dead-owner Hearth objects; verify partial save lag yields a usable single-home runtime rather than a journal replay, and reuse existing shutdown/final-save ordering instead of a new global barrier.
+- [ ] 4.5 Document the accepted crash-loss boundary, latest-projection save ordering, repair policy, and bounded dirty work. Verify death and home changes remain immediate during a worker/database outage and instrumentation reveals pending save age without per-player metric labels or a full-world tick scan.
 
-## 5. Manual Construction and Replacement
+## 5. Return, Interruption, and Normal Login
 
-- [ ] 5.1 Add the accessible five-branch build recipe with effective two-second and eight-stamina processing per branch through existing construction mechanics; verify solo ten-second/forty-stamina and split-worker cost tests with no skill/discovery requirement.
-- [ ] 5.2 Capture the actual final-branch actor once after lifecycle admission and preserve `hearth_finisher_id` through pending completion and recovery; verify another caller, offline/dead site initiator, restart, and retry cannot change the finisher.
-- [ ] 5.3 Route Hearth-only finalization through the durable coordinator and remove build state only on committed conversion; verify the finisher's old home becomes an ordinary unlit campfire at the same identity/location while the initiator's home and ordinary build finalization stay unchanged.
-- [ ] 5.4 Add cooperative, competing-completion, and delayed-replay integration coverage and reconcile construction documentation; verify unlimited sites coexist while DB ownership remains unique and a newer home is never replaced by an old acknowledgment.
+- [ ] 5.1 Register `Travel to Hearth Fire` as an ordinary no-target action with five-second progress, zero stamina, and the existing 360000 ms cooldown. Test missing home, combat, swimming, active KO, post-KO lying, and standing shallow water through existing eligibility/cycle tests.
+- [ ] 5.2 Resolve the latest runtime home again on the target surface shard immediately before relocation, not only at queue admission; recheck exact source handle/action generation, connection, combat, swimming, and resolved KO state. Reuse deferred transfer with narrow generic source-validation/target-resolution/success hooks and existing preparation timeout; test cancellation, replacement during progress or queued transfer, stale callbacks, and cooldown only after successful target relocation.
+- [ ] 5.3 Reuse exact player-only destination clearance and the carry transfer participant for same-layer/cross-layer return. Use a standing target-runtime copy while preserving the lying source rollback snapshot; test blocked-home failure without nearby fallback, carried-footprint exclusion, rollback/carry integrity, and unchanged stairs/admin incapacity rules.
+- [ ] 5.4 Invoke feature-selected interruption through a small generic action capability before gameplay-attempt rejection and on fresh movement intent, damage, combat/swimming transition, and normal disconnect cleanup. Test rejected/cooldown-blocked attempts, blocked movement without displacement, damage without combat, and chat/personal-window exemptions; shared ingress must not check a Hearth action key.
+- [ ] 5.5 Preserve cancellation when another action attempt is rejected by client cooldown controls using existing `C2S_CancelAction`. Verify Actions/hotbar mouse, keyboard, and touch paths plus movement/map-click suites; add no new cancellation packet and do not start the blocked action.
+- [ ] 5.6 Keep ordinary first entry and `tryReattachPlayer` without automatic Hearth creation; add normal login candidates in order: saved position, exact current home when present, near saved position, existing random fallback. Test no-home/reconnect and blocked-home cases, update entry and runtime-KO notes, and preserve capacity cleanup.
 
-## 6. Permanent Death and Terminal Cleanup
+## 6. Prepared Assets, UI, and Shared Skull Smoke
 
-- [ ] 6.1 Integrate home conversion/unlink with character soft-delete, status, and auth-token updates through the ordered worker lifecycle; preserve terminal commit before durable corpse writes by pinning/gating source chunk saves while retaining immediate runtime corpse/observer behavior, and verify cross-layer, unloaded-home, worker-delay, and restart injection tests leave no live SQL character alongside its durable corpse.
-- [ ] 6.2 Route existing REST terminal character deletion through the same Hearth cleanup without changing its authorization/deletion policy; verify authorized offline deletion converts/unlinks its home, unauthorized deletion remains rejected, and no nonexistent player-body death effect is fabricated.
-- [ ] 6.3 Emit one character-position death event at actual permanent death and one observed hearth-conversion event after its committed runtime transition; verify event-time observer snapshots, separate locations, duplicates, and unobserved/unloaded homes before adding client rendering.
-- [ ] 6.4 Add completion-before-death, terminal-before-completion, worker-outage, and restart tests; verify deterministic terminal ownership and document the terminal-lifecycle and existing REST boundary rather than widening unrelated corpse persistence behavior.
+- [ ] 6.1 Reuse the prepared green flame resource and skull-smoke assets with existing projection/anchor/alpha contracts; integrate the Hearth icon and always-green presentation. Verify label `Hearth Fire`, seven approved flame frames at 70% scale, no ownership/online indicator, no minimap marker, and unchanged campfire rendering.
+- [ ] 6.2 Add `Travel to Hearth Fire` beside `Stand Up` only after active KO ends, using the same action, progress, and shared cooldown UI. Verify knockout/action UI suites cover active KO, lying, cancellation, success, and cooldown.
+- [ ] 6.3 Add only `stream_epoch = 3` to existing `S2C_Fx`, preserving fields 1/2, and publish one position-based skull-smoke event at runtime character death or Hearth conversion to current observers. Regenerate server/client protobuf and test session/layer isolation, separate event positions, no historical replay, and legacy local-player `exp_gain` behavior.
+- [ ] 6.4 Render a reusable detached one-shot effect from the eight preloaded frames at 250 ms per frame, with a 2000 ms local monotonic lifetime, bounded concurrent effects, and reset-generation cleanup. Test source-view removal, suspended rendering, capacity limits, late loading after reset, and world/session destruction without an event-ID deduplication or server-clock freshness subsystem.
+- [ ] 6.5 Add visual/client asset regressions and gameplay-scale desktop/mobile screenshots for green fire, skull smoke, and post-KO controls; document delivered contracts and continuous-versus-transient smoke. Run relevant asset tests and, only if atlas/tools change, the three required pipeline checks; generate no replacement art and add no explanatory in-app copy.
 
-## 7. Ordinary Return and Transfer Outcomes
+## 7. Integration and Release
 
-- [ ] 7.1 Register the no-target `Travel to Hearth Fire` definition/handler with five-second existing progress, zero stamina, and 360000 ms shared cooldown; verify eligibility/action-cycle tests cover missing home, combat, swimming, active KO, and standing shallow water.
-- [ ] 7.2 Resolve the latest active home at authoritative handoff and validate source identity, generation, action token, connection, combat, swimming, and resolved KO state before detach; verify mid-progress replacement and late-canceled/stale-transfer tests cannot use an old home or transfer after cancellation.
-- [ ] 7.3 Add a Hearth transfer cause with deferred completion and an idempotent successful-target cooldown hook after ordinary participant restoration/failure resolution and before initial target snapshots; verify request admission starts no cooldown, successful body relocation starts it once even after a carry-restoration warning, and source/target rejection, timeout, and rollback start none.
-- [ ] 7.4 Reuse exact-target player-only clearance and the existing carry participant for same-layer/cross-layer return; verify blocked-home failure has no nearby fallback, large carried footprint is excluded from clearance, and failed transfers preserve body/carry without duplication.
-- [ ] 7.5 Apply the post-KO lying allowance only to Hearth and use a separate standing target snapshot while retaining the untouched lying rollback snapshot; verify successful return stands, failed return remains lying, stairs/admin rules are unchanged, and post-capture socket failure follows ordinary transfer restoration.
-- [ ] 7.6 Update `docs/features/runtime_ko.md` and related feature notes with the Hearth-only post-KO exception and success boundary; verify existing transfer/health tests plus the new cause-specific tests agree with the documentation.
-
-## 8. Interruption at Gameplay Intent
-
-- [ ] 8.1 Add narrowly scoped Hearth cancellation before availability checks at all shared gameplay execution entry points, including menu/hotbar, context, craft/build, carry/item gameplay, and Stand Up attempts; verify successful and rejected attempts, including cooldown rejection, cancel return without changing unrelated action admission.
-- [ ] 8.2 Cancel Hearth on fresh valid WASD and ordinary ground-movement requests before gameplay movement restrictions or displacement checks; verify collision, lying, stun, affordability, and unchanged-target cases cancel, while stale/malformed/expired/wrong-session input, release/refresh, and administrator-consumed clicks retain existing isolation.
-- [ ] 8.3 Wire any damage and combat/swimming transitions to ordinary return cancellation and retain generic disconnect cleanup; verify damage-without-combat, disconnect during progress, and stale completion tests leave source position and cooldown unchanged, while chat/personal-window opening preserves progress.
-- [ ] 8.4 Convey cancellation intent for other-action attempts blocked locally by existing client cooldown controls without starting the blocked action; verify Actions menu, hotbar keyboard/touch/mouse, and post-KO movement-intent tests, plus `npm run test:actions`, `npm run test:movement-input`, and `npm run test:map-click` regressions.
-
-## 9. Hearth Presentation and Post-Knockout UI
-
-- [ ] 9.1 Before generating/editing Origin art, read the approved style guide and visually inspect its reference; create the hearth/flame and skull-smoke assets with original sources/provenance and existing projection, scale, anchor, frame-key, and alpha contracts, and verify them at gameplay scale rather than substituting concept art.
-- [ ] 9.2 Integrate the hearth resource/icon and always-green world appearance through existing loaders and Actions presentation; verify label `Hearth Fire`, no owner/online indicator, no minimap changes, and unaffected ordinary campfire rendering.
-- [ ] 9.3 Add `Travel to Hearth Fire` beside `Stand Up` only after active KO ends using the same activation, progress, and shared cooldown presentation; verify `npm run test:knockout` and action UI tests for active KO, lying, success, cancellation, and cooldown.
-- [ ] 9.4 Verify asset/visual integration with relevant client asset tests and desktop/mobile screenshots; if atlas/tools are changed, run `python3 tools/tests/roundtrip_test.py --regression`, `node tools/tests/pixi_semantics_test.mjs`, and `python3 tools/tests/render_sim.py`, and document the delivered asset contracts without adding explanatory in-app copy.
-
-## 10. Shared World-Event Skull Smoke
-
-- [ ] 10.1 Add `stream_epoch = 3`, `event_id = 4`, and `server_time_ms = 5` to existing `S2C_Fx` while preserving fields 1/2; run `make proto` and `npm run proto` in `web_new/`, and verify round-trip tests preserve legacy `exp_gain` decoding and exact event identity.
-- [ ] 10.2 Publish world-position skull events through current reverse visibility with immutable event/session snapshots and recipient epochs; verify all current source observers receive one event, old sessions/other layers/later viewers receive none, and unloaded conversion does not queue historical replay.
-- [ ] 10.3 Extend FX dispatch/manager with a reusable detached one-shot preset and author-time 2000 ms total expiry, exact-ID dedup, current-entry freshness, and existing session-clock validation; verify death/conversion positions, duplicate/stale/expired/malformed events, delayed delivery/loading, permitted clock jitter, and unchanged owner-local experience FX.
-- [ ] 10.4 Bound active events, particles, and pending asset work; clear them and invalidate asynchronous callbacks on world/session/layer/reset/destroy paths; verify hidden/tab-suspended expiry, capacity exhaustion, view rebuild independence, and late-load-after-reset tests without an unbounded cosmetic queue.
-- [ ] 10.5 Document the event fields, freshness/lifetime boundary, and continuous-versus-transient smoke distinction; verify the resulting ordinary unlit campfire emits no continuous smoke and visual smoke is fully gone at the original two-second expiry.
-
-## 11. Integration and Release Gates
-
-- [ ] 11.1 Run `make test` at the repository root and PostgreSQL Hearth lifecycle integration coverage using the existing test fixture; verify protobuf/sqlc regeneration is coherent and report any unavailable DB fixture rather than claiming skipped coverage passed.
-- [ ] 11.2 In `web_new/`, run `npm run type-check`, `npm run lint`, and the relevant action, execution, knockout, movement, map-click, chunks, minimap, combat-protocol, visual, asset, and new FX suites; verify unrelated regression coverage and review lint's automatic diff for scope.
-- [ ] 11.3 Exercise the complete first-entry/build-replacement/underground-carry-return/post-KO/death/login lifecycle with server-authoritative state assertions and screenshots; verify failure injection and bounded queue/collider/FX work under representative load without new tick scans or N+1 SQL.
-- [ ] 11.4 Run strict OpenSpec validation and `git diff --check`, review generated/assets/protocol diffs, and deliver clean-database deployment and controlled rollback notes; verify no backfill, automatic DB clearing, unrelated balance or `life_death_factor` changes, or new dependencies were introduced.
+- [ ] 7.1 Run `make test` and PostgreSQL Hearth integration coverage using the existing fixture. Verify regeneration, schema uniqueness, asynchronous latest-state saving, and restart repair; report an unavailable fixture rather than claiming skipped database tests passed.
+- [ ] 7.2 Run client type-check, lint, and relevant action/execution/knockout/movement/map-click/chunk/minimap/FX/asset suites; review lint's automatic diff and verify unrelated presentation/protocol regressions remain covered.
+- [ ] 7.3 Exercise no-home entry, first construction/replacement, underground carry return, post-KO return, owner death/deletion, and blocked-position login recovery end to end. Verify runtime invariants during delayed saves/outage and bounded collider/metadata/FX work under representative load, without new tick scans or N+1 SQL.
+- [ ] 7.4 Run strict OpenSpec validation and `git diff --check`, review generated/assets/protocol diffs, and deliver clean-database deployment notes. Verify no automatic entry, backfill, database clearing, new dependency, or unrelated balance/`life_death_factor` change, and explicitly distinguish accepted crash rollback from runtime corruption.
