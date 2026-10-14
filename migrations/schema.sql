@@ -165,6 +165,19 @@ ALTER TABLE object_region_1
         autovacuum_analyze_scale_factor = 0.05
         );
 
+-- CHARACTER HEARTH ----------------------------------------------------
+-- Only the current saved association; object state remains in object.
+CREATE TABLE character_hearth
+(
+	character_id BIGINT PRIMARY KEY
+		REFERENCES character (id) ON DELETE RESTRICT,
+	object_region INT NOT NULL,
+	object_id BIGINT NOT NULL,
+	CONSTRAINT character_hearth_object_unique UNIQUE (object_region, object_id),
+	CONSTRAINT character_hearth_object_fk FOREIGN KEY (object_region, object_id)
+		REFERENCES object (region, id) ON DELETE RESTRICT
+);
+
 -- SPOT ----------------------------------------------------------------
 -- Resource quality spots created after final terrain generation.
 CREATE TABLE spot

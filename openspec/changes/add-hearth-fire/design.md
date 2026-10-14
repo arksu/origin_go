@@ -4,7 +4,7 @@
 
 See `proposal.md` and `docs/features/hearth_fire.md`, Part 2, for gameplay. On 2026-10-13 the owner reverted Hearth gameplay/persistence code and requested a simpler design: runtime integrity is required; asynchronous saves, independent checkpoints, and loss of recent progress after a crash are acceptable.
 
-The prepared static `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. The ownership table, Hearth runtime module, finisher codec, and lifecycle coordinator do not. Previous completed task marks therefore no longer describe the source tree.
+The prepared static `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. Tasks 1.1-1.4 now provide the ownership migration/schema, sqlc queries and isolated `internal/game/hearth` metadata index. They are not wired into gameplay or background saving. Finisher codecs and lifecycle coordinators are not introduced; previous reverted gameplay is not counted as delivered work.
 
 Relevant existing mechanisms:
 
@@ -30,6 +30,10 @@ Use `internal/game/hearth` for home lookup, current ownership, conversion policy
 Current runtime state wins over SQL results. A small revision/load-generation check rejects stale lookups and acknowledgments. Protect shared index access across layers with short synchronization, never holding that lock across ECS callbacks, shard locks or I/O. Geometry checks use the cached owner, not SQL.
 
 Cache entries are needed for connected characters, active/loading hearth objects and dirty ownership changes, not all historical characters. Do not evict dirty entries or revocation overrides. Retire clean idle entries only after their writes and referencing lookups finish; callbacks must still match their lookup generation. No permanent per-character terminal registration is required.
+
+The delivered index returns copied `Snapshot`/`Home` values. `BeginLookup`/`CompleteLookup`/`CancelLookup` coalesce and fence unknown-home reads; runtime changes advance revision, while eviction/recreation uses a fresh generation. `ReplaceHome` changes both indexes together and requires the expected version; `AcknowledgeSaved` only clears that exact dirty version. Callers retain metadata through `Retain`/release-once `Reference` while bodies, objects or writes refer to it. No ECS hooks or saver jobs are installed in this stage.
+
+Terminal eligibility is distinct from `NoHome`. `MarkTerminalPending` blocks new acquisition/return without mutating the current association from a notifying thread. An already admitted owning completion may finish before `ApplyTerminal` revokes the latest home. Applied terminal rejects rebinding and remains cached only while dirty or referenced. These contracts do not yet connect to death or REST and add no terminal operation queue.
 
 ### 2. Finalize construction immediately, in one surface critical section
 

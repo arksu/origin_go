@@ -68,6 +68,12 @@ type Character struct {
 	UpdatedAt       sql.NullTime    `json:"updated_at"`
 }
 
+type CharacterHearth struct {
+	CharacterID  int64 `json:"character_id"`
+	ObjectRegion int   `json:"object_region"`
+	ObjectID     int64 `json:"object_id"`
+}
+
 type Chat struct {
 	ID         int64         `json:"id"`
 	Channel    int16         `json:"channel"`

@@ -2,17 +2,21 @@
 
 ## Existing Preparation and Revised Baseline
 
-Only object/art preparation remains in the source tree. The server catalog
-contains static, indestructible `hearth_fire` (ID 36, resource `hearth_fire`,
+The server catalog contains the prepared static, indestructible
+`hearth_fire` (ID 36, resource `hearth_fire`,
 12x12 collider) without Hearth behaviors or a station. The ordinary client
 resource uses the approved seven green flame frames at 70% scale and 4 FPS.
 Eight approved skull-smoke frames and their asset descriptor are also present;
 the descriptor specifies 250 ms per frame and a 2000 ms one-shot animation.
 Reuse these assets instead of regenerating them.
 
-Previous feature persistence and lifecycle implementation was reverted. All
-tasks below are therefore unchecked. This replaces the former durable-lifecycle
-plan: gameplay changes finish in runtime without waiting for a database commit.
+Previous feature persistence and lifecycle implementation was reverted.
+The new foundation contracts in section 1 have been implemented and checked:
+migration/schema, sqlc queries and an isolated runtime metadata index with tests.
+They are not wired into gameplay, chunk loading or background saving. Task 2.1
+adds only the ordinary build recipe; it creates the prepared object without
+personal ownership. Tasks 2.2 onward remain unchecked. This replaces the former durable-lifecycle plan:
+gameplay changes finish in runtime without waiting for a database commit.
 Ordinary asynchronous persistence may lose recent progress on a crash. Runtime
 ownership, object state, action cancellation, and stale-handle safety remain
 authoritative; no lifecycle coordinator, mutation-reservation framework,
@@ -20,14 +24,14 @@ finisher sidecar, body-retention system, or special shutdown barrier is required
 
 ## 1. Ownership Data and Runtime State
 
-- [ ] 1.1 Add the single undeployed migration and matching canonical schema for unpartitioned `character_hearth`: character PK/FK, unique `(object_region, object_id)`, and composite RESTRICT object FK. Verify PostgreSQL rejects duplicate or invalid associations; add no first-entry marker, compatibility migration, or backfill.
-- [ ] 1.2 Add sqlc queries for indexed home/owner lookup, batched owner loading, latest association replacement/removal, and restart repair; run `make sqlc` and cover absent ownership, deleted characters, and invalid object references without hand-editing generated code.
-- [ ] 1.3 Add the feature-owned runtime home index with explicit unknown/known-no-home/current-home states and dirty revisions. Keep mutation on the owning execution path and expose copied metadata to other layers; test first assignment, replacement, removal, stale revisions, and absence of permanent pending-operation records.
-- [ ] 1.4 Document runtime authority, schema/index responsibilities, asynchronous save lag, and restart repair in the feature engineering notes. Verify ordinary character saves cannot overwrite home ownership and shared ECS/build/action state contains no Hearth-specific fields.
+- [x] 1.1 Add the single undeployed migration and matching canonical schema for unpartitioned `character_hearth`: character PK/FK, unique `(object_region, object_id)`, and composite RESTRICT object FK. Verify PostgreSQL rejects duplicate or invalid associations; add no first-entry marker, compatibility migration, or backfill.
+- [x] 1.2 Add sqlc queries for indexed home/owner lookup, batched owner loading, latest association replacement/removal, and restart repair; run `make sqlc` and cover absent ownership, deleted characters, and invalid object references without hand-editing generated code.
+- [x] 1.3 Add the feature-owned runtime home index with explicit unknown/known-no-home/current-home states and dirty revisions. Keep mutation on the owning execution path and expose copied metadata to other layers; test first assignment, replacement, removal, stale revisions, and absence of permanent pending-operation records.
+- [x] 1.4 Document runtime authority, schema/index responsibilities, asynchronous save lag, and restart repair in the feature engineering notes. Verify ordinary character saves cannot overwrite home ownership and shared ECS/build/action state contains no Hearth-specific fields.
 
 ## 2. Manual Construction and Immediate Replacement
 
-- [ ] 2.1 Add the universally available five-branch Hearth recipe using existing two-second and eight-stamina processing per branch. Verify solo ten-second/forty-stamina construction, cooperative acceleration, and no skill/discovery requirement.
+- [x] 2.1 Add the universally available five-branch Hearth recipe using existing two-second and eight-stamina processing per branch. Verify solo ten-second/forty-stamina construction, cooperative acceleration, and no skill/discovery requirement.
 - [ ] 2.2 Add small registered construction preflight/completion hooks and implement Hearth policy in its feature module. Before final-cycle costs, prepare any unknown old-home metadata through existing bounded read workers; if not ready, end that attempt with a loading message and no final-cycle costs. Verify ordinary recipes retain their current path and no SQL or blocking worker wait runs under the shard lock.
 - [ ] 2.3 Complete Hearth synchronously on the surface owning shard using the actual successful final-branch actor. Prepare fallible runtime transforms before mutation, convert the previous home to an ordinary unlit campfire, transform the site, and replace ownership in one shard-locked completion; test exact identity/location preservation and unchanged player position without a saved finisher sidecar.
 - [ ] 2.4 Apply an inactive old-home conversion to the prepared raw record without forcing activation; retain its latest runtime projection until ordinary save/activation consumes it. Make runtime raw updates advance the existing cache revision; test unloaded homes, stale read/load results, and activation before database catch-up cannot reveal a second active home.

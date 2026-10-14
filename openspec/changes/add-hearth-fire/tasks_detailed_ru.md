@@ -9,6 +9,16 @@
 этого документа не меняется. Приведённые точки интеграции проверены по текущему
 коду; новые interfaces/hooks описаны как предложения, а не существующие API.
 
+**Статус реализации:** выполнены только задачи 1.1–1.4 и 2.1. Их фактические SQL и
+runtime API описаны в `docs/features/hearth_fire.md`, разделе 2.13:
+`character_hearth.sql`, migration/schema и `internal/game/hearth/index.go`.
+Проверены PostgreSQL schema/query tests, unit/race tests индекса, `go vet`
+и полный `make test`. Обычный рецепт добавлен в `data/builds/basic.jsonc`;
+catalog/runtime tests проверяют пять циклов, solo и совместные затраты.
+Gameplay ownership hooks, chunk hydration, terminal notification и background
+saver пока не реализованы. Дальнейшие пункты
+остаются планом, а не обещанием уже действующей механики.
+
 ## Базовые гарантии
 
 **Главная гарантия: целостность текущего игрового состояния в памяти.**
@@ -167,6 +177,13 @@ Hearth-полей, key branches и глобальных mutable зависимо
 ## 2. Ручная стройка и немедленная замена
 
 ### 2.1. Обычный рецепт
+
+**Выполнено.** Рецепт `hearth_fire` получил свободный recipe ID 6 и создаёт
+подготовленный object ID 36 через существующий BuildService. Проверки в
+`internal/builddefs/integration_test.go` и
+`internal/game/hearth_build_recipe_test.go` используют реальные каталоги
+и cyclic action system: 100 solo ticks и 60 cooperative ticks при 10 Hz,
+затраты 40 и 16+24 stamina. Ядро не изменено, личное владение не подключено.
 
 **Что сделаю.** Добавлю рецепт в существующий build catalog, используя образец
 `data/builds/basic.jsonc`: пять `branch`, восемь stamina за обработку, длительность
