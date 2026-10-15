@@ -436,15 +436,6 @@ func (g *Game) buildPlayerSetupWithRuntimeFunc(
 			entitystats.MaxStaminaFromAttributes(normalizedAttributes),
 		)
 
-		// If entity has Vision component - add it to VisibilityState.VisibleByObserver with immediate update
-		visState := ecs.GetResource[ecs.VisibilityState](w)
-		visState.Mu.Lock()
-		visState.VisibleByObserver[h] = ecs.ObserverVisibility{
-			Known:          make(map[types.Handle]types.EntityID, 32),
-			NextUpdateTime: time.Time{}, // Zero time for immediate update
-		}
-		visState.Mu.Unlock()
-
 		// Load player inventories from database
 		dbInventories, err := g.db.Queries().GetInventoriesByOwner(ctx, character.ID)
 		if err != nil {
@@ -683,11 +674,9 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 	detachedEntities.RemoveDetachedEntity(playerEntityID)
 
 	// Force immediate visibility update for the reattached observer
+	g.ensureObserverVisibilityImmediate(shard.world, handle)
 	visState := ecs.GetResource[ecs.VisibilityState](shard.world)
 	if observerVis, ok := visState.VisibleByObserver[handle]; ok {
-		observerVis.NextUpdateTime = time.Time{} // Zero time for immediate update
-		visState.VisibleByObserver[handle] = observerVis
-
 		// Send spawn events for all currently visible entities
 		g.logger.Debug("Sending spawn events for reattached player's visible entities",
 			zap.Uint64("client_id", c.ID),

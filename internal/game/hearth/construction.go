@@ -21,14 +21,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const preparationCapacity = 64
-const preparationApplyBudget = 32
-
 type ConstructionChunks interface {
 	GetChunkFast(types.ChunkCoord) *core.Chunk
-	PinPersistence(types.ChunkCoord) error
+	PinPersistenceBlocking(types.ChunkCoord) error
 	UnpinPersistence(types.ChunkCoord)
-	SubmitPersistenceJob(world.PersistenceJob) bool
 	WaitPreloaded(context.Context, types.ChunkCoord) error
 }
 
@@ -36,36 +32,30 @@ type HomeReader interface {
 	GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error)
 }
 
-// Runtime belongs to the surface shard. Ownership lookup is synchronous;
-// only old-chunk preloads run outside its lock.
+// Runtime belongs to the surface shard. Construction prepares ownership and
+// the previous hearth's chunk synchronously before final costs.
 type Runtime struct {
-	Index     *Index
-	w         *ecs.World
-	chunks    ConstructionChunks
-	reader    HomeReader
-	registry  contracts.BehaviorRegistry
-	bus       *eventbus.EventBus
-	logger    *zap.Logger
-	completed chan *preparation
-	inFlight  int
-	preloads  map[types.ChunkCoord]bool
+	Index    *Index
+	w        *ecs.World
+	chunks   ConstructionChunks
+	reader   HomeReader
+	registry contracts.BehaviorRegistry
+	bus      *eventbus.EventBus
+	logger   *zap.Logger
 }
 
 func NewRuntime(w *ecs.World, chunks ConstructionChunks, reader HomeReader, registry contracts.BehaviorRegistry, bus *eventbus.EventBus, logger *zap.Logger) Runtime {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return Runtime{Index: NewIndex(), w: w, chunks: chunks, reader: reader, registry: registry, bus: bus, logger: logger,
-		completed: make(chan *preparation, preparationCapacity), preloads: make(map[types.ChunkCoord]bool)}
+	return Runtime{Index: NewIndex(), w: w, chunks: chunks, reader: reader, registry: registry, bus: bus, logger: logger}
 }
 
-func constructionRefused(reason string) contracts.ConstructionResult {
-	return contracts.ConstructionResult{BehaviorResult: contracts.BehaviorResult{
-		UserVisible: true, ReasonCode: reason, Severity: contracts.BehaviorAlertSeverityWarning,
-	}}
+func constructionRefused(reason string) contracts.BehaviorResult {
+	return contracts.BehaviorResult{UserVisible: true, ReasonCode: reason, Severity: contracts.BehaviorAlertSeverityWarning}
 }
 
-func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, complete func() bool) contracts.ConstructionResult {
+func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, complete func() bool) contracts.BehaviorResult {
 	if ctx == nil || ctx.World != r.w || r.w.Layer != SurfaceLayer || complete == nil ||
 		!r.w.Alive(ctx.PlayerHandle) || r.w.GetHandleByEntityID(ctx.PlayerID) != ctx.PlayerHandle ||
 		playerstate.ItemsLocked(r.w, ctx.PlayerHandle) {
@@ -105,7 +95,7 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 		return constructionRefused("This character cannot acquire a hearth.")
 	}
 	if current.State == Unknown {
-		return contracts.ConstructionResult{Retry: true}
+		return constructionRefused("Hearth data is unavailable.")
 	}
 
 	oldHandle := types.InvalidHandle
@@ -126,17 +116,23 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 			if r.chunks == nil {
 				return constructionRefused("The previous hearth is unavailable.")
 			}
-			if err := r.chunks.PinPersistence(coord); err != nil {
-				if errors.Is(err, world.ErrChunkPersistenceBusy) {
-					return contracts.ConstructionResult{Retry: true}
-				}
+			if err := r.chunks.PinPersistenceBlocking(coord); err != nil {
 				return constructionRefused("The previous hearth is unavailable.")
 			}
 			defer r.chunks.UnpinPersistence(coord)
+			loadCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := r.chunks.WaitPreloaded(loadCtx, coord)
+			cancel()
+			if err != nil {
+				if errors.Is(err, world.ErrChunkNotLoaded) {
+					return constructionRefused("The previous hearth is unavailable.")
+				}
+				r.logger.Fatal("hearth chunk load failed", zap.Error(err))
+				return contracts.BehaviorResult{}
+			}
 			oldChunk = r.chunks.GetChunkFast(coord)
 			if oldChunk == nil || (oldChunk.GetState() != types.ChunkStateActive && oldChunk.GetState() != types.ChunkStatePreloaded && oldChunk.GetState() != types.ChunkStateInactive) {
-				r.prepareChunk(coord)
-				return contracts.ConstructionResult{Retry: true}
+				return constructionRefused("The previous hearth is unavailable.")
 			}
 			raw := oldChunk.GetRawObjectByID(old.Object.ID)
 			if raw == nil || raw.DeletedAt.Valid || raw.TypeID != hearthDef.DefID || raw.Region != old.Object.Region || raw.Layer != SurfaceLayer {
@@ -150,8 +146,11 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 			oldRaw = &copy
 		}
 	}
+	if latest := r.Index.Snapshot(ctx.PlayerID); latest.Version != current.Version || !latest.CanAcquire() {
+		return constructionRefused("This character's hearth has changed.")
+	}
 	if !complete() {
-		return contracts.ConstructionResult{}
+		return contracts.BehaviorResult{}
 	}
 	if oldHandle != types.InvalidHandle {
 		if !world.TransformObjectToDefInPlace(r.w, current.Home.Object.ID, oldHandle, campfireDef, world.TransformObjectInPlaceOptions{
@@ -165,7 +164,7 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 	if _, err := r.Index.ReplaceHome(ctx.PlayerID, current.Version, next); err != nil {
 		panic("prepared hearth assignment failed: " + err.Error())
 	}
-	return contracts.ConstructionResult{BehaviorResult: contracts.BehaviorResult{OK: true}}
+	return contracts.BehaviorResult{OK: true}
 }
 
 func (r *Runtime) canTransform(id types.EntityID, handle types.Handle, typeID uint32) bool {
@@ -174,11 +173,6 @@ func (r *Runtime) canTransform(id types.EntityID, handle types.Handle, typeID ui
 	}
 	info, ok := ecs.GetComponent[components.EntityInfo](r.w, handle)
 	return ok && info.TypeID == typeID && ecs.HasComponent[components.ObjectInternalState](r.w, handle)
-}
-
-type preparation struct {
-	runtime *Runtime
-	coord   types.ChunkCoord
 }
 
 func (r *Runtime) loadHome(character types.EntityID, hearthType int) {
@@ -201,45 +195,5 @@ func (r *Runtime) loadHome(character types.EntityID, hearthType int) {
 	}
 	if err := r.Index.CompleteLookup(character, version, home); err != nil && !errors.Is(err, ErrStaleLookup) {
 		r.logger.Fatal("invalid hearth lookup result", zap.Error(err))
-	}
-}
-
-func (r *Runtime) prepareChunk(coord types.ChunkCoord) {
-	if r.inFlight == preparationCapacity || r.preloads[coord] {
-		return
-	}
-	if r.chunks.SubmitPersistenceJob(&preparation{runtime: r, coord: coord}) {
-		r.preloads[coord] = true
-		r.inFlight++
-	}
-}
-
-func (j *preparation) Run() error {
-	err := j.runtime.chunks.WaitPreloaded(context.Background(), j.coord)
-	if errors.Is(err, world.ErrChunkNotLoaded) {
-		return nil // shutdown or rejected load admission; a later attempt can retry
-	}
-	return err
-}
-
-func (j *preparation) Complete(err error) {
-	if err != nil {
-		j.runtime.logger.Fatal("hearth preparation failed", zap.Error(err))
-		return
-	}
-	// Admission counts jobs until application, so this bounded channel always
-	// has room. Workers neither touch ECS nor wait for a player to retry.
-	j.runtime.completed <- j
-}
-
-func (r *Runtime) ApplyReadResults() {
-	for n := 0; n < preparationApplyBudget; n++ {
-		select {
-		case job := <-r.completed:
-			r.inFlight--
-			delete(r.preloads, job.coord)
-		default:
-			return
-		}
 	}
 }

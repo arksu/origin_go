@@ -62,11 +62,23 @@ func (cm *ChunkManager) SubmitPersistenceJob(job PersistenceJob) bool {
 // PinPersistence is called under the shard lock before accepting a destruction.
 // It never waits for an in-flight database operation.
 func (cm *ChunkManager) PinPersistence(coord types.ChunkCoord) error {
+	return cm.pinPersistence(coord, false)
+}
+
+// PinPersistenceBlocking waits for current chunk I/O before retaining the chunk.
+// It releases the I/O gate before returning, so a pinned chunk can still load.
+func (cm *ChunkManager) PinPersistenceBlocking(coord types.ChunkCoord) error {
+	return cm.pinPersistence(coord, true)
+}
+
+func (cm *ChunkManager) pinPersistence(coord types.ChunkCoord, wait bool) error {
 	if cm == nil || !cm.IsWithinWorldBounds(coord) {
 		return ErrChunkOutsideWorld
 	}
 	gate := cm.persistenceFor(coord)
-	if !gate.ioMu.TryLock() {
+	if wait {
+		gate.ioMu.Lock()
+	} else if !gate.ioMu.TryLock() {
 		return ErrChunkPersistenceBusy
 	}
 	gate.pins.Add(1)

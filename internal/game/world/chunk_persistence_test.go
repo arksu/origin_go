@@ -1,6 +1,7 @@
 package world
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -64,6 +65,70 @@ func TestPersistencePinAndWorkerGatePreserveChunk(t *testing.T) {
 	gate.ioMu.Unlock()
 	require.NoError(t, cm.activateChunkInternal(coord, chunk))
 	require.Equal(t, types.ChunkStateActive, chunk.GetState())
+}
+
+func TestBlockingPersistencePinWaitsForIOAndAllowsPinnedLoad(t *testing.T) {
+	cm := newTestChunkManager()
+	defer cm.Stop()
+	coord := types.ChunkCoord{X: 2, Y: 2}
+	locked, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	releaseGate := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseGate()
+	gateDone := make(chan error, 1)
+	go func() {
+		gateDone <- cm.WithPersistence([]types.ChunkCoord{coord}, func() error {
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+	<-locked
+	require.ErrorIs(t, cm.PinPersistence(coord), ErrChunkPersistenceBusy, "ordinary pins must remain nonblocking")
+	pinDone := make(chan error, 1)
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		pinDone <- cm.PinPersistenceBlocking(coord)
+	}()
+	<-started
+	select {
+	case err := <-pinDone:
+		if err == nil {
+			cm.UnpinPersistence(coord)
+		}
+		t.Fatalf("blocking pin returned before current I/O completed: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	releaseGate()
+	require.NoError(t, <-gateDone)
+	select {
+	case err := <-pinDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("blocking pin did not acquire the released gate")
+	}
+	pinned := true
+	defer func() {
+		if pinned {
+			cm.UnpinPersistence(coord)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, cm.WaitPreloaded(ctx, coord), "the pin must release the gate so the load worker can run")
+	chunk := cm.GetChunkFast(coord)
+	require.NotNil(t, chunk)
+	require.Equal(t, types.ChunkStateInactive, chunk.GetState())
+	cm.safeSaveAndRemove(coord, chunk)
+	require.Same(t, chunk, cm.GetChunkFast(coord), "an existing save must skip a pinned chunk")
+	cm.onEvict(coord, chunk)
+	require.Empty(t, cm.saveQueue, "eviction must not submit a pinned chunk")
+	cm.UnpinPersistence(coord)
+	pinned = false
+	cm.safeSaveAndRemove(coord, chunk)
+	require.Nil(t, cm.GetChunkFast(coord), "ordinary eviction resumes after the pin is released")
 }
 
 func TestCrossChunkPersistenceCanonicalLockOrder(t *testing.T) {

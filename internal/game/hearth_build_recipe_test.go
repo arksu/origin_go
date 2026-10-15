@@ -3,7 +3,6 @@ package game
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"origin/internal/characterattrs"
 	"origin/internal/config"
 	constt "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/entitystats"
@@ -76,7 +76,7 @@ func TestHearthBuildRecipeVisibleToNewCharacter(t *testing.T) {
 	require.Empty(t, entry.RequiredDiscovery)
 	require.Len(t, entry.Inputs, 1)
 	require.Equal(t, "branch", entry.Inputs[0].GetItemKey())
-	require.Equal(t, uint32(5), entry.Inputs[0].Count)
+	require.Equal(t, build.Inputs[0].Count, entry.Inputs[0].Count)
 	require.Equal(t, uint32(1), entry.Inputs[0].QualityWeight)
 	branch, found := itemdefs.Global().GetByKey("branch")
 	require.True(t, found)
@@ -107,7 +107,7 @@ func newHearthBuildRecipeFixture(t *testing.T) *hearthBuildRecipeFixture {
 	timing := ecs.GetResource[ecs.TimeState](w)
 	timing.TickRate, timing.TickPeriod, timing.Delta = cfg.Game.TickRate, tickPeriod, tickPeriod.Seconds()
 	state := buildStateFromDef(build, result, 6, 6)
-	state.Items[0].PutItems = []components.BuildPutItemState{{ItemKey: "branch", Count: 5, Quality: 10}}
+	state.Items[0].PutItems = []components.BuildPutItemState{{ItemKey: "branch", Count: build.Inputs[0].Count, Quality: 10}}
 	site := w.Spawn(200, func(w *ecs.World, handle types.Handle) {
 		ecs.AddComponent(w, handle, components.EntityInfo{TypeID: constt.BuildObjectTypeID})
 		ecs.AddComponent(w, handle, components.Transform{X: 6, Y: 6})
@@ -167,7 +167,7 @@ func (f *hearthBuildRecipeFixture) assertProgress(t *testing.T, count uint32) {
 	state, found := components.GetBehaviorState[components.BuildBehaviorState](internal, buildBehaviorStateKey)
 	require.True(t, found)
 	require.Equal(t, count, state.Items[0].BuildCount)
-	require.Equal(t, 5-count, state.Items[0].PutCount())
+	require.Equal(t, f.build.Inputs[0].Count-count, state.Items[0].PutCount())
 }
 
 func (f *hearthBuildRecipeFixture) assertCompleted(t *testing.T) {
@@ -181,25 +181,27 @@ func (f *hearthBuildRecipeFixture) assertCompleted(t *testing.T) {
 	require.False(t, found)
 }
 
-func TestHearthBuildRecipeSoloUsesFiveOrdinaryCycles(t *testing.T) {
+func TestHearthBuildRecipeSoloUsesOneCyclePerBranch(t *testing.T) {
 	f := newHearthBuildRecipeFixture(t)
+	branches := f.build.Inputs[0].Count
 	player := f.startBuilder(t, 1)
-	for cycle := uint32(1); cycle <= 5; cycle++ {
+	for cycle := uint32(1); cycle <= branches; cycle++ {
 		f.advanceTicks(int(f.build.TicksRequired) - 1)
 		f.assertProgress(t, cycle-1)
 		stats, found := ecs.GetComponent[components.EntityStats](f.world, player)
 		require.True(t, found)
-		require.Equal(t, f.initialStamina-float64(cycle-1)*8, stats.Stamina)
+		require.Equal(t, f.initialStamina-float64(cycle-1)*f.build.StaminaCost, stats.Stamina)
 		f.advanceTicks(1)
 		stats, _ = ecs.GetComponent[components.EntityStats](f.world, player)
-		require.Equal(t, f.initialStamina-float64(cycle)*8, stats.Stamina)
-		if cycle < 5 {
+		require.Equal(t, f.initialStamina-float64(cycle)*f.build.StaminaCost, stats.Stamina)
+		if cycle < branches {
 			f.assertProgress(t, cycle)
 		} else {
 			f.assertCompleted(t)
 		}
 	}
-	require.Equal(t, 10*time.Second, time.Duration(ecs.GetResource[ecs.TimeState](f.world).Tick)*f.tickPeriod)
+	require.Equal(t, time.Duration(branches*f.build.TicksRequired)*f.tickPeriod,
+		time.Duration(ecs.GetResource[ecs.TimeState](f.world).Tick)*f.tickPeriod)
 	require.False(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
 	_, linked := ecs.GetResource[ecs.LinkState](f.world).GetLink(1)
 	require.False(t, linked)
@@ -210,70 +212,147 @@ func TestHearthBuildRecipeSoloUsesFiveOrdinaryCycles(t *testing.T) {
 
 type hearthBuildLookup struct {
 	reads int
+	home  *repository.GetCharacterHearthRow
 }
 
 func (l *hearthBuildLookup) GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
 	l.reads++
+	if l.home != nil {
+		return *l.home, nil
+	}
 	return repository.GetCharacterHearthRow{}, sql.ErrNoRows
 }
 
-func TestHearthConstructionUnknownHomeCompletesInRequiredCycles(t *testing.T) {
-	for _, branches := range []uint32{1, 2, 5} {
-		t.Run(fmt.Sprint(branches), func(t *testing.T) {
-			f := newHearthBuildRecipeFixture(t)
-			internal, _ := ecs.GetComponent[components.ObjectInternalState](f.world, f.site)
-			state, found := components.GetBehaviorState[components.BuildBehaviorState](internal, buildBehaviorStateKey)
-			require.True(t, found)
-			state.Items[0].RequiredCount = branches
-			state.Items[0].PutItems[0].Count = branches
-			player := f.startBuilder(t, 1)
-			lookup := &hearthBuildLookup{}
-			// Exercise the real first lookup instead of the fixture's known NoHome.
-			runtime := ecs.GetResource[hearth.Runtime](f.world)
-			*runtime = hearth.NewRuntime(f.world, nil, lookup, behaviors.MustDefaultRegistry(), nil, nil)
-			sender := &lockedBuildSender{}
-			f.service.alerts = sender
+type hearthBuildChunks struct {
+	chunk  *core.Chunk
+	pins   int
+	loads  int
+	loaded bool
+}
 
-			f.advanceTicks(int(f.build.TicksRequired*branches) - 1)
-			require.Equal(t, branches-1, state.Items[0].BuildCount)
-			require.Equal(t, uint32(1), state.Items[0].PutCount())
-			require.Equal(t, hearth.Unknown, runtime.Index.Snapshot(1).State)
-			require.Zero(t, lookup.reads)
-			stats, _ := ecs.GetComponent[components.EntityStats](f.world, player)
-			require.Equal(t, f.initialStamina-float64(branches-1)*8, stats.Stamina)
+func (c *hearthBuildChunks) PinPersistenceBlocking(types.ChunkCoord) error {
+	c.pins++
+	return nil
+}
 
-			f.advanceTicks(1)
-			f.assertCompleted(t)
-			require.Equal(t, 1, lookup.reads)
-			require.Empty(t, sender.alerts)
-			require.False(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
-			require.Equal(t, f.site, f.world.GetHandleByEntityID(200))
-			require.Equal(t, types.EntityID(200), runtime.Index.Snapshot(1).Home.Object.ID)
-			stats, _ = ecs.GetComponent[components.EntityStats](f.world, player)
-			require.Equal(t, f.initialStamina-float64(branches)*8, stats.Stamina)
-			require.Equal(t, uint64(f.build.TicksRequired*branches), ecs.GetResource[ecs.TimeState](f.world).Tick)
-		})
+func (c *hearthBuildChunks) UnpinPersistence(types.ChunkCoord) { c.pins-- }
+
+func (c *hearthBuildChunks) GetChunkFast(types.ChunkCoord) *core.Chunk {
+	if c.loaded {
+		return c.chunk
 	}
+	return nil
+}
+
+func (c *hearthBuildChunks) WaitPreloaded(context.Context, types.ChunkCoord) error {
+	c.loads++
+	c.loaded = true
+	c.chunk.SetState(types.ChunkStateInactive)
+	return nil
+}
+
+func TestHearthConstructionUnloadedHomeCompletesOnLastBranch(t *testing.T) {
+	f := newHearthBuildRecipeFixture(t)
+	internal, _ := ecs.GetComponent[components.ObjectInternalState](f.world, f.site)
+	state, found := components.GetBehaviorState[components.BuildBehaviorState](internal, buildBehaviorStateKey)
+	require.True(t, found)
+	branches := f.build.Inputs[0].Count
+	player := f.startBuilder(t, 1)
+	raw := &repository.Object{ID: 300, TypeID: f.result.DefID, X: 5000, Y: 200, Quality: 17}
+	coord := types.WorldToChunkCoord(raw.X, raw.Y, constt.ChunkSize, constt.CoordPerTile)
+	raw.ChunkX, raw.ChunkY = coord.X, coord.Y
+	chunk := core.NewChunk(coord, 0, hearth.SurfaceLayer, constt.ChunkSize)
+	chunk.SetRawObjects([]*repository.Object{raw})
+	chunks := &hearthBuildChunks{chunk: chunk}
+	lookup := &hearthBuildLookup{home: &repository.GetCharacterHearthRow{CharacterID: 1, ObjectID: raw.ID, X: raw.X, Y: raw.Y}}
+	runtime := ecs.GetResource[hearth.Runtime](f.world)
+	*runtime = hearth.NewRuntime(f.world, chunks, lookup, behaviors.MustDefaultRegistry(), nil, nil)
+
+	f.advanceTicks(int(f.build.TicksRequired*branches) - 1)
+	require.Equal(t, branches-1, state.Items[0].BuildCount)
+	require.Zero(t, chunks.loads)
+	require.Zero(t, lookup.reads)
+	f.advanceTicks(1)
+	f.assertCompleted(t)
+	require.False(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
+	require.Equal(t, types.EntityID(200), runtime.Index.Snapshot(1).Home.Object.ID)
+	require.Equal(t, 1, chunks.loads)
+	require.Equal(t, 1, lookup.reads)
+	require.Zero(t, chunks.pins)
+	require.Equal(t, types.InvalidHandle, f.world.GetHandleByEntityID(300))
+	campfire, found := objectdefs.Global().GetByKey("campfire")
+	require.True(t, found)
+	converted := chunk.GetRawObjectByID(300)
+	require.Equal(t, campfire.DefID, converted.TypeID)
+	require.Equal(t, raw.ID, converted.ID)
+	require.Equal(t, raw.X, converted.X)
+	require.Equal(t, raw.Y, converted.Y)
+	stats, _ := ecs.GetComponent[components.EntityStats](f.world, player)
+	require.Equal(t, f.initialStamina-float64(branches)*f.build.StaminaCost, stats.Stamina)
+	require.Equal(t, uint64(f.build.TicksRequired*branches), ecs.GetResource[ecs.TimeState](f.world).Tick)
+}
+
+func TestHearthConstructionUnknownHomeCompletesInRequiredCycles(t *testing.T) {
+	f := newHearthBuildRecipeFixture(t)
+	branches := f.build.Inputs[0].Count
+	player := f.startBuilder(t, 1)
+	lookup := &hearthBuildLookup{}
+	// Exercise the real first lookup instead of the fixture's known NoHome.
+	runtime := ecs.GetResource[hearth.Runtime](f.world)
+	*runtime = hearth.NewRuntime(f.world, nil, lookup, behaviors.MustDefaultRegistry(), nil, nil)
+	sender := &lockedBuildSender{}
+	f.service.alerts = sender
+
+	f.advanceTicks(int(f.build.TicksRequired*branches) - 1)
+	f.assertProgress(t, branches-1)
+	require.Equal(t, hearth.Unknown, runtime.Index.Snapshot(1).State)
+	require.Zero(t, lookup.reads)
+	stats, _ := ecs.GetComponent[components.EntityStats](f.world, player)
+	require.Equal(t, f.initialStamina-float64(branches-1)*f.build.StaminaCost, stats.Stamina)
+
+	f.advanceTicks(1)
+	f.assertCompleted(t)
+	require.Equal(t, 1, lookup.reads)
+	require.Empty(t, sender.alerts)
+	require.False(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
+	require.Equal(t, f.site, f.world.GetHandleByEntityID(200))
+	require.Equal(t, types.EntityID(200), runtime.Index.Snapshot(1).Home.Object.ID)
+	stats, _ = ecs.GetComponent[components.EntityStats](f.world, player)
+	require.Equal(t, f.initialStamina-float64(branches)*f.build.StaminaCost, stats.Stamina)
+	require.Equal(t, uint64(f.build.TicksRequired*branches), ecs.GetResource[ecs.TimeState](f.world).Tick)
 }
 
 func TestHearthBuildRecipeHelpersShareProgressAndOwnCosts(t *testing.T) {
 	f := newHearthBuildRecipeFixture(t)
-	first, helper := f.startBuilder(t, 1), f.startBuilder(t, 2)
-	f.advanceTicks(int(f.build.TicksRequired) * 2)
-	f.assertProgress(t, 4)
-	for _, handle := range []types.Handle{first, helper} {
-		stats, found := ecs.GetComponent[components.EntityStats](f.world, handle)
-		require.True(t, found)
-		require.Equal(t, f.initialStamina-16, stats.Stamina)
+	branches := f.build.Inputs[0].Count
+	firstShare, helperShare := branches/2, branches-branches/2
+	first := f.startBuilder(t, 1)
+	// Stagger by one tick so the helper's final cycle follows the first worker's.
+	f.advanceTicks(1)
+	helper := f.startBuilder(t, 2)
+	helperProcessed := uint32(0)
+	if firstShare > 0 {
+		f.advanceTicks(int(firstShare*f.build.TicksRequired) - 1)
+		helperProcessed = firstShare - 1
 	}
-	f.contextActions.cancelActiveCyclicAction(1, first, "")
-	f.advanceTicks(int(f.build.TicksRequired))
-	f.assertCompleted(t)
+	f.assertProgress(t, firstShare+helperProcessed)
 	firstStats, _ := ecs.GetComponent[components.EntityStats](f.world, first)
 	helperStats, _ := ecs.GetComponent[components.EntityStats](f.world, helper)
-	require.Equal(t, f.initialStamina-16, firstStats.Stamina)
-	require.Equal(t, f.initialStamina-24, helperStats.Stamina)
-	require.Equal(t, 6*time.Second, time.Duration(ecs.GetResource[ecs.TimeState](f.world).Tick)*f.tickPeriod)
+	require.Equal(t, f.initialStamina-float64(firstShare)*f.build.StaminaCost, firstStats.Stamina)
+	require.Equal(t, f.initialStamina-float64(helperProcessed)*f.build.StaminaCost, helperStats.Stamina)
+
+	f.contextActions.cancelActiveCyclicAction(1, first, "")
+	finishTick := uint64(helperShare*f.build.TicksRequired) + 1
+	f.advanceTicks(int(finishTick - ecs.GetResource[ecs.TimeState](f.world).Tick))
+	f.assertCompleted(t)
+	firstStats, _ = ecs.GetComponent[components.EntityStats](f.world, first)
+	helperStats, _ = ecs.GetComponent[components.EntityStats](f.world, helper)
+	require.Equal(t, f.initialStamina-float64(firstShare)*f.build.StaminaCost, firstStats.Stamina)
+	require.Equal(t, f.initialStamina-float64(helperShare)*f.build.StaminaCost, helperStats.Stamina)
+	require.Equal(t, finishTick, ecs.GetResource[ecs.TimeState](f.world).Tick)
+	if branches > 1 {
+		require.Less(t, finishTick, uint64(branches*f.build.TicksRequired), "cooperative work must finish faster than solo work")
+	}
 	require.False(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, helper))
 	_, firstLinked := ecs.GetResource[ecs.LinkState](f.world).GetLink(1)
 	_, helperLinked := ecs.GetResource[ecs.LinkState](f.world).GetLink(2)
@@ -288,7 +367,9 @@ func TestHearthBuildRecipeHelpersShareProgressAndOwnCosts(t *testing.T) {
 
 func TestHearthConstructionReplacesOnlyFinishersLiveHome(t *testing.T) {
 	f := newHearthBuildRecipeFixture(t)
-	first, helper := f.startBuilder(t, 1), f.startBuilder(t, 2)
+	branches := f.build.Inputs[0].Count
+	firstShare, helperShare := branches/2, branches-branches/2
+	first := f.startBuilder(t, 1)
 	index := ecs.GetResource[hearth.Runtime](f.world).Index
 	spawnHome := func(character, id types.EntityID, x int) types.Handle {
 		handle := gameworld.SpawnEntityFromDef(f.world, f.result, gameworld.DefSpawnParams{EntityID: id, X: float64(x), Y: 24, Quality: 17})
@@ -297,13 +378,15 @@ func TestHearthConstructionReplacesOnlyFinishersLiveHome(t *testing.T) {
 		return handle
 	}
 	initiatorHome := spawnHome(1, 300, 60)
+	f.advanceTicks(int(firstShare * f.build.TicksRequired))
+	f.assertProgress(t, firstShare)
+	helper := f.startBuilder(t, 2)
 	oldHome := spawnHome(2, 301, 84)
 	before, _ := ecs.GetComponent[components.Transform](f.world, oldHome)
-	f.advanceTicks(int(f.build.TicksRequired) * 2)
 	f.contextActions.cancelActiveCyclicAction(1, first, "")
 	// The initiator may go offline or die; ownership follows the surviving helper.
 	f.world.Despawn(first)
-	f.advanceTicks(int(f.build.TicksRequired))
+	f.advanceTicks(int(helperShare * f.build.TicksRequired))
 	f.assertCompleted(t)
 	require.Equal(t, types.EntityID(200), index.Snapshot(2).Home.Object.ID)
 	require.Equal(t, types.EntityID(300), index.Snapshot(1).Home.Object.ID)
@@ -322,13 +405,14 @@ func TestHearthConstructionReplacesOnlyFinishersLiveHome(t *testing.T) {
 	initialInfo, _ := ecs.GetComponent[components.EntityInfo](f.world, initiatorHome)
 	require.Equal(t, uint32(f.result.DefID), initialInfo.TypeID)
 	stats, _ := ecs.GetComponent[components.EntityStats](f.world, helper)
-	require.Equal(t, f.initialStamina-24, stats.Stamina)
+	require.Equal(t, f.initialStamina-float64(helperShare)*f.build.StaminaCost, stats.Stamina)
 }
 
 func TestHearthConstructionCompetingFinalCyclesAssignOnce(t *testing.T) {
 	f := newHearthBuildRecipeFixture(t)
+	branches := f.build.Inputs[0].Count
 	first, second := f.startBuilder(t, 1), f.startBuilder(t, 2)
-	f.advanceTicks(int(f.build.TicksRequired) * 3)
+	f.advanceTicks(int(f.build.TicksRequired * ((branches + 1) / 2)))
 	f.assertCompleted(t)
 	index := ecs.GetResource[hearth.Runtime](f.world).Index
 	owner, owned := index.Owner(hearth.ObjectKey{ID: 200})
@@ -336,7 +420,7 @@ func TestHearthConstructionCompetingFinalCyclesAssignOnce(t *testing.T) {
 	require.Contains(t, []types.EntityID{1, 2}, owner)
 	firstStats, _ := ecs.GetComponent[components.EntityStats](f.world, first)
 	secondStats, _ := ecs.GetComponent[components.EntityStats](f.world, second)
-	require.Equal(t, 2*f.initialStamina-40, firstStats.Stamina+secondStats.Stamina)
+	require.Equal(t, 2*f.initialStamina-float64(branches)*f.build.StaminaCost, firstStats.Stamina+secondStats.Stamina)
 	version := index.Snapshot(owner).Version
 	f.service.HandleBuildCycleComplete(f.world, 2, second, components.ActiveCyclicAction{TargetID: 200, TargetHandle: f.site})
 	require.Equal(t, version, index.Snapshot(owner).Version)

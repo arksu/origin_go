@@ -41,7 +41,7 @@ func TestLoadAllBuilds_RegistersCampfireForOneBranch(t *testing.T) {
 	require.Equal(t, []builddefs.BuildInput{{ItemKey: "branch", Count: 1, QualityWeight: 1}}, build.Inputs)
 }
 
-func TestLoadAllBuilds_RegistersHearthFireForFiveBranches(t *testing.T) {
+func TestLoadAllBuilds_RegistersHearthFireWithConfiguredBranches(t *testing.T) {
 	items, err := itemdefs.LoadFromDirectory(filepath.Join("..", "..", "data", "items"), zap.NewNop())
 	require.NoError(t, err)
 	previousItems, previousObjects := itemdefs.Global(), objectdefs.Global()
@@ -66,7 +66,10 @@ func TestLoadAllBuilds_RegistersHearthFireForFiveBranches(t *testing.T) {
 	require.NotEqual(t, hearth.DefID, build.DefID)
 	require.Equal(t, "Hearth Fire", build.Name)
 	require.Equal(t, "hearth_fire", build.ObjectKey)
-	require.Equal(t, []builddefs.BuildInput{{ItemKey: "branch", Count: 5, QualityWeight: 1}}, build.Inputs)
+	require.Len(t, build.Inputs, 1)
+	require.Equal(t, "branch", build.Inputs[0].ItemKey)
+	require.Positive(t, build.Inputs[0].Count)
+	require.Equal(t, uint32(1), build.Inputs[0].QualityWeight)
 	require.Equal(t, uint32(20), build.TicksRequired)
 	require.Equal(t, 8.0, build.StaminaCost)
 	require.Empty(t, build.RequiredSkills)

@@ -68,7 +68,6 @@ type Shard struct {
 	adminHandler      *ChatAdminCommandHandler
 	craftingService   *CraftingService
 	buildService      *BuildService
-	hearthRuntime     *hearth.Runtime
 	liftService       *LiftService
 	actionService     *ActionService
 	contextActions    *ContextActionService
@@ -143,7 +142,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		if db != nil {
 			reader = db.Queries()
 		}
-		s.hearthRuntime = ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, behaviorRegistry, eb, logger))
+		ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, behaviorRegistry, eb, logger))
 	}
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
@@ -424,10 +423,6 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	// Add lock wait timing
 	s.world.AddExternalTiming("ShardLockWait", lockWait)
 
-	// Complete asynchronous loads on the shard thread before gameplay uses them.
-	if s.hearthRuntime != nil {
-		s.hearthRuntime.ApplyReadResults()
-	}
 	if s.objectDestruction != nil {
 		s.objectDestruction.Update()
 	}

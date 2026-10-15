@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	constt "origin/internal/const"
 	"origin/internal/core"
@@ -26,21 +27,20 @@ import (
 )
 
 type constructionChunks struct {
-	chunks  map[types.ChunkCoord]*core.Chunk
-	pins    map[types.ChunkCoord]int
-	jobs    []world.PersistenceJob
-	reject  bool
-	pinErr  error
-	wait    func(types.ChunkCoord) error
-	waited  []types.ChunkCoord
-	submits int
+	chunks        map[types.ChunkCoord]*core.Chunk
+	pins          map[types.ChunkCoord]int
+	pinErr        error
+	wait          func(types.ChunkCoord) error
+	waited        []types.ChunkCoord
+	waitPins      []int
+	waitDeadlines []time.Time
 }
 
 func (c *constructionChunks) GetChunkFast(coord types.ChunkCoord) *core.Chunk {
 	return c.chunks[coord]
 }
 
-func (c *constructionChunks) PinPersistence(coord types.ChunkCoord) error {
+func (c *constructionChunks) PinPersistenceBlocking(coord types.ChunkCoord) error {
 	if c.pinErr != nil {
 		return c.pinErr
 	}
@@ -50,31 +50,15 @@ func (c *constructionChunks) PinPersistence(coord types.ChunkCoord) error {
 
 func (c *constructionChunks) UnpinPersistence(coord types.ChunkCoord) { c.pins[coord]-- }
 
-func (c *constructionChunks) SubmitPersistenceJob(job world.PersistenceJob) bool {
-	c.submits++
-	if c.reject {
-		return false
-	}
-	c.jobs = append(c.jobs, job)
-	return true
-}
-
-func (c *constructionChunks) WaitPreloaded(_ context.Context, coord types.ChunkCoord) error {
+func (c *constructionChunks) WaitPreloaded(ctx context.Context, coord types.ChunkCoord) error {
 	c.waited = append(c.waited, coord)
+	c.waitPins = append(c.waitPins, c.pins[coord])
+	deadline, _ := ctx.Deadline()
+	c.waitDeadlines = append(c.waitDeadlines, deadline)
 	if c.wait != nil {
 		return c.wait(coord)
 	}
 	return nil
-}
-
-func (c *constructionChunks) runNext(t *testing.T) {
-	t.Helper()
-	require.NotEmpty(t, c.jobs)
-	job := c.jobs[0]
-	c.jobs = c.jobs[1:]
-	err := job.Run()
-	require.NoError(t, err)
-	job.Complete(err)
 }
 
 type constructionReader struct {
@@ -155,13 +139,6 @@ func (f *constructionFixture) finishSite() bool {
 	return world.TransformObjectToDefInPlace(f.w, f.ctx.TargetID, f.ctx.TargetHandle, f.result, world.TransformObjectInPlaceOptions{BehaviorRegistry: f.registry})
 }
 
-func requireConstructionRetry(t *testing.T, result contracts.ConstructionResult) {
-	t.Helper()
-	require.False(t, result.OK)
-	require.True(t, result.Retry)
-	require.False(t, result.UserVisible, "transient preparation must continue without a warning")
-}
-
 func (f *constructionFixture) oldRaw(t *testing.T, state types.ChunkState) (*core.Chunk, *repository.Object) {
 	t.Helper()
 	raw := &repository.Object{ID: 2000, TypeID: f.result.DefID, Region: 1, X: 5000, Y: 200, Heading: sql.NullInt16{Int16: 90, Valid: true}, Quality: 17, CreateTick: 12}
@@ -189,10 +166,8 @@ func TestConstructionFirstHomeCompletesInSameCall(t *testing.T) {
 				return f.finishSite()
 			})
 			require.True(t, result.OK)
-			require.False(t, result.Retry)
 			require.Equal(t, 1, calls)
 			require.Equal(t, 1, f.reader.reads)
-			require.Empty(t, f.chunks.jobs)
 			home := f.runtime.Index.Snapshot(1)
 			require.Equal(t, hearth.CurrentHome, home.State)
 			require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
@@ -209,7 +184,6 @@ func TestConstructionCachedOwnershipDoesNotRead(t *testing.T) {
 	f.seedHome(t, nil)
 	require.True(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite).OK)
 	require.Zero(t, f.reader.reads)
-	require.Empty(t, f.chunks.jobs)
 }
 
 func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {
@@ -229,9 +203,7 @@ func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {
 			}
 			result := f.runtime.CompleteConstruction(&f.ctx, f.finishSite)
 			require.True(t, result.OK)
-			require.False(t, result.Retry)
 			require.Equal(t, 1, f.reader.reads)
-			require.Empty(t, f.chunks.jobs)
 			require.Equal(t, types.EntityID(1000), f.runtime.Index.Snapshot(1).Home.Object.ID)
 			if source == "live" {
 				info, _ := ecs.GetComponent[components.EntityInfo](f.w, handle)
@@ -268,7 +240,6 @@ func TestConstructionStaleLookupCannotRestoreOwnership(t *testing.T) {
 			if scenario == "terminal" {
 				require.Zero(t, calls)
 			}
-			require.Empty(t, f.chunks.jobs)
 			info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.ctx.TargetHandle)
 			require.Equal(t, uint32(constt.BuildObjectTypeID), info.TypeID)
 		})
@@ -286,58 +257,10 @@ func TestConstructionReadFailureIsFatal(t *testing.T) {
 	}, "database errors must synchronously reach the fatal logger hook")
 	require.Equal(t, hearth.Unknown, f.runtime.Index.Snapshot(1).State)
 	require.Equal(t, 1, f.reader.reads)
-	require.Empty(t, f.chunks.jobs)
 	require.Zero(t, calls)
 }
 
-func TestConstructionChunkPreloadRetriesAfterQueuePressure(t *testing.T) {
-	f := newConstructionFixture(t)
-	chunk, _ := f.oldRaw(t, types.ChunkStateInactive)
-	f.chunks.wait = func(coord types.ChunkCoord) error {
-		f.chunks.chunks[coord] = chunk
-		return nil
-	}
-	f.chunks.reject = true
-	for range 2 {
-		requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite))
-	}
-	require.Equal(t, 2, f.chunks.submits)
-	require.Empty(t, f.chunks.jobs)
-	f.chunks.reject = false
-	requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite))
-	require.Len(t, f.chunks.jobs, 1, "a rejected enqueue must permit another preload attempt")
-	f.chunks.runNext(t)
-	f.runtime.ApplyReadResults()
-	require.True(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite).OK)
-}
-
-func TestConstructionChunkPreloadCapacityReturnsAfterApplication(t *testing.T) {
-	f := newConstructionFixture(t)
-	for id := types.EntityID(1); id <= 65; id++ {
-		ctx := f.ctx
-		ctx.PlayerID = id
-		if id != 1 {
-			ctx.PlayerHandle = f.w.Spawn(id, nil)
-		}
-		version, started := f.runtime.Index.BeginLookup(id)
-		require.True(t, started)
-		require.NoError(t, f.runtime.Index.CompleteLookup(id, version, &hearth.Home{
-			Object: hearth.ObjectKey{Region: 1, ID: 2000 + id}, X: int(id) * constt.ChunkSize * constt.CoordPerTile,
-		}))
-		requireConstructionRetry(t, f.runtime.CompleteConstruction(&ctx, f.finishSite))
-	}
-	require.Len(t, f.chunks.jobs, 64, "feature chunk preload work must remain bounded")
-	f.chunks.runNext(t)
-	last := f.ctx
-	last.PlayerID, last.PlayerHandle = 65, f.w.GetHandleByEntityID(65)
-	requireConstructionRetry(t, f.runtime.CompleteConstruction(&last, f.finishSite))
-	require.Len(t, f.chunks.jobs, 63, "unapplied results still consume admission capacity")
-	f.runtime.ApplyReadResults()
-	requireConstructionRetry(t, f.runtime.CompleteConstruction(&last, f.finishSite))
-	require.Len(t, f.chunks.jobs, 64)
-}
-
-func TestConstructionPreloadsOldChunkWithoutCompletingSite(t *testing.T) {
+func TestConstructionLoadsOldChunkAndCompletesInSameCall(t *testing.T) {
 	f := newConstructionFixture(t)
 	chunk, raw := f.oldRaw(t, types.ChunkStateInactive)
 	f.chunks.wait = func(coord types.ChunkCoord) error {
@@ -346,22 +269,77 @@ func TestConstructionPreloadsOldChunkWithoutCompletingSite(t *testing.T) {
 		return nil
 	}
 	calls := 0
-	complete := func() bool { calls++; require.Equal(t, 1, f.chunks.pins[chunk.Coord]); return f.finishSite() }
-	for range 2 {
-		requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, complete))
-	}
-	require.Len(t, f.chunks.jobs, 1, "a missing chunk shares its pending preload")
-	require.Zero(t, f.chunks.pins[chunk.Coord], "preloading does not retain a persistence pin")
-	f.chunks.runNext(t)
-	f.runtime.ApplyReadResults()
-	require.Equal(t, []types.ChunkCoord{chunk.Coord}, f.chunks.waited)
-	require.Zero(t, calls)
-	require.Empty(t, chunk.GetHandles(), "preparation must not activate the distant chunk")
-	require.Equal(t, types.InvalidHandle, f.w.GetHandleByEntityID(types.EntityID(raw.ID)))
-	require.True(t, f.runtime.CompleteConstruction(&f.ctx, complete).OK)
+	result := f.runtime.CompleteConstruction(&f.ctx, func() bool {
+		calls++
+		require.Equal(t, 1, f.chunks.pins[chunk.Coord])
+		return f.finishSite()
+	})
+	require.True(t, result.OK)
 	require.Equal(t, 1, calls)
+	require.Equal(t, []types.ChunkCoord{chunk.Coord}, f.chunks.waited)
+	require.Equal(t, []int{1}, f.chunks.waitPins, "loading must retain the chunk before the database read")
+	require.Len(t, f.chunks.waitDeadlines, 1)
+	require.Positive(t, time.Until(f.chunks.waitDeadlines[0]))
+	require.LessOrEqual(t, time.Until(f.chunks.waitDeadlines[0]), 5*time.Second)
+	require.Empty(t, chunk.GetHandles(), "loading must not activate the distant chunk")
+	require.Equal(t, types.InvalidHandle, f.w.GetHandleByEntityID(types.EntityID(raw.ID)))
 	require.Zero(t, f.chunks.pins[chunk.Coord])
 	require.Equal(t, 16, chunk.GetRawObjectByID(2000).TypeID)
+}
+
+func TestConstructionOldChunkLoadRefusalPreservesState(t *testing.T) {
+	for _, scenario := range []struct {
+		name  string
+		err   error
+		fatal bool
+	}{
+		{name: "shutdown", err: world.ErrChunkNotLoaded},
+		{name: "timeout", err: context.DeadlineExceeded, fatal: true},
+		{name: "database_error", err: errors.New("chunk query failed"), fatal: true},
+		{name: "not_ready_after_wait"},
+		{name: "revoked_during_wait"},
+		{name: "terminal_pending_during_wait"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			f := newConstructionFixture(t)
+			logger := zap.NewNop().WithOptions(zap.WithFatalHook(zapcore.WriteThenPanic))
+			f.runtime = hearth.NewRuntime(f.w, f.chunks, f.reader, f.registry, nil, logger)
+			chunk, raw := f.oldRaw(t, types.ChunkStateInactive)
+			expected := f.runtime.Index.Snapshot(1)
+			f.chunks.wait = func(coord types.ChunkCoord) error {
+				f.chunks.chunks[coord] = chunk
+				switch scenario.name {
+				case "not_ready_after_wait":
+					chunk.SetState(types.ChunkStateLoading)
+				case "revoked_during_wait":
+					_, err := f.runtime.Index.RevokeHome(1)
+					require.NoError(t, err)
+				case "terminal_pending_during_wait":
+					require.NoError(t, f.runtime.Index.MarkTerminalPending(1))
+				}
+				expected = f.runtime.Index.Snapshot(1)
+				return scenario.err
+			}
+			calls := 0
+			attempt := func() {
+				result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return f.finishSite() })
+				require.False(t, result.OK)
+			}
+			if scenario.fatal {
+				require.Panics(t, attempt)
+			} else {
+				attempt()
+			}
+			require.Zero(t, calls)
+			require.Zero(t, f.chunks.pins[chunk.Coord])
+			require.Equal(t, []int{1}, f.chunks.waitPins)
+			require.Equal(t, expected, f.runtime.Index.Snapshot(1))
+			require.Same(t, raw, chunk.GetRawObjectByID(2000))
+			require.Empty(t, chunk.GetRawDirtyObjectIDs())
+			info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.ctx.TargetHandle)
+			require.Equal(t, uint32(constt.BuildObjectTypeID), info.TypeID)
+		})
+	}
 }
 
 func TestConstructionRawReplacementRestoresOrdinaryUnlitCampfire(t *testing.T) {
@@ -409,32 +387,19 @@ func TestConstructionRawReplacementRestoresOrdinaryUnlitCampfire(t *testing.T) {
 	}
 }
 
-func TestConstructionRawPreflightAndFailedCompletionPreserveOldHome(t *testing.T) {
-	for _, busy := range []bool{true, false} {
-		t.Run(map[bool]string{true: "busy_pin", false: "failed_final_costs"}[busy], func(t *testing.T) {
-			f := newConstructionFixture(t)
-			chunk, raw := f.oldRaw(t, types.ChunkStateInactive)
-			f.chunks.chunks[chunk.Coord] = chunk
-			before := f.runtime.Index.Snapshot(1)
-			if busy {
-				f.chunks.pinErr = world.ErrChunkPersistenceBusy
-			}
-			calls := 0
-			result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return false })
-			if busy {
-				requireConstructionRetry(t, result)
-				require.Zero(t, calls)
-			} else {
-				require.False(t, result.OK)
-				require.False(t, result.Retry)
-				require.Equal(t, 1, calls)
-			}
-			require.Equal(t, before, f.runtime.Index.Snapshot(1))
-			require.Same(t, raw, chunk.GetRawObjectByID(2000))
-			require.Empty(t, chunk.GetRawDirtyObjectIDs())
-			require.Zero(t, f.chunks.pins[chunk.Coord])
-		})
-	}
+func TestConstructionFailedCompletionPreservesOldHome(t *testing.T) {
+	f := newConstructionFixture(t)
+	chunk, raw := f.oldRaw(t, types.ChunkStateInactive)
+	f.chunks.chunks[chunk.Coord] = chunk
+	before := f.runtime.Index.Snapshot(1)
+	calls := 0
+	result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return false })
+	require.False(t, result.OK)
+	require.Equal(t, 1, calls)
+	require.Equal(t, before, f.runtime.Index.Snapshot(1))
+	require.Same(t, raw, chunk.GetRawObjectByID(2000))
+	require.Empty(t, chunk.GetRawDirtyObjectIDs())
+	require.Zero(t, f.chunks.pins[chunk.Coord])
 }
 
 func TestConstructionRejectsInvalidActorAndUnderground(t *testing.T) {
@@ -456,15 +421,13 @@ func TestConstructionRejectsInvalidActorAndUnderground(t *testing.T) {
 			calls := 0
 			result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return true })
 			require.False(t, result.OK)
-			require.False(t, result.Retry)
 			require.Zero(t, calls)
 			require.Equal(t, hearth.NoHome, f.runtime.Index.Snapshot(1).State)
-			require.Empty(t, f.chunks.jobs)
 		})
 	}
 }
 
-func TestConstructionUnavailablePreparationDoesNotRetry(t *testing.T) {
+func TestConstructionUnavailablePreparationRefusesCompletion(t *testing.T) {
 	for _, scenario := range []string{"nil_reader", "nil_chunks_home", "outside_world"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newConstructionFixture(t)
@@ -486,9 +449,7 @@ func TestConstructionUnavailablePreparationDoesNotRetry(t *testing.T) {
 			calls := 0
 			result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return true })
 			require.False(t, result.OK)
-			require.False(t, result.Retry, "permanent preparation failures must stop the action")
 			require.Zero(t, calls)
-			require.Empty(t, f.chunks.jobs)
 			require.Empty(t, f.chunks.pins)
 		})
 	}
