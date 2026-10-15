@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
-import type { proto } from '@/network/proto/packets.js'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { proto } from '@/network/proto/packets.js'
 import { toNonNegativeProtoInt } from '@/utils/protoNumbers'
+import { useInventoryDrag } from '@/composables/useInventoryDrag'
 import GameWindow from './GameWindow.vue'
 import AppButton from './AppButton.vue'
 
@@ -13,6 +14,11 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { activeDrag, beginBuildDrag, cancelSourceDrag, consumeClick } = useInventoryDrag()
+const buildRef = computed<proto.IInventoryRef>(() => ({
+  kind: proto.InventoryKind.INVENTORY_KIND_BUILD, ownerId: props.entityId ?? 0, inventoryKey: 0,
+}))
+const dropKey = computed(() => props.entityId ? `${buildRef.value.kind}_${props.entityId}_0` : undefined)
 
 const emit = defineEmits<{
   close: []
@@ -52,6 +58,7 @@ const tooltipY = ref(0)
 let tooltipElement: HTMLDivElement | null = null
 
 function onClose() {
+  cancelSourceDrag(buildRef.value)
   emit('close')
 }
 
@@ -67,12 +74,14 @@ function emitPutFromHand() {
   emit('putFromHand', entityId)
 }
 
-function onListClick() {
+function onListClick(event: MouseEvent) {
+  if (consumeClick(event)) return
   if (!props.handHasItem) return
   emitPutFromHand()
 }
 
 function onRowClick(slot: number, event: MouseEvent) {
+  if (consumeClick(event)) return
   const entityId = Math.trunc(Number(props.entityId ?? 0))
   if (!Number.isFinite(entityId) || entityId <= 0) return
 
@@ -165,6 +174,7 @@ function updateTooltipPosition() {
 }
 
 function onRowMouseEnter(row: proto.IBuildStateItem, event: MouseEvent) {
+  if (activeDrag.value) return
   tooltipVisible.value = true
   tooltipX.value = event.clientX + 10
   tooltipY.value = event.clientY + 10
@@ -185,8 +195,13 @@ function onRowMouseLeave() {
 }
 
 onUnmounted(() => {
+  cancelSourceDrag(buildRef.value)
   removeTooltip()
 })
+
+watch(() => activeDrag.value !== null, drag => {
+  if (drag) onRowMouseLeave()
+}, { flush: 'sync' })
 </script>
 
 <template>
@@ -198,7 +213,7 @@ onUnmounted(() => {
     @close="onClose"
   >
     <div class="build-state-window">
-      <div class="build-state-window__list" @click="onListClick">
+      <div class="build-state-window__list" :data-inventory-drop-key="dropKey" @click="onListClick">
         <div
           v-for="entry in displayRows"
           :key="`${entityId || 0}-row-${entry.idx}`"
@@ -215,6 +230,8 @@ onUnmounted(() => {
               :src="entry.iconUrl"
               alt=""
               draggable="false"
+              @pointerdown="beginBuildDrag($event, entityId ?? 0, entry.idx, entry.iconUrl)"
+              @dragstart.prevent
             />
           </span>
           <span class="build-state-window__counts">
@@ -280,6 +297,7 @@ onUnmounted(() => {
 }
 
 .build-state-window__icon {
+  touch-action: none;
   display: block;
   width: auto;
   height: auto;

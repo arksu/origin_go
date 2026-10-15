@@ -46,7 +46,7 @@ legacy `C2S_BuildTakeBack` hand flow retain their existing behavior. The new cli
 requires a server supporting the new Shift fields; existing clients continue to
 use their normal commands.
 
-Only one quick transfer is active at a time; additional Shift-clicks are ignored
+Only one quick transfer or drag transfer is active at a time; additional transfers are ignored
 until its correlated `InventoryOpResult` arrives. The client applies authoritative
 snapshots before completing the operation and never retries against another
 destination. The server returns one result, so failed candidate admissions cannot
@@ -65,9 +65,46 @@ execution path, retaining the existing BuildState, inventory, nested-parent and
 observer update flows. Selected build IDs travel through internal result metadata
 so BuildState refresh works even though the quick request has no explicit `dst`.
 
+## Drag and drop
+
+Dragging a grid item's icon with a mouse or touch pointer moves it directly,
+without putting it in the hand. Movement must exceed the existing 8 px drag
+threshold; below that threshold, ordinary and Shift clicks keep their behavior.
+Construction material icons can also be dragged to return one deposited unit.
+Equipment keeps its existing behavior.
+
+A drop on an open grid targets the exact cell under the pointer, adjusted for
+the grabbed cell of a multi-cell item. This also supports moving within the same
+grid. Occupied cells reject the move without swapping, merging or trying another
+cell. A drop on the construction requirements list uses the existing deposit
+rules, including partial acceptance. Build-to-build drops are ignored.
+
+The client sends one existing `InventoryOp.move` with explicit `dst`, grid
+`dstPos` when applicable, and `allowSwapOrMerge: false`. Grid sources send their
+item ID and captured source revision; build sources send `buildSlot`. Grid
+destinations include their current revision, deduplicated for a same-grid move.
+Drag commands omit Shift modifiers and the open-window list. The server checks
+access, links, revisions, item rules and exact placement before committing. Build
+returns without an explicit position retain their first-fit behavior. This adds
+no protocol fields.
+
+During dragging, a local icon follows the pointer. The original item remains
+until the server snapshot arrives; the held-item overlay is hidden only while
+the drag is active. Existing hand contents are unaffected. Shift and drag share
+the same pending-operation guard and result handling.
+
+Escape, pointer cancellation, lost capture, blur, hiding the page, closing the
+source, changing its revision or build row, leaving the world, and unmounting
+the source cancel the gesture. Dropping outside a valid target also cancels it.
+Once a drag starts, its finishing click is consumed, including after cancellation,
+so it cannot trigger pickup, build hand actions or a map click. Escape is consumed
+before the normal window-closing shortcut. A sent operation can still finish;
+authoritative late snapshots are applied without retrying the transfer.
+
 ## Verification
 
 - At the repository root: `make test`.
 - In `web_new`: `npm run type-check`, `npm run lint`,
-  `npm run test:inventory-item`, and `npm run test:inventory-transfer`.
+  `npm run test:inventory-item`, `npm run test:inventory-transfer`,
+  `npm run test:inventory-drag`, and `npm run test:map-click`.
 - Review the lint diff and run `git diff --check`.

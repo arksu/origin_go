@@ -66,7 +66,7 @@ result := service.ExecuteMove(world, playerID, playerHandle, opID, moveSpec, exp
 
 - `C2S_InventoryOp.move` may target `dst.kind = InventoryBuild` for hand or authorized grid -> build-site deposits. A grid source includes accessible nested containers; the source revision is checked and any excess quantity remains in its original position.
 - Build-site deposits are aggregated into `BuildBehaviorState.Items[].PutItems`, not a generic `InventoryState` container.
-- `InventoryMoveSpec` with a build source and explicit `build_slot` takes one deposited unit directly into an authorized grid, retaining its item type and quality. The aggregate has no source revision or item ID; the server creates a new item instance. Ordinary build -> hand take-back keeps its dedicated build packet flow.
+- `InventoryMoveSpec` with a build source and explicit `build_slot` takes one deposited unit directly into an authorized grid, retaining its item type and quality. An optional `dst_pos` requires that exact footprint to fit without swap, merge or placement fallback; omitting it retains first-fit placement. The aggregate has no source revision or item ID; the server creates a new item instance. Ordinary build -> hand take-back keeps its dedicated build packet flow.
 
 ### Shift Quick Transfer
 

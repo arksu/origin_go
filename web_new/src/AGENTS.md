@@ -78,9 +78,11 @@ Server → Network → gameStore → gameFacade → PIXI Render
 
 - Build recipe list window and build-site state window are separate UI states.
 - Build-state window click semantics are input-mode dependent:
+  - dragging a material icon → direct return of one unit to the selected grid cell, without using the hand
   - Shift + row click → server-selected quick take-back to an open grid, without using the hand
   - hand has item → put to build-site
   - empty hand + row click → take back one deposited item from that row
+- Grid-item and build-material dragging uses `useInventoryDrag`; direct transfers and Shift-click share the pending-operation guard in `useInventoryOps`. Dragging starts after the pointer threshold and consumes the finishing click. Exact grid drops never swap, merge, or fall back to another cell.
 - Object icon helpers must handle both visual JSON shapes used in `src/game/objects`: direct `{layers}` and nested variant maps.
 
 ## Stack

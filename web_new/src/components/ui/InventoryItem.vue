@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue'
+import { computed, ref, onUnmounted, watch } from 'vue'
 import { INVENTORY_GRID } from '@/constants/inventoryLayout'
 import { proto } from '@/network/proto/packets.js'
+import { useInventoryDrag } from '@/composables/useInventoryDrag'
 
 interface Props {
   item: {
@@ -15,6 +16,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { activeDrag, beginGridDrag, cancelSourceDrag, consumeClick } = useInventoryDrag()
 const emit = defineEmits<{
   itemClick: [item: Props['item'], ox: number, oy: number, shiftKey: boolean]
   itemRightClick: [item: Props['item']]
@@ -48,6 +50,7 @@ const onMouseMove = (e: MouseEvent) => {
 }
 
 const onMouseEnter = (e: MouseEvent) => {
+  if (activeDrag.value) return
   tooltipVisible.value = true
   tooltipX.value = e.clientX + 10
   tooltipY.value = e.clientY + 10
@@ -64,8 +67,13 @@ let tooltipElement: HTMLDivElement | null = null
 
 // Cleanup tooltip when component is unmounted (item deleted)
 onUnmounted(() => {
+  cancelSourceDrag(props.inventoryRef, props.item.instance.itemId)
   removeTooltip()
 })
+
+watch(() => activeDrag.value !== null, drag => {
+  if (drag) onMouseLeave()
+}, { flush: 'sync' })
 
 const createTooltip = () => {
   if (tooltipElement) return
@@ -93,6 +101,7 @@ const updateTooltipPosition = () => {
 }
 
 const onClick = (e: MouseEvent) => {
+  if (consumeClick(e)) return
   // Hide tooltip when picking up item
   onMouseLeave()
   const target = e.currentTarget as HTMLElement | null
@@ -111,6 +120,7 @@ const onClick = (e: MouseEvent) => {
 }
 
 const onContextmenu = () => {
+  if (activeDrag.value) return
   // Hide tooltip on right click
   onMouseLeave()
   emit('itemRightClick', props.item)
@@ -120,17 +130,21 @@ const onContextmenu = () => {
 <template>
   <div
     class="item-container"
+    :class="{ 'item-container--draggable': (inventoryRef.kind ?? 0) === proto.InventoryKind.INVENTORY_KIND_GRID }"
     :style="{ left: `${left ?? INVENTORY_GRID.itemInset + item.x * INVENTORY_GRID.cellPitch}px`, top: `${top ?? INVENTORY_GRID.itemInset + item.y * INVENTORY_GRID.cellPitch}px` }"
     @click.prevent="onClick"
     @contextmenu.prevent.stop="onContextmenu"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
     @mousemove="onMouseMove"
+    @pointerdown="beginGridDrag($event, inventoryRef, item)"
+    @dragstart.prevent
   >
     <img
       :src="`/assets/game/${item.instance.resource}`"
       alt="item"
       class="item-image"
+      draggable="false"
     >
     <span class="item-quality">{{ qualityText }}</span>
   </div>
@@ -145,6 +159,10 @@ const onContextmenu = () => {
 
 .item-image {
   display: block;
+}
+
+.item-container--draggable {
+  touch-action: none;
 }
 
 .item-quality {

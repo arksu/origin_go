@@ -2,6 +2,40 @@
   "v": 1,
   "sounds": [
     {
+      "key": "gather_snap",
+      "mode": "local",
+      "loudness": 160,
+      "files": [
+        "sound/gather/branch_snap.mp3"
+      ],
+      "volume": 0.45,
+      "priority": 5,
+      "max_voices": 12,
+      "max_voices_per_source": 2,
+      "local_attenuation": {
+        "near_gain": 0.9,
+        "far_gain": 0,
+        "shape": 4
+      }
+    },
+    {
+      "key": "gather_bark",
+      "mode": "local",
+      "loudness": 160,
+      "files": [
+        "sound/gather/bark_scrape.mp3"
+      ],
+      "volume": 0.45,
+      "priority": 5,
+      "max_voices": 12,
+      "max_voices_per_source": 2,
+      "local_attenuation": {
+        "near_gain": 0.9,
+        "far_gain": 0,
+        "shape": 4
+      }
+    },
+    {
       "key": "chop",
       "mode": "world",
       "loudness": 1000,

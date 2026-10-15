@@ -30,6 +30,8 @@ import SettingsWindow from '@/components/ui/SettingsWindow.vue'
 import KnockoutWindow from '@/components/ui/KnockoutWindow.vue'
 import { sendChatMessage, sendOpenWindow, sendCloseWindow, sendStartBuild, sendBuildProgress, sendBuildTakeBack, sendActivateAction, sendCancelAction } from '@/network'
 import { useInventoryOps } from '@/composables/useInventoryOps'
+import { useInventoryDrag } from '@/composables/useInventoryDrag'
+import InventoryDragOverlay from '@/components/ui/InventoryDragOverlay.vue'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useHotbarAssignments } from '@/composables/useHotbarAssignments'
 import { useActionsPanel } from '@/composables/useActionsPanel'
@@ -48,6 +50,7 @@ const router = useRouter()
 const gameStore = useGameStore()
 const authStore = useAuthStore()
 const { placeItemIntoBuild, quickTransferBuildItem } = useInventoryOps()
+const { activeDrag } = useInventoryDrag()
 
 const gameCanvas = ref<HTMLCanvasElement | null>(null)
 const chatContainerRef = ref<InstanceType<typeof ChatContainer>>()
@@ -1001,7 +1004,8 @@ useHotkeys(hotkeys)
       </div>
 
       <!-- Hand overlay (item following cursor) -->
-      <HandOverlay />
+      <HandOverlay v-if="!activeDrag" />
+      <InventoryDragOverlay />
     </div>
 
     <!-- Disconnected state -->

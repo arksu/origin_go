@@ -61,6 +61,8 @@ type Shard struct {
 	eventBus       *eventbus.EventBus
 	characterSaver *systems.CharacterSaver
 
+	objectCollisionFilter func(types.EntityID, types.Handle) bool
+
 	// Command queues for network/ECS separation
 	playerInbox       *network.PlayerCommandInbox
 	serverInbox       *network.ServerJobInbox
@@ -144,7 +146,8 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 			reader = db.Queries()
 			saver = hearth.NewConstructionSaverDB(db)
 		}
-		ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, objectFactory, saver, behaviorRegistry, eb, logger))
+		runtime := ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, objectFactory, saver, behaviorRegistry, eb, logger))
+		s.objectCollisionFilter = runtime.IgnoreObjectCollision
 	}
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
@@ -327,7 +330,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(networkCmdSystem)
 	s.world.AddSystem(systems.NewResetSystem(logger))
 	s.world.AddSystem(systems.NewMovementSystem(s.world, s.chunkManager, logger))
-	s.world.AddSystem(systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles))
+	collisionSystem := systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles)
+	collisionSystem.SetObjectCollisionFilter(s.objectCollisionFilter)
+	s.world.AddSystem(collisionSystem)
 	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
 	s.world.AddSystem(systems.NewLiftPlacementSystem(s.world, liftService, logger))
 	transformSystem := systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger)
@@ -731,6 +736,9 @@ func (s *Shard) trySpawnPlayerWithPolicy(
 			objMaxY := int(transform.Y + collider.HalfHeight)
 
 			if !(maxX <= objMinX || minX > objMaxX || maxY <= objMinY || minY > objMaxY) {
+				if s.objectCollisionFilter != nil && s.objectCollisionFilter(entityID, h) {
+					continue
+				}
 				return types.InvalidHandle, nil
 			}
 		}

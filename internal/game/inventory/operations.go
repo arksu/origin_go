@@ -235,10 +235,10 @@ func (s *InventoryOperationService) ExecuteMove(
 
 	switch dstInfo.Container.Kind {
 	case constt.InventoryGrid:
-		dstX, dstY := uint8(0), uint8(0)
+		dstX, dstY := uint32(0), uint32(0)
 		if moveSpec.DstPos != nil {
-			dstX = uint8(moveSpec.DstPos.X)
-			dstY = uint8(moveSpec.DstPos.Y)
+			dstX = moveSpec.DstPos.X
+			dstY = moveSpec.DstPos.Y
 		} else {
 			// Find free space
 			found, x, y := s.placementService.FindFreeSpace(dstInfo.Container, srcItem.W, srcItem.H)
@@ -249,7 +249,7 @@ func (s *InventoryOperationService) ExecuteMove(
 					Message:   "No free space in destination",
 				}
 			}
-			dstX, dstY = x, y
+			dstX, dstY = uint32(x), uint32(y)
 		}
 		placementResult = s.placementService.CheckGridPlacement(
 			dstInfo.Container, srcItem, dstX, dstY, moveSpec.AllowSwapOrMerge,
@@ -1006,7 +1006,7 @@ func (s *InventoryOperationService) ExecutePickupFromWorld(
 				Message:   "No free space in destination",
 			}
 		}
-		placementResult = s.placementService.CheckGridPlacement(dstInfo.Container, &srcItem, x, y, false)
+		placementResult = s.placementService.CheckGridPlacement(dstInfo.Container, &srcItem, uint32(x), uint32(y), false)
 	case constt.InventoryHand:
 		placementResult = s.placementService.CheckHandPlacement(dstInfo.Container, &srcItem, false)
 	default:

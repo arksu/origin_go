@@ -153,17 +153,17 @@ A hearth SHALL occupy one tile by one tile with identical construction and colli
 - **WHEN** any part of the footprint overlaps water, shallow water, swamp, bog, or an underground layer
 - **THEN** placement SHALL be rejected even if the anchor itself is valid
 
-### Requirement: Only the owner and animals pass through the hearth
+### Requirement: Only the owner passes through the hearth
 
-The owner SHALL be able to walk through their active hearth. Other players SHALL collide with it, and animals SHALL pass through it freely. Owner passage SHALL also apply to authoritative player spawn and return checks without disabling collisions with unrelated objects.
+The owner SHALL be able to walk through their active hearth. Other players and animals SHALL collide with it. Owner passage SHALL also apply to authoritative player spawn and return checks without disabling collisions with unrelated objects.
 
 #### Scenario: Owner and non-owner movement
 - **WHEN** the owner and another player attempt to cross the hearth footprint
 - **THEN** the owner SHALL pass and the other player SHALL be blocked
 
-#### Scenario: Animal crosses
-- **WHEN** an animal crosses the hearth footprint
-- **THEN** the hearth SHALL NOT obstruct that animal
+#### Scenario: Animal attempts to cross
+- **WHEN** an animal attempts to cross the hearth footprint
+- **THEN** the hearth SHALL block that animal
 
 #### Scenario: Unrelated obstacle at the home
 - **WHEN** the owner's destination also overlaps an unrelated solid obstacle

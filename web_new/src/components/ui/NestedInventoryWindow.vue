@@ -112,26 +112,36 @@ const windowTitle = computed(() => {
     :title="windowTitle"
     @close="onClose"
   >
-    <div v-for="y in gridState.height" :key="y">
-      <div v-for="x in gridState.width" :key="x">
-        <item-slot 
-          :left="(x-1) * INVENTORY_GRID.cellPitch"
-          :top="(y-1) * INVENTORY_GRID.cellPitch"
-          :x="x-1" 
-          :y="y-1"
-          @slot-click="onSlotClick"
+    <div class="inventory-grid" :data-inventory-drop-key="inventoryRef ? gameStore.refKey(inventoryRef) : undefined">
+      <div v-for="y in gridState.height" :key="y">
+        <div v-for="x in gridState.width" :key="x">
+          <item-slot
+            :left="(x-1) * INVENTORY_GRID.cellPitch"
+            :top="(y-1) * INVENTORY_GRID.cellPitch"
+            :x="x-1"
+            :y="y-1"
+            @slot-click="onSlotClick"
+          />
+        </div>
+      </div>
+
+      <div v-for="(gridItem, idx) in gridState.items" :key="idx">
+        <inventory-item
+          v-if="gridItem.item"
+          :inventory-ref="inventoryRef!"
+          :item="{ x: gridItem.x!, y: gridItem.y!, instance: gridItem.item }"
+          @item-click="onItemClick"
+          @item-right-click="onItemRightClick"
         />
       </div>
     </div>
-
-    <div v-for="(gridItem, idx) in gridState.items" :key="idx">
-      <inventory-item 
-        v-if="gridItem.item"
-        :inventory-ref="inventoryRef!"
-        :item="{ x: gridItem.x!, y: gridItem.y!, instance: gridItem.item }"
-        @item-click="onItemClick"
-        @item-right-click="onItemRightClick"
-      />
-    </div>
   </game-window>
 </template>
+
+<style scoped>
+.inventory-grid {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+</style>

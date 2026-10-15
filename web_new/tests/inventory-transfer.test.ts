@@ -289,3 +289,115 @@ test('ordinary pickup and placement keep explicit destinations/revisions without
   assert.equal(sent[1]!.expected!.length, 2)
   assert.equal(store.quickInventoryTransfer, null)
 })
+
+test('drag sends one exact grid move with two revisions and preserves the occupied hand', t => {
+  const { store, ops, sent, packets, openPlayer } = fixture(t)
+  openPlayer([{ ...material, w: 2, h: 1 }])
+  store.onContainerOpened(grid(gridRef(20), 11))
+  const hand: proto.IInventoryState = { ref: store.getPlayerHandRef(), revision: 12,
+    hand: { item: { itemId: 500 }, handPos: { mouseOffsetX: 40, mouseOffsetY: 20 } } }
+  store.updateInventory(hand)
+  assert.equal(ops.transferDraggedItem({ kind: 'grid', ref: gridRef(1), itemId: 101, revision: 7 }, gridRef(20), { x: 2, y: 1 }), true)
+  assert.equal(packets.length, 1)
+  assert.deepEqual(sent[0]!.move, { src: gridRef(1), dst: gridRef(20), itemId: 101,
+    dstPos: { x: 2, y: 1 }, allowSwapOrMerge: false })
+  assert.deepEqual(sent[0]!.expected, [{ ref: gridRef(1), expectedRevision: 7 }, { ref: gridRef(20), expectedRevision: 11 }])
+  assert.deepEqual(store.handInventoryState, hand)
+  assert.equal(store.getPlayerInventory()!.grid!.items![0]!.item!.quantity, 5)
+})
+
+test('drag within the same grid deduplicates revision and ignores unchanged position', t => {
+  const { store, ops, sent, openPlayer } = fixture(t)
+  openPlayer()
+  const source = { kind: 'grid' as const, ref: gridRef(1), itemId: 101, revision: 7 }
+  assert.equal(ops.transferDraggedItem(source, gridRef(1), { x: 0, y: 0 }), false)
+  assert.equal(ops.transferDraggedItem(source, gridRef(1), { x: 2, y: 1 }), true)
+  assert.deepEqual(sent[0]!.expected, [{ ref: gridRef(1), expectedRevision: 7 }])
+  assert.deepEqual(sent[0]!.move!.dstPos, { x: 2, y: 1 })
+  assert.equal(store.getPlayerInventory()!.grid!.items![0]!.x, 0)
+})
+
+test('drag from build row zero uses exact destination and drag into build uses normal deposit', t => {
+  const { store, ops, sent, reply, openPlayer } = fixture(t)
+  openPlayer()
+  store.setBuildStateSnapshot({ entityId: 50, list: [{ putCount: 3 }] })
+  assert.equal(ops.transferDraggedItem({ kind: 'build', ref: buildRef(50), buildSlot: 0 }, gridRef(1), { x: 2, y: 1 }), true)
+  assert.deepEqual(sent[0]!.move, { src: buildRef(50), dst: gridRef(1), buildSlot: 0,
+    dstPos: { x: 2, y: 1 }, allowSwapOrMerge: false })
+  assert.deepEqual(sent[0]!.expected, [{ ref: gridRef(1), expectedRevision: 7 }])
+  assert.equal(store.buildStateList[0]!.putCount, 3)
+  reply({ opId: sent[0]!.opId, success: true })
+  assert.equal(ops.transferDraggedItem({ kind: 'grid', ref: gridRef(1), itemId: 101, revision: 7 }, buildRef(50)), true)
+  assert.deepEqual(sent[1]!.move, { src: gridRef(1), dst: buildRef(50), itemId: 101, allowSwapOrMerge: false })
+  assert.deepEqual(sent[1]!.expected, [{ ref: gridRef(1), expectedRevision: 7 }])
+})
+
+test('invalid, stale, closed or own-nested drag targets never send a hand or transfer operation', t => {
+  const { store, ops, sent, openPlayer } = fixture(t)
+  openPlayer([{ ...material, w: 2, h: 1 }])
+  store.onContainerOpened(grid(gridRef(20)))
+  const source = { kind: 'grid' as const, ref: gridRef(1), itemId: 101, revision: 7 }
+  for (const position of [undefined, { x: -1, y: 0 }, { x: 0.5, y: 0 }, { x: NaN, y: 0 },
+    { x: 256, y: 0 }, { x: 0, y: 4 }, { x: 3, y: 0 }]) {
+    assert.equal(ops.transferDraggedItem(source, gridRef(20), position), false)
+  }
+  assert.equal(ops.transferDraggedItem({ ...source, revision: 6 }, gridRef(20), { x: 1, y: 1 }), false)
+  assert.equal(ops.transferDraggedItem({ ...source, itemId: 999 }, gridRef(20), { x: 1, y: 1 }), false)
+  store.updateInventory(grid(gridRef(1), 7, [{ ...material, nestedRef: gridRef(20) }]))
+  assert.equal(ops.transferDraggedItem(source, gridRef(20), { x: 1, y: 1 }), false)
+  store.onContainerClosed(gridRef(20))
+  assert.equal(ops.transferDraggedItem(source, gridRef(20), { x: 1, y: 1 }), false)
+  store.setPlayerInventoryVisible(false)
+  assert.equal(ops.transferDraggedItem(source, gridRef(1), { x: 1, y: 1 }), false)
+  assert.equal(sent.length, 0)
+  assert.equal(store.quickInventoryTransfer, null)
+})
+
+test('drag and Shift share one pending operation; rejected drop never picks another target', t => {
+  const { store, ops, sent, reply, openPlayer } = fixture(t)
+  openPlayer()
+  store.onContainerOpened(grid(gridRef(20)))
+  store.onContainerOpened(grid(gridRef(30)))
+  const source = { kind: 'grid' as const, ref: gridRef(1), itemId: 101, revision: 7 }
+  ops.quickTransferItem(gridRef(1), material)
+  assert.equal(ops.transferDraggedItem(source, gridRef(20), { x: 1, y: 1 }), false)
+  reply({ opId: sent[0]!.opId, success: true })
+  assert.equal(ops.transferDraggedItem(source, gridRef(20), { x: 1, y: 1 }), true)
+  ops.quickTransferItem(gridRef(1), material)
+  assert.equal(ops.transferDraggedItem(source, gridRef(30), { x: 1, y: 1 }), false)
+  assert.equal(sent.length, 2)
+  reply({ opId: sent[1]!.opId, success: false, error: proto.ErrorCode.ERROR_CODE_INVENTORY_FULL })
+  assert.equal(sent.length, 2)
+  assert.equal(store.miniAlerts.length, 1)
+  assert.equal(store.quickInventoryTransfer, null)
+})
+
+test('cancelled pending drag still applies late snapshots without a second command or alert', t => {
+  const { store, ops, sent, reply } = fixture(t)
+  store.onContainerOpened(grid(gridRef(20), 7, [material]))
+  store.onContainerOpened(grid(gridRef(30)))
+  assert.equal(ops.transferDraggedItem({ kind: 'grid', ref: gridRef(20), itemId: 101, revision: 7 }, gridRef(30), { x: 1, y: 1 }), true)
+  store.onContainerClosed(gridRef(20))
+  reply({ opId: sent[0]!.opId, success: false, error: proto.ErrorCode.ERROR_CODE_INVENTORY_FULL,
+    updated: [grid(gridRef(30), 90)] })
+  assert.equal(store.getNestedInventoryData('0_30_0')!.revision, 90)
+  assert.equal(store.miniAlerts.length, 0)
+  assert.equal(store.quickInventoryTransfer, null)
+  assert.equal(sent.length, 1)
+})
+
+test('drag packet preserves Long IDs and source/destination revisions exactly', t => {
+  const { store, ops, sent } = fixture(t)
+  const sourceRef = proto.InventoryRef.fromObject({ kind: 0, ownerId: '9007199254740992' })
+  const destinationRef = proto.InventoryRef.fromObject({ kind: 0, ownerId: '9007199254740993' })
+  const item = proto.ItemInstance.fromObject({ itemId: '9007199254740993', quantity: 1, w: 1, h: 1 })
+  const source = proto.InventoryState.fromObject({ ...grid(sourceRef, 0, [item]), revision: '9007199254740993' })
+  const destination = proto.InventoryState.fromObject({ ...grid(destinationRef), revision: '9007199254740995' })
+  store.onContainerOpened(source)
+  store.onContainerOpened(destination)
+  assert.equal(ops.transferDraggedItem({ kind: 'grid', ref: sourceRef, itemId: item.itemId, revision: source.revision }, destinationRef, { x: 1, y: 1 }), true)
+  const decoded = proto.InventoryOp.decode(proto.InventoryOp.encode(sent[0]!).finish())
+  assert.equal(String(decoded.move!.itemId), '9007199254740993')
+  assert.equal(String(decoded.move!.dst!.ownerId), '9007199254740993')
+  assert.deepEqual(decoded.expected!.map(entry => String(entry.expectedRevision)), ['9007199254740993', '9007199254740995'])
+})

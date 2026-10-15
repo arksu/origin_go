@@ -295,11 +295,15 @@ func TestBuildTakeBackPreservesDiscoveryAndNestedGrantHooks(t *testing.T) {
 	ecs.AddComponent(f.w, f.player, components.CharacterProfile{})
 	slot := uint32(0)
 	move := &netproto.InventoryMoveSpec{Src: &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_BUILD, OwnerId: uint64(f.targetID)},
-		BuildSlot: &slot, Dst: quickTestRef(f.w, f.grid)}
+		BuildSlot: &slot, Dst: quickTestRef(f.w, f.grid), DstPos: &netproto.GridPos{X: 2, Y: 3}}
 	executor := NewInventoryExecutor(zap.NewNop(), &dropTestIDAllocator{next: 9000}, nil, nil, nil)
 	result := executor.ExecuteOperation(f.w, f.playerID, f.player, &netproto.InventoryOp{OpId: 1, Kind: &netproto.InventoryOp_Move{Move: move}})
 	require.True(t, result.Success, "result: %+v", result)
 	require.Equal(t, f.targetID, result.BuildTargetID)
+	grid, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.grid)
+	require.Len(t, grid.Items, 1)
+	require.Equal(t, uint8(2), grid.Items[0].X)
+	require.Equal(t, uint8(3), grid.Items[0].Y)
 	child, found := ecs.GetResource[ecs.InventoryRefIndex](f.w).Lookup(constt.InventoryGrid, 9001, 0)
 	require.True(t, found)
 	require.True(t, f.w.Alive(child))

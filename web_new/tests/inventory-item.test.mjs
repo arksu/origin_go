@@ -16,10 +16,28 @@ const componentPath = join(clientRoot, 'src/components/ui/InventoryItem.vue')
 const { descriptor } = parse(await readFile(componentPath, 'utf8'), { filename: componentPath })
 const script = compileScript(descriptor, { id: 'inventory-item-test', inlineTemplate: true })
 const compiledPath = join(temporaryDirectory, 'InventoryItem.mjs')
+const dragFixtureSource = `
+  import { ref } from 'vue'
+  const activeDrag = ref(null)
+  export const useInventoryDrag = () => ({
+    activeDrag,
+    beginGridDrag: (...args) => globalThis.inventoryDragFixture?.calls.push(['grid', ...args]),
+    beginBuildDrag: (...args) => globalThis.inventoryDragFixture?.calls.push(['build', ...args]),
+    cancelSourceDrag: (...args) => globalThis.inventoryDragFixture?.calls.push(['cancel', ...args]),
+    consumeClick: () => !!globalThis.inventoryDragFixture?.consume,
+  })
+`
 await build({
   stdin: { contents: script.content, sourcefile: componentPath, resolveDir: dirname(componentPath), loader: 'ts' },
   outfile: compiledPath, bundle: true, platform: 'node', format: 'esm', external: ['vue'],
   alias: { '@': join(clientRoot, 'src') },
+  plugins: [{
+    name: 'inventory-drag-fixture',
+    setup(build) {
+      build.onResolve({ filter: /^@\/composables\/useInventoryDrag$/ }, () => ({ path: 'drag', namespace: 'inventory-drag-fixture' }))
+      build.onLoad({ filter: /.*/, namespace: 'inventory-drag-fixture' }, () => ({ contents: dragFixtureSource }))
+    },
+  }],
 })
 const { default: InventoryItem } = await import(pathToFileURL(compiledPath).href)
 
@@ -144,6 +162,32 @@ test('item click without a current target preserves shift and event offsets', ()
   }
 })
 
+test('grid item arms pointer drag and suppresses the finishing click', () => {
+  const originalFixture = globalThis.inventoryDragFixture
+  const fixture = { calls: [], consume: true }
+  globalThis.inventoryDragFixture = fixture
+  const host = createNode('root')
+  const item = { x: 0, y: 0, instance: { itemId: 19 } }
+  const inventoryRef = { kind: 0, ownerId: 7, inventoryKey: 0 }
+  const clicks = []
+  const app = renderer.createApp(InventoryItem, { item, inventoryRef, onItemClick: (...args) => clicks.push(args) })
+  try {
+    app.mount(host)
+    const container = host.children[0]
+    const event = { pointerId: 1, stopPropagation() { assert.fail('initial pointerdown must reach the outside-panel listener') } }
+    container.props.onPointerdown(event)
+    assert.deepEqual(fixture.calls, [['grid', event, inventoryRef, item]])
+    container.props.onClick({ preventDefault() {} })
+    assert.deepEqual(clicks, [])
+    app.unmount()
+    assert.deepEqual(fixture.calls.at(-1), ['cancel', inventoryRef, 19])
+  } finally {
+    app.unmount()
+    if (originalFixture === undefined) delete globalThis.inventoryDragFixture
+    else globalThis.inventoryDragFixture = originalFixture
+  }
+})
+
 // Compile the real window templates while replacing external controls and I/O.
 // Invoking the rendered item's listener verifies both windows route Shift-click
 // independently from the hand's ordinary pickup/swap behavior.
@@ -159,12 +203,13 @@ for (const name of ['InventoryWindow', 'NestedInventoryWindow', 'BuildStateWindo
     plugins: [{
       name: 'inventory-window-fixtures',
       setup(build) {
-        build.onResolve({ filter: /^(@\/stores\/gameStore|@\/composables\/useInventoryOps|@\/network|\.\/.*\.vue)$/ }, args => ({
+        build.onResolve({ filter: /^(@\/stores\/gameStore|@\/composables\/useInventoryOps|@\/composables\/useInventoryDrag|@\/network|\.\/.*\.vue)$/ }, args => ({
           path: args.path, namespace: 'inventory-window-fixture',
         }))
         build.onLoad({ filter: /.*/, namespace: 'inventory-window-fixture' }, args => {
           if (args.path === '@/stores/gameStore') return { contents: 'export const useGameStore = () => globalThis.inventoryWindowFixture.store' }
           if (args.path === '@/composables/useInventoryOps') return { contents: 'export const useInventoryOps = () => globalThis.inventoryWindowFixture.ops' }
+          if (args.path === '@/composables/useInventoryDrag') return { contents: dragFixtureSource }
           if (args.path === '@/network') return { contents: 'export const sendOpenContainer = ref => globalThis.inventoryWindowFixture.opened.push(ref); export const sendCloseContainer = () => {}' }
           return { contents: `import { defineComponent, h } from 'vue'; export default defineComponent({ inheritAttrs: false, setup(_, { attrs, slots }) { return () => h('control', attrs, slots.default?.()) } })` }
         })
@@ -206,6 +251,38 @@ for (const name of ['InventoryWindow', 'NestedInventoryWindow', 'BuildStateWindo
         }
       })
     }
+    test('build material icon arms pointer drag and suppresses row/hand clicks', () => {
+      const originalFixture = globalThis.inventoryDragFixture
+      const fixture = { calls: [], consume: true }
+      globalThis.inventoryDragFixture = fixture
+      const host = createNode('root')
+      const clicks = []
+      const app = renderer.createApp(Window, {
+        entityId: 50, handHasItem: true,
+        list: [{ itemKey: 'branch', resource: 'branch.png', requiredCount: 5, putCount: 2 }],
+        onPutFromHand: (...args) => clicks.push(args),
+        onTakeBack: (...args) => clicks.push(args),
+        onQuickTakeBack: (...args) => clicks.push(args),
+      })
+      try {
+        app.mount(host)
+        const findNode = (node, className) => node.props.class === className ? node : node.children.map(child => findNode(child, className)).find(Boolean)
+        const icon = findNode(host, 'build-state-window__icon')
+        const row = findNode(host, 'build-state-window__row')
+        const list = findNode(host, 'build-state-window__list')
+        const event = { pointerId: 1, stopPropagation() { assert.fail('initial pointerdown must reach the outside-panel listener') } }
+        icon.props.onPointerdown(event)
+        assert.deepEqual(fixture.calls, [['build', event, 50, 0, '/assets/game/branch.png']])
+        row.props.onClick({ shiftKey: true, stopPropagation() {} })
+        list.props.onClick({})
+        assert.deepEqual(clicks, [])
+        assert.equal(list.props['data-inventory-drop-key'], '4_50_0')
+      } finally {
+        app.unmount()
+        if (originalFixture === undefined) delete globalThis.inventoryDragFixture
+        else globalThis.inventoryDragFixture = originalFixture
+      }
+    })
     continue
   }
 
@@ -217,7 +294,12 @@ for (const name of ['InventoryWindow', 'NestedInventoryWindow', 'BuildStateWindo
       const instance = { itemId: 19, nestedRef: { kind: 0, ownerId: 19, inventoryKey: 0 } }
       const inventory = { ref: sourceRef, title: 'Inventory', grid: { width: 1, height: 1, items: [{ x: 0, y: 0, item: instance }] } }
       const fixture = {
-        store: { playerEntityId: 7, handState: handHasItem ? { item: { itemId: 20 } } : null, openNestedInventories: new Map() },
+        store: {
+          playerEntityId: 7,
+          handState: handHasItem ? { item: { itemId: 20 } } : null,
+          openNestedInventories: new Map(),
+          refKey: ref => `${ref.kind ?? 0}_${ref.ownerId ?? 0}_${ref.inventoryKey ?? 0}`,
+        },
         ops: {
           quickTransferItem: (...args) => { calls.push(['quick', ...args]); return false },
           pickUpItem: (...args) => calls.push(['pickup', ...args]),

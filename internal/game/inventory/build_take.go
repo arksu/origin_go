@@ -86,9 +86,9 @@ func (s *InventoryOperationService) resolveBuildTakeSource(w *ecs.World, playerI
 }
 
 func (s *InventoryOperationService) executeMoveFromBuild(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, move *netproto.InventoryMoveSpec, expected []*netproto.InventoryExpected) *OperationResult {
-	if move.Dst.Kind != netproto.InventoryKind_INVENTORY_KIND_GRID || move.DstPos != nil || move.DstEquipSlot != nil ||
+	if move.Dst.Kind != netproto.InventoryKind_INVENTORY_KIND_GRID || move.DstEquipSlot != nil ||
 		move.HandPos != nil || move.Quantity != nil || move.AllowSwapOrMerge {
-		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, Message: "Build take-back requires automatic grid placement"}
+		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, Message: "Build take-back requires grid placement without swap or merge"}
 	}
 	source, err := s.resolveBuildTakeSource(w, playerID, playerHandle, move)
 	if err != nil {
@@ -105,9 +105,19 @@ func (s *InventoryOperationService) executeMoveFromBuild(w *ecs.World, playerID 
 	if err := s.validator.ValidateItemAllowedInContainer(w, &source.item, destination, netproto.EquipSlot_EQUIP_SLOT_NONE); err != nil {
 		return &OperationResult{ErrorCode: err.Code, Message: err.Message}
 	}
-	found, x, y := s.placementService.FindFreeSpace(destination.Container, source.item.W, source.item.H)
-	if !found {
-		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_INVENTORY_FULL, Message: "No free space in destination"}
+	var x, y uint8
+	if move.DstPos != nil {
+		placement := s.placementService.CheckGridPlacement(destination.Container, &source.item, move.DstPos.X, move.DstPos.Y, false)
+		if !placement.Success {
+			return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_INVENTORY_FULL, Message: "Cannot place item at destination"}
+		}
+		x, y = placement.X, placement.Y
+	} else {
+		found, freeX, freeY := s.placementService.FindFreeSpace(destination.Container, source.item.W, source.item.H)
+		if !found {
+			return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_INVENTORY_FULL, Message: "No free space in destination"}
+		}
+		x, y = freeX, freeY
 	}
 	source.item.ItemID = s.idAllocator.GetFreeID()
 	source.item.X, source.item.Y = x, y

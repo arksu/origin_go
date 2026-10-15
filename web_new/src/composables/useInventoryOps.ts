@@ -6,6 +6,15 @@ import { toNonNegativeProtoInt } from '@/utils/protoNumbers'
 
 const INVENTORY_SLOT_SIZE_PX = 32
 
+export type InventoryDragSource =
+  | {
+    kind: 'grid'
+    ref: proto.IInventoryRef
+    itemId: NonNullable<proto.IItemInstance['itemId']>
+    revision: NonNullable<proto.IInventoryState['revision']>
+  }
+  | { kind: 'build'; ref: proto.IInventoryRef; buildSlot: number }
+
 /**
  * Builds expected revisions for optimistic concurrency.
  * Includes src and dst containers (deduped if same).
@@ -35,6 +44,63 @@ function buildExpected(
 
 export function useInventoryOps() {
   const gameStore = useGameStore()
+
+  function transferDraggedItem(
+    source: InventoryDragSource,
+    dstRef: proto.IInventoryRef,
+    dstPos?: { x: number; y: number },
+  ): boolean {
+    if (!gameStore.isInGame || gameStore.quickInventoryTransfer ||
+      !gameStore.isInventoryOpen(source.ref) || !gameStore.isInventoryOpen(dstRef)) return false
+
+    const srcKey = gameStore.refKey(source.ref)
+    const dstKey = gameStore.refKey(dstRef)
+    const expected: proto.IInventoryExpected[] = []
+    let gridItem: proto.IGridItem | undefined
+    if (source.kind === 'grid') {
+      const state = gameStore.getOpenInventoryState(source.ref)
+      if (!state || String(state.revision ?? 0) !== String(source.revision)) return false
+      gridItem = state.grid?.items?.find(entry => String(entry.item?.itemId ?? 0) === String(source.itemId))
+      const item = gridItem?.item
+      if (!item || (item.nestedRef && gameStore.refKey(item.nestedRef) === dstKey)) return false
+      expected.push({ ref: source.ref, expectedRevision: source.revision })
+    } else {
+      if (!Number.isInteger(source.buildSlot) || source.buildSlot < 0 ||
+        toNonNegativeProtoInt(gameStore.buildStateList[source.buildSlot]?.putCount) <= 0) return false
+    }
+
+    if ((dstRef.kind ?? 0) === proto.InventoryKind.INVENTORY_KIND_GRID) {
+      const destination = gameStore.getOpenInventoryState(dstRef)
+      if (!destination?.grid || !dstPos || !Number.isInteger(dstPos.x) || !Number.isInteger(dstPos.y) ||
+        dstPos.x < 0 || dstPos.y < 0 || dstPos.x >= (destination.grid.width ?? 0) ||
+        dstPos.y >= (destination.grid.height ?? 0)) return false
+      if (gridItem?.item) {
+        if (dstKey === srcKey && dstPos.x === (gridItem.x ?? 0) && dstPos.y === (gridItem.y ?? 0)) return false
+        if (dstPos.x + Math.max(1, gridItem.item.w ?? 1) > (destination.grid.width ?? 0) ||
+          dstPos.y + Math.max(1, gridItem.item.h ?? 1) > (destination.grid.height ?? 0)) return false
+      }
+      if (source.kind === 'build' || dstKey !== srcKey) {
+        expected.push({ ref: dstRef, expectedRevision: destination.revision ?? 0 })
+      }
+    } else if ((dstRef.kind ?? 0) !== proto.InventoryKind.INVENTORY_KIND_BUILD || source.kind === 'build' || dstPos) {
+      return false
+    }
+
+    const opId = gameStore.allocOpId()
+    gameStore.quickInventoryTransfer = { opId, sourceRef: { ...source.ref }, cancelled: false }
+    sendInventoryOp({
+      opId,
+      expected,
+      move: {
+        src: source.ref,
+        dst: dstRef,
+        ...(source.kind === 'grid' ? { itemId: source.itemId } : { buildSlot: source.buildSlot }),
+        ...(dstPos ? { dstPos } : {}),
+        allowSwapOrMerge: false,
+      },
+    })
+    return true
+  }
 
   function sendQuickTransfer(move: proto.IInventoryMoveSpec, srcState?: proto.IInventoryState) {
     const srcRef = move.src
@@ -315,6 +381,7 @@ export function useInventoryOps() {
   }
 
   return {
+    transferDraggedItem,
     quickTransferItem,
     quickTransferBuildItem,
     pickUpItem,

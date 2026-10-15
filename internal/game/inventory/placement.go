@@ -32,18 +32,21 @@ type PlacementResult struct {
 func (ps *PlacementService) CheckGridPlacement(
 	container *components.InventoryContainer,
 	item *components.InvItem,
-	dstX, dstY uint8,
+	dstX, dstY uint32,
 	allowSwapOrMerge bool,
 ) *PlacementResult {
 	if container.Kind != constt.InventoryGrid {
 		return &PlacementResult{Success: false}
 	}
 
-	// Check bounds
-	if int(dstX)+int(item.W) > int(container.Width) ||
-		int(dstY)+int(item.H) > int(container.Height) {
+	// Validate protocol coordinates before narrowing them to the grid's uint8 domain.
+	// Subtract only after checking the coordinate to avoid uint32 overflow.
+	if dstX > uint32(container.Width) || dstY > uint32(container.Height) ||
+		uint32(item.W) > uint32(container.Width)-dstX ||
+		uint32(item.H) > uint32(container.Height)-dstY {
 		return &PlacementResult{Success: false}
 	}
+	x, y := uint8(dstX), uint8(dstY)
 
 	// Check for collisions with existing items
 	var collidingItem *components.InvItem
@@ -56,7 +59,7 @@ func (ps *PlacementService) CheckGridPlacement(
 			continue
 		}
 
-		if ps.itemsOverlap(dstX, dstY, item.W, item.H, existing) {
+		if ps.itemsOverlap(x, y, item.W, item.H, existing) {
 			if collidingItem != nil {
 				// Multiple collisions - cannot place
 				return &PlacementResult{Success: false}
@@ -70,8 +73,8 @@ func (ps *PlacementService) CheckGridPlacement(
 	if collidingItem == nil {
 		return &PlacementResult{
 			Success: true,
-			X:       dstX,
-			Y:       dstY,
+			X:       x,
+			Y:       y,
 		}
 	}
 
@@ -92,8 +95,8 @@ func (ps *PlacementService) CheckGridPlacement(
 	// So we just return the swap candidate and let the caller handle it
 	return &PlacementResult{
 		Success:       true,
-		X:             dstX,
-		Y:             dstY,
+		X:             x,
+		Y:             y,
 		SwapItem:      collidingItem,
 		SwapItemIndex: collidingIndex,
 	}

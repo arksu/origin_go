@@ -18,6 +18,8 @@ type CollisionSystem struct {
 	ecs.BaseSystem
 	chunkManager core.ChunkManager
 	logger       *zap.Logger
+
+	objectCollisionFilter func(types.EntityID, types.Handle) bool
 	// Pooled buffer for candidates to avoid allocations
 	candidatesBuffer []types.Handle
 	// Pooled per-sweep prefetch of candidate data (invariant across slide
@@ -60,6 +62,13 @@ func NewCollisionSystem(world *ecs.World, chunkManager core.ChunkManager, logger
 		marginTiles:      marginTiles,
 		chunkSize:        constt.ChunkSize,
 	}
+}
+
+// SetObjectCollisionFilter installs an optional per-object exception. A true
+// result ignores only that candidate. The filter runs synchronously under the
+// owning shard lock and must not mutate the world.
+func (s *CollisionSystem) SetObjectCollisionFilter(filter func(types.EntityID, types.Handle) bool) {
+	s.objectCollisionFilter = filter
 }
 
 func (s *CollisionSystem) Update(w *ecs.World, dt float64) {
@@ -246,6 +255,10 @@ func (s *CollisionSystem) sweepCollision(
 	// so a candidate farther than intent + both half extents on any axis can
 	// never be touched, not even after a slide redirect.
 	pathBound := originalSpeed*(1+epsilon) + 1.0
+	var actorID types.EntityID
+	if s.objectCollisionFilter != nil {
+		actorID, _ = w.GetExternalID(entityHandle)
+	}
 	s.sweepCandidates = s.sweepCandidates[:0]
 	for _, candidateHandle := range candidates {
 		if candidateHandle == entityHandle || !w.Alive(candidateHandle) {
@@ -274,6 +287,9 @@ func (s *CollisionSystem) sweepCollision(
 
 		if math.Abs(candidateTransform.X-transform.X) > pathBound+entityHalfW+candidateCollider.HalfWidth ||
 			math.Abs(candidateTransform.Y-transform.Y) > pathBound+entityHalfH+candidateCollider.HalfHeight {
+			continue
+		}
+		if s.objectCollisionFilter != nil && s.objectCollisionFilter(actorID, candidateHandle) {
 			continue
 		}
 

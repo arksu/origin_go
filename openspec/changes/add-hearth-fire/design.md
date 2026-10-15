@@ -104,7 +104,9 @@ Use a small registered terminal notification at actual death and the existing RE
 
 Reuse the prepared definition and existing indestructibility; add the Hearth behavior without burner/fuel runtime or lift capability. Protect removal through a small registered object policy before gameplay/admin deletion, without adding a Hearth branch to the deletion core.
 
-Use identical 1x1 bounds for terrain, collision and structural overlap. Placement checks every overlapped surface dry-land tile, excluding water, shallow water, swamp and bog. Movement/spawn/return filtering allows the owner and animals through this object only; unrelated obstacles still block. Construction and put-down separately reject footprint overlap, including owner attempts, at admission and final application. Reuse spatial queries and bounded buffers.
+Use identical 1x1 bounds for terrain, collision and structural overlap. Placement checks every overlapped surface dry-land tile, excluding water, shallow water, swamp and bog. Movement/spawn/return filtering allows only the owner through this object; other players, animals and unrelated obstacles retain ordinary collisions. Construction and put-down separately reject footprint overlap, including owner attempts, at admission and final application. Reuse spatial queries and bounded buffers.
+
+Owner-only passage is implemented through one optional callback bound to the surface `hearth.Runtime`, shared by collision candidate filtering and authoritative player spawn. `IgnoreObjectCollision(actorID, targetHandle)` validates the live target's current Hearth behavior and composite identity against `Index.Owner`; unknown or ineligible ownership gives no exemption. No behavior capability/context/dispatcher is needed for this single rule. Existing terrain, phantom and other-object checks remain authoritative. Animals receive no exemption; task 3.2 is complete. Structural placement rules remain future work.
 
 ### 7. Return is an ordinary action with an asynchronous outcome
 
