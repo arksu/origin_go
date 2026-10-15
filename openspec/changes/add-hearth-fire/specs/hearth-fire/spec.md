@@ -403,10 +403,14 @@ The home index SHALL track at most one pending read per character with a loading
 
 ### Requirement: Final-cycle preparation precedes costs
 
-The final construction cycle SHALL validate and prepare the runtime data needed for immediate completion before consuming its branch or stamina. Temporary ownership-read, worker-queue or chunk-I/O readiness SHALL keep the ordinary build action running for automatic retry on its next cycle without a warning or another player click. Waiting or rejected preparation SHALL leave that cycle's materials, stamina, processed progress, and ownership unchanged. Normal movement and cancellation SHALL still stop the action; workers SHALL only prepare data, never complete construction. A successful payment SHALL NOT leave a completed site waiting for a database response.
+The final construction cycle SHALL validate and prepare the runtime data needed for immediate completion before consuming its branch or stamina. Unknown ownership SHALL be resolved by a direct `GetCharacterHearth` with a five-second timeout under the surface shard lock; its result SHALL hydrate the index and allow completion in the same call when the remaining data is ready, without a home-read job or extra action cycle. This chosen blocking lookup MAY delay the whole game loop because the shard manager waits for every layer before the next tick; latency from serial unknown-home reads is cumulative. Temporary chunk-preload queue or chunk-I/O readiness SHALL keep the ordinary build action running for automatic retry on its next cycle without a warning or another player click. Waiting or rejected preparation SHALL leave that cycle's materials, stamina, processed progress, and ownership unchanged. Normal movement and cancellation SHALL still stop the action; workers SHALL only preload chunks, never complete construction. A successful payment SHALL NOT leave a completed site waiting for a database response.
 
-#### Scenario: Previous home data is not ready
-- **WHEN** the last branch is reached before required previous-home data is ready
+#### Scenario: Unknown ownership is resolved during the final cycle
+- **WHEN** the final cycle reads unknown ownership successfully and the old-home source is ready or no home exists
+- **THEN** the index SHALL be hydrated and construction SHALL complete in the same call without another action cycle
+
+#### Scenario: Previous home chunk is not ready
+- **WHEN** the last branch is reached before the required previous-home chunk is ready
 - **THEN** the build action SHALL continue without consuming the branch or stamina and retry on its next ordinary cycle
 - **AND** the site SHALL remain an ordinary unfinished construction site while preparation is pending
 - **AND** once preparation is ready, a later cycle SHALL complete construction without another player click, unless the action was canceled

@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -208,65 +209,49 @@ func TestHearthBuildRecipeSoloUsesFiveOrdinaryCycles(t *testing.T) {
 }
 
 type hearthBuildLookup struct {
-	// This first-home fixture only uses job submission; no old chunk is needed.
-	hearth.ConstructionChunks
-	jobs []gameworld.PersistenceJob
+	reads int
 }
 
-func (l *hearthBuildLookup) SubmitPersistenceJob(job gameworld.PersistenceJob) bool {
-	l.jobs = append(l.jobs, job)
-	return true
-}
-
-func (*hearthBuildLookup) GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
+func (l *hearthBuildLookup) GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
+	l.reads++
 	return repository.GetCharacterHearthRow{}, sql.ErrNoRows
 }
 
-func TestHearthConstructionWaitsForLookupWithinActiveBuild(t *testing.T) {
-	for _, cancel := range []bool{false, true} {
-		t.Run(map[bool]string{false: "finish", true: "cancel_while_loading"}[cancel], func(t *testing.T) {
+func TestHearthConstructionUnknownHomeCompletesInRequiredCycles(t *testing.T) {
+	for _, branches := range []uint32{1, 2, 5} {
+		t.Run(fmt.Sprint(branches), func(t *testing.T) {
 			f := newHearthBuildRecipeFixture(t)
+			internal, _ := ecs.GetComponent[components.ObjectInternalState](f.world, f.site)
+			state, found := components.GetBehaviorState[components.BuildBehaviorState](internal, buildBehaviorStateKey)
+			require.True(t, found)
+			state.Items[0].RequiredCount = branches
+			state.Items[0].PutItems[0].Count = branches
 			player := f.startBuilder(t, 1)
 			lookup := &hearthBuildLookup{}
 			// Exercise the real first lookup instead of the fixture's known NoHome.
 			runtime := ecs.GetResource[hearth.Runtime](f.world)
-			*runtime = hearth.NewRuntime(f.world, lookup, lookup, behaviors.MustDefaultRegistry(), nil, nil)
+			*runtime = hearth.NewRuntime(f.world, nil, lookup, behaviors.MustDefaultRegistry(), nil, nil)
 			sender := &lockedBuildSender{}
 			f.service.alerts = sender
 
-			f.advanceTicks(int(f.build.TicksRequired) * 7)
-			f.assertProgress(t, 4)
-			require.True(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
+			f.advanceTicks(int(f.build.TicksRequired*branches) - 1)
+			require.Equal(t, branches-1, state.Items[0].BuildCount)
+			require.Equal(t, uint32(1), state.Items[0].PutCount())
 			require.Equal(t, hearth.Unknown, runtime.Index.Snapshot(1).State)
-			require.Len(t, lookup.jobs, 1, "waiting cycles share the accepted lookup")
-			require.Empty(t, sender.alerts, "ordinary loading must not report a build error")
+			require.Zero(t, lookup.reads)
 			stats, _ := ecs.GetComponent[components.EntityStats](f.world, player)
-			require.Equal(t, f.initialStamina-32, stats.Stamina)
+			require.Equal(t, f.initialStamina-float64(branches-1)*8, stats.Stamina)
 
-			if cancel {
-				f.contextActions.cancelActiveCyclicAction(1, player, "")
-			}
-			job := lookup.jobs[0]
-			err := job.Run()
-			require.NoError(t, err)
-			job.Complete(err)
-			runtime.ApplyReadResults()
-			f.assertProgress(t, 4)
-			require.Equal(t, hearth.NoHome, runtime.Index.Snapshot(1).State)
-
-			f.advanceTicks(int(f.build.TicksRequired))
+			f.advanceTicks(1)
+			f.assertCompleted(t)
+			require.Equal(t, 1, lookup.reads)
+			require.Empty(t, sender.alerts)
 			require.False(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
+			require.Equal(t, f.site, f.world.GetHandleByEntityID(200))
+			require.Equal(t, types.EntityID(200), runtime.Index.Snapshot(1).Home.Object.ID)
 			stats, _ = ecs.GetComponent[components.EntityStats](f.world, player)
-			if cancel {
-				f.assertProgress(t, 4)
-				require.Equal(t, hearth.NoHome, runtime.Index.Snapshot(1).State)
-				require.Equal(t, f.initialStamina-32, stats.Stamina)
-			} else {
-				f.assertCompleted(t)
-				require.Equal(t, f.site, f.world.GetHandleByEntityID(200))
-				require.Equal(t, types.EntityID(200), runtime.Index.Snapshot(1).Home.Object.ID)
-				require.Equal(t, f.initialStamina-40, stats.Stamina)
-			}
+			require.Equal(t, f.initialStamina-float64(branches)*8, stats.Stamina)
+			require.Equal(t, uint64(f.build.TicksRequired*branches), ecs.GetResource[ecs.TimeState](f.world).Tick)
 		})
 	}
 }

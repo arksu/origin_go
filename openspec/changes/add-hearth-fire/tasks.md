@@ -14,7 +14,8 @@ Previous feature persistence and lifecycle implementation was reverted.
 The foundation contracts in section 1 provide migration/schema, sqlc queries
 and a runtime metadata index with tests. Task 2.1 adds the ordinary build recipe.
 The construction stage now assigns its actual finisher in runtime and replaces
-their previous home, using bounded read preparation and ordinary object saving.
+their previous home, using synchronous ownership lookup, bounded chunk preloads
+and ordinary object saving.
 Its verification is tracked below. Ownership saving, general chunk hydration,
 restart repair, death cleanup and the remaining gameplay remain separate stages.
 This replaces the former durable-lifecycle plan:
@@ -40,7 +41,7 @@ it does not describe an already-installed universal database-error handler.
 ## 2. Manual Construction and Immediate Replacement
 
 - [x] 2.1 Add the universally available five-branch Hearth recipe using existing two-second and eight-stamina processing per branch. Verify solo ten-second/forty-stamina construction, cooperative acceleration, and no skill/discovery requirement.
-- [x] 2.2 Add one optional registered construction-result wrapper and keep Hearth policy in its feature module. Before final-cycle costs, prepare unknown ownership through `GetCharacterHearth` and an unloaded old chunk through `WaitPreloaded` using existing bounded workers. Temporary read/queue/I/O readiness returns `Retry` through ordinary `Continue`, preserving the action for automatic retry next cycle without costs, warnings or another click; normal cancellation and hard failures remain unchanged. Verify ordinary recipes retain their current path and no SQL or blocking worker wait runs under the shard lock.
+- [x] 2.2 Add one optional registered construction-result wrapper and keep Hearth policy in its feature module. Before final-cycle costs, resolve unknown ownership with direct `GetCharacterHearth` under the surface shard lock and a five-second timeout, hydrate the index and continue completion in the same call without a home-read job. Accept whole-game-loop blocking and cumulative latency from serial unknown reads. An unloaded old chunk uses `WaitPreloaded` through existing bounded workers; temporary preload/queue/I/O readiness returns `Retry` through ordinary `Continue` without costs, warnings or another click. Ordinary recipes, cancellation and hard failures retain their existing paths; chunk-worker waits remain outside the shard lock.
 - [x] 2.3 Complete Hearth synchronously on the surface owning shard using the actual successful final-branch actor. Prepare concrete source/definition checks, invoke ordinary completion with its existing link-before-transform order, propagate the transform result, convert the previous home to an ordinary unlit campfire, and replace ownership; test exact identity/location preservation and unchanged player position without a saved finisher sidecar.
 - [x] 2.4 Apply an inactive old-home conversion to a ready raw chunk without forcing activation. Reuse a short existing `PinPersistence` around completion and `UpsertRawObject`, then release it for ordinary save/activation; add no gate API or `cacheRevision` changes. Test unloaded/busy preparation, raw identity preservation and activation of the converted campfire before database catch-up.
 - [x] 2.5 Add cooperative and competing completion coverage and update construction notes. Verify first-home construction, helper-finisher ownership, replacement of only the finisher's home, repeated completion rejection, stale handles/results and unchanged ordinary recipe costs without admission tickets or a retained mutable build site.

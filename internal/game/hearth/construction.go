@@ -36,8 +36,8 @@ type HomeReader interface {
 	GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error)
 }
 
-// Runtime belongs to the surface shard. Only read jobs run outside its lock;
-// their copied results are applied by ApplyReadResults, even after actor logout.
+// Runtime belongs to the surface shard. Ownership lookup is synchronous;
+// only old-chunk preloads run outside its lock.
 type Runtime struct {
 	Index     *Index
 	w         *ecs.World
@@ -94,14 +94,17 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 		return constructionRefused("This construction site is unavailable.")
 	}
 	current := r.Index.Snapshot(ctx.PlayerID)
+	if current.State == Unknown && !current.PendingTerminal && !current.Terminal {
+		if r.reader == nil {
+			return constructionRefused("Hearth data is unavailable.")
+		}
+		r.loadHome(ctx.PlayerID, hearthDef.DefID)
+		current = r.Index.Snapshot(ctx.PlayerID)
+	}
 	if current.PendingTerminal || current.Terminal {
 		return constructionRefused("This character cannot acquire a hearth.")
 	}
 	if current.State == Unknown {
-		if r.chunks == nil || r.reader == nil {
-			return constructionRefused("Hearth data is unavailable.")
-		}
-		r.prepareHome(ctx.PlayerID, hearthDef.DefID)
 		return contracts.ConstructionResult{Retry: true}
 	}
 
@@ -174,28 +177,31 @@ func (r *Runtime) canTransform(id types.EntityID, handle types.Handle, typeID ui
 }
 
 type preparation struct {
-	runtime    *Runtime
-	character  types.EntityID // zero denotes a chunk preload
-	version    Version
-	hearthType int
-	coord      types.ChunkCoord
-	home       *Home
+	runtime *Runtime
+	coord   types.ChunkCoord
 }
 
-func (r *Runtime) prepareHome(character types.EntityID, hearthType int) {
-	if r.chunks == nil || r.reader == nil || r.inFlight == preparationCapacity {
-		return
-	}
+func (r *Runtime) loadHome(character types.EntityID, hearthType int) {
 	version, started := r.Index.BeginLookup(character)
 	if !started {
 		return
 	}
-	job := &preparation{runtime: r, character: character, version: version, hearthType: hearthType}
-	if !r.chunks.SubmitPersistenceJob(job) {
-		r.Index.RejectLookup(character)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	row, err := r.reader.GetCharacterHearth(ctx, repository.GetCharacterHearthParams{
+		CharacterID: int64(character), HearthTypeID: hearthType, SurfaceLayer: SurfaceLayer,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		r.logger.Fatal("hearth lookup failed", zap.Error(err))
 		return
 	}
-	r.inFlight++
+	var home *Home
+	if err == nil {
+		home = &Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer}
+	}
+	if err := r.Index.CompleteLookup(character, version, home); err != nil && !errors.Is(err, ErrStaleLookup) {
+		r.logger.Fatal("invalid hearth lookup result", zap.Error(err))
+	}
 }
 
 func (r *Runtime) prepareChunk(coord types.ChunkCoord) {
@@ -209,26 +215,11 @@ func (r *Runtime) prepareChunk(coord types.ChunkCoord) {
 }
 
 func (j *preparation) Run() error {
-	if j.character == 0 {
-		err := j.runtime.chunks.WaitPreloaded(context.Background(), j.coord)
-		if errors.Is(err, world.ErrChunkNotLoaded) {
-			return nil // shutdown or rejected load admission; a later attempt can retry
-		}
-		return err
+	err := j.runtime.chunks.WaitPreloaded(context.Background(), j.coord)
+	if errors.Is(err, world.ErrChunkNotLoaded) {
+		return nil // shutdown or rejected load admission; a later attempt can retry
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	row, err := j.runtime.reader.GetCharacterHearth(ctx, repository.GetCharacterHearthParams{
-		CharacterID: int64(j.character), HearthTypeID: j.hearthType, SurfaceLayer: SurfaceLayer,
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	j.home = &Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer}
-	return nil
+	return err
 }
 
 func (j *preparation) Complete(err error) {
@@ -246,13 +237,7 @@ func (r *Runtime) ApplyReadResults() {
 		select {
 		case job := <-r.completed:
 			r.inFlight--
-			if job.character == 0 {
-				delete(r.preloads, job.coord)
-				continue
-			}
-			if err := r.Index.CompleteLookup(job.character, job.version, job.home); err != nil && !errors.Is(err, ErrStaleLookup) {
-				r.logger.Fatal("invalid hearth lookup result", zap.Error(err))
-			}
+			delete(r.preloads, job.coord)
 		default:
 			return
 		}

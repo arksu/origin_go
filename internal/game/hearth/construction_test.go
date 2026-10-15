@@ -78,14 +78,18 @@ func (c *constructionChunks) runNext(t *testing.T) {
 }
 
 type constructionReader struct {
-	row   repository.GetCharacterHearthRow
-	err   error
-	found bool
-	reads int
+	row    repository.GetCharacterHearthRow
+	err    error
+	found  bool
+	reads  int
+	onRead func()
 }
 
 func (r *constructionReader) GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
 	r.reads++
+	if r.onRead != nil {
+		r.onRead()
+	}
 	if r.err != nil {
 		return repository.GetCharacterHearthRow{}, r.err
 	}
@@ -170,49 +174,105 @@ func (f *constructionFixture) oldRaw(t *testing.T, state types.ChunkState) (*cor
 	return chunk, raw
 }
 
-func TestConstructionLookupOnlyPreparesRetry(t *testing.T) {
-	f := newConstructionFixture(t)
-	calls := 0
-	complete := func() bool { calls++; return f.finishSite() }
-	for range 2 {
-		requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, complete))
+func TestConstructionFirstHomeCompletesInSameCall(t *testing.T) {
+	for _, scenario := range []string{"normal", "without_chunks"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := newConstructionFixture(t)
+			if scenario == "without_chunks" {
+				f.runtime = hearth.NewRuntime(f.w, nil, f.reader, f.registry, nil, zap.NewNop())
+			}
+			calls := 0
+			result := f.runtime.CompleteConstruction(&f.ctx, func() bool {
+				calls++
+				require.Equal(t, 1, f.reader.reads)
+				require.Equal(t, hearth.NoHome, f.runtime.Index.Snapshot(1).State)
+				return f.finishSite()
+			})
+			require.True(t, result.OK)
+			require.False(t, result.Retry)
+			require.Equal(t, 1, calls)
+			require.Equal(t, 1, f.reader.reads)
+			require.Empty(t, f.chunks.jobs)
+			home := f.runtime.Index.Snapshot(1)
+			require.Equal(t, hearth.CurrentHome, home.State)
+			require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
+			require.True(t, home.Dirty)
+			position, _ := ecs.GetComponent[components.Transform](f.w, f.ctx.PlayerHandle)
+			require.Equal(t, float64(30), position.X)
+			require.Equal(t, float64(40), position.Y)
+		})
 	}
-	require.Len(t, f.chunks.jobs, 1, "repeated attempts share the accepted read")
-	require.Zero(t, calls)
-	require.Zero(t, f.reader.reads, "the shard only enqueues database work")
-	f.chunks.runNext(t)
-	require.Equal(t, hearth.Unknown, f.runtime.Index.Snapshot(1).State)
-	require.Zero(t, calls)
-	f.runtime.ApplyReadResults()
-	require.Equal(t, hearth.NoHome, f.runtime.Index.Snapshot(1).State)
-	require.Zero(t, calls, "read completion never spends the final material")
-	require.True(t, f.runtime.CompleteConstruction(&f.ctx, complete).OK)
-	require.Equal(t, 1, calls)
-	home := f.runtime.Index.Snapshot(1)
-	require.Equal(t, hearth.CurrentHome, home.State)
-	require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
-	require.True(t, home.Dirty)
-	position, _ := ecs.GetComponent[components.Transform](f.w, f.ctx.PlayerHandle)
-	require.Equal(t, float64(30), position.X)
-	require.Equal(t, float64(40), position.Y)
+}
+
+func TestConstructionCachedOwnershipDoesNotRead(t *testing.T) {
+	f := newConstructionFixture(t)
+	f.seedHome(t, nil)
+	require.True(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite).OK)
+	require.Zero(t, f.reader.reads)
+	require.Empty(t, f.chunks.jobs)
+}
+
+func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {
+	for _, source := range []string{"live", "raw"} {
+		t.Run(source, func(t *testing.T) {
+			f := newConstructionFixture(t)
+			f.reader.found = true
+			f.reader.row = repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 2000, X: 5000, Y: 200}
+			var chunk *core.Chunk
+			var handle types.Handle
+			if source == "live" {
+				handle = world.SpawnEntityFromDef(f.w, f.result, world.DefSpawnParams{EntityID: 2000, X: 5000, Y: 200, Region: 1})
+			} else {
+				chunk, _ = f.oldRaw(t, types.ChunkStateInactive)
+				f.chunks.chunks[chunk.Coord] = chunk
+				f.runtime.Index = hearth.NewIndex()
+			}
+			result := f.runtime.CompleteConstruction(&f.ctx, f.finishSite)
+			require.True(t, result.OK)
+			require.False(t, result.Retry)
+			require.Equal(t, 1, f.reader.reads)
+			require.Empty(t, f.chunks.jobs)
+			require.Equal(t, types.EntityID(1000), f.runtime.Index.Snapshot(1).Home.Object.ID)
+			if source == "live" {
+				info, _ := ecs.GetComponent[components.EntityInfo](f.w, handle)
+				require.Equal(t, uint32(16), info.TypeID)
+			} else {
+				require.Equal(t, 16, chunk.GetRawObjectByID(2000).TypeID)
+			}
+		})
+	}
 }
 
 func TestConstructionStaleLookupCannotRestoreOwnership(t *testing.T) {
-	f := newConstructionFixture(t)
-	f.reader.found = true
-	f.reader.row = repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 2000, X: 5000, Y: 200}
-	calls := 0
-	requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return true }))
-	revoked, err := f.runtime.Index.RevokeHome(1)
-	require.NoError(t, err)
-	f.chunks.runNext(t)
-	f.runtime.ApplyReadResults()
-	require.Equal(t, revoked, f.runtime.Index.Snapshot(1))
-	_, owned := f.runtime.Index.Owner(hearth.ObjectKey{Region: 1, ID: 2000})
-	require.False(t, owned)
-	require.Zero(t, calls)
-	info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.ctx.TargetHandle)
-	require.Equal(t, uint32(constt.BuildObjectTypeID), info.TypeID)
+	for _, scenario := range []string{"revoked", "terminal"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := newConstructionFixture(t)
+			f.reader.found = true
+			f.reader.row = repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 2000, X: 5000, Y: 200}
+			var changed hearth.Snapshot
+			f.reader.onRead = func() {
+				var err error
+				if scenario == "terminal" {
+					changed, err = f.runtime.Index.ApplyTerminal(1)
+				} else {
+					changed, err = f.runtime.Index.RevokeHome(1)
+				}
+				require.NoError(t, err)
+			}
+			calls := 0
+			result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return false })
+			require.False(t, result.OK)
+			require.Equal(t, changed, f.runtime.Index.Snapshot(1))
+			_, owned := f.runtime.Index.Owner(hearth.ObjectKey{Region: 1, ID: 2000})
+			require.False(t, owned)
+			if scenario == "terminal" {
+				require.Zero(t, calls)
+			}
+			require.Empty(t, f.chunks.jobs)
+			info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.ctx.TargetHandle)
+			require.Equal(t, uint32(constt.BuildObjectTypeID), info.TypeID)
+		})
+	}
 }
 
 func TestConstructionReadFailureIsFatal(t *testing.T) {
@@ -221,37 +281,22 @@ func TestConstructionReadFailureIsFatal(t *testing.T) {
 	logger := zap.NewNop().WithOptions(zap.WithFatalHook(zapcore.WriteThenPanic))
 	f.runtime = hearth.NewRuntime(f.w, f.chunks, f.reader, f.registry, nil, logger)
 	calls := 0
-	requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return true }))
-	require.Len(t, f.chunks.jobs, 1)
-	job := f.chunks.jobs[0]
-	err := job.Run()
-	require.ErrorIs(t, err, f.reader.err)
-	require.Panics(t, func() { job.Complete(err) }, "database errors must reach the fatal logger hook")
+	require.Panics(t, func() {
+		f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return true })
+	}, "database errors must synchronously reach the fatal logger hook")
 	require.Equal(t, hearth.Unknown, f.runtime.Index.Snapshot(1).State)
+	require.Equal(t, 1, f.reader.reads)
+	require.Empty(t, f.chunks.jobs)
 	require.Zero(t, calls)
 }
 
-func TestConstructionAcceptedLookupAppliesAfterActorDespawn(t *testing.T) {
+func TestConstructionChunkPreloadRetriesAfterQueuePressure(t *testing.T) {
 	f := newConstructionFixture(t)
-	f.reader.found = true
-	f.reader.row = repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 2000, X: 5000, Y: 200}
-	calls := 0
-	requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return true }))
-	f.w.Despawn(f.ctx.PlayerHandle)
-	f.chunks.runNext(t)
-	f.runtime.ApplyReadResults()
-	home := f.runtime.Index.Snapshot(1)
-	require.Equal(t, hearth.CurrentHome, home.State)
-	require.Equal(t, types.EntityID(2000), home.Home.Object.ID)
-	require.False(t, home.Dirty, "loading an existing home is not a new assignment")
-	require.False(t, f.w.Alive(f.ctx.PlayerHandle))
-	require.Zero(t, calls)
-	info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.ctx.TargetHandle)
-	require.Equal(t, uint32(constt.BuildObjectTypeID), info.TypeID, "logout never completes the waiting construction")
-}
-
-func TestConstructionReadAdmissionRetriesAfterQueuePressure(t *testing.T) {
-	f := newConstructionFixture(t)
+	chunk, _ := f.oldRaw(t, types.ChunkStateInactive)
+	f.chunks.wait = func(coord types.ChunkCoord) error {
+		f.chunks.chunks[coord] = chunk
+		return nil
+	}
 	f.chunks.reject = true
 	for range 2 {
 		requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite))
@@ -260,13 +305,13 @@ func TestConstructionReadAdmissionRetriesAfterQueuePressure(t *testing.T) {
 	require.Empty(t, f.chunks.jobs)
 	f.chunks.reject = false
 	requireConstructionRetry(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite))
-	require.Len(t, f.chunks.jobs, 1, "a rejected enqueue must release lookup admission")
+	require.Len(t, f.chunks.jobs, 1, "a rejected enqueue must permit another preload attempt")
 	f.chunks.runNext(t)
 	f.runtime.ApplyReadResults()
 	require.True(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite).OK)
 }
 
-func TestConstructionPreparationCapacityReturnsAfterApplication(t *testing.T) {
+func TestConstructionChunkPreloadCapacityReturnsAfterApplication(t *testing.T) {
 	f := newConstructionFixture(t)
 	for id := types.EntityID(1); id <= 65; id++ {
 		ctx := f.ctx
@@ -274,9 +319,14 @@ func TestConstructionPreparationCapacityReturnsAfterApplication(t *testing.T) {
 		if id != 1 {
 			ctx.PlayerHandle = f.w.Spawn(id, nil)
 		}
+		version, started := f.runtime.Index.BeginLookup(id)
+		require.True(t, started)
+		require.NoError(t, f.runtime.Index.CompleteLookup(id, version, &hearth.Home{
+			Object: hearth.ObjectKey{Region: 1, ID: 2000 + id}, X: int(id) * constt.ChunkSize * constt.CoordPerTile,
+		}))
 		requireConstructionRetry(t, f.runtime.CompleteConstruction(&ctx, f.finishSite))
 	}
-	require.Len(t, f.chunks.jobs, 64, "feature read work must remain bounded")
+	require.Len(t, f.chunks.jobs, 64, "feature chunk preload work must remain bounded")
 	f.chunks.runNext(t)
 	last := f.ctx
 	last.PlayerID, last.PlayerHandle = 65, f.w.GetHandleByEntityID(65)
@@ -415,7 +465,7 @@ func TestConstructionRejectsInvalidActorAndUnderground(t *testing.T) {
 }
 
 func TestConstructionUnavailablePreparationDoesNotRetry(t *testing.T) {
-	for _, scenario := range []string{"nil_reader", "nil_chunks_unknown", "nil_chunks_home", "outside_world"} {
+	for _, scenario := range []string{"nil_reader", "nil_chunks_home", "outside_world"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newConstructionFixture(t)
 			var chunks hearth.ConstructionChunks = f.chunks
@@ -423,7 +473,7 @@ func TestConstructionUnavailablePreparationDoesNotRetry(t *testing.T) {
 			switch scenario {
 			case "nil_reader":
 				reader = nil
-			case "nil_chunks_unknown", "nil_chunks_home":
+			case "nil_chunks_home":
 				chunks = nil
 			case "outside_world":
 				f.chunks.pinErr = world.ErrChunkOutsideWorld
