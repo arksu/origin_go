@@ -125,6 +125,18 @@ func (c *Chunk) GetRawObjects() []*repository.Object {
 	return objects
 }
 
+// GetRawObjectByID returns a read-only cache view, or nil when absent. The caller
+// must hold the owning shard lock and a chunk persistence pin while copying it.
+func (c *Chunk) GetRawObjectByID(id types.EntityID) *repository.Object {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	index, found := c.rawObjectPositionLocked(id)
+	if !found {
+		return nil
+	}
+	return c.rawObjects[index]
+}
+
 // GetRawActivationObjects returns the next suffix to visit and its cache offset.
 // Advancing through suffixes preserves fair retries without moving the backlog.
 // The caller holds the owning shard and chunk persistence gate.

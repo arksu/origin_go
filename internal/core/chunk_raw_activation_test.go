@@ -18,6 +18,28 @@ func rawCacheObjects(count int) []*repository.Object {
 	return objects
 }
 
+func TestRawObjectLookupAfterActivationAndReplacement(t *testing.T) {
+	chunk := NewChunk(types.ChunkCoord{}, 1, 0, 128)
+	objects := rawCacheObjects(64)
+	retained, tail := objects[1], objects[63]
+	chunk.SetRawObjects(objects)
+	chunk.RetainRawActivationPrefix(32, []*repository.Object{retained})
+	chunk.RemoveCommittedObject(40)
+
+	require.Nil(t, chunk.GetRawObjectByID(1), "activated objects leave the raw cache")
+	require.Same(t, retained, chunk.GetRawObjectByID(2))
+	require.Nil(t, chunk.GetRawObjectByID(40), "removed cache holes are not objects")
+	require.Same(t, tail, chunk.GetRawObjectByID(64), "lookup accounts for the consumed prefix")
+	require.Nil(t, chunk.GetRawObjectByID(100))
+	require.Empty(t, chunk.GetRawDirtyObjectIDs(), "reading the cache must not dirty it")
+
+	updated := &repository.Object{ID: 64, TypeID: 16}
+	chunk.UpsertRawObject(updated)
+	require.Same(t, updated, chunk.GetRawObjectByID(64))
+	require.Equal(t, int64(64), tail.ID)
+	require.Zero(t, tail.TypeID, "replacement must not mutate a previously borrowed record")
+}
+
 func TestRawActivationPrefixPreservesTailAndIndexedUpdates(t *testing.T) {
 	chunk := NewChunk(types.ChunkCoord{}, 1, 0, 128)
 	objects := rawCacheObjects(10000)

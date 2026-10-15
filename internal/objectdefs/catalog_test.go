@@ -76,7 +76,7 @@ func TestObjectCatalogInitialHP(t *testing.T) {
 	require.InDelta(t, constt.CoordPerTile, hearth.Components.Collider.H, 0)
 	require.Empty(t, hearth.Components.Inventory)
 	require.Empty(t, hearth.Appearance)
-	require.Empty(t, hearth.Behaviors, "the preparatory object must not add fuel, lift, or Hearth gameplay")
-	require.Empty(t, hearth.BehaviorOrder)
+	require.Len(t, hearth.Behaviors, 1)
+	require.Equal(t, []string{"hearth"}, hearth.BehaviorOrder)
 	require.Nil(t, hearth.Station, "Hearth Fire is not a cooking or fuel station")
 }

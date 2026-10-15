@@ -19,6 +19,23 @@ testable code and you protect server authority and protocol compatibility.
   against current code rather than treating proposed or superseded decisions as implemented.
 - Trace the affected runtime path before editing. Keep unrelated working-tree changes intact.
 
+## Absolute necessity, KISS, and DRY
+
+- Every change must be strictly necessary to satisfy the requested task and its
+  verification requirements. If removing a change still satisfies all these
+  requirements, omit that change.
+- Before editing, justify the chosen solution against the affected code and
+  requirements. Explain why existing mechanisms or a simpler, less invasive
+  solution cannot solve the problem; do not claim necessity without evidence.
+- Apply this rule especially strictly to the server core. Change it only when
+  the task cannot be solved correctly through existing mechanisms outside the
+  core, and explicitly justify why each core change is unavoidable.
+- Follow KISS: choose the simplest correct implementation. Do not add speculative
+  abstractions, unrelated cleanup, refactoring, or optimizations unless required
+  to solve the task.
+- Follow DRY: reuse suitable existing logic and keep each rule in one place;
+  introduce shared abstractions only when necessary for the task.
+
 ## Origin art direction
 
 - Before generating or editing Origin game art, read `docs/art/STYLE_GUIDE.md`

@@ -143,6 +143,7 @@ func DefaultRegistry() (*Registry, error) {
 			containerBehavior{},
 			dryingBehavior{},
 			buildBehavior{},
+			hearthBehavior{},
 			liftBehavior{},
 			treeBehavior{},
 			burnerBehavior{},

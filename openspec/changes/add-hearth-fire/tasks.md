@@ -4,18 +4,20 @@
 
 The server catalog contains the prepared static, indestructible
 `hearth_fire` (ID 36, resource `hearth_fire`,
-12x12 collider) without Hearth behaviors or a station. The ordinary client
+12x12 collider), now with the `hearth` construction behavior and no station. The ordinary client
 resource uses the approved seven green flame frames at 70% scale and 4 FPS.
 Eight approved skull-smoke frames and their asset descriptor are also present;
 the descriptor specifies 250 ms per frame and a 2000 ms one-shot animation.
 Reuse these assets instead of regenerating them.
 
 Previous feature persistence and lifecycle implementation was reverted.
-The new foundation contracts in section 1 have been implemented and checked:
-migration/schema, sqlc queries and an isolated runtime metadata index with tests.
-They are not wired into gameplay, chunk loading or background saving. Task 2.1
-adds only the ordinary build recipe; it creates the prepared object without
-personal ownership. Tasks 2.2 onward remain unchecked. This replaces the former durable-lifecycle plan:
+The foundation contracts in section 1 provide migration/schema, sqlc queries
+and a runtime metadata index with tests. Task 2.1 adds the ordinary build recipe.
+The construction stage now assigns its actual finisher in runtime and replaces
+their previous home, using bounded read preparation and ordinary object saving.
+Its verification is tracked below. Ownership saving, general chunk hydration,
+restart repair, death cleanup and the remaining gameplay remain separate stages.
+This replaces the former durable-lifecycle plan:
 gameplay changes finish in runtime without waiting for a database commit.
 Ordinary asynchronous persistence may lose recent progress on a crash. Runtime
 ownership, object state, action cancellation, and stale-handle safety remain
@@ -38,10 +40,17 @@ it does not describe an already-installed universal database-error handler.
 ## 2. Manual Construction and Immediate Replacement
 
 - [x] 2.1 Add the universally available five-branch Hearth recipe using existing two-second and eight-stamina processing per branch. Verify solo ten-second/forty-stamina construction, cooperative acceleration, and no skill/discovery requirement.
-- [ ] 2.2 Add small registered construction preflight/completion hooks and implement Hearth policy in its feature module. Before final-cycle costs, prepare any unknown old-home metadata through existing bounded read workers; if not ready, end that attempt with a loading message and no final-cycle costs. Verify ordinary recipes retain their current path and no SQL or blocking worker wait runs under the shard lock.
-- [ ] 2.3 Complete Hearth synchronously on the surface owning shard using the actual successful final-branch actor. Prepare fallible runtime transforms before mutation, convert the previous home to an ordinary unlit campfire, transform the site, and replace ownership in one shard-locked completion; test exact identity/location preservation and unchanged player position without a saved finisher sidecar.
-- [ ] 2.4 Apply an inactive old-home conversion to the prepared raw record without forcing activation; retain its latest runtime projection until ordinary save/activation consumes it. Make runtime raw updates advance the existing cache revision; test unloaded homes, stale read/load results, and activation before database catch-up cannot reveal a second active home.
-- [ ] 2.5 Add cooperative and competing completion coverage and update construction notes. Verify unlimited sites, initiator independence, offline/dead initiators, first-home construction, repeated completion of an already transformed site, and latest runtime ownership without admission tickets or a retained mutable build site.
+- [x] 2.2 Add one optional registered construction-result wrapper and keep Hearth policy in its feature module. Before final-cycle costs, prepare unknown ownership through `GetCharacterHearth` and an unloaded old chunk through `WaitPreloaded` using existing bounded workers; if not ready, end that attempt with a loading message and no final-cycle costs. Verify ordinary recipes retain their current path and no SQL or blocking worker wait runs under the shard lock.
+- [x] 2.3 Complete Hearth synchronously on the surface owning shard using the actual successful final-branch actor. Prepare concrete source/definition checks, invoke ordinary completion with its existing link-before-transform order, propagate the transform result, convert the previous home to an ordinary unlit campfire, and replace ownership; test exact identity/location preservation and unchanged player position without a saved finisher sidecar.
+- [x] 2.4 Apply an inactive old-home conversion to a ready raw chunk without forcing activation. Reuse a short existing `PinPersistence` around completion and `UpsertRawObject`, then release it for ordinary save/activation; add no gate API or `cacheRevision` changes. Test unloaded/busy preparation, raw identity preservation and activation of the converted campfire before database catch-up.
+- [x] 2.5 Add cooperative and competing completion coverage and update construction notes. Verify first-home construction, helper-finisher ownership, replacement of only the finisher's home, repeated completion rejection, stale handles/results and unchanged ordinary recipe costs without admission tickets or a retained mutable build site.
+
+Construction verification: focused feature/raw/generic completion tests and
+`GOCACHE=/tmp/origin-hearth-go-cache make test` passed. Tests use real catalogs
+with stubbed ownership-read and chunk-worker boundaries. PostgreSQL integration
+tests were skipped because `ORIGIN_OBJECT_HEALTH_TEST_DSN` was unset; this stage
+does not claim a live-database integration check. Independent code review approved
+the implementation. Ownership saver and the later stages remain unchecked.
 
 ## 3. World Rules and Ownership Restoration
 

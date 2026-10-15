@@ -4,7 +4,7 @@
 
 See `proposal.md` and `docs/features/hearth_fire.md`, Part 2, for gameplay. On 2026-10-13 the owner reverted Hearth gameplay/persistence code and requested a simpler design: runtime integrity is required; asynchronous saves, independent checkpoints, and loss of recent progress after a crash are acceptable.
 
-The prepared static `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. Tasks 1.1-1.4 now provide the ownership migration/schema, sqlc queries and isolated `internal/game/hearth` metadata index. They are not wired into gameplay or background saving. Finisher codecs and lifecycle coordinators are not introduced; previous reverted gameplay is not counted as delivered work.
+The prepared `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. Tasks 1.1-1.4 provide the ownership migration/schema, sqlc queries and isolated metadata index. The construction stage now connects that index through `hearth.Runtime` and the result's `hearth` behavior; it assigns the actual finisher and replaces their previous home in memory. Ownership saving, general chunk hydration and restart repair remain unimplemented. Finisher codecs and lifecycle coordinators are not introduced; previous reverted gameplay is not counted as delivered work.
 
 The database is assumed available. Any database read, write or commit error must stop the entire server; Hearth adds no SQL retry, reconnect or database-error recovery path. An expected absent row, a runtime optimistic-version conflict and a full worker queue are ordinary outcomes, not database failures. Asynchronous saving and recovery of partial saved checkpoints remain unchanged. This is the integration policy, not a claim that the current server already has a universal fatal database-error handler.
 
@@ -12,8 +12,8 @@ Relevant existing mechanisms:
 
 - One shard/World owns each layer. Hearths and their construction sites are surface-only, so both sides of a replacement belong to one surface World.
 - Build cycles already process materials and stamina under the owning shard lock. `TransformObjectToDefInPlace` updates a live object's type, collider, behaviors, appearance and dirty intent without changing its ID or position.
-- Chunk persistence has bounded workers, I/O gates, raw cache and load revisions. `core.Chunk.UpsertRawObject` marks raw data dirty, but currently does not advance the cache revision used to fence old loads.
-- `finalizeCompletedBuild` currently ignores the transform's failure result. This needs a small correction before integrating another completion policy.
+- Chunk persistence has bounded workers, I/O gates and raw cache. A ready raw chunk can be retained with the existing nonblocking `PinPersistence`; `core.Chunk.UpsertRawObject` marks its replacement row dirty for ordinary saving.
+- `finalizeCompletedBuild` now propagates the transform result while keeping ordinary link/window cleanup before transformation.
 - Player transfers are asynchronous; accepting `RequestTransfer` is not successful relocation. Action progress, cooldowns, carry snapshots, generation checks and rollback already exist.
 - `S2C_Fx` currently carries a key and position. Existing dispatch is local-player-oriented; finite world effects need detached rendering, not a new persistence subsystem.
 
@@ -43,15 +43,17 @@ Terminal eligibility is distinct from `NoHome`. `MarkTerminalPending` blocks new
 
 ### 2. Finalize construction immediately, in one surface critical section
 
-Integrate through a small registered construction-result capability using the existing behavior registry. The feature selects its recipe/policy; shared construction does not check a Hearth key or carry a finisher field.
+Integrate through one optional construction-result wrapper capability using the existing behavior registry. The result behavior prepares its policy before invoking the ordinary completion callback. Shared construction does not check a Hearth key or carry a finisher field.
 
-Preparation runs before the last material and stamina costs. Resolve the actor's current home and prepare the old object's live/raw source. Use existing cache or worker reads for unloaded data, without activating a remote area or waiting for SQL under the shard lock. If preparation is unavailable, invalid or stale, use ordinary build failure/retry with a clear message and no final-cycle costs; do not introduce a special pending-finalization phase.
+Preparation runs before the last material and stamina costs. Resolve the actor's current home and prepare the old object's live/raw source. Unknown ownership uses `GetCharacterHearth`; an unloaded old chunk uses `WaitPreloaded`, both through existing bounded workers outside the shard lock. A missing saved row establishes known absence; it is not inferred from an empty index. If preparation is unavailable, invalid or stale, use ordinary build failure/retry with a clear message and no final-cycle costs; do not introduce a special pending-finalization phase or activate a remote area.
 
-When ready, revalidate the exact actor, site handle, current home revision and old source. Under the single surface shard lock, process/pay the final branch, transform the old home into an ordinary unlit campfire, transform the site into a Hearth, switch the feature-owned association, and perform ordinary link/window cleanup. Preflight both transforms before costs and propagate actual transform failure rather than reporting success. Preserve existing synchronous lifecycle ordering.
+When ready, revalidate the exact actor, site handle, current home revision and old source. Under the single surface shard lock, the wrapper invokes ordinary final-branch processing and site completion, converts the previous home to an ordinary unlit campfire, and switches the feature-owned association to the actual finisher. Preserve ordinary completion order: close windows/break links before transforming the site. Propagate the transform's actual `bool` result instead of reporting unconditional success. Prepare the concrete Hearth/campfire definitions and source data before costs; no generic transform transaction or rollback framework is needed.
 
-For a non-active old home, apply the prepared campfire row to the existing raw cache with dirty intent instead of spawning it. Make this generic runtime raw update participate in existing cache-revision fencing, so an older load cannot reinstall the prior type. If a required cache update cannot be prepared without blocking, defer the final cycle before payment.
+For a non-active old home, use only a ready raw chunk and hold a short existing `PinPersistence` from preflight through the synchronous callback and raw update. Apply the prepared campfire row with `UpsertRawObject`, then release the pin; do not spawn or activate the old object. Busy or unloaded chunks defer the final cycle before payment. Reuse existing load/save/cache lifetime rules without a new gate API, a change to `cacheRevision`, or a pin held until SQL commit.
 
 The game sees the final result immediately. Later save snapshots see either previous build progress or the final object, not a paid completed site waiting for a DB commit. The actual finisher is available in this synchronous call and becomes the current owner there. Neither `BuildBehaviorState.HearthFinisherID` nor `behaviors.hearth_construction` is needed. No feature state is added to shared ECS/build contracts.
+
+This construction stage reads saved ownership when needed and marks the runtime association dirty. Ownership saving, batch chunk hydration, restart repair, owner-death cleanup, collision/terrain rules, return and FX remain separate stages. Ordinary object saves do not persist the new association; this intermediate stage does not preserve newly assigned ownership across a server restart.
 
 ### 3. Save current state, not a history of operations
 

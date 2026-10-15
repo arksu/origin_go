@@ -31,6 +31,7 @@ import (
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
+	"origin/internal/game/hearth"
 	"origin/internal/game/inventory"
 	"origin/internal/game/lifecycle"
 	"origin/internal/game/world"
@@ -67,6 +68,7 @@ type Shard struct {
 	adminHandler      *ChatAdminCommandHandler
 	craftingService   *CraftingService
 	buildService      *BuildService
+	hearthRuntime     *hearth.Runtime
 	liftService       *LiftService
 	actionService     *ActionService
 	contextActions    *ContextActionService
@@ -136,6 +138,13 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
 	positionObservers := core.PositionObservers{colliderSpatial, s.soundEvents}
 	s.chunkManager.SetPositionObserver(positionObservers)
+	if layer == hearth.SurfaceLayer {
+		var reader hearth.HomeReader
+		if db != nil {
+			reader = db.Queries()
+		}
+		s.hearthRuntime = ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, behaviorRegistry, eb, logger))
+	}
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
 	worldMinX := float64(cfg.Game.WorldMinXChunks * chunkSize)
@@ -416,6 +425,9 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	s.world.AddExternalTiming("ShardLockWait", lockWait)
 
 	// Complete asynchronous loads on the shard thread before gameplay uses them.
+	if s.hearthRuntime != nil {
+		s.hearthRuntime.ApplyReadResults()
+	}
 	if s.objectDestruction != nil {
 		s.objectDestruction.Update()
 	}

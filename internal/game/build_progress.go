@@ -77,13 +77,43 @@ func (s *BuildService) HandleBuildCycleComplete(
 	if !ok {
 		return contracts.BehaviorCycleDecisionCanceled
 	}
+	if action.TargetHandle != types.InvalidHandle && action.TargetHandle != ctx.targetHandle {
+		return contracts.BehaviorCycleDecisionCanceled
+	}
 	if isBuildProgressComplete(ctx.buildState) {
-		if s.finalizeCompletedBuild(w, playerID, ctx.targetID, ctx.targetHandle, ctx.buildDef) {
+		if s.recoverCompletedBuild(w, playerID, ctx) {
 			return contracts.BehaviorCycleDecisionComplete
 		}
 		return contracts.BehaviorCycleDecisionCanceled
 	}
+	if isFinalBuildItem(ctx.buildState) {
+		if resultDef, completer := s.constructionCompleter(ctx.buildState); completer != nil {
+			completed := false
+			result := completer.CompleteConstruction(&contracts.ConstructionContext{
+				World: w, PlayerID: playerID, PlayerHandle: playerHandle,
+				TargetID: ctx.targetID, TargetHandle: ctx.targetHandle, ResultType: uint32(resultDef.DefID),
+			}, func() bool {
+				completed = s.processBuildCycle(w, playerID, playerHandle, ctx) == contracts.BehaviorCycleDecisionComplete
+				return completed
+			})
+			if result.UserVisible {
+				s.sendMiniAlert(playerID, mapBehaviorSeverity(result.Severity), result.ReasonCode)
+			}
+			if result.OK && completed {
+				return contracts.BehaviorCycleDecisionComplete
+			}
+			return contracts.BehaviorCycleDecisionCanceled
+		}
+	}
+	return s.processBuildCycle(w, playerID, playerHandle, ctx)
+}
 
+func (s *BuildService) processBuildCycle(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	ctx buildCycleContext,
+) contracts.BehaviorCycleDecision {
 	processed, ok := s.processOneBuildItem(w, ctx.targetHandle)
 	if !ok {
 		s.sendWarning(playerID, "BUILD_PROGRESS_NO_MATERIALS")
@@ -141,7 +171,7 @@ func (s *BuildService) startBuildCyclicAction(
 	}
 	if _, found := findFirstProcessableBuildSlot(ctx.buildState); !found {
 		if isBuildProgressComplete(ctx.buildState) {
-			if s.finalizeCompletedBuild(w, playerID, ctx.targetID, ctx.targetHandle, ctx.buildDef) {
+			if s.recoverCompletedBuild(w, playerID, ctx) {
 				return
 			}
 		}
@@ -271,6 +301,48 @@ func isBuildProgressComplete(buildState *components.BuildBehaviorState) bool {
 		}
 	}
 	return len(buildState.Items) > 0
+}
+
+func isFinalBuildItem(buildState *components.BuildBehaviorState) bool {
+	if buildState == nil {
+		return false
+	}
+	remaining := false
+	for _, slot := range buildState.Items {
+		if slot.BuildCount >= slot.RequiredCount {
+			continue
+		}
+		if remaining || slot.RequiredCount-slot.BuildCount != 1 {
+			return false
+		}
+		remaining = true
+	}
+	return remaining
+}
+
+func (s *BuildService) constructionCompleter(buildState *components.BuildBehaviorState) (*objectdefs.ObjectDef, contracts.ConstructionCompleter) {
+	if s.behaviorRegistry == nil {
+		return nil, nil
+	}
+	resultDef, ok := resolveBuildResultObjectDef(buildState)
+	if !ok {
+		return nil, nil
+	}
+	for _, key := range resultDef.BehaviorOrder {
+		behavior, _ := s.behaviorRegistry.GetBehavior(key)
+		if completer, ok := behavior.(contracts.ConstructionCompleter); ok {
+			return resultDef, completer
+		}
+	}
+	return resultDef, nil
+}
+
+func (s *BuildService) recoverCompletedBuild(w *ecs.World, playerID types.EntityID, ctx buildCycleContext) bool {
+	if _, completer := s.constructionCompleter(ctx.buildState); completer != nil {
+		// The last material's worker is no longer known; a retry cannot claim it.
+		return false
+	}
+	return s.finalizeCompletedBuild(w, playerID, ctx.targetID, ctx.targetHandle, ctx.buildDef)
 }
 
 func totalBuildPutItemCount(buildState *components.BuildBehaviorState) uint32 {
@@ -477,8 +549,7 @@ func (s *BuildService) finalizeCompletedBuild(
 	}
 
 	s.closeAndBreakLinksForCompletedBuild(w, actorPlayerID, targetID)
-	s.transformCompletedBuildTarget(w, targetID, targetHandle, buildDef, buildState, resultDef)
-	return true
+	return s.transformCompletedBuildTarget(w, targetID, targetHandle, buildDef, buildState, resultDef)
 }
 
 func resolveBuildResultObjectDef(buildState *components.BuildBehaviorState) (*objectdefs.ObjectDef, bool) {
@@ -570,9 +641,9 @@ func (s *BuildService) transformCompletedBuildTarget(
 	buildDef *builddefs.BuildDef,
 	buildState *components.BuildBehaviorState,
 	resultDef *objectdefs.ObjectDef,
-) {
+) bool {
 	if s == nil || w == nil || targetHandle == types.InvalidHandle || !w.Alive(targetHandle) || resultDef == nil {
-		return
+		return false
 	}
 	var computedQuality uint32
 	var hasComputedQuality bool
@@ -583,7 +654,7 @@ func (s *BuildService) transformCompletedBuildTarget(
 	if hasComputedQuality {
 		qualityOverride = &computedQuality
 	}
-	gameworld.TransformObjectToDefInPlace(w, targetID, targetHandle, resultDef, gameworld.TransformObjectInPlaceOptions{
+	return gameworld.TransformObjectToDefInPlace(w, targetID, targetHandle, resultDef, gameworld.TransformObjectInPlaceOptions{
 		DeleteBehaviorStateKeys: []string{buildBehaviorStateKey},
 		ClearFlags:              true,
 		QualityOverride:         qualityOverride,
