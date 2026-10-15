@@ -22,11 +22,17 @@ ownership, object state, action cancellation, and stale-handle safety remain
 authoritative; no lifecycle coordinator, mutation-reservation framework,
 finisher sidecar, body-retention system, or special shutdown barrier is required.
 
+The database is assumed available. Actual database errors, including an unknown
+commit outcome, must stop the entire server without SQL retries or database-error
+recovery. Expected absent rows, optimistic-version conflicts and queue saturation
+remain ordinary outcomes. This policy is to be wired with the gameplay/saver work;
+it does not describe an already-installed universal database-error handler.
+
 ## 1. Ownership Data and Runtime State
 
 - [x] 1.1 Add the single undeployed migration and matching canonical schema for unpartitioned `character_hearth`: character PK/FK, unique `(object_region, object_id)`, and composite RESTRICT object FK. Verify PostgreSQL rejects duplicate or invalid associations; add no first-entry marker, compatibility migration, or backfill.
 - [x] 1.2 Add sqlc queries for indexed home/owner lookup, batched owner loading, latest association replacement/removal, and restart repair; run `make sqlc` and cover absent ownership, deleted characters, and invalid object references without hand-editing generated code.
-- [x] 1.3 Add the feature-owned runtime home index with explicit unknown/known-no-home/current-home states and dirty revisions. Keep mutation on the owning execution path and expose copied metadata to other layers; test first assignment, replacement, removal, stale revisions, and absence of permanent pending-operation records.
+- [x] 1.3 Add the feature-owned runtime home index with explicit unknown/known-no-home/current-home states, optimistic versions and one loading read per character. Accepted reads complete exactly once without cancellation; only rejected submissions release loading before execution. Keep mutation on the owning execution path and expose copied metadata to other layers; test first assignment, replacement, removal, stale versions, exclusive reads and absence of permanent pending-operation records.
 - [x] 1.4 Document runtime authority, schema/index responsibilities, asynchronous save lag, and restart repair in the feature engineering notes. Verify ordinary character saves cannot overwrite home ownership and shared ECS/build/action state contains no Hearth-specific fields.
 
 ## 2. Manual Construction and Immediate Replacement
@@ -49,9 +55,9 @@ finisher sidecar, body-retention system, or special shutdown barrier is required
 
 - [ ] 4.1 Register a narrow permanent-death hook that immediately revokes runtime ownership and schedules any surface conversion through the existing owning-shard execution path. Retain only coalesced conversion intent when an inbox is full; test queue pressure, death with/without a home, cross-layer death, unloaded homes, and completion/death runtime ordering without retaining bodies or changing corpse save/decomposition rules.
 - [ ] 4.2 Connect REST character deletion to the same feature cleanup while preserving account-scoped authorization, deletion responses, and current online/offline policy. Test absent/already-deleted characters and no-home cleanup; emit no character-position death effect or fabricated corpse for REST deletion.
-- [ ] 4.3 Persist copied latest runtime projections through existing bounded persistence workers, with at most one in-flight write per character and coalesced dirty revisions. Use modest transactions for affected object rows and association changes plus existing chunk I/O gates; test queue saturation, retries, and stale acknowledgments without reverting runtime state or holding a gameplay reservation until commit.
+- [ ] 4.3 Persist copied latest runtime projections through existing bounded persistence workers, with at most one in-flight write per character and coalesced dirty versions. Use modest transactions for affected object rows and association changes plus existing chunk I/O gates; test resubmission after queue saturation and stale acknowledgments without holding a gameplay reservation until commit. Actual database errors, including unknown commit outcomes, must stop the entire server without SQL retries.
 - [ ] 4.4 Add restart repair and ordinary shutdown coverage. Treat a valid saved association as the surviving home and normalize orphan or dead-owner Hearth objects; verify partial save lag yields a usable single-home runtime rather than a journal replay, and reuse existing shutdown/final-save ordering instead of a new global barrier.
-- [ ] 4.5 Document the accepted crash-loss boundary, latest-projection save ordering, repair policy, and bounded dirty work. Verify death and home changes remain immediate during a worker/database outage and instrumentation reveals pending save age without per-player metric labels or a full-world tick scan.
+- [ ] 4.5 Document the accepted crash-loss boundary, latest-projection save ordering, restart normalization, and bounded dirty work. Verify death and home changes remain immediate while saving is queued or in flight, database errors stop the entire server, and instrumentation reveals pending save age without per-player metric labels or a full-world tick scan.
 
 ## 5. Return, Interruption, and Normal Login
 
@@ -74,5 +80,5 @@ finisher sidecar, body-retention system, or special shutdown barrier is required
 
 - [ ] 7.1 Run `make test` and PostgreSQL Hearth integration coverage using the existing fixture. Verify regeneration, schema uniqueness, asynchronous latest-state saving, and restart repair; report an unavailable fixture rather than claiming skipped database tests passed.
 - [ ] 7.2 Run client type-check, lint, and relevant action/execution/knockout/movement/map-click/chunk/minimap/FX/asset suites; review lint's automatic diff and verify unrelated presentation/protocol regressions remain covered.
-- [ ] 7.3 Exercise no-home entry, first construction/replacement, underground carry return, post-KO return, owner death/deletion, and blocked-position login recovery end to end. Verify runtime invariants during delayed saves/outage and bounded collider/metadata/FX work under representative load, without new tick scans or N+1 SQL.
+- [ ] 7.3 Exercise no-home entry, first construction/replacement, underground carry return, post-KO return, owner death/deletion, and blocked-position login recovery end to end. Verify runtime invariants during queued/in-flight saves, full-server stop on actual database errors, and bounded collider/metadata/FX work under representative load, without new tick scans or N+1 SQL.
 - [ ] 7.4 Run strict OpenSpec validation and `git diff --check`, review generated/assets/protocol diffs, and deliver clean-database deployment notes. Verify no automatic entry, backfill, database clearing, new dependency, or unrelated balance/`life_death_factor` change, and explicitly distinguish accepted crash rollback from runtime corruption.

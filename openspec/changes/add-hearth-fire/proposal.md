@@ -2,7 +2,7 @@
 
 ## Why
 
-Origin needs a personal home and an interruptible way to return to it, integrated with permanent death and existing building, action, transfer, and persistence mechanisms. The approved decisions in `docs/features/hearth_fire.md`, Part 2, define the feature without importing unrelated Haven & Hearth systems. Runtime state is authoritative: construction and ownership change immediately in the owning world, while asynchronous database saves may lag. Small crash rollback and partial checkpoints are acceptable; lossless durability is not a goal.
+Origin needs a personal home and an interruptible way to return to it, integrated with permanent death and existing building, action, transfer, and persistence mechanisms. The approved decisions in `docs/features/hearth_fire.md`, Part 2, define the feature without importing unrelated Haven & Hearth systems. Runtime state is authoritative: construction and ownership change immediately in the owning world, while asynchronous database saves may lag. The database is assumed available; a database error must stop the entire server, without SQL retries or error-recovery logic. Small crash rollback and partial checkpoints are acceptable; lossless durability is not a goal.
 
 ## What Changes
 

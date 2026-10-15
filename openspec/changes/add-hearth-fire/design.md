@@ -6,6 +6,8 @@ See `proposal.md` and `docs/features/hearth_fire.md`, Part 2, for gameplay. On 2
 
 The prepared static `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. Tasks 1.1-1.4 now provide the ownership migration/schema, sqlc queries and isolated `internal/game/hearth` metadata index. They are not wired into gameplay or background saving. Finisher codecs and lifecycle coordinators are not introduced; previous reverted gameplay is not counted as delivered work.
 
+The database is assumed available. Any database read, write or commit error must stop the entire server; Hearth adds no SQL retry, reconnect or database-error recovery path. An expected absent row, a runtime optimistic-version conflict and a full worker queue are ordinary outcomes, not database failures. Asynchronous saving and recovery of partial saved checkpoints remain unchanged. This is the integration policy, not a claim that the current server already has a universal fatal database-error handler.
+
 Relevant existing mechanisms:
 
 - One shard/World owns each layer. Hearths and their construction sites are surface-only, so both sides of a replacement belong to one surface World.
@@ -25,13 +27,17 @@ Relevant existing mechanisms:
 
 ### 1. Keep ownership in the Hearth module
 
-Use `internal/game/hearth` for home lookup, current ownership, conversion policy and association persistence. It owns a current `character -> home` cache and reverse object-owner index. Distinguish an unknown lookup from known absence; an absent home never creates one automatically. Store copied IDs, positions and generations, not pointers to live components.
+Use `internal/game/hearth` for home lookup, current ownership, conversion policy and association persistence. It owns a current `character -> home` cache and reverse object-owner index. Distinguish an unknown lookup from known absence; an absent home never creates one automatically. Store copied IDs, positions and versions, not pointers to live components.
 
-Current runtime state wins over SQL results. A small revision/load-generation check rejects stale lookups and acknowledgments. Protect shared index access across layers with short synchronization, never holding that lock across ECS callbacks, shard locks or I/O. Geometry checks use the cached owner, not SQL.
+Current runtime state wins over SQL results. `Version` supplies optimistic locking for home changes, lookup results and save acknowledgments. One `loading` flag admits at most one home read per character; accepted reads are never canceled and their submitter delivers each result exactly once. Protect shared index access across layers with short synchronization, never holding that lock across ECS callbacks, shard locks or I/O. Geometry checks use the cached owner, not SQL.
 
-Cache entries are needed for connected characters, active/loading hearth objects and dirty ownership changes, not all historical characters. Do not evict dirty entries or revocation overrides. Retire clean idle entries only after their writes and referencing lookups finish; callbacks must still match their lookup generation. No permanent per-character terminal registration is required.
+Cache entries are needed for connected characters, active/loading hearth objects and dirty ownership changes, not all historical characters. Do not evict dirty entries or revocation overrides. Retire clean idle entries only after their writes and referencing lookups finish. A read remains loading even after logout or a runtime home change; its sole result clears loading before checking the observed version, so stale data cannot strand the entry. No permanent per-character terminal registration is required.
 
-The delivered index returns copied `Snapshot`/`Home` values. `BeginLookup`/`CompleteLookup`/`CancelLookup` coalesce and fence unknown-home reads; runtime changes advance revision, while eviction/recreation uses a fresh generation. `ReplaceHome` changes both indexes together and requires the expected version; `AcknowledgeSaved` only clears that exact dirty version. Callers retain metadata through `Retain`/release-once `Reference` while bodies, objects or writes refer to it. No ECS hooks or saver jobs are installed in this stage.
+The delivered index returns copied `Snapshot`/`Home` values. A single monotonic sequence supplies `Version uint64` values for entry creation and runtime changes; versions never repeat after eviction/recreation or wrap on exhaustion.
+
+`BeginLookup(character)` sets loading and returns the observed version; `CompleteLookup(character, version, home)` consumes the read result. No token or lookup ID exists. Only the successful `BeginLookup` caller may invoke `RejectLookup(character)`, once and immediately after a rejected submission guarantees no job or result can follow. Rejection leaves the home version unchanged. An accepted read cannot be canceled through logout, timeout or deferred cleanup. The submitter must neither lose nor redeliver its result, including after a later read begins; the index does not deduplicate deliveries across attempts.
+
+`ReplaceHome` changes both indexes together and requires the expected version; `AcknowledgeSaved` only clears that exact dirty version. Callers retain metadata through `Retain`/release-once `Reference` while bodies, objects or writes refer to it. Reference release state and counts share the index mutex; live references prevent eviction without separate generation tracking or atomics. No ECS hooks or saver jobs are installed in this stage.
 
 Terminal eligibility is distinct from `NoHome`. `MarkTerminalPending` blocks new acquisition/return without mutating the current association from a notifying thread. An already admitted owning completion may finish before `ApplyTerminal` revokes the latest home. Applied terminal rejects rebinding and remains cached only while dirty or referenced. These contracts do not yet connect to death or REST and add no terminal operation queue.
 
@@ -66,11 +72,11 @@ CREATE TABLE origin.character_hearth
 
 The keys enforce one saved home per character and one saved owner per object. Coordinates/type/state remain in `object`; Hearth ownership does not use `object.owner_id` or object JSON. There is no first-entry marker, finisher table, pending operation table or cooldown column.
 
-After runtime changes, mark the latest ownership projection dirty. Reuse existing bounded persistence workers and the current saver pattern: coalesce changes per character, allow one in-flight association write per character, and retry dirty state when submission or writing fails. This is a dirty-state saver, not a completion/death operation queue. An immutable worker snapshot carries its revision; only a matching acknowledgment clears dirty intent. Workers never change runtime ownership, transforms or FX.
+After runtime changes, mark the latest ownership projection dirty. Reuse existing bounded persistence workers and the current saver pattern: coalesce changes per character, allow one in-flight association write per character, and resubmit dirty state when a full queue rejects admission. A database read, write or commit error stops the entire server instead of retrying SQL. This is a dirty-state saver, not a completion/death operation queue. An immutable worker snapshot carries its version; only a matching acknowledgment clears dirty intent. Workers never change runtime ownership, transforms or FX.
 
 A modest association transaction ensures the current target object exists for its FK, converts a previously linked saved Hearth if necessary, and sets/deletes the link. A deleted saved character cannot acquire a link. For newly persisted IDs reuse allocator watermark advancement. Normal chunk objects, character state and corpses continue their ordinary saving; they do not join an all-or-nothing Hearth checkpoint. Reuse `WithPersistence` for affected object I/O, outside shard locks. Do not pin gameplay objects until commit.
 
-An unknown commit outcome is handled by retrying the latest idempotent projection, not by replaying the original gameplay action or retaining its paid source. Replacements occurring while a write is in flight remain authoritative in memory and produce a newer dirty projection. Queue pressure or DB errors never roll runtime back or assign a different owner.
+An unknown commit outcome is a fatal database error: stop the entire server without retry, replay or commit probing. Replacements occurring while a write is in flight remain authoritative in memory and produce a newer dirty projection. Queue pressure does not roll runtime back or assign a different owner.
 
 Ordinary shutdown makes a bounded best-effort flush using existing worker lifetimes before their closure. Report remaining dirty state on failure; do not introduce shared participant/drain infrastructure or retain dead bodies to make flushing lossless.
 
@@ -78,7 +84,7 @@ Ordinary shutdown makes a bounded best-effort flush using existing worker lifeti
 
 Prepare owners in one batch while a chunk loads, then apply copied metadata through the owning shard before object activation/visibility. Add only the narrow metadata preparation/apply hook needed by this responsibility. Preserve existing burner/corpse restoration composition; no new deferred-restore framework or generic codec registry is required.
 
-In the running process, known runtime ownership and retired-object overrides supersede stale SQL/load results. A current home cannot be replaced by an old hydration callback. Reuse chunk load/raw revisions and the feature lookup generation; do not perform per-object SQL or scan the world each tick.
+In the running process, known runtime ownership and retired-object overrides supersede stale SQL/load results. A current home cannot be replaced by an old hydration callback. Reuse chunk load/raw revisions and the feature's single-read/optimistic-version contract; do not perform per-object SQL or scan the world each tick.
 
 After restart, accept only a saved association whose character is alive and whose object is undeleted, on the surface and of Hearth type. An invalid association means no home and can be cleaned asynchronously. A restored Hearth without a valid current owner becomes an ordinary unlit campfire before visibility. Do not infer ownership from JSON/`owner_id`, upgrade a saved campfire from the link, replay construction, or recreate missing objects. Partial saves can lose a home or restore an earlier saved result; they cannot publish two runtime homes.
 
@@ -117,7 +123,8 @@ Preload through existing asset loading, bound concurrent one-shot effects, and u
 - [Crash or independent save snapshots] -> Recent construction, home changes or death can roll back or lose a home. Conservative restore removes invalid runtime ownership; no lossless or cross-feature checkpoint is claimed.
 - [Missing old-home data] -> Prepare asynchronously before final costs; ordinary failure/retry is preferable to a paid half-completed runtime transition.
 - [Stale load or write completion] -> Existing raw/load revisions plus feature lookup/dirty revisions prevent callbacks from overriding known current runtime state.
-- [DB outage or queue pressure] -> Coalesce dirty projections and keep gameplay memory authoritative; reuse bounded workers. Observe dirty count/save failures, without per-entity metric labels or a new persistence platform.
+- [Database error] -> Stop the entire server, including on unknown commit outcome; do not add SQL retries or database-error recovery.
+- [Queue pressure] -> Coalesce dirty projections and resubmit rejected admissions through bounded workers. Observe dirty count/save age without per-entity metric labels or a new persistence platform.
 - [Cross-layer terminal work] -> Revoke the logical home immediately, apply physical conversion through the surface owner, and validate identity on delayed work.
 - [Transfer admission confused with success] -> Use existing deferred action/rollback and a target-success callback; do not charge cooldown at queue admission.
 - [Cosmetic delay] -> FX is best effort and locally short-lived. It has no durable exactly-once delivery guarantee and does not roll back gameplay.

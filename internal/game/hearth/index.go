@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math"
 	"sync"
-	"sync/atomic"
 
 	"origin/internal/types"
 )
@@ -42,11 +41,8 @@ const (
 	CurrentHome
 )
 
-// Generation survives eviction through the Index's monotonic sequence.
-type Version struct {
-	Generation uint64
-	Revision   uint64
-}
+// Version never repeats within an Index, including after eviction and recreation.
+type Version uint64
 
 type Snapshot struct {
 	State           HomeState
@@ -65,16 +61,9 @@ func (s Snapshot) CanReturn() bool {
 	return s.State == CurrentHome && !s.PendingTerminal && !s.Terminal
 }
 
-type LookupToken struct {
-	character  types.EntityID
-	generation uint64
-	lookup     uint64
-	revision   uint64
-}
-
 type indexEntry struct {
 	snapshot   Snapshot
-	lookup     uint64
+	loading    bool
 	references int
 }
 
@@ -82,10 +71,10 @@ type indexEntry struct {
 // Home mutations require the owning execution path. Its lock never spans ECS,
 // I/O, callbacks or acquiring a shard lock.
 type Index struct {
-	mu             sync.RWMutex
-	characters     map[types.EntityID]*indexEntry
-	owners         map[ObjectKey]types.EntityID
-	nextGeneration uint64
+	mu          sync.RWMutex
+	characters  map[types.EntityID]*indexEntry
+	owners      map[ObjectKey]types.EntityID
+	nextVersion Version
 }
 
 func NewIndex() *Index {
@@ -116,36 +105,36 @@ func (i *Index) Owner(object ObjectKey) (types.EntityID, bool) {
 	return character, true
 }
 
-// BeginLookup coalesces one read for an unknown character. CompleteLookup or
-// CancelLookup must finish it, even when a runtime change makes it obsolete.
-func (i *Index) BeginLookup(character types.EntityID) (LookupToken, bool) {
+// BeginLookup admits one read for an unknown character and returns its observed
+// version. Once submitted, the read must reach CompleteLookup exactly once,
+// even after logout or a runtime change. Only a rejected submission may release it.
+func (i *Index) BeginLookup(character types.EntityID) (Version, bool) {
 	if !validID(character) {
-		return LookupToken{}, false
+		return 0, false
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	entry := i.entryLocked(character)
-	if entry.snapshot.State != Unknown || entry.lookup != 0 || entry.snapshot.Terminal {
-		return LookupToken{}, false
+	if entry.snapshot.State != Unknown || entry.loading || entry.snapshot.Terminal {
+		return 0, false
 	}
-	entry.lookup = i.generationLocked()
-	return LookupToken{
-		character: character, generation: entry.snapshot.Version.Generation,
-		lookup: entry.lookup, revision: entry.snapshot.Version.Revision,
-	}, true
+	entry.loading = true
+	return entry.snapshot.Version, true
 }
 
 // A nil home is a successful lookup of known absence, not a failed SQL read.
 // Hydration may prepare cleanup metadata while PendingTerminal blocks admission.
-func (i *Index) CompleteLookup(token LookupToken, home *Home) error {
+// The submitter delivers each accepted read result exactly once. A stale result
+// still releases loading, which prevents eviction until that read completes.
+func (i *Index) CompleteLookup(character types.EntityID, expected Version, home *Home) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	entry, matches := i.lookupLocked(token)
-	if !matches {
+	entry := i.characters[character]
+	if entry == nil || !entry.loading {
 		return ErrStaleLookup
 	}
-	entry.lookup = 0
-	if entry.snapshot.Version.Revision != token.revision || entry.snapshot.Terminal {
+	entry.loading = false
+	if entry.snapshot.Version != expected || entry.snapshot.Terminal {
 		return ErrStaleLookup
 	}
 	if home == nil {
@@ -155,23 +144,27 @@ func (i *Index) CompleteLookup(token LookupToken, home *Home) error {
 	if !validHome(*home) {
 		return ErrInvalidHome
 	}
-	if owner, exists := i.owners[home.Object]; exists && owner != token.character {
+	if owner, exists := i.owners[home.Object]; exists && owner != character {
 		return ErrObjectOwned
 	}
 	entry.snapshot.State = CurrentHome
 	entry.snapshot.Home = *home
-	i.owners[home.Object] = token.character
+	i.owners[home.Object] = character
 	return nil
 }
 
-func (i *Index) CancelLookup(token LookupToken) bool {
+// RejectLookup releases a read only after its queue submission was rejected.
+// The BeginLookup caller invokes it once, immediately after rejection guarantees
+// no job or result can follow. It must never cancel an accepted read or be retried.
+func (i *Index) RejectLookup(character types.EntityID) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	entry, matches := i.lookupLocked(token)
-	if matches {
-		entry.lookup = 0
+	entry := i.characters[character]
+	if entry == nil || !entry.loading {
+		return false
 	}
-	return matches
+	entry.loading = false
+	return true
 }
 
 // ReplaceHome commits an already-prepared owning-shard completion. PendingTerminal
@@ -274,10 +267,9 @@ func (i *Index) AcknowledgeSaved(character types.EntityID, version Version) bool
 // It does not reserve a gameplay object. Release is safe to call more than once.
 // Keep the pointer returned by Retain; a Reference must not be copied after use.
 type Reference struct {
-	index      *Index
-	character  types.EntityID
-	generation uint64
-	released   atomic.Bool
+	index     *Index
+	character types.EntityID
+	released  bool // protected by index.mu
 }
 
 func (i *Index) Retain(character types.EntityID) (*Reference, error) {
@@ -288,26 +280,29 @@ func (i *Index) Retain(character types.EntityID) (*Reference, error) {
 	defer i.mu.Unlock()
 	entry := i.entryLocked(character)
 	entry.references++
-	return &Reference{index: i, character: character, generation: entry.snapshot.Version.Generation}, nil
+	return &Reference{index: i, character: character}, nil
 }
 
 func (r *Reference) Release() {
-	if r == nil || r.index == nil || !r.released.CompareAndSwap(false, true) {
+	if r == nil || r.index == nil {
 		return
 	}
 	i := r.index
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	if entry := i.characters[r.character]; entry != nil && entry.snapshot.Version.Generation == r.generation {
-		entry.references--
+	if r.released {
+		return
 	}
+	r.released = true
+	// This reference prevents eviction until its first release.
+	i.characters[r.character].references--
 }
 
 func (i *Index) Evict(character types.EntityID) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	entry := i.characters[character]
-	if entry == nil || entry.snapshot.Dirty || entry.snapshot.PendingTerminal || entry.lookup != 0 || entry.references != 0 {
+	if entry == nil || entry.snapshot.Dirty || entry.snapshot.PendingTerminal || entry.loading || entry.references != 0 {
 		return false
 	}
 	i.removeOwnerLocked(entry)
@@ -318,15 +313,10 @@ func (i *Index) Evict(character types.EntityID) bool {
 func (i *Index) entryLocked(character types.EntityID) *indexEntry {
 	entry := i.characters[character]
 	if entry == nil {
-		entry = &indexEntry{snapshot: Snapshot{Version: Version{Generation: i.generationLocked()}}}
+		entry = &indexEntry{snapshot: Snapshot{Version: i.versionLocked()}}
 		i.characters[character] = entry
 	}
 	return entry
-}
-
-func (i *Index) lookupLocked(token LookupToken) (*indexEntry, bool) {
-	entry := i.characters[token.character]
-	return entry, entry != nil && token.lookup != 0 && entry.lookup == token.lookup && entry.snapshot.Version.Generation == token.generation
 }
 
 func (i *Index) removeOwnerLocked(entry *indexEntry) {
@@ -336,19 +326,16 @@ func (i *Index) removeOwnerLocked(entry *indexEntry) {
 }
 
 func (i *Index) dirtyLocked(entry *indexEntry) {
-	if entry.snapshot.Version.Revision == math.MaxUint64 {
-		panic("hearth revision exhausted")
-	}
-	entry.snapshot.Version.Revision++
+	entry.snapshot.Version = i.versionLocked()
 	entry.snapshot.Dirty = true
 }
 
-func (i *Index) generationLocked() uint64 {
-	if i.nextGeneration == math.MaxUint64 {
-		panic("hearth generation exhausted")
+func (i *Index) versionLocked() Version {
+	if i.nextVersion == math.MaxUint64 {
+		panic("hearth version exhausted")
 	}
-	i.nextGeneration++
-	return i.nextGeneration
+	i.nextVersion++
+	return i.nextVersion
 }
 
 func validID(id types.EntityID) bool {

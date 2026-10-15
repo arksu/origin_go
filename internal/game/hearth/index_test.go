@@ -16,9 +16,9 @@ func testHome(id types.EntityID) Home {
 
 func hydrate(t *testing.T, index *Index, character types.EntityID, home *Home) Snapshot {
 	t.Helper()
-	lookup, started := index.BeginLookup(character)
+	version, started := index.BeginLookup(character)
 	require.True(t, started)
-	require.NoError(t, index.CompleteLookup(lookup, home))
+	require.NoError(t, index.CompleteLookup(character, version, home))
 	return index.Snapshot(character)
 }
 
@@ -32,21 +32,21 @@ func TestIndexUnknownAndKnownAbsence(t *testing.T) {
 	_, err := index.ReplaceHome(1, unknown.Version, testHome(10))
 	require.ErrorIs(t, err, ErrUnknownHome)
 
-	lookup, started := index.BeginLookup(1)
+	version, started := index.BeginLookup(1)
 	require.True(t, started)
 	_, started = index.BeginLookup(1)
 	require.False(t, started)
 	require.False(t, index.Evict(1))
-	require.NoError(t, index.CompleteLookup(lookup, nil))
+	require.NoError(t, index.CompleteLookup(1, version, nil))
 	none := index.Snapshot(1)
 	require.Equal(t, NoHome, none.State)
-	require.NotZero(t, none.Version.Generation)
+	require.NotZero(t, none.Version)
 	require.False(t, none.Dirty)
 	require.True(t, none.CanAcquire())
 	require.False(t, none.CanReturn())
 	_, started = index.BeginLookup(1)
 	require.False(t, started)
-	require.ErrorIs(t, index.CompleteLookup(lookup, nil), ErrStaleLookup)
+	require.ErrorIs(t, index.CompleteLookup(1, version, nil), ErrStaleLookup)
 }
 
 func TestIndexAssignmentReplacementAndRemoval(t *testing.T) {
@@ -57,7 +57,7 @@ func TestIndexAssignmentReplacementAndRemoval(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, assigned.CanReturn())
 	require.True(t, assigned.Dirty)
-	require.Equal(t, uint64(1), assigned.Version.Revision)
+	require.Greater(t, assigned.Version, initial.Version)
 	owner, owned := index.Owner(first.Object)
 	require.True(t, owned)
 	require.Equal(t, types.EntityID(1), owner)
@@ -70,7 +70,7 @@ func TestIndexAssignmentReplacementAndRemoval(t *testing.T) {
 	second := testHome(20)
 	replaced, err := index.ReplaceHome(1, assigned.Version, second)
 	require.NoError(t, err)
-	require.Equal(t, uint64(2), replaced.Version.Revision)
+	require.Greater(t, replaced.Version, assigned.Version)
 	_, owned = index.Owner(first.Object)
 	require.False(t, owned)
 	owner, owned = index.Owner(second.Object)
@@ -116,7 +116,7 @@ func TestIndexRejectedAssignmentPreservesBothIndexes(t *testing.T) {
 	two := hydrate(t, index, 2, &second)
 	_, err := index.ReplaceHome(2, two.Version, first)
 	require.ErrorIs(t, err, ErrObjectOwned)
-	_, err = index.ReplaceHome(2, Version{}, testHome(30))
+	_, err = index.ReplaceHome(2, 0, testHome(30))
 	require.ErrorIs(t, err, ErrVersionChanged)
 	require.Equal(t, one, index.Snapshot(1))
 	require.Equal(t, two, index.Snapshot(2))
@@ -130,7 +130,7 @@ func TestIndexLookupCannotOverwriteRuntimeRevocationOrNewHome(t *testing.T) {
 	for _, returnAbsent := range []bool{false, true} {
 		t.Run(map[bool]string{false: "stale-home", true: "stale-absence"}[returnAbsent], func(t *testing.T) {
 			index := NewIndex()
-			lookup, started := index.BeginLookup(1)
+			version, started := index.BeginLookup(1)
 			require.True(t, started)
 			revoked, err := index.RevokeHome(1)
 			require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestIndexLookupCannotOverwriteRuntimeRevocationOrNewHome(t *testing.T) {
 				home := testHome(10)
 				old = &home
 			}
-			require.ErrorIs(t, index.CompleteLookup(lookup, old), ErrStaleLookup)
+			require.ErrorIs(t, index.CompleteLookup(1, version, old), ErrStaleLookup)
 			expected := current
 			expected.Dirty = false
 			require.Equal(t, expected, index.Snapshot(1))
@@ -155,49 +155,114 @@ func TestIndexLookupCannotOverwriteRuntimeRevocationOrNewHome(t *testing.T) {
 	}
 }
 
-func TestIndexLookupFailureAndConflictingOwner(t *testing.T) {
+func TestIndexLookupRejectsConflictingOwner(t *testing.T) {
 	index := NewIndex()
 	first := testHome(10)
 	hydrate(t, index, 1, &first)
-	lookup, started := index.BeginLookup(2)
+	version, started := index.BeginLookup(2)
 	require.True(t, started)
-	require.ErrorIs(t, index.CompleteLookup(lookup, &first), ErrObjectOwned)
+	require.ErrorIs(t, index.CompleteLookup(2, version, &first), ErrObjectOwned)
 	require.Equal(t, Unknown, index.Snapshot(2).State)
 	owner, owned := index.Owner(first.Object)
 	require.True(t, owned)
 	require.Equal(t, types.EntityID(1), owner)
-
-	lookup, started = index.BeginLookup(2)
-	require.True(t, started)
-	require.True(t, index.CancelLookup(lookup))
-	require.False(t, index.CancelLookup(lookup))
-	require.Equal(t, Unknown, index.Snapshot(2).State)
-	retry, started := index.BeginLookup(2)
-	require.True(t, started)
-	require.ErrorIs(t, index.CompleteLookup(lookup, nil), ErrStaleLookup)
-	require.False(t, index.CancelLookup(lookup))
-	require.False(t, index.Evict(2), "old callback must not finish the newer read")
-	require.NoError(t, index.CompleteLookup(retry, nil))
+	require.True(t, index.Evict(2), "rejected metadata must release loading")
 }
 
-func TestIndexEvictionAndRecreationRejectOldTokens(t *testing.T) {
+func TestIndexRejectedLookupSubmissionCanRetry(t *testing.T) {
 	index := NewIndex()
-	lookup, started := index.BeginLookup(1)
+	version, started := index.BeginLookup(1)
 	require.True(t, started)
-	require.True(t, index.CancelLookup(lookup))
+	before := index.Snapshot(1)
+	require.True(t, index.RejectLookup(1))
+	require.Equal(t, before, index.Snapshot(1))
+
+	retryVersion, started := index.BeginLookup(1)
+	require.True(t, started)
+	require.Equal(t, version, retryVersion, "queue rejection must not change home version")
+	_, started = index.BeginLookup(1)
+	require.False(t, started)
+	require.False(t, index.Evict(1))
+	require.NoError(t, index.CompleteLookup(1, retryVersion, nil))
+	require.Equal(t, NoHome, index.Snapshot(1).State)
+	require.True(t, index.Evict(1))
+}
+
+func TestIndexLookupAdmissionIsExclusive(t *testing.T) {
+	index := NewIndex()
+	versions := make(chan Version, 8)
+	var workers sync.WaitGroup
+	for range 8 {
+		workers.Go(func() {
+			if version, started := index.BeginLookup(1); started {
+				versions <- version
+			}
+		})
+	}
+	workers.Wait()
+	require.Len(t, versions, 1, "only one caller may submit the character's read")
+	version := <-versions
+	require.NoError(t, index.CompleteLookup(1, version, nil))
+}
+
+func TestIndexLookupAfterEvictionUsesNewVersion(t *testing.T) {
+	index := NewIndex()
+	_, started := index.BeginLookup(1)
+	require.True(t, started)
+	require.True(t, index.RejectLookup(1))
 	old := index.Snapshot(1)
 	require.True(t, index.Evict(1))
-	newLookup, started := index.BeginLookup(1)
+	version, started := index.BeginLookup(1)
 	require.True(t, started)
-	require.NotEqual(t, old.Version.Generation, index.Snapshot(1).Version.Generation)
-	require.ErrorIs(t, index.CompleteLookup(lookup, nil), ErrStaleLookup)
-	require.False(t, index.CancelLookup(lookup))
-	require.NoError(t, index.CompleteLookup(newLookup, nil))
+	require.Greater(t, version, old.Version)
+	require.NoError(t, index.CompleteLookup(1, version, nil))
 	current := index.Snapshot(1)
+	_, err := index.ReplaceHome(1, old.Version, testHome(20))
+	require.ErrorIs(t, err, ErrVersionChanged)
 	assigned, err := index.ReplaceHome(1, current.Version, testHome(10))
 	require.NoError(t, err)
 	require.False(t, index.AcknowledgeSaved(1, old.Version))
 	require.True(t, assigned.Dirty)
+}
+
+func TestIndexLookupOutlivesLastReference(t *testing.T) {
+	index := NewIndex()
+	body, err := index.Retain(1)
+	require.NoError(t, err)
+	version, started := index.BeginLookup(1)
+	require.True(t, started)
+	body.Release()
+	require.False(t, index.Evict(1), "logout must not discard an accepted read")
+	_, started = index.BeginLookup(1)
+	require.False(t, started)
+
+	home := testHome(10)
+	require.NoError(t, index.CompleteLookup(1, version, &home))
+	owner, owned := index.Owner(home.Object)
+	require.True(t, owned)
+	require.Equal(t, types.EntityID(1), owner)
+	require.True(t, index.Evict(1))
+}
+
+func TestIndexRecreatedHomeRejectsPreviousVersion(t *testing.T) {
+	index := NewIndex()
+	previous := hydrate(t, index, 1, nil)
+	for _, objectID := range []types.EntityID{10, 11, 12} {
+		updated, err := index.ReplaceHome(1, previous.Version, testHome(objectID))
+		require.NoError(t, err)
+		previous = updated
+	}
+	require.True(t, index.AcknowledgeSaved(1, previous.Version))
+	require.True(t, index.Evict(1))
+
+	none := hydrate(t, index, 1, nil)
+	current, err := index.ReplaceHome(1, none.Version, testHome(20))
+	require.NoError(t, err)
+	require.Greater(t, current.Version, previous.Version)
+	_, err = index.ReplaceHome(1, previous.Version, testHome(30))
+	require.ErrorIs(t, err, ErrVersionChanged)
+	require.False(t, index.AcknowledgeSaved(1, previous.Version))
+	require.Equal(t, current, index.Snapshot(1))
 }
 
 func TestIndexSaveAcknowledgmentOnlyClearsMatchingRevision(t *testing.T) {
@@ -217,7 +282,7 @@ func TestIndexSaveAcknowledgmentOnlyClearsMatchingRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, index.AcknowledgeSaved(1, second.Version))
 	require.Equal(t, revoked, index.Snapshot(1))
-	// Failed submission/writing simply leaves dirty intent without an acknowledgment.
+	// Queue rejection leaves dirty intent without an acknowledgment. SQL errors are fatal.
 	require.True(t, index.Snapshot(1).Dirty)
 }
 
@@ -263,6 +328,21 @@ func TestIndexWriteReferenceSurvivesAcknowledgment(t *testing.T) {
 	require.True(t, index.Evict(1))
 }
 
+func TestIndexReferenceSurvivesHomeVersionChanges(t *testing.T) {
+	index := NewIndex()
+	none := hydrate(t, index, 1, nil)
+	reference, err := index.Retain(1)
+	require.NoError(t, err)
+	_, err = index.ReplaceHome(1, none.Version, testHome(10))
+	require.NoError(t, err)
+	revoked, err := index.RevokeHome(1)
+	require.NoError(t, err)
+	require.True(t, index.AcknowledgeSaved(1, revoked.Version))
+	require.False(t, index.Evict(1))
+	reference.Release()
+	require.True(t, index.Evict(1))
+}
+
 func TestIndexTerminalPendingPreservesAdmittedCompletion(t *testing.T) {
 	index := NewIndex()
 	first := testHome(10)
@@ -300,12 +380,12 @@ func TestIndexTerminalBlocksLateHydrationAndRetainsLiveBody(t *testing.T) {
 	index := NewIndex()
 	body, err := index.Retain(1)
 	require.NoError(t, err)
-	lookup, started := index.BeginLookup(1)
+	version, started := index.BeginLookup(1)
 	require.True(t, started)
 	terminal, err := index.ApplyTerminal(1)
 	require.NoError(t, err)
 	old := testHome(10)
-	require.ErrorIs(t, index.CompleteLookup(lookup, &old), ErrStaleLookup)
+	require.ErrorIs(t, index.CompleteLookup(1, version, &old), ErrStaleLookup)
 	require.Equal(t, terminal, index.Snapshot(1))
 	require.True(t, index.AcknowledgeSaved(1, terminal.Version))
 	require.False(t, index.Evict(1))
@@ -317,10 +397,10 @@ func TestIndexTerminalBlocksLateHydrationAndRetainsLiveBody(t *testing.T) {
 func TestIndexPendingTerminalCanPrepareCleanupMetadata(t *testing.T) {
 	index := NewIndex()
 	require.NoError(t, index.MarkTerminalPending(1))
-	lookup, started := index.BeginLookup(1)
+	version, started := index.BeginLookup(1)
 	require.True(t, started)
 	old := testHome(10)
-	require.NoError(t, index.CompleteLookup(lookup, &old))
+	require.NoError(t, index.CompleteLookup(1, version, &old))
 	require.Equal(t, old, index.Snapshot(1).Home)
 	require.False(t, index.Snapshot(1).CanReturn())
 	require.False(t, index.Snapshot(1).CanAcquire())
@@ -340,7 +420,7 @@ func TestIndexInvalidInputDoesNotMutateOwnership(t *testing.T) {
 		_, err = index.ApplyTerminal(character)
 		require.ErrorIs(t, err, ErrInvalidCharacter)
 		require.ErrorIs(t, index.MarkTerminalPending(character), ErrInvalidCharacter)
-		_, err = index.ReplaceHome(character, Version{}, testHome(10))
+		_, err = index.ReplaceHome(character, 0, testHome(10))
 		require.ErrorIs(t, err, ErrInvalidCharacter)
 	}
 	require.Empty(t, index.characters)
@@ -356,12 +436,11 @@ func TestIndexInvalidInputDoesNotMutateOwnership(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidHome)
 		require.Equal(t, none, index.Snapshot(1))
 	}
-	lookup, started := index.BeginLookup(2)
+	version, started := index.BeginLookup(2)
 	require.True(t, started)
 	bad := Home{}
-	require.ErrorIs(t, index.CompleteLookup(lookup, &bad), ErrInvalidHome)
-	_, started = index.BeginLookup(2)
-	require.True(t, started, "invalid completion must not strand the read")
+	require.ErrorIs(t, index.CompleteLookup(2, version, &bad), ErrInvalidHome)
+	require.True(t, index.Evict(2), "invalid completion must not strand the read")
 }
 
 func TestIndexConcurrentAccess(t *testing.T) {
@@ -412,8 +491,8 @@ func TestIndexReadsDoNotAllocate(t *testing.T) {
 func BenchmarkIndexReads(b *testing.B) {
 	index := NewIndex()
 	home := testHome(10)
-	lookup, _ := index.BeginLookup(1)
-	if err := index.CompleteLookup(lookup, &home); err != nil {
+	version, _ := index.BeginLookup(1)
+	if err := index.CompleteLookup(1, version, &home); err != nil {
 		b.Fatal(err)
 	}
 	b.ReportAllocs()

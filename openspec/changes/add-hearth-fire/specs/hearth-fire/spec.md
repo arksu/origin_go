@@ -347,7 +347,7 @@ Normal world-entry spawning SHALL try the saved player position, the current exa
 
 ### Requirement: Runtime transitions do not wait for persistence
 
-Successful construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world. Runtime state SHALL remain authoritative while saving is delayed or fails. Old saves, load results, and callbacks SHALL NOT change the latest runtime ownership, recreate a transformed site, or rebind a terminal owner. Saving SHALL use bounded asynchronous work without a durable operation journal or a database-confirmed publication barrier.
+Successful construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world. Runtime state SHALL remain authoritative while saving is queued or in flight. Old saves, load results, and callbacks SHALL NOT change the latest runtime ownership, recreate a transformed site, or rebind a terminal owner. Saving SHALL use bounded asynchronous work without a durable operation journal or a database-confirmed publication barrier. Optimistic version checks SHALL reject stale runtime mutations and save acknowledgments.
 
 #### Scenario: Database is slow after construction
 - **WHEN** a character completes a Hearth while its save is delayed
@@ -366,6 +366,40 @@ Successful construction SHALL apply its object and ownership changes as one sync
 #### Scenario: Old source handle is reused
 - **WHEN** asynchronous preparation completes after its source object was removed and its handle was reused
 - **THEN** the result SHALL NOT mutate the replacement entity or assign it Hearth ownership
+
+### Requirement: Database errors stop the entire server
+
+The database SHALL be assumed available. Any actual database read, write or commit error, including an unknown commit outcome, SHALL stop the entire server. Hearth SHALL NOT retry SQL or add a recovery path for database errors. Expected absent-row results, optimistic-version conflicts, unknown metadata awaiting preparation and worker-queue saturation SHALL NOT be treated as database failures.
+
+#### Scenario: A database operation fails
+- **WHEN** a database read, write or commit returns an actual error
+- **THEN** the entire server SHALL stop instead of continuing gameplay or retrying SQL
+- **AND** the error SHALL NOT be interpreted as absence of a home
+
+#### Scenario: A home query finds no association
+- **WHEN** a home lookup reports expected absence through `sql.ErrNoRows`
+- **THEN** the result SHALL establish `NoHome` and the server SHALL continue normally
+
+### Requirement: Home reads are exclusive and complete once
+
+The home index SHALL track at most one pending read per character with a loading flag and the observed optimistic version, without a lookup ID. Once submitted, a read SHALL NOT be canceled, including on logout, and its submitter SHALL deliver the result exactly once. Only a submission rejection that guarantees no job or result can follow SHALL release loading before completion; that release SHALL occur once, immediately after rejection. A stale result SHALL release loading without changing current ownership. Loading SHALL prevent eviction until that result is delivered. The delivery path SHALL NOT lose a result or redeliver it after another read begins.
+
+#### Scenario: Concurrent callers request an unknown home
+- **WHEN** callers request a home while its read is pending
+- **THEN** only one caller SHALL be admitted to submit the read
+
+#### Scenario: The worker queue rejects a read
+- **WHEN** submission is rejected before any read job is accepted
+- **THEN** the submitting caller SHALL release loading once without changing the home version
+- **AND** a later request SHALL be able to submit the read
+
+#### Scenario: A character leaves while its home is loading
+- **WHEN** the character logs out before an accepted read completes
+- **THEN** the read SHALL still deliver its sole result and SHALL retain the index entry until completion
+
+#### Scenario: Runtime ownership changes while a read is pending
+- **WHEN** a read result arrives after the runtime home version changed
+- **THEN** the result SHALL release loading without replacing the current runtime home
 
 ### Requirement: Final-cycle preparation precedes costs
 
