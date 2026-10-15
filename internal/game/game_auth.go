@@ -14,6 +14,7 @@ import (
 	"origin/internal/entityhealth"
 	"origin/internal/entitystats"
 	"origin/internal/eventbus"
+	"origin/internal/game/hearth"
 	"origin/internal/game/inventory"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
@@ -180,6 +181,20 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	}
 
 	playerEntityID := types.EntityID(character.ID)
+	if err := g.loadPlayerHearth(playerEntityID); err != nil {
+		g.logger.Error("Failed to load player hearth", zap.Int64("character_id", character.ID), zap.Error(err))
+		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: hearth data unavailable")
+		return
+	}
+
+	select {
+	case <-c.Done():
+		return
+	case <-ctx.Done():
+		c.SendError(netproto.ErrorCode_ERROR_CODE_TIMEOUT_EXCEEDED, "Spawn timeout")
+		return
+	default:
+	}
 
 	// Check if entity is detached (reconnect scenario)
 	if g.tryReattachPlayer(c, shard, playerEntityID, character) {
@@ -285,6 +300,35 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		zap.Any("posX", character.X),
 		zap.Any("posY", character.Y),
 	)
+}
+
+func (g *Game) loadPlayerHearth(character types.EntityID) error {
+	surface := g.shardManager.GetShard(hearth.SurfaceLayer)
+	if surface == nil {
+		return fmt.Errorf("hearth surface shard is unavailable")
+	}
+	surface.mu.Lock()
+	defer surface.mu.Unlock()
+
+	runtime, ok := ecs.TryGetResource[hearth.Runtime](surface.world)
+	if !ok || runtime.Index == nil {
+		return fmt.Errorf("hearth runtime is unavailable")
+	}
+	defs := objectdefs.Global()
+	if defs == nil {
+		return fmt.Errorf("hearth definitions are unavailable")
+	}
+	def, ok := defs.GetByKey("hearth_fire")
+	if !ok || def == nil {
+		return fmt.Errorf("hearth definition is unavailable")
+	}
+	if err := runtime.LoadHome(character, def.DefID); err != nil {
+		return err
+	}
+	if runtime.Index.Snapshot(character).State == hearth.Unknown {
+		return hearth.ErrUnknownHome
+	}
+	return nil
 }
 
 func headingDegreesToRadians(heading int16) float64 {

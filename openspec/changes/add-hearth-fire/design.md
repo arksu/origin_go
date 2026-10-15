@@ -4,7 +4,7 @@
 
 See `proposal.md` and `docs/features/hearth_fire.md`, Part 2, for gameplay. On 2026-10-13 the owner reverted Hearth gameplay/persistence code and requested a simpler design: runtime integrity is required; asynchronous saves, independent checkpoints, and loss of recent progress after a crash are acceptable.
 
-The prepared `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. Tasks 1.1-1.4 provide the ownership migration/schema, sqlc queries and isolated metadata index. The construction stage now connects that index through `hearth.Runtime` and the result's `hearth` behavior; it assigns the actual finisher, replaces their previous home in memory and saves construction synchronously. Terminal persistence, general chunk hydration and restart repair remain unimplemented. Finisher codecs and lifecycle coordinators are not introduced; previous reverted gameplay is not counted as delivered work.
+The prepared `hearth_fire` definition, seven green-flame frames at 70% scale, and eight approved skull-smoke frames still exist. Tasks 1.1-1.4 provide the ownership migration/schema, sqlc queries and isolated metadata index. The construction stage now connects that index through `hearth.Runtime` and the result's `hearth` behavior; it assigns the actual finisher, replaces their previous home in memory and saves construction synchronously. Login also restores existing home metadata before reattachment or spawning. Terminal persistence, general chunk hydration and restart repair remain unimplemented. Finisher codecs and lifecycle coordinators are not introduced; previous reverted gameplay is not counted as delivered work.
 
 The database is assumed available. Any database read, write or commit error must stop the entire server; Hearth adds no SQL retry, reconnect or database-error recovery path. An expected absent row, a runtime optimistic-version conflict and a full worker queue are ordinary outcomes, not database failures. Construction now waits for its save; independent checkpoints and future asynchronous terminal persistence remain acceptable. This is the integration policy, not a claim that the current server already has a universal fatal database-error handler.
 
@@ -41,6 +41,8 @@ The delivered index returns copied `Snapshot`/`Home` values. A single monotonic 
 
 Terminal eligibility is distinct from `NoHome`. `MarkTerminalPending` blocks new acquisition/return without mutating the current association from a notifying thread. An already admitted owning completion may finish before `ApplyTerminal` revokes the latest home. Applied terminal rejects rebinding and remains cached only while dirty or referenced. These contracts do not yet connect to death or REST and add no terminal operation queue.
 
+`Runtime.LoadHome(character, hearthType) error` is shared by construction and login. In `spawnAndLogin`, after validating the character's layer and before `tryReattachPlayer`, resolve the surface runtime and catalog `hearth_fire` definition and load under the surface shard lock, including for underground login. Known runtime metadata skips SQL; `Unknown` uses the existing `GetCharacterHearth` with an independent five-second context, then `CompleteLookup` fills both index directions or establishes `NoHome` for `sql.ErrNoRows`. Keep the existing single-read/version protection. Missing dependencies or remaining `Unknown` refuse entry; genuine database errors and invalid results remain fatal. An accepted read finishes despite client cancellation, then login checks disconnect/timeout again before reattachment. Release the surface lock before reattachment or spawning, without holding two shard locks together. This restores metadata only: it does not create or activate objects, repair chunks, change spawn candidates, or connect terminal cleanup/return.
+
 ### 2. Finalize construction immediately, in one surface critical section
 
 Integrate through one optional construction-result wrapper capability using the existing behavior registry. The result behavior prepares its policy before invoking the ordinary completion callback. Shared construction does not check a Hearth key or carry a finisher field.
@@ -55,7 +57,7 @@ For a non-active old home, call `PinPersistenceBlocking` before `WaitPreloaded`,
 
 Runtime changes precede serialization and SQL; the owning call reports success only after commit. Later save snapshots see either previous build progress or the final object, not a paid completed site waiting for a DB commit. The actual finisher is available in this synchronous call and becomes the current owner there. Neither `BuildBehaviorState.HearthFinisherID` nor `behaviors.hearth_construction` is needed. No feature state is added to shared ECS/build contracts.
 
-This construction stage reads saved ownership when needed and saves the completed objects and association in the same call. Batch chunk hydration, restart repair, owner-death/REST cleanup and persistence, collision/terrain rules, return and FX remain separate stages. The saved construction association is available to later ownership reads; general login metadata restoration is not delivered by this stage.
+This construction stage reads saved ownership through the same `Runtime.LoadHome` used by login and saves the completed objects and association in the same call. Batch chunk hydration, restart repair, owner-death/REST cleanup and persistence, collision/terrain rules, return and FX remain separate stages.
 
 ### 3. Save current state, not a history of operations
 
@@ -112,7 +114,7 @@ Revalidate the action generation, connection, health/KO, combat and swimming bef
 
 Interruption is an optional active-handler policy invoked through existing cancellation paths at valid gameplay intent, before another action's eligibility/cooldown rejection. Include fresh movement attempts, context/craft/build/carry/Stand Up attempts, any damage, combat/swimming and ordinary disconnect cleanup. Invalid/stale input is not gameplay intent. Chat and personal windows do not interrupt. The client sends existing `C2S_CancelAction` when its cooldown UI blocks another attempted action during return; no new command protocol is needed.
 
-Login keeps `tryReattachPlayer` first. Normal spawning tries saved position, exact current home if present, nearby saved-position candidates, then existing random fallback. Carry each candidate's layer. Missing ownership never creates an object or changes ordinary first-entry spawn eligibility.
+After restoring home metadata, login keeps `tryReattachPlayer` before normal spawning. The future spawn fallback tries saved position, exact current home if present, nearby saved-position candidates, then existing random fallback. Carry each candidate's layer. Missing ownership never creates an object or changes ordinary first-entry spawn eligibility; metadata loading does not implement this fallback.
 
 ### 8. Reuse approved assets and a small transient FX path
 
@@ -126,6 +128,7 @@ Preload through existing asset loading, bound concurrent one-shot effects, and u
 
 - [Crash or independent save snapshots] -> Recent construction, home changes or death can roll back or lose a home. Conservative restore removes invalid runtime ownership; no lossless or cross-feature checkpoint is claimed.
 - [Synchronous construction I/O] -> Read/wait before final costs with separate five-second contexts, then save with a five-second transaction context after runtime completion; accept whole-loop delay, cumulative latency and queued cancellation during the call.
+- [Synchronous login lookup] -> Unknown home metadata is read under the surface shard lock with a five-second timeout; accept whole-loop delay as for construction. Client cancellation does not abandon an accepted lookup and is checked again before entry.
 - [Stale load or write completion] -> Existing raw/load revisions plus feature lookup/dirty revisions prevent callbacks from overriding known current runtime state.
 - [Database error] -> Stop the entire server, including on unknown commit outcome; do not add SQL retries or database-error recovery.
 - [Future terminal queue pressure] -> Coalesce dirty projections and resubmit rejected admissions through bounded workers. Observe dirty count/save age without per-entity metric labels or a new persistence platform.

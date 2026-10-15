@@ -15,6 +15,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/game/hearth"
 	"origin/internal/game/inventory"
 	gameworld "origin/internal/game/world"
 	"origin/internal/network"
@@ -208,7 +209,9 @@ func TestSpawnAndLoginCapacityFailureDoesNotAttachClient(t *testing.T) {
 	client, conn := connectPlayerSpawnTestClient(t)
 	client.CharacterID = 10
 	game := &Game{cfg: shard.cfg, logger: shard.logger, shardManager: &ShardManager{shards: map[int]*Shard{0: shard}}}
+	runtime := installHearthLoginRuntime(t, shard, &hearthBuildLookup{})
 	game.spawnAndLogin(client, repository.Character{ID: 10, X: 200, Y: 200})
+	require.Equal(t, hearth.NoHome, runtime.Index.Snapshot(10).State)
 	require.False(t, client.InWorld.Load())
 	require.Zero(t, client.StreamEpoch.Load())
 	require.Empty(t, shard.Clients)

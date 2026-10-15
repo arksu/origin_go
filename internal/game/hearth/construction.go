@@ -89,12 +89,14 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 	if !validHome(next) {
 		return constructionRefused("This construction site is unavailable.")
 	}
+	if r.Index == nil {
+		return constructionRefused("Hearth data is unavailable.")
+	}
 	current := r.Index.Snapshot(ctx.PlayerID)
 	if current.State == Unknown && !current.PendingTerminal && !current.Terminal {
-		if r.reader == nil {
+		if err := r.LoadHome(ctx.PlayerID, hearthDef.DefID); err != nil {
 			return constructionRefused("Hearth data is unavailable.")
 		}
-		r.loadHome(ctx.PlayerID, hearthDef.DefID)
 		current = r.Index.Snapshot(ctx.PlayerID)
 	}
 	if current.PendingTerminal || current.Terminal {
@@ -210,10 +212,21 @@ func (r *Runtime) canTransform(id types.EntityID, handle types.Handle, typeID ui
 	return ok && info.TypeID == typeID && ecs.HasComponent[components.ObjectInternalState](r.w, handle)
 }
 
-func (r *Runtime) loadHome(character types.EntityID, hearthType int) {
+// LoadHome restores unknown ownership metadata. The caller must hold the owning
+// surface shard lock, and an admitted lookup completes independently of logout.
+func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
+	if r.Index == nil {
+		return errors.New("hearth index is unavailable")
+	}
+	if r.Index.Snapshot(character).State != Unknown {
+		return nil
+	}
+	if r.reader == nil {
+		return errors.New("hearth reader is unavailable")
+	}
 	version, started := r.Index.BeginLookup(character)
 	if !started {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -222,7 +235,7 @@ func (r *Runtime) loadHome(character types.EntityID, hearthType int) {
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		r.logger.Fatal("hearth lookup failed", zap.Error(err))
-		return
+		return err
 	}
 	var home *Home
 	if err == nil {
@@ -230,5 +243,7 @@ func (r *Runtime) loadHome(character types.EntityID, hearthType int) {
 	}
 	if err := r.Index.CompleteLookup(character, version, home); err != nil && !errors.Is(err, ErrStaleLookup) {
 		r.logger.Fatal("invalid hearth lookup result", zap.Error(err))
+		return err
 	}
+	return nil
 }
