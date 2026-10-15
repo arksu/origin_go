@@ -25,6 +25,21 @@
     footer { flex-shrink: 0; padding: 10px 24px; }
     #inspect { min-height: 22px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
     #error { color: #ffc4ad; white-space: pre-wrap; }
+    [hidden] { display: none !important; }
+    #gallery { flex: 1; overflow: auto; padding: 16px 24px; }
+    #piece-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin-bottom: 16px; }
+    #pieces { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+    .piece { background: #22352a; border: 1px solid #47604c; border-radius: 6px; padding: 12px; min-width: 0; }
+    .piece h2 { font-size: 14px; margin: 0 0 8px; }
+    .piece code { display: block; overflow-wrap: anywhere; margin-top: 8px; font-size: 12px; user-select: all; }
+    .piece-images { display: flex; flex-wrap: wrap; gap: 10px; }
+    .piece figure { margin: 0; max-width: 100%; overflow: auto; }
+    .piece figcaption { font-size: 12px; margin-bottom: 6px; color: #b7cbb4; }
+    .piece canvas { cursor: default; background: conic-gradient(#39433c 25%, #242e27 0 50%, #39433c 0 75%, #242e27 0) 0 0 / 16px 16px; }
+    .mask { display: grid; grid-template-columns: repeat(3, 12px); gap: 2px; margin-bottom: 8px; }
+    .mask span { height: 12px; background: #526256; }
+    .mask .overlay { background: #76b9ce; }
+    .mask .center { outline: 1px solid #ffe1a0; }
   </style>
 </head>
 <body>
@@ -32,6 +47,7 @@
     <h1>Tile seams</h1>
     <p>Drag the field with the mouse. Scroll to zoom. Textures come from the current client atlas.</p>
     <fieldset id="controls" disabled style="border: 0; padding: 0;">
+      <label>View<select id="view"><option value="field">Seam field</option><option value="pieces" selected>All transition pieces</option></select></label>
       <label>Target type<select id="target"></select></label>
       <label>Overlay direction
         <select id="direction">
@@ -71,7 +87,20 @@
     <p id="status" role="status">Loading atlas…</p>
     <p>Edges of types with smaller IDs overlay types with larger IDs. Zoom to 100% or more to review pixel seams.</p>
   </header>
-  <main id="preview" aria-label="Tile seam preview field"></main>
+  <main id="preview" aria-label="Tile seam preview field" hidden></main>
+  <section id="gallery" aria-label="All transition pieces">
+    <div id="piece-controls">
+      <label>Pieces<select id="piece-kind"><option value="all">Borders and corners</option><option value="border">Borders only</option><option value="corner">Corners only</option></select></label>
+      <label>Piece zoom<select id="piece-zoom"><option value="1">100%</option><option value="2" selected>200%</option><option value="3">300%</option><option value="4">400%</option><option value="6">600%</option></select></label>
+      <label class="checkbox"><input id="piece-context" type="checkbox" checked> Show 3 × 3 game context</label>
+      <button id="reload" type="button">Reload atlas</button>
+      <button id="export-review" type="button">Export review sheet</button>
+    </div>
+    <p>Each card shows one exact variant, alone and over the receiving ground. The 3 × 3 preview uses the game's chunk renderer; the outlined tile receives this piece. The small diagram shows neighbors in world X/Y axes.</p>
+    <p>Edit the listed PNG in art_source/tiles, rebuild the tile atlas, then reload to compare.</p>
+    <div id="review-sheet" hidden><a id="review-download" download="tile-transition-review.png">Download review PNG</a><img id="review-image" alt="Review sheet of every displayed terrain transition" style="display: block; max-width: 100%; margin: 12px 0;"></div>
+    <div id="pieces"></div>
+  </section>
   <footer><div id="inspect">Hover over a tile to see its type and texture variant.</div><pre id="error" role="alert"></pre></footer>
   <script type="module" src="./tile-seams.ts"></script>
 </body>

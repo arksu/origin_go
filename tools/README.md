@@ -104,18 +104,32 @@ Regenerate the archived candidates with
 Run `python3 tools/tests/water_shore_test.py` to check shared-edge
 continuity, preserved authored interiors and variant differences.
 
-The current v2 revision refines the four single-side borders (`b1`, `b2`, `b4`,
+The v2 revision refines the four single-side borders (`b1`, `b2`, `b4`,
 `b8`) and gives each six variations. Small asymmetric interior bends soften
 long straight cuts; subpixel alpha coverage softens the shore without blurring
 RGB texture. The v1 joining bands remain exact, and the other 78 overlays are
 unchanged. Its sources, prompt, raw imagegen output and recipe are in
 `art_source/terrain_revisions/water_shore_v2/`. Regenerate its 24 source frames
-with `python3 tools/export_water_shore_sprites.py`; `--check` verifies candidate
+with `python3 tools/export_water_shore_sprites.py --revision water_shore_v2`; `--check` verifies candidate
 and published PNGs without writing. After copying candidates into
 `art_source/tiles/water/`, repack with the command above. `water.json` registers
 all six variants for these four masks, giving 102 water overlays in the gallery.
 Run `python3 tools/tests/straight_water_shore_test.py` for join-band, contour
 variation, transparency and unchanged-overlay coverage.
+
+The current v3 revision rounds the interior shelves in adjacent-side borders
+(`b3`, `b6`, `b9`, `b12`) and single corners (`c1`, `c2`, `c4`, `c8`). It preserves
+the exact v1 join bands and the original RGB texture. Imagegen edits a grayscale
+coverage sheet; area sampling converts its gray levels to native alpha without
+blurring the material. Three existing variants remain distinct for each mask.
+The v2 straight borders and the other 54 v1 overlays remain unchanged.
+Sources, raw outputs, prompts, mask recipe and rendered reviews are retained in
+`art_source/terrain_revisions/water_shore_v3/`. Regenerate its 24 frames with
+`python3 tools/export_water_shore_sprites.py`; `--check` verifies the candidates
+and published PNGs. Run `python3 tools/tests/curved_water_shore_test.py` for
+exact joins, alpha/texture contracts, variant differences and limits on long
+horizontal/vertical interior contours at six opacity levels. Add `--report
+--source candidate` to print native-pixel contour measurements.
 
 ## Player skeleton sprites
 

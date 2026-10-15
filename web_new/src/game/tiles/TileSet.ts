@@ -30,6 +30,11 @@ export class TileArray {
     }
     return this.tiles[0]?.img ?? null
   }
+
+  /** All selectable atlas frames, without relying on a finite sample of seeds. */
+  getTextureNames(): string[] {
+    return [...new Set(this.tiles.filter(tile => tile.w > 0).map(tile => tile.img))]
+  }
 }
 
 export class TileSet {

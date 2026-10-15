@@ -1,10 +1,11 @@
-import { Application, Assets, Container, Graphics, TextureStyle, type Spritesheet } from 'pixi.js'
+import { Application, Assets, Container, Graphics, Rectangle, Sprite, TextureStyle, type Spritesheet } from 'pixi.js'
 import { Chunk } from '../src/game/Chunk'
 import { getGroundTextureName, getRegisteredTileIdsBelow, getTileSet } from '../src/game/tiles/TileSet'
 import { initTileSets } from '../src/game/tiles/tileSetLoader'
 import { TILE_WIDTH_HALF, TILE_HEIGHT_HALF } from '../src/game/tiles/Tile'
 import { setWorldParams } from './serverConstantsFixture'
 import * as tileIds from '../src/game/tiles/tileIds'
+import { PIECE_OFFSETS, pieceNeighborhood, transitionPieces, type TransitionPiece } from './tile-seam-pieces'
 
 const CHUNK_SIZE = 16
 const ZOOM_LEVELS = [0.25, 0.5, 1, 2, 3, 4, 6]
@@ -35,6 +36,7 @@ function element<T extends HTMLElement>(id: string): T {
 }
 
 const controls = {
+  view: element<HTMLSelectElement>('view'),
   target: element<HTMLSelectElement>('target'),
   direction: element<HTMLSelectElement>('direction'),
   neighbor: element<HTMLSelectElement>('neighbor'),
@@ -47,6 +49,11 @@ const controls = {
   chunks: element<HTMLInputElement>('chunks'),
 }
 const preview = element<HTMLElement>('preview')
+const gallery = element<HTMLElement>('gallery')
+const piecesOutput = element<HTMLElement>('pieces')
+const pieceKind = element<HTMLSelectElement>('piece-kind')
+const pieceZoom = element<HTMLSelectElement>('piece-zoom')
+const pieceContext = element<HTMLInputElement>('piece-context')
 const status = element<HTMLElement>('status')
 const inspect = element<HTMLElement>('inspect')
 const errorOutput = element<HTMLElement>('error')
@@ -68,7 +75,7 @@ async function main(): Promise<void> {
   if (!supportedIds.length) throw new Error('The client did not register any tile types')
   const app = new Application()
   await app.init({
-    width: preview.clientWidth, height: preview.clientHeight, resolution: 1,
+    width: Math.max(1, preview.clientWidth), height: Math.max(1, preview.clientHeight), resolution: 1,
     background: controls.background.value, antialias: false, preference: 'webgl',
   })
   app.stop()
@@ -89,7 +96,7 @@ async function main(): Promise<void> {
   for (const select of [controls.target, controls.third]) {
     for (const id of supportedIds) select.add(new Option(tileLabel(id), String(id)))
   }
-  controls.target.value = String(tileIds.TILE_GRASS)
+  controls.target.value = String(tileIds.TILE_SHALLOW_WATER)
   controls.third.value = String(tileIds.TILE_SHALLOW_WATER)
 
   function updateNeighbors(): void {
@@ -174,6 +181,18 @@ async function main(): Promise<void> {
     highlight.clear()
     for (const chunk of chunks) chunk.destroy()
     chunks = []
+    const showingPieces = controls.view.value === 'pieces'
+    preview.hidden = showingPieces
+    gallery.hidden = !showingPieces
+    for (const input of [controls.pattern, controls.size, controls.zoom, controls.grid, controls.chunks]) input.disabled = showingPieces
+    for (const id of ['shuffle', 'fit', 'center']) element<HTMLButtonElement>(id).disabled = showingPieces
+    controls.third.disabled = showingPieces || controls.pattern.value !== 'three-way'
+    controls.neighbor.disabled = !controls.neighbor.value || (!showingPieces && controls.pattern.value === 'solid')
+    if (showingPieces) {
+      rebuildPieces()
+      return
+    }
+    app.renderer.resize(preview.clientWidth, preview.clientHeight)
     fieldSize = Number(controls.size.value)
     const target = Number(controls.target.value)
     const mixed = controls.pattern.value !== 'solid'
@@ -224,19 +243,152 @@ async function main(): Promise<void> {
     render()
   }
 
-  const spritesheet = await Assets.load<Spritesheet>('/assets/game/tiles.json')
+  // Optional local candidate atlas for art review before publishing the game atlas.
+  const atlasParam = new URLSearchParams(window.location.search).get('atlas')
+  const atlasUrl = atlasParam ? new URL(atlasParam, window.location.href) : new URL('/assets/game/tiles.json', window.location.href)
+  if (atlasUrl.origin !== window.location.origin || !atlasUrl.pathname.endsWith('.json')) throw new Error('Review atlas must be a local JSON atlas')
+  const spritesheet = await Assets.load<Spritesheet>(atlasUrl.href)
   // Fail instead of silently displaying Chunk's fallback sand when an atlas
   // frame is missing: a fallback would invalidate this visual comparison.
   for (const id of supportedIds) {
     const set = getTileSet(id)!
     for (const array of [set.ground, ...set.borders, ...set.corners]) {
-      // TileArray weights are integral in the client configs. Every variant is
-      // selected by at least one seed in this range for the shipped tilesets.
-      for (let seed = 0; seed < 256; seed++) {
-        const name = array.get(seed)
-        if (name && !spritesheet.textures[name]) throw new Error(`Texture missing from atlas: ${name} (${tileLabel(id)})`)
+      for (const name of array.getTextureNames()) {
+        if (!spritesheet.textures[name]) throw new Error(`Texture missing from atlas: ${name} (${tileLabel(id)})`)
       }
     }
+  }
+
+  function pieceSprite(name: string): Sprite {
+    const texture = spritesheet.textures[name]!
+    const sprite = new Sprite(texture)
+    // Same full-canvas scale as VertexBuffer, retaining trim and rotated UVs.
+    sprite.scale.set(64 / texture.orig.width, 32 / texture.orig.height)
+    return sprite
+  }
+
+  function imageFigure(target: Container, frame: Rectangle, label: string): HTMLElement {
+    const figure = document.createElement('figure')
+    const caption = document.createElement('figcaption')
+    caption.textContent = label
+    const canvas = app.renderer.extract.canvas({ target, frame, resolution: 1, antialias: false }) as HTMLCanvasElement
+    const zoom = Number(pieceZoom.value)
+    canvas.style.width = `${frame.width * zoom}px`
+    canvas.style.height = `${frame.height * zoom}px`
+    canvas.setAttribute('role', 'img')
+    canvas.setAttribute('aria-label', label)
+    figure.append(caption, canvas)
+    return figure
+  }
+
+  function contextFigure(piece: TransitionPiece, overlay: number, base: number): HTMLElement {
+    const tiles = pieceNeighborhood(piece.kind, piece.mask, overlay, base, CHUNK_SIZE)
+    const set = getTileSet(overlay)!
+    const arrays = piece.kind === 'border' ? set.borders : set.corners
+    // Force this exact variant for the requested mask; all remaining selections
+    // and suppression of diagonal corners are handled by the real Chunk code.
+    const sheet = Object.create(spritesheet) as Spritesheet
+    sheet.textures = { ...spritesheet.textures }
+    for (const name of arrays[piece.mask - 1]!.getTextureNames()) sheet.textures[name] = spritesheet.textures[piece.texture]!
+    const chunk = new Chunk(0, 0)
+    const target = new Container({ sortableChildren: true })
+    try {
+      chunk.buildTiles(tiles, sheet)
+      target.addChild(chunk.getContainer())
+      const centerY = Math.floor(CHUNK_SIZE / 2) * 32
+      const outline = new Graphics().poly([0, centerY, 32, centerY + 16, 0, centerY + 32, -32, centerY + 16])
+        .stroke({ color: 0xffe1a0, width: 0.5, alpha: 0.8 })
+      outline.zIndex = Number.MAX_SAFE_INTEGER
+      target.addChild(outline)
+      return imageFigure(target, new Rectangle(-96, centerY - 32, 192, 96), 'In game · center tile outlined')
+    } finally {
+      chunk.destroy()
+      target.destroy({ children: true })
+    }
+  }
+
+  function rebuildPieces(): void {
+    element('review-sheet').hidden = true
+    piecesOutput.replaceChildren()
+    if (!controls.neighbor.value) {
+      status.textContent = 'No neighboring types are available. Choose another overlay direction.'
+      return
+    }
+    const first = Number(controls.target.value)
+    const second = Number(controls.neighbor.value)
+    const overlay = Math.min(first, second)
+    const base = Math.max(first, second)
+    const pieces = transitionPieces(getTileSet(overlay)!).filter(piece => pieceKind.value === 'all' || piece.kind === pieceKind.value)
+    const fragment = document.createDocumentFragment()
+    for (const piece of pieces) {
+      const card = document.createElement('article')
+      card.className = 'piece'
+      card.dataset.texture = piece.texture
+      const heading = document.createElement('h2')
+      heading.textContent = `${piece.kind === 'border' ? 'Border' : 'Corner'} ${piece.mask} · mask ${piece.mask.toString(2).padStart(4, '0')} · variant ${piece.variant}`
+      const diagram = document.createElement('div')
+      diagram.className = 'mask'
+      diagram.setAttribute('aria-label', 'Neighbor mask in world X/Y axes')
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const cell = document.createElement('span')
+        const bit = PIECE_OFFSETS[piece.kind].findIndex(([x, y]) => x === dx && y === dy)
+        if (bit >= 0 && piece.mask & (1 << bit)) cell.className = 'overlay'
+        if (dx === 0 && dy === 0) cell.className = 'center'
+        cell.title = `(${dx}, ${dy})`
+        diagram.append(cell)
+      }
+      const images = document.createElement('div')
+      images.className = 'piece-images'
+      const tile = new Container()
+      try {
+        tile.addChild(pieceSprite(piece.texture))
+        images.append(imageFigure(tile, new Rectangle(0, 0, 64, 32), 'Piece · transparent canvas'))
+        const ground = pieceSprite(getGroundTextureName(base, 8, 8)!)
+        tile.addChildAt(ground, 0)
+        images.append(imageFigure(tile, new Rectangle(0, 0, 64, 32), `Over ${TILE_NAMES[base]}`))
+      } finally {
+        tile.destroy({ children: true })
+      }
+      if (pieceContext.checked) images.append(contextFigure(piece, overlay, base))
+      const path = document.createElement('code')
+      path.textContent = `art_source/tiles/${piece.texture}`
+      card.append(heading, diagram, images, path)
+      fragment.append(card)
+    }
+    piecesOutput.append(fragment)
+    status.textContent = `${tileLabel(overlay)} overlays ${tileLabel(base)} · ${pieces.length} texture variants · ${new Set(pieces.filter(piece => piece.kind === 'border').map(piece => piece.mask)).size} border masks · ${new Set(pieces.filter(piece => piece.kind === 'corner').map(piece => piece.mask)).size} corner masks.`
+    if (!pieces.length) status.textContent += ' This tileset has no pieces for the selected filter.'
+    inspect.textContent = 'All registered variants are shown. Select a source path to copy it for editing.'
+    document.title = `${tileLabel(overlay)} — transition pieces`
+  }
+
+  function exportReview(): void {
+    const cards = [...piecesOutput.querySelectorAll<HTMLElement>('.piece')]
+    if (!cards.length) return
+    const columns = 6
+    const width = pieceContext.checked ? 192 : 64
+    const height = pieceContext.checked ? 96 : 32
+    const sheet = document.createElement('canvas')
+    sheet.width = columns * width
+    sheet.height = Math.ceil(cards.length / columns) * (height + 20)
+    const context = sheet.getContext('2d')!
+    context.fillStyle = '#14231b'
+    context.fillRect(0, 0, sheet.width, sheet.height)
+    context.font = '11px monospace'
+    context.fillStyle = '#e0eadc'
+    cards.forEach((card, index) => {
+      const x = index % columns * width
+      const y = Math.floor(index / columns) * (height + 20)
+      const canvases = card.querySelectorAll('canvas')
+      const canvas = canvases[pieceContext.checked ? 2 : 1]!
+      context.fillText(card.dataset.texture!, x + 4, y + 13)
+      context.drawImage(canvas, x, y + 20)
+    })
+    const link = element<HTMLAnchorElement>('review-download')
+    link.href = sheet.toDataURL('image/png')
+    element<HTMLImageElement>('review-image').src = link.href
+    element('review-sheet').hidden = false
+    element('review-sheet').scrollIntoView({ block: 'start' })
   }
 
   function safely(action: () => void): () => void {
@@ -244,6 +396,10 @@ async function main(): Promise<void> {
   }
 
   controls.target.addEventListener('change', safely(() => { updateNeighbors(); rebuild() }))
+  controls.view.addEventListener('change', safely(() => { rebuild(); centerScene(); render() }))
+  for (const control of [pieceKind, pieceZoom, pieceContext]) control.addEventListener('change', safely(rebuildPieces))
+  element('reload').addEventListener('click', () => window.location.reload())
+  element('export-review').addEventListener('click', safely(exportReview))
   controls.direction.addEventListener('change', safely(() => { updateNeighbors(); rebuild() }))
   for (const select of [controls.neighbor, controls.pattern, controls.third]) select.addEventListener('change', safely(rebuild))
   controls.size.addEventListener('change', safely(() => { rebuild(); centerScene(); render() }))
@@ -313,6 +469,7 @@ async function main(): Promise<void> {
   }, { passive: false })
 
   const observer = new ResizeObserver(() => {
+    if (preview.hidden) return
     app.renderer.resize(preview.clientWidth, preview.clientHeight)
     centerScene()
     render()

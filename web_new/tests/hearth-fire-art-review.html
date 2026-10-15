@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Hearth Fire</title>
+	<style>
+	  * { box-sizing: border-box; }
+	  body { margin: 0; background: #171d19; color: #ecf0e9; font: 14px Arial, sans-serif; }
+	  main { max-width: 1080px; margin: 0 auto; padding: 24px; }
+	  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+	  h1 { font-size: 26px; font-weight: 600; margin: 0; }
+	  .controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+	  label { display: inline-flex; align-items: center; gap: 8px; }
+	  button, select { color: inherit; background: #28342c; border: 1px solid #536557; border-radius: 4px; min-height: 34px; }
+	  button { width: 36px; display: inline-grid; place-items: center; cursor: pointer; }
+	  button:disabled { opacity: .5; cursor: default; }
+	  button:focus-visible, select:focus-visible { outline: 2px solid #addf82; outline-offset: 3px; }
+	  select { padding: 0 8px; }
+	  input[type="checkbox"] { accent-color: #95c878; }
+	  .pause { display: block; width: 12px; height: 14px; border-left: 4px solid currentColor; border-right: 4px solid currentColor; }
+	  .play { display: block; width: 0; height: 0; border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-left: 11px solid currentColor; margin-left: 2px; }
+	  .samples { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+	  figure { margin: 0; min-width: 0; }
+	  figcaption { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 15px; }
+	  .scale { color: #abb8ad; font-size: 12px; }
+	  .canvas { width: 100%; height: 240px; overflow: hidden; background: #283c2a; }
+	  .canvas.detail { height: 300px; }
+	  canvas { display: block; image-rendering: pixelated; }
+	  .detail-row { margin-top: 20px; }
+	  #status { margin: 12px 0 0; color: #abb8ad; min-height: 18px; overflow-wrap: anywhere; }
+	  #status:empty { display: none; }
+	  @media (max-width: 560px) {
+		main { padding: 16px; }
+		header { margin-bottom: 16px; }
+		.samples { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+		.canvas { height: 220px; }
+		.canvas.detail { height: 300px; }
+	  }
+	</style>
+  </head>
+  <body data-status="loading">
+	<main>
+	  <header>
+		<h1>Hearth Fire</h1>
+		<div class="controls">
+		  <label>Ground <select id="ground"><option value="grass">Grass</option><option value="dirt">Dirt</option></select></label>
+		  <button id="playback" type="button" aria-label="Pause" title="Pause" disabled><span class="pause" aria-hidden="true"></span></button>
+		</div>
+	  </header>
+	  <section class="samples" aria-label="Game scale">
+		<figure><figcaption><span>Campfire</span><span class="scale">1x</span></figcaption><div id="original" class="canvas"></div></figure>
+		<figure><figcaption><span>Hearth Fire</span><span class="scale">1x</span></figcaption><div id="candidate" class="canvas"></div></figure>
+	  </section>
+	  <section class="samples detail-row" aria-label="Detail">
+		<figure><figcaption><span>Campfire</span><span class="scale">4x</span></figcaption><div id="original-detail" class="canvas detail"></div></figure>
+		<figure><figcaption><span>Hearth Fire</span><span class="scale">4x</span></figcaption><div id="candidate-detail" class="canvas detail"></div></figure>
+	  </section>
+	  <p id="status" role="status">Loading...</p>
+	</main>
+	<script type="module" src="./hearth-fire-art-review.ts"></script>
+  </body>
+</html>

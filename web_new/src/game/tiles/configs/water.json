@@ -18,6 +18,18 @@
       {
         "img": "water/b1_3.png",
         "w": 1
+      },
+      {
+        "img": "water/b1_4.png",
+        "w": 1
+      },
+      {
+        "img": "water/b1_5.png",
+        "w": 1
+      },
+      {
+        "img": "water/b1_6.png",
+        "w": 1
       }
     ],
     [
@@ -31,6 +43,18 @@
       },
       {
         "img": "water/b2_3.png",
+        "w": 1
+      },
+      {
+        "img": "water/b2_4.png",
+        "w": 1
+      },
+      {
+        "img": "water/b2_5.png",
+        "w": 1
+      },
+      {
+        "img": "water/b2_6.png",
         "w": 1
       }
     ],
@@ -59,6 +83,18 @@
       },
       {
         "img": "water/b4_3.png",
+        "w": 1
+      },
+      {
+        "img": "water/b4_4.png",
+        "w": 1
+      },
+      {
+        "img": "water/b4_5.png",
+        "w": 1
+      },
+      {
+        "img": "water/b4_6.png",
         "w": 1
       }
     ],
@@ -115,6 +151,18 @@
       },
       {
         "img": "water/b8_3.png",
+        "w": 1
+      },
+      {
+        "img": "water/b8_4.png",
+        "w": 1
+      },
+      {
+        "img": "water/b8_5.png",
+        "w": 1
+      },
+      {
+        "img": "water/b8_6.png",
         "w": 1
       }
     ],

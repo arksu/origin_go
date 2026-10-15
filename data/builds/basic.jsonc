@@ -101,6 +101,24 @@
       "requiredDiscovery": [],
       "allowedTiles": [],
       "objectKey": "drying_frame"
+	},
+	{
+	  "defId": 6,
+	  "key": "hearth_fire",
+	  "name": "Hearth Fire",
+	  "inputs": [
+		{
+		  "itemKey": "branch",
+		  "count": 5,
+		  "qualityWeight": 1
+		}
+	  ],
+	  "staminaCost": 8,
+	  "ticksRequired": 20,
+	  "requiredSkills": [],
+	  "requiredDiscovery": [],
+	  "allowedTiles": [],
+	  "objectKey": "hearth_fire"
     }
   ]
 }
