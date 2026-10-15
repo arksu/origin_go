@@ -1,6 +1,8 @@
 package game
 
 import (
+	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
+	"origin/internal/persistence/repository"
 	"origin/internal/types"
 
 	"github.com/stretchr/testify/require"
@@ -202,6 +205,70 @@ func TestHearthBuildRecipeSoloUsesFiveOrdinaryCycles(t *testing.T) {
 	owner, owned := ecs.GetResource[hearth.Runtime](f.world).Index.Owner(hearth.ObjectKey{ID: 200})
 	require.True(t, owned)
 	require.Equal(t, types.EntityID(1), owner)
+}
+
+type hearthBuildLookup struct {
+	// This first-home fixture only uses job submission; no old chunk is needed.
+	hearth.ConstructionChunks
+	jobs []gameworld.PersistenceJob
+}
+
+func (l *hearthBuildLookup) SubmitPersistenceJob(job gameworld.PersistenceJob) bool {
+	l.jobs = append(l.jobs, job)
+	return true
+}
+
+func (*hearthBuildLookup) GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
+	return repository.GetCharacterHearthRow{}, sql.ErrNoRows
+}
+
+func TestHearthConstructionWaitsForLookupWithinActiveBuild(t *testing.T) {
+	for _, cancel := range []bool{false, true} {
+		t.Run(map[bool]string{false: "finish", true: "cancel_while_loading"}[cancel], func(t *testing.T) {
+			f := newHearthBuildRecipeFixture(t)
+			player := f.startBuilder(t, 1)
+			lookup := &hearthBuildLookup{}
+			// Exercise the real first lookup instead of the fixture's known NoHome.
+			runtime := ecs.GetResource[hearth.Runtime](f.world)
+			*runtime = hearth.NewRuntime(f.world, lookup, lookup, behaviors.MustDefaultRegistry(), nil, nil)
+			sender := &lockedBuildSender{}
+			f.service.alerts = sender
+
+			f.advanceTicks(int(f.build.TicksRequired) * 7)
+			f.assertProgress(t, 4)
+			require.True(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
+			require.Equal(t, hearth.Unknown, runtime.Index.Snapshot(1).State)
+			require.Len(t, lookup.jobs, 1, "waiting cycles share the accepted lookup")
+			require.Empty(t, sender.alerts, "ordinary loading must not report a build error")
+			stats, _ := ecs.GetComponent[components.EntityStats](f.world, player)
+			require.Equal(t, f.initialStamina-32, stats.Stamina)
+
+			if cancel {
+				f.contextActions.cancelActiveCyclicAction(1, player, "")
+			}
+			job := lookup.jobs[0]
+			err := job.Run()
+			require.NoError(t, err)
+			job.Complete(err)
+			runtime.ApplyReadResults()
+			f.assertProgress(t, 4)
+			require.Equal(t, hearth.NoHome, runtime.Index.Snapshot(1).State)
+
+			f.advanceTicks(int(f.build.TicksRequired))
+			require.False(t, ecs.HasComponent[components.ActiveCyclicAction](f.world, player))
+			stats, _ = ecs.GetComponent[components.EntityStats](f.world, player)
+			if cancel {
+				f.assertProgress(t, 4)
+				require.Equal(t, hearth.NoHome, runtime.Index.Snapshot(1).State)
+				require.Equal(t, f.initialStamina-32, stats.Stamina)
+			} else {
+				f.assertCompleted(t)
+				require.Equal(t, f.site, f.world.GetHandleByEntityID(200))
+				require.Equal(t, types.EntityID(200), runtime.Index.Snapshot(1).Home.Object.ID)
+				require.Equal(t, f.initialStamina-40, stats.Stamina)
+			}
+		})
+	}
 }
 
 func TestHearthBuildRecipeHelpersShareProgressAndOwnCosts(t *testing.T) {

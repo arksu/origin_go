@@ -403,12 +403,13 @@ The home index SHALL track at most one pending read per character with a loading
 
 ### Requirement: Final-cycle preparation precedes costs
 
-The final construction cycle SHALL validate and prepare the runtime data needed for immediate completion before consuming its branch or stamina. If preparation is unavailable or stale, the ordinary construction retry or failure path SHALL leave that cycle's materials, stamina, progress, and ownership unchanged. A successful payment SHALL NOT leave a completed site waiting for a database response.
+The final construction cycle SHALL validate and prepare the runtime data needed for immediate completion before consuming its branch or stamina. Temporary ownership-read, worker-queue or chunk-I/O readiness SHALL keep the ordinary build action running for automatic retry on its next cycle without a warning or another player click. Waiting or rejected preparation SHALL leave that cycle's materials, stamina, processed progress, and ownership unchanged. Normal movement and cancellation SHALL still stop the action; workers SHALL only prepare data, never complete construction. A successful payment SHALL NOT leave a completed site waiting for a database response.
 
 #### Scenario: Previous home data is not ready
 - **WHEN** the last branch is reached before required previous-home data is ready
-- **THEN** the final cycle SHALL use ordinary retry or failure without consuming the branch or stamina
-- **AND** the site SHALL remain an ordinary unfinished construction site
+- **THEN** the build action SHALL continue without consuming the branch or stamina and retry on its next ordinary cycle
+- **AND** the site SHALL remain an ordinary unfinished construction site while preparation is pending
+- **AND** once preparation is ready, a later cycle SHALL complete construction without another player click, unless the action was canceled
 
 #### Scenario: Preparation becomes stale
 - **WHEN** the prepared source or active ownership no longer matches immediately before final processing

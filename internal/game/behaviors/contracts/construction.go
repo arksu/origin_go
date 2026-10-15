@@ -15,10 +15,16 @@ type ConstructionContext struct {
 	ResultType   uint32
 }
 
+type ConstructionResult struct {
+	BehaviorResult
+	// Retry keeps the ordinary build action running without calling complete.
+	Retry bool
+}
+
 // ConstructionCompleter wraps the ordinary final material, stamina and transform
 // work. It runs under the owning shard lock and must call complete at most once,
 // synchronously, after any feature preflight. The callback must not be retained.
 // A false callback result means no feature completion should be applied.
 type ConstructionCompleter interface {
-	CompleteConstruction(ctx *ConstructionContext, complete func() bool) BehaviorResult
+	CompleteConstruction(ctx *ConstructionContext, complete func() bool) ConstructionResult
 }

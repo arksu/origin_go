@@ -102,6 +102,9 @@ func (s *BuildService) HandleBuildCycleComplete(
 			if result.OK && completed {
 				return contracts.BehaviorCycleDecisionComplete
 			}
+			if result.Retry {
+				return contracts.BehaviorCycleDecisionContinue
+			}
 			return contracts.BehaviorCycleDecisionCanceled
 		}
 	}

@@ -21,14 +21,14 @@ import (
 )
 
 type constructionTestBehavior struct {
-	complete func(*contracts.ConstructionContext, func() bool) contracts.BehaviorResult
+	complete func(*contracts.ConstructionContext, func() bool) contracts.ConstructionResult
 }
 
 func (*constructionTestBehavior) Key() string { return "construction_test" }
 func (*constructionTestBehavior) ValidateAndApplyDefConfig(*contracts.BehaviorDefConfigContext) (int, error) {
 	return 0, nil
 }
-func (b *constructionTestBehavior) CompleteConstruction(ctx *contracts.ConstructionContext, complete func() bool) contracts.BehaviorResult {
+func (b *constructionTestBehavior) CompleteConstruction(ctx *contracts.ConstructionContext, complete func() bool) contracts.ConstructionResult {
 	return b.complete(ctx, complete)
 }
 
@@ -112,7 +112,7 @@ func TestConstructionCompletionWrapsOnlyFinalMaterialAndPreservesLinkClosure(t *
 	behavior := &constructionTestBehavior{}
 	f := newConstructionTestFixture(t, behavior)
 	called := 0
-	behavior.complete = func(ctx *contracts.ConstructionContext, complete func() bool) contracts.BehaviorResult {
+	behavior.complete = func(ctx *contracts.ConstructionContext, complete func() bool) contracts.ConstructionResult {
 		called++
 		require.Equal(t, &contracts.ConstructionContext{World: f.w, PlayerID: 1, PlayerHandle: f.player, TargetID: 200, TargetHandle: f.site, ResultType: 901}, ctx)
 		require.Equal(t, uint32(1), f.progress(t).Items[0].BuildCount)
@@ -121,7 +121,7 @@ func TestConstructionCompletionWrapsOnlyFinalMaterialAndPreservesLinkClosure(t *
 		require.True(t, complete())
 		info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.site)
 		require.Equal(t, uint32(901), info.TypeID)
-		return contracts.BehaviorResult{OK: true}
+		return contracts.ConstructionResult{BehaviorResult: contracts.BehaviorResult{OK: true}}
 	}
 	helper := f.w.Spawn(2, nil)
 	ecs.GetResource[ecs.LinkState](f.w).SetLink(ecs.PlayerLink{PlayerID: 2, PlayerHandle: helper, TargetID: 200, TargetHandle: f.site})
@@ -146,8 +146,8 @@ func TestConstructionCompletionWrapsOnlyFinalMaterialAndPreservesLinkClosure(t *
 }
 
 func TestConstructionCompletionRejectionPreservesFinalCosts(t *testing.T) {
-	behavior := &constructionTestBehavior{complete: func(*contracts.ConstructionContext, func() bool) contracts.BehaviorResult {
-		return contracts.BehaviorResult{UserVisible: true, ReasonCode: "CONSTRUCTION_NOT_READY", Severity: contracts.BehaviorAlertSeverityWarning}
+	behavior := &constructionTestBehavior{complete: func(*contracts.ConstructionContext, func() bool) contracts.ConstructionResult {
+		return contracts.ConstructionResult{BehaviorResult: contracts.BehaviorResult{UserVisible: true, ReasonCode: "CONSTRUCTION_NOT_READY", Severity: contracts.BehaviorAlertSeverityWarning}}
 	}}
 	f := newConstructionTestFixture(t, behavior)
 	require.Equal(t, contracts.BehaviorCycleDecisionContinue, f.cycle())
@@ -174,10 +174,10 @@ func TestConstructionCompletionSeesFailedDefaultCompletion(t *testing.T) {
 				ecs.SetResource(f.w, ecs.ObjectDestructionState{Pending: map[types.Handle]bool{f.site: true}})
 			}
 			called := false
-			behavior.complete = func(_ *contracts.ConstructionContext, complete func() bool) contracts.BehaviorResult {
+			behavior.complete = func(_ *contracts.ConstructionContext, complete func() bool) contracts.ConstructionResult {
 				called = true
 				require.False(t, complete())
-				return contracts.BehaviorResult{}
+				return contracts.ConstructionResult{}
 			}
 			require.Equal(t, contracts.BehaviorCycleDecisionCanceled, f.cycle())
 			require.True(t, called)
@@ -197,9 +197,9 @@ func TestConstructionCompletionDoesNotInventFinisherOnCompleteSite(t *testing.T)
 			t.Run(entry+map[bool]string{false: "/ordinary", true: "/capable"}[capable], func(t *testing.T) {
 				var behavior *constructionTestBehavior
 				if capable {
-					behavior = &constructionTestBehavior{complete: func(*contracts.ConstructionContext, func() bool) contracts.BehaviorResult {
+					behavior = &constructionTestBehavior{complete: func(*contracts.ConstructionContext, func() bool) contracts.ConstructionResult {
 						t.Fatal("a completed site no longer identifies the last material's worker")
-						return contracts.BehaviorResult{}
+						return contracts.ConstructionResult{}
 					}}
 				}
 				f := newConstructionTestFixture(t, behavior)
@@ -230,9 +230,9 @@ func TestConstructionCompletionDoesNotInventFinisherOnCompleteSite(t *testing.T)
 }
 
 func TestConstructionCompletionRejectsReusedTargetHandle(t *testing.T) {
-	behavior := &constructionTestBehavior{complete: func(*contracts.ConstructionContext, func() bool) contracts.BehaviorResult {
+	behavior := &constructionTestBehavior{complete: func(*contracts.ConstructionContext, func() bool) contracts.ConstructionResult {
 		t.Fatal("a stale action must not finish a replacement entity")
-		return contracts.BehaviorResult{}
+		return contracts.ConstructionResult{}
 	}}
 	f := newConstructionTestFixture(t, behavior)
 	require.Equal(t, contracts.BehaviorCycleDecisionContinue, f.cycle())

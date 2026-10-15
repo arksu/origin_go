@@ -19,11 +19,13 @@ func (hearthBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConfig
 	return parsePriorityOnlyConfig(ctx.RawConfig, "hearth")
 }
 
-func (hearthBehavior) CompleteConstruction(ctx *contracts.ConstructionContext, complete func() bool) contracts.BehaviorResult {
+func (hearthBehavior) CompleteConstruction(ctx *contracts.ConstructionContext, complete func() bool) contracts.ConstructionResult {
 	if ctx != nil && ctx.World != nil && ctx.World.Layer == hearth.SurfaceLayer {
 		if runtime, ok := ecs.TryGetResource[hearth.Runtime](ctx.World); ok {
 			return runtime.CompleteConstruction(ctx, complete)
 		}
 	}
-	return contracts.BehaviorResult{UserVisible: true, ReasonCode: "Cannot complete this hearth here.", Severity: contracts.BehaviorAlertSeverityWarning}
+	return contracts.ConstructionResult{BehaviorResult: contracts.BehaviorResult{
+		UserVisible: true, ReasonCode: "Cannot complete this hearth here.", Severity: contracts.BehaviorAlertSeverityWarning,
+	}}
 }
