@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Let characters acquire a personal home through construction, with authoritative runtime ownership, asynchronous saving, protected world presence, and interruptible travel that respects permanent death and normal world-entry recovery.
+Let characters acquire a personal home through construction, with authoritative runtime ownership, synchronous construction saving, independent lifecycle checkpoints, protected world presence, and interruptible travel that respects permanent death and normal world-entry recovery.
 
 ## ADDED Requirements
 
@@ -65,7 +65,7 @@ Ownership SHALL be determined by the character successfully processing the final
 
 #### Scenario: Finisher acquires their first home
 - **WHEN** a character with no active hearth successfully completes a hearth site
-- **THEN** the completed site's object SHALL immediately become that finisher's active hearth in runtime and its ownership SHALL be scheduled for ordinary asynchronous persistence
+- **THEN** the completed site's object SHALL immediately become that finisher's active hearth in runtime and the same call SHALL save construction before returning success
 - **AND** the character SHALL remain at their current position
 
 #### Scenario: Helper finishes an offline initiator's site
@@ -345,27 +345,46 @@ Normal world-entry spawning SHALL try the saved player position, the current exa
 - **WHEN** a reconnect can reattach the existing live body
 - **THEN** it SHALL reattach in place without applying home fallback or creating another hearth
 
-### Requirement: Runtime transitions do not wait for persistence
+### Requirement: Runtime transitions precede persistence
 
-Successful construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world. Runtime state SHALL remain authoritative while saving is queued or in flight. Old saves, load results, and callbacks SHALL NOT change the latest runtime ownership, recreate a transformed site, or rebind a terminal owner. Saving SHALL use bounded asynchronous work without a durable operation journal or a database-confirmed publication barrier. Optimistic version checks SHALL reject stale runtime mutations and save acknowledgments.
+Construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world before serialization and SQL. Its call SHALL return success only after the construction transaction commits. Runtime state SHALL remain authoritative during saving; old saves, load results, and callbacks SHALL NOT change the latest runtime ownership, recreate a transformed site, or rebind a terminal owner. Future death/deletion persistence MAY use bounded asynchronous work. No durable operation journal or runtime rollback SHALL be introduced. Optimistic version checks SHALL reject stale runtime mutations and save acknowledgments.
 
 #### Scenario: Database is slow after construction
 - **WHEN** a character completes a Hearth while its save is delayed
-- **THEN** the completed object SHALL already be usable as that character's only active runtime home
+- **THEN** the completed object SHALL already be that character's only active runtime home
 - **AND** the site SHALL NOT remain available for another construction completion
+- **AND** the owning call SHALL wait for commit before reporting success, accepting whole-game-loop delay
 
 #### Scenario: Earlier save finishes after a newer home exists
 - **WHEN** a save callback or ownership-load result reflects an earlier home after replacement in runtime
 - **THEN** the newer runtime home SHALL remain active and the older result SHALL NOT restore ownership or the old green Hearth
 
 #### Scenario: Completion followed by permanent death
-- **WHEN** a character successfully finishes a Hearth and then permanently dies before the completion is saved
+- **WHEN** a character's construction has committed and the character then permanently dies while death persistence is delayed
 - **THEN** the Hearth SHALL cease to be an active runtime home
 - **AND** no later save callback SHALL undo that death or reinstate the home during that server run
 
 #### Scenario: Old source handle is reused
 - **WHEN** asynchronous preparation completes after its source object was removed and its handle was reused
 - **THEN** the result SHALL NOT mutate the replacement entity or assign it Hearth ownership
+
+### Requirement: Construction saves its final objects and association synchronously
+
+After final-branch processing, transforms and runtime index replacement, construction SHALL serialize its final objects and use one existing `WithTx` call with a five-second context to save the new Hearth, the previous unlit campfire if present, `character_hearth` and the durable object-ID watermark. After commit, `AcknowledgeSaved` SHALL acknowledge only the saved index version. Ordinary object/chunk dirty flags SHALL remain set, and a previous raw chunk's pin SHALL remain held until saving returns. Serialization, SQL or commit errors and an association affected-row count other than one SHALL stop the entire server, without runtime rollback, SQL retry or a construction save queue. Character, inventory, material, stamina and corpse persistence SHALL remain independent.
+
+#### Scenario: First construction commits
+- **WHEN** a character completes their first Hearth
+- **THEN** the new object, association and durable ID watermark SHALL be saved in one transaction before success is returned
+- **AND** only that saved ownership version SHALL be acknowledged
+
+#### Scenario: Replacement includes an inactive previous home
+- **WHEN** construction replaces a previous home held in the raw chunk cache
+- **THEN** the same transaction SHALL save that object's campfire state together with the new Hearth and association
+- **AND** its chunk pin SHALL remain held until saving returns, while ordinary object/chunk dirty flags remain intact
+
+#### Scenario: Association write does not affect exactly one row
+- **WHEN** `SetCharacterHearth` returns an affected-row count other than one during construction saving
+- **THEN** the entire server SHALL stop without reporting construction success, retrying SQL or rolling runtime back
 
 ### Requirement: Database errors stop the entire server
 
@@ -419,12 +438,12 @@ The final construction cycle SHALL validate and prepare the runtime data needed 
 - **WHEN** the prepared source or active ownership no longer matches immediately before final processing
 - **THEN** the final cycle SHALL be revalidated or rejected without applying costs or an outdated ownership change
 
-### Requirement: Recovery accepts asynchronous save rollback
+### Requirement: Recovery accepts independent checkpoints
 
 After a process failure, recovery SHALL use saved character, object, and ownership data; recent unsaved progress, homes, or terminal changes MAY roll back. These snapshots need not form one atomic checkpoint. Invalid associations SHALL yield no active home. A saved Hearth without valid ownership SHALL become an unlit campfire before visibility. Recovery SHALL NOT infer an owner, upgrade a campfire, or replay an unsaved final cycle. Ordinary material and stamina durability SHALL remain unchanged.
 
-#### Scenario: Process fails before completion is saved
-- **WHEN** the process fails after runtime completion but before its data is saved
+#### Scenario: Process fails before construction commit
+- **WHEN** the process fails after runtime completion but before its construction transaction commits
 - **THEN** recovery MAY restore earlier saved progress or ownership instead of the unsaved completion
 - **AND** it SHALL NOT fabricate the lost finisher or replay the final cycle
 

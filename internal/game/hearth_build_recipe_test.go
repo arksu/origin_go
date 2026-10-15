@@ -93,6 +93,7 @@ type hearthBuildRecipeFixture struct {
 	system         *CyclicActionSystem
 	tickPeriod     time.Duration
 	initialStamina float64
+	saver          *hearthBuildSaver
 }
 
 func newHearthBuildRecipeFixture(t *testing.T) *hearthBuildRecipeFixture {
@@ -111,20 +112,25 @@ func newHearthBuildRecipeFixture(t *testing.T) *hearthBuildRecipeFixture {
 	site := w.Spawn(200, func(w *ecs.World, handle types.Handle) {
 		ecs.AddComponent(w, handle, components.EntityInfo{TypeID: constt.BuildObjectTypeID})
 		ecs.AddComponent(w, handle, components.Transform{X: 6, Y: 6})
+		ecs.AddComponent(w, handle, components.ChunkRef{})
 		internal := components.ObjectInternalState{}
 		components.SetBehaviorState(&internal, buildBehaviorStateKey, state)
 		ecs.AddComponent(w, handle, internal)
 	})
 	sender := &lockedBuildSender{}
 	registry := behaviors.MustDefaultRegistry()
-	ecs.InitResource(w, hearth.NewRuntime(w, nil, nil, registry, nil, nil))
-	service := NewBuildService(w, nil, nil, nil, nil, nil, registry, nil, sender, nil, nil, nil)
+	saver := &hearthBuildSaver{}
+	factory := gameworld.NewObjectFactory(nil)
+	chunks := gameworld.NewChunkManager(cfg, nil, w, nil, 0, cfg.Game.Region, factory, registry, nil, zap.NewNop())
+	t.Cleanup(chunks.Stop)
+	ecs.InitResource(w, hearth.NewRuntime(w, nil, nil, factory, saver, registry, nil, nil))
+	service := NewBuildService(w, nil, chunks, nil, nil, nil, registry, nil, sender, nil, nil, nil)
 	contextActions := NewContextActionService(w, nil, nil, nil, nil, nil, nil, nil, nil, behaviors.MustDefaultRegistry(), nil)
 	contextActions.SetBuildService(service)
 	return &hearthBuildRecipeFixture{
 		world: w, build: build, result: result, site: site, service: service,
 		contextActions: contextActions, system: NewCyclicActionSystem(contextActions, nil, nil),
-		tickPeriod: tickPeriod, initialStamina: entitystats.MaxStaminaFromCon(characterattrs.DefaultValue),
+		tickPeriod: tickPeriod, initialStamina: entitystats.MaxStaminaFromCon(characterattrs.DefaultValue), saver: saver,
 	}
 }
 
@@ -208,6 +214,22 @@ func TestHearthBuildRecipeSoloUsesOneCyclePerBranch(t *testing.T) {
 	owner, owned := ecs.GetResource[hearth.Runtime](f.world).Index.Owner(hearth.ObjectKey{ID: 200})
 	require.True(t, owned)
 	require.Equal(t, types.EntityID(1), owner)
+	require.Equal(t, 1, f.saver.calls)
+	require.Equal(t, owner, f.saver.character)
+	require.Nil(t, f.saver.previous)
+}
+
+type hearthBuildSaver struct {
+	calls     int
+	character types.EntityID
+	current   *repository.Object
+	previous  *repository.Object
+}
+
+func (s *hearthBuildSaver) SaveConstruction(_ context.Context, character types.EntityID, current, previous *repository.Object) error {
+	s.calls++
+	s.character, s.current, s.previous = character, current, previous
+	return nil
 }
 
 type hearthBuildLookup struct {
@@ -266,7 +288,7 @@ func TestHearthConstructionUnloadedHomeCompletesOnLastBranch(t *testing.T) {
 	chunks := &hearthBuildChunks{chunk: chunk}
 	lookup := &hearthBuildLookup{home: &repository.GetCharacterHearthRow{CharacterID: 1, ObjectID: raw.ID, X: raw.X, Y: raw.Y}}
 	runtime := ecs.GetResource[hearth.Runtime](f.world)
-	*runtime = hearth.NewRuntime(f.world, chunks, lookup, behaviors.MustDefaultRegistry(), nil, nil)
+	*runtime = hearth.NewRuntime(f.world, chunks, lookup, gameworld.NewObjectFactory(nil), f.saver, behaviors.MustDefaultRegistry(), nil, nil)
 
 	f.advanceTicks(int(f.build.TicksRequired*branches) - 1)
 	require.Equal(t, branches-1, state.Items[0].BuildCount)
@@ -287,6 +309,9 @@ func TestHearthConstructionUnloadedHomeCompletesOnLastBranch(t *testing.T) {
 	require.Equal(t, raw.ID, converted.ID)
 	require.Equal(t, raw.X, converted.X)
 	require.Equal(t, raw.Y, converted.Y)
+	require.Equal(t, 1, f.saver.calls)
+	require.Equal(t, int64(200), f.saver.current.ID)
+	require.Equal(t, converted, f.saver.previous)
 	stats, _ := ecs.GetComponent[components.EntityStats](f.world, player)
 	require.Equal(t, f.initialStamina-float64(branches)*f.build.StaminaCost, stats.Stamina)
 	require.Equal(t, uint64(f.build.TicksRequired*branches), ecs.GetResource[ecs.TimeState](f.world).Tick)
@@ -299,7 +324,7 @@ func TestHearthConstructionUnknownHomeCompletesInRequiredCycles(t *testing.T) {
 	lookup := &hearthBuildLookup{}
 	// Exercise the real first lookup instead of the fixture's known NoHome.
 	runtime := ecs.GetResource[hearth.Runtime](f.world)
-	*runtime = hearth.NewRuntime(f.world, nil, lookup, behaviors.MustDefaultRegistry(), nil, nil)
+	*runtime = hearth.NewRuntime(f.world, nil, lookup, gameworld.NewObjectFactory(nil), f.saver, behaviors.MustDefaultRegistry(), nil, nil)
 	sender := &lockedBuildSender{}
 	f.service.alerts = sender
 
@@ -320,6 +345,9 @@ func TestHearthConstructionUnknownHomeCompletesInRequiredCycles(t *testing.T) {
 	stats, _ = ecs.GetComponent[components.EntityStats](f.world, player)
 	require.Equal(t, f.initialStamina-float64(branches)*f.build.StaminaCost, stats.Stamina)
 	require.Equal(t, uint64(f.build.TicksRequired*branches), ecs.GetResource[ecs.TimeState](f.world).Tick)
+	require.Equal(t, 1, f.saver.calls)
+	require.Equal(t, types.EntityID(1), f.saver.character)
+	require.False(t, runtime.Index.Snapshot(1).Dirty)
 }
 
 func TestHearthBuildRecipeHelpersShareProgressAndOwnCosts(t *testing.T) {
@@ -363,6 +391,8 @@ func TestHearthBuildRecipeHelpersShareProgressAndOwnCosts(t *testing.T) {
 	require.True(t, owned)
 	require.Equal(t, types.EntityID(2), owner)
 	require.Equal(t, hearth.NoHome, index.Snapshot(1).State)
+	require.Equal(t, 1, f.saver.calls)
+	require.Equal(t, owner, f.saver.character)
 }
 
 func TestHearthConstructionReplacesOnlyFinishersLiveHome(t *testing.T) {
@@ -373,6 +403,8 @@ func TestHearthConstructionReplacesOnlyFinishersLiveHome(t *testing.T) {
 	index := ecs.GetResource[hearth.Runtime](f.world).Index
 	spawnHome := func(character, id types.EntityID, x int) types.Handle {
 		handle := gameworld.SpawnEntityFromDef(f.world, f.result, gameworld.DefSpawnParams{EntityID: id, X: float64(x), Y: 24, Quality: 17})
+		coord := types.WorldToChunkCoord(x, 24, constt.ChunkSize, constt.CoordPerTile)
+		ecs.AddComponent(f.world, handle, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
 		_, err := index.ReplaceHome(character, index.Snapshot(character).Version, hearth.Home{Object: hearth.ObjectKey{ID: id}, X: x, Y: 24})
 		require.NoError(t, err)
 		return handle
@@ -406,6 +438,10 @@ func TestHearthConstructionReplacesOnlyFinishersLiveHome(t *testing.T) {
 	require.Equal(t, uint32(f.result.DefID), initialInfo.TypeID)
 	stats, _ := ecs.GetComponent[components.EntityStats](f.world, helper)
 	require.Equal(t, f.initialStamina-float64(helperShare)*f.build.StaminaCost, stats.Stamina)
+	require.Equal(t, 1, f.saver.calls)
+	require.Equal(t, types.EntityID(2), f.saver.character)
+	require.Equal(t, int64(301), f.saver.previous.ID)
+	require.Equal(t, campfire.DefID, f.saver.previous.TypeID)
 }
 
 func TestHearthConstructionCompetingFinalCyclesAssignOnce(t *testing.T) {
@@ -426,4 +462,6 @@ func TestHearthConstructionCompetingFinalCyclesAssignOnce(t *testing.T) {
 	require.Equal(t, version, index.Snapshot(owner).Version)
 	stillOwner, _ := index.Owner(hearth.ObjectKey{ID: 200})
 	require.Equal(t, owner, stillOwner)
+	require.Equal(t, 1, f.saver.calls)
+	require.Equal(t, owner, f.saver.character)
 }

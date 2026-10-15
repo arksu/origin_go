@@ -250,8 +250,8 @@ func (i *Index) ApplyTerminal(character types.EntityID) (Snapshot, error) {
 	return entry.snapshot, nil
 }
 
-// AcknowledgeSaved only clears the exact saved revision. The future saver must
-// hold a Reference while its copied snapshot is in flight; no worker exists here.
+// AcknowledgeSaved only clears the exact saved revision. Asynchronous callers
+// must hold a Reference while their copied snapshot is in flight.
 func (i *Index) AcknowledgeSaved(character types.EntityID, version Version) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()

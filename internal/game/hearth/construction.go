@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	constt "origin/internal/const"
@@ -39,16 +40,18 @@ type Runtime struct {
 	w        *ecs.World
 	chunks   ConstructionChunks
 	reader   HomeReader
+	factory  *world.ObjectFactory
+	saver    ConstructionSaver
 	registry contracts.BehaviorRegistry
 	bus      *eventbus.EventBus
 	logger   *zap.Logger
 }
 
-func NewRuntime(w *ecs.World, chunks ConstructionChunks, reader HomeReader, registry contracts.BehaviorRegistry, bus *eventbus.EventBus, logger *zap.Logger) Runtime {
+func NewRuntime(w *ecs.World, chunks ConstructionChunks, reader HomeReader, factory *world.ObjectFactory, saver ConstructionSaver, registry contracts.BehaviorRegistry, bus *eventbus.EventBus, logger *zap.Logger) Runtime {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return Runtime{Index: NewIndex(), w: w, chunks: chunks, reader: reader, registry: registry, bus: bus, logger: logger}
+	return Runtime{Index: NewIndex(), w: w, chunks: chunks, reader: reader, factory: factory, saver: saver, registry: registry, bus: bus, logger: logger}
 }
 
 func constructionRefused(reason string) contracts.BehaviorResult {
@@ -60,6 +63,9 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 		!r.w.Alive(ctx.PlayerHandle) || r.w.GetHandleByEntityID(ctx.PlayerID) != ctx.PlayerHandle ||
 		playerstate.ItemsLocked(r.w, ctx.PlayerHandle) {
 		return constructionRefused("Cannot complete this hearth here.")
+	}
+	if r.factory == nil || r.saver == nil {
+		return constructionRefused("Hearth persistence is unavailable.")
 	}
 	defs := objectdefs.Global()
 	if defs == nil {
@@ -143,6 +149,7 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 			copy.Hp = sql.NullFloat64{Float64: float64(campfireDef.HP), Valid: true}
 			// A fresh campfire restores its ordinary unlit station and burner state.
 			copy.Data.Valid, copy.Data.RawMessage = false, nil
+			copy.LastTick = int64(ecs.GetResource[ecs.TimeState](r.w).Tick)
 			oldRaw = &copy
 		}
 	}
@@ -161,10 +168,38 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 	} else if oldRaw != nil {
 		oldChunk.UpsertRawObject(oldRaw)
 	}
-	if _, err := r.Index.ReplaceHome(ctx.PlayerID, current.Version, next); err != nil {
+	assigned, err := r.Index.ReplaceHome(ctx.PlayerID, current.Version, next)
+	if err != nil {
 		panic("prepared hearth assignment failed: " + err.Error())
 	}
+	if err := r.saveConstruction(ctx.PlayerID, ctx.TargetHandle, oldHandle, oldRaw); err != nil {
+		r.logger.Fatal("hearth construction save failed", zap.Error(err))
+		return contracts.BehaviorResult{}
+	}
+	r.Index.AcknowledgeSaved(ctx.PlayerID, assigned.Version)
 	return contracts.BehaviorResult{OK: true}
+}
+
+func (r *Runtime) saveConstruction(character types.EntityID, newHandle, oldHandle types.Handle, oldRaw *repository.Object) error {
+	newObject, err := r.factory.Serialize(r.w, newHandle)
+	if err != nil {
+		return fmt.Errorf("serialize new hearth: %w", err)
+	}
+	previousObject := oldRaw
+	if oldHandle != types.InvalidHandle {
+		previousObject, err = r.factory.Serialize(r.w, oldHandle)
+		if err != nil {
+			return fmt.Errorf("serialize previous hearth: %w", err)
+		}
+	}
+	if newObject == nil || (oldHandle != types.InvalidHandle && previousObject == nil) {
+		return fmt.Errorf("completed hearth objects are not persistable")
+	}
+	newObject.LastTick = int64(ecs.GetResource[ecs.TimeState](r.w).Tick)
+	if oldHandle != types.InvalidHandle {
+		previousObject.LastTick = newObject.LastTick
+	}
+	return r.saver.SaveConstruction(context.Background(), character, newObject, previousObject)
 }
 
 func (r *Runtime) canTransform(id types.EntityID, handle types.Handle, typeID uint32) bool {

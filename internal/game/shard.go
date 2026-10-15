@@ -139,10 +139,12 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.chunkManager.SetPositionObserver(positionObservers)
 	if layer == hearth.SurfaceLayer {
 		var reader hearth.HomeReader
+		var saver hearth.ConstructionSaver
 		if db != nil {
 			reader = db.Queries()
+			saver = hearth.NewConstructionSaverDB(db)
 		}
-		ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, behaviorRegistry, eb, logger))
+		ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, objectFactory, saver, behaviorRegistry, eb, logger))
 	}
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile
