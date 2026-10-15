@@ -64,9 +64,15 @@ result := service.ExecuteMove(world, playerID, playerHandle, opID, moveSpec, exp
 
 ### Build-site Special Flow
 
-- `C2S_InventoryOp.move` may target `dst.kind = InventoryBuild` for hand -> build-site deposits.
+- `C2S_InventoryOp.move` may target `dst.kind = InventoryBuild` for hand or authorized grid -> build-site deposits. A grid source includes accessible nested containers; the source revision is checked and any excess quantity remains in its original position.
 - Build-site deposits are aggregated into `BuildBehaviorState.Items[].PutItems`, not a generic `InventoryState` container.
-- Build -> hand take-back must use dedicated build packet flow because aggregated build deposits do not preserve item instance IDs.
+- `InventoryMoveSpec` with a build source and explicit `build_slot` takes one deposited unit directly into an authorized grid, retaining its item type and quality. The aggregate has no source revision or item ID; the server creates a new item instance. Ordinary build -> hand take-back keeps its dedicated build packet flow.
+
+### Shift Quick Transfer
+
+- `InventoryMoveSpec.modifiers & 1` requests server-selected transfer with no explicit destination, placement, quantity or swap/merge fields. `open_inventories` is the per-click window-opening-order snapshot, limited to 64 unique grid/build refs and containing the source.
+- Validate the grid source's supplied revision and item, or the linked build source's slot/material, before considering destinations. Walk circularly after the source; skip inaccessible, missing, full or rejecting targets and the item's own nested inventory. Destination admission uses current server state. Stop after the first success and return one operation result.
+- Grid sources move the whole item/stack without merging; build destinations keep excess in the source. Build sources return exactly one unit without using the hand. Source/build or destination/build mutations commit before component observers run; successful build operations return internal `BuildTargetID` metadata for BuildState refresh.
 
 ### Container Types
 

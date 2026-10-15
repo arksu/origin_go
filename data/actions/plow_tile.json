@@ -6,7 +6,7 @@
       "cooldown": 20000,
       "presentation": {
         "label": "Plow tile",
-        "menuIcon": "/assets/cursor/dig.png"
+        "menuIcon": "/assets/img/hud/actions/plow_tile.png"
       },
       "target": {
         "kind": "tile",

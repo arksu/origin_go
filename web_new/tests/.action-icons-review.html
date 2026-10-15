@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Origin action icons</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 26px; background: #14291c; color: #d7c8a8; font: 14px Georgia, serif; }
+    main { width: 1056px; }
+    h1 { margin: 0 0 8px; font-size: 28px; font-weight: 400; }
+    p { margin: 0 0 23px; color: #a79f87; }
+    h2 { margin: 18px 0 12px; font-size: 15px; font-weight: 400; letter-spacing: 1px; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; }
+    .card { padding: 12px 8px 9px; text-align: center; background: #102117; border: 1px solid #4b4d31; border-radius: 3px; }
+    .card .action-icon.size-96 { width: 96px; height: 96px; box-shadow: 0 0 0 1px #786342; }
+    .card .action-icon.size-42 { width: 42px; height: 42px; }
+    .card .action-icon.size-36 { width: 36px; height: 36px; }
+    .card .action-icon.size-28 { width: 28px; height: 28px; }
+    .label { margin: 11px 0 12px; white-space: nowrap; }
+    .sizes { display: flex; justify-content: center; align-items: flex-end; gap: 7px; }
+    .sizes small { display: block; margin-top: 4px; font: 9px Arial, sans-serif; color: #8b9176; }
+    footer { margin-top: 20px; color: #929d81; font: 12px Arial, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { createApp, h } from 'vue'
+    import { createPinia } from 'pinia'
+    import ActionIcon from '/src/components/ui/ActionIcon.vue'
+    import { ACTION_CATALOG } from '/src/game/hud/actionCatalog.ts'
+    import { useGameStore } from '/src/stores/gameStore.ts'
+    const actions = [
+      { id: 'axe_sweep', label: 'Axe sweep' },
+      { id: 'axe_strike', label: 'Axe strike' },
+      { id: 'lift', label: 'Lift' },
+      { id: 'lift_down', label: 'Lift down' },
+      { id: 'dig', label: 'Dig' },
+      { id: 'plow_tile', label: 'Plow tile' },
+    ].map(action => ({ ...action, menuIcon: '/assets/img/hud/actions/' + action.id + '.png' }))
+    const card = (id, label) => h('article', { class: 'card' }, [
+      h(ActionIcon, { actionId: id, class: 'size-96' }),
+      h('div', { class: 'label' }, label),
+      h('div', { class: 'sizes' }, [42, 36, 28].map(size => h('div', [
+        h(ActionIcon, { actionId: id, class: 'size-' + size }),
+        h('small', size + ' px'),
+      ]))),
+    ])
+    const app = createApp({ setup() {
+      useGameStore().setGameActionList(actions)
+      return () => h('main', [
+        h('h1', 'Origin · Action icons'),
+        h('p', 'Classic RPG silhouettes · natural materials · upper-left light'),
+        h('h2', 'Interface'),
+        h('div', { class: 'grid' }, ACTION_CATALOG.map(action => card(action.id, action.label))),
+        h('h2', 'Gameplay'),
+        h('div', { class: 'grid' }, actions.map(action => card('game:' + action.id, action.label))),
+        h('footer', '96 px artwork and actual HUD sizes: 42 / 36 / 28 px. All samples use the client ActionIcon component.'),
+      ])
+    } })
+    app.use(createPinia())
+    app.mount('#app')
+  </script>
+</body>
+</html>

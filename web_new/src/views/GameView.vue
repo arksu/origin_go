@@ -47,7 +47,7 @@ import { cancelActiveActionOnEscape } from '@/game/hud/actionState'
 const router = useRouter()
 const gameStore = useGameStore()
 const authStore = useAuthStore()
-const { placeItemIntoBuild } = useInventoryOps()
+const { placeItemIntoBuild, quickTransferBuildItem } = useInventoryOps()
 
 const gameCanvas = ref<HTMLCanvasElement | null>(null)
 const chatContainerRef = ref<InstanceType<typeof ChatContainer>>()
@@ -553,6 +553,10 @@ function handleBuildStateTakeBack(entityId: number, slot: number) {
   sendBuildTakeBack(entityId, slot)
 }
 
+function handleBuildStateQuickTakeBack(entityId: number, slot: number) {
+  quickTransferBuildItem(entityId, slot)
+}
+
 function toggleBuildWindow() {
   if (gameStore.buildWindowVisible) {
     closeBuildWindow()
@@ -982,6 +986,7 @@ useHotkeys(hotkeys)
           @progress="handleBuildStateProgress"
           @put-from-hand="handleBuildStatePutFromHand"
           @take-back="handleBuildStateTakeBack"
+          @quick-take-back="handleBuildStateQuickTakeBack"
         />
       </div>
       

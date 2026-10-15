@@ -5,7 +5,7 @@
       "id": "lift",
       "presentation": {
         "label": "Lift",
-        "menuIcon": "/assets/cursor/lift.png"
+        "menuIcon": "/assets/img/hud/actions/lift.png"
       },
       "target": {
         "kind": "object",

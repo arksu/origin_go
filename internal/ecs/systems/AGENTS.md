@@ -43,7 +43,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 
 **Build integration notes**:
 - Routes build commands (`BuildStart`, `BuildProgress`, `BuildTakeBack`) to `BuildService` on the ECS thread.
-- After successful inventory move into a build-site (`dst.kind = INVENTORY_KIND_BUILD`), trigger immediate build-state snapshot refresh; hand inventory updates still flow through inventory result/update packets.
+- After successful inventory movement into or out of a build-site, use the executor result's `BuildTargetID` to trigger immediate build-state snapshot refresh. Quick-transfer requests omit `dst`; inventory updates still flow through inventory result/update packets.
 - Keep build-state sends on the ECS thread to preserve deterministic ordering with inventory/build mutations.
 
 ### MovementSystem (Priority: 100)

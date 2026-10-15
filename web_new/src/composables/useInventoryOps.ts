@@ -1,6 +1,8 @@
 import { proto } from '@/network/proto/packets.js'
 import { useGameStore } from '@/stores/gameStore'
 import { sendInventoryOp } from '@/network'
+import { Modifiers } from '@/game/InputController'
+import { toNonNegativeProtoInt } from '@/utils/protoNumbers'
 
 const INVENTORY_SLOT_SIZE_PX = 32
 
@@ -33,6 +35,39 @@ function buildExpected(
 
 export function useInventoryOps() {
   const gameStore = useGameStore()
+
+  function sendQuickTransfer(move: proto.IInventoryMoveSpec, srcState?: proto.IInventoryState) {
+    const srcRef = move.src
+    if (!gameStore.isInGame || gameStore.quickInventoryTransfer || !srcRef || !gameStore.isInventoryOpen(srcRef)) return
+    const openInventories = gameStore.openInventoryRefs
+      .filter(r => gameStore.isInventoryOpen(r)).map(r => ({ ...r }))
+    if (openInventories.length < 2 || !openInventories.some(r => gameStore.refKey(r) === gameStore.refKey(srcRef))) return
+
+    const opId = gameStore.allocOpId()
+    gameStore.quickInventoryTransfer = { opId, sourceRef: { ...srcRef }, cancelled: false }
+    sendInventoryOp({
+      opId,
+      expected: buildExpected(srcState, undefined),
+      move: { ...move, modifiers: Modifiers.SHIFT, openInventories, allowSwapOrMerge: false },
+    })
+  }
+
+  function quickTransferItem(srcRef: proto.IInventoryRef, item: proto.IItemInstance) {
+    if ((srcRef.kind ?? 0) !== proto.InventoryKind.INVENTORY_KIND_GRID || !item.itemId || String(item.itemId) === '0') return
+    const source = gameStore.getOpenInventoryState(srcRef)
+    if (!source) return
+    sendQuickTransfer({ src: { ...srcRef }, itemId: item.itemId }, source)
+  }
+
+  function quickTransferBuildItem(entityId: number, slot: number) {
+    if (!Number.isInteger(entityId) || entityId <= 0 || !Number.isInteger(slot) || slot < 0) return
+    const row = gameStore.buildStateList[slot]
+    if (!row || toNonNegativeProtoInt(row.putCount) <= 0) return
+    sendQuickTransfer({
+      src: { kind: proto.InventoryKind.INVENTORY_KIND_BUILD, ownerId: entityId, inventoryKey: 0 },
+      buildSlot: slot,
+    })
+  }
 
   function getPlacePositionFromSlotClick(dstX: number, dstY: number): { x: number; y: number } {
     const handPos = gameStore.handState?.handPos
@@ -280,6 +315,8 @@ export function useInventoryOps() {
   }
 
   return {
+    quickTransferItem,
+    quickTransferBuildItem,
     pickUpItem,
     placeItem,
     placeOrSwapItem,

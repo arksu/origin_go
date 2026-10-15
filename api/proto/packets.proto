@@ -227,6 +227,19 @@ message InventoryMoveSpec {
   // - если false: операция должна фейлиться
   // - если true: сервер может выполнить swap, merge stack, или другое определённое поведение
   bool allow_swap_or_merge = 8;
+
+  // BUILD sources identify an aggregate requirement row instead of an item_id.
+  // Take-back returns one deposited unit; slot zero is valid.
+  optional uint32 build_slot = 9;
+
+  // SHIFT=1 requests server-selected quick transfer. With SHIFT, omit dst and
+  // placement/quantity fields; open_inventories is the ordered window snapshot.
+  uint32 modifiers = 10;
+
+  // Used only for SHIFT: source and open GRID/BUILD refs in window-opening order.
+  // The server validates access and tries destinations after src, wrapping once.
+  // At most 64 refs; grid sources check only their expected source revision.
+  repeated InventoryRef open_inventories = 11;
 }
 
 message InventoryOp {

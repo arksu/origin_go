@@ -5,7 +5,7 @@
       "id": "lift_down",
       "presentation": {
         "label": "Lift down",
-        "menuIcon": "/assets/cursor/lift_down.png"
+        "menuIcon": "/assets/img/hud/actions/lift_down.png"
       },
       "target": {
         "kind": "tile",

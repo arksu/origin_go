@@ -75,6 +75,7 @@ type InventoryOpResult struct {
 	ErrorCode         netproto.ErrorCode
 	Message           string
 	UpdatedContainers []InventoryContainerState
+	BuildTargetID     types.EntityID
 
 	// ClosedContainerRefs lists nested container refs that should be closed on the client
 	// (e.g. when a container item is picked up into the hand).
@@ -1094,12 +1095,8 @@ func (s *NetworkCommandSystem) handleInventoryOp(w *ecs.World, playerHandle type
 	if result.Success && s.openContainerService != nil && len(response.Updated) > 0 {
 		s.openContainerService.BroadcastInventoryUpdates(w, cmd.CharacterID, response.Updated)
 	}
-	if result.Success && s.buildCommandService != nil {
-		if move := op.GetMove(); move != nil && move.Dst != nil &&
-			move.Dst.Kind == netproto.InventoryKind_INVENTORY_KIND_BUILD &&
-			move.Dst.OwnerId > 0 {
-			s.buildCommandService.SendBuildStateSnapshot(w, cmd.CharacterID, types.EntityID(move.Dst.OwnerId))
-		}
+	if result.Success && s.buildCommandService != nil && result.BuildTargetID > 0 {
+		s.buildCommandService.SendBuildStateSnapshot(w, cmd.CharacterID, result.BuildTargetID)
 	}
 	if result.Success && s.inventorySnapshotSender != nil {
 		s.inventorySnapshotSender.SendCraftListSnapshot(w, cmd.CharacterID, playerHandle)

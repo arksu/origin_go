@@ -27,7 +27,8 @@ func (s *InventoryOperationService) executeMoveToBuild(
 		}
 	}
 
-	if constt.InventoryKind(moveSpec.Src.Kind) != constt.InventoryHand ||
+	srcKind := constt.InventoryKind(moveSpec.Src.Kind)
+	if (srcKind != constt.InventoryHand && srcKind != constt.InventoryGrid) ||
 		constt.InventoryKind(moveSpec.Dst.Kind) != constt.InventoryBuild {
 		return &OperationResult{
 			Success:   false,
@@ -65,11 +66,11 @@ func (s *InventoryOperationService) executeMoveToBuild(
 			Message:   err.Message,
 		}
 	}
-	if srcInfo == nil || srcInfo.Container == nil || srcInfo.Container.Kind != constt.InventoryHand {
+	if srcInfo == nil || srcInfo.Container == nil || srcInfo.Container.Kind != srcKind {
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
-			Message:   "Source must be hand inventory",
+			Message:   "Source must be hand or grid inventory",
 		}
 	}
 
@@ -119,48 +120,9 @@ func (s *InventoryOperationService) executeMoveToBuild(
 	}
 
 	targetID := types.EntityID(moveSpec.Dst.OwnerId)
-	targetHandle := w.GetHandleByEntityID(targetID)
-	if targetHandle == types.InvalidHandle || !w.Alive(targetHandle) {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_ENTITY_NOT_FOUND,
-			Message:   "Build target not found",
-		}
-	}
-
-	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
-	if !hasInfo || info.TypeID != constt.BuildObjectTypeID {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
-			Message:   "Target is not a build site",
-		}
-	}
-
-	link, linked := ecs.GetResource[ecs.LinkState](w).GetLink(playerID)
-	if !linked || link.TargetID != targetID {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT,
-			Message:   "Player is not linked to this construction site",
-		}
-	}
-
-	internalState, hasInternalState := ecs.GetComponent[components.ObjectInternalState](w, targetHandle)
-	if !hasInternalState {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
-			Message:   "Build state is unavailable",
-		}
-	}
-	buildState, ok := components.GetBehaviorState[components.BuildBehaviorState](internalState, buildBehaviorStateKey)
-	if !ok || buildState == nil {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
-			Message:   "Build state is unavailable",
-		}
+	targetHandle, buildState, buildErr := resolveLinkedBuild(w, playerID, moveSpec.Dst)
+	if buildErr != nil {
+		return &OperationResult{ErrorCode: buildErr.Code, Message: buildErr.Message}
 	}
 
 	slotIndex := -1
@@ -199,87 +161,55 @@ func (s *InventoryOperationService) executeMoveToBuild(
 		}
 	}
 
-	buildMutationOK := false
-	ecs.MutateComponent[components.ObjectInternalState](w, targetHandle, func(state *components.ObjectInternalState) bool {
-		currentBuild, hasBuild := components.GetBehaviorState[components.BuildBehaviorState](*state, buildBehaviorStateKey)
-		if !hasBuild || currentBuild == nil || slotIndex < 0 || slotIndex >= len(currentBuild.Items) {
-			return false
-		}
-		slot := &currentBuild.Items[slotIndex]
-		slot.MergePutItem(itemDef.Key, srcItem.Quality, transferQty)
-		state.IsDirty = true
-		buildMutationOK = true
-		return true
-	})
-	if !buildMutationOK {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
-			Message:   "Failed to update build state",
-		}
-	}
-
-	handMutationOK := false
-	ecs.MutateComponent[components.InventoryContainer](w, srcInfo.Handle, func(c *components.InventoryContainer) bool {
+	// Both components commit under the shard lock before either component's
+	// observers run. Every fallible check precedes the first write.
+	sourceMutationOK := ecs.MutateComponent[components.InventoryContainer](w, srcInfo.Handle, func(c *components.InventoryContainer) bool {
 		if srcItemIndex < 0 || srcItemIndex >= len(c.Items) {
 			return false
 		}
 		if c.Items[srcItemIndex].ItemID != itemID || c.Items[srcItemIndex].Quantity < transferQty {
 			return false
 		}
-		if c.Items[srcItemIndex].Quantity == transferQty {
-			c.Items = append(c.Items[:srcItemIndex], c.Items[srcItemIndex+1:]...)
-			c.HandMouseOffsetX = 0
-			c.HandMouseOffsetY = 0
-		} else {
-			c.Items[srcItemIndex].Quantity -= transferQty
-		}
-		c.Version++
-		handMutationOK = true
-		return true
-	})
-	if !handMutationOK {
-		// Best-effort rollback to avoid losing materials if hand mutation unexpectedly fails.
-		ecs.MutateComponent[components.ObjectInternalState](w, targetHandle, func(state *components.ObjectInternalState) bool {
+		return ecs.MutateComponent[components.ObjectInternalState](w, targetHandle, func(state *components.ObjectInternalState) bool {
 			currentBuild, hasBuild := components.GetBehaviorState[components.BuildBehaviorState](*state, buildBehaviorStateKey)
 			if !hasBuild || currentBuild == nil || slotIndex < 0 || slotIndex >= len(currentBuild.Items) {
 				return false
 			}
-			currentBuild.Items[slotIndex].MergePutItem(itemDef.Key, srcItem.Quality, transferQty)
+			slot := &currentBuild.Items[slotIndex]
+			if !buildSlotMatchesItem(slot, itemDef) ||
+				uint64(slot.PutCount())+uint64(slot.BuildCount)+uint64(transferQty) > uint64(slot.RequiredCount) {
+				return false
+			}
+			slot.MergePutItem(itemDef.Key, c.Items[srcItemIndex].Quality, transferQty)
+			if c.Items[srcItemIndex].Quantity == transferQty {
+				c.Items = append(c.Items[:srcItemIndex], c.Items[srcItemIndex+1:]...)
+				if c.Kind == constt.InventoryHand {
+					c.HandMouseOffsetX = 0
+					c.HandMouseOffsetY = 0
+				}
+			} else {
+				c.Items[srcItemIndex].Quantity -= transferQty
+			}
+			c.Version++
 			state.IsDirty = true
 			return true
 		})
+	})
+	if !sourceMutationOK {
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
-			Message:   "Failed to update hand inventory",
+			Message:   "Failed to update build inventory",
 		}
 	}
 
-	updatedOwner, hasOwner := ecs.GetComponent[components.InventoryOwner](w, playerHandle)
-	if !hasOwner {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
-			Message:   "Player inventory owner missing",
-		}
-	}
-	updatedHand, hasHand := ecs.GetComponent[components.InventoryContainer](w, srcInfo.Handle)
-	if !hasHand {
-		return &OperationResult{
-			Success:   false,
-			ErrorCode: netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
-			Message:   "Hand inventory missing after update",
-		}
-	}
+	updatedSource, _ := ecs.GetComponent[components.InventoryContainer](w, srcInfo.Handle)
+	srcInfo.Container = &updatedSource
 
 	return &OperationResult{
-		Success: true,
-		UpdatedContainers: []*ContainerInfo{{
-			Handle:    srcInfo.Handle,
-			Container: &updatedHand,
-			Owner:     &updatedOwner,
-		}},
+		Success:           true,
+		UpdatedContainers: []*ContainerInfo{srcInfo},
+		BuildTargetID:     targetID,
 	}
 }
 

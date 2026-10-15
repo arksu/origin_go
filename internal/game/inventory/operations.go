@@ -31,6 +31,8 @@ type OperationResult struct {
 
 	// Updated containers (for sending to client)
 	UpdatedContainers []*ContainerInfo
+	// BuildTargetID identifies a committed build deposit/take-back for UI refresh.
+	BuildTargetID types.EntityID
 
 	// ClosedContainerRefs lists nested container refs that should be closed on the client
 	// (e.g. when a container item is picked up into the hand).
@@ -144,12 +146,24 @@ func (s *InventoryOperationService) ExecuteMove(
 		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_CANNOT_INTERACT, Message: playerstate.ItemsLockedReason}
 	}
 
+	if moveSpec != nil && moveSpec.Modifiers&inventoryModifierShift != 0 {
+		return s.executeQuickTransfer(w, playerID, playerHandle, opID, moveSpec, expected)
+	}
 	if moveSpec == nil || moveSpec.Src == nil || moveSpec.Dst == nil {
 		return &OperationResult{
 			Success:   false,
 			ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST,
 			Message:   "Invalid move request",
 		}
+	}
+	if len(moveSpec.OpenInventories) != 0 {
+		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, Message: "Open inventory list requires Shift"}
+	}
+	if moveSpec.Src.Kind == netproto.InventoryKind_INVENTORY_KIND_BUILD {
+		return s.executeMoveFromBuild(w, playerID, playerHandle, moveSpec, expected)
+	}
+	if moveSpec.BuildSlot != nil {
+		return &OperationResult{ErrorCode: netproto.ErrorCode_ERROR_CODE_INVALID_REQUEST, Message: "Build slot requires a build source"}
 	}
 
 	if constt.InventoryKind(moveSpec.Dst.Kind) == constt.InventoryBuild {

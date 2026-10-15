@@ -78,6 +78,7 @@ Server → Network → gameStore → gameFacade → PIXI Render
 
 - Build recipe list window and build-site state window are separate UI states.
 - Build-state window click semantics are input-mode dependent:
+  - Shift + row click → server-selected quick take-back to an open grid, without using the hand
   - hand has item → put to build-site
   - empty hand + row click → take back one deposited item from that row
 - Object icon helpers must handle both visual JSON shapes used in `src/game/objects`: direct `{layers}` and nested variant maps.

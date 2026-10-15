@@ -25,13 +25,13 @@ export interface ActionCatalogEntry {
 }
 
 export const ACTION_CATALOG: readonly ActionCatalogEntry[] = [
-  { id: 'settings', label: 'Settings', shortLabel: 'SET', iconPath: '/assets/img/hud/actions/settings.svg' },
-  { id: 'actions', label: 'Actions', shortLabel: 'ACT', iconPath: '/assets/img/hud/actions/actions.svg' },
-  { id: 'craft', label: 'Craft', shortLabel: 'CRF', iconPath: '/assets/img/hud/actions/craft.svg' },
-  { id: 'build', label: 'Build', shortLabel: 'BLD', iconPath: '/assets/img/hud/actions/build.svg' },
-  { id: 'stats', label: 'Stats', shortLabel: 'STS', iconPath: '/assets/img/hud/actions/stats.svg' },
-  { id: 'inventory', label: 'Inventory', shortLabel: 'INV', iconPath: '/assets/img/hud/actions/inventory.svg' },
-  { id: 'equip', label: 'Equipment', shortLabel: 'EQP', iconPath: '/assets/img/hud/actions/equip.svg' },
+  { id: 'settings', label: 'Settings', shortLabel: 'SET', iconPath: '/assets/img/hud/actions/settings.png' },
+  { id: 'actions', label: 'Actions', shortLabel: 'ACT', iconPath: '/assets/img/hud/actions/actions.png' },
+  { id: 'craft', label: 'Craft', shortLabel: 'CRF', iconPath: '/assets/img/hud/actions/craft.png' },
+  { id: 'build', label: 'Build', shortLabel: 'BLD', iconPath: '/assets/img/hud/actions/build.png' },
+  { id: 'stats', label: 'Stats', shortLabel: 'STS', iconPath: '/assets/img/hud/actions/stats.png' },
+  { id: 'inventory', label: 'Inventory', shortLabel: 'INV', iconPath: '/assets/img/hud/actions/inventory.png' },
+  { id: 'equip', label: 'Equipment', shortLabel: 'EQP', iconPath: '/assets/img/hud/actions/equip.png' },
 ] as const
 
 const ACTION_IDS = new Set<ActionId>(ACTION_CATALOG.map((entry) => entry.id))

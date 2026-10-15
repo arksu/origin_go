@@ -16,7 +16,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
-  itemClick: [item: Props['item'], ox: number, oy: number]
+  itemClick: [item: Props['item'], ox: number, oy: number, shiftKey: boolean]
   itemRightClick: [item: Props['item']]
 }>()
 
@@ -97,7 +97,7 @@ const onClick = (e: MouseEvent) => {
   onMouseLeave()
   const target = e.currentTarget as HTMLElement | null
   if (!target) {
-    emit('itemClick', props.item, e.offsetX, e.offsetY)
+    emit('itemClick', props.item, e.offsetX, e.offsetY, e.shiftKey)
     return
   }
 
@@ -107,7 +107,7 @@ const onClick = (e: MouseEvent) => {
   const offsetX = Math.floor(Math.min(Math.max(rawOffsetX, 0), rect.width))
   const offsetY = Math.floor(Math.min(Math.max(rawOffsetY, 0), rect.height))
 
-  emit('itemClick', props.item, offsetX, offsetY)
+  emit('itemClick', props.item, offsetX, offsetY, e.shiftKey)
 }
 
 const onContextmenu = () => {

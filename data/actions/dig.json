@@ -5,7 +5,7 @@
       "id": "dig",
       "presentation": {
         "label": "Dig",
-        "menuIcon": "/assets/cursor/dig.png"
+        "menuIcon": "/assets/img/hud/actions/dig.png"
       },
       "target": {
         "kind": "tile",

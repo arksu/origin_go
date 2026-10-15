@@ -66,6 +66,7 @@ func (e *InventoryExecutor) ExecuteOperation(
 		Success:           result.Success,
 		ErrorCode:         result.ErrorCode,
 		Message:           result.Message,
+		BuildTargetID:     result.BuildTargetID,
 		UpdatedContainers: make([]systems.InventoryContainerState, 0, len(result.UpdatedContainers)),
 	}
 

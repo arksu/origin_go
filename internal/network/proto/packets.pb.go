@@ -1727,8 +1727,18 @@ type InventoryMoveSpec struct {
 	// - если false: операция должна фейлиться
 	// - если true: сервер может выполнить swap, merge stack, или другое определённое поведение
 	AllowSwapOrMerge bool `protobuf:"varint,8,opt,name=allow_swap_or_merge,json=allowSwapOrMerge,proto3" json:"allow_swap_or_merge,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// BUILD sources identify an aggregate requirement row instead of an item_id.
+	// Take-back returns one deposited unit; slot zero is valid.
+	BuildSlot *uint32 `protobuf:"varint,9,opt,name=build_slot,json=buildSlot,proto3,oneof" json:"build_slot,omitempty"`
+	// SHIFT=1 requests server-selected quick transfer. With SHIFT, omit dst and
+	// placement/quantity fields; open_inventories is the ordered window snapshot.
+	Modifiers uint32 `protobuf:"varint,10,opt,name=modifiers,proto3" json:"modifiers,omitempty"`
+	// Used only for SHIFT: source and open GRID/BUILD refs in window-opening order.
+	// The server validates access and tries destinations after src, wrapping once.
+	// At most 64 refs; grid sources check only their expected source revision.
+	OpenInventories []*InventoryRef `protobuf:"bytes,11,rep,name=open_inventories,json=openInventories,proto3" json:"open_inventories,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *InventoryMoveSpec) Reset() {
@@ -1815,6 +1825,27 @@ func (x *InventoryMoveSpec) GetAllowSwapOrMerge() bool {
 		return x.AllowSwapOrMerge
 	}
 	return false
+}
+
+func (x *InventoryMoveSpec) GetBuildSlot() uint32 {
+	if x != nil && x.BuildSlot != nil {
+		return *x.BuildSlot
+	}
+	return 0
+}
+
+func (x *InventoryMoveSpec) GetModifiers() uint32 {
+	if x != nil {
+		return x.Modifiers
+	}
+	return 0
+}
+
+func (x *InventoryMoveSpec) GetOpenInventories() []*InventoryRef {
+	if x != nil {
+		return x.OpenInventories
+	}
+	return nil
 }
 
 type InventoryOp struct {
@@ -8738,7 +8769,7 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x01y\x18\x02 \x01(\rR\x01y\"U\n" +
 	"\aHandPos\x12$\n" +
 	"\x0emouse_offset_x\x18\x01 \x01(\x05R\fmouseOffsetX\x12$\n" +
-	"\x0emouse_offset_y\x18\x02 \x01(\x05R\fmouseOffsetY\"\x9e\x03\n" +
+	"\x0emouse_offset_y\x18\x02 \x01(\x05R\fmouseOffsetY\"\xaf\x04\n" +
 	"\x11InventoryMoveSpec\x12%\n" +
 	"\x03src\x18\x01 \x01(\v2\x13.proto.InventoryRefR\x03src\x12%\n" +
 	"\x03dst\x18\x02 \x01(\v2\x13.proto.InventoryRefR\x03dst\x12\x17\n" +
@@ -8747,12 +8778,18 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x0edst_equip_slot\x18\x05 \x01(\x0e2\x10.proto.EquipSlotH\x01R\fdstEquipSlot\x88\x01\x01\x12.\n" +
 	"\bhand_pos\x18\x06 \x01(\v2\x0e.proto.HandPosH\x02R\ahandPos\x88\x01\x01\x12\x1f\n" +
 	"\bquantity\x18\a \x01(\rH\x03R\bquantity\x88\x01\x01\x12-\n" +
-	"\x13allow_swap_or_merge\x18\b \x01(\bR\x10allowSwapOrMergeB\n" +
+	"\x13allow_swap_or_merge\x18\b \x01(\bR\x10allowSwapOrMerge\x12\"\n" +
+	"\n" +
+	"build_slot\x18\t \x01(\rH\x04R\tbuildSlot\x88\x01\x01\x12\x1c\n" +
+	"\tmodifiers\x18\n" +
+	" \x01(\rR\tmodifiers\x12>\n" +
+	"\x10open_inventories\x18\v \x03(\v2\x13.proto.InventoryRefR\x0fopenInventoriesB\n" +
 	"\n" +
 	"\b_dst_posB\x11\n" +
 	"\x0f_dst_equip_slotB\v\n" +
 	"\t_hand_posB\v\n" +
-	"\t_quantity\"\xd0\x01\n" +
+	"\t_quantityB\r\n" +
+	"\v_build_slot\"\xd0\x01\n" +
 	"\vInventoryOp\x12\x13\n" +
 	"\x05op_id\x18\x01 \x01(\x04R\x04opId\x124\n" +
 	"\bexpected\x18\x02 \x03(\v2\x18.proto.InventoryExpectedR\bexpected\x12.\n" +
@@ -9538,137 +9575,138 @@ var file_api_proto_packets_proto_depIdxs = []int32{
 	26,  // 16: proto.InventoryMoveSpec.dst_pos:type_name -> proto.GridPos
 	1,   // 17: proto.InventoryMoveSpec.dst_equip_slot:type_name -> proto.EquipSlot
 	27,  // 18: proto.InventoryMoveSpec.hand_pos:type_name -> proto.HandPos
-	25,  // 19: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
-	28,  // 20: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
-	28,  // 21: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
-	29,  // 22: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
-	17,  // 23: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
-	17,  // 24: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
-	13,  // 25: proto.EntityMovement.position:type_name -> proto.Position
-	14,  // 26: proto.EntityMovement.velocity:type_name -> proto.Vector2
-	0,   // 27: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
-	14,  // 28: proto.EntityMovement.target_position:type_name -> proto.Vector2
-	13,  // 29: proto.EntityPosition.position:type_name -> proto.Position
-	14,  // 30: proto.EntityPosition.size:type_name -> proto.Vector2
-	1,   // 31: proto.CharacterEquipmentVisual.slot:type_name -> proto.EquipSlot
-	36,  // 32: proto.CharacterVisualState.equipment:type_name -> proto.CharacterEquipmentVisual
-	37,  // 33: proto.S2C_CharacterVisual.state:type_name -> proto.CharacterVisualState
-	13,  // 34: proto.CharacterActionAnimationState.target_position:type_name -> proto.Position
-	39,  // 35: proto.S2C_CharacterActionAnimation.state:type_name -> proto.CharacterActionAnimationState
-	41,  // 36: proto.ChunkData.coord:type_name -> proto.ChunkCoord
-	8,   // 37: proto.MapClick.button:type_name -> proto.MapClickButton
-	43,  // 38: proto.C2S_PlayerAction.map_click:type_name -> proto.MapClick
-	44,  // 39: proto.C2S_PlayerAction.select_context_action:type_name -> proto.SelectContextAction
-	45,  // 40: proto.C2S_PlayerAction.move_direction:type_name -> proto.MoveDirection
-	47,  // 41: proto.C2S_PlayerAction.stand_up:type_name -> proto.StandUp
-	0,   // 42: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
-	9,   // 43: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
-	14,  // 44: proto.C2S_BuildStart.pos:type_name -> proto.Vector2
-	50,  // 45: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
-	51,  // 46: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
-	46,  // 47: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
-	48,  // 48: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
-	30,  // 49: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
-	49,  // 50: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
-	31,  // 51: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
-	32,  // 52: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
-	52,  // 53: proto.ClientMessage.start_craft_one:type_name -> proto.C2S_StartCraftOne
-	53,  // 54: proto.ClientMessage.start_craft_many:type_name -> proto.C2S_StartCraftMany
-	59,  // 55: proto.ClientMessage.open_window:type_name -> proto.C2S_OpenWindow
-	60,  // 56: proto.ClientMessage.close_window:type_name -> proto.C2S_CloseWindow
-	54,  // 57: proto.ClientMessage.build_start:type_name -> proto.C2S_BuildStart
-	55,  // 58: proto.ClientMessage.build_progress:type_name -> proto.C2S_BuildProgress
-	56,  // 59: proto.ClientMessage.build_take_back:type_name -> proto.C2S_BuildTakeBack
-	57,  // 60: proto.ClientMessage.activate_action:type_name -> proto.C2S_ActivateAction
-	58,  // 61: proto.ClientMessage.cancel_action:type_name -> proto.C2S_CancelAction
-	66,  // 62: proto.S2C_PlayerEnterWorld.audio:type_name -> proto.S2C_AudioParameters
-	7,   // 63: proto.CharacterAttributeEntry.key:type_name -> proto.CharacterAttributeKey
-	67,  // 64: proto.S2C_CharacterProfile.attributes:type_name -> proto.CharacterAttributeEntry
-	68,  // 65: proto.S2C_CharacterProfile.exp:type_name -> proto.CharacterExperience
-	42,  // 66: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
-	41,  // 67: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
-	34,  // 68: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
-	37,  // 69: proto.S2C_ObjectSpawn.character_visual:type_name -> proto.CharacterVisualState
-	10,  // 70: proto.S2C_ObjectSpawn.name_color:type_name -> proto.NicknameColor
-	39,  // 71: proto.S2C_ObjectSpawn.action_animation:type_name -> proto.CharacterActionAnimationState
-	75,  // 72: proto.S2C_ObjectSpawnBatch.spawns:type_name -> proto.S2C_ObjectSpawn
-	33,  // 73: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
-	78,  // 74: proto.S2C_ObjectMoveBatch.moves:type_name -> proto.S2C_ObjectMove
-	0,   // 75: proto.S2C_MovementMode.movement_mode:type_name -> proto.MovementMode
-	5,   // 76: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
-	24,  // 77: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
-	24,  // 78: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
-	24,  // 79: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
-	17,  // 80: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
-	85,  // 81: proto.S2C_ContextMenu.actions:type_name -> proto.ContextMenuAction
-	11,  // 82: proto.S2C_MiniAlert.severity:type_name -> proto.AlertSeverity
-	12,  // 83: proto.S2C_CyclicActionFinished.result:type_name -> proto.CyclicActionFinishResult
-	92,  // 84: proto.CraftStationRequirementDef.conditions:type_name -> proto.CraftStationConditionDef
-	93,  // 85: proto.CraftStationRequirementDef.consume:type_name -> proto.CraftStationResourceConsumptionDef
-	90,  // 86: proto.CraftRecipeEntry.inputs:type_name -> proto.CraftInputDef
-	91,  // 87: proto.CraftRecipeEntry.outputs:type_name -> proto.CraftOutputDef
-	95,  // 88: proto.CraftRecipeEntry.flags:type_name -> proto.CraftRequirementFlags
-	94,  // 89: proto.CraftRecipeEntry.station_requirements:type_name -> proto.CraftStationRequirementDef
-	96,  // 90: proto.S2C_CraftList.recipes:type_name -> proto.CraftRecipeEntry
-	98,  // 91: proto.BuildRecipeEntry.inputs:type_name -> proto.BuildInputDef
-	100, // 92: proto.S2C_BuildList.builds:type_name -> proto.BuildRecipeEntry
-	99,  // 93: proto.S2C_BuildState.list:type_name -> proto.BuildStateItem
-	105, // 94: proto.ActionDefinition.required_equipment:type_name -> proto.ActionEquipmentRequirement
-	106, // 95: proto.ActionDefinition.sector:type_name -> proto.ActionSector
-	107, // 96: proto.S2C_ActionList.actions:type_name -> proto.ActionDefinition
-	110, // 97: proto.S2C_ActionStateChanged.cooldowns:type_name -> proto.ActionCooldown
-	111, // 98: proto.S2C_AttackResult.hits:type_name -> proto.AttackHit
-	113, // 99: proto.S2C_SoundBatch.sounds:type_name -> proto.S2C_Sound
-	14,  // 100: proto.S2C_Fx.position:type_name -> proto.Vector2
-	9,   // 101: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
-	5,   // 102: proto.S2C_Error.code:type_name -> proto.ErrorCode
-	6,   // 103: proto.S2C_Warning.code:type_name -> proto.WarningCode
-	62,  // 104: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
-	63,  // 105: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
-	73,  // 106: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
-	74,  // 107: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
-	65,  // 108: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
-	72,  // 109: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
-	75,  // 110: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
-	77,  // 111: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
-	78,  // 112: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
-	80,  // 113: proto.ServerMessage.movement_mode:type_name -> proto.S2C_MovementMode
-	81,  // 114: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
-	82,  // 115: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
-	83,  // 116: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
-	84,  // 117: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
-	117, // 118: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
-	86,  // 119: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
-	87,  // 120: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
-	88,  // 121: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
-	89,  // 122: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
-	113, // 123: proto.ServerMessage.sound:type_name -> proto.S2C_Sound
-	69,  // 124: proto.ServerMessage.character_profile:type_name -> proto.S2C_CharacterProfile
-	70,  // 125: proto.ServerMessage.player_stats:type_name -> proto.S2C_PlayerStats
-	115, // 126: proto.ServerMessage.exp_gained:type_name -> proto.S2C_ExpGained
-	116, // 127: proto.ServerMessage.fx:type_name -> proto.S2C_Fx
-	97,  // 128: proto.ServerMessage.craft_list:type_name -> proto.S2C_CraftList
-	101, // 129: proto.ServerMessage.build_list:type_name -> proto.S2C_BuildList
-	102, // 130: proto.ServerMessage.build_state:type_name -> proto.S2C_BuildState
-	103, // 131: proto.ServerMessage.build_state_closed:type_name -> proto.S2C_BuildStateClosed
-	104, // 132: proto.ServerMessage.lift_carry_state:type_name -> proto.S2C_LiftCarryState
-	71,  // 133: proto.ServerMessage.death_dialog:type_name -> proto.S2C_DeathDialog
-	38,  // 134: proto.ServerMessage.character_visual:type_name -> proto.S2C_CharacterVisual
-	108, // 135: proto.ServerMessage.action_list:type_name -> proto.S2C_ActionList
-	109, // 136: proto.ServerMessage.action_state_changed:type_name -> proto.S2C_ActionStateChanged
-	40,  // 137: proto.ServerMessage.character_action_animation:type_name -> proto.S2C_CharacterActionAnimation
-	79,  // 138: proto.ServerMessage.object_move_batch:type_name -> proto.S2C_ObjectMoveBatch
-	76,  // 139: proto.ServerMessage.object_spawn_batch:type_name -> proto.S2C_ObjectSpawnBatch
-	114, // 140: proto.ServerMessage.sound_batch:type_name -> proto.S2C_SoundBatch
-	112, // 141: proto.ServerMessage.attack_result:type_name -> proto.S2C_AttackResult
-	64,  // 142: proto.ServerMessage.server_constants:type_name -> proto.S2C_ServerConstants
-	118, // 143: proto.ServerMessage.error:type_name -> proto.S2C_Error
-	119, // 144: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
-	145, // [145:145] is the sub-list for method output_type
-	145, // [145:145] is the sub-list for method input_type
-	145, // [145:145] is the sub-list for extension type_name
-	145, // [145:145] is the sub-list for extension extendee
-	0,   // [0:145] is the sub-list for field type_name
+	17,  // 19: proto.InventoryMoveSpec.open_inventories:type_name -> proto.InventoryRef
+	25,  // 20: proto.InventoryOp.expected:type_name -> proto.InventoryExpected
+	28,  // 21: proto.InventoryOp.move:type_name -> proto.InventoryMoveSpec
+	28,  // 22: proto.InventoryOp.drop_to_world:type_name -> proto.InventoryMoveSpec
+	29,  // 23: proto.C2S_InventoryOp.op:type_name -> proto.InventoryOp
+	17,  // 24: proto.C2S_OpenContainer.ref:type_name -> proto.InventoryRef
+	17,  // 25: proto.C2S_CloseContainer.ref:type_name -> proto.InventoryRef
+	13,  // 26: proto.EntityMovement.position:type_name -> proto.Position
+	14,  // 27: proto.EntityMovement.velocity:type_name -> proto.Vector2
+	0,   // 28: proto.EntityMovement.move_mode:type_name -> proto.MovementMode
+	14,  // 29: proto.EntityMovement.target_position:type_name -> proto.Vector2
+	13,  // 30: proto.EntityPosition.position:type_name -> proto.Position
+	14,  // 31: proto.EntityPosition.size:type_name -> proto.Vector2
+	1,   // 32: proto.CharacterEquipmentVisual.slot:type_name -> proto.EquipSlot
+	36,  // 33: proto.CharacterVisualState.equipment:type_name -> proto.CharacterEquipmentVisual
+	37,  // 34: proto.S2C_CharacterVisual.state:type_name -> proto.CharacterVisualState
+	13,  // 35: proto.CharacterActionAnimationState.target_position:type_name -> proto.Position
+	39,  // 36: proto.S2C_CharacterActionAnimation.state:type_name -> proto.CharacterActionAnimationState
+	41,  // 37: proto.ChunkData.coord:type_name -> proto.ChunkCoord
+	8,   // 38: proto.MapClick.button:type_name -> proto.MapClickButton
+	43,  // 39: proto.C2S_PlayerAction.map_click:type_name -> proto.MapClick
+	44,  // 40: proto.C2S_PlayerAction.select_context_action:type_name -> proto.SelectContextAction
+	45,  // 41: proto.C2S_PlayerAction.move_direction:type_name -> proto.MoveDirection
+	47,  // 42: proto.C2S_PlayerAction.stand_up:type_name -> proto.StandUp
+	0,   // 43: proto.C2S_MovementMode.mode:type_name -> proto.MovementMode
+	9,   // 44: proto.C2S_ChatMessage.channel:type_name -> proto.ChatChannel
+	14,  // 45: proto.C2S_BuildStart.pos:type_name -> proto.Vector2
+	50,  // 46: proto.ClientMessage.auth:type_name -> proto.C2S_Auth
+	51,  // 47: proto.ClientMessage.ping:type_name -> proto.C2S_Ping
+	46,  // 48: proto.ClientMessage.player_action:type_name -> proto.C2S_PlayerAction
+	48,  // 49: proto.ClientMessage.movement_mode:type_name -> proto.C2S_MovementMode
+	30,  // 50: proto.ClientMessage.inventory_op:type_name -> proto.C2S_InventoryOp
+	49,  // 51: proto.ClientMessage.chat:type_name -> proto.C2S_ChatMessage
+	31,  // 52: proto.ClientMessage.open_container:type_name -> proto.C2S_OpenContainer
+	32,  // 53: proto.ClientMessage.close_container:type_name -> proto.C2S_CloseContainer
+	52,  // 54: proto.ClientMessage.start_craft_one:type_name -> proto.C2S_StartCraftOne
+	53,  // 55: proto.ClientMessage.start_craft_many:type_name -> proto.C2S_StartCraftMany
+	59,  // 56: proto.ClientMessage.open_window:type_name -> proto.C2S_OpenWindow
+	60,  // 57: proto.ClientMessage.close_window:type_name -> proto.C2S_CloseWindow
+	54,  // 58: proto.ClientMessage.build_start:type_name -> proto.C2S_BuildStart
+	55,  // 59: proto.ClientMessage.build_progress:type_name -> proto.C2S_BuildProgress
+	56,  // 60: proto.ClientMessage.build_take_back:type_name -> proto.C2S_BuildTakeBack
+	57,  // 61: proto.ClientMessage.activate_action:type_name -> proto.C2S_ActivateAction
+	58,  // 62: proto.ClientMessage.cancel_action:type_name -> proto.C2S_CancelAction
+	66,  // 63: proto.S2C_PlayerEnterWorld.audio:type_name -> proto.S2C_AudioParameters
+	7,   // 64: proto.CharacterAttributeEntry.key:type_name -> proto.CharacterAttributeKey
+	67,  // 65: proto.S2C_CharacterProfile.attributes:type_name -> proto.CharacterAttributeEntry
+	68,  // 66: proto.S2C_CharacterProfile.exp:type_name -> proto.CharacterExperience
+	42,  // 67: proto.S2C_ChunkLoad.chunk:type_name -> proto.ChunkData
+	41,  // 68: proto.S2C_ChunkUnload.coord:type_name -> proto.ChunkCoord
+	34,  // 69: proto.S2C_ObjectSpawn.position:type_name -> proto.EntityPosition
+	37,  // 70: proto.S2C_ObjectSpawn.character_visual:type_name -> proto.CharacterVisualState
+	10,  // 71: proto.S2C_ObjectSpawn.name_color:type_name -> proto.NicknameColor
+	39,  // 72: proto.S2C_ObjectSpawn.action_animation:type_name -> proto.CharacterActionAnimationState
+	75,  // 73: proto.S2C_ObjectSpawnBatch.spawns:type_name -> proto.S2C_ObjectSpawn
+	33,  // 74: proto.S2C_ObjectMove.movement:type_name -> proto.EntityMovement
+	78,  // 75: proto.S2C_ObjectMoveBatch.moves:type_name -> proto.S2C_ObjectMove
+	0,   // 76: proto.S2C_MovementMode.movement_mode:type_name -> proto.MovementMode
+	5,   // 77: proto.S2C_InventoryOpResult.error:type_name -> proto.ErrorCode
+	24,  // 78: proto.S2C_InventoryOpResult.updated:type_name -> proto.InventoryState
+	24,  // 79: proto.S2C_InventoryUpdate.updated:type_name -> proto.InventoryState
+	24,  // 80: proto.S2C_ContainerOpened.state:type_name -> proto.InventoryState
+	17,  // 81: proto.S2C_ContainerClosed.ref:type_name -> proto.InventoryRef
+	85,  // 82: proto.S2C_ContextMenu.actions:type_name -> proto.ContextMenuAction
+	11,  // 83: proto.S2C_MiniAlert.severity:type_name -> proto.AlertSeverity
+	12,  // 84: proto.S2C_CyclicActionFinished.result:type_name -> proto.CyclicActionFinishResult
+	92,  // 85: proto.CraftStationRequirementDef.conditions:type_name -> proto.CraftStationConditionDef
+	93,  // 86: proto.CraftStationRequirementDef.consume:type_name -> proto.CraftStationResourceConsumptionDef
+	90,  // 87: proto.CraftRecipeEntry.inputs:type_name -> proto.CraftInputDef
+	91,  // 88: proto.CraftRecipeEntry.outputs:type_name -> proto.CraftOutputDef
+	95,  // 89: proto.CraftRecipeEntry.flags:type_name -> proto.CraftRequirementFlags
+	94,  // 90: proto.CraftRecipeEntry.station_requirements:type_name -> proto.CraftStationRequirementDef
+	96,  // 91: proto.S2C_CraftList.recipes:type_name -> proto.CraftRecipeEntry
+	98,  // 92: proto.BuildRecipeEntry.inputs:type_name -> proto.BuildInputDef
+	100, // 93: proto.S2C_BuildList.builds:type_name -> proto.BuildRecipeEntry
+	99,  // 94: proto.S2C_BuildState.list:type_name -> proto.BuildStateItem
+	105, // 95: proto.ActionDefinition.required_equipment:type_name -> proto.ActionEquipmentRequirement
+	106, // 96: proto.ActionDefinition.sector:type_name -> proto.ActionSector
+	107, // 97: proto.S2C_ActionList.actions:type_name -> proto.ActionDefinition
+	110, // 98: proto.S2C_ActionStateChanged.cooldowns:type_name -> proto.ActionCooldown
+	111, // 99: proto.S2C_AttackResult.hits:type_name -> proto.AttackHit
+	113, // 100: proto.S2C_SoundBatch.sounds:type_name -> proto.S2C_Sound
+	14,  // 101: proto.S2C_Fx.position:type_name -> proto.Vector2
+	9,   // 102: proto.S2C_ChatMessage.channel:type_name -> proto.ChatChannel
+	5,   // 103: proto.S2C_Error.code:type_name -> proto.ErrorCode
+	6,   // 104: proto.S2C_Warning.code:type_name -> proto.WarningCode
+	62,  // 105: proto.ServerMessage.auth_result:type_name -> proto.S2C_AuthResult
+	63,  // 106: proto.ServerMessage.pong:type_name -> proto.S2C_Pong
+	73,  // 107: proto.ServerMessage.chunk_load:type_name -> proto.S2C_ChunkLoad
+	74,  // 108: proto.ServerMessage.chunk_unload:type_name -> proto.S2C_ChunkUnload
+	65,  // 109: proto.ServerMessage.player_enter_world:type_name -> proto.S2C_PlayerEnterWorld
+	72,  // 110: proto.ServerMessage.player_leave_world:type_name -> proto.S2C_PlayerLeaveWorld
+	75,  // 111: proto.ServerMessage.object_spawn:type_name -> proto.S2C_ObjectSpawn
+	77,  // 112: proto.ServerMessage.object_despawn:type_name -> proto.S2C_ObjectDespawn
+	78,  // 113: proto.ServerMessage.object_move:type_name -> proto.S2C_ObjectMove
+	80,  // 114: proto.ServerMessage.movement_mode:type_name -> proto.S2C_MovementMode
+	81,  // 115: proto.ServerMessage.inventory_op_result:type_name -> proto.S2C_InventoryOpResult
+	82,  // 116: proto.ServerMessage.inventory_update:type_name -> proto.S2C_InventoryUpdate
+	83,  // 117: proto.ServerMessage.container_opened:type_name -> proto.S2C_ContainerOpened
+	84,  // 118: proto.ServerMessage.container_closed:type_name -> proto.S2C_ContainerClosed
+	117, // 119: proto.ServerMessage.chat:type_name -> proto.S2C_ChatMessage
+	86,  // 120: proto.ServerMessage.context_menu:type_name -> proto.S2C_ContextMenu
+	87,  // 121: proto.ServerMessage.mini_alert:type_name -> proto.S2C_MiniAlert
+	88,  // 122: proto.ServerMessage.cyclic_action_progress:type_name -> proto.S2C_CyclicActionProgress
+	89,  // 123: proto.ServerMessage.cyclic_action_finished:type_name -> proto.S2C_CyclicActionFinished
+	113, // 124: proto.ServerMessage.sound:type_name -> proto.S2C_Sound
+	69,  // 125: proto.ServerMessage.character_profile:type_name -> proto.S2C_CharacterProfile
+	70,  // 126: proto.ServerMessage.player_stats:type_name -> proto.S2C_PlayerStats
+	115, // 127: proto.ServerMessage.exp_gained:type_name -> proto.S2C_ExpGained
+	116, // 128: proto.ServerMessage.fx:type_name -> proto.S2C_Fx
+	97,  // 129: proto.ServerMessage.craft_list:type_name -> proto.S2C_CraftList
+	101, // 130: proto.ServerMessage.build_list:type_name -> proto.S2C_BuildList
+	102, // 131: proto.ServerMessage.build_state:type_name -> proto.S2C_BuildState
+	103, // 132: proto.ServerMessage.build_state_closed:type_name -> proto.S2C_BuildStateClosed
+	104, // 133: proto.ServerMessage.lift_carry_state:type_name -> proto.S2C_LiftCarryState
+	71,  // 134: proto.ServerMessage.death_dialog:type_name -> proto.S2C_DeathDialog
+	38,  // 135: proto.ServerMessage.character_visual:type_name -> proto.S2C_CharacterVisual
+	108, // 136: proto.ServerMessage.action_list:type_name -> proto.S2C_ActionList
+	109, // 137: proto.ServerMessage.action_state_changed:type_name -> proto.S2C_ActionStateChanged
+	40,  // 138: proto.ServerMessage.character_action_animation:type_name -> proto.S2C_CharacterActionAnimation
+	79,  // 139: proto.ServerMessage.object_move_batch:type_name -> proto.S2C_ObjectMoveBatch
+	76,  // 140: proto.ServerMessage.object_spawn_batch:type_name -> proto.S2C_ObjectSpawnBatch
+	114, // 141: proto.ServerMessage.sound_batch:type_name -> proto.S2C_SoundBatch
+	112, // 142: proto.ServerMessage.attack_result:type_name -> proto.S2C_AttackResult
+	64,  // 143: proto.ServerMessage.server_constants:type_name -> proto.S2C_ServerConstants
+	118, // 144: proto.ServerMessage.error:type_name -> proto.S2C_Error
+	119, // 145: proto.ServerMessage.warning:type_name -> proto.S2C_Warning
+	146, // [146:146] is the sub-list for method output_type
+	146, // [146:146] is the sub-list for method input_type
+	146, // [146:146] is the sub-list for extension type_name
+	146, // [146:146] is the sub-list for extension extendee
+	0,   // [0:146] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_packets_proto_init() }

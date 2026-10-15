@@ -19,6 +19,7 @@ const emit = defineEmits<{
   progress: [entityId: number]
   putFromHand: [entityId: number]
   takeBack: [entityId: number, slot: number]
+  quickTakeBack: [entityId: number, slot: number]
 }>()
 
 const WINDOW_INNER_WIDTH = 210
@@ -71,17 +72,24 @@ function onListClick() {
   emitPutFromHand()
 }
 
-function onRowClick(slot: number) {
+function onRowClick(slot: number, event: MouseEvent) {
   const entityId = Math.trunc(Number(props.entityId ?? 0))
   if (!Number.isFinite(entityId) || entityId <= 0) return
+
+  const slotIndex = Math.trunc(slot)
+  if (!Number.isFinite(slotIndex) || slotIndex < 0) return
+  if (event.shiftKey) {
+    if (asCount(rows.value[slotIndex]?.putCount) > 0) {
+      emit('quickTakeBack', entityId, slotIndex)
+    }
+    return
+  }
 
   if (props.handHasItem) {
     emit('putFromHand', entityId)
     return
   }
 
-  const slotIndex = Math.trunc(slot)
-  if (!Number.isFinite(slotIndex) || slotIndex < 0) return
   emit('takeBack', entityId, slotIndex)
 }
 
@@ -195,7 +203,7 @@ onUnmounted(() => {
           v-for="entry in displayRows"
           :key="`${entityId || 0}-row-${entry.idx}`"
           class="build-state-window__row"
-          @click.stop="onRowClick(entry.idx)"
+          @click.stop="onRowClick(entry.idx, $event)"
           @mouseenter="onRowMouseEnter(entry.row, $event)"
           @mousemove="onRowMouseMove"
           @mouseleave="onRowMouseLeave"

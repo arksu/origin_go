@@ -8,6 +8,12 @@ import type { ConnectionState, ConnectionError } from '@/network/types'
 import { isNewerCharacterVisual, type CharacterVisualState } from '@/types/characterVisual'
 import { acceptActionAnimation, type CharacterActionAnimationState } from '@/types/actionAnimation'
 
+export interface QuickInventoryTransfer {
+  opId: number
+  sourceRef: proto.IInventoryRef
+  cancelled: boolean
+}
+
 export interface Position {
   x: number
   y: number
@@ -169,6 +175,8 @@ export const useGameStore = defineStore('game', () => {
   const playerEquipmentVisible = ref(false)
   const openNestedInventories = ref(new Map<string, proto.IInventoryState>())
   const openedRootContainerRefs = ref(new Set<string>())
+  const openInventoryRefs = ref<proto.IInventoryRef[]>([])
+  const quickInventoryTransfer = ref<QuickInventoryTransfer | null>(null)
   let nextOpId = 1
   const mousePos = ref({ x: 0, y: 0 })
   const contextMenu = ref<ContextMenuState | null>(null)
@@ -323,6 +331,8 @@ export const useGameStore = defineStore('game', () => {
     inventories.value.clear()
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
+    openInventoryRefs.value = []
+    quickInventoryTransfer.value = null
     playerInventoryVisible.value = false
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
@@ -365,6 +375,8 @@ export const useGameStore = defineStore('game', () => {
     inventories.value.clear()
     openNestedInventories.value.clear()  // Clear nested inventories
     openedRootContainerRefs.value.clear()
+    openInventoryRefs.value = []
+    quickInventoryTransfer.value = null
     playerInventoryVisible.value = false
     playerEquipmentVisible.value = false
     characterSheetVisible.value = false
@@ -496,6 +508,61 @@ export const useGameStore = defineStore('game', () => {
     return `${r.kind ?? 0}_${r.ownerId ?? 0}_${r.inventoryKey ?? 0}`
   }
 
+  function registerOpenInventory(r: proto.IInventoryRef) {
+    const key = refKey(r)
+    if (openInventoryRefs.value.some(openRef => refKey(openRef) === key)) return
+    openInventoryRefs.value.push({ kind: r.kind ?? 0, ownerId: r.ownerId ?? 0, inventoryKey: r.inventoryKey ?? 0 })
+  }
+
+  function cancelQuickInventoryTransfer() {
+    if (quickInventoryTransfer.value) quickInventoryTransfer.value.cancelled = true
+  }
+
+  function unregisterOpenInventory(key: string) {
+    openInventoryRefs.value = openInventoryRefs.value.filter(r => refKey(r) !== key)
+    if (quickInventoryTransfer.value && refKey(quickInventoryTransfer.value.sourceRef) === key) {
+      cancelQuickInventoryTransfer()
+    }
+  }
+
+  // Resolve only visible windows: inventories also contains snapshots of closed containers.
+  function getOpenInventoryState(r: proto.IInventoryRef): proto.IInventoryState | undefined {
+    const key = refKey(r)
+    const playerInventory = getPlayerInventory()
+    if (playerInventoryVisible.value && playerInventory?.grid && playerInventory.ref && refKey(playerInventory.ref) === key) {
+      return playerInventory
+    }
+    const nested = openNestedInventories.value.get(key)
+    return nested?.grid ? nested : undefined
+  }
+
+  function isInventoryOpen(r: proto.IInventoryRef): boolean {
+    if ((r.kind ?? 0) === proto.InventoryKind.INVENTORY_KIND_BUILD) {
+      return buildStateWindowVisible.value && buildStateEntityId.value !== null &&
+        String(r.ownerId ?? 0) === String(buildStateEntityId.value) && (r.inventoryKey ?? 0) === 0
+    }
+    return !!getOpenInventoryState(r)
+  }
+
+  function syncOpenInventoryRefs() {
+    for (const r of openInventoryRefs.value) {
+      if (!isInventoryOpen(r)) unregisterOpenInventory(refKey(r))
+    }
+    const playerInventory = getPlayerInventory()
+    if (playerInventoryVisible.value && playerInventory?.grid && playerInventory.ref) {
+      registerOpenInventory(playerInventory.ref)
+    }
+  }
+
+  // The server completes the whole Shift operation. Only a closed source needs
+  // late feedback suppression; snapshots are still applied by the handler.
+  function completeQuickInventoryTransfer(opId: proto.IS2C_InventoryOpResult['opId']): boolean {
+    const transfer = quickInventoryTransfer.value
+    if (!transfer || String(opId ?? 0) !== String(transfer.opId)) return false
+    quickInventoryTransfer.value = null
+    return transfer.cancelled
+  }
+
   function inventoryKey(state: proto.IInventoryState): string {
     if (!state.ref) return 'no_ref'
     return refKey(state.ref)
@@ -513,6 +580,7 @@ export const useGameStore = defineStore('game', () => {
     }
 
     validateOpenNestedInventories()
+    syncOpenInventoryRefs()
   }
 
   function collectNestedRefsFromGrids(): Set<string> {
@@ -557,12 +625,16 @@ export const useGameStore = defineStore('game', () => {
 
     for (const key of toClose) {
       console.log('[gameStore] Auto-closing nested inventory (item removed from grid):', key)
-      openNestedInventories.value.delete(key)
+      closeNestedInventory(key)
     }
   }
 
   function removeInventory(state: proto.IInventoryState) {
     inventories.value.delete(inventoryKey(state))
+    if (quickInventoryTransfer.value && refKey(quickInventoryTransfer.value.sourceRef) === inventoryKey(state)) {
+      cancelQuickInventoryTransfer()
+    }
+    syncOpenInventoryRefs()
   }
 
   function getPlayerInventory(): proto.IInventoryState | undefined {
@@ -743,7 +815,7 @@ export const useGameStore = defineStore('game', () => {
 
   function togglePlayerInventory() {
     console.log('[gameStore] togglePlayerInventory called, current:', playerInventoryVisible.value)
-    playerInventoryVisible.value = !playerInventoryVisible.value
+    setPlayerInventoryVisible(!playerInventoryVisible.value)
     console.log('[gameStore] togglePlayerInventory new value:', playerInventoryVisible.value)
     console.log('[gameStore] Player inventory data:', getPlayerInventory())
   }
@@ -862,13 +934,18 @@ export const useGameStore = defineStore('game', () => {
       closeBuildStateWindow()
       return
     }
+    if (buildStateEntityId.value !== entityId) closeBuildStateWindow()
     buildStateEntityId.value = entityId
     buildStateName.value = (snapshot?.buildName || '').trim()
     buildStateList.value = (snapshot?.list || []).slice()
     buildStateWindowVisible.value = true
+    registerOpenInventory({ kind: proto.InventoryKind.INVENTORY_KIND_BUILD, ownerId: entityId, inventoryKey: 0 })
   }
 
   function closeBuildStateWindow() {
+    if (buildStateEntityId.value !== null) {
+      unregisterOpenInventory(refKey({ kind: proto.InventoryKind.INVENTORY_KIND_BUILD, ownerId: buildStateEntityId.value, inventoryKey: 0 }))
+    }
     buildStateWindowVisible.value = false
     buildStateEntityId.value = null
     buildStateName.value = ''
@@ -1008,6 +1085,7 @@ export const useGameStore = defineStore('game', () => {
 
   function setPlayerInventoryVisible(visible: boolean) {
     playerInventoryVisible.value = visible
+    syncOpenInventoryRefs()
   }
 
   function setPlayerEquipmentVisible(visible: boolean) {
@@ -1021,22 +1099,27 @@ export const useGameStore = defineStore('game', () => {
     inventories.value.set(key, state)
     openNestedInventories.value.set(key, state)
     openedRootContainerRefs.value.add(key)
+    if (state.grid) registerOpenInventory(state.ref)
+    syncOpenInventoryRefs()
   }
 
   function onContainerClosed(r: proto.IInventoryRef) {
     const key = refKey(r)
     console.log('[gameStore] onContainerClosed:', key)
-    openNestedInventories.value.delete(key)
+    closeNestedInventory(key)
     openedRootContainerRefs.value.delete(key)
   }
 
   function closeNestedInventory(windowKey: string) {
     openNestedInventories.value.delete(windowKey)
+    unregisterOpenInventory(windowKey)
   }
 
   function closeAllNestedInventories() {
+    const keys = Array.from(openNestedInventories.value.keys())
     openNestedInventories.value.clear()
     openedRootContainerRefs.value.clear()
+    for (const key of keys) unregisterOpenInventory(key)
   }
 
   function getNestedInventoryData(windowKey: string): proto.IInventoryState | undefined {
@@ -1170,6 +1253,8 @@ export const useGameStore = defineStore('game', () => {
     deathDialog,
     playerMoveMode,
     openNestedInventories,
+    openInventoryRefs,
+    quickInventoryTransfer,
     mousePos,
     contextMenu,
     miniAlerts,
@@ -1210,6 +1295,10 @@ export const useGameStore = defineStore('game', () => {
     cleanupExpiredMessages,
     updateInventory,
     removeInventory,
+    refKey,
+    getOpenInventoryState,
+    isInventoryOpen,
+    completeQuickInventoryTransfer,
     getPlayerInventory,
     getPlayerEquipment,
     togglePlayerInventory,

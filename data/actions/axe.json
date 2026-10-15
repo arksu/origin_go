@@ -5,7 +5,7 @@
       "id": "axe_sweep",
       "presentation": {
         "label": "Axe sweep",
-        "menuIcon": "/assets/cursor/atk.png"
+        "menuIcon": "/assets/img/hud/actions/axe_sweep.png"
       },
       "target": { "kind": "direction" },
       "requirements": {
@@ -23,7 +23,7 @@
       "id": "axe_strike",
       "presentation": {
         "label": "Axe strike",
-        "menuIcon": "/assets/cursor/atk.png"
+        "menuIcon": "/assets/img/hud/actions/axe_strike.png"
       },
       "target": { "kind": "direction" },
       "requirements": {
