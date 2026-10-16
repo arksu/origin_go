@@ -117,6 +117,9 @@ func NewContextActionService(
 	if buildStateSender, ok := any(alerts).(contracts.BuildStateSender); ok {
 		s.actionDeps.BuildState = buildStateSender
 	}
+	if sender, ok := any(alerts).(contracts.CustomWindowSender); ok {
+		s.actionDeps.CustomWindow = sender
+	}
 
 	if eventBus != nil {
 		eventBus.SubscribeSync(ecs.TopicGameplayLinkCreated, eventbus.PriorityHigh, s.onLinkCreated)
@@ -400,6 +403,16 @@ func (s *ContextActionService) onLinkBroken(_ context.Context, event eventbus.Ev
 	playerHandle := s.world.GetHandleByEntityID(linkEvent.PlayerID)
 	if playerHandle == types.InvalidHandle || !s.world.Alive(playerHandle) {
 		return nil
+	}
+	if s.actionDeps.CustomWindow != nil {
+		target := s.world.GetHandleByEntityID(linkEvent.TargetID)
+		for _, key := range s.behaviorOrder(target, s.world) {
+			behavior, _ := s.behaviorRegistry.GetBehavior(key)
+			if _, supportsWindow := behavior.(contracts.CustomWindowProvider); supportsWindow {
+				s.actionDeps.CustomWindow.SendCustomWindowClosed(linkEvent.PlayerID, linkEvent.TargetID)
+				break
+			}
+		}
 	}
 	// Preserve pending action when player is retargeting to a different object.
 	if pending, hasPending := ecs.GetComponent[components.PendingContextAction](s.world, playerHandle); hasPending &&

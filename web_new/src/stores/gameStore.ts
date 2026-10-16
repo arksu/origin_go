@@ -137,6 +137,12 @@ export type CraftRecipeState = proto.ICraftRecipeEntry
 export type BuildRecipeState = proto.IBuildRecipeEntry
 export type BuildStateItemState = proto.IBuildStateItem
 
+export interface CustomWindowState {
+  entityId: number
+  title: string
+  fields: { label: string; value: string }[]
+}
+
 export type WorldBootstrapState =
   | 'idle'
   | 'waiting_enter_world'
@@ -200,6 +206,7 @@ export const useGameStore = defineStore('game', () => {
   const buildStateEntityId = ref<number | null>(null)
   const buildStateName = ref<string>('')
   const buildStateList = ref<BuildStateItemState[]>([])
+  const customWindow = ref<CustomWindowState | null>(null)
   const liftCarryActive = ref(false)
   const liftCarriedEntityId = ref<number | null>(null)
   const actionCooldowns = useActionCooldownStore()
@@ -254,6 +261,7 @@ export const useGameStore = defineStore('game', () => {
   function setConnectionState(state: ConnectionState, error?: ConnectionError) {
     connectionState.value = state
     connectionError.value = error ?? null
+    if (state !== 'connected') closeCustomWindow()
   }
 
   function syncWorldBootstrapState() {
@@ -315,6 +323,7 @@ export const useGameStore = defineStore('game', () => {
     name: string,
     streamEpoch: number,
   ) {
+    closeCustomWindow()
     playerEntityId.value = entityId
     playerName.value = name
     const constants = serverConstants.requireSnapshot()
@@ -364,6 +373,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function setPlayerLeaveWorld() {
+    closeCustomWindow()
     playerEntityId.value = null
     playerName.value = ''
     worldParams.value = null
@@ -480,6 +490,7 @@ export const useGameStore = defineStore('game', () => {
 
   function despawnEntity(entityId: number) {
     entities.value.delete(entityId)
+    if (customWindow.value?.entityId === entityId) closeCustomWindow()
     if (buildStateEntityId.value === entityId) {
       closeBuildStateWindow()
     }
@@ -959,6 +970,26 @@ export const useGameStore = defineStore('game', () => {
     closeBuildStateWindow()
   }
 
+  function setCustomWindow(snapshot: proto.IS2C_CustomWindow) {
+    if (!isInGame.value || !snapshot.streamEpoch || snapshot.streamEpoch !== worldParams.value?.streamEpoch) return
+    const entityId = sanitizeNonNegativeInt64(snapshot.entityId)
+    if (!Number.isSafeInteger(entityId) || entityId <= 0) return
+    customWindow.value = {
+      entityId,
+      title: snapshot.title ?? '',
+      fields: (snapshot.fields ?? []).map(field => ({ label: field.label ?? '', value: field.value ?? '' })),
+    }
+  }
+
+  function closeCustomWindow() {
+    customWindow.value = null
+  }
+
+  function receiveCustomWindowClosed(message: proto.IS2C_CustomWindowClosed) {
+    if (!isInGame.value || !message.streamEpoch || message.streamEpoch !== worldParams.value?.streamEpoch) return
+    if (customWindow.value?.entityId === sanitizeNonNegativeInt64(message.entityId)) closeCustomWindow()
+  }
+
   function setLiftCarryState(snapshot: proto.IS2C_LiftCarryState | null | undefined) {
     const active = !!snapshot?.active
     if (!active) {
@@ -1241,6 +1272,7 @@ export const useGameStore = defineStore('game', () => {
     buildStateEntityId,
     buildStateName,
     buildStateList,
+    customWindow,
     liftCarryActive,
     liftCarriedEntityId,
     gameActions,
@@ -1322,6 +1354,9 @@ export const useGameStore = defineStore('game', () => {
     setBuildStateSnapshot,
     closeBuildStateWindow,
     closeBuildStateWindowIfEntity,
+    setCustomWindow,
+    closeCustomWindow,
+    receiveCustomWindowClosed,
     setLiftCarryState,
     setGameActionList,
     setGameActionState,

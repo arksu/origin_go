@@ -172,6 +172,7 @@ func TestHearthPostgresReadReplaceAndRemove(t *testing.T) {
 	home, err := q.GetCharacterHearth(ctx, hearthGetParams(1))
 	require.NoError(t, err)
 	require.EqualValues(t, 11, home.ObjectID)
+	require.Equal(t, "test", home.OwnerName)
 	require.Equal(t, 1, home.ObjectRegion)
 	require.Equal(t, 100, home.X)
 	require.Equal(t, -25, home.Y)
@@ -263,6 +264,7 @@ func TestHearthPostgresOwnerBatchUsesCompositePairs(t *testing.T) {
 	require.Len(t, owners, 2, "pairs are not a regions-by-IDs Cartesian product; duplicates do not duplicate owners")
 	characterIDs := make([]int64, 0, len(owners))
 	for _, owner := range owners {
+		require.Equal(t, "test", owner.OwnerName)
 		characterIDs = append(characterIDs, owner.CharacterID)
 	}
 	require.ElementsMatch(t, []int64{1, 2}, characterIDs)

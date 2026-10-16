@@ -25,10 +25,11 @@ type ObjectKey struct {
 
 // Home owns its metadata; it never retains ECS components or raw-cache pointers.
 type Home struct {
-	Object ObjectKey
-	X      int
-	Y      int
-	Layer  int
+	Object    ObjectKey
+	X         int
+	Y         int
+	Layer     int
+	OwnerName string
 }
 
 type HomeState uint8

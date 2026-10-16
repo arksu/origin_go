@@ -172,6 +172,9 @@ export function registerMessageHandlers(): void {
     gameStore.closeBuildStateWindowIfEntity(msg.entityId)
   })
 
+  messageDispatcher.on('customWindow', msg => gameStore.setCustomWindow(msg))
+  messageDispatcher.on('customWindowClosed', msg => gameStore.receiveCustomWindowClosed(msg))
+
   messageDispatcher.on('liftCarryState', (msg: proto.IS2C_LiftCarryState) => {
     console.log('[Handlers] liftCarryState:', {
       active: !!msg.active,

@@ -35,7 +35,8 @@ func drainActionTransitions(t *testing.T, client *network.Client, conn net.Conn)
 		if message.GetPong() != nil {
 			return messages
 		}
-		require.True(t, message.GetActionStateChanged() != nil || message.GetCyclicActionFinished() != nil)
+		require.True(t, message.GetActionStateChanged() != nil || message.GetCyclicActionFinished() != nil ||
+			message.GetCustomWindow() != nil || message.GetCustomWindowClosed() != nil)
 		messages = append(messages, message)
 	}
 }

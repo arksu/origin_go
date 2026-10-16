@@ -85,13 +85,17 @@ func TestPrepareChunkActivationHydratesOfflineOwnersInOneBatch(t *testing.T) {
 		require.True(t, ok)
 		require.InDelta(t, 5, time.Until(deadline).Seconds(), .5)
 		require.Equal(t, repository.GetCharacterHearthOwnersParams{HearthTypeID: f.result.DefID, SurfaceLayer: 0, ObjectRegions: []int{1, 1}, ObjectIds: []int64{200, 201}}, params)
-		return []repository.GetCharacterHearthOwnersRow{restoredOwner(70, first), restoredOwner(71, second)}, nil
+		rows := []repository.GetCharacterHearthOwnersRow{restoredOwner(70, first), restoredOwner(71, second)}
+		rows[0].OwnerName, rows[1].OwnerName = "First offline owner", "Second offline owner"
+		return rows, nil
 	}), nil)
 	require.NoError(t, runtime.PrepareChunkActivation(chunk))
 	require.ErrorIs(t, readContext.Err(), context.Canceled)
 	for n, raw := range []*repository.Object{first, second} {
 		character := types.EntityID(70 + n)
-		require.Equal(t, restoredHome(raw), runtime.Index.Snapshot(character).Home)
+		want := restoredHome(raw)
+		want.OwnerName = []string{"First offline owner", "Second offline owner"}[n]
+		require.Equal(t, want, runtime.Index.Snapshot(character).Home)
 		owner, ok := runtime.Index.Owner(restoredHome(raw).Object)
 		require.True(t, ok)
 		require.Equal(t, character, owner)

@@ -231,8 +231,12 @@ func TestConstructionFirstHomeCompletesInSameCall(t *testing.T) {
 func TestConstructionCachedOwnershipDoesNotRead(t *testing.T) {
 	f := newConstructionFixture(t)
 	f.seedHome(t, nil)
+	name := "Finisher <owner>"
+	ecs.AddComponent(f.w, f.ctx.PlayerHandle, components.Appearance{Name: &name})
 	require.True(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite).OK)
 	require.Zero(t, f.reader.reads)
+	name = "Changed after completion"
+	require.Equal(t, "Finisher <owner>", f.runtime.Index.Snapshot(f.ctx.PlayerID).Home.OwnerName)
 }
 
 func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {
@@ -247,6 +251,13 @@ func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {
 				handle = world.SpawnEntityFromDef(f.w, f.result, world.DefSpawnParams{EntityID: 2000, X: 5000, Y: 200, Region: 1})
 				coord := types.WorldToChunkCoord(5000, 200, constt.ChunkSize, constt.CoordPerTile)
 				ecs.AddComponent(f.w, handle, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
+				links := ecs.GetResource[ecs.LinkState](f.w)
+				links.SetLink(ecs.PlayerLink{PlayerID: 1, PlayerHandle: f.ctx.PlayerHandle, TargetID: 2000, TargetHandle: handle})
+				f.w.AddComponentObserver(components.EntityInfoComponentID, func(h types.Handle) {
+					if h == handle {
+						require.Empty(t, links.PlayersByTarget[2000], "links must break before replacement changes the behavior")
+					}
+				})
 			} else {
 				chunk, _ = f.oldRaw(t, types.ChunkStateInactive)
 				f.chunks.chunks[chunk.Coord] = chunk

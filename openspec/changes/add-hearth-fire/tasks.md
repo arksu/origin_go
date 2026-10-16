@@ -263,6 +263,23 @@ was introduced. Section 6 presentation/KO-window/FX work remains unchecked.
 - [ ] 6.3 Add only `stream_epoch = 3` to existing `S2C_Fx`, preserving fields 1/2, and publish one position-based skull-smoke event at runtime character death or Hearth conversion to current observers. Regenerate server/client protobuf and test session/layer isolation, separate event positions, no historical replay, and legacy local-player `exp_gain` behavior.
 - [ ] 6.4 Render a reusable detached one-shot effect from the eight preloaded frames at 250 ms per frame, with a 2000 ms local monotonic lifetime, bounded concurrent effects, and reset-generation cleanup. Test source-view removal, suspended rendering, capacity limits, late loading after reset, and world/session destruction without an event-ID deduplication or server-clock freshness subsystem.
 - [ ] 6.5 Add visual/client asset regressions and gameplay-scale desktop/mobile screenshots for green fire, skull smoke, and post-KO controls; document delivered contracts and continuous-versus-transient smoke. Run relevant asset tests and, only if atlas/tools change, the three required pipeline checks; generate no replacement art and add no explanatory in-app copy.
+- [x] 6.6 Add the minimal Hearth owner window through ordinary RMB approach/link, reusable text snapshots, owner metadata and existing close/reset paths. Keep the owner-contact exception feature-owned and use one optional LinkSystem callback; break links before live conversion. No window registry, instance IDs, client close command or push updates.
+
+Task 6.6 verification (2026-10-17): `make test` with `GOCACHE=/tmp/origin-go-build`
+passed, including protobuf/sqlc regeneration and real RMB/FIFO regressions.
+The sender and its test use platform-neutral filenames `custom_window.go` and
+`custom_window_test.go`; `go list` confirms both are included on Darwin and Linux.
+The real sender test passes explicitly after correcting the accidental `_windows`
+suffix, which had excluded both files from earlier non-Windows checks.
+Client `npm run proto`, `type-check`, `lint`, `test:map-click` and
+`test:custom-windows` passed; lint left existing files unchanged.
+`tests/custom-windows.html` was checked in a browser for literal HTML-like names,
+long-text wrapping/scrolling, a second form and local close/reopen without commands.
+Strict OpenSpec validation passed using the installed Homebrew Node runtime.
+`git diff --check` with standard whitespace rules passed; the user's
+`indent-with-non-tab` setting flags the repository's existing space indentation.
+PostgreSQL integration tests were skipped because `ORIGIN_OBJECT_HEALTH_TEST_DSN`
+was unset; live database restart and full-game browser scenarios were not exercised.
 
 ## 7. Integration and Release
 

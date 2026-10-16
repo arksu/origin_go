@@ -63,7 +63,10 @@ function withSsrContext(render) {
 }
 
 function hostNode(type, text = '') {
-  return { type, text, props: {}, children: [], parent: null }
+  return {
+    type, text, props: {}, children: [], parent: null,
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 200, bottom: 40, width: 200, height: 40 }),
+  }
 }
 
 const teleportTarget = hostNode('body')
@@ -96,6 +99,19 @@ const renderer = createRenderer({
 
 function descendants(node, type) {
   return [node, ...node.children.flatMap(child => descendants(child, type))].filter(child => child.type === type)
+}
+
+function nodeText(node) {
+  return node.text + node.children.map(nodeText).join('')
+}
+
+function tooltipNodes() {
+  return descendants(teleportTarget, 'div')
+    .filter(node => node.props.role === 'tooltip')
+}
+
+function tooltipTexts() {
+  return tooltipNodes().map(nodeText).sort()
 }
 
 let gameStore
@@ -522,10 +538,197 @@ try {
     gameStore.reset()
   }
 
+  // Open tooltips follow the same session clock without pointer movement or another RAF.
+  gameStore.setGameActionList(actions)
+  const tooltipPresentation = useActionPresentation()
+  const tooltipMenuActions = ref(actions)
+  const tooltipAssignments = ref(['game:lift', null, null, null, 'game:lift', null, null, null, 'inventory', null])
+  const draggingActionId = ref(null)
+  const tooltipMenuRoot = hostNode('root')
+  const tooltipHotbarRoot = hostNode('root')
+  const tooltipMenuApp = renderer.createApp(withSsrContext(() => h(ActionsMenu, {
+    actions: tooltipMenuActions.value, activeActionId: '', activePhase: 'idle',
+  })))
+  const tooltipHotbarApp = renderer.createApp(withSsrContext(() => h(Hotbar, {
+    assignments: tooltipAssignments.value,
+    draggingActionId: draggingActionId.value,
+    onClear: slot => { tooltipAssignments.value[slot] = null },
+  })))
+  const pointer = {
+    pointerType: 'mouse', clientX: 20, clientY: 30,
+    currentTarget: {
+      getBoundingClientRect: () => ({ left: 10, right: 50, top: 20, bottom: 60, width: 40, height: 40 }),
+      setPointerCapture() {},
+    },
+  }
+  tooltipMenuApp.mount(tooltipMenuRoot)
+  tooltipHotbarApp.mount(tooltipHotbarRoot)
+  await nextTick()
+  const menuLift = descendants(tooltipMenuRoot, 'button')[0]
+  const tooltipSlots = descendants(tooltipHotbarRoot, 'button')
+  assert.equal(menuLift.props.title, undefined, 'custom tooltips must not leave a competing native title')
+  menuLift.props.onPointerenter(pointer)
+  tooltipSlots[0].props.onPointerenter(pointer)
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 1: Lift', 'Lift'])
+  assert.equal(frames.size, 0)
+  const tooltipClockStart = monotonicMs
+  gameStore.setGameActionState({ phase: 'idle', serverTimeMs: 30000,
+    cooldowns: [{ actionId: 'lift', startedAtMs: 30000, expiresAtMs: 53000 }] })
+  await nextTick()
+  assert.equal(cooldownStore.remainingMs('lift'), 23000)
+  assert.equal(cooldownStore.remainingMs('unknown'), 0)
+  assert.equal(tooltipPresentation.presentation('game:lift').cooldownRemainingSeconds, 23)
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 1: Lift\nCooldown 23 seconds', 'Lift\nCooldown 23 seconds'])
+  assert.equal(menuLift.props['aria-label'], 'Lift')
+  assert.equal(frames.size, 1)
+  await advanceFrame(tooltipClockStart + 1)
+  assert.equal(cooldownStore.remainingMs('lift'), 22999)
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 1: Lift\nCooldown 23 seconds', 'Lift\nCooldown 23 seconds'])
+  await advanceFrame(tooltipClockStart + 1000)
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 1: Lift\nCooldown 22 seconds', 'Lift\nCooldown 22 seconds'])
+  tooltipSlots[0].props.onPointerleave()
+  tooltipSlots[4].props.onPointerenter(pointer)
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 5: Lift\nCooldown 22 seconds', 'Lift\nCooldown 22 seconds'])
+  await advanceFrame(tooltipClockStart + 22000)
+  assert.equal(cooldownStore.remainingMs('lift'), 1000)
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 5: Lift\nCooldown 1 second', 'Lift\nCooldown 1 second'])
+  await advanceFrame(tooltipClockStart + 22999)
+  assert.equal(cooldownStore.remainingMs('lift'), 1)
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 5: Lift\nCooldown 1 second', 'Lift\nCooldown 1 second'])
+  await advanceFrame(tooltipClockStart + 23000)
+  assert.equal(cooldownStore.remainingMs('lift'), 0)
+  assert.equal(tooltipPresentation.presentation('game:lift').cooldownRemainingSeconds, 0)
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 5: Lift', 'Lift'])
+  assert.equal(frames.size, 0)
+  menuLift.props.onPointerleave()
+  tooltipSlots[4].props.onPointerleave()
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), [])
+
+  // Keyboard focus has the same text, and blur removes both popups.
+  menuLift.props.onFocus(pointer)
+  tooltipSlots[4].props.onFocus(pointer)
+  gameStore.setGameActionState({ phase: 'idle', serverTimeMs: 60000,
+    cooldowns: [{ actionId: 'lift', startedAtMs: 60000, expiresAtMs: 61001 }] })
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 5: Lift\nCooldown 2 seconds', 'Lift\nCooldown 2 seconds'])
+  cooldownStore.reset()
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 5: Lift', 'Lift'])
+  assert.equal(frames.size, 0)
+  gameStore.reset()
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), [], 'session reset removes tooltips for unavailable gameplay actions')
+  assert.equal(frames.size, 0)
+  gameStore.setGameActionList(actions)
+  await nextTick()
+  menuLift.props.onBlur()
+  tooltipSlots[4].props.onBlur()
+  tooltipSlots[8].props.onFocus(pointer)
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), ['Hotbar slot 9: Inventory'])
+  assert.equal(tooltipPresentation.presentation('inventory').cooldownRemainingSeconds, 0)
+  tooltipSlots[8].props.onBlur()
+  menuLift.props.onPointerenter(pointer)
+  await nextTick()
+  menuLift.props.onDragstart({ dataTransfer: { setData() {} } })
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), [])
+  menuLift.props.onFocus(pointer)
+  menuLift.props.onPointerdown({ ...pointer, pointerType: 'touch', pointerId: 42 })
+  menuLift.props.onPointermove({ ...pointer, pointerType: 'touch', pointerId: 42, clientX: 40 })
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), [], 'touch dragging also removes the menu tooltip')
+  menuLift.props.onPointerup({ ...pointer, pointerType: 'touch', pointerId: 42, clientX: 40 })
+  const originalWindow = globalThis.window
+  const longPressTimers = new Map()
+  const resizeListeners = new Set()
+  globalThis.window = {
+    innerWidth: 1024,
+    innerHeight: 768,
+    addEventListener: (event, callback) => { if (event === 'resize') resizeListeners.add(callback) },
+    removeEventListener: (event, callback) => { if (event === 'resize') resizeListeners.delete(callback) },
+    setTimeout: callback => { longPressTimers.set(1, callback); return 1 },
+    clearTimeout: id => longPressTimers.delete(id),
+  }
+  try {
+    const edgePointer = {
+      ...pointer, clientX: 1020, clientY: 766,
+      currentTarget: { getBoundingClientRect: () => ({ left: 1000, bottom: 766 }) },
+    }
+    menuLift.props.onPointerenter(edgePointer)
+    tooltipSlots[4].props.onFocus(edgePointer)
+    await nextTick()
+    assert.equal(tooltipNodes().length, 2)
+    for (const tooltip of tooltipNodes()) {
+      assert.deepEqual(tooltip.props.style, { left: '820px', top: '724px' }, 'hover and focus tooltips fit inside the viewport')
+    }
+    assert.equal(resizeListeners.size, 2)
+    globalThis.window.innerWidth = 640
+    globalThis.window.innerHeight = 480
+    for (const listener of resizeListeners) listener()
+    await nextTick()
+    for (const tooltip of tooltipNodes()) {
+      assert.deepEqual(tooltip.props.style, { left: '436px', top: '436px' }, 'open tooltips follow viewport resize')
+    }
+    menuLift.props.onPointerleave()
+    tooltipSlots[4].props.onBlur()
+    await nextTick()
+    assert.equal(resizeListeners.size, 0, 'removed tooltips release resize listeners')
+    globalThis.window.innerWidth = 1024
+    globalThis.window.innerHeight = 768
+    const touchPointer = { ...pointer, pointerType: 'touch' }
+    tooltipSlots[4].props.onPointerenter(touchPointer)
+    await nextTick()
+    assert.deepEqual(tooltipTexts(), [])
+    tooltipSlots[4].props.onPointerdown(touchPointer)
+    await nextTick()
+    assert.deepEqual(tooltipTexts(), ['Hotbar slot 5: Lift'])
+    assert.equal(longPressTimers.size, 1)
+    tooltipSlots[4].props.onPointerup()
+    await nextTick()
+    assert.deepEqual(tooltipTexts(), [])
+    assert.equal(longPressTimers.size, 0)
+    tooltipSlots[4].props.onPointerdown(touchPointer)
+    tooltipSlots[4].props.onPointercancel()
+    await nextTick()
+    assert.deepEqual(tooltipTexts(), [])
+    assert.equal(longPressTimers.size, 0)
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window
+    else globalThis.window = originalWindow
+  }
+  menuLift.props.onPointerenter(pointer)
+  tooltipSlots[0].props.onPointerenter(pointer)
+  await nextTick()
+  tooltipMenuActions.value = actions.slice(1)
+  tooltipSlots[0].props.onContextmenu({ preventDefault() {} })
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), [], 'removed actions and cleared slots cannot leave floating tooltips')
+  tooltipSlots[4].props.onPointerenter(pointer)
+  await nextTick()
+  draggingActionId.value = 'game:lift'
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), [])
+  draggingActionId.value = null
+  tooltipSlots[4].props.onFocus(pointer)
+  await nextTick()
+  tooltipHotbarApp.unmount()
+  assert.deepEqual(tooltipTexts(), [], 'unmount removes teleported hotbar tooltips')
+  descendants(tooltipMenuRoot, 'button')[0].props.onFocus(pointer)
+  await nextTick()
+  assert.deepEqual(tooltipTexts(), ['Lift down'])
+  tooltipMenuApp.unmount()
+  assert.deepEqual(tooltipTexts(), [], 'unmount removes teleported menu tooltips')
+  assert.equal(frames.size, 0)
+  gameStore.reset()
+
   globalThis.performance = originalPerformance
   delete globalThis.requestAnimationFrame
   delete globalThis.cancelAnimationFrame
-  console.log('Action menu, activation, drag, hotbar, cursor, synchronized cooldown, and overhead progress tests passed')
+  console.log('Action menu, activation, drag, hotbar, cursor, synchronized cooldown, live tooltip, and overhead progress tests passed')
 } finally {
   gameStore?.reset()
   await rm(directory, { recursive: true, force: true })

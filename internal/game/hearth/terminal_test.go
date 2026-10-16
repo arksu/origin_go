@@ -139,6 +139,13 @@ func TestTerminalLiveHomeConvertsInPlaceAndCommitsInSameCall(t *testing.T) {
 	chunk, handle := terminalLiveHome(t, f)
 	oldInfo, _ := ecs.GetComponent[components.EntityInfo](f.w, handle)
 	oldPosition, _ := ecs.GetComponent[components.Transform](f.w, handle)
+	links := ecs.GetResource[ecs.LinkState](f.w)
+	links.SetLink(ecs.PlayerLink{PlayerID: 1, PlayerHandle: f.ctx.PlayerHandle, TargetID: 2000, TargetHandle: handle})
+	f.w.AddComponentObserver(components.EntityInfoComponentID, func(h types.Handle) {
+		if h == handle {
+			require.Empty(t, links.PlayersByTarget[2000], "links must break before in-place conversion")
+		}
+	})
 	saver.onSave = func() {
 		require.Equal(t, 1, f.chunks.pins[chunk.Coord])
 		require.Equal(t, hearth.Snapshot{State: hearth.NoHome, Terminal: true}, f.runtime.Index.Snapshot(1))

@@ -129,6 +129,7 @@ func (r *Runtime) completeTerminal(character types.EntityID) error {
 		if r.factory == nil {
 			return fmt.Errorf("hearth object factory is unavailable")
 		}
+		r.breakLinksBeforeConversion(home.Object.ID)
 		if !world.TransformObjectToDefInPlace(r.w, home.Object.ID, handle, campfireDef, world.TransformObjectInPlaceOptions{
 			ClearFlags: true, BehaviorRegistry: r.registry, Chunks: r.chunks, EventBus: r.bus, Logger: r.logger,
 		}) {

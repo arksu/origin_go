@@ -88,6 +88,9 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 		return constructionRefused("Cannot complete this hearth here.")
 	}
 	next := Home{Object: ObjectKey{Region: info.Region, ID: ctx.TargetID}, X: int(position.X), Y: int(position.Y), Layer: SurfaceLayer}
+	if appearance, ok := ecs.GetComponent[components.Appearance](r.w, ctx.PlayerHandle); ok && appearance.Name != nil {
+		next.OwnerName = *appearance.Name
+	}
 	if !validHome(next) {
 		return constructionRefused("This construction site is unavailable.")
 	}
@@ -158,6 +161,7 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 		return contracts.BehaviorResult{}
 	}
 	if oldHandle != types.InvalidHandle {
+		r.breakLinksBeforeConversion(current.Home.Object.ID)
 		if !world.TransformObjectToDefInPlace(r.w, current.Home.Object.ID, oldHandle, campfireDef, world.TransformObjectInPlaceOptions{
 			ClearFlags: true, BehaviorRegistry: r.registry, Chunks: r.chunks, EventBus: r.bus, Logger: r.logger,
 		}) {
@@ -233,7 +237,7 @@ func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
 	}
 	var home *Home
 	if err == nil {
-		home = &Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer}
+		home = &Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer, OwnerName: row.OwnerName}
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		saved, err := r.reader.GetSavedCharacterHearth(ctx, int64(character))

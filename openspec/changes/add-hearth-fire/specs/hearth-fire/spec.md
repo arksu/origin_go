@@ -290,6 +290,40 @@ The world object SHALL be named `Hearth Fire`, without the owner's name, and SHA
 - **WHEN** the owner's or another player's hearth enters the minimap area
 - **THEN** no hearth marker SHALL be displayed
 
+### Requirement: Linked hearths expose a reusable text window
+
+RMB SHALL select the hearth's single `open` context action without a menu and use the existing approach/link/validation path. Every player MAY inspect an active hearth. After validating live player/target handles, current ownership and their exact link, the server SHALL send `Hearth Fire` with an `Owner` field containing the owner's character name. The name SHALL be copied from the finishing character's server appearance or `character.name` in the existing ownership queries. Known runtime metadata SHALL win over SQL; opening SHALL perform no SQL and SHALL work for offline owners.
+
+`S2C_CustomWindow` SHALL contain `entity_id`, `stream_epoch`, `title` and ordered `{label, value}` fields. `S2C_CustomWindowClosed` SHALL contain `entity_id` and `stream_epoch`. A `CustomWindowProvider` capability in the existing behavior registry SHALL build the snapshot; `ExecutionDeps` SHALL supply its typed sender. Messages SHALL be serialized immediately on the owning shard path and use the current connection's critical FIFO and epoch. No window registry, reverse index, instance ID, client close command or push-update contract SHALL be introduced.
+
+The existing `LinkSystem` MAY use one optional additional-contact callback when ordinary collision does not confirm the intended or linked target. Hearth SHALL implement it only for the active owner's own hearth, checking live entities and touching/overlapping collider AABBs without allocations or world scans. Existing movement, incapacitation, identity checks and system order SHALL remain authoritative.
+
+The existing layer-filtered `LinkBroken` handler SHALL close windows for behaviors implementing `CustomWindowProvider`. Before a loaded hearth changes into a campfire on replacement or owner death, Hearth SHALL break its links through existing `PlayersByTarget` and `BreakLinkForPlayer`, before removing its behavior.
+
+One client component over `GameWindow` SHALL render server-provided text in order, escape HTML and wrap long values. `gameStore` SHALL retain only the current snapshot. Matching close, target despawn, world exit/entry and connection reset SHALL clear it. Old-epoch messages and closes for another target SHALL NOT alter it. Cross and ordinary Escape SHALL close locally without breaking the server link; another RMB SHALL reopen the window.
+
+#### Scenario: Owner stands at the hearth's center
+- **WHEN** the owner uses RMB while already inside or at the exact center of their hearth
+- **THEN** the ordinary link path SHALL accept AABB contact and open the window
+- **AND** walking through the hearth without interaction intent SHALL NOT open it
+
+#### Scenario: Approach is canceled or blocked
+- **WHEN** the player cancels approach, cannot reach the hearth, becomes incapacitated, or the target loses active ownership before execution
+- **THEN** no window SHALL open
+
+#### Scenario: Offline owner's hearth is restored
+- **WHEN** a saved hearth is loaded after restart while its owner is offline
+- **THEN** its existing ownership query SHALL hydrate the name and any linked visitor SHALL see it without another lookup
+
+#### Scenario: Linked hearth converts in place
+- **WHEN** replacement or permanent death converts a loaded hearth while visitors are linked
+- **THEN** those links SHALL break and their windows SHALL close before the object loses the Hearth behavior
+
+#### Scenario: A different text form uses the same renderer
+- **WHEN** a current-epoch snapshot names a workbench and supplies several text fields
+- **THEN** the same component SHALL display its title and fields in server order
+- **AND** HTML-like owner names or field values SHALL remain literal text
+
 ### Requirement: Return uses the ordinary timed action interface
 
 `Travel to Hearth Fire` SHALL be available through the existing Actions menu and use ordinary progress and cooldown presentation. One accepted attempt SHALL take five seconds of interruptible progress and cost no stamina. Travel Weariness SHALL NOT be introduced. Without an active home, the action SHALL be rejected with a clear message.

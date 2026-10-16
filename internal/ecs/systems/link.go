@@ -15,7 +15,7 @@ const linkMovementEpsilon = 0.001
 // LinkSystem maintains player<->object links.
 //
 // Rules:
-// - link is created only by explicit intent + confirmed collision with target
+// - link is created only by explicit intent + confirmed contact with target
 // - one player can have only one active link
 // - KO/lying forbid links and terminate all station/object interactions
 // - link also breaks on movement, collision switch, relink, or despawn
@@ -26,10 +26,11 @@ type breakCandidate struct {
 
 type LinkSystem struct {
 	ecs.BaseSystem
-	eventBus  *eventbus.EventBus
-	logger    *zap.Logger
-	epsilonSq float64
-	toBreak   []breakCandidate
+	eventBus          *eventbus.EventBus
+	logger            *zap.Logger
+	epsilonSq         float64
+	toBreak           []breakCandidate
+	additionalContact func(types.EntityID, types.Handle) bool
 }
 
 func NewLinkSystem(eventBus *eventbus.EventBus, logger *zap.Logger) *LinkSystem {
@@ -42,6 +43,17 @@ func NewLinkSystem(eventBus *eventbus.EventBus, logger *zap.Logger) *LinkSystem 
 		logger:     logger,
 		epsilonSq:  linkMovementEpsilon * linkMovementEpsilon,
 	}
+}
+
+// SetAdditionalContact allows a feature to confirm contact with a pass-through target.
+// It runs only for an intended or linked target, under the owning shard lock.
+func (s *LinkSystem) SetAdditionalContact(check func(types.EntityID, types.Handle) bool) {
+	s.additionalContact = check
+}
+
+func (s *LinkSystem) hasContact(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetID types.EntityID, targetHandle types.Handle) bool {
+	return s.lastCollidedWith(w, playerHandle) == targetID ||
+		(s.additionalContact != nil && s.additionalContact(playerID, targetHandle))
 }
 
 func (s *LinkSystem) Update(w *ecs.World, dt float64) {
@@ -78,7 +90,7 @@ func (s *LinkSystem) processIntents(w *ecs.World, linkState *ecs.LinkState) {
 			linkState.ClearIntent(playerID)
 			continue
 		}
-		if s.lastCollidedWith(w, playerHandle) != intent.TargetID {
+		if !s.hasContact(w, playerID, playerHandle, intent.TargetID, targetHandle) {
 			continue
 		}
 
@@ -150,8 +162,8 @@ func (s *LinkSystem) validateActiveLinks(w *ecs.World, linkState *ecs.LinkState)
 			continue
 		}
 
-		// Collision target must still be the linked target.
-		if s.lastCollidedWith(w, playerHandle) != link.TargetID {
+		// Contact must still be with the linked target.
+		if !s.hasContact(w, playerID, playerHandle, link.TargetID, targetHandle) {
 			s.toBreak = append(s.toBreak, breakCandidate{playerID: playerID, reason: ecs.LinkBreakMoved})
 		}
 	}

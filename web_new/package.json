@@ -12,6 +12,7 @@
     "test:inventory-transfer": "node scripts/test-character-visual.mjs tests/inventory-transfer.test.ts",
     "test:inventory-drag": "node scripts/test-character-visual.mjs tests/inventory-drag.test.ts",
     "test:knockout": "node scripts/test-character-visual.mjs tests/knockout.test.ts",
+    "test:custom-windows": "node scripts/test-character-visual.mjs tests/custom-windows.test.ts",
     "test:movement-input": "node scripts/test-character-visual.mjs tests/movement-input.test.ts",
     "test:move-marker": "node scripts/test-character-visual.mjs tests/move-marker.test.ts",
     "test:map-click": "node scripts/test-map-click.mjs",

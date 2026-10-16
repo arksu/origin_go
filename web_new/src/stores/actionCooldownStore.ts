@@ -60,6 +60,10 @@ export const useActionCooldownStore = defineStore('actionCooldowns', () => {
     return Math.max(0, Math.min(1, (nowMs.value - cooldown.startedAtMs) / (cooldown.expiresAtMs - cooldown.startedAtMs)))
   }
 
+  function remainingMs(actionId: string): number {
+    return Math.max(0, (cooldowns.value.get(actionId)?.expiresAtMs || 0) - nowMs.value)
+  }
+
   function reset(): void {
     stopClock()
     cooldowns.value = new Map()
@@ -69,5 +73,5 @@ export const useActionCooldownStore = defineStore('actionCooldowns', () => {
   }
 
   onScopeDispose(reset)
-  return { cooldowns, nowMs, serverNow, setSnapshot, isCoolingDown, progress, reset }
+  return { cooldowns, nowMs, serverNow, setSnapshot, isCoolingDown, progress, remainingMs, reset }
 })

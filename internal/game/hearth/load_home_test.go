@@ -50,7 +50,7 @@ func (h homeFatalHook) OnWrite(entry *zapcore.CheckedEntry, fields []zapcore.Fie
 func TestLoadHomeHydratesBothIndexesAndCachesResult(t *testing.T) {
 	const character types.EntityID = 72
 	const hearthType = 109
-	want := Home{Object: ObjectKey{Region: 5, ID: 391}, X: -125, Y: 640, Layer: SurfaceLayer}
+	want := Home{Object: ObjectKey{Region: 5, ID: 391}, X: -125, Y: 640, Layer: SurfaceLayer, OwnerName: "Offline owner"}
 	reads := 0
 	var readContext context.Context
 	reader := homeReaderFunc(func(ctx context.Context, params repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
@@ -61,7 +61,7 @@ func TestLoadHomeHydratesBothIndexesAndCachesResult(t *testing.T) {
 		require.True(t, present)
 		require.InDelta(t, 5, time.Until(deadline).Seconds(), 0.5)
 		require.NoError(t, ctx.Err())
-		return repository.GetCharacterHearthRow{CharacterID: int64(character), ObjectRegion: want.Object.Region, ObjectID: int64(want.Object.ID), X: want.X, Y: want.Y, Layer: want.Layer}, nil
+		return repository.GetCharacterHearthRow{CharacterID: int64(character), ObjectRegion: want.Object.Region, ObjectID: int64(want.Object.ID), X: want.X, Y: want.Y, Layer: want.Layer, OwnerName: want.OwnerName}, nil
 	})
 	runtime := NewRuntime(nil, nil, reader, nil, nil, nil, nil, nil)
 	require.NoError(t, runtime.LoadHome(character, hearthType))

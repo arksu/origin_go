@@ -17,12 +17,17 @@ export function useActionPresentation() {
     const shortcut = gameplay ? undefined : shortcuts.get(actionId)
     const label = definition?.label || shortcut?.label || (game.gameActionListLoaded ? 'Unavailable action' : 'Loading action')
     const cooldownProgress = gameplay ? cooldowns.progress(actionId) : 1
+    const cooldownRemainingSeconds = gameplay ? Math.ceil(cooldowns.remainingMs(actionId) / 1000) : 0
     return {
       label,
+      tooltip: cooldownRemainingSeconds > 0
+        ? `${label}\nCooldown ${cooldownRemainingSeconds} ${cooldownRemainingSeconds === 1 ? 'second' : 'seconds'}`
+        : label,
       shortLabel: shortcut?.shortLabel || label.slice(0, 3).toUpperCase(),
       iconPath: definition?.menuIcon || shortcut?.iconPath || '',
       available: !!definition || !!shortcut,
       cooldownProgress,
+      cooldownRemainingSeconds,
       coolingDown: cooldownProgress < 1,
     }
   }

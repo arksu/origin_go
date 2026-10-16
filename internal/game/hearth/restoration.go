@@ -82,7 +82,7 @@ func (r *Runtime) prepareChunkActivation(chunk *core.Chunk) error {
 	characters := make(map[types.EntityID]struct{}, len(rows))
 	for _, row := range rows {
 		character := types.EntityID(row.CharacterID)
-		home := Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer}
+		home := Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer, OwnerName: row.OwnerName}
 		_, requested := unresolved[home.Object]
 		_, duplicate := characters[character]
 		if !requested || duplicate || !validID(character) || !validHome(home) {

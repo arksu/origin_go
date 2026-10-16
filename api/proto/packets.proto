@@ -842,6 +842,24 @@ message S2C_BuildStateClosed {
   uint64 entity_id = 1;
 }
 
+// Read-only object window, opened only by a server-approved interaction.
+message CustomWindowField {
+  string label = 1;
+  string value = 2;
+}
+
+message S2C_CustomWindow {
+  uint64 entity_id = 1;
+  uint32 stream_epoch = 2;
+  string title = 3;
+  repeated CustomWindowField fields = 4;
+}
+
+message S2C_CustomWindowClosed {
+  uint64 entity_id = 1;
+  uint32 stream_epoch = 2;
+}
+
 message S2C_LiftCarryState {
   bool active = 1;
   uint64 entity_id = 2;
@@ -1009,6 +1027,8 @@ message ServerMessage {
     S2C_SoundBatch sound_batch = 51;
     S2C_AttackResult attack_result = 52;
     S2C_ServerConstants server_constants = 53;
+    S2C_CustomWindow custom_window = 54;
+    S2C_CustomWindowClosed custom_window_closed = 55;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

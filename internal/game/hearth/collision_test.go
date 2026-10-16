@@ -124,3 +124,33 @@ func BenchmarkIgnoreObjectCollision(b *testing.B) {
 		}
 	}
 }
+
+func TestOwnerContactUsesExactAABBAndActiveOwnership(t *testing.T) {
+	for _, scenario := range []struct {
+		name string
+		x, y float64
+		want bool
+	}{
+		{"center", 100, 100, true}, {"overlap", 105, 100, true},
+		{"edge", 111, 100, true}, {"corner", 111, 111, true},
+		{"outside x", 111.01, 100, false}, {"outside y", 100, 111.01, false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			runtime, target := newCollisionRuntime(t)
+			ecs.AddComponent(runtime.w, target, components.Transform{X: 100, Y: 100})
+			ecs.AddComponent(runtime.w, target, components.Collider{HalfWidth: 6, HalfHeight: 6})
+			actor := runtime.w.Spawn(1, func(w *ecs.World, h types.Handle) {
+				ecs.AddComponent(w, h, components.Transform{X: scenario.x, Y: scenario.y})
+				ecs.AddComponent(w, h, components.Collider{HalfWidth: 5, HalfHeight: 5})
+			})
+			require.Equal(t, scenario.want, runtime.HasOwnerContact(1, target))
+			require.False(t, runtime.HasOwnerContact(2, target))
+			require.Zero(t, testing.AllocsPerRun(100, func() { runtime.HasOwnerContact(1, target) }))
+			ecs.RemoveComponent[components.Collider](runtime.w, actor)
+			require.False(t, runtime.HasOwnerContact(1, target))
+			ecs.AddComponent(runtime.w, actor, components.Collider{HalfWidth: 5, HalfHeight: 5})
+			require.NoError(t, runtime.Index.MarkTerminalPending(1))
+			require.False(t, runtime.HasOwnerContact(1, target))
+		})
+	}
+}

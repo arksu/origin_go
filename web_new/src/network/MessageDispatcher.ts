@@ -103,6 +103,8 @@ export class MessageDispatcher {
     if (message.buildList) return 'buildList'
     if (message.buildState) return 'buildState'
     if (message.buildStateClosed) return 'buildStateClosed'
+    if (message.customWindow) return 'customWindow'
+    if (message.customWindowClosed) return 'customWindowClosed'
     if (message.liftCarryState) return 'liftCarryState'
     if (message.actionList) return 'actionList'
     if (message.actionStateChanged) return 'actionStateChanged'

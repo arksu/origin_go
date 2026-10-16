@@ -350,7 +350,11 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	transformSystem.SetPositionObserver(positionObservers)
 	s.world.AddSystem(transformSystem)
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, s.eventBus, logger))
-	s.world.AddSystem(systems.NewLinkSystem(s.eventBus, logger))
+	linkSystem := systems.NewLinkSystem(s.eventBus, logger)
+	if runtime, ok := ecs.TryGetResource[hearth.Runtime](s.world); ok {
+		linkSystem.SetAdditionalContact(runtime.HasOwnerContact)
+	}
+	s.world.AddSystem(linkSystem)
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
 	s.world.AddSystem(NewActionValidationSystem(s.world, actionService))
 	cyclicActions := NewCyclicActionSystem(contextActionService, s, logger)
@@ -1346,7 +1350,7 @@ func (s *Shard) SendCyclicActionFinished(entityID types.EntityID, finished *netp
 	if finished == nil {
 		return
 	}
-	s.sendActionTransition(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_CyclicActionFinished{CyclicActionFinished: finished}})
+	s.sendWorldTransition(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_CyclicActionFinished{CyclicActionFinished: finished}})
 }
 
 func (s *Shard) SendSoundBatch(entityID types.EntityID, clientID uint64, batch *netproto.S2C_SoundBatch) soundBatchDelivery {
@@ -1555,12 +1559,12 @@ func (s *Shard) SendActionStateChanged(entityID types.EntityID, state *netproto.
 		Cooldowns: state.Cooldowns, ServerTimeMs: state.ServerTimeMs,
 		ActionGeneration: state.ActionGeneration, FacingAngle: state.FacingAngle,
 	}
-	s.sendActionTransition(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_ActionStateChanged{ActionStateChanged: messageState}})
+	s.sendWorldTransition(entityID, &netproto.ServerMessage{Payload: &netproto.ServerMessage_ActionStateChanged{ActionStateChanged: messageState}})
 }
 
 // Keep client validation and enqueue in the same read-lock section so a replaced
-// session cannot receive the tail of a prior action's transition sequence.
-func (s *Shard) sendActionTransition(entityID types.EntityID, message *netproto.ServerMessage) {
+// session cannot receive the tail of a prior world's transition sequence.
+func (s *Shard) sendWorldTransition(entityID types.EntityID, message *netproto.ServerMessage) {
 	s.ClientsMu.RLock()
 	defer s.ClientsMu.RUnlock()
 	client := s.Clients[entityID]
@@ -1574,9 +1578,15 @@ func (s *Shard) sendActionTransition(entityID types.EntityID, message *netproto.
 	if state := message.GetActionStateChanged(); state != nil {
 		state.StreamEpoch = epoch
 	}
+	if window := message.GetCustomWindow(); window != nil {
+		window.StreamEpoch = epoch
+	}
+	if closed := message.GetCustomWindowClosed(); closed != nil {
+		closed.StreamEpoch = epoch
+	}
 	encoded, err := proto.Marshal(message)
 	if err != nil {
-		s.logger.Error("Failed to marshal action transition", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
+		s.logger.Error("Failed to marshal world transition", zap.Uint64("entity_id", uint64(entityID)), zap.Error(err))
 		return
 	}
 	client.SendCritical(encoded)

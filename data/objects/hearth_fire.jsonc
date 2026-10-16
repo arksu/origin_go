@@ -9,6 +9,7 @@
 	  "static": true,
 	  "hp": 100,
 	  "indestructible": true,
+	  "contextMenuEvenForOneItem": false,
 	  "components": {
 		"collider": { "w": 12, "h": 12 }
 	  },

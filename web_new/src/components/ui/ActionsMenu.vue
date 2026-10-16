@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import ActionIcon from './ActionIcon.vue'
+import ActionTooltip from './ActionTooltip.vue'
 import { useActionPresentation } from '@/composables/useActionPresentation'
 import type { proto } from '@/network/proto/packets.js'
 import { gameActionHotbarId, type HotbarActionId } from '@/game/hud/actionCatalog'
 
-defineProps<{
+const props = defineProps<{
   actions: proto.IActionDefinition[]
   activeActionId: string
   activePhase: string
@@ -28,6 +29,35 @@ const touchStartX = ref(0)
 const touchStartY = ref(0)
 const touchDragging = ref(false)
 const suppressClick = ref(false)
+const tooltipActionId = ref<string | null>(null)
+const tooltipX = ref(0)
+const tooltipY = ref(0)
+const tooltipAction = computed(() => props.actions.find(action => action.id === tooltipActionId.value))
+const tooltipText = computed(() => {
+  const id = tooltipAction.value?.id
+  if (!id) return ''
+  const action = presentation(gameActionHotbarId(id))
+  return action.available ? action.tooltip : ''
+})
+
+function showTooltip(action: proto.IActionDefinition, clientX: number, clientY: number): void {
+  tooltipActionId.value = action.id || null
+  tooltipX.value = clientX + 10
+  tooltipY.value = clientY + 10
+}
+
+function hideTooltip(): void {
+  tooltipActionId.value = null
+}
+
+function onPointerEnter(event: PointerEvent, action: proto.IActionDefinition): void {
+  if (event.pointerType !== 'touch') showTooltip(action, event.clientX, event.clientY)
+}
+
+function onFocus(event: FocusEvent, action: proto.IActionDefinition): void {
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  showTooltip(action, rect.left, rect.bottom)
+}
 
 function onClick(action: proto.IActionDefinition): void {
   if (suppressClick.value) {
@@ -38,6 +68,7 @@ function onClick(action: proto.IActionDefinition): void {
 }
 
 function onDragStart(event: DragEvent, action: proto.IActionDefinition): void {
+  hideTooltip()
   const id = gameActionHotbarId(action.id || '')
   event.dataTransfer?.setData('application/x-origin-action-id', id)
   event.dataTransfer?.setData('text/plain', id)
@@ -47,6 +78,7 @@ function onDragStart(event: DragEvent, action: proto.IActionDefinition): void {
 
 function onPointerDown(event: PointerEvent, action: proto.IActionDefinition): void {
   if (event.pointerType !== 'touch') return
+  showTooltip(action, event.clientX, event.clientY)
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
   touchPointerId.value = event.pointerId
   touchActionId.value = gameActionHotbarId(action.id || '')
@@ -56,9 +88,16 @@ function onPointerDown(event: PointerEvent, action: proto.IActionDefinition): vo
 }
 
 function onPointerMove(event: PointerEvent): void {
-  if (touchPointerId.value !== event.pointerId || !touchActionId.value) return
+  if (touchPointerId.value !== event.pointerId || !touchActionId.value) {
+    if (tooltipActionId.value && event.pointerType !== 'touch') {
+      tooltipX.value = event.clientX + 10
+      tooltipY.value = event.clientY + 10
+    }
+    return
+  }
   if (!touchDragging.value && Math.hypot(event.clientX - touchStartX.value, event.clientY - touchStartY.value) > 8) {
     touchDragging.value = true
+    hideTooltip()
     emit('dragStart', touchActionId.value)
     emit('touchDragStart', { actionId: touchActionId.value, pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY })
   }
@@ -67,6 +106,7 @@ function onPointerMove(event: PointerEvent): void {
 
 function onPointerUp(event: PointerEvent): void {
   if (touchPointerId.value !== event.pointerId) return
+  hideTooltip()
   if (touchDragging.value) {
     suppressClick.value = true
     setTimeout(() => { suppressClick.value = false }, 0)
@@ -90,11 +130,14 @@ function onPointerUp(event: PointerEvent): void {
       :aria-label="presentation(gameActionHotbarId(action.id || '')).label"
       :aria-disabled="presentation(gameActionHotbarId(action.id || '')).coolingDown || undefined"
       :aria-pressed="action.id === activeActionId && activePhase !== 'idle'"
-      :title="presentation(gameActionHotbarId(action.id || '')).label"
       draggable="true"
       @click="onClick(action)"
       @dragstart="onDragStart($event, action)"
       @dragend="emit('dragEnd')"
+      @pointerenter="onPointerEnter($event, action)"
+      @pointerleave="hideTooltip"
+      @focus="onFocus($event, action)"
+      @blur="hideTooltip"
       @pointerdown="onPointerDown($event, action)"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
@@ -104,6 +147,7 @@ function onPointerUp(event: PointerEvent): void {
       <span>{{ presentation(gameActionHotbarId(action.id || '')).label }}</span>
     </button>
   </div>
+  <ActionTooltip v-if="tooltipText" :text="tooltipText" :x="tooltipX" :y="tooltipY" />
 </template>
 
 <style scoped lang="scss">

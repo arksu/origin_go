@@ -152,6 +152,17 @@ type BuildStateSender interface {
 	SendBuildState(entityID types.EntityID, state *netproto.S2C_BuildState)
 }
 
+// CustomWindowProvider describes an object's read-only interaction window.
+// A nil snapshot means that the current interaction is no longer eligible.
+type CustomWindowProvider interface {
+	BuildCustomWindow(ctx *BehaviorActionExecuteContext) *netproto.S2C_CustomWindow
+}
+
+type CustomWindowSender interface {
+	SendCustomWindow(entityID types.EntityID, window *netproto.S2C_CustomWindow)
+	SendCustomWindowClosed(entityID types.EntityID, targetID types.EntityID)
+}
+
 type GiveItemOutcome struct {
 	Success      bool
 	AnyDropped   bool
@@ -192,6 +203,7 @@ type ExecutionDeps struct {
 	VisionForcer        VisionUpdateForcer
 	Alerts              MiniAlertSender
 	BuildState          BuildStateSender
+	CustomWindow        CustomWindowSender
 	BehaviorRegistry    BehaviorRegistry
 	Logger              *zap.Logger
 }

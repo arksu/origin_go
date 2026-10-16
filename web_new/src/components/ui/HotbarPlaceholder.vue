@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import ActionIcon from './ActionIcon.vue'
+import ActionTooltip from './ActionTooltip.vue'
 import { useActionPresentation } from '@/composables/useActionPresentation'
 import {
   isHotbarActionId,
@@ -25,10 +26,9 @@ const emit = defineEmits<{
 
 const longPressTimer = ref<number | null>(null)
 const longPressTriggered = ref(false)
-const tooltipText = ref('')
+const tooltipSlot = ref<number | null>(null)
 const tooltipX = ref(0)
 const tooltipY = ref(0)
-const tooltipVisible = ref(false)
 
 const leftGroupSlots = computed(() => [0, 1, 2, 3, 4])
 const rightGroupSlots = computed(() => [5, 6, 7, 8, 9])
@@ -42,9 +42,15 @@ function parseActionIdFromDataTransfer(event: DragEvent): HotbarActionId | null 
 
 const { presentation } = useActionPresentation()
 
-function slotLabel(id: HotbarActionId): string {
-  return presentation(id).label
-}
+const tooltipText = computed(() => {
+  const slotIndex = tooltipSlot.value
+  return slotIndex != null && slotVisible(props.assignments[slotIndex]) ? slotTooltip(slotIndex) : ''
+})
+
+watch(() => props.draggingActionId, id => {
+  if (id) hideTooltip()
+})
+onBeforeUnmount(clearLongPressTimer)
 
 function slotVisible(id: HotbarActionId | null | undefined): boolean {
   return !!id && presentation(id).available
@@ -56,6 +62,7 @@ function slotCoolingDown(slotIndex: number): boolean {
 }
 
 function onDrop(event: DragEvent, slotIndex: number): void {
+  hideTooltip()
   event.preventDefault()
   const actionId = parseActionIdFromDataTransfer(event)
   if (!actionId) {
@@ -80,15 +87,15 @@ function clearLongPressTimer(): void {
   }
 }
 
-function showTooltip(text: string, clientX: number, clientY: number): void {
-  tooltipText.value = text
+function showTooltip(slotIndex: number, clientX: number, clientY: number): void {
+  if (props.draggingActionId) return
+  tooltipSlot.value = slotIndex
   tooltipX.value = clientX + 10
   tooltipY.value = clientY + 10
-  tooltipVisible.value = true
 }
 
 function hideTooltip(): void {
-  tooltipVisible.value = false
+  tooltipSlot.value = null
 }
 
 function onSlotPointerDown(event: PointerEvent, slotIndex: number): void {
@@ -97,7 +104,7 @@ function onSlotPointerDown(event: PointerEvent, slotIndex: number): void {
     hideTooltip()
     return
   }
-  showTooltip(slotTooltip(slotIndex), event.clientX, event.clientY)
+  showTooltip(slotIndex, event.clientX, event.clientY)
   if (event.pointerType !== 'touch') {
     return
   }
@@ -124,7 +131,7 @@ function slotTooltip(slotIndex: number): string {
   if (!actionId) {
     return `Hotbar slot ${slotIndex + 1} (empty)`
   }
-  return `Hotbar slot ${slotIndex + 1}: ${slotLabel(actionId)}`
+  return `Hotbar slot ${slotIndex + 1}: ${presentation(actionId).tooltip}`
 }
 
 function onSlotPointerEnter(event: PointerEvent, slotIndex: number): void {
@@ -135,7 +142,7 @@ function onSlotPointerEnter(event: PointerEvent, slotIndex: number): void {
   if (event.pointerType === 'touch') {
     return
   }
-  showTooltip(slotTooltip(slotIndex), event.clientX, event.clientY)
+  showTooltip(slotIndex, event.clientX, event.clientY)
 }
 
 function onSlotPointerMove(event: PointerEvent, slotIndex: number): void {
@@ -143,17 +150,16 @@ function onSlotPointerMove(event: PointerEvent, slotIndex: number): void {
     hideTooltip()
     return
   }
-  if (event.pointerType === 'touch' && !tooltipVisible.value) {
+  if (tooltipSlot.value == null) {
     return
   }
-  if (!tooltipVisible.value) {
-    return
-  }
-  showTooltip(slotTooltip(slotIndex), event.clientX, event.clientY)
+  showTooltip(slotIndex, event.clientX, event.clientY)
 }
 
-function onSlotPointerLeave(): void {
-  hideTooltip()
+function onSlotFocus(event: FocusEvent, slotIndex: number): void {
+  if (!slotVisible(props.assignments[slotIndex])) return
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  showTooltip(slotIndex, rect.left, rect.bottom)
 }
 </script>
 
@@ -169,13 +175,16 @@ function onSlotPointerLeave(): void {
         :data-hotbar-slot="slotIndex"
         :aria-label="slotTooltip(slotIndex)"
         :aria-disabled="slotCoolingDown(slotIndex) || undefined"
-        @dragover.prevent
+        @dragover.prevent="hideTooltip"
+        @dragstart="hideTooltip"
         @drop="onDrop($event, slotIndex)"
         @click="onActivate(slotIndex)"
         @contextmenu.prevent="emit('clear', slotIndex)"
         @pointerenter="onSlotPointerEnter($event, slotIndex)"
         @pointermove="onSlotPointerMove($event, slotIndex)"
-        @pointerleave="onSlotPointerLeave"
+        @pointerleave="hideTooltip"
+        @focus="onSlotFocus($event, slotIndex)"
+        @blur="hideTooltip"
         @pointerdown="onSlotPointerDown($event, slotIndex)"
         @pointerup="onSlotPointerUp"
         @pointercancel="onSlotPointerUp"
@@ -200,13 +209,16 @@ function onSlotPointerLeave(): void {
         :data-hotbar-slot="slotIndex"
         :aria-label="slotTooltip(slotIndex)"
         :aria-disabled="slotCoolingDown(slotIndex) || undefined"
-        @dragover.prevent
+        @dragover.prevent="hideTooltip"
+        @dragstart="hideTooltip"
         @drop="onDrop($event, slotIndex)"
         @click="onActivate(slotIndex)"
         @contextmenu.prevent="emit('clear', slotIndex)"
         @pointerenter="onSlotPointerEnter($event, slotIndex)"
         @pointermove="onSlotPointerMove($event, slotIndex)"
-        @pointerleave="onSlotPointerLeave"
+        @pointerleave="hideTooltip"
+        @focus="onSlotFocus($event, slotIndex)"
+        @blur="hideTooltip"
         @pointerdown="onSlotPointerDown($event, slotIndex)"
         @pointerup="onSlotPointerUp"
         @pointercancel="onSlotPointerUp"
@@ -219,15 +231,7 @@ function onSlotPointerLeave(): void {
       </button>
     </div>
   </div>
-  <Teleport to="body">
-    <div
-      v-if="tooltipVisible"
-      class="hotbar__tooltip"
-      :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
-    >
-      {{ tooltipText }}
-    </div>
-  </Teleport>
+  <ActionTooltip v-if="tooltipText" :text="tooltipText" :x="tooltipX" :y="tooltipY" />
 </template>
 
 <style scoped lang="scss">
@@ -305,20 +309,6 @@ function onSlotPointerLeave(): void {
   display: block;
   margin: 0;
   pointer-events: none;
-}
-
-.hotbar__tooltip {
-  position: fixed;
-  padding: 4px 8px;
-  border: 1px solid rgba(217, 199, 155, 0.8);
-  border-radius: 6px;
-  background: rgba(11, 16, 22, 0.94);
-  color: #e8ecf1;
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 1000;
 }
 
 @media (max-width: 900px) {

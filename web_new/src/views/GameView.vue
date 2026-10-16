@@ -14,6 +14,7 @@ import PlayerStatsWindow from '@/components/ui/PlayerStatsWindow.vue'
 import CraftWindow from '@/components/ui/CraftWindow.vue'
 import BuildWindow from '@/components/ui/BuildWindow.vue'
 import BuildStateWindow from '@/components/ui/BuildStateWindow.vue'
+import CustomWindow from '@/components/ui/CustomWindow.vue'
 import HandOverlay from '@/components/ui/HandOverlay.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import ActionHourGlass from '@/components/ui/ActionHourGlass.vue'
@@ -771,6 +772,7 @@ const hotkeys: HotkeyConfig[] = [...DEFAULT_HOTKEYS, ...hotbarNumberHotkeys].map
         closeCraftWindow()
         closeBuildWindow()
         gameStore.closeBuildStateWindow()
+        gameStore.closeCustomWindow()
         gameStore.closeContextMenu()
         break
       case '/':
@@ -993,6 +995,14 @@ useHotkeys(hotkeys)
         />
       </div>
       
+      <div v-if="gameStore.customWindow" class="game-custom-window">
+        <CustomWindow
+          :title="gameStore.customWindow.title"
+          :fields="gameStore.customWindow.fields"
+          @close="gameStore.closeCustomWindow"
+        />
+      </div>
+
       <!-- Nested inventory windows -->
       <div v-for="windowKey in openNestedInventoryWindows" :key="windowKey" class="game-nested-inventory">
         <NestedInventoryWindow 
@@ -1337,7 +1347,8 @@ useHotkeys(hotkeys)
   z-index: 261;
 }
 
-.game-build-state-window {
+.game-build-state-window,
+.game-custom-window {
   position: absolute;
   top: 0;
   left: 0;
