@@ -259,5 +259,5 @@ func (r hearthLoginReader) GetCharacterHearthOwners(context.Context, repository.
 }
 
 func (hearthLoginReader) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
-	panic("unexpected saved hearth query")
+	return repository.GetSavedCharacterHearthRow{}, sql.ErrNoRows
 }

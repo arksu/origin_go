@@ -7,7 +7,7 @@
 строительством и ручной постановкой поднятых объектов (см. 2.12–2.20).
 Подготовка объектов перед activation реализована и проверена (2.21).
 Синхронная очистка при перманентной смерти и REST-удалении описана в 2.22–2.23;
-общий repair и остальные игровые правила ещё не подключены. Согласованные решения
+точечный repair и его границы описаны в 2.24; остальные игровые правила ещё не подключены. Согласованные решения
 зафиксированы 2026-10-11 и уточнены 2026-10-16 в части 2. Они имеют приоритет
 над справочным материалом Haven & Hearth и заменяют предыдущий черновой план порта.
 
@@ -404,10 +404,14 @@ CREATE TABLE origin.character_hearth
   lock: construction, login, pre-activation hydration/normalization, death
   и REST cleanup. Медленная БД/загрузка задерживает весь game loop, поскольку
   manager ждёт все слои. Serial latency суммируется; новые команды ждут.
+  Timeout ограничивает отдельный read/transaction, а не owning call целиком;
+  ожидание существующего I/O mutex в `PinPersistenceBlocking` вне этих contexts.
 - Один generic optional callback перед raw ECS activation подготавливает
   текущие Hearth candidates. Сначала берёт reverse-index snapshots, включая
   `PendingTerminal`; один `GetCharacterHearthOwners` читает unresolved keys.
   Known runtime state выигрывает; eligible offline owners тоже гидратируются.
+  Работа пропорциональна raw objects/candidates текущего чанка и returned owners;
+  фиксированного численного Hearth candidate budget нет.
 - Истинные orphan rows готовятся общим с construction campfire helper,
   сохраняются одной транзакцией через `UpsertObject`, затем применяются через
   `UpsertRawObject` до activation. Identity/position остаются, HP/data/lastTick
@@ -415,6 +419,7 @@ CREATE TABLE origin.character_hearth
 - Индекс хранит записи до конца процесса, без Reference/Retain/Evict и версий.
   Короткий mutex нужен для terminal notification во время SQL; I/O под ним нет.
   Память растёт с числом встреченных персонажей — это принятая стоимость.
+  Это число может превышать текущий online; local microbenchmarks не подтверждают 30 000 CCU.
 - SQL использует существующие PK/UNIQUE и JOIN; нет N+1, world-per-tick scan,
   новых schema/query, workers или load-generation протокола для 3.5.
 - После рестарта восстановление использует saved state. Невалидная связь не
@@ -494,6 +499,8 @@ permanent-death cleanup описан в 2.22, REST cleanup — в 2.23. Return �
 - `RemoveCharacterHearth` удаляет только совпавший character/object composite
   key. `DeleteInvalidCharacterHearth` дополнительно проверяет, что эта же
   наблюдавшаяся связь всё ещё невалидна. Старый repair не удаляет новый дом.
+  `LoadHome` вызывает его через существующий saver только после filtered miss
+  и saved lookup для Unknown; результат repair предшествует кэшированию NoHome.
 
 Эти запросы не добавлены в обычное сохранение персонажей:
 `UpdateCharacters` по-прежнему не пишет `character_hearth`. Координаты/тип
@@ -599,7 +606,7 @@ material, stamina и object checkpoints по-прежнему могут пот�
   не равным одному — Fatal. Runtime не откатывается, SQL retry и save queue нет.
 - Новая связь теперь сохраняется в БД и доступна следующему ownership lookup.
   Batch hydration/normalization описана в 2.21, смерть — в 2.22, REST — в 2.23;
-  общий repair, возврат и FX остаются отдельными задачами; правила размещения описаны в 2.17–2.20.
+  точечный repair описан в 2.24, возврат и FX остаются отдельными задачами; правила размещения описаны в 2.17–2.20.
   Персонаж, инвентарь, материалы и stamina не входят в транзакцию стройки.
   `/spawn` не назначает владельца; schema, protocol и recipe не меняются.
 - Тесты берут число веток из рецепта и проверяют синхронную достройку ровно
@@ -624,8 +631,8 @@ material, stamina и object checkpoints по-прежнему могут пот�
 - Общий с достройкой `Runtime.LoadHome(character, hearthType) error` использует
   известную runtime-запись без SQL. Для `Unknown` существующий
   `GetCharacterHearth` с timeout 5 секунд заполняет оба направления индекса;
-  `sql.ErrNoRows` передаётся в `LoadIfUnknown` как `nil` и устанавливает
-  `NoHome`. Known runtime state не заменяется; loading/version protocol отсутствует.
+  `sql.ErrNoRows` запускает точечный repair по 2.24, после которого
+  `LoadIfUnknown(nil)` устанавливает `NoHome`. Known runtime state не заменяется; loading/version protocol отсутствует.
 - Lookup выполняется под surface shard lock; перед переподключением или
   спавном блокировка освобождается. Блокировки двух shard одновременно не
   удерживаются. Медленный запрос может задержать весь game loop до своего
@@ -638,7 +645,7 @@ material, stamina и object checkpoints по-прежнему могут пот�
 - Подключена только загрузка существующих метаданных: очаг не создаётся,
   объект и чанк не активируются, выбор позиции спавна не меняется. Отдельная
   pre-activation hydration описана в 2.21, смерть — в 2.22, REST — в 2.23;
-  общий repair и возврат остаются будущими задачами. SQL, схема и протокол не меняются.
+  точечный repair описан в 2.24; возврат остаётся будущей задачей. SQL, схема и протокол не меняются.
 
 ### 2.17 Коллизии владельца
 
@@ -835,7 +842,7 @@ material, stamina и object checkpoints по-прежнему могут пот�
   связь становится Terminal; missing/deleted/changed/wrong-layer source получает
   `ApplyTerminal` и точный `SaveTerminal(..., nil)` без chunk I/O или upsert.
   Для known state дополнительного lookup нет; NoHome/Terminal не делают
-  Hearth I/O. Скрытые за known NoHome старые невалидные связи — граница repair 4.4.
+  Hearth I/O. Скрытые за known NoHome старые невалидные связи остаются за границей точечного repair 4.4.
 - После подтверждённого DELETE отмена HTTP не прерывает Hearth read/save:
   они используют независимые пятисекундные contexts и прежнюю Fatal-политику.
   Unknown при actual death по-прежнему Fatal. Login lookup не ослабляется.
@@ -844,6 +851,33 @@ material, stamina и object checkpoints по-прежнему могут пот�
   Дополнительные mutex, Game.wg-регистрации и изменения HTTP shutdown не нужны.
   Online-тело и сессия сохраняются; corpse/FX не создаются. Схема и протокол
   не меняются. Результаты проверок записаны в `tasks.md`.
+
+### 2.24 Точечный repair, независимые checkpoints и стоимость (4.4/4.5)
+
+- `LoadHome` сохраняет быстрые пути: known state не делает SQL, валидный
+  Unknown восстанавливается одним `GetCharacterHearth`. Только `sql.ErrNoRows`
+  запускает существующий `GetSavedCharacterHearth` с отдельным timeout 5 секунд.
+  Отсутствие связи устанавливает NoHome без записи; найденная связь проверяется
+  по character ID и составному ключу объекта.
+- `ConstructionSaverDB.RepairInvalidHome` через существующий `WithTx` вызывает
+  `DeleteInvalidCharacterHearth`, принимая 0/1 строк. Writer удаляет только
+  наблюдавшуюся и всё ещё невалидную связь; новая или снова валидная сохраняется.
+  Лишь после успешного commit выполняется `LoadIfUnknown(nil)`. Read/write/commit
+  error и невалидный результат — Fatal. Нет chunk I/O, upsert, новых SQL/schema
+  или подключений к ядру. Настоящее отсутствие стоит два reads, invalid link —
+  два reads и одну repair transaction, каждый с собственным five-second context.
+- Repair ограничен первым разрешением Unknown. Known NoHome/Terminal не
+  перечитываются. После `SaveOrphans` старая связь может указывать на campfire:
+  это не активный дом, и filtered queries не восстановят его после рестарта.
+  Полная очистка SQL-мусора и сканирование непосещённых данных не обещаются.
+- Сохранённые ownership/object и character/material/stamina snapshots остаются
+  независимыми. Потерянный terminal-переход допускает восстановление прежнего
+  saved home; недостроенная сохранённая площадка остаётся площадкой. Finisher
+  не угадывается, финальная ветка и её затраты повторно не применяются.
+- Обычный shutdown сохраняет прежний порядок
+  `SaveAll -> CharacterSaver.Stop -> ChunkManager.Stop`. Проверка с реальным CharacterSaver перечитывает committed
+  ownership и dirty live/raw conversions после final saves. Новых mutex, очередей,
+  flush/drain и метрик нет. Фактические проверки перечислены в `tasks.md`.
 
 ### Проверки для будущей реализации
 

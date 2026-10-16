@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"time"
 
 	constt "origin/internal/const"
@@ -16,6 +17,7 @@ type ConstructionSaver interface {
 	SaveConstruction(context.Context, types.EntityID, *repository.Object, *repository.Object) error
 	SaveOrphans(context.Context, []*repository.Object) error
 	SaveTerminal(context.Context, types.EntityID, ObjectKey, *repository.Object) error
+	RepairInvalidHome(context.Context, types.EntityID, ObjectKey, int) error
 }
 
 type ConstructionSaverDB struct {
@@ -61,6 +63,30 @@ func (s *ConstructionSaverDB) SaveConstruction(ctx context.Context, characterID 
 			Name: constt.LAST_USED_ID, ValueLong: sql.NullInt64{Int64: maxID, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("save hearth object ID high watermark: %w", err)
+		}
+		return nil
+	})
+}
+
+// RepairInvalidHome removes only the observed association while its owner or
+// source remains invalid. It never changes or recreates the source object.
+func (s *ConstructionSaverDB) RepairInvalidHome(ctx context.Context, character types.EntityID, key ObjectKey, hearthType int) error {
+	if s == nil || s.withTx == nil || ctx == nil || !validID(character) ||
+		!validHome(Home{Object: key, Layer: SurfaceLayer}) || hearthType <= 0 || hearthType > math.MaxInt32 {
+		return fmt.Errorf("repair invalid hearth: invalid dependencies or identity")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return s.withTx(ctx, func(q *repository.Queries) error {
+		rows, err := q.DeleteInvalidCharacterHearth(ctx, repository.DeleteInvalidCharacterHearthParams{
+			CharacterID: int64(character), ObjectRegion: key.Region, ObjectID: int64(key.ID),
+			HearthTypeID: hearthType, SurfaceLayer: SurfaceLayer,
+		})
+		if err != nil {
+			return fmt.Errorf("repair invalid hearth owner: %w", err)
+		}
+		if rows < 0 || rows > 1 {
+			return fmt.Errorf("repair invalid hearth owner: expected zero or one association, removed %d", rows)
 		}
 		return nil
 	})

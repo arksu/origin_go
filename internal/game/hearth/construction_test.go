@@ -62,11 +62,12 @@ func (c *constructionChunks) WaitPreloaded(ctx context.Context, coord types.Chun
 }
 
 type constructionReader struct {
-	row    repository.GetCharacterHearthRow
-	err    error
-	found  bool
-	reads  int
-	onRead func()
+	row        repository.GetCharacterHearthRow
+	err        error
+	found      bool
+	reads      int
+	savedReads int
+	onRead     func()
 }
 
 func (r *constructionReader) GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
@@ -196,6 +197,7 @@ func TestConstructionFirstHomeCompletesInSameCall(t *testing.T) {
 			require.True(t, result.OK)
 			require.Equal(t, 1, calls)
 			require.Equal(t, 1, f.reader.reads)
+			require.Equal(t, 1, f.reader.savedReads)
 			home := f.runtime.Index.Snapshot(1)
 			require.Equal(t, hearth.CurrentHome, home.State)
 			require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
@@ -609,6 +611,11 @@ func (s *constructionSaver) SaveOrphans(context.Context, []*repository.Object) e
 	panic("unexpected SaveOrphans")
 }
 
-func (*constructionReader) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
-	panic("unexpected saved hearth query")
+func (r *constructionReader) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+	r.savedReads++
+	return repository.GetSavedCharacterHearthRow{}, sql.ErrNoRows
+}
+
+func (*constructionSaver) RepairInvalidHome(context.Context, types.EntityID, hearth.ObjectKey, int) error {
+	panic("unexpected hearth repair")
 }

@@ -5,12 +5,15 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
 
 	constt "origin/internal/const"
 	"origin/internal/persistence/repository"
+	"origin/internal/types"
 
 	"github.com/stretchr/testify/require"
 )
@@ -155,4 +158,133 @@ func TestConstructionSaverRejectsMissingDependenciesAndIdentity(t *testing.T) {
 	require.Error(t, saver.SaveConstruction(context.Background(), 1, nil, nil))
 	require.Error(t, saver.SaveConstruction(context.Background(), 1, &repository.Object{}, nil))
 	require.Error(t, saver.SaveConstruction(context.Background(), 1, &repository.Object{ID: 10}, &repository.Object{}))
+}
+
+func TestRepairInvalidHomeUsesOnlyConditionalDelete(t *testing.T) {
+	for _, rows := range []int64{0, 1} {
+		t.Run(fmt.Sprintf("rows_%d", rows), func(t *testing.T) {
+			writes, transactions := 0, 0
+			var writeContext context.Context
+			db := constructionExecDB{exec: func(ctx context.Context, query string, args ...any) (sql.Result, error) {
+				writes++
+				require.Same(t, writeContext, ctx)
+				require.NoError(t, ctx.Err())
+				require.Contains(t, query, "-- name: DeleteInvalidCharacterHearth ")
+				require.Equal(t, []any{int64(7), 2, int64(100), 109, SurfaceLayer}, args)
+				return driver.RowsAffected(rows), nil
+			}}
+			saver := &ConstructionSaverDB{withTx: func(ctx context.Context, fn func(*repository.Queries) error) error {
+				transactions++
+				writeContext = ctx
+				deadline, ok := ctx.Deadline()
+				require.True(t, ok)
+				require.InDelta(t, 5, time.Until(deadline).Seconds(), .5)
+				return fn(repository.New(db))
+			}}
+			require.NoError(t, saver.RepairInvalidHome(context.Background(), 7, ObjectKey{Region: 2, ID: 100}, 109))
+			require.Equal(t, 1, transactions)
+			require.Equal(t, 1, writes, "repair must not upsert objects or write an ID watermark")
+			require.ErrorIs(t, writeContext.Err(), context.Canceled)
+		})
+	}
+}
+
+func TestRepairInvalidHomePropagatesTransactionFailuresWithoutRetry(t *testing.T) {
+	for _, scenario := range []string{"begin", "delete", "affected_rows", "commit"} {
+		t.Run(scenario, func(t *testing.T) {
+			failure := errors.New(scenario)
+			writes, transactions, commits := 0, 0, 0
+			db := constructionExecDB{exec: func(context.Context, string, ...any) (sql.Result, error) {
+				writes++
+				if scenario == "delete" {
+					return nil, failure
+				}
+				if scenario == "affected_rows" {
+					return terminalRowsError{err: failure}, nil
+				}
+				return driver.RowsAffected(1), nil
+			}}
+			saver := &ConstructionSaverDB{withTx: func(_ context.Context, fn func(*repository.Queries) error) error {
+				transactions++
+				if scenario == "begin" {
+					return failure
+				}
+				if err := fn(repository.New(db)); err != nil {
+					return err
+				}
+				commits++
+				if scenario == "commit" {
+					return failure
+				}
+				return nil
+			}}
+			err := saver.RepairInvalidHome(context.Background(), 1, ObjectKey{Region: 2, ID: 10}, 109)
+			require.ErrorIs(t, err, failure)
+			require.Equal(t, 1, transactions)
+			if scenario == "begin" {
+				require.Zero(t, writes)
+			} else {
+				require.Equal(t, 1, writes)
+			}
+			if scenario == "commit" {
+				require.Equal(t, 1, commits)
+			} else {
+				require.Zero(t, commits)
+			}
+		})
+	}
+}
+
+func TestRepairInvalidHomeRejectsInvalidAffectedRows(t *testing.T) {
+	for _, rows := range []int64{-1, 2} {
+		t.Run(fmt.Sprintf("rows_%d", rows), func(t *testing.T) {
+			committed := false
+			db := constructionExecDB{exec: func(context.Context, string, ...any) (sql.Result, error) {
+				return driver.RowsAffected(rows), nil
+			}}
+			saver := &ConstructionSaverDB{withTx: func(_ context.Context, fn func(*repository.Queries) error) error {
+				if err := fn(repository.New(db)); err != nil {
+					return err
+				}
+				committed = true
+				return nil
+			}}
+			err := saver.RepairInvalidHome(context.Background(), 1, ObjectKey{Region: 2, ID: 10}, 109)
+			require.ErrorContains(t, err, "expected zero or one association")
+			require.False(t, committed)
+		})
+	}
+}
+
+func TestRepairInvalidHomeHonorsEarlierContextDeadline(t *testing.T) {
+	saver := &ConstructionSaverDB{withTx: func(ctx context.Context, _ func(*repository.Queries) error) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, saver.RepairInvalidHome(ctx, 1, ObjectKey{Region: 2, ID: 10}, 109), context.DeadlineExceeded)
+}
+
+func TestRepairInvalidHomeRejectsInvalidInputBeforeTransaction(t *testing.T) {
+	saver := &ConstructionSaverDB{withTx: func(context.Context, func(*repository.Queries) error) error {
+		t.Fatal("invalid inputs must not begin a transaction")
+		return nil
+	}}
+	key := ObjectKey{Region: 2, ID: 10}
+	var missing *ConstructionSaverDB
+	require.Error(t, missing.RepairInvalidHome(context.Background(), 1, key, 109))
+	require.Error(t, (&ConstructionSaverDB{}).RepairInvalidHome(context.Background(), 1, key, 109))
+	require.Error(t, saver.RepairInvalidHome(nil, 1, key, 109))
+	for _, character := range []types.EntityID{0, math.MaxInt64 + 1} {
+		require.Error(t, saver.RepairInvalidHome(context.Background(), character, key, 109))
+	}
+	for _, invalid := range []ObjectKey{
+		{Region: 2}, {Region: 2, ID: math.MaxInt64 + 1}, {Region: math.MaxInt32 + 1, ID: 10}, {Region: math.MinInt32 - 1, ID: 10},
+	} {
+		require.Error(t, saver.RepairInvalidHome(context.Background(), 1, invalid, 109))
+	}
+	for _, hearthType := range []int{0, -1, math.MaxInt32 + 1} {
+		require.Error(t, saver.RepairInvalidHome(context.Background(), 1, key, hearthType))
+	}
 }

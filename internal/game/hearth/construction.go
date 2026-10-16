@@ -208,7 +208,7 @@ func (r *Runtime) canTransform(id types.EntityID, handle types.Handle, typeID ui
 }
 
 // LoadHome restores unknown ownership metadata. The caller must hold the owning
-// surface shard lock; the synchronous read completes independently of logout.
+// surface shard lock; synchronous reads and repair complete independently of logout.
 func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
 	if r.Index == nil {
 		return errors.New("hearth index is unavailable")
@@ -223,10 +223,10 @@ func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
 		return errors.New("hearth reader is unavailable")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	row, err := r.reader.GetCharacterHearth(ctx, repository.GetCharacterHearthParams{
 		CharacterID: int64(character), HearthTypeID: hearthType, SurfaceLayer: SurfaceLayer,
 	})
+	cancel()
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		r.logger.Fatal("hearth lookup failed", zap.Error(err))
 		return err
@@ -234,6 +234,31 @@ func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
 	var home *Home
 	if err == nil {
 		home = &Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		saved, err := r.reader.GetSavedCharacterHearth(ctx, int64(character))
+		cancel()
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			r.logger.Fatal("saved hearth lookup failed", zap.Error(err))
+			return err
+		}
+		if err == nil {
+			key := ObjectKey{Region: saved.ObjectRegion, ID: types.EntityID(saved.ObjectID)}
+			if saved.CharacterID != int64(character) || !validHome(Home{Object: key, Layer: SurfaceLayer}) {
+				err := fmt.Errorf("invalid saved hearth association")
+				r.logger.Fatal("invalid saved hearth lookup result", zap.Error(err))
+				return err
+			}
+			if r.saver == nil {
+				err := fmt.Errorf("hearth saver is unavailable")
+				r.logger.Fatal("hearth repair failed", zap.Error(err))
+				return err
+			}
+			if err := r.saver.RepairInvalidHome(context.Background(), character, key, hearthType); err != nil {
+				r.logger.Fatal("hearth repair failed", zap.Error(err))
+				return err
+			}
+		}
 	}
 	if err := r.Index.LoadIfUnknown(character, home); err != nil {
 		r.logger.Fatal("invalid hearth lookup result", zap.Error(err))

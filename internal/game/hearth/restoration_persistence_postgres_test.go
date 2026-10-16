@@ -113,6 +113,10 @@ func TestHearthRestorationPostgresNormalizesBatchAndSurvivesRestart(t *testing.T
 	}
 	_, err = q.GetCharacterHearth(ctx, hearthGetParams(2))
 	require.ErrorIs(t, err, sql.ErrNoRows)
+	stale, err := q.GetSavedCharacterHearth(ctx, 2)
+	require.NoError(t, err, "orphan normalization may leave a stale association until lazy owner repair")
+	require.Equal(t, int64(102), stale.ObjectID)
+	require.Equal(t, sql.NullInt32{Int32: int32(campfire.DefID), Valid: true}, stale.TypeID)
 
 	freshChunk := loadHearthRestorationPostgresChunk(t, q)
 	freshWorld := ecs.NewWorldForTesting()
@@ -131,6 +135,12 @@ func TestHearthRestorationPostgresNormalizesBatchAndSurvivesRestart(t *testing.T
 	for _, id := range []types.EntityID{102, 103, 104} {
 		require.Equal(t, campfire.DefID, freshChunk.GetRawObjectByID(id).TypeID)
 	}
+	require.False(t, restarted.Index.Snapshot(2).CanReturn(), "a stale link to a durable campfire never restores an active home")
+	_, owned = restarted.Index.Owner(hearth.ObjectKey{Region: 1, ID: 102})
+	require.False(t, owned)
+	staleAfterRestart, err := q.GetSavedCharacterHearth(ctx, 2)
+	require.NoError(t, err, "chunk restoration does not scan non-Hearth associations for repair")
+	require.Equal(t, stale, staleAfterRestart)
 }
 
 func TestHearthRestorationPostgresOrphanBatchRollsBackOnLaterFailure(t *testing.T) {

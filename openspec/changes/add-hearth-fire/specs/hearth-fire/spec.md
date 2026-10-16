@@ -162,7 +162,7 @@ REST character deletion SHALL execute the account-scoped soft delete and Hearth 
 - **WHEN** a confirmed REST deletion has Unknown runtime ownership
 - **THEN** cleanup SHALL read the saved association with an independent five-second context, joining the object by both region and ID without filtering out the deleted owner
 - **AND** a valid home SHALL use existing terminal conversion, an absent association SHALL become Terminal without conversion, and an unavailable or invalid source SHALL receive exact association-only cleanup
-- **AND** known CurrentHome, NoHome and Terminal SHALL retain runtime authority without this lookup; broader repair of invalid links hidden by known NoHome remains separate
+- **AND** known CurrentHome, NoHome and Terminal SHALL retain runtime authority without this lookup; lazy repair SHALL NOT revisit invalid links hidden by known NoHome
 
 #### Scenario: Deletion overlaps admitted construction
 - **WHEN** REST deletion overlaps an already admitted Hearth completion
@@ -482,7 +482,8 @@ The database SHALL be assumed available. Any actual Hearth database read, write 
 
 #### Scenario: A home query finds no association
 - **WHEN** a home lookup reports expected absence through `sql.ErrNoRows`
-- **THEN** the result SHALL establish `NoHome` and the server SHALL continue normally
+- **THEN** Unknown ownership SHALL resolve any saved association through the lazy repair requirement before establishing `NoHome`
+- **AND** confirmed absence SHALL remain an ordinary result
 
 ### Requirement: Home metadata preserves known runtime state
 
@@ -556,6 +557,25 @@ The final construction cycle SHALL validate and prepare the runtime data needed 
 - **WHEN** the prepared source or active ownership no longer matches immediately before final processing
 - **THEN** the final cycle SHALL be revalidated or rejected without applying costs or an outdated ownership change
 
+### Requirement: Unknown-home lookup repairs only its observed invalid association
+
+When `LoadHome` receives `sql.ErrNoRows` from `GetCharacterHearth` for Unknown ownership, it SHALL read the existing `GetSavedCharacterHearth` before publishing NoHome. If a saved association exists, it SHALL validate its character and composite object key and synchronously invoke existing `DeleteInvalidCharacterHearth` through the Hearth persistence component. The exact observed association SHALL be removed only while it remains invalid. Zero or one affected row SHALL be accepted; malformed identity, another row count, read/write or commit failure SHALL be fatal. Each read and the repair transaction SHALL use an independent five-second context under the existing surface lock. No object/chunk loading, upsert, SQL retry, new SQL/schema or core hook SHALL be added.
+
+#### Scenario: Unknown owner has an invalid saved link
+- **WHEN** the filtered home lookup finds no valid home but the saved lookup finds an association
+- **THEN** conditional repair SHALL finish before LoadIfUnknown publishes NoHome
+- **AND** a changed association or a now-valid source SHALL survive the conditional delete
+
+#### Scenario: No saved association exists
+- **WHEN** both lookups report expected absence
+- **THEN** NoHome SHALL be installed without a write
+- **AND** a valid first lookup SHALL still require only one read and known state SHALL require no SQL
+
+#### Scenario: A converted orphan retains an old SQL link
+- **WHEN** orphan normalization leaves a saved association pointing to the resulting campfire
+- **THEN** filtered restoration SHALL continue to yield no active home after restart
+- **AND** lazy repair SHALL NOT promise a global cleanup, scan unvisited data or reread known NoHome/Terminal
+
 ### Requirement: Recovery accepts independent checkpoints
 
 After a process failure, recovery SHALL use saved character, object, and ownership data; recent progress or a Hearth operation interrupted before its synchronous commit MAY roll back. These snapshots need not form one atomic checkpoint. Invalid associations SHALL yield no active home. A saved Hearth without valid ownership SHALL become an unlit campfire before visibility. Recovery SHALL NOT infer an owner, upgrade a campfire, or replay an unsaved final cycle. Ordinary material and stamina durability SHALL remain unchanged.
@@ -584,6 +604,18 @@ After a process failure, recovery SHALL use saved character, object, and ownersh
 - **WHEN** ordinary shutdown or process failure interrupts a pending owning operation before its Hearth transaction commits
 - **THEN** the unsaved portion MAY be lost under the same recovery rules
 - **AND** shutdown SHALL preserve ordinary final-save ordering without a Hearth dirty flush or new operation drain and SHALL NOT claim a fully atomic world checkpoint
+
+### Requirement: Synchronous cost and retained metadata are explicit
+
+The five-second contexts SHALL bound individual Hearth reads or transactions, not the complete owning call. Waiting for the existing persistence mutex precedes those contexts and serial waits accumulate, potentially blocking every world layer. Activation work SHALL remain limited to the current chunk's raw candidates and returned owners, with one unresolved-owner batch query and one orphan transaction; this SHALL NOT imply a fixed numerical Hearth candidate cap. Index memory SHALL grow with encountered characters retained for process lifetime, not only concurrent players. No new save queue, production metrics, per-player labels or world scan SHALL be introduced for cost reporting.
+
+#### Scenario: Several synchronous operations run in one owning call
+- **WHEN** preparation waits for a persistence gate and then reads, loads or saves
+- **THEN** the overall delay MAY exceed five seconds despite the separate operation deadlines
+
+#### Scenario: More characters have visited than are currently online
+- **WHEN** previously encountered characters leave the world
+- **THEN** their metadata SHALL remain in the index and memory reporting SHALL account for those retained entries
 
 ### Requirement: Deployment starts from the approved clean database
 

@@ -13,9 +13,10 @@
 структурные проверки ручной постановки и строительства 3.4, подготовка
 metadata/нормализация перед activation 3.5 и синхронное сохранение стройки 4.3.
 Синхронная очистка при смерти и REST-удалении реализована в 4.1–4.3a;
-проверки этого этапа фиксируются отдельно в `tasks.md`.
+точечный repair, проверки восстановления/final saves и границы стоимости — в 4.4–4.5.
+Проверки этих этапов фиксируются отдельно в `tasks.md`.
 Фактические SQL и runtime API описаны в
-`docs/features/hearth_fire.md`, разделах 2.13–2.23:
+`docs/features/hearth_fire.md`, разделах 2.13–2.24:
 `character_hearth.sql`, migration/schema и `internal/game/hearth/index.go`.
 Ранее прошли целевые Hearth/construction tests, unit-тесты записи и полный
 `GOCACHE=/tmp/origin-hearth-go-cache make test`, включая этап 4.3;
@@ -254,7 +255,7 @@ pending phase, admission ticket, раздельного prepare/commit прот�
 сохранённого finisher. Нефинальные циклы и результаты без capability идут
 по прежнему пути. Это read-side подготовки; синхронная запись описана в 4.3,
 pre-activation hydration описана в 3.5, смерть — в 4.1/4.3a; REST cleanup описан в 4.2;
-broader restart repair остаётся будущим этапом.
+точечный repair описан в 4.4.
 
 **Проверки.** Ставлю preflight именно до `processOneBuildItem` финального цикла,
 а не после списания. Проверяю reservation/destruction guards, смену дома между
@@ -309,12 +310,12 @@ Pin удерживается через ожидание, callback заверш�
 **Граница.** Использую существующие dirty/save/activation правила чанка.
 Не маскирую ещё не сохранённую строку API с семантикой committed replacement
 и не добавляю отдельное хранилище конверсий. Связь сначала меняется в runtime,
-затем сохраняется по 4.3; общее восстановление после рестарта остаётся в 4.4.
+затем сохраняется по 4.3; восстановление после рестарта описано в 4.4.
 
 **Проверки.** Готовый raw, отсутствующий/ещё загружаемый чанк, занятый I/O gate,
 освобождение pin при отказе callback и после успеха. Activation использует
 уже превращённый campfire, сохраняя identity и не активируя дальний AOI
-в момент замены. Полное restart repair проверяется отдельно в 4.4.
+в момент замены. Границы точечного repair проверяются отдельно в 4.4.
 
 ### 2.5. Совместное завершение и повторы
 
@@ -608,7 +609,7 @@ surface Hearth гидратируется и конвертируется сущ
 `ApplyTerminal` и точный `SaveTerminal(..., nil)` без chunk I/O. Reader errors,
 malformed results и cleanup failures — Fatal. Unknown при actual death остаётся
 Fatal; известные NoHome/Terminal не делают Hearth I/O. Скрытые за известным
-NoHome старые невалидные SQL-связи относятся к repair 4.4.
+NoHome старые невалидные SQL-связи остаются за границей точечного repair 4.4.
 
 **Граница.** После подтверждённого DELETE Hearth read/save используют независимые
 пятисекундные contexts; отмена HTTP не прерывает cleanup. 204 возвращается после
@@ -641,7 +642,7 @@ composite object identity, invalid source без upsert, cancellation после
 отличное от одного, также Fatal. Runtime rollback, SQL retry, save job queue
 и commit probing не добавляются. Персонаж, инвентари, материалы, stamina
 и труп не входят в транзакцию. Schema, protocol и recipe не меняются.
-Сохранение смерти/REST реализовано в 4.3a; restart repair остаётся задачей 4.4.
+Сохранение смерти/REST реализовано в 4.3a; точечный repair описан в 4.4.
 
 **Предыдущие проверки.** Focused Hearth/construction и writer unit tests,
 а также полный `make test` ранее прошли; проверялись ошибки записи/сериализации,
@@ -677,36 +678,61 @@ result — Fatal; синхронное ожидание может задерж�
 
 ### 4.4. Восстановление и остановка
 
-**Что сделаю.** Дополню восстановление task 3.5 проверками invalid associations
-и независимых character/object snapshots. Принимается связь живого персонажа
-с undeleted surface Hearth. Невалидная связь не даёт home; её условный repair
-исполняется синхронно owning path по тем же five-second/fatal правилам.
-Осиротевший Hearth уже должен быть сохранён как campfire до activation.
-Не сканирую мир на каждом tick и не загружаю его целиком при старте.
+**Точечный repair.** Только `LoadHome` для Unknown после `GetCharacterHearth`
+с `sql.ErrNoRows` читает существующий `GetSavedCharacterHearth`. Отсутствие
+связи устанавливает NoHome без записи. Найденный character/composite key
+проверяется и передаётся в `ConstructionSaverDB.RepairInvalidHome` через
+существующий saver-контракт. Writer вызывает готовый `DeleteInvalidCharacterHearth`
+в обычном `WithTx`: допустимы 0/1 строк, новая или снова валидная связь сохраняется.
+`LoadIfUnknown(nil)` выполняется только после успешного commit. Каждый read
+и transaction получает собственный five-second context под `surface.mu`.
+Ошибка read/write/commit или невалидный результат — Fatal.
+
+**Стоимость lookup.** Known state — ноль SQL; валидный Unknown — один read;
+настоящее отсутствие — два reads без записи; невалидная связь — два reads
+и условный repair. Нет chunk I/O, object upsert, SQL retry, новых запросов,
+schema или подключения к ядру.
+
+**Граница.** Это очистка встреченной связи, а не полная санация БД. Known
+NoHome/Terminal не перечитываются. `SaveOrphans` может оставить старую связь
+на уже преобразованный campfire: filtered queries и повторный restart не
+дают ему стать домом. Осиротевший Hearth сохраняется как campfire до activation.
+Непосещённые данные не сканируются, мир целиком не загружается.
 
 **Допуск сбоев.** Не угадываю утраченного finisher, не повышаю campfire в Hearth
 и не переигрываю финальную ветку. Ошибка процесса до commit может потерять
 последний переход; обычные character/material/stamina/corpse snapshots также
 не образуют общий atomic checkpoint.
 
-**Shutdown.** Сохраняется ordinary shutdown/final-save ordering. Hearth-specific
-flush, dirty drain, новый global coordinator или удержание dead bodies не нужны.
+**Shutdown.** Сохраняется ordinary shutdown/final-save ordering. Регрессия с
+реальным CharacterSaver проверяет `SaveAll -> CharacterSaver.Stop -> ChunkManager.Stop`
+и перечитывает ownership/conversions после завершения. Hearth-specific flush,
+dirty drain, новый global coordinator или удержание dead bodies не нужны.
 
-**Проверки.** Частичные saved snapshots, invalid link, повтор загрузки и
-остановка с незавершённым owning вызовом. Проверки допускают потерю недавнего
-прогресса и не обещают полное сохранение последнего tick.
+**Проверки.** Runtime repair missing/deleted/wrong-type/wrong-layer sources,
+точный ключ, отсутствие повторного I/O, pending state и Fatal failures.
+Свежий runtime восстанавливает прежний saved home после потерянного terminal
+перехода; сохранённый новый дом допускает старый character/material/stamina
+checkpoint; незавершённая saved стройка не получает выдуманного finisher.
+Проверки допускают потерю недавнего прогресса, не обещая атомарный мир или
+полное сохранение последнего tick. Результаты запусков фиксируются в `tasks.md`.
 
 ### 4.5. Стоимость и реальная граница потерь
 
-**Что сделаю.** Явно документирую выбранные цены: синхронные чтения, ожидание
+**Стоимость.** Синхронные чтения, ожидание
 чанка и транзакции под surface lock блокируют весь game loop; их задержки
 суммируются. Команды движения/отмены ждут возврата текущего вызова. Индекс
 хранит встреченные записи до конца процесса, поэтому его память растёт.
+Пять секунд ограничивают отдельный read/transaction, а не весь owning call;
+ожидание `PinPersistenceBlocking` на существующем mutex находится вне этих contexts.
 
 **Граница.** Нет Hearth save-lag queue, dirty-map metrics или flush/drain.
-Работа hydration ограничена текущими raw кандидатами, без per-object SQL,
-world scan или goroutine на каждого игрока. При оценке 30 000 CCU измеряю
-фактическую задержку и размер индекса, не обещаю фиксированную память.
+Работа hydration пропорциональна текущим raw objects/candidates и returned
+owners: один unresolved-owner batch и одна orphan transaction. Фиксированного
+численного Hearth candidate budget нет. Нет per-object owner lookup,
+world scan или goroutine на каждого игрока. Память индекса зависит от всех
+встреченных персонажей, а не текущего online. Локальный microbenchmark не
+подтверждает нагрузку 30 000 CCU или фиксированный объём памяти.
 
 **Проверки.** Стройка возвращает успех после commit; orphan normalization
 сохраняется до raw/ECS изменения; death cleanup ждёт commit до возврата

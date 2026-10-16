@@ -19,8 +19,8 @@ and construction saving.
 Its verification is tracked below. Task 3.5 delivers synchronous chunk hydration and
 orphan normalization; its completed verification is recorded below. Task 4.1 and the
 death portion of 4.3a add synchronous permanent-death cleanup. Task 4.2 connects
-REST deletion through the same cleanup. Broader restart repair and the remaining
-gameplay remain separate stages.
+REST deletion through the same cleanup. Tasks 4.4/4.5 add lazy repair, recovery/final-save checks and cost documentation.
+The remaining gameplay stays separate.
 This replaces the former durable-lifecycle plan:
 construction changes runtime first, then returns success after its database commit.
 Other independent saves may lose recent progress on a crash. Runtime
@@ -89,9 +89,9 @@ REST cleanup is tracked below; release tasks remain unchecked.
 - [x] 4.3 Save completed construction synchronously after final-branch processing, transforms and index replacement. Serialize final objects, then use one existing WithTx with a five-second context for the new Hearth, previous campfire if present, character_hearth and durable ID watermark. Return success after commit; retain object/chunk dirty flags and the raw-chunk pin until saving returns. Serialization/SQL/commit errors and an association affected-row count other than one are fatal; no version acknowledgment, runtime rollback, SQL retry or save queue.
 - [x] 4.3a Complete synchronous death/deletion persistence on the owning surface path.
   - [x] Death: save an optional campfire conversion and exact matching association removal in one five-second transaction through existing SQL. Retain the chunk pin until saving returns; deleted, missing, changed or quarantined objects receive association-only cleanup. Known NoHome requires no Hearth I/O; Unknown at actual death is fatal. Test atomicity, rollback, restart, identity checks, idempotence and fatal failures.
-  - [x] REST deletion: reuse synchronous cleanup after confirmed authorized deletion and saved-association resolution for offline Unknown owners. Independent five-second Hearth contexts finish after HTTP cancellation; known NoHome/Terminal perform no Hearth I/O and hidden invalid links remain task 4.4. No asynchronous saver, dirty revisions, retry or acknowledgment.
-- [ ] 4.4 Add broader restart repair and ordinary shutdown coverage around task 3.5 normalization. Verify independent checkpoints restore a usable single-home runtime without journal replay; execute any Hearth repair SQL synchronously on the owner path and retain existing shutdown/final-save ordering without a feature dirty flush or new global barrier.
-- [ ] 4.5 Document accepted crash-loss boundaries, synchronous SQL ordering, restart normalization, whole-game-loop blocking and process-lifetime index growth. Verify Hearth database/invalid-result errors stop the server, the preceding REST DELETE preserves HTTP 500 on failure, and work is limited to current candidates, without save-lag queue metrics, per-player labels or a world scan.
+  - [x] REST deletion: reuse synchronous cleanup after confirmed authorized deletion and saved-association resolution for offline Unknown owners. Independent five-second Hearth contexts finish after HTTP cancellation; known NoHome/Terminal perform no Hearth I/O; hidden invalid links remain outside the lazy repair boundary in 4.4. No asynchronous saver, dirty revisions, retry or acknowledgment.
+- [x] 4.4 Add lazy repair only after Unknown LoadHome receives a filtered miss: existing saved lookup, exact conditional DeleteInvalidCharacterHearth through the existing saver/WithTx, then NoHome. Preserve known-state zero-I/O and accept residual orphan-to-campfire SQL links without restoring ownership. Test invalid sources, conditional repair, independent checkpoints and ordinary shutdown with a real character saver. Reuse existing locks, gates, pins and final-save ordering; no new SQL/schema, core hook, world scan, dirty flush or barrier.
+- [x] 4.5 Document accepted crash-loss boundaries and synchronous ordering; five seconds bounds each operation, not total owner-call latency or I/O-mutex waiting. Activation work scales with current chunk candidates without a fixed numeric Hearth cap; index memory follows encountered characters for process lifetime. Verify fatal Hearth read/repair/save errors and the REST DELETE HTTP 500 exception through existing suites plus new repair tests. Add no metrics, per-player labels, scan or persistence framework.
 
 Task 4.1 and the death portion of 4.3a verification: focused runtime/writer tests
 and PostgreSQL integration tests passed, including real death through Update,
@@ -132,6 +132,25 @@ passed with PostgreSQL; the final real-DELETE-failure regression also passed
 focused normal and race runs. Strict OpenSpec validation and `git diff --check`
 passed. Independent code review returned Approve with no Critical or Important
 findings and independently passed focused PostgreSQL race tests.
+
+Tasks 4.4/4.5 verification: focused runtime/writer and PostgreSQL recovery tests
+passed. Coverage includes exact conditional repair of invalid sources, separate
+five-second contexts, commit-before-NoHome, retained PendingTerminal, cached-state
+I/O counts and Fatal failures. Restart tests preserve independent character,
+material and Hearth checkpoints, an incomplete saved build site and harmless
+residual orphan associations. The ordinary shutdown regression uses a real
+CharacterSaver, blocks its PostgreSQL write and verifies chunk final saves wait;
+fresh loading checks character state, current ownership and live/raw conversions.
+A temporary source overlay reversing CharacterSaver.Stop/ChunkManager.Stop made
+this regression fail as expected, without changing production shutdown code.
+`GOCACHE=/private/tmp/origin-go-build-cache make test` and
+`go test -race ./internal/game/hearth ./internal/game ./internal/restapi -count=1`
+passed with `ORIGIN_OBJECT_HEALTH_TEST_DSN` set to an isolated temporary PostgreSQL.
+Protobuf/sqlc regeneration produced no diff. Strict OpenSpec validation and
+`git diff --check` passed. Production changes are limited to the Hearth lookup
+and its existing saver; SQL, schema, protocol and core lifecycle are unchanged.
+Independent code review returned Approve with no material findings and
+independently passed focused runtime/recovery tests with PostgreSQL.
 
 ## 5. Return, Interruption, and Normal Login
 

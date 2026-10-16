@@ -41,6 +41,10 @@ func (restorationSaver) SaveConstruction(context.Context, types.EntityID, *repos
 	panic("unexpected construction save")
 }
 
+func (restorationSaver) RepairInvalidHome(context.Context, types.EntityID, hearth.ObjectKey, int) error {
+	panic("unexpected hearth repair")
+}
+
 func restorationChunk(f *constructionFixture, ids ...int64) *core.Chunk {
 	chunk := core.NewChunk(types.ChunkCoord{}, 1, hearth.SurfaceLayer, constt.ChunkSize)
 	chunk.SetState(types.ChunkStatePreloaded)

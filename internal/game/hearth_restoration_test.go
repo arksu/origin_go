@@ -55,6 +55,10 @@ func (*hearthActivationSaver) SaveTerminal(context.Context, types.EntityID, hear
 	panic("unexpected terminal save")
 }
 
+func (*hearthActivationSaver) RepairInvalidHome(context.Context, types.EntityID, hearth.ObjectKey, int) error {
+	panic("unexpected hearth repair")
+}
+
 func (s *hearthActivationSaver) SaveOrphans(_ context.Context, objects []*repository.Object) error {
 	s.calls++
 	if s.onSave != nil {

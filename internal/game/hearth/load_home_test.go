@@ -3,6 +3,7 @@ package hearth
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"math"
 	"testing"
@@ -20,6 +21,24 @@ type homeReaderFunc func(context.Context, repository.GetCharacterHearthParams) (
 
 func (f homeReaderFunc) GetCharacterHearth(ctx context.Context, params repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
 	return f(ctx, params)
+}
+
+type savedHomeReader struct {
+	homeReaderFunc
+	saved func(context.Context, int64) (repository.GetSavedCharacterHearthRow, error)
+}
+
+func (r savedHomeReader) GetSavedCharacterHearth(ctx context.Context, character int64) (repository.GetSavedCharacterHearthRow, error) {
+	return r.saved(ctx, character)
+}
+
+type homeRepairSaver struct {
+	ConstructionSaver
+	repair func(context.Context, types.EntityID, ObjectKey, int) error
+}
+
+func (s homeRepairSaver) RepairInvalidHome(ctx context.Context, character types.EntityID, key ObjectKey, hearthType int) error {
+	return s.repair(ctx, character, key, hearthType)
 }
 
 type homeFatalHook func(*zapcore.CheckedEntry, []zapcore.Field)
@@ -60,11 +79,19 @@ func TestLoadHomeHydratesBothIndexesAndCachesResult(t *testing.T) {
 }
 
 func TestLoadHomeAbsentRowCachesNoHome(t *testing.T) {
-	reads := 0
-	runtime := NewRuntime(nil, nil, homeReaderFunc(func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
-		reads++
-		return repository.GetCharacterHearthRow{}, sql.ErrNoRows
-	}), nil, nil, nil, nil, nil)
+	reads, savedReads := 0, 0
+	reader := savedHomeReader{
+		homeReaderFunc: func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
+			reads++
+			return repository.GetCharacterHearthRow{}, sql.ErrNoRows
+		},
+		saved: func(_ context.Context, character int64) (repository.GetSavedCharacterHearthRow, error) {
+			savedReads++
+			require.Equal(t, int64(1), character)
+			return repository.GetSavedCharacterHearthRow{}, sql.ErrNoRows
+		},
+	}
+	runtime := NewRuntime(nil, nil, reader, nil, nil, nil, nil, nil)
 	require.NoError(t, runtime.LoadHome(1, 109))
 	loaded := runtime.Index.Snapshot(1)
 	require.Equal(t, NoHome, loaded.State)
@@ -72,19 +99,27 @@ func TestLoadHomeAbsentRowCachesNoHome(t *testing.T) {
 	require.Empty(t, runtime.Index.owners)
 	require.NoError(t, runtime.LoadHome(1, 109))
 	require.Equal(t, 1, reads)
+	require.Equal(t, 1, savedReads)
 	require.Equal(t, loaded, runtime.Index.Snapshot(1))
 }
 
 func TestLoadHomeKnownRuntimeStateNeedsNoReader(t *testing.T) {
-	for _, state := range []string{"no_home", "current_home"} {
+	for _, state := range []string{"no_home", "current_home", "pending_no_home", "pending_current_home", "terminal"} {
 		t.Run(state, func(t *testing.T) {
 			runtime := NewRuntime(nil, nil, nil, nil, nil, nil, nil, nil)
 			var home *Home
-			if state == "current_home" {
+			if state == "current_home" || state == "pending_current_home" {
 				value := testHome(100)
 				home = &value
 			}
-			known := hydrate(t, runtime.Index, 1, home)
+			hydrate(t, runtime.Index, 1, home)
+			if state == "pending_no_home" || state == "pending_current_home" {
+				require.NoError(t, runtime.Index.MarkTerminalPending(1))
+			} else if state == "terminal" {
+				_, err := runtime.Index.ApplyTerminal(1)
+				require.NoError(t, err)
+			}
+			known := runtime.Index.Snapshot(1)
 			require.NoError(t, runtime.LoadHome(1, 109))
 			require.Equal(t, known, runtime.Index.Snapshot(1))
 		})
@@ -95,7 +130,7 @@ func TestLoadHomeMissingDependenciesDoNotRead(t *testing.T) {
 	reads := 0
 	reader := homeReaderFunc(func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
 		reads++
-		return repository.GetCharacterHearthRow{}, sql.ErrNoRows
+		return repository.GetCharacterHearthRow{CharacterID: 1, ObjectID: 100}, nil
 	})
 	runtime := NewRuntime(nil, nil, reader, nil, nil, nil, nil, nil)
 	index := runtime.Index
@@ -109,7 +144,7 @@ func TestLoadHomeMissingDependenciesDoNotRead(t *testing.T) {
 	runtime.reader = reader
 	require.NoError(t, runtime.LoadHome(1, 109))
 	require.Equal(t, 1, reads)
-	require.Equal(t, NoHome, index.Snapshot(1).State)
+	require.Equal(t, CurrentHome, index.Snapshot(1).State)
 }
 
 func TestLoadHomeHydratesPendingTerminalMetadata(t *testing.T) {
@@ -183,6 +218,165 @@ func TestLoadHomeFatalFailuresReturnErrors(t *testing.T) {
 			require.ErrorIs(t, runtime.LoadHome(1, 109), scenario.want)
 			require.Equal(t, 1, fatals, "lookup errors must reach the fatal logger hook")
 			require.Equal(t, Unknown, runtime.Index.Snapshot(1).State)
+		})
+	}
+}
+
+func TestLoadHomeWaitsForRepairBeforeCachingAbsence(t *testing.T) {
+	const character types.EntityID = 72
+	const hearthType = 109
+	key := ObjectKey{Region: 5, ID: 391}
+	reads, savedReads, writes, transactions := 0, 0, 0, 0
+	var readContext, savedContext, writeContext context.Context
+	var readStartErr, savedStartErr error
+	var savedCharacter int64
+	var query string
+	var args []any
+	reader := savedHomeReader{
+		homeReaderFunc: func(ctx context.Context, _ repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
+			reads++
+			readContext = ctx
+			readStartErr = ctx.Err()
+			return repository.GetCharacterHearthRow{}, sql.ErrNoRows
+		},
+		saved: func(ctx context.Context, id int64) (repository.GetSavedCharacterHearthRow, error) {
+			savedReads++
+			savedContext, savedCharacter = ctx, id
+			savedStartErr = ctx.Err()
+			return repository.GetSavedCharacterHearthRow{CharacterID: id, ObjectRegion: key.Region, ObjectID: int64(key.ID)}, nil
+		},
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	defer close(release)
+	db := constructionExecDB{exec: func(_ context.Context, statement string, params ...any) (sql.Result, error) {
+		writes++
+		query, args = statement, params
+		return driver.RowsAffected(1), nil
+	}}
+	saver := &ConstructionSaverDB{withTx: func(ctx context.Context, fn func(*repository.Queries) error) error {
+		transactions++
+		writeContext = ctx
+		if err := fn(repository.New(db)); err != nil {
+			return err
+		}
+		close(entered)
+		<-release
+		return nil
+	}}
+	runtime := NewRuntime(nil, nil, reader, nil, saver, nil, nil, nil)
+	result := make(chan error, 1)
+	go func() { result <- runtime.LoadHome(character, hearthType) }()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("repair did not reach commit")
+	}
+	require.Equal(t, int64(character), savedCharacter)
+	require.Equal(t, 1, reads)
+	require.Equal(t, 1, savedReads)
+	require.Equal(t, 1, writes)
+	require.Equal(t, 1, transactions)
+	require.NoError(t, readStartErr)
+	require.NoError(t, savedStartErr, "the fallback read must not inherit the completed first read context")
+	require.Contains(t, query, "-- name: DeleteInvalidCharacterHearth ")
+	require.Equal(t, []any{int64(character), key.Region, int64(key.ID), hearthType, SurfaceLayer}, args)
+	for _, ctx := range []context.Context{readContext, savedContext, writeContext} {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.InDelta(t, 5, time.Until(deadline).Seconds(), .5)
+	}
+	require.NotSame(t, readContext, savedContext)
+	require.NotSame(t, savedContext, writeContext)
+	require.ErrorIs(t, readContext.Err(), context.Canceled)
+	require.ErrorIs(t, savedContext.Err(), context.Canceled)
+	require.NoError(t, writeContext.Err(), "repair must not inherit either completed read context")
+	require.Equal(t, Unknown, runtime.Index.Snapshot(character).State)
+	require.Empty(t, runtime.Index.owners)
+	require.NoError(t, runtime.Index.MarkTerminalPending(character))
+	select {
+	case err := <-result:
+		t.Fatalf("LoadHome returned before repair commit: %v", err)
+	default:
+	}
+	release <- struct{}{}
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("LoadHome did not finish after repair commit")
+	}
+	loaded := runtime.Index.Snapshot(character)
+	require.Equal(t, NoHome, loaded.State)
+	require.True(t, loaded.PendingTerminal)
+	require.False(t, loaded.CanAcquire())
+	require.False(t, loaded.CanReturn())
+	require.ErrorIs(t, writeContext.Err(), context.Canceled)
+	require.NoError(t, runtime.LoadHome(character, hearthType))
+	require.Equal(t, 1, reads)
+	require.Equal(t, 1, savedReads)
+	require.Equal(t, 1, writes)
+}
+
+func TestLoadHomeSavedAssociationFailuresAreFatal(t *testing.T) {
+	databaseErr := errors.New("saved association read failed")
+	repairErr := errors.New("repair commit failed")
+	valid := repository.GetSavedCharacterHearthRow{CharacterID: 1, ObjectRegion: 2, ObjectID: 100}
+	for _, scenario := range []struct {
+		name         string
+		row          repository.GetSavedCharacterHearthRow
+		readErr      error
+		repairErr    error
+		missingSaver bool
+		want         error
+	}{
+		{name: "read_error", readErr: databaseErr, want: databaseErr},
+		{name: "read_timeout", readErr: context.DeadlineExceeded, want: context.DeadlineExceeded},
+		{name: "wrong_character", row: repository.GetSavedCharacterHearthRow{CharacterID: 2, ObjectID: 100}},
+		{name: "missing_object", row: repository.GetSavedCharacterHearthRow{CharacterID: 1}},
+		{name: "negative_object", row: repository.GetSavedCharacterHearthRow{CharacterID: 1, ObjectID: -1}},
+		{name: "region_overflow", row: repository.GetSavedCharacterHearthRow{CharacterID: 1, ObjectRegion: math.MaxInt32 + 1, ObjectID: 100}},
+		{name: "region_underflow", row: repository.GetSavedCharacterHearthRow{CharacterID: 1, ObjectRegion: math.MinInt32 - 1, ObjectID: 100}},
+		{name: "missing_saver", row: valid, missingSaver: true},
+		{name: "repair_error", row: valid, repairErr: repairErr, want: repairErr},
+		{name: "repair_timeout", row: valid, repairErr: context.DeadlineExceeded, want: context.DeadlineExceeded},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			fatals, reads, savedReads, repairs := 0, 0, 0, 0
+			logger := zap.NewNop().WithOptions(zap.WithFatalHook(homeFatalHook(func(*zapcore.CheckedEntry, []zapcore.Field) { fatals++ })))
+			reader := savedHomeReader{
+				homeReaderFunc: func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
+					reads++
+					return repository.GetCharacterHearthRow{}, sql.ErrNoRows
+				},
+				saved: func(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+					savedReads++
+					return scenario.row, scenario.readErr
+				},
+			}
+			var saver ConstructionSaver = homeRepairSaver{repair: func(context.Context, types.EntityID, ObjectKey, int) error {
+				repairs++
+				return scenario.repairErr
+			}}
+			if scenario.missingSaver {
+				saver = nil
+			}
+			runtime := NewRuntime(nil, nil, reader, nil, saver, nil, nil, logger)
+			require.NoError(t, runtime.Index.MarkTerminalPending(1))
+			err := runtime.LoadHome(1, 109)
+			require.Error(t, err)
+			if scenario.want != nil {
+				require.ErrorIs(t, err, scenario.want)
+			}
+			require.Equal(t, 1, fatals)
+			require.Equal(t, 1, reads)
+			require.Equal(t, 1, savedReads)
+			if scenario.repairErr != nil {
+				require.Equal(t, 1, repairs)
+			} else {
+				require.Zero(t, repairs)
+			}
+			require.Equal(t, Snapshot{State: Unknown, PendingTerminal: true}, runtime.Index.Snapshot(1))
+			require.Empty(t, runtime.Index.owners)
 		})
 	}
 }

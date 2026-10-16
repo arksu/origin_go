@@ -476,5 +476,9 @@ func (*hearthBuildSaver) SaveTerminal(context.Context, types.EntityID, hearth.Ob
 }
 
 func (*hearthBuildLookup) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
-	panic("unexpected saved hearth query")
+	return repository.GetSavedCharacterHearthRow{}, sql.ErrNoRows
+}
+
+func (*hearthBuildSaver) RepairInvalidHome(context.Context, types.EntityID, hearth.ObjectKey, int) error {
+	panic("unexpected hearth repair")
 }
