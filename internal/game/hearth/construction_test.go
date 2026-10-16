@@ -156,9 +156,7 @@ func newConstructionFixture(t *testing.T) *constructionFixture {
 
 func (f *constructionFixture) seedHome(t *testing.T, home *hearth.Home) {
 	t.Helper()
-	version, started := f.runtime.Index.BeginLookup(f.ctx.PlayerID)
-	require.True(t, started)
-	require.NoError(t, f.runtime.Index.CompleteLookup(f.ctx.PlayerID, version, home))
+	require.NoError(t, f.runtime.Index.LoadIfUnknown(f.ctx.PlayerID, home))
 }
 
 func (f *constructionFixture) finishSite() bool {
@@ -187,7 +185,6 @@ func TestConstructionFirstHomeCompletesInSameCall(t *testing.T) {
 			f.saver.onSave = func() {
 				home := f.runtime.Index.Snapshot(1)
 				require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
-				require.True(t, home.Dirty, "ownership stays dirty until the save commits")
 			}
 			calls := 0
 			result := f.runtime.CompleteConstruction(&f.ctx, func() bool {
@@ -202,7 +199,6 @@ func TestConstructionFirstHomeCompletesInSameCall(t *testing.T) {
 			home := f.runtime.Index.Snapshot(1)
 			require.Equal(t, hearth.CurrentHome, home.State)
 			require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
-			require.False(t, home.Dirty)
 			require.Len(t, f.saver.saves, 1)
 			saved := f.saver.saves[0]
 			require.Equal(t, f.ctx.PlayerID, saved.character)
@@ -258,7 +254,6 @@ func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {
 			require.True(t, result.OK)
 			require.Equal(t, 1, f.reader.reads)
 			require.Equal(t, types.EntityID(1000), f.runtime.Index.Snapshot(1).Home.Object.ID)
-			require.False(t, f.runtime.Index.Snapshot(1).Dirty)
 			require.Len(t, f.saver.saves, 1)
 			saved := f.saver.saves[0]
 			require.Equal(t, types.EntityID(1), saved.character)
@@ -288,36 +283,24 @@ func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {
 	}
 }
 
-func TestConstructionStaleLookupCannotRestoreOwnership(t *testing.T) {
-	for _, scenario := range []string{"revoked", "terminal"} {
-		t.Run(scenario, func(t *testing.T) {
-			f := newConstructionFixture(t)
-			f.reader.found = true
-			f.reader.row = repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 2000, X: 5000, Y: 200}
-			var changed hearth.Snapshot
-			f.reader.onRead = func() {
-				var err error
-				if scenario == "terminal" {
-					changed, err = f.runtime.Index.ApplyTerminal(1)
-				} else {
-					changed, err = f.runtime.Index.RevokeHome(1)
-				}
-				require.NoError(t, err)
-			}
-			calls := 0
-			result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return false })
-			require.False(t, result.OK)
-			require.Empty(t, f.saver.saves)
-			require.Equal(t, changed, f.runtime.Index.Snapshot(1))
-			_, owned := f.runtime.Index.Owner(hearth.ObjectKey{Region: 1, ID: 2000})
-			require.False(t, owned)
-			if scenario == "terminal" {
-				require.Zero(t, calls)
-			}
-			info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.ctx.TargetHandle)
-			require.Equal(t, uint32(constt.BuildObjectTypeID), info.TypeID)
-		})
+func TestConstructionPendingTerminalDuringLookupBlocksCompletion(t *testing.T) {
+	f := newConstructionFixture(t)
+	f.reader.found = true
+	f.reader.row = repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 2000, X: 5000, Y: 200}
+	f.reader.onRead = func() {
+		require.NoError(t, f.runtime.Index.MarkTerminalPending(1))
 	}
+	calls := 0
+	result := f.runtime.CompleteConstruction(&f.ctx, func() bool { calls++; return f.finishSite() })
+	require.False(t, result.OK)
+	require.Zero(t, calls)
+	require.Empty(t, f.saver.saves)
+	pending := f.runtime.Index.Snapshot(1)
+	require.True(t, pending.PendingTerminal)
+	require.Equal(t, types.EntityID(2000), pending.Home.Object.ID)
+	require.False(t, pending.CanAcquire())
+	info, _ := ecs.GetComponent[components.EntityInfo](f.w, f.ctx.TargetHandle)
+	require.Equal(t, uint32(constt.BuildObjectTypeID), info.TypeID)
 }
 
 func TestConstructionReadFailureIsFatal(t *testing.T) {
@@ -345,7 +328,6 @@ func TestConstructionLoadsOldChunkAndCompletesInSameCall(t *testing.T) {
 	}
 	f.saver.onSave = func() {
 		require.Equal(t, 1, f.chunks.pins[chunk.Coord], "the old chunk must remain pinned through the save")
-		require.True(t, f.runtime.Index.Snapshot(1).Dirty)
 		require.Equal(t, 16, chunk.GetRawObjectByID(2000).TypeID)
 	}
 	calls := 0
@@ -366,7 +348,6 @@ func TestConstructionLoadsOldChunkAndCompletesInSameCall(t *testing.T) {
 	require.Zero(t, f.chunks.pins[chunk.Coord])
 	require.Equal(t, 16, chunk.GetRawObjectByID(2000).TypeID)
 	require.Len(t, f.saver.saves, 1)
-	require.False(t, f.runtime.Index.Snapshot(1).Dirty)
 }
 
 func TestConstructionOldChunkLoadRefusalPreservesState(t *testing.T) {
@@ -379,7 +360,6 @@ func TestConstructionOldChunkLoadRefusalPreservesState(t *testing.T) {
 		{name: "timeout", err: context.DeadlineExceeded, fatal: true},
 		{name: "database_error", err: errors.New("chunk query failed"), fatal: true},
 		{name: "not_ready_after_wait"},
-		{name: "revoked_during_wait"},
 		{name: "terminal_pending_during_wait"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -393,9 +373,6 @@ func TestConstructionOldChunkLoadRefusalPreservesState(t *testing.T) {
 				switch scenario.name {
 				case "not_ready_after_wait":
 					chunk.SetState(types.ChunkStateLoading)
-				case "revoked_during_wait":
-					_, err := f.runtime.Index.RevokeHome(1)
-					require.NoError(t, err)
 				case "terminal_pending_during_wait":
 					require.NoError(t, f.runtime.Index.MarkTerminalPending(1))
 				}
@@ -486,7 +463,7 @@ func TestConstructionFailedCompletionPreservesOldHome(t *testing.T) {
 	require.Empty(t, f.saver.saves)
 }
 
-func TestConstructionSaveFailureIsFatalAndLeavesOwnershipDirty(t *testing.T) {
+func TestConstructionSaveFailureIsFatalAfterRuntimeAssignment(t *testing.T) {
 	for _, scenario := range []struct {
 		name string
 		err  error
@@ -504,7 +481,6 @@ func TestConstructionSaveFailureIsFatalAndLeavesOwnershipDirty(t *testing.T) {
 			f.saver.err = scenario.err
 			f.saver.onSave = func() {
 				require.Equal(t, 1, f.chunks.pins[chunk.Coord])
-				require.True(t, f.runtime.Index.Snapshot(1).Dirty)
 			}
 			calls := 0
 			require.Panics(t, func() {
@@ -514,7 +490,6 @@ func TestConstructionSaveFailureIsFatalAndLeavesOwnershipDirty(t *testing.T) {
 			require.Len(t, f.saver.saves, 1)
 			home := f.runtime.Index.Snapshot(1)
 			require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
-			require.True(t, home.Dirty, "a failed transaction must not acknowledge ownership")
 			require.Equal(t, 16, chunk.GetRawObjectByID(2000).TypeID)
 			require.Contains(t, chunk.GetRawDirtyObjectIDs(), types.EntityID(2000))
 			require.Zero(t, f.chunks.pins[chunk.Coord])
@@ -538,26 +513,31 @@ func TestConstructionSerializationFailureIsFatal(t *testing.T) {
 	require.Empty(t, f.saver.saves)
 	home := f.runtime.Index.Snapshot(1)
 	require.Equal(t, types.EntityID(1000), home.Home.Object.ID)
-	require.True(t, home.Dirty)
 	require.Zero(t, f.chunks.pins[chunk.Coord])
 }
 
-func TestConstructionSaveAcknowledgesOnlyItsOwnVersion(t *testing.T) {
+func TestConstructionPendingTerminalAfterFinalCheckPreservesCompletion(t *testing.T) {
 	f := newConstructionFixture(t)
-	var changed hearth.Snapshot
-	f.saver.onSave = func() {
-		saving := f.runtime.Index.Snapshot(1)
-		require.True(t, saving.Dirty)
-		var err error
-		changed, err = f.runtime.Index.RevokeHome(1)
-		require.NoError(t, err)
-		require.NotEqual(t, saving.Version, changed.Version)
-	}
-	require.True(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite).OK)
+	chunk, _ := f.oldRaw(t, types.ChunkStateInactive)
+	f.chunks.chunks[chunk.Coord] = chunk
+	result := f.runtime.CompleteConstruction(&f.ctx, func() bool {
+		require.NoError(t, f.runtime.Index.MarkTerminalPending(1))
+		return f.finishSite()
+	})
+	require.True(t, result.OK)
 	require.Len(t, f.saver.saves, 1)
-	require.Equal(t, int64(1000), f.saver.saves[0].next.ID)
-	require.Equal(t, changed, f.runtime.Index.Snapshot(1))
-	require.True(t, changed.Dirty, "an older save cannot acknowledge a newer revocation")
+	pending := f.runtime.Index.Snapshot(1)
+	require.Equal(t, types.EntityID(1000), pending.Home.Object.ID)
+	require.True(t, pending.PendingTerminal)
+	require.False(t, pending.CanAcquire())
+	require.False(t, pending.CanReturn())
+	require.Equal(t, 16, chunk.GetRawObjectByID(2000).TypeID)
+	owner, snapshot, owned := f.runtime.Index.SnapshotByObject(pending.Home.Object)
+	require.True(t, owned)
+	require.Equal(t, types.EntityID(1), owner)
+	require.Equal(t, pending, snapshot)
+	_, owned = f.runtime.Index.Owner(pending.Home.Object)
+	require.False(t, owned)
 }
 
 func TestConstructionRejectsInvalidActorAndUnderground(t *testing.T) {
@@ -619,4 +599,12 @@ func TestConstructionUnavailablePreparationRefusesCompletion(t *testing.T) {
 			require.Empty(t, f.chunks.pins)
 		})
 	}
+}
+
+func (r *constructionReader) GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error) {
+	panic("unexpected GetCharacterHearthOwners")
+}
+
+func (s *constructionSaver) SaveOrphans(context.Context, []*repository.Object) error {
+	panic("unexpected SaveOrphans")
 }

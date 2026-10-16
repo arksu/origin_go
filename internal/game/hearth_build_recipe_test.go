@@ -137,9 +137,7 @@ func newHearthBuildRecipeFixture(t *testing.T) *hearthBuildRecipeFixture {
 func (f *hearthBuildRecipeFixture) startBuilder(t *testing.T, playerID types.EntityID) types.Handle {
 	t.Helper()
 	index := ecs.GetResource[hearth.Runtime](f.world).Index
-	if version, started := index.BeginLookup(playerID); started {
-		require.NoError(t, index.CompleteLookup(playerID, version, nil))
-	}
+	require.NoError(t, index.LoadIfUnknown(playerID, nil))
 	player := f.world.Spawn(playerID, func(w *ecs.World, handle types.Handle) {
 		ecs.AddComponent(w, handle, components.CharacterProfile{})
 		ecs.AddComponent(w, handle, components.EntityStats{Stamina: f.initialStamina})
@@ -347,7 +345,6 @@ func TestHearthConstructionUnknownHomeCompletesInRequiredCycles(t *testing.T) {
 	require.Equal(t, uint64(f.build.TicksRequired*branches), ecs.GetResource[ecs.TimeState](f.world).Tick)
 	require.Equal(t, 1, f.saver.calls)
 	require.Equal(t, types.EntityID(1), f.saver.character)
-	require.False(t, runtime.Index.Snapshot(1).Dirty)
 }
 
 func TestHearthBuildRecipeHelpersShareProgressAndOwnCosts(t *testing.T) {
@@ -405,7 +402,7 @@ func TestHearthConstructionReplacesOnlyFinishersLiveHome(t *testing.T) {
 		handle := gameworld.SpawnEntityFromDef(f.world, f.result, gameworld.DefSpawnParams{EntityID: id, X: float64(x), Y: 24, Quality: 17})
 		coord := types.WorldToChunkCoord(x, 24, constt.ChunkSize, constt.CoordPerTile)
 		ecs.AddComponent(f.world, handle, components.ChunkRef{CurrentChunkX: coord.X, CurrentChunkY: coord.Y})
-		_, err := index.ReplaceHome(character, index.Snapshot(character).Version, hearth.Home{Object: hearth.ObjectKey{ID: id}, X: x, Y: 24})
+		_, err := index.ReplaceHome(character, hearth.Home{Object: hearth.ObjectKey{ID: id}, X: x, Y: 24})
 		require.NoError(t, err)
 		return handle
 	}
@@ -457,11 +454,19 @@ func TestHearthConstructionCompetingFinalCyclesAssignOnce(t *testing.T) {
 	firstStats, _ := ecs.GetComponent[components.EntityStats](f.world, first)
 	secondStats, _ := ecs.GetComponent[components.EntityStats](f.world, second)
 	require.Equal(t, 2*f.initialStamina-float64(branches)*f.build.StaminaCost, firstStats.Stamina+secondStats.Stamina)
-	version := index.Snapshot(owner).Version
+	before := index.Snapshot(owner)
 	f.service.HandleBuildCycleComplete(f.world, 2, second, components.ActiveCyclicAction{TargetID: 200, TargetHandle: f.site})
-	require.Equal(t, version, index.Snapshot(owner).Version)
+	require.Equal(t, before, index.Snapshot(owner))
 	stillOwner, _ := index.Owner(hearth.ObjectKey{ID: 200})
 	require.Equal(t, owner, stillOwner)
 	require.Equal(t, 1, f.saver.calls)
 	require.Equal(t, owner, f.saver.character)
+}
+
+func (l *hearthBuildLookup) GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error) {
+	panic("unexpected GetCharacterHearthOwners")
+}
+
+func (s *hearthBuildSaver) SaveOrphans(context.Context, []*repository.Object) error {
+	panic("unexpected SaveOrphans")
 }

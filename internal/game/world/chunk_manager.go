@@ -126,13 +126,18 @@ type ChunkManager struct {
 	behaviorRegistry  contracts.BehaviorRegistry
 	restoreReconciler contracts.RestoredObjectReconciler
 	logger            *zap.Logger
+
+	activationPreparer func(*core.Chunk) error
+
 	// Activation runs under streamMu; rate-limit capacity warnings across chunks.
 	lastActivationCapacityWarning time.Time
 	remainingDroppedActivations   int
 	dropExpiry                    *chunkDropExpiryCoordinator
 
 	// Serializes AOI transitions, tile mutations, and snapshot/event creation,
-	// including initial enabling outside the shard tick. Never held during DB I/O.
+	// including initial enabling outside the shard tick. Optional activation
+	// preparation may perform synchronous I/O under the owning shard, stream and
+	// chunk persistence locks.
 	streamMu    sync.Mutex
 	readyMu     sync.Mutex
 	readyChunks map[types.ChunkCoord]struct{}
@@ -182,6 +187,16 @@ func (cm *ChunkManager) SetRestoredObjectReconciler(reconciler contracts.Restore
 		return
 	}
 	cm.restoreReconciler = reconciler
+}
+
+// SetActivationPreparer installs an optional hook before any raw objects are
+// built or exposed. Configure it before activation starts. The callback runs
+// with the owning shard, stream and chunk persistence locks held.
+func (cm *ChunkManager) SetActivationPreparer(prepare func(*core.Chunk) error) {
+	if cm == nil {
+		return
+	}
+	cm.activationPreparer = prepare
 }
 
 func NewChunkManager(
@@ -953,7 +968,8 @@ func (cm *ChunkManager) WaitPreloaded(ctx context.Context, coord types.ChunkCoor
 	}
 }
 
-// activateChunkInternal activates a chunk by building entities from raw objects
+// activateChunkInternal activates a chunk by building entities from raw objects.
+// The caller holds the owning shard and stream locks.
 func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *core.Chunk) error {
 	gate := cm.persistenceFor(coord)
 	if !gate.ioMu.TryLock() {
@@ -967,6 +983,11 @@ func (cm *ChunkManager) activateChunkInternal(coord types.ChunkCoord, chunk *cor
 	state := chunk.GetState()
 	if state == types.ChunkStateUnloaded || state == types.ChunkStateLoading {
 		return ErrChunkNotLoaded
+	}
+	if cm.activationPreparer != nil {
+		if err := cm.activationPreparer(chunk); err != nil {
+			return fmt.Errorf("prepare chunk activation %v: %w", coord, err)
+		}
 	}
 
 	rawStart, rawObjects := chunk.GetRawActivationObjects()

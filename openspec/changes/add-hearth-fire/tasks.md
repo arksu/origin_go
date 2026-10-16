@@ -16,8 +16,9 @@ and a runtime metadata index with tests. Task 2.1 adds the ordinary build recipe
 The construction stage now assigns its actual finisher in runtime and replaces
 their previous home, using synchronous ownership lookup, old-chunk preparation
 and construction saving.
-Its verification is tracked below. Terminal persistence, general chunk hydration,
-restart repair, death cleanup and the remaining gameplay remain separate stages.
+Its verification is tracked below. Task 3.5 delivers synchronous chunk hydration and
+orphan normalization; its completed verification is recorded below. Terminal persistence,
+broader restart repair, death cleanup and the remaining gameplay remain separate stages.
 This replaces the former durable-lifecycle plan:
 construction changes runtime first, then returns success after its database commit.
 Other independent saves may lose recent progress on a crash. Runtime
@@ -27,16 +28,17 @@ finisher sidecar, body-retention system, or special shutdown barrier is required
 
 The database is assumed available. Actual database errors, including an unknown
 commit outcome, must stop the entire server without SQL retries or database-error
-recovery. Expected absent rows, optimistic-version conflicts and queue saturation
-remain ordinary outcomes. This policy is to be wired with the gameplay/saver work;
+recovery. Expected absent rows remain ordinary outcomes; invalid results are fatal.
+All Hearth SQL runs synchronously under the surface shard lock with five-second
+read/transaction contexts. Future terminal work must follow the same policy;
 it does not describe an already-installed universal database-error handler.
 
 ## 1. Ownership Data and Runtime State
 
 - [x] 1.1 Add the single undeployed migration and matching canonical schema for unpartitioned `character_hearth`: character PK/FK, unique `(object_region, object_id)`, and composite RESTRICT object FK. Verify PostgreSQL rejects duplicate or invalid associations; add no first-entry marker, compatibility migration, or backfill.
 - [x] 1.2 Add sqlc queries for indexed home/owner lookup, batched owner loading, latest association replacement/removal, and restart repair; run `make sqlc` and cover absent ownership, deleted characters, and invalid object references without hand-editing generated code.
-- [x] 1.3 Add the feature-owned runtime home index with explicit unknown/known-no-home/current-home states, optimistic versions and one loading read per character. Accepted reads complete exactly once without cancellation; only rejected submissions release loading before execution. Keep mutation on the owning execution path and expose copied metadata to other layers; test first assignment, replacement, removal, stale versions, exclusive reads and absence of permanent pending-operation records.
-- [x] 1.4 Document runtime authority, schema/index responsibilities, asynchronous save lag, and restart repair in the feature engineering notes. Verify ordinary character saves cannot overwrite home ownership and shared ECS/build/action state contains no Hearth-specific fields.
+- [x] 1.3 Add the feature-owned runtime home index with explicit unknown/known-no-home/current-home states and `LoadIfUnknown`. Preserve known runtime state and copied metadata, retain `PendingTerminal`/`Terminal` with a short mutex, and keep records for the process lifetime. Remove loading/version/dirty/acknowledgment and retain/eviction machinery; test assignment, replacement, removal, terminal notification during SQL and copied reverse snapshots that include pending owners.
+- [x] 1.4 Document runtime authority, schema/index responsibilities, synchronous owner-path SQL, accepted whole-loop blocking and process-lifetime index growth. Verify ordinary character saves cannot overwrite home ownership and shared ECS/build/action state contains no Hearth-specific fields.
 
 ## 2. Manual Construction and Immediate Replacement
 
@@ -51,8 +53,8 @@ writer unit tests, plus `GOCACHE=/tmp/origin-hearth-go-cache make test`, passed.
 Regeneration produced no changes. Tests use real catalogs and stubbed
 ownership-read, chunk-worker and persistence boundaries. PostgreSQL fixture
 tests were skipped because `ORIGIN_OBJECT_HEALTH_TEST_DSN` was unset; this stage
-does not claim a live-database integration check. Terminal persistence and the
-later stages remain unchecked.
+does not claim a live-database integration check. This earlier result predates the task 3.5 index simplification and activation work;
+current checks are reported separately. Terminal persistence and later stages remain unchecked.
 
 ## 3. World Rules and Ownership Restoration
 
@@ -62,20 +64,33 @@ later stages remain unchecked.
 - [x] 3.4 Complete structural-footprint exclusion, including owner attempts, through existing spatial queries shared by manual put-down and construction placement.
   - [x] 3.4.1 Reject manual carried-object placement (`lift_down` and RMB) at request and final application through the shared generic `colliderPlacementAllowed` helper on every layer. Use saved collider dimensions/masks or optional lift placementSize (log_x 24x6, log_y 6x24; default 2x2 with Layer/Mask 1). Query loaded colliders with ordinary masks; exclude carrier, carried object and phantom candidates without Hearth-specific filtering or neighbor readiness checks. Verify exact contact, cross-chunk colliders, bounded query refusal, stale attempts and preserved carry; forced lifecycle drops remain outside this step.
   - [x] 3.4.2 Reuse the shared collision helper at construction request and final placement with the current result collider, before new pending/phantom or site/ID creation. Cover ordinary construction sites, owner/non-owner attempts, the complete footprint, late obstacles, exact contact and replaced previews; retain admission-only terrain checks and existing `BUILD_PENDING_FAILED` cleanup.
-- [ ] 3.5 Batch ownership preparation during chunk loading and apply metadata on the owning shard before object visibility; guard load generations and normalize orphan Hearth records to ordinary unlit campfires. Verify unload/reload, stale snapshots, dead owners, and conversions; document terrain predicates and the actual metadata hook without a new deferred-restore framework.
+- [x] 3.5 Before raw activation, use one generic optional `ChunkManager.SetActivationPreparer` callback after existing gate/state guards. `Runtime.PrepareChunkActivation` filters current raw Hearth candidates, uses `SnapshotByObject` including PendingTerminal, and runs one existing `GetCharacterHearthOwners` batch for unresolved keys with a five-second context. Hydrate offline owners via LoadIfUnknown; known state wins. Prepare true-orphan campfires with `rawCampfire` and commit all copies via `ConstructionSaverDB.SaveOrphans` through existing `UpsertObject` in one synchronous five-second transaction before UpsertRawObject/activation. Preserve ordinary gates/generations/dirty flags; move dead-observer UnregisterEntityAOI under the existing shard lock. Verify no-query paths, batch counts, pending/dead/offline owners, stale data, skipped deleted/live duplicates and fatal failures. No new SQL/schema or worker framework.
+
+Task 3.5 verification: focused Hearth/login/activation tests and race checks for
+Index/Hearth/world/game passed. The final `make test` passed with
+`ORIGIN_OBJECT_HEALTH_TEST_DSN` pointing to an isolated temporary PostgreSQL
+instance and `GOCACHE=/private/tmp/origin-go-build-cache`; regenerated files were
+unchanged. New PostgreSQL tests ran successfully for mixed live/deleted/unowned
+Hearths, restart restoration and multirow transaction rollback. Regression
+coverage also verifies activation is a no-op when the catalog has no Hearth
+definition. `BenchmarkIgnoreObjectCollision`: 98.16 ns/op, 0 B/op, 0 allocs/op;
+this is a local microbenchmark, not a 30,000-CCU result. Strict OpenSpec validation
+and `git diff --check` passed. Independent code review returned Approve with no
+outstanding Critical or Important findings. Future terminal/release tasks remain
+unchecked.
 
 ## 4. Death, Deletion, and Ordinary Persistence
 
-- [ ] 4.1 Register a narrow permanent-death hook that immediately revokes runtime ownership and schedules any surface conversion through the existing owning-shard execution path. Retain only coalesced conversion intent when an inbox is full; test queue pressure, death with/without a home, cross-layer death, unloaded homes, and completion/death runtime ordering without retaining bodies or changing corpse save/decomposition rules.
+- [ ] 4.1 Register a narrow permanent-death hook that immediately marks PendingTerminal and dispatches association revocation/conversion to the existing surface owning path without nesting shard locks. Retain only coalesced conversion intent when an inbox is full; test queue pressure, death with/without a home, cross-layer death, unloaded homes, and completion/death runtime ordering without retaining bodies or changing corpse save/decomposition rules.
 - [ ] 4.2 Connect REST character deletion to the same feature cleanup while preserving account-scoped authorization, deletion responses, and current online/offline policy. Test absent/already-deleted characters and no-home cleanup; emit no character-position death effect or fabricated corpse for REST deletion.
-- [x] 4.3 Save completed construction synchronously after final-branch processing, transforms and index replacement. Serialize the final objects, then use one existing `WithTx` with a five-second context for the new Hearth, previous campfire if present, `character_hearth` and durable ID watermark. Return success after commit and acknowledge only the saved index version; retain object/chunk dirty flags and the raw-chunk pin until saving returns. Serialization/SQL/commit errors and an association affected-row count other than one are fatal; add no runtime rollback, SQL retry or save queue.
-- [ ] 4.3a Implement future death/deletion latest-projection persistence through existing bounded workers, with one in-flight write per character and coalesced dirty versions. Use existing chunk I/O gates and modest object/association cleanup transactions. Test queue saturation, stale acknowledgments and fatal database failures without introducing a lifecycle operation queue or changing ordinary deletion ordering.
-- [ ] 4.4 Add restart repair and ordinary shutdown coverage. Treat a valid saved association as the surviving home and normalize orphan or dead-owner Hearth objects; verify partial save lag yields a usable single-home runtime rather than a journal replay, and reuse existing shutdown/final-save ordering instead of a new global barrier.
-- [ ] 4.5 Document the accepted crash-loss boundary, latest-projection save ordering, restart normalization, and bounded dirty work. Verify death and home changes remain immediate while saving is queued or in flight, database errors stop the entire server, and instrumentation reveals pending save age without per-player metric labels or a full-world tick scan.
+- [x] 4.3 Save completed construction synchronously after final-branch processing, transforms and index replacement. Serialize final objects, then use one existing WithTx with a five-second context for the new Hearth, previous campfire if present, character_hearth and durable ID watermark. Return success after commit; retain object/chunk dirty flags and the raw-chunk pin until saving returns. Serialization/SQL/commit errors and an association affected-row count other than one are fatal; no version acknowledgment, runtime rollback, SQL retry or save queue.
+- [ ] 4.3a Implement future death/deletion persistence synchronously on the owning surface path, with five-second read/transaction contexts. Dispatch cross-layer intent without nesting shard locks, then save conversion and matching association cleanup through existing SQL and I/O ordering. Test pending notifications, identity checks and fatal failures; add no asynchronous saver, dirty revisions, retry or acknowledgment.
+- [ ] 4.4 Add broader restart repair and ordinary shutdown coverage around task 3.5 normalization. Verify independent checkpoints restore a usable single-home runtime without journal replay; execute any Hearth repair SQL synchronously on the owner path and retain existing shutdown/final-save ordering without a feature dirty flush or new global barrier.
+- [ ] 4.5 Document accepted crash-loss boundaries, synchronous SQL ordering, restart normalization, whole-game-loop blocking and process-lifetime index growth. Verify database/invalid-result errors stop the server and work is limited to current candidates, without save-lag queue metrics, per-player labels or a world scan.
 
 ## 5. Return, Interruption, and Normal Login
 
-- [ ] 5.1 Register `Travel to Hearth Fire` as an ordinary no-target action with five-second progress, zero stamina, and the existing 360000 ms cooldown. Test missing home, combat, swimming, active KO, post-KO lying, and standing shallow water through existing eligibility/cycle tests.
+- [ ] 5.1 Register Travel to Hearth Fire as an ordinary no-target action with five-second progress, zero stamina, and the existing 360000 ms cooldown. Use known runtime ownership from login/hydration; Unknown fails closed without an asynchronous lookup. Test missing/unknown home, combat, swimming, active KO, post-KO lying, and standing shallow water through existing eligibility/cycle tests.
 - [ ] 5.2 Resolve the latest runtime home again on the target surface shard immediately before relocation, not only at queue admission; recheck exact source handle/action generation, connection, combat, swimming, and resolved KO state. Reuse deferred transfer with narrow generic source-validation/target-resolution/success hooks and existing preparation timeout; test cancellation, replacement during progress or queued transfer, stale callbacks, and cooldown only after successful target relocation.
 - [ ] 5.3 Reuse exact player-only destination clearance and the carry transfer participant for same-layer/cross-layer return. Use a standing target-runtime copy while preserving the lying source rollback snapshot; test blocked-home failure without nearby fallback, carried-footprint exclusion, rollback/carry integrity, and unchanged stairs/admin incapacity rules.
 - [ ] 5.4 Invoke feature-selected interruption through a small generic action capability before gameplay-attempt rejection and on fresh movement intent, damage, combat/swimming transition, and normal disconnect cleanup. Test rejected/cooldown-blocked attempts, blocked movement without displacement, damage without combat, and chat/personal-window exemptions; shared ingress must not check a Hearth action key.
@@ -92,7 +107,7 @@ later stages remain unchecked.
 
 ## 7. Integration and Release
 
-- [ ] 7.1 Run `make test` and PostgreSQL Hearth integration coverage using the existing fixture. Verify regeneration, schema uniqueness, synchronous construction saving, future asynchronous terminal saving, and restart repair; report an unavailable fixture rather than claiming skipped database tests passed.
+- [ ] 7.1 Run make test and PostgreSQL Hearth integration coverage using the existing fixture. Verify regeneration, schema uniqueness, synchronous construction and activation transactions, future synchronous terminal persistence, and restart repair; report an unavailable fixture rather than claiming skipped database tests passed.
 - [ ] 7.2 Run client type-check, lint, and relevant action/execution/knockout/movement/map-click/chunk/minimap/FX/asset suites; review lint's automatic diff and verify unrelated presentation/protocol regressions remain covered.
-- [ ] 7.3 Exercise no-home entry, first construction/replacement, underground carry return, post-KO return, owner death/deletion, and blocked-position login recovery end to end. Verify runtime invariants during queued/in-flight saves, full-server stop on actual database errors, and bounded collider/metadata/FX work under representative load, without new tick scans or N+1 SQL.
+- [ ] 7.3 Exercise no-home entry, first construction/replacement, underground carry return, post-KO return, owner death/deletion, and blocked-position login recovery end to end. Verify runtime invariants during synchronous I/O, full-server stop on actual database/invalid-result errors, accepted loop delay and process-lifetime memory growth, and bounded collider/metadata/FX work without tick scans or N+1 SQL.
 - [ ] 7.4 Run strict OpenSpec validation and `git diff --check`, review generated/assets/protocol diffs, and deliver clean-database deployment notes. Verify no automatic entry, backfill, database clearing, new dependency, or unrelated balance/`life_death_factor` change, and explicitly distinguish accepted crash rollback from runtime corruption.

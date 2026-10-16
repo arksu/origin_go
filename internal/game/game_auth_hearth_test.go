@@ -213,7 +213,7 @@ func TestSpawnAndLoginCancelledHearthLookupCompletesWithoutReattach(t *testing.T
 }
 
 func TestLoadPlayerHearthRejectsUnavailableMetadata(t *testing.T) {
-	for _, dependency := range []string{"surface", "runtime", "index", "definitions", "definition", "reader", "pending_lookup"} {
+	for _, dependency := range []string{"surface", "runtime", "index", "definitions", "definition", "reader"} {
 		t.Run(dependency, func(t *testing.T) {
 			surface := &Shard{world: ecs.NewWorldForTesting()}
 			game := &Game{shardManager: &ShardManager{shards: map[int]*Shard{0: surface}}}
@@ -229,47 +229,31 @@ func TestLoadPlayerHearthRejectsUnavailableMetadata(t *testing.T) {
 				objectdefs.SetGlobalForTesting(nil)
 			case "definition":
 				objectdefs.SetGlobalForTesting(objectdefs.NewRegistry(nil))
-			case "pending_lookup":
-				*runtime = hearth.NewRuntime(surface.world, nil, &hearthBuildLookup{}, nil, nil, nil, nil, nil)
-				_, started := runtime.Index.BeginLookup(10)
-				require.True(t, started)
 			}
 			err := game.loadPlayerHearth(10)
 			require.Error(t, err)
-			if dependency == "pending_lookup" {
-				require.ErrorIs(t, err, hearth.ErrUnknownHome)
-			}
 		})
 	}
 }
 
 func TestSpawnAndLoginUnavailableHearthDoesNotReattach(t *testing.T) {
-	for _, pending := range []bool{false, true} {
-		name := "missing_runtime"
-		if pending {
-			name = "pending_lookup"
-		}
-		t.Run(name, func(t *testing.T) {
-			shard, game := newSoundLifecycleShard(t, config.DefaultAudioConfig(), 16)
-			player := spawnSoundLifecycleEntity(t, shard, 10, 200, 200)
-			detached := ecs.GetResource[ecs.DetachedEntities](shard.world)
-			detached.AddDetachedEntity(10, player, game.clock.GameNow().Add(time.Minute), game.clock.GameNow())
-			if pending {
-				runtime := installHearthLoginRuntime(t, shard, &hearthBuildLookup{})
-				_, started := runtime.Index.BeginLookup(10)
-				require.True(t, started)
-			}
-			client, connection := connectPlayerSpawnTestClient(t)
-			client.CharacterID = 10
-			game.spawnAndLogin(client, repository.Character{ID: 10})
-			message := readSoundLifecyclePacket(t, connection, func(message *netproto.ServerMessage) bool { return message.GetError() != nil })
-			require.Equal(t, netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, message.GetError().Code)
-			require.Contains(t, message.GetError().Message, "hearth data unavailable")
-			require.False(t, client.InWorld.Load())
-			require.Zero(t, client.StreamEpoch.Load())
-			require.Empty(t, shard.Clients)
-			require.True(t, detached.IsDetached(10))
-			require.Empty(t, ecs.GetResource[ecs.CharacterEntities](shard.world).GetAll())
-		})
-	}
+	shard, game := newSoundLifecycleShard(t, config.DefaultAudioConfig(), 16)
+	player := spawnSoundLifecycleEntity(t, shard, 10, 200, 200)
+	detached := ecs.GetResource[ecs.DetachedEntities](shard.world)
+	detached.AddDetachedEntity(10, player, game.clock.GameNow().Add(time.Minute), game.clock.GameNow())
+	client, connection := connectPlayerSpawnTestClient(t)
+	client.CharacterID = 10
+	game.spawnAndLogin(client, repository.Character{ID: 10})
+	message := readSoundLifecyclePacket(t, connection, func(message *netproto.ServerMessage) bool { return message.GetError() != nil })
+	require.Equal(t, netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, message.GetError().Code)
+	require.Contains(t, message.GetError().Message, "hearth data unavailable")
+	require.False(t, client.InWorld.Load())
+	require.Zero(t, client.StreamEpoch.Load())
+	require.Empty(t, shard.Clients)
+	require.True(t, detached.IsDetached(10))
+	require.Empty(t, ecs.GetResource[ecs.CharacterEntities](shard.world).GetAll())
+}
+
+func (r hearthLoginReader) GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error) {
+	panic("unexpected GetCharacterHearthOwners")
 }

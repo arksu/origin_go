@@ -14,6 +14,7 @@ import (
 
 type ConstructionSaver interface {
 	SaveConstruction(context.Context, types.EntityID, *repository.Object, *repository.Object) error
+	SaveOrphans(context.Context, []*repository.Object) error
 }
 
 type ConstructionSaverDB struct {

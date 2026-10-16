@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Let characters acquire a personal home through construction, with authoritative runtime ownership, synchronous construction saving, independent lifecycle checkpoints, protected world presence, and interruptible travel that respects permanent death and normal world-entry recovery.
+Let characters acquire a personal home through construction, with authoritative runtime ownership, synchronous Hearth reads and saving, independent lifecycle checkpoints, protected world presence, and interruptible travel that respects permanent death and normal world-entry recovery.
 
 ## ADDED Requirements
 
@@ -112,7 +112,7 @@ Completing a new hearth SHALL atomically change runtime ownership and convert th
 
 ### Requirement: Permanent death clears the active home
 
-Permanent death SHALL immediately revoke the owner's active runtime home. Conversion to an ordinary unlit campfire SHALL run through the surface world's owning execution path, including death on another layer; an unloaded hearth SHALL be reconciled before visibility. Saving SHALL remain asynchronous without a new atomic corpse-and-character guarantee. Hearth inheritance and descendant spawning SHALL NOT be added.
+Permanent death SHALL immediately mark the owner PendingTerminal and make its runtime home ineligible; the surface owner SHALL then revoke the association. Conversion to an ordinary unlit campfire SHALL run through the surface world's owning execution path, including death on another layer; an unloaded hearth SHALL be reconciled before visibility. Hearth reads and saving SHALL run synchronously when the surface owner executes the conversion, each with a five-second context, without nesting shard locks or adding an atomic corpse-and-character guarantee. Hearth inheritance and descendant spawning SHALL NOT be added.
 
 #### Scenario: Death before acquiring a home
 - **WHEN** a character permanently dies without an active hearth
@@ -125,21 +125,22 @@ Permanent death SHALL immediately revoke the owner's active runtime home. Conver
 
 #### Scenario: Death with an unloaded hearth
 - **WHEN** permanent death occurs while the hearth is not loaded by any player
-- **THEN** its runtime ownership SHALL be revoked and its conversion SHALL be scheduled for saving
+- **THEN** its runtime ownership SHALL become ineligible immediately and its conversion and synchronous save SHALL execute through the surface owner
 - **AND** later loading during that server run SHALL not restore an active hearth or expose its old green flame
 
 #### Scenario: Persistence is delayed during death
 - **WHEN** a character permanently dies while database saving is delayed
-- **THEN** death and runtime home revocation SHALL NOT wait for the database or retain a living character for a Hearth operation
+- **THEN** terminal notification SHALL make runtime ownership ineligible before the owning Hearth save
+- **AND** the owning call MAY wait for its synchronous database operation without retaining a living character or adding a corpse persistence barrier
 
 ### Requirement: Terminal deletion cannot orphan an active hearth
 
-Any accepted terminal deletion of a character SHALL revoke its active runtime home and schedule ordinary-campfire conversion and ownership saving. This SHALL preserve the existing authorization and deletion policy and SHALL NOT invent a character-location death event for an absent body. An invalid saved association to a deleted character SHALL NOT restore an active home.
+Any accepted terminal deletion of a character SHALL make its active runtime home ineligible immediately and dispatch ordinary-campfire conversion and synchronous ownership saving to the surface owner without nesting shard locks. This SHALL preserve the existing authorization and deletion policy and SHALL NOT invent a character-location death event for an absent body. An invalid saved association to a deleted character SHALL NOT restore an active home.
 
 #### Scenario: Offline character is explicitly deleted
 - **WHEN** an authorized character deletion removes an offline owner who has an active hearth
 - **THEN** runtime ownership SHALL be revoked and the hearth SHALL be converted through its owning world
-- **AND** the change SHALL use asynchronous saving without fabricating a character death event
+- **AND** the surface owner SHALL perform Hearth reads and cleanup saving synchronously with five-second contexts without fabricating a character death event
 
 ### Requirement: Hearth placement uses standard build tile rules
 
@@ -306,7 +307,7 @@ Progress SHALL cancel immediately on a movement command, any attempt to launch a
 
 ### Requirement: Return resolves the current exact home
 
-Return SHALL resolve the active hearth immediately before relocation, not freeze the home when progress begins. Changing the active home SHALL NOT alone cancel progress. The destination SHALL be the exact hearth position, checked for the player footprint only. A blocked destination SHALL fail clearly without searching nearby or using random spawn.
+Return SHALL use known runtime metadata and resolve the active hearth immediately before relocation, not freeze the home when progress begins. `Unknown` metadata SHALL fail closed without starting an asynchronous lookup. Changing the active home SHALL NOT alone cancel progress. The destination SHALL be the exact hearth position, checked for the player footprint only. A blocked destination SHALL fail clearly without searching nearby or using random spawn.
 
 #### Scenario: Home changes during progress
 - **WHEN** the active hearth changes while return progresses
@@ -393,7 +394,7 @@ Normal world-entry spawning SHALL try the saved player position, the current exa
 
 ### Requirement: Runtime transitions precede persistence
 
-Construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world before serialization and SQL. Its call SHALL return success only after the construction transaction commits. Runtime state SHALL remain authoritative during saving; old saves, load results, and callbacks SHALL NOT change the latest runtime ownership, recreate a transformed site, or rebind a terminal owner. Future death/deletion persistence MAY use bounded asynchronous work. No durable operation journal or runtime rollback SHALL be introduced. Optimistic version checks SHALL reject stale runtime mutations and save acknowledgments.
+Construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world before serialization and SQL. Its call SHALL return success only after the construction transaction commits. Known runtime state SHALL remain authoritative over loaded data, including known absence and terminal state. All Hearth reads and saves, including future death/deletion cleanup, SHALL execute synchronously under the owning surface shard lock with a five-second context per read or transaction. Cross-layer terminal notification SHALL dispatch intent without nesting shard locks. Hearth SHALL NOT add a save queue, SQL retry, asynchronous acknowledgment, durable operation journal or runtime rollback.
 
 #### Scenario: Database is slow after construction
 - **WHEN** a character completes a Hearth while its save is delayed
@@ -401,27 +402,27 @@ Construction SHALL apply its object and ownership changes as one synchronous ope
 - **AND** the site SHALL NOT remain available for another construction completion
 - **AND** the owning call SHALL wait for commit before reporting success, accepting whole-game-loop delay
 
-#### Scenario: Earlier save finishes after a newer home exists
-- **WHEN** a save callback or ownership-load result reflects an earlier home after replacement in runtime
-- **THEN** the newer runtime home SHALL remain active and the older result SHALL NOT restore ownership or the old green Hearth
+#### Scenario: Saved ownership is older than runtime
+- **WHEN** a read reflects an earlier home after replacement or revocation in runtime
+- **THEN** the known runtime state SHALL remain unchanged and the saved result SHALL NOT restore ownership or the old green Hearth
 
-#### Scenario: Completion followed by permanent death
-- **WHEN** a character's construction has committed and the character then permanently dies while death persistence is delayed
-- **THEN** the Hearth SHALL cease to be an active runtime home
-- **AND** no later save callback SHALL undo that death or reinstate the home during that server run
+#### Scenario: Terminal notification arrives during SQL
+- **WHEN** a different layer marks the character terminal while the surface owner is waiting on SQL
+- **THEN** PendingTerminal SHALL block new acquisition and return without changing the association from that notifying path
+- **AND** the surface owner SHALL apply terminal cleanup to the latest association before allowing later acquisition
 
 #### Scenario: Old source handle is reused
-- **WHEN** asynchronous preparation completes after its source object was removed and its handle was reused
-- **THEN** the result SHALL NOT mutate the replacement entity or assign it Hearth ownership
+- **WHEN** owning work observes that a prepared source object was removed and its handle was reused
+- **THEN** it SHALL NOT mutate the replacement entity or assign it Hearth ownership
 
 ### Requirement: Construction saves its final objects and association synchronously
 
-After final-branch processing, transforms and runtime index replacement, construction SHALL serialize its final objects and use one existing `WithTx` call with a five-second context to save the new Hearth, the previous unlit campfire if present, `character_hearth` and the durable object-ID watermark. After commit, `AcknowledgeSaved` SHALL acknowledge only the saved index version. Ordinary object/chunk dirty flags SHALL remain set, and a previous raw chunk's pin SHALL remain held until saving returns. Serialization, SQL or commit errors and an association affected-row count other than one SHALL stop the entire server, without runtime rollback, SQL retry or a construction save queue. Character, inventory, material, stamina and corpse persistence SHALL remain independent.
+After final-branch processing, transforms and runtime index replacement, construction SHALL serialize its final objects and use one existing `WithTx` call with a five-second context to save the new Hearth, the previous unlit campfire if present, `character_hearth` and the durable object-ID watermark. Ordinary object/chunk dirty flags SHALL remain set, and a previous raw chunk's pin SHALL remain held until saving returns. Serialization, SQL or commit errors and an association affected-row count other than one SHALL stop the entire server, without runtime rollback, SQL retry or a construction save queue. Character, inventory, material, stamina and corpse persistence SHALL remain independent.
 
 #### Scenario: First construction commits
 - **WHEN** a character completes their first Hearth
 - **THEN** the new object, association and durable ID watermark SHALL be saved in one transaction before success is returned
-- **AND** only that saved ownership version SHALL be acknowledged
+- **AND** ownership SHALL require no asynchronous save acknowledgment
 
 #### Scenario: Replacement includes an inactive previous home
 - **WHEN** construction replaces a previous home held in the raw chunk cache
@@ -434,7 +435,7 @@ After final-branch processing, transforms and runtime index replacement, constru
 
 ### Requirement: Database errors stop the entire server
 
-The database SHALL be assumed available. Any actual database read, write or commit error, including an unknown commit outcome, SHALL stop the entire server. Hearth SHALL NOT retry SQL or add a recovery path for database errors. Expected absent-row results, optimistic-version conflicts, unknown metadata awaiting preparation and worker-queue saturation SHALL NOT be treated as database failures.
+The database SHALL be assumed available. Any actual database read, write or commit error, including an unknown commit outcome, SHALL stop the entire server. Hearth SHALL NOT retry SQL or add a recovery path for database errors. Invalid query results SHALL also stop the server. Expected absent-row results and unknown metadata awaiting synchronous preparation SHALL NOT be treated as database failures.
 
 #### Scenario: A database operation fails
 - **WHEN** a database read, write or commit returns an actual error
@@ -445,26 +446,59 @@ The database SHALL be assumed available. Any actual database read, write or comm
 - **WHEN** a home lookup reports expected absence through `sql.ErrNoRows`
 - **THEN** the result SHALL establish `NoHome` and the server SHALL continue normally
 
-### Requirement: Home reads are exclusive and complete once
+### Requirement: Home metadata preserves known runtime state
 
-The home index SHALL track at most one pending read per character with a loading flag and the observed optimistic version, without a lookup ID. Once submitted, a read SHALL NOT be canceled, including on logout, and its submitter SHALL deliver the result exactly once. Only a submission rejection that guarantees no job or result can follow SHALL release loading before completion; that release SHALL occur once, immediately after rejection. A stale result SHALL release loading without changing current ownership. Loading SHALL prevent eviction until that result is delivered. The delivery path SHALL NOT lose a result or redeliver it after another read begins.
+The owning surface shard SHALL serialize home reads and association mutations. `LoadIfUnknown` SHALL install copied metadata only while the character state is Unknown, preserving known NoHome, CurrentHome and terminal state. The index SHALL retain PendingTerminal and Terminal eligibility with a short mutex for cross-layer notification; it SHALL NOT hold that mutex across SQL, shard locks or ECS callbacks. Records SHALL remain for the process lifetime, accepting growth with encountered characters; no loading/version/dirty acknowledgment or retain/eviction protocol SHALL be required. Return and collision policy SHALL use eligible ownership, while the copied reverse snapshot used for activation SHALL also include PendingTerminal associations.
 
-#### Scenario: Concurrent callers request an unknown home
-- **WHEN** callers request a home while its read is pending
-- **THEN** only one caller SHALL be admitted to submit the read
+#### Scenario: A known character is loaded again
+- **WHEN** login or construction already has known metadata
+- **THEN** its home lookup SHALL skip SQL and preserve the current state
 
-#### Scenario: The worker queue rejects a read
-- **WHEN** submission is rejected before any read job is accepted
-- **THEN** the submitting caller SHALL release loading once without changing the home version
-- **AND** a later request SHALL be able to submit the read
+#### Scenario: An old association is offered for a known absent home
+- **WHEN** loaded metadata names a home for a character already known to have NoHome
+- **THEN** LoadIfUnknown SHALL preserve NoHome
 
-#### Scenario: A character leaves while its home is loading
-- **WHEN** the character logs out before an accepted read completes
-- **THEN** the read SHALL still deliver its sole result and SHALL retain the index entry until completion
+#### Scenario: Pending terminal owner is inspected for activation
+- **WHEN** an object belongs to a character whose terminal notification is pending
+- **THEN** the reverse snapshot SHALL retain its association so activation does not mistake it for an orphan
+- **AND** ordinary Owner lookup SHALL NOT grant that character return or passage eligibility
 
-#### Scenario: Runtime ownership changes while a read is pending
-- **WHEN** a read result arrives after the runtime home version changed
-- **THEN** the result SHALL release loading without replacing the current runtime home
+### Requirement: Hearth ownership is prepared before raw activation
+
+ChunkManager SHALL invoke one optional generic callback after its existing gate/state guards and before creating raw ECS entities. The surface runtime SHALL select current raw Hearth candidates, excluding deleted rows and object IDs already represented by live entities. It SHALL consult copied reverse snapshots first and use one existing GetCharacterHearthOwners query for unresolved keys, with a five-second context under the surface shard lock. Eligible offline owners SHALL also be hydrated through LoadIfUnknown; known runtime state SHALL win. Empty or fully known candidate sets SHALL need no SQL. Existing chunk generations, gates, dirty behavior and load workers SHALL remain unchanged. Any dead-observer AOI unregister path that can initiate activation SHALL hold its existing shard lock.
+
+#### Scenario: A chunk contains no unresolved Hearth
+- **WHEN** the current activation candidates contain no Hearth needing owner metadata
+- **THEN** activation SHALL issue no Hearth owner query
+
+#### Scenario: Several offline owners have Hearths in one chunk
+- **WHEN** a chunk contains several unresolved Hearths with eligible offline owners
+- **THEN** one batch query SHALL hydrate all those owners before entity creation or visibility
+
+#### Scenario: Raw cache duplicates a live entity
+- **WHEN** a current raw row has the same object ID as an already live entity, or the row is deleted
+- **THEN** Hearth preparation SHALL skip that row without changing its live entity or writing a campfire conversion
+
+#### Scenario: Owner state changes while the batch is read
+- **WHEN** a PendingTerminal notification arrives during the synchronous batch read
+- **THEN** activation SHALL honor current terminal metadata and SHALL NOT normalize that pending owner's Hearth as an orphan
+
+### Requirement: Orphan normalization commits before activation
+
+A true orphan Hearth SHALL be prepared as an ordinary unlit campfire using the same raw conversion helper as construction. The conversion SHALL preserve composite identity and position, apply the campfire definition and HP, clear old behavior data and set the current lastTick. All orphan copies for that activation SHALL be saved in one synchronous transaction with a five-second context using existing UpsertObject. Only after commit SHALL the runtime apply UpsertRawObject and create entities. SQL, commit or invalid-result failure SHALL stop the server without exposing partial normalization. No new SQL/schema, per-object query, worker, generation protocol or deferred-restore framework SHALL be introduced.
+
+#### Scenario: Several Hearths have no valid owner
+- **WHEN** a batch confirms several true orphan Hearth candidates
+- **THEN** one transaction SHALL save all campfire copies before any raw-cache replacement or ECS activation
+- **AND** each converted object SHALL retain its identity and position with campfire HP, cleared data and current lastTick
+
+#### Scenario: Orphan saving fails
+- **WHEN** the orphan transaction returns an SQL or commit error
+- **THEN** the entire server SHALL stop and the activation callback SHALL NOT apply the orphan copies or expose their entities
+
+#### Scenario: Owner died before restart
+- **WHEN** a restored Hearth has no valid alive owner after restart
+- **THEN** it SHALL be saved and exposed as an ordinary unlit campfire without inferring an owner or replaying construction
 
 ### Requirement: Final-cycle preparation precedes costs
 
@@ -486,15 +520,15 @@ The final construction cycle SHALL validate and prepare the runtime data needed 
 
 ### Requirement: Recovery accepts independent checkpoints
 
-After a process failure, recovery SHALL use saved character, object, and ownership data; recent unsaved progress, homes, or terminal changes MAY roll back. These snapshots need not form one atomic checkpoint. Invalid associations SHALL yield no active home. A saved Hearth without valid ownership SHALL become an unlit campfire before visibility. Recovery SHALL NOT infer an owner, upgrade a campfire, or replay an unsaved final cycle. Ordinary material and stamina durability SHALL remain unchanged.
+After a process failure, recovery SHALL use saved character, object, and ownership data; recent progress or a Hearth operation interrupted before its synchronous commit MAY roll back. These snapshots need not form one atomic checkpoint. Invalid associations SHALL yield no active home. A saved Hearth without valid ownership SHALL become an unlit campfire before visibility. Recovery SHALL NOT infer an owner, upgrade a campfire, or replay an unsaved final cycle. Ordinary material and stamina durability SHALL remain unchanged.
 
 #### Scenario: Process fails before construction commit
 - **WHEN** the process fails after runtime completion but before its construction transaction commits
 - **THEN** recovery MAY restore earlier saved progress or ownership instead of the unsaved completion
 - **AND** it SHALL NOT fabricate the lost finisher or replay the final cycle
 
-#### Scenario: Process fails before death is saved
-- **WHEN** death and home revocation exist only in memory when the process fails
+#### Scenario: Process fails before terminal commit
+- **WHEN** death or home revocation exists only in memory because the process fails before synchronous terminal cleanup commits
 - **THEN** recovery MAY use the earlier saved character and home state
 - **AND** the feature SHALL NOT claim every runtime terminal change survived the restart
 
@@ -509,9 +543,9 @@ After a process failure, recovery SHALL use saved character, object, and ownersh
 - **AND** it SHALL NOT acquire an owner from nearby players, a build initiator, or a later retry caller
 
 #### Scenario: Ordinary shutdown cannot finish saving
-- **WHEN** ordinary shutdown ends before all latest Hearth data has been saved
+- **WHEN** ordinary shutdown or process failure interrupts a pending owning operation before its Hearth transaction commits
 - **THEN** the unsaved portion MAY be lost under the same recovery rules
-- **AND** shutdown SHALL NOT require a new Hearth operation drain or claim a fully atomic world checkpoint
+- **AND** shutdown SHALL preserve ordinary final-save ordering without a Hearth dirty flush or new operation drain and SHALL NOT claim a fully atomic world checkpoint
 
 ### Requirement: Deployment starts from the approved clean database
 

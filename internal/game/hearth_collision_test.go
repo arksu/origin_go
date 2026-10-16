@@ -40,9 +40,7 @@ func addHearthCollisionTestObject(shard *Shard, id types.EntityID, x, y int, beh
 
 func seedHearthCollisionTestHome(t *testing.T, runtime *hearth.Runtime, owner types.EntityID, home *hearth.Home) {
 	t.Helper()
-	version, started := runtime.Index.BeginLookup(owner)
-	require.True(t, started)
-	require.NoError(t, runtime.Index.CompleteLookup(owner, version, home))
+	require.NoError(t, runtime.Index.LoadIfUnknown(owner, home))
 }
 
 func TestHearthCollisionPlayerSpawn(t *testing.T) {

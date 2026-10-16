@@ -853,9 +853,8 @@ func (g *Game) handleDisconnect(c *network.Client) {
 				playerHandle := shard.world.GetHandleByEntityID(playerEntityID)
 				shard.soundEvents.Detach(playerHandle, c.ID)
 				cleanupObserverModeStateForHandle(shard.world, playerHandle)
-				shard.mu.Unlock()
-
 				shard.UnregisterEntityAOI(playerEntityID)
+				shard.mu.Unlock()
 				g.logger.Debug("Dead observer session ended",
 					zap.Uint64("client_id", c.ID),
 					zap.Int64("character_id", int64(playerEntityID)),

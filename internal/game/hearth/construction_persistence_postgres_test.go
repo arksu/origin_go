@@ -62,11 +62,9 @@ func TestConstructionSaverPostgresFirstHomeAndReplacement(t *testing.T) {
 	require.Equal(t, first.Y, converted.Y)
 	require.Equal(t, first.Layer, converted.Layer)
 	freshIndex := hearth.NewIndex()
-	version, started := freshIndex.BeginLookup(1)
-	require.True(t, started)
 	home, err = q.GetCharacterHearth(ctx, hearthGetParams(1))
 	require.NoError(t, err)
-	require.NoError(t, freshIndex.CompleteLookup(1, version, &hearth.Home{
+	require.NoError(t, freshIndex.LoadIfUnknown(1, &hearth.Home{
 		Object: hearth.ObjectKey{Region: home.ObjectRegion, ID: types.EntityID(home.ObjectID)},
 		X:      home.X, Y: home.Y, Layer: home.Layer,
 	}))
@@ -77,7 +75,6 @@ func TestConstructionSaverPostgresFirstHomeAndReplacement(t *testing.T) {
 	snapshot := freshIndex.Snapshot(1)
 	require.Equal(t, hearth.CurrentHome, snapshot.State)
 	require.Equal(t, expectedHome, snapshot.Home)
-	require.False(t, snapshot.Dirty)
 	owner, owned := freshIndex.Owner(expectedHome.Object)
 	require.True(t, owned)
 	require.Equal(t, types.EntityID(1), owner)

@@ -148,6 +148,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		}
 		runtime := ecs.InitResource(s.world, hearth.NewRuntime(s.world, s.chunkManager, reader, objectFactory, saver, behaviorRegistry, eb, logger))
 		s.objectCollisionFilter = runtime.IgnoreObjectCollision
+		s.chunkManager.SetActivationPreparer(runtime.PrepareChunkActivation)
 	}
 
 	chunkSize := _const.ChunkSize * _const.CoordPerTile

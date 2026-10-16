@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -48,8 +49,6 @@ func TestLoadHomeHydratesBothIndexesAndCachesResult(t *testing.T) {
 	loaded := runtime.Index.Snapshot(character)
 	require.Equal(t, CurrentHome, loaded.State)
 	require.Equal(t, want, loaded.Home)
-	require.NotZero(t, loaded.Version)
-	require.False(t, loaded.Dirty)
 	owner, owned := runtime.Index.Owner(want.Object)
 	require.True(t, owned)
 	require.Equal(t, character, owner)
@@ -70,7 +69,6 @@ func TestLoadHomeAbsentRowCachesNoHome(t *testing.T) {
 	loaded := runtime.Index.Snapshot(1)
 	require.Equal(t, NoHome, loaded.State)
 	require.Equal(t, Home{}, loaded.Home)
-	require.False(t, loaded.Dirty)
 	require.Empty(t, runtime.Index.owners)
 	require.NoError(t, runtime.LoadHome(1, 109))
 	require.Equal(t, 1, reads)
@@ -93,7 +91,7 @@ func TestLoadHomeKnownRuntimeStateNeedsNoReader(t *testing.T) {
 	}
 }
 
-func TestLoadHomeMissingDependenciesDoNotStartLookup(t *testing.T) {
+func TestLoadHomeMissingDependenciesDoNotRead(t *testing.T) {
 	reads := 0
 	reader := homeReaderFunc(func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
 		reads++
@@ -107,52 +105,52 @@ func TestLoadHomeMissingDependenciesDoNotStartLookup(t *testing.T) {
 	runtime.Index = index
 	runtime.reader = nil
 	require.Error(t, runtime.LoadHome(1, 109))
-	require.Empty(t, index.characters, "missing reader must not leave an admitted lookup")
+	require.Empty(t, index.characters, "missing reader must not change metadata")
 	runtime.reader = reader
 	require.NoError(t, runtime.LoadHome(1, 109))
 	require.Equal(t, 1, reads)
 	require.Equal(t, NoHome, index.Snapshot(1).State)
 }
 
-func TestLoadHomeDoesNotDuplicatePendingLookup(t *testing.T) {
+func TestLoadHomeHydratesPendingTerminalMetadata(t *testing.T) {
+	for _, alreadyPending := range []bool{false, true} {
+		t.Run(map[bool]string{false: "during_read", true: "before_read"}[alreadyPending], func(t *testing.T) {
+			runtime := NewRuntime(nil, nil, nil, nil, nil, nil, nil, nil)
+			runtime.reader = homeReaderFunc(func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
+				require.NoError(t, runtime.Index.MarkTerminalPending(1))
+				return repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 100, X: 50, Y: 60}, nil
+			})
+			if alreadyPending {
+				require.NoError(t, runtime.Index.MarkTerminalPending(1))
+			}
+			require.NoError(t, runtime.LoadHome(1, 109))
+			pending := runtime.Index.Snapshot(1)
+			require.Equal(t, CurrentHome, pending.State)
+			require.True(t, pending.PendingTerminal)
+			require.False(t, pending.CanAcquire())
+			require.False(t, pending.CanReturn())
+			object := ObjectKey{Region: 1, ID: 100}
+			_, owned := runtime.Index.Owner(object)
+			require.False(t, owned)
+			owner, snapshot, owned := runtime.Index.SnapshotByObject(object)
+			require.True(t, owned)
+			require.Equal(t, types.EntityID(1), owner)
+			require.Equal(t, pending, snapshot)
+		})
+	}
+}
+
+func TestLoadHomeInvalidCharacterDoesNotRead(t *testing.T) {
 	reads := 0
 	runtime := NewRuntime(nil, nil, homeReaderFunc(func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
 		reads++
 		return repository.GetCharacterHearthRow{}, sql.ErrNoRows
 	}), nil, nil, nil, nil, nil)
-	version, started := runtime.Index.BeginLookup(1)
-	require.True(t, started)
-	require.NoError(t, runtime.LoadHome(1, 109))
-	require.Zero(t, reads)
-	require.Equal(t, Unknown, runtime.Index.Snapshot(1).State)
-	require.NoError(t, runtime.Index.CompleteLookup(1, version, nil))
-}
-
-func TestLoadHomeStaleResultPreservesRuntimeOwnership(t *testing.T) {
-	for _, scenario := range []string{"revoked", "replaced", "terminal"} {
-		t.Run(scenario, func(t *testing.T) {
-			runtime := NewRuntime(nil, nil, nil, nil, nil, nil, nil, zap.NewNop().WithOptions(zap.WithFatalHook(zapcore.WriteThenPanic)))
-			var want Snapshot
-			runtime.reader = homeReaderFunc(func(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error) {
-				var err error
-				if scenario == "terminal" {
-					want, err = runtime.Index.ApplyTerminal(1)
-				} else {
-					want, err = runtime.Index.RevokeHome(1)
-					if err == nil && scenario == "replaced" {
-						want, err = runtime.Index.ReplaceHome(1, want.Version, testHome(200))
-					}
-				}
-				require.NoError(t, err)
-				return repository.GetCharacterHearthRow{CharacterID: 1, ObjectRegion: 1, ObjectID: 100, X: 50, Y: 60, Layer: SurfaceLayer}, nil
-			})
-			require.NoError(t, runtime.LoadHome(1, 109))
-			require.Equal(t, want, runtime.Index.Snapshot(1))
-			_, owned := runtime.Index.Owner(ObjectKey{Region: 1, ID: 100})
-			require.False(t, owned)
-			require.False(t, runtime.Index.characters[1].loading, "stale result must release its accepted lookup")
-		})
+	for _, character := range []types.EntityID{0, math.MaxUint64} {
+		require.ErrorIs(t, runtime.LoadHome(character, 109), ErrInvalidCharacter)
 	}
+	require.Zero(t, reads)
+	require.Empty(t, runtime.Index.characters)
 }
 
 func TestLoadHomeFatalFailuresReturnErrors(t *testing.T) {
@@ -185,9 +183,10 @@ func TestLoadHomeFatalFailuresReturnErrors(t *testing.T) {
 			require.ErrorIs(t, runtime.LoadHome(1, 109), scenario.want)
 			require.Equal(t, 1, fatals, "lookup errors must reach the fatal logger hook")
 			require.Equal(t, Unknown, runtime.Index.Snapshot(1).State)
-			if scenario.err == nil {
-				require.False(t, runtime.Index.characters[1].loading, "invalid completion must consume the lookup")
-			}
 		})
 	}
+}
+
+func (f homeReaderFunc) GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error) {
+	panic("unexpected GetCharacterHearthOwners")
 }

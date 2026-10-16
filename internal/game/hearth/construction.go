@@ -31,10 +31,11 @@ type ConstructionChunks interface {
 
 type HomeReader interface {
 	GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error)
+	GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error)
 }
 
-// Runtime belongs to the surface shard. Construction prepares ownership and
-// the previous hearth's chunk synchronously before final costs.
+// Runtime belongs to the surface shard. Home reads, ownership changes and saves
+// run synchronously while the caller holds that shard's lock.
 type Runtime struct {
 	Index    *Index
 	w        *ecs.World
@@ -146,16 +147,10 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 			if raw == nil || raw.DeletedAt.Valid || raw.TypeID != hearthDef.DefID || raw.Region != old.Object.Region || raw.Layer != SurfaceLayer {
 				return constructionRefused("The previous hearth is unavailable.")
 			}
-			copy := *raw
-			copy.TypeID = campfireDef.DefID
-			copy.Hp = sql.NullFloat64{Float64: float64(campfireDef.HP), Valid: true}
-			// A fresh campfire restores its ordinary unlit station and burner state.
-			copy.Data.Valid, copy.Data.RawMessage = false, nil
-			copy.LastTick = int64(ecs.GetResource[ecs.TimeState](r.w).Tick)
-			oldRaw = &copy
+			oldRaw = rawCampfire(raw, campfireDef, int64(ecs.GetResource[ecs.TimeState](r.w).Tick))
 		}
 	}
-	if latest := r.Index.Snapshot(ctx.PlayerID); latest.Version != current.Version || !latest.CanAcquire() {
+	if !r.Index.Snapshot(ctx.PlayerID).CanAcquire() {
 		return constructionRefused("This character's hearth has changed.")
 	}
 	if !complete() {
@@ -170,7 +165,7 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 	} else if oldRaw != nil {
 		oldChunk.UpsertRawObject(oldRaw)
 	}
-	assigned, err := r.Index.ReplaceHome(ctx.PlayerID, current.Version, next)
+	_, err := r.Index.ReplaceHome(ctx.PlayerID, next)
 	if err != nil {
 		panic("prepared hearth assignment failed: " + err.Error())
 	}
@@ -178,7 +173,6 @@ func (r *Runtime) CompleteConstruction(ctx *contracts.ConstructionContext, compl
 		r.logger.Fatal("hearth construction save failed", zap.Error(err))
 		return contracts.BehaviorResult{}
 	}
-	r.Index.AcknowledgeSaved(ctx.PlayerID, assigned.Version)
 	return contracts.BehaviorResult{OK: true}
 }
 
@@ -213,20 +207,19 @@ func (r *Runtime) canTransform(id types.EntityID, handle types.Handle, typeID ui
 }
 
 // LoadHome restores unknown ownership metadata. The caller must hold the owning
-// surface shard lock, and an admitted lookup completes independently of logout.
+// surface shard lock; the synchronous read completes independently of logout.
 func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
 	if r.Index == nil {
 		return errors.New("hearth index is unavailable")
+	}
+	if !validID(character) {
+		return ErrInvalidCharacter
 	}
 	if r.Index.Snapshot(character).State != Unknown {
 		return nil
 	}
 	if r.reader == nil {
 		return errors.New("hearth reader is unavailable")
-	}
-	version, started := r.Index.BeginLookup(character)
-	if !started {
-		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -241,7 +234,7 @@ func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
 	if err == nil {
 		home = &Home{Object: ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}, X: row.X, Y: row.Y, Layer: row.Layer}
 	}
-	if err := r.Index.CompleteLookup(character, version, home); err != nil && !errors.Is(err, ErrStaleLookup) {
+	if err := r.Index.LoadIfUnknown(character, home); err != nil {
 		r.logger.Fatal("invalid hearth lookup result", zap.Error(err))
 		return err
 	}

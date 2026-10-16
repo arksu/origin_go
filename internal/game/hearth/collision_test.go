@@ -17,10 +17,8 @@ func newCollisionRuntime(t testing.TB) (*Runtime, types.Handle) {
 	w := ecs.NewWorldForTesting()
 	target := spawnCollisionHearth(w, 100)
 	runtime := NewRuntime(w, nil, nil, nil, nil, nil, nil, nil)
-	version, started := runtime.Index.BeginLookup(1)
-	require.True(t, started)
 	home := testHome(100)
-	require.NoError(t, runtime.Index.CompleteLookup(1, version, &home))
+	require.NoError(t, runtime.Index.LoadIfUnknown(1, &home))
 	return &runtime, target
 }
 
@@ -96,8 +94,7 @@ func TestIgnoreObjectCollisionRequiresLiveSurfaceHearth(t *testing.T) {
 func TestIgnoreObjectCollisionFollowsReplacementAndTransformation(t *testing.T) {
 	runtime, previous := newCollisionRuntime(t)
 	next := spawnCollisionHearth(runtime.w, 200)
-	current := runtime.Index.Snapshot(1)
-	_, err := runtime.Index.ReplaceHome(1, current.Version, testHome(200))
+	_, err := runtime.Index.ReplaceHome(1, testHome(200))
 	require.NoError(t, err)
 	require.False(t, runtime.IgnoreObjectCollision(1, previous))
 	require.True(t, runtime.IgnoreObjectCollision(1, next))
