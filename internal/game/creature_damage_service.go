@@ -55,6 +55,7 @@ type CreatureDamageService struct {
 	config     *ecs.EntityStatsRuntimeConfig
 	activity   *ecs.CombatActivityState
 	detached   *ecs.DetachedEntities
+	interrupt  func(*ecs.World, types.EntityID, types.Handle)
 }
 
 func NewCreatureDamageService(world *ecs.World, equipment *CombatEquipmentResolver) (*CreatureDamageService, error) {
@@ -228,6 +229,9 @@ func (service *CreatureDamageService) commitDamage(commit creatureDamageCommit) 
 }
 
 func (service *CreatureDamageService) commitDamageResult(target types.Handle, identity types.EntityID, now int64, result *CreatureDamageResult) {
+	if service.interrupt != nil {
+		service.interrupt(service.world, identity, target)
+	}
 	service.activity.RecordPreparedEvent(target, now)
 	service.detached.RequestRecheck(target, service.time.Now)
 	if result.Damage == 0 {
@@ -260,4 +264,10 @@ func (service *CreatureDamageService) releaseTarget(target types.Handle) {
 	service.stats.ReleasePlayer(identity, target)
 	service.visual.Forget(target)
 	service.activity.Release(target)
+}
+
+// SetActionInterrupter observes accepted combat, including fully absorbed hits.
+// The callback runs synchronously under the same owning shard lock as Apply.
+func (service *CreatureDamageService) SetActionInterrupter(interrupt func(*ecs.World, types.EntityID, types.Handle)) {
+	service.interrupt = interrupt
 }

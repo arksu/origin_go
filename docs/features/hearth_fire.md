@@ -7,7 +7,9 @@
 строительством и ручной постановкой поднятых объектов (см. 2.12–2.20).
 Подготовка объектов перед activation реализована и проверена (2.21).
 Синхронная очистка при перманентной смерти и REST-удалении описана в 2.22–2.23;
-точечный repair и его границы описаны в 2.24; остальные игровые правила ещё не подключены. Согласованные решения
+точечный repair и его границы описаны в 2.24. Возврат, прерывания и fallback
+обычного входа реализованы в 2.25; отдельная кнопка в KO-окне и FX остаются
+следующими этапами. Согласованные решения
 зафиксированы 2026-10-11 и уточнены 2026-10-16 в части 2. Они имеют приоритет
 над справочным материалом Haven & Hearth и заменяют предыдущий черновой план порта.
 
@@ -473,8 +475,8 @@ CREATE TABLE origin.character_hearth
 и их тесты. Рецепт описан в 2.14, runtime-завершение стройки — в 2.15.
 Загрузка метаданных при входе подключена в 2.16.
 Pre-activation hydration/normalization реализована и проверена по 2.21,
-permanent-death cleanup описан в 2.22, REST cleanup — в 2.23. Return и FX
-остаются будущими задачами. Объект, созданный `/spawn`, игрового владельца не получает.
+permanent-death cleanup описан в 2.22, REST cleanup — в 2.23. Return и login fallback
+описаны в 2.25; FX остаётся будущей задачей. Объект, созданный `/spawn`, игрового владельца не получает.
 
 #### SQL-контракты
 
@@ -606,7 +608,7 @@ material, stamina и object checkpoints по-прежнему могут пот�
   не равным одному — Fatal. Runtime не откатывается, SQL retry и save queue нет.
 - Новая связь теперь сохраняется в БД и доступна следующему ownership lookup.
   Batch hydration/normalization описана в 2.21, смерть — в 2.22, REST — в 2.23;
-  точечный repair описан в 2.24, возврат и FX остаются отдельными задачами; правила размещения описаны в 2.17–2.20.
+  точечный repair описан в 2.24, возврат — в 2.25; FX остаётся отдельной задачей. Правила размещения описаны в 2.17–2.20.
   Персонаж, инвентарь, материалы и stamina не входят в транзакцию стройки.
   `/spawn` не назначает владельца; schema, protocol и recipe не меняются.
 - Тесты берут число веток из рецепта и проверяют синхронную достройку ровно
@@ -645,7 +647,7 @@ material, stamina и object checkpoints по-прежнему могут пот�
 - Подключена только загрузка существующих метаданных: очаг не создаётся,
   объект и чанк не активируются, выбор позиции спавна не меняется. Отдельная
   pre-activation hydration описана в 2.21, смерть — в 2.22, REST — в 2.23;
-  точечный repair описан в 2.24; возврат остаётся будущей задачей. SQL, схема и протокол не меняются.
+  точечный repair описан в 2.24; возврат и отдельный login fallback — в 2.25. SQL, схема и протокол не меняются.
 
 ### 2.17 Коллизии владельца
 
@@ -775,7 +777,7 @@ material, stamina и object checkpoints по-прежнему могут пот�
   локальный microbenchmark, не подтверждение нагрузки 30 000 CCU.
   Strict OpenSpec validation и `git diff --check` прошли. Независимый review:
   Approve, без outstanding Critical/Important. Проверки смерти приведены
-  отдельно в `tasks.md`; return/FX и общий release scope остаются открытыми.
+  отдельно в `tasks.md`; return описан в 2.25, FX и общий release scope остаются открытыми.
 
 ### 2.22 Синхронная очистка при перманентной смерти (4.1 и часть 4.3a)
 
@@ -879,7 +881,94 @@ material, stamina и object checkpoints по-прежнему могут пот�
   ownership и dirty live/raw conversions после final saves. Новых mutex, очередей,
   flush/drain и метрик нет. Фактические проверки перечислены в `tasks.md`.
 
-### Проверки для будущей реализации
+### 2.25 Возврат, прерывание и обычный вход (раздел 5)
+
+- `travel_to_hearth_fire` — обычное no-target action с label `Travel to Hearth Fire`,
+  нулевой stamina и cooldown 360000 ms. До публикации каталога Hearth переводит
+  пять секунд в `5 * TickRate` ticks; обычный progress и клиентский каталог
+  используют одно значение. Иконка ссылается на существующий зелёный flame frame,
+  отдельная графика в этом этапе не создаётся.
+- Handler читает готовый `Index`: Unknown, отсутствие eligible home, active KO,
+  combat, swimming и закрытая сессия дают отказ. Post-KO lying разрешён после
+  authoritative resolution; стояние на shallow water не считается swimming.
+  Optional `BeforeExecution` останавливает прежнее движение и взаимодействия
+  до progress. Eligibility повторно проверяется обычным action lifecycle.
+- После progress работает штатный асинхронный `RequestTransfer` с `ActionDeferred`.
+  Hearth I/O остаётся синхронным; возврат не делает нового ownership SQL lookup.
+  Три optional transfer hooks задают source policy, target spawn и результат.
+  Source policy проверяет exact handle/client/action generation и `CanCommit`
+  до сохранения и после него, перед destructive capture. Ранний отказ завершает
+  только исходное deferred action; late result не отменяет новую попытку.
+  После успешного `SaveSync` общий transfer перечитывает полную строку персонажа
+  существующим `GetCharacter` под тем же source lock, до capture. Чтение получает
+  отдельный пятисекундный timeout от game context. И target,
+  и rollback получают сохранённые актуальные stamina, energy, heading и profile
+  вместо строки до save; ошибка чтения оставляет исходное тело и carry на месте.
+- Общий resolved-spawn helper подготавливает AOI и заново разрешает полный
+  ключ/позицию дома под surface lock. Final resolution, live-object validation,
+  обычная проверка коллизии и spawn выполняются под одной блокировкой. При смене
+  дома прежняя unpublished AOI-регистрация очищается и подготовка повторяется
+  в пределах одного `SpawnTimeout`. В transfer participants и сохранение позиции
+  попадают фактические координаты, а не устаревшие hints.
+  Регистрация тела, восстановление participants, completion и attachment идут
+  через один non-fallible finalizer под последним spawn lock. Rollback использует
+  ту же последовательность; competing world update видит уже привязанное тело
+  с carry. При закрытом соединении logout/drop ставится до unlock. Возможная
+  смерть при attachment выполняет штатный observer/death flow, а синхронная
+  Hearth-очистка вызывается через `unlockAndCompletePermanentDeaths` после unlock.
+- Проверка места учитывает только player collider и существующий owner filter;
+  nearby/random fallback для возврата отсутствует. Carry переносится существующим
+  participant. Целевая runtime-копия становится standing до spawn; source-снимок
+  сохраняет lying для rollback. Cooldown ставится один раз на целевом теле после
+  успеха и до attachment/bootstrap; отказ/rollback его не запускают. После capture
+  остаётся штатное восстановление тела и logout при закрытом соединении.
+  Сохранённые runtime-инвентари игрока и carry, включая вложенные контейнеры,
+  удаляются через `DeleteOwnedInventoryContainers` до despawn владельцев.
+  Существующая очистка source raw-cache carry выполняется при capture под source
+  lock, чтобы последующая активация не восстановила прежний экземпляр.
+  После успешного снимка carry его существующий active source chunk удерживается
+  через nonblocking `PinPersistence` до конца transfer. Busy/unavailable source
+  отклоняется до изменений. Снимок владеет pin; общий deferred cleanup освобождает
+  его и при частичном отказе capture или неудачном rollback spawn. Пока pin жив,
+  исходный чанк не выгружается и повторный AOI не перечитывает старый carry из SQL.
+  Штатная best-effort политика ошибок сохранения carry не меняется: после отказа
+  основной и fallback-записи SQL может по-прежнему указывать source. Pin не
+  устраняет эту отдельную границу durable-write failure и не удерживается навечно.
+- Optional interruption policy использует обычный `Cancel` до gameplay-отказов
+  валидного другого action/context/craft/build/carry/Stand Up намерения и свежей
+  команды движения. Release/refresh, malformed/stale input и старая сессия
+  не прерывают новую попытку. Damage/combat, включая нулевой hit, starvation,
+  admin damage и принятый переход в swim уведомляют синхронно. Disconnect уже
+  отменяет действие; chat и личные окна сохраняют progress.
+- Actions/hotbar mouse, keyboard и touch доходят до общего activation helper.
+  Если другое известное action отсекается клиентским cooldown во время возврата,
+  уходит только существующий `CancelAction`. Drag, clearing и long press не
+  являются попыткой запуска.
+- Авторизация проверяет существующий `transferInFlight` до установки online.
+  Если перенос ещё не завершён, auth отпускает транзакцию и ждёт его completion
+  channel в пределах одного `SpawnTimeout`, с отменой через `g.ctx` и `c.Done()`.
+  Затем повторяет всю транзакцию проверки токена и online с актуальной строкой.
+  Channel закрывается после restore/rollback, logout закрытого соединения и
+  сохранения конечной позиции; ожидание не держит shard или DB lock.
+- Login сохраняет reattach перед новым spawn, включая surface body после
+  межслойного fallback при ещё старом сохранённом слое. Кандидаты идут saved
+  position → exact current home на surface → nearby saved → existing random
+  на исходном слое. Общий helper повторно проверяет актуальный home; обычный
+  вход сохраняет исходный runtime KO/combat cache и lying pose, обновляет слой
+  клиента и удаляет cache при успешном attachment под lock целевого тела,
+  до возможного нового disconnect/expiry snapshot. Нового очага нет.
+  Для каждого кандидата spawn, регистрация тела и attachment либо logout
+  выполняются под одной owning-shard блокировкой. После её освобождения
+  world update может штатно обработать смерть уже привязанного игрока.
+  При фактической смене слоя синхронно вызывается существующий
+  `UpdateCharacterPositionAndLayer` с независимым bounded context вне shard lock:
+  обычный CharacterSaver не пишет Layer. После записи повторного attachment
+  или logout нет: за время SQL тело могло стать corpse. Ошибка этой записи позиции
+  сохраняет штатный transfer warning-контракт и независимые checkpoints.
+- Новых SQL/schema/protocol, очередей, workers или persistence barriers нет.
+  Результаты проверок записаны в `tasks.md`; KO-window кнопка относится к 6.2.
+
+### Проверки оставшихся этапов
 
 - Первый вход, повторный вход и отсутствие действующей связи не создают очаг.
   Новый персонаж существует в мире без очага до завершения ручной стройки.

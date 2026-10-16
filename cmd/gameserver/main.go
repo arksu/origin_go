@@ -24,6 +24,7 @@ import (
 	"origin/internal/game"
 	"origin/internal/game/behaviors"
 	"origin/internal/game/events"
+	"origin/internal/game/hearth"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 	"origin/internal/itemdefs"
@@ -84,6 +85,9 @@ func main() {
 	actionRegistry, err := actiondefs.LoadFromDirectory("./data/actions", logger)
 	if err != nil {
 		logger.Fatal("Failed to load action definitions", zap.Error(err))
+	}
+	if err := hearth.PrepareReturnActionDefinition(actionRegistry, cfg.Game.TickRate); err != nil {
+		logger.Fatal("Invalid Hearth return action", zap.Error(err))
 	}
 	actiondefs.SetGlobal(actionRegistry)
 	soundRegistry, err := sounddefs.LoadFromDirectory("./data/sounds", logger)

@@ -312,11 +312,15 @@ func TestMeleeLifecycleTransferAndRollbackPrepareNewGeneration(t *testing.T) {
 				assertMeleeLifecycleReleased(t, source, 10, player)
 			}
 			if rollback {
-				transfer.restoreParticipantsOnRollback(req, destination, newPlayer, snapshot.ParticipantStates)
+				destination.mu.Lock()
+				transfer.restoreParticipantsOnRollbackLocked(req, destination, newPlayer, snapshot.ParticipantStates)
+				destination.unlockAndCompletePermanentDeaths()
 				require.True(t, participant.rollback)
 				require.False(t, participant.restored)
 			} else {
-				transfer.restoreParticipantsOnTarget(req, destination, newPlayer, snapshot.ParticipantStates)
+				destination.mu.Lock()
+				transfer.restoreParticipantsOnTargetLocked(req, destination, newPlayer, snapshot.ParticipantStates)
+				destination.unlockAndCompletePermanentDeaths()
 				require.True(t, participant.restored)
 				require.False(t, participant.rollback)
 			}

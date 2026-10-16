@@ -14,9 +14,10 @@
 metadata/нормализация перед activation 3.5 и синхронное сохранение стройки 4.3.
 Синхронная очистка при смерти и REST-удалении реализована в 4.1–4.3a;
 точечный repair, проверки восстановления/final saves и границы стоимости — в 4.4–4.5.
+Раздел 5 подключает обычное действие возврата, прерывания и межслойный login fallback.
 Проверки этих этапов фиксируются отдельно в `tasks.md`.
 Фактические SQL и runtime API описаны в
-`docs/features/hearth_fire.md`, разделах 2.13–2.24:
+`docs/features/hearth_fire.md`, разделах 2.13–2.25:
 `character_hearth.sql`, migration/schema и `internal/game/hearth/index.go`.
 Ранее прошли целевые Hearth/construction tests, unit-тесты записи и полный
 `GOCACHE=/tmp/origin-hearth-go-cache make test`, включая этап 4.3;
@@ -32,7 +33,7 @@ regeneration не изменил generated-файлы. Тесты использ
 Задача 3.5 реализована и проверена, включая упрощённый индекс, PostgreSQL
 integration и финальный полный `make test`; результаты приведены в 3.5.
 Ранее указанное отсутствие DSN относится только к предыдущему этапу.
-Return и FX остаются отдельными будущими этапами.
+Кнопка возврата в KO-окне и FX остаются отдельными будущими этапами.
 
 ## Базовые гарантии
 
@@ -749,8 +750,10 @@ per-player metric labels или новый persistence framework.
 **Что сделаю.** Зарегистрирую `Travel to Hearth Fire` в server action catalog
 и feature-owned handler через существующие `ActionService`/`ActionHandler`.
 Действие без цели, с обычным execution progress на пять секунд, нулевой
-stamina cost и cooldown 360000 ms. Длительность переводится в ticks текущим
-способом, не отдельным wall-clock таймером и не произвольным fixed tick count.
+stamina cost и cooldown 360000 ms. Каталог поддерживает ticks; Hearth до его
+публикации переводит пять секунд в `5 * TickRate`. Отдельного таймера или
+нового duration-формата нет. Optional `BeforeExecution` очищает прежние
+взаимодействия и движение до progress: обычный `Start` вызывается после него.
 
 **Политика фичи.** Проверяю current runtime home, живое тело, combat state,
 swim mode и active KO. Post-KO lying допускается, если нокаут уже закончился;
@@ -786,8 +789,10 @@ lock непосредственно до detach. Проверка `CanCommit` и
 **Cooldown.** Admission сейчас запускает асинхронную работу, а detach отменяет
 source action и убирает source handle. Поэтому нельзя вызывать на старом
 handle `Complete(success=true)` или считать `RequestTransfer` успехом.
-Target-success hook применяет existing cooldown helper к новому target body
+Result hook применяет existing cooldown helper к новому target body
 один раз после действительного relocation и до attach/initial snapshots.
+При отказе до detach он завершает только exact исходное deferred action;
+без этого `ActionCompletionStarted` оставил бы progress в ожидании.
 Текущий `transferInFlight` запрещает параллельный перенос персонажа, но не
 содержит отдельной transfer generation. Однократность нового completion hook
 проверяется его узким контрактом под owning lock; captured action generation,
@@ -799,6 +804,11 @@ Target-success hook применяет existing cooldown helper к новому 
 поведение. Disconnect/cancel до detach запрещает успех; после capture остаётся
 обычная transfer/disconnect политика, не новый способ rollback по произвольному
 позднему input. Не добавляю DB publication barrier или новый transfer journal.
+Source policy повторно проверяется после blocking save, до capture. Общий
+resolved-spawn helper удерживает target lock через final resolve/validate/spawn;
+смена полного composite key или позиции очищает unpublished AOI и повторяет
+подготовку в пределах одного timeout. Итоговые координаты используются также
+participant-ами и SQL сохранения позиции.
 
 **Проверки.** Два места смены дома: во время progress и после queue admission.
 Также late callback, cancel, disconnect, eligibility change, timeout, source
@@ -891,8 +901,22 @@ random fallback. Первый вход без Hearth проходит обычн
 **Необходимая правка общего пути.** Текущий `spawnPos` содержит X/Y, а loop
 привязан к исходному layer/shard. Добавлю нейтральный layer-aware candidate
 и согласованный выбор owning shard/setup/attach: saved position может быть
-под землёй, home всегда на поверхности. Подготовка ownership/инвентарей
-выполняется вне shard lock; SQL в проверку кандидата не добавляется.
+под землёй, home всегда на поверхности. Ownership уже известен; setup сохраняет
+штатную загрузку инвентарей. SQL lookup в проверку кандидата не добавляется.
+Source runtime KO/combat cache копируется до смены candidate layer и сохраняется
+через неудачные попытки. Reattach проверяет saved shard, затем surface: после
+межслойного fallback сохранённый слой может быть устаревшим при отмене или ошибке записи. Успех использует
+runtime-позицию тела и корректный `client.Layer`; старый cache удаляется при
+успешном attachment под lock тела, до следующего disconnect/expiry snapshot.
+Обычный вход не применяет standing-политику добровольного возврата.
+Для любого успешного кандидата spawn, регистрация тела и attachment либо
+logout используют одну owning-shard блокировку и existing locked finalizer.
+Ordinary CharacterSaver не сохраняет Layer, поэтому при успешной смене слоя
+используется готовый `UpdateCharacterPositionAndLayer` с независимым bounded
+context вне shard lock после финализации. После SQL нет повторного attachment
+или logout: за время записи world update мог уже обработать смерть тела.
+Ошибка сохраняет штатный transfer warning-контракт;
+нового запроса, схемы или объединённого checkpoint нет.
 
 **Граница.** No-home просто пропускает этап дома, не создаёт объект, marker
 или initialization transaction. Blocked home ищет место около saved position,

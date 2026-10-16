@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"google.golang.org/protobuf/proto"
-	"origin/internal/characterattrs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
@@ -56,7 +55,7 @@ func (g *Game) spawnTeleportedPlayer(
 	if len(runtimeHealth) > 0 {
 		runtime = &playerRuntimeState{Health: runtimeHealth[0]}
 	}
-	return g.spawnTeleportedPlayerWithRuntime(client, shard, character, x, y, ignoreObjectCollision, runtime, false)
+	return g.spawnTeleportedPlayerWithRuntime(client, shard, character, x, y, ignoreObjectCollision, runtime, nil)
 }
 
 func (g *Game) spawnTeleportedPlayerWithRuntime(
@@ -66,15 +65,31 @@ func (g *Game) spawnTeleportedPlayerWithRuntime(
 	x, y int,
 	ignoreObjectCollision bool,
 	runtime *playerRuntimeState,
-	deferAttachment bool,
+	finalize playerSpawnFinalizer,
 ) (types.Handle, error) {
+	handle, _, err := g.spawnTeleportedPlayerAtDestination(client, shard, character, runtime, finalize,
+		func(*Shard) (playerSpawnDestination, error) { return playerSpawnDestination{X: x, Y: y}, nil }, nil,
+		SpawnCollisionPolicy{IgnoreObjectCollision: ignoreObjectCollision})
+	return handle, err
+}
+
+func (g *Game) spawnTeleportedPlayerAtDestination(
+	client *network.Client,
+	shard *Shard,
+	character repository.Character,
+	runtime *playerRuntimeState,
+	finalize playerSpawnFinalizer,
+	resolve func(*Shard) (playerSpawnDestination, error),
+	validate func(*Shard, playerSpawnDestination) error,
+	policy SpawnCollisionPolicy,
+) (types.Handle, repository.Character, error) {
 	if client == nil {
-		return types.InvalidHandle, fmt.Errorf("nil client")
+		return types.InvalidHandle, character, fmt.Errorf("nil client")
 	}
-	if !deferAttachment {
+	if finalize == nil {
 		select {
 		case <-client.Done():
-			return types.InvalidHandle, fmt.Errorf("client disconnected")
+			return types.InvalidHandle, character, fmt.Errorf("client disconnected")
 		default:
 		}
 	}
@@ -82,50 +97,32 @@ func (g *Game) spawnTeleportedPlayerWithRuntime(
 	// state is independent of whether its connection is still open.
 	ctx, cancel := context.WithTimeout(context.Background(), g.cfg.Game.SpawnTimeout)
 	defer cancel()
-
-	playerEntityID := types.EntityID(character.ID)
-	if err := shard.PrepareEntityAOI(ctx, playerEntityID, x, y); err != nil {
-		return types.InvalidHandle, err
-	}
-
-	normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
-	profileExperience, profileSkills, profileDiscovery := loadCharacterProfileData(character, g.logger)
-	pos := spawnPos{X: x, Y: y}
-	setupFn := g.buildPlayerSetupWithRuntimeFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery, runtime)
-	handle, spawnErr := shard.trySpawnPlayerWithPolicy(x, y, character, setupFn, SpawnCollisionPolicy{
-		IgnoreObjectCollision: ignoreObjectCollision,
-	})
+	handle, character, spawnErr := g.spawnPlayerAtResolvedDestination(ctx, shard, character, runtime, resolve, validate, policy,
+		func(handle types.Handle, actual repository.Character) {
+			playerEntityID := types.EntityID(actual.ID)
+			charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
+			nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
+			charEntities.Add(playerEntityID, handle, nextSaveAt)
+			client.Layer = actual.Layer
+			if finalize != nil {
+				finalize(handle, actual)
+				return
+			}
+			if g.attachClientToWorldLocked(shard, client, playerEntityID, actual, handle) {
+				g.ensureObserverVisibilityImmediate(shard.world, handle)
+			} else {
+				delay := time.Duration(shard.cfg.Game.DisconnectDelay) * time.Second
+				shard.queuePlayerLogoutLocked(playerEntityID, handle, ecs.GetResource[ecs.TimeState](shard.world).Now, delay)
+			}
+		})
 	if handle == types.InvalidHandle {
-		shard.mu.Lock()
-		shard.UnregisterEntityAOI(playerEntityID)
-		shard.mu.Unlock()
 		if spawnErr != nil {
-			return types.InvalidHandle, spawnErr
+			return types.InvalidHandle, character, spawnErr
 		}
-		return types.InvalidHandle, fmt.Errorf("spawn blocked")
+		return types.InvalidHandle, character, fmt.Errorf("spawn blocked")
 	}
 
-	shard.mu.Lock()
-	defer shard.unlockAndCompletePermanentDeaths()
-	charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
-	nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
-	charEntities.Add(playerEntityID, handle, nextSaveAt)
-
-	client.Layer = character.Layer
-	if deferAttachment {
-		// Transfer participants restore their state before the session is exposed
-		// to disconnect/expiry; the caller completes attachment afterwards.
-		return handle, nil
-	}
-	if g.attachClientToWorldLocked(shard, client, playerEntityID, character, handle) {
-		g.ensureObserverVisibilityImmediate(shard.world, handle)
-	} else {
-		// The restored body remains authoritative even if its connection closes
-		// during setup. Queue logout rather than creating a duplicate rollback.
-		delay := time.Duration(shard.cfg.Game.DisconnectDelay) * time.Second
-		shard.queuePlayerLogoutLocked(playerEntityID, handle, ecs.GetResource[ecs.TimeState](shard.world).Now, delay)
-	}
-	return handle, nil
+	return handle, character, nil
 }
 
 func (g *Game) sendPlayerLeaveWorld(c *network.Client, entityID types.EntityID) {

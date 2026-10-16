@@ -6,6 +6,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors"
+	"origin/internal/game/lifecycle"
 	gameworld "origin/internal/game/world"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
@@ -23,8 +24,18 @@ type liftCarryTransferState struct {
 	LiftedMeta     components.LiftedObjectState
 	CarryStartedAt int64
 
-	SourceLayer int
-	SourceChunk types.ChunkCoord
+	SourceLayer        int
+	SourceChunk        types.ChunkCoord
+	sourceChunkManager *gameworld.ChunkManager
+}
+
+func (s *liftCarryTransferState) releaseTransferResources() {
+	if s == nil || s.sourceChunkManager == nil {
+		return
+	}
+	manager := s.sourceChunkManager
+	s.sourceChunkManager = nil
+	manager.UnpinPersistence(s.SourceChunk)
 }
 
 type LiftCarryTransferParticipant struct {
@@ -100,13 +111,26 @@ func (p *LiftCarryTransferParticipant) CaptureSource(
 			Y: chunkRef.CurrentChunkY,
 		},
 	}
+	if sourceShard.chunkManager == nil {
+		return nil, fmt.Errorf("carried object source chunk manager unavailable")
+	}
+	chunk := sourceShard.chunkManager.GetChunkFast(state.SourceChunk)
+	if chunk == nil || chunk.GetState() != types.ChunkStateActive {
+		return nil, fmt.Errorf("carried object source chunk is not active")
+	}
+	if err := sourceShard.chunkManager.PinPersistence(state.SourceChunk); err != nil {
+		return nil, fmt.Errorf("pin carried object source chunk: %w", err)
+	}
+	state.sourceChunkManager = sourceShard.chunkManager
 
 	invalidateEntityVisibility(sourceShard.world, sourceShard.layer, objectHandle, carry.ObjectEntityID, sourceShard.EventBus())
-	if chunk := sourceShard.chunkManager.GetChunkFast(state.SourceChunk); chunk != nil {
-		chunk.Spatial().RemoveStatic(objectHandle, int(transform.X), int(transform.Y))
-		chunk.Spatial().RemoveDynamic(objectHandle, int(transform.X), int(transform.Y))
-	}
+	// Retire the captured raw copy before source AOI changes can reactivate it.
+	chunk.RemoveRawObjectByID(carry.ObjectEntityID)
+	chunk.RemoveRawInventoriesByOwner(carry.ObjectEntityID)
+	chunk.Spatial().RemoveStatic(objectHandle, int(transform.X), int(transform.Y))
+	chunk.Spatial().RemoveDynamic(objectHandle, int(transform.X), int(transform.Y))
 	ecs.CancelBehaviorTicksByEntityID(sourceShard.world, carry.ObjectEntityID)
+	lifecycle.DeleteOwnedInventoryContainers(sourceShard.world, carry.ObjectEntityID)
 	sourceShard.world.Despawn(objectHandle)
 
 	sourceShard.liftService.clearPendingLiftTransitionState(sourceShard.world, req.PlayerID, playerHandle, false)
@@ -283,15 +307,6 @@ func (p *LiftCarryTransferParticipant) patchChunkCachesAfterTransfer(
 	if objectID == 0 {
 		return
 	}
-	// Remove stale source raw caches so future inactive saves do not resurrect the moved object.
-	if sourceShard := g.shardManager.GetShard(state.SourceLayer); sourceShard != nil {
-		if sourceChunk := sourceShard.chunkManager.GetChunkFast(state.SourceChunk); sourceChunk != nil {
-			// These helpers intentionally mark rawDataDirty so cache repairs persist.
-			sourceChunk.RemoveRawObjectByID(objectID)
-			sourceChunk.RemoveRawInventoriesByOwner(objectID)
-		}
-	}
-
 	rawObj, err := g.objectFactory.Serialize(targetShard.world, objectHandle)
 	if err != nil || rawObj == nil {
 		return

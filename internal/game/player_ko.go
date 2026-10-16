@@ -16,8 +16,13 @@ func (s *Shard) queueStandUp(w *ecs.World, handle types.Handle, command *network
 	if !ok || request == nil {
 		return
 	}
-	if !s.currentStandUpConnection(w, command.CharacterID, command.ClientID) {
+	if !s.currentPlayerConnection(w, command.CharacterID, command.ClientID) {
 		return
+	}
+	// Keep invalid-epoch requests queued for the ordinary authoritative stats ack,
+	// but only a current session may interrupt gameplay.
+	if s.validDirectionalSession(command.CharacterID, command.ClientID, request.StreamEpoch) && s.actionService != nil {
+		s.actionService.Interrupt(w, command.CharacterID, handle)
 	}
 	if s.pendingStandUps == nil {
 		s.pendingStandUps = make(map[types.EntityID]*network.PlayerCommand)
@@ -32,7 +37,7 @@ func (s *Shard) ApplyPendingStandUp(w *ecs.World, playerID types.EntityID, handl
 	}
 	delete(s.pendingStandUps, playerID)
 	request := command.Payload.(*netproto.StandUp)
-	if !s.currentStandUpConnection(w, playerID, command.ClientID) {
+	if !s.currentPlayerConnection(w, playerID, command.ClientID) {
 		return
 	}
 	if !s.validDirectionalSession(playerID, command.ClientID, request.StreamEpoch) {
@@ -82,7 +87,7 @@ func (s *Shard) HandlePlayerIncapacitated(w *ecs.World, playerID types.EntityID,
 	playerstate.StopMovement(w, handle)
 }
 
-func (s *Shard) currentStandUpConnection(w *ecs.World, playerID types.EntityID, clientID uint64) bool {
+func (s *Shard) currentPlayerConnection(w *ecs.World, playerID types.EntityID, clientID uint64) bool {
 	if ecs.GetResource[ecs.DetachedEntities](w).IsDetached(playerID) {
 		return false
 	}

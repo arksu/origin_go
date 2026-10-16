@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import test from 'node:test'
@@ -25,6 +25,10 @@ test('comparison covers each artifact and deterministic manifest content', async
 
 test('reproducibility compares fresh Blender exports and never publishes', async () => {
   const project = await createBuildProject()
+  await mkdir(join(project.publicRoot, 'assets/game'), { recursive: true })
+  const scratch = join(project.root, 'build/asset-pipeline')
+  await mkdir(join(scratch, 'stage-prior'), { recursive: true })
+  await writeFile(join(scratch, 'stage-prior/old.log'), 'previous failure')
   const log = join(project.root, 'workers.jsonl')
   const blender = await blenderWrapper(project, '', `if (args.includes('--request')) {
     const output = args[args.indexOf('--output') + 1];
@@ -39,6 +43,7 @@ test('reproducibility compares fresh Blender exports and never publishes', async
   assert.notEqual(workers[0].pid, workers[1].pid)
   assert.notEqual(workers[0].output, workers[1].output)
   assert.deepEqual(await runtimeState(project.publicRoot), before)
+  assert.deepEqual(await readdir(scratch), [])
 })
 
 test('reproducibility reports nondeterministic runtime metadata and leaves catalog untouched', async () => {

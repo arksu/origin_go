@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "travel_to_hearth_fire",
+      "presentation": {
+        "label": "Travel to Hearth Fire",
+        "menuIcon": "/assets/game/obj/hearth_fire/flame/frame_1.png"
+      },
+      "target": { "kind": "none" },
+      "requirements": {},
+      "execution": { "ticks": 50 },
+      "cooldown": 360000
+    }
+  ]
+}

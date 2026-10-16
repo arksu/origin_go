@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { findRecipeFiles, loadRecipes, selectRecipes } from './catalog.ts'
@@ -66,6 +66,23 @@ async function stage(staging, id, name, operation, log = noLog) {
     await writeFile(detailsPath, detail)
     report(log, `${id} ${name} failed (${elapsedSince(startedAt)}); details: ${detailsPath}`)
     throw new Error(`${id} ${name} failed: ${error.message}; log: ${detailsPath}`, { cause: error })
+  }
+}
+
+// All staging users hold the publish lock, so previous runs cannot still be active.
+async function cleanPreviousStaging(root) {
+  let parent = root
+  for (const part of ['build', 'asset-pipeline']) {
+    parent = join(parent, part)
+    await mkdir(parent).catch(error => { if (error.code !== 'EEXIST') throw error })
+    if (!(await lstat(parent)).isDirectory() || await realpath(parent) !== parent) {
+      throw new Error(`Staging path crosses a non-directory or symlink: ${parent}`)
+    }
+  }
+  for (const entry of await readdir(parent, { withFileTypes: true })) {
+    if (entry.name.startsWith('stage-') && entry.isDirectory()) {
+      await rm(join(parent, entry.name), { recursive: true })
+    }
   }
 }
 
@@ -224,6 +241,7 @@ export async function buildAssets({ root = defaultRoot, target, animations = fal
   root = await realpath(root)
   const publicRoot = await realpath(join(root, 'web_new/public'))
   return withPublishLock(publicRoot, async () => {
+    await cleanPreviousStaging(root)
     const previousCatalog = await readCatalog(publicRoot)
     const actionAnimationDefinitions = await loadActionAnimationDefinitions(root)
     const audioDefinitions = await loadAudioDefinitions(root)
@@ -236,7 +254,8 @@ export async function buildAssets({ root = defaultRoot, target, animations = fal
         retainPublishedModel(bundle, published.get(bundle.manifest.id), publicRoot, context.recipes.get(bundle.manifest.id)), log)
     }
     await checkInputs(context)
-    const catalog = await stage(context.staging, target, 'publication', () => publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions, ...audioDefinitions }), log)
+    const runtimePaths = [...context.recipes.values()].map(recipe => recipe.runtimePath)
+    const catalog = await stage(context.staging, target, 'publication', () => publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions, ...audioDefinitions, runtimePaths }), log)
     report(log, `publication ${join(publicRoot, 'assets/game/asset-catalog.json')} complete (${manifests.length} assets)`)
     // Publication is committed. A scratch cleanup problem must not report a failed build.
     await rm(context.staging, { recursive: true }).catch(error => { process.stderr.write(`Build committed; staging cleanup failed: ${error.message}\n`) })
@@ -246,44 +265,51 @@ export async function buildAssets({ root = defaultRoot, target, animations = fal
 
 export async function verifyReproducible({ root = defaultRoot, target, toolPaths = {}, log = noLog }) {
   root = await realpath(root)
-  const first = await prepare(root, target, toolPaths, log)
-  const firstBuild = await stageAssets(first, { log })
-  const second = await prepare(root, target, toolPaths, log)
-  const secondBuild = await stageAssets(second, { log })
-  await checkInputs(first)
-  await checkInputs(second)
-  await compareBuilds(firstBuild, secondBuild)
-  await rm(first.staging, { recursive: true })
-  await rm(second.staging, { recursive: true })
-  return { assets: firstBuild.map(bundle => bundle.manifest.id) }
+  const publicRoot = await realpath(join(root, 'web_new/public'))
+  return withPublishLock(publicRoot, async () => {
+    await cleanPreviousStaging(root)
+    const first = await prepare(root, target, toolPaths, log)
+    const firstBuild = await stageAssets(first, { log })
+    const second = await prepare(root, target, toolPaths, log)
+    const secondBuild = await stageAssets(second, { log })
+    await checkInputs(first)
+    await checkInputs(second)
+    await compareBuilds(firstBuild, secondBuild)
+    await rm(first.staging, { recursive: true })
+    await rm(second.staging, { recursive: true })
+    return { assets: firstBuild.map(bundle => bundle.manifest.id) }
+  })
 }
 
 export async function validateAssets({ root = defaultRoot, target, toolPaths = {}, log = noLog }) {
   root = await realpath(root)
   const publicRoot = await realpath(join(root, 'web_new/public'))
-  const catalog = await readCatalog(publicRoot)
-  const context = await prepare(root, target, toolPaths, log)
-  const published = new Map()
-  for (const recipe of context.selected) {
-    const artifact = catalog.assets[recipe.id]
-    if (!artifact) throw new Error(`Missing published asset: ${recipe.id}; run build first`)
-    const manifest = JSON.parse(await readArtifact(publicRoot, artifact))
-    if (manifest.provenance?.source?.sha256 !== context.sourceInputs[recipe.source.absolutePath]) throw new Error(`${recipe.id} source input differs from published manifest`)
-    for (const entry of [manifest.model, manifest.metadata, ...manifest.textures, ...Object.values(manifest.clips).map(clip => clip.artifact)]) {
-      await readArtifact(publicRoot, entry)
+  return withPublishLock(publicRoot, async () => {
+    await cleanPreviousStaging(root)
+    const catalog = await readCatalog(publicRoot)
+    const context = await prepare(root, target, toolPaths, log)
+    const published = new Map()
+    for (const recipe of context.selected) {
+      const artifact = catalog.assets[recipe.id]
+      if (!artifact) throw new Error(`Missing published asset: ${recipe.id}; run build first`)
+      const manifest = JSON.parse(await readArtifact(publicRoot, artifact))
+      if (manifest.provenance?.source?.sha256 !== context.sourceInputs[recipe.source.absolutePath]) throw new Error(`${recipe.id} source input differs from published manifest`)
+      for (const entry of [manifest.model, manifest.metadata, ...manifest.textures, ...Object.values(manifest.clips).map(clip => clip.artifact)]) {
+        await readArtifact(publicRoot, entry)
+      }
+      published.set(recipe.id, manifest)
     }
-    published.set(recipe.id, manifest)
-  }
-  const rebuilt = await stageAssets(context, { log })
-  for (const { manifest, result } of rebuilt) {
-    const previous = published.get(manifest.id)
-    if (canonicalJSON(previous) !== canonicalJSON(manifest)) throw new Error(`${manifest.id} published source, toolchain or artifact compatibility mismatch; run build`)
-    await validateArtifacts({ ...result, model: artifactPath(publicRoot, previous.model),
-      metadata: artifactPath(publicRoot, previous.metadata), textures: previous.textures.map(entry => artifactPath(publicRoot, entry)),
-      clips: Object.fromEntries(Object.entries(previous.clips).map(([id, clip]) => [id, artifactPath(publicRoot, clip.artifact)])),
-    }, context.recipes.get(manifest.id))
-  }
-  await checkInputs(context)
-  await rm(context.staging, { recursive: true })
-  return catalog
+    const rebuilt = await stageAssets(context, { log })
+    for (const { manifest, result } of rebuilt) {
+      const previous = published.get(manifest.id)
+      if (canonicalJSON(previous) !== canonicalJSON(manifest)) throw new Error(`${manifest.id} published source, toolchain or artifact compatibility mismatch; run build`)
+      await validateArtifacts({ ...result, model: artifactPath(publicRoot, previous.model),
+        metadata: artifactPath(publicRoot, previous.metadata), textures: previous.textures.map(entry => artifactPath(publicRoot, entry)),
+        clips: Object.fromEntries(Object.entries(previous.clips).map(([id, clip]) => [id, artifactPath(publicRoot, clip.artifact)])),
+      }, context.recipes.get(manifest.id))
+    }
+    await checkInputs(context)
+    await rm(context.staging, { recursive: true })
+    return catalog
+  })
 }

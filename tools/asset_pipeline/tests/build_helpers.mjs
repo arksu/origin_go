@@ -26,7 +26,7 @@ export async function createBuildProject() {
   await mkdir(directory, { recursive: true })
   const source = join(directory, 'source.blend')
   await copyFile(fixture.source, source)
-  const { outputDirectory, ...recipe } = fixture.recipe
+  const { outputDirectory, equipmentSlots, ...recipe } = fixture.recipe
   const recipePath = join(directory, 'asset.yaml')
   await writeFile(recipePath, JSON.stringify({ ...recipe, id: 'character/test_actor',
     source: 'source.blend', runtimePath: '/assets/game/character/test_actor' }))

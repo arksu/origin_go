@@ -150,6 +150,7 @@ func TestLiftCarryTransferHealthTargetAndRollback(t *testing.T) {
 				req := PlayerTransferRequest{PlayerID: liftHealthPlayerID, SourceLayer: 0, TargetLayer: 1}
 				stateAny, err := participant.CaptureSource(g, source, req, sourcePlayer)
 				require.NoError(t, err)
+				t.Cleanup(stateAny.(*liftCarryTransferState).releaseTransferResources)
 				require.False(t, source.world.Alive(object))
 				require.False(t, ecs.HasComponent[components.LiftCarryState](source.world, sourcePlayer))
 				state := stateAny.(*liftCarryTransferState)
@@ -189,6 +190,7 @@ func TestLiftCarryTransferIndestructibleRuntimeRestore(t *testing.T) {
 			req := PlayerTransferRequest{PlayerID: liftHealthPlayerID, SourceLayer: 0, TargetLayer: 1}
 			stateAny, err := participant.CaptureSource(g, source, req, sourcePlayer)
 			require.NoError(t, err)
+			t.Cleanup(stateAny.(*liftCarryTransferState).releaseTransferResources)
 			require.False(t, source.world.Alive(object))
 			if mode == "target" {
 				// Exercise the real target runtime restore; database durability is covered separately.
@@ -256,6 +258,7 @@ func TestLiftCarryTransferInvalidHealthPreservesSourceUntilRepair(t *testing.T) 
 			require.Equal(t, originalState.Flags, repairedState.Flags)
 			stateAny, err = participant.CaptureSource(g, source, req, player)
 			require.NoError(t, err)
+			t.Cleanup(stateAny.(*liftCarryTransferState).releaseTransferResources)
 			require.False(t, source.world.Alive(object))
 			require.NoError(t, participant.RestoreSourceRollback(g, source, req, player, stateAny))
 			requireLiftHealthTransferState(t, source, player, .49, originalMeta)

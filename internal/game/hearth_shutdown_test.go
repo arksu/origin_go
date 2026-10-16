@@ -64,7 +64,7 @@ func newHearthShutdownFixture(t *testing.T, logger *zap.Logger) (*hearthTerminal
 		entityIDManager:  &EntityIDManager{db: db, logger: logger},
 		shardManager:     &ShardManager{shards: make(map[int]*Shard), workerPool: NewWorkerPool(1), eventBus: bus},
 		networkServer:    network.NewServer(&cfg.Network, &cfg.Game, logger),
-		transferInFlight: make(map[types.EntityID]struct{}),
+		transferInFlight: make(map[types.EntityID]chan struct{}),
 	}
 	g.serverConstantsData, err = marshalServerConstants(cfg.Game.TickRate)
 	require.NoError(t, err)

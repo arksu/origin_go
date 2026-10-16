@@ -2,6 +2,7 @@ import { ACTION_CATALOG, requestGameAction, type HotbarActionId } from '@/game/h
 import { useGameStore } from '@/stores/gameStore'
 import { useActionCooldownStore } from '@/stores/actionCooldownStore'
 import { getDirectionSector } from '@/game/hud/directionAim'
+import { sendCancelAction } from '@/network'
 
 const shortcuts = new Map(ACTION_CATALOG.map(entry => [entry.id as string, entry]))
 
@@ -44,7 +45,14 @@ export function useActionPresentation() {
         game.closeContextMenu()
       }
       send(id)
-    }, cooldowns.isCoolingDown)
+    }, id => {
+      const coolingDown = cooldowns.isCoolingDown(id)
+      const active = game.gameActionState
+      if (coolingDown && active.phase === 'executing' && active.actionId === 'travel_to_hearth_fire' && id !== active.actionId) {
+        sendCancelAction()
+      }
+      return coolingDown
+    })
     return requested && accepted
   }
 

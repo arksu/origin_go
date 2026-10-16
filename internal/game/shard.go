@@ -295,6 +295,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		"plow_tile": &plowTileActionHandler{terrain: s.chunkManager},
 		"dig":       &digTileActionHandler{terrain: s.chunkManager, giveItem: giveItem},
 	}
+	if _, found := definitions.Get(hearth.ReturnActionID); found {
+		handlers[hearth.ReturnActionID] = &hearthReturnActionHandler{shard: s}
+	}
 	for id, prepared := range combat.actions {
 		definition, _ := definitions.Get(id)
 		handler, err := NewMeleeActionHandler(s.meleeExecution, definition, prepared)
@@ -308,6 +311,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
 	}
 	s.actionService = actionService
+	s.creatureDamage.SetActionInterrupter(actionService.Interrupt)
 	actionService.SetSoundEventService(s.soundEvents)
 	actionService.SetApproachTimeout(cfg.Game.InteractionPendingTimeout)
 	actionService.SubscribeEvents(s.eventBus)
@@ -321,6 +325,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetBuildCommandService(buildService)
 	networkCmdSystem.SetLiftCommandService(liftService)
 	networkCmdSystem.SetActionService(actionService)
+	networkCmdSystem.SetPlayerConnectionValidator(s.currentPlayerConnection)
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
@@ -328,6 +333,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	adminHandler.SetContainerCloseSender(s)
 	adminHandler.SetLifeDeathFactor(cfg.Game.LifeDeathFactor)
 	adminHandler.SetAllowReviveCommand(strings.EqualFold(cfg.Game.Env, "dev"))
+	adminHandler.SetActionInterrupter(actionService.Interrupt)
 	s.adminHandler = adminHandler
 	networkCmdSystem.SetAdminHandler(adminHandler)
 	networkCmdSystem.SetInventorySnapshotSender(s)
@@ -372,12 +378,14 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(systems.NewCharacterVisualSystem(s, logger))
 	s.world.AddSystem(systems.NewActionAnimationSystem(s, logger))
 	s.world.AddSystem(systems.NewCharacterSaveSystem(s.characterSaver, cfg.Game.PlayerSaveInterval, logger))
-	s.world.AddSystem(NewPlayerDeathSystem(s, PlayerDeathSystemConfig{
+	playerDeathSystem := NewPlayerDeathSystem(s, PlayerDeathSystemConfig{
 		LifeDeathFactor:                 cfg.Game.LifeDeathFactor,
 		ShpRegenIntervalTicks:           uint64(cfg.Game.ShpRegenIntervalTicks),
 		StarvationDamageIntervalTicks:   uint64(cfg.Game.StarvationDamageIntervalTicks),
 		StarvationSoftDamagePerInterval: 10,
-	}))
+	})
+	playerDeathSystem.SetActionInterrupter(actionService.Interrupt)
+	s.world.AddSystem(playerDeathSystem)
 	s.world.AddSystem(systems.NewExpireDetachedSystem(logger, s.characterSaver, s.onDetachedEntityExpired, s.onDetachedEntitiesExpired, s.playerLogout.Check))
 	s.world.AddSystem(systems.NewDropDecaySystem(worldObjectPersistence, s.chunkManager, logger))
 
@@ -675,7 +683,17 @@ func (s *Shard) trySpawnPlayerWithPolicy(
 ) (types.Handle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.trySpawnPlayerWithPolicyLocked(worldX, worldY, character, setupFunc, policy)
+}
 
+// trySpawnPlayerWithPolicyLocked keeps destination resolution and spawning in
+// the same owning-shard critical section.
+func (s *Shard) trySpawnPlayerWithPolicyLocked(
+	worldX, worldY int,
+	character repository.Character,
+	setupFunc func(*ecs.World, types.Handle) error,
+	policy SpawnCollisionPolicy,
+) (types.Handle, error) {
 	if s.world.EntityCount() >= s.world.EntityCapacity() {
 		return types.InvalidHandle, s.playerSpawnCapacityError(ecs.ErrEntityCapacityExhausted)
 	}

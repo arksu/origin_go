@@ -73,8 +73,10 @@ await build({
           import { controls } from 'test:controls'
           export const connectToGame = token => controls.calls.push({ name: 'connect', token })
           export const disconnectFromGame = () => controls.calls.push({ name: 'disconnect' })
+          export const sendActivateAction = actionId => controls.calls.push({ name: 'activateAction', actionId })
+          export const sendCancelAction = () => controls.calls.push({ name: 'cancelAction' })
           ${['sendChatMessage', 'sendOpenWindow', 'sendCloseWindow', 'sendStartBuild', 'sendBuildProgress',
-            'sendBuildTakeBack', 'sendActivateAction', 'sendCancelAction', 'sendInventoryOp']
+            'sendBuildTakeBack', 'sendInventoryOp']
             .map(name => `export const ${name} = () => {}`).join('\n')}
         `,
       }
@@ -225,6 +227,50 @@ test('leaving during renderer initialization prevents a late connection and dest
   await flush()
   assert.equal(controls.calls.some(call => call.name === 'connect'), false)
   assert.equal(controls.calls.at(-1).name, 'destroy')
+})
+
+test('number hotkeys cancel Hearth return for another cooling-down action without activating it', async context => {
+  const previous = ['HTMLInputElement', 'HTMLTextAreaElement', 'requestAnimationFrame', 'cancelAnimationFrame'].map(
+    name => [name, Object.getOwnPropertyDescriptor(globalThis, name)],
+  )
+  for (const [name, value] of Object.entries({
+    HTMLInputElement: class {}, HTMLTextAreaElement: class {},
+    requestAnimationFrame: () => 0, cancelAnimationFrame: () => {},
+  })) Object.defineProperty(globalThis, name, { configurable: true, value })
+  context.after(() => {
+    useGameStore().reset()
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor)
+      else Reflect.deleteProperty(globalThis, name)
+    }
+  })
+  const hearthId = 'travel_to_hearth_fire'
+  const store = useGameStore()
+  store.setGameSession('token', 1)
+  localStorage.setItem('hotbar_assignments_v1:anonymous', JSON.stringify([
+    'game:lift', `game:${hearthId}`, 'game:retired', 'inventory', null, null, null, null, null, null,
+  ]))
+  mount(GameView, context)
+  await flush()
+  store.setGameActionList([{ id: 'lift' }, { id: hearthId }])
+  const cooldowns = [
+    { actionId: 'lift', startedAtMs: 10000, expiresAtMs: 20000 },
+    { actionId: hearthId, startedAtMs: 10000, expiresAtMs: 20000 },
+  ]
+  store.setGameActionState({ actionId: hearthId, phase: 'executing', serverTimeMs: 10000, cooldowns })
+  const state = store.gameActionState
+  const press = key => document.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }), { key }))
+  controls.calls.length = 0
+  press('1')
+  assert.deepEqual(controls.calls, [{ name: 'cancelAction' }])
+  assert.equal(store.gameActionState, state)
+  controls.calls.length = 0
+  for (const key of ['2', '3', '4', '0']) press(key)
+  assert.equal(store.playerInventoryVisible, true)
+  assert.deepEqual(controls.calls, [], 'same action, unknown and empty slots, and personal windows preserve return')
+  store.setGameActionState({ actionId: 'lift_down', phase: 'executing', serverTimeMs: 10000, cooldowns })
+  press('1')
+  assert.deepEqual(controls.calls, [], 'cooldown rejection preserves unrelated active actions')
 })
 
 test('return message survives loading, API failure and retry, while the API error is separate', async context => {

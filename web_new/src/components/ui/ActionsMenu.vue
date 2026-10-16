@@ -20,7 +20,7 @@ const emit = defineEmits<{
   touchDragEnd: [payload: { pointerId: number; clientX: number; clientY: number }]
 }>()
 
-const { presentation, canActivate } = useActionPresentation()
+const { presentation } = useActionPresentation()
 
 const touchPointerId = ref<number | null>(null)
 const touchActionId = ref<HotbarActionId | null>(null)
@@ -34,7 +34,7 @@ function onClick(action: proto.IActionDefinition): void {
     suppressClick.value = false
     return
   }
-  if (action.id && canActivate(gameActionHotbarId(action.id))) emit('activate', action.id)
+  if (action.id && presentation(gameActionHotbarId(action.id)).available) emit('activate', action.id)
 }
 
 function onDragStart(event: DragEvent, action: proto.IActionDefinition): void {

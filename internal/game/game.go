@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"origin/internal/config"
+	"origin/internal/game/hearth"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 )
@@ -101,7 +102,7 @@ type Game struct {
 	enableStats       bool
 	enableVisionStats bool
 	transferMu        sync.Mutex
-	transferInFlight  map[types.EntityID]struct{}
+	transferInFlight  map[types.EntityID]chan struct{}
 	transferService   *PlayerTransferService
 
 	ctx    context.Context
@@ -146,7 +147,7 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 			minDuration: time.Hour,
 			systemStats: make(map[string]ecs.SystemTimingStat),
 		},
-		transferInFlight: make(map[types.EntityID]struct{}),
+		transferInFlight: make(map[types.EntityID]chan struct{}),
 	}
 	g.state.Store(int32(GameStateStarting))
 	var constantsErr error
@@ -165,6 +166,10 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	for _, shard := range g.shardManager.GetShards() {
 		shard.SetAdminTeleportExecutor(g)
 		shard.SetAdminTimeExecutor(g)
+		if handler, ok := shard.actionService.handlers[hearth.ReturnActionID].(*hearthReturnActionHandler); ok {
+			handler.game, handler.transfer = g, g.transferService
+			handler.index = ecs.GetResource[hearth.Runtime](g.shardManager.GetShard(hearth.SurfaceLayer).world).Index
+		}
 	}
 
 	g.resetOnlinePlayers()

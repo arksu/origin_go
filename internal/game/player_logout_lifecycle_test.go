@@ -210,7 +210,9 @@ func TestLogoutWaitsForTransferParticipantRestoreBeforeClosedAttachment(t *testi
 	transfer.RegisterParticipant(participant)
 	restored := make(chan struct{})
 	go func() {
-		transfer.restoreParticipantsOnTarget(PlayerTransferRequest{PlayerID: 10}, shard, player, nil)
+		shard.mu.Lock()
+		transfer.restoreParticipantsOnTargetLocked(PlayerTransferRequest{PlayerID: 10}, shard, player, nil)
+		shard.unlockAndCompletePermanentDeaths()
 		close(restored)
 	}()
 	<-participant.entered

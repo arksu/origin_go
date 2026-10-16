@@ -64,6 +64,7 @@ type ChatAdminCommandHandler struct {
 	logger                *zap.Logger
 	lifeDeathFactor       float64
 	allowRevive           bool
+	interrupt             func(*ecs.World, types.EntityID, types.Handle)
 }
 
 // AdminAlertSender sends direct error/warning packets to a single player.
@@ -1024,18 +1025,24 @@ func (h *ChatAdminCommandHandler) handleDamage(
 		}
 	}
 
+	appliedDamage := false
 	if !ecs.MutateComponent[components.EntityHealth](w, playerHandle, func(health *components.EntityHealth) bool {
 		mhp := resolveMaxHHPForHandle(w, playerHandle, h.lifeDeathFactor)
 		if mhp <= 0 {
 			mhp = 1
 		}
+		previousSHP, previousHHP := health.SHP, health.HHP
 		health.SHP, health.HHP, _, _ = entityhealth.ApplyDamage(health.SHP, health.HHP, mhp, softDamage, hardDamage)
+		appliedDamage = health.SHP < previousSHP || health.HHP < previousHHP
 		return true
 	}) {
 		h.sendSystemMessage(playerID, "health component missing")
 		return
 	}
 
+	if appliedDamage && h.interrupt != nil {
+		h.interrupt(w, playerID, playerHandle)
+	}
 	playerstate.ObserveHealthChange(w, playerID, playerHandle)
 	h.sendSystemMessage(playerID, fmt.Sprintf("damage applied: soft=%.2f hard=%.2f", softDamage, hardDamage))
 }
@@ -1203,4 +1210,8 @@ func (h *ChatAdminCommandHandler) sendSystemMessage(playerID types.EntityID, tex
 // buildInventoryStateFromContainerState converts a systems.InventoryContainerState to proto.
 func buildInventoryStateFromContainerState(cs systems.InventoryContainerState) *netproto.InventoryState {
 	return systems.BuildInventoryStateProto(cs)
+}
+
+func (h *ChatAdminCommandHandler) SetActionInterrupter(interrupt func(*ecs.World, types.EntityID, types.Handle)) {
+	h.interrupt = interrupt
 }

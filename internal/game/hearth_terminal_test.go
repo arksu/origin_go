@@ -187,7 +187,7 @@ func TestHearthTerminalPostgresDeathOwningCallsWaitWithSourceUnlocked(t *testing
 				case "reattach":
 					game.tryReattachPlayer(client, source, 10, character)
 				case "teleport":
-					_, err := game.spawnTeleportedPlayerWithRuntime(client, source, character, 200, 200, true, &playerRuntimeState{Health: components.EntityHealth{}}, false)
+					_, err := game.spawnTeleportedPlayerWithRuntime(client, source, character, 200, 200, true, &playerRuntimeState{Health: components.EntityHealth{}}, nil)
 					result <- err
 				}
 			}()

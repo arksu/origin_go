@@ -22,6 +22,7 @@ export { default as Hotbar } from './src/components/ui/HotbarPlaceholder.vue';
 export { useHotbarAssignments } from './src/composables/useHotbarAssignments.ts';
 export { useActionsPanel } from './src/composables/useActionsPanel.ts';
 export { useActionPresentation } from './src/composables/useActionPresentation.ts';
+export { gameConnection, sendActivateAction } from './src/network/index.ts';
 export { requestGameAction } from './src/game/hud/actionCatalog.ts';
 export { useGameStore } from './src/stores/gameStore.ts';
 export { setWorldParams } from './tests/serverConstantsFixture.ts';
@@ -99,7 +100,7 @@ function descendants(node, type) {
 
 let gameStore
 try {
-  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, useActionPresentation, requestGameAction, useGameStore, setWorldParams, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager, ActionHourGlass, gameFacade } = await import(pathToFileURL(outfile).href)
+  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, useActionPresentation, gameConnection, sendActivateAction, requestGameAction, useGameStore, setWorldParams, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager, ActionHourGlass, gameFacade } = await import(pathToFileURL(outfile).href)
   setActivePinia(createPinia())
   gameStore = useGameStore()
 
@@ -352,6 +353,124 @@ try {
   aimMenuApp.unmount()
   aimHotbarApp.unmount()
   gameStore.reset()
+
+  // Cooldown-blocked activation conveys only cancellation during Hearth return.
+  const hearthId = 'travel_to_hearth_fire'
+  const hearthActions = [...actions, { id: hearthId, label: 'Travel to Hearth Fire', targetKind: 'none' }]
+  gameStore.setGameActionList(hearthActions)
+  const hearthPresentation = useActionPresentation()
+  const packets = []
+  const originalSend = gameConnection.send
+  const originalWindow = globalThis.window
+  let longPressCallback = null
+  gameConnection.send = packet => { packets.push(packet); return true }
+  globalThis.window = {
+    setTimeout(callback) { longPressCallback = callback; return 1 },
+    clearTimeout() { longPressCallback = null },
+  }
+  const hearthMenuRoot = hostNode('root')
+  const hearthMenuApp = renderer.createApp(withSsrContext(() => h(ActionsMenu, {
+    actions: hearthActions, activeActionId: hearthId, activePhase: 'executing',
+    onActivate: id => hearthPresentation.activate(id, sendActivateAction),
+  })))
+  const hearthSlots = ['game:lift', `game:${hearthId}`, 'game:retired', null, null, null, null, null, null, null]
+  const cleared = []
+  const hearthHotbarRoot = hostNode('root')
+  const hearthHotbarApp = renderer.createApp(withSsrContext(() => h(Hotbar, {
+    assignments: hearthSlots,
+    onActivate: slot => hearthPresentation.activate(hearthSlots[slot].slice(5), sendActivateAction),
+    onClear: slot => cleared.push(slot),
+  })))
+  const setHearthState = (actionId = hearthId, phase = 'executing') => {
+    gameStore.setGameActionState({ actionId, phase, serverTimeMs: 10000,
+      cooldowns: [
+        { actionId: 'lift', startedAtMs: 10000, expiresAtMs: 16000 },
+        { actionId: hearthId, startedAtMs: 10000, expiresAtMs: 16000 },
+        { actionId: 'retired', startedAtMs: 10000, expiresAtMs: 16000 },
+      ] })
+  }
+  const assertCancelOnly = () => {
+    assert.equal(packets.length, 1)
+    const packet = proto.ClientMessage.decode(proto.ClientMessage.encode(packets[0]).finish())
+    assert.ok(packet.cancelAction)
+    assert.equal(packet.activateAction, null)
+    packets.length = 0
+  }
+  try {
+    setHearthState()
+    const serverState = gameStore.gameActionState
+    hearthMenuApp.mount(hearthMenuRoot)
+    hearthHotbarApp.mount(hearthHotbarRoot)
+    await nextTick()
+    const menuButtons = descendants(hearthMenuRoot, 'button')
+    const hotbarButtons = descendants(hearthHotbarRoot, 'button')
+    assert.equal(menuButtons[0].props['aria-disabled'], true)
+    assert.equal(hotbarButtons[0].props['aria-disabled'], true)
+    assert.equal(hearthPresentation.canActivate('game:lift'), false)
+    assert.equal(hearthPresentation.presentation('game:lift').coolingDown, true)
+    assert.deepEqual(packets, [], 'availability and rendering remain side-effect free')
+
+    assert.equal(hearthPresentation.activate('lift', sendActivateAction), false)
+    assertCancelOnly()
+    menuButtons[0].props.onClick()
+    assertCancelOnly()
+    hotbarButtons[0].props.onClick()
+    assertCancelOnly()
+    const touch = { pointerType: 'touch', pointerId: 10, clientX: 0, clientY: 0, currentTarget: { setPointerCapture() {} } }
+    menuButtons[0].props.onPointerdown(touch)
+    menuButtons[0].props.onPointerup(touch)
+    menuButtons[0].props.onClick()
+    assertCancelOnly()
+    hotbarButtons[0].props.onPointerdown(touch)
+    hotbarButtons[0].props.onPointerup()
+    hotbarButtons[0].props.onClick()
+    assertCancelOnly()
+    assert.equal(gameStore.gameActionState, serverState, 'cancellation and cooldown state remain server-owned')
+
+    menuButtons[0].props.onDragstart({ dataTransfer: { setData() {} } })
+    menuButtons[0].props.onDragend()
+    menuButtons[0].props.onPointerdown(touch)
+    menuButtons[0].props.onPointermove({ ...touch, clientX: 20 })
+    menuButtons[0].props.onPointerup({ ...touch, clientX: 20 })
+    menuButtons[0].props.onClick()
+    hotbarButtons[0].props.onPointerenter({ ...touch, pointerType: 'mouse' })
+    hotbarButtons[0].props.onPointerleave()
+    hotbarButtons[0].props.onContextmenu({ preventDefault() {} })
+    hotbarButtons[0].props.onPointerdown(touch)
+    longPressCallback()
+    hotbarButtons[0].props.onPointerup()
+    hotbarButtons[0].props.onClick()
+    assert.deepEqual(cleared, [0, 0])
+    assert.deepEqual(packets, [], 'dragging, hovering and slot clearing are not activation attempts')
+
+    assert.equal(hearthPresentation.activate(hearthId, sendActivateAction), false)
+    hotbarButtons[1].props.onClick()
+    hotbarButtons[2].props.onClick()
+    assert.equal(hearthPresentation.activate('retired', sendActivateAction), false)
+    gameStore.gameActionListLoaded = false
+    assert.equal(hearthPresentation.activate('lift', sendActivateAction), false)
+    gameStore.setGameActionList(hearthActions)
+    for (const phase of ['idle', 'selecting', 'approaching', 'cooldown_wait']) {
+      setHearthState(hearthId, phase)
+      assert.equal(hearthPresentation.activate('lift', sendActivateAction), false)
+    }
+    setHearthState('lift_down')
+    menuButtons[0].props.onClick()
+    hotbarButtons[0].props.onClick()
+    assert.deepEqual(packets, [], 'only another known action during executing Hearth return can cancel')
+    setHearthState()
+    assert.equal(hearthPresentation.activate('lift_down', sendActivateAction), true)
+    assert.equal(packets.length, 1)
+    assert.equal(packets[0].activateAction.actionId, 'lift_down')
+    assert.equal(packets[0].cancelAction, undefined, 'unblocked attempts retain server-side interruption')
+  } finally {
+    hearthMenuApp.unmount()
+    hearthHotbarApp.unmount()
+    gameConnection.send = originalSend
+    if (originalWindow === undefined) delete globalThis.window
+    else globalThis.window = originalWindow
+    gameStore.reset()
+  }
 
   // Owner progress follows the rendered character, independently of the camera
   // center and action animation bounds. Only an active indicator owns a RAF.

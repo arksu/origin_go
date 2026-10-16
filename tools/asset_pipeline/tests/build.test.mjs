@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
-import { chmod, copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { setTimeout as delay } from 'node:timers/promises'
 import test from 'node:test'
 import { createFixture, blenderPath, pipelineDirectory } from './blender_helpers.ts'
 import { runCli } from '../cli.ts'
@@ -23,11 +25,13 @@ async function createBuildProject() {
   const fixture = await createFixture('equipment', { packedTexture: true })
   const root = fixture.root
   await mkdir(join(root, 'web_new/public'), { recursive: true })
+  await mkdir(join(root, 'data/action_animations'), { recursive: true })
+  await writeFile(join(root, 'data/action_animations/empty.json'), JSON.stringify({ v: 1, bindings: [] }))
   for (const name of ['test_axe', 'test_other']) {
     const directory = join(root, 'art_source/equipment', name)
     await mkdir(directory, { recursive: true })
     await copyFile(fixture.source, join(directory, 'source.blend'))
-    const { outputDirectory, ...recipe } = fixture.recipe
+    const { outputDirectory, equipmentSlots, ...recipe } = fixture.recipe
     await writeFile(join(directory, 'asset.yaml'), JSON.stringify({ ...recipe, id: `equipment/${name}`,
       source: 'source.blend', runtimePath: `/assets/game/equipment/${name}` }))
   }
@@ -39,9 +43,102 @@ async function createBuildProject() {
     recipe: name => join(root, `art_source/equipment/${name}/asset.yaml`) }
 }
 
+async function stagingDirectories(root) {
+  return (await readdir(join(root, 'build/asset-pipeline'), { withFileTypes: true }))
+    .filter(entry => entry.isDirectory() && entry.name.startsWith('stage-')).map(entry => entry.name).sort()
+}
+
+async function createScratchProject() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'asset-scratch-test-')))
+  const publicRoot = join(root, 'web_new/public')
+  const sourceDirectory = join(root, 'art_source/character/test_commoner')
+  await mkdir(join(publicRoot, 'assets/game'), { recursive: true })
+  await mkdir(sourceDirectory, { recursive: true })
+  await copyFile(new URL('./fixtures/recipe.yaml', import.meta.url), join(sourceDirectory, 'asset.yaml'))
+  await writeFile(join(sourceDirectory, 'source.blend'), 'preflight fails before reading Blender content')
+  await mkdir(join(root, 'data/action_animations'), { recursive: true })
+  await writeFile(join(root, 'data/action_animations/empty.json'), JSON.stringify({ v: 1, bindings: [] }))
+  const builder = await import('../build.mjs')
+  const options = { root, target: 'all', toolPaths: { blender: join(root, 'missing-blender') } }
+  return { root, publicRoot, builder, options }
+}
+
+test('each operation cleans prior staging and retains its current failure diagnostics', async () => {
+  const project = await createScratchProject()
+  const parent = join(project.root, 'build/asset-pipeline')
+  await mkdir(join(parent, 'stage-prior'), { recursive: true })
+  await writeFile(join(parent, 'stage-prior/previous.log'), 'old failure')
+  await mkdir(join(parent, 'keep'))
+  await writeFile(join(parent, 'keep/notes.txt'), 'unrelated')
+  await writeFile(join(parent, 'stage-file'), 'not a directory')
+  const linked = await realpath(await mkdtemp(join(tmpdir(), 'asset-scratch-linked-')))
+  await writeFile(join(linked, 'keep.txt'), 'linked content')
+  await symlink(linked, join(parent, 'stage-linked'))
+  let previous = 'stage-prior'
+  for (const operation of ['buildAssets', 'validateAssets', 'verifyReproducible']) {
+    await assert.rejects(project.builder[operation](project.options), /preflight.*failed/)
+    await assert.rejects(lstat(join(parent, previous)), { code: 'ENOENT' })
+    const stages = await stagingDirectories(project.root)
+    assert.equal(stages.length, 1, `${operation} retains only the current failed stage`)
+    previous = stages[0]
+    const log = join(parent, previous, 'all-preflight.log')
+    assert.match(await readFile(log, 'utf8'), /Unable to inspect|Setup requires/)
+    assert.equal(await readFile(join(parent, 'keep/notes.txt'), 'utf8'), 'unrelated')
+    assert.equal(await readFile(join(parent, 'stage-file'), 'utf8'), 'not a directory')
+    assert.equal((await lstat(join(parent, 'stage-linked'))).isSymbolicLink(), true)
+    assert.equal(await readFile(join(linked, 'keep.txt'), 'utf8'), 'linked content')
+  }
+})
+
+test('all staging operations wait for the shared lock before cleanup', async () => {
+  const { withPublishLock } = await import('../publish.mjs')
+  for (const operation of ['buildAssets', 'validateAssets', 'verifyReproducible']) {
+    const project = await createScratchProject()
+    const active = join(project.root, 'build/asset-pipeline/stage-active')
+    await mkdir(active, { recursive: true })
+    await writeFile(join(active, 'active.log'), 'active work')
+    const entered = Promise.withResolvers(), release = Promise.withResolvers()
+    const owner = withPublishLock(project.publicRoot, async () => {
+      entered.resolve()
+      await release.promise
+    })
+    await entered.promise
+    let settled = false
+    const waiting = project.builder[operation](project.options)
+      .then(value => ({ value }), error => ({ error })).finally(() => { settled = true })
+    try {
+      await delay(60)
+      assert.equal(settled, false, operation)
+      assert.equal(await readFile(join(active, 'active.log'), 'utf8'), 'active work')
+    } finally {
+      release.resolve()
+    }
+    await owner
+    assert.match((await waiting).error.message, /preflight.*failed/)
+    await assert.rejects(lstat(active), { code: 'ENOENT' })
+  }
+})
+
+test('staging cleanup rejects symlinked scratch parents and ancestors', async () => {
+  for (const linkedPart of ['build', 'asset-pipeline']) {
+    const project = await createScratchProject()
+    const external = await realpath(await mkdtemp(join(tmpdir(), 'asset-scratch-external-')))
+    const protectedStage = linkedPart === 'build' ? join(external, 'asset-pipeline/stage-protected') : join(external, 'stage-protected')
+    await mkdir(protectedStage, { recursive: true })
+    await writeFile(join(protectedStage, 'failure.log'), 'preserve outside files')
+    if (linkedPart === 'asset-pipeline') await mkdir(join(project.root, 'build'))
+    await symlink(external, linkedPart === 'build' ? join(project.root, 'build') : join(project.root, 'build/asset-pipeline'))
+    for (const operation of ['buildAssets', 'validateAssets', 'verifyReproducible']) {
+      await assert.rejects(project.builder[operation](project.options), /Staging path.*symlink/)
+      assert.equal(await readFile(join(protectedStage, 'failure.log'), 'utf8'), 'preserve outside files')
+    }
+  }
+})
+
 test('real builds publish both assets, offline validation writes nothing, and failed source preserves catalog', async () => {
   const project = await createBuildProject()
   await project.build('all')
+  assert.deepEqual(await stagingDirectories(project.root), [])
   const before = await project.catalogBytes()
   assert.deepEqual(Object.keys(JSON.parse(before).assets).sort(), ['equipment/test_axe', 'equipment/test_other'])
   const publicRoot = join(project.root, 'web_new/public')
@@ -58,6 +155,7 @@ test('real builds publish both assets, offline validation writes nothing, and fa
   assert.equal(status, 0, error)
   assert.deepEqual(await project.catalogBytes(), before)
   assert.deepEqual(await runtimeState(publicRoot), runtimeBefore)
+  assert.deepEqual(await stagingDirectories(project.root), [])
   const bad = await createFixture('equipment', { missingExport: true })
   await copyFile(bad.source, project.source('test_axe'))
   await assert.rejects(project.build('all'), /equipment\/test_axe.*export[\s\S]*EXPORT[\s\S]*log:/)

@@ -67,11 +67,24 @@ setting or toolchain can require a full build. Locomotion distance comes from
 
 Successful builds atomically update
 `web_new/public/assets/game/asset-catalog.json`. Models, separate animation GLBs,
-KTX2 textures and metadata have immutable content-hash URLs. Reload the browser
-after a build; running actor instances do not hot-reload their asset snapshot.
-Validation checks sources and current published artifacts without publishing.
-Reproducibility compares two clean exports without switching the runtime catalog.
-Stage logs and reports are retained under ignored `build/asset-pipeline/`.
+KTX2 textures and metadata have immutable content-hash URLs. After a successful
+catalog switch, cleanup validates the current references and removes obsolete
+content-hash files from known asset output and generated projection directories.
+It preserves all current catalog references, including unchanged assets and clips
+in partial builds, and leaves unrelated files and symlinks alone. Reload the
+browser after a build: previous versions are removed, and running actor instances
+do not hot-reload their asset snapshot. A cleanup error after the catalog switch
+is a warning; the new catalog is already active, and cleanup is retried on the
+next successful publication.
+
+`build`, `validate` and `verify-reproducible` hold the same publication lock for
+their entire operation. At entry they remove old real `stage-*` directories under
+ignored `build/asset-pipeline/`. Successful operations remove their staging data;
+failed operations retain logs and reports until the next such command. Cleanup
+does not follow symlinks and refuses a symlinked staging parent directory.
+Validation checks sources and current published artifacts; reproducibility
+compares two clean exports. Both leave published file bytes unchanged, although
+the lock and empty `assets/game/` directories may be created during the operation.
 
 ## Action presentation definitions
 
@@ -131,12 +144,12 @@ node --test --test-name-pattern='editing walk preserves' tools/asset_pipeline/te
   exit, and rerun. Do not edit sources or dependencies during a build.
 - Invalid source, budget or export: read the asset/stage-specific log path printed
   by the CLI, correct that source/recipe, and rerun. Do not edit hashed output files.
-- Locked publisher: inspect `web_new/public/assets/game/.publish.lock` and its
-  recorded PID/host/owner. Wait for a live publisher. Dead locks owned by the same
+- Locked operation: inspect `web_new/public/assets/game/.publish.lock` and its
+  recorded PID/host/owner. Wait for a live operation. Dead locks owned by the same
   user on the same host recover automatically. Unknown ownership or a leftover
-  `.publish.lock.guard` needs manual investigation; confirm that no publisher is
+  `.publish.lock.guard` needs manual investigation; confirm that no operation is
   alive before moving the exact stale lock/guard to a named recovery location.
-  Never delete locks solely because a timeout occurred. Retry the original build.
+  Never delete locks solely because a timeout occurred. Retry the original command.
 
 Acceptance on 2026-09-17 reused the existing browser pages and cache tests, plus
 one disposable Blender walk edit through the CLI. Evidence is in ignored

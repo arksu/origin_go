@@ -251,6 +251,7 @@ func (service *ActionService) ActivateRequest(world *ecs.World, playerID types.E
 		}
 		target.AimAngle = angle
 	}
+	service.Interrupt(world, playerID, playerHandle)
 	if service.rejectIncapacitatedAction(world, playerID, playerHandle, id) {
 		return
 	}
@@ -311,6 +312,7 @@ func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
 		return
 	}
+	service.Interrupt(world, playerID, playerHandle)
 	if service.rejectIncapacitatedAction(world, playerID, playerHandle, id) {
 		return
 	}
@@ -458,6 +460,12 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 		eventTime = ecs.GetResource[ecs.TimeState](world).UnixMs
 		if err := activity.ValidateEvent(playerHandle, playerID, eventTime); err != nil {
 			service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_FAILED")
+			return
+		}
+	}
+	if admission, ok := service.handlers[definition.ID].(actionExecutionAdmission); ok {
+		if reason := admission.BeforeExecution(world, playerID, playerHandle); reason != "" {
+			service.Complete(world, playerID, playerHandle, active.Generation, false, reason)
 			return
 		}
 	}

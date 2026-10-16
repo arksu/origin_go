@@ -147,9 +147,61 @@ async function installImmutable(publicRoot, artifact, bytes) {
   } finally { await fs.unlink(candidate) }
 }
 
+function manifestArtifacts(manifest) {
+  return [manifest.model, ...(manifest.textures ?? []), ...Object.values(manifest.clips ?? {}).map(clip => clip.artifact),
+    ...(manifest.metadata ? [manifest.metadata] : [])]
+}
+
+async function pruneArtifacts(publicRoot, previousCatalog, catalog, runtimePaths) {
+  const live = new Set()
+  const roots = new Set([...runtimePaths, ...Object.values(previousCatalog.assets).map(artifact => dirname(artifact.url))])
+  // Validate the complete current closure before deleting anything, including
+  // unchanged assets and artifacts retained by animation-only builds.
+  for (const [id, reference] of Object.entries(catalog.assets)) {
+    const manifest = JSON.parse(await readArtifact(publicRoot, reference))
+    if (manifest.schema !== 1 || manifest.id !== id) throw new Error(`Manifest ID/schema mismatch: ${id}`)
+    live.add(reference.url)
+    roots.add(dirname(reference.url))
+    for (const artifact of manifestArtifacts(manifest)) {
+      await readArtifact(publicRoot, artifact)
+      live.add(artifact.url)
+    }
+  }
+  for (const key of ['actionAnimations', 'sounds', 'locomotionAudio']) {
+    if (catalog[key] === undefined) continue
+    await readArtifact(publicRoot, catalog[key])
+    live.add(catalog[key].url)
+  }
+  for (const root of roots) {
+    if (!/^\/assets\/game\/[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/.test(root)) throw new Error(`Invalid cleanup output directory: ${root}`)
+  }
+  async function pruneDirectory(url, pattern) {
+    const directory = join(publicRoot, url)
+    let entries
+    try {
+      // realpath also rejects symlinks in any ancestor. Do not create missing
+      // directories or follow links while searching for obsolete artifacts.
+      if (await fs.realpath(directory) !== directory || !(await fs.lstat(directory)).isDirectory()) return
+      entries = await fs.readdir(directory, { withFileTypes: true })
+    } catch (error) { if (error.code === 'ENOENT') return; throw error }
+    for (const entry of entries) {
+      if (entry.isFile() && pattern.test(entry.name) && !live.has(`${url}/${entry.name}`)) {
+        await fs.unlink(join(directory, entry.name))
+      }
+    }
+  }
+  const artifactName = /^[a-f0-9]{64}\.(?:glb|ktx2|json)$/
+  for (const root of roots) {
+    for (const suffix of ['', '/textures', '/animations']) await pruneDirectory(`${root}${suffix}`, artifactName)
+  }
+  for (const directory of ['action_animations', 'sounds', 'locomotion_audio']) {
+    await pruneDirectory(`/assets/game/${directory}`, /^[a-f0-9]{64}\.json$/)
+  }
+}
+
 // Caller holds withPublishLock across reading previousCatalog and this switch.
 // A bundle contains deterministic manifest JSON plus staged {source, artifact} files.
-export async function publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions, soundDefinitions, locomotionAudioDefinitions }) {
+export async function publishCatalog({ publicRoot, previousCatalog, manifests, actionAnimationDefinitions, soundDefinitions, locomotionAudioDefinitions, runtimePaths = [] }) {
   validateCatalog(publicRoot, previousCatalog)
   const assets = { ...previousCatalog.assets }
   const owners = new Map(Object.entries(assets).map(([id, artifact]) => [dirname(artifact.url), id]))
@@ -165,9 +217,7 @@ export async function publishCatalog({ publicRoot, previousCatalog, manifests, a
   // No mutable output is touched until the entire selected set has validated.
   for (const { manifest, files } of manifests) {
     for (const { source, artifact } of files) await installImmutable(publicRoot, artifact, await fs.readFile(source))
-    const references = [manifest.model, ...manifest.textures, ...Object.values(manifest.clips).map(clip => clip.artifact),
-      ...(manifest.metadata ? [manifest.metadata] : [])]
-    for (const artifact of references) {
+    for (const artifact of manifestArtifacts(manifest)) {
       if (!artifact.url.startsWith(`${dirname(manifest.model.url)}/`)) throw new Error(`Artifact escapes asset output: ${artifact.url}`)
       await readArtifact(publicRoot, artifact)
     }
@@ -183,7 +233,7 @@ export async function publishCatalog({ publicRoot, previousCatalog, manifests, a
   const effectiveManifests = hasAudio || hasActions ? Object.fromEntries(await Promise.all(Object.entries(assets).map(async ([id, reference]) => {
     const manifest = JSON.parse(await readArtifact(publicRoot, reference))
     if (manifest.id !== id) throw new Error(`Manifest ID mismatch: ${id}`)
-    for (const artifact of [manifest.model, ...(manifest.textures ?? []), ...Object.values(manifest.clips ?? {}).map(clip => clip.artifact), ...(manifest.metadata ? [manifest.metadata] : [])]) await readArtifact(publicRoot, artifact)
+    for (const artifact of manifestArtifacts(manifest)) await readArtifact(publicRoot, artifact)
     return [id, manifest]
   }))) : {}
   let profiles = []
@@ -222,5 +272,10 @@ export async function publishCatalog({ publicRoot, previousCatalog, manifests, a
     await fs.rm(candidate, { force: true }).catch(cleanup => { process.stderr.write(`Catalog candidate cleanup failed: ${cleanup.message}\n`) })
     throw error
   }
+  // The catalog is committed. Cleanup failure must not turn publication into a
+  // reported failure or roll back its valid references; retry on the next publish.
+  await pruneArtifacts(publicRoot, previousCatalog, catalog, runtimePaths).catch(error => {
+    process.stderr.write(`Publication committed; artifact cleanup failed: ${error.message}\n`)
+  })
   return catalog
 }

@@ -86,6 +86,15 @@ func (s *NetworkCommandSystem) handleMoveDirection(w *ecs.World, handle types.Ha
 	}
 	// Retain rejected fresh revisions so their later heartbeats cannot become presses.
 	movement.Direction.Revision = direction.InputRevision
+	if length != 0 && age < DirectionalInputTTL {
+		ecs.WithComponent(w, handle, func(current *components.Movement) { *current = movement })
+		s.interruptGameplayAction(w, command.CharacterID, handle)
+		// Cancellation can change movement; retain the revision, not an old copy.
+		movement, exists = ecs.GetComponent[components.Movement](w, handle)
+		if !exists {
+			return
+		}
+	}
 	if length == 0 || age >= DirectionalInputTTL || directionalMovementRestricted(w, handle, movement) {
 		movement.ReleaseDirection()
 		ecs.WithComponent(w, handle, func(current *components.Movement) { *current = movement })

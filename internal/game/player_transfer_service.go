@@ -1,11 +1,14 @@
 package game
 
 import (
+	"context"
 	"fmt"
-	"origin/internal/cyclicaction"
+	"time"
 
+	"origin/internal/cyclicaction"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/lifecycle"
 	netproto "origin/internal/network/proto"
 	"origin/internal/persistence/repository"
 	"origin/internal/playerstate"
@@ -67,7 +70,7 @@ func (s *PlayerTransferService) RequestTransfer(req PlayerTransferRequest) error
 		g.transferMu.Unlock()
 		return fmt.Errorf("transfer already in progress")
 	}
-	g.transferInFlight[req.PlayerID] = struct{}{}
+	g.transferInFlight[req.PlayerID] = make(chan struct{})
 	g.transferMu.Unlock()
 
 	g.wg.Add(1)
@@ -82,28 +85,43 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 	g := s.game
 	defer func() {
 		g.transferMu.Lock()
+		done := g.transferInFlight[req.PlayerID]
 		delete(g.transferInFlight, req.PlayerID)
+		if done != nil {
+			close(done)
+		}
 		g.transferMu.Unlock()
 	}()
 
 	sourceShard := g.shardManager.GetShard(req.SourceLayer)
+	resultErr := fmt.Errorf("source layer unavailable")
+	resultDelivered := false
+	defer func() {
+		if !resultDelivered {
+			s.completeResult(req, sourceShard, types.InvalidHandle, resultErr)
+		}
+	}()
 	if sourceShard == nil {
 		return
 	}
 	targetShard := g.shardManager.GetShard(req.TargetLayer)
 	if targetShard == nil {
+		resultErr = fmt.Errorf("target layer unavailable")
 		s.sendFailureToLayer(req, fmt.Sprintf("Teleport failed: target layer %d not found.", req.TargetLayer))
 		return
 	}
 
 	characterTemplate, err := g.db.Queries().GetCharacter(g.ctx, int64(req.PlayerID))
 	if err != nil {
+		resultErr = fmt.Errorf("load transfer character: %w", err)
 		s.sendFailureToLayer(req, "Teleport failed: character not found.")
 		return
 	}
 
 	snapshot, detachErr := s.detachTransferSource(req, sourceShard, characterTemplate)
+	defer releaseTransferResources(snapshot.ParticipantStates)
 	if detachErr != nil {
+		resultErr = detachErr
 		s.sendFailureToLayer(req, "Teleport failed: could not detach current entity.")
 		return
 	}
@@ -111,14 +129,44 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 		snapshot.Client.Layer = req.TargetLayer
 	}
 
-	characterTemplate.ActionCooldowns = snapshot.Character.ActionCooldowns
-	characterSpawn := characterTemplate
+	characterTemplate = snapshot.Character
+	characterSpawn := snapshot.Character
 	characterSpawn.Layer = req.TargetLayer
 	characterSpawn.X = req.TargetX
 	characterSpawn.Y = req.TargetY
 
-	targetHandle, spawnErr := g.spawnTeleportedPlayerWithRuntime(snapshot.Client, targetShard, characterSpawn, req.TargetX, req.TargetY, req.IgnoreObjectCollision, &snapshot.RuntimeState, true)
+	// Spawn calls this before releasing its owning shard. No world update may
+	// observe the restored body between participant restoration and attachment.
+	finish := func(shard *Shard, handle types.Handle, actual repository.Character, restoreErr error) {
+		if restoreErr == nil {
+			req.TargetLayer, req.TargetX, req.TargetY = actual.Layer, actual.X, actual.Y
+			sourceShard.offlineHealth.Delete(req.PlayerID)
+			s.restoreParticipantsOnTargetLocked(req, shard, handle, snapshot.ParticipantStates)
+		} else {
+			s.restoreParticipantsOnRollbackLocked(req, shard, handle, snapshot.ParticipantStates)
+		}
+		if req.OnResult != nil {
+			req.OnResult(shard, handle, restoreErr)
+		}
+		resultDelivered = true
+		if g.attachClientToWorldLocked(shard, snapshot.Client, req.PlayerID, actual, handle) {
+			g.ensureObserverVisibilityImmediate(shard.world, handle)
+		} else {
+			delay := time.Duration(shard.cfg.Game.DisconnectDelay) * time.Second
+			shard.queuePlayerLogoutLocked(req.PlayerID, handle, ecs.GetResource[ecs.TimeState](shard.world).Now, delay)
+		}
+	}
+	finishTarget := func(handle types.Handle, actual repository.Character) {
+		finish(targetShard, handle, actual, nil)
+	}
+	var spawnErr error
+	if req.SpawnTarget != nil {
+		_, characterSpawn, spawnErr = req.SpawnTarget(targetShard, characterSpawn, snapshot.RuntimeState, finishTarget)
+	} else {
+		_, spawnErr = g.spawnTeleportedPlayerWithRuntime(snapshot.Client, targetShard, characterSpawn, req.TargetX, req.TargetY, req.IgnoreObjectCollision, &snapshot.RuntimeState, finishTarget)
+	}
 	if spawnErr != nil {
+		resultErr = spawnErr
 		rollbackChar := characterTemplate
 		rollbackChar.Layer = snapshot.SourceLayer
 		rollbackChar.X = snapshot.SourceX
@@ -126,7 +174,10 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 		if snapshot.Client != nil {
 			snapshot.Client.Layer = snapshot.SourceLayer
 		}
-		rollbackHandle, rollbackErr := g.spawnTeleportedPlayerWithRuntime(snapshot.Client, sourceShard, rollbackChar, snapshot.SourceX, snapshot.SourceY, req.IgnoreObjectCollision, &snapshot.RuntimeState, true)
+		_, rollbackErr := g.spawnTeleportedPlayerWithRuntime(snapshot.Client, sourceShard, rollbackChar, snapshot.SourceX, snapshot.SourceY, req.IgnoreObjectCollision, &snapshot.RuntimeState,
+			func(handle types.Handle, actual repository.Character) {
+				finish(sourceShard, handle, actual, spawnErr)
+			})
 		if rollbackErr != nil {
 			if snapshot.Client != nil {
 				snapshot.Client.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Teleport failed and rollback failed. Reconnect required.")
@@ -140,15 +191,9 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 			)
 			return
 		}
-		s.restoreParticipantsOnRollback(req, sourceShard, rollbackHandle, snapshot.ParticipantStates)
-		g.attachClientToWorld(sourceShard, snapshot.Client, req.PlayerID, rollbackChar, rollbackHandle)
 		g.sendTeleportSystemMessageToClient(snapshot.Client, "Teleport failed, restored previous position.")
 		return
 	}
-
-	sourceShard.offlineHealth.Delete(req.PlayerID)
-	s.restoreParticipantsOnTarget(req, targetShard, targetHandle, snapshot.ParticipantStates)
-	g.attachClientToWorld(targetShard, snapshot.Client, req.PlayerID, characterSpawn, targetHandle)
 
 	if err := g.db.Queries().UpdateCharacterPositionAndLayer(g.ctx, repository.UpdateCharacterPositionAndLayerParams{
 		ID:    int64(req.PlayerID),
@@ -170,6 +215,14 @@ func (s *PlayerTransferService) executeTransfer(req PlayerTransferRequest) {
 		g.sendTeleportSystemMessageToClient(snapshot.Client, fmt.Sprintf("Teleported to (%d, %d) layer %d.", req.TargetX, req.TargetY, req.TargetLayer))
 	default:
 		g.sendTeleportSystemMessageToClient(snapshot.Client, "Transfer complete.")
+	}
+}
+
+func releaseTransferResources(states map[string]any) {
+	for _, state := range states {
+		if resource, ok := state.(interface{ releaseTransferResources() }); ok {
+			resource.releaseTransferResources()
+		}
 	}
 }
 
@@ -201,9 +254,13 @@ func (s *PlayerTransferService) detachTransferSource(
 	if ecs.InventoryHandleReserved(shard.world, playerHandle) {
 		return snapshot, fmt.Errorf("inventory operation is still being committed")
 	}
-	// A queued teleport must recheck under the world lock before saving, leaving
-	// the world or capturing participants: KO/lying cannot be bypassed by transfer.
-	if playerstate.IsIncapacitated(shard.world, playerHandle) {
+	// Most transfers prohibit any incapacity. A feature may supply a narrower
+	// authoritative policy without changing stairs or administrator teleports.
+	if req.SourcePolicy != nil {
+		if err := req.SourcePolicy(shard, playerHandle, client); err != nil {
+			return snapshot, err
+		}
+	} else if playerstate.IsIncapacitated(shard.world, playerHandle) {
 		return snapshot, fmt.Errorf("cannot teleport during KO or while lying")
 	}
 
@@ -238,8 +295,24 @@ func (s *PlayerTransferService) detachTransferSource(
 			// A retained source snapshot must not retry after the player moves to another shard.
 			return snapshot, fmt.Errorf("save character before transfer: %w", err)
 		}
+		// Both destination and rollback need the profile and stats just saved,
+		// not the character row loaded before acquiring the source lock.
+		readCtx, cancel := context.WithTimeout(s.game.ctx, 5*time.Second)
+		savedCharacter, err := s.game.db.Queries().GetCharacter(readCtx, int64(req.PlayerID))
+		cancel()
+		if err != nil {
+			return snapshot, fmt.Errorf("reload saved transfer character: %w", err)
+		}
+		snapshot.Character = savedCharacter
 	}
 
+	// Saving or reloading can block while the connection closes. Recheck immediately
+	// before destructive participant capture under the same owning lock.
+	if req.SourcePolicy != nil {
+		if err := req.SourcePolicy(shard, playerHandle, client); err != nil {
+			return snapshot, err
+		}
+	}
 	for _, participant := range s.participants {
 		if participant == nil {
 			continue
@@ -284,6 +357,7 @@ func (s *PlayerTransferService) detachTransferSource(
 	}
 
 	shard.offlineHealth.Store(req.PlayerID, snapshot.RuntimeState)
+	lifecycle.DeleteOwnedInventoryContainers(shard.world, req.PlayerID)
 	shard.world.Despawn(playerHandle)
 	ecs.GetResource[ecs.CharacterEntities](shard.world).Remove(req.PlayerID)
 	ecs.GetResource[ecs.DetachedEntities](shard.world).RemoveDetachedEntity(req.PlayerID)
@@ -296,7 +370,7 @@ func (s *PlayerTransferService) detachTransferSource(
 	return snapshot, nil
 }
 
-func (s *PlayerTransferService) restoreParticipantsOnTarget(
+func (s *PlayerTransferService) restoreParticipantsOnTargetLocked(
 	req PlayerTransferRequest,
 	targetShard *Shard,
 	playerHandle types.Handle,
@@ -305,8 +379,6 @@ func (s *PlayerTransferService) restoreParticipantsOnTarget(
 	if targetShard == nil || playerHandle == types.InvalidHandle {
 		return
 	}
-	targetShard.mu.Lock()
-	defer targetShard.mu.Unlock()
 	if !targetShard.world.Alive(playerHandle) {
 		return
 	}
@@ -321,7 +393,7 @@ func (s *PlayerTransferService) restoreParticipantsOnTarget(
 	}
 }
 
-func (s *PlayerTransferService) restoreParticipantsOnRollback(
+func (s *PlayerTransferService) restoreParticipantsOnRollbackLocked(
 	req PlayerTransferRequest,
 	sourceShard *Shard,
 	playerHandle types.Handle,
@@ -330,8 +402,6 @@ func (s *PlayerTransferService) restoreParticipantsOnRollback(
 	if sourceShard == nil || playerHandle == types.InvalidHandle {
 		return
 	}
-	sourceShard.mu.Lock()
-	defer sourceShard.mu.Unlock()
 	if !sourceShard.world.Alive(playerHandle) {
 		return
 	}
@@ -352,8 +422,19 @@ func (s *PlayerTransferService) restoreParticipantsOnRollback(
 }
 
 func (s *PlayerTransferService) sendFailureToLayer(req PlayerTransferRequest, text string) {
-	if s == nil || s.game == nil || text == "" {
+	// A feature completion owns its guarded failure notification. Looking up
+	// the current layer client here could report stale work to a newer session.
+	if s == nil || s.game == nil || text == "" || req.OnResult != nil {
 		return
 	}
 	s.game.sendTeleportSystemMessage(req.PlayerID, req.SourceLayer, text)
+}
+
+func (s *PlayerTransferService) completeResult(req PlayerTransferRequest, shard *Shard, handle types.Handle, err error) {
+	if req.OnResult == nil || shard == nil {
+		return
+	}
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	req.OnResult(shard, handle, err)
 }

@@ -242,11 +242,13 @@ func TestSoundLifecycleTransferAndRollbackRefreshMembership(t *testing.T) {
 				require.NotEqual(t, player, newPlayer, "rollback respawn must have a fresh entity generation")
 			}
 			attachSoundLifecycleClient(t, game, destination, client, newPlayer)
+			destination.mu.Lock()
 			if rollback {
-				transfer.restoreParticipantsOnRollback(PlayerTransferRequest{PlayerID: 10}, destination, newPlayer, snapshot.ParticipantStates)
+				transfer.restoreParticipantsOnRollbackLocked(PlayerTransferRequest{PlayerID: 10}, destination, newPlayer, snapshot.ParticipantStates)
 			} else {
-				transfer.restoreParticipantsOnTarget(PlayerTransferRequest{PlayerID: 10}, destination, newPlayer, snapshot.ParticipantStates)
+				transfer.restoreParticipantsOnTargetLocked(PlayerTransferRequest{PlayerID: 10}, destination, newPlayer, snapshot.ParticipantStates)
 			}
+			destination.unlockAndCompletePermanentDeaths()
 			secondEntry := readSoundLifecycleEntry(t, connection)
 			require.Equal(t, firstEntry.StreamEpoch+1, secondEntry.StreamEpoch)
 			require.Equal(t, destination.soundEvents.EffectiveHearing(newPlayer), secondEntry.Audio.Hearing)

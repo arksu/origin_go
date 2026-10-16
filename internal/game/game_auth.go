@@ -32,6 +32,14 @@ type spawnPos struct {
 	X, Y int
 }
 
+type loginSpawnCandidate struct {
+	spawnPos
+	Layer int
+	Home  bool
+}
+
+var errCharacterTransferInFlight = errors.New("character transfer in progress")
+
 func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S_Auth) {
 	if !c.BeginAuthentication() {
 		select {
@@ -51,49 +59,96 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	}
 
 	var character repository.Character
+	var err error
+	var waitCtx context.Context
+	var cancelWait context.CancelFunc
+	defer func() {
+		if cancelWait != nil {
+			cancelWait()
+		}
+	}()
 
 	// Use transaction with FOR UPDATE lock to prevent race conditions
-	err := g.db.WithTx(g.ctx, func(q *repository.Queries) error {
-		var err error
-		character, err = q.GetCharacterByTokenForUpdate(g.ctx, sql.NullString{String: auth.Token, Valid: true})
-		if err != nil {
-			return err
-		}
-
-		// Check if token is expired
-		if character.TokenExpiresAt.Valid && character.TokenExpiresAt.Time.Before(time.Now()) {
-			return fmt.Errorf("token expired")
-		}
-
-		// Check if character is already online
-		if character.IsOnline.Valid && character.IsOnline.Bool {
-			return fmt.Errorf("character already online")
-		}
-
-		normalizedAttributes, changed := characterattrs.FromRaw(character.Attributes)
-		rawAttributes, err := characterattrs.Marshal(normalizedAttributes)
-		if err != nil {
-			return fmt.Errorf("marshal character attributes: %w", err)
-		}
-		if changed {
-			if err := q.UpdateCharacterAttributes(g.ctx, repository.UpdateCharacterAttributesParams{
-				ID:         character.ID,
-				Attributes: rawAttributes,
-			}); err != nil {
-				return fmt.Errorf("update character attributes: %w", err)
+	for {
+		authCtx := g.ctx
+		if waitCtx != nil {
+			authCtx = waitCtx
+			select {
+			case <-c.Done():
+				return
+			default:
 			}
 		}
-		character.Attributes = rawAttributes
+		var transferDone <-chan struct{}
+		err = g.db.WithTx(authCtx, func(q *repository.Queries) error {
+			var err error
+			character, err = q.GetCharacterByTokenForUpdate(authCtx, sql.NullString{String: auth.Token, Valid: true})
+			if err != nil {
+				return err
+			}
 
-		// Update character: set is_online=true where is_online=false
-		if err := q.SetCharacterOnline(g.ctx, character.ID); err != nil {
-			return fmt.Errorf("set character online: %w", err)
+			// Check if token is expired
+			if character.TokenExpiresAt.Valid && character.TokenExpiresAt.Time.Before(time.Now()) {
+				return fmt.Errorf("token expired")
+			}
+
+			// Check if character is already online
+			if character.IsOnline.Valid && character.IsOnline.Bool {
+				return fmt.Errorf("character already online")
+			}
+
+			g.transferMu.Lock()
+			transferDone = g.transferInFlight[types.EntityID(character.ID)]
+			g.transferMu.Unlock()
+			if transferDone != nil {
+				return errCharacterTransferInFlight
+			}
+
+			normalizedAttributes, changed := characterattrs.FromRaw(character.Attributes)
+			rawAttributes, err := characterattrs.Marshal(normalizedAttributes)
+			if err != nil {
+				return fmt.Errorf("marshal character attributes: %w", err)
+			}
+			if changed {
+				if err := q.UpdateCharacterAttributes(authCtx, repository.UpdateCharacterAttributesParams{
+					ID:         character.ID,
+					Attributes: rawAttributes,
+				}); err != nil {
+					return fmt.Errorf("update character attributes: %w", err)
+				}
+			}
+			character.Attributes = rawAttributes
+
+			// Update character: set is_online=true where is_online=false
+			if err := q.SetCharacterOnline(authCtx, character.ID); err != nil {
+				return fmt.Errorf("set character online: %w", err)
+			}
+
+			return nil
+		})
+		if !errors.Is(err, errCharacterTransferInFlight) {
+			break
 		}
-
-		return nil
-	})
+		// Release the character row before waiting: transfer completion persists
+		// its final position through that same row. Retry auth with fresh data.
+		if waitCtx == nil {
+			waitCtx, cancelWait = context.WithTimeout(g.ctx, g.cfg.Game.SpawnTimeout)
+		}
+		select {
+		case <-c.Done():
+			return
+		case <-waitCtx.Done():
+			g.sendAuthResult(c, sequence, false, "Character transfer timed out")
+			return
+		case <-transferDone:
+		}
+	}
 
 	if err != nil {
+		if waitCtx != nil && errors.Is(err, context.DeadlineExceeded) {
+			g.sendAuthResult(c, sequence, false, "Character transfer timed out")
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			g.sendAuthResult(c, sequence, false, "Invalid token")
 			return
@@ -204,13 +259,31 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 	if g.tryReattachPlayer(c, shard, playerEntityID, character) {
 		return
 	}
+	// Hearth fallback can leave a detached surface body while the saved row
+	// still names its old layer. Reuse that body on reconnect instead of spawning
+	// another from the stale saved position.
+	if surface := g.shardManager.GetShard(hearth.SurfaceLayer); surface != nil && surface != shard {
+		if g.tryReattachPlayer(c, surface, playerEntityID, character) {
+			return
+		}
+	}
 
 	// Normal spawn flow
 	normalizedAttributes, _ := characterattrs.FromRaw(character.Attributes)
 	profileExperience, profileSkills, profileDiscovery := loadCharacterProfileData(character, g.logger)
-	candidates := g.generateSpawnCandidates(character.X, character.Y)
+	candidates := g.generateLoginSpawnCandidates(character)
+	sourceShard := shard
+	var runtime *playerRuntimeState
+	if cached, exists := sourceShard.offlineHealth.Load(playerEntityID); exists {
+		state, valid := cached.(playerRuntimeState)
+		if !valid {
+			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: invalid runtime state")
+			return
+		}
+		runtime = &state
+	}
 	spawned := false
-	var playerHandle *types.Handle
+	attached := false
 
 	for _, pos := range candidates {
 		select {
@@ -220,36 +293,66 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		default:
 		}
 
-		if err := shard.PrepareEntityAOI(ctx, playerEntityID, pos.X, pos.Y); err != nil {
-			g.logger.Error("Failed to prepare AOI for player",
-				zap.Uint64("client_id", c.ID),
-				zap.Int64("character_id", character.ID),
-				zap.Error(err),
-			)
-			c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: AOI preparation error")
-			return
-		}
-
-		setupFunc := g.buildPlayerSetupFunc(ctx, character, pos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery)
-		handle, spawnErr := shard.trySpawnPlayerWithPolicy(pos.X, pos.Y, character, setupFunc, SpawnCollisionPolicy{})
-		if handle != types.InvalidHandle {
-			// Register character entity for periodic saving
-			shard.mu.Lock()
-			charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
+		targetShard := g.shardManager.GetShard(pos.Layer)
+		candidateCharacter := character
+		candidateCharacter.Layer = pos.Layer
+		finalize := func(handle types.Handle, actual repository.Character) {
+			charEntities := ecs.GetResource[ecs.CharacterEntities](targetShard.world)
 			nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 			charEntities.Add(playerEntityID, handle, nextSaveAt)
-			shard.mu.Unlock()
-
-			character.X = pos.X
-			character.Y = pos.Y
+			c.Layer = actual.Layer
+			if ctx.Err() == nil && g.attachClientToWorldLocked(targetShard, c, playerEntityID, actual, handle) {
+				g.ensureObserverVisibilityImmediate(targetShard.world, handle)
+				attached = true
+				return
+			}
+			targetShard.queuePlayerLogoutLocked(playerEntityID, handle, ecs.GetResource[ecs.TimeState](targetShard.world).Now, time.Duration(targetShard.cfg.Game.DisconnectDelay)*time.Second)
+		}
+		var handle types.Handle
+		var spawnErr error
+		if pos.Home {
+			handle, candidateCharacter, spawnErr = g.spawnPlayerAtResolvedDestination(ctx, targetShard, candidateCharacter, runtime,
+				func(target *Shard) (playerSpawnDestination, error) {
+					return resolveHearthSpawnDestinationLocked(target, playerEntityID)
+				},
+				func(target *Shard, destination playerSpawnDestination) error {
+					return validateHearthSpawnDestinationLocked(target, playerEntityID, destination)
+				}, SpawnCollisionPolicy{}, finalize)
+			if errors.Is(spawnErr, ErrSpawnDestinationUnavailable) {
+				spawnErr = nil // An unavailable home falls through to ordinary candidates.
+			}
+		} else {
+			if err := targetShard.PrepareEntityAOI(ctx, playerEntityID, pos.X, pos.Y); err != nil {
+				g.logger.Error("Failed to prepare AOI for player",
+					zap.Uint64("client_id", c.ID),
+					zap.Int64("character_id", character.ID),
+					zap.Error(err),
+				)
+				c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: AOI preparation error")
+				return
+			}
+			setupFunc := g.buildPlayerSetupWithRuntimeFunc(ctx, candidateCharacter, pos.spawnPos, normalizedAttributes, profileExperience, profileSkills, profileDiscovery, runtime)
+			candidateCharacter.X, candidateCharacter.Y = pos.X, pos.Y
+			func() {
+				targetShard.mu.Lock()
+				defer targetShard.unlockAndCompletePermanentDeaths()
+				handle, spawnErr = targetShard.trySpawnPlayerWithPolicyLocked(pos.X, pos.Y, candidateCharacter, setupFunc, SpawnCollisionPolicy{})
+				if handle != types.InvalidHandle {
+					finalize(handle, candidateCharacter)
+				}
+			}()
+		}
+		if handle != types.InvalidHandle {
+			character, shard = candidateCharacter, targetShard
 
 			spawned = true
-			playerHandle = &handle
 			break
 		}
-		shard.mu.Lock()
-		shard.UnregisterEntityAOI(playerEntityID)
-		shard.mu.Unlock()
+		if !pos.Home {
+			targetShard.mu.Lock()
+			targetShard.UnregisterEntityAOI(playerEntityID)
+			targetShard.mu.Unlock()
+		}
 		var capacityErr *playerSpawnCapacityError
 		if errors.As(spawnErr, &capacityErr) {
 			g.logger.Error("Player spawn rejected: entity capacity exhausted",
@@ -281,19 +384,26 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		c.SendError(netproto.ErrorCode_ERROR_CODE_PATH_BLOCKED, "Spawn failed: no valid position")
 		return
 	}
-
-	// Final check: ensure spawn context hasn't timed out before sending packets
-	select {
-	case <-ctx.Done():
-		g.logger.Info("Spawn context timed out before sending packets", zap.Uint64("client_id", c.ID), zap.Error(ctx.Err()))
-		shard.mu.Lock()
-		shard.queuePlayerLogoutLocked(playerEntityID, *playerHandle, ecs.GetResource[ecs.TimeState](shard.world).Now, time.Duration(shard.cfg.Game.DisconnectDelay)*time.Second)
-		shard.mu.Unlock()
-		return
-	default:
+	if sourceShard != shard {
+		// Ordinary character snapshots do not save Layer. Persist a successful
+		// cross-layer fallback even when its socket closes during finalization.
+		persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := g.db.Queries().UpdateCharacterPositionAndLayer(persistCtx, repository.UpdateCharacterPositionAndLayerParams{
+			ID: character.ID, X: character.X, Y: character.Y, Layer: character.Layer,
+		})
+		persistCancel()
+		if err != nil {
+			g.logger.Warn("Login fallback: failed to persist final position/layer",
+				zap.Int64("character_id", character.ID),
+				zap.Int("target_layer", character.Layer),
+				zap.Int("target_x", character.X),
+				zap.Int("target_y", character.Y),
+				zap.Error(err),
+			)
+		}
 	}
 
-	if !g.attachClientToWorld(shard, c, playerEntityID, character, *playerHandle) {
+	if !attached {
 		return
 	}
 
@@ -304,6 +414,21 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		zap.Any("posX", character.X),
 		zap.Any("posY", character.Y),
 	)
+}
+
+// A canceled cross-layer spawn can retain its old-layer cache until a later
+// login attaches on the now-persisted destination layer. The live body then
+// supersedes every offline snapshot. Retire them before releasing its lock,
+// so a subsequent disconnect/expiry cannot publish a newer snapshot first.
+func (g *Game) retireLoginRuntimeState(attached *Shard, playerEntityID types.EntityID) {
+	attached.offlineHealth.Delete(playerEntityID)
+	if g.shardManager != nil {
+		for _, shard := range g.shardManager.GetShards() {
+			if shard != attached {
+				shard.offlineHealth.Delete(playerEntityID)
+			}
+		}
+	}
 }
 
 func (g *Game) loadPlayerHearth(character types.EntityID) error {
@@ -715,6 +840,8 @@ func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID
 		posX = int(transform.X)
 		posY = int(transform.Y)
 	}
+	character.Layer, character.X, character.Y = shard.layer, posX, posY
+	c.Layer = shard.layer
 
 	if !g.attachClientToWorldLocked(shard, c, playerEntityID, character, handle) {
 		return true
@@ -771,6 +898,30 @@ func (g *Game) isValidSpawnPos(x, y int) bool {
 	maxY := (g.cfg.Game.WorldMinYChunks+g.cfg.Game.WorldHeightChunks)*chunkSize - marginPixels
 
 	return x >= minX && x < maxX && y >= minY && y < maxY
+}
+
+func (g *Game) generateLoginSpawnCandidates(character repository.Character) []loginSpawnCandidate {
+	ordinary := g.generateSpawnCandidates(character.X, character.Y)
+	candidates := make([]loginSpawnCandidate, 0, len(ordinary)+1)
+	if len(ordinary) > 0 && ordinary[0] == (spawnPos{X: character.X, Y: character.Y}) {
+		candidates = append(candidates, loginSpawnCandidate{spawnPos: ordinary[0], Layer: character.Layer})
+		ordinary = ordinary[1:]
+	}
+	if surface := g.shardManager.GetShard(hearth.SurfaceLayer); surface != nil {
+		surface.mu.Lock()
+		if runtime, exists := ecs.TryGetResource[hearth.Runtime](surface.world); exists && runtime.Index != nil {
+			if snapshot := runtime.Index.Snapshot(types.EntityID(character.ID)); snapshot.CanReturn() {
+				candidates = append(candidates, loginSpawnCandidate{
+					spawnPos: spawnPos{X: snapshot.Home.X, Y: snapshot.Home.Y}, Layer: hearth.SurfaceLayer, Home: true,
+				})
+			}
+		}
+		surface.mu.Unlock()
+	}
+	for _, pos := range ordinary {
+		candidates = append(candidates, loginSpawnCandidate{spawnPos: pos, Layer: character.Layer})
+	}
+	return candidates
 }
 
 func (g *Game) generateSpawnCandidates(dbX, dbY int) []spawnPos {
@@ -918,7 +1069,7 @@ func (g *Game) attachClientToWorldLocked(shard *Shard, client *network.Client, p
 		g.logger.Error("Failed to attach world sound listener", zap.Uint64("client_id", client.ID), zap.Uint64("entity_id", uint64(playerEntityID)))
 	}
 	shard.ClientsMu.Unlock()
-	shard.offlineHealth.Delete(playerEntityID)
+	g.retireLoginRuntimeState(shard, playerEntityID)
 	shard.ChunkManager().EnableChunkLoadEvents(playerEntityID, client.StreamEpoch.Load())
 
 	if health, exists := ecs.GetComponent[components.EntityHealth](shard.world, handle); exists && health.HHP <= 0 {

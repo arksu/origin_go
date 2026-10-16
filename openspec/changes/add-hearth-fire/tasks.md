@@ -20,7 +20,8 @@ Its verification is tracked below. Task 3.5 delivers synchronous chunk hydration
 orphan normalization; its completed verification is recorded below. Task 4.1 and the
 death portion of 4.3a add synchronous permanent-death cleanup. Task 4.2 connects
 REST deletion through the same cleanup. Tasks 4.4/4.5 add lazy repair, recovery/final-save checks and cost documentation.
-The remaining gameplay stays separate.
+Section 5 adds ordinary return, strict opt-in interruption and layer-aware login fallback.
+The remaining presentation and FX stay separate.
 This replaces the former durable-lifecycle plan:
 construction changes runtime first, then returns success after its database commit.
 Other independent saves may lose recent progress on a crash. Runtime
@@ -154,12 +155,106 @@ independently passed focused runtime/recovery tests with PostgreSQL.
 
 ## 5. Return, Interruption, and Normal Login
 
-- [ ] 5.1 Register Travel to Hearth Fire as an ordinary no-target action with five-second progress, zero stamina, and the existing 360000 ms cooldown. Use known runtime ownership from login/hydration; Unknown fails closed without an asynchronous lookup. Test missing/unknown home, combat, swimming, active KO, post-KO lying, and standing shallow water through existing eligibility/cycle tests.
-- [ ] 5.2 Resolve the latest runtime home again on the target surface shard immediately before relocation, not only at queue admission; recheck exact source handle/action generation, connection, combat, swimming, and resolved KO state. Reuse deferred transfer with narrow generic source-validation/target-resolution/success hooks and existing preparation timeout; test cancellation, replacement during progress or queued transfer, stale callbacks, and cooldown only after successful target relocation.
-- [ ] 5.3 Reuse exact player-only destination clearance and the carry transfer participant for same-layer/cross-layer return. Use a standing target-runtime copy while preserving the lying source rollback snapshot; test blocked-home failure without nearby fallback, carried-footprint exclusion, rollback/carry integrity, and unchanged stairs/admin incapacity rules.
-- [ ] 5.4 Invoke feature-selected interruption through a small generic action capability before gameplay-attempt rejection and on fresh movement intent, damage, combat/swimming transition, and normal disconnect cleanup. Test rejected/cooldown-blocked attempts, blocked movement without displacement, damage without combat, and chat/personal-window exemptions; shared ingress must not check a Hearth action key.
-- [ ] 5.5 Preserve cancellation when another action attempt is rejected by client cooldown controls using existing `C2S_CancelAction`. Verify Actions/hotbar mouse, keyboard, and touch paths plus movement/map-click suites; add no new cancellation packet and do not start the blocked action.
-- [ ] 5.6 Keep ordinary first entry and `tryReattachPlayer` without automatic Hearth creation; add normal login candidates in order: saved position, exact current home when present, near saved position, existing random fallback. Test no-home/reconnect and blocked-home cases, update entry and runtime-KO notes, and preserve capacity cleanup.
+- [x] 5.1 Register Travel to Hearth Fire as an ordinary no-target action with five-second progress compiled from TickRate before registry publication, zero stamina and the existing 360000 ms cooldown. Reuse an optional admission hook for prior interaction/movement cleanup. Use known runtime ownership from login/hydration; Unknown fails closed without a lookup. Test missing/unknown home, combat, swimming, active KO, post-KO lying, and standing shallow water through existing eligibility/cycle tests.
+- [x] 5.2 Resolve the latest runtime home again on the target surface shard immediately before relocation, not only at queue admission; recheck exact source handle/action generation, connection, combat, swimming, and resolved KO state before and after source saving. Reuse stock deferred transfer with narrow generic source-policy/target-spawn/result hooks and one preparation timeout; complete pre-detach failure without leaving progress stuck, guard late results, and start cooldown only after successful target relocation. Reprepare changed homes after retiring unpublished AOI and use actual coordinates throughout.
+- [x] 5.3 Reuse exact player-only destination clearance and the carry transfer participant for same-layer/cross-layer return. Use a standing target-runtime copy while preserving the lying source rollback snapshot; reload the full saved character under the source lock after SaveSync for both target and rollback. Test DB/ECS stats/profile divergence, blocked-home failure without nearby fallback, carried-footprint exclusion, rollback/carry integrity, and unchanged stairs/admin incapacity rules.
+- [x] 5.4 Invoke feature-selected interruption through a small generic action capability before gameplay-attempt rejection and on fresh movement intent, damage, combat/swimming transition, and normal disconnect cleanup. Test rejected/cooldown-blocked attempts, blocked movement without displacement, damage without combat, and chat/personal-window exemptions; shared ingress must not check a Hearth action key.
+- [x] 5.5 Preserve cancellation when another action attempt is rejected by client cooldown controls using existing `C2S_CancelAction`. Verify Actions/hotbar mouse, keyboard, and touch paths plus movement/map-click suites; add no new cancellation packet and do not start the blocked action.
+- [x] 5.6 Keep ordinary first entry and body reattachment without automatic Hearth creation; add layer-aware normal login candidates in order: saved position, exact current home when present, near saved position, existing random fallback. Preserve original runtime KO/combat state, capacity/setup failure cleanup and authoritative surface-body reattachment despite stale saved layers. Reuse UpdateCharacterPositionAndLayer after successful cross-layer spawning because ordinary CharacterSaver omits Layer; keep its stock warning policy and retire offline caches only after attachment. Test no-home/reconnect, blocked-home, cancellation, final-save/reload and actual write failure; update runtime-KO notes.
+
+Section 5 verification: PostgreSQL return tests passed through real RequestTransfer
+and executeTransfer, including same/cross-layer carry, lying-to-standing success,
+lying rollback, blocked destinations, replaced homes/AOI, full identity validation,
+timeout, early failure cleanup, stale source/session/generation, disconnect during
+SaveSync and after target spawn, actual position persistence and success-only
+cooldown. Admission regressions retire old build phantom and personal craft,
+including later return cancellation/failure. Login tests cover saved/home/nearby/
+random ordering, no-home first entry, original KO/combat state, stale-row reattach,
+capacity/setup errors, cancellation before attach, existing layer write and reload
+after real character save/expiry; SQL failure retains the stock warning contract.
+Login now reuses locked finalization for every candidate: spawn, character
+registration and attachment/logout finish before the owning lock is released.
+Cross-layer position persistence remains outside that lock with no later
+attachment/logout. A PostgreSQL regression blocks this real SQL write, runs
+lethal damage and PlayerDeathSystem, then checks ordinary DeathDialog/observer
+mode and no EnterWorld after death; it failed before the login correction.
+It also expires the spawn context without detaching the corpse. Immediate
+attachment-death tests cover saved-position and home candidates, including
+synchronous cleanup after unlock. Focused PostgreSQL tests, make test, the
+four-package race run, strict OpenSpec validation and diff checks passed;
+independent review approved the login correction.
+Locked-attachment ordering coverage verifies old-layer caches retire before unlock
+and a subsequent real expiry preserves fresh health/combat; a temporary source
+overlay reverting to local-only retirement made the regression fail as expected.
+Interruption tests cover valid/rejected intents, stale input/session, WASD release/
+refresh/expiry, Stand Up epochs, swimming, damage/zero-damage combat, starvation
+masked by KO resolution, admin damage, chat/windows and existing disconnect.
+Opt-out/empty interruption paths allocate zero in AllocsPerRun checks.
+
+DB/ECS divergence regressions verify current stamina, energy, heading and the full
+profile on same/cross-layer return and rollback, then save the restored body again.
+They reproduced stale-body state and durable data loss before the post-SaveSync
+reload fix. A failed reload preserves the source body, client, carry and inventories
+after successful source persistence; no destructive participant capture occurs.
+The post-save reload uses a separate five-second timeout under the source lock;
+a PostgreSQL blocked-read regression verifies deadline expiry with an unbounded
+parent context and preserves the source before destructive capture.
+
+Real-socket reconnect regressions pause return after source capture, invoke actual
+disconnect/offline and token authentication, and verify auth waits for the existing
+per-flight completion channel before repeating its transaction with fresh data.
+Both layers and success/rollback retain exactly one live character across all
+worlds, the replacement connection, the stock carry drop and success-only cooldown.
+Waiting holds no shard/DB lock and uses one SpawnTimeout; timed-out auth makes no
+online/session claim. Repeated return/rollback regressions preserve nested player
+and carried-object inventories while retiring all previous container handles and
+source refs, without growing the entity count. Existing source raw-cache removal
+now runs at capture before despawn, preventing stale carry reactivation.
+The carry snapshot pins its existing active source chunk before destructive
+capture through transfer completion; busy/unavailable sources refuse capture.
+Real PostgreSQL tests seed carry in SQL, pause after capture, force capacity
+eviction and returning source AOI, and verify success/rollback retain one body,
+one carry and nested inventories. Normal eviction resumes after cleanup. Partial
+capture, failed rollback spawn, persistence fallback and repeated-save failure
+tests verify pin release; direct tests cover busy admission and idempotent release.
+The stock repeated-persistence-failure policy remains best effort: SQL may retain
+the old source after both writes fail. The pin closes the in-flight reload window,
+not that separate durable-write failure; the failure regression states this bound.
+Pin correction verification: make test, the four-package server race run and focused
+world pin/gate/eviction race tests passed. Adding the entire world package to the
+race run exposed unchanged allocation-count assertions and Skull metadata's
+time.Local write racing existing LRU timers; that expanded run did not pass.
+The socket fixture publishes its deliberately paused disconnect boundary with a
+mutex; this does not validate or fix the pre-existing unsynchronized Client.Layer
+accesses observed without that fixture synchronization.
+
+Atomic finalization regressions cover both layers and target/rollback: a competing
+real Shard.Update with lethal damage and PlayerDeathSystem cannot enter between
+spawn and attachment. Its first observation includes the living bound body and
+restored carry; death then drops carry and sends the ordinary observer/dialog flow
+without a later ordinary EnterWorld. Immediate attachment death also completes
+Hearth cleanup only after owning-shard unlock. Existing transfer/disconnect tests
+forward the locked spawn finalizer, and direct lifecycle tests own the restore lock.
+All eight PostgreSQL death cases passed normally and with -race; make test and
+the four-package server race run passed after the finalizer correction.
+
+Client actions, movement-input, map-click, knockout and direction-aim suites passed;
+the GameView keyboard harness passed all six tests. Mouse/touch/hotbar tests verify
+cancel-only cooldown attempts and drag/long-press/clearing exemptions. Type-check
+and lint passed; lint's diff was reviewed. No manual browser/server E2E is claimed.
+`GOCACHE=/private/tmp/origin-go-build-cache make test` passed with isolated temporary
+PostgreSQL via ORIGIN_OBJECT_HEALTH_TEST_DSN; protobuf/sqlc regeneration produced
+no diff. Full `go test -race ./internal/game ./internal/game/hearth
+./internal/ecs/systems ./internal/restapi -count=1` passed with the same fixture.
+One aggregate race run hit the unchanged lift-health fixture's single-Update
+chunk-activation assertion; no data race was reported. Thirty focused repetitions
+and the repeated full race run passed without changing that fixture or chunk code.
+Strict OpenSpec validation and git diff --check passed. Independent review returned
+Approve after resolving admission cleanup, durable layer persistence and cache
+retirement ordering findings; the final cache regression also passed independent
+PostgreSQL race review.
+No new SQL/schema/protocol, dependency, worker, queue or global lifecycle barrier
+was introduced. Section 6 presentation/KO-window/FX work remains unchecked.
 
 ## 6. Prepared Assets, UI, and Shared Skull Smoke
 

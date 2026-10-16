@@ -4,15 +4,18 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { createBuildProject, blenderWrapper, runtimeState } from './build_helpers.mjs'
 import { runCli } from '../cli.ts'
+import { readArtifact } from '../publish.mjs'
 
 test('editing walk preserves the model texture and idle bytes', async () => {
   const project = await createBuildProject()
   await project.build()
   const before = await project.manifest()
+  const beforeReference = JSON.parse(await project.catalogBytes()).assets['character/test_actor']
   // Change an interior key so the fixture's loop remains closed.
   await project.editAction('walk', { bone: 'hand.r', frame: 6, rotationZ: 0.2 })
   await project.build('character/test_actor', { animations: true, clip: 'walk' })
   const after = await project.manifest()
+  const afterReference = JSON.parse(await project.catalogBytes()).assets['character/test_actor']
   assert.deepEqual(after.model, before.model)
   assert.deepEqual(after.textures, before.textures)
   assert.deepEqual(after.clips.idle, before.clips.idle)
@@ -21,6 +24,12 @@ test('editing walk preserves the model texture and idle bytes', async () => {
   const metadata = JSON.parse(await readFile(join(project.publicRoot, after.metadata.url)))
   assert.deepEqual(Object.keys(metadata.clips).sort(), ['idle', 'walk'])
   assert.equal(after.metrics.animationBytes, after.clips.idle.artifact.bytes + after.clips.walk.artifact.bytes)
+  for (const artifact of [afterReference, after.model, ...after.textures, after.clips.idle.artifact, after.clips.walk.artifact, after.metadata]) {
+    await readArtifact(project.publicRoot, artifact)
+  }
+  for (const [previous, current] of [[beforeReference, afterReference], [before.metadata, after.metadata], [before.clips.walk.artifact, after.clips.walk.artifact]]) {
+    if (previous.url !== current.url) await assert.rejects(readFile(join(project.publicRoot, previous.url)), { code: 'ENOENT' })
+  }
 })
 
 test('rest, socket, texture, modifier and mesh transform changes reject partial builds atomically', async () => {

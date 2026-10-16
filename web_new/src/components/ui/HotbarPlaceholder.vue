@@ -40,7 +40,7 @@ function parseActionIdFromDataTransfer(event: DragEvent): HotbarActionId | null 
   return isHotbarActionId(actionRaw) ? actionRaw : null
 }
 
-const { presentation, canActivate } = useActionPresentation()
+const { presentation } = useActionPresentation()
 
 function slotLabel(id: HotbarActionId): string {
   return presentation(id).label
@@ -70,7 +70,7 @@ function onActivate(slotIndex: number): void {
     return
   }
   const id = props.assignments[slotIndex]
-  if (id && canActivate(id)) emit('activate', slotIndex)
+  if (slotVisible(id)) emit('activate', slotIndex)
 }
 
 function clearLongPressTimer(): void {

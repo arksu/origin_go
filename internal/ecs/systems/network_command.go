@@ -191,6 +191,7 @@ type NetworkCommandSystem struct {
 	actionService               ActionCommandService
 	contextPendingTTL           time.Duration
 	standUpHandler              func(*ecs.World, types.Handle, *network.PlayerCommand)
+	playerConnectionValidator   func(*ecs.World, types.EntityID, uint64) bool
 	directionalSessionValidator func(playerID types.EntityID, clientID uint64, epoch uint32) bool
 	manualMovementCanceler      ManualMovementCanceler
 
@@ -320,6 +321,19 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 		return
 	}
 
+	// Legacy commands have no stream epoch; use the same current-connection
+	// guard as Stand Up before allowing them to interrupt a newer action.
+	switch cmd.CommandType {
+	case network.CmdStandUp, network.CmdMoveDirection, network.CmdMapClick,
+		network.CmdSetMovementMode, network.CmdSelectContextAction,
+		network.CmdStartCraftOne, network.CmdStartCraftMany, network.CmdStartBuild,
+		network.CmdBuildProgress, network.CmdBuildTakeBack,
+		network.CmdActivateAction, network.CmdCancelAction:
+		if s.playerConnectionValidator != nil && (cmd.Layer != w.Layer || !s.playerConnectionValidator(w, cmd.CharacterID, cmd.ClientID)) {
+			return
+		}
+	}
+
 	// Route to command handlers
 	switch cmd.CommandType {
 	case network.CmdStandUp:
@@ -364,7 +378,7 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 			s.actionService.ActivateRequest(w, cmd.CharacterID, handle, request)
 		}
 	case network.CmdCancelAction:
-		if s.actionService != nil {
+		if request, ok := cmd.Payload.(*netproto.C2S_CancelAction); ok && request != nil && s.actionService != nil {
 			s.actionService.Cancel(w, cmd.CharacterID, handle)
 		}
 	case network.CmdOpenWindow:
@@ -382,12 +396,13 @@ func (s *NetworkCommandSystem) processPlayerCommand(w *ecs.World, cmd *network.P
 }
 
 func (s *NetworkCommandSystem) handleStartCraftOne(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	msg, ok := cmd.Payload.(*netproto.C2S_StartCraftOne)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for StartCraftOne", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
 	if s.craftCommandService == nil {
@@ -397,12 +412,13 @@ func (s *NetworkCommandSystem) handleStartCraftOne(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	msg, ok := cmd.Payload.(*netproto.C2S_StartCraftMany)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for StartCraftMany", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
 	if s.craftCommandService == nil {
@@ -412,12 +428,13 @@ func (s *NetworkCommandSystem) handleStartCraftMany(w *ecs.World, playerHandle t
 }
 
 func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	msg, ok := cmd.Payload.(*netproto.C2S_BuildStart)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for BuildStart", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
 	if s.buildCommandService == nil {
@@ -427,12 +444,13 @@ func (s *NetworkCommandSystem) handleStartBuild(w *ecs.World, playerHandle types
 }
 
 func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	msg, ok := cmd.Payload.(*netproto.C2S_BuildProgress)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for BuildProgress", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
 	if s.buildCommandService == nil {
@@ -442,12 +460,13 @@ func (s *NetworkCommandSystem) handleBuildProgress(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleBuildTakeBack(w *ecs.World, playerHandle types.Handle, cmd *network.PlayerCommand) {
-	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
-		return
-	}
 	msg, ok := cmd.Payload.(*netproto.C2S_BuildTakeBack)
 	if !ok || msg == nil {
 		s.logger.Error("Invalid payload type for BuildTakeBack", zap.Uint64("client_id", cmd.ClientID))
+		return
+	}
+	s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
+	if s.rejectIfCarrying(w, playerHandle, cmd.CharacterID) {
 		return
 	}
 	if s.buildCommandService == nil {
@@ -506,6 +525,7 @@ func (s *NetworkCommandSystem) handlePrimaryMapClick(w *ecs.World, playerHandle 
 	if s.consumeAdminMapClick(w, playerHandle, cmd.CharacterID, click) {
 		return
 	}
+	s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
 	targetID := types.EntityID(click.TargetEntityId)
 	targetHandle := w.GetHandleByEntityID(targetID)
 	if playerstate.IsIncapacitated(w, playerHandle) {
@@ -579,11 +599,15 @@ func (s *NetworkCommandSystem) handleSetMovementMode(w *ecs.World, playerHandle 
 		return
 	}
 
+	before, hadMovement := ecs.GetComponent[components.Movement](w, playerHandle)
 	desiredMode := protoToMoveMode(payload.Mode)
 	ecs.WithComponent(w, playerHandle, func(m *components.Movement) {
 		m.Mode = desiredMode
 	})
 	_ = s.enforceMovementModeByStamina(w, playerHandle)
+	if after, exists := ecs.GetComponent[components.Movement](w, playerHandle); exists && hadMovement && before.Mode != constt.Swim && after.Mode == constt.Swim {
+		s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
+	}
 	ecs.MarkMovementModeDirtyByHandle(w, playerHandle)
 }
 
@@ -686,6 +710,7 @@ func (s *NetworkCommandSystem) stopMovementAndEmit(w *ecs.World, playerHandle ty
 }
 
 func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandle types.Handle, playerID types.EntityID, click *netproto.MapClick) {
+	s.interruptGameplayAction(w, playerID, playerHandle)
 	targetID := types.EntityID(click.TargetEntityId)
 	targetHandle := w.GetHandleByEntityID(targetID)
 	if targetID != 0 && w.Alive(targetHandle) && playerstate.ItemsLocked(w, playerHandle) {
@@ -755,7 +780,7 @@ func (s *NetworkCommandSystem) handleSelectContextAction(
 	cmd *network.PlayerCommand,
 ) {
 	selectAction, ok := cmd.Payload.(*netproto.SelectContextAction)
-	if !ok {
+	if !ok || selectAction == nil {
 		s.logger.Error("Invalid payload type for SelectContextAction",
 			zap.Uint64("client_id", cmd.ClientID))
 		return
@@ -763,6 +788,7 @@ func (s *NetworkCommandSystem) handleSelectContextAction(
 	if selectAction.ActionId == "" {
 		return
 	}
+	s.interruptGameplayAction(w, cmd.CharacterID, playerHandle)
 	if s.contextActionService == nil {
 		return
 	}
@@ -1504,5 +1530,19 @@ func (s *NetworkCommandSystem) sendItemsLocked(playerID types.EntityID) {
 		SendMiniAlert(types.EntityID, *netproto.S2C_MiniAlert)
 	}); ok {
 		sender.SendMiniAlert(playerID, &netproto.S2C_MiniAlert{Severity: netproto.AlertSeverity_ALERT_SEVERITY_WARNING, ReasonCode: playerstate.ItemsLockedReason, TtlMs: 3000})
+	}
+}
+
+// SetPlayerConnectionValidator reuses the owning shard's attached-client check
+// for commands that can cancel an in-progress gameplay action.
+func (s *NetworkCommandSystem) SetPlayerConnectionValidator(validator func(*ecs.World, types.EntityID, uint64) bool) {
+	s.playerConnectionValidator = validator
+}
+
+func (s *NetworkCommandSystem) interruptGameplayAction(w *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
+	if service, ok := s.actionService.(interface {
+		Interrupt(*ecs.World, types.EntityID, types.Handle)
+	}); ok {
+		service.Interrupt(w, playerID, playerHandle)
 	}
 }

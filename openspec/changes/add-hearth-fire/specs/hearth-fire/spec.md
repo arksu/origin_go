@@ -294,6 +294,8 @@ The world object SHALL be named `Hearth Fire`, without the owner's name, and SHA
 
 `Travel to Hearth Fire` SHALL be available through the existing Actions menu and use ordinary progress and cooldown presentation. One accepted attempt SHALL take five seconds of interruptible progress and cost no stamina. Travel Weariness SHALL NOT be introduced. Without an active home, the action SHALL be rejected with a clear message.
 
+Before the action registry is published, its duration SHALL be converted to execution ticks using the configured TickRate. Accepted admission SHALL stop prior movement and retire existing build/craft/link interactions through their ordinary cleanup before progress starts; rejected admission SHALL NOT perform this cleanup.
+
 #### Scenario: Ordinary successful channel
 - **WHEN** an eligible character activates return and waits without interruption
 - **THEN** the character SHALL travel after five seconds without a stamina charge
@@ -301,6 +303,11 @@ The world object SHALL be named `Hearth Fire`, without the owner's name, and SHA
 #### Scenario: No active hearth
 - **WHEN** a character without an active home requests return
 - **THEN** the server SHALL reject it and SHALL NOT create a hearth or choose an alternative travel destination
+
+#### Scenario: Prior build or craft is still pending
+- **WHEN** an eligible character starts return with an earlier build preview or personal craft
+- **THEN** ordinary cancellation SHALL remove that preview, phantom and craft before return progress
+- **AND** later return cancellation or failure SHALL NOT revive that earlier work
 
 ### Requirement: Return respects combat swimming and knockout
 
@@ -356,6 +363,11 @@ Return SHALL use known runtime metadata and resolve the active hearth immediatel
 - **THEN** the target world SHALL resolve the new active home before spawning the character
 - **AND** queued coordinates SHALL NOT relocate the character to the retired home
 
+#### Scenario: Home changes while its AOI is being prepared
+- **WHEN** the full home identity or position changes during target preparation
+- **THEN** the unpublished old AOI registration SHALL be retired and the current target prepared within the same timeout
+- **AND** final resolution, live-home validation and exact spawning SHALL share the surface lock, with actual coordinates passed to participants and position persistence
+
 #### Scenario: Destination is blocked
 - **WHEN** the exact hearth destination cannot fit the player because of an obstacle
 - **THEN** return SHALL fail with a clear message, no relocation, and no cooldown
@@ -383,6 +395,11 @@ Return SHALL use the existing independent persisted action cooldown of six minut
 #### Scenario: Accepted transfer later fails
 - **WHEN** a transfer request is accepted but the destination spawn fails
 - **THEN** return cooldown SHALL NOT start
+
+#### Scenario: Accepted transfer fails before source capture
+- **WHEN** transfer character loading, source saving or source validation fails before detach
+- **THEN** the exact original deferred action SHALL finish without cooldown or destructive carry capture
+- **AND** a late result SHALL NOT cancel a replacement body, session or action generation
 
 #### Scenario: Successful transfer and later reconnect
 - **WHEN** return succeeds and the player reconnects while the six-minute deadline is unexpired
@@ -413,6 +430,15 @@ After active knockout ends, the knockout window SHALL show `Travel to Hearth Fir
 
 Normal world-entry spawning SHALL try the saved player position, the current exact hearth if one exists, nearby positions around the saved player position, then existing random-spawn fallback. Without an active hearth, the home stage SHALL be skipped without creating an object or failing merely because ownership is absent. Existing reattachment of a still-live detached body SHALL stay first and unchanged. Login recovery SHALL NOT turn voluntary return into a nearby-position search.
 
+Candidates SHALL retain their owning layer and original runtime KO/combat state. Cross-layer login SHALL preserve lying pose, update the client layer and synchronously reuse existing UpdateCharacterPositionAndLayer with an independent bounded context after body creation; ordinary position-write failure SHALL retain the stock transfer warning policy and authoritative body. No new query/schema or atomic checkpoint SHALL be added. Offline runtime caches SHALL be retired at successful attachment under the attached body's shard lock, before a later disconnect/expiry can publish a newer snapshot.
+
+For every successful candidate, body creation, character registration and attachment or logout SHALL share the owning shard lock. The cross-layer position write SHALL remain outside that lock, after finalization, without a later attachment or logout based on the spawned handle.
+
+#### Scenario: Permanent death during cross-layer login position write
+- **WHEN** the login position write is delayed and a world update kills the newly spawned player
+- **THEN** the client SHALL already be attached and receive the ordinary DeathDialog and observer mode
+- **AND** completing or timing out the position write SHALL NOT attach the corpse, queue a new logout or send ordinary EnterWorld after death
+
 #### Scenario: Saved position is blocked and no home exists
 - **WHEN** normal login cannot use the saved position and the character has no active hearth
 - **THEN** normal login SHALL try nearby positions around the saved position and then existing random spawn if necessary
@@ -429,6 +455,20 @@ Normal world-entry spawning SHALL try the saved player position, the current exa
 #### Scenario: Detached body still exists
 - **WHEN** a reconnect can reattach the existing live body
 - **THEN** it SHALL reattach in place without applying home fallback or creating another hearth
+
+#### Scenario: Cross-layer fallback has a stale saved layer
+- **WHEN** a detached surface body exists after fallback but the login snapshot still names the old layer
+- **THEN** that authoritative body SHALL be reattached before any new spawn, using its actual position and layer
+
+#### Scenario: Ordinary final save follows cross-layer fallback
+- **WHEN** a successful surface fallback is followed by ordinary character save, expiry or restart
+- **THEN** the existing position/layer write SHALL allow reloading the surface layer despite ordinary CharacterSaver omitting Layer
+- **AND** accepted independent-checkpoint loss and ordinary write-failure semantics SHALL remain unchanged
+
+#### Scenario: Disconnect follows successful attachment
+- **WHEN** a later disconnect and expiry capture a fresh runtime snapshot after attachment
+- **THEN** old-layer cache retirement SHALL already have completed under the attached body's lock
+- **AND** no delayed attachment cleanup SHALL delete that newer health/combat snapshot
 
 ### Requirement: Runtime transitions precede persistence
 

@@ -28,8 +28,9 @@ type PlayerDeathHandler interface {
 // Independent timed KO on SHP<=0, permanent death on HHP<=0.
 type PlayerDeathSystem struct {
 	ecs.BaseSystem
-	handler PlayerDeathHandler
-	cfg     PlayerDeathSystemConfig
+	handler   PlayerDeathHandler
+	cfg       PlayerDeathSystemConfig
+	interrupt func(*ecs.World, types.EntityID, types.Handle)
 }
 
 func NewPlayerDeathSystem(handler PlayerDeathHandler, cfg PlayerDeathSystemConfig) *PlayerDeathSystem {
@@ -95,10 +96,13 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 	}
 
 	before, _ := ecs.GetComponent[components.EntityHealth](w, handle)
+	starvationDamage := false
 	ecs.WithComponent(w, handle, func(health *components.EntityHealth) {
 		health.SHP, health.HHP = entityhealth.ClampHealth(health.SHP, health.HHP, mhp)
 		if health.HHP > 0 && nowTick > 0 && nowTick%s.cfg.StarvationDamageIntervalTicks == 0 && energy < 500 {
+			previousSHP, previousHHP := health.SHP, health.HHP
 			health.SHP, health.HHP, _, _ = entityhealth.ApplyDamage(health.SHP, health.HHP, mhp, s.cfg.StarvationSoftDamagePerInterval, 0)
+			starvationDamage = health.SHP < previousSHP || health.HHP < previousHHP
 		}
 		// Depletion must be observed before regeneration, but all incoming damage
 		// takes priority over the one-time completion grant.
@@ -108,6 +112,9 @@ func (s *PlayerDeathSystem) processPlayerHealth(w *ecs.World, playerID types.Ent
 		}
 		health.SHP, health.HHP = entityhealth.ClampHealth(health.SHP, health.HHP, mhp)
 	})
+	if starvationDamage && s.interrupt != nil {
+		s.interrupt(w, playerID, handle)
+	}
 	after, _ := ecs.GetComponent[components.EntityHealth](w, handle)
 	if before.IsLying != after.IsLying {
 		ecs.MarkCharacterVisualDirty(w, playerID)
@@ -146,4 +153,8 @@ func resolveMaxHHPForHandle(w *ecs.World, handle types.Handle, lifeDeathFactor f
 		con = characterattrs.Get(profile.Attributes, characterattrs.CON)
 	}
 	return entityhealth.MaxHHPFromCon(con, lifeDeathFactor)
+}
+
+func (s *PlayerDeathSystem) SetActionInterrupter(interrupt func(*ecs.World, types.EntityID, types.Handle)) {
+	s.interrupt = interrupt
 }
