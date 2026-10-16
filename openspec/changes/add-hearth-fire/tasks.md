@@ -21,7 +21,8 @@ orphan normalization; its completed verification is recorded below. Task 4.1 and
 death portion of 4.3a add synchronous permanent-death cleanup. Task 4.2 connects
 REST deletion through the same cleanup. Tasks 4.4/4.5 add lazy repair, recovery/final-save checks and cost documentation.
 Section 5 adds ordinary return, strict opt-in interruption and layer-aware login fallback.
-The remaining presentation and FX stay separate.
+Owner-death Hearth FX now uses the shared object-FX path; remaining presentation
+and other FX triggers stay separate.
 This replaces the former durable-lifecycle plan:
 construction changes runtime first, then returns success after its database commit.
 Other independent saves may lose recent progress on a crash. Runtime
@@ -261,9 +262,45 @@ was introduced. Section 6 presentation/KO-window/FX work remains unchecked.
 - [ ] 6.1 Reuse the prepared green flame resource and skull-smoke assets with existing projection/anchor/alpha contracts; integrate the Hearth icon and always-green presentation. Verify label `Hearth Fire`, seven approved flame frames at 70% scale, no ownership/online indicator, no minimap marker, and unchanged campfire rendering.
 - [ ] 6.2 Add `Travel to Hearth Fire` beside `Stand Up` only after active KO ends, using the same action, progress, and shared cooldown UI. Verify knockout/action UI suites cover active KO, lying, cancellation, success, and cooldown.
 - [ ] 6.3 Add only `stream_epoch = 3` to existing `S2C_Fx`, preserving fields 1/2, and publish one position-based skull-smoke event at runtime character death or Hearth conversion to current observers. Regenerate server/client protobuf and test session/layer isolation, separate event positions, no historical replay, and legacy local-player `exp_gain` behavior.
-- [ ] 6.4 Render a reusable detached one-shot effect from the eight preloaded frames at 250 ms per frame, with a 2000 ms local monotonic lifetime, bounded concurrent effects, and reset-generation cleanup. Test source-view removal, suspended rendering, capacity limits, late loading after reset, and world/session destruction without an event-ID deduplication or server-clock freshness subsystem.
+- [x] 6.4 Render a reusable detached one-shot effect from the eight preloaded frames at 250 ms per frame, with a 2000 ms local monotonic lifetime, bounded concurrent effects, and owner-container cleanup. Drop events before asset readiness instead of retaining callbacks for old events. Test source-view removal, suspended rendering, capacity limits, late loading after reset, and world/session destruction without an event-ID deduplication or server-clock freshness subsystem.
 - [ ] 6.5 Add visual/client asset regressions and gameplay-scale desktop/mobile screenshots for green fire, skull smoke, and post-KO controls; document delivered contracts and continuous-versus-transient smoke. Run relevant asset tests and, only if atlas/tools change, the three required pipeline checks; generate no replacement art and add no explanatory in-app copy.
 - [x] 6.6 Add the minimal Hearth owner window through ordinary RMB approach/link, reusable text snapshots, owner metadata and existing close/reset paths. Keep the owner-contact exception feature-owned and use one optional LinkSystem callback; break links before live conversion. No window registry, instance IDs, client close command or push updates.
+
+Tasks 6.3 (partial), 6.4 and smoke-only 6.5 verification (2026-10-17):
+The approved implementation scope is only the converted Hearth at permanent owner
+death. Character-location, replacement and REST-deletion triggers are not added;
+6.3 remains unchecked for its remaining triggers and 6.5 for its other visuals.
+`CompleteTerminal` returns a saved live-conversion handle; the existing surface
+completion uses `SendObjectFx(handle, key)`, the visibility reverse index and
+`SendFx`. The only wire addition is `S2C_Fx.stream_epoch = 3`. No extra ECS system,
+queue, event-bus event, callback registry, SQL or dependency is introduced.
+The existing client FxManager owns detached world effects through activeFx and
+its ticker: shared preload, drop-before-ready, 64 effects, monotonic 2000 ms
+expiry and per-container reset/destroy cleanup. No pending event loading callback
+exists, so late asset completion cannot revive reset-world presentation.
+
+`GOCACHE=/tmp/origin-go-build make test` passed, including protobuf/sqlc
+regeneration and real localhost socket regressions. Targeted new object-FX and
+Hearth death tests passed outside the socket-restricted sandbox. They cover
+position/observer/session/epoch selection, stale handles, no send before save,
+source-unlock completion from another layer, terminal repeats, raw/no-home,
+REST deletion and save failure. Updated terminal tests assert which conversions
+return a live handle. Initial ad-hoc CGO-enabled tests failed at the host macOS
+SDK linker; the required make target uses CGO_ENABLED=0 and passed.
+Client proto generation, type-check, lint, test:world-fx (5 tests), test:sounds,
+test:render-init and test:asset-pipeline passed. Lint did not rewrite existing
+files. The render-init failure fixtures log expected missing browser texture
+loader warnings while testing deliberately incomplete renderers.
+Independent code-reviewer2 review returned Approve without significant findings.
+A temporary browser harness exercised the real ObjectManager/FxManager conversion
+and smoke at game scale on desktop/mobile-sized canvases; the approved art and
+placement were visually inspected. This is not a full-game network E2E test or
+an actual mobile-device run. The harness is removed after verification.
+PostgreSQL integration tests were skipped because ORIGIN_OBJECT_HEALTH_TEST_DSN
+is unset; live database restart and full-game owner death were not exercised.
+Strict OpenSpec validation and `git diff --check` with standard whitespace rules
+passed. The repository's `indent-with-non-tab` setting conflicts with existing
+space-indented TypeScript; no indentation rewrite was introduced.
 
 Task 6.6 verification (2026-10-17): `make test` with `GOCACHE=/tmp/origin-go-build`
 passed, including protobuf/sqlc regeneration and real RMB/FIFO regressions.

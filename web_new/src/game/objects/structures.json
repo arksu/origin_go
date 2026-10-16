@@ -1,5 +1,16 @@
 {
   "hearth_fire": {
+    "light": {
+        "radius": 80,
+        "offset": [0, -12],
+        "tint": 2853406,
+        "strength": 0.90,
+        "flicker": 0.20,
+        "flickerHz": 7,
+        "flickerFastWeight": 0.65,
+        "sway": [8, 3],
+        "swayHz": 3
+      },
 	"offset": [32, 63],
 	"layers": [
 	  {

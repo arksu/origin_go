@@ -266,6 +266,10 @@ export class GameFacade {
     this.render?.playFx(entityId, fxKey)
   }
 
+  playWorldFx(fxKey: string, x: number, y: number): void {
+    this.render?.playWorldFx(fxKey, x, y)
+  }
+
   showChatBalloon(entityId: number, text: string): void {
     this.render?.showChatBalloon(entityId, text)
   }

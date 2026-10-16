@@ -142,7 +142,7 @@ func TestHearthRecoveryPostgresUnsavedTerminalRestoresEarlierAliveHome(t *testin
 	f.runtime = hearth.NewRuntime(f.w, f.chunks, q, f.factory, recoveryInterruptedSaver{ConstructionSaver: saver}, f.registry, nil, nil)
 	require.NoError(t, f.runtime.LoadHome(1, f.result.DefID))
 	require.NoError(t, f.runtime.NotifyTerminal(1))
-	require.PanicsWithValue(t, recoveryProcessLoss, func() { _ = f.runtime.CompleteTerminal(1) })
+	require.PanicsWithValue(t, recoveryProcessLoss, func() { _, _ = f.runtime.CompleteTerminal(1) })
 	require.True(t, f.runtime.Index.Snapshot(1).Terminal)
 	require.Equal(t, 16, chunk.GetRawObjectByID(types.EntityID(original.ID)).TypeID)
 

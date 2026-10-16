@@ -1614,16 +1614,20 @@ func (s *Shard) SendFx(entityID types.EntityID, fx *netproto.S2C_Fx) {
 	}
 
 	s.ClientsMu.RLock()
-	client, ok := s.Clients[entityID]
-	s.ClientsMu.RUnlock()
+	defer s.ClientsMu.RUnlock()
+	client := s.Clients[entityID]
+	if client == nil || !client.InWorld.Load() || client.CharacterID != entityID || client.Layer != s.layer {
+		return
+	}
 
-	if !ok || client == nil {
+	epoch := client.StreamEpoch.Load()
+	if epoch == 0 {
 		return
 	}
 
 	response := &netproto.ServerMessage{
 		Payload: &netproto.ServerMessage_Fx{
-			Fx: fx,
+			Fx: &netproto.S2C_Fx{FxKey: fx.FxKey, Position: fx.Position, StreamEpoch: epoch},
 		},
 	}
 

@@ -83,18 +83,24 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 	}
 	if surface := sm.GetShard(hearth.SurfaceLayer); surface != nil {
 		runtime := ecs.GetResource[hearth.Runtime](surface.world)
-		complete := func(character types.EntityID) error {
-			surface.mu.Lock()
-			defer surface.mu.Unlock()
-			return runtime.CompleteTerminal(character)
-		}
 		for _, shard := range sm.shards {
 			shard.permanentDeathNotify = runtime.NotifyTerminal
-			shard.permanentDeathComplete = complete
+			shard.permanentDeathComplete = surface.completeHearthDeath
 		}
 	}
 
 	return sm
+}
+
+// Complete on the existing surface owner path, after releasing the source lock.
+func (s *Shard) completeHearthDeath(character types.EntityID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	handle, err := ecs.GetResource[hearth.Runtime](s.world).CompleteTerminal(character)
+	if err == nil && handle != types.InvalidHandle {
+		s.SendObjectFx(handle, "skull_smoke")
+	}
+	return err
 }
 
 func (sm *ShardManager) GetShard(layer int) *Shard {

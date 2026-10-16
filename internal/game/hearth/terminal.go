@@ -42,65 +42,67 @@ func (r *Runtime) notifyTerminal(character types.EntityID) error {
 
 // CompleteTerminal runs synchronously while the caller holds the surface shard
 // lock. It resolves the current home here, never from an earlier death snapshot.
-func (r *Runtime) CompleteTerminal(character types.EntityID) error {
-	if err := r.completeTerminal(character); err != nil {
+// Only a saved live conversion returns a handle for event-time presentation.
+func (r *Runtime) CompleteTerminal(character types.EntityID) (types.Handle, error) {
+	handle, err := r.completeTerminal(character)
+	if err != nil {
 		r.logger.Fatal("hearth terminal completion failed", zap.Error(err))
-		return err
+		return types.InvalidHandle, err
 	}
-	return nil
+	return handle, nil
 }
 
-func (r *Runtime) completeTerminal(character types.EntityID) error {
+func (r *Runtime) completeTerminal(character types.EntityID) (types.Handle, error) {
 	if !validID(character) {
-		return ErrInvalidCharacter
+		return types.InvalidHandle, ErrInvalidCharacter
 	}
 	if r.Index == nil {
-		return fmt.Errorf("hearth index is unavailable")
+		return types.InvalidHandle, fmt.Errorf("hearth index is unavailable")
 	}
 	current := r.Index.Snapshot(character)
 	if current.Terminal {
-		return nil
+		return types.InvalidHandle, nil
 	}
 	if current.State == Unknown {
-		return ErrUnknownHome
+		return types.InvalidHandle, ErrUnknownHome
 	}
 	if current.State == NoHome {
 		_, err := r.Index.ApplyTerminal(character)
-		return err
+		return types.InvalidHandle, err
 	}
 	if current.State != CurrentHome || !validHome(current.Home) {
-		return ErrInvalidHome
+		return types.InvalidHandle, ErrInvalidHome
 	}
 	if r.w == nil || r.w.Layer != SurfaceLayer || r.chunks == nil || r.saver == nil {
-		return fmt.Errorf("invalid hearth terminal dependencies")
+		return types.InvalidHandle, fmt.Errorf("invalid hearth terminal dependencies")
 	}
 	defs := objectdefs.Global()
 	if defs == nil {
-		return fmt.Errorf("hearth definitions are unavailable")
+		return types.InvalidHandle, fmt.Errorf("hearth definitions are unavailable")
 	}
 	hearthDef, hearthOK := defs.GetByKey("hearth_fire")
 	campfireDef, campfireOK := defs.GetByKey("campfire")
 	if !hearthOK || hearthDef == nil || !campfireOK || campfireDef == nil || campfireDef.HP <= 0 ||
 		campfireDef.BurnerConfig == nil || campfireDef.Station == nil || campfireDef.Station.InitialState != "unlit" {
-		return fmt.Errorf("hearth conversion definitions are unavailable")
+		return types.InvalidHandle, fmt.Errorf("hearth conversion definitions are unavailable")
 	}
 
 	home := current.Home
 	coord := types.WorldToChunkCoord(home.X, home.Y, constt.ChunkSize, constt.CoordPerTile)
 	if err := r.chunks.PinPersistenceBlocking(coord); err != nil {
-		return fmt.Errorf("pin terminal hearth chunk: %w", err)
+		return types.InvalidHandle, fmt.Errorf("pin terminal hearth chunk: %w", err)
 	}
 	defer r.chunks.UnpinPersistence(coord)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	err := r.chunks.WaitPreloaded(ctx, coord)
 	cancel()
 	if err != nil {
-		return fmt.Errorf("load terminal hearth chunk: %w", err)
+		return types.InvalidHandle, fmt.Errorf("load terminal hearth chunk: %w", err)
 	}
 	chunk := r.chunks.GetChunkFast(coord)
 	if chunk == nil || chunk.Coord != coord || chunk.Region != home.Object.Region || chunk.Layer != SurfaceLayer ||
 		(chunk.GetState() != types.ChunkStateActive && chunk.GetState() != types.ChunkStatePreloaded && chunk.GetState() != types.ChunkStateInactive) {
-		return fmt.Errorf("invalid terminal hearth chunk")
+		return types.InvalidHandle, fmt.Errorf("invalid terminal hearth chunk")
 	}
 
 	handle := types.InvalidHandle
@@ -123,38 +125,38 @@ func (r *Runtime) completeTerminal(character types.EntityID) error {
 	// PendingTerminal, but it cannot replace the home being prepared.
 	latest := r.Index.Snapshot(character)
 	if latest.Terminal || latest.State != CurrentHome || latest.Home != home {
-		return fmt.Errorf("terminal hearth changed during owning preparation")
+		return types.InvalidHandle, fmt.Errorf("terminal hearth changed during owning preparation")
 	}
 	if handle != types.InvalidHandle {
 		if r.factory == nil {
-			return fmt.Errorf("hearth object factory is unavailable")
+			return types.InvalidHandle, fmt.Errorf("hearth object factory is unavailable")
 		}
 		r.breakLinksBeforeConversion(home.Object.ID)
 		if !world.TransformObjectToDefInPlace(r.w, home.Object.ID, handle, campfireDef, world.TransformObjectInPlaceOptions{
 			ClearFlags: true, BehaviorRegistry: r.registry, Chunks: r.chunks, EventBus: r.bus, Logger: r.logger,
 		}) {
-			return fmt.Errorf("prepared terminal hearth conversion failed")
+			return types.InvalidHandle, fmt.Errorf("prepared terminal hearth conversion failed")
 		}
 	} else if converted != nil {
 		chunk.UpsertRawObject(converted)
 	}
 	if _, err := r.Index.ApplyTerminal(character); err != nil {
-		return fmt.Errorf("revoke terminal hearth: %w", err)
+		return types.InvalidHandle, fmt.Errorf("revoke terminal hearth: %w", err)
 	}
 	if handle != types.InvalidHandle {
 		converted, err = r.factory.Serialize(r.w, handle)
 		if err != nil {
-			return fmt.Errorf("serialize terminal hearth conversion: %w", err)
+			return types.InvalidHandle, fmt.Errorf("serialize terminal hearth conversion: %w", err)
 		}
 		if converted == nil {
-			return fmt.Errorf("terminal hearth conversion is not persistable")
+			return types.InvalidHandle, fmt.Errorf("terminal hearth conversion is not persistable")
 		}
 		converted.LastTick = int64(ecs.GetResource[ecs.TimeState](r.w).Tick)
 	}
 	// A missing, changed or quarantined source only removes its association. In
 	// particular, never recreate an object from the old ownership metadata.
 	if err := r.saver.SaveTerminal(context.Background(), character, home.Object, converted); err != nil {
-		return fmt.Errorf("save terminal hearth: %w", err)
+		return types.InvalidHandle, fmt.Errorf("save terminal hearth: %w", err)
 	}
-	return nil
+	return handle, nil
 }

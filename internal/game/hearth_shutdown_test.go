@@ -161,9 +161,7 @@ func TestHearthTerminalPostgresGameStopWaitsForAdmittedOwningCalls(t *testing.T)
 				defer close(completed)
 				entered <- struct{}{}
 				<-releaseCompletion
-				f.shards[0].mu.Lock()
-				defer f.shards[0].mu.Unlock()
-				return f.runtime.CompleteTerminal(id)
+				return f.shards[0].completeHearthDeath(id)
 			}
 			saving := make(chan types.EntityID, 1)
 			f.saver.beforeSave = func(id types.EntityID) { saving <- id; <-releaseSave }

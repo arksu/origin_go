@@ -12,6 +12,7 @@ export const SKULL_SMOKE = {
   ],
   frameSize: [96, 128],
   anchor: [48, 120],
+  offset: [0, -8],
   frameDurationMs: 250,
   lifetimeMs: 2000,
   loop: false,

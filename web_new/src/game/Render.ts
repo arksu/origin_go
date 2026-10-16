@@ -137,6 +137,7 @@ export class Render {
       throw new Error(WEBGL_INIT_ERROR_MESSAGE)
     }
 
+    void fxManager.preloadWorldFx()
     this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer, this.actorRenderSettings)
     this.lightingManager = new LightingManager(this.app.renderer as WebGLRenderer)
     this.objectManager.setLightingManager(this.lightingManager)
@@ -823,6 +824,12 @@ export class Render {
     })
   }
 
+  playWorldFx(fxKey: string, x: number, y: number): void {
+    if (!this.sceneInitialized) return
+    const position = coordGame2Screen(x, y)
+    fxManager.playWorldFx({ container: this.objectsContainer, x: position.x, y: position.y, fxKey })
+  }
+
   showChatBalloon(entityId: number, text: string): void {
     if (!this.objectManager.getObject(entityId)) return
     this.chatBalloonManager.show(entityId, text)
@@ -918,6 +925,7 @@ export class Render {
    * This keeps canvas/input alive between reconnect attempts.
    */
   resetWorld(): void {
+    fxManager.clearWorldFx(this.objectsContainer)
     this.clearAttackSector()
     this.playerEntityId = null
     this.clearMinimap()
@@ -943,6 +951,7 @@ export class Render {
   }
 
   destroy(): void {
+    fxManager.clearWorldFx(this.objectsContainer)
     this.sceneInitialized = false
     this.app.renderer?.off('resize', this.onRendererResize)
     this.combatSectorPreview.destroy()

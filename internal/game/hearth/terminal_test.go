@@ -61,6 +61,13 @@ func newTerminalFixture(t *testing.T) (*constructionFixture, *terminalSaver) {
 	return f, saver
 }
 
+func requireTerminalComplete(t *testing.T, runtime *hearth.Runtime, character types.EntityID) types.Handle {
+	t.Helper()
+	handle, err := runtime.CompleteTerminal(character)
+	require.NoError(t, err)
+	return handle
+}
+
 func terminalLiveHome(t *testing.T, f *constructionFixture) (*core.Chunk, types.Handle) {
 	t.Helper()
 	chunk, raw := f.oldRaw(t, types.ChunkStateActive)
@@ -76,10 +83,10 @@ func TestTerminalNoHomeNeedsNoWorldOrIOAndIsIdempotent(t *testing.T) {
 	require.NoError(t, runtime.Index.LoadIfUnknown(1, nil))
 	require.NoError(t, runtime.NotifyTerminal(1))
 	require.True(t, runtime.Index.Snapshot(1).PendingTerminal)
-	require.NoError(t, runtime.CompleteTerminal(1))
+	require.Equal(t, types.InvalidHandle, requireTerminalComplete(t, &runtime, 1))
 	require.Equal(t, hearth.Snapshot{State: hearth.NoHome, Terminal: true}, runtime.Index.Snapshot(1))
 	require.NoError(t, runtime.NotifyTerminal(1))
-	require.NoError(t, runtime.CompleteTerminal(1))
+	require.Equal(t, types.InvalidHandle, requireTerminalComplete(t, &runtime, 1))
 	_, err := runtime.Index.ReplaceHome(1, hearth.Home{Object: hearth.ObjectKey{Region: 1, ID: 2}})
 	require.ErrorIs(t, err, hearth.ErrTerminal)
 }
@@ -121,7 +128,7 @@ func TestTerminalUnknownAndInvalidCharacterAreFatalWithoutIO(t *testing.T) {
 					if operation == "notify" {
 						_ = f.runtime.NotifyTerminal(character)
 					} else {
-						_ = f.runtime.CompleteTerminal(character)
+						_, _ = f.runtime.CompleteTerminal(character)
 					}
 				})
 				require.Zero(t, f.reader.reads)
@@ -151,7 +158,7 @@ func TestTerminalLiveHomeConvertsInPlaceAndCommitsInSameCall(t *testing.T) {
 		require.Equal(t, hearth.Snapshot{State: hearth.NoHome, Terminal: true}, f.runtime.Index.Snapshot(1))
 	}
 	require.NoError(t, f.runtime.NotifyTerminal(1))
-	require.NoError(t, f.runtime.CompleteTerminal(1))
+	require.Equal(t, handle, requireTerminalComplete(t, &f.runtime, 1))
 	require.True(t, f.w.Alive(handle))
 	require.Equal(t, handle, f.w.GetHandleByEntityID(2000))
 	require.Equal(t, []types.Handle{handle}, chunk.GetHandles())
@@ -183,7 +190,7 @@ func TestTerminalLiveHomeConvertsInPlaceAndCommitsInSameCall(t *testing.T) {
 	require.Zero(t, f.reader.reads)
 	require.Zero(t, f.chunks.pins[chunk.Coord])
 	require.NoError(t, f.runtime.NotifyTerminal(1))
-	require.NoError(t, f.runtime.CompleteTerminal(1))
+	require.Equal(t, types.InvalidHandle, requireTerminalComplete(t, &f.runtime, 1))
 	require.Len(t, saver.saves, 1, "duplicates perform no second save or conversion")
 	require.Len(t, f.chunks.waited, 1)
 }
@@ -214,7 +221,7 @@ func TestTerminalRawAndUnloadedHomeConvertWithoutActivation(t *testing.T) {
 				require.True(t, f.runtime.Index.Snapshot(1).Terminal)
 			}
 			require.NoError(t, f.runtime.NotifyTerminal(1))
-			require.NoError(t, f.runtime.CompleteTerminal(1))
+			require.Equal(t, types.InvalidHandle, requireTerminalComplete(t, &f.runtime, 1))
 			require.Len(t, saver.saves, 1)
 			converted := saver.saves[0].converted
 			require.Same(t, converted, chunk.GetRawObjectByID(2000))
@@ -264,7 +271,7 @@ func TestTerminalUnavailableRawSourceOnlyRemovesAssociation(t *testing.T) {
 			before := *raw
 			dirty := chunk.GetRawDirtyObjectIDs()
 			require.NoError(t, f.runtime.NotifyTerminal(1))
-			require.NoError(t, f.runtime.CompleteTerminal(1))
+			require.Equal(t, types.InvalidHandle, requireTerminalComplete(t, &f.runtime, 1))
 			require.Len(t, saver.saves, 1)
 			require.Nil(t, saver.saves[0].converted)
 			require.Equal(t, hearth.ObjectKey{Region: 1, ID: 2000}, saver.saves[0].previous)
@@ -301,7 +308,7 @@ func TestTerminalUnavailableLiveSourceNeverFallsBackToStaleRaw(t *testing.T) {
 			}
 			before, _ := ecs.GetComponent[components.EntityInfo](f.w, handle)
 			require.NoError(t, f.runtime.NotifyTerminal(1))
-			require.NoError(t, f.runtime.CompleteTerminal(1))
+			require.Equal(t, types.InvalidHandle, requireTerminalComplete(t, &f.runtime, 1))
 			require.Len(t, saver.saves, 1)
 			require.Nil(t, saver.saves[0].converted)
 			after, _ := ecs.GetComponent[components.EntityInfo](f.w, handle)
@@ -326,7 +333,7 @@ func TestTerminalUsesHomeFromAlreadyAdmittedConstruction(t *testing.T) {
 	require.True(t, result.OK)
 	require.True(t, f.runtime.Index.Snapshot(1).PendingTerminal)
 	require.Equal(t, types.EntityID(1000), f.runtime.Index.Snapshot(1).Home.Object.ID)
-	require.NoError(t, f.runtime.CompleteTerminal(1))
+	require.Equal(t, f.w.GetHandleByEntityID(1000), requireTerminalComplete(t, &f.runtime, 1))
 	require.Len(t, saver.saves, 1)
 	require.Equal(t, hearth.ObjectKey{Region: 1, ID: 1000}, saver.saves[0].previous)
 	require.Equal(t, int64(1000), saver.saves[0].converted.ID)
@@ -341,7 +348,7 @@ func TestTerminalWaitsForSaveAndRetainsPinWhileNotificationRemainsNonblocking(t 
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	saver.onSave = func() { close(entered); <-release }
 	require.NoError(t, f.runtime.NotifyTerminal(1))
-	go func() { done <- f.runtime.CompleteTerminal(1) }()
+	go func() { _, err := f.runtime.CompleteTerminal(1); done <- err }()
 	select {
 	case <-entered:
 	case <-time.After(time.Second):
@@ -385,7 +392,7 @@ func TestTerminalPreparationErrorsAreFatalWithoutMutation(t *testing.T) {
 			}
 			require.NoError(t, f.runtime.NotifyTerminal(1))
 			before := f.runtime.Index.Snapshot(1)
-			require.Panics(t, func() { _ = f.runtime.CompleteTerminal(1) })
+			require.Panics(t, func() { _, _ = f.runtime.CompleteTerminal(1) })
 			require.Equal(t, before, f.runtime.Index.Snapshot(1))
 			require.Same(t, raw, chunk.GetRawObjectByID(2000))
 			require.Empty(t, chunk.GetRawDirtyObjectIDs())
@@ -404,7 +411,7 @@ func TestTerminalSaveErrorsAreFatalAfterConversionAndRevocation(t *testing.T) {
 			saver.err = failure
 			saver.onSave = func() { require.Equal(t, 1, f.chunks.pins[chunk.Coord]) }
 			require.NoError(t, f.runtime.NotifyTerminal(1))
-			require.Panics(t, func() { _ = f.runtime.CompleteTerminal(1) })
+			require.Panics(t, func() { _, _ = f.runtime.CompleteTerminal(1) })
 			require.Len(t, saver.saves, 1)
 			require.True(t, f.runtime.Index.Snapshot(1).Terminal)
 			require.Equal(t, 16, chunk.GetRawObjectByID(2000).TypeID)
@@ -419,7 +426,7 @@ func TestTerminalSerializationFailureIsFatalAfterConversionAndRevocation(t *test
 	chunk, handle := terminalLiveHome(t, f)
 	ecs.RemoveComponent[components.ChunkRef](f.w, handle)
 	require.NoError(t, f.runtime.NotifyTerminal(1))
-	require.Panics(t, func() { _ = f.runtime.CompleteTerminal(1) })
+	require.Panics(t, func() { _, _ = f.runtime.CompleteTerminal(1) })
 	require.Empty(t, saver.saves)
 	require.True(t, f.runtime.Index.Snapshot(1).Terminal)
 	info, _ := ecs.GetComponent[components.EntityInfo](f.w, handle)

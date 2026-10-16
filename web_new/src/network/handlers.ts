@@ -129,6 +129,13 @@ export function registerMessageHandlers(): void {
   })
 
   messageDispatcher.on('fx', (msg: proto.IS2C_Fx) => {
+    if (msg.fxKey !== 'exp_gain') {
+      const epoch = gameStore.worldParams?.streamEpoch
+      if (!gameStore.isInGame || !epoch || msg.streamEpoch !== epoch || !msg.fxKey || !msg.position ||
+          !Number.isFinite(msg.position.x) || !Number.isFinite(msg.position.y)) return
+      gameFacade.playWorldFx(msg.fxKey, msg.position.x!, msg.position.y!)
+      return
+    }
     const targetEntityId = gameStore.playerEntityId
     if (targetEntityId == null) return
 

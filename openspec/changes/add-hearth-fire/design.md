@@ -142,7 +142,7 @@ Keep the existing green fire and skull-smoke assets; do not generate replacement
 
 Reuse `S2C_Fx` fields 1/2; add only `stream_epoch = 3` for world-event freshness. Publish once from real runtime death/conversion to event-time observers and matching sessions. No persistence worker sends effects, and restore/view rebuild never synthesizes old events. No event-ID sequence, retransmission/dedup service, server-authored expiry or new clock protocol is required.
 
-Preload through existing asset loading, bound concurrent one-shot effects, and use a local monotonic two-second deadline starting at playback. Clear effects on world/layer/session/reset/destroy and invalidate late callbacks with the existing reset-generation pattern. Suspended rendering does not extend an already started effect. Legacy local-player `exp_gain` and continuous burning-campfire smoke retain their behavior.
+Preload through existing asset loading, bound concurrent one-shot effects, and use a local monotonic two-second deadline starting at playback. Clear effects on world/layer/session/reset/destroy. The current implementation drops events before assets are ready; loading only caches textures and retains no event callbacks that could revive a previous world. Suspended rendering does not extend an already started effect. Legacy local-player `exp_gain` and continuous burning-campfire smoke retain their behavior.
 
 ## Risks / Trade-offs
 

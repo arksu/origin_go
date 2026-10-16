@@ -2,6 +2,15 @@ import { Container, Sprite, Texture, Ticker } from 'pixi.js'
 import { ResourceLoader } from '../ResourceLoader'
 import { ParticleEmitter } from './ParticleEmitter'
 import { smokePreset, type FxDefinition } from './presets/smoke'
+import { SKULL_SMOKE } from './assets/skullSmoke'
+
+const MAX_WORLD_FX = 64
+
+interface ActiveFx {
+  update: (delta: number) => boolean
+  worldOwner?: Container
+  destroy?: () => void
+}
 
 export interface FloatingAnimationOptions {
   container: Container
@@ -15,7 +24,10 @@ export interface FloatingAnimationOptions {
 export class FxManager {
   private static instance: FxManager
   private ticker: Ticker
-  private activeFx: Set<{ update: (delta: number) => boolean }> = new Set()
+  private activeFx: Set<ActiveFx> = new Set()
+  private skullTextures: Texture[] | null = null
+  private worldFxLoading: Promise<void> | null = null
+  private worldFxCount = 0
 
   private constructor() {
     this.ticker = Ticker.shared
@@ -52,6 +64,62 @@ export class FxManager {
   detach(emitter: ParticleEmitter): void {
     emitter.detach(emitter.config.linger)
     if (emitter.container.destroyed) this.activeFx.delete(emitter)
+  }
+
+  preloadWorldFx(): Promise<void> {
+    if (this.skullTextures) return Promise.resolve()
+    if (this.worldFxLoading) return this.worldFxLoading
+    this.worldFxLoading = Promise.all(SKULL_SMOKE.frames.map(path => ResourceLoader.loadTexture(path)))
+      .then(textures => {
+        if (textures.some(texture => texture === Texture.WHITE)) return
+        this.skullTextures = textures
+      })
+      .catch((error: unknown) => console.warn('[FxManager] Unable to preload world FX', error))
+      .finally(() => { this.worldFxLoading = null })
+    return this.worldFxLoading
+  }
+
+  playWorldFx(options: Omit<FloatingAnimationOptions, 'durationMs' | 'onComplete'>): void {
+    // Events are never queued behind asset loading, including across world resets.
+    if (options.fxKey !== SKULL_SMOKE.key || !this.skullTextures ||
+        options.container.destroyed || this.worldFxCount >= MAX_WORLD_FX) return
+    const textures = this.skullTextures
+    const sprite = new Sprite(textures[0]!)
+    sprite.anchor.set(SKULL_SMOKE.anchor[0] / SKULL_SMOKE.frameSize[0], SKULL_SMOKE.anchor[1] / SKULL_SMOKE.frameSize[1])
+    sprite.position.set(options.x + SKULL_SMOKE.offset[0], options.y + SKULL_SMOKE.offset[1])
+    sprite.zIndex = 999999
+    sprite.eventMode = 'none'
+    options.container.addChild(sprite)
+    const startedAt = performance.now()
+    let destroyed = false
+    this.worldFxCount++
+    const destroy = () => {
+      if (destroyed) return
+      destroyed = true
+      this.worldFxCount--
+      sprite.destroy()
+    }
+    this.activeFx.add({
+      worldOwner: options.container,
+      destroy,
+      update: () => {
+        const elapsed = performance.now() - startedAt
+        if (sprite.destroyed || options.container.destroyed || elapsed >= SKULL_SMOKE.lifetimeMs) {
+          destroy()
+          return false
+        }
+        sprite.texture = textures[Math.floor(elapsed / SKULL_SMOKE.frameDurationMs)]!
+        return true
+      },
+    })
+  }
+
+  clearWorldFx(owner: Container): void {
+    for (const fx of this.activeFx) {
+      if (fx.worldOwner !== owner) continue
+      fx.destroy?.()
+      this.activeFx.delete(fx)
+    }
   }
 
   async playFx(options: FloatingAnimationOptions): Promise<void> {

@@ -7901,6 +7901,7 @@ type S2C_Fx struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	FxKey         string                 `protobuf:"bytes,1,opt,name=fx_key,json=fxKey,proto3" json:"fx_key,omitempty"`
 	Position      *Vector2               `protobuf:"bytes,2,opt,name=position,proto3" json:"position,omitempty"`
+	StreamEpoch   uint32                 `protobuf:"varint,3,opt,name=stream_epoch,json=streamEpoch,proto3" json:"stream_epoch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7947,6 +7948,13 @@ func (x *S2C_Fx) GetPosition() *Vector2 {
 		return x.Position
 	}
 	return nil
+}
+
+func (x *S2C_Fx) GetStreamEpoch() uint32 {
+	if x != nil {
+		return x.StreamEpoch
+	}
+	return 0
 }
 
 type S2C_ChatMessage struct {
@@ -9475,10 +9483,11 @@ const file_api_proto_packets_proto_rawDesc = "" +
 	"\x03_lpB\t\n" +
 	"\a_natureB\v\n" +
 	"\t_industryB\t\n" +
-	"\a_combat\"K\n" +
+	"\a_combat\"n\n" +
 	"\x06S2C_Fx\x12\x15\n" +
 	"\x06fx_key\x18\x01 \x01(\tR\x05fxKey\x12*\n" +
-	"\bposition\x18\x02 \x01(\v2\x0e.proto.Vector2R\bposition\"\xce\x01\n" +
+	"\bposition\x18\x02 \x01(\v2\x0e.proto.Vector2R\bposition\x12!\n" +
+	"\fstream_epoch\x18\x03 \x01(\rR\vstreamEpoch\"\xce\x01\n" +
 	"\x0fS2C_ChatMessage\x12,\n" +
 	"\achannel\x18\x01 \x01(\x0e2\x12.proto.ChatChannelR\achannel\x12$\n" +
 	"\x0efrom_entity_id\x18\x02 \x01(\x04R\ffromEntityId\x12\x1b\n" +

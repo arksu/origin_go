@@ -33,7 +33,8 @@ func (r *Runtime) completeDeletion(character types.EntityID) error {
 	}
 	current := r.Index.Snapshot(character)
 	if current.Terminal || current.State != Unknown {
-		return r.completeTerminal(character)
+		_, err := r.completeTerminal(character)
+		return err
 	}
 	if r.reader == nil {
 		return fmt.Errorf("hearth reader is unavailable")
@@ -48,7 +49,8 @@ func (r *Runtime) completeDeletion(character types.EntityID) error {
 		if err := r.Index.LoadIfUnknown(character, nil); err != nil {
 			return err
 		}
-		return r.completeTerminal(character)
+		_, err := r.completeTerminal(character)
+		return err
 	}
 	key := ObjectKey{Region: row.ObjectRegion, ID: types.EntityID(row.ObjectID)}
 	if row.CharacterID != int64(character) || !validHome(Home{Object: key}) {
@@ -74,7 +76,8 @@ func (r *Runtime) completeDeletion(character types.EntityID) error {
 			if err := r.Index.LoadIfUnknown(character, &home); err != nil {
 				return err
 			}
-			return r.completeTerminal(character)
+			_, err := r.completeTerminal(character)
+			return err
 		}
 	}
 	// An unusable saved source needs only exact association removal. Loading its

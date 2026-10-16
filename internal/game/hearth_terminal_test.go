@@ -63,9 +63,7 @@ func newHearthTerminalGameFixture(t *testing.T) *hearthTerminalGameFixture {
 	for _, shard := range f.shards {
 		shard.permanentDeathNotify = f.runtime.NotifyTerminal
 		shard.permanentDeathComplete = func(character types.EntityID) error {
-			surface.mu.Lock()
-			defer surface.mu.Unlock()
-			return f.runtime.CompleteTerminal(character)
+			return surface.completeHearthDeath(character)
 		}
 	}
 	return f
@@ -252,9 +250,7 @@ func TestHearthTerminalPostgresSimultaneousLayersAndManagerWait(t *testing.T) {
 		}
 		shard.permanentDeathComplete = func(id types.EntityID) error {
 			requested <- id
-			f.shards[0].mu.Lock()
-			defer f.shards[0].mu.Unlock()
-			return f.runtime.CompleteTerminal(id)
+			return f.shards[0].completeHearthDeath(id)
 		}
 	}
 	f.saver.beforeSave = func(id types.EntityID) { saving <- id; <-releaseSave }

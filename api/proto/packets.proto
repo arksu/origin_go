@@ -951,6 +951,7 @@ message S2C_ExpGained {
 message S2C_Fx {
   string fx_key = 1;
   Vector2 position = 2;
+  uint32 stream_epoch = 3;
 }
 
 message S2C_ChatMessage {

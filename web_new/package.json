@@ -32,6 +32,7 @@
     "test:direction-aim": "node scripts/test-character-visual.mjs tests/direction-aim.test.ts",
     "test:action-animations": "node scripts/test-character-visual.mjs tests/action-animations.test.ts",
     "test:sounds": "node scripts/test-character-visual.mjs tests/sounds.test.ts",
+    "test:world-fx": "node scripts/test-character-visual.mjs tests/world-fx.test.ts",
     "test:character-visual": "node scripts/test-character-visual.mjs",
     "test:asset-pipeline": "node scripts/test-asset-pipeline.mjs",
     "validate-objects": "node scripts/validate-object-schema.mjs",
