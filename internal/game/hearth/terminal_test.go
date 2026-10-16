@@ -112,6 +112,11 @@ func TestTerminalUnknownAndInvalidCharacterAreFatalWithoutIO(t *testing.T) {
 		for _, character := range []types.EntityID{0, 1, ^types.EntityID(0)} {
 			t.Run(fmt.Sprintf("%s/%d", operation, character), func(t *testing.T) {
 				f, saver := newTerminalFixture(t)
+				savedReads := 0
+				deletionFixtureReader(f, saver, func(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+					savedReads++
+					return repository.GetSavedCharacterHearthRow{}, sql.ErrNoRows
+				})
 				require.Panics(t, func() {
 					if operation == "notify" {
 						_ = f.runtime.NotifyTerminal(character)
@@ -120,6 +125,7 @@ func TestTerminalUnknownAndInvalidCharacterAreFatalWithoutIO(t *testing.T) {
 					}
 				})
 				require.Zero(t, f.reader.reads)
+				require.Zero(t, savedReads, "actual death must never resolve Unknown through the deletion lookup")
 				require.Empty(t, f.chunks.pins)
 				require.Empty(t, saver.saves)
 				require.False(t, f.runtime.Index.Snapshot(character).Terminal)

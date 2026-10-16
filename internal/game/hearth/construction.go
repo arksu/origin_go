@@ -32,6 +32,7 @@ type ConstructionChunks interface {
 type HomeReader interface {
 	GetCharacterHearth(context.Context, repository.GetCharacterHearthParams) (repository.GetCharacterHearthRow, error)
 	GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error)
+	GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error)
 }
 
 // Runtime belongs to the surface shard. Home reads, ownership changes and saves

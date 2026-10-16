@@ -290,3 +290,7 @@ func TestHearthRestorationSkipsRawDuplicateOfLiveCampfire(t *testing.T) {
 	require.Equal(t, []types.Handle{handle}, f.chunk.GetHandles())
 	f.requireCampfire(t, f.firstVisible(t))
 }
+
+func (*hearthActivationReader) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+	panic("unexpected saved hearth query")
+}

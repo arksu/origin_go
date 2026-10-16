@@ -7,6 +7,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/lib/pq"
 )
@@ -160,16 +161,37 @@ func (q *Queries) GetCharacterHearthOwners(ctx context.Context, arg GetCharacter
 }
 
 const getSavedCharacterHearth = `-- name: GetSavedCharacterHearth :one
-SELECT character_id, object_region, object_id
-FROM character_hearth
-WHERE character_id = $1
+SELECT h.character_id, h.object_region, h.object_id, o.type_id, o.x, o.y, o.layer, o.deleted_at
+FROM character_hearth AS h
+LEFT JOIN object AS o ON o.region = h.object_region AND o.id = h.object_id
+WHERE h.character_id = $1
 `
 
+type GetSavedCharacterHearthRow struct {
+	CharacterID  int64         `json:"character_id"`
+	ObjectRegion int           `json:"object_region"`
+	ObjectID     int64         `json:"object_id"`
+	TypeID       sql.NullInt32 `json:"type_id"`
+	X            sql.NullInt32 `json:"x"`
+	Y            sql.NullInt32 `json:"y"`
+	Layer        sql.NullInt32 `json:"layer"`
+	DeletedAt    sql.NullTime  `json:"deleted_at"`
+}
+
 // Replacement also needs the old association when its owner is soft-deleted.
-func (q *Queries) GetSavedCharacterHearth(ctx context.Context, characterID int64) (CharacterHearth, error) {
+func (q *Queries) GetSavedCharacterHearth(ctx context.Context, characterID int64) (GetSavedCharacterHearthRow, error) {
 	row := q.db.QueryRowContext(ctx, getSavedCharacterHearth, characterID)
-	var i CharacterHearth
-	err := row.Scan(&i.CharacterID, &i.ObjectRegion, &i.ObjectID)
+	var i GetSavedCharacterHearthRow
+	err := row.Scan(
+		&i.CharacterID,
+		&i.ObjectRegion,
+		&i.ObjectID,
+		&i.TypeID,
+		&i.X,
+		&i.Y,
+		&i.Layer,
+		&i.DeletedAt,
+	)
 	return i, err
 }
 

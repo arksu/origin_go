@@ -12,10 +12,10 @@
 стройки 2.2–2.5, проход владельца 3.2, стандартные tile rules 3.3,
 структурные проверки ручной постановки и строительства 3.4, подготовка
 metadata/нормализация перед activation 3.5 и синхронное сохранение стройки 4.3.
-Синхронная очистка при смерти реализована в 4.1 и death-части 4.3a;
+Синхронная очистка при смерти и REST-удалении реализована в 4.1–4.3a;
 проверки этого этапа фиксируются отдельно в `tasks.md`.
 Фактические SQL и runtime API описаны в
-`docs/features/hearth_fire.md`, разделах 2.13–2.22:
+`docs/features/hearth_fire.md`, разделах 2.13–2.23:
 `character_hearth.sql`, migration/schema и `internal/game/hearth/index.go`.
 Ранее прошли целевые Hearth/construction tests, unit-тесты записи и полный
 `GOCACHE=/tmp/origin-hearth-go-cache make test`, включая этап 4.3;
@@ -31,7 +31,7 @@ regeneration не изменил generated-файлы. Тесты использ
 Задача 3.5 реализована и проверена, включая упрощённый индекс, PostgreSQL
 integration и финальный полный `make test`; результаты приведены в 3.5.
 Ранее указанное отсутствие DSN относится только к предыдущему этапу.
-REST cleanup, return и FX остаются отдельными будущими этапами.
+Return и FX остаются отдельными будущими этапами.
 
 ## Базовые гарантии
 
@@ -48,8 +48,9 @@ REST cleanup, return и FX остаются отдельными будущим�
 синхронный SQL на owning surface path, с отдельным five-second context для
 каждого чтения/транзакции. После аварии их
 несохранённые изменения могут откатиться; общего checkpoint и WAL операций нет.
-БД считаем доступной. Любая ошибка обращения к ней, включая неизвестный
-результат commit, требует полной остановки сервера. SQL retry, reconnect
+БД считаем доступной. Любая ошибка Hearth SQL, включая неизвестный
+результат commit, требует полной остановки сервера. Ошибка предшествующего
+account-scoped DELETE сохраняет HTTP 500. SQL retry, reconnect
 и восстановление после ошибки БД не добавляются. Штатное отсутствие строки
 не является ошибкой; невалидный результат запроса фатален.
 
@@ -252,8 +253,8 @@ chunk worker только загружает cache; owning вызов ждёт �
 pending phase, admission ticket, раздельного prepare/commit протокола или
 сохранённого finisher. Нефинальные циклы и результаты без capability идут
 по прежнему пути. Это read-side подготовки; синхронная запись описана в 4.3,
-pre-activation hydration описана в 3.5, смерть — в 4.1/4.3a; REST cleanup
-и broader restart repair остаются будущими этапами.
+pre-activation hydration описана в 3.5, смерть — в 4.1/4.3a; REST cleanup описан в 4.2;
+broader restart repair остаётся будущим этапом.
 
 **Проверки.** Ставлю preflight именно до `processOneBuildItem` финального цикла,
 а не после списания. Проверяю reservation/destruction guards, смену дома между
@@ -526,7 +527,7 @@ restart restoration и rollback нескольких строк в одной т
 microbenchmark не доказывает нагрузку 30 000 CCU. Strict OpenSpec validation
 и `git diff --check` прошли. Независимый code review: Approve, нет outstanding
 Critical/Important. Отметка 3.5 установлена; результаты death cleanup приведены
-отдельно в `tasks.md`. REST cleanup и release задачи остаются открытыми.
+отдельно в `tasks.md`. REST cleanup описан ниже; release задачи остаются открытыми.
 
 ## 4. Смерть, удаление и обычное сохранение
 
@@ -579,41 +580,45 @@ missing/deleted/changed/quarantined source, Fatal failures и блокировк
 
 ### 4.2. REST-удаление персонажа
 
-**Что сделаю.** Подключу тот же feature cleanup после подтверждённого
-account-scoped удаления. Сейчас `DeleteCharacter :exec` не сообщает число
-изменённых строк, а handler отвечает 204 и при no-op. Минимально изменю SQL
-результат на `UPDATE ... RETURNING id` либо эквивалентный проверяемый результат:
-callback получает только действительно удалённый ID.
+**Реализация.** REST Handler получает обязательный callback `Game.DeleteCharacter`.
+Authentication, разбор ID и HTTP-ответы остаются в REST; callback получает
+`repository.DeleteCharacterParams`. Game берёт существующий `surface.mu`,
+проверяет Running/runtime до SQL и удерживает lock через DELETE и весь cleanup.
 
-**Почему это необходимо.** Нельзя отзывать дом по ID, пришедшему от клиента:
-при чужом character ID account-scoped SQL ничего не изменяет, но такой callback
-отобрал бы чужой очаг. No-row и повтор сохраняют прежнюю HTTP no-op семантику;
-SQL error приводит к полной остановке сервера. Текущая REST-политика не содержит
-запрета online deletion; новый запрет или новые HTTP ответы не добавляю.
+**Подтверждение удаления.** `DeleteCharacter :execrows` сохраняет прежние
+account-scoped predicates. Ноль строк — прежний 204 без изменения индекса;
+одна строка — `Runtime.CompleteDeletion`. SQL DELETE использует request context
+с пределом пять секунд; ошибка сохраняет HTTP 500. Это согласованное исключение
+из Fatal-политики последующих Hearth read/save, а не новая общая DB policy.
 
-**Будущий runtime-порядок.** После подтверждённого account-scoped удаления
-notification сразу ставит `PendingTerminal`; затем тот же HTTP-вызов без
-source shard lock синхронно ждёт surface completion и commit. Association
-меняет только surface-владелец, используя актуальный результат уже допущенной
-стройки. Очереди между тиками и async saver не нужны. Для offline Unknown
-понадобится синхронно разрешить сохранённую связь на surface; runtime API
-реальной смерти пока намеренно требует known state. Это расширение относится
-к 4.2, а не к выполненной death-части 4.1/4.3a.
+**Почему lock нужен до DELETE.** Иначе удаление может опередить save уже
+допущенной достройки и нарушить её alive-owner проверку. Один surface lock
+упорядочивает всю стройку перед удалением последнего дома либо всё удаление
+перед отказом новой стройки. `Shard.Stop` устанавливает Stopping под тем же lock,
+поэтому принятый DELETE заканчивает cleanup до остановки chunk manager, а
+поздний запрос отказывается до SQL. Новых mutex, Game.wg-регистраций и изменений
+network shutdown нет, даже если HTTP shutdown уже исчерпал timeout.
 
-**Граница.** REST не знает `character_hearth`, ключ объекта или слой конвертации.
-Не читает/меняет live ECS напрямую, не создаёт offline тело, corpse или
-character-position death FX. Ordinary NoHome не подменяет terminal eligibility:
-новому персонажу строить можно, удалённому — нельзя. Unknown старую связь
-для cleanup читается синхронно surface-владельцем; признак запрета уже защищает
-runtime. HTTP callback не держит source shard lock и вызывает Hearth SQL
-только через синхронный surface cleanup.
-Существование online тела сохраняется по прежней REST-политике.
+**Feature cleanup.** `CompleteDeletion` ставит PendingTerminal. Known state
+передаётся существующему terminal cleanup без lookup. Только Unknown читает
+расширенный `GetSavedCharacterHearth`: LEFT JOIN по `(region, id)` сохраняет
+ключ связи и nullable metadata объекта после soft delete владельца. Валидный
+surface Hearth гидратируется и конвертируется существующим completion; нет
+связи — Terminal без conversion; missing/deleted/changed/wrong-layer source —
+`ApplyTerminal` и точный `SaveTerminal(..., nil)` без chunk I/O. Reader errors,
+malformed results и cleanup failures — Fatal. Unknown при actual death остаётся
+Fatal; известные NoHome/Terminal не делают Hearth I/O. Скрытые за известным
+NoHome старые невалидные SQL-связи относятся к repair 4.4.
 
-**Проверки.** Чужой account, отсутствующий/deleted ID, повтор удаления, online/
-offline персонаж, failure SQL и race с поздним ownership lookup. Дополнительно
-online DELETE с последующей попыткой достройки, DELETE во время финального
-цикла и очистка именно последнего дома. Не меняю существующую политику аккаунта
-и не превращаю no-op в terminal event.
+**Граница.** После подтверждённого DELETE Hearth read/save используют независимые
+пятисекундные contexts; отмена HTTP не прерывает cleanup. 204 возвращается после
+save. REST не знает таблицу/тип очага, не удаляет online-тело, не отключает
+сессию, не создаёт corpse/FX. Политика online deletion сохраняется.
+
+**Проверки.** Account scope и no-op responses, online/offline/Unknown/known,
+composite object identity, invalid source без upsert, cancellation после DELETE,
+синхронный возврат, обе очередности с достройкой и остановкой surface. Результаты
+фактических запусков фиксируются в `tasks.md`.
 
 ### 4.3. Синхронное сохранение завершённой стройки
 
@@ -636,7 +641,7 @@ online DELETE с последующей попыткой достройки, DEL
 отличное от одного, также Fatal. Runtime rollback, SQL retry, save job queue
 и commit probing не добавляются. Персонаж, инвентари, материалы, stamina
 и труп не входят в транзакцию. Schema, protocol и recipe не меняются.
-Сохранение смерти/REST и restart repair этим этапом не реализуются.
+Сохранение смерти/REST реализовано в 4.3a; restart repair остаётся задачей 4.4.
 
 **Предыдущие проверки.** Focused Hearth/construction и writer unit tests,
 а также полный `make test` ранее прошли; проверялись ошибки записи/сериализации,
@@ -646,7 +651,7 @@ affected-row count, ID watermark и timeout. Эти результаты пре�
 
 ### 4.3a. Сохранение смерти и удаления
 
-**Death-часть реализована.** `ConstructionSaverDB.SaveTerminal` под `surface.mu`
+**Реализовано для смерти и REST.** `ConstructionSaverDB.SaveTerminal` под `surface.mu`
 исполняет один `WithTx` с timeout 5 секунд: optional `UpsertObject` для
 проверенного преобразованного костра, затем `RemoveCharacterHearth` по точному
 character/region/object ID. Допустимы 0 или 1 удалённая связь; больше — ошибка.
@@ -662,8 +667,8 @@ Nil object означает только удаление связи: отсут
 Персонаж/инвентари/труп сохраняются независимо. Serialization/SQL/commit/invalid
 result — Fatal; синхронное ожидание может задержать весь game loop.
 
-**Остаётся.** REST hookup и saved lookup для offline Unknown owner относятся
-к 4.2; общая 4.3a остаётся незавершённой до этой части.
+**REST.** Подключение и saved lookup для offline Unknown owner реализованы
+по 4.2; общий terminal writer переиспользован без нового persistence API.
 
 **Проверки.** Runtime identity/terminal ordering и идемпотентность, timeout,
 ошибки записи/числа строк, PostgreSQL atomic conversion+removal, rollback
@@ -705,8 +710,9 @@ world scan или goroutine на каждого игрока. При оценк�
 
 **Проверки.** Стройка возвращает успех после commit; orphan normalization
 сохраняется до raw/ECS изменения; death cleanup ждёт commit до возврата
-текущего update/attachment, будущий REST cleanup тоже синхронен.
-Реальные SQL errors/invalid results останавливают сервер. Общий transfer
+текущего update/attachment, REST cleanup тоже синхронен.
+Реальные Hearth SQL errors/invalid results останавливают сервер; ошибка
+самого REST DELETE возвращает HTTP 500. Общий transfer
 сохраняет собственные DB dependencies и ordinary rollback; не добавляю
 per-player metric labels или новый persistence framework.
 
@@ -993,7 +999,7 @@ pipeline проверки; если менялись, выполняю все т
 была выполнена, а не скрыта среди skipped tests.
 
 **Покрытие.** PK/UNIQUE/FK, alive/type/layer checks, синхронное сохранение стройки
-и pre-activation batch read/orphan transaction, синхронный death save и будущий REST cleanup,
+и pre-activation batch read/orphan transaction, синхронные death save и REST cleanup,
 PendingTerminal во время SQL, fatal/invalid-result failure, partial recovery
 и отсутствие resurrection deleted target. Runtime ordering проверяется
 контролируемыми задержками synchronous SQL и owning callbacks. Task 3.5 уже

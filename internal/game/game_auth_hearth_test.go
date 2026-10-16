@@ -257,3 +257,7 @@ func TestSpawnAndLoginUnavailableHearthDoesNotReattach(t *testing.T) {
 func (r hearthLoginReader) GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error) {
 	panic("unexpected GetCharacterHearthOwners")
 }
+
+func (hearthLoginReader) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+	panic("unexpected saved hearth query")
+}

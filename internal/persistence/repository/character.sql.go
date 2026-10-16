@@ -98,7 +98,7 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 	return i, err
 }
 
-const deleteCharacter = `-- name: DeleteCharacter :exec
+const deleteCharacter = `-- name: DeleteCharacter :execrows
 UPDATE character
 SET deleted_at = now()
 WHERE id = $1
@@ -111,9 +111,12 @@ type DeleteCharacterParams struct {
 	AccountID int64 `json:"account_id"`
 }
 
-func (q *Queries) DeleteCharacter(ctx context.Context, arg DeleteCharacterParams) error {
-	_, err := q.db.ExecContext(ctx, deleteCharacter, arg.ID, arg.AccountID)
-	return err
+func (q *Queries) DeleteCharacter(ctx context.Context, arg DeleteCharacterParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteCharacter, arg.ID, arg.AccountID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteCharacterByID = `-- name: DeleteCharacterByID :exec

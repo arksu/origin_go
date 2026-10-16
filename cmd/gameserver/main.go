@@ -165,7 +165,7 @@ func main() {
 		logger.Info("pprof enabled")
 	}
 
-	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger, &cfg.Game)
+	httpHandler := restapi.NewHandler(db, g.EntityIDManager(), logger, &cfg.Game, g.DeleteCharacter)
 	httpHandler.RegisterRoutes(mux)
 
 	// Register Prometheus metrics

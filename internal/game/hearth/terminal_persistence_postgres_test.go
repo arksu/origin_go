@@ -107,7 +107,9 @@ func TestTerminalSaverPostgresRemovalFailureRollsBackConversion(t *testing.T) {
 	require.Equal(t, original, stored, "association failure must roll back the preceding object upsert")
 	association, err := q.GetSavedCharacterHearth(ctx, 1)
 	require.NoError(t, err)
-	require.Equal(t, repository.CharacterHearth{CharacterID: 1, ObjectRegion: 1, ObjectID: 10}, association)
+	require.Equal(t, int64(1), association.CharacterID)
+	require.Equal(t, 1, association.ObjectRegion)
+	require.Equal(t, int64(10), association.ObjectID)
 }
 
 func TestTerminalSaverPostgresCleanupDoesNotReviveDeletedSource(t *testing.T) {

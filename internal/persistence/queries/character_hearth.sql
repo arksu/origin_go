@@ -26,9 +26,10 @@ WHERE c.deleted_at IS NULL
 
 -- Replacement also needs the old association when its owner is soft-deleted.
 -- name: GetSavedCharacterHearth :one
-SELECT character_id, object_region, object_id
-FROM character_hearth
-WHERE character_id = sqlc.arg(character_id);
+SELECT h.character_id, h.object_region, h.object_id, o.type_id, o.x, o.y, o.layer, o.deleted_at
+FROM character_hearth AS h
+LEFT JOIN object AS o ON o.region = h.object_region AND o.id = h.object_id
+WHERE h.character_id = sqlc.arg(character_id);
 
 -- Lock the character row so a concurrent soft delete cannot acquire a home.
 -- name: SetCharacterHearth :execrows

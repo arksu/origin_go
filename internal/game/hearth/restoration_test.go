@@ -255,3 +255,7 @@ func TestPrepareChunkActivationFatalFailuresLeaveRawUnchanged(t *testing.T) {
 		})
 	}
 }
+
+func (restorationReader) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+	panic("unexpected saved hearth query")
+}

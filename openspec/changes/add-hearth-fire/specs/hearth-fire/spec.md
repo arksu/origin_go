@@ -151,12 +151,34 @@ Permanent death SHALL immediately mark the owner PendingTerminal and make its ru
 
 ### Requirement: Terminal deletion cannot orphan an active hearth
 
-Any accepted terminal deletion of a character SHALL make its active runtime home ineligible immediately and dispatch ordinary-campfire conversion and synchronous ownership saving to the surface owner without nesting shard locks. This SHALL preserve the existing authorization and deletion policy and SHALL NOT invent a character-location death event for an absent body. An invalid saved association to a deleted character SHALL NOT restore an active home.
+REST character deletion SHALL execute the account-scoped soft delete and Hearth cleanup in one surface-shard critical section. Only a confirmed single-row deletion SHALL mark terminal ownership and perform ordinary-campfire conversion and synchronous saving before returning HTTP 204. Zero affected rows SHALL preserve the existing 204 no-op without touching ownership. The existing authorization and online-deletion policy SHALL remain unchanged; cleanup SHALL NOT disconnect the character, remove an online body, fabricate a corpse or emit character-location death FX. An invalid saved association to a deleted character SHALL NOT restore an active home.
 
 #### Scenario: Offline character is explicitly deleted
 - **WHEN** an authorized character deletion removes an offline owner who has an active hearth
 - **THEN** runtime ownership SHALL be revoked and the hearth SHALL be converted through its owning world
 - **AND** the surface owner SHALL perform Hearth reads and cleanup saving synchronously with five-second contexts without fabricating a character death event
+
+#### Scenario: Offline ownership is unknown after deletion
+- **WHEN** a confirmed REST deletion has Unknown runtime ownership
+- **THEN** cleanup SHALL read the saved association with an independent five-second context, joining the object by both region and ID without filtering out the deleted owner
+- **AND** a valid home SHALL use existing terminal conversion, an absent association SHALL become Terminal without conversion, and an unavailable or invalid source SHALL receive exact association-only cleanup
+- **AND** known CurrentHome, NoHome and Terminal SHALL retain runtime authority without this lookup; broader repair of invalid links hidden by known NoHome remains separate
+
+#### Scenario: Deletion overlaps admitted construction
+- **WHEN** REST deletion overlaps an already admitted Hearth completion
+- **THEN** the surface lock SHALL order the whole construction save before the soft delete and cleanup of its latest home, or order deletion before construction refusal
+- **AND** REST SHALL NOT commit a soft delete outside this critical section
+
+#### Scenario: The delete statement fails
+- **WHEN** the account-scoped character DELETE returns a database error
+- **THEN** REST SHALL preserve HTTP 500 and SHALL NOT start Hearth cleanup without confirmation of deletion
+- **AND** later Hearth lookup or cleanup errors SHALL retain the fatal policy
+
+#### Scenario: Request cancellation or shutdown overlaps cleanup
+- **WHEN** a confirmed deletion is completing Hearth cleanup
+- **THEN** request cancellation SHALL NOT interrupt cleanup and HTTP success SHALL wait for its save
+- **AND** the surface lock SHALL keep its chunk manager available until cleanup finishes
+- **AND** a request acquiring the lock after the shard entered Stopping SHALL refuse before executing the delete statement
 
 ### Requirement: Hearth placement uses standard build tile rules
 
@@ -410,7 +432,7 @@ Normal world-entry spawning SHALL try the saved player position, the current exa
 
 ### Requirement: Runtime transitions precede persistence
 
-Construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world before serialization and SQL. Its call SHALL return success only after the construction transaction commits. Known runtime state SHALL remain authoritative over loaded data, including known absence and terminal state. All Hearth reads and saves, including death and future REST cleanup, SHALL execute synchronously under the owning surface shard lock with a five-second context per read or transaction. Cross-layer death cleanup SHALL complete after source unlock and before the current call returns without nesting shard locks. Hearth SHALL NOT add a save queue, SQL retry, asynchronous acknowledgment, durable operation journal or runtime rollback.
+Construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world before serialization and SQL. Its call SHALL return success only after the construction transaction commits. Known runtime state SHALL remain authoritative over loaded data, including known absence and terminal state. All Hearth reads and saves, including death and REST cleanup, SHALL execute synchronously under the owning surface shard lock with a five-second context per read or transaction. Cross-layer death cleanup SHALL complete after source unlock and before the current call returns without nesting shard locks. Hearth SHALL NOT add a save queue, SQL retry, asynchronous acknowledgment, durable operation journal or runtime rollback.
 
 #### Scenario: Database is slow after construction
 - **WHEN** a character completes a Hearth while its save is delayed
@@ -451,10 +473,10 @@ After final-branch processing, transforms and runtime index replacement, constru
 
 ### Requirement: Database errors stop the entire server
 
-The database SHALL be assumed available. Any actual database read, write or commit error, including an unknown commit outcome, SHALL stop the entire server. Hearth SHALL NOT retry SQL or add a recovery path for database errors. Invalid query results SHALL also stop the server. Expected absent-row results and unknown metadata awaiting synchronous preparation SHALL NOT be treated as database failures.
+The database SHALL be assumed available. Any actual Hearth database read, write or commit error, including an unknown commit outcome, SHALL stop the entire server. The account-scoped REST character DELETE itself SHALL retain HTTP 500 on SQL failure; this exception SHALL NOT apply to subsequent Hearth cleanup. Hearth SHALL NOT retry SQL or add a recovery path for database errors. Invalid query results SHALL also stop the server. Expected absent-row results and unknown metadata awaiting synchronous preparation SHALL NOT be treated as database failures.
 
 #### Scenario: A database operation fails
-- **WHEN** a database read, write or commit returns an actual error
+- **WHEN** a Hearth database read, write or commit returns an actual error
 - **THEN** the entire server SHALL stop instead of continuing gameplay or retrying SQL
 - **AND** the error SHALL NOT be interpreted as absence of a home
 

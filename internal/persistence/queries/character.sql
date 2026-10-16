@@ -49,7 +49,7 @@ VALUES ($1, $2, $3, 1, $4, $5, 0, 0, sqlc.arg(stamina), sqlc.arg(energy), sqlc.a
         sqlc.arg(exp)::jsonb, sqlc.arg(skills)::jsonb, sqlc.arg(discovery)::jsonb)
 RETURNING *;
 
--- name: DeleteCharacter :exec
+-- name: DeleteCharacter :execrows
 UPDATE character
 SET deleted_at = now()
 WHERE id = $1

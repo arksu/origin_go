@@ -190,3 +190,7 @@ func TestLoadHomeFatalFailuresReturnErrors(t *testing.T) {
 func (f homeReaderFunc) GetCharacterHearthOwners(context.Context, repository.GetCharacterHearthOwnersParams) ([]repository.GetCharacterHearthOwnersRow, error) {
 	panic("unexpected GetCharacterHearthOwners")
 }
+
+func (homeReaderFunc) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+	panic("unexpected saved hearth query")
+}

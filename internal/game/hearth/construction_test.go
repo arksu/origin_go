@@ -608,3 +608,7 @@ func (r *constructionReader) GetCharacterHearthOwners(context.Context, repositor
 func (s *constructionSaver) SaveOrphans(context.Context, []*repository.Object) error {
 	panic("unexpected SaveOrphans")
 }
+
+func (*constructionReader) GetSavedCharacterHearth(context.Context, int64) (repository.GetSavedCharacterHearthRow, error) {
+	panic("unexpected saved hearth query")
+}

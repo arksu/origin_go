@@ -34,14 +34,19 @@ type Handler struct {
 	entityIDManager *game.EntityIDManager
 	logger          *zap.Logger
 	gameConfig      *config.GameConfig
+	deleteCharacter func(context.Context, repository.DeleteCharacterParams) error
 }
 
-func NewHandler(db *persistence.Postgres, entityIDManager *game.EntityIDManager, logger *zap.Logger, gameConfig *config.GameConfig) *Handler {
+func NewHandler(db *persistence.Postgres, entityIDManager *game.EntityIDManager, logger *zap.Logger, gameConfig *config.GameConfig, deleteCharacter func(context.Context, repository.DeleteCharacterParams) error) *Handler {
+	if deleteCharacter == nil {
+		panic("character deletion callback is required")
+	}
 	return &Handler{
 		db:              db,
 		entityIDManager: entityIDManager,
 		logger:          logger,
 		gameConfig:      gameConfig,
+		deleteCharacter: deleteCharacter,
 	}
 }
 
@@ -340,7 +345,7 @@ func (h *Handler) handleDeleteCharacter(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.db.Queries().DeleteCharacter(r.Context(), repository.DeleteCharacterParams{
+	if err := h.deleteCharacter(r.Context(), repository.DeleteCharacterParams{
 		ID:        id,
 		AccountID: accountID,
 	}); err != nil {
