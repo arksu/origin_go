@@ -42,7 +42,7 @@ func drainChatMessages(tb testing.TB, client *network.Client, conn net.Conn) []*
 	}
 }
 
-func TestLocalChatSpatialRecipientsDeliverPacketsAndReuseBuffer(t *testing.T) {
+func TestLocalChatDeliveryReusesBufferAndKeepsAdminCommandsPrivate(t *testing.T) {
 	f := newAttackResultFixture(t, 8)
 	w := f.shard.world
 	var err error
@@ -84,6 +84,7 @@ func TestLocalChatSpatialRecipientsDeliverPacketsAndReuseBuffer(t *testing.T) {
 	inbox := network.NewPlayerCommandInbox(queueConfig)
 	commands := systems.NewNetworkCommandSystem(inbox, network.NewServerJobInbox(queueConfig),
 		f.shard, f.shard, nil, nil, nil, 1000, f.shard.logger)
+	commands.SetAdminHandler(NewChatAdminCommandHandler(nil, nil, f.shard, nil, nil, nil, nil, nil, nil, f.shard.logger))
 	send := func(commandID uint64, text string) {
 		t.Helper()
 		require.NoError(t, inbox.Enqueue(&network.PlayerCommand{
@@ -120,6 +121,31 @@ func TestLocalChatSpatialRecipientsDeliverPacketsAndReuseBuffer(t *testing.T) {
 	send(1, "At the first position")
 	check("At the first position", senderID, 2, 3)
 
+	for i, command := range []struct {
+		text string
+		want string
+	}{
+		{text: "/unknown private arguments", want: "Unknown command: /unknown"},
+		{text: "/", want: "Unknown command: /"},
+		{text: "//", want: "Unknown command: //"},
+		{text: "/pos", want: "pos: 0, 0"},
+		{text: "/info invalid", want: "usage: /info"},
+	} {
+		send(uint64(i+2), command.text)
+		for _, recipient := range recipients {
+			messages := drainChatMessages(t, recipient.client, recipient.conn)
+			if recipient.id != senderID {
+				require.Empty(t, messages, "command %q must remain private", command.text)
+				continue
+			}
+			require.Len(t, messages, 1, "command %q must produce only a system reply", command.text)
+			require.Equal(t, netproto.ChatChannel_CHAT_CHANNEL_LOCAL, messages[0].Channel)
+			require.Zero(t, messages[0].FromEntityId)
+			require.Equal(t, "[Server]", messages[0].FromName)
+			require.Equal(t, command.want, messages[0].Text)
+		}
+	}
+
 	// Reuse the same command system after the sender crosses spatial cells. The
 	// second selection is shorter and must drop both old neighbours while adding
 	// the formerly out-of-radius client, without retaining old recipient IDs.
@@ -127,6 +153,6 @@ func TestLocalChatSpatialRecipientsDeliverPacketsAndReuseBuffer(t *testing.T) {
 	ecs.WithComponent(w, recipients[0].handle, func(position *components.Transform) { position.X = 2000 })
 	f.shard.soundEvents.OnPositionCommitted(recipients[0].handle, 2000, 0)
 	f.shard.mu.Unlock()
-	send(2, "At the second position")
-	check("At the second position", senderID, 4)
+	send(7, "At the second position /pos")
+	check("At the second position /pos", senderID, 4)
 }

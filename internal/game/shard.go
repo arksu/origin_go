@@ -863,6 +863,7 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 
 	s.clearPlayerTransientStateForDeath(w, playerID, playerHandle)
 	s.convertPlayerEntityToCorpse(w, playerID, playerHandle)
+	s.sendPlayerDeathFx(playerID, playerHandle)
 	s.persistPermanentDeath(playerID)
 	hasObserverClient := s.enterClientObserverModeAfterPermanentDeath(w, playerID)
 

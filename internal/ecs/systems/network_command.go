@@ -60,7 +60,7 @@ type InventoryOperationExecutor interface {
 }
 
 // AdminCommandHandler processes admin chat commands (e.g. /give, /spawn).
-// Returns true if the text was recognized as an admin command.
+// HandleCommand returns true for any slash command, including unknown commands.
 type AdminCommandHandler interface {
 	HandleCommand(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, text string) bool
 	ExecutePendingSpawn(w *ecs.World, playerID types.EntityID, playerHandle types.Handle, targetX, targetY float64)
@@ -1007,11 +1007,12 @@ func (s *NetworkCommandSystem) handleChat(w *ecs.World, playerHandle types.Handl
 		return
 	}
 
-	// Intercept admin commands (starting with "/")
+	// Slash commands must never fall through to ordinary chat delivery.
 	if len(payload.Text) > 0 && payload.Text[0] == '/' {
-		if s.adminHandler != nil && s.adminHandler.HandleCommand(w, cmd.CharacterID, playerHandle, payload.Text) {
-			return
+		if s.adminHandler != nil {
+			s.adminHandler.HandleCommand(w, cmd.CharacterID, playerHandle, payload.Text)
 		}
+		return
 	}
 
 	senderTransform, hasTransform := ecs.GetComponent[components.Transform](w, playerHandle)

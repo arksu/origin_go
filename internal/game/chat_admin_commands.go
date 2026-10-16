@@ -144,7 +144,7 @@ func (h *ChatAdminCommandHandler) SetAllowReviveCommand(allow bool) {
 }
 
 // HandleCommand parses and executes an admin command.
-// Returns true if the text was recognized as an admin command (even if it failed).
+// Returns true for any slash command, including unknown commands, and false for ordinary text.
 func (h *ChatAdminCommandHandler) HandleCommand(
 	w *ecs.World,
 	playerID types.EntityID,
@@ -152,7 +152,7 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 	text string,
 ) bool {
 	parts := strings.Fields(text)
-	if len(parts) == 0 {
+	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
 		return false
 	}
 
@@ -212,7 +212,8 @@ func (h *ChatAdminCommandHandler) HandleCommand(
 		h.handleRevive(w, playerID, playerHandle)
 		return true
 	default:
-		return false
+		h.sendSystemMessage(playerID, "Unknown command: "+parts[0])
+		return true
 	}
 }
 

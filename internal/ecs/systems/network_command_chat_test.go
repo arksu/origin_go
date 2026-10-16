@@ -162,27 +162,42 @@ func TestNetworkCommandChatMissingDependenciesDoesNotScanCharacters(t *testing.T
 
 type handledChatAdmin struct {
 	AdminCommandHandler
-	calls int
+	calls   int
+	handled bool
 }
 
 func (a *handledChatAdmin) HandleCommand(*ecs.World, types.EntityID, types.Handle, string) bool {
 	a.calls++
-	return true
+	return a.handled
 }
 
 func TestNetworkCommandChatAdminInterceptionPrecedesRecipientSelection(t *testing.T) {
-	w := ecs.NewWorldWithCapacity(128, nil, 0)
-	handle := spawnChatCommandSender(w, 1)
-	delivery := &chatDeliveryRecorder{}
-	selector := chatSelectorFunc(func(*ecs.World, float64, float64, float64, float64, []types.EntityID) []types.EntityID {
-		t.Fatal("handled admin command must not select chat recipients")
-		return nil
-	})
-	system := NewNetworkCommandSystem(nil, nil, delivery, selector, nil, nil, nil, 1000, zap.NewNop())
-	admin := &handledChatAdmin{}
-	system.SetAdminHandler(admin)
-	system.handleChat(w, handle, &network.PlayerCommand{CharacterID: 1,
-		Payload: &network.ChatCommandPayload{Text: "/handled"}})
-	require.Equal(t, 1, admin.calls)
-	require.Empty(t, delivery.messages)
+	for _, test := range []struct {
+		name  string
+		admin *handledChatAdmin
+	}{
+		{name: "handled", admin: &handledChatAdmin{handled: true}},
+		{name: "unhandled", admin: &handledChatAdmin{}},
+		{name: "missing handler"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			w := ecs.NewWorldWithCapacity(128, nil, 0)
+			handle := spawnChatCommandSender(w, 1)
+			delivery := &chatDeliveryRecorder{}
+			selector := chatSelectorFunc(func(*ecs.World, float64, float64, float64, float64, []types.EntityID) []types.EntityID {
+				t.Fatal("slash command must not select chat recipients")
+				return nil
+			})
+			system := NewNetworkCommandSystem(nil, nil, delivery, selector, nil, nil, nil, 1000, zap.NewNop())
+			if test.admin != nil {
+				system.SetAdminHandler(test.admin)
+			}
+			system.handleChat(w, handle, &network.PlayerCommand{CharacterID: 1,
+				Payload: &network.ChatCommandPayload{Text: "/command"}})
+			if test.admin != nil {
+				require.Equal(t, 1, test.admin.calls)
+			}
+			require.Empty(t, delivery.messages)
+		})
+	}
 }

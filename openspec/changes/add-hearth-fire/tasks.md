@@ -21,8 +21,8 @@ orphan normalization; its completed verification is recorded below. Task 4.1 and
 death portion of 4.3a add synchronous permanent-death cleanup. Task 4.2 connects
 REST deletion through the same cleanup. Tasks 4.4/4.5 add lazy repair, recovery/final-save checks and cost documentation.
 Section 5 adds ordinary return, strict opt-in interruption and layer-aware login fallback.
-Owner-death Hearth FX now uses the shared object-FX path; remaining presentation
-and other FX triggers stay separate.
+Owner-death Hearth and permanent character-death FX now use the shared object-FX
+path; remaining presentation and replacement FX stay separate.
 This replaces the former durable-lifecycle plan:
 construction changes runtime first, then returns success after its database commit.
 Other independent saves may lose recent progress on a crash. Runtime
@@ -265,6 +265,30 @@ was introduced. Section 6 presentation/KO-window/FX work remains unchecked.
 - [x] 6.4 Render a reusable detached one-shot effect from the eight preloaded frames at 250 ms per frame, with a 2000 ms local monotonic lifetime, bounded concurrent effects, and owner-container cleanup. Drop events before asset readiness instead of retaining callbacks for old events. Test source-view removal, suspended rendering, capacity limits, late loading after reset, and world/session destruction without an event-ID deduplication or server-clock freshness subsystem.
 - [ ] 6.5 Add visual/client asset regressions and gameplay-scale desktop/mobile screenshots for green fire, skull smoke, and post-KO controls; document delivered contracts and continuous-versus-transient smoke. Run relevant asset tests and, only if atlas/tools change, the three required pipeline checks; generate no replacement art and add no explanatory in-app copy.
 - [x] 6.6 Add the minimal Hearth owner window through ordinary RMB approach/link, reusable text snapshots, owner metadata and existing close/reset paths. Keep the owner-contact exception feature-owned and use one optional LinkSystem callback; break links before live conversion. No window registry, instance IDs, client close command or push updates.
+
+Task 6.3 character-death increment (2026-10-17):
+Permanent death now emits the existing skull_smoke at the body's Transform,
+through one call in HandlePlayerPermanentDeath after corpse conversion. A local
+helper in player_death_visual.go uses unchanged SendObjectFx and supplies only
+the missing self-recipient via existing SendFx before first visibility. An indexed
+self-observer is not sent twice. Shared sending, client code, protocol, assets,
+persistence and observer-mode ordering are unchanged. No new state or subsystem
+is introduced. Task 6.3 remains unchecked only for replacement FX and its coverage.
+
+`GOCACHE=/tmp/origin-go-build make test` and targeted PlayerDeathFx/HearthDeathFx/
+PlayerDeathSystem tests passed. Real socket regressions verify one self-send
+with/without self visibility, current versus replaced/ineligible sessions,
+observer positions/epochs, and separate body/Hearth positions. Existing death
+lifecycle tests cover one-time processing and knockout separation. The PostgreSQL
+attachment/transfer death packet helper now checks body-position FX too; these
+integration scenarios were explicitly skipped because ORIGIN_OBJECT_HEALTH_TEST_DSN
+is unset. No claim of a live database or full-game death E2E run is made.
+Client test:world-fx passed (5 tests). Independent code-reviewer2 review returned
+Approve without significant findings. A temporary copy of the existing hybrid
+character preview exercised the unchanged real lying actor and FxManager at
+game scale; smoke placement over the body was visually checked. This was a
+renderer preview, not a full-game network E2E run. The temporary files were
+removed. Strict OpenSpec validation and standard whitespace checks passed.
 
 Tasks 6.3 (partial), 6.4 and smoke-only 6.5 verification (2026-10-17):
 The approved implementation scope is only the converted Hearth at permanent owner

@@ -17,9 +17,15 @@ characters within an inclusive distance of `game.chat_local_radius` (default
    command rate limit, duplicate detection, bounded queue, and tick fairness.
 4. `NetworkCommandSystem` (priority 0) drains player commands before server
    jobs under `Shard.Update`'s world lock. Execution resolves the sender's
-   EntityID and requires a live Handle, Transform, and Appearance; recognized
-   slash commands are handled before local delivery. Current chat execution
-   does not add a connection-ID or stream-epoch ownership check.
+   EntityID and requires a live Handle. Every message starting with `/` after
+   ingress normalization is handled exclusively as a command, before checking
+   Transform or Appearance. It never selects local recipients or falls through
+   to ordinary chat delivery, even if the command handler is missing or returns
+   false. Unknown commands reply only to the sender with
+   `Unknown command: /name`, without arguments, using `[Server]` and
+   `from_entity_id = 0`; the client therefore shows no character speech balloon.
+   Ordinary chat requires Transform and Appearance. Current chat execution does
+   not add a connection-ID or stream-epoch ownership check.
 5. `Shard.AppendLocalChatRecipients` queries the existing connected-listener
    grid owned by `SoundEventService`, then checks the current Transform with
    `distanceSquared <= radiusSquared`. Each candidate must have a live Handle,

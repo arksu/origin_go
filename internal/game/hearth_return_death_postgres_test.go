@@ -250,7 +250,10 @@ func requireHearthReturnDeathPackets(t *testing.T, f *hearthReturnTransferFixtur
 	}})
 	require.NoError(t, err)
 	f.client.Send(marker)
-	entries, dialogs := 0, 0
+	entries, dialogs, bodyFx := 0, 0, 0
+	shard := f.shards[f.client.Layer]
+	body, hasBody := ecs.GetComponent[components.Transform](shard.world, shard.world.GetHandleByEntityID(f.client.CharacterID))
+	require.True(t, hasBody)
 	readSoundLifecyclePacket(t, f.connection, func(packet *netproto.ServerMessage) bool {
 		if packet.GetPlayerEnterWorld() != nil {
 			entries++
@@ -261,8 +264,13 @@ func requireHearthReturnDeathPackets(t *testing.T, f *hearthReturnTransferFixtur
 			assert.Equal(t, "Death", dialog.Title)
 			assert.Equal(t, "You are dead", dialog.Message)
 		}
+		if fx := packet.GetFx(); fx != nil && fx.FxKey == "skull_smoke" && fx.Position != nil &&
+			fx.Position.X == int32(body.X) && fx.Position.Y == int32(body.Y) && fx.StreamEpoch == f.client.StreamEpoch.Load() {
+			bodyFx++
+		}
 		return packet.GetPong().GetClientTimeMs() == markerTime
 	})
 	assert.Equal(t, expectedEntries, entries, "only a completed living attachment may send EnterWorld")
 	assert.Equal(t, 1, dialogs, "permanent death must be shown exactly once")
+	assert.GreaterOrEqual(t, bodyFx, 1, "death must emit at the body, including before the first visibility update; a coincident hearth can emit too")
 }

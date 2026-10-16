@@ -17,6 +17,42 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
+func TestHandleCommandSlashRouting(t *testing.T) {
+	for _, test := range []struct {
+		text string
+		want string
+	}{
+		{text: "/unknown", want: "Unknown command: /unknown"},
+		{text: "/unknown private arguments", want: "Unknown command: /unknown"},
+		{text: " \t/unknown argument\n", want: "Unknown command: /unknown"},
+		{text: "/", want: "Unknown command: /"},
+		{text: "//", want: "Unknown command: //"},
+		{text: "/POS", want: "Unknown command: /POS"},
+		{text: ""},
+		{text: " \t\n"},
+		{text: "hello"},
+		{text: "hello /pos"},
+	} {
+		t.Run(test.text, func(t *testing.T) {
+			chat := &mockChatDeliveryService{messages: make(map[types.EntityID]string)}
+			handler := NewChatAdminCommandHandler(nil, nil, chat, nil, nil, nil, nil, nil, nil, zaptest.NewLogger(t))
+			const playerID types.EntityID = 42
+			if handled := handler.HandleCommand(nil, playerID, types.InvalidHandle, test.text); handled != (test.want != "") {
+				t.Fatalf("handled = %t, want %t", handled, test.want != "")
+			}
+			if test.want == "" {
+				if len(chat.messages) != 0 {
+					t.Fatalf("ordinary text produced system messages: %v", chat.messages)
+				}
+				return
+			}
+			if len(chat.messages) != 1 || chat.messages[playerID] != test.want {
+				t.Fatalf("system messages = %v, want player %d: %q", chat.messages, playerID, test.want)
+			}
+		})
+	}
+}
+
 func TestHandleOnline(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	eventBus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 2})
