@@ -43,6 +43,7 @@ import { gameCalendarSync } from '@/network/GameCalendarSync'
 import { resolveRenderResolution } from './renderResolution'
 
 const CARRIED_OBJECT_OFFSET_PX = 56
+const WEBGL_INIT_ERROR_MESSAGE = 'Unable to initialize WebGL 2. Enable hardware acceleration or try another browser.'
 
 export class Render {
   private app: Application
@@ -118,15 +119,23 @@ export class Render {
     const resolution = resolveRenderResolution(this.economyRendering, window.devicePixelRatio)
     TextureStyle.defaultOptions.scaleMode = 'nearest'
 
-    await this.app.init({
-      canvas,
-      resolution,
-      autoDensity: true,
-      resizeTo: window,
-      background: '#353e67ff',
-      antialias: false,
-      preference: 'webgl',
-    })
+    try {
+      await this.app.init({
+        canvas,
+        resolution,
+        autoDensity: true,
+        resizeTo: window,
+        background: '#353e67ff',
+        antialias: false,
+        preference: ['webgl'],
+      })
+    } catch (error) {
+      throw new Error(WEBGL_INIT_ERROR_MESSAGE, { cause: error })
+    }
+
+    if ((this.app.renderer as WebGLRenderer).context?.webGLVersion !== 2) {
+      throw new Error(WEBGL_INIT_ERROR_MESSAGE)
+    }
 
     this.actorRenderer = new ActorRenderer(this.app.renderer as WebGLRenderer, this.actorRenderSettings)
     this.lightingManager = new LightingManager(this.app.renderer as WebGLRenderer)
@@ -935,14 +944,14 @@ export class Render {
 
   destroy(): void {
     this.sceneInitialized = false
-    this.app.renderer.off('resize', this.onRendererResize)
+    this.app.renderer?.off('resize', this.onRendererResize)
     this.combatSectorPreview.destroy()
     if (this.minimapCanvas) this.detachMinimap(this.minimapCanvas)
     this.playerEntityId = null
     this.keyboardMovement.destroy()
     this.renderErrorNotice?.remove()
     this.renderErrorNotice = null
-    this.app.ticker.stop()
+    this.app.ticker?.stop()
 
     this.inputController.destroy()
     this.buildGhostController.destroy()
@@ -960,7 +969,15 @@ export class Render {
     this.actorRenderer = null
     this.debugOverlay.destroy()
     cameraController.reset()
-    this.app.destroy(true, { children: true, texture: true })
+    if (this.app.renderer) {
+      this.app.destroy(true, { children: true, texture: true })
+    } else {
+      // Application plugins are not initialized when renderer creation fails.
+      this.app.stage.destroy({ children: true, texture: true })
+    }
+    for (const container of [this.mapContainer, this.objectsContainer, this.worldHudContainer, this.uiContainer]) {
+      if (!container.destroyed) container.destroy({ children: true, texture: true })
+    }
     clearAlphaMaskCache()
 
     this.canvas = null

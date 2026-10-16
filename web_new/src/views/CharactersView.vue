@@ -36,13 +36,11 @@ const deletingId = ref<number | null>(null)
 const listUnavailable = ref(false)
 
 const emptySlots = computed(() => Math.max(0, MAX_CHARACTERS - characters.value.length))
-const uiErrorMessage = computed(() => error.value || disconnectReasonMessage.value)
 
 async function loadCharacters() {
   loading.value = true
   listUnavailable.value = false
   error.value = ''
-  disconnectReasonMessage.value = ''
   createError.value = ''
 
   try {
@@ -196,8 +194,11 @@ onMounted(() => {
       <div class="login-panel">
         Characters<br>
 
-        <AppAlert v-if="uiErrorMessage" type="error" class="panel-alert">
-          {{ uiErrorMessage }}
+        <AppAlert v-if="disconnectReasonMessage" type="error" class="panel-alert" role="alert">
+          {{ disconnectReasonMessage }}
+        </AppAlert>
+        <AppAlert v-if="error" type="error" class="panel-alert">
+          {{ error }}
         </AppAlert>
 
         <div v-if="loading" class="loading-area">

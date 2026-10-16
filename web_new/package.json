@@ -20,6 +20,7 @@
     "test:minimap": "node scripts/test-minimap.mjs && node --test tests/minimap-hud.test.mjs",
     "test:daytime-hud": "node --test tests/daytime-hud.test.mjs",
     "test:lighting": "node scripts/test-character-visual.mjs tests/lighting.test.ts && node scripts/test-character-visual.mjs tests/economy-rendering.test.ts",
+    "test:render-init": "node scripts/test-character-visual.mjs tests/render-init.test.ts && node --test tests/render-init-ui.test.mjs",
     "test:actions": "node scripts/test-actions.mjs",
     "test:combat-protocol": "node scripts/test-character-visual.mjs tests/combat-protocol.test.ts",
     "test:damage-numbers": "node scripts/test-character-visual.mjs tests/damage-numbers.test.ts",

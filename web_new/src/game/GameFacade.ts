@@ -25,7 +25,7 @@ export class GameFacade {
   private economyRendering = false
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
-    if (this.initialized) {
+    if (this.render) {
       this.destroy()
     }
 
