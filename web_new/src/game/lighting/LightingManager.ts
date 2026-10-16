@@ -3,8 +3,8 @@ import {
   Shader, Sprite, State, Texture, UniformGroup, type RenderOptions, type WebGLRenderer,
 } from 'pixi.js'
 import {
-  createRadialLightPixels, getLightMapLayout, getNightOpacity, LIGHT_RADIAL_SIZE,
-  lightFlickerPhase, lightFlickerStrength, NIGHT_FLOOR, resolveLightDefinition,
+  createRadialLightPixels, getLightMapLayout, getNightOpacity, LIGHT_RADIAL_SIZE, LIGHT_FLICKER_RADIUS_RATIO,
+  lightFlickerSeed, lightFlickerAmount, lightSwayOffset, NIGHT_FLOOR, resolveLightDefinition,
   shouldRefreshLightMap, type LightDefinition, type ResolvedLightDefinition,
 } from './model'
 
@@ -23,7 +23,10 @@ interface LightSource {
   readonly owner: Container
   readonly definition: ResolvedLightDefinition
   readonly sprite: Sprite
-  readonly phase: number
+  readonly seed: number
+  /** Unmodulated screen geometry; light animation must not dirty it every frame. */
+  x: number
+  y: number
   radiusX: number
   radiusY: number
 }
@@ -118,8 +121,8 @@ export class LightingManager {
     sprite.eventMode = 'none'
     sprite.visible = false
     this.sources.set(entityId, {
-      owner, definition: resolved, sprite, phase: lightFlickerPhase(entityId),
-      radiusX: Number.NaN, radiusY: Number.NaN,
+      owner, definition: resolved, sprite, seed: lightFlickerSeed(entityId),
+      x: Number.NaN, y: Number.NaN, radiusX: Number.NaN, radiusY: Number.NaN,
     })
     this.lightContainer.addChild(sprite)
     this.metrics.sources = this.sources.size
@@ -157,7 +160,7 @@ export class LightingManager {
     }
 
     let intersecting = 0
-    let hasFlicker = false
+    let hasAnimation = false
     const scaleX = world.scale.x
     const scaleY = world.scale.y
     for (const source of this.sources.values()) {
@@ -166,19 +169,21 @@ export class LightingManager {
       const y = world.y + (source.owner.y + definition.offsetY) * scaleY
       const radiusX = definition.radius * Math.abs(scaleX)
       const radiusY = definition.radius * Math.abs(scaleY)
+      const maxRadiusScale = 1 + definition.flicker * LIGHT_FLICKER_RADIUS_RATIO
+      const extentX = radiusX * maxRadiusScale + definition.swayX * Math.abs(scaleX)
+      const extentY = radiusY * maxRadiusScale + definition.swayY * Math.abs(scaleY)
       const visible = !source.owner.destroyed && definition.strength > 0 && definition.tint !== 0 &&
-        radiusX > 0 && radiusY > 0 && x + radiusX >= 0 && y + radiusY >= 0 && x - radiusX <= width && y - radiusY <= height
+        radiusX > 0 && radiusY > 0 && x + extentX >= 0 && y + extentY >= 0 && x - extentX <= width && y - extentY <= height
       if (source.sprite.visible !== visible) {
         source.sprite.visible = visible
         this.geometryDirty = true
       }
       if (!visible) continue
       intersecting++
-      hasFlicker ||= definition.flicker > 0
-      if (source.sprite.x !== x || source.sprite.y !== y || source.radiusX !== radiusX || source.radiusY !== radiusY) {
-        source.sprite.position.set(x, y)
-        source.sprite.width = radiusX * 2
-        source.sprite.height = radiusY * 2
+      hasAnimation ||= definition.flicker > 0 || definition.swayX > 0 || definition.swayY > 0
+      if (source.x !== x || source.y !== y || source.radiusX !== radiusX || source.radiusY !== radiusY) {
+        source.x = x
+        source.y = y
         source.radiusX = radiusX
         source.radiusY = radiusY
         this.geometryDirty = true
@@ -189,13 +194,21 @@ export class LightingManager {
       this.invalidate()
       return
     }
-    if (!shouldRefreshLightMap(nowMs, this.lastRefreshMs, this.mapValid, this.geometryDirty, hasFlicker)) return
+    if (!shouldRefreshLightMap(nowMs, this.lastRefreshMs, this.mapValid, this.geometryDirty, hasAnimation)) return
 
     this.prepareMap()
     for (const source of this.sources.values()) {
       if (source.sprite.visible) {
         const definition = source.definition
-        source.sprite.alpha = lightFlickerStrength(nowMs, definition.strength, definition.flicker, source.phase)
+        const flicker = lightFlickerAmount(nowMs, definition.flicker, source.seed, definition.flickerHz, definition.flickerFastWeight)
+        const radiusScale = 1 + flicker * LIGHT_FLICKER_RADIUS_RATIO
+        source.sprite.position.set(
+          source.x + lightSwayOffset(nowMs, definition.swayX, source.seed ^ 0x68bc21eb, definition.swayHz) * scaleX,
+          source.y + lightSwayOffset(nowMs, definition.swayY, source.seed ^ 0x02e5be93, definition.swayHz) * scaleY,
+        )
+        source.sprite.alpha = Math.max(0, Math.min(1, definition.strength * (1 + flicker)))
+        source.sprite.width = source.radiusX * 2 * radiusScale
+        source.sprite.height = source.radiusY * 2 * radiusScale
       }
     }
     this.renderer.render(this.renderOptions)

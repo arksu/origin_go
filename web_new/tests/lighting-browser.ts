@@ -50,11 +50,11 @@ async function createScene(resolution: number) {
   objects.setLightingManager(lighting)
   let width = WIDTH
   let height = HEIGHT
-  const draw = (phase: number | null = 0, active = true) => {
+  const draw = (phase: number | null = 0, active = true, nowMs = performance.now()) => {
     objects.update()
     worldHud.position.copyFrom(world.position)
     worldHud.scale.copyFrom(world.scale)
-    lighting.update(performance.now(), phase, world, width, height, active)
+    lighting.update(nowMs, phase, world, width, height, active)
     app.render()
   }
   const pixels = () => app.renderer.extract.pixels({ target: app.stage, frame: new Rectangle(0, 0, width, height), resolution: 1 })
@@ -183,6 +183,73 @@ async function preloadCampfire() {
     await Promise.all(definition.layers.flatMap((layer) => layer.frames?.map((image) => ResourceLoader.loadTexture(image.img)) ?? (layer.img ? [ResourceLoader.loadTexture(layer.img)] : [])))
   }
 }
+
+async function checkFireFlicker(resolution: number) {
+  const scene = await createScene(resolution)
+  try {
+    const fire = ResourceLoader.getResourceDef('campfire/burning')?.light
+    if (!fire) throw new Error('Production burning campfire is missing its light definition')
+    scene.draw(0.5, true, 0)
+    const day = scene.pixel(280, 180)
+    scene.draw(0, true, 0)
+    const ambient = scene.pixel(280, 180)
+    scene.owner(91001, 160, 180, fire)
+    scene.owner(91002, 480, 180, fire)
+    const first: number[] = []
+    const second: number[] = []
+    let initial: RGB | undefined
+    let bounded = true
+    for (let now = 0; now <= 10_000; now += 67) {
+      scene.draw(0, true, now)
+      const pixels = scene.pixels()
+      const read = (x: number): RGB => {
+        const index = (180 * pixels.width + x) * 4
+        return [pixels.pixels[index]!, pixels.pixels[index + 1]!, pixels.pixels[index + 2]!]
+      }
+      const a = read(280)
+      const b = read(360)
+      initial ??= a
+      first.push(brightness(a))
+      second.push(brightness(b))
+      bounded &&= a.every((value, channel) => value >= ambient[channel]! - 2 && value <= day[channel]! + 2) &&
+        b.every((value, channel) => value >= ambient[channel]! - 2 && value <= day[channel]! + 2)
+    }
+    check(bounded, `DPR ${resolution}: all fire samples stay between ambient and daylight`)
+    check(Math.max(...first) - Math.min(...first) > 8 && Math.max(...second) - Math.min(...second) > 8,
+      `DPR ${resolution}: production campfires visibly flicker in GPU pixels`)
+    check(first.some((value, index) => Math.abs(value - second[index]!) > 6),
+      `DPR ${resolution}: two campfires have independent flicker`)
+    scene.lighting.invalidate()
+    scene.draw(0, true, 0)
+    check(near(scene.pixel(280, 180), initial!, 1), `DPR ${resolution}: seeking to the same time reproduces the fire pixels`)
+    const night = scene.pixel(280, 180)
+    scene.draw(21.5 / 24, true, 0)
+    const dusk = scene.pixel(280, 180)
+    check(brightness(night) < brightness(dusk) && brightness(dusk) < brightness(day),
+      `DPR ${resolution}: the same fire fades with the existing dusk multiplier`)
+    scene.draw(0.5, true, 67)
+    check(near(scene.pixel(280, 180), day, 1) && !scene.lighting.getContainer().visible,
+      `DPR ${resolution}: fire lighting remains disabled in daylight`)
+    scene.lighting.clear()
+    scene.owner(91003, 320, 180, { ...fire, flicker: 0 })
+    let minBias = Infinity
+    let maxBias = -Infinity
+    for (let now = 0; now <= 10_000; now += 67) {
+      scene.draw(0, true, now)
+      const pixels = scene.pixels()
+      const lightAt = (x: number): number => {
+        const index = (180 * pixels.width + x) * 4
+        return pixels.pixels[index]! + pixels.pixels[index + 1]! + pixels.pixels[index + 2]!
+      }
+      const bias = lightAt(440) - lightAt(200)
+      minBias = Math.min(minBias, bias)
+      maxBias = Math.max(maxBias, bias)
+    }
+    check(minBias < -4 && maxBias > 4,
+      `DPR ${resolution}: production halo sways to both sides with constant brightness and radius`)
+  } finally { scene.dispose() }
+}
+
 async function spawn(scene: Scene, id: number, state: 'burning' | 'unlit', screenX = 180, screenY = 220) {
   scene.objects.spawnObject({ entityId: id, typeId: 16, resourcePath: `campfire/${state}`, position: coordScreen2Game(screenX, screenY), size: { x: 12, y: 12 } })
   await settle()
@@ -382,6 +449,8 @@ async function main() {
   await preloadCampfire()
   await checkPixels(1)
   await checkPixels(2)
+  await checkFireFlicker(1)
+  await checkFireFlicker(2)
   const scene = await createScene(1)
   document.querySelector('#preview')!.append(scene.app.canvas)
   await checkObjectLifecycle(scene)

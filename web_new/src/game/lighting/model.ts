@@ -9,8 +9,16 @@ export interface LightDefinition {
   offset?: readonly [number, number]
   tint?: number
   strength?: number
-  /** Relative strength variation; the evaluated result is clamped to [0, 1]. */
+  /** Relative strength variation (clamped to [0, 1]); radius varies by a quarter as much. */
   flicker?: number
+  /** Fast noise frequency in Hz; slow noise runs at one quarter of this rate. Default: 4. */
+  flickerHz?: number
+  /** Fast noise share in [0, 1]; higher values produce sharper changes. Default: 0.25. */
+  flickerFastWeight?: number
+  /** Maximum horizontal/vertical halo displacement in local pixels. Default: [0, 0]. */
+  sway?: readonly [number, number]
+  /** Sway noise frequency in Hz. Default: 1. */
+  swayHz?: number
 }
 
 export interface ResolvedLightDefinition {
@@ -20,6 +28,11 @@ export interface ResolvedLightDefinition {
   readonly tint: number
   readonly strength: number
   readonly flicker: number
+  readonly flickerHz: number
+  readonly flickerFastWeight: number
+  readonly swayX: number
+  readonly swayY: number
+  readonly swayHz: number
 }
 
 export interface LightMapLayout {
@@ -31,7 +44,11 @@ export interface LightMapLayout {
 export const NIGHT_FLOOR = [0.24, 0.28, 0.36] as const
 export const LIGHT_MAP_MAX_DIMENSION = 512
 export const LIGHT_FLICKER_PERIOD_MS = 1000 / 15
+export const LIGHT_FLICKER_RADIUS_RATIO = 0.25
 export const LIGHT_RADIAL_SIZE = 256
+const DEFAULT_FLICKER_HZ = 4
+const DEFAULT_FLICKER_FAST_WEIGHT = 0.25
+const DEFAULT_SWAY_HZ = 1
 
 export function resolveLightDefinition(definition: LightDefinition): ResolvedLightDefinition {
   validateLightDefinition(definition)
@@ -42,6 +59,11 @@ export function resolveLightDefinition(definition: LightDefinition): ResolvedLig
     tint: definition.tint ?? 0xffffff,
     strength: definition.strength ?? 1,
     flicker: definition.flicker ?? 0,
+    flickerHz: definition.flickerHz ?? DEFAULT_FLICKER_HZ,
+    flickerFastWeight: definition.flickerFastWeight ?? DEFAULT_FLICKER_FAST_WEIGHT,
+    swayX: definition.sway?.[0] ?? 0,
+    swayY: definition.sway?.[1] ?? 0,
+    swayHz: definition.swayHz ?? DEFAULT_SWAY_HZ,
   }
 }
 
@@ -61,18 +83,41 @@ export function radialLightFalloff(normalizedDistance: number): number {
   return Math.max(0, Math.min(1, 2 * (1 - normalizedDistance)))
 }
 
-export function lightFlickerPhase(entityId: number): number {
-  let hash = entityId >>> 0
+function hashLightNoise(value: number): number {
+  let hash = value >>> 0
   hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b)
   hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b)
-  return ((hash ^ (hash >>> 16)) >>> 0) / 0x100000000 * Math.PI * 2
+  return (hash ^ (hash >>> 16)) >>> 0
 }
 
-export function lightFlickerStrength(nowMs: number, strength: number, flicker: number, phase: number): number {
-  if (flicker === 0) return strength
+export function lightFlickerSeed(entityId: number): number {
+  return hashLightNoise(entityId)
+}
+
+function smoothLightNoise(position: number, seed: number): number {
+  const cell = Math.floor(position)
+  const fraction = position - cell
+  const blend = fraction * fraction * (3 - 2 * fraction)
+  const start = hashLightNoise(seed ^ cell) / 0xffffffff * 2 - 1
+  const end = hashLightNoise(seed ^ (cell + 1)) / 0xffffffff * 2 - 1
+  return start + (end - start) * blend
+}
+
+/** Stateless two-band value noise, shared by brightness and radius on each map refresh. */
+export function lightFlickerAmount(
+  nowMs: number, flicker: number, seed: number,
+  frequencyHz = DEFAULT_FLICKER_HZ, fastWeight = DEFAULT_FLICKER_FAST_WEIGHT,
+): number {
+  if (flicker === 0) return 0
   const seconds = nowMs / 1000
-  const wave = 0.65 * Math.sin(7.1 * seconds + phase) + 0.35 * Math.sin(11.7 * seconds + 1.7 * phase)
-  return Math.max(0, Math.min(1, strength * (1 + flicker * wave)))
+  return flicker * ((1 - fastWeight) * smoothLightNoise(seconds * (frequencyHz / 4), seed) +
+    fastWeight * smoothLightNoise(seconds * frequencyHz, seed ^ 0x9e3779b9))
+}
+
+/** Separate noise seeds let the halo drift independently of brightness and of its other axis. */
+export function lightSwayOffset(nowMs: number, amplitude: number, seed: number, frequencyHz = DEFAULT_SWAY_HZ): number {
+  if (amplitude === 0) return 0
+  return amplitude * smoothLightNoise(nowMs / 1000 * frequencyHz, seed)
 }
 
 /** Per-channel multiplier; sources add before saturation and can only restore daytime. */
@@ -85,9 +130,9 @@ export function shouldRefreshLightMap(
   lastRefreshMs: number,
   valid: boolean,
   geometryDirty: boolean,
-  hasFlicker: boolean,
+  hasAnimation: boolean,
 ): boolean {
-  return !valid || geometryDirty || (hasFlicker && nowMs - lastRefreshMs >= LIGHT_FLICKER_PERIOD_MS)
+  return !valid || geometryDirty || (hasAnimation && nowMs - lastRefreshMs >= LIGHT_FLICKER_PERIOD_MS)
 }
 
 /** Premultiplied white RGBA avoids upload ambiguity and a separate source texture pass. */

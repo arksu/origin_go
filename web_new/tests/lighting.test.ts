@@ -4,7 +4,7 @@ import { Container, DOMAdapter, Mesh, type RenderOptions, RenderTexture, Sprite,
 import { LightingManager } from '../src/game/lighting/LightingManager'
 import {
   createRadialLightPixels, getLightMapLayout, getNightOpacity, LIGHT_FLICKER_PERIOD_MS,
-  lightFlickerPhase, lightFlickerStrength, NIGHT_FLOOR, nightLightMultiplier,
+  lightFlickerSeed, lightFlickerAmount, lightSwayOffset, NIGHT_FLOOR, nightLightMultiplier,
   radialLightFalloff, resolveLightDefinition, shouldRefreshLightMap,
 } from '../src/game/lighting/model'
 import { validateLightDefinition } from '../src/game/lighting/validateDefinition.js'
@@ -64,18 +64,40 @@ test('light definitions reject malformed data and resolve independent scalar sna
   for (const definition of [null, [], {}, { radius: 0 }, { radius: Number.NaN }, { radius: 1, other: true },
     { radius: 1, offset: [1] }, { radius: 1, offset: [0, Infinity] }, { radius: 1, tint: 0x1000000 },
     { radius: 1, tint: 2.5 }, { radius: 1, strength: -0.1 }, { radius: 1, strength: 1.1 },
-    { radius: 1, flicker: NaN }, { radius: 1, flicker: 1.1 }]) {
+    { radius: 1, flicker: NaN }, { radius: 1, flicker: 1.1 },
+    { radius: 1, flickerHz: 0 }, { radius: 1, flickerHz: -1 }, { radius: 1, flickerHz: NaN },
+    { radius: 1, flickerHz: Infinity }, { radius: 1, flickerHz: '6' },
+    { radius: 1, flickerFastWeight: -0.1 }, { radius: 1, flickerFastWeight: 1.1 },
+    { radius: 1, flickerFastWeight: NaN }, { radius: 1, flickerFastWeight: Infinity },
+    { radius: 1, sway: [1] }, { radius: 1, sway: [-1, 0] }, { radius: 1, sway: [0, -1] },
+    { radius: 1, sway: [0, NaN] }, { radius: 1, sway: [Infinity, 0] }, { radius: 1, sway: '8,3' },
+    { radius: 1, swayHz: 0 }, { radius: 1, swayHz: -1 }, { radius: 1, swayHz: NaN },
+    { radius: 1, swayHz: Infinity }, { radius: 1, swayHz: '1.2' }]) {
     assert.throws(() => validateLightDefinition(definition), /Invalid light:/)
   }
   assert.deepEqual(resolveLightDefinition({ radius: 160 }), {
     radius: 160, offsetX: 0, offsetY: 0, tint: 0xffffff, strength: 1, flicker: 0,
+    flickerHz: 4, flickerFastWeight: 0.25,
+    swayX: 0, swayY: 0, swayHz: 1,
   })
-  const definition = { radius: 160, offset: [0, -12] as [number, number], tint: 0xffe6cc, strength: 0.96, flicker: 0.04 }
+  const definition = {
+    radius: 160, offset: [0, -12] as [number, number], tint: 0xffe6cc, strength: 0.96, flicker: 0.04,
+    sway: [8, 3] as [number, number], swayHz: 1.2,
+  }
   const resolved = resolveLightDefinition(definition)
   definition.offset[1] = -100
   definition.radius = 1000
+  definition.sway[0] = 100
   assert.equal(resolved.offsetY, -12)
   assert.equal(resolved.radius, 160)
+  assert.equal(resolved.swayX, 8)
+  assert.equal(resolved.swayY, 3)
+  assert.equal(resolved.swayHz, 1.2)
+  for (const weight of [0, 0.65, 1]) {
+    const tuned = resolveLightDefinition({ radius: 160, flickerHz: 6, flickerFastWeight: weight })
+    assert.equal(tuned.flickerHz, 6)
+    assert.equal(tuned.flickerFastWeight, weight)
+  }
 })
 
 test('light-map dimensions use integer physical pixels and stay bounded independently of DPR', () => {
@@ -125,21 +147,27 @@ test('additive overlapping light restores daytime without brightening above it',
   assert.ok(red > green && green > blue, 'the campfire restores subtly warmer colors')
 })
 
-test('flicker is deterministic, source-specific, smooth, and clamps Sprite strength', () => {
-  const phase = lightFlickerPhase(123)
-  assert.equal(phase, lightFlickerPhase(123))
-  assert.notEqual(phase, lightFlickerPhase(124))
-  assert.equal(lightFlickerStrength(100, 0.7, 0, phase), 0.7)
-  let observedClamp = false
-  for (let now = 0; now < 10_000; now += 20) {
-    const strength = lightFlickerStrength(now, 0.96, 0.04, phase)
-    assert.ok(strength >= 0.96 * 0.96 && strength <= 0.96 * 1.04)
-    assert.ok(Math.abs(strength - lightFlickerStrength(now + 1, 0.96, 0.04, phase)) < 0.001)
-    const strongest = lightFlickerStrength(now, 1, 1, phase)
-    assert.ok(strongest >= 0 && strongest <= 1)
-    observedClamp ||= strongest === 1
+test('flicker noise is stateless, source-specific, bounded, smooth, and does not loop each second', () => {
+  const seed = lightFlickerSeed(123)
+  const otherSeed = lightFlickerSeed(124)
+  assert.equal(seed, lightFlickerSeed(123))
+  assert.notEqual(seed, otherSeed)
+  assert.equal(lightFlickerAmount(100, 0, seed), 0)
+  const samples = Array.from({ length: 3001 }, (_, index) => lightFlickerAmount(index * 20, 0.1, seed))
+  assert.ok(Math.min(...samples) < -0.04 && Math.max(...samples) > 0.04, 'the fire both dims and brightens')
+  assert.ok(samples.some((value, index) => Math.abs(value - lightFlickerAmount(index * 20, 0.1, otherSeed)) > 0.04))
+  assert.ok(samples.some((value, index) => Math.abs(value - lightFlickerAmount(index * 20 + 1000, 0.1, seed)) > 0.04))
+  // Evaluate backwards to verify that seeking and skipped frames need no accumulated state.
+  for (let index = samples.length - 1; index >= 0; index--) {
+    const now = index * 20
+    const amount = lightFlickerAmount(now, 0.1, seed)
+    assert.equal(amount, samples[index])
+    assert.ok(amount >= -0.1 && amount <= 0.1)
+    assert.ok(Math.abs(amount - lightFlickerAmount(now + 1, 0.1, seed)) < 0.001)
   }
-  assert.equal(observedClamp, true)
+  for (let boundary = 250; boundary <= 60_000; boundary += 250) {
+    assert.ok(Math.abs(lightFlickerAmount(boundary - 1, 0.1, seed) - lightFlickerAmount(boundary + 1, 0.1, seed)) < 0.001)
+  }
 })
 
 test('geometry and invalid content bypass the 15 Hz flicker deadline without catch-up work', () => {
@@ -148,6 +176,125 @@ test('geometry and invalid content bypass the 15 Hz flicker deadline without cat
   assert.equal(shouldRefreshLightMap(10, 0, true, false, true), false)
   assert.equal(shouldRefreshLightMap(LIGHT_FLICKER_PERIOD_MS, 0, true, false, true), true)
   assert.equal(shouldRefreshLightMap(100_000, 0, true, false, false), false)
+})
+
+test('halo sway is bounded, smooth, deterministic, source-specific, and has its own frequency', () => {
+  const seed = lightFlickerSeed(123)
+  const samples = Array.from({ length: 1001 }, (_, index) => lightSwayOffset(index * 20, 8, seed, 1.2))
+  assert.ok(Math.min(...samples) < -3 && Math.max(...samples) > 3, 'the halo sways to both sides')
+  assert.ok(samples.some((value, index) => Math.abs(value - lightSwayOffset(index * 20, 8, lightFlickerSeed(124), 1.2)) > 3))
+  for (let index = samples.length - 1; index >= 0; index--) {
+    const now = index * 20
+    const offset = lightSwayOffset(now, 8, seed, 1.2)
+    assert.equal(offset, samples[index])
+    assert.ok(offset >= -8 && offset <= 8)
+    assert.ok(Math.abs(offset - lightSwayOffset(now + 1, 8, seed, 1.2)) < 0.05)
+    near(lightSwayOffset(now, 8, seed, 2), lightSwayOffset(now * 2, 8, seed))
+    assert.equal(lightSwayOffset(now, 0, seed, 1.2), 0)
+  }
+})
+
+test('sway without brightness flicker respects the refresh limit and follows camera and owner transforms', context => {
+  const f = fixture(context)
+  f.world.position.set(20, 30)
+  f.world.scale.set(2, 0.5)
+  f.manager.register(123, f.owner, { radius: 40, offset: [5, -2], strength: 0.7, sway: [8, 3], swayHz: 1.2 })
+  f.manager.update(0, 0, f.world, 320, 240)
+  const sprite = firstSource(f.passes[0]!)
+  const firstX = sprite.x
+  const firstY = sprite.y
+  for (let now = 1; now <= 66; now++) f.manager.update(now, 0, f.world, 320, 240)
+  assert.equal(f.passes.length, 1)
+  near(sprite.x, firstX)
+  near(sprite.y, firstY)
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (let now = 67; now < 20_000; now += 67) {
+    f.manager.update(now, 0, f.world, 320, 240)
+    assert.ok(sprite.x >= 174 && sprite.x <= 206)
+    assert.ok(sprite.y >= 57.5 && sprite.y <= 60.5)
+    near(sprite.alpha, 0.7)
+    near(sprite.width, 160)
+    near(sprite.height, 40)
+    minX = Math.min(minX, sprite.x)
+    maxX = Math.max(maxX, sprite.x)
+    minY = Math.min(minY, sprite.y)
+    maxY = Math.max(maxY, sprite.y)
+  }
+  assert.ok(maxX - minX > 8 && maxY - minY > 1, 'both axes move while brightness and radius stay constant')
+  const localX = (sprite.x - 20) / 2
+  const localY = (sprite.y - 30) / 0.5
+  const draws = f.passes.length
+  const lastRefresh = (draws - 1) * 67
+  f.world.x += 10
+  f.world.scale.set(4, 1)
+  f.manager.update(lastRefresh, 0, f.world, 320, 240)
+  assert.equal(f.passes.length, draws + 1)
+  near(sprite.x, 30 + localX * 4)
+  near(sprite.y, 30 + localY)
+  const beforeMove = sprite.x
+  f.owner.x++
+  f.manager.update(lastRefresh, 0, f.world, 320, 240)
+  assert.equal(f.passes.length, draws + 2)
+  near(sprite.x, beforeMove + 4)
+  near(f.owner.x, 81)
+  near(f.owner.y, 60)
+  assert.equal(f.passes[0]!.target, f.passes.at(-1)!.target)
+})
+
+test('viewport selection includes the full sway envelope even without brightness flicker', context => {
+  const f = fixture(context)
+  f.owner.visible = false
+  f.manager.register(123, f.owner, { radius: 40, sway: [8, 3] })
+  for (const [x, y] of [[-47.5, 60], [367.5, 60], [80, -42.5], [80, 282.5]]) {
+    f.owner.position.set(x, y)
+    f.manager.update(0, 0, f.world, 320, 240)
+    assert.equal(f.manager.getMetrics().intersecting, 1)
+  }
+  for (const [x, y] of [[-48.1, 60], [368.1, 60], [80, -43.1], [80, 283.1]]) {
+    f.owner.position.set(x, y)
+    f.manager.update(1, 0, f.world, 320, 240)
+    assert.equal(f.manager.getMetrics().intersecting, 0)
+    assert.equal(getUniforms(f.manager).uHasLights, 0)
+  }
+})
+
+test('authored flicker frequency scales time and fast-noise weight makes changes sharper', () => {
+  const seed = lightFlickerSeed(123)
+  let gentleChange = 0
+  let sharpChange = 0
+  for (let now = 0; now < 60_000; now += 67) {
+    near(lightFlickerAmount(now, 0.2, seed, 8), lightFlickerAmount(now * 2, 0.2, seed))
+    const gentle = lightFlickerAmount(now, 0.2, seed)
+    const sharp = lightFlickerAmount(now, 0.2, seed, 6, 0.65)
+    gentleChange += Math.abs(gentle - lightFlickerAmount(now + 67, 0.2, seed))
+    sharpChange += Math.abs(sharp - lightFlickerAmount(now + 67, 0.2, seed, 6, 0.65))
+    for (const weight of [0, 0.65, 1]) {
+      const amount = lightFlickerAmount(now, 0.2, seed, 6, weight)
+      assert.ok(amount >= -0.2 && amount <= 0.2)
+      assert.equal(lightFlickerAmount(now, 0, seed, 6, weight), 0)
+    }
+  }
+  assert.ok(sharpChange > gentleChange * 1.5, 'the campfire preset changes faster between light-map refreshes')
+})
+
+test('registered light definitions pass frequency and fast-noise weight into the rendered light', context => {
+  const f = fixture(context)
+  const definition = { radius: 40, strength: 0.7, flicker: 0.2 }
+  f.manager.register(123, f.owner, definition)
+  f.manager.update(517, 0, f.world, 320, 240)
+  const gentleAlpha = firstSource(f.passes[0]!).alpha
+  f.manager.register(123, f.owner, { ...definition, flickerHz: 6, flickerFastWeight: 0.65 })
+  f.manager.update(517, 0, f.world, 320, 240)
+  const sprite = firstSource(f.passes[1]!)
+  const flicker = lightFlickerAmount(517, 0.2, lightFlickerSeed(123), 6, 0.65)
+  near(sprite.alpha, 0.7 * (1 + flicker))
+  near(sprite.width, 80 * (1 + flicker / 4))
+  assert.notEqual(sprite.alpha, gentleAlpha)
+  f.manager.update(583, 0, f.world, 320, 240)
+  assert.equal(f.passes.length, 2, 'a faster authored frequency still respects the 15 Hz refresh limit')
 })
 
 test('daylight and ambient-only night need no map allocation; entry into night redraws immediately', context => {
@@ -203,21 +350,93 @@ test('offscreen owner culling does not remove an intersecting halo and real came
 
 test('stationary flicker is throttled but geometry changes redraw immediately and reset its deadline', context => {
   const f = fixture(context)
-  f.manager.register(3, f.owner, { radius: 40, strength: 0.96, flicker: 0.04 })
+  f.manager.register(3, f.owner, { radius: 40, strength: 0.9, flicker: 0.1 })
   f.manager.update(100, 0, f.world, 320, 240)
-  const firstAlpha = firstSource(f.passes[0]!).alpha
-  f.manager.update(150, 0, f.world, 320, 240)
+  const sprite = firstSource(f.passes[0]!)
+  const firstAlpha = sprite.alpha
+  const firstWidth = sprite.width
+  for (let now = 101; now <= 166; now++) f.manager.update(now, 0, f.world, 320, 240)
   assert.equal(f.passes.length, 1)
-  assert.equal(firstSource(f.passes[0]!).alpha, firstAlpha)
+  assert.equal(sprite.alpha, firstAlpha)
+  assert.equal(sprite.width, firstWidth)
+  assert.equal(sprite.height, firstWidth)
   f.owner.x++
-  f.manager.update(152, 0, f.world, 320, 240)
+  f.manager.update(166, 0, f.world, 320, 240)
   assert.equal(f.passes.length, 2)
-  f.manager.update(218, 0, f.world, 320, 240)
+  near(sprite.x, f.owner.x)
+  const movedAlpha = sprite.alpha
+  const movedWidth = sprite.width
+  f.manager.update(232, 0, f.world, 320, 240)
   assert.equal(f.passes.length, 2)
-  f.manager.update(219, 0, f.world, 320, 240)
+  assert.equal(sprite.alpha, movedAlpha)
+  assert.equal(sprite.width, movedWidth)
+  f.manager.update(233, 0, f.world, 320, 240)
   assert.equal(f.passes.length, 3)
+  assert.notEqual(sprite.alpha, movedAlpha)
+  assert.notEqual(sprite.width, movedWidth)
   assert.equal(f.passes[0], f.passes[1], 'render options are reused instead of allocated per refresh')
   assert.equal(f.passes[0]!.target, f.passes[2]!.target, 'the RT is reused')
+})
+
+test('fire brightness and radius vary together within bounds and zoom redraws immediately', context => {
+  const f = fixture(context)
+  f.manager.register(123, f.owner, { radius: 160, strength: 0.9, flicker: 0.1 })
+  let minimumWidth = Infinity
+  let maximumWidth = 0
+  for (let now = 0; now < 30_000; now += 67) {
+    f.manager.update(now, 0, f.world, 320, 240)
+    const sprite = firstSource(f.passes[0]!)
+    assert.ok(sprite.alpha >= 0.81 && sprite.alpha <= 0.99)
+    assert.ok(sprite.width >= 312 && sprite.width <= 328)
+    near(sprite.height, sprite.width)
+    near(sprite.width / 320 - 1, (sprite.alpha / 0.9 - 1) / 4)
+    minimumWidth = Math.min(minimumWidth, sprite.width)
+    maximumWidth = Math.max(maximumWidth, sprite.width)
+  }
+  assert.ok(maximumWidth - minimumWidth > 4, 'the radius visibly breathes over time')
+  const draws = f.passes.length
+  const sprite = firstSource(f.passes[0]!)
+  const previousWidth = sprite.width
+  const previousAlpha = sprite.alpha
+  f.world.scale.set(2, 0.5)
+  const lastRefresh = (draws - 1) * 67
+  f.manager.update(lastRefresh, 0, f.world, 320, 240)
+  assert.equal(f.passes.length, draws + 1)
+  near(sprite.width, previousWidth * 2)
+  near(sprite.height, previousWidth * 0.5)
+  near(sprite.alpha, previousAlpha)
+  assert.equal(f.passes[0]!.target, f.passes.at(-1)!.target)
+})
+
+test('flickering lights use their maximum radius for viewport selection on every edge', context => {
+  const f = fixture(context)
+  f.owner.visible = false
+  f.manager.register(123, f.owner, { radius: 40, strength: 0.9, flicker: 0.1 })
+  for (const [x, y] of [[-40.5, 60], [360.5, 60], [80, -40.5], [80, 280.5]]) {
+    f.owner.position.set(x, y)
+    f.manager.update(0, 0, f.world, 320, 240)
+    assert.equal(f.manager.getMetrics().intersecting, 1, 'the expanded halo is selected even outside the base radius')
+  }
+  for (const [x, y] of [[-41.1, 60], [361.1, 60], [80, -41.1], [80, 281.1]]) {
+    f.owner.position.set(x, y)
+    f.manager.update(1, 0, f.world, 320, 240)
+    assert.equal(f.manager.getMetrics().intersecting, 0)
+    assert.equal(getUniforms(f.manager).uHasLights, 0)
+  }
+})
+
+test('full-amplitude flicker clamps brightness without collapsing the radius', context => {
+  const f = fixture(context)
+  f.manager.register(123, f.owner, { radius: 40, strength: 1, flicker: 1 })
+  let observedClamp = false
+  for (let now = 0; now < 10_000; now += 67) {
+    f.manager.update(now, 0, f.world, 320, 240)
+    const sprite = firstSource(f.passes[0]!)
+    assert.ok(sprite.alpha >= 0 && sprite.alpha <= 1)
+    assert.ok(sprite.width >= 60 && sprite.width <= 100)
+    observedClamp ||= sprite.alpha === 1
+  }
+  assert.equal(observedClamp, true)
 })
 
 test('static lights reuse the map while dusk opacity changes; pan, zoom, and viewport changes redraw', context => {
