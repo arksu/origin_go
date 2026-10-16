@@ -1198,13 +1198,15 @@ func (g *Game) Stop() {
 
 	g.logger.Info("Stopping networkServer")
 	g.networkServer.Stop()
+	// Network handlers can no longer launch logins. The tracked game loop waits
+	// for shard commands, so their transfer launches precede its Done as well.
+	// Finish all owning calls before stopping the chunks they may still need.
+	g.wg.Wait()
 	g.logger.Info("Stopping shardManager")
 	g.shardManager.Stop()
 	g.logger.Info("Stopping entityIDManager")
 	g.entityIDManager.Stop()
 
-	// Wait for all goroutines to finish
-	g.wg.Wait()
 	g.persistServerTimeSnapshot("shutdown")
 
 	g.setState(GameStateStopped)

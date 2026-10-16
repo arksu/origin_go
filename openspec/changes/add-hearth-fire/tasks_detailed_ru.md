@@ -12,8 +12,10 @@
 стройки 2.2–2.5, проход владельца 3.2, стандартные tile rules 3.3,
 структурные проверки ручной постановки и строительства 3.4, подготовка
 metadata/нормализация перед activation 3.5 и синхронное сохранение стройки 4.3.
+Синхронная очистка при смерти реализована в 4.1 и death-части 4.3a;
+проверки этого этапа фиксируются отдельно в `tasks.md`.
 Фактические SQL и runtime API описаны в
-`docs/features/hearth_fire.md`, разделах 2.13–2.21:
+`docs/features/hearth_fire.md`, разделах 2.13–2.22:
 `character_hearth.sql`, migration/schema и `internal/game/hearth/index.go`.
 Ранее прошли целевые Hearth/construction tests, unit-тесты записи и полный
 `GOCACHE=/tmp/origin-hearth-go-cache make test`, включая этап 4.3;
@@ -28,8 +30,8 @@ regeneration не изменил generated-файлы. Тесты использ
 вызове завершения; отдельного Hearth apply hook в `Shard.Update` нет.
 Задача 3.5 реализована и проверена, включая упрощённый индекс, PostgreSQL
 integration и финальный полный `make test`; результаты приведены в 3.5.
-Ранее указанное отсутствие DSN относится только к предыдущему этапу. Terminal notification,
-сохранение смерти/удаления, return и FX остаются отдельными будущими этапами.
+Ранее указанное отсутствие DSN относится только к предыдущему этапу.
+REST cleanup, return и FX остаются отдельными будущими этапами.
 
 ## Базовые гарантии
 
@@ -42,7 +44,7 @@ integration и финальный полный `make test`; результаты
 **Сохранение стройки: синхронное после runtime-перехода.**
 Итоговые объекты, связь и ID watermark сохраняются одной транзакцией;
 успех возвращается после commit. Персонаж, инвентари, материалы, stamina
-сохраняются независимо. Будущие Hearth terminal-переходы также используют
+сохраняются независимо. Hearth terminal-переходы также используют
 синхронный SQL на owning surface path, с отдельным five-second context для
 каждого чтения/транзакции. После аварии их
 несохранённые изменения могут откатиться; общего checkpoint и WAL операций нет.
@@ -98,7 +100,7 @@ registry и lifecycle hooks. Если они уже решают задачу, �
 | Raw cache | Точечное чтение raw по ID, `PinPersistenceBlocking` поверх existing gate/pins и `UpsertRawObject` | Nonblocking pin вернул бы busy; блокирующий вариант удерживает чанк, но освобождает mutex для loader до `WaitPreloaded` |
 | Активация чанка | Один optional callback после existing gate/state guards до создания raw ECS; синхронные batch read и orphan transaction | Без подготовленного владельца и commit нормализации нельзя публиковать очаг; существующий per-object reconcile не объединяет SQL до создания entities |
 | Удаление объекта | Зарегистрированная removal policy до изменения runtime или SQL, только там, где существующего запрета недостаточно | Одной защиты от урона недостаточно для отдельного admin deletion path |
-| Смерть и REST | Нейтральное уведомление о реально принятом terminal transition | Фича должна узнать о смерти, но death/REST не должны знать её таблицу и ключ объекта |
+| Смерть и REST | Нейтральное уведомление о принятом terminal transition и синхронный completion после source unlock | Фича должна узнать о смерти и завершить save до возврата owning call; вызов под source lock вложил бы две shard locks |
 | Перенос игрока | Source validation, разрешение цели и уведомление об успешном relocation | Admission асинхронного переноса не является успехом, а координаты могли устареть |
 | Действия | Optional interruption policy текущего handler до игровых отказов | Отказ другого действия всё равно должен прерывать возврат, не меняя правила остальных действий |
 | Протокол FX | Только поле `stream_epoch = 3` в существующем `S2C_Fx` | World-event из прошлого входа не должен отобразиться в новом мире |
@@ -250,8 +252,8 @@ chunk worker только загружает cache; owning вызов ждёт �
 pending phase, admission ticket, раздельного prepare/commit протокола или
 сохранённого finisher. Нефинальные циклы и результаты без capability идут
 по прежнему пути. Это read-side подготовки; синхронная запись описана в 4.3,
-pre-activation hydration описана в 3.5; terminal persistence и broader restart
-repair остаются будущими этапами.
+pre-activation hydration описана в 3.5, смерть — в 4.1/4.3a; REST cleanup
+и broader restart repair остаются будущими этапами.
 
 **Проверки.** Ставлю preflight именно до `processOneBuildItem` финального цикла,
 а не после списания. Проверяю reservation/destruction guards, смену дома между
@@ -523,39 +525,57 @@ restart restoration и rollback нескольких строк в одной т
 `BenchmarkIgnoreObjectCollision`: 98.16 ns/op, 0 B/op, 0 allocs/op; локальный
 microbenchmark не доказывает нагрузку 30 000 CCU. Strict OpenSpec validation
 и `git diff --check` прошли. Независимый code review: Approve, нет outstanding
-Critical/Important. Отметка 3.5 установлена; будущие terminal/release задачи
-остаются невыполненными.
+Critical/Important. Отметка 3.5 установлена; результаты death cleanup приведены
+отдельно в `tasks.md`. REST cleanup и release задачи остаются открытыми.
 
 ## 4. Смерть, удаление и обычное сохранение
 
 ### 4.1. Перманентная смерть
 
-**Что сделаю.** Подключу narrow terminal notification в реальной death boundary
-`internal/game/shard.go`, пока известны character ID и позиция. Callback
-сразу ставит `PendingTerminal` и создаёт conversion intent; association
-отзывает owning surface path, используя актуальный объект. Сам труп и обычные death rules не удерживаются
-до Hearth save. Surface-владелец применяет live/raw конвертацию.
+**Реализация.** `HandlePlayerPermanentDeath` вызывает приватный notification
+callback. `Runtime.NotifyTerminal` работает только с синхронизированным индексом:
+немедленно ставит `PendingTerminal`, сохраняя association до owning completion.
+Исходный shard записывает только character ID текущего вызова.
 
-**Минимальный путь между слоями.** `ServerJobInbox` сейчас обрабатывает типы
-snapshot requests, а не произвольные executable callbacks. Не добавляю
-`JobHearth` в его enum/switch и не создаю общий dispatcher ради этой фичи.
-Использую coalesced feature-owned intents и обычную зарегистрированную
-surface ECS-систему, забирающую ограниченную порцию работы под owning lock.
-Это конкретизация existing owning-shard path из design, не отдельная платформа
-операций. Здесь ожидаемое inbox admission из краткого плана заменяется
-непосредственным coalesced feature work: сеть не получает новый тип job.
-Межслойный вызов меняет только синхронизированное feature-состояние,
-не чужой ECS; обновления слоёв могут идти в любом порядке.
+**Синхронное завершение.** На выходе из `Shard.Update`, `tryReattachPlayer`,
+`attachClientToWorld` и немедленного attachment в `spawnTeleportedPlayerWithRuntime`
+общий helper отделяет текущий список ID, присваивает полю `nil`, освобождает
+source lock и вызывает `CompleteTerminal` под surface lock. Возврат внешнего
+вызова ждёт conversion и commit. Новый вызов source shard не может перезаписать
+отделённый список. `ShardManager.Update` уже ждёт возврата всех слоёв;
+worker pool, game loop, `ServerJobInbox` и набор ECS-систем не меняются.
 
-**Граница.** До owner-path исполнения сохраняется только terminal intent,
-не save projection. Межслойная передача не вкладывает shard locks друг в друга.
-Surface-владелец проверяет актуальную identity, меняет объект и синхронно
-выполняет Hearth SQL по 4.3a. Corpse persistence остаётся независимым.
+**Почему нужны эти точки ядра.** Смерть возникает как из ECS death system,
+так и при offline progression во время подключения. Прямой surface вызов
+из death handler вложил бы две shard locks; перенос работы на следующий tick
+нарушил бы выбранную синхронность. Два приватных callback подключаются после
+создания всех shard; helper меняет только указанные границы unlock. Очередь
+между тиками, coalesced drain и новый dispatcher не нужны.
 
-**Проверки.** Смерть без дома, на поверхности/underground, при unloaded доме,
-смена дома перед смертью, повтор notification и ограниченный drain при давлении
-на очереди. Logical home исчезает сразу; physical conversion другой поверхности
-применяется её владельцем, а не обещается одновременно во всех слоях.
+**Остановка сервера.** Вход и перенос учитываются существующим `Game.wg`:
+`Add` до запуска горутины, `Done` после всего owning call с terminal completion.
+Существующий `Wait` перенесён после остановки сети, перед остановкой shard.
+Auth handlers уже завершены сетевым `Stop`; переносы запускаются командами
+shard, возврата которых ждёт отслеживаемый game loop. Поэтому `Add/Wait`
+не требуют нового mutex, а chunk workers работают до завершения cleanup.
+
+**Runtime.** Login уже загружает metadata до входа, записи не эвиктятся.
+Поэтому Unknown при реальной смерти — Fatal, дополнительного SQL lookup нет.
+NoHome становится Terminal без Hearth I/O, повтор Terminal — no-op.
+CurrentHome разрешается заново на surface, включая результат уже допущенной
+достройки. `PinPersistenceBlocking` и `WaitPreloaded` готовят home chunk;
+pin остаётся до окончания сохранения. Общие live/raw transform helpers
+сохраняют identity и позицию без activation unloaded дома. Проверяются
+регион, слой, текущий тип, deleted/tombstone и destruction/reservation state;
+непригодный источник получает только удаление связи. Труп и обычные death
+rules не удерживаются до Hearth save; corpse persistence независим.
+
+**Проверки.** NoHome без I/O, live/raw/unloaded дом, смерть на поверхности и
+underground, актуальный дом после admitted construction, повтор notification,
+missing/deleted/changed/quarantined source, Fatal failures и блокировка возврата
+до сохранения. Конкурентные owning calls проверяют отсутствие вложенных locks
+и повторного использования отделённого списка. Защита `/destroy` отложена
+по решению пользователя и этим этапом не реализуется.
 
 ### 4.2. REST-удаление персонажа
 
@@ -571,25 +591,22 @@ callback получает только действительно удалённ
 SQL error приводит к полной остановке сервера. Текущая REST-политика не содержит
 запрета online deletion; новый запрет или новые HTTP ответы не добавляю.
 
-**Runtime-порядок.** HTTP callback передаёт coalesced terminal intent, а не
-меняет current association между preflight и двумя трансформациями стройки.
-Owning surface path применяет его до следующих build cycles: устанавливает
-terminal eligibility, отзывает актуальный дом и конвертирует соответствующий
-объект. Уже выполняющийся под surface lock финальный цикл упорядочивается
-перед этим применением; cleanup берёт актуальный результат, не устаревший
-дом из момента HTTP-запроса. Пока notification ожидает применения,
-feature-owned `PendingTerminal` сразу блокирует новые construction preflight
-и return eligibility/lookup. Это отдельный синхронизированный признак,
-не мутация двух association maps из HTTP-потока. Ни backlog drain, ни SQL
-callback не снимают этот запрет.
-В runtime не устанавливается глобальный порядок по SQL timestamp.
+**Будущий runtime-порядок.** После подтверждённого account-scoped удаления
+notification сразу ставит `PendingTerminal`; затем тот же HTTP-вызов без
+source shard lock синхронно ждёт surface completion и commit. Association
+меняет только surface-владелец, используя актуальный результат уже допущенной
+стройки. Очереди между тиками и async saver не нужны. Для offline Unknown
+понадобится синхронно разрешить сохранённую связь на surface; runtime API
+реальной смерти пока намеренно требует known state. Это расширение относится
+к 4.2, а не к выполненной death-части 4.1/4.3a.
 
 **Граница.** REST не знает `character_hearth`, ключ объекта или слой конвертации.
 Не читает/меняет live ECS напрямую, не создаёт offline тело, corpse или
 character-position death FX. Ordinary NoHome не подменяет terminal eligibility:
 новому персонажу строить можно, удалённому — нельзя. Unknown старую связь
 для cleanup читается синхронно surface-владельцем; признак запрета уже защищает
-runtime. HTTP-поток не получает второй shard lock и не исполняет Hearth SQL.
+runtime. HTTP callback не держит source shard lock и вызывает Hearth SQL
+только через синхронный surface cleanup.
 Существование online тела сохраняется по прежней REST-политике.
 
 **Проверки.** Чужой account, отсутствующий/deleted ID, повтор удаления, online/
@@ -627,22 +644,31 @@ affected-row count, ID watermark и timeout. Эти результаты пре�
 упрощению индекса в 3.5. В том запуске PostgreSQL fixture был пропущен без DSN;
 последующий полный запуск с реальным временным PostgreSQL прошёл и описан в 3.5.
 
-### 4.3a. Будущее сохранение смерти и удаления
+### 4.3a. Сохранение смерти и удаления
 
-**Что сделаю.** После доставки terminal intent surface-владелец синхронно
-читает нужную сохранённую связь и выполняет cleanup-транзакцию под `surface.mu`.
-Каждое чтение/транзакция имеет timeout 5 секунд. Не добавляю save queue,
-coalesced dirty projections, SQL retry, in-flight revision или async ack.
+**Death-часть реализована.** `ConstructionSaverDB.SaveTerminal` под `surface.mu`
+исполняет один `WithTx` с timeout 5 секунд: optional `UpsertObject` для
+проверенного преобразованного костра, затем `RemoveCharacterHearth` по точному
+character/region/object ID. Допустимы 0 или 1 удалённая связь; больше — ошибка.
+Нет нового SQL/schema, ID watermark, save queue, retry или acknowledgment.
 
-**Запись.** Существующий SQL сохраняет campfire conversion и удаляет совпавшую
-связь. Lookup для cleanup видит связь после soft delete владельца. Сохраняю
-existing I/O/destruction ordering и не воскрешаю deleted объект слепым upsert.
-Персонаж/инвентари/труп сохраняются независимо. SQL/commit/invalid result fatal;
-синхронное ожидание может задержать весь game loop.
+**Порядок.** Подготовка и проверка source предшествуют runtime conversion и
+`ApplyTerminal`; затем выполняется сохранение. Live сериализуется общим factory,
+raw использует `rawCampfire` и `UpsertRawObject`. Существующий chunk pin
+удерживается до возврата save. `WithPersistence` под surface lock не вызывается.
+Nil object означает только удаление связи: отсутствующий, deleted, changed
+или quarantined source не восстанавливается через upsert. NoHome обходится
+без Hearth SQL/chunk access; Unknown при actual death — Fatal.
+Персонаж/инвентари/труп сохраняются независимо. Serialization/SQL/commit/invalid
+result — Fatal; синхронное ожидание может задержать весь game loop.
 
-**Проверки.** Cross-layer dispatch без вложенных shard locks, PendingTerminal
-во время SQL, проверка актуального объекта, отсутствие повторной записи и
-полная остановка при SQL/commit error. Этот этап остаётся будущей задачей.
+**Остаётся.** REST hookup и saved lookup для offline Unknown owner относятся
+к 4.2; общая 4.3a остаётся незавершённой до этой части.
+
+**Проверки.** Runtime identity/terminal ordering и идемпотентность, timeout,
+ошибки записи/числа строк, PostgreSQL atomic conversion+removal, rollback
+при отказе удаления связи, сохранение deleted_at и отсутствие дома после
+рестарта. Фактические результаты запуска фиксируются в `tasks.md`.
 
 ### 4.4. Восстановление и остановка
 
@@ -678,7 +704,8 @@ world scan или goroutine на каждого игрока. При оценк�
 фактическую задержку и размер индекса, не обещаю фиксированную память.
 
 **Проверки.** Стройка возвращает успех после commit; orphan normalization
-сохраняется до raw/ECS изменения; будущий terminal SQL синхронен на owner path.
+сохраняется до raw/ECS изменения; death cleanup ждёт commit до возврата
+текущего update/attachment, будущий REST cleanup тоже синхронен.
 Реальные SQL errors/invalid results останавливают сервер. Общий transfer
 сохраняет собственные DB dependencies и ordinary rollback; не добавляю
 per-player metric labels или новый persistence framework.
@@ -966,7 +993,7 @@ pipeline проверки; если менялись, выполняю все т
 была выполнена, а не скрыта среди skipped tests.
 
 **Покрытие.** PK/UNIQUE/FK, alive/type/layer checks, синхронное сохранение стройки
-и pre-activation batch read/orphan transaction, будущий синхронный terminal save,
+и pre-activation batch read/orphan transaction, синхронный death save и будущий REST cleanup,
 PendingTerminal во время SQL, fatal/invalid-result failure, partial recovery
 и отсутствие resurrection deleted target. Runtime ordering проверяется
 контролируемыми задержками synchronous SQL и owning callbacks. Task 3.5 уже

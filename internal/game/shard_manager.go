@@ -11,10 +11,12 @@ import (
 	"origin/internal/config"
 	"origin/internal/ecs"
 	"origin/internal/eventbus"
+	"origin/internal/game/hearth"
 	"origin/internal/game/inventory"
 	"origin/internal/game/world"
 	"origin/internal/itemdefs"
 	"origin/internal/persistence"
+	"origin/internal/types"
 )
 
 type ShardUpdateResult struct {
@@ -78,6 +80,18 @@ func NewShardManager(cfg *config.Config, db *persistence.Postgres, entityIDManag
 
 	for layer := 0; layer < cfg.Game.MaxLayers; layer++ {
 		sm.shards[layer] = NewShard(layer, cfg, db, entityIDManager, objectFactory, snapshotSender, sm.eventBus, enableVisionStats, logger.Named("shard"), combat, &sm.attackEvents)
+	}
+	if surface := sm.GetShard(hearth.SurfaceLayer); surface != nil {
+		runtime := ecs.GetResource[hearth.Runtime](surface.world)
+		complete := func(character types.EntityID) error {
+			surface.mu.Lock()
+			defer surface.mu.Unlock()
+			return runtime.CompleteTerminal(character)
+		}
+		for _, shard := range sm.shards {
+			shard.permanentDeathNotify = runtime.NotifyTerminal
+			shard.permanentDeathComplete = complete
+		}
 	}
 
 	return sm

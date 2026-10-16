@@ -124,7 +124,11 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 		return
 	}
 
-	go g.spawnAndLogin(c, character)
+	g.wg.Add(1)
+	go func() {
+		defer g.wg.Done()
+		g.spawnAndLogin(c, character)
+	}()
 }
 
 func (g *Game) sendAuthResult(c *network.Client, sequence uint32, success bool, errorMsg string) bool {
@@ -618,7 +622,7 @@ func buildInitialEntityHealth(
 // Returns true if reattach was successful, false if normal spawn should proceed
 func (g *Game) tryReattachPlayer(c *network.Client, shard *Shard, playerEntityID types.EntityID, character repository.Character) bool {
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
+	defer shard.unlockAndCompletePermanentDeaths()
 
 	detachedEntities := ecs.GetResource[ecs.DetachedEntities](shard.world)
 
@@ -864,7 +868,7 @@ func (g *Game) attachClientToWorld(
 		return false
 	}
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
+	defer shard.unlockAndCompletePermanentDeaths()
 	if !g.attachClientToWorldLocked(shard, client, playerEntityID, character, handle) {
 		identity, exists := shard.world.GetExternalID(handle)
 		if shard.world.Alive(handle) && exists && identity == playerEntityID {

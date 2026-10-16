@@ -85,6 +85,10 @@ type Shard struct {
 	playerLogout      *PlayerLogoutService
 	pendingLogoutAOI  map[types.EntityID]struct{}
 
+	permanentDeathNotify   func(types.EntityID) error
+	permanentDeathComplete func(types.EntityID) error
+	permanentDeathIDs      []types.EntityID
+
 	Clients   map[types.EntityID]*network.Client
 	ClientsMu sync.RWMutex
 
@@ -420,7 +424,7 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	shardStart := time.Now()
 	s.mu.Lock()
 	lockWait := time.Since(shardStart)
-	defer s.mu.Unlock()
+	defer s.unlockAndCompletePermanentDeaths()
 	if s.state != ShardStateRunning {
 		return
 	}
@@ -818,6 +822,12 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 	if s == nil || w == nil || w != s.world || playerID == 0 || playerHandle == types.InvalidHandle || !w.Alive(playerHandle) {
 		return
 	}
+	if s.permanentDeathNotify != nil {
+		if err := s.permanentDeathNotify(playerID); err != nil {
+			return // The notification owns the fatal-error policy.
+		}
+		s.permanentDeathIDs = append(s.permanentDeathIDs, playerID)
+	}
 
 	s.offlineHealth.Delete(playerID)
 	delete(s.pendingStandUps, playerID)
@@ -849,6 +859,19 @@ func (s *Shard) HandlePlayerPermanentDeath(w *ecs.World, playerID types.EntityID
 					zap.Uint64("player_id", uint64(playerID)),
 					zap.Error(err))
 			}
+		}
+	}
+}
+
+// Finish deaths in this owning call, after releasing the source world. A new
+// caller must not reuse the detached slice while its surface cleanup is running.
+func (s *Shard) unlockAndCompletePermanentDeaths() {
+	deaths := s.permanentDeathIDs
+	s.permanentDeathIDs = nil
+	s.mu.Unlock()
+	for _, character := range deaths {
+		if err := s.permanentDeathComplete(character); err != nil {
+			return // Completion owns the fatal-error policy; do not continue work.
 		}
 	}
 }

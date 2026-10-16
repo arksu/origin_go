@@ -106,7 +106,7 @@ func (g *Game) spawnTeleportedPlayerWithRuntime(
 	}
 
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
+	defer shard.unlockAndCompletePermanentDeaths()
 	charEntities := ecs.GetResource[ecs.CharacterEntities](shard.world)
 	nextSaveAt := g.clock.GameNow().Add(g.cfg.Game.PlayerSaveInterval)
 	charEntities.Add(playerEntityID, handle, nextSaveAt)

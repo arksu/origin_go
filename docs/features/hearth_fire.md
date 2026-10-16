@@ -5,9 +5,9 @@
 а также загрузка метаданных очага при входе, проход владельца при движении
 и спавне, стандартная проверка тайлов build и запрет пересечения очага
 строительством и ручной постановкой поднятых объектов (см. 2.12–2.20).
-Подготовка объектов перед activation реализована и проверена (2.21); общий
-repair, сохранение смерти/удаления и остальные игровые правила
-ещё не подключены. Согласованные решения
+Подготовка объектов перед activation реализована и проверена (2.21).
+Синхронная очистка при перманентной смерти описана в 2.22; общий repair,
+REST cleanup и остальные игровые правила ещё не подключены. Согласованные решения
 зафиксированы 2026-10-11 и уточнены 2026-10-16 в части 2. Они имеют приоритет
 над справочным материалом Haven & Hearth и заменяют предыдущий черновой план порта.
 
@@ -334,7 +334,7 @@ CREATE TABLE origin.character_hearth
   преобразуем очаг и удаляем связь; обычная игровая смерть остаётся soft delete.
 - Таблица связи является **сохраняемым представлением действующего владельца**.
   Сервер использует текущий индекс Hearth-модуля; завершение стройки сохраняет
-  новую связь синхронно после runtime-перехода. Будущие terminal-переходы
+  новую связь синхронно после runtime-перехода. Terminal-переходы
   также выполняют Hearth SQL синхронно на owning surface path. На запуске и при загрузке БД восстанавливает
   сохранённое состояние, но не заменяет более свежие runtime-изменения.
   `object.owner_id` для этой цели не используем; у активного очага он остаётся
@@ -389,9 +389,9 @@ CREATE TABLE origin.character_hearth
   объекты. Один `WithTx` сохраняет новый очаг, прежний костёр, связь и durable
   ID watermark через `UpsertGlobalVarLongMax`; успех возвращается после commit.
   `SetCharacterHearth` обязан изменить ровно одну строку. Runtime rollback нет.
-- Смерть/REST cleanup остаётся будущей задачей, но её Hearth SQL подчиняется
-  тому же синхронному owner-path контракту. Асинхронной очереди сохранения,
-  dirty revision и matching-version ack в плане нет.
+- Смерть синхронно завершает conversion и save после source unlock до возврата
+  текущего update/attachment (2.22). Будущий REST cleanup следует тому же
+  owner-path контракту. Асинхронной очереди сохранения, dirty revision и ack нет.
 - Обычные dirty-флаги объектов/чанков сохраняются. Персонаж, инвентари,
   материалы, stamina и труп сохраняются независимо; общего checkpoint или
   terminal-commit-before-corpse гарантии не добавляем.
@@ -399,8 +399,8 @@ CREATE TABLE origin.character_hearth
 #### Сохранение, загрузка и стоимость
 
 - Синхронный Hearth I/O — согласованное исключение из запрета I/O под shard
-  lock: construction, login, pre-activation hydration/normalization и будущий
-  terminal cleanup. Медленная БД/загрузка задерживает весь game loop, поскольку
+  lock: construction, login, pre-activation hydration/normalization, death
+  и будущий REST cleanup. Медленная БД/загрузка задерживает весь game loop, поскольку
   manager ждёт все слои. Serial latency суммируется; новые команды ждут.
 - Один generic optional callback перед raw ECS activation подготавливает
   текущие Hearth candidates. Сначала берёт reverse-index snapshots, включая
@@ -465,8 +465,9 @@ CREATE TABLE origin.character_hearth
 Готовы migration/schema, sqlc-запросы, feature-owned `hearth.Index`
 и их тесты. Рецепт описан в 2.14, runtime-завершение стройки — в 2.15.
 Загрузка метаданных при входе подключена в 2.16.
-Pre-activation hydration/normalization реализована и проверена по 2.21. Terminal notification, сохранение terminal-переходов,
-return и FX остаются будущими задачами. Объект, созданный `/spawn`, игрового владельца не получает.
+Pre-activation hydration/normalization реализована и проверена по 2.21,
+permanent-death cleanup описан в 2.22. REST cleanup, return и FX остаются
+будущими задачами. Объект, созданный `/spawn`, игрового владельца не получает.
 
 #### SQL-контракты
 
@@ -516,12 +517,12 @@ transfer contracts.
   SQL, поэтому остаётся короткий mutex; I/O и ECS callbacks под ним запрещены.
 - `MarkTerminalPending` блокирует новые acquisition/return admission, сохраняя
   association уже допущенной completion. `ApplyTerminal` на owning path
-  отзывает последний дом и устанавливает `Terminal`. Подключение к смерти/REST
-  остаётся будущим этапом; terminal state не эвиктится.
+  отзывает последний дом и устанавливает `Terminal`. Смерть подключена по 2.22;
+  REST остаётся будущим этапом. Terminal state не эвиктится.
 
 Все Hearth reads/saves используют five-second contexts под surface lock.
-Construction сохраняется по 2.15, orphan rows перед activation — по 2.21;
-будущая terminal persistence следует той же политике. Независимые character,
+Construction сохраняется по 2.15, orphan rows перед activation — по 2.21,
+смерть — по 2.22; будущий REST cleanup следует той же политике. Независимые character,
 material, stamina и object checkpoints по-прежнему могут потерять недавний
 прогресс при сбое; durable lifecycle journal и общий atomic checkpoint не нужны.
 
@@ -594,8 +595,8 @@ material, stamina и object checkpoints по-прежнему могут пот�
   Ошибка сериализации/SQL/commit либо `SetCharacterHearth` с числом строк
   не равным одному — Fatal. Runtime не откатывается, SQL retry и save queue нет.
 - Новая связь теперь сохраняется в БД и доступна следующему ownership lookup.
-  Batch hydration/normalization описана в 2.21; общий repair, сохранение
-  смерти/REST deletion, возврат и FX
+  Batch hydration/normalization описана в 2.21, смерть — в 2.22; общий repair,
+  REST deletion, возврат и FX
   остаются отдельными задачами; правила размещения описаны в 2.17–2.20.
   Персонаж, инвентарь, материалы и stamina не входят в транзакцию стройки.
   `/spawn` не назначает владельца; schema, protocol и recipe не меняются.
@@ -634,8 +635,8 @@ material, stamina и object checkpoints по-прежнему могут пот�
   вход без него. Настоящая ошибка БД и невалидный результат вызывают `Fatal`.
 - Подключена только загрузка существующих метаданных: очаг не создаётся,
   объект и чанк не активируются, выбор позиции спавна не меняется. Отдельная
-  pre-activation hydration описана в 2.21; общий repair, terminal cleanup
-  и возврат остаются будущими задачами. SQL, схема и протокол не меняются.
+  pre-activation hydration описана в 2.21, смерть — в 2.22; общий repair,
+  REST cleanup и возврат остаются будущими задачами. SQL, схема и протокол не меняются.
 
 ### 2.17 Коллизии владельца
 
@@ -764,8 +765,57 @@ material, stamina и object checkpoints по-прежнему могут пот�
 - `BenchmarkIgnoreObjectCollision`: 98.16 ns/op, 0 B/op, 0 allocs/op; это
   локальный microbenchmark, не подтверждение нагрузки 30 000 CCU.
   Strict OpenSpec validation и `git diff --check` прошли. Независимый review:
-  Approve, без outstanding Critical/Important. Future terminal/return/FX
-  и общий release scope остаются отдельными задачами.
+  Approve, без outstanding Critical/Important. Проверки смерти приведены
+  отдельно в `tasks.md`; REST/return/FX и общий release scope остаются открытыми.
+
+### 2.22 Синхронная очистка при перманентной смерти (4.1 и часть 4.3a)
+
+- `HandlePlayerPermanentDeath` вызывает приватный notification callback:
+  `Runtime.NotifyTerminal` немедленно ставит `PendingTerminal`, обращаясь
+  только к синхронизированному индексу. Новые acquisition/return запрещены;
+  association пока остаётся для уже допущенной достройки.
+- Исходный shard хранит только ID умерших в текущем owning call. На выходе
+  из `Shard.Update`, `tryReattachPlayer`, `attachClientToWorld` или немедленного
+  attachment в `spawnTeleportedPlayerWithRuntime` общий helper отделяет список,
+  устанавливает поле в `nil`, освобождает source lock и синхронно вызывает
+  completion под surface lock. Внешний вызов ждёт conversion и commit.
+  Следующий source call не переиспользует отделённый backing array.
+- Два приватных callback подключены после создания всех shard. Существующий
+  manager уже ждёт возврата каждого Update; изменения game loop, worker pool,
+  inbox или новая ECS-система не нужны. Нет переноса работы на следующий tick
+  или одновременного удержания блокировок двух слоёв.
+- Горутины входа и переноса регистрируются в существующем `Game.wg` до запуска;
+  `Done` выполняется после полного вызова, включая terminal completion.
+  Shutdown останавливает сеть, затем ждёт этот `wg` до остановки shard и chunk
+  workers. Сеть завершает все auth handlers, а отслеживаемый game loop ждёт
+  команды shard, запускающие переносы: новых `Add` после обнуления счётчика нет.
+  Отдельный admission mutex или Hearth shutdown barrier не добавляется.
+- Login устанавливает known state до входа, индекс не эвиктит записи.
+  Поэтому Unknown при actual death — Fatal. NoHome становится Terminal без
+  Hearth SQL, загрузки чанка и обращения к catalog; повтор Terminal — no-op.
+  CurrentHome читается заново на surface, включая последнюю допущенную стройку.
+- `PinPersistenceBlocking` и `WaitPreloaded` с timeout 5 секунд готовят home
+  chunk; pin остаётся до возврата сохранения. Проверяются текущая composite
+  identity, layer/type, chunk tombstones, raw deleted_at и live destruction/
+  reservation state. Live конвертируется через `TransformObjectToDefInPlace`,
+  raw — через общий `rawCampfire`/`UpsertRawObject`. ID, позиция и live handle
+  сохраняются; unloaded дом не активируется.
+- После runtime conversion и `ApplyTerminal` один `SaveTerminal`/`WithTx`
+  с timeout 5 секунд сохраняет optional campfire через существующий
+  `UpsertObject` и удаляет точную связь через `RemoveCharacterHearth`.
+  Допустимы 0 или 1 удалённая строка. Missing/deleted/changed/quarantined
+  source передаётся как nil object: удаляется только связь, объект не создаётся
+  заново. Нет нового SQL/schema, watermark или вызова `WithPersistence`
+  под shard lock. Ошибки подготовки/сериализации/SQL/commit — Fatal.
+- Corpse, character и inventory persistence сохраняют прежний порядок и
+  независимость. Общей atomic death-транзакции, удержания тела и FX нет.
+  REST deletion и saved lookup для offline Unknown owner остаются задачей 4.2;
+  общая 4.3a открыта до этой части. Защита `/destroy` отложена пользователем.
+- Регрессионные тесты покрывают live/raw/unloaded/no-home, latest association,
+  повтор, deleted/tombstone и Fatal, реальную смерть при update/подключении,
+  cross-layer ожидание и ownership отделённого списка. PostgreSQL tests
+  проверяют atomic conversion/removal, rollback, deleted_at и restart.
+  Фактические результаты запуска этого этапа записываются в `tasks.md`.
 
 ### Проверки для будущей реализации
 

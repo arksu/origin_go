@@ -470,3 +470,7 @@ func (l *hearthBuildLookup) GetCharacterHearthOwners(context.Context, repository
 func (s *hearthBuildSaver) SaveOrphans(context.Context, []*repository.Object) error {
 	panic("unexpected SaveOrphans")
 }
+
+func (*hearthBuildSaver) SaveTerminal(context.Context, types.EntityID, hearth.ObjectKey, *repository.Object) error {
+	panic("unexpected terminal save")
+}

@@ -70,7 +70,11 @@ func (s *PlayerTransferService) RequestTransfer(req PlayerTransferRequest) error
 	g.transferInFlight[req.PlayerID] = struct{}{}
 	g.transferMu.Unlock()
 
-	go s.executeTransfer(req)
+	g.wg.Add(1)
+	go func() {
+		defer g.wg.Done()
+		s.executeTransfer(req)
+	}()
 	return nil
 }
 

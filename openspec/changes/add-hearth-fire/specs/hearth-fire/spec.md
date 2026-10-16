@@ -112,16 +112,18 @@ Completing a new hearth SHALL atomically change runtime ownership and convert th
 
 ### Requirement: Permanent death clears the active home
 
-Permanent death SHALL immediately mark the owner PendingTerminal and make its runtime home ineligible; the surface owner SHALL then revoke the association. Conversion to an ordinary unlit campfire SHALL run through the surface world's owning execution path, including death on another layer; an unloaded hearth SHALL be reconciled before visibility. Hearth reads and saving SHALL run synchronously when the surface owner executes the conversion, each with a five-second context, without nesting shard locks or adding an atomic corpse-and-character guarantee. Hearth inheritance and descendant spawning SHALL NOT be added.
+Permanent death SHALL immediately mark the owner PendingTerminal and make its runtime home ineligible; the surface owner SHALL then revoke the latest association. After releasing the source shard lock, the current update or attachment call SHALL synchronously finish conversion to an ordinary unlit campfire and its save under the surface lock before returning, including death on another layer. Work SHALL NOT carry over to another tick. An unloaded hearth SHALL be converted without activation. Hearth loading and saving SHALL use five-second contexts, without nesting shard locks or adding an atomic corpse-and-character guarantee. Hearth inheritance and descendant spawning SHALL NOT be added.
 
 #### Scenario: Death before acquiring a home
 - **WHEN** a character permanently dies without an active hearth
 - **THEN** ordinary terminal character cleanup SHALL proceed without a Hearth conversion or creation
+- **AND** known NoHome SHALL become Terminal without Hearth database or chunk access
 
 #### Scenario: Death underground
 - **WHEN** a character permanently dies underground while its hearth is on the surface
 - **THEN** no active runtime home SHALL remain for that character immediately
 - **AND** the surface world's execution path SHALL convert the old hearth into an ordinary unlit campfire
+- **AND** the source call and its shard-manager update SHALL wait for Hearth cleanup and commit
 
 #### Scenario: Death with an unloaded hearth
 - **WHEN** permanent death occurs while the hearth is not loaded by any player
@@ -131,7 +133,21 @@ Permanent death SHALL immediately mark the owner PendingTerminal and make its ru
 #### Scenario: Persistence is delayed during death
 - **WHEN** a character permanently dies while database saving is delayed
 - **THEN** terminal notification SHALL make runtime ownership ineligible before the owning Hearth save
-- **AND** the owning call MAY wait for its synchronous database operation without retaining a living character or adding a corpse persistence barrier
+- **AND** the current update or attachment call SHALL wait for the synchronous Hearth operation without retaining a living character or adding a corpse persistence barrier
+
+#### Scenario: Shutdown overlaps attachment death
+- **WHEN** server shutdown begins while an admitted login or transfer is completing permanent death
+- **THEN** shutdown SHALL wait for the full owning call, including Hearth loading and saving, before stopping any shard's chunk manager
+- **AND** a valid unloaded home SHALL remain loadable until terminal completion finishes
+
+#### Scenario: The saved home no longer has a convertible object
+- **WHEN** the current home source is missing, deleted, changed or quarantined
+- **THEN** cleanup SHALL remove only the matching association and SHALL NOT recreate or overwrite that object
+
+#### Scenario: Death arrives after an admitted construction completion
+- **WHEN** an already admitted final construction cycle replaces the home after PendingTerminal is marked
+- **THEN** surface completion SHALL revoke and convert the latest home
+- **AND** repeated terminal completion SHALL perform no additional save
 
 ### Requirement: Terminal deletion cannot orphan an active hearth
 
@@ -394,7 +410,7 @@ Normal world-entry spawning SHALL try the saved player position, the current exa
 
 ### Requirement: Runtime transitions precede persistence
 
-Construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world before serialization and SQL. Its call SHALL return success only after the construction transaction commits. Known runtime state SHALL remain authoritative over loaded data, including known absence and terminal state. All Hearth reads and saves, including future death/deletion cleanup, SHALL execute synchronously under the owning surface shard lock with a five-second context per read or transaction. Cross-layer terminal notification SHALL dispatch intent without nesting shard locks. Hearth SHALL NOT add a save queue, SQL retry, asynchronous acknowledgment, durable operation journal or runtime rollback.
+Construction SHALL apply its object and ownership changes as one synchronous operation in the owning surface world before serialization and SQL. Its call SHALL return success only after the construction transaction commits. Known runtime state SHALL remain authoritative over loaded data, including known absence and terminal state. All Hearth reads and saves, including death and future REST cleanup, SHALL execute synchronously under the owning surface shard lock with a five-second context per read or transaction. Cross-layer death cleanup SHALL complete after source unlock and before the current call returns without nesting shard locks. Hearth SHALL NOT add a save queue, SQL retry, asynchronous acknowledgment, durable operation journal or runtime rollback.
 
 #### Scenario: Database is slow after construction
 - **WHEN** a character completes a Hearth while its save is delayed

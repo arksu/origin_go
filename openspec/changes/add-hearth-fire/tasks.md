@@ -17,8 +17,9 @@ The construction stage now assigns its actual finisher in runtime and replaces
 their previous home, using synchronous ownership lookup, old-chunk preparation
 and construction saving.
 Its verification is tracked below. Task 3.5 delivers synchronous chunk hydration and
-orphan normalization; its completed verification is recorded below. Terminal persistence,
-broader restart repair, death cleanup and the remaining gameplay remain separate stages.
+orphan normalization; its completed verification is recorded below. Task 4.1 and the
+death portion of 4.3a add synchronous permanent-death cleanup. REST deletion,
+broader restart repair and the remaining gameplay remain separate stages.
 This replaces the former durable-lifecycle plan:
 construction changes runtime first, then returns success after its database commit.
 Other independent saves may lose recent progress on a crash. Runtime
@@ -30,7 +31,7 @@ The database is assumed available. Actual database errors, including an unknown
 commit outcome, must stop the entire server without SQL retries or database-error
 recovery. Expected absent rows remain ordinary outcomes; invalid results are fatal.
 All Hearth SQL runs synchronously under the surface shard lock with five-second
-read/transaction contexts. Future terminal work must follow the same policy;
+read/transaction contexts. Future REST cleanup must follow the same policy;
 it does not describe an already-installed universal database-error handler.
 
 ## 1. Ownership Data and Runtime State
@@ -54,7 +55,7 @@ Regeneration produced no changes. Tests use real catalogs and stubbed
 ownership-read, chunk-worker and persistence boundaries. PostgreSQL fixture
 tests were skipped because `ORIGIN_OBJECT_HEALTH_TEST_DSN` was unset; this stage
 does not claim a live-database integration check. This earlier result predates the task 3.5 index simplification and activation work;
-current checks are reported separately. Terminal persistence and later stages remain unchecked.
+current checks are reported separately.
 
 ## 3. World Rules and Ownership Restoration
 
@@ -76,17 +77,42 @@ coverage also verifies activation is a no-op when the catalog has no Hearth
 definition. `BenchmarkIgnoreObjectCollision`: 98.16 ns/op, 0 B/op, 0 allocs/op;
 this is a local microbenchmark, not a 30,000-CCU result. Strict OpenSpec validation
 and `git diff --check` passed. Independent code review returned Approve with no
-outstanding Critical or Important findings. Future terminal/release tasks remain
-unchecked.
+outstanding Critical or Important findings. Death cleanup is tracked below;
+REST cleanup and release tasks remain unchecked.
 
 ## 4. Death, Deletion, and Ordinary Persistence
 
-- [ ] 4.1 Register a narrow permanent-death hook that immediately marks PendingTerminal and dispatches association revocation/conversion to the existing surface owning path without nesting shard locks. Retain only coalesced conversion intent when an inbox is full; test queue pressure, death with/without a home, cross-layer death, unloaded homes, and completion/death runtime ordering without retaining bodies or changing corpse save/decomposition rules.
+- [x] 4.1 Register a narrow permanent-death notification that immediately marks PendingTerminal. At the end of the current Update or attachment call, detach that call's character IDs, release the source lock and synchronously complete cleanup under the surface lock before returning. Reuse live/raw conversion and chunk pins; test no-home, cross-layer and unloaded deaths, latest ownership, repeated notification and blocked-return ordering. Track login/transfer owning calls with the existing Game wait group and drain it after network shutdown, before stopping any shard. No next-tick queue, new ECS system, nested shard locks or corpse persistence changes. Gameplay/admin removal protection in 3.1 is explicitly deferred.
 - [ ] 4.2 Connect REST character deletion to the same feature cleanup while preserving account-scoped authorization, deletion responses, and current online/offline policy. Test absent/already-deleted characters and no-home cleanup; emit no character-position death effect or fabricated corpse for REST deletion.
 - [x] 4.3 Save completed construction synchronously after final-branch processing, transforms and index replacement. Serialize final objects, then use one existing WithTx with a five-second context for the new Hearth, previous campfire if present, character_hearth and durable ID watermark. Return success after commit; retain object/chunk dirty flags and the raw-chunk pin until saving returns. Serialization/SQL/commit errors and an association affected-row count other than one are fatal; no version acknowledgment, runtime rollback, SQL retry or save queue.
-- [ ] 4.3a Implement future death/deletion persistence synchronously on the owning surface path, with five-second read/transaction contexts. Dispatch cross-layer intent without nesting shard locks, then save conversion and matching association cleanup through existing SQL and I/O ordering. Test pending notifications, identity checks and fatal failures; add no asynchronous saver, dirty revisions, retry or acknowledgment.
+- [ ] 4.3a Complete synchronous death/deletion persistence on the owning surface path.
+  - [x] Death: save an optional campfire conversion and exact matching association removal in one five-second transaction through existing SQL. Retain the chunk pin until saving returns; deleted, missing, changed or quarantined objects receive association-only cleanup. Known NoHome requires no Hearth I/O; Unknown at actual death is fatal. Test atomicity, rollback, restart, identity checks, idempotence and fatal failures.
+  - [ ] REST deletion: reuse synchronous cleanup after authorized deletion and add saved-association resolution for offline Unknown owners. No asynchronous saver, dirty revisions, retry or acknowledgment.
 - [ ] 4.4 Add broader restart repair and ordinary shutdown coverage around task 3.5 normalization. Verify independent checkpoints restore a usable single-home runtime without journal replay; execute any Hearth repair SQL synchronously on the owner path and retain existing shutdown/final-save ordering without a feature dirty flush or new global barrier.
 - [ ] 4.5 Document accepted crash-loss boundaries, synchronous SQL ordering, restart normalization, whole-game-loop blocking and process-lifetime index growth. Verify database/invalid-result errors stop the server and work is limited to current candidates, without save-lag queue metrics, per-player labels or a world scan.
+
+Task 4.1 and the death portion of 4.3a verification: focused runtime/writer tests
+and PostgreSQL integration tests passed, including real death through Update,
+login attachment, reattachment and immediate teleport attachment. Controlled
+save delays verified source unlock, synchronous outer-call/manager waiting and
+detached-batch ownership across overlapping calls. Live/raw/unloaded conversion,
+NoHome without I/O, latest admitted construction, idempotence, deleted sources,
+fatal failures, transaction rollback and restart behavior are covered.
+The shutdown regression enters through real auth/transfer launches, holds
+terminal completion before the surface lock and again before saving, and verifies
+that an unloaded home remains loadable and cleanup commits before shutdown.
+It passes with PostgreSQL and under the race detector; temporary source overlays
+fail with the original shutdown ordering, either launch registration removed,
+or only the wait moved back after shard shutdown. No production test seam or new
+shutdown barrier was added.
+`GOCACHE=/private/tmp/origin-go-build-cache make test` passed with
+`ORIGIN_OBJECT_HEALTH_TEST_DSN` pointing to an isolated temporary PostgreSQL;
+protobuf/sqlc regeneration produced no diff. Full
+`go test -race ./internal/game/hearth ./internal/game -count=1` also passed with
+that fixture. Strict OpenSpec validation and `git diff --check` passed.
+Independent code review returned Approve with no findings and independently
+passed focused race tests with PostgreSQL. REST cleanup remains unimplemented,
+so the parent 4.3a and task 4.2 remain unchecked.
 
 ## 5. Return, Interruption, and Normal Login
 
@@ -107,7 +133,7 @@ unchecked.
 
 ## 7. Integration and Release
 
-- [ ] 7.1 Run make test and PostgreSQL Hearth integration coverage using the existing fixture. Verify regeneration, schema uniqueness, synchronous construction and activation transactions, future synchronous terminal persistence, and restart repair; report an unavailable fixture rather than claiming skipped database tests passed.
+- [ ] 7.1 Run make test and PostgreSQL Hearth integration coverage using the existing fixture. Verify regeneration, schema uniqueness, synchronous construction, activation and death transactions, future REST cleanup, and restart repair; report an unavailable fixture rather than claiming skipped database tests passed.
 - [ ] 7.2 Run client type-check, lint, and relevant action/execution/knockout/movement/map-click/chunk/minimap/FX/asset suites; review lint's automatic diff and verify unrelated presentation/protocol regressions remain covered.
 - [ ] 7.3 Exercise no-home entry, first construction/replacement, underground carry return, post-KO return, owner death/deletion, and blocked-position login recovery end to end. Verify runtime invariants during synchronous I/O, full-server stop on actual database/invalid-result errors, accepted loop delay and process-lifetime memory growth, and bounded collider/metadata/FX work without tick scans or N+1 SQL.
 - [ ] 7.4 Run strict OpenSpec validation and `git diff --check`, review generated/assets/protocol diffs, and deliver clean-database deployment notes. Verify no automatic entry, backfill, database clearing, new dependency, or unrelated balance/`life_death_factor` change, and explicitly distinguish accepted crash rollback from runtime corruption.

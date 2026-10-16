@@ -51,6 +51,10 @@ func (*hearthActivationSaver) SaveConstruction(context.Context, types.EntityID, 
 	panic("activation must not save construction")
 }
 
+func (*hearthActivationSaver) SaveTerminal(context.Context, types.EntityID, hearth.ObjectKey, *repository.Object) error {
+	panic("unexpected terminal save")
+}
+
 func (s *hearthActivationSaver) SaveOrphans(_ context.Context, objects []*repository.Object) error {
 	s.calls++
 	if s.onSave != nil {
