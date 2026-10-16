@@ -1,8 +1,30 @@
 # Tree gathering sound sources
 
 Selected on 2026-10-16. These are the standard sounds for every tree using the
-corresponding action: `take_branch` and `pick_catkin` share A1; `take_bark` uses B2.
+corresponding action: `take_branch` and `pick_catkin` share the G1/G2 pool;
+`take_bark` retains the existing B2 recording.
 The existing action-animation markers play one local cue at phase `0.5` per cycle.
+The existing sound player cycles through the two gathering samples in order.
+
+## Generated gathering pool
+
+G1 (Soft pluck) and G2 (Dry branch break) are original local procedural synthesis.
+No external recordings, services or generative audio models were used. The user
+approved their repeated audition previews; runtime files are the corresponding
+single one-shots, copied byte-for-byte without the preview's second hit or pause.
+
+| File | Duration | SHA-256 |
+| --- | --- | --- |
+| `g1.wav` | 0.48 s | `8661b4ea55af4d9e751c04ff54d1e20ad6a1dc8dd1939323eed24c734ac05aef` |
+| `g2.wav` | 0.56 s | `4511ac89a211124af74b08c984c70489316efb83b03190db47029f508b49a813` |
+
+The generation recipe, fixed seeds, source WAVs and measurement manifest are
+preserved in `art_source/audio/gather_candidates/2026-10-16-synth-v1/`.
+Format: mono PCM16 at 44,100 Hz. Event energy is matched at -30 dBFS for one event
+per second. Playback level and distance attenuation remain authored in
+`data/sounds/actions.json`.
+
+## Recorded sounds
 
 Both recordings are offered under
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
@@ -10,6 +32,8 @@ The files are unchanged public high-quality MP3 previews; the original WAV/AIFF
 downloads require a Freesound login. No trimming, normalization or pitch edits
 were applied. Playback level and distance attenuation live in
 `data/sounds/actions.json`.
+`branch_snap.mp3` is retained as the previous A1 selection and is no longer in
+the active pool. `bark_scrape.mp3` remains the active B2 bark sound.
 
 | File | Recording | Download | SHA-256 |
 | --- | --- | --- | --- |

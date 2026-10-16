@@ -271,7 +271,7 @@ test('explicit action, context, craft and build requests release before sending'
 test('Render sends stop before primary, secondary, long-press, placement and hand drop', context => {
   setActivePinia(createPinia())
   const f = inputFixture(context)
-  const render = Object.create(Render.prototype) as Record<string, any>
+  const render = Object.create(Render.prototype) as Record<string, unknown> & { setupInputController(): void }
   render.canvas = f.canvas
   render.inputController = f.input
   render.keyboardMovement = f.keyboard

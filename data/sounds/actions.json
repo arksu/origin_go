@@ -6,7 +6,8 @@
       "mode": "local",
       "loudness": 160,
       "files": [
-        "sound/gather/branch_snap.mp3"
+        "sound/gather/g1.wav",
+        "sound/gather/g2.wav"
       ],
       "volume": 0.45,
       "priority": 5,

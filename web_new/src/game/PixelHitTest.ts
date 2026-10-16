@@ -263,6 +263,7 @@ export function hitTestSpritePixel(
   screenX: number,
   screenY: number,
   // Bitmask is binary alpha (> 0), threshold is kept for API compatibility.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Preserve the existing threshold argument without changing binary-mask behavior.
   _alphaThreshold: number,
 ): boolean {
   const bounds = sprite.getBounds()

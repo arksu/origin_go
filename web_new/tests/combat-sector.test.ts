@@ -213,7 +213,7 @@ test('world reset hides the sector and renderer destruction releases its resourc
     liftGhostController: { cancel: noop, destroy: noop },
     chatBalloonManager: lifecycle, nicknameManager: lifecycle, damageNumberManager: lifecycle,
     objectManager: lifecycle, chunkManager: lifecycle,
-    debugOverlay: { destroy: noop }, app: { ticker: { stop: noop }, destroy: noop },
+    debugOverlay: { destroy: noop }, app: { renderer: { off: noop }, ticker: { stop: noop }, destroy: noop },
   })
   const origin = { x: 100, y: 200 }
   f.preview.show(origin, 0, sector, 1, 1000)

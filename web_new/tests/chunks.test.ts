@@ -231,7 +231,12 @@ test('minimap reads only accepted terrain and rejected packets cannot revive evi
 // Exercise the real bridge and loop with only unrelated graphics/UI work stubbed.
 // The chunk manager, movement controller, handlers and lifecycle methods stay real.
 function renderBridgeFixture(t: TestContext, manager: ChunkManager) {
+  setActivePinia(createPinia())
+  const store = useGameStore()
+  store.setConnectionState('connected')
+  store.setPlayerEnterWorld(42, 'Player', 1)
   const noop = () => {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Stub parameters preserve the argument types inspected by mocks.
   const minimap = { render: (_frame: MinimapFrame) => {}, clear: noop, destroy: noop, setZoom: (_zoom: number) => {} }
   const objectManager = {
     updateObjectPosition: noop, setPlayerEntityId: noop, update: noop,
@@ -252,7 +257,7 @@ function renderBridgeFixture(t: TestContext, manager: ChunkManager) {
     t.mock.method(render as unknown as Record<typeof method, () => void>, method, noop)
   }
   moveController.reset()
-  t.after(() => { moveController.reset(); cameraController.reset() })
+  t.after(() => { moveController.reset(); cameraController.reset(); store.reset() })
   return { render, frameLoop, minimap, objectManager }
 }
 
@@ -319,7 +324,6 @@ test('facade controls the attached minimap and stale detach cannot release a new
 test('every world entry clears the minimap before same-coordinate surface and mine-layer streams', async t => {
   const manager = await managerFixture(t)
   const { render, frameLoop, minimap } = renderBridgeFixture(t, manager)
-  setActivePinia(createPinia())
   const facadeState = gameFacade as unknown as { render: Render | null }
   const originalRender = facadeState.render
   facadeState.render = render

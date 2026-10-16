@@ -10,7 +10,7 @@ The database is assumed available. Any database read, write or commit error must
 
 Relevant existing mechanisms:
 
-- One shard/World owns each layer. Hearths and their construction sites are surface-only, so both sides of a replacement belong to one surface World.
+- One shard/World owns each layer. Hearth construction can complete only on the surface, so both sides of a successful replacement belong to one surface World. Ordinary build-site admission does not filter the layer.
 - Build cycles already process materials and stamina under the owning shard lock. `TransformObjectToDefInPlace` updates a live object's type, collider, behaviors, appearance and dirty intent without changing its ID or position.
 - Chunk persistence has bounded workers, I/O gates and raw cache. `PinPersistenceBlocking` waits for the existing I/O mutex, increments its pin count and releases the mutex before loading; `core.Chunk.UpsertRawObject` marks the replacement row dirty for ordinary saving.
 - `finalizeCompletedBuild` now propagates the transform result while keeping ordinary link/window cleanup before transformation.
@@ -104,7 +104,7 @@ Use a small registered terminal notification at actual death and the existing RE
 
 Reuse the prepared definition and existing indestructibility; add the Hearth behavior without burner/fuel runtime or lift capability. Protect removal through a small registered object policy before gameplay/admin deletion, without adding a Hearth branch to the deletion core.
 
-Use identical 1x1 bounds for terrain, collision and structural overlap. Placement checks every overlapped surface dry-land tile, excluding water, shallow water, swamp and bog. Movement/spawn/return filtering allows only the owner through this object; other players, animals and unrelated obstacles retain ordinary collisions. Construction and put-down separately reject footprint overlap, including owner attempts, at admission and final application. Reuse spatial queries and bounded buffers.
+Use identical 1x1 bounds for terrain, collision and structural overlap. Hearth's recipe uses `disallowedTiles: [1, 3, 50, 53, 56, 255]` with existing `BuildService.validateTileRules` over the result footprint at build admission; other known tile IDs remain allowed. There is no additional final terrain recheck, layer field or placement behavior policy. Existing Hearth completion remains surface-only. Movement/spawn/return filtering allows only the owner through this object; other players, animals and unrelated obstacles retain ordinary collisions. Future construction and put-down structural checks separately reject footprint overlap, including owner attempts, at admission and final application. Reuse spatial queries and bounded buffers.
 
 Owner-only passage is implemented through one optional callback bound to the surface `hearth.Runtime`, shared by collision candidate filtering and authoritative player spawn. `IgnoreObjectCollision(actorID, targetHandle)` validates the live target's current Hearth behavior and composite identity against `Index.Owner`; unknown or ineligible ownership gives no exemption. No behavior capability/context/dispatcher is needed for this single rule. Existing terrain, phantom and other-object checks remain authoritative. Animals receive no exemption; task 3.2 is complete. Structural placement rules remain future work.
 

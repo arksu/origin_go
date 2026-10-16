@@ -29,7 +29,7 @@ test('authorization immediately sends existing Ping and a new connection resets 
     onclose = null
     onerror = null
     packets: proto.ClientMessage[] = []
-    constructor(_url: string) { sockets.push(this) }
+    constructor() { sockets.push(this) }
     send(bytes: Uint8Array) { this.packets.push(proto.ClientMessage.decode(bytes)) }
     close() { this.readyState = 3 }
     receive(packet: proto.IServerMessage) {

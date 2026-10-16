@@ -213,6 +213,7 @@ export class ChunkManager {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Keep the event identity in the chunk lifecycle API; the stream guard validates it before dispatch.
   unloadChunk(x: number, y: number, _identity: ChunkEventIdentity): void {
     const key = `${x},${y}`
     this.activeChunks.delete(key)

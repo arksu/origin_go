@@ -113,7 +113,6 @@ export class Chunk {
       hasBordersOrCorners.push(new Array(chunkSize).fill(false))
     }
 
-    let subchunksCreated = 0
     const subchunkTimes: number[] = []
     for (let cx = 0; cx < DIVIDER; cx++) {
       for (let cy = 0; cy < DIVIDER; cy++) {
@@ -124,7 +123,6 @@ export class Chunk {
           this.subchunks.push(result.container)
           this.subchunkDataList.push(result)
           this.container.addChild(result.container)
-          subchunksCreated++
         }
       }
     }
@@ -135,8 +133,6 @@ export class Chunk {
 
     if (totalTime > 10 || maxSubchunk > 5) {
       //console.warn(`[Chunk ${this.key}] SLOW: total=${totalTime.toFixed(2)}ms, avg subchunk=${avgSubchunk.toFixed(2)}ms, max subchunk=${maxSubchunk.toFixed(2)}ms`)
-    } else {
-      // console.log(`[Chunk ${this.key}] Built ${subchunksCreated} subchunks in ${totalTime.toFixed(2)}ms`)
     }
 
     this.lastBuildResult = { hasBordersOrCorners }
@@ -174,11 +170,7 @@ export class Chunk {
     const elements = subchunkSize * subchunkSize * 2
     const vertexBuffer = new VertexBuffer(elements)
 
-    let tilesProcessed = 0
-    let texturesFound = 0
-    let texturesMissing = 0
     let firstMissingTexture = ''
-    let borderTime = 0
 
     for (let tx = 0; tx < subchunkSize; tx++) {
       for (let ty = 0; ty < subchunkSize; ty++) {
@@ -188,14 +180,12 @@ export class Chunk {
 
         const tileType = tiles[idx]
         if (tileType === undefined) continue
-        tilesProcessed++
 
         const globalX = this.x * chunkSize + x
         const globalY = this.y * chunkSize + y
 
         const textureName = getGroundTextureName(tileType, globalX, globalY)
         if (!textureName) {
-          texturesMissing++
           if (!firstMissingTexture) firstMissingTexture = `tileType=${tileType} has no texture name`
           continue
         }
@@ -208,7 +198,6 @@ export class Chunk {
           }
         }
         if (!texture) {
-          texturesMissing++
           if (!firstMissingTexture) firstMissingTexture = textureName
           if (!warnedMissingTextureFrames.has(textureName)) {
             warnedMissingTextureFrames.add(textureName)
@@ -216,14 +205,12 @@ export class Chunk {
           }
           continue
         }
-        texturesFound++
 
         const sx = tx * TILE_WIDTH_HALF - ty * TILE_WIDTH_HALF
         const sy = tx * TILE_HEIGHT_HALF + ty * TILE_HEIGHT_HALF
 
         vertexBuffer.addVertex(sx, sy, TEXTURE_WIDTH, TEXTURE_HEIGHT, texture)
 
-        const borderStart = performance.now()
         const hadBordersOrCorners = this.addBordersAndCorners(
           vertexBuffer,
           spritesheet,
@@ -236,17 +223,11 @@ export class Chunk {
           sy,
           neighborTiles,
         )
-        borderTime += performance.now() - borderStart
 
         if (hadBordersOrCorners) {
           hasBordersOrCorners[x]![y] = true
         }
       }
-    }
-
-    if (cx === 0 && cy === 0) {
-      // const totalTime = performance.now() - start
-      // console.log(`[Chunk ${this.key}] Subchunk(0,0) tiles=${tilesProcessed}, found=${texturesFound}, missing=${texturesMissing}, time=${totalTime.toFixed(2)}ms, borders=${borderTime.toFixed(2)}ms`)
     }
 
     if (vertexBuffer.count === 0) {

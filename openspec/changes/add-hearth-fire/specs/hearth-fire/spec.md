@@ -141,17 +141,25 @@ Any accepted terminal deletion of a character SHALL revoke its active runtime ho
 - **THEN** runtime ownership SHALL be revoked and the hearth SHALL be converted through its owning world
 - **AND** the change SHALL use asynchronous saving without fabricating a character death event
 
-### Requirement: Hearth placement uses the entire surface footprint
+### Requirement: Hearth placement uses standard build tile rules
 
-A hearth SHALL occupy one tile by one tile with identical construction and collision bounds. Every overlapped tile SHALL be passable surface dry land. Underground layers, water including shallow water, swamp, and bog SHALL be forbidden. No additional soil-type prerequisite SHALL be imposed.
+A hearth SHALL occupy one tile by one tile with identical construction and collision bounds. At placement admission, standard build validation SHALL check the full result collider footprint against recipe `disallowedTiles: [1, 3, 50, 53, 56, 255]` (DeepWater, ShallowWater, Swamp1/2/3 and Void). Other known tile IDs SHALL remain eligible. Ordinary build timing SHALL be preserved without an additional final terrain recheck or placement layer policy; existing Hearth construction completion SHALL remain surface-only.
 
-#### Scenario: Ordinary dry terrain
-- **WHEN** the full footprint occupies passable surface dry land
-- **THEN** terrain eligibility SHALL allow placement regardless of dry-land soil type
+#### Scenario: Allowed terrain
+- **WHEN** the full footprint occupies loaded known tiles outside the recipe's forbidden list
+- **THEN** tile eligibility SHALL allow placement
 
 #### Scenario: Footprint touches forbidden terrain
-- **WHEN** any part of the footprint overlaps water, shallow water, swamp, bog, or an underground layer
-- **THEN** placement SHALL be rejected even if the anchor itself is valid
+- **WHEN** any part of the footprint overlaps a forbidden tile
+- **THEN** placement admission SHALL be rejected even if the anchor itself is valid
+
+#### Scenario: Footprint touches unavailable chunk data
+- **WHEN** any tile required for the footprint is unavailable
+- **THEN** placement admission SHALL be rejected without creating pending placement or phantom
+
+#### Scenario: Exact footprint boundary
+- **WHEN** the collider's maximum edge exactly touches an adjacent tile boundary
+- **THEN** that adjacent tile SHALL NOT be included in the footprint check
 
 ### Requirement: Only the owner passes through the hearth
 

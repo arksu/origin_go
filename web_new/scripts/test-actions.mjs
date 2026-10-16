@@ -24,6 +24,7 @@ export { useActionsPanel } from './src/composables/useActionsPanel.ts';
 export { useActionPresentation } from './src/composables/useActionPresentation.ts';
 export { requestGameAction } from './src/game/hud/actionCatalog.ts';
 export { useGameStore } from './src/stores/gameStore.ts';
+export { setWorldParams } from './tests/serverConstantsFixture.ts';
 export { proto } from './src/network/proto/packets.js';
 export { actionCursorCss } from './src/game/cursorCatalog.ts';
 export { cancelActiveActionOnEscape } from './src/game/hud/actionState.ts';
@@ -98,7 +99,7 @@ function descendants(node, type) {
 
 let gameStore
 try {
-  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, useActionPresentation, requestGameAction, useGameStore, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager, ActionHourGlass, gameFacade } = await import(pathToFileURL(outfile).href)
+  const { ActionsMenu, ActionIcon, useActionCooldownStore, timeSync, Hotbar, useHotbarAssignments, useActionsPanel, useActionPresentation, requestGameAction, useGameStore, setWorldParams, proto, actionCursorCss, cancelActiveActionOnEscape, CursorManager, ActionHourGlass, gameFacade } = await import(pathToFileURL(outfile).href)
   setActivePinia(createPinia())
   gameStore = useGameStore()
 
@@ -317,8 +318,9 @@ try {
   hotbarApp.unmount()
 
   // Both UI entry points immediately request the directional action through the shared activation path.
+  setWorldParams(12, 100)
   gameStore.setConnectionState('connected')
-  gameStore.setPlayerEnterWorld(1, 'Player', 12, 100, 7)
+  gameStore.setPlayerEnterWorld(1, 'Player', 7)
   const directionalActions = [
     { id: 'axe_sweep', label: 'Axe sweep', menuIcon: '/assets/cursor/atk.png', targetKind: 'direction', sector: { range: 18, sectorAngle: Math.PI / 2 } },
     { id: 'axe_strike', label: 'Axe strike', menuIcon: '/assets/cursor/atk.png', targetKind: 'direction', sector: { range: 18, sectorAngle: Math.PI / 2 } },
@@ -369,7 +371,7 @@ try {
     await nextTick()
     assert.equal(descendants(progressRoot, 'div').length, 0)
     assert.equal(frames.size, 0)
-    gameStore.setPlayerEnterWorld(1, 'Player', 12, 100, 7)
+    gameStore.setPlayerEnterWorld(1, 'Player', 7)
     gameStore.setActionProgress(20, 5)
     await nextTick()
     const indicator = () => descendants(progressRoot, 'div').find(node => node.props.class === 'window-container')

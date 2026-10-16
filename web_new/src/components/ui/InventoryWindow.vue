@@ -38,7 +38,7 @@ const onClose = () => {
   emit('close')
 }
 
-const onSlotClick = (x: number, y: number, _ox: number, _oy: number) => {
+const onSlotClick = (x: number, y: number) => {
   if (!inventoryRef.value) return
   const hand = gameStore.handState
   if (hand?.item) {

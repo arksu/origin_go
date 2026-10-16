@@ -8,7 +8,11 @@ export default [
   },
   {
     name: 'app/files-to-ignore',
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'],
+    ignores: [
+      '**/dist/**', '**/node_modules/**', '**/coverage/**',
+      'src/network/proto/packets.{js,d.ts}',
+      'public/assets/game/decoders/basis/basis_transcoder.js',
+    ],
   },
   ...pluginVue.configs['flat/essential'],
   ...vueTsEslintConfig(),

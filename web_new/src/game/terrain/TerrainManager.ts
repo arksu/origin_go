@@ -274,10 +274,6 @@ export class TerrainManager {
   private updateSubchunkVisibility(): void {
     if (!this.renderer) return
 
-    let hiddenCount = 0
-    let visibleCount = 0
-    let shownCount = 0
-
     // Calculate visibility rect around camera
     const halfVisibleWidth = TERRAIN_VISIBLE_WIDTH_SUBCHUNKS / 2
     const halfVisibleHeight = TERRAIN_VISIBLE_HEIGHT_SUBCHUNKS / 2
@@ -343,22 +339,14 @@ export class TerrainManager {
           // Rebuild immediately for show (high priority)
           this.buildSubchunk(task)
           subchunk.state = TerrainSubchunkState.BuiltVisible
-          shownCount++
         }
       } else if (!inHideRect && isVisible) {
         // Hide - outside hide rect
         //console.log(`[TerrainManager] Hiding subchunk ${subchunkKey}, subchunkGlobal=(${subchunkGlobalX},${subchunkGlobalY}), camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
         this.renderer.hideSubchunk(subchunkKey)
         subchunk.state = TerrainSubchunkState.BuiltHidden
-        hiddenCount++
-      } else if (isVisible) {
-        visibleCount++
       }
     }
-
-    // if (hiddenCount > 0 || shownCount > 0) {
-    // console.log(`[TerrainManager] Visibility: visible=${visibleCount}, shown=${shownCount}, hidden=${hiddenCount}, camera=(${this.cameraSubchunkX.toFixed(2)},${this.cameraSubchunkY.toFixed(2)})`)
-    // }
   }
 
 

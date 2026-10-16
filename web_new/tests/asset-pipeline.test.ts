@@ -70,6 +70,7 @@ function makeRig(name: string) {
 
 test('optional action catalog validates shared definitions, ordered variants and references', async () => {
   const bindings = parseActionAnimationFile(JSON.parse(await readFile(`${ASSET_TEST_ROOT}/../tests/fixtures/action_animations/bindings.json`, 'utf8')), 'fixture')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- The client projection deliberately omits the source-only field.
   const projection = { v: 1, bindings: bindings.map(({ source: _source, ...presentation }) => presentation) }
   const base = compatibleClipManifests()
   base.id = bindings[0]!.actor
