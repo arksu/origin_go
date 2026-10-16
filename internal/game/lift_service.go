@@ -6,6 +6,7 @@ import (
 
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -13,6 +14,7 @@ import (
 	"origin/internal/eventbus"
 	gameworld "origin/internal/game/world"
 	netproto "origin/internal/network/proto"
+	"origin/internal/objectdefs"
 	"origin/internal/playerstate"
 	"origin/internal/types"
 
@@ -20,8 +22,11 @@ import (
 )
 
 const (
-	liftPendingTTL          = 15 * time.Second
-	liftPointPhantomHalfLen = 1.0
+	liftPendingTTL             = 15 * time.Second
+	liftPointPhantomHalfLen    = 1.0
+	liftPlacementMaxCandidates = 4096
+	liftPlacementMaxCells      = 1024
+	liftPlacementMaxVisits     = 4096
 )
 
 type liftRuntimeSender interface {
@@ -30,15 +35,16 @@ type liftRuntimeSender interface {
 }
 
 type LiftService struct {
-	world            *ecs.World
-	chunkManager     *gameworld.ChunkManager
-	eventBus         *eventbus.EventBus
-	alerts           liftRuntimeSender
-	logger           *zap.Logger
-	actionCompletion func(*ecs.World, types.EntityID, types.Handle, uint64, bool, string)
-	actionCanCommit  func(*ecs.World, types.EntityID, types.Handle, uint64) bool
-	chunkActive      func(types.ChunkCoord) bool
-	relocateObject   func(*ecs.World, types.Handle, gameworld.RelocateWorldObjectImmediateOptions, float64, float64) bool
+	world               *ecs.World
+	chunkManager        *gameworld.ChunkManager
+	eventBus            *eventbus.EventBus
+	alerts              liftRuntimeSender
+	logger              *zap.Logger
+	actionCompletion    func(*ecs.World, types.EntityID, types.Handle, uint64, bool, string)
+	actionCanCommit     func(*ecs.World, types.EntityID, types.Handle, uint64) bool
+	chunkActive         func(types.ChunkCoord) bool
+	relocateObject      func(*ecs.World, types.Handle, gameworld.RelocateWorldObjectImmediateOptions, float64, float64) bool
+	placementCandidates [liftPlacementMaxCandidates]types.Handle
 }
 
 func (s *LiftService) SetActionCompletion(callback func(*ecs.World, types.EntityID, types.Handle, uint64, bool, string)) {
@@ -172,6 +178,9 @@ func (s *LiftService) StartPutDownAt(
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
 	if _, hasMovement := ecs.GetComponent[components.Movement](w, playerHandle); !hasMovement {
+		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
+	}
+	if !s.placementAllowedAt(w, playerHandle, objectHandle, lifted, targetX, targetY) {
 		return ActionResult{Outcome: ActionRejected, Reason: "LIFT_PUTDOWN_INVALID"}
 	}
 
@@ -427,7 +436,7 @@ func (s *LiftService) finalizeLiftPutDown(
 	dropX, dropY := liftPutDownTargetPosition(pending)
 
 	coord := types.WorldToChunkCoord(int(dropX), int(dropY), _const.ChunkSize, _const.CoordPerTile)
-	if !s.chunkActive(coord) {
+	if !s.chunkActive(coord) || !s.placementAllowedAt(w, playerHandle, objectHandle, liftedState, dropX, dropY) {
 		s.clearPendingLiftTransitionState(w, playerID, playerHandle, false)
 		s.sendWarning(playerID, "LIFT_PUTDOWN_INVALID")
 		return false
@@ -462,6 +471,48 @@ func (s *LiftService) finalizeLiftPutDown(
 
 func liftPutDownTargetPosition(pending components.PendingLiftTransition) (float64, float64) {
 	return pending.TargetX, pending.TargetY
+}
+
+func (s *LiftService) placementAllowedAt(w *ecs.World, playerHandle, objectHandle types.Handle, lifted components.LiftedObjectState, x, y float64) bool {
+	collider := components.Collider{HalfWidth: liftPointPhantomHalfLen, HalfHeight: liftPointPhantomHalfLen, Layer: 1, Mask: 1}
+	if lifted.HadCollider {
+		collider = lifted.OriginalCollider
+	} else if defs := objectdefs.Global(); defs != nil {
+		if info, ok := ecs.GetComponent[components.EntityInfo](w, objectHandle); ok {
+			if def, found := defs.GetByID(int(info.TypeID)); found && def.LiftConfig != nil && def.LiftConfig.PlacementSize != nil {
+				collider.HalfWidth, collider.HalfHeight = def.LiftConfig.PlacementSize.W/2, def.LiftConfig.PlacementSize.H/2
+			}
+		}
+	}
+	bounds := core.ColliderBounds{MinX: x - collider.HalfWidth, MinY: y - collider.HalfHeight, MaxX: x + collider.HalfWidth, MaxY: y + collider.HalfHeight}
+	if !(bounds.MinX < bounds.MaxX && bounds.MinY < bounds.MaxY) {
+		return false
+	}
+	spatial, ok := ecs.TryGetResource[*core.WorldColliderSpatial](w)
+	if !ok || *spatial == nil || (*spatial).Index == nil {
+		return false
+	}
+	candidates, err := (*spatial).Index.QueryBoundedInto(bounds, s.placementCandidates[:0], core.ColliderQueryBudget{
+		MaxCells: liftPlacementMaxCells, MaxVisits: liftPlacementMaxVisits,
+	})
+	if err != nil {
+		return false
+	}
+	for _, handle := range candidates {
+		if handle == playerHandle || handle == objectHandle || !w.Alive(handle) {
+			continue
+		}
+		target, hasCollider := ecs.GetComponent[components.Collider](w, handle)
+		if !hasCollider || target.Phantom != nil || (collider.Layer&target.Mask == 0 && target.Layer&collider.Mask == 0) {
+			continue
+		}
+		position, hasPosition := ecs.GetComponent[components.Transform](w, handle)
+		if hasPosition && bounds.MinX < position.X+target.HalfWidth && bounds.MaxX > position.X-target.HalfWidth &&
+			bounds.MinY < position.Y+target.HalfHeight && bounds.MaxY > position.Y-target.HalfHeight {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *LiftService) startCarryingObject(

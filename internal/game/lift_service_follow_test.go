@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"origin/internal/config"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -32,6 +33,7 @@ func newLiftFollowTest(t *testing.T) (*ecs.World, *LiftService, *eventbus.EventB
 	}}
 	manager := gameworld.NewChunkManager(cfg, nil, w, nil, 0, 1, nil, nil, bus, zap.NewNop())
 	t.Cleanup(manager.Stop)
+	manager.SetPositionObserver(core.AttachColliderSpatial(w))
 	service := NewLiftService(w, manager, bus, nil, nil)
 	return w, service, bus, received
 }
@@ -152,7 +154,7 @@ func TestLiftServiceSamePositionPickupAndDropsStillPublishImmediately(t *testing
 	player, object := spawnFollowPair(w, 1, 11, 20, 20)
 	ecs.RemoveComponent[components.LiftCarryState](w, player)
 	ecs.RemoveComponent[components.LiftedObjectState](w, object)
-	ecs.AddComponent(w, object, components.Collider{})
+	ecs.AddComponent(w, object, components.Collider{HalfWidth: 5, HalfHeight: 5, Layer: 1, Mask: 1})
 	service.chunkActive = func(types.ChunkCoord) bool { return true }
 	if result := service.StartLift(w, 1, player, 11, object); result.Outcome != ActionSucceeded {
 		t.Fatalf("pickup failed: %+v", result)

@@ -126,6 +126,16 @@ Examples in this folder:
 - `trees.jsonc` for `tree` / `take` patterns
 - `drying.jsonc` for `container` + `drying` (currently no live processes)
 
+### Lift
+
+`lift` accepts optional `priority` (default 100) and
+`placementSize: { "w": 24, "h": 6 }`. Both dimensions must be finite and positive,
+in world coordinates (one tile is 12 units). Manual put-down uses the object's
+original collider when present, otherwise `placementSize`, falling back to 2×2
+when neither exists. These bounds are checked against ordinary loaded colliders
+with compatible collision masks; they do not add movement collision or change the approach phantom.
+The catalog gives `log_x` a 24×6 footprint and `log_y` a 6×24 footprint.
+
 ### Drying
 
 `drying` requires `container` and exactly one 2×2 root grid (key 0). Its

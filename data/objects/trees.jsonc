@@ -10,7 +10,7 @@
       "hp": 1,
       "resource": "trees/log_y",
       "behaviors": {
-        "lift": {}
+        "lift": { "placementSize": { "w": 6, "h": 24 } }
       }
     },
     {
@@ -21,7 +21,7 @@
       "hp": 1,
       "resource": "trees/log_x",
       "behaviors": {
-        "lift": {}
+        "lift": { "placementSize": { "w": 24, "h": 6 } }
       }
     },
     {

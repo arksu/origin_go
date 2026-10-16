@@ -26,6 +26,7 @@ type ObjectDef struct {
 	TakeConfig                     *TakeBehaviorConfig   `json:"-"`
 	BurnerConfig                   *BurnerBehaviorConfig `json:"-"`
 	DryingConfig                   *DryingBehaviorConfig `json:"-"`
+	LiftConfig                     *LiftBehaviorConfig   `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.
@@ -113,6 +114,19 @@ type TakeBehaviorConfig struct {
 	Priority int          `json:"priority,omitempty"`
 	Items    []TakeConfig `json:"items"`
 }
+
+// LiftBehaviorConfig is resolved and immutable after definition loading.
+type LiftBehaviorConfig struct {
+	Priority      int                `json:"priority,omitempty"`
+	PlacementSize *LiftPlacementSize `json:"placementSize,omitempty"`
+}
+
+// LiftPlacementSize describes placement bounds without adding a collider.
+type LiftPlacementSize struct {
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
 type BurnerBehaviorConfig struct {
 	Priority                                int
 	FuelAbilities                           []string

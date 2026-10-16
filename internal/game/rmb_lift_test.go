@@ -85,7 +85,7 @@ func TestRMBLiftPlacementUsesCoordinatesBeforeTarget(t *testing.T) {
 			} else if kind != "stale" {
 				test.world.Spawn(9, func(w *ecs.World, h types.Handle) {
 					ecs.AddComponent(w, h, components.Transform{X: 900, Y: 900})
-					ecs.AddComponent(w, h, components.Collider{})
+					ecs.AddComponent(w, h, components.Collider{HalfWidth: 5, HalfHeight: 5, Layer: 1, Mask: 1})
 					if kind == "dropped" {
 						ecs.AddComponent(w, h, components.DroppedItem{})
 					}

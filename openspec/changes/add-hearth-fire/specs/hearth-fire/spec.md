@@ -179,7 +179,9 @@ The owner SHALL be able to walk through their active hearth. Other players and a
 
 ### Requirement: The hearth footprint stays reserved against placement
 
-No construction or put-down of a carried world object SHALL overlap an active hearth's footprint, even when performed by the owner. Validation SHALL consider the complete placed footprint rather than only its anchor. Movement passage permission SHALL NOT grant structural placement permission.
+No construction or manual put-down of a carried world object SHALL overlap an active hearth's footprint, even when performed by the owner. Validation SHALL consider the complete placed footprint rather than only its anchor. Movement passage permission SHALL NOT grant structural placement permission. Manual put-down SHALL validate at request and final application, before restoring the object's runtime. Forced drops during logout, death and failed transfers are outside the manual put-down requirement.
+
+For manual put-down on every layer, the server SHALL use the saved original collider and its masks, or the optional `lift.placementSize` for colliderless objects (log_x 24x6, log_y 6x24 world units; default 2x2 with Layer/Mask 1). Dimensions SHALL be finite and positive when configured. These dimensions SHALL NOT change colliderless pickup, movement collision or approach phantom behavior. A generic bounded spatial query SHALL check loaded live colliders with ordinary movement mask compatibility, excluding the carrier, carried object and candidates with a phantom. Exact edge/corner contact SHALL be allowed. Hearth behavior, ownership and owner passage permission SHALL NOT affect this check. The existing active-anchor-chunk check SHALL remain; neighboring chunk readiness and deferred activation SHALL NOT add placement restrictions. A missing spatial index or bounded spatial query failure SHALL reject placement without loading data.
 
 #### Scenario: Owner builds across their home
 - **WHEN** the owner attempts a construction whose footprint intersects the hearth
@@ -188,6 +190,26 @@ No construction or put-down of a carried world object SHALL overlap an active he
 #### Scenario: Carried object crosses the boundary
 - **WHEN** a player attempts to put down a chest or log whose anchor is outside but footprint intersects the hearth
 - **THEN** placement SHALL be rejected and the valid carry state SHALL remain intact
+
+#### Scenario: Hearth appears during approach
+- **WHEN** manual put-down was accepted but a Hearth overlaps the target before final application
+- **THEN** the current attempt SHALL fail, clearing its pending/phantom while preserving the carried object's runtime and carry state
+
+#### Scenario: Exact contact
+- **WHEN** the placed footprint only touches an obstacle's boundary
+- **THEN** that contact SHALL NOT reject manual placement
+
+#### Scenario: Hearth conversion retains ordinary collision
+- **WHEN** the hearth becomes an ordinary campfire before manual placement finishes
+- **THEN** its current collider SHALL still block intersecting placement according to ordinary masks
+
+#### Scenario: Loaded collider extends across a chunk boundary
+- **WHEN** a loaded obstacle's anchor lies in another chunk but its collider overlaps the placed footprint
+- **THEN** manual placement SHALL be rejected according to ordinary masks
+
+#### Scenario: Stale put-down completion
+- **WHEN** an older put-down attempt completes after a newer generation has started
+- **THEN** the newer attempt and its phantom SHALL remain unchanged
 
 ### Requirement: Active hearths are eternal and protected
 

@@ -6,6 +6,7 @@ import (
 
 	"origin/internal/actiondefs"
 	constt "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -19,10 +20,11 @@ import (
 func newNoColliderLiftActionTest(t *testing.T) (*ecs.World, types.Handle, types.Handle, *LiftService, *ActionService, *testActionSender) {
 	t.Helper()
 	world := ecs.NewWorldForTesting()
+	core.AttachColliderSpatial(world)
 	player := world.Spawn(1, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Transform{X: 0, Y: 0})
 		ecs.AddComponent(w, h, components.Movement{})
-		ecs.AddComponent(w, h, components.Collider{})
+		ecs.AddComponent(w, h, components.Collider{HalfWidth: 5, HalfHeight: 5, Layer: constt.PlayerLayer, Mask: constt.PlayerMask})
 	})
 	target := world.Spawn(3, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Transform{X: 1000, Y: 1000})
