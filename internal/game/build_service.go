@@ -63,18 +63,19 @@ type buildPendingContextStarter interface {
 }
 
 type BuildService struct {
-	world            *ecs.World
-	chunkManager     *gameworld.ChunkManager
-	objectInvInit    gameworld.ObjectInventoryInitializer
-	despawnPersist   gameworld.ObjectDespawnPersistence
-	eventBus         *eventbus.EventBus
-	idAllocator      contracts.EntityIDAllocator
-	behaviorRegistry contracts.BehaviorRegistry
-	visionForcer     contracts.VisionUpdateForcer
-	alerts           buildRuntimeSender
-	inventory        buildInventoryService
-	pendingStarter   buildPendingContextStarter
-	logger           *zap.Logger
+	world               *ecs.World
+	chunkManager        *gameworld.ChunkManager
+	objectInvInit       gameworld.ObjectInventoryInitializer
+	despawnPersist      gameworld.ObjectDespawnPersistence
+	eventBus            *eventbus.EventBus
+	idAllocator         contracts.EntityIDAllocator
+	behaviorRegistry    contracts.BehaviorRegistry
+	visionForcer        contracts.VisionUpdateForcer
+	alerts              buildRuntimeSender
+	inventory           buildInventoryService
+	pendingStarter      buildPendingContextStarter
+	logger              *zap.Logger
+	placementCandidates [placementMaxCandidates]types.Handle
 }
 
 var _ systems.BuildCommandService = (*BuildService)(nil)
@@ -166,6 +167,11 @@ func (s *BuildService) HandleStartBuild(
 		s.sendWarning(playerID, "BUILD_PENDING_FAILED")
 		return
 	}
+	resultCollider := objectdefs.BuildColliderComponent(resultColliderDef)
+	if !colliderPlacementAllowed(w, resultCollider, float64(targetX), float64(targetY), playerHandle, types.InvalidHandle, s.placementCandidates[:0]) {
+		s.sendWarning(playerID, "BUILD_PENDING_FAILED")
+		return
+	}
 
 	// Replace any previous pending build placement.
 	s.CancelPendingBuildPlacement(w, playerID, playerHandle)
@@ -174,7 +180,6 @@ func (s *BuildService) HandleStartBuild(
 	// LinkSystem would also break it after movement, but doing it here avoids stale linked state until then.
 	s.breakActiveLink(w, playerID)
 
-	resultCollider := objectdefs.BuildColliderComponent(resultColliderDef)
 	ecs.WithComponent(w, playerHandle, func(col *components.Collider) {
 		col.Phantom = &components.PhantomCollider{
 			WorldX:     float64(targetX),
@@ -422,7 +427,7 @@ func (s *BuildService) FinalizePendingBuildPlacement(
 	// Guard against stale callback arguments if pending was replaced earlier in the tick.
 	if currentPending.TargetX != pending.TargetX || currentPending.TargetY != pending.TargetY ||
 		currentPending.BuildKey != pending.BuildKey {
-		pending = currentPending
+		return
 	}
 
 	buildDef, resultDef, buildSiteDef, resultColliderDef, resolveErr := s.resolveBuildDefs(pending.BuildKey)
@@ -451,9 +456,15 @@ func (s *BuildService) FinalizePendingBuildPlacement(
 		return
 	}
 
-	newID := s.idAllocator.GetFreeID()
 	targetXf := float64(pending.TargetX)
 	targetYf := float64(pending.TargetY)
+	resultCollider := objectdefs.BuildColliderComponent(resultColliderDef)
+	if !colliderPlacementAllowed(w, resultCollider, targetXf, targetYf, playerHandle, types.InvalidHandle, s.placementCandidates[:0]) {
+		s.CancelPendingBuildPlacement(w, playerID, playerHandle)
+		s.sendWarning(playerID, "BUILD_PENDING_FAILED")
+		return
+	}
+	newID := s.idAllocator.GetFreeID()
 	handle := gameworld.SpawnEntityFromDef(w, buildSiteDef, gameworld.DefSpawnParams{
 		EntityID:         newID,
 		X:                targetXf,
@@ -476,7 +487,7 @@ func (s *BuildService) FinalizePendingBuildPlacement(
 		PrevChunkX:    chunkX,
 		PrevChunkY:    chunkY,
 	})
-	ecs.AddComponent(w, handle, objectdefs.BuildColliderComponent(resultColliderDef))
+	ecs.AddComponent(w, handle, resultCollider)
 
 	ecs.WithComponent(w, handle, func(internalState *components.ObjectInternalState) {
 		components.SetBehaviorState(internalState, buildBehaviorStateKey, buildStateFromDef(buildDef, resultDef, pending.TargetX, pending.TargetY))

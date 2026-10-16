@@ -181,11 +181,27 @@ The owner SHALL be able to walk through their active hearth. Other players and a
 
 No construction or manual put-down of a carried world object SHALL overlap an active hearth's footprint, even when performed by the owner. Validation SHALL consider the complete placed footprint rather than only its anchor. Movement passage permission SHALL NOT grant structural placement permission. Manual put-down SHALL validate at request and final application, before restoring the object's runtime. Forced drops during logout, death and failed transfers are outside the manual put-down requirement.
 
-For manual put-down on every layer, the server SHALL use the saved original collider and its masks, or the optional `lift.placementSize` for colliderless objects (log_x 24x6, log_y 6x24 world units; default 2x2 with Layer/Mask 1). Dimensions SHALL be finite and positive when configured. These dimensions SHALL NOT change colliderless pickup, movement collision or approach phantom behavior. A generic bounded spatial query SHALL check loaded live colliders with ordinary movement mask compatibility, excluding the carrier, carried object and candidates with a phantom. Exact edge/corner contact SHALL be allowed. Hearth behavior, ownership and owner passage permission SHALL NOT affect this check. The existing active-anchor-chunk check SHALL remain; neighboring chunk readiness and deferred activation SHALL NOT add placement restrictions. A missing spatial index or bounded spatial query failure SHALL reject placement without loading data.
+For manual put-down on every layer, the server SHALL use the saved original collider and its masks, or the optional `lift.placementSize` for colliderless objects (log_x 24x6, log_y 6x24 world units; default 2x2 with Layer/Mask 1). Dimensions SHALL be finite and positive when configured. These dimensions SHALL NOT change colliderless pickup, movement collision or approach phantom behavior.
 
-#### Scenario: Owner builds across their home
-- **WHEN** the owner attempts a construction whose footprint intersects the hearth
-- **THEN** placement SHALL be rejected
+Construction placement on every layer SHALL use the collider and masks of the current result definition at request admission before creating new pending/phantom state, and again at final placement before allocating an ID or creating the site. The final check SHALL resolve the current result definition again. Collision refusal SHALL use `BUILD_PENDING_FAILED`. A final refusal SHALL clear the current pending/phantom through ordinary cancellation without creating a site or allocating an ID. Standard recipe terrain rules SHALL remain admission-only.
+
+Both paths SHALL reuse one generic bounded spatial query and overlap check over loaded live `Transform`/`Collider` with ordinary movement mask compatibility, excluding the actor, carried object when applicable, and candidates with a phantom. Each service SHALL reuse its own 4096-handle buffer with 1024-cell and 4096-visit query budgets. Exact edge/corner contact SHALL be allowed. Hearth behavior, ownership and owner passage permission SHALL NOT affect this check; ordinary objects and construction sites SHALL also block intersecting placement. Existing chunk admission checks SHALL remain; neighboring chunk readiness and deferred activation SHALL NOT add placement restrictions. A missing spatial index or bounded spatial query failure SHALL reject placement without loading data.
+
+#### Scenario: Construction crosses a hearth boundary
+- **WHEN** the owner or another player requests construction whose anchor is outside the hearth but whose result footprint intersects it
+- **THEN** placement SHALL be rejected without creating new pending/phantom state
+
+#### Scenario: Ordinary site blocks construction
+- **WHEN** construction's result footprint intersects an existing ordinary construction site's compatible collider
+- **THEN** placement SHALL be rejected regardless of Hearth ownership
+
+#### Scenario: Construction preview becomes obstructed
+- **WHEN** a construction request was accepted but a compatible collider overlaps the result footprint before final placement
+- **THEN** final placement SHALL fail with `BUILD_PENDING_FAILED`, clearing the current pending/phantom without allocating an ID or creating a site
+
+#### Scenario: Replaced construction preview receives an older completion
+- **WHEN** finalization receives an earlier preview's coordinates or build key that differ from the current pending placement
+- **THEN** it SHALL return without creating a site or applying collision refusal and cleanup to the newer preview
 
 #### Scenario: Carried object crosses the boundary
 - **WHEN** a player attempts to put down a chest or log whose anchor is outside but footprint intersects the hearth
@@ -197,7 +213,7 @@ For manual put-down on every layer, the server SHALL use the saved original coll
 
 #### Scenario: Exact contact
 - **WHEN** the placed footprint only touches an obstacle's boundary
-- **THEN** that contact SHALL NOT reject manual placement
+- **THEN** that contact SHALL NOT reject construction or manual placement
 
 #### Scenario: Hearth conversion retains ordinary collision
 - **WHEN** the hearth becomes an ordinary campfire before manual placement finishes
@@ -205,7 +221,7 @@ For manual put-down on every layer, the server SHALL use the saved original coll
 
 #### Scenario: Loaded collider extends across a chunk boundary
 - **WHEN** a loaded obstacle's anchor lies in another chunk but its collider overlaps the placed footprint
-- **THEN** manual placement SHALL be rejected according to ordinary masks
+- **THEN** construction or manual placement SHALL be rejected according to ordinary masks
 
 #### Scenario: Stale put-down completion
 - **WHEN** an older put-down attempt completes after a newer generation has started

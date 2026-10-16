@@ -6,7 +6,6 @@ import (
 
 	"origin/internal/characterattrs"
 	_const "origin/internal/const"
-	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
@@ -22,11 +21,8 @@ import (
 )
 
 const (
-	liftPendingTTL             = 15 * time.Second
-	liftPointPhantomHalfLen    = 1.0
-	liftPlacementMaxCandidates = 4096
-	liftPlacementMaxCells      = 1024
-	liftPlacementMaxVisits     = 4096
+	liftPendingTTL          = 15 * time.Second
+	liftPointPhantomHalfLen = 1.0
 )
 
 type liftRuntimeSender interface {
@@ -44,7 +40,7 @@ type LiftService struct {
 	actionCanCommit     func(*ecs.World, types.EntityID, types.Handle, uint64) bool
 	chunkActive         func(types.ChunkCoord) bool
 	relocateObject      func(*ecs.World, types.Handle, gameworld.RelocateWorldObjectImmediateOptions, float64, float64) bool
-	placementCandidates [liftPlacementMaxCandidates]types.Handle
+	placementCandidates [placementMaxCandidates]types.Handle
 }
 
 func (s *LiftService) SetActionCompletion(callback func(*ecs.World, types.EntityID, types.Handle, uint64, bool, string)) {
@@ -484,35 +480,7 @@ func (s *LiftService) placementAllowedAt(w *ecs.World, playerHandle, objectHandl
 			}
 		}
 	}
-	bounds := core.ColliderBounds{MinX: x - collider.HalfWidth, MinY: y - collider.HalfHeight, MaxX: x + collider.HalfWidth, MaxY: y + collider.HalfHeight}
-	if !(bounds.MinX < bounds.MaxX && bounds.MinY < bounds.MaxY) {
-		return false
-	}
-	spatial, ok := ecs.TryGetResource[*core.WorldColliderSpatial](w)
-	if !ok || *spatial == nil || (*spatial).Index == nil {
-		return false
-	}
-	candidates, err := (*spatial).Index.QueryBoundedInto(bounds, s.placementCandidates[:0], core.ColliderQueryBudget{
-		MaxCells: liftPlacementMaxCells, MaxVisits: liftPlacementMaxVisits,
-	})
-	if err != nil {
-		return false
-	}
-	for _, handle := range candidates {
-		if handle == playerHandle || handle == objectHandle || !w.Alive(handle) {
-			continue
-		}
-		target, hasCollider := ecs.GetComponent[components.Collider](w, handle)
-		if !hasCollider || target.Phantom != nil || (collider.Layer&target.Mask == 0 && target.Layer&collider.Mask == 0) {
-			continue
-		}
-		position, hasPosition := ecs.GetComponent[components.Transform](w, handle)
-		if hasPosition && bounds.MinX < position.X+target.HalfWidth && bounds.MaxX > position.X-target.HalfWidth &&
-			bounds.MinY < position.Y+target.HalfHeight && bounds.MaxY > position.Y-target.HalfHeight {
-			return false
-		}
-	}
-	return true
+	return colliderPlacementAllowed(w, collider, x, y, playerHandle, objectHandle, s.placementCandidates[:0])
 }
 
 func (s *LiftService) startCarryingObject(

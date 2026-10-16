@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	constt "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	netproto "origin/internal/network/proto"
@@ -28,9 +29,10 @@ func newHearthBuildPlacementFixture(t *testing.T) *hearthBuildPlacementFixture {
 	require.Equal(t, float64(constt.CoordPerTile), result.Components.Collider.H)
 	shard, _ := newPlayerSpawnTestShard(t, 4)
 	shard.chunkManager.GetChunk(types.ChunkCoord{}).SetState(types.ChunkStateActive)
+	shard.chunkManager.SetPositionObserver(core.AttachColliderSpatial(shard.world))
 	player := shard.world.Spawn(1, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.Movement{State: constt.StateIdle})
-		ecs.AddComponent(w, h, components.Collider{})
+		ecs.AddComponent(w, h, components.Collider{HalfWidth: 5, HalfHeight: 5, Layer: constt.PlayerLayer, Mask: constt.PlayerMask})
 	})
 	sender := &lockedBuildSender{}
 	return &hearthBuildPlacementFixture{

@@ -268,14 +268,14 @@ func TestLiftPlacementRejectsIncompleteSpatialQueries(t *testing.T) {
 	t.Run("visit budget", func(t *testing.T) {
 		f := newLiftPlacementFixture(0)
 		collider := components.Collider{HalfWidth: 1, HalfHeight: 1}
-		for i := 0; i < liftPlacementMaxVisits; i++ {
+		for i := 0; i < placementMaxVisits; i++ {
 			spawnLiftPlacementCollider(f.w, types.EntityID(i+100), 100, 100, collider)
 		}
 		require.True(t, f.allowed(100, 100), "a complete query with only inactive colliders is allowed")
-		require.Equal(t, liftPlacementMaxVisits, f.spatial.Index.LastQueryStats().Visits)
-		spawnLiftPlacementCollider(f.w, types.EntityID(liftPlacementMaxVisits+100), 100, 100, collider)
+		require.Equal(t, placementMaxVisits, f.spatial.Index.LastQueryStats().Visits)
+		spawnLiftPlacementCollider(f.w, types.EntityID(placementMaxVisits+100), 100, 100, collider)
 		require.False(t, f.allowed(100, 100), "an incomplete query must not allow placement based on partial results")
-		require.Equal(t, liftPlacementMaxVisits, f.spatial.Index.LastQueryStats().Visits)
+		require.Equal(t, placementMaxVisits, f.spatial.Index.LastQueryStats().Visits)
 	})
 	t.Run("cell budget", func(t *testing.T) {
 		f := newLiftPlacementFixture(0)
@@ -287,10 +287,10 @@ func TestLiftPlacementRejectsIncompleteSpatialQueries(t *testing.T) {
 		}
 		f.lifted.OriginalCollider.HalfWidth, f.lifted.OriginalCollider.HalfHeight = 520, 520
 		require.True(t, f.allowed(512, 512))
-		require.Equal(t, liftPlacementMaxCells, f.spatial.Index.LastQueryStats().Cells)
+		require.Equal(t, placementMaxCells, f.spatial.Index.LastQueryStats().Cells)
 		spawnLiftPlacementCollider(f.w, 1000, 528, 16, collider)
 		require.False(t, f.allowed(512, 512), "all colliders are inactive, but the query still must complete")
-		require.LessOrEqual(t, f.spatial.Index.LastQueryStats().Cells, liftPlacementMaxCells)
+		require.LessOrEqual(t, f.spatial.Index.LastQueryStats().Cells, placementMaxCells)
 	})
 }
 
