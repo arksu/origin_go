@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	_const "origin/internal/const"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence"
@@ -22,7 +21,7 @@ func spotStageGenerator(db *persistence.Postgres, options MapgenOptions) *MapGen
 	return &MapGenerator{
 		db: db, logger: zap.NewNop(), chunkSize: _const.ChunkSize,
 		coordPerTile: _const.CoordPerTile, region: 7, seed: options.Seed,
-		options: options, perlin: perlin, objectDefs: objectdefs.NewRegistry(nil),
+		options: options, perlin: perlin, objectDefs: objectdefs.NewRegistry(mapgenTreeDefinitions()),
 		noiseFields: NewNoiseFieldsWithTerrainScale(perlin, _const.CoordPerTile, options.TerrainScale),
 	}
 }
@@ -71,6 +70,7 @@ func TestMapgenOverviewSkipsAllSpotPersistence(t *testing.T) {
 	options.PNG.Export, options.PNG.OverviewOnly = true, true
 	options.SpotsConfigPath = filepath.Join(t.TempDir(), "missing.yaml")
 	generator := spotStageGenerator(nil, options)
+	generator.objectDefs = nil
 	require.NoError(t, generator.Generate(context.Background()))
 	_, err := os.Stat(filepath.Join(options.PNG.OutputDir, "overview.png"))
 	require.NoError(t, err)
@@ -79,6 +79,8 @@ func TestMapgenOverviewSkipsAllSpotPersistence(t *testing.T) {
 func TestMapgenSpotsStagePostgres(t *testing.T) {
 	db := testutil.NewPostgres(t, "ORIGIN_SPOTS_TEST_DSN", filepath.Join("..", "..", "migrations", "schema.sql"))
 	ctx := context.Background()
+	_, err := db.Pool().Exec(ctx, "CREATE TABLE object_region_7 PARTITION OF object FOR VALUES IN (7)")
+	require.NoError(t, err)
 	options := spotStageOptions(t)
 	spotConfig := validSpotsConfig()
 	for index := range spotConfig.Spots {
@@ -89,7 +91,7 @@ func TestMapgenSpotsStagePostgres(t *testing.T) {
 	options.SpotsConfigPath = filepath.Join(t.TempDir(), "spots.yaml")
 	require.NoError(t, os.WriteFile(options.SpotsConfigPath, content, 0o600))
 
-	// Existing data must survive bad runtime preflight, then be removed by reset.
+	// Existing data must survive bad config preflight, then be removed by reset.
 	_, err = db.Queries().UpsertChunk(ctx, repository.UpsertChunkParams{
 		Region: 7, X: 99, Y: 99, TilesData: []byte{tileGrass},
 	})
@@ -100,19 +102,16 @@ func TestMapgenSpotsStagePostgres(t *testing.T) {
 	require.NoError(t, err)
 	var oldID int64
 	require.NoError(t, db.Pool().QueryRow(ctx, "SELECT id FROM spot").Scan(&oldID))
-	for _, invalid := range []sql.NullInt64{{}, {Int64: -1, Valid: true}} {
-		require.NoError(t, db.Queries().UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
-			Name: _const.SERVER_RUNTIME_SECONDS_TOTAL, ValueLong: invalid,
-		}))
-		generator := spotStageGenerator(db, options)
-		require.Error(t, generator.Generate(ctx))
-		require.Nil(t, generator.terrain)
-		var count int
-		require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM chunk WHERE x = 99").Scan(&count))
-		require.Equal(t, 1, count)
-		require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM spot WHERE id = $1", oldID).Scan(&count))
-		require.Equal(t, 1, count)
-	}
+	invalidOptions := options
+	invalidOptions.SpotsConfigPath = filepath.Join(t.TempDir(), "missing.yaml")
+	generator := spotStageGenerator(db, invalidOptions)
+	require.Error(t, generator.Generate(ctx))
+	require.Nil(t, generator.terrain)
+	var count int
+	require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM chunk WHERE x = 99").Scan(&count))
+	require.Equal(t, 1, count)
+	require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM spot WHERE id = $1", oldID).Scan(&count))
+	require.Equal(t, 1, count)
 	require.NoError(t, db.SetGlobalVarLong(ctx, _const.SERVER_RUNTIME_SECONDS_TOTAL, 321))
 	var previousID = oldID
 	for _, workers := range []int{1, 3} {
@@ -128,7 +127,7 @@ func TestMapgenSpotsStagePostgres(t *testing.T) {
 		require.NoError(t, db.Pool().QueryRow(ctx, "SELECT min(id) FROM spot").Scan(&minimumID))
 		require.Greater(t, minimumID, previousID)
 		previousID = minimumID
-		require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM spot WHERE last_runtime_seconds = 321 AND state = '{}'::jsonb AND revision = 1").Scan(&count))
+		require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM spot WHERE last_runtime_seconds = 0 AND state = '{}'::jsonb AND revision = 1").Scan(&count))
 		require.Equal(t, spotTypeCount, count)
 		// The stage only completes after the entity-ID checkpoint is durable.
 		_, err := db.Queries().GetGlobalVar(ctx, "last_used_id")

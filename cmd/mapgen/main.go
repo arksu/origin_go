@@ -24,10 +24,7 @@ import (
 	"origin/internal/config"
 )
 
-const (
-	TreeDensity    = 0.05
-	BoulderDensity = 0.0012
-)
+const BoulderDensity = 0.0012
 
 func main() {
 	logger, _ := zap.NewDevelopment()
@@ -69,6 +66,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to load object definitions", zap.Error(err))
 	}
+	treePlacements, err := resolveTreePlacementRules(objRegistry, _const.CoordPerTile)
+	if err != nil {
+		logger.Fatal("invalid mapgen tree placement definitions", zap.Error(err))
+	}
 
 	ctx := context.Background()
 	db, err := persistence.NewPostgres(ctx, &cfg.Database, logger)
@@ -79,17 +80,18 @@ func main() {
 
 	perlin := NewPerlinNoise(opts.Seed)
 	gen := &MapGenerator{
-		cfg:          cfg,
-		db:           db,
-		logger:       logger,
-		chunkSize:    _const.ChunkSize,
-		coordPerTile: _const.CoordPerTile,
-		region:       cfg.Game.Region,
-		perlin:       perlin,
-		seed:         opts.Seed,
-		objectDefs:   objRegistry,
-		options:      opts,
-		noiseFields:  NewNoiseFieldsWithTerrainScale(perlin, _const.CoordPerTile, opts.TerrainScale),
+		cfg:            cfg,
+		db:             db,
+		logger:         logger,
+		chunkSize:      _const.ChunkSize,
+		coordPerTile:   _const.CoordPerTile,
+		region:         cfg.Game.Region,
+		perlin:         perlin,
+		seed:           opts.Seed,
+		objectDefs:     objRegistry,
+		treePlacements: treePlacements,
+		options:        opts,
+		noiseFields:    NewNoiseFieldsWithTerrainScale(perlin, _const.CoordPerTile, opts.TerrainScale),
 	}
 
 	logger.Info("starting map generation",
@@ -214,18 +216,19 @@ func runOverviewOnly(logger *zap.Logger, opts MapgenOptions) {
 }
 
 type MapGenerator struct {
-	cfg          *config.Config
-	db           *persistence.Postgres
-	logger       *zap.Logger
-	chunkSize    int
-	coordPerTile int
-	region       int
-	perlin       *PerlinNoise
-	noiseFields  *NoiseFields
-	seed         int64
-	objectDefs   *objectdefs.Registry
-	options      MapgenOptions
-	terrain      *TerrainPrecompute
+	cfg            *config.Config
+	db             *persistence.Postgres
+	logger         *zap.Logger
+	chunkSize      int
+	coordPerTile   int
+	region         int
+	perlin         *PerlinNoise
+	noiseFields    *NoiseFields
+	seed           int64
+	objectDefs     *objectdefs.Registry
+	treePlacements *resolvedTreePlacementRules
+	options        MapgenOptions
+	terrain        *TerrainPrecompute
 
 	lastEntityID atomic.Uint64
 	generated    atomic.Int32
@@ -237,9 +240,14 @@ type ChunkTask struct {
 
 func (g *MapGenerator) Generate(ctx context.Context) error {
 	var spotsConfig SpotsConfig
-	var spotRuntimeSeconds int64
 	if !g.options.PNG.OverviewOnly {
 		var err error
+		if g.treePlacements == nil {
+			g.treePlacements, err = resolveTreePlacementRules(g.objectDefs, g.coordPerTile)
+			if err != nil {
+				return err
+			}
+		}
 		var resolvedPath string
 		spotsConfig, resolvedPath, err = LoadSpotsConfig(g.options.SpotsConfigPath)
 		if err != nil {
@@ -252,12 +260,7 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 		if err := spotsConfig.ValidateForWorld(width, height); err != nil {
 			return fmt.Errorf("validate spots for world: %w", err)
 		}
-		spotRuntimeSeconds, err = loadSpotRuntimeSeconds(ctx, g.db.Queries())
-		if err != nil {
-			return err
-		}
-		g.logger.Info("loaded spot configuration", zap.String("path", resolvedPath),
-			zap.Int64("runtime_seconds", spotRuntimeSeconds))
+		g.logger.Info("loaded spot configuration", zap.String("path", resolvedPath))
 	}
 
 	g.logger.Info("precomputing terrain")
@@ -295,19 +298,26 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 		return nil
 	}
 
-	g.logger.Info("truncating existing data for region", zap.Int("region", g.region))
-	if err := g.db.Queries().DeleteSpotsByRegion(ctx, g.region); err != nil {
-		return fmt.Errorf("delete spots: %w", err)
-	}
-	if err := g.db.Queries().DeleteChunksByRegion(ctx, g.region); err != nil {
-		return fmt.Errorf("delete chunks: %w", err)
-	}
-	if err := g.db.Queries().HardDeleteObjectsByRegion(ctx, g.region); err != nil {
-		return fmt.Errorf("delete objects: %w", err)
+	g.logger.Info("truncating world data across all regions, preserving accounts and characters")
+	var lastEntityID int64
+	if err := g.db.WithTx(ctx, func(queries *repository.Queries) error {
+		if err := queries.TruncateWorld(ctx); err != nil {
+			return err
+		}
+		var err error
+		lastEntityID, err = queries.GetMaxCharacterID(ctx)
+		if err != nil {
+			return fmt.Errorf("read retained character IDs: %w", err)
+		}
+		return queries.UpsertGlobalVarLong(ctx, repository.UpsertGlobalVarLongParams{
+			Name: _const.LAST_USED_ID, ValueLong: sql.NullInt64{Int64: lastEntityID, Valid: true},
+		})
+	}); err != nil {
+		return fmt.Errorf("reset world: %w", err)
 	}
 
-	g.lastEntityID.Store(uint64(g.db.GetGlobalVarLong(ctx, "last_used_id")))
-	g.logger.Info("loaded last entity ID", zap.Uint64("last_entity_id", g.lastEntityID.Load()))
+	g.lastEntityID.Store(uint64(lastEntityID))
+	g.logger.Info("initialized last entity ID from retained characters", zap.Uint64("last_entity_id", g.lastEntityID.Load()))
 
 	totalChunks := g.options.ChunksX * g.options.ChunksY
 	g.generated.Store(0)
@@ -353,7 +363,7 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 	if err := g.db.WithTx(ctx, func(queries *repository.Queries) error {
 		var err error
 		spotStats, err = writeSpotBatches(ctx, terrain, spotsConfig, g.seed,
-			g.region, spotRuntimeSeconds, queries.InsertSpots)
+			g.region, 0, queries.InsertSpots)
 		return err
 	}); err != nil {
 		return fmt.Errorf("generate and save spots: %w", err)
@@ -396,6 +406,9 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 	if g.terrain == nil {
 		return fmt.Errorf("terrain precompute is not initialized")
 	}
+	if g.treePlacements == nil {
+		return fmt.Errorf("tree placement definitions are not initialized")
+	}
 
 	tilesPerChunk := g.chunkSize
 	tiles := make([]byte, tilesPerChunk*tilesPerChunk)
@@ -412,14 +425,15 @@ func (g *MapGenerator) generateChunkWithRNG(ctx context.Context, chunkX, chunkY 
 			tile := g.terrain.Tiles[tileIndex(globalTileX, globalTileY, g.terrain.WidthTiles)]
 			tiles[ty*g.chunkSize+tx] = tile
 
-			if treeDef := g.treeDefForTile(tile); treeDef != nil && rng.Float64() < TreeDensity {
+			if tree := g.treePlacementForTile(tile, rng); tree != nil {
 				entityID := g.lastEntityID.Add(1)
-				tileWorldX := int(worldOffsetX) + tx*g.coordPerTile + rng.Intn(g.coordPerTile)
-				tileWorldY := int(worldOffsetY) + ty*g.coordPerTile + rng.Intn(g.coordPerTile)
+				offsetX, offsetY := tree.offset(rng)
+				tileWorldX := int(worldOffsetX) + tx*g.coordPerTile + offsetX
+				tileWorldY := int(worldOffsetY) + ty*g.coordPerTile + offsetY
 
 				entities = append(entities, repository.UpsertObjectParams{
 					ID:         int64(entityID),
-					TypeID:     treeDef.DefID,
+					TypeID:     tree.def.DefID,
 					Region:     g.region,
 					X:          tileWorldX,
 					Y:          tileWorldY,
@@ -488,18 +502,6 @@ func (g *MapGenerator) boulderDefForTile(tile byte) *objectdefs.ObjectDef {
 	switch tile {
 	case types.TileGrass, types.TileSand:
 		def, _ := g.objectDefs.GetByKey("boulder")
-		return def
-	}
-	return nil
-}
-
-func (g *MapGenerator) treeDefForTile(tile byte) *objectdefs.ObjectDef {
-	switch tile {
-	case types.TileConiferousForest:
-		def, _ := g.objectDefs.GetByKey("tree_birch")
-		return def
-	case types.TileBroadleafForest:
-		def, _ := g.objectDefs.GetByKey("tree_birch")
 		return def
 	}
 	return nil

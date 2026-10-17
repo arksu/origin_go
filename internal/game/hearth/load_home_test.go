@@ -61,13 +61,15 @@ func TestLoadHomeHydratesBothIndexesAndCachesResult(t *testing.T) {
 		require.True(t, present)
 		require.InDelta(t, 5, time.Until(deadline).Seconds(), 0.5)
 		require.NoError(t, ctx.Err())
-		return repository.GetCharacterHearthRow{CharacterID: int64(character), ObjectRegion: want.Object.Region, ObjectID: int64(want.Object.ID), X: want.X, Y: want.Y, Layer: want.Layer, OwnerName: want.OwnerName}, nil
+		return repository.GetCharacterHearthRow{CharacterID: int64(character), ObjectRegion: want.Object.Region, ObjectID: int64(want.Object.ID), X: want.X, Y: want.Y, Layer: want.Layer, OwnerName: want.OwnerName,
+			OwnerDisconnectAt: sql.NullTime{Time: time.UnixMilli(123000), Valid: true}}, nil
 	})
 	runtime := NewRuntime(nil, nil, reader, nil, nil, nil, nil, nil)
 	require.NoError(t, runtime.LoadHome(character, hearthType))
 	loaded := runtime.Index.Snapshot(character)
 	require.Equal(t, CurrentHome, loaded.State)
 	require.Equal(t, want, loaded.Home)
+	require.Equal(t, int64(123000), loaded.LastDisconnectUnixMs)
 	owner, owned := runtime.Index.Owner(want.Object)
 	require.True(t, owned)
 	require.Equal(t, character, owner)

@@ -14,6 +14,45 @@ func testHome(id types.EntityID) Home {
 	return Home{Object: ObjectKey{Region: 1, ID: id}, X: -12, Y: 24, Layer: SurfaceLayer}
 }
 
+func TestIndexDisconnectSurvivesOwnershipChanges(t *testing.T) {
+	index := NewIndex()
+	index.RecordDisconnect(1, 1000)
+	require.Equal(t, Unknown, index.Snapshot(1).State)
+	require.NoError(t, index.LoadIfUnknown(1, nil))
+	for _, id := range []types.EntityID{10, 20} {
+		_, err := index.ReplaceHome(1, testHome(id))
+		require.NoError(t, err)
+		require.Equal(t, int64(1000), index.Snapshot(1).LastDisconnectUnixMs)
+	}
+	_, err := index.RevokeHome(1)
+	require.NoError(t, err)
+	require.Equal(t, int64(1000), index.Snapshot(1).LastDisconnectUnixMs)
+	index.RecordDisconnect(1, 999)
+	require.Equal(t, int64(1000), index.Snapshot(1).LastDisconnectUnixMs)
+	index.RecordDisconnect(0, 2000)
+	index.RecordDisconnect(2, 0)
+	require.Equal(t, Unknown, index.Snapshot(2).State)
+	require.Len(t, index.characters, 1)
+}
+
+func TestIndexConcurrentDisconnectUpdates(t *testing.T) {
+	index := NewIndex()
+	home := testHome(10)
+	require.NoError(t, index.LoadIfUnknown(1, &home))
+	var workers sync.WaitGroup
+	for n := range 8 {
+		workers.Go(func() {
+			for v := int64(1); v <= 100; v++ {
+				index.RecordDisconnect(1, int64(n)*100+v)
+				index.SnapshotByObject(home.Object)
+			}
+		})
+	}
+	workers.Wait()
+	require.Equal(t, int64(800), index.Snapshot(1).LastDisconnectUnixMs)
+	require.Equal(t, home, index.Snapshot(1).Home)
+}
+
 func hydrate(t *testing.T, index *Index, character types.EntityID, home *Home) Snapshot {
 	t.Helper()
 	require.NoError(t, index.LoadIfUnknown(character, home))

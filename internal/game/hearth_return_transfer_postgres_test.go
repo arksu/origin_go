@@ -172,6 +172,7 @@ func TestHearthReturnPostgresTransferSuccessAndRollback(t *testing.T) {
 				require.Equal(t, resultShard.layer, row.Layer)
 				require.Equal(t, wantX, row.X)
 				require.Equal(t, wantY, row.Y)
+				require.False(t, row.DisconnectAt.Valid, "transfer without a socket close is not a disconnect")
 				// Ordinary character saving persists the independently committed cooldown.
 				if !blocked {
 					saver := systems.NewCharacterSaver(f.db, 1, inventory.NewInventorySaver(f.game.logger), f.game.logger)

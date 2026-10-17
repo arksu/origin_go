@@ -268,7 +268,10 @@ func (d *authenticationTestDatabase) offlineCount() int {
 type authenticationTestConnector struct{ state *authenticationTestState }
 type authenticationTestDriver struct{}
 type authenticationTestConn struct{ state *authenticationTestState }
-type authenticationTestRows struct{ values []driver.Value }
+type authenticationTestRows struct {
+	values      []driver.Value
+	columnCount int
+}
 
 func (c authenticationTestConnector) Connect(context.Context) (driver.Conn, error) {
 	return &authenticationTestConn{c.state}, nil
@@ -298,6 +301,17 @@ func (c *authenticationTestConn) ExecContext(_ context.Context, query string, _ 
 	return driver.RowsAffected(1), nil
 }
 func (c *authenticationTestConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	if strings.Contains(query, "name: SetCharacterDisconnected") {
+		c.state.mu.Lock()
+		defer c.state.mu.Unlock()
+		rows := &authenticationTestRows{columnCount: 1}
+		if c.state.online {
+			c.state.online = false
+			c.state.offlineCalls++
+			rows.values = []driver.Value{args[0].Value}
+		}
+		return rows, nil
+	}
 	if !strings.Contains(query, "name: GetCharacterByTokenForUpdate") {
 		return nil, errors.New("unexpected auth query: " + query)
 	}
@@ -313,8 +327,13 @@ func (c *authenticationTestConn) QueryContext(_ context.Context, query string, a
 		c.state.online, nil, false, nil, nil, time.Now(), nil,
 	}}, nil
 }
-func (*authenticationTestRows) Columns() []string { return make([]string, 28) }
-func (*authenticationTestRows) Close() error      { return nil }
+func (r *authenticationTestRows) Columns() []string {
+	if r.columnCount != 0 {
+		return make([]string, r.columnCount)
+	}
+	return make([]string, 28)
+}
+func (*authenticationTestRows) Close() error { return nil }
 func (r *authenticationTestRows) Next(dest []driver.Value) error {
 	if r.values == nil {
 		return io.EOF

@@ -874,6 +874,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 		}
 
 		if g.getState() == GameStateRunning {
+			disconnectedAt := g.clock.WallNow()
 			if shard := g.shardManager.GetShard(c.Layer); shard != nil {
 				// Remove client from command queue to clean up rate limiting state
 				shard.PlayerInbox().RemoveClient(c.ID)
@@ -884,12 +885,7 @@ func (g *Game) handleDisconnect(c *network.Client) {
 
 			}
 
-			// Set character offline in DB immediately (per requirement)
-			if err := g.db.Queries().SetCharacterOffline(g.ctx, int64(c.CharacterID)); err != nil {
-				g.logger.Error("Failed to set character offline", zap.Uint64("client_id", c.ID), zap.Uint64("character_id", uint64(c.CharacterID)), zap.Error(err))
-			} else {
-				g.logger.Info("Character set offline", zap.Uint64("client_id", c.ID), zap.Uint64("character_id", uint64(c.CharacterID)))
-			}
+			g.recordCharacterDisconnect(c.CharacterID, disconnectedAt)
 		}
 	}
 
@@ -1196,8 +1192,8 @@ func isDeadObserverDeadlineExpired(deadlineUnixMs int64, nowUnixMs int64) bool {
 func (g *Game) Stop() {
 	g.logger.Info("Stopping game...")
 	g.setState(GameStateStopping)
+	shutdownAt := g.clock.WallNow()
 
-	g.resetOnlinePlayers()
 	g.cancel()
 	g.stopPeriodicServerTimePersist()
 
@@ -1207,6 +1203,7 @@ func (g *Game) Stop() {
 	// for shard commands, so their transfer launches precede its Done as well.
 	// Finish all owning calls before stopping the chunks they may still need.
 	g.wg.Wait()
+	g.recordShutdownDisconnects(shutdownAt)
 	g.logger.Info("Stopping shardManager")
 	g.shardManager.Stop()
 	g.logger.Info("Stopping entityIDManager")

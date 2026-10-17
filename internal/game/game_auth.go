@@ -245,6 +245,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: hearth data unavailable")
 		return
 	}
+	g.rememberCharacterDisconnect(playerEntityID, character.DisconnectAt)
 
 	select {
 	case <-c.Done():

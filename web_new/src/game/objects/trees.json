@@ -71,7 +71,8 @@
               7,
               3
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -95,7 +96,8 @@
               4,
               9
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -119,7 +121,8 @@
               5,
               8
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -143,7 +146,8 @@
               8,
               0
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -167,7 +171,8 @@
               0,
               3
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -191,7 +196,8 @@
               0,
               0
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -754,7 +760,8 @@
               4,
               0
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -784,25 +791,25 @@
       },
       "stump": {
         "offset": [
-          40,
-          20
+          45,
+          18
         ],
         "layers": [
           {
-            "img": "obj/trees/maple/stump_.png",
-            "offset": [
-              3,
-              11
-            ],
-            "shadow": true
-          },
-          {
-            "img": "obj/trees/maple/stump.png",
+            "img": "obj/trees/oak/stump.png",
             "offset": [
               0,
               0
             ],
             "z": 0
+          },
+          {
+            "img": "obj/trees/oak/stump_.png",
+            "offset": [
+              0,
+              13
+            ],
+            "shadow": true
           }
         ]
       }
@@ -948,7 +955,8 @@
               21,
               6
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -998,7 +1006,32 @@
               0,
               0
             ],
+            "z": 0,
+            "interactive": true
+          }
+        ]
+      },
+      "stump": {
+        "offset": [
+          40,
+          24
+        ],
+        "layers": [
+          {
+            "img": "obj/trees/mberry/stump.png",
+            "offset": [
+              0,
+              0
+            ],
             "z": 0
+          },
+          {
+            "img": "obj/trees/mberry/stump_.png",
+            "offset": [
+              0,
+              12
+            ],
+            "shadow": true
           }
         ]
       }
@@ -1024,7 +1057,8 @@
               16,
               0
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -1098,7 +1132,8 @@
               12,
               9
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },
@@ -1148,7 +1183,8 @@
               28,
               13
             ],
-            "z": 0
+            "z": 0,
+            "interactive": true
           }
         ]
       },

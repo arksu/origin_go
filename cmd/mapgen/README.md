@@ -24,6 +24,16 @@ go run ./cmd/mapgen -gen-config ... -seed 42 -chunks-x 50 -chunks-y 50 -threads 
   (параллельность по строкам/чанкам на результат не влияет).
 - Мир: `chunks_x/y` × 128 тайлов; пресет hnh — 50×50 чанков = 6400² тайлов.
 
+Stop the game server before full database generation. Mapgen truncates all world
+tables across every region and layer, then generates the configured region.
+Only account and character rows are retained unchanged, including character
+attributes, skills, discovery, health and saved positions. Inventories, hearth
+associations, construction sites, chat, the separate skill table, chunks,
+objects, spots and world globals are cleared. SQL sequences continue; new entity
+IDs start above the highest retained character ID, including deleted characters.
+World tick/runtime globals restart from zero when the server next starts.
+Overview-only and interactive previews never reset the database.
+
 Generated trees and boulders store `object.hp = NULL`. The server initializes HP
 from the matching object definition on load, without backfilling the database.
 Explicitly saved HP, including zero, is restored unchanged.
@@ -58,15 +68,18 @@ chance does not change the center or quality of retained spots. Logs distinguish
 
 Config dimensions are in tiles. Persisted centers and radii use absolute world
 units calculated through `CoordPerTile`; chunk sizes use the shared constants.
-Config and coordinate-range checks and a strict runtime read happen before any
-region reset. PNG-only and interactive previews do not load spot config or write
-spots. PNG export alongside full database generation still generates spots.
+Config and coordinate-range checks happen before the world reset. PNG-only and
+interactive previews do not load spot config or write spots. PNG export alongside
+full database generation still generates spots.
 
 Generation streams five candidates per district and inserts batches of at most
-1000 spots in one transaction. An insertion error rolls back that stage; the
-whole map reset is not atomic. Region reset uses `DELETE` and retains the spot
-ID sequence. Spots store geometry, peak quality, `{}` state, revision `1`, and
-the saved server-runtime timestamp. No generation metadata is stored.
+1000 spots in one transaction. An insertion error rolls back that stage. The
+world reset commits before chunk/object/spot generation, so a later generation
+failure does not restore the previous world. The reset truncates all world
+tables and reseeds the shared entity ID checkpoint in one transaction;
+SQL sequences, including spot IDs, continue. Spots store geometry, peak quality,
+`{}` state, revision `1`, and runtime timestamp `0` for the new world.
+No generation metadata is stored.
 
 This stage does not change resource gathering, digging, wells, or runtime
 regeneration. Feature details: [spots](../../docs/features/spot.md).
@@ -297,14 +310,21 @@ go test ./cmd/mapgen -run '^TestLakeGeometryReview$' -count=1 -timeout 15m -v -a
 ## Полный поток (main.go)
 
 1. `ParseMapgenOptions` — флаги → YAML-пресет → `Validate()` (диапазоны + лимиты памяти 6 GiB).
-2. `BuildTerrainPrecompute` — весь мир считается в память (tile_pipeline.go), см. пайплайн ниже.
-3. PNG-экспорт (`png_export.go`): `overview.png` + пофрагментные `chunks/`.
-4. Если не `overview_only`: truncate чанков/объектов региона → пул воркеров →
+2. Full generation validates tree chances and resolves their ordered definitions
+   before opening the database; `Generate` also validates unresolved rules before
+   any database access. Invalid chances or missing definitions abort generation
+   before world reset. Overview-only skips definitions.
+3. `BuildTerrainPrecompute` — весь мир считается в память (tile_pipeline.go), см. пайплайн ниже.
+4. PNG-экспорт (`png_export.go`): `overview.png` + пофрагментные `chunks/`.
+5. Full generation atomically truncates every world table while retaining accounts
+   and characters, then runs the worker pool:
    на чанк: тайлы из precompute + спавн деревьев/валунов → UpsertChunk/UpsertObject.
-5. `last_used_id` (сквозной счётчик entity ID) читается и сохраняется глобально.
+6. `last_used_id` is initialized above retained character IDs and checkpointed
+   after object generation; new spots start at runtime zero.
 
-Детерминизм чанка: `deterministicChunkSeed(seed, x, y)` — splitMix64-микс; RNG чанка
-управляет только позициями/heading деревьев и валунов.
+Детерминизм чанка: `deterministicChunkSeed(seed, x, y)` — splitMix64-микс.
+The chunk RNG controls object spawn rolls, tree species, positions, and headings.
+Worker order does not change those choices; database entity ID order can differ.
 
 ## Пайплайн BuildTerrainPrecompute (tile_pipeline.go)
 
@@ -363,11 +383,53 @@ RNG пятна детерминирован: `blobRandom(seed, pass, column, row
 равномерная сетка рек (`generateUniformGridRivers`) с авто-уплотнением, пока покрытие суши
 реками < 0.6%/1%. Режим в пресетах сейчас не используется.
 
-## Объекты (main.go)
+## Objects (main.go, tree_placement.go)
 
-- Деревья: p=0.05 на forest-тайлах (`treeDefForTile`: и хвойный, и лиственный → `tree_birch`), Q=10.
-- Валуны: p=0.0012 на траве/песке (`boulder`).
-- Константы `TreeDensity`/`BoulderDensity` — в начале main.go; плотность тайлов — в пресете.
+Each eligible tile uses one random roll to select at most one tree. Configure
+each species' absolute chance per tile in `treePlacementRules`:
+
+```go
+types.TileConiferousForest: {
+	{key: "tree_pine", chance: 0.02},
+	{key: "tree_fir", chance: 0.01},
+	{key: "tree_yew", chance: 0.005},
+},
+```
+
+This example gives pine 2%, fir 1%, and yew 0.5% of coniferous tiles, for a total
+tree chance of 3.5%. Chances are independent configuration values and are never
+normalized: changing fir's chance leaves pine's chance unchanged. Zero disables
+a species. Each chance must be finite and in `[0, 1]`, and the sum for a terrain
+must not exceed 1. The remaining probability produces no tree. Species order is
+stable for deterministic generation.
+
+Current terrain assignments are below; editable chances live in
+`treePlacementRules` rather than being duplicated here.
+
+| Terrain | Species, in selection order |
+| --- | --- |
+| Coniferous forest | Pine, fir, yew |
+| Broadleaf forest | Birch, oak, maple, elm, apple, mulberry |
+| Thicket | Hazel |
+| Swamp types 1–3 | Willow |
+| Grass | Birch, oak, elm, apple, mulberry |
+| All other tiles | None |
+
+Tree trunks keep a minimum `treeMinGap` of 2 world units. Each tree's centered
+collider stays inside its source tile with a 1-unit margin on every edge, which
+also guarantees clearance across chunk boundaries without shared worker state
+or rejecting spawn rolls. Current 10×10 trunks on 12×12 tiles sit at tile centers;
+smaller trunks retain random offsets inside the allowed range. Missing, invalid,
+or oversized active trunk colliders fail validation before database access.
+
+Heath and moor remain open. Boulders retain their 0.12% roll on grass and sand,
+after a failed tree roll when grass is eligible for both. Each tile holds at most
+one generated object. Boulders retain their random within-tile positions. Trees
+and boulders keep quality 10, random headings, and definition-default NULL HP. Trees have no
+persisted behavior state, so the server restores them at their mature stage.
+
+These rules apply to future generation; they do not regenerate existing worlds.
+Terrain output is unchanged, while object layouts for an existing seed change.
 
 ## Карта правок «хочу X → крути Y»
 
@@ -383,7 +445,7 @@ RNG пятна детерминирован: `blobRandom(seed, pass, column, row
 | Сглаживание, мин. пятно | `hnh_smoothing_passes`, `hnh_min_patch_tiles` |
 | Пляжи | shoreline_sand.go (шансы 0.17/0.11, clusterScale, fallback-бюджет) |
 | Озёра/реки рисуемой сети | секция `river:` пресета (см. аннотированный hnh.yaml — каждый ключ прокомментирован) |
-| Плотность леса/валунов | `TreeDensity`/`BoulderDensity` в main.go, `treeDefForTile`/`boulderDefForTile` |
+| Tree species/chances; boulder density | `treePlacementRules` in tree_placement.go; `BoulderDensity` and `boulderDefForTile` in main.go |
 | Цвета PNG | png_export.go `tileColor` (на тайлы мира не влияет) |
 
 ## Мёртвый/зарезервированный код (не влияет на карту)
@@ -401,6 +463,16 @@ go build ./... && go test ./cmd/mapgen/   # сейчас зелёные
 
 Покрытие: детерминизм (фикс. seed), геометрия блобов, пайплайн (blob_pipeline_test),
 берега, экспорт PNG, валидация опций/конфига.
+
+Tree tests cover terrain rules, per-species chance boundaries, invalid chances,
+all excluded tile IDs, random draw ordering, all configured species,
+missing-definition preflight, and overview generation without definitions.
+To also check PostgreSQL persistence,
+default HP, mature restoration, and unchanged boulder placement against a disposable
+database, set `ORIGIN_OBJECT_HEALTH_TEST_DSN` before running the mapgen tests.
+Set `ORIGIN_MAPGEN_RESET_TEST_DSN` to also verify all-region/all-layer reset,
+restrictive hearth foreign keys, transaction rollback, unchanged accounts and
+characters, sequence continuity, and entity ID reseeding.
 
 ## Незавершённое (openspec/changes/)
 

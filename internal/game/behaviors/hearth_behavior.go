@@ -25,7 +25,7 @@ func (hearthBehavior) ProvideActions(ctx *contracts.BehaviorActionListContext) [
 	if ctx == nil {
 		return nil
 	}
-	if _, ok := hearthOwnerName(ctx.World, ctx.TargetID, ctx.TargetHandle); !ok {
+	if _, _, ok := hearthOwnerDetails(ctx.World, ctx.TargetID, ctx.TargetHandle); !ok {
 		return nil
 	}
 	return []contracts.ContextAction{{ActionID: actionOpen, Title: "Open"}}
@@ -35,7 +35,7 @@ func (hearthBehavior) ValidateAction(ctx *contracts.BehaviorActionValidateContex
 	if ctx == nil || ctx.ActionID != actionOpen {
 		return contracts.BehaviorResult{}
 	}
-	_, ok := hearthOwnerName(ctx.World, ctx.TargetID, ctx.TargetHandle)
+	_, _, ok := hearthOwnerDetails(ctx.World, ctx.TargetID, ctx.TargetHandle)
 	return contracts.BehaviorResult{OK: ok}
 }
 
@@ -53,7 +53,7 @@ func (hearthBehavior) BuildCustomWindow(ctx *contracts.BehaviorActionExecuteCont
 		ctx.World.GetHandleByEntityID(ctx.PlayerID) != ctx.PlayerHandle {
 		return nil
 	}
-	name, ok := hearthOwnerName(ctx.World, ctx.TargetID, ctx.TargetHandle)
+	name, disconnectedAt, ok := hearthOwnerDetails(ctx.World, ctx.TargetID, ctx.TargetHandle)
 	if !ok {
 		return nil
 	}
@@ -63,20 +63,43 @@ func (hearthBehavior) BuildCustomWindow(ctx *contracts.BehaviorActionExecuteCont
 	}
 	return &netproto.S2C_CustomWindow{
 		EntityId: uint64(ctx.TargetID), Title: "Hearth Fire",
-		Fields: []*netproto.CustomWindowField{{Label: "Owner", Value: name}},
+		Fields: []*netproto.CustomWindowField{
+			{Label: "Owner", Value: name},
+			{Label: "Last disconnect", Value: formatLastDisconnect(disconnectedAt, ecs.GetResource[ecs.TimeState](ctx.World).UnixMs)},
+		},
 	}
 }
 
-func hearthOwnerName(w *ecs.World, id types.EntityID, target types.Handle) (string, bool) {
+func hearthOwnerDetails(w *ecs.World, id types.EntityID, target types.Handle) (string, int64, bool) {
 	if w == nil || id == 0 || !w.Alive(target) || w.GetHandleByEntityID(id) != target || ecs.ObjectDestructionPending(w, target) {
-		return "", false
+		return "", 0, false
 	}
 	runtime, ok := ecs.TryGetResource[hearth.Runtime](w)
 	if !ok {
-		return "", false
+		return "", 0, false
 	}
-	_, name, owned := runtime.Owner(target)
-	return name, owned && name != ""
+	_, name, disconnectedAt, owned := runtime.Owner(target)
+	return name, disconnectedAt, owned && name != ""
+}
+
+func formatLastDisconnect(disconnectedAt, now int64) string {
+	if disconnectedAt <= 0 {
+		return "Unknown"
+	}
+	if now <= disconnectedAt || now-disconnectedAt < 60_000 {
+		return "just now"
+	}
+	minutes := (now - disconnectedAt) / 60_000
+	value, unit := minutes, "minute"
+	if minutes >= 24*60 {
+		value, unit = minutes/(24*60), "day"
+	} else if minutes >= 60 {
+		value, unit = minutes/60, "hour"
+	}
+	if value != 1 {
+		unit += "s"
+	}
+	return fmt.Sprintf("%d %s ago", value, unit)
 }
 
 func (hearthBehavior) CompleteConstruction(ctx *contracts.ConstructionContext, complete func() bool) contracts.BehaviorResult {

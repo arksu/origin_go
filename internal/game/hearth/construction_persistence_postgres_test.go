@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	constt "origin/internal/const"
 	"origin/internal/game/hearth"
@@ -18,12 +19,15 @@ func TestConstructionSaverPostgresFirstHomeAndReplacement(t *testing.T) {
 	ctx := context.Background()
 	q := db.Queries()
 	insertHearthCharacter(t, db, 1)
+	disconnectedAt := sql.NullTime{Time: time.Unix(123, 0).UTC(), Valid: true}
+	_, err := db.Pool().Exec(ctx, "UPDATE character SET disconnect_at=$1 WHERE id=1", disconnectedAt.Time)
+	require.NoError(t, err)
 	saver := hearth.NewConstructionSaverDB(db)
 	first := repository.Object{
 		ID: 2000, TypeID: testHearthTypeID, Region: 1, X: 125, Y: 270, ChunkX: 1, ChunkY: 2,
 		Quality: 12, Hp: sql.NullFloat64{Float64: 100, Valid: true}, CreateTick: 80, LastTick: 90,
 	}
-	_, err := q.GetObjectByID(ctx, first.ID)
+	_, err = q.GetObjectByID(ctx, first.ID)
 	require.ErrorIs(t, err, sql.ErrNoRows, "construction can finish before the chunk's ordinary save")
 	require.NoError(t, saver.SaveConstruction(ctx, 1, &first, nil))
 	stored, err := q.GetObjectByID(ctx, first.ID)
@@ -35,8 +39,10 @@ func TestConstructionSaverPostgresFirstHomeAndReplacement(t *testing.T) {
 	require.Equal(t, first.LastTick, stored.LastTick)
 	home, err := q.GetCharacterHearth(ctx, hearthGetParams(1))
 	require.NoError(t, err)
+	home.OwnerDisconnectAt.Time = home.OwnerDisconnectAt.Time.UTC()
 	require.Equal(t, repository.GetCharacterHearthRow{
 		CharacterID: 1, ObjectRegion: first.Region, ObjectID: first.ID, X: first.X, Y: first.Y,
+		OwnerName: "test", OwnerDisconnectAt: disconnectedAt,
 	}, home)
 	watermark, err := q.GetGlobalVar(ctx, constt.LAST_USED_ID)
 	require.NoError(t, err)

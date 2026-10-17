@@ -1,5 +1,6 @@
 -- name: GetCharacterHearth :one
-SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name
+SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name,
+	c.disconnect_at AS owner_disconnect_at
 FROM character_hearth AS h
 JOIN character AS c ON c.id = h.character_id
 JOIN object AS o ON o.region = h.object_region AND o.id = h.object_id
@@ -10,7 +11,8 @@ WHERE h.character_id = sqlc.arg(character_id)
 	AND o.layer = sqlc.arg(surface_layer);
 
 -- name: GetCharacterHearthOwners :many
-SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name
+SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name,
+	c.disconnect_at AS owner_disconnect_at
 FROM character_hearth AS h
 JOIN character AS c ON c.id = h.character_id
 JOIN object AS o ON o.region = h.object_region AND o.id = h.object_id

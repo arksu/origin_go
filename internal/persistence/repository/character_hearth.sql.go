@@ -53,7 +53,8 @@ func (q *Queries) DeleteInvalidCharacterHearth(ctx context.Context, arg DeleteIn
 }
 
 const getCharacterHearth = `-- name: GetCharacterHearth :one
-SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name
+SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name,
+	c.disconnect_at AS owner_disconnect_at
 FROM character_hearth AS h
 JOIN character AS c ON c.id = h.character_id
 JOIN object AS o ON o.region = h.object_region AND o.id = h.object_id
@@ -71,13 +72,14 @@ type GetCharacterHearthParams struct {
 }
 
 type GetCharacterHearthRow struct {
-	CharacterID  int64  `json:"character_id"`
-	ObjectRegion int    `json:"object_region"`
-	ObjectID     int64  `json:"object_id"`
-	X            int    `json:"x"`
-	Y            int    `json:"y"`
-	Layer        int    `json:"layer"`
-	OwnerName    string `json:"owner_name"`
+	CharacterID       int64        `json:"character_id"`
+	ObjectRegion      int          `json:"object_region"`
+	ObjectID          int64        `json:"object_id"`
+	X                 int          `json:"x"`
+	Y                 int          `json:"y"`
+	Layer             int          `json:"layer"`
+	OwnerName         string       `json:"owner_name"`
+	OwnerDisconnectAt sql.NullTime `json:"owner_disconnect_at"`
 }
 
 func (q *Queries) GetCharacterHearth(ctx context.Context, arg GetCharacterHearthParams) (GetCharacterHearthRow, error) {
@@ -91,12 +93,14 @@ func (q *Queries) GetCharacterHearth(ctx context.Context, arg GetCharacterHearth
 		&i.Y,
 		&i.Layer,
 		&i.OwnerName,
+		&i.OwnerDisconnectAt,
 	)
 	return i, err
 }
 
 const getCharacterHearthOwners = `-- name: GetCharacterHearthOwners :many
-SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name
+SELECT h.character_id, h.object_region, h.object_id, o.x, o.y, o.layer, c.name AS owner_name,
+	c.disconnect_at AS owner_disconnect_at
 FROM character_hearth AS h
 JOIN character AS c ON c.id = h.character_id
 JOIN object AS o ON o.region = h.object_region AND o.id = h.object_id
@@ -119,13 +123,14 @@ type GetCharacterHearthOwnersParams struct {
 }
 
 type GetCharacterHearthOwnersRow struct {
-	CharacterID  int64  `json:"character_id"`
-	ObjectRegion int    `json:"object_region"`
-	ObjectID     int64  `json:"object_id"`
-	X            int    `json:"x"`
-	Y            int    `json:"y"`
-	Layer        int    `json:"layer"`
-	OwnerName    string `json:"owner_name"`
+	CharacterID       int64        `json:"character_id"`
+	ObjectRegion      int          `json:"object_region"`
+	ObjectID          int64        `json:"object_id"`
+	X                 int          `json:"x"`
+	Y                 int          `json:"y"`
+	Layer             int          `json:"layer"`
+	OwnerName         string       `json:"owner_name"`
+	OwnerDisconnectAt sql.NullTime `json:"owner_disconnect_at"`
 }
 
 func (q *Queries) GetCharacterHearthOwners(ctx context.Context, arg GetCharacterHearthOwnersParams) ([]GetCharacterHearthOwnersRow, error) {
@@ -150,6 +155,7 @@ func (q *Queries) GetCharacterHearthOwners(ctx context.Context, arg GetCharacter
 			&i.Y,
 			&i.Layer,
 			&i.OwnerName,
+			&i.OwnerDisconnectAt,
 		); err != nil {
 			return nil, err
 		}

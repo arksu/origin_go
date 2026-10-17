@@ -177,6 +177,9 @@ func disconnectHearthReconnectSource(t *testing.T, f *hearthReturnTransferFixtur
 	require.NoError(t, err)
 	require.True(t, row.IsOnline.Valid)
 	require.False(t, row.IsOnline.Bool, "the real disconnect must admit the replacement authentication")
+	require.True(t, row.DisconnectAt.Valid)
+	require.True(t, row.DisconnectAt.Time.Equal(f.game.clock.WallNow()))
+	require.Equal(t, row.DisconnectAt.Time.UnixMilli(), f.runtime.Index.Snapshot(10).LastDisconnectUnixMs)
 }
 
 func waitHearthReconnectWork(t *testing.T, g *Game) {

@@ -41,10 +41,11 @@ const (
 )
 
 type Snapshot struct {
-	State           HomeState
-	Home            Home
-	PendingTerminal bool
-	Terminal        bool
+	State                HomeState
+	Home                 Home
+	LastDisconnectUnixMs int64
+	PendingTerminal      bool
+	Terminal             bool
 }
 
 func (s Snapshot) CanAcquire() bool {
@@ -78,6 +79,20 @@ func (i *Index) Snapshot(character types.EntityID) Snapshot {
 		return *entry
 	}
 	return Snapshot{State: Unknown}
+}
+
+// RecordDisconnect copies confirmed wall time without changing ownership. It is
+// safe across layers and never replaces a newer in-memory value with saved data.
+func (i *Index) RecordDisconnect(character types.EntityID, unixMs int64) {
+	if !validID(character) || unixMs <= 0 {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	entry := i.entryLocked(character)
+	if unixMs > entry.LastDisconnectUnixMs {
+		entry.LastDisconnectUnixMs = unixMs
+	}
 }
 
 // SnapshotByObject includes pending ownership so restoration can distinguish an

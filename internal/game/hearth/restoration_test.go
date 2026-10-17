@@ -87,6 +87,7 @@ func TestPrepareChunkActivationHydratesOfflineOwnersInOneBatch(t *testing.T) {
 		require.Equal(t, repository.GetCharacterHearthOwnersParams{HearthTypeID: f.result.DefID, SurfaceLayer: 0, ObjectRegions: []int{1, 1}, ObjectIds: []int64{200, 201}}, params)
 		rows := []repository.GetCharacterHearthOwnersRow{restoredOwner(70, first), restoredOwner(71, second)}
 		rows[0].OwnerName, rows[1].OwnerName = "First offline owner", "Second offline owner"
+		rows[0].OwnerDisconnectAt = sql.NullTime{Time: time.UnixMilli(123000), Valid: true}
 		return rows, nil
 	}), nil)
 	require.NoError(t, runtime.PrepareChunkActivation(chunk))
@@ -96,6 +97,11 @@ func TestPrepareChunkActivationHydratesOfflineOwnersInOneBatch(t *testing.T) {
 		want := restoredHome(raw)
 		want.OwnerName = []string{"First offline owner", "Second offline owner"}[n]
 		require.Equal(t, want, runtime.Index.Snapshot(character).Home)
+		if n == 0 {
+			require.Equal(t, int64(123000), runtime.Index.Snapshot(character).LastDisconnectUnixMs)
+		} else {
+			require.Zero(t, runtime.Index.Snapshot(character).LastDisconnectUnixMs)
+		}
 		owner, ok := runtime.Index.Owner(restoredHome(raw).Object)
 		require.True(t, ok)
 		require.Equal(t, character, owner)

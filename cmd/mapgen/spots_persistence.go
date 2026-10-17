@@ -2,32 +2,12 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
-	_const "origin/internal/const"
 	"origin/internal/persistence/repository"
 )
 
 const spotInsertBatchSize = 1000
-
-type spotRuntimeReader interface {
-	GetGlobalVar(context.Context, string) (repository.GlobalVar, error)
-}
-
-func loadSpotRuntimeSeconds(ctx context.Context, reader spotRuntimeReader) (int64, error) {
-	value, err := reader.GetGlobalVar(ctx, _const.SERVER_RUNTIME_SECONDS_TOTAL)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, fmt.Errorf("read spot runtime seconds: %w", err)
-	}
-	if !value.ValueLong.Valid || value.ValueLong.Int64 < 0 {
-		return 0, errors.New("saved server runtime seconds must be a nonnegative integer")
-	}
-	return value.ValueLong.Int64, nil
-}
 
 // The caller owns the transaction. Batches reuse fixed-capacity slices and are
 // inserted synchronously, so the insert callback must not retain their contents.

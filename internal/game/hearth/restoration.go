@@ -93,6 +93,9 @@ func (r *Runtime) prepareChunkActivation(chunk *core.Chunk) error {
 		if err := r.Index.LoadIfUnknown(character, &home); err != nil {
 			return fmt.Errorf("restore hearth owner: %w", err)
 		}
+		if row.OwnerDisconnectAt.Valid {
+			r.Index.RecordDisconnect(character, row.OwnerDisconnectAt.Time.UnixMilli())
+		}
 	}
 
 	var orphans []*repository.Object

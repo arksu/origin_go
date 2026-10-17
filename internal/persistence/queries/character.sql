@@ -83,6 +83,25 @@ WHERE id = $1
   AND is_online = true
   AND deleted_at IS NULL;
 
+-- Only a real session disconnect records wall time; death uses SetCharacterOffline.
+-- name: SetCharacterDisconnected :one
+UPDATE character
+SET is_online = false,
+	disconnect_at = GREATEST(disconnect_at, sqlc.arg(disconnected_at)::timestamptz)
+WHERE id = sqlc.arg(id)
+  AND is_online = true
+  AND deleted_at IS NULL
+RETURNING disconnect_at;
+
+-- Run after network/auth shutdown, never during startup crash recovery.
+-- name: SetOnlineCharactersDisconnected :exec
+UPDATE character
+SET is_online = false,
+	disconnect_at = GREATEST(disconnect_at, sqlc.arg(disconnected_at)::timestamptz)
+WHERE region = sqlc.arg(region)
+  AND is_online = true
+  AND deleted_at IS NULL;
+
 -- name: UpdateCharacterAttributes :exec
 UPDATE character
 SET attributes = sqlc.arg(attributes)::jsonb,

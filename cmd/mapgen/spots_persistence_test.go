@@ -2,60 +2,13 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"fmt"
-	"math"
 	_const "origin/internal/const"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
 	"reflect"
 	"testing"
 )
-
-type spotRuntimeStub struct {
-	value repository.GlobalVar
-	err   error
-	name  string
-}
-
-func (stub *spotRuntimeStub) GetGlobalVar(_ context.Context, name string) (repository.GlobalVar, error) {
-	stub.name = name
-	return stub.value, stub.err
-}
-
-func TestLoadSpotRuntimeSeconds(t *testing.T) {
-	dbFailure := errors.New("database unavailable")
-	for _, tc := range []struct {
-		name  string
-		value sql.NullInt64
-		err   error
-		want  int64
-		fails bool
-	}{
-		{name: "missing", err: fmt.Errorf("lookup: %w", sql.ErrNoRows)},
-		{name: "zero", value: sql.NullInt64{Valid: true}},
-		{name: "saved", value: sql.NullInt64{Int64: 321, Valid: true}, want: 321},
-		{name: "maximum", value: sql.NullInt64{Int64: math.MaxInt64, Valid: true}, want: math.MaxInt64},
-		{name: "null", fails: true},
-		{name: "negative", value: sql.NullInt64{Int64: -1, Valid: true}, fails: true},
-		{name: "database error", err: dbFailure, fails: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			stub := &spotRuntimeStub{value: repository.GlobalVar{ValueLong: tc.value}, err: tc.err}
-			got, err := loadSpotRuntimeSeconds(context.Background(), stub)
-			if (err != nil) != tc.fails || got != tc.want {
-				t.Fatalf("got runtime %d, error %v; want %d, failure %v", got, err, tc.want, tc.fails)
-			}
-			if stub.name != _const.SERVER_RUNTIME_SECONDS_TOTAL {
-				t.Fatalf("read wrong key %q", stub.name)
-			}
-			if tc.err == dbFailure && !errors.Is(err, dbFailure) {
-				t.Fatal("database failure must remain inspectable")
-			}
-		})
-	}
-}
 
 func spotsBatchFixture() (*TerrainPrecompute, SpotsConfig) {
 	config := validSpotsConfig()

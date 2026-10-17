@@ -185,3 +185,19 @@ The original sheets, prompts and preparation recipe remain with the source.
 Open `/tests/rabbit-walk.html` on the Vite server to review all eight published
 resources with playback controls and an idle comparison. No Blender or atlas
 rebuild is needed for these ordinary frame-layer PNGs.
+
+## Mulberry tree sprites
+
+`python3 tools/export_mulberry_sprites.py` exports the generated mature mulberry
+and matching stump from `art_source/objects/trees/mulberry/candidate_v1/` to
+`web_new/public/assets/game/obj/trees/mberry/`. The pinned recipe retains source
+hashes, crop regions and reviewed ground anchors. Nearest-neighbor sampling
+preserves the selected source RGBA; separate subdued silhouette shadows use the
+existing tree shadow-layer contract.
+
+The body canvases are 136×136 with anchor `(67, 114)` and 80×48 with anchor
+`(40, 24)`. Their 104×40 and 80×32 shadows use layer offsets `(15, 103)` and
+`(0, 12)`. `python3 tools/export_mulberry_sprites.py --check` verifies the original
+sources, anchors, transparent margins and byte-exact outputs without writing.
+Prompts, raw imagegen outputs and native/enlarged terrain-background reviews
+remain beside the recipe. No Blender build or atlas publication is required.

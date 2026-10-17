@@ -14,7 +14,7 @@ func (r *Runtime) IgnoreObjectCollision(actorID types.EntityID, targetHandle typ
 	if actorID == 0 {
 		return false
 	}
-	owner, _, owned := r.Owner(targetHandle)
+	owner, _, _, owned := r.Owner(targetHandle)
 	return owned && owner == actorID
 }
 

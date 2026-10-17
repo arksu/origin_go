@@ -280,7 +280,7 @@ An active hearth SHALL burn permanently without fuel. It SHALL be immune to all 
 
 ### Requirement: Hearth appearance does not reveal owner status
 
-The world object SHALL be named `Hearth Fire`, without the owner's name, and SHALL always show green flame regardless of online status. No last-login indication or hearth minimap marker SHALL be added for the owner or other players.
+The world object SHALL be named `Hearth Fire`, without the owner's name, and SHALL always show green flame regardless of online status. No last-login indication or hearth minimap marker SHALL be added for the owner or other players. The linked text window MAY show the owner's last disconnect as specified below; it SHALL NOT indicate whether the owner is currently online.
 
 #### Scenario: Owner goes offline
 - **WHEN** the owner disconnects while other players see the hearth
@@ -293,6 +293,26 @@ The world object SHALL be named `Hearth Fire`, without the owner's name, and SHA
 ### Requirement: Linked hearths expose a reusable text window
 
 RMB SHALL select the hearth's single `open` context action without a menu and use the existing approach/link/validation path. Every player MAY inspect an active hearth. After validating live player/target handles, current ownership and their exact link, the server SHALL send `Hearth Fire` with an `Owner` field containing the owner's character name. The name SHALL be copied from the finishing character's server appearance or `character.name` in the existing ownership queries. Known runtime metadata SHALL win over SQL; opening SHALL perform no SQL and SHALL work for offline owners.
+
+The next field SHALL be `Last disconnect`, derived at open time from the owner's last confirmed `character.disconnect_at` and the current tick's wall Unix milliseconds. A missing timestamp SHALL show `Unknown`; a future timestamp or age below one minute SHALL show `just now`. Otherwise the value SHALL show whole minutes, hours or days rounded down with singular/plural English units followed by `ago`. No push updates SHALL be introduced.
+
+An authenticated session's disconnect SHALL atomically set `is_online=false` and record server wall time, independently of delayed body removal. Existing stale-session rejection SHALL precede persistence. Duplicate offline transitions SHALL NOT change the timestamp, and delayed writes SHALL NOT reduce it. Death's existing offline write SHALL NOT record a disconnect. Normal shutdown SHALL record the shutdown-start wall time for remaining online characters of the region in one batch after network/auth work drains; startup online-flag recovery SHALL preserve the previous timestamp because crash time is unknown. These writes SHALL run outside shard locks with independent five-second contexts, logging failures without retries or publishing unconfirmed metadata.
+
+Confirmed disconnect time SHALL be retained separately from the current home in the existing mutex-protected character index. Login character data and the existing single/batched ownership queries SHALL hydrate it without replacing a newer runtime timestamp. First construction, replacement and reconnect SHALL preserve it, including cross-layer sessions. No schema migration or protocol change SHALL be needed.
+
+#### Scenario: Last disconnect survives offline restoration
+- **WHEN** an offline owner's hearth is restored after restart
+- **THEN** its window SHALL show the saved disconnect age without a query at open time
+- **AND** an owner without recorded history SHALL show `Unknown`
+
+#### Scenario: Old session closes after replacement
+- **WHEN** an old session's callback runs after a replacement session owns the character
+- **THEN** neither the replacement's online flag nor the last disconnect timestamp SHALL change
+
+#### Scenario: Reopen refreshes the disconnect age
+- **WHEN** time passes or a newer disconnect is confirmed while the window is open
+- **THEN** the current snapshot SHALL remain unchanged
+- **AND** reopening SHALL calculate a fresh value
 
 `S2C_CustomWindow` SHALL contain `entity_id`, `stream_epoch`, `title` and ordered `{label, value}` fields. `S2C_CustomWindowClosed` SHALL contain `entity_id` and `stream_epoch`. A `CustomWindowProvider` capability in the existing behavior registry SHALL build the snapshot; `ExecutionDeps` SHALL supply its typed sender. Messages SHALL be serialized immediately on the owning shard path and use the current connection's critical FIFO and epoch. No window registry, reverse index, instance ID, client close command or push-update contract SHALL be introduced.
 

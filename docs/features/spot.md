@@ -60,12 +60,13 @@ DDL находится в [миграции](../../migrations/20261010_spots.sql
 `_const.ChunkWorldSize`. Арифметика проверяется на переполнение и диапазон SQL `INTEGER`.
 Обратное преобразование отрицательных координат округляет вниз.
 
-Конфиг, геометрия и чтение `_const.SERVER_RUNTIME_SECONDS_TOTAL` проверяются до
-очистки региона. Отсутствующий runtime означает ноль; `NULL`, отрицательное значение
-или ошибка БД останавливают генерацию. Все новые споты получают один прочитанный runtime.
-Старые споты региона удаляются через `DELETE` без сброса последовательности ID.
-Вставки новых спотов выполняются батчами до 1000 строк в одной транзакции; ошибка
-откатывает этот этап, но не весь процесс перегенерации карты.
+Mapgen validates configuration and geometry before resetting the world. Full
+generation atomically truncates all world tables, including spots and world
+globals, across all regions and layers, while preserving account and character
+rows. The shared entity ID checkpoint is reseeded above every retained character
+ID. SQL sequences continue. New spots use runtime `0` in the fresh world.
+Spot insertion uses batches of at most 1000 rows in one transaction; an error
+rolls back that stage, but not the preceding world reset and terrain generation.
 
 ## Последующие этапы
 

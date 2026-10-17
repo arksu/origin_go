@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"time"
 
 	"github.com/lib/pq"
 )
@@ -335,6 +336,29 @@ func (q *Queries) SetCharacterAuthToken(ctx context.Context, arg SetCharacterAut
 	return err
 }
 
+const setCharacterDisconnected = `-- name: SetCharacterDisconnected :one
+UPDATE character
+SET is_online = false,
+	disconnect_at = GREATEST(disconnect_at, $1::timestamptz)
+WHERE id = $2
+  AND is_online = true
+  AND deleted_at IS NULL
+RETURNING disconnect_at
+`
+
+type SetCharacterDisconnectedParams struct {
+	DisconnectedAt time.Time `json:"disconnected_at"`
+	ID             int64     `json:"id"`
+}
+
+// Only a real session disconnect records wall time; death uses SetCharacterOffline.
+func (q *Queries) SetCharacterDisconnected(ctx context.Context, arg SetCharacterDisconnectedParams) (sql.NullTime, error) {
+	row := q.db.QueryRowContext(ctx, setCharacterDisconnected, arg.DisconnectedAt, arg.ID)
+	var disconnect_at sql.NullTime
+	err := row.Scan(&disconnect_at)
+	return disconnect_at, err
+}
+
 const setCharacterOffline = `-- name: SetCharacterOffline :exec
 UPDATE character
 SET is_online = false
@@ -358,6 +382,26 @@ WHERE id = $1
 
 func (q *Queries) SetCharacterOnline(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, setCharacterOnline, id)
+	return err
+}
+
+const setOnlineCharactersDisconnected = `-- name: SetOnlineCharactersDisconnected :exec
+UPDATE character
+SET is_online = false,
+	disconnect_at = GREATEST(disconnect_at, $1::timestamptz)
+WHERE region = $2
+  AND is_online = true
+  AND deleted_at IS NULL
+`
+
+type SetOnlineCharactersDisconnectedParams struct {
+	DisconnectedAt time.Time `json:"disconnected_at"`
+	Region         int       `json:"region"`
+}
+
+// Run after network/auth shutdown, never during startup crash recovery.
+func (q *Queries) SetOnlineCharactersDisconnected(ctx context.Context, arg SetOnlineCharactersDisconnectedParams) error {
+	_, err := q.db.ExecContext(ctx, setOnlineCharactersDisconnected, arg.DisconnectedAt, arg.Region)
 	return err
 }
 
