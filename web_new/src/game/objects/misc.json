@@ -146,6 +146,36 @@
       }
     ]
   },
+  "wild_windsown_weed": {
+    "0": {
+      "size": [32, 40],
+      "offset": [16, 36],
+      "layers": [
+        { "interactive": true, "img": "obj/wild_windsown_weed/0.png" }
+      ]
+    },
+    "1": {
+      "size": [32, 40],
+      "offset": [16, 36],
+      "layers": [
+        { "interactive": true, "img": "obj/wild_windsown_weed/1.png" }
+      ]
+    },
+    "2": {
+      "size": [32, 40],
+      "offset": [16, 36],
+      "layers": [
+        { "interactive": true, "img": "obj/wild_windsown_weed/2.png" }
+      ]
+    },
+    "3": {
+      "size": [32, 40],
+      "offset": [16, 36],
+      "layers": [
+        { "interactive": true, "img": "obj/wild_windsown_weed/3.png" }
+      ]
+    }
+  },
   "unknown": {
     "offset": [
       15,

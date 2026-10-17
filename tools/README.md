@@ -186,6 +186,22 @@ Open `/tests/rabbit-walk.html` on the Vite server to review all eight published
 resources with playback controls and an idle comparison. No Blender or atlas
 rebuild is needed for these ordinary frame-layer PNGs.
 
+## Wild Windsown Weed sprites
+
+`python3 tools/export_wild_windsown_sprites.py` publishes the four approved WWW
+stages to `web_new/public/assets/game/obj/wild_windsown_weed/{0..3}.png`:
+cut stems, young shoots, closed panicles, and the approved taller mature C.
+The original imagegen sources and prompts remain in
+`art_source/nature/wild_windsown_weed/growth_c_v1/` and `mature_variants_v1/`.
+
+All four 32×40 frames share ground anchor `(16, 36)`. One source sampling grid
+retains their relative heights and basal alignment without recentering individual
+stages. The client catalog registers `wild_windsown_weed/0` through `/3` as ordinary
+interactive PNG resources. No atlas build is needed.
+
+`python3 tools/export_wild_windsown_sprites.py --check` verifies the approved source
+hashes, dimensions, alpha, shared ground contact and byte-exact runtime PNGs.
+
 ## Mulberry tree sprites
 
 `python3 tools/export_mulberry_sprites.py` exports the generated mature mulberry
