@@ -205,6 +205,17 @@ The same exporter publishes `items/wild_windsown_weed.png` as a transparent 30x3
 inventory icon, fitting the approved mature frame proportionally with nearest
 neighbor sampling. It verifies that icon with the same `--check` command.
 
+## Beet and potato seed icons
+
+`python3 tools/export_seed_icons.py` publishes the approved beet B and potato A
+sources from `art_source/nature/wild_windsown_weed/seed_variants_v2/` as
+`web_new/public/assets/game/items/seed_beet.png` and `seed_potato.png`.
+Both icons use transparent 30×30 canvases and nearest-neighbor sampling, keeping
+the selected colors, proportions and alpha. Original candidates and prompts
+remain beside the sources. `--check` verifies the pinned source hashes,
+dimensions, transparent margins and byte-exact runtime outputs without writing.
+The item definitions reference these PNGs directly; no atlas rebuild is needed.
+
 ## Mulberry tree sprites
 
 `python3 tools/export_mulberry_sprites.py` exports the generated mature mulberry

@@ -32,7 +32,7 @@
             "defId": 4004,
             "key": "seed_beet",
             "name": "Beet Seeds",
-            "resource": "items/yarn.png",
+			"resource": "items/seed_beet.png",
             "tags": [
                 "seed"
             ],
@@ -45,7 +45,7 @@
             "defId": 4005,
             "key": "seed_potato",
             "name": "Potato Seeds",
-            "resource": "items/yarn.png",
+			"resource": "items/seed_potato.png",
             "tags": [
                 "seed"
             ],
