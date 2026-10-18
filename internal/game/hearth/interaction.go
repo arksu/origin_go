@@ -28,7 +28,7 @@ func (r *Runtime) Owner(target types.Handle) (types.EntityID, string, int64, boo
 	if !found || !snapshot.CanReturn() {
 		return 0, "", 0, false
 	}
-	return owner, snapshot.Home.OwnerName, snapshot.LastDisconnectUnixMs, true
+	return owner, snapshot.Home.OwnerName, snapshot.LastPingUnixMs, true
 }
 
 // Break while the old behavior is still present so its normal LinkBroken

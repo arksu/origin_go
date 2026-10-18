@@ -104,7 +104,7 @@ func TestSpawnAndLoginLoadsSurfaceHearthBeforeReattach(t *testing.T) {
 			finished := make(chan struct{})
 			go func() {
 				defer close(finished)
-				game.spawnAndLogin(client, repository.Character{ID: 10, Layer: layer, DisconnectAt: sql.NullTime{Time: time.UnixMilli(123000), Valid: true}})
+				game.spawnAndLogin(client, repository.Character{ID: 10, Layer: layer, LastPingAt: sql.NullTime{Time: time.UnixMilli(123000), Valid: true}})
 			}()
 			select {
 			case <-started:
@@ -133,7 +133,7 @@ func TestSpawnAndLoginLoadsSurfaceHearthBeforeReattach(t *testing.T) {
 			require.Equal(t, player, target.world.GetHandleByEntityID(10))
 			require.False(t, detached.IsDetached(10))
 			require.Equal(t, hearth.CurrentHome, runtime.Index.Snapshot(10).State)
-			require.Equal(t, int64(123000), runtime.Index.Snapshot(10).LastDisconnectUnixMs)
+			require.Equal(t, int64(123000), runtime.Index.Snapshot(10).LastPingUnixMs)
 			owner, exists := runtime.Index.Owner(hearth.ObjectKey{Region: 4, ID: 200})
 			require.True(t, exists)
 			require.Equal(t, types.EntityID(10), owner)
@@ -147,7 +147,7 @@ func TestSpawnAndLoginLoadsSurfaceHearthBeforeReattach(t *testing.T) {
 			game.spawnAndLogin(next, repository.Character{ID: 10, Layer: layer})
 			readSoundLifecycleEntry(t, nextConnection)
 			require.True(t, next.InWorld.Load())
-			require.Equal(t, int64(123000), runtime.Index.Snapshot(10).LastDisconnectUnixMs, "reconnect preserves the last disconnect")
+			require.Equal(t, int64(123000), runtime.Index.Snapshot(10).LastPingUnixMs, "reconnect preserves the last ping")
 			require.Equal(t, 1, reads)
 		})
 	}

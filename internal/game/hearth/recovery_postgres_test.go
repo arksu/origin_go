@@ -140,7 +140,7 @@ func TestHearthRecoveryPostgresUnsavedTerminalRestoresEarlierAliveHome(t *testin
 	saver := hearth.NewConstructionSaverDB(db)
 	require.NoError(t, saver.SaveConstruction(ctx, 1, original, nil))
 	f.runtime = hearth.NewRuntime(f.w, f.chunks, q, f.factory, recoveryInterruptedSaver{ConstructionSaver: saver}, f.registry, nil, nil)
-	_, err := db.Pool().Exec(ctx, "UPDATE character SET disconnect_at=to_timestamp(123) WHERE id=1")
+	_, err := db.Pool().Exec(ctx, "UPDATE character SET last_ping_at=to_timestamp(123) WHERE id=1")
 	require.NoError(t, err)
 	require.NoError(t, f.runtime.LoadHome(1, f.result.DefID))
 	require.NoError(t, f.runtime.NotifyTerminal(1))
@@ -160,7 +160,7 @@ func TestHearthRecoveryPostgresUnsavedTerminalRestoresEarlierAliveHome(t *testin
 	require.NoError(t, restarted.LoadHome(1, f.result.DefID))
 	expectedHome := restoredHome(&stored)
 	expectedHome.OwnerName = character.Name
-	require.Equal(t, hearth.Snapshot{State: hearth.CurrentHome, Home: expectedHome, LastDisconnectUnixMs: 123000}, restarted.Index.Snapshot(1))
+	require.Equal(t, hearth.Snapshot{State: hearth.CurrentHome, Home: expectedHome, LastPingUnixMs: 123000}, restarted.Index.Snapshot(1))
 	require.True(t, restarted.Index.Snapshot(1).CanReturn())
 	owner, owned := restarted.Index.Owner(restoredHome(&stored).Object)
 	require.True(t, owned)

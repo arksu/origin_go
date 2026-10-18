@@ -7,6 +7,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/lib/pq"
 )
@@ -62,4 +63,84 @@ func (q *Queries) InsertSpots(ctx context.Context, arg InsertSpotsParams) error 
 		arg.LastRuntimeSeconds,
 	)
 	return err
+}
+
+const loadSpotsByRegion = `-- name: LoadSpotsByRegion :many
+SELECT id, region, layer, spot_type, district_x, district_y, center_x, center_y, radius, peak_quality, state, last_runtime_seconds, revision FROM spot WHERE region = $1 ORDER BY id
+`
+
+func (q *Queries) LoadSpotsByRegion(ctx context.Context, region int) ([]Spot, error) {
+	rows, err := q.db.QueryContext(ctx, loadSpotsByRegion, region)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Spot
+	for rows.Next() {
+		var i Spot
+		if err := rows.Scan(
+			&i.ID,
+			&i.Region,
+			&i.Layer,
+			&i.SpotType,
+			&i.DistrictX,
+			&i.DistrictY,
+			&i.CenterX,
+			&i.CenterY,
+			&i.Radius,
+			&i.PeakQuality,
+			&i.State,
+			&i.LastRuntimeSeconds,
+			&i.Revision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const saveSpotState = `-- name: SaveSpotState :execrows
+UPDATE spot
+SET state = $1::jsonb,
+	last_runtime_seconds = $2::bigint,
+	revision = $3::bigint + 1
+WHERE id = $4::bigint AND region = $5::int
+	AND (
+		revision = $3::bigint
+		OR (
+			revision = $3::bigint + 1
+			AND state = $1::jsonb
+			AND last_runtime_seconds = $2::bigint
+		)
+	)
+`
+
+type SaveSpotStateParams struct {
+	State              json.RawMessage `json:"state"`
+	LastRuntimeSeconds int64           `json:"last_runtime_seconds"`
+	ExpectedRevision   int64           `json:"expected_revision"`
+	ID                 int64           `json:"id"`
+	Region             int             `json:"region"`
+}
+
+// A retry after an ambiguous result must not advance the revision twice.
+func (q *Queries) SaveSpotState(ctx context.Context, arg SaveSpotStateParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, saveSpotState,
+		arg.State,
+		arg.LastRuntimeSeconds,
+		arg.ExpectedRevision,
+		arg.ID,
+		arg.Region,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

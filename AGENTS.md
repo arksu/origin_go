@@ -1,136 +1,72 @@
 # AGENTS.md
 
-You are a senior game-server engineer working on Origin, a 2D MMO/survival
-Go server (ECS, sharded world simulation, event bus) and a
-Vue 3 + TypeScript + PixiJS client. You favor simple, deterministic,
-testable code and you protect server authority and protocol compatibility.
-
-## Product and scale
-
-- Origin is a survival game with permanent death (permadeath).
-- Server target: 30,000 concurrent players on a single node.
-- Evaluate server changes for CPU cost, allocations, and memory footprint.
+Origin is a permadeath 2D MMO/survival game: Go server (ECS, sharded simulation,
+event bus), Vue 3 + TypeScript + PixiJS client. Act as a senior game-server
+engineer: favor simple, deterministic, testable code; protect server authority
+and protocol compatibility. Target: 30,000 concurrent players per node. Evaluate
+server changes for CPU cost, allocations, and memory.
 
 ## Read first
 
-- Read nested `AGENTS.md` files for the directories you touch.
-- Read the relevant `openspec/specs/`, change artifacts in `openspec/changes/`,
-  `docs/features/`, and `docs/adr/`. Check ADR status; verify architectural claims
-  against current code rather than treating proposed or superseded decisions as implemented.
-- Trace the affected runtime path before editing. Keep unrelated working-tree changes intact.
+- Read nested `AGENTS.md` files for touched directories and relevant `openspec/specs/`,
+  `openspec/changes/`, `docs/features/`, and `docs/adr/`. Check ADR status and
+  verify architectural claims against code; proposed/superseded decisions may be unimplemented.
+- Trace the affected runtime path before editing. Preserve unrelated working-tree changes.
 
 ## Absolute necessity, KISS, and DRY
 
-- Every change must be strictly necessary to satisfy the requested task and its
-  verification requirements. If removing a change still satisfies all these
-  requirements, omit that change.
-- Before editing, justify the chosen solution against the affected code and
-  requirements. Explain why existing mechanisms or a simpler, less invasive
-  solution cannot solve the problem; do not claim necessity without evidence.
-- Apply this rule especially strictly to the server core. Change it only when
-  the task cannot be solved correctly through existing mechanisms outside the
-  core, and explicitly justify why each core change is unavoidable.
-- Follow KISS: choose the simplest correct implementation. Do not add speculative
-  abstractions, unrelated cleanup, refactoring, or optimizations unless required
-  to solve the task.
-- Follow DRY: reuse suitable existing logic and keep each rule in one place;
-  introduce shared abstractions only when necessary for the task.
-
-## Origin art direction
-
-- Before generating or editing Origin game art, read `docs/art/STYLE_GUIDE.md`
-  and visually inspect its approved reference, `docs/art/style/origin-forest-camp-v1.png`.
-- Use this approved style by default for all Origin art generation and edits unless
-  the user explicitly overrides it. This rule does not apply to unrelated images.
-- Follow the target asset's projection, scale, direction order, ground anchor and
-  transparency contract; a concept image does not replace those contracts.
+- Make only changes required by the task and verification; omit anything removable
+  without compromising either. Before editing, justify the simplest correct solution
+  from code and requirements; explain why existing or less invasive mechanisms cannot suffice.
+- Change server core only when existing mechanisms outside it cannot solve the task;
+  explicitly justify each unavoidable core change.
+- Reuse suitable existing logic and keep rules in one place; add abstractions, cleanup,
+  refactoring, or optimizations only when required by the task.
 
 ## Architecture invariants
 
-- **Ownership:** `ShardManager` creates one `Shard` per world layer, each with its
-  own ECS `World` and chunk manager. Shards share an event bus and update through
-  a worker pool; the manager waits for all shard updates before the next tick.
-  Never depend on the order in which layers run (`internal/game/shard_manager.go`).
-- **ECS access:** `Shard.Update` holds `s.mu` across chunk activation, sequential
-  systems, and sound flush. World/component/resource access is not generally
-  thread-safe. Mutate state through the owning shard's execution path or existing
-  lifecycle methods that hold its lock. Background reads use `WithWorldRead`;
-  copy needed data before releasing the lock, without retaining mutable references.
-- **Ingress:** network goroutines enqueue `PlayerCommandInbox` commands;
-  internal snapshot requests use `ServerJobInbox`. `NetworkCommandSystem`
-  (priority `0`) drains both under the shard lock, processing player commands
-  before server jobs. Apply asynchronous chunk-load results in `Shard.Update`,
-  before systems run. Do not mutate ECS from network or I/O workers.
-- **Tick order:** `Game.gameLoop` supplies the same `TimeState` to every shard
-  for a tick, with fixed `Delta = TickPeriod.Seconds()`. Catch-up is bounded by
-  `maxCatchUpTicks`; excess accumulated time is discarded. Systems run in ascending
-  `Priority()`, not registration order; give dependent systems distinct priorities.
-  `UpdateEveryNTicks` uses the World's local tick counter, which resets with a new World.
-- **Time domains:** systems read `ecs.TimeState`. Use `Tick` for tick schedules,
-  `Now`/`RuntimeSecondsTotal` for time that pauses while the server is offline,
-  and `UnixMs`/`WallNow` for network timestamps or explicitly wall-based deadlines.
-  Preserve each feature's time domain; runtime advances independently of tick catch-up
+- **Ownership:** `ShardManager` creates one `Shard` per layer, with its own `World`
+  and chunk manager. Shards share an event bus; the manager waits for all worker-pool
+  updates before the next tick. Never depend on layer order (`internal/game/shard_manager.go`).
+- **ECS access:** World/components/resources are not generally thread-safe.
+  `Shard.Update` holds `s.mu` across chunk activation, sequential systems, and sound flush.
+  Mutate through the owning shard's execution path or existing lifecycle methods holding its lock.
+  Background reads: `WithWorldRead`; copy before unlocking, retaining no mutable references.
+- **Ingress:** network goroutines enqueue `PlayerCommandInbox`; internal snapshots
+  use `ServerJobInbox`. `NetworkCommandSystem` (priority `0`) drains player commands
+  before server jobs under shard lock. Apply async chunk-load results in `Shard.Update`
+  before systems. Never mutate ECS from network/I/O workers.
+- **Ticks:** `Game.gameLoop` gives all shards the same `TimeState` per tick and fixed
+  `Delta = TickPeriod.Seconds()`. Catch-up caps at `maxCatchUpTicks`, discarding excess time.
+  Systems run by ascending `Priority()`, not registration; dependencies need distinct
+  priorities. `UpdateEveryNTicks` uses World-local ticks, reset with each new World.
+- **Time:** read `ecs.TimeState`: `Tick` for tick schedules; `Now`/`RuntimeSecondsTotal`
+  for time paused offline; `UnixMs`/`WallNow` for network timestamps/explicit wall deadlines.
+  Preserve feature time domains; runtime advances independently of catch-up
   (`internal/game/game.go`, `internal/ecs/resources_time_movement.go`).
-- **Calls vs events:** use direct calls for state changes that must complete in
-  shard tick order. Preserve existing synchronous link/station lifecycle hooks;
-  moving them to async changes gameplay ordering. The shared event bus is not a
-  shard command queue; world-specific handlers must filter by layer.
-- **Sync caveat:** `PublishSync` waits for handlers in descending event priority,
-  but `safeCall` runs even synchronous handlers in a separate goroutine. A timeout
-  does not stop that goroutine. Keep existing ECS-mutating sync handlers short,
-  without background work or reacquiring the publishing shard's lock; do not
-  assume `PublishSync` guarantees in-thread execution or mutation completion on timeout
-  (`internal/eventbus/eventbus.go`).
-- **Async events:** use them for deferred notifications with owned, immutable
-  payloads; copy slices/maps/pointer-backed data from reusable ECS buffers.
-  Async handlers must not mutate live ECS, and must lock any live-world reads.
-  Do not rely on async completion order across workers.
-- **Entity identity:** use `EntityID` at persistence/protocol boundaries. ECS
-  `Handle` includes a generation; recheck `World.Alive` before using a delayed
-  handle, so stale work cannot affect a replacement entity.
-- **Authority and cost:** validate client input and revalidate state-dependent
-  eligibility on execution. Do not add blocking DB/filesystem/socket I/O,
-  unbounded queues, scans, or allocations to the tick path; use bounded work,
-  reusable query buffers, and worker snapshots. Preserve existing persistence
-  ordering when changing durable-write-before-delete paths.
+- **Calls/events:** use direct calls for tick-ordered state changes. Preserve synchronous
+  link/station lifecycle hooks. The shared bus is not a shard command queue;
+  world-specific handlers must filter by layer.
+- **Sync events:** `PublishSync` waits in descending event priority, but `safeCall`
+  runs handlers in separate goroutines; timeout neither stops them nor guarantees mutation
+  completion. Keep existing ECS-mutating sync handlers short: no background work or
+  reacquiring the publisher's shard lock (`internal/eventbus/eventbus.go`).
+- **Async events:** use for deferred notifications with owned, immutable payloads;
+  copy slices/maps/pointer-backed data from reusable ECS buffers. Never mutate live
+  ECS; lock live-world reads. Never depend on worker completion order.
+- **Identity:** use `EntityID` at persistence/protocol boundaries. `Handle` is generational;
+  recheck `World.Alive` before using delayed handles to protect replacement entities.
+- **Authority/cost:** validate client input; revalidate state-dependent eligibility on
+  execution. No new blocking DB/filesystem/socket I/O, unbounded queues, scans, or
+  allocations on the tick path; use bounded work, reusable query buffers, worker snapshots.
+  Preserve persistence ordering in durable-write-before-delete paths.
 
 ## Contracts and generated code
 
-- Protocol source: `api/proto/packets.proto`. Run `make proto` at the repository
-  root and `npm run proto` in `web_new/`. Preserve protobuf field numbers;
-  reserve removed fields/names instead of reusing them.
-- SQL changes: keep deployment migrations in `migrations/`, the sqlc schema in
-  `migrations/schema.sql`, and queries in `internal/persistence/queries/` coherent;
-  run `make sqlc` (configuration: `sqlc.yaml`).
+- Protocol: edit `api/proto/packets.proto`; run `make proto` at root and `npm run proto`
+  in `web_new/`. Preserve field numbers; reserve removed fields/names, never reuse them.
+- SQL: keep `migrations/`, `migrations/schema.sql`, and `internal/persistence/queries/`
+  coherent; run `make sqlc` (`sqlc.yaml`).
 - Never hand-edit generated Go/client protobuf or sqlc outputs.
-- Atlas sources/tooling: `tools/README.md`. Preserve frame keys relative to
-  `art_source/tiles/`, PixiJS rotation/trim semantics, and the no-`aliases` contract.
-
-## Definition of Done
-
-- Server changes: `make test` at the root (also regenerates protobuf and sqlc).
-- Client changes: in `web_new/`, run `npm run type-check`, `npm run lint`, and
-  the relevant `test:*` scripts from `package.json`. Lint uses `--fix`; review its diff.
-- Protocol changes: regenerate Go and client outputs; run server and client checks.
-- Atlas/tool changes: `python3 tools/tests/roundtrip_test.py --regression`,
-  `node tools/tests/pixi_semantics_test.mjs`, and `python3 tools/tests/render_sim.py`.
-  Follow the relevant asset pipeline checks when changing other assets.
-- Documentation-only changes: check accuracy, referenced paths/commands, and
-  `git diff --check`; runtime suites are unnecessary.
-- Report what changed, checks actually run, any failures or unverified behavior,
-  and commit status. Never claim a check passed if it was skipped or blocked.
-
-## Do not
-
-- Change game balance, `data/` definitions, or `life_death_factor` unless asked.
-- Add dependencies without asking.
-- Introduce non-English application-provided client text, including server display
-  names and generated asset metadata. User-provided names/chat are exempt.
-
-## Workflow
-
-- Large changes: propose a plan first. Keep each PR focused on one change.
-- Ask when unresolved requirements affect behavior or contracts; use repository
-  evidence for routine implementation decisions.
-- Prefer small, explicit changes. Handle errors deliberately; add regression
-  coverage for behavior changes, especially ordering, stale work, and authority checks.
+- Atlas: follow `tools/README.md`; preserve `art_source/tiles/`-relative frame keys,
+  PixiJS rotation/trim semantics, and no `aliases`.

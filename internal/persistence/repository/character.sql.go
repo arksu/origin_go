@@ -30,7 +30,7 @@ INSERT INTO character (id, account_id, name, region, x, y, layer, heading, stami
                        discovery)
 VALUES ($1, $2, $3, 1, $4, $5, 0, 0, $6, $7, $8, $9, $10::jsonb,
         $11::jsonb, $12::jsonb, $13::jsonb)
-RETURNING id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+RETURNING id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, last_ping_at, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 `
 
 type CreateCharacterParams struct {
@@ -86,6 +86,7 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 		&i.Discovery,
 		&i.ActionCooldowns,
 		&i.OnlineTime,
+		&i.LastPingAt,
 		&i.AuthToken,
 		&i.TokenExpiresAt,
 		&i.IsOnline,
@@ -133,7 +134,7 @@ func (q *Queries) DeleteCharacterByID(ctx context.Context, id int64) error {
 }
 
 const getCharacter = `-- name: GetCharacter :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, last_ping_at, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 FROM character
 WHERE id = $1
   AND deleted_at IS NULL
@@ -162,6 +163,7 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 		&i.Discovery,
 		&i.ActionCooldowns,
 		&i.OnlineTime,
+		&i.LastPingAt,
 		&i.AuthToken,
 		&i.TokenExpiresAt,
 		&i.IsOnline,
@@ -176,7 +178,7 @@ func (q *Queries) GetCharacter(ctx context.Context, id int64) (Character, error)
 }
 
 const getCharacterByTokenForUpdate = `-- name: GetCharacterByTokenForUpdate :one
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, last_ping_at, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 from character
 where auth_token = $1
   AND deleted_at IS NULL
@@ -206,6 +208,7 @@ func (q *Queries) GetCharacterByTokenForUpdate(ctx context.Context, authToken sq
 		&i.Discovery,
 		&i.ActionCooldowns,
 		&i.OnlineTime,
+		&i.LastPingAt,
 		&i.AuthToken,
 		&i.TokenExpiresAt,
 		&i.IsOnline,
@@ -220,7 +223,7 @@ func (q *Queries) GetCharacterByTokenForUpdate(ctx context.Context, authToken sq
 }
 
 const getCharactersByAccountID = `-- name: GetCharactersByAccountID :many
-SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
+SELECT id, account_id, name, region, x, y, layer, heading, stamina, energy, shp, hhp, is_lying, attributes, exp, skills, discovery, action_cooldowns, online_time, last_ping_at, auth_token, token_expires_at, is_online, disconnect_at, is_ghost, last_save_at, deleted_at, created_at, updated_at
 FROM character
 WHERE account_id = $1
   AND deleted_at IS NULL
@@ -256,6 +259,7 @@ func (q *Queries) GetCharactersByAccountID(ctx context.Context, accountID int64)
 			&i.Discovery,
 			&i.ActionCooldowns,
 			&i.OnlineTime,
+			&i.LastPingAt,
 			&i.AuthToken,
 			&i.TokenExpiresAt,
 			&i.IsOnline,
@@ -402,6 +406,31 @@ type SetOnlineCharactersDisconnectedParams struct {
 // Run after network/auth shutdown, never during startup crash recovery.
 func (q *Queries) SetOnlineCharactersDisconnected(ctx context.Context, arg SetOnlineCharactersDisconnectedParams) error {
 	_, err := q.db.ExecContext(ctx, setOnlineCharactersDisconnected, arg.DisconnectedAt, arg.Region)
+	return err
+}
+
+const updateCharacterActivity = `-- name: UpdateCharacterActivity :exec
+UPDATE character AS c
+SET online_time = GREATEST(c.online_time, v.online_time),
+	last_ping_at = GREATEST(c.last_ping_at, to_timestamp(v.last_ping_ms / 1000.0))
+FROM (
+	SELECT unnest($1::bigint[]) AS id,
+		unnest($2::bigint[]) AS online_time,
+		unnest($3::bigint[]) AS last_ping_ms
+) AS v
+WHERE c.id = v.id
+`
+
+type UpdateCharacterActivityParams struct {
+	Ids         []int64 `json:"ids"`
+	OnlineTimes []int64 `json:"online_times"`
+	LastPingMs  []int64 `json:"last_ping_ms"`
+}
+
+// Activity snapshots are absolute and idempotent, including after an ambiguous
+// commit. Keep pre-death pings when their batch reaches an already deleted row.
+func (q *Queries) UpdateCharacterActivity(ctx context.Context, arg UpdateCharacterActivityParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterActivity, pq.Array(arg.Ids), pq.Array(arg.OnlineTimes), pq.Array(arg.LastPingMs))
 	return err
 }
 

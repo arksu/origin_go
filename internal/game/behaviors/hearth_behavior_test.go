@@ -2,7 +2,7 @@ package behaviors
 
 import "testing"
 
-func TestFormatLastDisconnect(t *testing.T) {
+func TestFormatLastSeen(t *testing.T) {
 	const at int64 = 1_000_000
 	for _, test := range []struct {
 		name    string
@@ -24,7 +24,7 @@ func TestFormatLastDisconnect(t *testing.T) {
 		{"days", at, at + 3*86_400_000, "3 days ago"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := formatLastDisconnect(test.at, test.now); got != test.want {
+			if got := formatLastSeen(test.at, test.now); got != test.want {
 				t.Fatalf("got %q, want %q", got, test.want)
 			}
 		})

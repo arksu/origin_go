@@ -57,6 +57,7 @@ type Character struct {
 	Discovery       json.RawMessage `json:"discovery"`
 	ActionCooldowns json.RawMessage `json:"action_cooldowns"`
 	OnlineTime      int64           `json:"online_time"`
+	LastPingAt      sql.NullTime    `json:"last_ping_at"`
 	AuthToken       sql.NullString  `json:"auth_token"`
 	TokenExpiresAt  sql.NullTime    `json:"token_expires_at"`
 	IsOnline        sql.NullBool    `json:"is_online"`

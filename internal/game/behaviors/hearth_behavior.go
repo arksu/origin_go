@@ -53,7 +53,7 @@ func (hearthBehavior) BuildCustomWindow(ctx *contracts.BehaviorActionExecuteCont
 		ctx.World.GetHandleByEntityID(ctx.PlayerID) != ctx.PlayerHandle {
 		return nil
 	}
-	name, disconnectedAt, ok := hearthOwnerDetails(ctx.World, ctx.TargetID, ctx.TargetHandle)
+	name, lastPingAt, ok := hearthOwnerDetails(ctx.World, ctx.TargetID, ctx.TargetHandle)
 	if !ok {
 		return nil
 	}
@@ -65,7 +65,7 @@ func (hearthBehavior) BuildCustomWindow(ctx *contracts.BehaviorActionExecuteCont
 		EntityId: uint64(ctx.TargetID), Title: "Hearth Fire",
 		Fields: []*netproto.CustomWindowField{
 			{Label: "Owner", Value: name},
-			{Label: "Last disconnect", Value: formatLastDisconnect(disconnectedAt, ecs.GetResource[ecs.TimeState](ctx.World).UnixMs)},
+			{Label: "Last seen at", Value: formatLastSeen(lastPingAt, ecs.GetResource[ecs.TimeState](ctx.World).UnixMs)},
 		},
 	}
 }
@@ -78,18 +78,18 @@ func hearthOwnerDetails(w *ecs.World, id types.EntityID, target types.Handle) (s
 	if !ok {
 		return "", 0, false
 	}
-	_, name, disconnectedAt, owned := runtime.Owner(target)
-	return name, disconnectedAt, owned && name != ""
+	_, name, lastPingAt, owned := runtime.Owner(target)
+	return name, lastPingAt, owned && name != ""
 }
 
-func formatLastDisconnect(disconnectedAt, now int64) string {
-	if disconnectedAt <= 0 {
+func formatLastSeen(lastPingAt, now int64) string {
+	if lastPingAt <= 0 {
 		return "Unknown"
 	}
-	if now <= disconnectedAt || now-disconnectedAt < 60_000 {
+	if now <= lastPingAt || now-lastPingAt < 60_000 {
 		return "just now"
 	}
-	minutes := (now - disconnectedAt) / 60_000
+	minutes := (now - lastPingAt) / 60_000
 	value, unit := minutes, "minute"
 	if minutes >= 24*60 {
 		value, unit = minutes/(24*60), "day"

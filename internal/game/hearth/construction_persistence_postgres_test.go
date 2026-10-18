@@ -20,7 +20,7 @@ func TestConstructionSaverPostgresFirstHomeAndReplacement(t *testing.T) {
 	q := db.Queries()
 	insertHearthCharacter(t, db, 1)
 	disconnectedAt := sql.NullTime{Time: time.Unix(123, 0).UTC(), Valid: true}
-	_, err := db.Pool().Exec(ctx, "UPDATE character SET disconnect_at=$1 WHERE id=1", disconnectedAt.Time)
+	_, err := db.Pool().Exec(ctx, "UPDATE character SET last_ping_at=$1 WHERE id=1", disconnectedAt.Time)
 	require.NoError(t, err)
 	saver := hearth.NewConstructionSaverDB(db)
 	first := repository.Object{
@@ -39,10 +39,10 @@ func TestConstructionSaverPostgresFirstHomeAndReplacement(t *testing.T) {
 	require.Equal(t, first.LastTick, stored.LastTick)
 	home, err := q.GetCharacterHearth(ctx, hearthGetParams(1))
 	require.NoError(t, err)
-	home.OwnerDisconnectAt.Time = home.OwnerDisconnectAt.Time.UTC()
+	home.OwnerLastPingAt.Time = home.OwnerLastPingAt.Time.UTC()
 	require.Equal(t, repository.GetCharacterHearthRow{
 		CharacterID: 1, ObjectRegion: first.Region, ObjectID: first.ID, X: first.X, Y: first.Y,
-		OwnerName: "test", OwnerDisconnectAt: disconnectedAt,
+		OwnerName: "test", OwnerLastPingAt: disconnectedAt,
 	}, home)
 	watermark, err := q.GetGlobalVar(ctx, constt.LAST_USED_ID)
 	require.NoError(t, err)

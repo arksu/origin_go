@@ -83,6 +83,7 @@ type Game struct {
 	networkServer       *network.Server
 	inventoryLoader     *inventory.InventoryLoader
 	serverTimeManager   *timeutil.ServerTimeManager
+	playerActivity      *playerActivity
 	timePersistStopCh   chan struct{}
 	timePersistDoneCh   chan struct{}
 	timeStateMu         sync.RWMutex
@@ -173,6 +174,9 @@ func NewGame(cfg *config.Config, db *persistence.Postgres, objectFactory *world.
 	}
 
 	g.resetOnlinePlayers()
+	hearthIndex := ecs.GetResource[hearth.Runtime](g.shardManager.GetShard(hearth.SurfaceLayer).world).Index
+	g.playerActivity = newPlayerActivity(g.db.Queries().UpdateCharacterActivity, hearthIndex.RecordPing, logger)
+	g.playerActivity.start()
 
 	return g
 }
@@ -260,6 +264,12 @@ func (g *Game) handlePacket(c *network.Client, data []byte) {
 }
 
 func (g *Game) handlePing(c *network.Client, sequence uint32, ping *netproto.C2S_Ping) {
+	if ping == nil {
+		return
+	}
+	if g.playerActivity != nil && c.CharacterID != 0 && !c.IsDeadObserverMode() {
+		g.playerActivity.recordPing(c.CharacterID, c.ID, g.clock.WallNow())
+	}
 	serverTimeMs, runtimeSeconds := g.runtimePongSample()
 	pong := &netproto.S2C_Pong{
 		ClientTimeMs: ping.ClientTimeMs,
@@ -842,6 +852,15 @@ func (g *Game) handleCloseWindow(c *network.Client, sequence uint32, msg *netpro
 
 func (g *Game) handleDisconnect(c *network.Client) {
 	g.logger.Info("Client disconnected", zap.Uint64("client_id", c.ID))
+	if activity := g.playerActivity; activity != nil && activity.endSession(c.CharacterID, c.ID) {
+		character := c.CharacterID
+		defer func() {
+			// Shutdown drains all characters together after network handlers exit.
+			if g.getState() == GameStateRunning {
+				activity.flushWithTimeout(character)
+			}
+		}()
+	}
 
 	if c.CharacterID != 0 {
 		if c.IsDeadObserverMode() {
@@ -1203,6 +1222,9 @@ func (g *Game) Stop() {
 	// for shard commands, so their transfer launches precede its Done as well.
 	// Finish all owning calls before stopping the chunks they may still need.
 	g.wg.Wait()
+	if g.playerActivity != nil {
+		g.playerActivity.stop()
+	}
 	g.recordShutdownDisconnects(shutdownAt)
 	g.logger.Info("Stopping shardManager")
 	g.shardManager.Stop()

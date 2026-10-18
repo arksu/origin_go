@@ -268,8 +268,8 @@ func (r *Runtime) LoadHome(character types.EntityID, hearthType int) error {
 		r.logger.Fatal("invalid hearth lookup result", zap.Error(err))
 		return err
 	}
-	if row.OwnerDisconnectAt.Valid {
-		r.Index.RecordDisconnect(character, row.OwnerDisconnectAt.Time.UnixMilli())
+	if row.OwnerLastPingAt.Valid {
+		r.Index.RecordPing(character, row.OwnerLastPingAt.Time.UnixMilli())
 	}
 	return nil
 }

@@ -231,14 +231,14 @@ func TestConstructionFirstHomeCompletesInSameCall(t *testing.T) {
 func TestConstructionCachedOwnershipDoesNotRead(t *testing.T) {
 	f := newConstructionFixture(t)
 	f.seedHome(t, nil)
-	f.runtime.Index.RecordDisconnect(f.ctx.PlayerID, 123000)
+	f.runtime.Index.RecordPing(f.ctx.PlayerID, 123000)
 	name := "Finisher <owner>"
 	ecs.AddComponent(f.w, f.ctx.PlayerHandle, components.Appearance{Name: &name})
 	require.True(t, f.runtime.CompleteConstruction(&f.ctx, f.finishSite).OK)
 	require.Zero(t, f.reader.reads)
 	name = "Changed after completion"
 	require.Equal(t, "Finisher <owner>", f.runtime.Index.Snapshot(f.ctx.PlayerID).Home.OwnerName)
-	require.Equal(t, int64(123000), f.runtime.Index.Snapshot(f.ctx.PlayerID).LastDisconnectUnixMs)
+	require.Equal(t, int64(123000), f.runtime.Index.Snapshot(f.ctx.PlayerID).LastPingUnixMs)
 }
 
 func TestConstructionSavedHomeIsReplacedInSameCall(t *testing.T) {

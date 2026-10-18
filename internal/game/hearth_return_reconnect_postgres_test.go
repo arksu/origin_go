@@ -179,7 +179,7 @@ func disconnectHearthReconnectSource(t *testing.T, f *hearthReturnTransferFixtur
 	require.False(t, row.IsOnline.Bool, "the real disconnect must admit the replacement authentication")
 	require.True(t, row.DisconnectAt.Valid)
 	require.True(t, row.DisconnectAt.Time.Equal(f.game.clock.WallNow()))
-	require.Equal(t, row.DisconnectAt.Time.UnixMilli(), f.runtime.Index.Snapshot(10).LastDisconnectUnixMs)
+	require.Zero(t, f.runtime.Index.Snapshot(10).LastPingUnixMs, "a disconnect cannot invent a ping")
 }
 
 func waitHearthReconnectWork(t *testing.T, g *Game) {

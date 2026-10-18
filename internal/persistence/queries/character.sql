@@ -102,6 +102,19 @@ WHERE region = sqlc.arg(region)
   AND is_online = true
   AND deleted_at IS NULL;
 
+-- Activity snapshots are absolute and idempotent, including after an ambiguous
+-- commit. Keep pre-death pings when their batch reaches an already deleted row.
+-- name: UpdateCharacterActivity :exec
+UPDATE character AS c
+SET online_time = GREATEST(c.online_time, v.online_time),
+	last_ping_at = GREATEST(c.last_ping_at, to_timestamp(v.last_ping_ms / 1000.0))
+FROM (
+	SELECT unnest(sqlc.arg(ids)::bigint[]) AS id,
+		unnest(sqlc.arg(online_times)::bigint[]) AS online_time,
+		unnest(sqlc.arg(last_ping_ms)::bigint[]) AS last_ping_ms
+) AS v
+WHERE c.id = v.id;
+
 -- name: UpdateCharacterAttributes :exec
 UPDATE character
 SET attributes = sqlc.arg(attributes)::jsonb,

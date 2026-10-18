@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS character
     action_cooldowns JSONB NOT NULL DEFAULT '{}'::jsonb,
 
     online_time      BIGINT       NOT NULL DEFAULT 0,             -- time in seconds spent in game
+	last_ping_at     TIMESTAMPTZ,                                 -- last authenticated client ping received by server
     auth_token       VARCHAR(64),                                 -- token used in C2SAuth packet
     token_expires_at TIMESTAMPTZ,
     is_online        BOOLEAN               DEFAULT false,

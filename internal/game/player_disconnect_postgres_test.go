@@ -36,7 +36,7 @@ func TestCharacterDisconnectPostgresLifecycle(t *testing.T) {
 			require.False(t, row.IsOnline.Bool)
 			require.True(t, row.DisconnectAt.Valid)
 			require.True(t, row.DisconnectAt.Time.Equal(clock.WallNow()))
-			require.Equal(t, row.DisconnectAt.Time.UnixMilli(), f.runtime.Index.Snapshot(10).LastDisconnectUnixMs)
+			require.Zero(t, f.runtime.Index.Snapshot(10).LastPingUnixMs, "disconnect is not a ping")
 			require.True(t, source.world.Alive(body), "disconnect time precedes delayed body removal")
 			require.True(t, ecs.GetResource[ecs.DetachedEntities](source.world).IsDetached(10))
 
@@ -61,7 +61,7 @@ func TestCharacterDisconnectPostgresLifecycle(t *testing.T) {
 
 			restarted := hearth.NewRuntime(nil, nil, f.db.Queries(), nil, nil, nil, nil, nil)
 			require.NoError(t, restarted.LoadHome(10, f.hearth.DefID))
-			require.Equal(t, row.DisconnectAt.Time.UnixMilli(), restarted.Index.Snapshot(10).LastDisconnectUnixMs)
+			require.Zero(t, restarted.Index.Snapshot(10).LastPingUnixMs)
 		})
 	}
 }
@@ -97,7 +97,7 @@ func TestCharacterDisconnectPostgresMonotonicFailureAndStartup(t *testing.T) {
 	row, err := f.db.Queries().GetCharacter(t.Context(), 10)
 	require.NoError(t, err)
 	require.True(t, row.DisconnectAt.Time.Equal(previous), "late writes keep the latest confirmed timestamp")
-	require.Equal(t, previous.UnixMilli(), f.runtime.Index.Snapshot(10).LastDisconnectUnixMs)
+	require.Zero(t, f.runtime.Index.Snapshot(10).LastPingUnixMs)
 	require.NoError(t, f.db.Queries().SetCharacterOnline(t.Context(), 10))
 	require.NoError(t, f.db.Queries().ResetOnlinePlayers(t.Context(), 1))
 	row, err = f.db.Queries().GetCharacter(t.Context(), 10)
@@ -114,7 +114,7 @@ func TestCharacterDisconnectPostgresMonotonicFailureAndStartup(t *testing.T) {
 	row, err = f.db.Queries().GetCharacter(t.Context(), 10)
 	require.NoError(t, err)
 	require.True(t, row.DisconnectAt.Time.Equal(previous))
-	require.Equal(t, previous.UnixMilli(), f.runtime.Index.Snapshot(10).LastDisconnectUnixMs, "failed SQL must not publish unconfirmed metadata")
+	require.Zero(t, f.runtime.Index.Snapshot(10).LastPingUnixMs, "disconnect writes do not change last-seen metadata")
 }
 
 func TestCharacterDisconnectPostgresShutdownWaitsForAuthentication(t *testing.T) {

@@ -41,11 +41,11 @@ const (
 )
 
 type Snapshot struct {
-	State                HomeState
-	Home                 Home
-	LastDisconnectUnixMs int64
-	PendingTerminal      bool
-	Terminal             bool
+	State           HomeState
+	Home            Home
+	LastPingUnixMs  int64
+	PendingTerminal bool
+	Terminal        bool
 }
 
 func (s Snapshot) CanAcquire() bool {
@@ -81,17 +81,17 @@ func (i *Index) Snapshot(character types.EntityID) Snapshot {
 	return Snapshot{State: Unknown}
 }
 
-// RecordDisconnect copies confirmed wall time without changing ownership. It is
-// safe across layers and never replaces a newer in-memory value with saved data.
-func (i *Index) RecordDisconnect(character types.EntityID, unixMs int64) {
+// RecordPing copies received ping wall time without changing ownership. It is
+// safe across layers and never replaces a newer live value with saved data.
+func (i *Index) RecordPing(character types.EntityID, unixMs int64) {
 	if !validID(character) || unixMs <= 0 {
 		return
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	entry := i.entryLocked(character)
-	if unixMs > entry.LastDisconnectUnixMs {
-		entry.LastDisconnectUnixMs = unixMs
+	if unixMs > entry.LastPingUnixMs {
+		entry.LastPingUnixMs = unixMs
 	}
 }
 

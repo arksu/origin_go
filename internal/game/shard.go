@@ -58,6 +58,7 @@ type Shard struct {
 
 	world          *ecs.World
 	chunkManager   *world.ChunkManager
+	spotManager    *world.SpotManager
 	eventBus       *eventbus.EventBus
 	characterSaver *systems.CharacterSaver
 
@@ -141,6 +142,13 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger.Fatal("Invalid world sound configuration", zap.Error(soundErr))
 	}
 	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
+	if layer == hearth.SurfaceLayer && db != nil {
+		var spotErr error
+		s.spotManager, spotErr = world.NewSpotManager(context.Background(), cfg, world.NewSpotStoreDB(db), s.chunkManager.SubmitPersistenceJob, logger)
+		if spotErr != nil {
+			logger.Fatal("Failed to load spots", zap.Error(spotErr))
+		}
+	}
 	positionObservers := core.PositionObservers{colliderSpatial, s.soundEvents}
 	s.chunkManager.SetPositionObserver(positionObservers)
 	if layer == hearth.SurfaceLayer {
@@ -451,6 +459,9 @@ func (s *Shard) Update(ts ecs.TimeState) {
 		s.objectDestruction.Update()
 	}
 	s.chunkManager.Update(ts.Delta)
+	if s.spotManager != nil {
+		s.spotManager.Update(time.Now())
+	}
 
 	s.world.Update(ts.Delta)
 	s.soundEvents.Flush(s.world)
@@ -466,8 +477,12 @@ func (s *Shard) Stop() {
 	if s.objectDestruction != nil {
 		s.objectDestruction.StopAdmission()
 	}
+	if s.spotManager != nil {
+		s.spotManager.StopAdmission()
+	}
 	s.mu.Unlock()
 	s.drainObjectDestruction()
+	s.drainSpotSaves()
 	s.mu.Lock()
 	if s.liftService != nil {
 		handles := ecs.NewQuery(s.world).

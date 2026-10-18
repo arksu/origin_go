@@ -172,6 +172,9 @@ func (g *Game) handleAuth(c *network.Client, sequence uint32, auth *netproto.C2S
 	c.Layer = character.Layer
 	// Client is not yet in world during spawn attempts
 	c.InWorld.Store(false)
+	if g.playerActivity != nil {
+		g.playerActivity.beginSession(c.CharacterID, c.ID, character.OnlineTime)
+	}
 
 	g.logger.Info("Character authenticated", zap.Uint64("client_id", c.ID), zap.Int64("character_id", character.ID), zap.String("character_name", character.Name))
 
@@ -245,7 +248,7 @@ func (g *Game) spawnAndLogin(c *network.Client, character repository.Character) 
 		c.SendError(netproto.ErrorCode_ERROR_CODE_INTERNAL_ERROR, "Spawn failed: hearth data unavailable")
 		return
 	}
-	g.rememberCharacterDisconnect(playerEntityID, character.DisconnectAt)
+	g.rememberCharacterPing(playerEntityID, character.LastPingAt)
 
 	select {
 	case <-c.Done():

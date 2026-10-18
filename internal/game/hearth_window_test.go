@@ -114,7 +114,7 @@ func TestHearthWindowRMBApproachesLinksAndReopens(t *testing.T) {
 			require.Equal(t, "Owner", f.sender.opened[0].Fields[0].Label)
 			require.Equal(t, "Owner <Марко>", f.sender.opened[0].Fields[0].Value)
 			require.Len(t, f.sender.opened[0].Fields, 2)
-			require.Equal(t, "Last disconnect", f.sender.opened[0].Fields[1].Label)
+			require.Equal(t, "Last seen at", f.sender.opened[0].Fields[1].Label)
 			require.Equal(t, "Unknown", f.sender.opened[0].Fields[1].Value)
 			link, linked := ecs.GetResource[ecs.LinkState](w).GetLink(10)
 			require.True(t, linked)
@@ -130,16 +130,16 @@ func TestHearthWindowRMBApproachesLinksAndReopens(t *testing.T) {
 	}
 }
 
-func TestHearthWindowDisconnectRefreshesOnlyOnReopen(t *testing.T) {
+func TestHearthWindowLastSeenRefreshesOnlyOnReopen(t *testing.T) {
 	f := newHearthWindowFixture(t, 99, 180)
 	clock := ecs.GetResource[ecs.TimeState](f.shard.world)
 	clock.UnixMs = 10_000_000
-	f.runtime.Index.RecordDisconnect(99, clock.UnixMs-2*3_600_000)
+	f.runtime.Index.RecordPing(99, clock.UnixMs-2*3_600_000)
 	f.click(t, 200, netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, 200)
 	f.ticks(10)
 	require.Len(t, f.sender.opened, 1)
 	require.Equal(t, "2 hours ago", f.sender.opened[0].Fields[1].Value)
-	f.runtime.Index.RecordDisconnect(99, clock.UnixMs-120_000)
+	f.runtime.Index.RecordPing(99, clock.UnixMs-120_000)
 	require.Len(t, f.sender.opened, 1, "metadata changes do not push window snapshots")
 	f.click(t, 200, netproto.MapClickButton_MAP_CLICK_BUTTON_SECONDARY, 200)
 	require.Len(t, f.sender.opened, 2)

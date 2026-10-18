@@ -323,7 +323,7 @@ func (c *authenticationTestConn) QueryContext(_ context.Context, query string, a
 	return &authenticationTestRows{values: []driver.Value{
 		int64(17), int64(1), "calendar-test", int64(1), int64(200), int64(200), int64(0), int64(0),
 		float64(100), float64(100), float64(100), float64(100), false, c.state.attributes,
-		[]byte("{}"), []byte("{}"), []byte("{}"), []byte("{}"), int64(0), "valid", time.Now().Add(time.Hour),
+		[]byte("{}"), []byte("{}"), []byte("{}"), []byte("{}"), int64(0), nil, "valid", time.Now().Add(time.Hour),
 		c.state.online, nil, false, nil, nil, time.Now(), nil,
 	}}, nil
 }
@@ -331,7 +331,7 @@ func (r *authenticationTestRows) Columns() []string {
 	if r.columnCount != 0 {
 		return make([]string, r.columnCount)
 	}
-	return make([]string, 28)
+	return make([]string, 29)
 }
 func (*authenticationTestRows) Close() error { return nil }
 func (r *authenticationTestRows) Next(dest []driver.Value) error {
